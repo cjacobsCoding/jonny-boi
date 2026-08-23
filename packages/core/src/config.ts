@@ -16,6 +16,27 @@ export interface RulesConfig {
   readonly playerOnPlaySkipsFirstDraw: boolean;
   /** Cards drawn during a normal draw step. */
   readonly cardsPerDrawStep: number;
+  /**
+   * The MAXIMUM HAND SIZE the active player is discarded down to in their cleanup
+   * step (CR 514.1). A knob rather than a literal 7 for the same reason
+   * {@link startingLife} is one: a format variant changes it, and the rule must
+   * read it from one place.
+   *
+   * A player whose board says otherwise (`CardDefinition.noMaximumHandSize` —
+   * Reliquary Tower) has no limit at all and skips the discard entirely; that is a
+   * card ability, not a config value, so it is not expressed here.
+   *
+   * It is a SEPARATE knob from {@link startingHandSize} even though both are
+   * seven in the default rules, because they are different rules — CR 103.4
+   * draws the opening hand, CR 402.2 caps what you may keep — and a format may
+   * move one without the other.
+   *
+   * ⚠️ Not a cosmetic knob in a deck-tuning lab. An unbounded hand changes what
+   * card draw and held-back reactive spells are worth, which is exactly the
+   * quantity every gauntlet and every A/B verdict measures. Moving this number
+   * moves every recorded baseline in DESIGN §3.4a.
+   */
+  readonly maximumHandSize: number;
 }
 
 /** The default MTG-faithful rules configuration. */
@@ -25,4 +46,5 @@ export const DEFAULT_RULES: RulesConfig = Object.freeze({
   maxLandsPerTurn: 1,
   playerOnPlaySkipsFirstDraw: true,
   cardsPerDrawStep: 1,
+  maximumHandSize: 7,
 });

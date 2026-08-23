@@ -6,6 +6,9 @@ import {
   draftStatus,
   emptyDraft,
   orderBadge,
+  pickCount,
+  setChooseNumber,
+  setChosenValue,
   setConfirm,
   setPayLife,
   setPayMana,
@@ -123,6 +126,21 @@ export function ChoicePrompt({
               onSet={(pay) => setDraft((d) => setPayLife(d, pay))}
             />
           )}
+          {choice.kind === 'chooseValue' && (
+            <NameableValueOptions
+              choice={choice}
+              chosen={draft.kind === 'chooseValue' ? draft.value : null}
+              onSet={(value) => setDraft((d) => setChosenValue(d, value))}
+            />
+          )}
+          {choice.kind === 'chooseNumber' && (
+            <NumberOptions
+              min={choice.min}
+              max={choice.max}
+              chosen={draft.kind === 'chooseNumber' ? draft.value : null}
+              onSet={(value) => setDraft((d) => setChooseNumber(d, value))}
+            />
+          )}
         </div>
 
         <footer className="choice-prompt__foot">
@@ -217,7 +235,11 @@ function PlayerOptions({
   );
 }
 
-/** The modes of a modal spell — "choose two —" is `min = max = 2` over this list. */
+/**
+ * The modes of a modal spell — "choose two —" is `min = max = 2` over this list.
+ * The question is asked while the spell is being CAST, so what the human sees
+ * here is the menu of modes this board actually lets them announce.
+ */
 function ModeOptions({
   choice,
   draft,
@@ -227,18 +249,69 @@ function ModeOptions({
   draft: ChoiceDraft;
   onPick: (value: ChoiceOptionValue) => void;
 }): ReactElement {
-  const picked = new Set(draft.kind === 'chooseModes' ? draft.modeIds : []);
   return (
     <div className="choice-prompt__list">
-      {choice.modes.map((m) => (
+      {choice.modes.map((m) => {
+        // A repeated-modes choice can hold the SAME mode several times, and how
+        // many is part of the answer — so the count is shown, not just whether
+        // the mode is selected at all.
+        const times = pickCount(draft, m.id);
+        return (
+          <button
+            key={m.id}
+            type="button"
+            className={`choice-option${times > 0 ? ' choice-option--selected' : ''}`}
+            aria-pressed={times > 0}
+            onClick={() => onPick(m.id)}
+          >
+            {m.label}
+            {times > 1 ? ` ×${times}` : ''}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * The values a permanent may NAME as it enters — "As Cavern of Souls enters,
+ * choose a creature type."
+ *
+ * A radio group, not a multi-select: exactly one value is named, and naming it
+ * is not optional (there is no "choose none" button on this prompt, because
+ * declining is the engine's floor for a seat that cannot answer, never a move a
+ * human should be offered).
+ *
+ * The list can be long — a creature-type menu is as long as the deck is varied —
+ * so it scrolls inside the prompt rather than pushing the Confirm button off the
+ * card. The engine never raises this question with an empty menu (it settles
+ * that case itself), but the empty branch is rendered anyway: a hand-built or
+ * replayed state must show a readable dialog, not an empty box with a dead
+ * button.
+ */
+function NameableValueOptions({
+  choice,
+  chosen,
+  onSet,
+}: {
+  choice: Extract<PendingChoice, { kind: 'chooseValue' }>;
+  chosen: string | null;
+  onSet: (value: string) => void;
+}): ReactElement {
+  if (choice.options.length === 0) {
+    return <p className="choice-prompt__empty">There is nothing to name.</p>;
+  }
+  return (
+    <div className="choice-prompt__list choice-prompt__list--scroll">
+      {choice.options.map((option) => (
         <button
-          key={m.id}
+          key={option.value}
           type="button"
-          className={`choice-option${picked.has(m.id) ? ' choice-option--selected' : ''}`}
-          aria-pressed={picked.has(m.id)}
-          onClick={() => onPick(m.id)}
+          className={`choice-option${chosen === option.value ? ' choice-option--selected' : ''}`}
+          aria-pressed={chosen === option.value}
+          onClick={() => onSet(option.value)}
         >
-          {m.label}
+          {option.label}
         </button>
       ))}
     </div>
@@ -318,6 +391,42 @@ function BinaryOptions({
       >
         {labels.no}
       </button>
+    </div>
+  );
+}
+
+/**
+ * The values a choose-a-number question offers ("choose a value for X"), one
+ * button per value. The range comes from the engine, which bounded it by what
+ * the board can actually pay, so every button here is a legal, fundable answer
+ * — no button ever needs disabling.
+ */
+function NumberOptions({
+  min,
+  max,
+  chosen,
+  onSet,
+}: {
+  min: number;
+  max: number;
+  chosen: number | null;
+  onSet: (value: number) => void;
+}): ReactElement {
+  const values: number[] = [];
+  for (let value = min; value <= max; value++) values.push(value);
+  return (
+    <div className="choice-prompt__list choice-prompt__list--inline">
+      {values.map((value) => (
+        <button
+          key={value}
+          type="button"
+          className={`choice-option${chosen === value ? ' choice-option--selected' : ''}`}
+          aria-pressed={chosen === value}
+          onClick={() => onSet(value)}
+        >
+          {value}
+        </button>
+      ))}
     </div>
   );
 }

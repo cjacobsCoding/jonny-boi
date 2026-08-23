@@ -266,8 +266,8 @@ describe('targeting filters — artifact and opponent-only', () => {
   });
 });
 
-describe('modal spells — the primitive was built, the text never reached it', () => {
-  it('compiles "Choose one —" with both modes', () => {
+describe('modal spells — announced at cast, as data on the definition', () => {
+  it('compiles "Choose one —" into a ModalSpec, not into a resolution-time effect', () => {
     const result = compileCard(
       card({
         name: 'Test Charm',
@@ -276,17 +276,57 @@ describe('modal spells — the primitive was built, the text never reached it', 
       }),
     );
     expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
-    const effect = onlyEffect(result.definition);
-    expect(effect.primitive).toBe('modal');
-    const params = effect.params as { count: number; modes: Array<{ effects: unknown[] }> };
-    expect(params.count).toBe(1);
-    expect(params.modes).toHaveLength(2);
-    expect(params.modes[0]!.effects).toEqual([
-      { primitive: 'dealDamage', params: { amount: 3 } },
-    ]);
-    expect(params.modes[1]!.effects).toEqual([
-      { primitive: 'gainLife', params: { amount: 3 } },
-    ]);
+    // A modal card's whole script is its modes: there is no top-level effect and
+    // no `modal` primitive, because the modes are chosen while the spell is
+    // being CAST (CR 601.2b) and a primitive only ever runs at resolution.
+    expect(result.definition.effects).toBeUndefined();
+    const modal = result.definition.modal!;
+    expect([modal.min, modal.max]).toEqual([1, 1]);
+    expect(modal.modes).toHaveLength(2);
+    expect(modal.modes[0]!.effects).toEqual([{ primitive: 'dealDamage', params: { amount: 3 } }]);
+    // A mode that names a target DECLARES what it may be aimed at, because its
+    // aim is chosen per mode rather than inherited from the cast.
+    expect(modal.modes[0]!.targets).toBe('any');
+    expect(modal.modes[1]!.effects).toEqual([{ primitive: 'gainLife', params: { amount: 3 } }]);
+    expect(modal.modes[1]!.targets).toBeUndefined();
+  });
+
+  it('compiles "Choose one or both —" as the RANGE it prints', () => {
+    const result = compileCard(
+      card({
+        name: 'Both Charm',
+        oracleText: 'Choose one or both —\n• You gain 3 life.\n• Draw a card.',
+      }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect([result.definition.modal!.min, result.definition.modal!.max]).toEqual([1, 2]);
+  });
+
+  it('compiles "Choose up to two —", whose floor is ZERO modes', () => {
+    const result = compileCard(
+      card({
+        name: 'Upto Charm',
+        oracleText: 'Choose up to two —\n• You gain 3 life.\n• Draw a card.',
+      }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect([result.definition.modal!.min, result.definition.modal!.max]).toEqual([0, 2]);
+  });
+
+  it('compiles "You may choose the same mode more than once"', () => {
+    const result = compileCard(
+      card({
+        name: 'Confluence',
+        oracleText:
+          'Choose three. You may choose the same mode more than once.\n• You gain 3 life.\n• Draw a card.',
+      }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    const modal = result.definition.modal!;
+    expect(modal.allowRepeats).toBe(true);
+    // THREE picks off a TWO-mode menu is only legal because repeats are, so the
+    // count must not be clamped down to the menu size here.
+    expect([modal.min, modal.max]).toEqual([3, 3]);
   });
 
   it('rejects the WHOLE card when one mode is unimplementable', () => {
@@ -300,6 +340,7 @@ describe('modal spells — the primitive was built, the text never reached it', 
       }),
     );
     expect(result.status).toBe('incomplete');
+    expect(result.definition.modal).toBeUndefined();
   });
 
   it('does not treat a bare "Choose one —" with no modes as modal', () => {
@@ -339,7 +380,7 @@ describe('flash / hexproof / shroud compile from the printed keyword list', () =
     expect(result.definition.keywords).toMatchObject({ hexproof: true });
   });
 
-  it('still reports WARD, which is a cost-to-target rule we do not have', () => {
+  it('compiles Ward {N}, which the engine now enforces as a pay-or-counter trigger', () => {
     const result = compileCard(
       card({
         name: 'Warded Thing',
@@ -348,6 +389,63 @@ describe('flash / hexproof / shroud compile from the printed keyword list', () =
         power: 2,
         toughness: 2,
         keywords: ['Ward'],
+      }),
+    );
+    expect(result.status).toBe('complete');
+    expect(result.definition.keywords).toMatchObject({ ward: 2 });
+  });
+
+  it('still reports a ward whose cost is not plain generic mana', () => {
+    const result = compileCard(
+      card({
+        name: 'Life Warded Thing',
+        oracleText: 'Ward—Pay 3 life.',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: 2,
+        toughness: 2,
+        keywords: ['Ward'],
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+
+  it('compiles protection from a color, and from a two-color list', () => {
+    const single = compileCard(
+      card({
+        name: 'Guarded Knight',
+        oracleText: 'Protection from red',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: 2,
+        toughness: 2,
+        keywords: ['Protection'],
+      }),
+    );
+    expect(single.status).toBe('complete');
+    expect(single.definition.keywords).toMatchObject({ protectionFrom: ['red'] });
+
+    const pair = compileCard(
+      card({
+        name: 'Sworded Knight',
+        oracleText: 'Protection from black and from green',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: 2,
+        toughness: 2,
+        keywords: ['Protection'],
+      }),
+    );
+    expect(pair.status).toBe('complete');
+    expect(pair.definition.keywords).toMatchObject({ protectionFrom: ['black', 'green'] });
+  });
+
+  it('still reports a protection quality outside the closed table', () => {
+    const result = compileCard(
+      card({
+        name: 'Tribal Warded Thing',
+        oracleText: 'Protection from Demons',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: 2,
+        toughness: 2,
+        keywords: ['Protection'],
       }),
     );
     expect(result.status).toBe('incomplete');

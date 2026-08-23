@@ -57,6 +57,8 @@ const KIND_NOUNS: Readonly<Record<ChoiceKind, { one: string; many: string }>> = 
   confirm: { one: 'answer', many: 'answers' },
   payMana: { one: 'answer', many: 'answers' },
   payLife: { one: 'answer', many: 'answers' },
+  chooseNumber: { one: 'value', many: 'values' },
+  chooseValue: { one: 'choice', many: 'choices' },
   selectTargets: { one: 'target', many: 'targets' },
 });
 
@@ -68,6 +70,16 @@ const KIND_NOUNS: Readonly<Record<ChoiceKind, { one: string; many: string }>> = 
  */
 function isBinaryKind(kind: ChoiceKind): boolean {
   return kind === 'confirm' || kind === 'payMana' || kind === 'payLife';
+}
+
+/**
+ * The kinds whose answer is one scalar rather than a selection — the binary
+ * kinds plus the number pick. They share the selection-machinery no-ops
+ * (nothing to toggle, nothing to clear) without sharing the binary two-button
+ * copy, which is why this is a second predicate rather than a wider first one.
+ */
+function isScalarKind(kind: ChoiceKind): boolean {
+  return isBinaryKind(kind) || kind === 'chooseNumber' || kind === 'chooseValue';
 }
 
 /** A readable zone name, degrading to the raw id for a zone we have no copy for. */
@@ -95,7 +107,9 @@ export type ChoiceDraft =
   | { readonly kind: 'chooseModes'; readonly modeIds: readonly string[] }
   | { readonly kind: 'confirm'; readonly yes: boolean | null }
   | { readonly kind: 'payMana'; readonly pay: boolean | null }
-  | { readonly kind: 'payLife'; readonly pay: boolean | null };
+  | { readonly kind: 'payLife'; readonly pay: boolean | null }
+  | { readonly kind: 'chooseNumber'; readonly value: number | null }
+  | { readonly kind: 'chooseValue'; readonly value: string | null };
 
 /** The value one selectable option contributes to the draft. */
 export type ChoiceOptionValue = InstanceId | PlayerId | string;
@@ -115,6 +129,14 @@ export function emptyDraft(choice: PendingChoice): ChoiceDraft {
       return { kind: 'payMana', pay: null };
     case 'payLife':
       return { kind: 'payLife', pay: null };
+    case 'chooseNumber':
+      return { kind: 'chooseNumber', value: null };
+    case 'chooseValue':
+      // `null` is UNDECIDED, and is deliberately not `NOTHING_CHOSEN`: naming
+      // nothing is a legal answer the engine accepts, so the two must stay
+      // distinguishable or the Confirm button would submit "nothing" the moment
+      // the prompt opened.
+      return { kind: 'chooseValue', value: null };
     default:
       return { kind: 'confirm', yes: null };
   }
@@ -164,10 +186,18 @@ function withValues(draft: ChoiceDraft, values: readonly ChoiceOptionValue[]): C
  * over-picking.
  */
 export function toggleOption(choice: PendingChoice, draft: ChoiceDraft, value: ChoiceOptionValue): ChoiceDraft {
-  if (isBinaryKind(draft.kind)) return draft;
+  if (isScalarKind(draft.kind)) return draft;
   const values = draftValues(draft);
+  // "You may choose the same mode more than once": below the maximum, clicking a
+  // mode ADDS another copy rather than deselecting the one already there,
+  // because the number of copies IS the answer. At the maximum the click falls
+  // through to the ordinary remove-one path, so a human who over-picked steps
+  // back one copy instead of having to clear the whole draft.
+  if (allowsRepeats(choice) && values.length < choice.max) {
+    return withValues(draft, [...values, value]);
+  }
   const at = values.indexOf(value);
-  if (at >= 0) return withValues(draft, values.filter((v) => v !== value));
+  if (at >= 0) return withValues(draft, values.filter((v, i) => !(v === value && i === at)));
   if (values.length >= choice.max) {
     if (choice.max === SINGLE_PICK) return withValues(draft, [value]);
     return draft;
@@ -177,6 +207,22 @@ export function toggleOption(choice: PendingChoice, draft: ChoiceDraft, value: C
 
 /** A choice that takes exactly one option behaves like a radio group. */
 const SINGLE_PICK = 1;
+
+/** Whether one option may be picked several times (a repeated-modes choice). */
+function allowsRepeats(choice: PendingChoice): boolean {
+  return choice.kind === 'chooseModes' && choice.allowRepeats;
+}
+
+/**
+ * How many times `value` is in the draft — the badge a repeated-mode option
+ * shows ("×2"). Zero for anything unpicked, so a caller can render it as
+ * "picked or not" without a second predicate.
+ */
+export function pickCount(draft: ChoiceDraft, value: ChoiceOptionValue): number {
+  let count = 0;
+  for (const picked of draftValues(draft)) if (picked === value) count += 1;
+  return count;
+}
 
 /** Set a yes/no draft's answer (a no-op on any other kind). */
 export function setConfirm(draft: ChoiceDraft, yes: boolean): ChoiceDraft {
@@ -193,9 +239,19 @@ export function setPayLife(draft: ChoiceDraft, pay: boolean): ChoiceDraft {
   return draft.kind === 'payLife' ? { kind: 'payLife', pay } : draft;
 }
 
+/** Set a choose-a-number draft's value (a no-op on any other kind). */
+export function setChooseNumber(draft: ChoiceDraft, value: number): ChoiceDraft {
+  return draft.kind === 'chooseNumber' ? { kind: 'chooseNumber', value } : draft;
+}
+
+/** Name a value ("choose a creature type") — a no-op on any other kind. */
+export function setChosenValue(draft: ChoiceDraft, value: string): ChoiceDraft {
+  return draft.kind === 'chooseValue' ? { kind: 'chooseValue', value } : draft;
+}
+
 /** Clear every pick — the "choose none" path of a `may` selection. */
 export function clearDraft(choice: PendingChoice, draft: ChoiceDraft): ChoiceDraft {
-  return isBinaryKind(draft.kind) ? draft : emptyDraft(choice);
+  return isScalarKind(draft.kind) ? draft : emptyDraft(choice);
 }
 
 /**
@@ -226,6 +282,10 @@ export function draftToAnswer(draft: ChoiceDraft): ChoiceAnswer | null {
       return draft.pay === null ? null : { kind: 'payMana', pay: draft.pay };
     case 'payLife':
       return draft.pay === null ? null : { kind: 'payLife', pay: draft.pay };
+    case 'chooseNumber':
+      return draft.value === null ? null : { kind: 'chooseNumber', value: draft.value };
+    case 'chooseValue':
+      return draft.value === null ? null : { kind: 'chooseValue', value: draft.value };
     default:
       return draft.yes === null ? null : { kind: 'confirm', yes: draft.yes };
   }
@@ -250,7 +310,15 @@ export function draftStatus(choice: PendingChoice, draft: ChoiceDraft): DraftSta
   const answer = draftToAnswer(draft);
   if (!answer) {
     const paying = choice.kind === 'payMana' || choice.kind === 'payLife';
-    return { answer: null, canSubmit: false, hint: paying ? PAY_UNDECIDED_HINT : CONFIRM_UNDECIDED_HINT };
+    const hint =
+      choice.kind === 'chooseValue'
+        ? VALUE_UNDECIDED_HINT
+        : choice.kind === 'chooseNumber'
+          ? NUMBER_UNDECIDED_HINT
+          : paying
+            ? PAY_UNDECIDED_HINT
+            : CONFIRM_UNDECIDED_HINT;
+    return { answer: null, canSubmit: false, hint };
   }
   const verdict: AnswerValidation = validateChoiceAnswer(choice, answer);
   if (!verdict.ok) return { answer, canSubmit: false, hint: capitalize(verdict.reason) };
@@ -259,7 +327,7 @@ export function draftStatus(choice: PendingChoice, draft: ChoiceDraft): DraftSta
 
 /** The hint shown once the draft is already legal (it may still take more picks). */
 function readyHint(choice: PendingChoice, draft: ChoiceDraft): string {
-  if (isBinaryKind(choice.kind)) return 'Confirm your answer.';
+  if (isScalarKind(choice.kind)) return 'Confirm your answer.';
   const picked = draftValues(draft).length;
   if (picked < choice.max) {
     const room = choice.max - picked;
@@ -268,9 +336,20 @@ function readyHint(choice: PendingChoice, draft: ChoiceDraft): string {
   return picked === 0 ? 'Choosing nothing is allowed here.' : 'Ready to confirm.';
 }
 
+/** What each naming subject is called in the requirement line (UI copy only). */
+const VALUE_SUBJECT_NOUNS: Readonly<Record<string, string>> = Object.freeze({
+  color: 'color',
+  creatureType: 'creature type',
+  cardType: 'card type',
+  basicLandType: 'basic land type',
+  player: 'player',
+});
+
 /** The two undecided-draft hints, named so the copy is not buried in a branch. */
 const CONFIRM_UNDECIDED_HINT = 'Choose Yes or No.';
 const PAY_UNDECIDED_HINT = 'Choose whether to pay.';
+const NUMBER_UNDECIDED_HINT = 'Choose a value.';
+const VALUE_UNDECIDED_HINT = 'Name one.';
 
 function capitalize(text: string): string {
   return text.length === 0 ? text : text.charAt(0).toUpperCase() + text.slice(1);
@@ -306,6 +385,20 @@ function requirementText(choice: PendingChoice): string {
   if (choice.kind === 'selectTargets') {
     return `Choose what ${choice.sourceName} points at: ${describeRestriction(choice.restriction)}.`;
   }
+  if (choice.kind === 'chooseNumber') {
+    // The range was computed by the engine from what the board can pay, so the
+    // copy can promise every offered value is fundable.
+    return choice.min === choice.max
+      ? `Only ${choice.min} can be chosen here.`
+      : `Choose a value from ${choice.min} to ${choice.max} — every value shown is one you can pay for.`;
+  }
+  if (choice.kind === 'chooseValue') {
+    // The naming is permanent and PUBLIC — both halves matter to a human, and
+    // neither is obvious from the prompt, so the requirement line says them.
+    return choice.options.length === 0
+      ? 'There is nothing to name here.'
+      : `Name one ${VALUE_SUBJECT_NOUNS[choice.subject]}. It is announced to the table and stays on this permanent.`;
+  }
   if (choice.kind === 'payLife') {
     return choice.affordable
       ? `Pay ${choice.amount} life to have it enter untapped, or decline and it enters tapped.`
@@ -321,14 +414,29 @@ function requirementText(choice: PendingChoice): string {
       ? `Pay ${cost}, or decline and let the effect happen.`
       : `You cannot produce ${cost}, so the only answer is to decline.`;
   }
+  // A scry/surveil look reads as a keep-or-discard, not as a count: the human is
+  // told what happens to the cards they DON'T pick, which is the whole decision.
+  if (choice.kind === 'selectCards' && choice.keepOnTop) {
+    return `Pick the cards to keep on top, in the order you want to draw them — every card you leave unpicked goes where the prompt says. Picking none is allowed.`;
+  }
+  // An as-enters COPY is not a "how many" question either: it is "which
+  // permanent do you want to be?", and the one thing a player has to be told is
+  // that they get the PRINTED card (CR 707.2) — counters and buffs on the thing
+  // they copy stay behind. A generic "choose up to 1 card from the battlefield"
+  // leaves that out, and it is exactly the part that surprises people.
+  if (choice.kind === 'selectCards' && choice.context === 'copyAsEnters') {
+    return `Pick the permanent to enter as a copy of — you get its PRINTED card, so counters and buffs on it stay behind. Picking none is allowed.`;
+  }
+
   const { min, max, kind } = choice;
   const zone = choice.kind === 'selectCards' ? zoneLabel(choice.fromZone) : undefined;
   const suffix = zone ? ` from the ${zone}` : '';
   const orderNote = choice.kind === 'selectCards' && choice.ordered ? ' The order you pick is the order used.' : '';
   if (max === 0) return `Nothing can be chosen${suffix}.`;
-  if (min === max) return `Choose exactly ${countNoun(kind, max)}${suffix}.${orderNote}`;
-  if (min === 0) return `Choose up to ${countNoun(kind, max)}${suffix} — or none.${orderNote}`;
-  return `Choose ${min}–${countNoun(kind, max)}${suffix}.${orderNote}`;
+  const repeatNote = allowsRepeats(choice) ? ' You may choose the same mode more than once.' : '';
+  if (min === max) return `Choose exactly ${countNoun(kind, max)}${suffix}.${orderNote}${repeatNote}`;
+  if (min === 0) return `Choose up to ${countNoun(kind, max)}${suffix} — or none.${orderNote}${repeatNote}`;
+  return `Choose ${min}–${countNoun(kind, max)}${suffix}.${orderNote}${repeatNote}`;
 }
 
 /** Build the prompt header for a pending choice. */
@@ -344,7 +452,7 @@ export function choicePromptView(
     prompt: choice.prompt,
     requirement: requirementText(choice),
     ordered: choice.kind === 'selectCards' && choice.ordered,
-    optional: !isBinaryKind(choice.kind) && choice.min === 0,
+    optional: !isScalarKind(choice.kind) && choice.min === 0,
     optionCount: choiceOptionCount(choice),
   };
 }

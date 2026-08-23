@@ -20,16 +20,32 @@
 import {
   planManaPayment,
   type CardInstance,
+  type CastZone,
   type GameAction,
   type InstanceId,
+  type ManaCost,
   type ManaPlanView,
   type PlayerId,
 } from '@jonny-boi/core';
 
 /**
+ * The cost this cast pays: the printed cost from hand, the flashback cost from
+ * the graveyard (the engine's own rule at `applyCastSpell` — the two must agree
+ * or the client plans the wrong taps). `undefined` for a graveyard cast of a
+ * card with no flashback: no legal cast exists, so no sequence should either.
+ */
+function castCost(card: CardInstance, fromZone: CastZone): ManaCost | undefined | null {
+  if (fromZone === 'graveyard') return card.def.flashback ?? null;
+  return card.def.cost;
+}
+
+/**
  * The ordered actions that pay for and then cast `card`, or `null` when the board
  * cannot fund it. An empty tap list is normal — it means the pool already pays, in
- * which case the server has already offered the cast directly.
+ * which case the server has already offered the cast directly. `fromZone`
+ * defaults to `'hand'`; pass `'graveyard'` for a flashback cast (the flashback
+ * cost is planned for, and the cast action carries the zone so the server looks
+ * in the right place).
  *
  * Actions must be sent in order; the server applies them sequentially, so each tap
  * is legal when it arrives and the cast is legal once the last one lands.
@@ -40,9 +56,20 @@ export function castSequence(
   card: CardInstance,
   targets: readonly (InstanceId | PlayerId)[],
   legalActions: readonly GameAction[],
+  fromZone: CastZone = 'hand',
 ): GameAction[] | null {
-  const cost = card.def.cost;
-  const plan = cost ? planManaPayment(view, player, cost, legalActions) : [];
+  const cost = castCost(card, fromZone);
+  if (cost === null) return null; // graveyard cast of a card with no flashback
+  const plan = cost
+    ? planManaPayment(
+        view,
+        player,
+        cost,
+        legalActions,
+        card.def,
+        'cast',
+      )
+    : [];
   if (!plan) return null;
 
   const actions: GameAction[] = plan.map((tap) => ({
@@ -56,6 +83,7 @@ export function castSequence(
     player,
     instanceId: card.instanceId,
     targets: targets.length > 0 ? [...targets] : undefined,
+    ...(fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
   });
   return actions;
 }
@@ -80,7 +108,36 @@ export function castableWithTaps(
   for (const card of hand) {
     const cost = card.def.cost;
     if (!cost) continue;
-    if (planManaPayment(view, player, cost, legalActions)) out.add(card.instanceId);
+    if (planManaPayment(view, player, cost, legalActions, card.def, 'cast')) out.add(card.instanceId);
+  }
+  return out;
+}
+
+/**
+ * Which cards in the viewer's GRAVEYARD could be flashback-cast if we tapped for
+ * them — the graveyard twin of {@link castableWithTaps}, planning the FLASHBACK
+ * cost. Unlike the hand helper it also gates on timing (`sorceryWindowOpen`:
+ * the viewer is the active player, in a main phase, stack empty), because a
+ * flashback card sits in the graveyard for the whole game — without the gate
+ * every sorcery there would glow "castable" on the opponent's turn only to be
+ * rejected on submit, a dead-end the hand rarely hits.
+ */
+export function graveyardCastableWithTaps(
+  view: ManaPlanView,
+  player: PlayerId,
+  graveyard: readonly CardInstance[],
+  legalActions: readonly GameAction[],
+  sorceryWindowOpen: boolean,
+): ReadonlySet<InstanceId> {
+  const out = new Set<InstanceId>();
+  const hasTaps = legalActions.some((a) => a.kind === 'tapForMana' && a.player === player);
+  if (!hasTaps) return out;
+  for (const card of graveyard) {
+    const cost = card.def.flashback;
+    if (cost === undefined) continue;
+    const instantSpeed = card.def.timing === 'instant' || card.def.types.includes('instant');
+    if (!instantSpeed && !sorceryWindowOpen) continue;
+    if (planManaPayment(view, player, cost, legalActions, card.def, 'cast')) out.add(card.instanceId);
   }
   return out;
 }

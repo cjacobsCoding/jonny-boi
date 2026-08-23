@@ -72,6 +72,24 @@ export interface SimConfig {
    */
   readonly maxActionsPerGame: number;
   /**
+   * Actions ONE TURN may take before the game is declared a draw by CR 104.4b.
+   *
+   * Some real card pairs are genuine MANDATORY infinite loops — Dualcaster Mage
+   * copying a Rite of Replication that makes another Dualcaster Mage is the
+   * printed example, and neither half is a "may". A player cannot stop it, so
+   * the rules already answer this: "if the game somehow enters a loop of
+   * mandatory actions, repeating a sequence of events with no way to stop, the
+   * game is a draw."
+   *
+   * Distinct from {@link maxActionsPerGame} on purpose, and that distinction is
+   * the whole point. The GAME cap is a backstop that says "something is wrong
+   * and I do not know what", and the soak treats reaching it as a defect. A
+   * single TURN running past this bound is a different and *diagnosable* fact —
+   * no legitimate turn is thousands of actions long — so the game ends the way
+   * the rules say rather than by burning the backstop and looking like a bug.
+   */
+  readonly maxActionsPerTurn: number;
+  /**
    * How many times in a row the engine may reject a pilot's action before the
    * harness steps in and passes priority for that seat instead.
    *
@@ -116,6 +134,9 @@ export const DEFAULT_SIM_CONFIG: SimConfig = Object.freeze({
   // Each turn is a bounded number of priority passes / micro-actions; this cap is
   // generously above any legitimate game and only trips on a pathological loop.
   maxActionsPerGame: 20_000,
+  // Two orders of magnitude above a real turn (a heavy storm turn is tens of
+  // actions), so only a genuine loop reaches it.
+  maxActionsPerTurn: 2_000,
   // A healthy pilot is rejected essentially never; a couple of rejections in a row
   // is already pathological, so we intervene quickly rather than after thousands.
   maxConsecutiveRejectedActions: 3,
@@ -164,7 +185,10 @@ export const DEFAULT_STATS_CONFIG: StatsConfig = Object.freeze({
  * THIS constant so there is exactly one wording. The statistics are always exact.
  */
 export const FIDELITY_CAVEAT =
-  'Note: the engine models triggered abilities and until-end-of-turn effects. A few ' +
-  'advanced mechanics remain unimplemented — transform/double-faced cards, dynamic ' +
-  'power/toughness, planeswalker loyalty, and flash/flashback — so cards using them ' +
-  'play as a simplified subset. The statistics are exact.';
+  'Note: the engine models triggered abilities, until-end-of-turn effects, '
+  + 'planeswalkers with loyalty, transforming double-faced cards, printed '
+  + '"Flashback {cost}", characteristic-defining power/toughness (the star box) '
+  + 'and turn-scoped memory (revolt). A few advanced mechanics remain '
+  + 'unimplemented — flashback GRANTED by another card, and modes chosen at '
+  + 'cast time — so cards using them play as a simplified subset. The '
+  + 'statistics are exact.';

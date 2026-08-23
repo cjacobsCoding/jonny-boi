@@ -67,6 +67,21 @@ export function parseCount(token: string | undefined): number | null {
  * `./rules` and one in `./compile`, which is precisely the shape a rule gains in
  * one place and not the other.
  */
+/**
+ * The bare symbols of a printed cost run, uppercased: `{X}{R}{R}` becomes
+ * `['X','R','R']`.
+ *
+ * Transcription only, with no opinion about payability — which is exactly why
+ * it is separate from {@link parseManaSymbols}. A caller that CAN pay a symbol
+ * that parser refuses (a flashback cost's `{X}`, whose value is a cast-time
+ * question) partitions the run here first and hands the rest on.
+ */
+export function splitCostSymbols(text: string): string[] {
+  const out: string[] = [];
+  for (const match of text.matchAll(/\{([^}]+)\}/g)) out.push(match[1]!.toUpperCase());
+  return out;
+}
+
 export function parseManaSymbols(text: string): ManaCost | null {
   const cost: Record<string, number> = {};
   for (const match of text.matchAll(/\{([^}]+)\}/g)) {
@@ -113,6 +128,12 @@ const SELF_PHRASES: readonly string[] = [
   'this enchantment',
   'this land',
   'this card',
+  // A BATTLE names itself by its subtype in exactly the same way an Aura does
+  // ("As this Siege enters, choose an opponent to protect it"). Without these the
+  // phrase survives normalization, the line reads as an ability about some other
+  // object, and every printed battle reports its own reminder text as unknown.
+  'this siege',
+  'this battle',
 ];
 
 /**
@@ -171,11 +192,17 @@ export function splitAbilities(oracleText: string): string[] {
     .split(/\r?\n+/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
-  return joinModalBlocks(lines);
+  return joinRevoltRiders(joinModalBlocks(lines));
 }
 
-/** A modal header: "Choose one —", "Choose two —", "Choose one or both —". */
-const MODAL_HEADER = /^choose\s+(?:one|two|three|one or both|up to \w+)\s*[—-]\s*$/i;
+/**
+ * A modal header: "Choose one —", "Choose one or both —", "Choose up to two —",
+ * and the Confluence form "Choose three. You may choose the same mode more than
+ * once." — which prints a full stop instead of the dash, and is why the dash is
+ * optional here rather than required.
+ */
+const MODAL_HEADER =
+  /^choose\s+(?:one or both|up to \w+|one|two|three|four|five)\s*\.?\s*(?:you may choose the same mode more than once\s*\.?\s*)?[—-]?\s*$/i;
 
 /** A printed mode line, which Oracle text bullets. */
 const MODE_BULLET = /^[•·]\s*/;
@@ -213,8 +240,43 @@ function joinModalBlocks(lines: readonly string[]): string[] {
       out.push(line);
       continue;
     }
-    out.push(`${line} ${modes.map((mode) => `• ${mode}`).join(' ')}`);
+    // The rule table's pattern wants the header, a dash, then the bullets. A
+    // header printed WITHOUT a dash (the Confluence form) gets one supplied
+    // here, so one rule reads both printings rather than two nearly-identical
+    // patterns drifting apart.
+    const header = /[—-]\s*$/.test(line.trim()) ? line.trim() : `${line.trim()} —`;
+    out.push(`${header} ${modes.map((mode) => `• ${mode}`).join(' ')}`);
     i = j - 1;
+  }
+  return out;
+}
+
+/**
+ * An ability-word rider that MODIFIES the line above it rather than standing on
+ * its own. Revolt is the shape: Fatal Push prints "Destroy target creature if
+ * it has mana value 2 or less." and then, on its own line, "Revolt — Destroy
+ * that creature if it has mana value 4 or less **instead** if a permanent left
+ * the battlefield under your control this turn."
+ *
+ * The second line is meaningless alone — "that creature" has no referent, and
+ * compiling the two independently would destroy twice. So it is joined onto the
+ * previous line, exactly as {@link joinModalBlocks} joins a modal header to its
+ * bullets, and ONE rule then sees the whole idiom.
+ *
+ * A rider with no line above it is left exactly as found, so it reports as
+ * unrecognized rather than silently attaching to nothing.
+ */
+const RIDER_PREFIX = /^(?:revolt|morbid|delirium|threshold|metalcraft)\s*[—-]\s*/i;
+
+function joinRevoltRiders(lines: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const line of lines) {
+    if (RIDER_PREFIX.test(line) && out.length > 0) {
+      const previous = out[out.length - 1] as string;
+      out[out.length - 1] = `${previous.replace(/\.$/, '')}. ${line}`;
+      continue;
+    }
+    out.push(line);
   }
   return out;
 }

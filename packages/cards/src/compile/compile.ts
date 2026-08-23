@@ -19,6 +19,7 @@
 import type {
   ActivatedAbility,
   ActivationCost,
+  AdditionalCastCost,
   AttachmentSpec,
   CardDefinition,
   CardType,
@@ -47,10 +48,15 @@ import {
   MANA_RULES,
   STATIC_RULES,
   TRIGGER_RULES,
+  ABILITY_WORDS,
   explainUnsupported,
   isVacuousClause,
+  parseProtectionOrWard,
 } from './rules.js';
+import { mergeKeywordGrant } from '@jonny-boi/core';
+import type { CastZone, KeywordFlags } from '@jonny-boi/core';
 import { frontFaceName, normalizeClause, parseManaSymbols, prepareOracle, splitSentences } from './text.js';
+import { AS_ENTERS_PRIMITIVE } from '../choice-primitives.js';
 
 /**
  * Scryfall's keyword names for the two printed attachment abilities. They are
@@ -58,6 +64,66 @@ import { frontFaceName, normalizeClause, parseManaSymbols, prepareOracle, splitS
  * keyword flag, so the keyword sweep must not report them a second time.
  */
 const ATTACHMENT_KEYWORDS: ReadonlySet<string> = new Set(['enchant', 'equip']);
+
+/**
+ * Scryfall keywords that this compiler models as effect PRIMITIVES matched by the
+ * rule table rather than as keyword flags or dedicated assembly fields.
+ *
+ * Scry, Surveil and Mill each compile from their printed line (`scry-n`,
+ * `surveil-n`, `scry-then-effect`, `self-mill`, `target-player-mills`) into an
+ * `EffectRef` whose `primitive` is the name below. The keyword sweep therefore has
+ * to look at the compiled OUTPUT to decide whether the line was implemented — the
+ * same question `flashback`/`kicker` answer with a single assembly field.
+ *
+ * The guard is deliberately evidence-based, not a blanket skip: a wording the rule
+ * table does NOT match (a derived or conditional count, "look at the top N …")
+ * produces no such primitive, so that card still reports honestly.
+ */
+/**
+ * Scryfall's keyword names for a damage-SCALING replacement ability. They are
+ * modelled by the rule table (`replacement-damage-scaled`) as
+ * `CardDefinition.replacements` data rather than as a keyword flag, so the sweep
+ * must not report them a second time — see the guard's own comment for why it is
+ * keyed on the compiled outcome rather than on the word.
+ */
+const SCALING_KEYWORDS: ReadonlySet<string> = new Set(['double', 'triple']);
+
+const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freeze({
+  scry: 'scry',
+  surveil: 'surveil',
+  mill: 'mill',
+});
+
+/**
+ * Every effect-primitive name reachable in a compiled assembly.
+ *
+ * Primitives nest: a scry can sit inside a triggered ability's effect list (the
+ * Theros temples), inside an activated ability (Castle Vantress), or inside another
+ * primitive's params (`scry-then-effect`, the "you may" wrappers). A shallow look at
+ * `assembly.effects` would miss all three and report the keyword anyway, so the walk
+ * is a deep one over the assembled data.
+ */
+function compiledPrimitives(assembly: Assembly): ReadonlySet<string> {
+  const found = new Set<string>();
+  const seen = new Set<unknown>();
+  const visit = (node: unknown): void => {
+    if (node === null || typeof node !== 'object') return;
+    if (seen.has(node)) return;
+    seen.add(node);
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
+    const record = node as Record<string, unknown>;
+    if (typeof record.primitive === 'string') found.add(record.primitive);
+    for (const value of Object.values(record)) visit(value);
+  };
+  visit(assembly.effects);
+  visit(assembly.triggers);
+  visit(assembly.activated);
+  visit(assembly.statics);
+  return found;
+}
 
 /** Scryfall card types → the core `CardType`s the engine understands. */
 const TYPE_MAP: Readonly<Record<string, CardType>> = Object.freeze({
@@ -68,17 +134,44 @@ const TYPE_MAP: Readonly<Record<string, CardType>> = Object.freeze({
   artifact: 'artifact',
   enchantment: 'enchantment',
   planeswalker: 'planeswalker',
+  battle: 'battle',
+  // Kindred (CR 308, printed as "Tribal" before 2024) — a real card type with a
+  // real, small meaning: it never appears alone, and it makes the card's
+  // subtypes CREATURE types without making the card a creature. Mapped rather
+  // than reported because core models exactly that (see `CardType`), so a
+  // Kindred Sorcery is a sorcery with Eldrazi among its subtypes, which is what
+  // the printed card is.
+  kindred: 'kindred',
 });
 
 /**
- * Card types the engine has no system for, with the reason. `planeswalker` maps
- * to a real `CardType` (so it is representable) but has no loyalty system, so a
- * planeswalker can never be complete.
+ * Card types the engine has no system for, with the reason. Exported so the
+ * About view's TODO list can name these gaps from the same record the compiler
+ * judges by.
+ *
+ * The record is EMPTY, and that is the honest state of the world: every printed
+ * card type the engine can meet now has a system behind it. `planeswalker` left
+ * when loyalty landed; `battle` left when battles did — a battle enters with its
+ * printed defense counters, is attacked through the same attackable-object seam
+ * as a walker, loses defense to combat and to burn, and is put into its owner's
+ * graveyard by a state-based action at zero.
+ *
+ * ⚠️ A battle CARD is still usually reported, and by design: every printed battle
+ * is a Siege, whose reward is casting its BACK FACE, and that needs the
+ * castable-second-face system (`SECOND_CASTABLE_FACE_GAP`). The subsystem being
+ * complete is not the same claim as the cards being playable, and the compiler
+ * says so per card rather than letting a type-level "supported" imply it.
  */
-const TYPES_WITHOUT_SYSTEM: Readonly<Record<string, string>> = Object.freeze({
-  planeswalker: 'planeswalker loyalty abilities',
-  battle: 'battles (siege / defense counters)',
-});
+export const TYPES_WITHOUT_SYSTEM: Readonly<Record<string, string>> = Object.freeze({});
+
+/**
+ * A Kindred card ALWAYS prints a second card type (CR 308.1), and the second
+ * one is what decides how the card is played. A record that somehow carried
+ * `Kindred` alone would therefore be malformed rather than unsupported — it is
+ * reported through the generic "a card type the engine can represent" check
+ * below rather than being given a system-shaped excuse.
+ */
+const KINDRED_TYPE = 'kindred';
 
 /** Basic land subtypes → the mana they tap for. */
 const LAND_SUBTYPE_MANA: Readonly<Record<string, ManaColor>> = Object.freeze({
@@ -117,19 +210,29 @@ function bundleAsMode(bundle: readonly ManaColor[]): ManaProduction {
   return mode;
 }
 
-/** Split `other` cost symbols into payable hybrids and genuinely unpayable ones. */
+/** Split `other` cost symbols into payable hybrids, `{X}` symbols, and genuinely unpayable ones. */
 function partitionOtherSymbols(symbols: readonly string[]): {
   hybrid: ManaColor[][];
+  /** How many `{X}` symbols the cost prints — payable now (chosen at cast time). */
+  xCount: number;
   unpayable: string[];
 } {
   const hybrid: ManaColor[][] = [];
   const unpayable: string[] = [];
+  let xCount = 0;
   for (const symbol of symbols) {
-    const match = HYBRID_SYMBOL.exec(symbol.toUpperCase());
+    // Canonical `other` entries are brace-free ('X', 'G/W'), but a hand-built
+    // record may carry the printed form ('{X}') — fold both to one shape.
+    const upper = symbol.replace(/[{}]/g, '').toUpperCase();
+    if (upper === 'X') {
+      xCount += 1;
+      continue;
+    }
+    const match = HYBRID_SYMBOL.exec(upper);
     if (match) hybrid.push([match[1] as ManaColor, match[2] as ManaColor]);
     else unpayable.push(symbol);
   }
-  return { hybrid, unpayable };
+  return { hybrid, xCount, unpayable };
 }
 
 /** Convert a data-tools mana cost to the core cost shape (omitting zeroes). */
@@ -187,17 +290,76 @@ interface Assembly {
   readonly triggers: TriggeredAbility[];
   readonly produces: ManaColor[];
   readonly producesOptions: ManaProduction[];
+  /** Mana abilities that print a cost, a rider, a restriction or derived colours. */
+  readonly manaAbilities: import('@jonny-boi/core').ManaAbility[];
   readonly activated: ActivatedAbility[];
-  keywords: Record<string, boolean>;
+  readonly statics: import('@jonny-boi/core').StaticAbility[];
+  /** Printed replacement/prevention abilities (core's CR 614/615 layer). */
+  readonly replacements: import('@jonny-boi/core').ReplacementAbility[];
+  keywords: KeywordFlags;
   entersTapped: boolean;
   entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   entersTappedUnlessLifePaid?: number;
+  entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
+  copyAsEnters?: import('@jonny-boi/core').CopyAsEntersSpec;
+  /** The printed "As ~ enters, choose a…" naming, once some line prints it. */
+  asEntersChoice?: import('@jonny-boi/core').AsEntersChoice;
+  /** "~ is the chosen type in addition to its other types". */
+  isChosenSubtype?: boolean;
+  /** The printed "Kicker {COST}", once some line prints it. */
+  kicker?: ManaCost;
+  /**
+   * The printed "As an additional cost to cast this spell, …" — a MANDATORY cost
+   * that makes the cast illegal when it cannot be paid (CR 601.2h).
+   */
+  additionalCost?: AdditionalCastCost;
+  /** The printed "Multikicker {COST}" — an additional cost paid any number of times. */
+  multikicker?: ManaCost;
+  /** The printed modal header + modes ("Choose one — • … • …"). */
+  modal?: import('@jonny-boi/core').ModalSpec;
+  /** The printed flashback cost, once a "Flashback {…}" line compiles. */
+  flashback?: ManaCost;
+  /** How many {X} symbols the flashback cost prints. */
+  flashbackXCost?: number;
+  /** The "Pay N life" rider on a flashback cost. */
+  flashbackLifeCost?: number;
+  /** Cycling abilities, accumulated — a card may print cycling AND landcycling. */
+  readonly cycling: import('@jonny-boi/core').CyclingAbility[];
+  /** The printed buyback cost, once a "Buyback {…}" line compiles. */
+  buyback?: ManaCost;
+  /** The printed madness cost, once a "Madness {…}" line compiles. */
+  madness?: ManaCost;
+  /** The formula behind a `*` P/T box, once a line compiles one. */
+  characteristicPT?: import('@jonny-boi/core').CharacteristicPT;
   /** The "Enchant …" / "Equip {N}" half of an attachment, once some line prints it. */
   attachesAs?: ClauseContribution['attachesAs'];
   /** The "Enchanted/Equipped creature gets …" half, accumulated across lines. */
   attachmentModifies?: PermanentModification;
+  /** Set once a line prints the keyword **Changeling**. */
+  changeling?: boolean;
+  /** Set once a line prints "This spell can't be countered". */
+  cantBeCountered?: boolean;
+  /** Set once a line prints "Spells [you control] can't be countered". */
+  spellsCantBeCountered?: import('@jonny-boi/core').UncounterableSpellsAbility;
+  /** Set once a line prints "You have no maximum hand size". */
+  noMaximumHandSize?: boolean;
+  /** Land-play zones this card unlocks, accumulated across lines. */
+  playLandsFrom?: import('@jonny-boi/core').LandPlayZone[];
   readonly matchedRules: string[];
   readonly missing: UnsupportedClause[];
+}
+
+/**
+ * Whether a Scryfall keyword name is a CYCLING one. Matched by suffix rather
+ * than against a list, because Scryfall names the typed variants BOTH generically
+ * ("Typecycling") and by the printed word ("Plainscycling", "Islandcycling",
+ * "Landcycling") — and a list would have to enumerate every land, creature and
+ * artifact type that has ever been printed with the word attached. All of them
+ * compile to the same `CardDefinition.cycling` list, so all of them are answered
+ * by the same guard.
+ */
+function isCyclingKeyword(word: string): boolean {
+  return word === 'cycling' || word.endsWith('cycling');
 }
 
 /** Merge one clause contribution into the assembly. */
@@ -206,14 +368,48 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.triggers) assembly.triggers.push(...contribution.triggers);
   if (contribution.produces) assembly.produces.push(...contribution.produces);
   if (contribution.producesOptions) assembly.producesOptions.push(...contribution.producesOptions);
+  if (contribution.manaAbilities) assembly.manaAbilities.push(...contribution.manaAbilities);
   if (contribution.keywords) {
-    assembly.keywords = { ...assembly.keywords, ...(contribution.keywords as Record<string, boolean>) };
+    // Folded by the same merge rule the engine layers with: boolean flags OR,
+    // protection lists UNION, ward costs ADD (`mergeKeywordGrant`).
+    assembly.keywords = mergeKeywordGrant(assembly.keywords, contribution.keywords);
   }
   if (contribution.activated) assembly.activated.push(...contribution.activated);
+  if (contribution.statics) assembly.statics.push(...contribution.statics);
+  if (contribution.replacements) assembly.replacements.push(...contribution.replacements);
   if (contribution.entersTapped) assembly.entersTapped = true;
   if (contribution.entersTappedUnless) assembly.entersTappedUnless = contribution.entersTappedUnless;
   if (contribution.entersTappedUnlessLifePaid !== undefined) {
     assembly.entersTappedUnlessLifePaid = contribution.entersTappedUnlessLifePaid;
+  }
+  if (contribution.copyAsEnters !== undefined) assembly.copyAsEnters = contribution.copyAsEnters;
+  if (contribution.entersTappedUnlessRevealed !== undefined) {
+    assembly.entersTappedUnlessRevealed = contribution.entersTappedUnlessRevealed;
+  }
+  if (contribution.asEntersChoice !== undefined) assembly.asEntersChoice = contribution.asEntersChoice;
+  if (contribution.isChosenSubtype) assembly.isChosenSubtype = true;
+  if (contribution.kicker) assembly.kicker = contribution.kicker;
+  if (contribution.additionalCost) assembly.additionalCost = contribution.additionalCost;
+  if (contribution.multikicker) assembly.multikicker = contribution.multikicker;
+  if (contribution.modal) assembly.modal = contribution.modal;
+  if (contribution.cycling) assembly.cycling.push(...contribution.cycling);
+  if (contribution.buyback) assembly.buyback = contribution.buyback;
+  if (contribution.madness) assembly.madness = contribution.madness;
+  if (contribution.characteristicPT) assembly.characteristicPT = contribution.characteristicPT;
+  if (contribution.flashback !== undefined) assembly.flashback = contribution.flashback;
+  if (contribution.flashbackXCost !== undefined) assembly.flashbackXCost = contribution.flashbackXCost;
+  if (contribution.flashbackLifeCost !== undefined) {
+    assembly.flashbackLifeCost = contribution.flashbackLifeCost;
+  }
+  if (contribution.changeling) assembly.changeling = true;
+  if (contribution.cantBeCountered) assembly.cantBeCountered = true;
+  if (contribution.spellsCantBeCountered) assembly.spellsCantBeCountered = contribution.spellsCantBeCountered;
+  if (contribution.noMaximumHandSize) assembly.noMaximumHandSize = true;
+  if (contribution.playLandsFrom) {
+    // Accumulated, not replaced: Bolas's Citadel prints one zone and a second
+    // line could print another, and both permissions are real at once.
+    const zones = assembly.playLandsFrom ?? (assembly.playLandsFrom = []);
+    for (const zone of contribution.playLandsFrom) if (!zones.includes(zone)) zones.push(zone);
   }
   if (contribution.attachesAs) assembly.attachesAs = contribution.attachesAs;
   if (contribution.attachmentModifies) {
@@ -254,6 +450,48 @@ function assembleAttachment(assembly: Assembly): AttachmentSpec | undefined {
     ...assembly.attachesAs,
     ...(assembly.attachmentModifies ? { modifies: assembly.attachmentModifies } : {}),
   };
+}
+
+/** Whether an ability watches the permanent its source is ATTACHED TO. */
+function watchesTheHost(ability: TriggeredAbility): boolean {
+  return ability.condition.watches === 'attachedHost';
+}
+
+/**
+ * Compile a body printed as ONE sentence joined by the word "and" - "you lose 1
+ * life **and** create a 1/1 black Faerie Rogue creature token with flying".
+ *
+ * Tried only AFTER the whole body and the sentence split have both failed, so
+ * nothing that compiles today compiles differently.
+ *
+ * **Splitting on a word cannot invent a card here, and that is the whole safety
+ * argument:** a split is accepted only when the left half is a complete rule AND
+ * the right half compiles in turn, so a cut in the wrong place simply fails.
+ * "create a 1/1 **blue and black** Faerie creature token" is exactly that case -
+ * cutting at that "and" leaves "create a 1/1 blue", which matches no rule, so
+ * the cut is abandoned and the earlier one ("you lose 1 life" / "create a 1/1
+ * blue and black Faerie creature token with flying") is the one that stands.
+ *
+ * Left-to-right and recursive, so "A and B and C" is handled by the same walk,
+ * and the first split whose halves BOTH compile wins.
+ */
+function compileConjunction(
+  clause: string,
+  ctx: RuleContext,
+): NonNullable<ReturnType<typeof applyRules>>[] | null {
+  const CONJUNCTION = ' and ';
+  let at = clause.indexOf(CONJUNCTION);
+  while (at >= 0) {
+    const left = applyRules(EFFECT_RULES, clause.slice(0, at).trim(), ctx);
+    if (left) {
+      const rest = clause.slice(at + CONJUNCTION.length).trim();
+      const whole = applyRules(EFFECT_RULES, rest, ctx);
+      const right = whole ? [whole] : compileConjunction(rest, ctx);
+      if (right) return [left, ...right];
+    }
+    at = clause.indexOf(CONJUNCTION, at + CONJUNCTION.length);
+  }
+  return null;
 }
 
 /**
@@ -305,6 +543,42 @@ function splitCostAndEffect(
   // Planeswalker loyalty costs are their own system and must stay reported.
   if (/^[+−-]?\d+$/.test(cost)) return null;
   return { cost, effect, raw: clause };
+}
+
+/**
+ * A planeswalker loyalty-ability line: `+1: BODY`, `−2: BODY`, `0: BODY`. The
+ * printed minus is U+2212 (`−`); a plain hyphen is accepted for hand-typed text.
+ */
+const LOYALTY_LINE = /^([+−-]?\d+): (.+)$/;
+
+/**
+ * Compile a loyalty ability into an activated ability with a SIGNED loyalty
+ * cost, sorcery-speed — which, with the engine's once-per-turn rule keyed on the
+ * cost kind, is exactly what CR 606 makes a loyalty ability. The body goes
+ * through the ordinary effect rules (targets and questions included), so a
+ * walker can only print abilities the engine genuinely runs; any body without a
+ * faithful implementation leaves the line unmatched and reported.
+ *
+ * Only planeswalkers get this reading: on anything else a leading `+2:` is not
+ * a loyalty cost, and the line falls through to the normal tables. Returns true
+ * when the line was consumed.
+ */
+function compileLoyaltyAbility(clause: string, assembly: Assembly, ctx: RuleContext): boolean {
+  if (!ctx.card.typeLine.types.some((printed) => printed.toLowerCase() === 'planeswalker')) return false;
+  const match = LOYALTY_LINE.exec(clause);
+  if (!match) return false;
+  const value = Number.parseInt(match[1]!.replace('−', '-'), 10);
+  if (!Number.isFinite(value)) return false;
+  const effects = ctx.compileEffectClause(match[2]!);
+  if (!effects || effects.length === 0) return false;
+  assembly.activated.push({
+    cost: { loyalty: value },
+    effects,
+    timing: 'sorcery',
+    label: capitalizeFirst(clause),
+  });
+  assembly.matchedRules.push('loyalty-ability');
+  return true;
 }
 
 /** A cost component the parser understands, as printed. */
@@ -374,11 +648,19 @@ function compileKeywordLine(line: string, assembly: Assembly, ctx: RuleContext):
     .filter((word) => word.length > 0);
   if (words.length === 0) return false;
 
-  const flags: Record<string, boolean> = {};
+  let flags: KeywordFlags = {};
   for (const word of words) {
     const field = KEYWORD_FLAGS[word];
     if (field) {
-      flags[field] = true;
+      flags = mergeKeywordGrant(flags, { [field]: true });
+      continue;
+    }
+    // The two payload keywords - `Ward {N}` and `Protection from ...` - are not
+    // boolean flags, so they parse through their own closed tables. A form
+    // outside them ("Ward-Pay 3 life") falls through and reports the line.
+    const special = parseProtectionOrWard(word);
+    if (special) {
+      flags = mergeKeywordGrant(flags, special);
       continue;
     }
     // A keyword with a real primitive-built implementation, either as a direct
@@ -399,7 +681,7 @@ function compileKeywordLine(line: string, assembly: Assembly, ctx: RuleContext):
     return false; // not a keyword we model — report the line
   }
   if (Object.keys(flags).length > 0) {
-    assembly.keywords = { ...assembly.keywords, ...flags };
+    assembly.keywords = mergeKeywordGrant(assembly.keywords, flags);
     assembly.matchedRules.push('keyword-flags');
   }
   return true;
@@ -448,6 +730,11 @@ function compileAbilityLine(
     return;
   }
 
+  // A planeswalker's loyalty ability: "+1: EFFECT" / "−2: EFFECT". Tried before
+  // the generic activated-ability parser, whose cost vocabulary deliberately
+  // refuses a bare number.
+  if (compileLoyaltyAbility(clause, assembly, ctx)) return;
+
   // An activated ability: "COST: EFFECT". Handled before the effect rules so the
   // cost is never mistaken for part of the effect text.
   if (compileActivatedAbility(clause, assembly, ctx)) return;
@@ -486,19 +773,56 @@ function compileAbilityLine(
  *   `'incomplete'` result explaining what was wrong.
  */
 export function compileCard(card: CompilableCard): CompileResult {
+  // A TRANSFORMING double-faced card is compiled as two linked faces — see
+  // `compileTransformDfc`. Detected by Scryfall's `layout` when the record
+  // carries it, else by the `Transform` keyword Scryfall stamps on every
+  // transforming DFC (the committed index predates the layout field). Other
+  // multi-faced layouts (modal DFC, split, adventure) fall through: their
+  // second face is CASTABLE, which needs the cast-time face choice the engine
+  // does not have, and they are reported as exactly that below.
+  // A SIEGE is a transforming layout by Scryfall's reckoning, but its back face
+  // is CASTABLE - from exile, once the battle has been defeated - so it is
+  // compiled by the second-half path, not the transform one.
+  if (isSiege(card)) return compileSiege(card);
+  if (isTransformDfc(card)) return compileTransformDfc(card);
+  // A MODAL double-faced card is compiled as two linked faces too, but with the
+  // opposite castability rule: BOTH halves are cast (or played) from hand, each
+  // for its own cost. That is `backFaceCastable`, and it is the whole
+  // difference between the two DFC layouts.
+  if (isModalDfc(card)) return compileModalDfc(card);
+  // A SPLIT card (CR 709) and an ADVENTURER card (CR 715) are one card with two
+  // HALVES rather than two faces, and each half has its own cast path - see the
+  // two compilers below for the difference that makes.
+  if (isSplitLayout(card)) return compileSplitCard(card);
+  if (isAdventureLayout(card)) return compileAdventure(card);
+
   const assembly: Assembly = {
     effects: [],
     triggers: [],
     produces: [],
     producesOptions: [],
+    manaAbilities: [],
     activated: [],
+    statics: [],
+    replacements: [],
     keywords: {},
+    cycling: [],
     entersTapped: false,
     matchedRules: [],
     missing: [],
   };
 
   // --- type line -------------------------------------------------------------
+  // SUPERTYPES were parsed but never read until the legend rule needed one.
+  // Two of them now carry engine meaning: **Legendary** (CR 704.5j) and
+  // **Basic**, which the battlelands' "unless you control two or more basic
+  // lands" counts and which no other characteristic can answer (a nonbasic dual
+  // prints the same land subtypes as two basics). "Snow" still has none — no
+  // card in reach cares — so it is ignored rather than reported, which changes
+  // nothing a game could observe.
+  const supertypes = card.typeLine.supertypes.map((printed) => printed.toLowerCase());
+  const isLegendary = supertypes.includes('legendary');
+  const isBasic = supertypes.includes('basic');
   const types: CardType[] = [];
   for (const printed of card.typeLine.types) {
     const key = printed.toLowerCase();
@@ -517,42 +841,77 @@ export function compileCard(card: CompilableCard): CompileResult {
       });
     }
   }
-  if (types.length === 0) {
+  // A Kindred card that prints NOTHING else is not a card this engine (or the
+  // rules) can play: CR 308.1 requires a second card type, and the second one is
+  // what decides the zone, the timing and the stack behaviour. Reported rather
+  // than played as a typeless object.
+  if (types.length === 0 || (types.length === 1 && types[0] === KINDRED_TYPE)) {
     assembly.missing.push({
       text: `${card.typeLine.types.join(' ') || '(no type line)'}`,
       missingEngineSystem: 'a card type the engine can represent',
     });
   }
 
-  // A double-faced card can be played as its front face, but the engine cannot
-  // transform it — so the back face's existence is itself a gap.
+  // A card whose NAME names two halves but which reached this far is one the
+  // compiler could not route to a half-aware path above: a layout it does not
+  // know (meld, flip), or a record carrying the combined name with no per-face
+  // data to compile. Reported rather than played as its first half only, which
+  // would be a strictly weaker card than the one printed.
   if (card.name.includes(' // ')) {
     assembly.missing.push({
       text: card.name,
-      missingEngineSystem: 'transform / double-faced cards',
+      missingEngineSystem: SECOND_CASTABLE_FACE_GAP,
     });
   }
 
   // --- mana cost -------------------------------------------------------------
-  // Colour/colour hybrid symbols are payable now (the mana system tries each
-  // assignment). What remains in `other` — {X}, Phyrexian, monocolour hybrid,
-  // snow — genuinely cannot be paid, and a card we would mis-cost is never
-  // complete.
-  const { hybrid, unpayable } = partitionOtherSymbols(card.manaCost.other);
+  // Colour/colour hybrid symbols are payable (the mana system tries each
+  // assignment) and `{X}` is payable now too — its value is a cast-time choice
+  // the engine charges (`CardDefinition.xCost`). What remains in `other` —
+  // Phyrexian, monocolour hybrid, snow — genuinely cannot be paid, and a card
+  // we would mis-cost is never complete.
+  const { hybrid, xCount, unpayable } = partitionOtherSymbols(card.manaCost.other);
   if (unpayable.length > 0) {
     assembly.missing.push({
       text: unpayable.map((symbol) => `{${symbol}}`).join(''),
-      missingEngineSystem: 'variable ({X}), Phyrexian, and monocolour hybrid mana costs',
+      missingEngineSystem: 'Phyrexian and monocolour hybrid mana costs',
     });
   }
   const cost = toCoreCost(card, hybrid);
 
-  // --- power / toughness -----------------------------------------------------
   const isCreatureCard = types.includes('creature');
-  if (isCreatureCard && (card.power === null || card.toughness === null)) {
+
+  // --- planeswalkers: printed starting loyalty --------------------------------
+  // A walker without a usable loyalty number cannot enter at the right value, so
+  // it is never complete — whether the printed box is variable (`X`, parsed to
+  // null) or the record simply predates loyalty capture in the data pipeline.
+  const isWalkerCard = types.includes('planeswalker');
+  const printedLoyalty =
+    typeof card.loyalty === 'number' && Number.isFinite(card.loyalty) && card.loyalty > 0
+      ? card.loyalty
+      : undefined;
+  if (isWalkerCard && printedLoyalty === undefined) {
     assembly.missing.push({
-      text: 'power/toughness',
-      missingEngineSystem: 'dynamic power/toughness (characteristic-defining */*)',
+      text: 'loyalty',
+      missingEngineSystem:
+        'a printed starting-loyalty number in the card record (variable/X loyalty, or a cached record from before loyalty was captured)',
+    });
+  }
+
+  // --- battles: printed starting defense --------------------------------------
+  // The same contract, for the same reason: a battle that entered with the wrong
+  // number of defense counters would take the wrong number of attacks to defeat,
+  // which is a different card. No number in the record ⇒ reported, never guessed.
+  const isBattleCard = types.includes('battle');
+  const printedDefense =
+    typeof card.defense === 'number' && Number.isFinite(card.defense) && card.defense > 0
+      ? card.defense
+      : undefined;
+  if (isBattleCard && printedDefense === undefined) {
+    assembly.missing.push({
+      text: 'defense',
+      missingEngineSystem:
+        'a printed starting-defense number in the card record (variable defense, or a cached record from before defense was captured)',
     });
   }
 
@@ -622,7 +981,12 @@ export function compileCard(card: CompilableCard): CompileResult {
             out.push(result);
           }
           return out;
-        })();
+        })() ??
+        // A body printed as ONE sentence joined by "and" - "you lose 1 life AND
+        // create a 1/1 black Faerie Rogue creature token with flying"
+        // (Bitterblossom). See {@link compileConjunction} for why splitting on a
+        // word cannot invent a card here.
+        compileConjunction(clauses[0]!, ctx);
       if (!parts) return null;
 
       const refs: EffectRef[] = [];
@@ -650,9 +1014,35 @@ export function compileCard(card: CompilableCard): CompileResult {
     compileAbilityLine(line, assembly, ctx, isSpell);
   }
 
+  // --- power / toughness -----------------------------------------------------
+  // Checked AFTER the ability lines, because the answer depends on them: a `*`
+  // box (Scryfall parses it to null) is faithful exactly when some line
+  // compiled the FORMULA that defines it. The blanket refusal this replaces
+  // reported every such card; the refusal itself is kept for every card whose
+  // defining sentence the rule table cannot express, which is the honest half —
+  // a formula we cannot reproduce must be named, never approximated.
+  if (isCreatureCard && (card.power === null || card.toughness === null)) {
+    if (assembly.characteristicPT === undefined) {
+      assembly.missing.push({
+        text: 'power/toughness',
+        missingEngineSystem:
+          'a characteristic-defining P/T formula the compiler does not recognize yet (the star box is supported; this card defines it by a rule outside the closed count vocabulary)',
+      });
+    }
+  } else if (assembly.characteristicPT !== undefined) {
+    // A card printing NUMBERS and a defining sentence would be two answers to
+    // one question. No real card does it; refusing keeps the invariant that
+    // `characteristicPT` and printed P/T never coexist.
+    assembly.missing.push({
+      text: 'power/toughness',
+      missingEngineSystem: 'a card printing both a fixed P/T and a characteristic-defining formula',
+    });
+  }
+
   // --- keyword flags printed on the type line but not in the text ------------
   // Scryfall lists a card's keywords separately; anything it lists that we did
   // not already pick up from the text must still be modelled or reported.
+  const primitivesCompiled = compiledPrimitives(assembly);
   for (const keyword of card.keywords) {
     const word = keyword.toLowerCase();
     const field = KEYWORD_FLAGS[word];
@@ -664,11 +1054,71 @@ export function compileCard(card: CompilableCard): CompileResult {
     // (prowess via its template, persist via a direct builder) — Scryfall
     // listing them again is not a second, unmodelled ability.
     if (KEYWORD_ABILITY_TEXT[word] || KEYWORD_ABILITY_BUILDERS[word]) continue;
+    // Scryfall lists ward and protection by their bare names; the printed line
+    // carries the payload ("Ward {2}", "Protection from red") and has already
+    // compiled it into the keyword fields - or already reported the line, in
+    // which case the missing-scan below still refuses a duplicate entry.
+    if (word === 'ward' && assembly.keywords.ward !== undefined) continue;
+    if (word === 'protection' && assembly.keywords.protectionFrom !== undefined) continue;
     // "Enchant" and "Equip" are Scryfall's names for the attachment ability the
     // card's own printed line already compiled (see `assembleAttachment`). Without
     // this, every Aura and Equipment would report its central ability as missing
     // one line after implementing it.
     if (ATTACHMENT_KEYWORDS.has(word) && assembly.attachesAs !== undefined) continue;
+    // Same story for "Kicker": Scryfall lists it as a keyword, and the printed
+    // "Kicker {COST}" line has already compiled into `CardDefinition.kicker`.
+    if (word === 'kicker' && assembly.kicker !== undefined) continue;
+    // Scryfall lists BOTH "Kicker" and "Multikicker" on a multikicker card (the
+    // mechanic is a kicker), so a compiled multikicker answers for either name.
+    if ((word === 'multikicker' || word === 'kicker') && assembly.multikicker !== undefined) continue;
+    // "Modal" is not printed as an ability — it is the shape of the card, and
+    // the "Choose one —" line has already compiled into `assembly.modal`.
+    if (word === 'modal' && assembly.modal !== undefined) continue;
+    // Same shape for "Flashback": the printed "Flashback {…}" line compiled into
+    // `assembly.flashback`, and Scryfall listing the keyword again is not a
+    // second, unmodelled ability. A flashback line that did NOT compile (an {X}
+    // or additional-cost form) leaves `flashback` unset, so the keyword still
+    // reports through the line's own `missing` entry.
+    if (word === 'flashback' && assembly.flashback !== undefined) continue;
+    // Scry / Surveil / Mill: modelled as effect primitives, so the evidence that
+    // the printed line compiled is the primitive's presence in the assembled card
+    // rather than a dedicated field. Same contract as the guards above — skip the
+    // sweep entry ONLY when the line really was implemented; a wording the rules do
+    // not match compiles no primitive and still reports through its own `missing`
+    // entry (the scry/mill template hints).
+    const backingPrimitive = PRIMITIVE_BACKED_KEYWORDS[word];
+    if (backingPrimitive !== undefined && primitivesCompiled.has(backingPrimitive)) continue;
+    // Cycling and its typed variants: Scryfall lists "Cycling", "Typecycling"
+    // and "Landcycling" as keywords, and the printed line has already compiled
+    // into `assembly.cycling`. A cycling line that did NOT compile (an {X}
+    // cycling cost, a cycling word this engine cannot search for) leaves the
+    // list empty for that line, so the keyword still reports through the line's
+    // own `missing` entry — which is why this is keyed on the list, not on the
+    // keyword's presence.
+    if (isCyclingKeyword(word) && assembly.cycling.length > 0) continue;
+    // "Double" / "Triple" are Scryfall's keyword names for a DAMAGE-SCALING
+    // REPLACEMENT ability ("it deals double that damage instead" — Gratuitous
+    // Violence, Fiery Emancipation, Torbran's family). The printed line has
+    // already compiled into `assembly.replacements`, and the keyword being
+    // listed again is not a second, unmodelled ability. Same evidence-based
+    // contract as the scry/mill guard above: the skip is keyed on a compiled
+    // replacement that actually SCALES, so a card whose line the rule table did
+    // not match compiles none and still reports through its own `missing` entry.
+    if (SCALING_KEYWORDS.has(word) && assembly.replacements.some((r) => r.outcome.times !== undefined)) {
+      continue;
+    }
+    if (word === 'buyback' && assembly.buyback !== undefined) continue;
+    if (word === 'madness' && assembly.madness !== undefined) continue;
+    // An ABILITY WORD (Revolt, Morbid, …) is a label, not an ability — CR
+    // 207.2c. It is skipped only when the line it labels actually compiled;
+    // a line that failed put its own text (word included) into `missing`, so
+    // the card still reports through that entry.
+    if (
+      ABILITY_WORDS.has(word) &&
+      !assembly.missing.some((entry) => entry.text.toLowerCase().includes(word))
+    ) {
+      continue;
+    }
     if (!assembly.missing.some((m) => m.text.toLowerCase().includes(word))) {
       assembly.missing.push({
         text: keyword,
@@ -682,6 +1132,18 @@ export function compileCard(card: CompilableCard): CompileResult {
   if (attachment === undefined && assembly.attachmentModifies !== undefined) {
     assembly.missing.push({
       text: 'enchanted/equipped creature gets …',
+      missingEngineSystem: 'auras and equipment attachment (no "Enchant …" or "Equip {N}" line to attach it)',
+    });
+  }
+  // The same argument, for the OTHER thing an attachment line can print. A
+  // trigger that watches "equipped creature" fires on the permanent this one is
+  // attached to — so on a card with no "Equip {N}"/"Enchant …" line it is
+  // attached to nothing, forever, and can never fire. Reported for the same
+  // reason a lone modification is: a permanent that sits there doing nothing is
+  // the "looks implemented, isn't" failure this compiler exists to prevent.
+  if (attachment === undefined && assembly.triggers.some(watchesTheHost)) {
+    assembly.missing.push({
+      text: 'whenever enchanted/equipped creature …',
       missingEngineSystem: 'auras and equipment attachment (no "Enchant …" or "Equip {N}" line to attach it)',
     });
   }
@@ -700,6 +1162,44 @@ export function compileCard(card: CompilableCard): CompileResult {
         ]
       : [];
 
+  // A card that prints a RICH mana ability (a cost, a rider, an "Activate only
+  // if …", derived colours) emits `manaAbilities` and NOTHING ELSE — core treats
+  // that field as superseding both shorthands, so a plain line on the same card
+  // ("{T}: Add {C}" on a pain land, the basic land types on a filter land) has to
+  // come along as one more entry or it would vanish. It leads the list because it
+  // is printed first on every real card of this shape.
+  const richManaAbilities: readonly import('@jonny-boi/core').ManaAbility[] =
+    assembly.manaAbilities.length > 0
+      ? [
+          ...(manaModes.length > 0
+            ? [{ produces: manaModes }]
+            : assembly.produces.length > 0
+              ? [{ produces: [bundleAsMode(assembly.produces)] }]
+              : []),
+          ...assembly.manaAbilities,
+        ]
+      : [];
+
+  /**
+   * The card's resolution script, with the "As ~ enters, choose a…" NAMING
+   * prepended when this permanent is one the engine cannot ask at play time.
+   *
+   * A LAND is played, not cast, so its script never runs at all — core's
+   * `raiseLandEntryChoice` asks there instead, from the same `asEntersChoice`
+   * declaration. Every other permanent resolves, so the naming is the first
+   * thing its resolution does: the card is `ctx.source` and not yet on the
+   * battlefield at that moment, which is exactly the printed timing (CR 614.1c),
+   * the same moment "enters with N +1/+1 counters" applies.
+   *
+   * Prepended HERE rather than by the rule that matched the line, because the
+   * printed naming can appear on any line (Realmwalker prints it second) and it
+   * must run before every other effect regardless.
+   */
+  const entryScript: EffectRef[] =
+    assembly.asEntersChoice !== undefined && !types.includes('land')
+      ? [{ primitive: AS_ENTERS_PRIMITIVE, params: {} }, ...assembly.effects]
+      : assembly.effects;
+
   const definition: CardDefinition = {
     id: card.id,
     // A double-faced card is played as its front face; the back is a separate
@@ -709,6 +1209,27 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(cost ? { cost } : {}),
     ...(isCreatureCard && card.power !== null ? { power: card.power } : {}),
     ...(isCreatureCard && card.toughness !== null ? { toughness: card.toughness } : {}),
+    // A `*` box: the FORMULA replaces the numbers (never both — refused above).
+    ...(assembly.characteristicPT ? { characteristicPT: assembly.characteristicPT } : {}),
+    ...(isWalkerCard && printedLoyalty !== undefined ? { loyalty: printedLoyalty } : {}),
+    ...(isBattleCard && printedDefense !== undefined ? { defense: printedDefense } : {}),
+    // The printed **Legendary** supertype, carried because the legend rule
+    // (CR 704.5j) is keyed on exactly this — it is not decoration. Read from the
+    // supertype list rather than from the raw type line so a card whose name
+    // happens to contain the word is not mistaken for one.
+    ...(isLegendary ? { legendary: true } : {}),
+    // The printed **Basic** supertype — read by the battlelands' enters-untapped
+    // condition (see `EntersUntappedCondition.minBasicLands`).
+    ...(isBasic ? { basic: true } : {}),
+    // Changeling is a characteristic-defining ability that applies in EVERY zone,
+    // so it rides the definition rather than the keyword-flag bag.
+    ...(assembly.changeling ? { changeling: true } : {}),
+    ...(assembly.cantBeCountered ? { cantBeCountered: true } : {}),
+    ...(assembly.spellsCantBeCountered ? { spellsCantBeCountered: assembly.spellsCantBeCountered } : {}),
+    ...(assembly.noMaximumHandSize ? { noMaximumHandSize: true } : {}),
+    ...(assembly.playLandsFrom && assembly.playLandsFrom.length > 0
+      ? { playLandsFrom: assembly.playLandsFrom }
+      : {}),
     ...(Object.keys(assembly.keywords).length > 0 ? { keywords: assembly.keywords } : {}),
     // Printed subtypes, lowercased, so subtype-selecting effects ("a Mountain
     // or Plains card") match a dual land the way the printed card does.
@@ -717,17 +1238,40 @@ export function compileCard(card: CompilableCard): CompileResult {
       : {}),
     ...(assembly.entersTapped ? { entersTapped: true } : {}),
     ...(assembly.entersTappedUnless ? { entersTappedUnless: assembly.entersTappedUnless } : {}),
+    ...(assembly.copyAsEnters !== undefined ? { copyAsEnters: assembly.copyAsEnters } : {}),
+    ...(assembly.entersTappedUnlessRevealed !== undefined
+      ? { entersTappedUnlessRevealed: assembly.entersTappedUnlessRevealed }
+      : {}),
     ...(assembly.entersTappedUnlessLifePaid !== undefined
       ? { entersTappedUnlessLifePaid: assembly.entersTappedUnlessLifePaid }
       : {}),
-    ...(assembly.effects.length > 0 ? { effects: assembly.effects } : {}),
-    ...(manaModes.length > 0
-      ? { producesOptions: manaModes }
-      : assembly.produces.length > 0
-        ? { produces: assembly.produces }
-        : {}),
+    ...(assembly.asEntersChoice !== undefined ? { asEntersChoice: assembly.asEntersChoice } : {}),
+    ...(assembly.isChosenSubtype ? { isChosenSubtype: true } : {}),
+    ...(xCount > 0 ? { xCost: xCount } : {}),
+    ...(assembly.kicker ? { kicker: assembly.kicker } : {}),
+    ...(assembly.additionalCost ? { additionalCost: assembly.additionalCost } : {}),
+    ...(assembly.multikicker ? { multikicker: assembly.multikicker } : {}),
+    ...(assembly.modal ? { modal: assembly.modal } : {}),
+    ...(assembly.cycling.length > 0 ? { cycling: assembly.cycling } : {}),
+    ...(assembly.buyback ? { buyback: assembly.buyback } : {}),
+    ...(assembly.madness ? { madness: assembly.madness } : {}),
+    ...(assembly.flashback !== undefined ? { flashback: assembly.flashback } : {}),
+    ...(assembly.flashbackXCost !== undefined ? { flashbackXCost: assembly.flashbackXCost } : {}),
+    ...(assembly.flashbackLifeCost !== undefined
+      ? { flashbackLifeCost: assembly.flashbackLifeCost }
+      : {}),
+    ...(entryScript.length > 0 ? { effects: entryScript } : {}),
+    ...(richManaAbilities.length > 0
+      ? { manaAbilities: richManaAbilities }
+      : manaModes.length > 0
+        ? { producesOptions: manaModes }
+        : assembly.produces.length > 0
+          ? { produces: assembly.produces }
+          : {}),
     ...(assembly.triggers.length > 0 ? { triggers: assembly.triggers } : {}),
     ...(assembly.activated.length > 0 ? { activated: assembly.activated } : {}),
+    ...(assembly.statics.length > 0 ? { statics: assembly.statics } : {}),
+    ...(assembly.replacements.length > 0 ? { replacements: assembly.replacements } : {}),
     ...(attachment ? { attachment } : {}),
   };
 
@@ -736,6 +1280,531 @@ export function compileCard(card: CompilableCard): CompileResult {
     definition,
     matchedRules: assembly.matchedRules,
     missing: assembly.missing,
+  };
+}
+
+// --- transforming double-faced cards ---------------------------------------------
+
+/**
+ * What a two-halved card reports when the compiler cannot tell WHICH kind it is.
+ *
+ * The four printed shapes are all built now - split and aftermath (CR 709 /
+ * 702.127), adventure (CR 715), Siege (CR 310.4) and the modal DFC that came
+ * before them - and each is recognised by Scryfall's `layout` plus its face
+ * data. What is left under this name is the residual: a record that carries a
+ * combined `A // B` name with no per-face data to compile, or a multi-faced
+ * layout with no cast path at all (meld, flip). Those are reported, never
+ * played as their first half.
+ */
+export const SECOND_CASTABLE_FACE_GAP =
+  'a two-halved card whose layout the compiler cannot read (split, aftermath, adventure, Siege and modal-DFC halves are all cast today; a meld or flip layout, or a record carrying only the combined name with no per-face data, is not)';
+
+/**
+ * FUSE (CR 702.102): "You may cast one or both halves of this card from your
+ * hand" - a single spell that is BOTH halves at once, with a combined cost, a
+ * combined script and a combined set of targets chosen at announcement.
+ *
+ * It is not the split-card cast path with an extra flag: everything downstream
+ * of the announcement (one stack object carrying two effect lists, per-half
+ * targets that must each still be legal on resolution) is a second shape of
+ * spell. Reported by name rather than approximated as "cast the left half".
+ */
+export const FUSE_GAP =
+  'the FUSE keyword (CR 702.102 - casting BOTH halves of a split card as one spell, with one combined cost and both scripts)';
+
+/**
+ * ROOMS (CR 714) share Scryfall's `split` layout and share nothing else: both
+ * halves are Enchantment - Room, the card enters the battlefield as a permanent
+ * with one door unlocked, and the other door is unlocked later by paying its
+ * mana cost as a sorcery. That is a permanent with two independently-active
+ * halves, not a card with two castable ones, so it is a different system and
+ * says so rather than being played as an ordinary enchantment.
+ */
+export const ROOM_DOOR_GAP =
+  'the Room / door system (CR 714 - a permanent with two doors, the second unlocked on the battlefield by paying its mana cost as a sorcery)';
+
+/** The id suffix a compiled back-face definition carries (`<frontId>#back`). */
+export const BACK_FACE_ID_SUFFIX = '#back';
+
+/** Scryfall's layout value / keyword for Innistrad-style transforming DFCs. */
+const TRANSFORM_LAYOUT = 'transform';
+const TRANSFORM_KEYWORD = 'transform';
+
+/** Scryfall's layout value for a Zendikar-Rising-style MODAL double-faced card. */
+const MODAL_DFC_LAYOUT = 'modal_dfc';
+
+/** The number of faces a transforming DFC prints — a front and a back. */
+const DFC_FACE_COUNT = 2;
+
+/**
+ * Whether this record is a TRANSFORMING double-faced card (front castable, back
+ * never castable, a transform instruction flips between them) — as opposed to a
+ * modal DFC / split / adventure, whose second half is castable.
+ */
+function isTransformDfc(card: CompilableCard): boolean {
+  if (!card.faces || card.faces.length !== DFC_FACE_COUNT) return false;
+  if (card.layout !== undefined) return card.layout === TRANSFORM_LAYOUT;
+  return card.keywords.some((keyword) => keyword.toLowerCase() === TRANSFORM_KEYWORD);
+}
+
+/**
+ * Compile one face of a transforming DFC by wrapping it as an ordinary
+ * single-faced record and running it through {@link compileCard} — the whole
+ * rule table, the keyword sweep, the P/T checks, everything, applies to each
+ * face with no second compiler.
+ *
+ * `keywords` is the subset of the card's Scryfall keywords attributable to this
+ * face (see {@link compileTransformDfc} for how attribution works).
+ */
+function compileFace(
+  face: NonNullable<CompilableCard['faces']>[number],
+  id: string,
+  keywords: readonly string[],
+  extras?: { readonly oracleText?: string; readonly defense?: number | null; readonly loyalty?: number | null },
+): CompileResult {
+  return compileCard({
+    id,
+    name: face.name,
+    manaCost: face.manaCost,
+    typeLine: face.typeLine,
+    // A caller may hand over TEXT it has already edited - the bare `Aftermath` /
+    // `Fuse` keyword line a half prints once its parenthesised reminder has been
+    // stripped, which is layout machinery rather than an ability. Nothing else
+    // may be rewritten here: a half's abilities go through the whole rule table
+    // exactly as a single-faced card's do.
+    oracleText: extras?.oracleText ?? face.oracleText,
+    power: face.power,
+    toughness: face.toughness,
+    // Scryfall prints loyalty/defense at the CARD level, not per face, so a
+    // Siege's starting defense has to be handed down or its front face compiles
+    // as a battle with no number and reports itself missing one.
+    ...(extras?.defense !== undefined ? { defense: extras.defense } : {}),
+    ...(extras?.loyalty !== undefined ? { loyalty: extras.loyalty } : {}),
+    keywords,
+    // No `faces` on the wrapped record — each face is single-faced, which is
+    // also what terminates the recursion.
+  });
+}
+
+/**
+ * Compile a transforming DFC: BOTH faces in full, linked as one definition.
+ *
+ * THE CONTRACT DOES NOT BEND HERE: the card is `'complete'` only when every
+ * printed ability of BOTH faces compiled — a DFC whose back face is
+ * half-modelled would sit on the battlefield playing wrong after the first
+ * transform, which is worse than reporting it. The front face's definition
+ * carries the back nested as `CardDefinition.backFace` (back marked
+ * `isBackFace`, id `<frontId>#back` so the UI can look up per-face art); which
+ * face is UP is per-permanent state owned by core (`transformPermanent`).
+ *
+ * Scryfall's card-level `keywords` list is the UNION of both faces' keywords
+ * (Delver's says `Flying`, printed only on the back). Each keyword (minus
+ * `Transform` itself, which is the machinery, not an ability) is attributed to
+ * every face whose own oracle text prints it; one attributable to NEITHER face
+ * is reported, never guessed onto a face.
+ */
+function compileTransformDfc(card: CompilableCard): CompileResult {
+  const faces = card.faces as NonNullable<CompilableCard['faces']>;
+  const [frontFace, backFace] = faces as [typeof faces[number], typeof faces[number]];
+
+  const missing: UnsupportedClause[] = [];
+  const keywordsFor = (face: typeof frontFace): string[] => {
+    const text = face.oracleText.toLowerCase();
+    return card.keywords.filter((keyword) => {
+      const word = keyword.toLowerCase();
+      return word !== TRANSFORM_KEYWORD && text.includes(word);
+    });
+  };
+  for (const keyword of card.keywords) {
+    const word = keyword.toLowerCase();
+    if (word === TRANSFORM_KEYWORD) continue;
+    const printedSomewhere = faces.some((face) => face.oracleText.toLowerCase().includes(word));
+    if (!printedSomewhere) {
+      missing.push({
+        text: keyword,
+        missingEngineSystem: `the "${keyword}" keyword ability (not attributable to either face's text)`,
+      });
+    }
+  }
+
+  const front = compileFace(frontFace, card.id, keywordsFor(frontFace));
+  const back = compileFace(backFace, `${card.id}${BACK_FACE_ID_SUFFIX}`, keywordsFor(backFace));
+  missing.push(...front.missing, ...back.missing);
+
+  const definition: CardDefinition = {
+    ...front.definition,
+    backFace: { ...back.definition, isBackFace: true },
+  };
+  return {
+    status: missing.length === 0 ? 'complete' : 'incomplete',
+    definition,
+    matchedRules: [...front.matchedRules, ...back.matchedRules, 'transforming-dfc'],
+    missing,
+  };
+}
+
+/**
+ * Whether this record is a MODAL double-faced card — a card whose SECOND FACE
+ * is castable (or playable, when it is a land), as opposed to a transforming
+ * DFC whose back face is only ever reached by a transform instruction.
+ *
+ * Detected by Scryfall's `layout` alone, with no keyword fallback: modal DFCs
+ * print no keyword that names the layout, and guessing one from a "//" name
+ * would sweep in split and adventure cards, which are NOT two faces and must
+ * keep reporting.
+ */
+function isModalDfc(card: CompilableCard): boolean {
+  return card.layout === MODAL_DFC_LAYOUT && (card.faces?.length ?? 0) === DFC_FACE_COUNT;
+}
+
+/**
+ * Compile a modal DFC: BOTH faces in full, linked as one definition whose back
+ * face is marked CASTABLE.
+ *
+ * The contract does not bend here either — the card is `'complete'` only when
+ * every printed ability of BOTH faces compiled. A modal DFC whose back half is
+ * half-modelled would be a card whose value is precisely the choice between two
+ * halves, one of which lies.
+ *
+ * Two things differ from `compileTransformDfc`, and both follow from the
+ * layout: the back face is stamped `isBackFace` AND the front stamps
+ * `backFaceCastable`, so core offers both halves at cast/play time; and each
+ * face keeps its OWN mana cost (a transforming back face has none, because it
+ * is never cast). Keyword attribution is shared with the transform path — a
+ * keyword is attributed to every face whose own text prints it, never guessed.
+ */
+function compileModalDfc(card: CompilableCard): CompileResult {
+  const faces = card.faces as NonNullable<CompilableCard['faces']>;
+  const [frontFace, backFace] = faces as [typeof faces[number], typeof faces[number]];
+
+  const missing: UnsupportedClause[] = [];
+  for (const keyword of card.keywords) {
+    const word = keyword.toLowerCase();
+    if (!faces.some((face) => face.oracleText.toLowerCase().includes(word))) {
+      missing.push({
+        text: keyword,
+        missingEngineSystem: `the "${keyword}" keyword ability (not attributable to either face's text)`,
+      });
+    }
+  }
+  const keywordsFor = (face: typeof frontFace): string[] =>
+    card.keywords.filter((keyword) => face.oracleText.toLowerCase().includes(keyword.toLowerCase()));
+
+  const front = compileFace(frontFace, card.id, keywordsFor(frontFace));
+  const back = compileFace(backFace, `${card.id}${BACK_FACE_ID_SUFFIX}`, keywordsFor(backFace));
+  missing.push(...front.missing, ...back.missing);
+
+  const definition: CardDefinition = {
+    ...front.definition,
+    backFace: { ...back.definition, isBackFace: true },
+    backFaceCastable: true,
+  };
+  return {
+    status: missing.length === 0 ? 'complete' : 'incomplete',
+    definition,
+    matchedRules: [...front.matchedRules, ...back.matchedRules, 'modal-dfc'],
+    missing,
+  };
+}
+
+// --- split cards, adventurer cards and Sieges ------------------------------------
+
+/** Scryfall's layout value for a two-halved SPLIT card (CR 709). */
+const SPLIT_LAYOUT = 'split';
+/** Scryfall's layout value for an ADVENTURER card (CR 715). */
+const ADVENTURE_LAYOUT = 'adventure';
+/** The subtype every adventure half prints; the whole of how one is spotted. */
+const ADVENTURE_SUBTYPE = 'adventure';
+/** The subtype a battle prints when it carries the exile-and-cast reward. */
+const SIEGE_SUBTYPE = 'siege';
+/** The subtype both halves of a Room print (CR 714) - a different system. */
+const ROOM_SUBTYPE = 'room';
+/** CR 702.127: "cast this spell only from your graveyard. Then exile it." */
+const AFTERMATH_KEYWORD = 'aftermath';
+/** CR 702.102: "you may cast one or both halves of this card from your hand." */
+const FUSE_KEYWORD = 'fuse';
+
+/** The zones an AFTERMATH half may be cast from - the graveyard, and only it. */
+const AFTERMATH_CAST_ZONES: readonly CastZone[] = ['graveyard'];
+/** The zones a defeated Siege's reward half may be cast from. */
+const SIEGE_REWARD_CAST_ZONES: readonly CastZone[] = ['exile'];
+
+/** Whether a face prints `subtype` (case-insensitively). */
+function faceHasSubtype(face: NonNullable<CompilableCard['faces']>[number], subtype: string): boolean {
+  return face.typeLine.subtypes.some((printed) => printed.toLowerCase() === subtype);
+}
+
+/** Whether this record is a two-halved SPLIT card (which includes Rooms). */
+function isSplitLayout(card: CompilableCard): boolean {
+  return card.layout === SPLIT_LAYOUT && (card.faces?.length ?? 0) === DFC_FACE_COUNT;
+}
+
+/** Whether this record is an ADVENTURER card - a creature (or land, or
+ * enchantment) whose second half is an instant or sorcery with the Adventure
+ * subtype. Detected by the SUBTYPE rather than by the reminder text, because
+ * Scryfall omits the reminder on some printings and the subtype is never absent.
+ */
+function isAdventureLayout(card: CompilableCard): boolean {
+  const faces = card.faces;
+  if (card.layout !== ADVENTURE_LAYOUT || faces?.length !== DFC_FACE_COUNT) return false;
+  return faceHasSubtype(faces[1] as NonNullable<CompilableCard['faces']>[number], ADVENTURE_SUBTYPE);
+}
+
+/**
+ * Whether this record is a SIEGE - a battle whose back face is the reward cast
+ * from exile once its last defense counter comes off (CR 310.4). Scryfall files
+ * it under the `transform` layout, so the front face's Siege subtype is what
+ * separates it from an Innistrad werewolf.
+ */
+function isSiege(card: CompilableCard): boolean {
+  const faces = card.faces;
+  if (faces?.length !== DFC_FACE_COUNT) return false;
+  if (card.layout !== undefined && card.layout !== TRANSFORM_LAYOUT) return false;
+  return faceHasSubtype(faces[0] as NonNullable<CompilableCard['faces']>[number], SIEGE_SUBTYPE);
+}
+
+/**
+ * Drop a bare LAYOUT KEYWORD line (`Aftermath`, `Fuse`) from a face's text.
+ *
+ * On the printed card those words head a parenthesised reminder that
+ * `stripReminderText` already removes, leaving the word alone on its own line.
+ * It is not an ability - it is the name of the layout, which this compiler has
+ * already read from `card.keywords` - so leaving it in would have every
+ * aftermath half report its own layout as an unrecognised template.
+ */
+function withoutLayoutKeywordLine(text: string, keyword: string): string {
+  return text
+    .split('\n')
+    .filter((line) => {
+      const bare = line.replace(/\([^)]*\)/g, '').trim().toLowerCase();
+      return bare !== keyword;
+    })
+    .join('\n');
+}
+
+/**
+ * Sum two printed costs - CR 709.4's combined mana value AND combined colours in
+ * one operation, because a mana cost is both. The hybrid lists concatenate
+ * rather than add: each entry is one printed symbol with a choice of colours,
+ * and two halves that each print one contribute two.
+ */
+function combinedCost(left: ManaCost | undefined, right: ManaCost | undefined): ManaCost | undefined {
+  if (!left) return right;
+  if (!right) return left;
+  const sum: {
+    generic?: number;
+    W?: number;
+    U?: number;
+    B?: number;
+    R?: number;
+    G?: number;
+    C?: number;
+    hybrid?: readonly (readonly import('@jonny-boi/core').ManaColor[])[];
+  } = {};
+  for (const symbol of COMBINABLE_COST_SYMBOLS) {
+    const total = (left[symbol] ?? 0) + (right[symbol] ?? 0);
+    if (total > 0) sum[symbol] = total;
+  }
+  const hybrid = [...(left.hybrid ?? []), ...(right.hybrid ?? [])];
+  if (hybrid.length > 0) sum.hybrid = hybrid;
+  return sum;
+}
+
+/** The numeric components of a mana cost, in the order a cost prints them. */
+const COMBINABLE_COST_SYMBOLS = ['generic', 'W', 'U', 'B', 'R', 'G', 'C'] as const;
+
+/**
+ * The keywords attributable to one face - a keyword whose own text prints it -
+ * minus the LAYOUT words, which name the machinery rather than an ability.
+ */
+function faceKeywords(card: CompilableCard, text: string, layoutWords: readonly string[]): string[] {
+  const lower = text.toLowerCase();
+  return card.keywords.filter((keyword) => {
+    const word = keyword.toLowerCase();
+    return !layoutWords.includes(word) && lower.includes(word);
+  });
+}
+
+/**
+ * Compile a SPLIT card (CR 709): ONE card, TWO halves, either castable.
+ *
+ * The shape is the whole design. A split card in a hand, graveyard or library is
+ * neither half - CR 709.4 gives it the COMBINED characteristics - so THIS
+ * definition carries those (the full `A // B` name, the union of the type lines,
+ * and a cost that is the sum of both halves, which is simultaneously the right
+ * mana value and the right colour set), and the two halves hang off it as
+ * `frontFace` and `backFace`. Core's `playableFaceOf` then answers "which object
+ * am I casting?" for a split card, a modal DFC and an ordinary spell alike.
+ *
+ * Two split-layout shapes are NOT this and say so instead of being approximated:
+ * a ROOM (CR 714, a permanent whose second door unlocks on the battlefield) and
+ * FUSE (CR 702.102, one spell that is both halves at once). Aftermath is not one
+ * of them: "cast this spell only from your graveyard" is exactly a per-half list
+ * of legal cast zones, which the engine reads.
+ */
+function compileSplitCard(card: CompilableCard): CompileResult {
+  const faces = card.faces as NonNullable<CompilableCard['faces']>;
+  const [leftFace, rightFace] = faces as [typeof faces[number], typeof faces[number]];
+  const missing: UnsupportedClause[] = [];
+
+  const words = card.keywords.map((keyword) => keyword.toLowerCase());
+  const aftermath = words.includes(AFTERMATH_KEYWORD);
+  const fused = words.includes(FUSE_KEYWORD);
+  const isRoom = faces.some((face) => faceHasSubtype(face, ROOM_SUBTYPE));
+
+  if (isRoom) missing.push({ text: card.name, missingEngineSystem: ROOM_DOOR_GAP });
+  if (fused) missing.push({ text: FUSE_KEYWORD, missingEngineSystem: FUSE_GAP });
+
+  const layoutWords = [AFTERMATH_KEYWORD, FUSE_KEYWORD];
+  for (const keyword of card.keywords) {
+    const word = keyword.toLowerCase();
+    if (layoutWords.includes(word)) continue;
+    if (!faces.some((face) => face.oracleText.toLowerCase().includes(word))) {
+      missing.push({
+        text: keyword,
+        missingEngineSystem: `the "${keyword}" keyword ability (not attributable to either half's text)`,
+      });
+    }
+  }
+
+  const textFor = (face: typeof leftFace): string =>
+    layoutWords.reduce((text, word) => withoutLayoutKeywordLine(text, word), face.oracleText);
+  const left = compileFace(leftFace, card.id, faceKeywords(card, leftFace.oracleText, layoutWords), {
+    oracleText: textFor(leftFace),
+  });
+  const right = compileFace(
+    rightFace,
+    `${card.id}${BACK_FACE_ID_SUFFIX}`,
+    faceKeywords(card, rightFace.oracleText, layoutWords),
+    { oracleText: textFor(rightFace) },
+  );
+  missing.push(...left.missing, ...right.missing);
+
+  // The CR 709.4 combined object. It has no script of its own and is never cast:
+  // `frontFace` being present is precisely what tells core so.
+  const combinedTypes = [...new Set([...left.definition.types, ...right.definition.types])];
+  const cost = combinedCost(left.definition.cost, right.definition.cost);
+  const definition: CardDefinition = {
+    id: card.id,
+    name: card.name,
+    types: combinedTypes,
+    ...(cost ? { cost } : {}),
+    frontFace: left.definition,
+    backFace: { ...right.definition, isBackFace: true },
+    backFaceCastable: true,
+    // AFTERMATH (CR 702.127a) is the one printed restriction on WHERE a half may
+    // be cast from, and it is data: the right half is offered from the graveyard
+    // and nowhere else. Everything after that - paying its own printed cost, and
+    // exiling the card when it leaves the stack - the graveyard cast path
+    // already does for flashback.
+    ...(aftermath ? { backFaceCastZones: AFTERMATH_CAST_ZONES } : {}),
+  };
+  return {
+    status: missing.length === 0 ? 'complete' : 'incomplete',
+    definition,
+    matchedRules: [...left.matchedRules, ...right.matchedRules, aftermath ? 'aftermath-card' : 'split-card'],
+    missing,
+  };
+}
+
+/**
+ * Compile an ADVENTURER card (CR 715): a creature (or land, or enchantment)
+ * whose second half is an instant or sorcery you may cast first.
+ *
+ * Unlike a split card this one's own definition IS the primary half, because CR
+ * 715.2 gives an adventurer card in every zone but the stack only its normal
+ * characteristics - a Bonecrusher Giant in your graveyard is a creature card,
+ * full stop. So `frontFace` stays absent and the adventure hangs off the back,
+ * marked `adventure` so that resolving it exiles the card and grants its owner
+ * permission to play the primary half from exile (CR 715.3d).
+ */
+function compileAdventure(card: CompilableCard): CompileResult {
+  const faces = card.faces as NonNullable<CompilableCard['faces']>;
+  const [mainFace, adventureFace] = faces as [typeof faces[number], typeof faces[number]];
+  const missing: UnsupportedClause[] = [];
+
+  for (const keyword of card.keywords) {
+    const word = keyword.toLowerCase();
+    if (!faces.some((face) => face.oracleText.toLowerCase().includes(word))) {
+      missing.push({
+        text: keyword,
+        missingEngineSystem: `the "${keyword}" keyword ability (not attributable to either half's text)`,
+      });
+    }
+  }
+
+  const main = compileFace(mainFace, card.id, faceKeywords(card, mainFace.oracleText, []));
+  const adventure = compileFace(
+    adventureFace,
+    `${card.id}${BACK_FACE_ID_SUFFIX}`,
+    faceKeywords(card, adventureFace.oracleText, []),
+  );
+  missing.push(...main.missing, ...adventure.missing);
+
+  const definition: CardDefinition = {
+    ...main.definition,
+    backFace: { ...adventure.definition, isBackFace: true, adventure: true },
+    backFaceCastable: true,
+  };
+  return {
+    status: missing.length === 0 ? 'complete' : 'incomplete',
+    definition,
+    matchedRules: [...main.matchedRules, ...adventure.matchedRules, 'adventurer-card'],
+    missing,
+  };
+}
+
+/**
+ * Compile a SIEGE (CR 310.4): a battle whose back face is a REWARD its
+ * controller may cast, free, from exile, once the last defense counter has been
+ * removed and the battle exiled.
+ *
+ * Structurally it is the transform layout - Scryfall files it there and the two
+ * faces are compiled the same way - with one difference that changes everything
+ * about how the card plays: the back face is castable, from exile only, without
+ * paying its mana cost. The engine's state-based action does the exiling and
+ * writes the permission; this only has to say the reward exists.
+ */
+function compileSiege(card: CompilableCard): CompileResult {
+  const faces = card.faces as NonNullable<CompilableCard['faces']>;
+  const [battleFace, rewardFace] = faces as [typeof faces[number], typeof faces[number]];
+  const missing: UnsupportedClause[] = [];
+
+  const layoutWords = [TRANSFORM_KEYWORD];
+  for (const keyword of card.keywords) {
+    const word = keyword.toLowerCase();
+    if (layoutWords.includes(word)) continue;
+    if (!faces.some((face) => face.oracleText.toLowerCase().includes(word))) {
+      missing.push({
+        text: keyword,
+        missingEngineSystem: `the "${keyword}" keyword ability (not attributable to either face's text)`,
+      });
+    }
+  }
+
+  // The printed starting defense lives on the CARD, not on the battle face.
+  const battle = compileFace(battleFace, card.id, faceKeywords(card, battleFace.oracleText, layoutWords), {
+    defense: card.defense ?? null,
+  });
+  const reward = compileFace(
+    rewardFace,
+    `${card.id}${BACK_FACE_ID_SUFFIX}`,
+    faceKeywords(card, rewardFace.oracleText, layoutWords),
+  );
+  missing.push(...battle.missing, ...reward.missing);
+
+  const definition: CardDefinition = {
+    ...battle.definition,
+    backFace: { ...reward.definition, isBackFace: true },
+    backFaceCastable: true,
+    backFaceCastZones: SIEGE_REWARD_CAST_ZONES,
+    backFaceFreeCast: true,
+  };
+  return {
+    status: missing.length === 0 ? 'complete' : 'incomplete',
+    definition,
+    matchedRules: [...battle.matchedRules, ...reward.matchedRules, 'siege-battle'],
+    missing,
   };
 }
 

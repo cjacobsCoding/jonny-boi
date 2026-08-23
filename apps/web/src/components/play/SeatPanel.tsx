@@ -28,11 +28,18 @@ export function SeatPanel({
   isActive,
   hasPriority,
   interaction,
+  onGraveyardClick,
 }: {
   seat: SeatView;
   isActive: boolean;
   hasPriority: boolean;
   interaction?: PermInteraction;
+  /**
+   * When present, the graveyard count becomes a button that opens the graveyard
+   * panel (the flashback affordance's entry point). Absent → plain count, as
+   * before, so seats without a panel are unchanged.
+   */
+  onGraveyardClick?: () => void;
 }): ReactElement {
   const lands = seat.permanents.filter((p) => p.isLand);
   const nonlands = seat.permanents.filter((p) => !p.isLand);
@@ -68,15 +75,42 @@ export function SeatPanel({
       <div className="seat__zones">
         <span title="Cards in hand">✋ {seat.handCount}</span>
         <span title="Library">📚 {seat.libraryCount}</span>
-        <span title="Graveyard">⚰ {seat.graveyardCount}</span>
+        {onGraveyardClick ? (
+          <button
+            type="button"
+            className="seat__zone-btn"
+            title="Open graveyard"
+            aria-label={`Open ${seat.name} graveyard (${seat.graveyardCount} cards)`}
+            onClick={onGraveyardClick}
+          >
+            ⚰ {seat.graveyardCount}
+          </button>
+        ) : (
+          <span title="Graveyard">⚰ {seat.graveyardCount}</span>
+        )}
         {seat.exileCount > 0 && <span title="Exile">✦ {seat.exileCount}</span>}
         {manaEntries.length > 0 && (
-          <span className="seat__mana" title="Floating mana">
+          <span
+            className="seat__mana"
+            title={
+              // Restricted mana is PUBLIC — it was printed on a permanent the
+              // table can read. Naming it here is what stops "3 floating, spell
+              // still greyed out" from reading as a bug.
+              seat.restrictedMana.length > 0
+                ? `Floating mana — restricted: ${seat.restrictedMana.join('; ')}`
+                : 'Floating mana'
+            }
+          >
             {manaEntries.map(([c, n]) => (
               <span key={c} className={`pip pip--${c}`} aria-hidden="true">
                 {n > 1 ? `${n}${c}` : c}
               </span>
             ))}
+            {seat.restrictedMana.length > 0 && (
+              <span className="seat__mana-restricted" aria-label="some floating mana is restricted">
+                ⚠
+              </span>
+            )}
           </span>
         )}
       </div>

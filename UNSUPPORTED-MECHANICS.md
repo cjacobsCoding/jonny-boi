@@ -40,16 +40,34 @@ rather than a speculative wishlist.
 
 **→ [UNSUPPORTED-BACKLOG.md](UNSUPPORTED-BACKLOG.md) is the ranked list. Work from the top.**
 
+**→ [docs/plans/mechanic-completion-plan.md](docs/plans/mechanic-completion-plan.md) is what
+the backlog *means*:** the finish line with a number on it (2093/2100 = 99.7%, because the
+genuinely-unrepresentable set turns out to be seven cards), the wave-by-wave path there, and
+the reason the top of the raw backlog is **not** always the right next thing to build — a gap
+that blocks 38 cards but is the sole blocker for none of them moves the playable count by
+zero. Read it before picking work off the list below.
+
 That file is *generated*, not written:
 
 ```bash
-node packages/cards/scripts/coverage-audit.mjs --pages 12 --out UNSUPPORTED-BACKLOG.md
+# The network run. Cache the corpus while you are here — the fetch is the only
+# online step, and a cached corpus makes every later re-run offline and identical.
+node packages/cards/scripts/coverage-audit.mjs --pages 12 --out UNSUPPORTED-BACKLOG.md \
+  --json audit.json --save-corpus corpus.json
+
+# Re-measure offline against the same corpus (what you do after landing a system):
+node packages/cards/scripts/coverage-audit.mjs --input corpus.json --top 0 --json audit.json
 ```
 
 It fetches the most-played cards from Scryfall (EDHREC order), runs every one
 through the real compiler, and ranks each missing engine system by **how many
 cards it blocks**. So the top entry is, by construction, the highest-value engine
 work available — not the one someone happened to hit.
+
+`--json` is the one to reach for when planning: the Markdown is only the top 25, while
+the JSON carries **every** gap with its full blocked-card list and a `kind` of `system`
+(engine work) or `template` (a rule-table entry). Inverting it gap→card gives the number
+that actually predicts progress — how many cards a gap is the *sole* blocker for.
 
 This complements the in-app registry below rather than replacing it: the registry
 reflects what *this user* tried to add, the audit reflects what the format plays.
@@ -80,7 +98,6 @@ compiler refuses to reproduce them rather than fake them:
 | dynamic power/toughness (`*/*`) | Tarmogoyf | Characteristic-defining ability |
 | transform / double-faced cards | Delver of Secrets | Needs a second face + transform |
 | planeswalker loyalty abilities | Liliana of the Veil | Loyalty costs, one activation per turn |
-| flash / flashback | Snapcaster Mage | Alternate timing + graveyard casting |
 
 ## Picking one up
 

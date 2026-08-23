@@ -2,7 +2,8 @@
  * State-based actions (SBAs). Checked at the right times (after each resolution,
  * after combat damage, on priority). They are not actions players take — the game
  * performs them automatically. MVP set:
- *   - A creature with lethal marked damage or ≤0 toughness is destroyed.
+ *   - A creature with lethal marked damage or ≤0 toughness leaves the battlefield —
+ *     two DIFFERENT rules, only one of which indestructible exempts (see below).
  *   - A player at ≤0 life loses.
  *   - A player who attempted to draw from an empty library loses (flagged at draw).
  *
@@ -14,11 +15,21 @@
  * that only that Aura's +0/+2 was keeping alive dies on the pass after.
  */
 
-import type { CardInstance, GameState, PlayerId } from '../state.js';
-import { PLAYER_IDS } from '../state.js';
+import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
+import { NO_COUNTERS, PLAYER_IDS } from '../state.js';
 import type { GameEvent } from '../events.js';
-import { isCreature } from '../card.js';
-import { effectiveToughness, remainingToughness } from './stats.js';
+import { hasCastableBackFace, isBattle, isCreature, isPlaneswalker } from '../card.js';
+import { addCardGrant } from '../card-grants.js';
+import { cardOption, choiceOptionCount, normalizeChoiceRequest } from '../choices.js';
+import {
+  defenseOf,
+  effectiveKeywords,
+  effectiveToughness,
+  loyaltyOf,
+  MINUS_ONE_COUNTER,
+  PLUS_ONE_COUNTER,
+  remainingToughness,
+} from './stats.js';
 import { moveToZone, resetInstanceForNewZone } from './zones.js';
 import { indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './continuous.js';
 import { detachFromHost, isLegallyAttached } from '../attachments.js';
@@ -52,7 +63,8 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
     // buff can be lethal. Rebuilt each fixpoint pass (effects can change between).
     const index = indexContinuous(state);
 
-    // Creature death: lethal damage or non-positive toughness.
+    // Creature death: lethal damage (destruction — indestructible exempts it) or
+    // non-positive toughness (not destruction — indestructible does not).
     //
     // Walked with an explicit cursor over the LIVE battlefield rather than over a
     // spread copy of it. The copy existed because `moveToZone` splices the dying
@@ -65,15 +77,88 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
     // the game, and a permanent visited twice is far cheaper than that.)
     for (let cursor = 0; cursor < state.battlefield.length; ) {
       const inst = state.battlefield[cursor] as CardInstance;
+      // CR 704.5i: a planeswalker with no loyalty is put into its owner's
+      // graveyard. Checked in the same pass as creature death because both are
+      // "this permanent stops existing on the battlefield" rules and the cursor
+      // walk already handles the splice-under-the-loop mechanics.
+      if (isPlaneswalker(inst.def) && !isCreature(inst.def)) {
+        if (loyaltyOf(inst) > 0) {
+          cursor += 1;
+          continue;
+        }
+        const walkerSizeBefore = state.battlefield.length;
+        emit({ type: 'planeswalkerDied', instanceId: inst.instanceId, name: inst.def.name });
+        moveToZone(state, inst, 'graveyard', emit, inst.owner);
+        resetInstanceForNewZone(inst);
+        changed = true;
+        if (state.battlefield.length >= walkerSizeBefore) cursor += 1;
+        continue;
+      }
+      // CR 704.5x (generic outcome): a battle with no defense counters is put
+      // into its owner's graveyard. A SIEGE instead prints its reward (CR
+      // 310.4): "exile it, then you may cast it transformed without paying its
+      // mana cost". Both endings are the same move to a different zone, plus -
+      // for the Siege - the permission that makes the reward reachable, which
+      // is recorded as a card grant on the exiled card exactly as an adventure's
+      // is. Same cursor mechanics as the walker check above.
+      if (isBattle(inst.def) && !isCreature(inst.def)) {
+        if (defenseOf(inst) > 0) {
+          cursor += 1;
+          continue;
+        }
+        // Read BEFORE the move: `resetInstanceForNewZone` reverts the active
+        // face, and the reward is a property of the definition either way, but
+        // the controller (who gets to cast it) is battlefield state.
+        const reward = hasCastableBackFace(inst.def) ? inst.controller : undefined;
+        const battleSizeBefore = state.battlefield.length;
+        emit({ type: 'battleDefeated', instanceId: inst.instanceId, name: inst.def.name });
+        moveToZone(state, inst, reward === undefined ? 'graveyard' : 'exile', emit, inst.owner);
+        resetInstanceForNewZone(inst);
+        if (reward !== undefined) {
+          addCardGrant(
+            state,
+            {
+              targetInstanceId: inst.instanceId,
+              sourceInstanceId: inst.instanceId,
+              zone: 'exile',
+              duration: 'permanent',
+              castFace: 'back',
+              castFree: true,
+            },
+            emit,
+          );
+        }
+        changed = true;
+        if (state.battlefield.length >= battleSizeBefore) cursor += 1;
+        continue;
+      }
       if (!isCreature(inst.def)) {
         cursor += 1;
         continue;
       }
       const mod = index.get(inst.instanceId) ?? NO_MOD;
+      // The creature-death state-based actions are TWO DIFFERENT RULES, and
+      // indestructible exempts exactly one of them. Keeping them as separate
+      // questions here is the entire point:
+      //   - CR 704.5f — toughness 0 or less puts the creature into its owner's
+      //     graveyard. Indestructible does not mention this rule and does not
+      //     stop it, so a -N/-N that takes toughness to 0 kills an indestructible
+      //     creature. Asked FIRST, and never gated on the flag.
+      //   - CR 704.5g — LETHAL MARKED DAMAGE destroys the creature, and CR 702.2b
+      //     deathtouch makes any nonzero damage lethal. Both are destruction, so
+      //     CR 702.12b exempts both.
+      // Collapsing the two into one expression guarded by the flag is the classic
+      // wrong implementation: it makes an indestructible creature survive having
+      // no toughness at all.
+      //
+      // Cost: the keyword read is placed AFTER the damage test on purpose, so a
+      // creature that is not dying at all — nearly every creature on nearly every
+      // pass of this loop — never pays for it.
+      const destroyedByDamage =
+        remainingToughness(inst, mod) <= 0 || (inst.markedByDeathtouch && inst.damageMarked > 0);
       const dead =
         effectiveToughness(inst, mod) <= 0 ||
-        remainingToughness(inst, mod) <= 0 ||
-        (inst.markedByDeathtouch && inst.damageMarked > 0);
+        (destroyedByDamage && !effectiveKeywords(inst, mod).indestructible);
       if (!dead) {
         cursor += 1;
         continue;
@@ -86,6 +171,10 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
       if (state.battlefield.length >= sizeBefore) cursor += 1;
     }
 
+    // CR 704.5q — a permanent with both +1/+1 and -1/-1 counters has N of each
+    // removed, where N is the smaller number. See {@link annihilateCounters}.
+    if (annihilateCounters(state, emit)) changed = true;
+
     // Player loss by life total.
     for (const pid of PLAYER_IDS) {
       const p = state.players[pid];
@@ -97,6 +186,15 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
 
     // If exactly one player remains, the other wins.
     if (resolveWinner(state, emit)) changed = true;
+
+    // The legend rule (CR 704.5j) — checked LAST in the pass, once nothing else
+    // is changing the board, because it may have to STOP the fixpoint: which
+    // copy survives is the controlling player's choice, and a state-based action
+    // cannot decide it for them. When a duplicate exists the choice is parked
+    // and this whole check returns; the answer handler removes the losers and
+    // re-runs the SBAs, so cascades (an Aura on the discarded copy, a second
+    // duplicated name, the OTHER player's duplicates) settle then.
+    if (!changed && !state.gameOver && checkLegendRule(state, emit)) return;
   }
 
   // A temporary modification only exists while its permanent is on the battlefield.
@@ -105,6 +203,61 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
   // "until end of turn" pump — a re-cast 2/2 read as a 5/5. SBAs run at every point
   // a permanent can have just changed zones, so this is the right place to let go.
   pruneOrphanContinuousEffects(state);
+}
+
+/**
+ * CR 704.5q — "if a permanent has both a +1/+1 counter and a -1/-1 counter on it,
+ * N +1/+1 and N -1/-1 counters are removed from it, where N is the smaller of the
+ * two numbers."
+ *
+ * ## Why it lives HERE and not in the primitive that puts the counters on
+ * `putCountersOn` used to do this itself, which is right for the one path that
+ * calls it and wrong for every other. Counters arrive on a permanent by several
+ * routes — a resolving effect, a trigger, persist returning a creature with a
+ * -1/-1 counter, a token created with counters, and whatever the next branch adds
+ * — and a rule implemented inside ONE of those routes is a rule the others do not
+ * have. CR 704.5q is a state-based action, so the state-based action pass is the
+ * seam: every route now gets it, at the moment the rules say, and there is one
+ * implementation to keep right instead of one per producer.
+ *
+ * The arithmetic is unchanged either way ({@link counterShift} nets the tallies),
+ * so what this fixes is the STATE rather than the numbers: after it runs, "does
+ * this permanent have a -1/-1 counter on it?" — which persist, undying and
+ * "remove a counter" all ask — has the answer the printed card gives.
+ *
+ * Returns true when it removed anything, so the fixpoint runs another pass.
+ *
+ * Cost: one reference comparison per permanent on a board where nothing carries a
+ * counter, and no allocation at all. `NO_COUNTERS` is the shared frozen empty
+ * record every counter-free permanent points at, so the common board never even
+ * enumerates a key.
+ */
+function annihilateCounters(state: GameState, emit: (e: GameEvent) => void): boolean {
+  let removedAny = false;
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    const counters = perm.counters;
+    if (counters === NO_COUNTERS) continue;
+    const plus = counters[PLUS_ONE_COUNTER] ?? 0;
+    const minus = counters[MINUS_ONE_COUNTER] ?? 0;
+    // Both kinds must be genuinely PRESENT. A negative tally is not a counter of
+    // the other kind (nothing in the rules can put "minus one +1/+1 counter" on a
+    // permanent), so `Math.min` alone would happily "annihilate" a pair that is
+    // not there.
+    if (plus <= 0 || minus <= 0) continue;
+    const n = Math.min(plus, minus);
+    // REPLACE the record, never write into it — `CardInstance.counters` is shared
+    // and frozen while a permanent has none. Same contract `putCountersOn` obeys.
+    perm.counters = { ...counters, [PLUS_ONE_COUNTER]: plus - n, [MINUS_ONE_COUNTER]: minus - n };
+    // Reported as the two removals it is, through the existing counter event with
+    // a NEGATIVE amount — the vocabulary persist already speaks. A dedicated
+    // "annihilated" event would be a second way to say "these counters left".
+    emit({ type: 'counterAdded', instanceId: perm.instanceId, kind: PLUS_ONE_COUNTER, amount: -n });
+    emit({ type: 'counterAdded', instanceId: perm.instanceId, kind: MINUS_ONE_COUNTER, amount: -n });
+    removedAny = true;
+  }
+  return removedAny;
 }
 
 /**
@@ -185,16 +338,331 @@ export function loseGame(state: GameState, player: PlayerId, reason: string, emi
   emit({ type: 'playerLost', player, reason });
 }
 
-/** If the game is decided, set winner/gameOver. Returns true if it changed. */
+/**
+ * Mark a player as having WON — "you win the game instead" (Laboratory Maniac).
+ *
+ * Expressed as the other seat LOSING, because that is how this engine already
+ * decides a game: `resolveWinner` reads `hasLost`, so there is exactly one way
+ * for a game to end and no second field that could disagree with it.
+ */
+export function winGame(state: GameState, player: PlayerId, reason: string, emit: (e: GameEvent) => void): void {
+  for (const pid of PLAYER_IDS) {
+    if (pid !== player) loseGame(state, pid, reason, emit);
+  }
+}
+
+/**
+ * If the game is decided, set winner/gameOver. Returns true if it changed.
+ *
+ * The two seats are read DIRECTLY rather than through `PLAYER_IDS.filter(...)`,
+ * which allocated a predicate closure and a result array on every state-based
+ * action check — after every resolution, every draw, every combat-damage step
+ * and (now) every priority boundary — to decide a question about two booleans.
+ * Same answer, no allocation. (The same reason `indexContinuous` reads the two
+ * command zones directly instead of looping `PLAYER_IDS`.)
+ */
 export function resolveWinner(state: GameState, emit: (e: GameEvent) => void): boolean {
   if (state.gameOver) return false;
-  const alive = PLAYER_IDS.filter((pid) => !state.players[pid].hasLost);
-  if (alive.length <= 1) {
-    const winner = alive.length === 1 ? (alive[0] as PlayerId) : null;
-    state.winner = winner;
-    state.gameOver = true;
-    emit({ type: 'gameOver', winner });
-    return true;
+  const aLost = state.players.A.hasLost;
+  const bLost = state.players.B.hasLost;
+  if (!aLost && !bLost) return false;
+  // Both out at once is a draw, exactly as `alive.length === 0` was.
+  const winner: PlayerId | null = aLost && bLost ? null : aLost ? 'B' : 'A';
+  state.winner = winner;
+  state.gameOver = true;
+  emit({ type: 'gameOver', winner });
+  return true;
+}
+
+/**
+ * Whether any state-based action could POSSIBLY apply right now — the cheap gate
+ * in front of the CR 704.3 priority-boundary check.
+ *
+ * ## Why a gate exists at all
+ * CR 704.3 checks state-based actions whenever a player would receive priority,
+ * which in this engine is the single hottest thing a game does: a sim game passes
+ * priority hundreds of times, and every one of those passes follows an action
+ * that already ran the full check at its own mutation site. The boundary check is
+ * a BACKSTOP for the next mutation path that forgets, so it has to be nearly free
+ * on the passes where it has nothing to do (rule 7). Measured on the gauntlet,
+ * 125,753 boundary passes reach this and it lets 1.2% of them through.
+ *
+ * ## The direction it is allowed to be wrong in
+ * It may answer **true** on a board where the real check turns out to do nothing;
+ * that costs one wasted check. It must NEVER answer false on a board where the
+ * real check would act — that would silently defer a state-based action, which is
+ * the whole defect this backstop exists to prevent. Every test of it is written in
+ * that direction, and every clause below is either the rule's own condition or a
+ * conservative superset of it.
+ *
+ * ## Why a positive modifier is not a reason to look
+ * The subtle half is creature death, and the saving observation is that
+ * `PermanentModification` is **purely additive** (the rules manifest pins that as
+ * a compile-time proof, and CR 613's layer system stops being optional the day it
+ * is not): nothing SETS a toughness, everything adds a delta. A modifier that can
+ * only ADD toughness therefore cannot make a creature die — it can only keep one
+ * alive — so a board whose modifiers are all positive can be judged on printed
+ * base plus counters, which is exactly what `effectiveToughness(perm)` with no
+ * aggregate computes. Being wrong in that direction is safe by construction: an
+ * ignored positive buff can only make this answer `true` when the truth is
+ * `false`. A modifier that can SUBTRACT toughness is the other direction, so any
+ * of those sends the whole board to the real check.
+ *
+ * Two things are read as "always look" rather than reasoned about, because both
+ * change with no event to notice: a characteristic-defining `*` box (Tarmogoyf
+ * shrinks when a card leaves a graveyard) and an attachment (which is also its
+ * own state-based action, CR 704.5m/n). Both are rare on a board.
+ */
+export function stateBasedActionsPossible(state: GameState): boolean {
+  // A decided game performs no more state-based actions.
+  if (state.gameOver) return false;
+  const a = state.players.A;
+  const b = state.players.B;
+  // CR 704.5a/b — a lost seat not yet resolved into a winner, or a life total the
+  // check has not seen yet.
+  if (a.hasLost || b.hasLost || a.life <= 0 || b.life <= 0) return true;
+  // An "until end of turn" effect that SHRINKS something (a -X/-X, a Weakness).
+  const continuous = state.continuous;
+  for (let i = 0; i < continuous.length; i++) {
+    const toughness = (continuous[i] as { readonly toughness?: number }).toughness;
+    if (toughness !== undefined && toughness < 0) return true;
+  }
+  // EMBLEMS radiate statics from the command zone (CR 114). Nothing has ever put
+  // one there in a measured game, so this is one length read, not a walk.
+  if (a.command.length > 0 && commandCanShrink(a.command)) return true;
+  if (b.command.length > 0 && commandCanShrink(b.command)) return true;
+
+  let legendary = 0;
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    const def = perm.def;
+    // An attachment is BOTH a modifier source (layer 3a) and its own state-based
+    // action (CR 704.5m/n), so either end of the relationship is enough.
+    if (def.attachment !== undefined || perm.attachedTo != null) return true;
+    // A `*` power/toughness is a function of the whole game and moves with no
+    // event on this permanent at all.
+    if (def.characteristicPT !== undefined) return true;
+    // A static that can only ADD toughness cannot kill anything — see above.
+    if (def.statics !== undefined && staticsCanShrink(def.statics)) return true;
+    // CR 704.5j — two legendary permanents may share a name. Counting is enough;
+    // deciding whether the names actually match is the real check's job.
+    if (def.legendary === true && ++legendary > 1) return true;
+    // Counters are read by `effectiveToughness` below for a creature, but for a
+    // walker and a battle they ARE the box (CR 704.5i / 704.5x), and CR 704.5q is
+    // about the two standard kinds coexisting. One reference comparison for the
+    // counter-free permanent that is nearly every permanent.
+    if (perm.counters !== NO_COUNTERS) {
+      if (isPlaneswalker(def) && !isCreature(def) && loyaltyOf(perm) <= 0) return true;
+      if (isBattle(def) && !isCreature(def) && defenseOf(perm) <= 0) return true;
+      if ((perm.counters[PLUS_ONE_COUNTER] ?? 0) > 0 && (perm.counters[MINUS_ONE_COUNTER] ?? 0) > 0) return true;
+    } else if ((isPlaneswalker(def) || isBattle(def)) && !isCreature(def)) {
+      // No counters at all on a walker or a battle IS zero loyalty / zero defense.
+      return true;
+    }
+    if (!isCreature(def)) continue;
+    // CR 704.5f / 704.5g, read with the aggregate that is genuinely empty here.
+    if (effectiveToughness(perm) <= 0) return true;
+    if (perm.damageMarked > 0 && (remainingToughness(perm) <= 0 || perm.markedByDeathtouch)) return true;
   }
   return false;
+}
+
+/** Whether any of these static abilities can SUBTRACT toughness. */
+function staticsCanShrink(statics: readonly { readonly toughness?: number }[]): boolean {
+  for (let i = 0; i < statics.length; i++) {
+    const toughness = statics[i]?.toughness;
+    if (toughness !== undefined && toughness < 0) return true;
+  }
+  return false;
+}
+
+/** The same question for the objects in a command zone (emblems). */
+function commandCanShrink(command: readonly CardInstance[]): boolean {
+  for (let i = 0; i < command.length; i++) {
+    const statics = (command[i] as CardInstance).def.statics;
+    if (statics !== undefined && staticsCanShrink(statics)) return true;
+  }
+  return false;
+}
+
+// --- the legend rule (CR 704.5j) -------------------------------------------------
+
+/**
+ * The legend rule, as ONE state-based action for every legendary permanent kind
+ * - creatures, planeswalkers, battles, artifacts, enchantments, lands alike.
+ *
+ * CR 704.5j: if a player controls two or more legendary permanents **with the
+ * same name**, that player chooses one of them and the rest are put into their
+ * owners' graveyards. Three details a walker-only or creature-only version gets
+ * wrong, and which are why this is shared:
+ *   - it is **per PLAYER, not global**: each player may control their own copy of
+ *     the same legend quite legally, and nothing happens;
+ *   - the **controller chooses**, not the game - so unlike every other SBA this
+ *     one cannot be decided here, and instead parks a question;
+ *   - the discarded copies go to their **OWNERS'** graveyards, which is not
+ *     necessarily the chooser's (a stolen legend goes home).
+ *
+ * Returns true when it PARKED a choice, which tells the SBA loop to stop: the
+ * board cannot settle until the question is answered. {@link applyLegendRuleChoice}
+ * finishes the job and re-runs the SBAs, so cascades (a second duplicated name,
+ * the other player's duplicates, an Aura orphaned by the copy that left) settle
+ * on that pass rather than being missed here.
+ *
+ * Cost: one property read per permanent on a board with fewer than two legendary
+ * permanents - which is nearly every board in the sim - and no allocation at all.
+ */
+function checkLegendRule(state: GameState, emit: (e: GameEvent) => void): boolean {
+  // Never stack two questions. A choice already parked belongs to somebody (a
+  // resolving spell, a shockland, an earlier legend-rule pass) and overwriting it
+  // would silently drop the game's outstanding decision. The rule is not skipped,
+  // only deferred: answering re-runs the SBAs.
+  if (state.pendingChoice) return false;
+
+  const duplicates = findLegendDuplicates(state);
+  if (duplicates === null) return false;
+
+  const choice = normalizeChoiceRequest(
+    {
+      kind: 'selectCards',
+      chooser: duplicates.controller,
+      prompt: `Legend rule: choose which ${duplicates.name} to keep`,
+      candidates: duplicates.copies.map(cardOption),
+      min: LEGEND_RULE_KEEP_COUNT,
+      max: LEGEND_RULE_KEEP_COUNT,
+      // Being selected is being KEPT, so the AI's "pick your best" steer is the
+      // right one - the copies share a name, but one may be untapped, wearing an
+      // Aura, or no longer summoning sick.
+      valence: 'gain',
+    },
+    {
+      id: state.nextInstanceId++,
+      sourceInstanceId: (duplicates.copies[0] as CardInstance).instanceId,
+      sourceName: duplicates.name,
+    },
+  );
+  if (!choice) return false;
+  // The marker is what routes the answer: this question has no resolution frame
+  // behind it (a state-based action is not a resolution), so `applyAnswerChoice`
+  // must be able to tell it apart from an ordinary card selection.
+  state.pendingChoice = { ...choice, context: 'legendRule' };
+  state.priorityPlayer = duplicates.controller;
+  state.consecutivePasses = 0;
+  emit({
+    type: 'choiceAsked',
+    choiceId: choice.id,
+    chooser: choice.chooser,
+    choiceKind: choice.kind,
+    prompt: choice.prompt,
+    sourceInstanceId: choice.sourceInstanceId,
+    optionCount: choiceOptionCount(choice),
+  });
+  return true;
+}
+
+/** The legend rule keeps exactly one of the duplicates (CR 704.5j). */
+const LEGEND_RULE_KEEP_COUNT = 1;
+
+/** A set of same-named legendary permanents one player controls. */
+interface LegendDuplicates {
+  readonly controller: PlayerId;
+  readonly name: string;
+  readonly copies: readonly CardInstance[];
+}
+
+/**
+ * The FIRST group of same-named legendary permanents a single player controls,
+ * or `null` when the rule does not apply.
+ *
+ * "First" is deterministic - battlefield order decides, and the battlefield is
+ * stably ordered - so a seeded sim always asks about the same group first when
+ * two different names are duplicated at once. (The second group is found by the
+ * re-check after the first is answered.)
+ *
+ * The two-phase shape is the whole performance story: a board with fewer than two
+ * legendary permanents answers with one property read each and NO map, which is
+ * what keeps this off the sim's hot path. Names are compared as printed
+ * (CR 201.2), and by the ACTIVE face's name, since `inst.def` is the face that is
+ * up - a transformed DFC is legend-checked as what it currently is.
+ */
+function findLegendDuplicates(state: GameState): LegendDuplicates | null {
+  const battlefield = state.battlefield;
+  let legendaryCount = 0;
+  for (let i = 0; i < battlefield.length; i++) {
+    if ((battlefield[i] as CardInstance).def.legendary === true) legendaryCount += 1;
+  }
+  if (legendaryCount < 2) return null;
+
+  // Keyed on controller AND name: the same legend under two different players is
+  // not a legend-rule violation, and folding them together is precisely the
+  // "global instead of per player" bug this shape exists to prevent.
+  const groups = new Map<string, CardInstance[]>();
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    if (perm.def.legendary !== true) continue;
+    const key = `${perm.controller} ${perm.def.name}`;
+    const group = groups.get(key);
+    if (group === undefined) groups.set(key, [perm]);
+    else group.push(perm);
+  }
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const first = group[0] as CardInstance;
+    return { controller: first.controller, name: first.def.name, copies: group };
+  }
+  return null;
+}
+
+/**
+ * Finish the legend rule once its controller has named the copy they keep: every
+ * OTHER legendary permanent that player controls with that name is put into its
+ * **owner's** graveyard (CR 704.5j).
+ *
+ * The losing set is re-derived from the kept permanent rather than read from a
+ * list captured when the question was asked - a board can change between the two
+ * moments, and a stale list would try to bury a permanent that has already left.
+ *
+ * Exported for `applyAnswerChoice`, which is the only caller.
+ */
+export function applyLegendRuleChoice(
+  state: GameState,
+  keptInstanceId: InstanceId,
+  emit: (e: GameEvent) => void,
+): void {
+  const kept = state.battlefield.find((perm) => perm.instanceId === keptInstanceId);
+  // The kept copy left the battlefield between question and answer: the rule has
+  // no chosen survivor, so nothing is buried here. The re-check below sees
+  // whatever board actually exists and asks again if it must.
+  if (!kept) {
+    checkStateBasedActions(state, emit);
+    return;
+  }
+  const controller = kept.controller;
+  const name = kept.def.name;
+  // Snapshot first: `moveToZone` splices the battlefield under any live walk.
+  const losers = state.battlefield.filter(
+    (perm) =>
+      perm.instanceId !== keptInstanceId &&
+      perm.def.legendary === true &&
+      perm.controller === controller &&
+      perm.def.name === name,
+  );
+  emit({ type: 'legendRuleApplied', player: controller, name, keptInstanceId });
+  for (const loser of losers) {
+    // A legendary CREATURE leaving this way is still a creature dying - the same
+    // event every other death emits, so dies-triggers and any log reader see it
+    // through the one mechanism. Walkers and battles announce themselves in kind.
+    if (isCreature(loser.def)) {
+      emit({ type: 'creatureDied', instanceId: loser.instanceId, name: loser.def.name });
+    } else if (isPlaneswalker(loser.def)) {
+      emit({ type: 'planeswalkerDied', instanceId: loser.instanceId, name: loser.def.name });
+    } else if (isBattle(loser.def)) {
+      emit({ type: 'battleDefeated', instanceId: loser.instanceId, name: loser.def.name });
+    }
+    moveToZone(state, loser, 'graveyard', emit, loser.owner);
+    resetInstanceForNewZone(loser);
+  }
+  // Everything the departures set off - an orphaned Aura, a creature an anthem
+  // was propping up, a SECOND duplicated name - settles now.
+  checkStateBasedActions(state, emit);
 }

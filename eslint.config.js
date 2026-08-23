@@ -77,6 +77,32 @@ export default tseslint.config(
     },
   },
   {
+    // A Puppeteer harness is TWO programs in one file: the outer half runs in
+    // Node, and everything inside `page.evaluate()` is serialised and run in the
+    // BROWSER. Lint sees one file and flags every `document`/`Image`/`btoa` in
+    // the inner half as undefined — 19 errors that are all false. Declaring the
+    // browser globals here is what makes the real errors in this file visible.
+    files: ['**/scripts/verify-bug-reporter.mjs'],
+    languageOptions: {
+      globals: {
+        document: 'readonly',
+        window: 'readonly',
+        Image: 'readonly',
+        btoa: 'readonly',
+        atob: 'readonly',
+        TextDecoder: 'readonly',
+        DataView: 'readonly',
+        innerWidth: 'readonly',
+        innerHeight: 'readonly',
+        // Used by BOTH halves: the harness inflates the archive's deflated
+        // entries to check them, and times its own fetches out.
+        DecompressionStream: 'readonly',
+        Response: 'readonly',
+        AbortSignal: 'readonly',
+      },
+    },
+  },
+  {
     // The React app. Three files already carried
     // `eslint-disable-next-line react-hooks/exhaustive-deps`, but the plugin was
     // never installed — so each disable was INERT (suppressing nothing) *and*

@@ -29,15 +29,28 @@
 
 import type {
   CardFilter,
+  CardInstance,
   CardOption,
   EffectContext,
   EffectPrimitive,
-  EffectRef,
   InstanceId,
+  ManaCost,
   PlayerId,
   CardType,
 } from '@jonny-boi/core';
-import { collectCardOptions, formatManaCost, isCreature, matchesCardFilter } from '@jonny-boi/core';
+import {
+  NOTHING_CHOSEN,
+  asEntersOptions,
+  asEntersPrompt,
+  collectCardOptions,
+  formatManaCost,
+  isCreature,
+  isPlayerTarget,
+  matchesCardFilter,
+  recordChosenAsEntered,
+  transformPermanent,
+} from '@jonny-boi/core';
+import type { StackObject } from '@jonny-boi/core';
 import {
   boolParam,
   counterSpellOnStack,
@@ -99,6 +112,12 @@ function playerParam(ctx: EffectContext, key: string, fallback: string): PlayerI
       return firstPlayerTarget(ctx) ?? otherPlayer(ctx.controller);
     case 'targetController':
       return firstTargetInstance(ctx)?.controller;
+    case 'triggering':
+      // The player the TRIGGER's event was about — the printed "that player".
+      // Same word, same meaning as `playersForParam`'s `'triggering'`; the two
+      // vocabularies overlap deliberately so one printed phrase compiles to one
+      // param value whichever kind of primitive reads it.
+      return ctx.triggeringPlayer ?? ctx.controller;
     default:
       return ctx.controller;
   }
@@ -136,6 +155,61 @@ export const putFromHandOnTop: EffectPrimitive = (ctx) => {
   for (let i = chosen.length - 1; i >= 0; i--) {
     const id = chosen[i] as InstanceId;
     moveOwnedCard(ctx, who, id, 'hand', 'library', 'top');
+  }
+};
+
+/**
+ * `handToBottomThenDraw` — a player puts **the cards in their hand** on the
+ * bottom of their library **in any order**, then draws that many cards
+ * (Teferi's Puzzle Box).
+ *
+ * `params.who` picks the player through the shared vocabulary above, so
+ * `'triggering'` is the printed "that player" of an "at the beginning of each
+ * player's draw step" trigger.
+ *
+ * Three things this gets exactly right rather than nearly right:
+ *  - **"that many"** is the hand size AT THE MOMENT the cards leave, so an
+ *    empty hand draws nothing and a seven-card hand draws seven. Counted before
+ *    the move, never re-read after it.
+ *  - **the order is the player's**, and it is asked as one ordered selection of
+ *    the whole hand — first-chosen goes deepest, since the cards are bottomed in
+ *    the chosen order. Skipped entirely for a hand of fewer than two cards,
+ *    where there is no order to choose and a question would be an empty prompt.
+ *  - **valence `'loss'`**: the hand is being given up. The pilot answering is
+ *    not choosing WHETHER, only the order, but the valence is what tells it
+ *    these are cards leaving rather than cards arriving.
+ */
+export const handToBottomThenDraw: EffectPrimitive = (ctx) => {
+  const who = playerParam(ctx, 'who', 'controller');
+  if (!who) return;
+  const hand = ctx.state.players[who].hand;
+  const handSize = hand.length;
+  if (handSize === 0) return;
+  let order: readonly InstanceId[];
+  if (handSize === 1) {
+    order = [hand[0]!.instanceId];
+  } else {
+    const chosen = ctx.chooseCards({
+      chooser: who,
+      prompt: 'Put the cards in your hand on the bottom of your library, in any order',
+      candidates: collectCardOptions(ctx.state, 'hand', { controller: who }),
+      min: handSize,
+      max: handSize,
+      ordered: true,
+      valence: 'loss',
+      fromZone: 'hand',
+    });
+    if (!chosen) return; // parked — nothing mutated, this ref will be re-run
+    order = chosen;
+  }
+  for (const id of order) moveOwnedCard(ctx, who, id, 'hand', 'library', 'bottom');
+  const library = ctx.state.players[who].library;
+  for (let i = 0; i < handSize; i++) {
+    const top = library.shift();
+    if (!top) break; // decked — core's SBA answers for it, this never fabricates a loss
+    top.zone = 'hand';
+    ctx.state.players[who].hand.push(top);
+    ctx.emit({ type: 'drawCard', player: who, instanceId: top.instanceId });
   }
 };
 
@@ -201,14 +275,79 @@ export const mayShuffleLibrary: EffectPrimitive = (ctx) => {
 };
 
 /**
+ * Where ONE card a search found goes: the zone, and (for the battlefield)
+ * whether it arrives tapped. The unit of {@link searchLibrary}'s `route` param
+ * and of its single-destination default alike, so both forms move a card by the
+ * same code with no second opinion about what `tapped` means.
+ */
+interface SearchStep {
+  readonly destination: 'hand' | 'battlefield' | 'graveyard';
+  readonly tapped?: boolean;
+}
+
+/**
+ * The three zones a printed library search may put a found card into. A CLOSED
+ * table for the same reason the subtype table is closed: an unrecognised zone
+ * word must report, never silently become "hand" — a tutor that fetched to the
+ * wrong zone is a strictly different card. (`'exile'` is absent because no
+ * search template compiled here prints it.)
+ */
+const SEARCH_DESTINATIONS: ReadonlySet<string> = new Set(['hand', 'battlefield', 'graveyard']);
+
+/** The single destination a non-routed search uses, defaulting to hand. */
+function plainDestination(ctx: EffectContext): SearchStep['destination'] {
+  const word = strParam(ctx, 'destination');
+  return word !== undefined && SEARCH_DESTINATIONS.has(word)
+    ? (word as SearchStep['destination'])
+    : 'hand';
+}
+
+/**
+ * Read the multi-destination `route` param, or `undefined` for a plain search.
+ *
+ * A malformed entry collapses the whole route to `undefined` rather than being
+ * dropped: a partially-understood routing would put a card somewhere the printed
+ * card never says, and the compiler is the only thing that writes this param.
+ */
+function routeParam(ctx: EffectContext, count: number): readonly SearchStep[] | undefined {
+  const raw = ctx.params.route;
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const steps: SearchStep[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) return undefined;
+    const destination = (entry as { destination?: unknown }).destination;
+    if (typeof destination !== 'string' || !SEARCH_DESTINATIONS.has(destination)) return undefined;
+    const tapped = (entry as { tapped?: unknown }).tapped === true;
+    steps.push({ destination: destination as SearchStep['destination'], ...(tapped ? { tapped } : {}) });
+  }
+  // `count` stays the printed maximum: a route longer than the card says it may
+  // find would let the search fetch an extra card.
+  return steps.length <= count ? steps : steps.slice(0, count);
+}
+
+/**
  * `searchLibrary` — "search your library for a card, put it into <zone>, then
  * shuffle" (Path to Exile's compensation; any tutor).
  *
  * Params: `who` (whose library — see {@link playerParam}), `optional` (ask a
  * yes/no first, which is what "**may** search" means), `filter` + `nameAnyOf`
  * (what may be found — the two together express "a basic land card"),
- * `count` (how many, default 1), `destination` (`'hand'` by default or
- * `'battlefield'`) and `tapped` (for "…onto the battlefield tapped").
+ * `count` (how many, default 1), `destination` (`'hand'` by default,
+ * `'battlefield'` or `'graveyard'`) and `tapped` (for "…onto the battlefield
+ * tapped").
+ *
+ * `route` is the MULTI-DESTINATION form — Cultivate's "put one onto the
+ * battlefield tapped **and the other into your hand**". It is an ordered list of
+ * `{ destination, tapped? }` steps, one per card the search may find, and the
+ * selection becomes `ordered`, so the ANSWER'S ORDER IS THE ROUTING: the first
+ * card chosen takes the first step, the second the second. That is deliberate
+ * and not a shortcut — routing is a real decision (which basic you keep in hand
+ * matters), and expressing it as the order of the one selection the card already
+ * makes means it is answered by the same `selectCards` a UI, an AI and a network
+ * peer all already know how to answer, instead of a second bespoke question.
+ * A library with FEWER matches than steps simply leaves the trailing steps
+ * unused — "up to two" is a maximum, and a search may always fail to find.
+ * `route` supersedes `destination`/`tapped` when present.
  *
  * `requiresTargetInZone` gates the search on the targeted card having actually
  * ended up in that zone — the honest way to tie a compensation clause to the
@@ -233,51 +372,64 @@ export const searchLibrary: EffectPrimitive = (ctx) => {
     if (yes === undefined) return; // parked
     if (!yes) return; // declined — no search, and therefore no shuffle
   }
+  const route = routeParam(ctx, count);
   const candidates = restrictToNames(ctx, collectCardOptions(ctx.state, 'library', { controller: who, filter: filterParam(ctx) }));
   const chosen = ctx.chooseCards({
     chooser: who,
-    prompt: `Search your library for ${count} card(s)`,
+    prompt: route
+      ? `Search your library for up to ${route.length} card(s), in the order they are routed`
+      : `Search your library for ${count} card(s)`,
     candidates,
     // A search may always FAIL to find, so the floor is zero.
     min: 0,
-    max: count,
+    max: route ? route.length : count,
+    // A ROUTED search's answer order IS which card goes where (see above), so
+    // the selection is ordered; a plain search's is not, and stays byte-for-byte
+    // the request every existing tutor has always made.
+    ...(route ? { ordered: true } : {}),
     valence: 'gain',
     fromZone: 'library',
   });
   if (!chosen) return; // parked
 
-  const destination = strParam(ctx, 'destination') === 'battlefield' ? 'battlefield' : 'hand';
-  const tapped = boolParam(ctx, 'tapped', false);
+  // The single-destination form is ONE step reused for every found card, so both
+  // shapes are read through the same accessor and there is no second opinion
+  // about where a card goes or whether it arrives tapped.
+  const plainStep: SearchStep = { destination: plainDestination(ctx), tapped: boolParam(ctx, 'tapped', false) };
+  const stepFor = (index: number): SearchStep => (route ? (route[index] as SearchStep) : plainStep);
 
   // A fetched SHOCKLAND asks its "you may pay 2 life" here, mid-resolution,
   // BEFORE anything moves (the ask-first contract): the engine has already
   // charged the life by the time `paid` comes back true. Only a battlefield
   // destination raises it — a card searched to hand pays nothing.
   const shockPaid = new Map<InstanceId, boolean>();
-  if (destination === 'battlefield') {
-    for (const id of chosen) {
-      const found = ctx.state.players[who].library.find((c) => c.instanceId === id);
-      const shockCost = found?.def.entersTappedUnlessLifePaid;
-      if (shockCost === undefined) continue;
-      const paid = ctx.payLifeOrDecline({
-        chooser: who,
-        amount: shockCost,
-        prompt: `Pay ${shockCost} life, or ${found!.def.name} enters tapped`,
-        valence: 'neutral',
-      });
-      if (paid === undefined) return; // parked — nothing has moved yet
-      shockPaid.set(id, paid);
-    }
+  for (let index = 0; index < chosen.length; index++) {
+    if (stepFor(index).destination !== 'battlefield') continue;
+    const id = chosen[index] as InstanceId;
+    const found = ctx.state.players[who].library.find((c) => c.instanceId === id);
+    const shockCost = found?.def.entersTappedUnlessLifePaid;
+    if (found === undefined || shockCost === undefined) continue;
+    const paid = ctx.payLifeOrDecline({
+      chooser: who,
+      amount: shockCost,
+      prompt: `Pay ${shockCost} life, or ${found.def.name} enters tapped`,
+      valence: 'neutral',
+    });
+    if (paid === undefined) return; // parked — nothing has moved yet
+    shockPaid.set(id, paid);
   }
 
-  for (const id of chosen) {
-    if (destination === 'battlefield') {
+  for (let index = 0; index < chosen.length; index++) {
+    const id = chosen[index] as InstanceId;
+    const step = stepFor(index);
+    if (step.destination === 'battlefield') {
       // `putOntoBattlefield` consults `entersTapped`, whose answer for a
       // shockland is the unpaid default (tapped); a paid entry overrides it.
-      const enters = shockPaid.get(id) === true ? { tapped: false, ignoreEntersTapped: true } : { tapped };
+      const enters =
+        shockPaid.get(id) === true ? { tapped: false, ignoreEntersTapped: true } : { tapped: step.tapped === true };
       putOntoBattlefield(ctx, who, id, 'library', enters);
     } else {
-      moveOwnedCard(ctx, who, id, 'library', 'hand');
+      moveOwnedCard(ctx, who, id, 'library', step.destination);
     }
   }
   // Searching a library shuffles it, found or not.
@@ -322,6 +474,15 @@ export const revealTopCard: EffectPrimitive = (ctx) => {
 export const discardCard: EffectPrimitive = (ctx) => {
   const count = intParam(ctx, 'count', 1);
   if (count <= 0) return;
+  // "Each player discards a card" (Liliana of the Veil's +1): BOTH seats choose
+  // their own discards, in APNAP order — the active player answers first
+  // (CR 101.4). Handled inside this primitive because it is the same question
+  // asked twice, and BOTH answers are collected before either card moves, per
+  // the ask-first-then-mutate contract in this file's header.
+  if (strParam(ctx, 'who') === 'eachPlayer') {
+    discardEachPlayer(ctx, count);
+    return;
+  }
   const victim = playerParam(ctx, 'who', 'targetPlayer');
   if (!victim) return;
   const chooserIsController = strParam(ctx, 'chosenBy') === 'controller';
@@ -339,6 +500,35 @@ export const discardCard: EffectPrimitive = (ctx) => {
   if (!chosen) return; // parked
   for (const id of chosen) moveOwnedCard(ctx, victim, id, 'hand', 'graveyard');
 };
+
+/** The "each player discards" branch of {@link discardCard}. */
+function discardEachPlayer(ctx: EffectContext, count: number): void {
+  const active = ctx.state.activePlayer;
+  const order: readonly PlayerId[] = [active, otherPlayer(active)];
+  const chosen: (readonly InstanceId[])[] = [];
+  for (const victim of order) {
+    const candidates = collectCardOptions(ctx.state, 'hand', {
+      controller: victim,
+      filter: filterParam(ctx),
+    });
+    const picked = ctx.chooseCards({
+      chooser: victim,
+      prompt: `Discard ${count} card(s)`,
+      candidates,
+      min: count,
+      max: count,
+      valence: 'loss',
+      fromZone: 'hand',
+    });
+    if (!picked) return; // parked — nothing mutated yet
+    chosen.push(picked);
+  }
+  // Both answers are in; the discards happen "at the same time" (both were
+  // chosen from un-discarded hands, so neither choice saw the other's result).
+  for (let i = 0; i < order.length; i++) {
+    for (const id of chosen[i]!) moveOwnedCard(ctx, order[i]!, id, 'hand', 'graveyard');
+  }
+}
 
 /**
  * `returnFromGraveyard` — return `params.count` (default 1) **chosen** cards from a
@@ -373,78 +563,19 @@ export const returnFromGraveyard: EffectPrimitive = (ctx) => {
   for (const id of chosen) moveOwnedCard(ctx, who, id, 'graveyard', 'hand');
 };
 
-// --- modal spells --------------------------------------------------------------------
-
-/** One mode of a modal card, as authored in the card's data. */
-interface ModeSpec {
-  readonly id: string;
-  readonly label: string;
-  /** What this mode does — ordinary effect refs, run if the mode is chosen. */
-  readonly effects?: readonly EffectRef[];
-  /**
-   * What the mode needs in order to be CHOOSABLE at all. MTG only lets you pick a
-   * mode whose targets are legal (CR 700.2), which is exactly why a Cryptic
-   * Command cast with no spell to counter is still a real card: the counter mode
-   * simply is not on the menu.
-   */
-  readonly requires?: ModeRequirement;
-}
-
-/** The target shapes a mode can require. Data, so the card states its own needs. */
-type ModeRequirement = 'targetSpell' | 'targetPermanent' | 'targetCreature';
-
-/** Whether this resolution's targets satisfy a mode's requirement. */
-function modeIsAvailable(ctx: EffectContext, requires: ModeRequirement | undefined): boolean {
-  if (!requires) return true;
-  switch (requires) {
-    case 'targetSpell':
-      return ctx.targets.some((t) => ctx.state.stack.some((o) => o.kind === 'spell' && o.instanceId === t));
-    case 'targetPermanent':
-      return ctx.targets.some((t) => ctx.state.battlefield.some((c) => c.instanceId === t));
-    case 'targetCreature':
-      return ctx.targets.some((t) => ctx.state.battlefield.some((c) => c.instanceId === t && isCreature(c.def)));
-    default:
-      return false;
-  }
-}
-
-/** Read the `modes` param, keeping only well-formed entries. */
-function modesParam(ctx: EffectContext): readonly ModeSpec[] {
-  const v = ctx.params.modes;
-  if (!Array.isArray(v)) return [];
-  return v.filter((m): m is ModeSpec => typeof m === 'object' && m !== null && typeof (m as ModeSpec).id === 'string');
-}
-
-/**
- * `modal` — "choose `params.count` —" then run the chosen modes' effects inside
- * this same resolution (Cryptic Command; every future modal card).
- *
- * The modes are DATA on the card; this primitive knows only how to ask and how to
- * enqueue. Chosen modes run in the order the card PRINTS them, not the order they
- * were picked, which is how MTG resolves a modal spell. Modes whose targets are
- * not legal for this cast are not offered (see {@link ModeSpec.requires}), and
- * core clamps the count to what is left, so a spell cast with nothing to counter
- * still resolves as the best legal version of itself instead of fizzling.
- */
-export const modal: EffectPrimitive = (ctx) => {
-  const count = intParam(ctx, 'count', 1);
-  const modes = modesParam(ctx);
-  if (modes.length === 0 || count <= 0) return;
-  const available = modes.filter((m) => modeIsAvailable(ctx, m.requires));
-  if (available.length === 0) return;
-  const chosen = ctx.chooseModes({
-    prompt: `Choose ${count} —`,
-    modes: available.map((m) => ({ id: m.id, label: m.label })),
-    min: count,
-    max: count,
-    valence: 'gain',
-  });
-  if (!chosen) return; // parked
-  const picked = new Set(chosen);
-  // Printed order, not answer order.
-  const refs = modes.filter((m) => picked.has(m.id)).flatMap((m) => m.effects ?? []);
-  ctx.enqueueEffects(refs);
-};
+// --- modal spells -------------------------------------------------------------------
+//
+// There is deliberately NO `modal` PRIMITIVE. A modal spell's modes are chosen
+// as it is CAST (CR 601.2b), not as it resolves, and a primitive only ever runs
+// during a resolution — so a primitive-based modal card could not help but let
+// its controller see the opponent's response before committing to a mode, which
+// is strictly better than the printed card.
+//
+// The system lives on the cast seam instead: `CardDefinition.modal` (core's
+// `ModalSpec`), announced and aimed by the engine's cast-time question pipeline,
+// and flattened into this resolution by `picksToResolution` (core's
+// `modal.ts`). The modes' own effects are ordinary primitives from this file
+// and `../primitives.ts`, which is exactly the composition the seam is for.
 
 // --- small battlefield primitives the modal card needs -------------------------------
 
@@ -461,10 +592,21 @@ export const returnToHand: EffectPrimitive = (ctx) => {
 };
 
 /**
- * `tapPermanents` — tap every permanent matching `params.types` (default:
- * creatures) controlled by `params.who` (default: the opponent). Cryptic Command's
- * "tap all creatures your opponents control"; a Falter-style effect is the same
- * primitive with different data.
+ * `tapPermanents` — tap (or UNTAP) every permanent matching `params.types`
+ * (default: creatures) controlled by `params.who` (default: the opponent).
+ * Cryptic Command's "tap all creatures your opponents control"; a Falter-style
+ * effect is the same primitive with different data.
+ *
+ * Params:
+ *   - `who` — whose permanents (`'all'` for every controller).
+ *   - `types` — the card types to match (default: creatures).
+ *   - `excludeTypes` — types to SKIP, which is how "all **nonland** permanents"
+ *     is written. Applied after `types`, so `types: [every permanent type]` plus
+ *     `excludeTypes: ['land']` is exactly the printed set.
+ *   - `untap` — run the loop in the other direction. Untapping is the same
+ *     traversal with the flag and the event flipped, so it is a parameter rather
+ *     than a second primitive; a card that untaps is not a different mechanic
+ *     from one that taps, and splitting them would duplicate the filter logic.
  */
 export const tapPermanents: EffectPrimitive = (ctx) => {
   // `'all'` means every controller, so it is the one scope that is NOT a single
@@ -474,12 +616,19 @@ export const tapPermanents: EffectPrimitive = (ctx) => {
   if (!everyone && who === undefined) return;
   const types = strArrayParam(ctx, 'types');
   const wanted: readonly CardType[] = types.length > 0 ? (types as readonly CardType[]) : DEFAULT_TAP_TYPES;
+  const excluded = strArrayParam(ctx, 'excludeTypes') as readonly CardType[];
+  const untapping = boolParam(ctx, 'untap', false);
   for (const perm of ctx.state.battlefield) {
     if (who !== undefined && perm.controller !== who) continue;
     if (!wanted.some((t) => perm.def.types.includes(t))) continue;
-    if (perm.tapped) continue;
-    perm.tapped = true;
-    ctx.emit({ type: 'tapped', instanceId: perm.instanceId });
+    if (excluded.length > 0 && excluded.some((t) => perm.def.types.includes(t))) continue;
+    if (perm.tapped === !untapping) continue; // already in the state we would set
+    perm.tapped = !untapping;
+    ctx.emit(
+      untapping
+        ? { type: 'untapped', instanceId: perm.instanceId, player: perm.controller }
+        : { type: 'tapped', instanceId: perm.instanceId },
+    );
   }
 };
 
@@ -513,6 +662,25 @@ const DEFAULT_TAP_TYPES: readonly CardType[] = Object.freeze(['creature'] as con
 export const counterUnlessPaid: EffectPrimitive = (ctx) => {
   const spell = targetedSpellOnStack(ctx);
   if (!spell) return; // already gone, or not a spell — safe no-op
+  // "…unless its controller pays {X}" (Condescend): the cost is the X the
+  // CASTER chose (and paid for) at cast time, read off the resolution. X = 0
+  // prints a cost of {0}, which any player trivially pays (CR 118.5) — so the
+  // spell simply survives, exactly like the printed card cast for zero.
+  if (boolParam(ctx, UNLESS_PAID_X_PARAM, false)) {
+    const x = ctx.xValue ?? 0;
+    if (x <= 0) return; // "pays {0}" — always paid, never a counter
+    const cost: ManaCost = { generic: x };
+    const paid = ctx.payOrDecline({
+      chooser: spell.controller,
+      cost,
+      prompt: `Pay ${formatManaCost(cost)} or ${ctx.source.def.name} counters ${spell.card.def.name}`,
+      valence: 'gain',
+    });
+    if (paid === undefined) return; // parked — resume later, nothing mutated
+    if (paid) return; // paid in full: the spell resolves as normal
+    counterSpellOnStack(ctx, spell);
+    return;
+  }
   const cost = manaCostParam(ctx, UNLESS_PAID_PARAM);
   if (cost) {
     // ASK FIRST, THEN MUTATE: nothing above this line has touched the state.
@@ -533,6 +701,272 @@ export const counterUnlessPaid: EffectPrimitive = (ctx) => {
 /** Where the optional payment's cost lives in a card's params. */
 const UNLESS_PAID_PARAM = 'unlessPaid';
 
+/** Boolean param: the payment is the {X} chosen at cast time (Condescend). */
+const UNLESS_PAID_X_PARAM = 'unlessPaidX';
+
+/**
+ * `wardCounterUnlessPaid` — the resolution of a WARD trigger (CR 702.21):
+ * "counter the spell or ability that targeted this permanent unless its
+ * controller pays the ward cost".
+ *
+ * The id is core's reserved {@link WARD_COUNTER_PRIMITIVE} seam: core raises
+ * the trigger itself when an opponent's spell/ability targets a warded
+ * permanent ("becomes the target" is a moment only the engine sees), and this
+ * primitive supplies the behaviour through the SAME optional-payment machinery
+ * Mana Leak uses — the engine enriches affordability, charges the mana as the
+ * answer is accepted, and never asks a player who cannot pay.
+ *
+ * Unlike `counterUnlessPaid` this must counter ABILITIES too — ward reads
+ * "spell or ability", and a Flametongue-style trigger aimed at a warded
+ * creature is the ability case. Countering a trigger object is simply removing
+ * it from the stack (no card changes zones), reported with the same event a
+ * fizzled trigger emits so the log always says why the stack shrank.
+ */
+export const wardCounterUnlessPaid: EffectPrimitive = (ctx) => {
+  const target = ctx.targets[0];
+  if (target === undefined || isPlayerTarget(target)) return;
+  const object = ctx.state.stack.find((o) => o.instanceId === target);
+  if (!object) return; // already resolved or countered — safe no-op
+  const cost = manaCostParam(ctx, UNLESS_PAID_PARAM);
+  if (cost) {
+    // ASK FIRST, THEN MUTATE — nothing above this line has touched the state.
+    const paid = ctx.payOrDecline({
+      chooser: object.controller,
+      cost,
+      prompt: `Pay ${formatManaCost(cost)} (ward) or ${ctx.source.def.name}'s ward counters ${describeStackObject(object)}`,
+      // Paying keeps your spell/ability, so agreeing is the favourable branch
+      // for the chooser — exactly as with a soft counterspell.
+      valence: 'gain',
+    });
+    if (paid === undefined) return; // parked — resume later, nothing mutated
+    if (paid) return; // paid in full: the targeting object resolves as normal
+  }
+  if (object.kind === 'spell') {
+    counterSpellOnStack(ctx, object);
+    return;
+  }
+  const idx = ctx.state.stack.indexOf(object);
+  if (idx < 0) return;
+  ctx.state.stack.splice(idx, 1);
+  ctx.emit({
+    type: 'triggerRemovedFromStack',
+    sourceInstanceId: object.sourceInstanceId,
+    controller: object.controller,
+    label: object.label,
+    reason: `countered by ${ctx.source.def.name}'s ward`,
+  });
+};
+
+/** How a countered stack object reads in the ward prompt. */
+function describeStackObject(object: StackObject): string {
+  return object.kind === 'spell' ? object.card.def.name : object.label;
+}
+
+// --- transforming double-faced cards -------------------------------------------------
+
+/**
+ * `transformRevealTop` — Delver of Secrets' upkeep body: "look at the top card of
+ * your library. You may reveal that card. If a card matching `params.filter` is
+ * revealed this way, transform ~."
+ *
+ * The look and the "you may reveal" are ONE question: a `min: 0, max: 1`
+ * selection whose single candidate is the top card. Offering the candidate IS
+ * the look (the choice travels only to its chooser, so nobody else sees it — the
+ * `choiceAsked` event carries just a count), selecting it is the reveal, and the
+ * PROMPT is deliberately constant so the public log cannot leak whether the top
+ * card matched when the reveal is declined.
+ *
+ * Valence is computed from the top card: revealing a matching card transforms
+ * the source (`'gain'`), revealing a non-matching one does nothing but hand the
+ * opponent information (`'loss'`) — so a pilot reveals exactly when it should,
+ * with no card knowledge. Both answers stay legal either way; a human may still
+ * reveal a blank to bluff.
+ *
+ * Same documented gap as {@link revealTopCard}: the engine has no
+ * `cardsRevealed` event yet, so the reveal itself is not in the log — every
+ * MECHANICAL consequence (the transform, or nothing) is exact.
+ *
+ * The transform itself is core's `transformPermanent` (CR 701.28/712): a source
+ * that is not on the battlefield, or is not a transforming DFC, transforms
+ * nothing — never a crash.
+ */
+export const transformRevealTop: EffectPrimitive = (ctx) => {
+  const who = playerParam(ctx, 'who', 'controller');
+  if (!who) return;
+  const candidates = collectCardOptions(ctx.state, 'library', { controller: who, limit: 1, fromTop: true });
+  if (candidates.length === 0) return; // empty library — nothing to look at
+  const filter = filterParam(ctx);
+  const top = ctx.state.players[who].library[0];
+  const matches = top !== undefined && matchesCardFilter(top, filter);
+  const chosen = ctx.chooseCards({
+    chooser: who,
+    prompt: 'You may reveal the top card of your library',
+    candidates,
+    min: 0,
+    max: 1,
+    valence: matches ? 'gain' : 'loss',
+    fromZone: 'library',
+  });
+  if (chosen === undefined) return; // parked — nothing mutated
+  if (chosen.length === 0) return; // declined — the card stays hidden on top
+  if (!matches) return; // revealed a non-matching card — nothing happens
+  transformPermanent(ctx.state, ctx.source.instanceId, ctx.emit);
+};
+
+// --- scry & surveil ------------------------------------------------------------------
+
+/**
+ * The shared first half of scry and surveil: look at the top `count` cards of
+ * `who`'s library and ask which of them STAY on top, in the order they will be
+ * drawn. Returns the answer plus the candidates it was asked over, or
+ * `undefined` while the question is parked.
+ *
+ * One deliberately constant-shaped question (a `keepOnTop`-marked ordered
+ * `selectCards`, min 0): offering the candidates IS the look — the choice
+ * travels only to its chooser, and the public `choiceAsked` event carries only
+ * a count, so a spectator learns exactly what paper Magic shows the table: that
+ * N cards were looked at (the `transformRevealTop` precedent). The prompt names
+ * only the count and where the rest go, never a card.
+ */
+function askKeepOnTop(
+  ctx: EffectContext,
+  who: PlayerId,
+  count: number,
+  restFate: string,
+): { kept: readonly InstanceId[]; candidates: readonly CardOption[] } | undefined {
+  const candidates = collectCardOptions(ctx.state, 'library', { controller: who, limit: count, fromTop: true });
+  if (candidates.length === 0) return { kept: [], candidates };
+  const kept = ctx.chooseCards({
+    chooser: who,
+    prompt: `Look at the top ${candidates.length} card(s) of your library. Choose the cards to keep on top, in order — the rest ${restFate}`,
+    candidates,
+    min: 0,
+    max: candidates.length,
+    ordered: true,
+    keepOnTop: true,
+    valence: 'neutral',
+    fromZone: 'library',
+  });
+  if (kept === undefined) return undefined; // parked — nothing mutated
+  return { kept, candidates };
+}
+
+/**
+ * Re-seat the kept cards so the FIRST chosen ends up on top — the same
+ * back-to-front `moveOwnedCard 'top'` walk `reorderTopOfLibrary` uses, so the
+ * two library-arranging primitives cannot disagree about what "in order" means.
+ */
+function placeKeptOnTop(ctx: EffectContext, who: PlayerId, kept: readonly InstanceId[]): void {
+  for (let i = kept.length - 1; i >= 0; i--) {
+    moveOwnedCard(ctx, who, kept[i] as InstanceId, 'library', 'library', 'top');
+  }
+}
+
+/**
+ * Log the LOOK itself, as a count and nothing more — the public half of a scry
+ * or a surveil (see core's `cardsLookedAt`). Called from the mutate phase, once
+ * every answer is in: emitting it before an unanswered ask would log the same
+ * look again on every re-run of the effect.
+ */
+function emitLookedAt(ctx: EffectContext, who: PlayerId, amount: number): void {
+  if (amount > 0) ctx.emit({ type: 'cardsLookedAt', player: who, amount });
+}
+
+/**
+ * `scry` — "Scry N" (CR 701.18): look at the top `params.count` cards of your
+ * library, put any number of them on the bottom and the rest back on top, both
+ * groups in any order.
+ *
+ * TWO questions, both collected before anything moves (the ask-first contract):
+ *   1. which cards stay on TOP, in draw order ({@link askKeepOnTop});
+ *   2. the ORDER of the bottomed cards — asked only when there are two or more
+ *      to order (one or zero is not a decision; core would auto-answer anyway).
+ * In both ordered answers the FIRST chosen card is the one that comes up
+ * soonest: topmost of the kept, and the highest-placed (drawn first if the
+ * library empties) of the bottomed — the one meaning `ordered` always has.
+ *
+ * A library shorter than N scries what is there (core clamps the look). The
+ * bottom placement is `moveOwnedCard`'s `'bottom'` position — the same funnel
+ * every zone move uses, so each move emits the standard `zoneChange`, which the
+ * observation layer already anonymises (its destination is a hidden zone).
+ */
+export const scry: EffectPrimitive = (ctx) => {
+  const count = intParam(ctx, 'count', 1);
+  if (count <= 0) return;
+  const who = playerParam(ctx, 'who', 'controller');
+  if (!who) return;
+
+  const look = askKeepOnTop(ctx, who, count, 'go to the bottom of your library');
+  if (look === undefined) return; // parked
+  const { kept, candidates } = look;
+  if (candidates.length === 0) return; // empty library — nothing to scry
+
+  const keptSet = new Set(kept);
+  const restOptions = candidates.filter((option) => !keptSet.has(option.instanceId));
+  let bottomOrder: readonly InstanceId[] = restOptions.map((option) => option.instanceId);
+  if (restOptions.length > 1) {
+    const chosen = ctx.chooseCards({
+      chooser: who,
+      prompt: `Put ${restOptions.length} card(s) on the bottom of your library, in any order`,
+      candidates: restOptions,
+      min: restOptions.length,
+      max: restOptions.length,
+      ordered: true,
+      valence: 'neutral',
+      fromZone: 'library',
+    });
+    if (chosen === undefined) return; // parked — still nothing mutated
+    bottomOrder = chosen;
+  }
+
+  // MUTATE, only now. Bottoms first (the kept cards are still on top and out of
+  // the way), each appended to the library's end: the first-chosen bottom card
+  // is pushed first and every later one lands BELOW it, so first = surfaces
+  // soonest. Then the kept cards are re-seated in chosen order.
+  emitLookedAt(ctx, who, candidates.length);
+  for (const id of bottomOrder) {
+    moveOwnedCard(ctx, who, id, 'library', 'library', 'bottom');
+  }
+  placeKeptOnTop(ctx, who, kept);
+};
+
+/**
+ * `surveil` — "Surveil N" (CR 701.42): look at the top `params.count` cards of
+ * your library, put any number into your graveyard and the rest back on top in
+ * any order.
+ *
+ * ONE question suffices: the kept-on-top pick ({@link askKeepOnTop}) decides
+ * everything, because a graveyard has no order worth asking about. The
+ * graveyarded cards move through the same `moveOwnedCard` funnel, whose
+ * `zoneChange` into a PUBLIC zone carries the instance id — exactly paper
+ * Magic, where surveilled-away cards are placed face up for the table to see,
+ * while the kept cards stay hidden.
+ *
+ * Filling a graveyard this way triggers nothing extra by construction: the
+ * moves emit only the standard `zoneChange`s, and no trigger condition in core
+ * watches cards ARRIVING in a graveyard from a library (dying is its own
+ * event).
+ */
+export const surveil: EffectPrimitive = (ctx) => {
+  const count = intParam(ctx, 'count', 1);
+  if (count <= 0) return;
+  const who = playerParam(ctx, 'who', 'controller');
+  if (!who) return;
+
+  const look = askKeepOnTop(ctx, who, count, 'go to your graveyard');
+  if (look === undefined) return; // parked
+  const { kept, candidates } = look;
+  if (candidates.length === 0) return; // empty library — nothing to surveil
+
+  emitLookedAt(ctx, who, candidates.length);
+  const keptSet = new Set(kept);
+  for (const option of candidates) {
+    if (keptSet.has(option.instanceId)) continue;
+    moveOwnedCard(ctx, who, option.instanceId, 'library', 'graveyard');
+  }
+  placeKeptOnTop(ctx, who, kept);
+};
+
 // --- registry ------------------------------------------------------------------------
 
 /**
@@ -540,16 +974,192 @@ const UNLESS_PAID_PARAM = 'unlessPaid';
  * into `CORE_PRIMITIVES` by `./primitives`, so there is still exactly one registry
  * to register.
  */
+// --- sacrifice (a player chooses what leaves their own board) ----------------------
+
+/**
+ * Sacrifice a permanent: its controller's own choice moved to its owner's
+ * graveyard through the same zone path death uses, so dies-triggers and instance
+ * reset behave identically. `creatureDied` / `planeswalkerDied` are emitted for
+ * the kinds that have death events, because a sacrificed creature DIES.
+ */
+function sacrificePermanent(ctx: EffectContext, perm: CardInstance): void {
+  const wasCreature = isCreature(perm.def);
+  const wasWalker = perm.def.types.includes('planeswalker');
+  if (wasCreature) {
+    ctx.emit({ type: 'creatureDied', instanceId: perm.instanceId, name: perm.def.name });
+  } else if (wasWalker) {
+    ctx.emit({ type: 'planeswalkerDied', instanceId: perm.instanceId, name: perm.def.name });
+  }
+  movePermanentTo(ctx, perm, 'graveyard');
+}
+
+/**
+ * `sacrificeChosen` — "target player sacrifices a creature" (Liliana of the
+ * Veil's −2; every edict). The VICTIM chooses which of their own permanents is
+ * sacrificed — that choice is the entire card, which is why this is not
+ * `destroyTarget`: nothing here targets a creature, so hexproof does not save
+ * it and the victim gives up their worst body, not the caster's pick.
+ *
+ * Params: `who` (whose board — `'targetPlayer'` by default), `count` (how many,
+ * default 1), `filter` (what qualifies — `{ anyOfTypes: ['creature'] }` is
+ * "a creature"). A board with nothing that qualifies sacrifices nothing (zero
+ * candidates auto-answer as "none" — the printed card does nothing either).
+ */
+export const sacrificeChosen: EffectPrimitive = (ctx) => {
+  const count = intParam(ctx, 'count', 1);
+  if (count <= 0) return;
+  const victim = playerParam(ctx, 'who', 'targetPlayer');
+  if (!victim) return;
+  const candidates = collectCardOptions(ctx.state, 'battlefield', {
+    controller: victim,
+    filter: filterParam(ctx),
+  });
+  const chosen = ctx.chooseCards({
+    chooser: victim,
+    prompt: `Sacrifice ${count} permanent(s)`,
+    candidates,
+    min: count,
+    max: count,
+    valence: 'loss',
+    fromZone: 'battlefield',
+  });
+  if (!chosen) return; // parked
+  for (const id of chosen) {
+    const perm = ctx.state.battlefield.find((c) => c.instanceId === id);
+    if (perm) sacrificePermanent(ctx, perm);
+  }
+};
+
+/** The two pile ids the split offers — data the UI/AI answer refers back to. */
+const PILE_ONE = 'pile1';
+const PILE_TWO = 'pile2';
+
+/**
+ * `pileSplitSacrifice` — Liliana of the Veil's −6: "Separate all permanents
+ * target player controls into two piles. That player sacrifices all permanents
+ * in the pile of their choice."
+ *
+ * Two questions, in the printed order, both collected before anything moves:
+ *   1. the CONTROLLER splits — a `selectCards` over every permanent the victim
+ *      controls; the chosen cards are pile one, the rest are pile two (choosing
+ *      none, or everything, is a legal — if poor — split);
+ *   2. the VICTIM picks which pile is sacrificed — a two-mode `chooseModes`
+ *      whose labels list each pile's contents so the decision is renderable by
+ *      a UI that knows no rules.
+ * Then every permanent in the chosen pile is sacrificed at once.
+ *
+ * The split is valence-`'neutral'` deliberately: "half my picks are good for me"
+ * has no per-card direction, and the searchless pilot's pile is built by the AI
+ * layer (which knows values), not by a valence hint.
+ */
+export const pileSplitSacrifice: EffectPrimitive = (ctx) => {
+  const victim = playerParam(ctx, 'who', 'targetPlayer');
+  if (!victim) return;
+  const all = collectCardOptions(ctx.state, 'battlefield', { controller: victim });
+  if (all.length === 0) return; // no permanents — nothing to split, nothing to do
+
+  const pileOne = ctx.chooseCards({
+    chooser: ctx.controller,
+    prompt: `Separate ${victim}'s permanents into two piles`,
+    candidates: all,
+    min: 0,
+    max: all.length,
+    valence: 'neutral',
+    fromZone: 'battlefield',
+  });
+  if (!pileOne) return; // parked
+
+  const inPileOne = new Set(pileOne);
+  const pileTwo = all.filter((option) => !inPileOne.has(option.instanceId));
+  const describe = (options: readonly CardOption[]): string =>
+    options.length === 0 ? '(empty)' : options.map((option) => option.name).join(', ');
+  const picked = ctx.chooseModes({
+    chooser: victim,
+    prompt: 'Sacrifice all permanents in the pile of your choice',
+    modes: [
+      { id: PILE_ONE, label: `Sacrifice pile 1: ${describe(all.filter((o) => inPileOne.has(o.instanceId)))}` },
+      { id: PILE_TWO, label: `Sacrifice pile 2: ${describe(pileTwo)}` },
+    ],
+    min: 1,
+    max: 1,
+    valence: 'neutral',
+  });
+  if (!picked) return; // parked — the split is replayed from `frame.answers`
+
+  const sacrificed = picked[0] === PILE_ONE ? [...inPileOne] : pileTwo.map((o) => o.instanceId);
+  for (const id of sacrificed) {
+    const perm = ctx.state.battlefield.find((c) => c.instanceId === id);
+    if (perm) sacrificePermanent(ctx, perm);
+  }
+};
+
+/**
+ * **"As ~ enters, choose a creature type / a color / a player"** (CR 614.1c) —
+ * the naming a PERMANENT SPELL makes on the way to the battlefield.
+ *
+ * ## Why this is a resolution primitive and not an engine branch
+ * A land is PLAYED, so the engine holds it mid-entry and asks there
+ * (`raiseLandEntryChoice`). A permanent SPELL resolves, and the resolution frame
+ * is already the mechanism for asking a question mid-entry — the same mechanism
+ * "enters with N +1/+1 counters" uses, and for the same reason: while the spell
+ * resolves, the card is `ctx.source` and is not yet on the battlefield. So the
+ * compiler puts this primitive FIRST in the card's script and the naming happens
+ * at exactly the printed moment, with no second question mechanism to keep in
+ * step with the first.
+ *
+ * ## It takes no params
+ * What to ask is `ctx.source.def.asEntersChoice`, the one declaration every
+ * consumer reads — the engine's land path, the AI's answering policy, the UI and
+ * the About page. A params copy would be a second place for the subject to be
+ * written, and the two would disagree the first time a compiler rule changed.
+ *
+ * ## Naming nothing is a real answer
+ * An empty menu (nothing to name) and an explicit `NOTHING_CHOSEN` both record
+ * nothing, which every reader treats as matching nothing. That is the same inert
+ * default an entry path that cannot ask at all produces — one spelling, every
+ * path.
+ */
+export const AS_ENTERS_PRIMITIVE = 'chooseAsEnters';
+
+export const chooseAsEnters: EffectPrimitive = (ctx) => {
+  const entering = ctx.source;
+  const naming = entering.def.asEntersChoice;
+  if (!naming) return;
+  // Re-entry guard: the frame re-runs this ref from the top for every later
+  // question the same resolution asks, and a permanent names once per entry.
+  if (entering.chosenAsEntered !== undefined) return;
+  const options = asEntersOptions(ctx.state, naming, ctx.controller);
+  if (options.length === 0) {
+    recordChosenAsEntered(entering, naming, NOTHING_CHOSEN, ctx.emit);
+    return;
+  }
+  const named = ctx.chooseValue({
+    prompt: asEntersPrompt(entering.def, naming),
+    subject: naming.subject,
+    options,
+    valence: 'gain',
+  });
+  if (named === undefined) return; // parked — nothing mutated, replayed on the answer
+  recordChosenAsEntered(entering, naming, named, ctx.emit);
+};
+
 export const CHOICE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object.freeze({
+  [AS_ENTERS_PRIMITIVE]: chooseAsEnters,
   putFromHandOnTop,
+  handToBottomThenDraw,
   reorderTopOfLibrary,
   mayShuffleLibrary,
   searchLibrary,
   revealTopCard,
   discardCard,
   returnFromGraveyard,
-  modal,
   returnToHand,
   tapPermanents,
   counterUnlessPaid,
+  sacrificeChosen,
+  pileSplitSacrifice,
+  wardCounterUnlessPaid,
+  transformRevealTop,
+  scry,
+  surveil,
 });

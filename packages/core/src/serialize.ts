@@ -8,10 +8,11 @@ import type { PendingChoice } from './choices.js';
 import { choiceOptionCount } from './choices.js';
 import type { CardInstance, GameState, PlayerId } from './state.js';
 import { PLAYER_IDS } from './state.js';
-import { poolTotal } from './mana.js';
+import { poolTotal, restrictedTotal } from './mana.js';
 import { effectivePower, effectiveToughness } from './internal/stats.js';
 import { indexContinuous, NO_MOD } from './internal/continuous.js';
-import { isCreature } from './card.js';
+import { isBattle, isCreature, isPlaneswalker } from './card.js';
+import { defenseOf, loyaltyOf } from './internal/stats.js';
 
 /** A plain, JSON-safe snapshot of the game (no methods, no class instances). */
 export interface SerializedState {
@@ -27,6 +28,17 @@ export interface SerializedState {
     {
       readonly life: number;
       readonly manaTotal: number;
+      /**
+       * How much of `manaTotal` carries a printed SPEND RESTRICTION.
+       *
+       * ⚠️ OMITTED ENTIRELY when there is none, which is not a style choice: this
+       * snapshot is hashed by `selfplay-lock.test.ts` to prove that a refactor did
+       * not change the game the engine plays. A field that appeared on every
+       * ordinary board would have moved all 24 golden state digests while the
+       * event log stayed byte-identical — a false alarm that reads exactly like a
+       * rules regression, in the one test whose job is to tell them apart.
+       */
+      readonly manaRestricted?: number;
       readonly handSize: number;
       readonly librarySize: number;
       readonly graveyardSize: number;
@@ -49,6 +61,28 @@ export interface SerializedState {
      * board with no attachments serializes byte-for-byte as it always did.
      */
     readonly attachedTo?: number;
+    /**
+     * The value this permanent NAMED as it entered — "As ~ enters, choose a
+     * creature type" (CR 614.1c). Present only when something was named, so a
+     * board with no naming serializes byte-for-byte as it always did.
+     *
+     * It is here because it is the one piece of a naming permanent's state that
+     * is invisible from the rest of the row: an Adaptive Automaton that named
+     * Goblin and one that named Sliver dump identically without it, and a
+     * bug report or a step-through of an anthem that "isn't working" is
+     * unreadable when the answer is missing.
+     */
+    readonly chosenAsEntered?: string;
+    /**
+     * A planeswalker's current loyalty. Present only for walkers, so every
+     * other board serializes byte-for-byte as it always did.
+     */
+    readonly loyalty?: number;
+    /**
+     * A battle's current defense. Present only for battles, so every other board
+     * serializes byte-for-byte as it always did.
+     */
+    readonly defense?: number;
   }>;
   /**
    * The question the game is currently waiting on, if any — so the debug
@@ -72,9 +106,11 @@ export function serializeState(state: GameState): SerializedState {
   const players = {} as SerializedState['players'];
   for (const pid of PLAYER_IDS) {
     const p = state.players[pid];
+    const restricted = restrictedTotal(p.manaPool);
     players[pid] = {
       life: p.life,
       manaTotal: poolTotal(p.manaPool),
+      ...(restricted > 0 ? { manaRestricted: restricted } : {}),
       handSize: p.hand.length,
       librarySize: p.library.length,
       graveyardSize: p.graveyard.length,
@@ -104,6 +140,9 @@ export function serializeState(state: GameState): SerializedState {
         toughness: isCreature(c.def) ? effectiveToughness(c, mod) : undefined,
         damageMarked: c.damageMarked,
         ...(c.attachedTo != null ? { attachedTo: c.attachedTo } : {}),
+        ...(c.chosenAsEntered ? { chosenAsEntered: c.chosenAsEntered } : {}),
+        ...(isPlaneswalker(c.def) ? { loyalty: loyaltyOf(c) } : {}),
+        ...(isBattle(c.def) ? { defense: defenseOf(c) } : {}),
       };
     }),
     ...(state.pendingChoice ? { pendingChoice: serializePendingChoice(state.pendingChoice) } : {}),
@@ -132,21 +171,33 @@ export function dumpState(state: GameState): string {
   for (const pid of PLAYER_IDS) {
     const p = s.players[pid];
     lines.push(
-      `  ${pid}: life=${p.life} hand=${p.handSize} lib=${p.librarySize} gy=${p.graveyardSize} mana=${p.manaTotal}` +
+      `  ${pid}: life=${p.life} hand=${p.handSize} lib=${p.librarySize} gy=${p.graveyardSize} mana=${p.manaTotal}${p.manaRestricted ? ` (${p.manaRestricted} restricted)` : ''}` +
         (p.hasLost ? ' [LOST]' : ''),
     );
   }
   if (s.battlefield.length > 0) {
     lines.push('  battlefield:');
     for (const b of s.battlefield) {
-      const pt = b.power !== undefined ? ` ${b.power}/${b.toughness}` : '';
+      const pt =
+        b.power !== undefined
+          ? ` ${b.power}/${b.toughness}`
+          : b.loyalty !== undefined
+            ? ` [${b.loyalty} loyalty]`
+            : b.defense !== undefined
+              ? ` [${b.defense} defense]`
+              : '';
       const flags = [b.tapped ? 'T' : '', b.summoningSick ? 'SS' : '', b.damageMarked ? `dmg${b.damageMarked}` : '']
         .filter(Boolean)
         .join(',');
       // "→[7]" reads as "attached to instance 7" — the one thing a dump of an
       // aura/equipment board is useless without.
       const attached = b.attachedTo !== undefined ? ` →[${b.attachedTo}]` : '';
-      lines.push(`    [${b.instanceId}] ${b.name}${pt} (${b.controller})${flags ? ` {${flags}}` : ''}${attached}`);
+      // "named:goblin" — what this permanent chose as it entered, without which
+      // an anthem that "isn't working" is unreadable in a dump.
+      const named = b.chosenAsEntered !== undefined ? ` named:${b.chosenAsEntered}` : '';
+      lines.push(
+        `    [${b.instanceId}] ${b.name}${pt} (${b.controller})${flags ? ` {${flags}}` : ''}${named}${attached}`,
+      );
     }
   }
   if (s.stackSize > 0) lines.push(`  stack: ${s.stackSize} object(s)`);

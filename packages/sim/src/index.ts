@@ -212,5 +212,38 @@ export {
   TURN_STATS_REPORTER_ID,
 } from './reporters.js';
 
+/*
+ * THE FULL-POOL SOAK (`soak.ts`) — thousands of seeded games over randomised
+ * legal decks built from the WHOLE pool, asserting invariants and requiring
+ * every mechanic the pool prints to actually fire.
+ *
+ * Exported because it is a tool, not just a test: the CLI's `soak` command and
+ * `soak-deep.test.ts` are two front ends onto the same function, and anything
+ * that wants to soak a change (a Lab button, a CI job) should call this rather
+ * than grow a third copy of the loop.
+ */
+export type { SoakMechanic, SoakMechanicId, SoakInvariantName, SoakWitnessKind } from './soak-config.js';
+export {
+  SOAK_BASE_SEED,
+  SOAK_DEEP_DEFAULT_GAMES,
+  SOAK_DEEP_ENV_VAR,
+  SOAK_EVENT_WITNESS,
+  SOAK_FAST_MIXED_GAMES,
+  SOAK_INVARIANTS,
+  SOAK_MECHANICS,
+  SOAK_MECHANIC_SEED_ATTEMPTS,
+} from './soak-config.js';
+export type { SoakCardIndex, SoakDeck } from './soak-decks.js';
+export { buildAnchoredDeck, buildMixedDeck, describeDeck, indexPoolForSoak } from './soak-decks.js';
+export type { SoakOptions, SoakReport, SoakViolation } from './soak.js';
+export {
+  compareApplyPaths,
+  formatSoakReport,
+  formatViolations,
+  requiredMechanicsOf,
+  runSoak,
+  soakSimConfig,
+} from './soak.js';
+
 /** The core package this harness drives, surfaced for the scaffold smoke test. */
 export { PACKAGE_NAME as CORE_DEPENDENCY } from '@jonny-boi/core';

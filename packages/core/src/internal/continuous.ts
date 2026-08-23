@@ -61,9 +61,12 @@
  */
 
 import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
-import type { KeywordFlags } from '../card.js';
+import type { BooleanKeywordName, KeywordFlags } from '../card.js';
+import { unionProtection } from '../card.js';
+import { intersectBlockRestrictions } from './stats.js';
 import type { GameEvent } from '../events.js';
 import { modificationIsInert, staticAppliesTo, staticIsInert, staticsOf } from '../statics.js';
+import { characteristicValue } from '../derived.js';
 
 /**
  * How long a continuous effect lasts before the engine removes it.
@@ -112,13 +115,47 @@ export interface AggregatedMod {
   readonly power: number;
   readonly toughness: number;
   readonly keywords: KeywordFlags;
+  /**
+   * CR 613.3 LAYER 7a — a characteristic-defining P/T, computed from the live
+   * state for a permanent whose definition carries `characteristicPT`
+   * (Tarmogoyf's star-power box). Present ONLY for such a permanent; absent means
+   * "use the printed numbers".
+   *
+   * It is a BASE, not a delta, which is what makes the layering right: the stat
+   * accessors use it in place of `def.power`, so counters (layer 7d) and pumps
+   * (7c) add ON TOP of it, never the other way round. A Tarmogoyf with a +1/+1
+   * counter is (types)+1 / (types)+2, and it re-derives on every read — so a
+   * fetchland cracking mid-combat grows it before state-based actions run.
+   */
+  readonly basePower?: number;
+  readonly baseToughness?: number;
 }
 
 /** A precomputed lookup from instance id to its aggregated continuous mod. */
 export type ContinuousIndex = ReadonlyMap<InstanceId, AggregatedMod>;
 
-/** The keyword flags, in canonical order, that a grant can set. */
-const KEYWORD_KEYS: readonly (keyof KeywordFlags)[] = [
+/**
+ * The BOOLEAN keyword flags, in canonical order, that a grant can set.
+ *
+ * This list used to stop at the ten combat keywords, which silently dropped a
+ * granted hexproof/shroud/menace/unblockable/flash — the exact grants
+ * `targeting.ts` documents as working. The full boolean set is here now; the
+ * three non-boolean keywords (`protectionFrom`, `ward`, `minBlockers`) carry
+ * payloads and are folded by their own merge rules in {@link grantInto}.
+ *
+ * ⚠️ ADDING A BOOLEAN FLAG TO `KeywordFlags` AND NOT TO THIS LIST used to be a
+ * silent, one-directional bug: the printed keyword worked and every GRANT of it
+ * did nothing. It ate a granted hexproof once and a granted indestructible once,
+ * found both times only because someone happened to write the test.
+ *
+ * It cannot happen a third time: {@link KEYWORD_LIST_IS_EXHAUSTIVE} below is a
+ * compile-time proof that this list and the boolean half of `KeywordFlags` are
+ * the SAME set, in both directions. Add a boolean flag and this file stops
+ * type-checking until it is listed here — the same default-deny shape the sim's
+ * `OBSERVATION_POLICY` and `paired-arms-config` use, and for the same reason: a
+ * new thing must not default into the safe-looking bucket.
+ */
+const KEYWORD_KEYS = [
   'flying',
   'vigilance',
   'haste',
@@ -129,7 +166,45 @@ const KEYWORD_KEYS: readonly (keyof KeywordFlags)[] = [
   'reach',
   'defender',
   'lifelink',
-];
+  'flash',
+  'hexproof',
+  'shroud',
+  'menace',
+  'unblockable',
+  'cantBlock',
+  'indestructible',
+  'mustBeBlocked',
+  'blockedByAllAble',
+] as const;
+
+/**
+ * The boolean-valued keys of `KeywordFlags`. The FOUR payload keywords
+ * (`protectionFrom`, `ward`, `minBlockers`, `blockRestriction`) are excluded BY
+ * TYPE rather than by memory: they are folded by their own merge rules in
+ * {@link grantInto}, since "set it to true" is not what granting one of them
+ * means.
+ *
+ * Imported from `card.ts` rather than restated here, so the interface and this
+ * proof cannot be edited apart.
+ */
+type BooleanKeywordKey = BooleanKeywordName;
+
+/**
+ * COMPILE-TIME PROOF that {@link KEYWORD_KEYS} is exactly the boolean keyword
+ * set — checked by `tsc` on every build, in BOTH directions:
+ *  - a boolean flag missing from the list would make grants of it do nothing;
+ *  - a listed key that is not a boolean flag would be dead weight, or a typo.
+ * Either mistake makes this initialiser fail to compile.
+ */
+type KeywordListIsExhaustive =
+  Exclude<BooleanKeywordKey, (typeof KEYWORD_KEYS)[number]> extends never
+    ? Exclude<(typeof KEYWORD_KEYS)[number], BooleanKeywordKey> extends never
+      ? true
+      : never
+    : never;
+
+/** The witness. If the two sets ever diverge, this line stops type-checking. */
+export const KEYWORD_LIST_IS_EXHAUSTIVE: KeywordListIsExhaustive = true;
 
 /**
  * The accumulator an aggregation pass folds into. Structurally an `AggregatedMod`
@@ -142,6 +217,8 @@ interface MutableMod {
   power: number;
   toughness: number;
   keywords: KeywordFlags;
+  basePower?: number;
+  baseToughness?: number;
 }
 
 /**
@@ -156,9 +233,41 @@ const NO_KEYWORDS: KeywordFlags = Object.freeze({});
 function grantInto(agg: MutableMod, grant: KeywordFlags | undefined): void {
   if (!grant) return;
   for (const key of KEYWORD_KEYS) {
-    if (!grant[key]) continue;
+    if (grant[key] !== true) continue;
     if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
     (agg.keywords as Record<string, boolean>)[key] = true;
+  }
+  // The two payload keywords, merged by the same rules `effectiveKeywords`
+  // applies when the aggregate meets the printed set: protections UNION, wards ADD.
+  if (grant.protectionFrom !== undefined && grant.protectionFrom.length > 0) {
+    if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
+    (agg.keywords as { protectionFrom?: KeywordFlags['protectionFrom'] }).protectionFrom =
+      unionProtection(agg.keywords.protectionFrom, grant.protectionFrom);
+  }
+  if (typeof grant.ward === 'number' && grant.ward > 0) {
+    if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
+    (agg.keywords as { ward?: number }).ward = (agg.keywords.ward ?? 0) + grant.ward;
+  }
+  // `minBlockers` takes the MAXIMUM, matching `mergeKeywordGrant`: two blocking
+  // requirements are both in force, so the stricter one decides. Summing them
+  // would invent a restriction neither source printed.
+  if (typeof grant.minBlockers === 'number' && grant.minBlockers > 0) {
+    if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
+    (agg.keywords as { minBlockers?: number }).minBlockers = Math.max(
+      agg.keywords.minBlockers ?? 0,
+      grant.minBlockers,
+    );
+  }
+  // The fourth payload: a comparing block restriction. Merged field by field to
+  // the STRICTEST of each, through the same function `mergeKeywordGrant` uses, so
+  // a granted "except by creatures with haste" and a printed "power 2 or less"
+  // are both in force rather than one replacing the other.
+  if (grant.blockRestriction !== undefined) {
+    if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
+    const merged = intersectBlockRestrictions(agg.keywords.blockRestriction, grant.blockRestriction);
+    if (merged !== undefined) {
+      (agg.keywords as { blockRestriction?: KeywordFlags['blockRestriction'] }).blockRestriction = merged;
+    }
   }
 }
 
@@ -192,6 +301,25 @@ function applyAttachment(map: Map<InstanceId, MutableMod>, attachment: CardInsta
   grantInto(agg, mod.keywords);
 }
 
+/**
+ * Append the objects in one zone that declare static abilities to `sources`,
+ * allocating the list only if there is something to put in it. Hoisted to module
+ * scope rather than written inline so the hot path does not re-create a closure
+ * per call.
+ */
+function collectStaticSources(
+  zone: readonly CardInstance[],
+  sources: CardInstance[] | null,
+): CardInstance[] | null {
+  let out = sources;
+  for (let i = 0; i < zone.length; i++) {
+    const object = zone[i] as CardInstance;
+    const declared = object.def.statics;
+    if (declared !== undefined && declared.length > 0) (out ??= []).push(object);
+  }
+  return out;
+}
+
 /** Get (creating if needed) the accumulator for one instance. */
 function accumulatorFor(map: Map<InstanceId, MutableMod>, id: InstanceId): MutableMod {
   let agg = map.get(id);
@@ -223,20 +351,55 @@ export function indexContinuous(state: GameState): ContinuousIndex {
   // a board that has neither an anthem nor an attachment.
   let sources: CardInstance[] | null = null;
   let attachments: CardInstance[] | null = null;
+  // Permanents whose P/T is a FORMULA (layer 7a). Collected in the same single
+  // pass as statics and attachments, so a board with none pays one extra
+  // property read per permanent and allocates nothing.
+  let characteristic: CardInstance[] | null = null;
   const permanents = state.battlefield;
+  // EMBLEMS radiate statics from the COMMAND zone (CR 114): "creatures you
+  // control get +1/+1 as long as this emblem exists" is the SAME continuous
+  // modification an anthem applies from the battlefield, differing only in where
+  // its source sits and in the fact that nothing can ever remove it. So it folds
+  // into this one pass instead of getting a layer of its own — which is also
+  // what makes an emblem's buff survive a board wipe with no special case.
+  //
+  // PERFORMANCE: read directly rather than through `for (const pid of
+  // PLAYER_IDS)`, which allocates an array iterator per call for a two-element
+  // list — and this function runs several times per action across combat, SBAs,
+  // legality and serialization. The `.length === 0` guard means a game that
+  // never made an emblem (all of them, today) pays two integer comparisons.
+  const commandA = state.players.A.command;
+  if (commandA.length > 0) sources = collectStaticSources(commandA, sources);
+  const commandB = state.players.B.command;
+  if (commandB.length > 0) sources = collectStaticSources(commandB, sources);
   for (let i = 0; i < permanents.length; i++) {
     const perm = permanents[i] as CardInstance;
     const declared = perm.def.statics;
     if (declared !== undefined && declared.length > 0) (sources ??= []).push(perm);
+    if (perm.def.characteristicPT !== undefined) (characteristic ??= []).push(perm);
     // `!= null` rather than `!== null` on purpose: an instance built by code that
     // predates this field (an older serialized state, an untyped test literal)
     // then reads as UNATTACHED instead of as an attachment with an undefined
     // host, which would corrupt the whole layering pass. One comparison either way.
     if (perm.attachedTo != null) (attachments ??= []).push(perm);
   }
-  if (sources === null && attachments === null && state.continuous.length === 0) return EMPTY_INDEX;
+  if (sources === null && attachments === null && characteristic === null && state.continuous.length === 0) {
+    return EMPTY_INDEX;
+  }
 
   const map = new Map<InstanceId, MutableMod>();
+  // Layer 7a FIRST — a characteristic-defining base is what the other layers
+  // then modify. (Arithmetically the folds commute, so the order is about the
+  // model being honest rather than about the number, and it is the order that
+  // stays correct if a value-SETTING effect is ever added.)
+  if (characteristic !== null) {
+    for (const perm of characteristic) {
+      const formula = perm.def.characteristicPT as NonNullable<CardInstance['def']['characteristicPT']>;
+      const agg = accumulatorFor(map, perm.instanceId);
+      agg.basePower = characteristicValue(state, formula.power, perm.controller);
+      agg.baseToughness = characteristicValue(state, formula.toughness, perm.controller);
+    }
+  }
   // Layer 3a — attachments. An attachment is a static whose "filter" is a single
   // named permanent, so it needs no battlefield scan at all: O(attachments), not
   // O(attachments x battlefield).
@@ -277,6 +440,42 @@ export function indexContinuous(state: GameState): ContinuousIndex {
 }
 
 /**
+ * Whether ANY continuous modification could be in force on this board right now
+ * — the cheap gate a caller uses before deciding whether it has to build the
+ * index at all.
+ *
+ * ⚠️ **`state.continuous.length === 0` is NOT that gate, and using it as one is a
+ * shipped-bug shape.** That list holds only layer-4 "until end of turn" effects.
+ * Layer 3 — an Aura or Equipment's grant to its host, an anthem-style static, an
+ * emblem radiating from the command zone — is DERIVED from the battlefield and the
+ * command zones on every read and puts nothing in that list at all (see the
+ * `statics.ts` "lifetime is derived" note). So a fast path keyed on it silently
+ * answers "printed keywords only" on exactly the boards where an equipped,
+ * enchanted or anthem'd creature is standing there wearing a granted keyword. That
+ * is how a real pool card (Mask of Avacyn — "equipped creature … has hexproof")
+ * stayed targetable by an opponent's burn.
+ *
+ * Cost: short-circuits on the first modifying source, and on a board with none it
+ * is one or two property reads per permanent with NO allocation — the same shape,
+ * and the same reason, as `internal/sba.ts`'s `collectAttachments`.
+ */
+export function anyContinuousModification(state: GameState): boolean {
+  if (state.continuous.length > 0) return true;
+  if (state.players.A.command.length > 0 || state.players.B.command.length > 0) return true;
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    const declared = perm.def.statics;
+    if (declared !== undefined && declared.length > 0) return true;
+    // `!= null` for the same reason `indexContinuous` uses it: an instance built
+    // before this field existed must read as unattached, not as an attachment
+    // with an undefined host.
+    if (perm.attachedTo != null) return true;
+  }
+  return false;
+}
+
+/**
  * Aggregate every active modification for a SINGLE instance without building the
  * whole index. Use for one-off reads; for bulk reads prefer `indexContinuous` + map
  * lookup, which shares the battlefield scan across every permanent.
@@ -292,6 +491,13 @@ export function aggregateFor(state: GameState, instanceId: InstanceId): Aggregat
   // modifier against it in the SAME battlefield walk.
   const target = findPermanent(state, instanceId);
   if (target !== undefined) {
+    // Layer 7a — the formula base, before anything modifies it.
+    const formula = target.def.characteristicPT;
+    if (formula !== undefined) {
+      any = true;
+      agg.basePower = characteristicValue(state, formula.power, target.controller);
+      agg.baseToughness = characteristicValue(state, formula.toughness, target.controller);
+    }
     for (const source of state.battlefield) {
       if (source.attachedTo === instanceId) {
         const spec = source.def.attachment;
@@ -313,6 +519,18 @@ export function aggregateFor(state: GameState, instanceId: InstanceId): Aggregat
         grantInto(agg, ability.keywords);
       }
     }
+    // EMBLEMS radiate from the COMMAND zone, and this single-instance path has to
+    // agree with `indexContinuous` about that or the same board would report two
+    // different power values depending on which accessor a caller happened to
+    // reach for. (It did, once: wiring only the bulk path made an emblem's anthem
+    // real in combat and invisible to a one-off read — caught by a test before it
+    // shipped, which is the only reason this comment is not a bug report.)
+    //
+    // Same direct-read guard as the bulk path: no iterator for a two-element list.
+    const commandA = state.players.A.command;
+    if (commandA.length > 0) any = foldCommandStatics(commandA, target, agg) || any;
+    const commandB = state.players.B.command;
+    if (commandB.length > 0) any = foldCommandStatics(commandB, target, agg) || any;
   }
   // Layer 4 — until-end-of-turn effects aimed at this instance.
   for (const eff of state.continuous) {
@@ -324,6 +542,32 @@ export function aggregateFor(state: GameState, instanceId: InstanceId): Aggregat
   }
 
   return any ? agg : NO_MOD;
+}
+
+/**
+ * Fold every static a command zone's objects (emblems) radiate onto ONE target's
+ * accumulator. Returns whether anything applied. The single-instance twin of
+ * {@link collectStaticSources}.
+ */
+function foldCommandStatics(
+  zone: readonly CardInstance[],
+  target: CardInstance,
+  agg: MutableMod,
+): boolean {
+  let applied = false;
+  for (let i = 0; i < zone.length; i++) {
+    const source = zone[i] as CardInstance;
+    const declared = source.def.statics;
+    if (declared === undefined || declared.length === 0) continue;
+    for (const ability of declared) {
+      if (staticIsInert(ability) || !staticAppliesTo(ability, source, target)) continue;
+      applied = true;
+      agg.power += ability.power ?? 0;
+      agg.toughness += ability.toughness ?? 0;
+      grantInto(agg, ability.keywords);
+    }
+  }
+  return applied;
 }
 
 /**
@@ -369,13 +613,17 @@ export function applyControlChange(
   targetInstanceId: InstanceId,
   sourceInstanceId: InstanceId,
   emit: (e: GameEvent) => void,
+  stealer?: PlayerId,
 ): ControlChange | undefined {
   const permanent = state.battlefield.find((c) => c.instanceId === targetInstanceId);
   if (!permanent) return undefined;
   const source = state.battlefield.find((c) => c.instanceId === sourceInstanceId);
-  // The stealing player is the source's controller; with no source on the
-  // battlefield (an instant that has already left) there is nobody to give it to.
-  const to = source?.controller;
+  // The stealing player is the source's controller when the source is a
+  // permanent — but the printed cards are overwhelmingly SPELLS (Act of
+  // Treason), whose source is never on the battlefield while they resolve, so
+  // the resolution passes the caster explicitly as `stealer`. With neither (a
+  // ghost id and no stealer named) there is nobody to give the permanent to.
+  const to = source?.controller ?? stealer;
   if (to === undefined || to === permanent.controller) return undefined;
 
   const from = permanent.controller;

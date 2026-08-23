@@ -15,7 +15,13 @@
  */
 
 import { PLAYER_IDS, type CardInstance, type GameAction, type PlayerId } from '@jonny-boi/core';
-import { PROTOCOL_VERSION, type ClientMessage, type DeckList, type ServerMessage } from '@jonny-boi/protocol';
+import {
+  collectInstanceIds,
+  PROTOCOL_VERSION,
+  type ClientMessage,
+  type DeckList,
+  type ServerMessage,
+} from '@jonny-boi/protocol';
 import { SAMPLE_DECKS } from '@jonny-boi/sim';
 import { describe, expect, it } from 'vitest';
 import {
@@ -62,24 +68,20 @@ function sampleDeck(index: number): DeckList {
   return { name: d.name, cards: d.cards.map((c) => ({ cardId: c.cardId, count: c.count })) };
 }
 
-/**
- * Every `instanceId` reachable anywhere in a payload, at any depth and through any
- * field — hands, zones, the stack, `legalActions`, a nested reference we have not
- * thought of yet. A structural walk rather than a regex over the serialized JSON on
- * purpose: a text search silently mis-reads adjacent digits (`10` inside `100`) and
- * one escaping slip turns the strongest assertion in this file into a no-op.
+/*
+ * ⚠️ There used to be a LOCAL `collectInstanceIds` here, and it was the weaker of
+ * the repo's two copies: it recognised keys named exactly `instanceId`, and it
+ * stopped descending as soon as it matched one. The engine names cards under a
+ * dozen other keys (`sourceInstanceId`, `targets`, `attackTargets`, `blocks`,
+ * `instanceIds` …), every one of which this file's strongest assertion walked
+ * straight past — on the ONE path where a leak is a cheating vector rather than a
+ * biased pilot.
+ *
+ * It now uses `@jonny-boi/protocol`'s, whose key vocabulary is derived from a
+ * mapped type over every field of every `GameEvent` in core. Two copies of an
+ * anti-cheat check is two checks that can disagree, and the weaker one is the one
+ * that gets believed.
  */
-function collectInstanceIds(value: unknown, out: Set<number> = new Set()): Set<number> {
-  if (Array.isArray(value)) {
-    for (const item of value) collectInstanceIds(item, out);
-  } else if (value !== null && typeof value === 'object') {
-    for (const [key, v] of Object.entries(value)) {
-      if (key === 'instanceId' && typeof v === 'number') out.add(v);
-      else collectInstanceIds(v, out);
-    }
-  }
-  return out;
-}
 
 /** Whether `id` appears ANYWHERE in everything this connection was ever sent. */
 function mentionsInstanceId(conn: FakeConnection, id: number): boolean {

@@ -19,15 +19,48 @@ import {
   indexContinuous,
   isCreature,
   isLand,
+  isBattle,
+  isPlaneswalker,
+  defenseOf,
+  loyaltyOf,
+  protectorOf,
   manaColorsOffered,
+  MANA_COLORS,
   NO_MOD,
   type CardInstance,
   type GameState,
   type InstanceId,
   type KeywordFlags,
+  type ManaPool,
   type PlayerId,
   type StackObject,
 } from '@jonny-boi/core';
+
+/**
+ * The six colour counts of a pool as a plain record — the shape every view, the
+ * replay format and the online board expect.
+ *
+ * Spelled out rather than `{ ...pool }` ON PURPOSE: a pool carrying spend
+ * restrictions also carries a `restricted` array, and spreading it into a
+ * `Record<string, number>` would smuggle a non-number through a view type and
+ * into the replay wire format. The restriction travels as
+ * {@link poolRestrictionLabels} instead, which is a shape the UI can render.
+ */
+export function poolColorCounts(pool: ManaPool): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const color of MANA_COLORS) out[color] = pool[color];
+  return out;
+}
+
+/** The printed spend restrictions on the mana currently floating, in add order. */
+export function poolRestrictionLabels(pool: ManaPool): readonly string[] {
+  const parcels = pool.restricted;
+  if (parcels === undefined) return EMPTY_RESTRICTIONS;
+  return parcels.map((parcel) => `${parcel.amount} {${parcel.color}} ${parcel.restriction.label}`);
+}
+
+/** Shared empty list so the ordinary pool allocates nothing to describe none. */
+const EMPTY_RESTRICTIONS: readonly string[] = Object.freeze([]);
 
 /** A hand card the viewer is allowed to see (their own hand). */
 export interface VisibleHandCard {
@@ -45,6 +78,24 @@ export interface BoardPermanent {
   readonly controller: PlayerId;
   readonly isCreature: boolean;
   readonly isLand: boolean;
+  readonly isPlaneswalker: boolean;
+  /** Current loyalty (from the loyalty counter); 0 for non-walkers. */
+  readonly loyalty: number;
+  readonly isBattle: boolean;
+  /**
+   * Current defense (from the defense counter); 0 for non-battles. A battle's
+   * defense is its life total exactly as loyalty is a walker's, so the board
+   * renders it the same way — a badge carrying the CURRENT value, never the
+   * printed one.
+   */
+  readonly defense: number;
+  /**
+   * Who PROTECTS this battle — the seat that defends it, which is its
+   * controller's opponent (CR 310.11). Carried so the board can say whose
+   * Siege a player is attacking without re-deriving the rule in the UI.
+   * `null` for everything that is not a battle.
+   */
+  readonly protector: PlayerId | null;
   readonly tapped: boolean;
   readonly summoningSick: boolean;
   readonly power: number;
@@ -74,8 +125,25 @@ export interface SeatView {
   readonly hand: readonly VisibleHandCard[] | null;
   readonly libraryCount: number;
   readonly graveyardCount: number;
+  /**
+   * The graveyard's actual cards, oldest first. The graveyard is a PUBLIC zone
+   * (CR 404.2), so this is present for BOTH seats — it is what lets either play
+   * UI open a graveyard and offer flashback casts from it, not a leak.
+   */
+  readonly graveyard: readonly VisibleHandCard[];
   readonly exileCount: number;
   readonly manaPool: Readonly<Record<string, number>>;
+  /**
+   * The printed SPEND RESTRICTIONS on mana currently floating — "only to cast a
+   * creature spell". One entry per restricted parcel, in the order the mana was
+   * added, so a seat holding two differently-restricted mana shows both.
+   *
+   * Public information, exactly like the mana itself: the restriction was printed
+   * on a permanent everyone can read, and the whole table watched it be tapped.
+   * Shown because a pool reading "3 mana" while only one of them can pay for the
+   * spell in hand is otherwise an unexplained refusal.
+   */
+  readonly restrictedMana: readonly string[];
   readonly hasLost: boolean;
   readonly permanents: readonly BoardPermanent[];
 }
@@ -122,6 +190,15 @@ function boardPermanent(state: GameState, inst: CardInstance): BoardPermanent {
     controller: inst.controller,
     isCreature: creature,
     isLand: isLand(inst.def),
+    isPlaneswalker: isPlaneswalker(inst.def),
+    // A walker's loyalty LIVES in its counters (engine invariant), so this is the
+    // authoritative current value, not the printed one.
+    loyalty: isPlaneswalker(inst.def) ? loyaltyOf(inst) : 0,
+    isBattle: isBattle(inst.def),
+    // Same engine invariant as loyalty: a battle's defense LIVES in its counters,
+    // so this is the authoritative current value rather than the printed one.
+    defense: isBattle(inst.def) ? defenseOf(inst) : 0,
+    protector: isBattle(inst.def) ? protectorOf(inst) : null,
     tapped: inst.tapped,
     summoningSick: inst.summoningSick,
     power: creature ? effectivePower(inst, mod) : 0,
@@ -149,8 +226,10 @@ function seatView(state: GameState, seat: PlayerId, name: string, reveal: boolea
     hand: reveal ? visibleHand(p.hand) : null,
     libraryCount: p.library.length,
     graveyardCount: p.graveyard.length,
+    graveyard: visibleHand(p.graveyard),
     exileCount: p.exile.length,
-    manaPool: { ...p.manaPool },
+    manaPool: poolColorCounts(p.manaPool),
+    restrictedMana: poolRestrictionLabels(p.manaPool),
     hasLost: p.hasLost,
     permanents,
   };

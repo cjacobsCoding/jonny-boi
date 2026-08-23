@@ -111,7 +111,10 @@ describe('buildDeckFromPlan', () => {
     const [entry] = result.unsupportedCards;
     expect(entry!.name).toBe('Jace, the Mind Sculptor');
     expect(entry!.qty).toBe(2);
-    expect(entry!.systems.join(' ')).toContain('planeswalker');
+    // Loyalty is a SYSTEM now; what this fixture (no printed loyalty in the
+    // record, a look-at-library ability with no rule) still needs is named in
+    // loyalty terms rather than "planeswalkers are unimplemented".
+    expect(entry!.systems.join(' ')).toContain('loyalty');
   });
 
   it('names every card Scryfall could not find, so a typo is fixable', async () => {
@@ -143,7 +146,7 @@ describe('buildDeckFromPlan', () => {
     const unsupported = issues.filter((issue) => issue.severity === 'unsupported');
     expect(unsupported).toHaveLength(1);
     expect(unsupported[0]!.message).toContain('Jace, the Mind Sculptor');
-    expect(unsupported[0]!.message).toContain('planeswalker');
+    expect(unsupported[0]!.message).toContain('loyalty');
   });
 
   it('still excludes the sideboard from a maindeck-only deck', async () => {

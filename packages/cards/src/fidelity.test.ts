@@ -34,6 +34,7 @@ import {
   createGame,
   DEFAULT_RULES,
   generateLegalActions,
+  isTargetRestriction,
   targetRestrictionOf,
 } from '@jonny-boi/core';
 import { buildRegistry } from './pool.js';
@@ -313,14 +314,49 @@ function behaviour(definition: CardDefinition): string {
       .map((trigger) => [trigger.condition, trigger.effects.map((ref) => [ref.primitive, ref.params ?? {}])])
       .map((entry) => JSON.stringify(entry))
       .sort(),
+    // The display label is presentation, not behaviour; cost + timing + effects
+    // are what the ability DOES. Liliana of the Veil is the first card whose
+    // whole behaviour lives here, so leaving `activated` out would have let a
+    // walker with wrong loyalty costs pass the audit.
+    activated: (definition.activated ?? []).map((ability) => [
+      ability.cost,
+      ability.timing ?? 'instant',
+      ability.effects.map((ref) => [ref.primitive, ref.params ?? {}]),
+    ]),
+    loyalty: definition.loyalty ?? null,
+    // A MODAL card's whole behaviour is its modes, not its `effects` — Cryptic
+    // Command has no top-level effects at all. Leaving them out would give such
+    // a card an EMPTY behaviour signature that matched anything, which is
+    // precisely the blind spot this audit exists to close.
+    modal: definition.modal
+      ? [
+          definition.modal.min,
+          definition.modal.max,
+          definition.modal.allowRepeats ?? false,
+          definition.modal.modes.map((mode) => [
+            mode.targets ?? null,
+            mode.effects.map((ref) => [ref.primitive, ref.params ?? {}]),
+          ]),
+        ]
+      : null,
+    // A characteristic-defining P/T IS behaviour — it is what the creature's
+    // size DOES at every read. Without it here, a Tarmogoyf compiled with the
+    // wrong count (or the wrong offset) would pass the audit silently.
+    characteristicPT: definition.characteristicPT ?? null,
+    // An as-enters COPY spec is behaviour too, and of the most consequential
+    // kind: it decides what the permanent IS. A hand-authored Clone whose
+    // filter or "except" tail differed from its printed text would be a
+    // different card entirely, and without this line the signature could not
+    // tell -- the same blind spot `modal` and `characteristicPT` were added to
+    // close.
+    copyAsEnters: definition.copyAsEnters ?? null,
   });
 }
 
 describe('pool audit — every card claimed faithful really is', () => {
-  // Tarmogoyf's `*/*` is a FRAME approximation (a pinned P/T), not a behaviour
-  // one: it has no effects or triggers, so its behaviour signature is empty and
-  // matches. It stays out of this list deliberately — the frame check that catches
-  // it lives in the compiler's own suite.
+  // Tarmogoyf used to be exempt here: its star box was a FRAME approximation (a
+  // pinned 2/3) that a behaviour signature could not see. It is a real formula
+  // now, carried in the signature below, so it is audited like everything else.
   for (const authored of CARD_POOL) {
     if (KNOWN_UNFAITHFUL.has(authored.name)) continue;
     it(`${authored.name} is reproduced exactly from its printed text`, () => {
@@ -347,19 +383,25 @@ describe('pool audit — every card claimed faithful really is', () => {
   });
 
   it('every declared target restriction is a value the engine enforces', () => {
-    const RESTRICTED = ['creature', 'player', 'spell'] as const;
+    // Asked of the ENGINE (`isTargetRestriction`), never of a list copied here:
+    // a hand-kept copy goes stale the moment core learns a new restriction, and
+    // it did — "Destroy target artifact" compiled to `targets: 'artifact'`,
+    // which core has enforced since the attachment work, and this audit called
+    // it unenforced anyway. The engine's own predicate cannot drift from the
+    // engine.
     for (const card of CARD_POOL) {
       for (const ref of card.effects ?? []) {
         const declared = ref.params?.targets;
         if (declared === undefined) continue;
         expect(
-          (RESTRICTED as readonly unknown[]).includes(declared) || declared === 'any',
+          isTargetRestriction(declared),
           `${card.name} declares targets: ${String(declared)}`,
         ).toBe(true);
       }
-      // …and if it declares one, the engine reads it back.
-      const narrow = (card.effects ?? []).some((ref) =>
-        (RESTRICTED as readonly unknown[]).includes(ref.params?.targets),
+      // …and if it declares a NARROWING one, the engine reads it back. ('any' is
+      // the default and is deliberately not reported as a restriction.)
+      const narrow = (card.effects ?? []).some(
+        (ref) => isTargetRestriction(ref.params?.targets) && ref.params?.targets !== 'any',
       );
       expect(targetRestrictionOf(card) !== undefined, card.name).toBe(narrow);
     }

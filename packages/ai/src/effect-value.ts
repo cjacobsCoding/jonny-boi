@@ -32,18 +32,29 @@
  * keeps a seeded sim reproducible.
  */
 
-import type { CardInstance, EffectRef, GameState, InstanceId, ManaCost, PlayerId } from '@jonny-boi/core';
+import type {
+  CardInstance,
+  EffectRef,
+  GameState,
+  InstanceId,
+  ManaCost,
+  PlayerId,
+  TargetRestriction,
+} from '@jonny-boi/core';
 import {
   canAffordManaCost,
   convertedManaCost,
-  effectivePower,
-  effectiveToughness,
   isCreature,
   MANA_COLORS,
+  legalTargetsFor,
+  matchesCardFilter,
+  modalSpecOf,
   opponentOf,
-  remainingToughness,
 } from '@jonny-boi/core';
+import type { CardFilter } from '@jonny-boi/core';
 import { cardValue, findInstance, type CardValueContext } from './card-value.js';
+import type { ContinuousIndex } from './board-stats.js';
+import { boardIndex, keywordsOf, power as effPower, statTotal, toughnessLeft } from './board-stats.js';
 import type { HeuristicWeights } from './weights.js';
 
 /**
@@ -61,6 +72,13 @@ export interface EffectValueContext {
   readonly weights: HeuristicWeights;
   /** Board context for `cardValue`, precomputed once per decision. */
   readonly cards: CardValueContext;
+  /**
+   * The board's continuous aggregate, precomputed once per decision alongside
+   * `cards`. Every P/T this module prices is read through it, so an anthem, an
+   * Equipment or a `*` P/T box is worth what it actually is — a removal spell
+   * pointed at an anthem-boosted creature is priced at the creature's real size.
+   */
+  readonly index: ContinuousIndex;
 }
 
 /** The total value of running a list of effect refs, in order. */
@@ -119,6 +137,12 @@ function manaCostParam(params: Readonly<Record<string, unknown>>, key: string): 
   return Object.keys(cost).length > 0 ? (cost as ManaCost) : undefined;
 }
 
+/** Read a `CardFilter`-shaped param (what a sacrifice/discard may pick from). */
+function filterParamOf(params: Readonly<Record<string, unknown>>): CardFilter | undefined {
+  const v = params.filter;
+  return typeof v === 'object' && v !== null ? (v as CardFilter) : undefined;
+}
+
 /**
  * Resolve the player an effect acts on from its `who`-style param, mirroring the
  * `cards` primitives' own convention. `'all'` is not a single seat and is handled
@@ -161,12 +185,85 @@ function firstTargetPermanent(ctx: EffectValueContext): CardInstance | undefined
 
 /** The first targeted SPELL still on the stack, if any. */
 function firstTargetSpell(ctx: EffectValueContext) {
-  for (const t of ctx.targets) {
+  return spellOnStackAmong(ctx, ctx.targets);
+}
+
+/** The first of `targets` that is a spell still on the stack, if any. */
+function spellOnStackAmong(ctx: EffectValueContext, targets: readonly (InstanceId | PlayerId)[]) {
+  for (const t of targets) {
     if (t === 'A' || t === 'B') continue;
     const obj = ctx.state.stack.find((o) => o.kind === 'spell' && o.instanceId === t);
     if (obj && obj.kind === 'spell') return obj;
   }
   return undefined;
+}
+
+/** A spell sitting on the stack — what the copy-chain walk below moves between. */
+type SpellOnStack = NonNullable<ReturnType<typeof firstTargetSpell>>;
+
+/**
+ * The primitive a copy spell runs. Named once so this file and the pilot's
+ * copy-aiming code cannot drift apart on a bare string.
+ */
+const COPY_SPELL_PRIMITIVE = 'copySpell';
+
+/**
+ * How many copy-of-a-copy links to follow before calling the chain worthless.
+ * Its job is to stop two copy spells aimed at each other from recursing, not to
+ * model play — no real board stacks this many.
+ */
+const MAX_COPY_CHAIN_LINKS = 4;
+
+/**
+ * What a COPY of `spell` actually delivers — which is NOT `cardValue(spell)`.
+ *
+ * A copy of a COPY SPELL does nothing on its own: it resolves, copies whatever
+ * its own target is, and hands the real work one step further down. So the chain
+ * is walked to the non-copy spell it bottoms out at, and each extra link costs
+ * {@link HeuristicWeights.modeCopyChainPenalty} — one more resolution that puts
+ * nothing on the board, and one more chance to fizzle on the way.
+ *
+ * Pricing a copy spell at its face value instead is what let two copy spells
+ * aimed at each other look like the best target available, forever: every copy
+ * made another copy, neither original ever reached the top of the stack, and
+ * three full-pool soak games burned the 6,000-action cap ~1,850 copies deep.
+ */
+function copyPayloadValue(ctx: EffectValueContext, spell: SpellOnStack, links: number): number {
+  if (willFizzleOnResolution(ctx, spell.targets)) return 0;
+  // `effects` is optional on a CardDefinition — a spell with none copies nothing,
+  // so it is priced as the plain card it is rather than throwing here.
+  const copiesSomething = (spell.card.def.effects ?? []).some(
+    (e) => e.primitive === COPY_SPELL_PRIMITIVE,
+  );
+  if (!copiesSomething) return cardValue(spell.card, ctx.weights, ctx.cards);
+  if (links >= MAX_COPY_CHAIN_LINKS) return 0;
+  const next = spellOnStackAmong(ctx, spell.targets ?? []);
+  if (!next) return 0; // it copies nothing that is still there — a dead copy
+  return Math.max(0, copyPayloadValue(ctx, next, links + 1) - ctx.weights.modeCopyChainPenalty);
+}
+
+/**
+ * Will a spell with these targets be countered on resolution for having none of
+ * them left (CR 608.2b)?
+ *
+ * "None", not "any": a spell with several targets still resolves for the ones
+ * that remain, so only a spell that has lost EVERY target is dead. A spell that
+ * never targeted anything is not targeting-dependent and always resolves.
+ *
+ * A player target is always still there — players do not leave the game here —
+ * so only object targets are looked up, in the two zones a spell's target can
+ * still be sitting in when the question is asked.
+ */
+function willFizzleOnResolution(
+  ctx: EffectValueContext,
+  targets: readonly (InstanceId | PlayerId)[] | undefined,
+): boolean {
+  if (!targets || targets.length === 0) return false;
+  return !targets.some((target) => {
+    if (target === 'A' || target === 'B') return true;
+    if (ctx.state.battlefield.some((permanent) => permanent.instanceId === target)) return true;
+    return ctx.state.stack.some((object) => object.instanceId === target);
+  });
 }
 
 // --- shared pricing --------------------------------------------------------------
@@ -176,8 +273,22 @@ function firstTargetSpell(ctx: EffectValueContext) {
  * the main-phase pilot uses to pick a removal target, so "kill the biggest threat"
  * means one thing across the whole pilot.
  */
-function removalValue(perm: CardInstance, weights: HeuristicWeights): number {
-  return weights.removalBaseScore + weights.removalPerPowerOfTarget * effectivePower(perm);
+function removalValue(perm: CardInstance, weights: HeuristicWeights, index: ContinuousIndex): number {
+  return weights.removalBaseScore + weights.removalPerPowerOfTarget * effPower(perm, index);
+}
+
+/**
+ * Whether this permanent shrugs off an effect that says "destroy".
+ *
+ * Read through the continuous layer rather than off `def.keywords`, so a granted
+ * indestructible — the whole point of Heroic Intervention — is seen. A mode
+ * chooser that reads the printed set picks "destroy their board" into a board it
+ * cannot touch. The decision's index is reused rather than `aggregateFor` being
+ * called per permanent: that helper is a whole battlefield pass, and this runs
+ * once per creature on the board for a sweeper mode.
+ */
+function isIndestructible(ctx: EffectValueContext, perm: CardInstance): boolean {
+  return Boolean(keywordsOf(perm, ctx.index).indestructible);
 }
 
 /** The mana value of a permanent's printed card (a token has none). */
@@ -223,6 +334,95 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
   },
 
   /**
+   * COPYING A SPELL (CR 707.10) is worth **whatever the copy will actually
+   * deliver**, priced by the pilot's one card ruler — a copy of a Cryptic
+   * Command is worth a Cryptic Command, and a copy of a cantrip is worth a
+   * cantrip. That is what makes a pilot hold a Reverberate for something big
+   * instead of spending it on the first instant it sees.
+   *
+   * "Deliver", not "the copied card's face value", because those differ for the
+   * one card type that matters here: copying a COPY SPELL delivers only whatever
+   * sits at the end of its chain. See {@link copyPayloadValue}.
+   *
+   * The sign is the interesting half and it is the OPPOSITE of a counterspell's:
+   * countering your OWN spell is the classic printed-first-mode blunder, while
+   * copying your own spell is the play the card is FOR. Copying an OPPONENT'S
+   * spell is also fine (the copy is yours — CR 707.10), so neither controller
+   * earns a penalty here; what earns zero is copying nothing, which is what a
+   * dead mode is worth.
+   */
+  copySpell: (params, ctx) => {
+    const spell = firstTargetSpell(ctx);
+    if (!spell) return 0; // nothing on the stack — a dead mode
+    const count = Math.max(intParam(params, 'count', 1), 0);
+    return count * copyPayloadValue(ctx, spell, 0);
+  },
+
+  /**
+   * COPYING A TRIGGERED ABILITY is worth what the ability itself delivers — the
+   * same principle §3.33 established for spell copies, which is that a copy is
+   * worth its PAYLOAD and never a flat "copies are good" bonus.
+   *
+   * Priced by recursing into the trigger's own effects with the targets it is
+   * actually aimed at, so copying "draw a card" is worth a card and copying a
+   * trigger whose target has gone is worth nothing.
+   *
+   * ⚠️ The recursion is bounded by construction, unlike the spell case: a
+   * trigger's effects are read from the ability, and `copyTriggeredAbility` is
+   * an ACTIVATED ability that no trigger prints, so a copied trigger can never
+   * itself be another trigger-copy. There is no mirror to guard against here —
+   * but if a card ever prints one, this is the line that has to grow the same
+   * chain-depth guard `copyPayloadValue` carries.
+   */
+  copyTriggeredAbility: (params, ctx) => {
+    const target = ctx.targets?.[0];
+    if (target === undefined || target === 'A' || target === 'B') return 0;
+    const trigger = ctx.state.stack.find(
+      (o) => o.kind === 'trigger' && o.instanceId === target,
+    );
+    if (!trigger || trigger.kind !== 'trigger') return 0; // gone — a dead activation
+    const count = Math.max(intParam(params, 'count', 1), 0);
+    return count * valueOfEffects(trigger.effects, { ...ctx, targets: [...trigger.targets] });
+  },
+
+  /**
+   * A TOKEN COPY is worth a creature of the copied body's size, priced through
+   * the SAME formula `makeToken` uses so "a 4/4 token" means one thing to this
+   * pilot however it was made.
+   *
+   * ⚠️ It reads the copied permanent's PRINTED power and toughness, not its
+   * effective ones — the same trap `copyTargetValue` exists for on the as-enters
+   * path. Reading effective stats would have a pilot copy the 1/1 wearing three
+   * +1/+1 counters over the printed 4/4 beside it and end up with a 1/1, because
+   * CR 707.2 copies the printed card and counters are not copiable.
+   */
+  createTokenCopy: (params, ctx) => {
+    const source = tokenCopySource(ctx);
+    if (!source) return 0;
+    // The BASE count, deliberately: this is asked while the pilot is deciding
+    // whether to CAST, and the kicker has not been paid (or even offered) yet.
+    // Pricing Rite of Replication's kicked five here would have the pilot value
+    // a spell it has not agreed to pay for — the kicker is its own question,
+    // answered by the pilot's kicker policy on its own terms.
+    const count = Math.max(intParam(params, 'count', 1), 0);
+    const stats = (source.def.power ?? 0) + (source.def.toughness ?? 0);
+    return count * (ctx.weights.castCreatureBaseScore + ctx.weights.castCreaturePerStat * stats);
+  },
+
+  /**
+   * Returning the targeted SPELL to its owner's hand (Narset's Reversal) is
+   * tempo against an opponent and a straight loss against yourself: they get the
+   * card back either way, so it is priced as the bounce it is, and aiming it at
+   * your own spell is the same blunder countering your own spell is.
+   */
+  returnSpellToHand: (_params, ctx) => {
+    const spell = firstTargetSpell(ctx);
+    if (!spell) return 0;
+    if (spell.controller === ctx.player) return -ctx.weights.modeSelfHarmPenalty;
+    return cardValue(spell.card, ctx.weights, ctx.cards);
+  },
+
+  /**
    * The SOFT counter is the hard counter's price, **scaled by whether it will
    * actually counter anything**: "unless its controller pays {3}" against an
    * opponent with three untapped lands mostly taxes them, and against a tapped-out
@@ -255,18 +455,80 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     againstTarget(ctx, (perm) => {
       const weights = ctx.weights;
       const redeploy = weights.modeBouncePerManaValue * permanentManaValue(perm);
-      const pressure = isCreature(perm.def) ? weights.removalPerPowerOfTarget * effectivePower(perm) : 0;
+      const pressure = isCreature(perm.def) ? weights.removalPerPowerOfTarget * effPower(perm, ctx.index) : 0;
       return weights.modeBounceBaseScore + redeploy + pressure;
     }),
 
-  /** Same shape as a bounce, but the card is gone for good. */
-  destroyTarget: (_params, ctx) => againstTarget(ctx, (perm) => removalValue(perm, ctx.weights)),
-  exileTarget: (_params, ctx) => againstTarget(ctx, (perm) => removalValue(perm, ctx.weights)),
+  /**
+   * Same shape as a bounce, but the card is gone for good — UNLESS the thing it
+   * points at is indestructible, in which case the mode does literally nothing
+   * (CR 702.12b) and must score as the blank it is. Exile has no such exemption,
+   * which is exactly why the two are not one entry.
+   */
+  destroyTarget: (_params, ctx) =>
+    againstTarget(ctx, (perm) =>
+      isIndestructible(ctx, perm) ? 0 : removalValue(perm, ctx.weights, ctx.index),
+    ),
+  exileTarget: (_params, ctx) => againstTarget(ctx, (perm) => removalValue(perm, ctx.weights, ctx.index)),
+
+  /**
+   * BLINK — "exile it, then return it". Priced by what re-entering is WORTH,
+   * which is the enters trigger it fires again (and the leaves trigger it fires
+   * on the way out — blinking Thragtusk collects both halves).
+   *
+   * Deliberately NOT routed through `againstTarget`: that prices hitting an
+   * OPPONENT'S permanent and penalises aiming at your own, which is backwards
+   * here. A blink is something you do TO YOUR OWN board, and the self-harm
+   * penalty would have made every legal aim negative.
+   *
+   * ⚠️ A TOKEN is the trap. Blinking one destroys it outright (CR 111.7 — it
+   * ceases to exist in exile and nothing returns), so it is priced as the loss
+   * of a creature rather than as zero. Without this the whole table answered 0
+   * for every candidate, the pilot fell through to the FIRST offered one, and
+   * Conjurer's Closet spent its trigger eating its own Soldier tokens — measured
+   * at ~10 destroyed tokens per 40 games before this entry existed.
+   */
+  /**
+   * "YOU MAY <body>" — worth exactly what the body is worth.
+   *
+   * ⚠️ Its absence made every optional card invisible to the pilot. An unknown
+   * primitive scores `modeUnknownEffectScore`, so `mayEffects` answered a flat
+   * constant and the nested body was never looked at — which meant a pilot
+   * AIMING an optional trigger scored every candidate identically and fell
+   * through to the FIRST one offered. Conjurer's Closet ate its own Soldier
+   * tokens that way (9 of them per 40 games) while a Thragtusk stood next to it.
+   *
+   * Recursing is the whole fix, and it is safe in both directions: the option to
+   * DECLINE is answered elsewhere (`answerConfirm` reads the same value and says
+   * no to a negative one), so pricing the body here cannot force a bad "yes" —
+   * it only lets the pilot tell two candidates apart.
+   */
+  mayEffects: (params, ctx) => {
+    const inner = params['effects'];
+    return Array.isArray(inner) ? valueOfEffects(inner as readonly EffectRef[], ctx) : 0;
+  },
+
+  blinkTarget: (_params, ctx) => {
+    const perm = firstTargetPermanent(ctx);
+    if (!perm) return 0;
+    if (perm.def.isToken === true) {
+      return -removalValue(perm, ctx.weights, ctx.index);
+    }
+    const triggers = perm.def.triggers ?? [];
+    let worth = 0;
+    for (const trigger of triggers) {
+      if (trigger.condition.on !== 'etb' && trigger.condition.on !== 'leaves') continue;
+      worth += valueOfEffects(trigger.effects, { ...ctx, targets: [] });
+    }
+    // A body with nothing to re-trigger comes back summoning sick and shorn of
+    // its counters, so blinking it is a small loss rather than a neutral move.
+    return worth > 0 ? worth : -ctx.weights.modeSelfHarmPenalty;
+  },
 
   /** Tapping one permanent is a fraction of tapping a board; price it per power. */
   tapTarget: (_params, ctx) =>
     againstTarget(ctx, (perm) =>
-      perm.tapped ? 0 : ctx.weights.modeTapPerPowerValue * Math.max(effectivePower(perm), 1),
+      perm.tapped ? 0 : ctx.weights.modeTapPerPowerValue * Math.max(effPower(perm, ctx.index), 1),
     ),
 
   /**
@@ -279,7 +541,10 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     let net = 0;
     for (const perm of ctx.state.battlefield) {
       if (!isCreature(perm.def)) continue;
-      const stats = effectivePower(perm) + effectiveToughness(perm);
+      // A wipe neither clears their indestructible creatures nor costs us ours,
+      // so neither side of the trade includes them.
+      if (isIndestructible(ctx, perm)) continue;
+      const stats = statTotal(perm, ctx.index);
       net += perm.controller === ctx.player ? -stats * weights.ownCreatureLossPerStat : stats * weights.killEnemyPerStat;
     }
     return net * weights.removalPerPowerOfTarget;
@@ -303,7 +568,7 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
       if (perm.tapped) continue;
       const types: readonly string[] = perm.def.types;
       if (!wanted.some((t) => types.includes(t))) continue;
-      const weight = weights.modeTapPerPowerValue * Math.max(effectivePower(perm), 1);
+      const weight = weights.modeTapPerPowerValue * Math.max(effPower(perm, ctx.index), 1);
       value += perm.controller === ctx.player ? -weight : weight;
     }
     return value;
@@ -323,6 +588,34 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
   },
 
   /** Life is cheap at a healthy total and priceless when the clock is on us. */
+  /**
+   * PREVENTION — a fog, or a mode of one (Dawn Charm's first bullet). Its value
+   * is not a property of the card: it is exactly the damage it stops, which is
+   * ZERO unless an attack has already been declared against us. So this asks the
+   * same three questions the main-phase scorer does, in one place, and answers
+   * zero cheaply the rest of the time — a modal spell whose prevention mode
+   * scored a flat number would pick that mode in an empty main phase and throw
+   * the card away.
+   */
+  preventDamage: (_params, ctx) => {
+    const combat = ctx.state.combat;
+    if (!combat || !combat.attackersDeclared || combat.attackers.length === 0) return 0;
+    if (ctx.state.activePlayer === ctx.player) return 0; // we are the attacker
+    const index = boardIndex(ctx.state);
+    let incoming = 0;
+    for (const id of combat.attackers) {
+      const attacker = ctx.state.battlefield.find((c) => c.instanceId === id);
+      if (attacker && attacker.controller !== ctx.player) incoming += effPower(attacker, index);
+    }
+    if (incoming <= 0) return 0;
+    const life = ctx.state.players[ctx.player].life;
+    if (incoming >= life) return ctx.weights.lethalBurnScore;
+    if (incoming < ctx.weights.fogMinimumDamagePrevented && life > ctx.weights.desperateLifeThreshold) {
+      return 0;
+    }
+    return incoming * ctx.weights.fogValuePerDamagePrevented;
+  },
+
   gainLife: (params, ctx) => lifeSwing(intParam(params, 'amount', 0), ctx, params),
   loseLife: (params, ctx) => -lifeSwing(intParam(params, 'amount', 0), ctx, params),
 
@@ -341,8 +634,8 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
       return amount >= ctx.state.players[playerTarget].life ? weights.lethalBurnScore : weights.burnFaceBaseScore;
     }
     return againstTarget(ctx, (perm) =>
-      remainingToughness(perm) <= amount
-        ? removalValue(perm, weights)
+      toughnessLeft(perm, ctx.index) <= amount
+        ? removalValue(perm, weights, ctx.index)
         : weights.removalPerPowerOfTarget * amount,
     );
   },
@@ -356,6 +649,15 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
    * worth nothing at all against an empty hand.
    */
   discardCard: (params, ctx) => {
+    // "Each player discards" (Liliana's +1): symmetric on paper, ours in
+    // practice when we planned for it — we chose to fire it, so half-price the
+    // self half. An empty opposing hand makes the whole thing worthless.
+    if (strParam(params, 'who') === 'eachPlayer') {
+      const base = ctx.weights.modeDiscardBaseScore;
+      const theirs = ctx.state.players[opponentOf(ctx.player)].hand.length;
+      const mine = ctx.state.players[ctx.player].hand.length;
+      return (theirs > 0 ? base : 0) - (mine > 0 ? base / 2 : 0);
+    }
     const victim = subjectPlayer(params, 'who', 'targetPlayer', ctx);
     if (victim === undefined) return 0;
     const hand = ctx.state.players[victim].hand;
@@ -367,6 +669,45 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     return victim === ctx.player ? -value : value;
   },
 
+  /**
+   * An edict ("target player sacrifices a creature") is removal whose victim
+   * picks — so it is worth their WORST qualifying body, not their best, and it
+   * is worth nothing at all against an empty board.
+   */
+  sacrificeChosen: (params, ctx) => {
+    const victim = subjectPlayer(params, 'who', 'targetPlayer', ctx);
+    if (victim === undefined) return 0;
+    let worst: number | undefined;
+    for (const perm of ctx.state.battlefield) {
+      if (perm.controller !== victim) continue;
+      if (!matchesCardFilter(perm, filterParamOf(params))) continue;
+      const value = removalValue(perm, ctx.weights, ctx.index);
+      if (worst === undefined || value < worst) worst = value;
+    }
+    if (worst === undefined) return 0;
+    return victim === ctx.player ? -worst : worst;
+  },
+
+  /**
+   * The pile split (Liliana's −6) costs its victim about HALF their board by
+   * value: a fair split loses the lesser pile, an unfair one lets the victim
+   * keep the good half. Worth nothing against an empty board.
+   */
+  pileSplitSacrifice: (params, ctx) => {
+    const victim = subjectPlayer(params, 'who', 'targetPlayer', ctx);
+    if (victim === undefined) return 0;
+    let total = 0;
+    let any = false;
+    for (const perm of ctx.state.battlefield) {
+      if (perm.controller !== victim) continue;
+      any = true;
+      total += removalValue(perm, ctx.weights, ctx.index);
+    }
+    if (!any) return 0;
+    const half = total / 2;
+    return victim === ctx.player ? -half : half;
+  },
+
   /** Regrowth is worth the best card actually sitting in the yard. */
   returnFromGraveyard: (params, ctx) => {
     const who = subjectPlayer(params, 'who', 'controller', ctx);
@@ -375,6 +716,27 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     if (yard.length === 0) return 0;
     const value = bestCardIn(yard, ctx) * Math.max(intParam(params, 'count', 1), 1);
     return who === ctx.player ? value : -value;
+  },
+
+  /**
+   * A GRANTED FLASHBACK (Snapcaster's ETB) is card advantage, priced off the
+   * very card it names — which is what makes the ability's aiming work: the
+   * trigger's target chooser (`answerSelectTargets`) scores each graveyard
+   * candidate through this entry, so the pilot points Snapcaster at its best
+   * instant or sorcery rather than the first one offered.
+   *
+   * Discounted by `grantedFlashbackValueShare` against simply returning the
+   * card (`returnFromGraveyard` above scores the full value): the grant wears
+   * off at end of turn and the card still costs its mana. A grant aimed at
+   * nothing — the target already gone — is worth nothing, which is also what
+   * it does.
+   */
+  grantFlashback: (_params, ctx) => {
+    const target = ctx.targets[0];
+    if (target === undefined || typeof target !== 'number') return 0;
+    const card = ctx.state.players[ctx.player].graveyard.find((c) => c.instanceId === target);
+    if (!card) return 0;
+    return cardValue(card, ctx.weights, ctx.cards) * ctx.weights.grantedFlashbackValueShare;
   },
 
   /** A tutor is worth roughly the best thing it could find; the library is deep. */
@@ -428,8 +790,8 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
       // Shrink-removal: worth a kill when it is lethal, a fraction when it only
       // trims, and a mistake pointed at our own board.
       if (perm.controller === ctx.player) return -ctx.weights.modeSelfHarmPenalty;
-      return -toughness >= remainingToughness(perm)
-        ? removalValue(perm, ctx.weights)
+      return -toughness >= toughnessLeft(perm, ctx.index)
+        ? removalValue(perm, ctx.weights, ctx.index)
         : ctx.weights.modePumpPerStatValue * -toughness;
     }
     if (perm.controller !== ctx.player) return -ctx.weights.modeSelfHarmPenalty;
@@ -471,6 +833,27 @@ function tokenValue(params: Readonly<Record<string, unknown>>, ctx: EffectValueC
   return count * (weights.castCreatureBaseScore + weights.castCreaturePerStat * stats);
 }
 
+/**
+ * The permanent a `createTokenCopy` ref would copy — its TARGET.
+ *
+ * The primitive reads three selectors (`self`, `equipped`, the target) and this
+ * prices only the third, because the other two are never a DECISION: a card that
+ * copies itself or its equipped host does so from a TRIGGER, which the pilot does
+ * not choose to run. What the pilot chooses is whether to cast a Rite of
+ * Replication and where to point it, and that is always a target.
+ *
+ * `undefined` means "nothing legal to copy", which prices the ref at zero — the
+ * same dead-mode answer `counterSpell` gives with an empty stack.
+ */
+function tokenCopySource(ctx: EffectValueContext): CardInstance | undefined {
+  for (const t of ctx.targets) {
+    if (t === 'A' || t === 'B') continue;
+    const found = ctx.state.battlefield.find((c) => c.instanceId === t);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 /** The value of the best card in a zone, by the pilot's one card ruler. */
 function bestCardIn(cards: readonly CardInstance[], ctx: EffectValueContext): number {
   let best = 0;
@@ -483,50 +866,65 @@ function bestCardIn(cards: readonly CardInstance[], ctx: EffectValueContext): nu
 
 // --- modal-spell mode lookup --------------------------------------------------------
 
-/** A mode as the card AUTHORED it: an id and the effects choosing it runs. */
+/** A mode as the card AUTHORED it: its id, its effects, and what it may aim at. */
 export interface ModeEffects {
   readonly id: string;
   readonly effects: readonly EffectRef[];
+  /** What choosing this mode will then be asked to target, when it targets. */
+  readonly targets?: TargetRestriction;
 }
 
 /**
  * Recover the effects behind each offered mode id.
  *
- * The pending choice carries only `{ id, label }`, so the meaning has to come from
- * the card's own data. The authoritative source is the SUSPENDED RESOLUTION: the
- * effect ref it stopped on is the `modal` ref itself, complete with its `modes`
- * param, and its `targets` are the ones this cast locked in. Falling back to the
- * source card's printed effects covers a state that arrived without a frame (a
- * hand-built test position, a replay), and returning an empty map — never a throw —
- * covers a card this build cannot read, which simply degrades mode choice to
- * printed order.
+ * The pending choice carries only `{ id, label }` — deliberately, since a choice
+ * must be renderable by a UI that knows no rules — so the meaning comes from the
+ * card's own data: `CardDefinition.modal`, read off the card that asked.
+ *
+ * The question is raised while the spell is being CAST, so the card is on the
+ * STACK, not the battlefield; `findInstance` searches every zone, and a card
+ * this build cannot read yields an empty list rather than a throw, which simply
+ * degrades mode choice to printed order.
  */
 export function modeEffectsFor(state: GameState, sourceInstanceId: InstanceId): readonly ModeEffects[] {
-  const frame = state.resolution;
-  const running = frame ? frame.effects[frame.next] : undefined;
-  const fromFrame = running ? readModes(running) : undefined;
-  if (fromFrame && fromFrame.length > 0) return fromFrame;
-
-  const source = findInstance(state, sourceInstanceId);
-  for (const ref of source?.def.effects ?? []) {
-    const modes = readModes(ref);
-    if (modes && modes.length > 0) return modes;
-  }
-  return [];
+  // The STACK first, and that is not an optimisation: a modal spell's modes are
+  // chosen while it is being cast, so the card is on the stack and NOWHERE else
+  // — and `findInstance` (built for board/hand/graveyard questions) does not
+  // look there. Searching only through it returned an empty mode list, which
+  // silently degraded every mode choice to printed order.
+  const onStack = state.stack.find((o) => o.kind === 'spell' && o.instanceId === sourceInstanceId);
+  const source = (onStack?.kind === 'spell' ? onStack.card : undefined) ?? findInstance(state, sourceInstanceId);
+  const spec = source ? modalSpecOf(source.def) : undefined;
+  if (!spec) return [];
+  return spec.modes.map((mode) => ({
+    id: mode.id,
+    effects: mode.effects,
+    ...(mode.targets !== undefined ? { targets: mode.targets } : {}),
+  }));
 }
 
-/** Read a `modal` ref's `modes` param, keeping only well-formed entries. */
-function readModes(ref: EffectRef): readonly ModeEffects[] | undefined {
-  const raw = ref.params?.modes;
-  if (!Array.isArray(raw)) return undefined;
-  const out: ModeEffects[] = [];
-  for (const entry of raw) {
-    if (typeof entry !== 'object' || entry === null) continue;
-    const mode = entry as { id?: unknown; effects?: unknown };
-    if (typeof mode.id !== 'string') continue;
-    out.push({ id: mode.id, effects: Array.isArray(mode.effects) ? (mode.effects as EffectRef[]) : [] });
+/**
+ * What one mode is worth on this board, aimed as well as it could be.
+ *
+ * A targeting mode is priced by its BEST legal target rather than by an
+ * unaimed guess, because the aim is the mode: "counter target spell" is a
+ * blank with nothing worth countering and premium removal with something. This
+ * is also what stops the pilot countering ITS OWN spell — a Cryptic Command is
+ * on the stack while its modes are chosen, so it is a legal counter target, and
+ * `counterSpell`'s scorer prices aiming there as the mistake it is.
+ */
+export function valueOfMode(mode: ModeEffects, ctx: EffectValueContext): number {
+  if (mode.targets === undefined) return valueOfEffects(mode.effects, ctx);
+  const candidates = legalTargetsFor(ctx.state, mode.targets, ctx.player);
+  let best: number | undefined;
+  for (const ref of candidates) {
+    const value = valueOfEffects(mode.effects, { ...ctx, targets: [ref] });
+    if (best === undefined || value > best) best = value;
   }
-  return out;
+  // No legal target at all: the mode would not have been offered, but a caller
+  // scoring a card in hand can ask about one, and a mode that cannot happen is
+  // worth nothing.
+  return best ?? 0;
 }
 
 /** Build the value context for a resolution that is currently asking a question. */
@@ -536,5 +934,5 @@ export function resolutionValueContext(
   weights: HeuristicWeights,
   cards: CardValueContext,
 ): EffectValueContext {
-  return { state, player, targets: state.resolution?.targets ?? [], weights, cards };
+  return { state, player, targets: state.resolution?.targets ?? [], weights, cards, index: cards.index };
 }

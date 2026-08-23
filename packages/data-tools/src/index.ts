@@ -57,6 +57,7 @@ export {
   diffCard,
   verifyCards,
   formatVerifyReport,
+  frontFaceName,
   scryfallLookupName,
   type FieldDiff,
   type VerifyReport,

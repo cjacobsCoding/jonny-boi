@@ -14,12 +14,39 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 159 cards.
+ * 555 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
 
 export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
+  // Choose one —
+  // • Abrade deals 3 damage to target creature.
+  // • Destroy target artifact.
+  {
+    id: 'f9db72dc-9a5b-48a4-a86e-7464d9a2166a',
+    name: 'Abrade',
+    types: ['instant'],
+    cost: { generic: 1, R: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Abrade deals 3 damage to target creature',
+          effects: [{ primitive: 'dealDamage', params: { amount: 3, targets: 'creature' } }],
+          targets: 'creature',
+        },
+        {
+          id: 'mode2',
+          label: 'Destroy target artifact',
+          effects: [{ primitive: 'destroyTarget', params: { targets: 'artifact' } }],
+          targets: 'artifact',
+        },
+      ],
+    },
+  },
   // Counter target spell. You gain 3 life.
   {
     id: '132ca99a-a3c7-4ed6-b4d0-0edcd7140ca2',
@@ -53,6 +80,65 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 0, toughness: 3, keywords: { vigilance: true } },
     },
   },
+  // Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)
+  // When this creature enters, destroy target artifact, enchantment, or land.
+  {
+    id: '21f45043-5419-4019-8b6c-e5294bd5f549',
+    name: 'Acidic Slime',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { deathtouch: true },
+    subtypes: ['ooze'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'destroyTarget', params: { targets: 'artifactEnchantmentOrLand' } }],
+        label: 'Enters: destroy target artifact, enchantment, or land',
+        targets: 'artifactEnchantmentOrLand',
+      },
+    ],
+  },
+  // Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn. (It can attack and {T} this turn.)
+  {
+    id: '9d08af23-9f4a-4097-9abc-3b17475ab744',
+    name: 'Act of Treason',
+    types: ['sorcery'],
+    cost: { generic: 2, R: 1 },
+    effects: [{ primitive: 'gainControl', params: { targets: 'creature', untap: true, haste: true } }],
+  },
+  // As this creature enters, choose a creature type.
+  // This creature is the chosen type in addition to its other types.
+  // Other creatures you control of the chosen type get +1/+1.
+  {
+    id: '53c730c6-2f8c-4af8-b400-b9d573a71e60',
+    name: 'Adaptive Automaton',
+    types: ['artifact', 'creature'],
+    cost: { generic: 3 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['construct'],
+    asEntersChoice: { subject: 'creatureType' },
+    isChosenSubtype: true,
+    effects: [{ primitive: 'chooseAsEnters', params: {} }],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'you', ofChosenSubtype: true, excludeSource: true },
+        power: 1,
+        toughness: 1,
+        label: 'other creatures you control of the chosen type get +1/+1',
+      },
+    ],
+  },
+  // {T}: Add {C}.
+  // {T}: Add {W} or {U}. This land deals 1 damage to you.
+  {
+    id: 'd5ad26cc-2bdb-46b7-b8bf-dd099d5fa09b',
+    name: 'Adarkar Wastes',
+    types: ['land'],
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ W: 1 }, { U: 1 }], rider: { damageToController: 1 } }],
+  },
   // Flying, vigilance, lifelink
   {
     id: '69b1b0ec-9db0-48d1-a7b5-71281aca16fe',
@@ -63,6 +149,41 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 3,
     keywords: { flying: true, vigilance: true, lifelink: true },
     subtypes: ['dwarf', 'soldier'],
+  },
+  // Choose one or both —
+  // • Return target creature card from your graveyard to your hand.
+  // • Return target planeswalker card from your graveyard to your hand.
+  {
+    id: 'acb0084d-3b09-4d2a-a4c1-848c92588845',
+    name: 'Aid the Fallen',
+    types: ['sorcery'],
+    cost: { generic: 1, B: 1 },
+    modal: {
+      min: 1,
+      max: 2,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Return target creature card from your graveyard to your hand',
+          effects: [
+            {
+              primitive: 'returnFromGraveyard',
+              params: { count: 1, filter: { anyOfTypes: ['creature'] } },
+            },
+          ],
+        },
+        {
+          id: 'mode2',
+          label: 'Return target planeswalker card from your graveyard to your hand',
+          effects: [
+            {
+              primitive: 'returnFromGraveyard',
+              params: { count: 1, filter: { anyOfTypes: ['planeswalker'] } },
+            },
+          ],
+        },
+      ],
+    },
   },
   // Flying
   {
@@ -86,6 +207,55 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     keywords: { lifelink: true },
     subtypes: ['cat', 'cleric'],
   },
+  // Trample
+  {
+    id: 'afedce7b-0e18-40ad-a26a-1933fddb560d',
+    name: 'Akoum Warrior',
+    types: ['creature'],
+    cost: { generic: 5, R: 1 },
+    power: 4,
+    toughness: 5,
+    keywords: { trample: true },
+    subtypes: ['minotaur', 'warrior'],
+    backFace: {
+      id: 'afedce7b-0e18-40ad-a26a-1933fddb560d#back',
+      name: 'Akoum Teeth',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['R'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
+  // Flying, first strike, vigilance, trample, haste, protection from black and from red
+  {
+    id: '107f204c-9fd3-490d-8887-be63d14fc6a4',
+    name: 'Akroma, Angel of Wrath',
+    types: ['creature'],
+    cost: { generic: 5, W: 3 },
+    power: 6,
+    toughness: 6,
+    legendary: true,
+    keywords: {
+      flying: true,
+      firstStrike: true,
+      vigilance: true,
+      trample: true,
+      haste: true,
+      protectionFrom: ['black', 'red'],
+    },
+    subtypes: ['angel'],
+  },
+  // Alchemist's Greeting deals 4 damage to target creature.
+  // Madness {1}{R} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: '9aaf0df7-5e2d-4f49-a8cb-66523be15ad6',
+    name: 'Alchemist\'s Greeting',
+    types: ['sorcery'],
+    cost: { generic: 4, R: 1 },
+    madness: { generic: 1, R: 1 },
+    effects: [{ primitive: 'dealDamage', params: { amount: 4, targets: 'creature' } }],
+  },
   // {T}: Add one mana of any color.
   {
     id: 'efb0394c-2a45-4dd8-bca3-08704056fa31',
@@ -106,6 +276,60 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 1,
     subtypes: ['myr'],
   },
+  // As an additional cost to cast this spell, sacrifice a creature.
+  // Draw two cards.
+  {
+    id: '6a125750-2b8c-4f9d-8173-ac8d14c91ddb',
+    name: 'Altar\'s Reap',
+    types: ['instant'],
+    cost: { generic: 1, B: 1 },
+    additionalCost: { kind: 'sacrifice', filter: { anyOfTypes: ['creature'] }, label: 'Sacrifice a creature' },
+    effects: [{ primitive: 'drawCards', params: { count: 2 } }],
+  },
+  // {T}: Add {W}.
+  {
+    id: '02f16726-f2f6-4943-b71a-93f8e26251d3',
+    name: 'Ancient Den',
+    types: ['artifact', 'land'],
+    produces: ['W'],
+  },
+  // Destroy target artifact.
+  // Flashback {G} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: '306593b0-6ea8-476f-a3f2-e17876c1bab4',
+    name: 'Ancient Grudge',
+    types: ['instant'],
+    cost: { generic: 1, R: 1 },
+    flashback: { G: 1 },
+    effects: [{ primitive: 'destroyTarget', params: { targets: 'artifact' } }],
+  },
+  // {T}: Add {C}{C}. This land deals 2 damage to you.
+  {
+    id: '23467047-6dba-4498-b783-1ebc4f74b8c2',
+    name: 'Ancient Tomb',
+    types: ['land'],
+    manaAbilities: [{ produces: [{ C: 2 }], rider: { damageToController: 2 } }],
+  },
+  // Flying
+  // When this creature enters, destroy target permanent.
+  {
+    id: '02520741-d7f0-46e6-acbe-010b65fc24c0',
+    name: 'Angel of Despair',
+    types: ['creature'],
+    cost: { generic: 3, W: 2, B: 2 },
+    power: 5,
+    toughness: 5,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'destroyTarget', params: { targets: 'permanent' } }],
+        label: 'Enters: destroy target permanent',
+        targets: 'permanent',
+      },
+    ],
+  },
   // Flying
   // When this creature enters, you gain 3 life.
   {
@@ -125,6 +349,58 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // Flying
+  // When this creature enters, you may exile up to three other target creatures from the battlefield and/or creature cards from graveyards.
+  // When this creature leaves the battlefield, return the exiled cards to their owners' hands.
+  {
+    id: 'f4ce6078-8c7b-4f68-b324-13130c63a983',
+    name: 'Angel of Serenity',
+    types: ['creature'],
+    cost: { generic: 4, W: 3 },
+    power: 5,
+    toughness: 6,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'exileUntilLeaves',
+            params: { targets: 'creatureOnBattlefieldOrInGraveyard', max: 3 },
+          },
+        ],
+        label: 'Enters: exile up to three other creatures until this leaves',
+        targets: 'creatureOnBattlefieldOrInGraveyard',
+        targetsExcludeSelf: true,
+        targetCount: { min: 0, max: 3 },
+      },
+      {
+        condition: { on: 'leaves' },
+        effects: [{ primitive: 'returnExiledByThis', params: { to: 'hand' } }],
+        label: 'Leaves: return the exiled cards to their owners\' hands',
+      },
+    ],
+  },
+  // Flying
+  // Cycling {2} ({2}, Discard this card: Draw a card.)
+  {
+    id: '701912d5-9995-4ac7-9858-188f78b2b8a3',
+    name: 'Angel of the God-Pharaoh',
+    types: ['creature'],
+    cost: { generic: 4, W: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    cycling: [
+      {
+        cost: { generic: 2 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {2}',
+      },
+    ],
+  },
   // You gain 7 life.
   {
     id: '6b232bb7-d372-4174-a049-5f8d620810e6',
@@ -132,6 +408,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['instant'],
     cost: { generic: 2, W: 2 },
     effects: [{ primitive: 'gainLife', params: { amount: 7 } }],
+  },
+  // Flying, protection from artifacts
+  {
+    id: 'cca29a9b-794f-4712-8e6c-36ce3da9cb8b',
+    name: 'Angelic Curator',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true, protectionFrom: ['artifacts'] },
+    subtypes: ['angel', 'spirit'],
   },
   // Enchant creature
   // When this Aura enters, draw a card.
@@ -157,6 +444,233 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 0, toughness: 0, keywords: { flying: true } },
     },
   },
+  // Choose one or both —
+  // • Target creature gets +1/+1 until end of turn.
+  // • Return target creature to its owner's hand.
+  {
+    id: '93ee2ea1-4f9b-47dd-b7d4-b0ed5a26d719',
+    name: 'Applied Biomancy',
+    types: ['instant'],
+    cost: { U: 1, G: 1 },
+    modal: {
+      min: 1,
+      max: 2,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Target creature gets +1/+1 until end of turn',
+          effects: [
+            {
+              primitive: 'pumpUntilEndOfTurn',
+              params: { power: 1, toughness: 1, targets: 'creature' },
+            },
+          ],
+          targets: 'creature',
+        },
+        {
+          id: 'mode2',
+          label: 'Return target creature to its owner\'s hand',
+          effects: [{ primitive: 'returnToHand', params: { targets: 'creature' } }],
+          targets: 'creature',
+        },
+      ],
+    },
+  },
+  // Enchant creature
+  // Enchanted creature can't be blocked.
+  // Whenever enchanted creature attacks, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  {
+    id: '3378fef3-4d8c-4d9e-a338-4abb6f70d410',
+    name: 'Aqueous Form',
+    types: ['enchantment'],
+    cost: { U: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    triggers: [
+      {
+        condition: { on: 'attacks', watches: 'attachedHost' },
+        effects: [{ primitive: 'scry' }],
+        label: 'Equipped creature attacks: scry 1',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 0, toughness: 0, keywords: { unblockable: true } },
+    },
+  },
+  // Flying, vigilance
+  {
+    id: '9971697b-2acc-4bc2-a44e-074d03a51df7',
+    name: 'Archangel',
+    types: ['creature'],
+    cost: { generic: 5, W: 2 },
+    power: 5,
+    toughness: 5,
+    keywords: { flying: true, vigilance: true },
+    subtypes: ['angel'],
+  },
+  // Flying
+  // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
+  // Whenever you gain life, put a +1/+1 counter on each creature you control.
+  {
+    id: '4f2d4538-dc1d-4c09-964b-b0d7c240fb7d',
+    name: 'Archangel of Thune',
+    types: ['creature'],
+    cost: { generic: 3, W: 2 },
+    power: 3,
+    toughness: 4,
+    keywords: { flying: true, lifelink: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'gainLife', who: 'you' },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, each: true, scope: 'you', filter: {} } }],
+        label: 'Gain life: put a +1/+1 counter on each creature you control',
+      },
+    ],
+  },
+  // Flying
+  // Ward {2} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.)
+  // When this creature enters, scry 2.
+  {
+    id: 'cddbd819-4895-4712-b44b-d6b51f3d8646',
+    name: 'Archive Dragon',
+    types: ['creature'],
+    cost: { generic: 4, U: 2 },
+    power: 4,
+    toughness: 6,
+    keywords: { flying: true, ward: 2 },
+    subtypes: ['dragon', 'wizard'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'scry', params: { count: 2 } }],
+        label: 'Enters: scry 2',
+      },
+    ],
+  },
+  // Equipped creature gets +6/+6.
+  // Whenever equipped creature attacks, destroy target permanent.
+  // Equip {6}
+  {
+    id: 'd0a1f39b-cda4-4925-83f8-2161f575edfb',
+    name: 'Argentum Armor',
+    types: ['artifact'],
+    cost: { generic: 6 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'attacks', watches: 'attachedHost' },
+        effects: [{ primitive: 'destroyTarget', params: { targets: 'permanent' } }],
+        label: 'Equipped creature attacks: destroy target permanent',
+        targets: 'permanent',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 6 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {6}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {6}',
+      modifies: { power: 6, toughness: 6, keywords: {} },
+    },
+  },
+  // Trample
+  // Madness {2}{G} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: 'dc7f0c33-80ea-453e-a237-473f077f038e',
+    name: 'Arrogant Wurm',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { trample: true },
+    subtypes: ['wurm'],
+    madness: { generic: 2, G: 1 },
+  },
+  // Target creature can't be blocked this turn.
+  // Flashback {U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'c174dcbb-03a0-439c-b3d8-ed61bd46dc67',
+    name: 'Artful Dodge',
+    types: ['sorcery'],
+    cost: { U: 1 },
+    flashback: { U: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordUntilEndOfTurn',
+        params: { keywords: { unblockable: true }, targets: 'creature' },
+      },
+    ],
+  },
+  // Choose one or both —
+  // • Tap target creature.
+  // • Target creature gets -2/-4 until end of turn.
+  {
+    id: 'edc193bf-2987-4c7b-9cf3-69089ff13764',
+    name: 'Artful Takedown',
+    types: ['instant'],
+    cost: { generic: 2, U: 1, B: 1 },
+    modal: {
+      min: 1,
+      max: 2,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Tap target creature',
+          effects: [{ primitive: 'tapTarget', params: { targets: 'creature' } }],
+          targets: 'creature',
+        },
+        {
+          id: 'mode2',
+          label: 'Target creature gets -2/-4 until end of turn',
+          effects: [
+            {
+              primitive: 'pumpUntilEndOfTurn',
+              params: { power: -2, toughness: -4, targets: 'creature' },
+            },
+          ],
+          targets: 'creature',
+        },
+      ],
+    },
+  },
+  // Assault deals 2 damage to any target.
+  {
+    id: 'fcdeb83f-531c-4087-9254-7f19eb065f00',
+    name: 'Assault // Battery',
+    types: ['sorcery'],
+    cost: { generic: 3, R: 1, G: 1 },
+    frontFace: {
+      id: 'fcdeb83f-531c-4087-9254-7f19eb065f00',
+      name: 'Assault',
+      types: ['sorcery'],
+      cost: { R: 1 },
+      effects: [{ primitive: 'dealDamage', params: { amount: 2 } }],
+    },
+    backFace: {
+      id: 'fcdeb83f-531c-4087-9254-7f19eb065f00#back',
+      name: 'Battery',
+      types: ['sorcery'],
+      cost: { generic: 3, G: 1 },
+      effects: [
+        {
+          primitive: 'makeToken',
+          params: { power: 3, toughness: 3, name: 'Elephant', colors: ['G'], subtypes: ['Elephant'] },
+        },
+      ],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
   // First strike
   // When this creature enters, create a 1/1 white Soldier creature token.
   {
@@ -171,8 +685,52 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     triggers: [
       {
         condition: { on: 'etb' },
-        effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Soldier' } }],
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: { power: 1, toughness: 1, name: 'Soldier', colors: ['W'], subtypes: ['Soldier'] },
+          },
+        ],
         label: 'Enters: create a 1/1 white soldier creature token',
+      },
+    ],
+  },
+  // Flying
+  // When this creature enters, scry 3. (Look at the top three cards of your library, then put any number of them on the bottom and the rest on top in any order.)
+  {
+    id: '44c5f8e1-d9b8-4067-a60a-1ecc8bd11145',
+    name: 'Augury Owl',
+    types: ['creature'],
+    cost: { generic: 1, U: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true },
+    subtypes: ['bird'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'scry', params: { count: 3 } }],
+        label: 'Enters: scry 3',
+      },
+    ],
+  },
+  // Flying, vigilance, indestructible
+  // Other permanents you control have indestructible.
+  {
+    id: '216cb26e-8da9-478b-bfbc-8030f7adee72',
+    name: 'Avacyn, Angel of Hope',
+    types: ['creature'],
+    cost: { generic: 5, W: 3 },
+    power: 8,
+    toughness: 8,
+    legendary: true,
+    keywords: { flying: true, vigilance: true, indestructible: true },
+    subtypes: ['angel'],
+    statics: [
+      {
+        affects: { controller: 'you', excludeSource: true },
+        keywords: { indestructible: true },
+        label: 'other permanents you control have indestructible',
       },
     ],
   },
@@ -197,6 +755,168 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     entersTapped: true,
     producesOptions: [{ W: 1 }, { U: 1 }],
   },
+  // {1}, {T}: Add {W}{U}.
+  {
+    id: 'e018773f-95b3-49a3-9674-6f04ddef2092',
+    name: 'Azorius Signet',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ W: 1, U: 1 }], cost: { mana: { generic: 1 } } }],
+  },
+  // Black creatures get +1/+1.
+  {
+    id: 'fc5d3341-cbce-49e5-93cc-8add92479dca',
+    name: 'Bad Moon',
+    types: ['enchantment'],
+    cost: { generic: 1, B: 1 },
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'any', anyOfColors: ['B'] },
+        power: 1,
+        toughness: 1,
+        label: 'black creatures get +1/+1',
+      },
+    ],
+  },
+  // Return target card from your graveyard to your hand.
+  {
+    id: 'd2075f58-b0e9-4e85-b7e6-0523a27a1d5b',
+    name: 'Bala Ged Recovery',
+    types: ['sorcery'],
+    cost: { generic: 2, G: 1 },
+    effects: [{ primitive: 'returnFromGraveyard', params: { count: 1 } }],
+    backFace: {
+      id: 'd2075f58-b0e9-4e85-b7e6-0523a27a1d5b#back',
+      name: 'Bala Ged Sanctuary',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['G'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
+  // When this creature enters, exile target creature an opponent controls until this creature leaves the battlefield.
+  {
+    id: '9f560b83-32d4-4bb4-a956-8f5db18599db',
+    name: 'Banisher Priest',
+    types: ['creature'],
+    cost: { generic: 1, W: 2 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'cleric'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'exileUntilLeaves',
+            params: { targets: 'creatureAnOpponentControls', max: 1 },
+          },
+        ],
+        label: 'Enters: exile target creature an opponent controls until this leaves',
+        targets: 'creatureAnOpponentControls',
+      },
+      {
+        condition: { on: 'leaves' },
+        effects: [{ primitive: 'returnExiledByThis', params: { to: 'battlefield' } }],
+        label: 'Leaves: return the exiled card',
+      },
+    ],
+  },
+  // {T}: Add {G}.
+  {
+    id: '59d22de5-e310-44d7-89cf-ef3529e40cef',
+    name: 'Barkchannel Pathway',
+    types: ['land'],
+    produces: ['G'],
+    backFace: {
+      id: '59d22de5-e310-44d7-89cf-ef3529e40cef#back',
+      name: 'Tidechannel Pathway',
+      types: ['land'],
+      produces: ['U'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
+  // This land enters tapped.
+  // {T}: Add {B}.
+  // Cycling {B} ({B}, Discard this card: Draw a card.)
+  {
+    id: '326ba371-124c-4949-a048-3a0c8962e567',
+    name: 'Barren Moor',
+    types: ['land'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { B: 1 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {B}',
+      },
+    ],
+    produces: ['B'],
+  },
+  // Equipped creature has deathtouch and lifelink. (Any amount of damage it deals to a creature is enough to destroy it. Damage dealt by this creature also causes you to gain that much life.)
+  // Equip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: 'f5f4dd28-f4ae-4d39-b9b8-6ebfd63c93fe',
+    name: 'Basilisk Collar',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 0, toughness: 0, keywords: { deathtouch: true, lifelink: true } },
+    },
+  },
+  // {T}: Add {C}.
+  // {T}: Add {R} or {W}. This land deals 1 damage to you.
+  {
+    id: '6b75b94e-83b7-457e-ac41-7ca90b5a59aa',
+    name: 'Battlefield Forge',
+    types: ['land'],
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ R: 1 }, { W: 1 }], rider: { damageToController: 1 } }],
+  },
+  // Beanstalk Giant's power and toughness are each equal to the number of lands you control.
+  {
+    id: '22c75ad5-237c-4dbd-bbc4-3058a3db408f',
+    name: 'Beanstalk Giant',
+    types: ['creature'],
+    cost: { generic: 6, G: 1 },
+    characteristicPT: { power: { countOf: 'landsYouControl' }, toughness: { countOf: 'landsYouControl' } },
+    subtypes: ['giant'],
+    backFace: {
+      id: '22c75ad5-237c-4dbd-bbc4-3058a3db408f#back',
+      name: 'Fertile Footsteps',
+      types: ['sorcery'],
+      cost: { generic: 2, G: 1 },
+      subtypes: ['adventure'],
+      effects: [
+        {
+          primitive: 'searchLibrary',
+          params: {
+            who: 'controller',
+            count: 1,
+            filter: { anyOfTypes: ['land'] },
+            nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+            destination: 'battlefield',
+          },
+        },
+      ],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
   // When this creature enters, create two 1/1 red Goblin creature tokens.
   {
     id: 'f5c5f64c-6911-430c-a825-b32b96d39c7d',
@@ -209,10 +929,142 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     triggers: [
       {
         condition: { on: 'etb' },
-        effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Goblin', count: 2 } }],
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Goblin',
+              colors: ['R'],
+              subtypes: ['Goblin'],
+              count: 2,
+            },
+          },
+        ],
         label: 'Enters: create two 1/1 red goblin creature tokens',
       },
     ],
+  },
+  // Other creatures you control get +1/+1.
+  {
+    id: '2cc439e8-d112-44e6-bc5a-6e99333c519a',
+    name: 'Benalish Marshal',
+    types: ['creature'],
+    cost: { W: 3 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['human', 'knight'],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'you', excludeSource: true },
+        power: 1,
+        toughness: 1,
+        label: 'other creatures you control get +1/+1',
+      },
+    ],
+  },
+  // When Bilbo Baggins enters, draw a card.
+  {
+    id: 'fa85f9e6-69ff-4669-b70a-440aa7b16c97',
+    name: 'Bilbo Baggins, Burglar',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 2,
+    toughness: 1,
+    legendary: true,
+    subtypes: ['halfling', 'rogue'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Enters: draw a card',
+      },
+    ],
+    backFace: {
+      id: 'fa85f9e6-69ff-4669-b70a-440aa7b16c97#back',
+      name: 'Take a Glance',
+      types: ['sorcery'],
+      cost: { U: 1 },
+      subtypes: ['adventure'],
+      effects: [{ primitive: 'scry', params: { count: 2 } }],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
+  // Flash
+  // Flying
+  // At the beginning of your upkeep, you lose 1 life and create a 1/1 blue and black Faerie creature token with flying.
+  {
+    id: '5effb651-f9e0-4c14-8192-bd0e132b8d5d',
+    name: 'Bitterbloom Bearer',
+    types: ['creature'],
+    cost: { B: 2 },
+    power: 1,
+    toughness: 1,
+    keywords: { flash: true, flying: true },
+    subtypes: ['faerie', 'rogue'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          { primitive: 'loseLife', params: { amount: 1 } },
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Faerie',
+              colors: ['U', 'B'],
+              subtypes: ['Faerie'],
+              keywords: { flying: true },
+            },
+          },
+        ],
+        label: 'your upkeep: you lose 1 life and create a 1/1 blue and black faerie creature token with flying',
+      },
+    ],
+  },
+  // At the beginning of your upkeep, you lose 1 life and create a 1/1 black Faerie Rogue creature token with flying.
+  {
+    id: 'fb868840-09fa-49b1-85cb-b08ad065e972',
+    name: 'Bitterblossom',
+    types: ['kindred', 'enchantment'],
+    cost: { generic: 1, B: 1 },
+    subtypes: ['faerie'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          { primitive: 'loseLife', params: { amount: 1 } },
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Faerie Rogue',
+              colors: ['B'],
+              subtypes: ['Faerie', 'Rogue'],
+              keywords: { flying: true },
+            },
+          },
+        ],
+        label: 'your upkeep: you lose 1 life and create a 1/1 black faerie rogue creature token with flying',
+      },
+    ],
+  },
+  // First strike (This creature deals combat damage before creatures without first strike.)
+  // Protection from white (This creature can't be blocked, targeted, dealt damage, or enchanted by anything white.)
+  {
+    id: '9456c5b6-946d-403a-8ed0-dff9f921d98c',
+    name: 'Black Knight',
+    types: ['creature'],
+    cost: { B: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { firstStrike: true, protectionFrom: ['white'] },
+    subtypes: ['human', 'knight'],
   },
   // Equipped creature has flying and first strike.
   // Equip {2}
@@ -236,6 +1088,62 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       label: 'Equip {2}',
       modifies: { power: 0, toughness: 0, keywords: { flying: true, firstStrike: true } },
     },
+  },
+  // Blaze deals X damage to any target.
+  {
+    id: '0596920f-9946-42f4-a03b-24aab67f9f1b',
+    name: 'Blaze',
+    types: ['sorcery'],
+    cost: { R: 1 },
+    xCost: 1,
+    effects: [{ primitive: 'dealDamage', params: { amount: { chosenX: true } } }],
+  },
+  // {T}: Add {B}.
+  {
+    id: 'e580a229-e800-4746-9d37-c32fcef8de28',
+    name: 'Blightstep Pathway',
+    types: ['land'],
+    produces: ['B'],
+    backFace: {
+      id: 'e580a229-e800-4746-9d37-c32fcef8de28#back',
+      name: 'Searstep Pathway',
+      types: ['land'],
+      produces: ['R'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
+  // Whenever this creature or another creature dies, target player loses 1 life and you gain 1 life.
+  {
+    id: '310f141c-7f37-4729-aed6-dd9c09db448d',
+    name: 'Blood Artist',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 0,
+    toughness: 1,
+    subtypes: ['vampire'],
+    triggers: [
+      {
+        condition: { on: 'permanentDies', who: 'any', permanentFilter: { anyOfTypes: ['creature'] } },
+        effects: [
+          { primitive: 'loseLife', params: { amount: 1, targetPlayer: true, targets: 'player' } },
+          { primitive: 'gainLife', params: { amount: 1 } },
+        ],
+        label: 'creature (any) dies: target player loses 1 life and you gain 1 life',
+        targets: 'player',
+      },
+    ],
+  },
+  // First strike, protection from white
+  {
+    id: '67fba605-9cfa-499c-83e0-4fbd023bcfa0',
+    name: 'Blood Knight',
+    types: ['creature'],
+    cost: { R: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { firstStrike: true, protectionFrom: ['white'] },
+    subtypes: ['human', 'knight'],
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -293,6 +1201,16 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 1, toughness: 0, keywords: {} },
     },
   },
+  // As an additional cost to cast this spell, sacrifice a creature.
+  // Destroy target creature.
+  {
+    id: '0c936582-d4c0-4da8-bc7e-49da5a433939',
+    name: 'Bone Splinters',
+    types: ['sorcery'],
+    cost: { B: 1 },
+    additionalCost: { kind: 'sacrifice', filter: { anyOfTypes: ['creature'] }, label: 'Sacrifice a creature' },
+    effects: [{ primitive: 'destroyTarget', params: { targets: 'creature' } }],
+  },
   // Equipped creature gets +2/+0.
   // Equip {1}
   {
@@ -316,6 +1234,49 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 2, toughness: 0, keywords: {} },
     },
   },
+  // Choose one —
+  // • Boros Charm deals 4 damage to target player or planeswalker.
+  // • Permanents you control gain indestructible until end of turn.
+  // • Target creature gains double strike until end of turn.
+  {
+    id: '2679d0dd-ba30-4a1c-b6a0-b3ac6c790496',
+    name: 'Boros Charm',
+    types: ['instant'],
+    cost: { W: 1, R: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Boros Charm deals 4 damage to target player or planeswalker',
+          effects: [{ primitive: 'dealDamage', params: { amount: 4, targets: 'playerOrPlaneswalker' } }],
+          targets: 'playerOrPlaneswalker',
+        },
+        {
+          id: 'mode2',
+          label: 'Permanents you control gain indestructible until end of turn',
+          effects: [
+            {
+              primitive: 'grantKeywordToYoursUntilEndOfTurn',
+              params: { keywords: { indestructible: true } },
+            },
+          ],
+        },
+        {
+          id: 'mode3',
+          label: 'Target creature gains double strike until end of turn',
+          effects: [
+            {
+              primitive: 'grantKeywordUntilEndOfTurn',
+              params: { keywords: { doubleStrike: true }, targets: 'creature' },
+            },
+          ],
+          targets: 'creature',
+        },
+      ],
+    },
+  },
   // This land enters tapped.
   // {T}: Add {R} or {W}.
   {
@@ -326,6 +1287,44 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     entersTapped: true,
     producesOptions: [{ R: 1 }, { W: 1 }],
   },
+  // {1}, {T}: Add {R}{W}.
+  {
+    id: '41c84665-1f99-40ab-aaca-1188649eb263',
+    name: 'Boros Signet',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ R: 1, W: 1 }], cost: { mana: { generic: 1 } } }],
+  },
+  // {T}: Add {G}.
+  {
+    id: '7c304547-a4b1-46c9-baed-16d2bfbe16eb',
+    name: 'Branchloft Pathway',
+    types: ['land'],
+    produces: ['G'],
+    backFace: {
+      id: '7c304547-a4b1-46c9-baed-16d2bfbe16eb#back',
+      name: 'Boulderloft Pathway',
+      types: ['land'],
+      produces: ['W'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
+  // {T}: Add {W}.
+  {
+    id: '1c633e02-95ef-445e-b4e0-fbfbc5ed9cc9',
+    name: 'Brightclimb Pathway',
+    types: ['land'],
+    produces: ['W'],
+    backFace: {
+      id: '1c633e02-95ef-445e-b4e0-fbfbc5ed9cc9#back',
+      name: 'Grimclimb Pathway',
+      types: ['land'],
+      produces: ['B'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
   {
     id: 'f27e5e11-0ad0-448b-8760-75ed1b97e7d8',
     name: 'Bronze Sable',
@@ -335,6 +1334,78 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 1,
     subtypes: ['sable'],
   },
+  // {T}: Add {C}.
+  // {T}: Add {G} or {W}. This land deals 1 damage to you.
+  {
+    id: '5eb8b497-ec9a-4a89-ad29-1ec3ca82da7c',
+    name: 'Brushland',
+    types: ['land'],
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ G: 1 }, { W: 1 }], rider: { damageToController: 1 } }],
+  },
+  // Target opponent loses 3 life.
+  // Flashback {5}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'd9f2c571-b357-4d4d-94c5-fd47551bb842',
+    name: 'Bump in the Night',
+    types: ['sorcery'],
+    cost: { B: 1 },
+    flashback: { generic: 5, R: 1 },
+    effects: [{ primitive: 'loseLife', params: { amount: 3, targetPlayer: true, targets: 'opponent' } }],
+  },
+  // {3}, Sacrifice this creature: Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.
+  {
+    id: '893fed41-c144-433f-af88-bc7d419b7fb3',
+    name: 'Burnished Hart',
+    types: ['artifact', 'creature'],
+    cost: { generic: 3 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['elk'],
+    activated: [
+      {
+        cost: { mana: { generic: 3 }, sacrificeSelf: true },
+        effects: [
+          {
+            primitive: 'searchLibrary',
+            params: {
+              who: 'controller',
+              count: 2,
+              filter: { anyOfTypes: ['land'] },
+              nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+              destination: 'battlefield',
+              tapped: true,
+            },
+          },
+        ],
+        label: '{3}, sacrifice ~: search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle',
+      },
+    ],
+  },
+  // Create a token that's a copy of target creature you control.
+  // Flashback {5}{U}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: '9e2adca5-f39c-4a09-bcce-8238ebac2c4a',
+    name: 'Cackling Counterpart',
+    types: ['instant'],
+    cost: { generic: 1, U: 2 },
+    flashback: { generic: 5, U: 2 },
+    effects: [{ primitive: 'createTokenCopy', params: { targets: 'creatureYouControl', count: 1 } }],
+  },
+  // Create a 3/3 green Elephant creature token.
+  // Flashback {3}{G} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'ee243f81-f51c-4d9a-a396-f7cef84b46c1',
+    name: 'Call of the Herd',
+    types: ['sorcery'],
+    cost: { generic: 2, G: 1 },
+    flashback: { generic: 3, G: 1 },
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 3, toughness: 3, name: 'Elephant', colors: ['G'], subtypes: ['Elephant'] },
+      },
+    ],
+  },
   // Counter target spell.
   {
     id: '7d00fb28-ea6c-49a9-b4af-ffb38860a9a7',
@@ -343,13 +1414,92 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, U: 2 },
     effects: [{ primitive: 'counterSpell', params: { targets: 'spell' } }],
   },
+  // ({T}: Add {B} or {R}.)
+  // This land enters tapped.
+  // Cycling {2} ({2}, Discard this card: Draw a card.)
+  {
+    id: '2031b17c-0536-446f-a9aa-b46fe79b7ea7',
+    name: 'Canyon Slough',
+    types: ['land'],
+    subtypes: ['swamp', 'mountain'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { generic: 2 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {2}',
+      },
+    ],
+    producesOptions: [{ B: 1 }, { R: 1 }],
+  },
+  // Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)
+  // Return target permanent to its owner's hand.
+  {
+    id: '77637eff-2963-4402-88f3-ca346f762fc8',
+    name: 'Capsize',
+    types: ['instant'],
+    cost: { generic: 1, U: 2 },
+    buyback: { generic: 3 },
+    effects: [{ primitive: 'returnToHand', params: { targets: 'permanent' } }],
+  },
   // Create three 1/1 white Soldier creature tokens.
   {
     id: '46418fe4-065c-4dfa-b796-eee02c14f351',
     name: 'Captain\'s Call',
     types: ['sorcery'],
     cost: { generic: 3, W: 1 },
-    effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Soldier', count: 3 } }],
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 1, toughness: 1, name: 'Soldier', colors: ['W'], subtypes: ['Soldier'], count: 3 },
+      },
+    ],
+  },
+  // {T}: Add {C}.
+  // {U/R}, {T}: Add {U}{U}, {U}{R}, or {R}{R}.
+  {
+    id: 'f1603384-4361-49c9-98aa-7785fc3504c4',
+    name: 'Cascade Bluffs',
+    types: ['land'],
+    manaAbilities: [
+      { produces: [{ C: 1 }] },
+      { produces: [{ U: 2 }, { U: 1, R: 1 }, { R: 2 }], cost: { mana: { hybrid: [['U', 'R']] } } },
+    ],
+  },
+  // This land enters tapped unless you control an Island.
+  // {T}: Add {U}.
+  // {2}{U}{U}, {T}: Scry 2.
+  {
+    id: 'cdf41cf4-4e77-453d-be5b-0abbbd358934',
+    name: 'Castle Vantress',
+    types: ['land'],
+    entersTappedUnless: { controlsSubtype: ['island'] },
+    produces: ['U'],
+    activated: [
+      {
+        cost: { mana: { generic: 2, U: 2 }, tap: true },
+        effects: [{ primitive: 'scry', params: { count: 2 } }],
+        label: '{2}{u}{u}, {t}: scry 2',
+      },
+    ],
+  },
+  // As an additional cost to cast this spell, discard two cards.
+  // Draw three cards.
+  {
+    id: '0f3c3e5f-6af3-4af2-8703-4ccc8ed8f675',
+    name: 'Cathartic Reunion',
+    types: ['sorcery'],
+    cost: { generic: 1, R: 1 },
+    additionalCost: { kind: 'discard', count: 2, label: 'Discard two cards' },
+    effects: [{ primitive: 'drawCards', params: { count: 3 } }],
+  },
+  // {T}: Add {C}.
+  // {T}: Add {W} or {B}. This land deals 1 damage to you.
+  {
+    id: '33de01e9-ce5a-42d4-afcb-343cd54a6d80',
+    name: 'Caves of Koilos',
+    types: ['land'],
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ W: 1 }, { B: 1 }], rider: { damageToController: 1 } }],
   },
   {
     id: '2f5bf099-2e01-4e1c-9ebf-0ce0ac66939e',
@@ -370,6 +1520,21 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     entersTapped: true,
     produces: ['B'],
   },
+  // Create a 1/1 green Squirrel creature token.
+  // Flashback {1}{G} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'b0aaa4b1-5188-43a6-997d-7a9b2ad452bc',
+    name: 'Chatter of the Squirrel',
+    types: ['sorcery'],
+    cost: { G: 1 },
+    flashback: { generic: 1, G: 1 },
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 1, toughness: 1, name: 'Squirrel', colors: ['G'], subtypes: ['Squirrel'] },
+      },
+    ],
+  },
   // Lifelink
   {
     id: 'c650a7bc-e350-44a0-a698-d4a233d66156',
@@ -380,6 +1545,58 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 1,
     keywords: { lifelink: true },
     subtypes: ['vampire'],
+  },
+  // As Chronicle of Victory enters, choose a creature type.
+  // Creatures you control of the chosen type get +2/+2 and have first strike and trample.
+  // Whenever you cast a spell of the chosen type, draw a card.
+  {
+    id: 'e949b362-4988-4482-ac51-c1049af9040c',
+    name: 'Chronicle of Victory',
+    types: ['artifact'],
+    cost: { generic: 6 },
+    legendary: true,
+    asEntersChoice: { subject: 'creatureType' },
+    effects: [{ primitive: 'chooseAsEnters', params: {} }],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellSubtypeIsChosen: true },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cast spell of the chosen type: draw a card',
+      },
+    ],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'you', ofChosenSubtype: true },
+        power: 2,
+        toughness: 2,
+        keywords: { firstStrike: true, trample: true },
+        label: 'creatures you control of the chosen type get +2/+2 and have first strike and trample',
+      },
+    ],
+  },
+  // Counter target spell unless its controller pays {X}.
+  {
+    id: '56aec5bd-a8e8-403f-b339-0fc817426428',
+    name: 'Clash of Wills',
+    types: ['instant'],
+    cost: { U: 1 },
+    xCost: 1,
+    effects: [{ primitive: 'counterUnlessPaid', params: { targets: 'spell', unlessPaidX: true } }],
+  },
+  // {T}: Add {U}.
+  {
+    id: '144119bc-7fd1-45c5-9e29-f742e7c255ac',
+    name: 'Clearwater Pathway',
+    types: ['land'],
+    produces: ['U'],
+    backFace: {
+      id: '144119bc-7fd1-45c5-9e29-f742e7c255ac#back',
+      name: 'Murkwater Pathway',
+      types: ['land'],
+      produces: ['B'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
   },
   // Flying
   // When this creature enters, draw a card.
@@ -399,6 +1616,14 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         label: 'Enters: draw a card',
       },
     ],
+  },
+  // Exile target creature you control, then return that card to the battlefield under your control.
+  {
+    id: '6879f5ce-7a1b-4606-bad1-885779b0d456',
+    name: 'Cloudshift',
+    types: ['instant'],
+    cost: { W: 1 },
+    effects: [{ primitive: 'blinkTarget', params: { targets: 'creatureYouControl' } }],
   },
   // Equipped creature has flying.
   // Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)
@@ -423,6 +1648,49 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 0, toughness: 0, keywords: { flying: true } },
     },
   },
+  // This artifact enters tapped.
+  // As this artifact enters, choose a color.
+  // {T}: Add one mana of the chosen color.
+  {
+    id: '21d700e8-0255-418e-96a0-6fe05b3f836d',
+    name: 'Coldsteel Heart',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    entersTapped: true,
+    asEntersChoice: { subject: 'color' },
+    effects: [{ primitive: 'chooseAsEnters', params: {} }],
+    manaAbilities: [{ chosenColor: true, label: 'Add one mana of the chosen color' }],
+  },
+  // At the beginning of your upkeep, if you control a creature with power 4 or greater, draw a card.
+  {
+    id: 'cac95494-0db0-4bec-8665-998431a6f76b',
+    name: 'Colossal Majesty',
+    types: ['enchantment'],
+    cost: { generic: 2, G: 1 },
+    triggers: [
+      {
+        condition: {
+          on: 'upkeep',
+          who: 'you',
+          intervening: { kind: 'controlCount', filter: { anyOfTypes: ['creature'] }, min: 1, minPower: 4 },
+        },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'your upkeep: if you control a creature with power 4 or greater, draw a card',
+      },
+    ],
+  },
+  // ({T}: Add {R} or {G}.)
+  // This land enters tapped.
+  // When this land enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)
+  {
+    id: 'b33656ae-3473-4223-845f-f9147f87678b',
+    name: 'Commercial District',
+    types: ['land'],
+    subtypes: ['mountain', 'forest'],
+    entersTapped: true,
+    producesOptions: [{ R: 1 }, { G: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'surveil' }], label: 'Enters: surveil 1' }],
+  },
   // Draw three cards.
   {
     id: 'a3d287ec-1a39-4f91-acf1-7c1d2c00ed89',
@@ -430,6 +1698,51 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['sorcery'],
     cost: { generic: 2, U: 2 },
     effects: [{ primitive: 'drawCards', params: { count: 3 } }],
+  },
+  // Counter target spell unless its controller pays {X}. Scry 2. (Look at the top two cards of your library, then put any number of them on the bottom and the rest on top in any order.)
+  {
+    id: '96cf3c10-733d-4110-9dab-43d0cd4e6629',
+    name: 'Condescend',
+    types: ['instant'],
+    cost: { U: 1 },
+    xCost: 1,
+    effects: [
+      { primitive: 'counterUnlessPaid', params: { targets: 'spell', unlessPaidX: true } },
+      { primitive: 'scry', params: { count: 2 } },
+    ],
+  },
+  // At the beginning of your end step, you may exile target creature you control, then return that card to the battlefield under your control.
+  {
+    id: 'cd1eda60-53e4-44d0-9b2c-7a57395e291f',
+    name: 'Conjurer\'s Closet',
+    types: ['artifact'],
+    cost: { generic: 5 },
+    triggers: [
+      {
+        condition: { on: 'endStep', who: 'you' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may exile target creature you control, then return that card to the battlefield under your control',
+              valence: 'gain',
+              effects: [{ primitive: 'blinkTarget', params: { targets: 'creatureYouControl' } }],
+            },
+          },
+        ],
+        label: 'your end step: you may exile target creature you control, then return that card to the battlefield under your control',
+        targets: 'creatureYouControl',
+      },
+    ],
+  },
+  // Surveil 1. (Look at the top card of your library. You may put it into your graveyard.)
+  // Draw a card.
+  {
+    id: '4c9bcba6-87b5-4fb3-97ee-6fe5b739337d',
+    name: 'Consider',
+    types: ['instant'],
+    cost: { U: 1 },
+    effects: [{ primitive: 'surveil' }, { primitive: 'drawCards', params: { count: 1 } }],
   },
   // {T}: Add {G}.
   {
@@ -451,6 +1764,57 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 1,
     subtypes: ['merfolk'],
   },
+  // Whenever another creature you control enters, each opponent loses 1 life.
+  {
+    id: '0c77b805-728d-4ae4-88a9-223f4b7b52e0',
+    name: 'Corpse Knight',
+    types: ['creature'],
+    cost: { W: 1, B: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['zombie', 'knight'],
+    triggers: [
+      {
+        condition: {
+          on: 'permanentEnters',
+          who: 'you',
+          permanentFilter: { anyOfTypes: ['creature'] },
+          excludeSelf: true,
+        },
+        effects: [{ primitive: 'loseLife', params: { amount: 1, whichPlayer: 'opponent' } }],
+        label: 'another creature (you) enters: each opponent loses 1 life',
+      },
+    ],
+  },
+  // As an additional cost to cast this spell, sacrifice an artifact or creature.
+  // Draw two cards.
+  {
+    id: '8cdfd9df-4783-4138-a286-828a97f516aa',
+    name: 'Costly Plunder',
+    types: ['instant'],
+    cost: { generic: 1, B: 1 },
+    additionalCost: {
+      kind: 'sacrifice',
+      filter: { anyOfTypes: ['artifact', 'creature'] },
+      label: 'Sacrifice an artifact or creature',
+    },
+    effects: [{ primitive: 'drawCards', params: { count: 2 } }],
+  },
+  // {T}: Add {R}.
+  {
+    id: '727ca426-f4cc-4218-8ae5-8c427af2e816',
+    name: 'Cragcrown Pathway',
+    types: ['land'],
+    produces: ['R'],
+    backFace: {
+      id: '727ca426-f4cc-4218-8ae5-8c427af2e816#back',
+      name: 'Timbercrown Pathway',
+      types: ['land'],
+      produces: ['G'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
   {
     id: '6a462a69-3e42-41de-a3aa-a488d9f38d69',
     name: 'Craw Wurm',
@@ -459,6 +1823,143 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 6,
     toughness: 4,
     subtypes: ['wurm'],
+  },
+  // Target creature gets -2/-2 until end of turn.
+  // Flashback—{1}{B}, Pay 3 life. (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'd87190d0-bda3-4ad9-84b2-019f751999ce',
+    name: 'Crippling Fatigue',
+    types: ['sorcery'],
+    cost: { generic: 1, B: 2 },
+    flashback: { generic: 1, B: 1 },
+    flashbackLifeCost: 3,
+    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -2, toughness: -2, targets: 'creature' } }],
+  },
+  // Choose one —
+  // • Return target permanent to its owner's hand.
+  // • Destroy target nonblack creature. It can't be regenerated.
+  // • Destroy target artifact.
+  {
+    id: 'e59d70a2-40ac-45b0-995d-65b9caa290c8',
+    name: 'Crosis\'s Charm',
+    types: ['instant'],
+    cost: { U: 1, B: 1, R: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Return target permanent to its owner\'s hand',
+          effects: [{ primitive: 'returnToHand', params: { targets: 'permanent' } }],
+          targets: 'permanent',
+        },
+        {
+          id: 'mode2',
+          label: 'Destroy target nonblack creature',
+          effects: [{ primitive: 'destroyTarget', params: { targets: 'creature', notColor: 'B' } }],
+          targets: 'creature',
+        },
+        {
+          id: 'mode3',
+          label: 'Destroy target artifact',
+          effects: [{ primitive: 'destroyTarget', params: { targets: 'artifact' } }],
+          targets: 'artifact',
+        },
+      ],
+    },
+  },
+  // White creatures get +1/+1.
+  {
+    id: '4692740f-be90-459f-8d90-c4ae71771595',
+    name: 'Crusade',
+    types: ['enchantment'],
+    cost: { W: 2 },
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'any', anyOfColors: ['W'] },
+        power: 1,
+        toughness: 1,
+        label: 'white creatures get +1/+1',
+      },
+    ],
+  },
+  // {T}: Add {C}.
+  // {T}, Sacrifice this land: Add {C}{C}.
+  {
+    id: '616d6013-24f4-4999-9bf3-5b0764e52fa6',
+    name: 'Crystal Vein',
+    types: ['land'],
+    produces: ['C'],
+    activated: [
+      {
+        cost: { tap: true, sacrificeSelf: true },
+        effects: [{ primitive: 'addMana', params: { mana: ['C', 'C'] } }],
+        label: '{t}, sacrifice ~: add {c}{c}',
+      },
+    ],
+  },
+  // Search your library for up to two basic land cards, reveal those cards, put one onto the battlefield tapped and the other into your hand, then shuffle.
+  {
+    id: '8b755881-a72d-4e21-a369-d2924eb4585a',
+    name: 'Cultivate',
+    types: ['sorcery'],
+    cost: { generic: 2, G: 1 },
+    effects: [
+      {
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 2,
+          filter: { anyOfTypes: ['land'] },
+          nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+          route: [{ destination: 'battlefield', tapped: true }, { destination: 'hand' }],
+        },
+      },
+    ],
+  },
+  // Choose one —
+  // • Return target creature card from your graveyard to your hand.
+  // • Darigaaz's Charm deals 3 damage to any target.
+  // • Target creature gets +3/+3 until end of turn.
+  {
+    id: '7ee01801-5e42-4916-a359-64e9975090a7',
+    name: 'Darigaaz\'s Charm',
+    types: ['instant'],
+    cost: { B: 1, R: 1, G: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Return target creature card from your graveyard to your hand',
+          effects: [
+            {
+              primitive: 'returnFromGraveyard',
+              params: { count: 1, filter: { anyOfTypes: ['creature'] } },
+            },
+          ],
+        },
+        {
+          id: 'mode2',
+          label: 'Darigaaz\'s Charm deals 3 damage to any target',
+          effects: [{ primitive: 'dealDamage', params: { amount: 3 } }],
+          targets: 'any',
+        },
+        {
+          id: 'mode3',
+          label: 'Target creature gets +3/+3 until end of turn',
+          effects: [
+            {
+              primitive: 'pumpUntilEndOfTurn',
+              params: { power: 3, toughness: 3, targets: 'creature' },
+            },
+          ],
+          targets: 'creature',
+        },
+      ],
+    },
   },
   // Enchant creature
   // When this Aura enters, you lose 1 life.
@@ -484,6 +1985,173 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 3, toughness: 1, keywords: {} },
     },
   },
+  // {T}: Add {B}.
+  {
+    id: '868e6e68-4367-4073-a864-235d5961ae56',
+    name: 'Darkbore Pathway',
+    types: ['land'],
+    produces: ['B'],
+    backFace: {
+      id: '868e6e68-4367-4073-a864-235d5961ae56#back',
+      name: 'Slitherbore Pathway',
+      types: ['land'],
+      produces: ['G'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
+  // This land enters tapped.
+  // Indestructible
+  // {T}: Add {B} or {G}.
+  {
+    id: '2065cada-4078-41c4-9e06-2460d2a2e8ee',
+    name: 'Darkmoss Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ B: 1 }, { G: 1 }],
+  },
+  // Prevent all combat damage that would be dealt this turn.
+  {
+    id: '932708ae-9d5c-4561-aa8b-0d2222d37fdc',
+    name: 'Darkness',
+    types: ['instant'],
+    cost: { B: 1 },
+    effects: [
+      {
+        primitive: 'preventDamage',
+        params: { combat: true, label: 'prevent all combat damage that would be dealt this turn' },
+      },
+    ],
+  },
+  // Indestructible (Effects that say "destroy" don't destroy this Equipment.)
+  // Equipped creature gets +2/+0.
+  // Equip {2}
+  {
+    id: '3b7ea3ac-ac0a-40aa-b743-d153e1c47d8c',
+    name: 'Darksteel Axe',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    keywords: { indestructible: true },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 2, toughness: 0, keywords: {} },
+    },
+  },
+  // Indestructible
+  // {T}: Add {C}.
+  {
+    id: '8dc067bf-f78f-4ac4-b6e7-b305c42cf0bc',
+    name: 'Darksteel Citadel',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    produces: ['C'],
+  },
+  // Indestructible (Effects that say "destroy" don't destroy this artifact.)
+  // {T}: Add one mana of any color.
+  {
+    id: 'a2529491-7389-4cfa-92d2-145eda779603',
+    name: 'Darksteel Ingot',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    keywords: { indestructible: true },
+    producesOptions: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+  },
+  // Indestructible (Damage and effects that say "destroy" don't destroy this creature. If its toughness is 0 or less, it still dies.)
+  {
+    id: 'f90fe86c-5cca-483b-93c2-6e856fa01c88',
+    name: 'Darksteel Myr',
+    types: ['artifact', 'creature'],
+    cost: { generic: 3 },
+    power: 0,
+    toughness: 1,
+    keywords: { indestructible: true },
+    subtypes: ['myr'],
+  },
+  // Indestructible (Effects that say "destroy" don't destroy this artifact.)
+  // {1}, {T}: Scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  {
+    id: '431838a8-f020-4e4e-a6f4-2d4ca27c56df',
+    name: 'Darksteel Pendant',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    keywords: { indestructible: true },
+    activated: [
+      {
+        cost: { mana: { generic: 1 }, tap: true },
+        effects: [{ primitive: 'scry' }],
+        label: '{1}, {t}: scry 1',
+      },
+    ],
+  },
+  // Indestructible
+  // Equipped creature has indestructible.
+  // Equip {2}
+  {
+    id: 'b5b4cf54-ed5e-42d0-9d98-5fec76b0b0b8',
+    name: 'Darksteel Plate',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    keywords: { indestructible: true },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 0, toughness: 0, keywords: { indestructible: true } },
+    },
+  },
+  // Flash (You may cast this spell any time you could cast an instant.)
+  // Vigilance
+  // Indestructible (Damage and effects that say "destroy" don't destroy this creature. If its toughness is 0 or less, it's still put into its owner's graveyard.)
+  {
+    id: 'b91c8946-591b-4c0d-a37e-36803df40db7',
+    name: 'Darksteel Sentinel',
+    types: ['artifact', 'creature'],
+    cost: { generic: 6 },
+    power: 3,
+    toughness: 3,
+    keywords: { flash: true, vigilance: true, indestructible: true },
+    subtypes: ['golem'],
+  },
+  // Flying
+  // When this creature enters, you gain 4 life.
+  {
+    id: 'a7d88510-d2ce-4dd6-938c-964cc74ff7d7',
+    name: 'Dawning Angel',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 3,
+    toughness: 2,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'gainLife', params: { amount: 4 } }],
+        label: 'Enters: you gain 4 life',
+      },
+    ],
+  },
   // Destroy all creatures.
   {
     id: 'd057289d-5e28-43d5-8ff3-4a1bc723477d',
@@ -491,6 +2159,30 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['sorcery'],
     cost: { generic: 2, W: 2 },
     effects: [{ primitive: 'destroyAll' }],
+  },
+  // Flying
+  // Whenever another creature you control enters, you gain 1 life.
+  {
+    id: '7de464e3-fae3-44cc-8233-776fc727c00a',
+    name: 'Dazzling Angel',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: {
+          on: 'permanentEnters',
+          who: 'you',
+          permanentFilter: { anyOfTypes: ['creature'] },
+          excludeSelf: true,
+        },
+        effects: [{ primitive: 'gainLife', params: { amount: 1 } }],
+        label: 'another creature (you) enters: you gain 1 life',
+      },
+    ],
   },
   // Enchant creature
   // Enchanted creature gets -2/-2.
@@ -520,6 +2212,144 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     keywords: { reach: true, deathtouch: true },
     subtypes: ['spider'],
   },
+  // Death Grasp deals X damage to any target. You gain X life.
+  {
+    id: 'a2335149-d2db-48c1-9699-0df8ce12d4dd',
+    name: 'Death Grasp',
+    types: ['sorcery'],
+    cost: { W: 1, B: 1 },
+    xCost: 1,
+    effects: [
+      { primitive: 'dealDamage', params: { amount: { chosenX: true } } },
+      { primitive: 'gainLife', params: { amount: { chosenX: true } } },
+    ],
+  },
+  // Flying
+  // {W}{W}: Target creature gains indestructible until end of turn.
+  {
+    id: '6098ba4b-ebfe-48da-a33d-b94c021ac559',
+    name: 'Deathless Angel',
+    types: ['creature'],
+    cost: { generic: 4, W: 2 },
+    power: 5,
+    toughness: 7,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    activated: [
+      {
+        cost: { mana: { W: 2 } },
+        effects: [
+          {
+            primitive: 'grantKeywordUntilEndOfTurn',
+            params: { keywords: { indestructible: true }, targets: 'creature' },
+          },
+        ],
+        label: '{w}{w}: target creature gains indestructible until end of turn',
+      },
+    ],
+  },
+  // Search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.
+  // Flashback {4}{G} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'a823e880-3d5f-4186-a7da-e710a7db583c',
+    name: 'Deep Reconnaissance',
+    types: ['sorcery'],
+    cost: { generic: 2, G: 1 },
+    flashback: { generic: 4, G: 1 },
+    effects: [
+      {
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 1,
+          filter: { anyOfTypes: ['land'] },
+          nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+          destination: 'battlefield',
+          tapped: true,
+        },
+      },
+    ],
+  },
+  // Search your library for a card, put that card into your hand, then shuffle.
+  {
+    id: '82004860-e589-4e38-8d61-8c0210e4ea39',
+    name: 'Demonic Tutor',
+    types: ['sorcery'],
+    cost: { generic: 1, B: 1 },
+    effects: [{ primitive: 'searchLibrary', params: { who: 'controller', count: 1, destination: 'hand' } }],
+  },
+  // This land enters tapped.
+  // {T}: Add {R}.
+  // Cycling {1}{R} ({1}{R}, Discard this card: Draw a card.)
+  {
+    id: '311f38a6-f68f-4d30-bc4e-62339f1e0d88',
+    name: 'Desert of the Fervent',
+    types: ['land'],
+    subtypes: ['desert'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { generic: 1, R: 1 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {1}{R}',
+      },
+    ],
+    produces: ['R'],
+  },
+  // This land enters tapped.
+  // {T}: Add {W}.
+  // Cycling {1}{W} ({1}{W}, Discard this card: Draw a card.)
+  {
+    id: '2672e0ca-8d5c-449f-8483-35d0e697fbb2',
+    name: 'Desert of the True',
+    types: ['land'],
+    subtypes: ['desert'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { generic: 1, W: 1 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {1}{W}',
+      },
+    ],
+    produces: ['W'],
+  },
+  // Devil's Play deals X damage to any target.
+  // Flashback {X}{R}{R}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'ee9f0b29-8a54-4cb8-8e2c-7bd67c2184ba',
+    name: 'Devil\'s Play',
+    types: ['sorcery'],
+    cost: { R: 1 },
+    xCost: 1,
+    flashback: { R: 3 },
+    flashbackXCost: 1,
+    effects: [{ primitive: 'dealDamage', params: { amount: { chosenX: true } } }],
+  },
+  // Search your library for a card, put that card into your hand, then shuffle.
+  {
+    id: '14589b6b-1814-46f9-a364-83cc15dacac2',
+    name: 'Diabolic Tutor',
+    types: ['sorcery'],
+    cost: { generic: 2, B: 2 },
+    effects: [{ primitive: 'searchLibrary', params: { who: 'controller', count: 1, destination: 'hand' } }],
+  },
+  // Flash (You may cast this spell any time you could cast an instant.)
+  // At the beginning of each player's draw step, that player draws an additional card.
+  {
+    id: 'be74a4c1-d569-4203-b28a-3e2ac6a82990',
+    name: 'Dictate of Kruphix',
+    types: ['enchantment'],
+    cost: { generic: 1, U: 2 },
+    keywords: { flash: true },
+    triggers: [
+      {
+        condition: { on: 'drawStep', who: 'any' },
+        effects: [{ primitive: 'drawCards', params: { count: 1, whichPlayer: 'triggering' } }],
+        label: 'each player\'s draw step: that player draws an additional card',
+      },
+    ],
+  },
   // This land enters tapped.
   // {T}: Add {U} or {B}.
   {
@@ -529,6 +2359,53 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     subtypes: ['gate'],
     entersTapped: true,
     producesOptions: [{ U: 1 }, { B: 1 }],
+  },
+  // {1}, {T}: Add {U}{B}.
+  {
+    id: '7d881c57-0bd9-4c57-aa4a-b10808b86143',
+    name: 'Dimir Signet',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ U: 1, B: 1 }], cost: { mana: { generic: 1 } } }],
+  },
+  // Deathtouch
+  // Other Zombie creatures you control get +1/+1.
+  // Whenever another Zombie you control dies, target opponent loses 1 life.
+  {
+    id: '70de24d9-c585-4bf6-ac2c-c5b4b7aa298c',
+    name: 'Diregraf Captain',
+    types: ['creature'],
+    cost: { generic: 1, U: 1, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { deathtouch: true },
+    subtypes: ['zombie', 'soldier'],
+    triggers: [
+      {
+        condition: {
+          on: 'permanentDies',
+          who: 'you',
+          permanentFilter: { anyOfSubtypes: ['zombie'] },
+          excludeSelf: true,
+        },
+        effects: [{ primitive: 'loseLife', params: { amount: 1, targetPlayer: true, targets: 'opponent' } }],
+        label: 'another zombie (you) dies: target opponent loses 1 life',
+        targets: 'opponent',
+      },
+    ],
+    statics: [
+      {
+        affects: {
+          anyOfTypes: ['creature'],
+          anyOfSubtypes: ['zombie'],
+          controller: 'you',
+          excludeSource: true,
+        },
+        power: 1,
+        toughness: 1,
+        label: 'other zombie creatures you control get +1/+1',
+      },
+    ],
   },
   // This creature enters tapped.
   {
@@ -578,6 +2455,21 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       { primitive: 'drawCards', params: { count: 1 } },
     ],
   },
+  // Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)
+  // Return target creature card from your graveyard to your hand.
+  {
+    id: 'cdbaa21d-5896-4b8b-9a08-f0839ccfddfc',
+    name: 'Disturbed Burial',
+    types: ['sorcery'],
+    cost: { generic: 1, B: 1 },
+    buyback: { generic: 3 },
+    effects: [
+      {
+        primitive: 'returnFromGraveyard',
+        params: { count: 1, filter: { anyOfTypes: ['creature'] } },
+      },
+    ],
+  },
   // Draw two cards.
   {
     id: '273b339c-964b-4a18-8eb5-ceb8abcdfd9e',
@@ -592,7 +2484,230 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Dragon Fodder',
     types: ['sorcery'],
     cost: { generic: 1, R: 1 },
-    effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Goblin', count: 2 } }],
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 1, toughness: 1, name: 'Goblin', colors: ['R'], subtypes: ['Goblin'], count: 2 },
+      },
+    ],
+  },
+  // At the beginning of your upkeep, if you control six or more lands, create a 5/5 red Dragon creature token with flying.
+  {
+    id: 'b6fb79c3-cd32-4045-8177-e52841eea65b',
+    name: 'Dragonmaster Outcast',
+    types: ['creature'],
+    cost: { R: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'shaman'],
+    triggers: [
+      {
+        condition: {
+          on: 'upkeep',
+          who: 'you',
+          intervening: { kind: 'controlCount', filter: { anyOfTypes: ['land'] }, min: 6 },
+        },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 5,
+              toughness: 5,
+              name: 'Dragon',
+              colors: ['R'],
+              subtypes: ['Dragon'],
+              keywords: { flying: true },
+            },
+          },
+        ],
+        label: 'your upkeep: if you control six or more lands, create a 5/5 red dragon creature token with flying',
+      },
+    ],
+  },
+  // Target player mills three cards.
+  // Flashback {1}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'd569d969-ce39-4314-b5f0-76b45f5c4c7f',
+    name: 'Dream Twist',
+    types: ['instant'],
+    cost: { U: 1 },
+    flashback: { generic: 1, U: 1 },
+    effects: [{ primitive: 'mill', params: { amount: 3, targets: 'player' } }],
+  },
+  // Choose one —
+  // • You gain 5 life.
+  // • Counter target spell.
+  // • Target creature gets -2/-2 until end of turn.
+  {
+    id: 'e9950393-8458-4132-9dc7-01246282a41a',
+    name: 'Dromar\'s Charm',
+    types: ['instant'],
+    cost: { W: 1, U: 1, B: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'You gain 5 life',
+          effects: [{ primitive: 'gainLife', params: { amount: 5 } }],
+        },
+        {
+          id: 'mode2',
+          label: 'Counter target spell',
+          effects: [{ primitive: 'counterSpell', params: { targets: 'spell' } }],
+          targets: 'spell',
+        },
+        {
+          id: 'mode3',
+          label: 'Target creature gets -2/-2 until end of turn',
+          effects: [
+            {
+              primitive: 'pumpUntilEndOfTurn',
+              params: { power: -2, toughness: -2, targets: 'creature' },
+            },
+          ],
+          targets: 'creature',
+        },
+      ],
+    },
+  },
+  // This land enters tapped.
+  // Indestructible
+  // {T}: Add {B} or {R}.
+  {
+    id: '44b83535-fdbf-4307-bf53-ca20470a768d',
+    name: 'Drossforge Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ B: 1 }, { R: 1 }],
+  },
+  // Flash
+  // When this creature enters, copy target instant or sorcery spell. You may choose new targets for the copy.
+  {
+    id: '8eb7c0a5-6190-40de-b473-2d1daa3bbe28',
+    name: 'Dualcaster Mage',
+    types: ['creature'],
+    cost: { generic: 1, R: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { flash: true },
+    subtypes: ['human', 'wizard'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'copySpell',
+            params: { targets: 'instantOrSorcerySpell', mayRetarget: true },
+          },
+        ],
+        label: 'Enters: copy target instant or sorcery spell. you may choose new targets for the copy',
+        targets: 'instantOrSorcerySpell',
+      },
+    ],
+  },
+  // Deathtouch
+  // Whenever another creature you control enters, you gain 1 life.
+  // Whenever another creature you control dies, each opponent loses 1 life.
+  {
+    id: 'a4d33e21-d3fe-4d5b-903c-b75e859d6f7f',
+    name: 'Elas il-Kor, Sadistic Pilgrim',
+    types: ['creature'],
+    cost: { W: 1, B: 1 },
+    power: 2,
+    toughness: 2,
+    legendary: true,
+    keywords: { deathtouch: true },
+    subtypes: ['phyrexian', 'kor', 'cleric'],
+    triggers: [
+      {
+        condition: {
+          on: 'permanentEnters',
+          who: 'you',
+          permanentFilter: { anyOfTypes: ['creature'] },
+          excludeSelf: true,
+        },
+        effects: [{ primitive: 'gainLife', params: { amount: 1 } }],
+        label: 'another creature (you) enters: you gain 1 life',
+      },
+      {
+        condition: {
+          on: 'permanentDies',
+          who: 'you',
+          permanentFilter: { anyOfTypes: ['creature'] },
+          excludeSelf: true,
+        },
+        effects: [{ primitive: 'loseLife', params: { amount: 1, whichPlayer: 'opponent' } }],
+        label: 'another creature (you) dies: each opponent loses 1 life',
+      },
+    ],
+  },
+  // Trample
+  // Whenever you cast an instant or sorcery spell, put a +1/+1 counter on this creature.
+  {
+    id: 'ba8883fc-db24-4c3d-ae36-05085089c9cc',
+    name: 'Electrostatic Infantry',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 1,
+    toughness: 2,
+    keywords: { trample: true },
+    subtypes: ['dwarf', 'wizard'],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellType: 'instant' },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: 'Cast instant: put a +1/+1 counter on ~',
+      },
+      {
+        condition: { on: 'castSpell', who: 'you', spellType: 'sorcery' },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: 'Cast sorcery: put a +1/+1 counter on ~',
+      },
+    ],
+  },
+  // ({T}: Add {R} or {W}.)
+  // This land enters tapped.
+  // When this land enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)
+  {
+    id: '9ea747cf-5d04-4aa7-bdc3-8145860cd1ba',
+    name: 'Elegant Parlor',
+    types: ['land'],
+    subtypes: ['mountain', 'plains'],
+    entersTapped: true,
+    producesOptions: [{ R: 1 }, { W: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'surveil' }], label: 'Enters: surveil 1' }],
+  },
+  // Enchant creature
+  // Enchanted creature gets +3/+3.
+  // When enchanted creature dies, create a 3/3 green Elephant creature token.
+  {
+    id: 'c138bd7f-8751-4e96-b54a-d5082e1a491f',
+    name: 'Elephant Guide',
+    types: ['enchantment'],
+    cost: { generic: 2, G: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    triggers: [
+      {
+        condition: { on: 'dies', watches: 'attachedHost' },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: { power: 3, toughness: 3, name: 'Elephant', colors: ['G'], subtypes: ['Elephant'] },
+          },
+        ],
+        label: 'Equipped creature dies: create a 3/3 green elephant creature token',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 3, toughness: 3, keywords: {} },
+    },
   },
   {
     id: 'b3b9a87d-cb95-435c-90b6-037406cab32e',
@@ -602,6 +2717,16 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 1,
     subtypes: ['human', 'soldier'],
+  },
+  // Buyback {4} (You may pay an additional {4} as you cast this spell. If you do, put this card into your hand as it resolves.)
+  // Target creature gets +2/+2 until end of turn.
+  {
+    id: '557d2af0-04c5-461d-826b-7208c4535dc2',
+    name: 'Elvish Fury',
+    types: ['instant'],
+    cost: { G: 1 },
+    buyback: { generic: 4 },
+    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2, targets: 'creature' } }],
   },
   // {T}: Add {G}.
   {
@@ -631,6 +2756,77 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  {
+    id: '52e439d0-a263-4d53-9ae3-fa1f8aa8293e',
+    name: 'Embereth Shieldbreaker',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 2,
+    toughness: 1,
+    subtypes: ['human', 'knight'],
+    backFace: {
+      id: '52e439d0-a263-4d53-9ae3-fa1f8aa8293e#back',
+      name: 'Battle Display',
+      types: ['sorcery'],
+      cost: { R: 1 },
+      subtypes: ['adventure'],
+      effects: [{ primitive: 'destroyTarget', params: { targets: 'artifact' } }],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
+  // Flying
+  // Landfall — Whenever a land you control enters, you may create a 1/1 white Bird creature token with flying.
+  {
+    id: 'ea6616e4-db8d-4905-80f8-cb0162906850',
+    name: 'Emeria Angel',
+    types: ['creature'],
+    cost: { generic: 2, W: 2 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'permanentEnters', who: 'you', permanentFilter: { anyOfTypes: ['land'] } },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may create a 1/1 white bird creature token with flying',
+              valence: 'gain',
+              effects: [
+                {
+                  primitive: 'makeToken',
+                  params: {
+                    power: 1,
+                    toughness: 1,
+                    name: 'Bird',
+                    colors: ['W'],
+                    subtypes: ['Bird'],
+                    keywords: { flying: true },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        label: 'land (you) enters: you may create a 1/1 white bird creature token with flying',
+      },
+    ],
+  },
+  // This creature enters with X +1/+1 counters on it.
+  {
+    id: '7a51780a-fa28-4ee0-94c7-4330800ca9cb',
+    name: 'Endless One',
+    types: ['creature'],
+    power: 0,
+    toughness: 0,
+    subtypes: ['eldrazi'],
+    xCost: 1,
+    effects: [{ primitive: 'addCounters', params: { amount: { chosenX: true }, self: true } }],
+  },
   // Enchant creature (Target a creature as you cast this. This card enters attached to that creature.)
   // Enchanted creature gets -2/-2.
   {
@@ -647,6 +2843,203 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: -2, toughness: -2, keywords: {} },
     },
   },
+  // Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)
+  // Evincar's Justice deals 2 damage to each creature and each player.
+  {
+    id: 'c0d3dfc0-1ff2-4ac3-98eb-32eaa5b84c05',
+    name: 'Evincar\'s Justice',
+    types: ['sorcery'],
+    cost: { generic: 2, B: 2 },
+    buyback: { generic: 3 },
+    effects: [{ primitive: 'dealDamageToEach', params: { amount: 2, creatures: true, players: true } }],
+  },
+  // {T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
+  {
+    id: 'a75445d3-1303-4bb5-89ad-26ea93fecd48',
+    name: 'Evolving Wilds',
+    types: ['land'],
+    activated: [
+      {
+        cost: { tap: true, sacrificeSelf: true },
+        effects: [
+          {
+            primitive: 'searchLibrary',
+            params: {
+              who: 'controller',
+              count: 1,
+              filter: { anyOfTypes: ['land'] },
+              nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+              destination: 'battlefield',
+              tapped: true,
+            },
+          },
+        ],
+        label: '{t}, sacrifice ~: search your library for a basic land card, put it onto the battlefield tapped, then shuffle',
+      },
+    ],
+  },
+  // {T}: Add one mana of any color that a land an opponent controls could produce.
+  {
+    id: '27b047e3-0d41-45e2-98e9-9391d7923a1e',
+    name: 'Exotic Orchard',
+    types: ['land'],
+    manaAbilities: [{ derivedColors: 'landsOpponentsControl' }],
+  },
+  // {2}, {T}, Sacrifice this artifact: Search your library for a land card, reveal it, put it into your hand, then shuffle.
+  {
+    id: '8fcf50cd-e6d0-4516-850f-d42ee75dcc3a',
+    name: 'Expedition Map',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    activated: [
+      {
+        cost: { mana: { generic: 2 }, tap: true, sacrificeSelf: true },
+        effects: [
+          {
+            primitive: 'searchLibrary',
+            params: { who: 'controller', count: 1, filter: { anyOfTypes: ['land'] }, destination: 'hand' },
+          },
+        ],
+        label: '{2}, {t}, sacrifice ~: search your library for a land card, reveal it, put it into your hand, then shuffle',
+      },
+    ],
+  },
+  // Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.
+  {
+    id: 'a0abd957-01a0-4aa9-8fc8-0e6840d21606',
+    name: 'Explosive Vegetation',
+    types: ['sorcery'],
+    cost: { generic: 3, G: 1 },
+    effects: [
+      {
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 2,
+          filter: { anyOfTypes: ['land'] },
+          nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+          destination: 'battlefield',
+          tapped: true,
+        },
+      },
+    ],
+  },
+  // Flying
+  {
+    id: '04fbb7aa-0dd4-4ac6-837d-822227fb6356',
+    name: 'Faerie Guidemother',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true },
+    subtypes: ['faerie'],
+    backFace: {
+      id: '04fbb7aa-0dd4-4ac6-837d-822227fb6356#back',
+      name: 'Gift of the Fae',
+      types: ['sorcery'],
+      cost: { generic: 1, W: 1 },
+      keywords: { flying: true },
+      subtypes: ['adventure'],
+      effects: [
+        { primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 1, targets: 'creature' } },
+        {
+          primitive: 'grantKeywordUntilEndOfTurn',
+          params: { keywords: { flying: true }, targets: 'creature' },
+        },
+      ],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
+  // Vigilance
+  // This creature enters with three +1/+1 counters on it.
+  {
+    id: '139fb542-89fd-4b9e-87e6-ec925bcca93a',
+    name: 'Faithful Watchdog',
+    types: ['creature'],
+    cost: { W: 1, G: 1 },
+    power: 0,
+    toughness: 0,
+    keywords: { vigilance: true },
+    subtypes: ['dog'],
+    effects: [{ primitive: 'addCounters', params: { amount: 3, self: true } }],
+  },
+  // When this creature enters, you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
+  {
+    id: '4ce2357f-93e6-40ca-beca-8f4e15adc464',
+    name: 'Farhaven Elf',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['elf', 'druid'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may search your library for a basic land card, put it onto the battlefield tapped, then shuffle',
+              valence: 'gain',
+              effects: [
+                {
+                  primitive: 'searchLibrary',
+                  params: {
+                    who: 'controller',
+                    count: 1,
+                    filter: { anyOfTypes: ['land'] },
+                    nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+                    destination: 'battlefield',
+                    tapped: true,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        label: 'Enters: you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle',
+      },
+    ],
+  },
+  // Search your library for a Plains, Island, Swamp, or Mountain card, put it onto the battlefield tapped, then shuffle.
+  {
+    id: '495e52e6-4c2b-4574-9474-eadbdcc8b4ac',
+    name: 'Farseek',
+    types: ['sorcery'],
+    cost: { generic: 1, G: 1 },
+    effects: [
+      {
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 1,
+          filter: { anyOfTypes: ['land'], anyOfSubtypes: ['plains', 'island', 'swamp', 'mountain'] },
+          destination: 'battlefield',
+          tapped: true,
+        },
+      },
+    ],
+  },
+  // Whenever an opponent draws a card, this creature deals 1 damage to that player.
+  {
+    id: '7d66f67d-3148-4636-ac5a-2cf8a51d5e50',
+    name: 'Fate Unraveler',
+    types: ['enchantment', 'creature'],
+    cost: { generic: 3, B: 1 },
+    power: 3,
+    toughness: 4,
+    subtypes: ['hag'],
+    triggers: [
+      {
+        condition: { on: 'drawsCard', who: 'opponent' },
+        effects: [{ primitive: 'dealDamage', params: { amount: 1, whichPlayer: 'triggering' } }],
+        label: 'an opponent draws: ~ deals 1 damage to that player',
+      },
+    ],
+  },
   // Double strike (This creature deals both first-strike and regular combat damage.)
   {
     id: '2f810936-2ba6-4c2b-84a0-ff4c1deb026b',
@@ -657,6 +3050,79 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 1,
     keywords: { doubleStrike: true },
     subtypes: ['human', 'soldier'],
+  },
+  // {T}: Add {C}.
+  // {W/B}, {T}: Add {W}{W}, {W}{B}, or {B}{B}.
+  {
+    id: '42bf259d-4bb9-49c3-b4ec-223dca62f4d6',
+    name: 'Fetid Heath',
+    types: ['land'],
+    manaAbilities: [
+      { produces: [{ C: 1 }] },
+      { produces: [{ W: 2 }, { W: 1, B: 1 }, { B: 2 }], cost: { mana: { hybrid: [['W', 'B']] } } },
+    ],
+  },
+  // ({T}: Add {U} or {B}.)
+  // This land enters tapped.
+  // Cycling {2} ({2}, Discard this card: Draw a card.)
+  {
+    id: '32b03b48-06da-4a74-a7ac-e5ae39a4f428',
+    name: 'Fetid Pools',
+    types: ['land'],
+    subtypes: ['island', 'swamp'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { generic: 2 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {2}',
+      },
+    ],
+    producesOptions: [{ U: 1 }, { B: 1 }],
+  },
+  // When this creature enters, you may exile another target creature.
+  // When this creature leaves the battlefield, return the exiled card to the battlefield under its owner's control.
+  {
+    id: 'cb9d557a-fc06-428c-8be6-7d28add33028',
+    name: 'Fiend Hunter',
+    types: ['creature'],
+    cost: { generic: 1, W: 2 },
+    power: 1,
+    toughness: 3,
+    subtypes: ['human', 'cleric'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may exile another target creature',
+              valence: 'gain',
+              effects: [{ primitive: 'exileUntilLeaves', params: { targets: 'creature', max: 1 } }],
+            },
+          },
+        ],
+        label: 'Enters: you may exile another target creature',
+        targets: 'creature',
+        targetsExcludeSelf: true,
+      },
+      {
+        condition: { on: 'leaves' },
+        effects: [{ primitive: 'returnExiledByThis', params: { to: 'battlefield' } }],
+        label: 'Leaves: return the exiled card to the battlefield under its owner\'s control',
+      },
+    ],
+  },
+  // Fiery Temper deals 3 damage to any target.
+  // Madness {R} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: 'f07bd49d-8e71-4d56-be2a-638514011318',
+    name: 'Fiery Temper',
+    types: ['instant'],
+    cost: { generic: 1, R: 2 },
+    madness: { R: 1 },
+    effects: [{ primitive: 'dealDamage', params: { amount: 3 } }],
   },
   // This artifact enters tapped.
   // {T}: Add {R}.
@@ -676,6 +3142,38 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 5,
     toughness: 4,
     subtypes: ['elemental'],
+  },
+  // {T}: Add {C}.
+  // {R/G}, {T}: Add {R}{R}, {R}{G}, or {G}{G}.
+  {
+    id: 'd99a1d9a-7721-4331-bf22-1c6ee0bd825a',
+    name: 'Fire-Lit Thicket',
+    types: ['land'],
+    manaAbilities: [
+      { produces: [{ C: 1 }] },
+      { produces: [{ R: 2 }, { R: 1, G: 1 }, { G: 2 }], cost: { mana: { hybrid: [['R', 'G']] } } },
+    ],
+  },
+  // Kicker {4} (You may pay an additional {4} as you cast this spell.)
+  // Firebending Lesson deals 2 damage to target creature. If this spell was kicked, it deals 5 damage to that creature instead.
+  {
+    id: 'a9282f91-638e-414b-8b3d-9a99e30aec96',
+    name: 'Firebending Lesson',
+    types: ['instant'],
+    cost: { R: 1 },
+    subtypes: ['lesson'],
+    kicker: { generic: 4 },
+    effects: [{ primitive: 'dealDamage', params: { amount: { base: 2, kicked: 5 }, targets: 'creature' } }],
+  },
+  // Firebolt deals 2 damage to any target.
+  // Flashback {4}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: '7aa31280-12c3-479d-a6dd-f1c669043083',
+    name: 'Firebolt',
+    types: ['sorcery'],
+    cost: { R: 1 },
+    flashback: { generic: 4, R: 1 },
+    effects: [{ primitive: 'dealDamage', params: { amount: 2 } }],
   },
   // Equipped creature has double strike. (It deals both first-strike and regular combat damage.)
   // Equip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)
@@ -724,6 +3222,135 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 0, toughness: 0, keywords: { flying: true } },
     },
   },
+  // {T}: Add {C}.
+  // {G/U}, {T}: Add {G}{G}, {G}{U}, or {U}{U}.
+  {
+    id: 'dc974eb4-72b9-4213-887b-8ee684b93420',
+    name: 'Flooded Grove',
+    types: ['land'],
+    manaAbilities: [
+      { produces: [{ C: 1 }] },
+      { produces: [{ G: 2 }, { G: 1, U: 1 }, { U: 2 }], cost: { mana: { hybrid: [['G', 'U']] } } },
+    ],
+  },
+  // Prevent all combat damage that would be dealt this turn.
+  {
+    id: '27e9db49-7af7-4bef-ad4c-bf5dfb92030d',
+    name: 'Fog',
+    types: ['instant'],
+    cost: { G: 1 },
+    effects: [
+      {
+        primitive: 'preventDamage',
+        params: { combat: true, label: 'prevent all combat damage that would be dealt this turn' },
+      },
+    ],
+  },
+  // At the beginning of each player's draw step, that player draws two additional cards.
+  {
+    id: '7194a262-5e7a-4c12-b271-2bc5e0799477',
+    name: 'Font of Mythos',
+    types: ['artifact'],
+    cost: { generic: 4 },
+    triggers: [
+      {
+        condition: { on: 'drawStep', who: 'any' },
+        effects: [{ primitive: 'drawCards', params: { count: 2, whichPlayer: 'triggering' } }],
+        label: 'each player\'s draw step: that player draws two additional cards',
+      },
+    ],
+  },
+  // Whenever an opponent casts a spell, that player draws seven cards.
+  {
+    id: '448b27a5-7c0c-4ab6-bddf-bd62b920aacc',
+    name: 'Forced Fruition',
+    types: ['enchantment'],
+    cost: { generic: 4, U: 2 },
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'opponent' },
+        effects: [{ primitive: 'drawCards', params: { count: 7, whichPlayer: 'triggering' } }],
+        label: 'Opponent casts spell: that player draws seven cards',
+      },
+    ],
+  },
+  // This land enters tapped.
+  // {T}: Add {R}.
+  // Cycling {R} ({R}, Discard this card: Draw a card.)
+  {
+    id: '394c6de5-7957-4a0b-a6b9-ee0c707cd022',
+    name: 'Forgotten Cave',
+    types: ['land'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { R: 1 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {R}',
+      },
+    ],
+    produces: ['R'],
+  },
+  // Deathtouch
+  {
+    id: '10c0f814-e302-49ff-aded-1b8d8424fd60',
+    name: 'Foulmire Knight',
+    types: ['creature'],
+    cost: { B: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { deathtouch: true },
+    subtypes: ['zombie', 'knight'],
+    backFace: {
+      id: '10c0f814-e302-49ff-aded-1b8d8424fd60#back',
+      name: 'Profane Insight',
+      types: ['instant'],
+      cost: { generic: 2, B: 1 },
+      subtypes: ['adventure'],
+      effects: [
+        { primitive: 'drawCards', params: { count: 1 } },
+        { primitive: 'loseLife', params: { amount: 1 } },
+      ],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
+  // Flying
+  // Whenever you cast an instant or sorcery spell, this creature gets +1/+1 until end of turn.
+  {
+    id: 'bbb6867f-7186-41de-9828-21be469178c1',
+    name: 'Frolicking Familiar',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true },
+    subtypes: ['otter', 'wizard'],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellType: 'instant' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Cast instant: ~ gets +1/+1 until end of turn',
+      },
+      {
+        condition: { on: 'castSpell', who: 'you', spellType: 'sorcery' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Cast sorcery: ~ gets +1/+1 until end of turn',
+      },
+    ],
+    backFace: {
+      id: 'bbb6867f-7186-41de-9828-21be469178c1#back',
+      name: 'Blow Off Steam',
+      types: ['instant'],
+      cost: { R: 1 },
+      subtypes: ['adventure'],
+      effects: [{ primitive: 'dealDamage', params: { amount: 1 } }],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
   // {T}: Add {G}.
   {
     id: 'df317532-7d36-40fd-938f-e972749c8792',
@@ -735,6 +3362,41 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     subtypes: ['elf', 'druid'],
     produces: ['G'],
   },
+  // Creatures you control get +1/+1.
+  {
+    id: '3754dce0-3e97-406f-8807-a4942a222c41',
+    name: 'Gaea\'s Anthem',
+    types: ['enchantment'],
+    cost: { generic: 1, G: 2 },
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'you' },
+        power: 1,
+        toughness: 1,
+        label: 'creatures you control get +1/+1',
+      },
+    ],
+  },
+  {
+    id: '496c9633-ff17-48df-9b24-1d8cbfd06126',
+    name: 'Garenbrig Carver',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 3,
+    toughness: 2,
+    subtypes: ['human', 'warrior'],
+    backFace: {
+      id: '496c9633-ff17-48df-9b24-1d8cbfd06126#back',
+      name: 'Shield\'s Might',
+      types: ['instant'],
+      cost: { generic: 1, G: 1 },
+      subtypes: ['adventure'],
+      effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2, targets: 'creature' } }],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
   // Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)
   {
     id: '32fc8fa7-7e0a-4d4e-85cf-2f98b3fc6ecf',
@@ -745,6 +3407,75 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 2,
     keywords: { trample: true },
     subtypes: ['beast'],
+  },
+  // Defender
+  // When this creature enters, you may search your library for a basic land card or a Gate card, reveal it, put it into your hand, then shuffle.
+  {
+    id: '0f539127-535f-4e0d-abaa-e884521098d2',
+    name: 'Gatecreeper Vine',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 0,
+    toughness: 2,
+    keywords: { defender: true },
+    subtypes: ['plant'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may search your library for a basic land card or a gate card, reveal it, put it into your hand, then shuffle',
+              valence: 'gain',
+              effects: [
+                {
+                  primitive: 'searchLibrary',
+                  params: {
+                    who: 'controller',
+                    count: 1,
+                    filter: { anyOfSubtypes: ['gate'] },
+                    nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+                    destination: 'hand',
+                    reveal: true,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        label: 'Enters: you may search your library for a basic land card or a gate card, reveal it, put it into your hand, then shuffle',
+      },
+    ],
+  },
+  // Geistflame deals 1 damage to any target.
+  // Flashback {3}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: '2f01c3d9-e0fc-4cdf-b4db-daeb8bb24bc3',
+    name: 'Geistflame',
+    types: ['instant'],
+    cost: { R: 1 },
+    flashback: { generic: 3, R: 1 },
+    effects: [{ primitive: 'dealDamage', params: { amount: 1 } }],
+  },
+  // Trample
+  // Whenever this creature deals combat damage to a player, create a token that's a copy of this creature.
+  {
+    id: '8e1d261d-b8d3-4fb1-922d-47789854b5b3',
+    name: 'Giant Adephage',
+    types: ['creature'],
+    cost: { generic: 5, G: 2 },
+    power: 7,
+    toughness: 7,
+    keywords: { trample: true },
+    subtypes: ['insect'],
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer' },
+        effects: [{ primitive: 'createTokenCopy', params: { self: true, count: 1 } }],
+        label: 'Combat damage to a player: create a token that\'s a copy of ~',
+      },
+    ],
   },
   // Reach (This creature can block creatures with flying.)
   {
@@ -773,6 +3504,101 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 1, toughness: 1, keywords: { flying: true, lifelink: true } },
     },
   },
+  // {T}: Add three mana of any one color.
+  {
+    id: '9a02a9a7-39d9-4763-85d3-747a0540b60b',
+    name: 'Gilded Lotus',
+    types: ['artifact'],
+    cost: { generic: 5 },
+    producesOptions: [{ W: 3 }, { U: 3 }, { B: 3 }, { R: 3 }, { G: 3 }],
+  },
+  // Flying, first strike
+  // If a source would deal damage to an opponent or a permanent an opponent controls, that source deals double that damage to that player or permanent instead.
+  // If a source would deal damage to you or a permanent you control, prevent half that damage, rounded up.
+  {
+    id: '66f9f325-5e8e-4ebf-b5b3-c6410d80f2c5',
+    name: 'Gisela, Blade of Goldnight',
+    types: ['creature'],
+    cost: { generic: 4, W: 2, R: 1 },
+    power: 5,
+    toughness: 5,
+    legendary: true,
+    keywords: { flying: true, firstStrike: true },
+    subtypes: ['angel'],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { recipientController: 'opponent' },
+        outcome: { times: 2 },
+        label: 'if a source would deal damage to an opponent or a permanent an opponent controls, that source deals double that damage to that player or permanent instead',
+      },
+      {
+        event: 'damage',
+        applies: { recipientController: 'you' },
+        outcome: { preventHalfRoundedUp: true },
+        label: 'if a source would deal damage to you or a permanent you control, prevent half that damage, rounded up',
+      },
+    ],
+  },
+  // Enchant creature
+  // Enchanted creature gets +2/+2 and has flying and lifelink.
+  {
+    id: '3a3e8c9b-e458-4661-980d-0a84a4c2452b',
+    name: 'Glasswing Grace',
+    types: ['enchantment'],
+    cost: { generic: 3, hybrid: [['W', 'B'], ['W', 'B']] },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 2, toughness: 2, keywords: { flying: true, lifelink: true } },
+    },
+    backFace: {
+      id: '3a3e8c9b-e458-4661-980d-0a84a4c2452b#back',
+      name: 'Age-Graced Chapel',
+      types: ['land'],
+      entersTapped: true,
+      producesOptions: [{ W: 1 }, { B: 1 }],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
+  // Target player mills ten cards.
+  {
+    id: '552f0163-a19d-4671-888f-044fc0354875',
+    name: 'Glimpse the Unthinkable',
+    types: ['sorcery'],
+    cost: { U: 1, B: 1 },
+    effects: [{ primitive: 'mill', params: { amount: 10, targets: 'player' } }],
+  },
+  // Haste (This creature can attack and {T} as soon as it comes under your control.)
+  // Other Goblin creatures you control get +1/+1 and have haste.
+  {
+    id: '368b4052-174e-4458-a6e6-eaf8093aa0fe',
+    name: 'Goblin Chieftain',
+    types: ['creature'],
+    cost: { generic: 1, R: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { haste: true },
+    subtypes: ['goblin'],
+    statics: [
+      {
+        affects: {
+          anyOfTypes: ['creature'],
+          anyOfSubtypes: ['goblin'],
+          controller: 'you',
+          excludeSource: true,
+        },
+        power: 1,
+        toughness: 1,
+        keywords: { haste: true },
+        label: 'other goblin creatures you control get +1/+1 and have haste',
+      },
+    ],
+  },
   // When this creature enters, create a 1/1 red Goblin creature token.
   {
     id: '8b022754-6d16-470e-b754-4df6e4f4709e',
@@ -785,7 +3611,12 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     triggers: [
       {
         condition: { on: 'etb' },
-        effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Goblin' } }],
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: { power: 1, toughness: 1, name: 'Goblin', colors: ['R'], subtypes: ['Goblin'] },
+          },
+        ],
         label: 'Enters: create a 1/1 red goblin creature token',
       },
     ],
@@ -827,6 +3658,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     produces: ['W'],
   },
   // This land enters tapped.
+  // Indestructible
+  // {T}: Add {W} or {B}.
+  {
+    id: 'c9b7ea9c-3bcb-4538-aa25-cdb82a52037e',
+    name: 'Goldmire Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ W: 1 }, { B: 1 }],
+  },
+  // This land enters tapped.
   // {T}: Add {B} or {G}.
   {
     id: 'fa2da325-6859-45bb-b185-35526b01bcc1',
@@ -836,6 +3678,30 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     entersTapped: true,
     producesOptions: [{ B: 1 }, { G: 1 }],
   },
+  // {1}, {T}: Add {B}{G}.
+  {
+    id: '1cf51f50-24e4-48d0-95b3-1dad3ffa4bf5',
+    name: 'Golgari Signet',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ B: 1, G: 1 }], cost: { mana: { generic: 1 } } }],
+  },
+  // This land enters tapped.
+  // {T}: Add {C}.
+  // {T}: Add one mana of any color. This land deals 1 damage to you.
+  {
+    id: '1cea9b82-d2e9-4758-8ec8-729fcf4bb7d7',
+    name: 'Grand Coliseum',
+    types: ['land'],
+    entersTapped: true,
+    manaAbilities: [
+      { produces: [{ C: 1 }] },
+      {
+        produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+        rider: { damageToController: 1 },
+      },
+    ],
+  },
   // Target creature gets -4/-4 until end of turn.
   {
     id: '494c819d-7d73-432b-8c96-4cb9dcd31094',
@@ -843,6 +3709,81 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['instant'],
     cost: { B: 2 },
     effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -4, toughness: -4, targets: 'creature' } }],
+  },
+  // When this creature enters, you may return target creature card from your graveyard to your hand.
+  {
+    id: '1a2030cc-d7ee-4059-b2d7-fb95ea8e267b',
+    name: 'Gravedigger',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['zombie'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, filter: { anyOfTypes: ['creature'] }, optional: true },
+          },
+        ],
+        label: 'Enters: you may return target creature card from your graveyard to your hand',
+      },
+    ],
+  },
+  // {T}: Add {C}.
+  // {B/R}, {T}: Add {B}{B}, {B}{R}, or {R}{R}.
+  {
+    id: '5004b84a-33b7-4f6f-b2c2-7086b9087535',
+    name: 'Graven Cairns',
+    types: ['land'],
+    manaAbilities: [
+      { produces: [{ C: 1 }] },
+      { produces: [{ B: 2 }, { B: 1, R: 1 }, { R: 2 }], cost: { mana: { hybrid: [['B', 'R']] } } },
+    ],
+  },
+  // {T}: Add {R}.
+  {
+    id: 'f4819061-b0b5-48ab-af7b-6525c3d2eab7',
+    name: 'Great Furnace',
+    types: ['artifact', 'land'],
+    produces: ['R'],
+  },
+  // Choose one or both —
+  // • Return target creature card from your graveyard to your hand.
+  // • Return target land card from your graveyard to your hand.
+  {
+    id: 'be78d7ca-b904-452f-b9eb-34792e588986',
+    name: 'Grim Discovery',
+    types: ['sorcery'],
+    cost: { generic: 1, B: 1 },
+    modal: {
+      min: 1,
+      max: 2,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Return target creature card from your graveyard to your hand',
+          effects: [
+            {
+              primitive: 'returnFromGraveyard',
+              params: { count: 1, filter: { anyOfTypes: ['creature'] } },
+            },
+          ],
+        },
+        {
+          id: 'mode2',
+          label: 'Return target land card from your graveyard to your hand',
+          effects: [
+            {
+              primitive: 'returnFromGraveyard',
+              params: { count: 1, filter: { anyOfTypes: ['land'] } },
+            },
+          ],
+        },
+      ],
+    },
   },
   {
     id: '14c8f55d-d177-4c25-a931-ebeb9e6062a0',
@@ -862,6 +3803,14 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     subtypes: ['gate'],
     entersTapped: true,
     producesOptions: [{ R: 1 }, { G: 1 }],
+  },
+  // {1}, {T}: Add {R}{G}.
+  {
+    id: 'd36e0c9f-c025-4dfe-9644-9cad2461ce38',
+    name: 'Gruul Signet',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ R: 1, G: 1 }], cost: { mana: { generic: 1 } } }],
   },
   // Whenever you cast an instant or sorcery spell, this creature deals 2 damage to each opponent.
   {
@@ -885,6 +3834,90 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // If one or more +1/+1 counters would be put on a creature you control, that many plus one +1/+1 counters are put on it instead.
+  {
+    id: 'a1f3da21-af6d-450e-bf0b-985d158418e6',
+    name: 'Hardened Scales',
+    types: ['enchantment'],
+    cost: { G: 1 },
+    replacements: [
+      {
+        event: 'counters',
+        applies: {
+          recipientController: 'you',
+          recipientFilter: { anyOfTypes: ['creature'] },
+          counterKind: '+1/+1',
+        },
+        outcome: { plus: 1 },
+        label: 'if one or more +1/+1 counters would be put on a creature you control, that many plus one +1/+1 counters are put on it instead',
+      },
+    ],
+  },
+  // Ward {2} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.)
+  // Harmonious Grovestrider's power and toughness are each equal to the number of lands you control.
+  {
+    id: '0ebec97e-3cb1-41e2-a693-0febb5623016',
+    name: 'Harmonious Grovestrider',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    characteristicPT: { power: { countOf: 'landsYouControl' }, toughness: { countOf: 'landsYouControl' } },
+    keywords: { ward: 2 },
+    subtypes: ['beast'],
+  },
+  // As an additional cost to cast this spell, sacrifice a land.
+  // Search your library for up to two basic land cards, put them onto the battlefield, then shuffle.
+  {
+    id: '705509e9-a034-4a5a-9c65-66f58748b8a2',
+    name: 'Harrow',
+    types: ['instant'],
+    cost: { generic: 2, G: 1 },
+    additionalCost: { kind: 'sacrifice', filter: { anyOfTypes: ['land'] }, label: 'Sacrifice a land' },
+    effects: [
+      {
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 2,
+          filter: { anyOfTypes: ['land'] },
+          nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+          destination: 'battlefield',
+        },
+      },
+    ],
+  },
+  // Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)
+  // Whenever another nontoken creature dies, you may draw a card.
+  {
+    id: '5987ce77-10ad-4871-900a-5a005fcf4955',
+    name: 'Harvester of Souls',
+    types: ['creature'],
+    cost: { generic: 4, B: 2 },
+    power: 5,
+    toughness: 5,
+    keywords: { deathtouch: true },
+    subtypes: ['demon'],
+    triggers: [
+      {
+        condition: {
+          on: 'permanentDies',
+          who: 'any',
+          permanentFilter: { anyOfTypes: ['creature'], isToken: false },
+          excludeSelf: true,
+        },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may draw a card',
+              valence: 'gain',
+              effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+            },
+          },
+        ],
+        label: 'another nontoken creature (any) dies: you may draw a card',
+      },
+    ],
+  },
   // Flying
   // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
   {
@@ -897,6 +3930,81 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     keywords: { flying: true, lifelink: true },
     subtypes: ['bird'],
   },
+  // Heat Ray deals X damage to target creature.
+  {
+    id: '76ec76b9-da0f-4b9d-ad0a-d734052a5f2b',
+    name: 'Heat Ray',
+    types: ['instant'],
+    cost: { R: 1 },
+    xCost: 1,
+    effects: [{ primitive: 'dealDamage', params: { amount: { chosenX: true }, targets: 'creature' } }],
+  },
+  // ({T}: Add {G} or {U}.)
+  // This land enters tapped.
+  // When this land enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)
+  {
+    id: 'ca4b6689-04ee-4227-9bdc-cb5a9590c745',
+    name: 'Hedge Maze',
+    types: ['land'],
+    subtypes: ['forest', 'island'],
+    entersTapped: true,
+    producesOptions: [{ G: 1 }, { U: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'surveil' }], label: 'Enters: surveil 1' }],
+  },
+  // {T}: Add {W}.
+  {
+    id: '461b3f2f-fcee-4160-abfa-061f8b6a784f',
+    name: 'Hengegate Pathway',
+    types: ['land'],
+    produces: ['W'],
+    backFace: {
+      id: '461b3f2f-fcee-4160-abfa-061f8b6a784f#back',
+      name: 'Mistgate Pathway',
+      types: ['land'],
+      produces: ['U'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
+  // Flying
+  // Whenever this creature attacks, you gain 2 life.
+  {
+    id: 'cb97da84-1d13-4795-b68a-2bf111a50067',
+    name: 'Herald of Faith',
+    types: ['creature'],
+    cost: { generic: 3, W: 2 },
+    power: 4,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'gainLife', params: { amount: 2 } }],
+        label: 'Attacks: you gain 2 life',
+      },
+    ],
+  },
+  // As this artifact enters, choose a color.
+  // Creatures you control of the chosen color get +1/+0.
+  // {T}: Add one mana of the chosen color.
+  {
+    id: '3525e263-e29a-49bf-a29f-fb3ce43bbd33',
+    name: 'Heraldic Banner',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    asEntersChoice: { subject: 'color' },
+    effects: [{ primitive: 'chooseAsEnters', params: {} }],
+    manaAbilities: [{ chosenColor: true, label: 'Add one mana of the chosen color' }],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'you', ofChosenColor: true },
+        power: 1,
+        toughness: 0,
+        label: 'creatures you control of the chosen color get +1/+0',
+      },
+    ],
+  },
   {
     id: '342199e0-15b6-4824-83da-25caef2592b3',
     name: 'Hill Giant',
@@ -905,6 +4013,39 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 3,
     toughness: 3,
     subtypes: ['giant'],
+  },
+  // Flash
+  // Flying
+  // When this creature enters, you gain 2 life and scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  {
+    id: '748003fd-84c5-4c99-b146-d7d382eef64d',
+    name: 'Holy Cow',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flash: true, flying: true },
+    subtypes: ['ox', 'angel'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'gainLife', params: { amount: 2 } }, { primitive: 'scry' }],
+        label: 'Enters: you gain 2 life and scry 1',
+      },
+    ],
+  },
+  // Prevent all combat damage that would be dealt this turn.
+  {
+    id: '98423a34-f044-4811-b288-56981d604b6e',
+    name: 'Holy Day',
+    types: ['instant'],
+    cost: { W: 1 },
+    effects: [
+      {
+        primitive: 'preventDamage',
+        params: { combat: true, label: 'prevent all combat damage that would be dealt this turn' },
+      },
+    ],
   },
   // Enchant creature
   // Enchanted creature gets +1/+2.
@@ -922,6 +4063,286 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 1, toughness: 2, keywords: {} },
     },
   },
+  // Create three 1/1 red Goblin creature tokens.
+  {
+    id: 'a6450b8e-eb18-431c-9eb7-7daf107978b2',
+    name: 'Hordeling Outburst',
+    types: ['sorcery'],
+    cost: { generic: 1, R: 2 },
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 1, toughness: 1, name: 'Goblin', colors: ['R'], subtypes: ['Goblin'], count: 3 },
+      },
+    ],
+  },
+  // Flying, deathtouch
+  // When this creature enters, create four 1/1 green Insect creature tokens with flying and deathtouch.
+  {
+    id: '3b1f8108-6911-49e9-8f78-f950bb58cb6c',
+    name: 'Hornet Queen',
+    types: ['creature'],
+    cost: { generic: 4, G: 3 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true, deathtouch: true },
+    subtypes: ['insect'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Insect',
+              colors: ['G'],
+              subtypes: ['Insect'],
+              count: 4,
+              keywords: { flying: true, deathtouch: true },
+            },
+          },
+        ],
+        label: 'Enters: create four 1/1 green insect creature tokens with flying and deathtouch',
+      },
+    ],
+  },
+  // At the beginning of each player's draw step, if this artifact is untapped, that player draws an additional card.
+  {
+    id: 'd26b27db-a567-4631-b4b6-7294222fbdd1',
+    name: 'Howling Mine',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    triggers: [
+      {
+        condition: { on: 'drawStep', who: 'any', intervening: { kind: 'sourceUntapped' } },
+        effects: [{ primitive: 'drawCards', params: { count: 1, whichPlayer: 'triggering' } }],
+        label: 'each player\'s draw step: if ~ is untapped, that player draws an additional card',
+      },
+    ],
+  },
+  // Kicker {W} (You may pay an additional {W} as you cast this spell.)
+  // Hurloon Battle Hymn deals 4 damage to target creature or planeswalker. If this spell was kicked, you gain 4 life.
+  {
+    id: '2f541bf9-1e5b-4d16-8558-a5cfce7e93ad',
+    name: 'Hurloon Battle Hymn',
+    types: ['instant'],
+    cost: { generic: 2, R: 1 },
+    kicker: { W: 1 },
+    effects: [
+      { primitive: 'dealDamage', params: { amount: 4, targets: 'creatureOrPlaneswalker' } },
+      {
+        primitive: 'ifKicked',
+        params: { effects: [{ primitive: 'gainLife', params: { amount: 4 } }] },
+      },
+    ],
+  },
+  // Haste (This creature can attack and {T} as soon as it comes under your control.)
+  // Madness {2}{R} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: '9c239027-c5cb-43c6-b4f3-93c269a1d853',
+    name: 'Incorrigible Youths',
+    types: ['creature'],
+    cost: { generic: 3, R: 2 },
+    power: 4,
+    toughness: 3,
+    keywords: { haste: true },
+    subtypes: ['vampire'],
+    madness: { generic: 2, R: 1 },
+  },
+  // Flying
+  // When this creature enters, you gain 1 life and draw a card.
+  {
+    id: 'd646e42b-5635-4798-b633-29c093b66a55',
+    name: 'Inspiring Overseer',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { flying: true },
+    subtypes: ['angel', 'cleric'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          { primitive: 'gainLife', params: { amount: 1 } },
+          { primitive: 'drawCards', params: { count: 1 } },
+        ],
+        label: 'Enters: you gain 1 life and draw a card',
+      },
+    ],
+  },
+  // Target creature gets +2/+2 until end of turn.
+  {
+    id: '12f252b1-d3da-43af-ab31-0c8a6807c3c4',
+    name: 'Integrity // Intervention',
+    types: ['instant'],
+    cost: { generic: 2, W: 1, R: 1, hybrid: [['R', 'W']] },
+    frontFace: {
+      id: '12f252b1-d3da-43af-ab31-0c8a6807c3c4',
+      name: 'Integrity',
+      types: ['instant'],
+      cost: { hybrid: [['R', 'W']] },
+      effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2, targets: 'creature' } }],
+    },
+    backFace: {
+      id: '12f252b1-d3da-43af-ab31-0c8a6807c3c4#back',
+      name: 'Intervention',
+      types: ['instant'],
+      cost: { generic: 2, W: 1, R: 1 },
+      effects: [
+        { primitive: 'dealDamage', params: { amount: 3 } },
+        { primitive: 'gainLife', params: { amount: 3 } },
+      ],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
+  // (As a Siege enters, choose an opponent to protect it. You and others can attack it. When it's defeated, exile it, then cast it transformed.)
+  // When this Siege enters, create a 2/2 white and blue Knight creature token with vigilance.
+  {
+    id: 'e462e78d-2d26-4a2d-8d8f-5f31abe5c924',
+    name: 'Invasion of Belenon',
+    types: ['battle'],
+    cost: { generic: 2, W: 1 },
+    defense: 5,
+    subtypes: ['siege'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 2,
+              toughness: 2,
+              name: 'Knight',
+              colors: ['W', 'U'],
+              subtypes: ['Knight'],
+              keywords: { vigilance: true },
+            },
+          },
+        ],
+        label: 'Enters: create a 2/2 white and blue knight creature token with vigilance',
+      },
+    ],
+    backFace: {
+      id: 'e462e78d-2d26-4a2d-8d8f-5f31abe5c924#back',
+      name: 'Belenon War Anthem',
+      types: ['enchantment'],
+      statics: [
+        {
+          affects: { anyOfTypes: ['creature'], controller: 'you' },
+          power: 1,
+          toughness: 1,
+          label: 'creatures you control get +1/+1',
+        },
+      ],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+    backFaceCastZones: ['exile'],
+    backFaceFreeCast: true,
+  },
+  // (As a Siege enters, choose an opponent to protect it. You and others can attack it. When it's defeated, exile it, then cast it transformed.)
+  // When this Siege enters, you gain 4 life and draw a card.
+  {
+    id: 'dcbd8b15-e5fd-4f0d-ba2d-06f018b64fb3',
+    name: 'Invasion of Dominaria',
+    types: ['battle'],
+    cost: { generic: 2, W: 1 },
+    defense: 5,
+    subtypes: ['siege'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          { primitive: 'gainLife', params: { amount: 4 } },
+          { primitive: 'drawCards', params: { count: 1 } },
+        ],
+        label: 'Enters: you gain 4 life and draw a card',
+      },
+    ],
+    backFace: {
+      id: 'dcbd8b15-e5fd-4f0d-ba2d-06f018b64fb3#back',
+      name: 'Serra Faithkeeper',
+      types: ['creature'],
+      power: 4,
+      toughness: 4,
+      keywords: { flying: true, vigilance: true },
+      subtypes: ['angel'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+    backFaceCastZones: ['exile'],
+    backFaceFreeCast: true,
+  },
+  // (As a Siege enters, choose an opponent to protect it. You and others can attack it. When it's defeated, exile it, then cast it transformed.)
+  // When this Siege enters, put a +1/+1 counter on each creature you control.
+  {
+    id: 'a9855326-8958-4b03-b81b-1f9e4d1335b1',
+    name: 'Invasion of Moag',
+    types: ['battle'],
+    cost: { generic: 2, W: 1, G: 1 },
+    defense: 5,
+    subtypes: ['siege'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, each: true, scope: 'you', filter: {} } }],
+        label: 'Enters: put a +1/+1 counter on each creature you control',
+      },
+    ],
+    backFace: {
+      id: 'a9855326-8958-4b03-b81b-1f9e4d1335b1#back',
+      name: 'Bloomwielder Dryads',
+      types: ['creature'],
+      power: 3,
+      toughness: 3,
+      keywords: { ward: 2 },
+      subtypes: ['dryad'],
+      triggers: [
+        {
+          condition: { on: 'endStep', who: 'you' },
+          effects: [{ primitive: 'addCounters', params: { amount: 1, targets: 'creatureYouControl' } }],
+          label: 'your end step: put a +1/+1 counter on target creature you control',
+          targets: 'creatureYouControl',
+        },
+      ],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+    backFaceCastZones: ['exile'],
+    backFaceFreeCast: true,
+  },
+  // Choose one —
+  // • Draw X cards.
+  // • Invoke the Firemind deals X damage to any target.
+  {
+    id: '2037659f-2efe-4321-afaf-961bbec35e9e',
+    name: 'Invoke the Firemind',
+    types: ['sorcery'],
+    cost: { U: 2, R: 1 },
+    xCost: 1,
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Draw x cards',
+          effects: [{ primitive: 'drawCards', params: { count: { chosenX: true } } }],
+        },
+        {
+          id: 'mode2',
+          label: 'Invoke the Firemind deals x damage to any target',
+          effects: [{ primitive: 'dealDamage', params: { amount: { chosenX: true } } }],
+          targets: 'any',
+        },
+      ],
+    },
+  },
   // {T}: Add {R}.
   {
     id: '6c5cbab6-ee27-46f5-97a7-df85698d1e9f',
@@ -933,6 +4354,24 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     subtypes: ['myr'],
     produces: ['R'],
   },
+  // ({T}: Add {W} or {U}.)
+  // This land enters tapped.
+  // Cycling {2} ({2}, Discard this card: Draw a card.)
+  {
+    id: '406eabe2-df62-49e2-bb39-c0227509d875',
+    name: 'Irrigated Farmland',
+    types: ['land'],
+    subtypes: ['plains', 'island'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { generic: 2 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {2}',
+      },
+    ],
+    producesOptions: [{ W: 1 }, { U: 1 }],
+  },
   // This land enters tapped.
   // {T}: Add {U} or {R}.
   {
@@ -942,6 +4381,34 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     subtypes: ['gate'],
     entersTapped: true,
     producesOptions: [{ U: 1 }, { R: 1 }],
+  },
+  // {1}, {T}: Add {U}{R}.
+  {
+    id: '2fda4fe7-8b0c-489c-a000-6d358e614e34',
+    name: 'Izzet Signet',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ U: 1, R: 1 }], cost: { mana: { generic: 1 } } }],
+  },
+  // Flying
+  // {1}{W}: Put a +1/+1 counter on Jenara.
+  {
+    id: 'd06cd670-7ffc-4295-97d1-0eff042fb6d5',
+    name: 'Jenara, Asura of War',
+    types: ['creature'],
+    cost: { W: 1, U: 1, G: 1 },
+    power: 3,
+    toughness: 3,
+    legendary: true,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, W: 1 } },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: '{1}{w}: put a +1/+1 counter on ~',
+      },
+    ],
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -960,6 +4427,33 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // Return target creature to its owner's hand.
+  // Madness {U} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: '761ebd6a-8f53-46fa-b3cd-16616b773007',
+    name: 'Just the Wind',
+    types: ['instant'],
+    cost: { generic: 1, U: 1 },
+    madness: { U: 1 },
+    effects: [{ primitive: 'returnToHand', params: { targets: 'creature' } }],
+  },
+  // Counter target spell unless its controller pays {1}.
+  {
+    id: '941a4b14-ea2a-4bd0-8cc2-d609f80df32c',
+    name: 'Jwari Disruption',
+    types: ['instant'],
+    cost: { generic: 1, U: 1 },
+    effects: [{ primitive: 'counterUnlessPaid', params: { targets: 'spell', unlessPaid: { generic: 1 } } }],
+    backFace: {
+      id: '941a4b14-ea2a-4bd0-8cc2-d609f80df32c#back',
+      name: 'Jwari Ruins',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['U'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
   {
     id: 'df7f697e-6886-4897-a024-61ae225c1b34',
     name: 'Kalonian Tusker',
@@ -968,6 +4462,79 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 3,
     toughness: 3,
     subtypes: ['beast'],
+  },
+  // Whenever an opponent casts a noncreature spell, that player loses 2 life and you gain 2 life.
+  {
+    id: '4987c458-604a-4727-b360-170616e91e67',
+    name: 'Kambal, Consul of Allocation',
+    types: ['creature'],
+    cost: { generic: 1, W: 1, B: 1 },
+    power: 2,
+    toughness: 3,
+    legendary: true,
+    subtypes: ['human', 'advisor'],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'opponent', spellTypeNoneOf: ['creature'] },
+        effects: [
+          { primitive: 'loseLife', params: { amount: 2, whichPlayer: 'triggering' } },
+          { primitive: 'gainLife', params: { amount: 2 } },
+        ],
+        label: 'Opponent casts noncreature: that player loses 2 life and you gain 2 life',
+      },
+    ],
+  },
+  // At the beginning of each player's draw step, that player draws an additional card.
+  {
+    id: '38cfe4a0-6ead-435b-9f86-928205c0a52c',
+    name: 'Kami of the Crescent Moon',
+    types: ['creature'],
+    cost: { U: 2 },
+    power: 1,
+    toughness: 3,
+    legendary: true,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'drawStep', who: 'any' },
+        effects: [{ primitive: 'drawCards', params: { count: 1, whichPlayer: 'triggering' } }],
+        label: 'each player\'s draw step: that player draws an additional card',
+      },
+    ],
+  },
+  // {T}: Add {C}.
+  // {T}: Add {R} or {G}. This land deals 1 damage to you.
+  {
+    id: 'bd912666-f37f-4767-af6f-9e6d0fcccacf',
+    name: 'Karplusan Forest',
+    types: ['land'],
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ R: 1 }, { G: 1 }], rider: { damageToController: 1 } }],
+  },
+  // Landfall — Whenever a land you control enters, this creature gets +2/+2 until end of turn.
+  {
+    id: '2ac1c95c-2a9d-40bc-9cad-9cadfa3f19f7',
+    name: 'Kazandu Mammoth',
+    types: ['creature'],
+    cost: { generic: 1, G: 2 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['elephant'],
+    triggers: [
+      {
+        condition: { on: 'permanentEnters', who: 'you', permanentFilter: { anyOfTypes: ['land'] } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'land (you) enters: ~ gets +2/+2 until end of turn',
+      },
+    ],
+    backFace: {
+      id: '2ac1c95c-2a9d-40bc-9cad-9cadfa3f19f7#back',
+      name: 'Kazandu Valley',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['G'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
   },
   // Whenever you cast an instant or sorcery spell, this creature gets +3/+0 until end of turn.
   {
@@ -1014,13 +4581,38 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 1, toughness: 0, keywords: { flying: true } },
     },
   },
+  // Search your library for up to two basic land cards, reveal those cards, put one onto the battlefield tapped and the other into your hand, then shuffle.
+  {
+    id: '1593ea18-2f2f-4ab4-83fb-6ccc0bec8a90',
+    name: 'Kodama\'s Reach',
+    types: ['sorcery'],
+    cost: { generic: 2, G: 1 },
+    subtypes: ['arcane'],
+    effects: [
+      {
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 2,
+          filter: { anyOfTypes: ['land'] },
+          nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+          route: [{ destination: 'battlefield', tapped: true }, { destination: 'hand' }],
+        },
+      },
+    ],
+  },
   // Create two 1/1 red Goblin creature tokens.
   {
     id: '9cfe86ae-eebe-44aa-a956-4b3e9e621105',
     name: 'Krenko\'s Command',
     types: ['sorcery'],
     cost: { generic: 1, R: 1 },
-    effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Goblin', count: 2 } }],
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 1, toughness: 1, name: 'Goblin', colors: ['R'], subtypes: ['Goblin'], count: 2 },
+      },
+    ],
   },
   // Target creature gets -3/-3 until end of turn.
   {
@@ -1037,7 +4629,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['sorcery'],
     cost: { R: 1 },
     subtypes: ['arcane'],
-    effects: [{ primitive: 'dealDamage', params: { amount: 3, targets: 'player' } }],
+    effects: [{ primitive: 'dealDamage', params: { amount: 3, targets: 'playerOrPlaneswalker' } }],
   },
   // {T}: Add {B}.
   {
@@ -1115,6 +4707,29 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     keywords: { haste: true },
     subtypes: ['elemental'],
   },
+  // Equipped creature has haste and shroud. (It can't be the target of spells or abilities.)
+  // Equip {0}
+  {
+    id: 'ca204b66-8d0c-431a-8d34-282f7c2d17da',
+    name: 'Lightning Greaves',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 0 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {0}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {0}',
+      modifies: { power: 0, toughness: 0, keywords: { haste: true, shroud: true } },
+    },
+  },
   // Lightning Helix deals 3 damage to any target and you gain 3 life.
   {
     id: '800c258a-cfc4-4a54-a667-065ea8dea69e',
@@ -1134,6 +4749,37 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, R: 1 },
     effects: [{ primitive: 'dealDamage', params: { amount: 3 } }],
   },
+  // Create two 1/1 white Spirit creature tokens with flying.
+  // Flashback {1}{B} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: '0b8c3337-04dd-4798-8203-6d8b8cfb936b',
+    name: 'Lingering Souls',
+    types: ['sorcery'],
+    cost: { generic: 2, W: 1 },
+    flashback: { generic: 1, B: 1 },
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: {
+          power: 1,
+          toughness: 1,
+          name: 'Spirit',
+          colors: ['W'],
+          subtypes: ['Spirit'],
+          count: 2,
+          keywords: { flying: true },
+        },
+      },
+    ],
+  },
+  // {T}: Add {C}.
+  // {T}: Add {B} or {G}. This land deals 1 damage to you.
+  {
+    id: '32116127-cf96-4a1b-8896-a1ebc087b597',
+    name: 'Llanowar Wastes',
+    types: ['land'],
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ B: 1 }, { G: 1 }], rider: { damageToController: 1 } }],
+  },
   // When this creature enters, you gain 4 life.
   {
     id: '626f1dc3-3b14-4873-902f-ffec5487a97d',
@@ -1150,6 +4796,58 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         label: 'Enters: you gain 4 life',
       },
     ],
+  },
+  // This land enters tapped.
+  // {T}: Add {U}.
+  // Cycling {U} ({U}, Discard this card: Draw a card.)
+  {
+    id: '765863c8-1be0-4bb1-9e9c-db7701cffde3',
+    name: 'Lonely Sandbar',
+    types: ['land'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { U: 1 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {U}',
+      },
+    ],
+    produces: ['U'],
+  },
+  // Vigilance
+  {
+    id: 'c8f6cc1f-b7e4-470d-8d48-ef848d7c1116',
+    name: 'Lonesome Unicorn',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { vigilance: true },
+    subtypes: ['unicorn'],
+    backFace: {
+      id: 'c8f6cc1f-b7e4-470d-8d48-ef848d7c1116#back',
+      name: 'Rider in Need',
+      types: ['sorcery'],
+      cost: { generic: 2, W: 1 },
+      keywords: { vigilance: true },
+      subtypes: ['adventure'],
+      effects: [
+        {
+          primitive: 'makeToken',
+          params: {
+            power: 2,
+            toughness: 2,
+            name: 'Knight',
+            colors: ['W'],
+            subtypes: ['Knight'],
+            keywords: { vigilance: true },
+          },
+        },
+      ],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
   },
   // Equipped creature gets +3/+0 and has trample and lifelink.
   // Equip {3}
@@ -1174,6 +4872,126 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 3, toughness: 0, keywords: { trample: true, lifelink: true } },
     },
   },
+  // Flying
+  // At the beginning of your upkeep, you may create a 1/1 white Spirit creature token with flying.
+  {
+    id: '8d7cf56c-94fd-47d8-9e0f-cd3163688983',
+    name: 'Luminous Angel',
+    types: ['creature'],
+    cost: { generic: 4, W: 3 },
+    power: 4,
+    toughness: 4,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may create a 1/1 white spirit creature token with flying',
+              valence: 'gain',
+              effects: [
+                {
+                  primitive: 'makeToken',
+                  params: {
+                    power: 1,
+                    toughness: 1,
+                    name: 'Spirit',
+                    colors: ['W'],
+                    subtypes: ['Spirit'],
+                    keywords: { flying: true },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        label: 'your upkeep: you may create a 1/1 white spirit creature token with flying',
+      },
+    ],
+  },
+  // ({T}: Add {G} or {W}.)
+  // This land enters tapped.
+  // When this land enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)
+  {
+    id: 'd51831b1-7394-456e-a1de-6787a59f5932',
+    name: 'Lush Portico',
+    types: ['land'],
+    subtypes: ['forest', 'plains'],
+    entersTapped: true,
+    producesOptions: [{ G: 1 }, { W: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'surveil' }], label: 'Enters: surveil 1' }],
+  },
+  // Flying
+  // First strike (This creature deals combat damage before creatures without first strike.)
+  // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
+  // Other Angels you control get +1/+1 and have lifelink.
+  {
+    id: '592c91fc-6430-4c76-9460-65f047350f67',
+    name: 'Lyra Dawnbringer',
+    types: ['creature'],
+    cost: { generic: 3, W: 2 },
+    power: 5,
+    toughness: 5,
+    legendary: true,
+    keywords: { flying: true, firstStrike: true, lifelink: true },
+    subtypes: ['angel'],
+    statics: [
+      {
+        affects: { anyOfSubtypes: ['angel'], controller: 'you', excludeSource: true },
+        power: 1,
+        toughness: 1,
+        keywords: { lifelink: true },
+        label: 'other angels you control get +1/+1 and have lifelink',
+      },
+    ],
+  },
+  // Magma Jet deals 2 damage to any target. Scry 2.
+  {
+    id: '2f292253-64d3-4cf2-881f-a3eea4fda388',
+    name: 'Magma Jet',
+    types: ['instant'],
+    cost: { generic: 1, R: 1 },
+    effects: [
+      { primitive: 'dealDamage', params: { amount: 2 } },
+      { primitive: 'scry', params: { count: 2 } },
+    ],
+  },
+  // When this creature enters, return target creature to its owner's hand.
+  {
+    id: '67a3541c-8408-40c8-b44f-90035b860f57',
+    name: 'Man-o\'-War',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['jellyfish'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'returnToHand', params: { targets: 'creature' } }],
+        label: 'Enters: return target creature to its owner\'s hand',
+        targets: 'creature',
+      },
+    ],
+  },
+  // {T}, Pay 1 life: Add one mana of any color.
+  {
+    id: 'd0ee5bdc-2b69-4b73-9a20-ffcc18783b29',
+    name: 'Mana Confluence',
+    types: ['land'],
+    manaAbilities: [{ produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }], cost: { life: 1 } }],
+  },
+  // Counter target spell unless its controller pays {3}.
+  {
+    id: 'c61fe162-2202-4e56-9ba0-393547f9875f',
+    name: 'Mana Leak',
+    types: ['instant'],
+    cost: { generic: 1, U: 1 },
+    effects: [{ primitive: 'counterUnlessPaid', params: { targets: 'spell', unlessPaid: { generic: 3 } } }],
+  },
   // {T}: Add one mana of any color.
   {
     id: 'bd9e416a-89b3-4912-be9b-49fce6a93dc9',
@@ -1181,6 +4999,23 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['artifact'],
     cost: { generic: 3 },
     producesOptions: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+  },
+  // Whenever you gain life, each opponent loses 1 life.
+  {
+    id: '814b87fe-2a75-4ff2-8637-7e69e3fb285b',
+    name: 'Marauding Blight-Priest',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 3,
+    toughness: 2,
+    subtypes: ['vampire', 'cleric'],
+    triggers: [
+      {
+        condition: { on: 'gainLife', who: 'you' },
+        effects: [{ primitive: 'loseLife', params: { amount: 1, whichPlayer: 'opponent' } }],
+        label: 'Gain life: each opponent loses 1 life',
+      },
+    ],
   },
   // This artifact enters tapped.
   // {T}: Add {W}.
@@ -1239,6 +5074,80 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 1,
     subtypes: ['construct'],
   },
+  {
+    id: '4f5096d4-bbb5-4a48-9dd0-9dabdd2ac125',
+    name: 'Merfolk Secretkeeper',
+    types: ['creature'],
+    cost: { U: 1 },
+    power: 0,
+    toughness: 4,
+    subtypes: ['merfolk', 'wizard'],
+    backFace: {
+      id: '4f5096d4-bbb5-4a48-9dd0-9dabdd2ac125#back',
+      name: 'Venture Deeper',
+      types: ['sorcery'],
+      cost: { U: 1 },
+      subtypes: ['adventure'],
+      effects: [{ primitive: 'mill', params: { amount: 4, targets: 'player' } }],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
+  // ({T}: Add {W} or {U}.)
+  // This land enters tapped.
+  // When this land enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)
+  {
+    id: 'ccfb8b4d-651c-418a-aa19-cb23105b3f2f',
+    name: 'Meticulous Archive',
+    types: ['land'],
+    subtypes: ['plains', 'island'],
+    entersTapped: true,
+    producesOptions: [{ W: 1 }, { U: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'surveil' }], label: 'Enters: surveil 1' }],
+  },
+  // Choose one —
+  // • Midnight Charm deals 1 damage to target creature and you gain 1 life.
+  // • Target creature gains first strike until end of turn.
+  // • Tap target creature.
+  {
+    id: 'ed228f67-3adf-46d4-ac45-e0278592850d',
+    name: 'Midnight Charm',
+    types: ['instant'],
+    cost: { B: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Midnight Charm deals 1 damage to target creature and you gain 1 life',
+          effects: [
+            { primitive: 'dealDamage', params: { amount: 1, targets: 'creature' } },
+            { primitive: 'gainLife', params: { amount: 1 } },
+          ],
+          targets: 'creature',
+        },
+        {
+          id: 'mode2',
+          label: 'Target creature gains first strike until end of turn',
+          effects: [
+            {
+              primitive: 'grantKeywordUntilEndOfTurn',
+              params: { keywords: { firstStrike: true }, targets: 'creature' },
+            },
+          ],
+          targets: 'creature',
+        },
+        {
+          id: 'mode3',
+          label: 'Tap target creature',
+          effects: [{ primitive: 'tapTarget', params: { targets: 'creature' } }],
+          targets: 'creature',
+        },
+      ],
+    },
+  },
   // Target creature gets +7/+7 until end of turn.
   {
     id: '8331f281-819b-4a0b-bad7-bd86dbedb877',
@@ -1246,6 +5155,75 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['instant'],
     cost: { generic: 3, G: 1 },
     effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 7, toughness: 7, targets: 'creature' } }],
+  },
+  // Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.
+  // Cycling {2} ({2}, Discard this card: Draw a card.)
+  {
+    id: 'db4907f3-4071-47c4-9329-96b4813435be',
+    name: 'Migration Path',
+    types: ['sorcery'],
+    cost: { generic: 3, G: 1 },
+    cycling: [
+      {
+        cost: { generic: 2 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {2}',
+      },
+    ],
+    effects: [
+      {
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 2,
+          filter: { anyOfTypes: ['land'] },
+          nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+          destination: 'battlefield',
+          tapped: true,
+        },
+      },
+    ],
+  },
+  // {T}: Add {C}.
+  // {2}, {T}: Each player draws a card.
+  {
+    id: 'a4580a1d-141e-449b-9018-e0258130634b',
+    name: 'Mikokoro, Center of the Sea',
+    types: ['land'],
+    legendary: true,
+    produces: ['C'],
+    activated: [
+      {
+        cost: { mana: { generic: 2 }, tap: true },
+        effects: [{ primitive: 'drawCards', params: { count: 1, whichPlayer: 'each' } }],
+        label: '{2}, {t}: each player draws a card',
+      },
+    ],
+  },
+  // Target player discards two cards.
+  {
+    id: 'ad44cf74-b717-48fb-9fa2-77512024d76a',
+    name: 'Mind Rot',
+    types: ['sorcery'],
+    cost: { generic: 2, B: 1 },
+    effects: [{ primitive: 'discardCard', params: { count: 2, who: 'targetPlayer', targets: 'player' } }],
+  },
+  // Target opponent mills seven cards.
+  {
+    id: '4d8592d7-2e36-4a7a-be9e-7c8f512d5f62',
+    name: 'Mind Sculpt',
+    types: ['sorcery'],
+    cost: { generic: 1, U: 1 },
+    effects: [{ primitive: 'mill', params: { amount: 7, targets: 'player' } }],
+  },
+  // Draw X cards.
+  {
+    id: '3428287b-cfd5-45bc-b5f9-1e3f5a425a68',
+    name: 'Mind Spring',
+    types: ['sorcery'],
+    cost: { U: 2 },
+    xCost: 1,
+    effects: [{ primitive: 'drawCards', params: { count: { chosenX: true } } }],
   },
   // {T}: Add {C}.
   // {1}, {T}, Sacrifice this artifact: Draw a card.
@@ -1263,6 +5241,93 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  {
+    id: 'df555f60-2164-49dc-be67-00aca9eb0d45',
+    name: 'Minecart Daredevil',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 4,
+    toughness: 2,
+    subtypes: ['dwarf', 'knight'],
+    backFace: {
+      id: 'df555f60-2164-49dc-be67-00aca9eb0d45#back',
+      name: 'Ride the Rails',
+      types: ['instant'],
+      cost: { generic: 1, R: 1 },
+      subtypes: ['adventure'],
+      effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 1, targets: 'creature' } }],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
+  // Double strike, protection from black and from green
+  {
+    id: 'fe69d9bd-2a60-4b33-a0d8-1ca18c2b6705',
+    name: 'Mirran Crusader',
+    types: ['creature'],
+    cost: { generic: 1, W: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { doubleStrike: true, protectionFrom: ['black', 'green'] },
+    subtypes: ['human', 'knight'],
+  },
+  // This land enters tapped.
+  // Indestructible
+  // {T}: Add {U} or {B}.
+  {
+    id: '33ee23bc-6327-4a54-a704-dfd83be36bb5',
+    name: 'Mistvault Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ U: 1 }, { B: 1 }],
+  },
+  // Create two 2/2 black Zombie creature tokens.
+  // Flashback {5}{B}{B} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'ce87e5ed-2562-4563-9a5b-bd53c04ec4a5',
+    name: 'Moan of the Unhallowed',
+    types: ['sorcery'],
+    cost: { generic: 2, B: 2 },
+    flashback: { generic: 5, B: 2 },
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 2, toughness: 2, name: 'Zombie', colors: ['B'], subtypes: ['Zombie'], count: 2 },
+      },
+    ],
+  },
+  // Prevent all combat damage that would be dealt this turn.
+  // Flashback {2}{G} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'b6d22228-a45e-4296-9ae2-1649e04b1c53',
+    name: 'Moment\'s Peace',
+    types: ['instant'],
+    cost: { generic: 1, G: 1 },
+    flashback: { generic: 2, G: 1 },
+    effects: [
+      {
+        primitive: 'preventDamage',
+        params: { combat: true, label: 'prevent all combat damage that would be dealt this turn' },
+      },
+    ],
+  },
+  // Return target creature card from your graveyard to your hand.
+  // Flashback {4}{B} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: '0b8a508b-20c0-4a87-a73a-08af72c39a0a',
+    name: 'Morgue Theft',
+    types: ['sorcery'],
+    cost: { generic: 1, B: 1 },
+    flashback: { generic: 4, B: 1 },
+    effects: [
+      {
+        primitive: 'returnFromGraveyard',
+        params: { count: 1, filter: { anyOfTypes: ['creature'] } },
+      },
+    ],
+  },
   // This artifact enters tapped.
   // {T}: Add {G}.
   {
@@ -1273,6 +5338,19 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     entersTapped: true,
     produces: ['G'],
   },
+  // Metalcraft — {T}: Add one mana of any color. Activate only if you control three or more artifacts.
+  {
+    id: 'de2440de-e948-4811-903c-0bbe376ff64d',
+    name: 'Mox Opal',
+    types: ['artifact'],
+    legendary: true,
+    manaAbilities: [
+      {
+        produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+        restriction: { controlsTypeAtLeast: { type: 'artifact', count: 3 } },
+      },
+    ],
+  },
   // Destroy target creature.
   {
     id: '938b4e2c-88d9-4637-bc00-e228920c9a78',
@@ -1280,6 +5358,78 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['instant'],
     cost: { generic: 1, B: 2 },
     effects: [{ primitive: 'destroyTarget', params: { targets: 'creature' } }],
+  },
+  // Sacrifice this creature: Put a +1/+1 counter on target creature.
+  {
+    id: '1a4ffc1e-2f5e-446a-b1e8-32385b3c083b',
+    name: 'Myr Scrapling',
+    types: ['artifact', 'creature'],
+    cost: { generic: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['myr'],
+    activated: [
+      {
+        cost: { sacrificeSelf: true },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, targets: 'creature' } }],
+        label: 'Sacrifice ~: put a +1/+1 counter on target creature',
+      },
+    ],
+  },
+  // {T}: Add {C}.
+  // {W/U}, {T}: Add {W}{W}, {W}{U}, or {U}{U}.
+  {
+    id: 'e9f5feb2-2c1a-46ce-885a-4f378d7d10af',
+    name: 'Mystic Gate',
+    types: ['land'],
+    manaAbilities: [
+      { produces: [{ C: 1 }] },
+      { produces: [{ W: 2 }, { W: 1, U: 1 }, { U: 2 }], cost: { mana: { hybrid: [['W', 'U']] } } },
+    ],
+  },
+  // Copy target instant or sorcery spell, then return it to its owner's hand. You may choose new targets for the copy.
+  {
+    id: 'd55f6c70-321f-4fb4-bd33-0850ae1a7c36',
+    name: 'Narset\'s Reversal',
+    types: ['instant'],
+    cost: { U: 2 },
+    effects: [
+      { primitive: 'copySpell', params: { targets: 'instantOrSorcerySpell', mayRetarget: true } },
+      { primitive: 'returnSpellToHand', params: { targets: 'instantOrSorcerySpell' } },
+    ],
+  },
+  // Search your library for a Forest card, put that card onto the battlefield, then shuffle.
+  {
+    id: '78826359-fe63-44ad-adc4-a17ffcd710e4',
+    name: 'Nature\'s Lore',
+    types: ['sorcery'],
+    cost: { generic: 1, G: 1 },
+    effects: [
+      {
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 1,
+          filter: { anyOfTypes: ['land'], anyOfSubtypes: ['forest'] },
+          destination: 'battlefield',
+        },
+      },
+    ],
+  },
+  // {T}: Add {R}.
+  {
+    id: 'a9b8d020-4d72-4934-8942-df29ef19fc1d',
+    name: 'Needleverge Pathway',
+    types: ['land'],
+    produces: ['R'],
+    backFace: {
+      id: 'a9b8d020-4d72-4934-8942-df29ef19fc1d#back',
+      name: 'Pillarverge Pathway',
+      types: ['land'],
+      produces: ['W'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
   },
   {
     id: 'e876d1fc-3acd-41a3-a34b-2bfa83204393',
@@ -1301,6 +5451,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       { primitive: 'loseLife', params: { amount: 2 } },
     ],
   },
+  // Flying, protection from black
+  {
+    id: '9a642db9-c337-481c-b260-11e01f64e68e',
+    name: 'Nightwind Glider',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { flying: true, protectionFrom: ['black'] },
+    subtypes: ['human', 'rebel'],
+  },
   // Enchant creature
   // Enchanted creature gets +1/+2 and has flying.
   {
@@ -1316,6 +5477,140 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       label: 'Enchant creature',
       modifies: { power: 1, toughness: 2, keywords: { flying: true } },
     },
+  },
+  // Draw a card.
+  // Madness {U} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: '116ee88e-9e13-4f21-bc6a-efa994b5bf75',
+    name: 'Obsessive Search',
+    types: ['instant'],
+    cost: { U: 1 },
+    madness: { U: 1 },
+    effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+  },
+  // Flying
+  {
+    id: '396b088d-f9af-4ee1-843f-dbe1633f9cc8',
+    name: 'Obyra\'s Attendants',
+    types: ['creature'],
+    cost: { generic: 4, U: 1 },
+    power: 3,
+    toughness: 4,
+    keywords: { flying: true },
+    subtypes: ['faerie', 'wizard'],
+    backFace: {
+      id: '396b088d-f9af-4ee1-843f-dbe1633f9cc8#back',
+      name: 'Desperate Parry',
+      types: ['instant'],
+      cost: { generic: 1, U: 1 },
+      subtypes: ['adventure'],
+      effects: [
+        {
+          primitive: 'pumpUntilEndOfTurn',
+          params: { power: -4, toughness: 0, targets: 'creature' },
+        },
+      ],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
+  // Flash (You may cast this spell any time you could cast an instant.)
+  // When this enchantment enters, scry 2, then draw a card.
+  // {2}{U}, Sacrifice this enchantment: Scry 2. (Look at the top two cards of your library, then put any number of them on the bottom and the rest on top in any order.)
+  {
+    id: '41960d32-ddb5-42be-94b2-3a2e77ca148d',
+    name: 'Omen of the Sea',
+    types: ['enchantment'],
+    cost: { generic: 1, U: 1 },
+    keywords: { flash: true },
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          { primitive: 'scry', params: { count: 2 } },
+          { primitive: 'drawCards', params: { count: 1 } },
+        ],
+        label: 'Enters: scry 2, then draw a card',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2, U: 1 }, sacrificeSelf: true },
+        effects: [{ primitive: 'scry', params: { count: 2 } }],
+        label: '{2}{u}, sacrifice ~: scry 2',
+      },
+    ],
+  },
+  // At the beginning of each upkeep, if you control no Snakes, create a 1/1 black Snake creature token with deathtouch.
+  {
+    id: '55eca80c-dcd8-4c2f-aa0f-fb0aec7b80f7',
+    name: 'Ophiomancer',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'shaman'],
+    triggers: [
+      {
+        condition: {
+          on: 'upkeep',
+          who: 'any',
+          intervening: { kind: 'controlCount', filter: { anyOfSubtypes: ['snake'] }, max: 0 },
+        },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Snake',
+              colors: ['B'],
+              subtypes: ['Snake'],
+              keywords: { deathtouch: true },
+            },
+          },
+        ],
+        label: 'each upkeep: if you control no snakes, create a 1/1 black snake creature token with deathtouch',
+      },
+    ],
+  },
+  // Scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  // Draw a card.
+  {
+    id: '713332c1-5bd8-400f-bfff-c1ca0697a043',
+    name: 'Opt',
+    types: ['instant'],
+    cost: { U: 1 },
+    effects: [{ primitive: 'scry' }, { primitive: 'drawCards', params: { count: 1 } }],
+  },
+  // Flying
+  // This creature can't block.
+  {
+    id: '2db17cfc-0947-407f-bd53-d64a48eec314',
+    name: 'Order of Midnight',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true, cantBlock: true },
+    subtypes: ['human', 'knight'],
+    backFace: {
+      id: '2db17cfc-0947-407f-bd53-d64a48eec314#back',
+      name: 'Alter Fate',
+      types: ['sorcery'],
+      cost: { generic: 1, B: 1 },
+      subtypes: ['adventure'],
+      effects: [
+        {
+          primitive: 'returnFromGraveyard',
+          params: { count: 1, filter: { anyOfTypes: ['creature'] } },
+        },
+      ],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
   },
   // Flying
   {
@@ -1337,6 +5632,47 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     entersTapped: true,
     producesOptions: [{ W: 1 }, { B: 1 }],
   },
+  // {1}, {T}: Add {W}{B}.
+  {
+    id: 'de3dcb5d-775a-479f-99f5-d1883ed9b1b5',
+    name: 'Orzhov Signet',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ W: 1, B: 1 }], cost: { mana: { generic: 1 } } }],
+  },
+  // Surveil 3. (Look at the top three cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)
+  // Flashback {1}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'be668c2d-71ea-4346-8980-1fbf5e4cbed3',
+    name: 'Otherworldly Gaze',
+    types: ['instant'],
+    cost: { U: 1 },
+    flashback: { generic: 1, U: 1 },
+    effects: [{ primitive: 'surveil', params: { count: 3 } }],
+  },
+  // Counter target spell unless its controller pays {X}. You gain X life.
+  {
+    id: 'fa43d688-99de-4774-ac2d-2d01866eef58',
+    name: 'Overrule',
+    types: ['instant'],
+    cost: { W: 1, U: 1 },
+    xCost: 1,
+    effects: [
+      { primitive: 'counterUnlessPaid', params: { targets: 'spell', unlessPaidX: true } },
+      { primitive: 'gainLife', params: { amount: { chosenX: true } } },
+    ],
+  },
+  // First strike, protection from black and from red (This creature deals combat damage before creatures without first strike. It can't be blocked, targeted, dealt damage, or enchanted by anything black or red.)
+  {
+    id: 'fd8722e1-9c41-4037-ab7e-47e2aa9858a0',
+    name: 'Paladin en-Vec',
+    types: ['creature'],
+    cost: { generic: 1, W: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { firstStrike: true, protectionFrom: ['black', 'red'] },
+    subtypes: ['human', 'knight'],
+  },
   // {T}: Add {C}{C}.
   {
     id: '7b0767b8-b504-456e-93bd-218502f73b3d',
@@ -1347,6 +5683,45 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 2,
     subtypes: ['myr'],
     produces: ['C', 'C'],
+  },
+  // Ward {2} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.)
+  // Whenever you cast an artifact spell, put a +1/+1 counter on this creature.
+  {
+    id: '0ba86a50-13df-4b26-8b3a-9e3917ff850f',
+    name: 'Patchwork Automaton',
+    types: ['artifact', 'creature'],
+    cost: { generic: 2 },
+    power: 1,
+    toughness: 1,
+    keywords: { ward: 2 },
+    subtypes: ['construct'],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellType: 'artifact' },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: 'Cast artifact: put a +1/+1 counter on ~',
+      },
+    ],
+  },
+  // As this artifact enters, choose a creature type.
+  // Creatures you control of the chosen type get +1/+1.
+  // {T}: Add one mana of any color.
+  {
+    id: '4fb00dbe-1f82-4ba6-b18c-97e816d10d3a',
+    name: 'Patchwork Banner',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    asEntersChoice: { subject: 'creatureType' },
+    effects: [{ primitive: 'chooseAsEnters', params: {} }],
+    producesOptions: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'you', ofChosenSubtype: true },
+        power: 1,
+        toughness: 1,
+        label: 'creatures you control of the chosen type get +1/+1',
+      },
+    ],
   },
   // Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)
   // When this creature enters, you gain 7 life.
@@ -1373,6 +5748,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // This creature can't be blocked.
+  {
+    id: '23745133-e5e2-4ce3-b94a-73d0d3d8a013',
+    name: 'Phantom Warrior',
+    types: ['creature'],
+    cost: { generic: 1, U: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { unblockable: true },
+    subtypes: ['illusion', 'warrior'],
+  },
   {
     id: '7af75024-6c9b-4844-aeb6-81de25464822',
     name: 'Phyrexian Walker',
@@ -1380,6 +5766,50 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 0,
     toughness: 3,
     subtypes: ['phyrexian', 'construct'],
+  },
+  // Reach (This creature can block creatures with flying.)
+  // Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)
+  // Whenever another creature dies, each opponent loses 1 life.
+  {
+    id: 'd0e810bb-5f38-4045-a718-30d423c05659',
+    name: 'Poison-Tip Archer',
+    types: ['creature'],
+    cost: { generic: 2, B: 1, G: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { reach: true, deathtouch: true },
+    subtypes: ['elf', 'archer'],
+    triggers: [
+      {
+        condition: {
+          on: 'permanentDies',
+          who: 'any',
+          permanentFilter: { anyOfTypes: ['creature'] },
+          excludeSelf: true,
+        },
+        effects: [{ primitive: 'loseLife', params: { amount: 1, whichPlayer: 'opponent' } }],
+        label: 'another creature (any) dies: each opponent loses 1 life',
+      },
+    ],
+  },
+  // Scry 2, then draw a card. (To scry 2, look at the top two cards of your library, then put any number of them on the bottom and the rest on top in any order.)
+  {
+    id: 'ac641490-ca14-48d7-8cc4-b69ce984befa',
+    name: 'Preordain',
+    types: ['sorcery'],
+    cost: { U: 1 },
+    effects: [{ primitive: 'scry', params: { count: 2 } }, { primitive: 'drawCards', params: { count: 1 } }],
+  },
+  // Ward {3} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {3}.)
+  {
+    id: 'dfb13eca-55fd-4ac6-aee3-2bdbfe9e1c4e',
+    name: 'Punk Frogs',
+    types: ['creature'],
+    cost: { generic: 3, hybrid: [['G', 'U'], ['G', 'U']] },
+    power: 4,
+    toughness: 5,
+    keywords: { ward: 3 },
+    subtypes: ['frog', 'mutant', 'rebel'],
   },
   // Pyroclasm deals 2 damage to each creature.
   {
@@ -1421,7 +5851,12 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Raise the Alarm',
     types: ['instant'],
     cost: { generic: 1, W: 1 },
-    effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Soldier', count: 2 } }],
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 1, toughness: 1, name: 'Soldier', colors: ['W'], subtypes: ['Soldier'], count: 2 },
+      },
+    ],
   },
   // This land enters tapped.
   // {T}: Add {B} or {R}.
@@ -1432,6 +5867,311 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     subtypes: ['gate'],
     entersTapped: true,
     producesOptions: [{ B: 1 }, { R: 1 }],
+  },
+  // {1}, {T}: Add {B}{R}.
+  {
+    id: '3adb7681-977f-4a32-9ec8-51481b958268',
+    name: 'Rakdos Signet',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ B: 1, R: 1 }], cost: { mana: { generic: 1 } } }],
+  },
+  // Search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.
+  {
+    id: '8539f295-5d58-4436-a73a-b9277c4c7795',
+    name: 'Rampant Growth',
+    types: ['sorcery'],
+    cost: { generic: 1, G: 1 },
+    effects: [
+      {
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 1,
+          filter: { anyOfTypes: ['land'] },
+          nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+          destination: 'battlefield',
+          tapped: true,
+        },
+      },
+    ],
+  },
+  // ({T}: Add {B} or {R}.)
+  // This land enters tapped.
+  // When this land enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)
+  {
+    id: '04e5e84f-8fd4-43ab-8f9d-5b24646f7ae5',
+    name: 'Raucous Theater',
+    types: ['land'],
+    subtypes: ['swamp', 'mountain'],
+    entersTapped: true,
+    producesOptions: [{ B: 1 }, { R: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'surveil' }], label: 'Enters: surveil 1' }],
+  },
+  // This land enters tapped.
+  // Indestructible
+  // {T}: Add {W} or {U}.
+  {
+    id: '6cb37ac1-dd11-4a8c-bca5-ef44d828059f',
+    name: 'Razortide Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ W: 1 }, { U: 1 }],
+  },
+  // Scry 2, then draw two cards. You lose 2 life. (To scry 2, look at the top two cards of your library, then put any number of them on the bottom and the rest on top in any order.)
+  {
+    id: '5bf4d8d9-a2b2-4dba-ac05-9d4470a89db2',
+    name: 'Read the Bones',
+    types: ['sorcery'],
+    cost: { generic: 2, B: 1 },
+    effects: [
+      { primitive: 'scry', params: { count: 2 } },
+      { primitive: 'drawCards', params: { count: 2 } },
+      { primitive: 'loseLife', params: { amount: 2 } },
+    ],
+  },
+  // Target creature gets +3/+0 and gains haste until end of turn.
+  // Flashback {2}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: '45bee121-0beb-4901-9473-20e4704ba6dc',
+    name: 'Reckless Charge',
+    types: ['sorcery'],
+    cost: { R: 1 },
+    flashback: { generic: 2, R: 1 },
+    effects: [
+      { primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 0, targets: 'creature' } },
+      {
+        primitive: 'grantKeywordUntilEndOfTurn',
+        params: { keywords: { haste: true }, targets: 'creature' },
+      },
+    ],
+  },
+  // Trample
+  // Madness {2}{R} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: 'c9159396-81d3-4f81-88b4-dda163ff4b74',
+    name: 'Reckless Wurm',
+    types: ['creature'],
+    cost: { generic: 3, R: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { trample: true },
+    subtypes: ['wurm'],
+    madness: { generic: 2, R: 1 },
+  },
+  // {T}: Add one mana of any type that a land you control could produce.
+  {
+    id: '67f43ac6-2a58-4b53-b5d7-0330e2a252e2',
+    name: 'Reflecting Pool',
+    types: ['land'],
+    manaAbilities: [{ derivedColors: 'landsYouControl', derivedIncludesColorless: true }],
+  },
+  // Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)
+  // Copy target instant or sorcery spell. You may choose new targets for the copy.
+  {
+    id: '38394ee3-6726-4f91-bc25-36bce0c6aab9',
+    name: 'Reiterate',
+    types: ['instant'],
+    cost: { generic: 1, R: 2 },
+    buyback: { generic: 3 },
+    effects: [{ primitive: 'copySpell', params: { targets: 'instantOrSorcerySpell', mayRetarget: true } }],
+  },
+  // Flash
+  // Flying
+  // When this creature enters, you may exile target non-Angel creature you control, then return that card to the battlefield under your control.
+  {
+    id: 'dfbd3afc-9905-4cff-a4f4-df08a4d0a7fa',
+    name: 'Restoration Angel',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 3,
+    toughness: 4,
+    keywords: { flash: true, flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may exile target non-angel creature you control, then return that card to the battlefield under your control',
+              valence: 'gain',
+              effects: [{ primitive: 'blinkTarget', params: { targets: 'nonAngelCreatureYouControl' } }],
+            },
+          },
+        ],
+        label: 'Enters: you may exile target non-angel creature you control, then return that card to the battlefield under your control',
+        targets: 'nonAngelCreatureYouControl',
+      },
+    ],
+  },
+  // Copy target instant or sorcery spell. You may choose new targets for the copy.
+  {
+    id: 'a1f55890-31c5-4ed4-a2cd-7a4a9f05f8ca',
+    name: 'Reverberate',
+    types: ['instant'],
+    cost: { R: 2 },
+    effects: [{ primitive: 'copySpell', params: { targets: 'instantOrSorcerySpell', mayRetarget: true } }],
+  },
+  // Put a +1/+1 counter on target creature. It gains indestructible until end of turn.
+  {
+    id: '8dd6d060-d023-48a6-85cb-7a5521b6257b',
+    name: 'Revitalizing Repast',
+    types: ['instant'],
+    cost: { hybrid: [['B', 'G']] },
+    effects: [
+      { primitive: 'addCounters', params: { amount: 1, targets: 'creature' } },
+      { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords: { indestructible: true } } },
+    ],
+    backFace: {
+      id: '8dd6d060-d023-48a6-85cb-7a5521b6257b#back',
+      name: 'Old-Growth Grove',
+      types: ['land'],
+      entersTapped: true,
+      producesOptions: [{ B: 1 }, { G: 1 }],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
+  // Ward {3} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {3}.)
+  {
+    id: 'ec47cf67-2580-464f-8118-7eabea5be11c',
+    name: 'Rimeshield Frost Giant',
+    types: ['creature'],
+    cost: { generic: 3, U: 2 },
+    power: 4,
+    toughness: 5,
+    keywords: { ward: 3 },
+    subtypes: ['giant', 'warrior'],
+  },
+  // This creature can't block.
+  {
+    id: '24db950b-e4fe-42d0-977b-4957eb8229d9',
+    name: 'Rimrock Knight',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 3,
+    toughness: 1,
+    keywords: { cantBlock: true },
+    subtypes: ['dwarf', 'knight'],
+    backFace: {
+      id: '24db950b-e4fe-42d0-977b-4957eb8229d9#back',
+      name: 'Boulder Rush',
+      types: ['instant'],
+      cost: { R: 1 },
+      subtypes: ['adventure'],
+      effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0, targets: 'creature' } }],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
+  // Kicker {5} (You may pay an additional {5} as you cast this spell.)
+  // Create a token that's a copy of target creature. If this spell was kicked, create five of those tokens instead.
+  {
+    id: 'fb60739e-1dc3-481d-a056-ad72e665c680',
+    name: 'Rite of Replication',
+    types: ['sorcery'],
+    cost: { generic: 2, U: 2 },
+    kicker: { generic: 5 },
+    effects: [{ primitive: 'createTokenCopy', params: { targets: 'creature', count: 1, kickedCount: 5 } }],
+  },
+  // {T}: Add {U}.
+  {
+    id: '4924b3a4-a218-4783-8a4d-82361fdecc78',
+    name: 'Riverglide Pathway',
+    types: ['land'],
+    produces: ['U'],
+    backFace: {
+      id: '4924b3a4-a218-4783-8a4d-82361fdecc78#back',
+      name: 'Lavaglide Pathway',
+      types: ['land'],
+      produces: ['R'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
+  // Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
+  {
+    id: 'f18d8939-7ee8-4a44-a1c8-6ae3a08f52fd',
+    name: 'Road // Ruin',
+    types: ['instant', 'sorcery'],
+    cost: { generic: 3, R: 2, G: 1 },
+    frontFace: {
+      id: 'f18d8939-7ee8-4a44-a1c8-6ae3a08f52fd',
+      name: 'Road',
+      types: ['instant'],
+      cost: { generic: 2, G: 1 },
+      effects: [
+        {
+          primitive: 'searchLibrary',
+          params: {
+            who: 'controller',
+            count: 1,
+            filter: { anyOfTypes: ['land'] },
+            nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+            destination: 'battlefield',
+            tapped: true,
+          },
+        },
+      ],
+    },
+    backFace: {
+      id: 'f18d8939-7ee8-4a44-a1c8-6ae3a08f52fd#back',
+      name: 'Ruin',
+      types: ['sorcery'],
+      cost: { generic: 1, R: 2 },
+      effects: [
+        {
+          primitive: 'dealDamage',
+          params: { amount: { countOf: 'landsYouControl' }, targets: 'creature' },
+        },
+      ],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+    backFaceCastZones: ['graveyard'],
+  },
+  // Create a 6/6 green Wurm creature token.
+  // Flashback {3}{G} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'b8b9e6fd-b3ed-4fbc-8753-74018fa33caa',
+    name: 'Roar of the Wurm',
+    types: ['sorcery'],
+    cost: { generic: 6, G: 1 },
+    flashback: { generic: 3, G: 1 },
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 6, toughness: 6, name: 'Wurm', colors: ['G'], subtypes: ['Wurm'] },
+      },
+    ],
+  },
+  // Sacrifice a land. Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.
+  {
+    id: '65d63518-3261-40b5-87b8-19c152b29ee3',
+    name: 'Roiling Regrowth',
+    types: ['instant'],
+    cost: { generic: 2, G: 1 },
+    effects: [
+      {
+        primitive: 'sacrificeChosen',
+        params: { who: 'controller', filter: { anyOfTypes: ['land'] } },
+      },
+      {
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 2,
+          filter: { anyOfTypes: ['land'] },
+          nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+          destination: 'battlefield',
+          tapped: true,
+        },
+      },
+    ],
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -1450,6 +6190,60 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // {T}: Add {C}.
+  // {R/W}, {T}: Add {R}{R}, {R}{W}, or {W}{W}.
+  {
+    id: '8e7641e1-e814-4d5a-9cb3-71ad2f4ceee8',
+    name: 'Rugged Prairie',
+    types: ['land'],
+    manaAbilities: [
+      { produces: [{ C: 1 }] },
+      { produces: [{ R: 2 }, { R: 1, W: 1 }, { W: 2 }], cost: { mana: { hybrid: [['R', 'W']] } } },
+    ],
+  },
+  // Reach, deathtouch
+  // {3}{G}: Put a +1/+1 counter on this creature.
+  {
+    id: 'd99efecd-1419-434b-9de6-5fbb04f57dda',
+    name: 'Ruins Recluse',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { reach: true, deathtouch: true },
+    subtypes: ['spider'],
+    activated: [
+      {
+        cost: { mana: { generic: 3, G: 1 } },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: '{3}{g}: put a +1/+1 counter on ~',
+      },
+    ],
+  },
+  // Flying
+  // When this creature enters, search your library for a card, put it into your hand, then shuffle.
+  {
+    id: '14aefe99-fb60-4f1c-a71f-7ffbe94c8b13',
+    name: 'Rune-Scarred Demon',
+    types: ['creature'],
+    cost: { generic: 5, B: 2 },
+    power: 6,
+    toughness: 6,
+    keywords: { flying: true },
+    subtypes: ['demon'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'searchLibrary',
+            params: { who: 'controller', count: 1, destination: 'hand' },
+          },
+        ],
+        label: 'Enters: search your library for a card, put it into your hand, then shuffle',
+      },
+    ],
+  },
   {
     id: 'ec49dfcf-d16d-4621-af4b-4a6f09043221',
     name: 'Runeclaw Bear',
@@ -1459,6 +6253,76 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 2,
     subtypes: ['bear'],
   },
+  // This land enters tapped.
+  // Indestructible
+  // {T}: Add {R} or {W}.
+  {
+    id: 'a3faf70d-c034-4692-9e92-1922029e3852',
+    name: 'Rustvale Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ R: 1 }, { W: 1 }],
+  },
+  // Sacred Fire deals 2 damage to any target and you gain 2 life.
+  // Flashback {4}{R}{W} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: '812bf52c-37f5-41c9-8a69-009fddbafb3f',
+    name: 'Sacred Fire',
+    types: ['instant'],
+    cost: { W: 1, R: 1 },
+    flashback: { generic: 4, R: 1, W: 1 },
+    effects: [
+      { primitive: 'dealDamage', params: { amount: 2 } },
+      { primitive: 'gainLife', params: { amount: 2 } },
+    ],
+  },
+  // ({T}: Add {R} or {W}.)
+  // As this land enters, you may pay 2 life. If you don't, it enters tapped.
+  {
+    id: '45181cb8-2090-4471-ba90-e5a8f04d525f',
+    name: 'Sacred Foundry',
+    types: ['land'],
+    subtypes: ['mountain', 'plains'],
+    entersTappedUnlessLifePaid: 2,
+    producesOptions: [{ R: 1 }, { W: 1 }],
+  },
+  // Creatures you control have haste.
+  // −1: Target creature gets +2/+1 and gains haste until end of turn. Scry 1.
+  {
+    id: '80405d7a-f533-44bd-ac85-890476cf2b78',
+    name: 'Samut, Tyrant Smasher',
+    types: ['planeswalker'],
+    cost: { generic: 2, hybrid: [['R', 'G'], ['R', 'G']] },
+    loyalty: 5,
+    legendary: true,
+    subtypes: ['samut'],
+    activated: [
+      {
+        cost: { loyalty: -1 },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 2, toughness: 1, targets: 'creature' },
+          },
+          {
+            primitive: 'grantKeywordUntilEndOfTurn',
+            params: { keywords: { haste: true }, targets: 'creature' },
+          },
+          { primitive: 'scry' },
+        ],
+        timing: 'sorcery',
+        label: '−1: target creature gets +2/+1 and gains haste until end of turn. scry 1',
+      },
+    ],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'you' },
+        keywords: { haste: true },
+        label: 'creatures you control have haste',
+      },
+    ],
+  },
   {
     id: '60ba93eb-39e6-4af2-9c66-cd38f72daff2',
     name: 'Savannah Lions',
@@ -1467,6 +6331,34 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 1,
     subtypes: ['cat'],
+  },
+  // ({T}: Add {G} or {W}.)
+  // This land enters tapped.
+  // Cycling {2} ({2}, Discard this card: Draw a card.)
+  {
+    id: '3c87ea85-ca29-45a7-b5b2-758c62898b0a',
+    name: 'Scattered Groves',
+    types: ['land'],
+    subtypes: ['forest', 'plains'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { generic: 2 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {2}',
+      },
+    ],
+    producesOptions: [{ G: 1 }, { W: 1 }],
+  },
+  // Scry 2, then draw a card.
+  // Flashback {4}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: '3fb9f0d9-6514-4005-b65a-7929f7c4df06',
+    name: 'Scour All Possibilities',
+    types: ['sorcery'],
+    cost: { generic: 1, U: 1 },
+    flashback: { generic: 4, U: 1 },
+    effects: [{ primitive: 'scry', params: { count: 2 } }, { primitive: 'drawCards', params: { count: 1 } }],
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -1485,6 +6377,69 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // Kicker {1}{W} (You may pay an additional {1}{W} as you cast this spell.)
+  // Search your library for a basic land card, put it onto the battlefield tapped, then shuffle. If this spell was kicked, create two 1/1 white Soldier creature tokens.
+  {
+    id: '422aca0b-8e8f-4774-9a20-6f7a1cae967e',
+    name: 'Scout the Wilderness',
+    types: ['sorcery'],
+    cost: { generic: 2, G: 1 },
+    kicker: { generic: 1, W: 1 },
+    effects: [
+      {
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 1,
+          filter: { anyOfTypes: ['land'] },
+          nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+          destination: 'battlefield',
+          tapped: true,
+        },
+      },
+      {
+        primitive: 'ifKicked',
+        params: {
+          effects: [
+            {
+              primitive: 'makeToken',
+              params: {
+                power: 1,
+                toughness: 1,
+                name: 'Soldier',
+                colors: ['W'],
+                subtypes: ['Soldier'],
+                count: 2,
+              },
+            },
+          ],
+        },
+      },
+    ],
+  },
+  // At the beginning of your upkeep, each player draws a card.
+  // Whenever an opponent draws a card, that player loses 1 life.
+  {
+    id: '1d60c80d-9a95-4051-bbf7-02ca51ee1be2',
+    name: 'Scrawling Crawler',
+    types: ['artifact', 'creature'],
+    cost: { generic: 3 },
+    power: 3,
+    toughness: 2,
+    subtypes: ['phyrexian', 'construct'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [{ primitive: 'drawCards', params: { count: 1, whichPlayer: 'each' } }],
+        label: 'your upkeep: each player draws a card',
+      },
+      {
+        condition: { on: 'drawsCard', who: 'opponent' },
+        effects: [{ primitive: 'loseLife', params: { amount: 1, whichPlayer: 'triggering' } }],
+        label: 'an opponent draws: that player loses 1 life',
+      },
+    ],
+  },
   // Searing Spear deals 3 damage to any target.
   {
     id: 'aafd44c1-74a9-4aa7-a4a2-67eb39a07478',
@@ -1492,6 +6447,52 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['instant'],
     cost: { generic: 1, R: 1 },
     effects: [{ primitive: 'dealDamage', params: { amount: 3 } }],
+  },
+  // {T}: Add {U}.
+  {
+    id: '39451b4d-cd7a-40da-b457-cb51b609173f',
+    name: 'Seat of the Synod',
+    types: ['artifact', 'land'],
+    produces: ['U'],
+  },
+  // As this land enters, choose a creature type.
+  // {T}: Add {C}.
+  // {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type.
+  {
+    id: '79ba18fd-f184-43c1-86df-56ee18ce806c',
+    name: 'Secluded Courtyard',
+    types: ['land'],
+    asEntersChoice: { subject: 'creatureType' },
+    manaAbilities: [
+      { produces: [{ C: 1 }] },
+      {
+        produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+        spendRestriction: {
+          label: 'only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type',
+          allow: [
+            { purpose: 'cast', types: ['creature'], subtypeChosenBySource: true },
+            { purpose: 'activate', types: ['creature'], subtypeChosenBySource: true },
+          ],
+        },
+      },
+    ],
+  },
+  // This land enters tapped.
+  // {T}: Add {W}.
+  // Cycling {W} ({W}, Discard this card: Draw a card.)
+  {
+    id: '8dec6fcf-1254-4b1b-ba23-7a3e492a7241',
+    name: 'Secluded Steppe',
+    types: ['land'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { W: 1 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {W}',
+      },
+    ],
+    produces: ['W'],
   },
   // Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)
   {
@@ -1504,6 +6505,27 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     keywords: { deathtouch: true },
     subtypes: ['scorpion'],
   },
+  // Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)
+  // Target creature gets +3/+0 until end of turn.
+  {
+    id: '2effcd1c-5833-4e0e-bb67-2d2ffb22a014',
+    name: 'Seething Anger',
+    types: ['sorcery'],
+    cost: { R: 1 },
+    buyback: { generic: 3 },
+    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 0, targets: 'creature' } }],
+  },
+  // Flying, vigilance
+  {
+    id: '50372c54-359c-4ee6-9e21-1e40ba53652d',
+    name: 'Segovian Angel',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true, vigilance: true },
+    subtypes: ['angel'],
+  },
   // This land enters tapped.
   // {T}: Add {G} or {W}.
   {
@@ -1513,6 +6535,37 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     subtypes: ['gate'],
     entersTapped: true,
     producesOptions: [{ G: 1 }, { W: 1 }],
+  },
+  // {1}, {T}: Add {G}{W}.
+  {
+    id: '1436dd81-496e-42a5-b210-fb5b9cdf073f',
+    name: 'Selesnya Signet',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ G: 1, W: 1 }], cost: { mana: { generic: 1 } } }],
+  },
+  // Flying, lifelink
+  {
+    id: '38c588ae-7254-4fae-aa9a-03e2a5524492',
+    name: 'Seraph of Dawn',
+    types: ['creature'],
+    cost: { generic: 2, W: 2 },
+    power: 2,
+    toughness: 4,
+    keywords: { flying: true, lifelink: true },
+    subtypes: ['angel'],
+  },
+  // Flying
+  // Indestructible (Damage and effects that say "destroy" don't destroy this creature. If its toughness is 0 or less, it still dies.)
+  {
+    id: '8354b70e-43fc-4581-bb53-b913335bf460',
+    name: 'Seraph of the Suns',
+    types: ['creature'],
+    cost: { generic: 5, W: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { flying: true, indestructible: true },
+    subtypes: ['angel'],
   },
   // Enchant creature
   // Enchanted creature gets +2/+2 and has flying and vigilance. (Attacking doesn't cause it to tap.)
@@ -1529,6 +6582,85 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       label: 'Enchant creature',
       modifies: { power: 2, toughness: 2, keywords: { flying: true, vigilance: true } },
     },
+  },
+  // Flying (This creature can't be blocked except by creatures with flying or reach.)
+  // Vigilance (Attacking doesn't cause this creature to tap.)
+  // Other creatures you control have vigilance.
+  {
+    id: 'c50cd7e7-8d53-44af-ac96-3e104587bdb3',
+    name: 'Serra\'s Guardian',
+    types: ['creature'],
+    cost: { generic: 4, W: 2 },
+    power: 5,
+    toughness: 5,
+    keywords: { flying: true, vigilance: true },
+    subtypes: ['angel'],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'you', excludeSource: true },
+        keywords: { vigilance: true },
+        label: 'other creatures you control have vigilance',
+      },
+    ],
+  },
+  // Draw a card. Scry 2.
+  {
+    id: '56956afd-db53-4542-816b-490c8b0bbcf7',
+    name: 'Serum Visions',
+    types: ['sorcery'],
+    cost: { U: 1 },
+    effects: [{ primitive: 'drawCards', params: { count: 1 } }, { primitive: 'scry', params: { count: 2 } }],
+  },
+  // ({T}: Add {W} or {B}.)
+  // This land enters tapped.
+  // When this land enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)
+  {
+    id: '216a2a92-9ca3-4ca3-8af7-686c13b04290',
+    name: 'Shadowy Backstreet',
+    types: ['land'],
+    subtypes: ['plains', 'swamp'],
+    entersTapped: true,
+    producesOptions: [{ W: 1 }, { B: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'surveil' }], label: 'Enters: surveil 1' }],
+  },
+  // Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)
+  // Destroy target artifact.
+  {
+    id: '77953b7a-813e-45f5-ad7f-ab72a79a0112',
+    name: 'Shattering Pulse',
+    types: ['instant'],
+    cost: { generic: 1, R: 1 },
+    buyback: { generic: 3 },
+    effects: [{ primitive: 'destroyTarget', params: { targets: 'artifact' } }],
+  },
+  // ({T}: Add {R} or {G}.)
+  // This land enters tapped.
+  // Cycling {2} ({2}, Discard this card: Draw a card.)
+  {
+    id: 'db8d8643-3d0b-4f20-bf53-f4cd26a0e8df',
+    name: 'Sheltered Thicket',
+    types: ['land'],
+    subtypes: ['mountain', 'forest'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { generic: 2 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {2}',
+      },
+    ],
+    producesOptions: [{ R: 1 }, { G: 1 }],
+  },
+  // Flying, first strike, vigilance
+  {
+    id: 'd8c70f2f-985c-4982-97eb-99da3810e048',
+    name: 'Shepherd of the Lost',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true, firstStrike: true, vigilance: true },
+    subtypes: ['angel'],
   },
   // Flying
   // {R}: This creature gets +1/+0 until end of turn.
@@ -1549,6 +6681,14 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // {T}: Add {C}.
+  // {T}: Add {U} or {R}. This land deals 1 damage to you.
+  {
+    id: '0fe16212-66c3-4e45-a641-7391e9b2e304',
+    name: 'Shivan Reef',
+    types: ['land'],
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ U: 1 }, { R: 1 }], rider: { damageToController: 1 } }],
+  },
   // Shock deals 2 damage to any target.
   {
     id: 'a9d288b8-cdc1-4e55-a0c9-d6edfc95e65d',
@@ -1556,6 +6696,41 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['instant'],
     cost: { R: 1 },
     effects: [{ primitive: 'dealDamage', params: { amount: 2 } }],
+  },
+  // Target player draws two cards and loses 2 life.
+  {
+    id: 'c6207f6a-a624-4754-88f5-dbe700c841ff',
+    name: 'Sign in Blood',
+    types: ['sorcery'],
+    cost: { B: 2 },
+    effects: [
+      {
+        primitive: 'drawCards',
+        params: { count: 2, whichPlayer: 'targetPlayer', targets: 'player' },
+      },
+      { primitive: 'loseLife', params: { amount: 2, targetPlayer: true } },
+    ],
+  },
+  // Return target creature to its owner's hand.
+  // Flashback {4}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'c41641f0-1abf-4776-9dec-1882f2d9badd',
+    name: 'Silent Departure',
+    types: ['sorcery'],
+    cost: { U: 1 },
+    flashback: { generic: 4, U: 1 },
+    effects: [{ primitive: 'returnToHand', params: { targets: 'creature' } }],
+  },
+  // First strike, protection from red
+  {
+    id: 'aa7cd6e6-35a6-4c18-9d66-dc2a95206401',
+    name: 'Silver Knight',
+    types: ['creature'],
+    cost: { W: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { firstStrike: true, protectionFrom: ['red'] },
+    subtypes: ['human', 'knight'],
   },
   // {T}: Add {U}.
   {
@@ -1569,6 +6744,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     produces: ['U'],
   },
   // This land enters tapped.
+  // Indestructible
+  // {T}: Add {U} or {R}.
+  {
+    id: '081bfd50-a436-463b-9d2c-5bc8a32b387c',
+    name: 'Silverbluff Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ U: 1 }, { R: 1 }],
+  },
+  // This land enters tapped.
   // {T}: Add {G} or {U}.
   {
     id: 'e8705df9-6439-4930-91b6-229f818559af',
@@ -1577,6 +6763,54 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     subtypes: ['gate'],
     entersTapped: true,
     producesOptions: [{ G: 1 }, { U: 1 }],
+  },
+  // {1}, {T}: Add {G}{U}.
+  {
+    id: '44503105-3e13-408d-a44f-37d503c61d72',
+    name: 'Simic Signet',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ G: 1, U: 1 }], cost: { mana: { generic: 1 } } }],
+  },
+  // Counter target spell.
+  // Surveil 1. (Look at the top card of your library. You may put it into your graveyard.)
+  {
+    id: '973fd4d4-9255-4825-85b7-503606c4e932',
+    name: 'Sinister Sabotage',
+    types: ['instant'],
+    cost: { generic: 1, U: 2 },
+    effects: [{ primitive: 'counterSpell', params: { targets: 'spell' } }, { primitive: 'surveil' }],
+  },
+  // Equipped creature gets +1/-1.
+  // Whenever equipped creature dies, draw two cards.
+  // Equip {1}
+  {
+    id: '65986c1b-8e51-4604-b685-d82fa7d1263a',
+    name: 'Skullclamp',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'dies', watches: 'attachedHost' },
+        effects: [{ primitive: 'drawCards', params: { count: 2 } }],
+        label: 'Equipped creature dies: draw two cards',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 1 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {1}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {1}',
+      modifies: { power: 1, toughness: -1, keywords: {} },
+    },
   },
   // This artifact enters tapped.
   // {T}: Add {U}.
@@ -1587,6 +6821,32 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 2 },
     entersTapped: true,
     produces: ['U'],
+  },
+  // When this creature enters, you gain 2 life.
+  {
+    id: 'da9e3910-9a1c-43a9-9138-ca971b2bccae',
+    name: 'Skyclave Cleric',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 1,
+    toughness: 3,
+    subtypes: ['kor', 'cleric'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'gainLife', params: { amount: 2 } }],
+        label: 'Enters: you gain 2 life',
+      },
+    ],
+    backFace: {
+      id: 'da9e3910-9a1c-43a9-9138-ca971b2bccae#back',
+      name: 'Skyclave Basilica',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['W'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
   },
   // Flying, double strike
   {
@@ -1610,6 +6870,57 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     keywords: { flying: true, haste: true },
     subtypes: ['human', 'knight'],
   },
+  // This land enters tapped.
+  // Indestructible
+  // {T}: Add {R} or {G}.
+  {
+    id: 'e040a8e6-b90c-42d1-a1b1-771d954c61ab',
+    name: 'Slagwoods Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ R: 1 }, { G: 1 }],
+  },
+  // Flying
+  {
+    id: 'fc75cfec-e1f6-4cb5-8a3c-2f7b2c39c03f',
+    name: 'Smaug, the Great Calamity',
+    types: ['creature'],
+    cost: { generic: 5, R: 2 },
+    power: 5,
+    toughness: 5,
+    legendary: true,
+    keywords: { flying: true },
+    subtypes: ['dragon'],
+    backFace: {
+      id: 'fc75cfec-e1f6-4cb5-8a3c-2f7b2c39c03f#back',
+      name: 'Spew Flame',
+      types: ['sorcery'],
+      cost: { generic: 4, R: 1 },
+      subtypes: ['adventure'],
+      effects: [{ primitive: 'dealDamage', params: { amount: 5, targets: 'creature' } }],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
+  // Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn.
+  {
+    id: '81b61770-2ed5-4a50-84d0-97790002fc5a',
+    name: 'Song-Mad Treachery',
+    types: ['sorcery'],
+    cost: { generic: 3, R: 2 },
+    effects: [{ primitive: 'gainControl', params: { targets: 'creature', untap: true, haste: true } }],
+    backFace: {
+      id: '81b61770-2ed5-4a50-84d0-97790002fc5a#back',
+      name: 'Song-Mad Ruins',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['R'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
   // Sorin's Vengeance deals 10 damage to target player or planeswalker and you gain 10 life.
   {
     id: '75d9c036-4f0d-4b55-b0a4-096ca84748ca',
@@ -1617,9 +6928,183 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['sorcery'],
     cost: { generic: 4, B: 3 },
     effects: [
-      { primitive: 'dealDamage', params: { amount: 10, targets: 'player' } },
+      { primitive: 'dealDamage', params: { amount: 10, targets: 'playerOrPlaneswalker' } },
       { primitive: 'gainLife', params: { amount: 10 } },
     ],
+  },
+  // Trample
+  // Whenever another nontoken creature you control enters, you may draw a card.
+  {
+    id: '6b9194dd-2296-4879-ac5e-f89b18431df6',
+    name: 'Soul of the Harvest',
+    types: ['creature'],
+    cost: { generic: 4, G: 2 },
+    power: 6,
+    toughness: 6,
+    keywords: { trample: true },
+    subtypes: ['elemental'],
+    triggers: [
+      {
+        condition: {
+          on: 'permanentEnters',
+          who: 'you',
+          permanentFilter: { anyOfTypes: ['creature'], isToken: false },
+          excludeSelf: true,
+        },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may draw a card',
+              valence: 'gain',
+              effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+            },
+          },
+        ],
+        label: 'another nontoken creature (you) enters: you may draw a card',
+      },
+    ],
+  },
+  // You gain X life and draw X cards.
+  {
+    id: '71d83fca-e40e-4d0e-956d-d0d6da9cc472',
+    name: 'Sphinx\'s Revelation',
+    types: ['instant'],
+    cost: { W: 1, U: 2 },
+    xCost: 1,
+    effects: [
+      { primitive: 'gainLife', params: { amount: { chosenX: true } } },
+      { primitive: 'drawCards', params: { count: { chosenX: true } } },
+    ],
+  },
+  // Enchant creature
+  // Enchanted creature gets +1/+1 and has protection from creatures.
+  {
+    id: '81a51328-b995-4f3b-90bc-a20ae21dd254',
+    name: 'Spirit Mantle',
+    types: ['enchantment'],
+    cost: { generic: 1, W: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 1, toughness: 1, keywords: { protectionFrom: ['creatures'] } },
+    },
+  },
+  // At the beginning of each player's draw step, that player draws an additional card.
+  // Whenever a player draws a card, this enchantment deals 1 damage to that player.
+  {
+    id: '922cf963-2b1b-43ad-819e-6e49133e6aae',
+    name: 'Spiteful Visions',
+    types: ['enchantment'],
+    cost: { generic: 2, hybrid: [['B', 'R'], ['B', 'R']] },
+    triggers: [
+      {
+        condition: { on: 'drawStep', who: 'any' },
+        effects: [{ primitive: 'drawCards', params: { count: 1, whichPlayer: 'triggering' } }],
+        label: 'each player\'s draw step: that player draws an additional card',
+      },
+      {
+        condition: { on: 'drawsCard', who: 'any' },
+        effects: [{ primitive: 'dealDamage', params: { amount: 1, whichPlayer: 'triggering' } }],
+        label: 'a player draws: ~ deals 1 damage to that player',
+      },
+    ],
+  },
+  // Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
+  {
+    id: '6dd7e861-7ae2-49e6-a9ab-8fd761939e22',
+    name: 'Spring // Mind',
+    types: ['sorcery', 'instant'],
+    cost: { generic: 6, U: 2, G: 1 },
+    frontFace: {
+      id: '6dd7e861-7ae2-49e6-a9ab-8fd761939e22',
+      name: 'Spring',
+      types: ['sorcery'],
+      cost: { generic: 2, G: 1 },
+      effects: [
+        {
+          primitive: 'searchLibrary',
+          params: {
+            who: 'controller',
+            count: 1,
+            filter: { anyOfTypes: ['land'] },
+            nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+            destination: 'battlefield',
+            tapped: true,
+          },
+        },
+      ],
+    },
+    backFace: {
+      id: '6dd7e861-7ae2-49e6-a9ab-8fd761939e22#back',
+      name: 'Mind',
+      types: ['instant'],
+      cost: { generic: 4, U: 2 },
+      effects: [{ primitive: 'drawCards', params: { count: 2 } }],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+    backFaceCastZones: ['graveyard'],
+  },
+  // Flying, haste
+  // Whenever you cast a noncreature spell, put a +1/+1 counter on this creature.
+  {
+    id: 'a9d8ab76-70a4-475e-b87e-4737c090553a',
+    name: 'Sprite Dragon',
+    types: ['creature'],
+    cost: { U: 1, R: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true, haste: true },
+    subtypes: ['faerie', 'dragon'],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellTypeNoneOf: ['creature'] },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: 'Cast noncreature: put a +1/+1 counter on ~',
+      },
+    ],
+  },
+  // Create two 1/1 white Warrior creature tokens with vigilance.
+  {
+    id: '4ae2750e-3650-42df-a539-ea4cb72fa136',
+    name: 'Start // Finish',
+    types: ['instant', 'sorcery'],
+    cost: { generic: 4, W: 1, B: 1 },
+    frontFace: {
+      id: '4ae2750e-3650-42df-a539-ea4cb72fa136',
+      name: 'Start',
+      types: ['instant'],
+      cost: { generic: 2, W: 1 },
+      effects: [
+        {
+          primitive: 'makeToken',
+          params: {
+            power: 1,
+            toughness: 1,
+            name: 'Warrior',
+            colors: ['W'],
+            subtypes: ['Warrior'],
+            count: 2,
+            keywords: { vigilance: true },
+          },
+        },
+      ],
+    },
+    backFace: {
+      id: '4ae2750e-3650-42df-a539-ea4cb72fa136#back',
+      name: 'Finish',
+      types: ['sorcery'],
+      cost: { generic: 2, B: 1 },
+      additionalCost: { kind: 'sacrifice', filter: { anyOfTypes: ['creature'] }, label: 'Sacrifice a creature' },
+      effects: [{ primitive: 'destroyTarget', params: { targets: 'creature' } }],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+    backFaceCastZones: ['graveyard'],
   },
   // Defender (This creature can't attack.)
   {
@@ -1631,6 +7116,28 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 4,
     keywords: { defender: true },
     subtypes: ['wall'],
+  },
+  // Menace
+  // At the beginning of your upkeep, each player draws a card and loses 1 life.
+  {
+    id: '0d3bebc6-662a-4cd4-ad1e-aeed0c5e04f6',
+    name: 'Stormfist Crusader',
+    types: ['creature'],
+    cost: { B: 1, R: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { menace: true },
+    subtypes: ['human', 'knight'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          { primitive: 'drawCards', params: { count: 1, whichPlayer: 'each' } },
+          { primitive: 'loseLife', params: { amount: 1, whichPlayer: 'each' } },
+        ],
+        label: 'your upkeep: each player draws a card and loses 1 life',
+      },
+    ],
   },
   // Equipped creature gets +1/+1 and has haste.
   // Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)
@@ -1655,6 +7162,106 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 1, toughness: 1, keywords: { haste: true } },
     },
   },
+  // {2}, {T}: Copy target triggered ability you control. You may choose new targets for the copy. (A triggered ability uses the words "when," "whenever," or "at.")
+  {
+    id: 'cf751552-156f-4f81-ac94-9814dce099f9',
+    name: 'Strionic Resonator',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    activated: [
+      {
+        cost: { mana: { generic: 2 }, tap: true },
+        effects: [
+          {
+            primitive: 'copyTriggeredAbility',
+            params: { targets: 'triggeredAbilityYouControl', count: 1 },
+          },
+        ],
+        label: '{2}, {t}: copy target triggered ability you control. you may choose new targets for the copy',
+      },
+    ],
+  },
+  // Flying
+  // When this creature enters, tap all creatures your opponents control.
+  {
+    id: '88b1e06c-5899-4e83-8204-e2c32c0c6aff',
+    name: 'Subjugator Angel',
+    types: ['creature'],
+    cost: { generic: 4, W: 2 },
+    power: 4,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'tapPermanents', params: { who: 'opponent', types: ['creature'] } }],
+        label: 'Enters: tap all creatures your opponents control',
+      },
+    ],
+  },
+  // Choose one or both —
+  // • Target creature gets -1/-1 until end of turn.
+  // • Put a +1/+1 counter on target creature.
+  {
+    id: '08122109-6287-4d78-9242-2da8a25022b0',
+    name: 'Subtle Strike',
+    types: ['instant'],
+    cost: { generic: 1, B: 1 },
+    modal: {
+      min: 1,
+      max: 2,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Target creature gets -1/-1 until end of turn',
+          effects: [
+            {
+              primitive: 'pumpUntilEndOfTurn',
+              params: { power: -1, toughness: -1, targets: 'creature' },
+            },
+          ],
+          targets: 'creature',
+        },
+        {
+          id: 'mode2',
+          label: 'Put a +1/+1 counter on target creature',
+          effects: [{ primitive: 'addCounters', params: { amount: 1, targets: 'creature' } }],
+          targets: 'creature',
+        },
+      ],
+    },
+  },
+  // {T}: Add {C}.
+  // {T}: Add {B} or {R}. This land deals 1 damage to you.
+  {
+    id: 'f5c38c01-4a40-469f-91a0-7479daf4e8e7',
+    name: 'Sulfurous Springs',
+    types: ['land'],
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ B: 1 }, { R: 1 }], rider: { damageToController: 1 } }],
+  },
+  // Flying, first strike, vigilance, lifelink
+  {
+    id: 'be37ef9d-955a-417e-bde8-bb9e0bdf3612',
+    name: 'Sunblade Angel',
+    types: ['creature'],
+    cost: { generic: 5, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true, firstStrike: true, vigilance: true, lifelink: true },
+    subtypes: ['angel'],
+  },
+  // {T}: Add {C}.
+  // {U/B}, {T}: Add {U}{U}, {U}{B}, or {B}{B}.
+  {
+    id: 'e6415ffb-8b7a-41c3-bedf-0d4112b7b795',
+    name: 'Sunken Ruins',
+    types: ['land'],
+    manaAbilities: [
+      { produces: [{ C: 1 }] },
+      { produces: [{ U: 2 }, { U: 1, B: 1 }, { B: 2 }], cost: { mana: { hybrid: [['U', 'B']] } } },
+    ],
+  },
   // Flying
   {
     id: 'a8d31e2f-7b2e-4135-8074-9e6ef778bd80',
@@ -1665,6 +7272,29 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 1,
     keywords: { flying: true },
     subtypes: ['bird'],
+  },
+  // Equipped creature has hexproof and haste. (It can't be the target of spells or abilities your opponents control. It can attack and {T} no matter when it came under your control.)
+  // Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: 'c8b143ad-43ec-4e0d-a440-e348daa31391',
+    name: 'Swiftfoot Boots',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 1 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {1}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {1}',
+      modifies: { power: 0, toughness: 0, keywords: { hexproof: true, haste: true } },
+    },
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -1682,6 +7312,94 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         label: 'Enters: you gain 1 life',
       },
     ],
+  },
+  // Equipped creature gets +2/+2 and has protection from red and from blue.
+  // Whenever equipped creature deals combat damage to a player, this Equipment deals 2 damage to any target and you draw a card.
+  // Equip {2}
+  {
+    id: '2ccdc60a-49a9-44b9-a7af-0ebf18b26785',
+    name: 'Sword of Fire and Ice',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer', watches: 'attachedHost' },
+        effects: [
+          { primitive: 'dealDamage', params: { amount: 2 } },
+          { primitive: 'drawCards', params: { count: 1 } },
+        ],
+        label: 'Equipped creature deals combat damage to a player: ~ deals 2 damage to any target and you draw a card',
+        targets: 'any',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 2, toughness: 2, keywords: { protectionFrom: ['red', 'blue'] } },
+    },
+  },
+  // Equipped creature gets +1/+1.
+  // Whenever equipped creature attacks, you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
+  // Equip {2}
+  {
+    id: 'd79cbc61-6c15-48ea-bbba-3cffb819ccba',
+    name: 'Sword of the Animist',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    legendary: true,
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'attacks', watches: 'attachedHost' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may search your library for a basic land card, put it onto the battlefield tapped, then shuffle',
+              valence: 'gain',
+              effects: [
+                {
+                  primitive: 'searchLibrary',
+                  params: {
+                    who: 'controller',
+                    count: 1,
+                    filter: { anyOfTypes: ['land'] },
+                    nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+                    destination: 'battlefield',
+                    tapped: true,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        label: 'Equipped creature attacks: you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 1, toughness: 1, keywords: {} },
+    },
   },
   // Equipped creature gets +2/+0 and has first strike, vigilance, trample, and haste.
   // Equip {3}
@@ -1710,6 +7428,295 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     },
   },
+  // Defender, hexproof
+  // {T}: Add one mana of any color.
+  {
+    id: '13d4c46b-c2d6-44cc-a252-4a991d471854',
+    name: 'Sylvan Caryatid',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 0,
+    toughness: 3,
+    keywords: { defender: true, hexproof: true },
+    subtypes: ['plant'],
+    producesOptions: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+  },
+  // {T}: Add {C}.
+  // {T}: Add {R} or {W}. This artifact deals 1 damage to you.
+  {
+    id: '6c326439-5620-4ec6-a56a-fe9c3d5d2a46',
+    name: 'Talisman of Conviction',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ R: 1 }, { W: 1 }], rider: { damageToController: 1 } }],
+  },
+  // {T}: Add {C}.
+  // {T}: Add {U} or {R}. This artifact deals 1 damage to you.
+  {
+    id: '14d2979d-5728-42d7-a027-0eb1f754655d',
+    name: 'Talisman of Creativity',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ U: 1 }, { R: 1 }], rider: { damageToController: 1 } }],
+  },
+  // {T}: Add {C}.
+  // {T}: Add {G} or {U}. This artifact deals 1 damage to you.
+  {
+    id: '8c34b089-aad1-476e-958a-3077bf1bbb51',
+    name: 'Talisman of Curiosity',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ G: 1 }, { U: 1 }], rider: { damageToController: 1 } }],
+  },
+  // {T}: Add {C}.
+  // {T}: Add {U} or {B}. This artifact deals 1 damage to you.
+  {
+    id: '4c0a0448-b9d6-43a0-8549-64066dac63f0',
+    name: 'Talisman of Dominance',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ U: 1 }, { B: 1 }], rider: { damageToController: 1 } }],
+  },
+  // {T}: Add {C}.
+  // {T}: Add {W} or {B}. This artifact deals 1 damage to you.
+  {
+    id: 'b693c3de-2eaf-4850-b405-e79d00adefda',
+    name: 'Talisman of Hierarchy',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ W: 1 }, { B: 1 }], rider: { damageToController: 1 } }],
+  },
+  // {T}: Add {C}.
+  // {T}: Add {R} or {G}. This artifact deals 1 damage to you.
+  {
+    id: 'f2ccc9e8-8e92-4f8c-8728-8c748630e0dd',
+    name: 'Talisman of Impulse',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ R: 1 }, { G: 1 }], rider: { damageToController: 1 } }],
+  },
+  // {T}: Add {C}.
+  // {T}: Add {B} or {R}. This artifact deals 1 damage to you.
+  {
+    id: '1d9aeaaa-66f6-41cb-9bac-162d6fd8662c',
+    name: 'Talisman of Indulgence',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ B: 1 }, { R: 1 }], rider: { damageToController: 1 } }],
+  },
+  // {T}: Add {C}.
+  // {T}: Add {W} or {U}. This artifact deals 1 damage to you.
+  {
+    id: '00e35322-1a9a-41e3-9ce1-359c8eaa3bc7',
+    name: 'Talisman of Progress',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ W: 1 }, { U: 1 }], rider: { damageToController: 1 } }],
+  },
+  // {T}: Add {C}.
+  // {T}: Add {B} or {G}. This artifact deals 1 damage to you.
+  {
+    id: '42b8aa14-10bc-4bd6-88d9-4bb287eadd19',
+    name: 'Talisman of Resilience',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ B: 1 }, { G: 1 }], rider: { damageToController: 1 } }],
+  },
+  // {T}: Add {C}.
+  // {T}: Add {G} or {W}. This artifact deals 1 damage to you.
+  {
+    id: 'e5fcc5d7-6a60-4a5b-9d02-6c30041a95b9',
+    name: 'Talisman of Unity',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ G: 1 }, { W: 1 }], rider: { damageToController: 1 } }],
+  },
+  // {T}: Add {G}.
+  {
+    id: '53542c79-a62a-4d6a-97db-5296e9c68302',
+    name: 'Tangled Florahedron',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['elemental'],
+    produces: ['G'],
+    backFace: {
+      id: '53542c79-a62a-4d6a-97db-5296e9c68302#back',
+      name: 'Tangled Vale',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['G'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
+  // This land enters tapped.
+  // Indestructible
+  // {T}: Add {G} or {U}.
+  {
+    id: '29cd8a7c-108a-43d1-af63-f603a27c24f2',
+    name: 'Tanglepool Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ G: 1 }, { U: 1 }],
+  },
+  // At the beginning of each player's draw step, that player puts the cards in their hand on the bottom of their library in any order, then draws that many cards.
+  {
+    id: '37abcc92-9466-47ea-9e0b-5eda2eb62c8e',
+    name: 'Teferi\'s Puzzle Box',
+    types: ['artifact'],
+    cost: { generic: 4 },
+    triggers: [
+      {
+        condition: { on: 'drawStep', who: 'any' },
+        effects: [{ primitive: 'handToBottomThenDraw', params: { who: 'triggering' } }],
+        label: 'each player\'s draw step: that player puts the cards in their hand on the bottom of their library in any order, then draws that many cards',
+      },
+    ],
+  },
+  // Whenever you cast a noncreature spell, put a +1/+1 counter on this creature.
+  {
+    id: '60ac490c-b489-4ad2-bcc2-3babaabf8ccb',
+    name: 'Tempest Angler',
+    types: ['creature'],
+    cost: { generic: 1, hybrid: [['U', 'R'], ['U', 'R']] },
+    power: 2,
+    toughness: 2,
+    subtypes: ['otter', 'wizard'],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellTypeNoneOf: ['creature'] },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: 'Cast noncreature: put a +1/+1 counter on ~',
+      },
+    ],
+  },
+  // {T}: Each player draws a card.
+  {
+    id: 'fc8032e9-c83a-4cf9-92e1-b1d2d9642695',
+    name: 'Temple Bell',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    activated: [
+      {
+        cost: { tap: true },
+        effects: [{ primitive: 'drawCards', params: { count: 1, whichPlayer: 'each' } }],
+        label: '{t}: each player draws a card',
+      },
+    ],
+  },
+  // This land enters tapped.
+  // When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  // {T}: Add {R} or {G}.
+  {
+    id: '3baa8e38-ef93-435d-b63e-f781d5bfcc68',
+    name: 'Temple of Abandon',
+    types: ['land'],
+    entersTapped: true,
+    producesOptions: [{ R: 1 }, { G: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'scry' }], label: 'Enters: scry 1' }],
+  },
+  // This land enters tapped.
+  // When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  // {T}: Add {U} or {B}.
+  {
+    id: '33b9b3bd-33ca-46f3-b8bb-a978bc3d1085',
+    name: 'Temple of Deceit',
+    types: ['land'],
+    entersTapped: true,
+    producesOptions: [{ U: 1 }, { B: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'scry' }], label: 'Enters: scry 1' }],
+  },
+  // This land enters tapped.
+  // When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  // {T}: Add {W} or {U}.
+  {
+    id: '89f43e27-790b-4ca1-8ba7-0882b31e0783',
+    name: 'Temple of Enlightenment',
+    types: ['land'],
+    entersTapped: true,
+    producesOptions: [{ W: 1 }, { U: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'scry' }], label: 'Enters: scry 1' }],
+  },
+  // This land enters tapped.
+  // When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  // {T}: Add {U} or {R}.
+  {
+    id: '79f94050-d850-41ca-b1db-5ae0cf743f0a',
+    name: 'Temple of Epiphany',
+    types: ['land'],
+    entersTapped: true,
+    producesOptions: [{ U: 1 }, { R: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'scry' }], label: 'Enters: scry 1' }],
+  },
+  // This land enters tapped.
+  // When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  // {T}: Add {B} or {G}.
+  {
+    id: 'dc55421f-dee8-4263-9df0-2365df5f14bb',
+    name: 'Temple of Malady',
+    types: ['land'],
+    entersTapped: true,
+    producesOptions: [{ B: 1 }, { G: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'scry' }], label: 'Enters: scry 1' }],
+  },
+  // This land enters tapped.
+  // When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  // {T}: Add {B} or {R}.
+  {
+    id: '7c439c18-31dc-41fe-b03d-3fca06e6fc0b',
+    name: 'Temple of Malice',
+    types: ['land'],
+    entersTapped: true,
+    producesOptions: [{ B: 1 }, { R: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'scry' }], label: 'Enters: scry 1' }],
+  },
+  // This land enters tapped.
+  // When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  // {T}: Add {G} or {U}.
+  {
+    id: '7e26f0b7-20e6-46d5-8130-d98c14d6aa29',
+    name: 'Temple of Mystery',
+    types: ['land'],
+    entersTapped: true,
+    producesOptions: [{ G: 1 }, { U: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'scry' }], label: 'Enters: scry 1' }],
+  },
+  // This land enters tapped.
+  // When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  // {T}: Add {G} or {W}.
+  {
+    id: 'e521322b-0e83-458c-8936-7021a80ee279',
+    name: 'Temple of Plenty',
+    types: ['land'],
+    entersTapped: true,
+    producesOptions: [{ G: 1 }, { W: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'scry' }], label: 'Enters: scry 1' }],
+  },
+  // This land enters tapped.
+  // When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  // {T}: Add {W} or {B}.
+  {
+    id: 'e6e6fce8-0f6a-4b84-865e-d4e4a4182f9f',
+    name: 'Temple of Silence',
+    types: ['land'],
+    entersTapped: true,
+    producesOptions: [{ W: 1 }, { B: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'scry' }], label: 'Enters: scry 1' }],
+  },
+  // This land enters tapped.
+  // When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  // {T}: Add {R} or {W}.
+  {
+    id: '6f0d94d9-64bb-4175-83bc-301e8f79f54f',
+    name: 'Temple of Triumph',
+    types: ['land'],
+    entersTapped: true,
+    producesOptions: [{ R: 1 }, { W: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'scry' }], label: 'Enters: scry 1' }],
+  },
   // Destroy target creature. It can't be regenerated.
   {
     id: '6257c2fd-005f-41e3-8a72-af76df1eb134',
@@ -1717,6 +7724,81 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['instant'],
     cost: { B: 1, R: 1 },
     effects: [{ primitive: 'destroyTarget', params: { targets: 'creature' } }],
+  },
+  // {T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
+  {
+    id: '1bd3e453-aa21-4ee6-95c2-d6d920ee8e7a',
+    name: 'Terramorphic Expanse',
+    types: ['land'],
+    activated: [
+      {
+        cost: { tap: true, sacrificeSelf: true },
+        effects: [
+          {
+            primitive: 'searchLibrary',
+            params: {
+              who: 'controller',
+              count: 1,
+              filter: { anyOfTypes: ['land'] },
+              nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+              destination: 'battlefield',
+              tapped: true,
+            },
+          },
+        ],
+        label: '{t}, sacrifice ~: search your library for a basic land card, put it onto the battlefield tapped, then shuffle',
+      },
+    ],
+  },
+  // Draw a card.
+  // Flashback {2}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'fa85c5a2-8e83-4624-a35a-a0bbf17ecbb4',
+    name: 'Think Twice',
+    types: ['instant'],
+    cost: { generic: 1, U: 1 },
+    flashback: { generic: 2, U: 1 },
+    effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+  },
+  // Whenever you cast a noncreature spell, create a 1/1 colorless Soldier artifact creature token.
+  {
+    id: 'f7156897-2b02-4ecd-868d-d4d59244e9ed',
+    name: 'Third Path Iconoclast',
+    types: ['creature'],
+    cost: { U: 1, R: 1 },
+    power: 2,
+    toughness: 1,
+    subtypes: ['human', 'monk'],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellTypeNoneOf: ['creature'] },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Soldier',
+              colors: [],
+              subtypes: ['Soldier'],
+              types: ['artifact', 'creature'],
+            },
+          },
+        ],
+        label: 'Cast noncreature: create a 1/1 colorless soldier artifact creature token',
+      },
+    ],
+  },
+  // This land enters tapped.
+  // Indestructible
+  // {T}: Add {G} or {W}.
+  {
+    id: '99720c65-be96-4220-8ed4-720660bf6928',
+    name: 'Thornglint Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ G: 1 }, { W: 1 }],
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -1733,6 +7815,18 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         effects: [{ primitive: 'gainLife', params: { amount: 1 } }],
         label: 'Enters: you gain 1 life',
       },
+    ],
+  },
+  // Target player mills two cards.
+  // Draw a card.
+  {
+    id: '83101ba8-a569-4827-8c53-9ca0dfcd59a7',
+    name: 'Thought Scour',
+    types: ['instant'],
+    cost: { U: 1 },
+    effects: [
+      { primitive: 'mill', params: { amount: 2, targets: 'player' } },
+      { primitive: 'drawCards', params: { count: 1 } },
     ],
   },
   // When this creature enters, you gain 5 life.
@@ -1753,10 +7847,73 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
       {
         condition: { on: 'leaves' },
-        effects: [{ primitive: 'makeToken', params: { power: 3, toughness: 3, name: 'Beast' } }],
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: { power: 3, toughness: 3, name: 'Beast', colors: ['G'], subtypes: ['Beast'] },
+          },
+        ],
         label: 'Leaves: create a 3/3 green beast creature token',
       },
     ],
+  },
+  // {T}: Add {C}{C}{C}.
+  {
+    id: 'a699c663-8131-4045-9265-a83e86609374',
+    name: 'Thran Dynamo',
+    types: ['artifact'],
+    cost: { generic: 4 },
+    produces: ['C', 'C', 'C'],
+  },
+  // Search your library for a Forest card, put it onto the battlefield, then shuffle.
+  {
+    id: '1b882a0e-0ede-4d1a-bd1a-9b7cffbcde8e',
+    name: 'Three Visits',
+    types: ['sorcery'],
+    cost: { generic: 1, G: 1 },
+    effects: [
+      {
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 1,
+          filter: { anyOfTypes: ['land'], anyOfSubtypes: ['forest'] },
+          destination: 'battlefield',
+        },
+      },
+    ],
+  },
+  // As an additional cost to cast this spell, discard a card.
+  // Draw two cards.
+  {
+    id: '1cb0610b-a731-42c2-b93f-0a29f63cebf4',
+    name: 'Thrill of Possibility',
+    types: ['instant'],
+    cost: { generic: 1, R: 1 },
+    additionalCost: { kind: 'discard', label: 'Discard a card' },
+    effects: [{ primitive: 'drawCards', params: { count: 2 } }],
+  },
+  // Target creature gets +1/+2 until end of turn.
+  // Flashback {W} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: '7b1f0b78-806f-4a7d-809b-d2bc60cf1b01',
+    name: 'Thrill of the Hunt',
+    types: ['instant'],
+    cost: { G: 1 },
+    flashback: { W: 1 },
+    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 2, targets: 'creature' } }],
+  },
+  // ({T}: Add {U} or {R}.)
+  // This land enters tapped.
+  // When this land enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)
+  {
+    id: 'd2bcff58-7a8a-46ef-b6b3-39501d4c8e6e',
+    name: 'Thundering Falls',
+    types: ['land'],
+    subtypes: ['island', 'mountain'],
+    entersTapped: true,
+    producesOptions: [{ U: 1 }, { R: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'surveil' }], label: 'Enters: surveil 1' }],
   },
   // Draw four cards.
   {
@@ -1774,6 +7931,122 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, G: 1 },
     effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 4, toughness: 4, targets: 'creature' } }],
   },
+  // Ward {2} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.)
+  // {3}{G}: Put a +1/+1 counter on this creature.
+  {
+    id: '77b48b3c-c780-4c5b-90e6-33c5fd940c16',
+    name: 'Toadstool Admirer',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { ward: 2 },
+    subtypes: ['ouphe'],
+    activated: [
+      {
+        cost: { mana: { generic: 3, G: 1 } },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: '{3}{g}: put a +1/+1 counter on ~',
+      },
+    ],
+  },
+  // Kicker {W} (You may pay an additional {W} as you cast this spell.)
+  // Return target creature to its owner's hand. Draw a card. If this spell was kicked, you gain 3 life.
+  {
+    id: 'd2240ce8-0bd6-4c4f-a73e-fb0a2af5bfac',
+    name: 'Tolarian Geyser',
+    types: ['sorcery'],
+    cost: { generic: 2, U: 1 },
+    kicker: { W: 1 },
+    effects: [
+      { primitive: 'returnToHand', params: { targets: 'creature' } },
+      { primitive: 'drawCards', params: { count: 1 } },
+      {
+        primitive: 'ifKicked',
+        params: { effects: [{ primitive: 'gainLife', params: { amount: 3 } }] },
+      },
+    ],
+  },
+  // Ward {2} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.)
+  {
+    id: 'b68cf4e6-205e-40b6-b28b-f4b7d8af7017',
+    name: 'Tomakul Honor Guard',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 3,
+    toughness: 1,
+    keywords: { ward: 2 },
+    subtypes: ['human', 'soldier'],
+  },
+  // Target player mills five cards.
+  {
+    id: '446a9d7e-9c1a-4e83-8342-2ed5acae2eed',
+    name: 'Tome Scour',
+    types: ['sorcery'],
+    cost: { U: 1 },
+    effects: [{ primitive: 'mill', params: { amount: 5, targets: 'player' } }],
+  },
+  // Flying, deathtouch
+  {
+    id: 'ca8535f2-1f96-4836-bd32-5e952f9bee72',
+    name: 'Topaz Dragon',
+    types: ['creature'],
+    cost: { generic: 4, B: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { flying: true, deathtouch: true },
+    subtypes: ['dragon'],
+    backFace: {
+      id: 'ca8535f2-1f96-4836-bd32-5e952f9bee72#back',
+      name: 'Entropic Cloud',
+      types: ['instant'],
+      cost: { generic: 1, B: 1 },
+      keywords: { deathtouch: true },
+      subtypes: ['adventure'],
+      effects: [
+        {
+          primitive: 'grantKeywordToYoursUntilEndOfTurn',
+          params: { keywords: { deathtouch: true }, anyOfTypes: ['creature'] },
+        },
+      ],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
+  // If a red source you control would deal damage to an opponent or a permanent an opponent controls, it deals that much damage plus 2 instead.
+  {
+    id: '8c3495bf-02e7-4ad9-949d-92eb3d2b662a',
+    name: 'Torbran, Thane of Red Fell',
+    types: ['creature'],
+    cost: { generic: 1, R: 3 },
+    power: 2,
+    toughness: 4,
+    legendary: true,
+    subtypes: ['dwarf', 'noble'],
+    replacements: [
+      {
+        event: 'damage',
+        applies: {
+          sourceController: 'you',
+          sourceFilter: { anyOfColors: ['R'] },
+          recipientController: 'opponent',
+        },
+        outcome: { plus: 2 },
+        label: 'if a red source you control would deal damage to an opponent or a permanent an opponent controls, it deals that much damage plus 2 instead',
+      },
+    ],
+  },
+  // As an additional cost to cast this spell, discard a card.
+  // Draw two cards.
+  {
+    id: 'f307b5b4-e949-4f69-8dc7-856e33a45a16',
+    name: 'Tormenting Voice',
+    types: ['sorcery'],
+    cost: { generic: 1, R: 1 },
+    additionalCost: { kind: 'discard', label: 'Discard a card' },
+    effects: [{ primitive: 'drawCards', params: { count: 2 } }],
+  },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
   // {T}: Add {W} or {U}.
@@ -1790,6 +8063,30 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         label: 'Enters: you gain 1 life',
       },
     ],
+  },
+  // This land enters tapped.
+  // {T}: Add {G}.
+  // Cycling {G} ({G}, Discard this card: Draw a card.)
+  {
+    id: '9f8fe514-77ed-41b4-a6f3-c6f095bb97be',
+    name: 'Tranquil Thicket',
+    types: ['land'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { G: 1 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {G}',
+      },
+    ],
+    produces: ['G'],
+  },
+  // {T}: Add {G}.
+  {
+    id: '8b4aa971-b919-4750-8388-33d4f42c9280',
+    name: 'Tree of Tales',
+    types: ['artifact', 'land'],
+    produces: ['G'],
   },
   // Equipped creature gets +2/+1.
   // Equip {2}
@@ -1814,6 +8111,72 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 2, toughness: 1, keywords: {} },
     },
   },
+  {
+    id: '09193c40-538c-4154-a671-076eece35e54',
+    name: 'Tuinvale Treefolk',
+    types: ['creature'],
+    cost: { generic: 5, G: 1 },
+    power: 6,
+    toughness: 5,
+    subtypes: ['treefolk', 'druid'],
+    backFace: {
+      id: '09193c40-538c-4154-a671-076eece35e54#back',
+      name: 'Oaken Boon',
+      types: ['sorcery'],
+      cost: { generic: 3, G: 1 },
+      subtypes: ['adventure'],
+      effects: [{ primitive: 'addCounters', params: { amount: 2, targets: 'creature' } }],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
+  // {T}: Add {C}.
+  // {B/G}, {T}: Add {B}{B}, {B}{G}, or {G}{G}.
+  {
+    id: 'db623754-e078-4030-ba07-818803c348a8',
+    name: 'Twilight Mire',
+    types: ['land'],
+    manaAbilities: [
+      { produces: [{ C: 1 }] },
+      { produces: [{ B: 2 }, { B: 1, G: 1 }, { G: 2 }], cost: { mana: { hybrid: [['B', 'G']] } } },
+    ],
+  },
+  // Copy target instant or sorcery spell. You may choose new targets for the copy.
+  {
+    id: '8f878efc-850f-43d2-a6fe-5ea8d1dd5afb',
+    name: 'Twincast',
+    types: ['instant'],
+    cost: { U: 2 },
+    effects: [{ primitive: 'copySpell', params: { targets: 'instantOrSorcerySpell', mayRetarget: true } }],
+  },
+  // Menace (This creature can't be blocked except by two or more creatures.)
+  {
+    id: '0f222f3d-f02b-42b9-aedf-fb7ed92d4889',
+    name: 'Two-Headed Hunter',
+    types: ['creature'],
+    cost: { generic: 4, R: 1 },
+    power: 5,
+    toughness: 4,
+    keywords: { menace: true },
+    subtypes: ['giant'],
+    backFace: {
+      id: '0f222f3d-f02b-42b9-aedf-fb7ed92d4889#back',
+      name: 'Twice the Rage',
+      types: ['instant'],
+      cost: { generic: 1, R: 1 },
+      subtypes: ['adventure'],
+      effects: [
+        {
+          primitive: 'grantKeywordUntilEndOfTurn',
+          params: { keywords: { doubleStrike: true }, targets: 'creature' },
+        },
+      ],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
   // Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)
   {
     id: 'd6ee6cc1-902d-4f56-afa5-6fa4813bfbbc',
@@ -1824,6 +8187,141 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 1,
     keywords: { deathtouch: true },
     subtypes: ['rat'],
+  },
+  // Choose one —
+  // • Destroy target creature with mana value 3 or less.
+  // • Return target creature to its owner's hand.
+  {
+    id: 'afb278f1-0e21-4f6d-96bb-c34aa3ef96b0',
+    name: 'Tyrant\'s Scorn',
+    types: ['instant'],
+    cost: { U: 1, B: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Destroy target creature with mana value 3 or less',
+          effects: [{ primitive: 'destroyTarget', params: { targets: 'creature', maxManaValue: 3 } }],
+          targets: 'creature',
+        },
+        {
+          id: 'mode2',
+          label: 'Return target creature to its owner\'s hand',
+          effects: [{ primitive: 'returnToHand', params: { targets: 'creature' } }],
+          targets: 'creature',
+        },
+      ],
+    },
+  },
+  // Choose one —
+  // • Target creature gets +2/+2 until end of turn.
+  // • Target creature gets -1/-1 until end of turn.
+  // • You gain 2 life.
+  {
+    id: '7cfd7606-1dab-4627-ba42-37d6e375f9f1',
+    name: 'Umezawa\'s Charm',
+    types: ['instant'],
+    cost: { generic: 1, B: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Target creature gets +2/+2 until end of turn',
+          effects: [
+            {
+              primitive: 'pumpUntilEndOfTurn',
+              params: { power: 2, toughness: 2, targets: 'creature' },
+            },
+          ],
+          targets: 'creature',
+        },
+        {
+          id: 'mode2',
+          label: 'Target creature gets -1/-1 until end of turn',
+          effects: [
+            {
+              primitive: 'pumpUntilEndOfTurn',
+              params: { power: -1, toughness: -1, targets: 'creature' },
+            },
+          ],
+          targets: 'creature',
+        },
+        {
+          id: 'mode3',
+          label: 'You gain 2 life',
+          effects: [{ primitive: 'gainLife', params: { amount: 2 } }],
+        },
+      ],
+    },
+  },
+  // As this land enters, choose a creature type.
+  // {T}: Add {C}.
+  // {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type.
+  {
+    id: '584b15f2-6ae9-413a-8b8d-9244dbea4878',
+    name: 'Unclaimed Territory',
+    types: ['land'],
+    asEntersChoice: { subject: 'creatureType' },
+    manaAbilities: [
+      { produces: [{ C: 1 }] },
+      {
+        produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+        spendRestriction: {
+          label: 'only to cast a creature spell of the chosen type',
+          allow: [{ purpose: 'cast', types: ['creature'], subtypeChosenBySource: true }],
+        },
+      },
+    ],
+  },
+  // ({T}: Add {U} or {B}.)
+  // This land enters tapped.
+  // When this land enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)
+  {
+    id: '08d80efc-9542-4ba2-824c-c8615d8d07f2',
+    name: 'Undercity Sewers',
+    types: ['land'],
+    subtypes: ['island', 'swamp'],
+    entersTapped: true,
+    producesOptions: [{ U: 1 }, { B: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'surveil' }], label: 'Enters: surveil 1' }],
+  },
+  // ({T}: Add {B} or {G}.)
+  // This land enters tapped.
+  // When this land enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)
+  {
+    id: '840119bf-e60f-4ff7-9c9b-d420d09df545',
+    name: 'Underground Mortuary',
+    types: ['land'],
+    subtypes: ['swamp', 'forest'],
+    entersTapped: true,
+    producesOptions: [{ B: 1 }, { G: 1 }],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'surveil' }], label: 'Enters: surveil 1' }],
+  },
+  // {T}: Add {C}.
+  // {T}: Add {U} or {B}. This land deals 1 damage to you.
+  {
+    id: '857febd9-cdd7-4f8e-a852-d88084b0cfbc',
+    name: 'Underground River',
+    types: ['land'],
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ U: 1 }, { B: 1 }], rider: { damageToController: 1 } }],
+  },
+  // Whenever an opponent draws a card, this enchantment deals 1 damage to that player.
+  {
+    id: '967cf377-ae26-464d-85ac-8448b5a911f7',
+    name: 'Underworld Dreams',
+    types: ['enchantment'],
+    cost: { B: 3 },
+    triggers: [
+      {
+        condition: { on: 'drawsCard', who: 'opponent' },
+        effects: [{ primitive: 'dealDamage', params: { amount: 1, whichPlayer: 'triggering' } }],
+        label: 'an opponent draws: ~ deals 1 damage to that player',
+      },
+    ],
   },
   // Enchant creature
   // Enchanted creature gets +2/+2 and has trample and lifelink. (Damage dealt by the creature also causes its controller to gain that much life.)
@@ -1857,6 +8355,20 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 2, toughness: 1, keywords: {} },
     },
   },
+  // Pay 3 life: Put a +1/+1 counter on target creature.
+  {
+    id: 'a5690d5f-633c-4a1e-afba-5fd79dcbf20e',
+    name: 'Unspeakable Symbol',
+    types: ['enchantment'],
+    cost: { generic: 1, B: 2 },
+    activated: [
+      {
+        cost: { life: 3 },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, targets: 'creature' } }],
+        label: 'Pay 3 life: put a +1/+1 counter on target creature',
+      },
+    ],
+  },
   // Return target creature to its owner's hand.
   {
     id: '837182db-1bf3-4a2c-bd01-1af9d9873561',
@@ -1886,6 +8398,66 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     keywords: { flying: true, deathtouch: true, lifelink: true },
     subtypes: ['vampire', 'shaman'],
   },
+  // As this artifact enters, choose a creature type.
+  // Creatures you control of the chosen type get +1/+1.
+  // Whenever you cast a creature spell of the chosen type, draw a card.
+  {
+    id: '8cf38025-5821-45a0-9483-266353b7e82d',
+    name: 'Vanquisher\'s Banner',
+    types: ['artifact'],
+    cost: { generic: 5 },
+    asEntersChoice: { subject: 'creatureType' },
+    effects: [{ primitive: 'chooseAsEnters', params: {} }],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellType: 'creature', spellSubtypeIsChosen: true },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cast creature of the chosen type: draw a card',
+      },
+    ],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'you', ofChosenSubtype: true },
+        power: 1,
+        toughness: 1,
+        label: 'creatures you control of the chosen type get +1/+1',
+      },
+    ],
+  },
+  // Put a +1/+1 counter on target creature.
+  {
+    id: 'ce148a0c-6c63-49d5-a156-99efae4e367a',
+    name: 'Vastwood Fortification',
+    types: ['instant'],
+    cost: { G: 1 },
+    effects: [{ primitive: 'addCounters', params: { amount: 1, targets: 'creature' } }],
+    backFace: {
+      id: 'ce148a0c-6c63-49d5-a156-99efae4e367a#back',
+      name: 'Vastwood Thicket',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['G'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
+  // {T}: Add {B}.
+  {
+    id: '09496421-74e4-466a-9546-56f2a0c8eef4',
+    name: 'Vault of Whispers',
+    types: ['artifact', 'land'],
+    produces: ['B'],
+  },
+  // As an additional cost to cast this spell, sacrifice a creature.
+  // Draw two cards.
+  {
+    id: '365548fb-5acc-4a8a-b20b-26d28b7d029f',
+    name: 'Village Rites',
+    types: ['instant'],
+    cost: { B: 1 },
+    additionalCost: { kind: 'sacrifice', filter: { anyOfTypes: ['creature'] }, label: 'Sacrifice a creature' },
+    effects: [{ primitive: 'drawCards', params: { count: 2 } }],
+  },
   // Defender (This creature can't attack.)
   // {T}: Add {G}.
   {
@@ -1898,6 +8470,26 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     keywords: { defender: true },
     subtypes: ['plant', 'wall'],
     produces: ['G'],
+  },
+  // Flying, protection from red
+  {
+    id: '535007c5-03a8-495f-a132-37960f179f96',
+    name: 'Voice of Law',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true, protectionFrom: ['red'] },
+    subtypes: ['angel'],
+  },
+  // Volcanic Geyser deals X damage to any target.
+  {
+    id: '846a4f9c-d955-403f-8a08-5c7c3d32e180',
+    name: 'Volcanic Geyser',
+    types: ['instant'],
+    cost: { R: 2 },
+    xCost: 1,
+    effects: [{ primitive: 'dealDamage', params: { amount: { chosenX: true } } }],
   },
   // Equipped creature gets +2/+2.
   // Equip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)
@@ -1981,7 +8573,13 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     ],
   },
   // {T}: Add {C}.
-  { id: '05d24b0c-904a-46b6-b42a-96a4d91a0dd4', name: 'Wastes', types: ['land'], produces: ['C'] },
+  {
+    id: '05d24b0c-904a-46b6-b42a-96a4d91a0dd4',
+    name: 'Wastes',
+    types: ['land'],
+    basic: true,
+    produces: ['C'],
+  },
   {
     id: 'a35c2e20-eb90-4132-b65f-be1fcb569819',
     name: 'Watchwolf',
@@ -1990,6 +8588,44 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 3,
     toughness: 3,
     subtypes: ['wolf'],
+  },
+  // Flying
+  // Ward {2} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.)
+  {
+    id: '736026b2-84d4-4452-ae0d-5d1b0af0a400',
+    name: 'Waterfall Aerialist',
+    types: ['creature'],
+    cost: { generic: 3, U: 1 },
+    power: 3,
+    toughness: 1,
+    keywords: { flying: true, ward: 2 },
+    subtypes: ['djinn', 'wizard'],
+  },
+  // {2}, {T}, Sacrifice this artifact: Search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.
+  {
+    id: '31f15274-301b-47c5-ba19-0ced04520878',
+    name: 'Wayfarer\'s Bauble',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    activated: [
+      {
+        cost: { mana: { generic: 2 }, tap: true, sacrificeSelf: true },
+        effects: [
+          {
+            primitive: 'searchLibrary',
+            params: {
+              who: 'controller',
+              count: 1,
+              filter: { anyOfTypes: ['land'] },
+              nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+              destination: 'battlefield',
+              tapped: true,
+            },
+          },
+        ],
+        label: '{2}, {t}, sacrifice ~: search your library for a basic land card, put that card onto the battlefield tapped, then shuffle',
+      },
+    ],
   },
   // Enchant creature
   // Enchanted creature gets -2/-1.
@@ -2006,6 +8642,61 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       label: 'Enchant creature',
       modifies: { power: -2, toughness: -1, keywords: {} },
     },
+  },
+  // Buyback {5} (You may pay an additional {5} as you cast this spell. If you do, put this card into your hand as it resolves.)
+  // Draw a card.
+  {
+    id: 'a4a8af4e-8686-45ba-94fd-ccf6cc8adaae',
+    name: 'Whispers of the Muse',
+    types: ['instant'],
+    cost: { U: 1 },
+    buyback: { generic: 5 },
+    effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+  },
+  // Equipped creature can't be blocked and has shroud. (It can't be the target of spells or abilities.)
+  // Equip {2}
+  {
+    id: '9ad4f730-a18e-4a7c-a468-a926c718c741',
+    name: 'Whispersilk Cloak',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 0, toughness: 0, keywords: { unblockable: true, shroud: true } },
+    },
+  },
+  // First strike (This creature deals combat damage before creatures without first strike.)
+  // Protection from black (This creature can't be blocked, targeted, dealt damage, or enchanted by anything black.)
+  {
+    id: 'ddb021df-ae4a-4ac1-8353-d0b375761714',
+    name: 'White Knight',
+    types: ['creature'],
+    cost: { W: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { firstStrike: true, protectionFrom: ['black'] },
+    subtypes: ['human', 'knight'],
+  },
+  // As an additional cost to cast this spell, discard a card.
+  // Draw two cards.
+  {
+    id: 'a05ab59e-680a-4050-aecb-56ee69dcd13f',
+    name: 'Wild Guess',
+    types: ['sorcery'],
+    cost: { R: 2 },
+    additionalCost: { kind: 'discard', label: 'Discard a card' },
+    effects: [{ primitive: 'drawCards', params: { count: 2 } }],
   },
   // Flying
   {
@@ -2035,6 +8726,90 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // Flying, vigilance
+  // Cycling {W} ({W}, Discard this card: Draw a card.)
+  {
+    id: 'e18c93bc-2073-4bb6-83b4-c5c70f2d8a82',
+    name: 'Winged Shepherd',
+    types: ['creature'],
+    cost: { generic: 5, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true, vigilance: true },
+    subtypes: ['angel'],
+    cycling: [
+      {
+        cost: { W: 1 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {W}',
+      },
+    ],
+  },
+  // Choose one or both —
+  // • Tap target creature.
+  // • Winterflame deals 2 damage to target creature.
+  {
+    id: '8d3a0b81-1895-47a8-87a3-3e4093cbd951',
+    name: 'Winterflame',
+    types: ['instant'],
+    cost: { generic: 1, U: 1, R: 1 },
+    modal: {
+      min: 1,
+      max: 2,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Tap target creature',
+          effects: [{ primitive: 'tapTarget', params: { targets: 'creature' } }],
+          targets: 'creature',
+        },
+        {
+          id: 'mode2',
+          label: 'Winterflame deals 2 damage to target creature',
+          effects: [{ primitive: 'dealDamage', params: { amount: 2, targets: 'creature' } }],
+          targets: 'creature',
+        },
+      ],
+    },
+  },
+  // When this creature enters, search your library for a Forest card, put that card onto the battlefield, then shuffle.
+  {
+    id: '8973bd99-20f8-4867-90ef-50392147ee1b',
+    name: 'Wood Elves',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['elf', 'scout'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'searchLibrary',
+            params: {
+              who: 'controller',
+              count: 1,
+              filter: { anyOfTypes: ['land'], anyOfSubtypes: ['forest'] },
+              destination: 'battlefield',
+            },
+          },
+        ],
+        label: 'Enters: search your library for a forest card, put that card onto the battlefield, then shuffle',
+      },
+    ],
+  },
+  // {T}: Add {C}.
+  // {G/W}, {T}: Add {G}{G}, {G}{W}, or {W}{W}.
+  {
+    id: '61b85077-64aa-4bcc-890d-2d88da9543c0',
+    name: 'Wooded Bastion',
+    types: ['land'],
+    manaAbilities: [
+      { produces: [{ C: 1 }] },
+      { produces: [{ G: 2 }, { G: 1, W: 1 }, { W: 2 }], cost: { mana: { hybrid: [['G', 'W']] } } },
+    ],
+  },
   // This artifact enters tapped.
   // {T}: Add {C}{C}.
   {
@@ -2053,6 +8828,36 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { B: 1 },
     effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -3, toughness: -1, targets: 'creature' } }],
   },
+  // {T}: Add {C}.
+  // {T}: Add {G} or {U}. This land deals 1 damage to you.
+  {
+    id: '40b36bc6-c185-4bda-99e7-0118953c2c97',
+    name: 'Yavimaya Coast',
+    types: ['land'],
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ G: 1 }, { U: 1 }], rider: { damageToController: 1 } }],
+  },
+  // Flying
+  {
+    id: 'fff28b30-9903-4a0a-a723-31216abd457d',
+    name: 'Young Blue Dragon',
+    types: ['creature'],
+    cost: { generic: 4, U: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['dragon'],
+    backFace: {
+      id: 'fff28b30-9903-4a0a-a723-31216abd457d#back',
+      name: 'Sand Augury',
+      types: ['sorcery'],
+      cost: { generic: 1, U: 1 },
+      subtypes: ['adventure'],
+      effects: [{ primitive: 'scry' }, { primitive: 'drawCards', params: { count: 1 } }],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
   // First strike
   {
     id: 'ef2a24f5-ce5e-4054-843a-2cae0c66318a',
@@ -2063,6 +8868,71 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 1,
     keywords: { firstStrike: true },
     subtypes: ['human', 'knight'],
+  },
+  // Flying
+  // Whenever another Angel you control enters, put a +1/+1 counter on this creature.
+  {
+    id: '6d37ba4b-ff56-4eec-9dc2-2d7f357dc9c9',
+    name: 'Youthful Valkyrie',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 1,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: {
+          on: 'permanentEnters',
+          who: 'you',
+          permanentFilter: { anyOfSubtypes: ['angel'] },
+          excludeSelf: true,
+        },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: 'another angel (you) enters: put a +1/+1 counter on ~',
+      },
+    ],
+  },
+  // Flying, double strike, vigilance, trample, indestructible
+  {
+    id: '7da0e5de-3e4c-420a-8685-991206100b9d',
+    name: 'Zetalpa, Primal Dawn',
+    types: ['creature'],
+    cost: { generic: 6, W: 2 },
+    power: 4,
+    toughness: 8,
+    legendary: true,
+    keywords: { flying: true, doubleStrike: true, vigilance: true, trample: true, indestructible: true },
+    subtypes: ['elder', 'dinosaur'],
+  },
+  // When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  // {T}: Add {C}.
+  {
+    id: '13aab4fc-4c89-45e6-8275-b074b00d0ee9',
+    name: 'Zhalfirin Void',
+    types: ['land'],
+    produces: ['C'],
+    triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'scry' }], label: 'Enters: scry 1' }],
+  },
+  // Each opponent loses 4 life and you gain 4 life.
+  {
+    id: 'd9f11985-e460-425d-b083-9cb0edf1983a',
+    name: 'Zof Consumption',
+    types: ['sorcery'],
+    cost: { generic: 4, B: 2 },
+    effects: [
+      { primitive: 'loseLife', params: { amount: 4, whichPlayer: 'opponent' } },
+      { primitive: 'gainLife', params: { amount: 4 } },
+    ],
+    backFace: {
+      id: 'd9f11985-e460-425d-b083-9cb0edf1983a#back',
+      name: 'Zof Bloodbog',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['B'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
   },
   {
     id: 'eadd88b6-e75a-4482-8382-561718121772',

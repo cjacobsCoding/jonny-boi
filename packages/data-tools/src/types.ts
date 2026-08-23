@@ -27,6 +27,10 @@ export interface RawScryfallCard {
   oracle_text?: string;
   power?: string;
   toughness?: string;
+  /** Planeswalkers: printed starting loyalty ("3", or "X" on a variable one). */
+  loyalty?: string;
+  /** Battles: printed starting defense ("4"). Scryfall's own field name. */
+  defense?: string;
   colors?: string[];
   color_identity?: string[];
   keywords?: string[];
@@ -47,6 +51,14 @@ export interface RawScryfallCardFace {
   oracle_text?: string;
   power?: string;
   toughness?: string;
+  /**
+   * A transforming planeswalker's / battle's printed number lives on the FACE,
+   * not at the card level — Scryfall reports `defense: undefined` for
+   * `Invasion of Gobakhan` and `'3'` on its battle face. The normalizer falls
+   * back to the front face for exactly that reason.
+   */
+  loyalty?: string;
+  defense?: string;
   colors?: string[];
   image_uris?: ScryfallImageUris;
 }
@@ -109,6 +121,19 @@ export interface NormalizedCard {
   oracleText: string;
   power: number | null;
   toughness: number | null;
+  /**
+   * Printed starting loyalty (planeswalkers), `null` otherwise or when variable
+   * ("X"). Records written before this field existed simply lack it, which the
+   * card compiler reads as "loyalty unknown — not playable until re-fetched".
+   */
+  loyalty?: number | null;
+  /**
+   * Printed starting defense (battles), `null` otherwise or when non-numeric.
+   * The exact contract {@link NormalizedCard.loyalty} has, and for the same
+   * reason: a battle entering with the wrong number of defense counters is a
+   * different card, so the compiler reports a missing value rather than guessing.
+   */
+  defense?: number | null;
   colors: string[];
   colorIdentity: string[];
   keywords: string[];
@@ -119,6 +144,19 @@ export interface NormalizedCard {
   imageUris: ScryfallImageUris;
   /** Local cache paths for downloaded images, populated by the art downloader. */
   localImages: LocalImagePaths;
+  /**
+   * Scryfall's `layout` verbatim — `'normal'`, `'transform'`, `'modal_dfc'`,
+   * `'split'`, `'adventure'`, … . It is the ONLY unambiguous statement of what
+   * a multi-faced record MEANS: a split card and a modal DFC both print two
+   * faces with two costs, and only the layout says whether they are two halves
+   * of one object (CR 709) or two faces of one card (CR 712). The compiler
+   * refuses to guess it from the name or the type line.
+   *
+   * Optional because the committed index predates the field; a record without
+   * it falls back to the narrower keyword/face-shape detection the compiler
+   * already had.
+   */
+  layout?: string;
   /** True when this card had `card_faces[]` (DFC / split / adventure / etc.). */
   isDoubleFaced: boolean;
   /** Per-face data when double-faced; empty otherwise. */

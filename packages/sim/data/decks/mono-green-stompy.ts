@@ -17,9 +17,11 @@
  * **Faithfulness.** Every card plays in full under engine-v2 — the dorks tap for
  * mana, Recluse's deathtouch and Spider's reach are honoured in combat, Witness'
  * ETB regrowth chooses the best card, and Pelakka Wurm's ETB lifegain and
- * dies-trigger draw both fire. Tarmogoyf (dynamic P/T) and Sakura-Tribe Elder
- * (sacrifice) are still deliberately excluded: their mechanics are unimplemented,
- * so they would play as something other than what they print.
+ * dies-trigger draw both fire. Tarmogoyf (whose star P/T box is implemented now)
+ * is still deliberately
+ * excluded: its mechanic is unimplemented, so it would play as something other
+ * than what it prints. (Sakura-Tribe Elder plays in full now — sacrifice-self
+ * cost + basic-land search — it just hasn't been tuned into this list.)
  *
  * Identity: the "biggest creatures" pillar. Beats decks that try to win on the
  * ground; loses to exile removal, evasion and sweepers.

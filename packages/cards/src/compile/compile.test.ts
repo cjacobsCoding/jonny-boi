@@ -58,8 +58,16 @@ const STUBBED_NAMES = new Set(STUBBED_MECHANICS.map((entry) => entry.card));
  * one mana. The compiler reports the hybrid cost instead of shipping that.
  */
 const HUMAN_APPROXIMATIONS: Readonly<Record<string, string>> = Object.freeze({
-  Tarmogoyf: 'dynamic power/toughness (characteristic-defining */*)',
-  // Birds of Paradise used to live here: "{T}: Add one mana of any color" had no
+  // EMPTY, and that is the news: every remaining pool card is either reproduced
+  // exactly from its printed text or named in STUBBED_MECHANICS.
+  //
+  // Tarmogoyf used to live here — the pool pinned a representative 2/3 for a
+  // card whose printed box is a formula, and the compiler refused to copy the
+  // guess. Characteristic-defining P/T (CR 613.3 layer 7a) closed that gap, so
+  // the compiler reproduces the authored Tarmogoyf exactly and the card is held
+  // to the full ground-truth check like everything else.
+  //
+  // Birds of Paradise used to live here too: "{T}: Add one mana of any color" had no
   // faithful form, because a fixed `produces` bundle adds one of EACH colour and
   // would have made Birds tap for five mana. Core's modal `producesOptions` (one
   // tap = one chosen mode) closed that gap, so the compiler now reproduces the
@@ -181,13 +189,46 @@ describe('compileCard — honesty about what the engine cannot do', () => {
   });
 
   it('partitions a mixed list into playable and blocked', () => {
+    // THE BLOCKED HALF IS NO LONGER A POOL CARD, and that is the news: the last
+    // one was Cryptic Command, whose modes are now announced at cast (CR
+    // 601.2b/c), so every hand-authored card compiles from its printed text.
+    // Liliana compiles (planeswalkers), Tarmogoyf compiles (the star P/T box),
+    // Snapcaster compiles (graveyard targeting plus grants on a non-battlefield
+    // card).
+    //
+    // The partition still has to be PROVEN to separate, though — a test whose
+    // blocked half is empty by construction would pass even if `compileCards`
+    // stopped blocking anything at all. So the blocked half is a split-card
+    // RECORD WITH NO FACE DATA — split cards themselves compile now, but only
+    // from a record that carries its two faces; this one carries the combined
+    // name alone, so both halves would have to be guessed (see
+    // `SECOND_CASTABLE_FACE_GAP`).
     const bolt = scryfallFor(CARD_POOL.find((c) => c.name === 'Lightning Bolt')!);
     const liliana = scryfallFor(CARD_POOL.find((c) => c.name === 'Liliana of the Veil')!);
+    const goyf = scryfallFor(CARD_POOL.find((c) => c.name === 'Tarmogoyf')!);
+    const snapcaster = scryfallFor(CARD_POOL.find((c) => c.name === 'Snapcaster Mage')!);
+    const cryptic = scryfallFor(CARD_POOL.find((c) => c.name === 'Cryptic Command')!);
+    const split: CompilableCard = {
+      id: 'split-fire-ice',
+      name: 'Fire // Ice',
+      manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+      typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+      oracleText: 'Fire deals 2 damage divided as you choose among one or two targets.',
+      power: null,
+      toughness: null,
+      keywords: [],
+    };
 
-    const { playable, blocked } = compileCards([bolt, liliana]);
+    const { playable, blocked } = compileCards([bolt, liliana, goyf, snapcaster, cryptic, split]);
 
-    expect(playable.map((card) => card.name)).toEqual(['Lightning Bolt']);
-    expect(blocked.map((entry) => entry.card.name)).toEqual(['Liliana of the Veil']);
+    expect(playable.map((card) => card.name)).toEqual([
+      'Lightning Bolt',
+      'Liliana of the Veil',
+      'Tarmogoyf',
+      'Snapcaster Mage',
+      'Cryptic Command',
+    ]);
+    expect(blocked.map((entry) => entry.card.name)).toEqual(['Fire // Ice']);
     expect(blocked[0]!.missing.length).toBeGreaterThan(0);
   });
 });
@@ -258,18 +299,19 @@ describe('compileCard — templated cards outside the curated pool', () => {
   // unrestricted `dealDamage` is exactly what made Flame Slash a 1-mana 4-damage
   // any-target spell and let Lava Spike kill creatures.
   //
-  // "or planeswalker" collapses onto the non-planeswalker half because the engine
-  // has no planeswalkers — vacuous, not approximated. 'any' is omitted from the
+  // "or planeswalker" is a REAL third kind now that planeswalkers exist: the
+  // player-or-planeswalker and creature-or-planeswalker phrases compile to their
+  // own restrictions the engine enforces. 'any' is omitted from the
   // params because it IS the default, so an unrestricted card compiles to exactly
   // the data it always did.
   it.each([
     ['any target', undefined],
     ['target creature or player', undefined],
     ['target creature, player, or planeswalker', undefined],
-    ['target player or planeswalker', 'player'],
+    ['target player or planeswalker', 'playerOrPlaneswalker'],
     ['target player', 'player'],
     ['target creature', 'creature'],
-    ['target creature or planeswalker', 'creature'],
+    ['target creature or planeswalker', 'creatureOrPlaneswalker'],
   ])('compiles a damage spell targeting "%s" as targets=%s', (targetPhrase, restriction) => {
     const result = compileCard(
       makeCard({
@@ -307,7 +349,7 @@ describe('compileCard — templated cards outside the curated pool', () => {
 
     expect(result.status, JSON.stringify(result.missing)).toBe('complete');
     expect(result.definition.effects).toEqual([
-      { primitive: 'dealDamage', params: { amount: 3, targets: 'player' } },
+      { primitive: 'dealDamage', params: { amount: 3, targets: 'playerOrPlaneswalker' } },
       { primitive: 'gainLife', params: { amount: 3 } },
     ]);
   });
@@ -415,23 +457,147 @@ describe('compileCard — templated cards outside the curated pool', () => {
     expect(result.definition.keywords).toEqual({ flying: true });
   });
 
-  it('reports an {X} cost instead of pretending it is free', () => {
+  it('compiles a plain {X} burn spell: the cost carries xCost and the damage reads the cast-time X', () => {
+    // A Blaze-shaped card. (Real Fireball adds "divided among any number of
+    // targets", which is still a template gap — see the test below.)
+    const result = compileCard(
+      makeCard({
+        name: 'Blaze',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: ['X'] },
+        power: null,
+        toughness: null,
+        oracleText: 'Blaze deals X damage to any target.',
+        keywords: [],
+      }),
+    );
+
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.xCost).toBe(1);
+    expect(result.definition.cost).toEqual({ R: 1 });
+    expect(result.definition.effects).toEqual([
+      { primitive: 'dealDamage', params: { amount: { chosenX: true } } },
+    ]);
+  });
+
+  it('still reports an {X} template the effect table cannot compile (real Fireball)', () => {
     const result = compileCard(
       makeCard({
         name: 'Fireball',
         typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
-        manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: ['{X}'] },
+        manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: ['X'] },
         power: null,
         toughness: null,
-        oracleText: 'Fireball deals X damage to any target.',
+        oracleText:
+          'This spell costs {1} more to cast for each target beyond the first.\nFireball deals X damage divided evenly, rounded down, among any number of targets.',
+        keywords: [],
+      }),
+    );
+
+    expect(result.status).toBe('incomplete');
+    expect(result.missing.length).toBeGreaterThan(0);
+  });
+
+  it('does NOT read "deals X damage" as the cast-time X on a card whose cost has no {X}', () => {
+    // The X here is defined by a clause the compiler cannot read; compiling the
+    // damage against a cast-time X that does not exist would deal 0 forever.
+    const result = compileCard(
+      makeCard({
+        name: 'Not An X Cost',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        manaCost: { generic: 1, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+        power: null,
+        toughness: null,
+        oracleText: 'Not An X Cost deals X damage to any target.',
+        keywords: [],
+      }),
+    );
+
+    expect(result.status).toBe('incomplete');
+    expect(result.definition.xCost).toBeUndefined();
+  });
+
+  it('still reports a Phyrexian symbol, with the {X}-free wording', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Phyrexian Thing',
+        typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+        manaCost: { generic: 1, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: ['W/P'] },
+        power: null,
+        toughness: null,
+        oracleText: 'You gain 2 life.',
         keywords: [],
       }),
     );
 
     expect(result.status).toBe('incomplete');
     expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(
-      'variable ({X}), Phyrexian, and monocolour hybrid mana costs',
+      'Phyrexian and monocolour hybrid mana costs',
     );
+  });
+
+  it('compiles kicker: the cost line, and a kicked rider that runs only when paid', () => {
+    // Into-the-Roil-shaped rider on a supported main clause.
+    const result = compileCard(
+      makeCard({
+        name: 'Kicked Bolt',
+        typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+        manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+        power: null,
+        toughness: null,
+        oracleText:
+          'Kicker {1}{U} (You may pay an additional {1}{U} as you cast this spell.)\nKicked Bolt deals 2 damage to any target. If this spell was kicked, draw a card.',
+        keywords: ['Kicker'],
+      }),
+    );
+
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.kicker).toEqual({ generic: 1, U: 1 });
+    expect(result.definition.effects).toEqual([
+      { primitive: 'dealDamage', params: { amount: 2 } },
+      { primitive: 'ifKicked', params: { effects: [{ primitive: 'drawCards', params: { count: 1 } }] } },
+    ]);
+  });
+
+  it('compiles the "deals M damage instead" kicked form as one switched damage ref (Burst Lightning)', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Burst Lightning',
+        typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+        manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+        power: null,
+        toughness: null,
+        oracleText:
+          'Kicker {4} (You may pay an additional {4} as you cast this spell.)\nBurst Lightning deals 2 damage to any target. If this spell was kicked, it deals 4 damage to that target instead.',
+        keywords: ['Kicker'],
+      }),
+    );
+
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.kicker).toEqual({ generic: 4 });
+    expect(result.definition.effects).toEqual([
+      { primitive: 'dealDamage', params: { amount: { base: 2, kicked: 4 } } },
+    ]);
+  });
+
+  it('compiles multikicker as a COUNT, never flattened into a single kick', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Multi Thing',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        manaCost: { generic: 1, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+        power: null,
+        toughness: null,
+        oracleText: 'Multikicker {R}\nMulti Thing deals 2 damage to any target.',
+        keywords: ['Multikicker'],
+      }),
+    );
+
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    // `multikicker`, NOT `kicker`: the two ask different questions (a count vs a
+    // yes/no), and compiling one as the other would cap the card at one kick.
+    expect(result.definition.multikicker).toEqual({ R: 1 });
+    expect(result.definition.kicker).toBeUndefined();
   });
 
   it('compiles a colour/colour hybrid cost the mana system can pay', () => {
@@ -457,11 +623,14 @@ describe('compileCard — templated cards outside the curated pool', () => {
   });
 
   it('reports an unmodelled keyword rather than dropping the ability', () => {
-    // Menace used to be the example here; it is implemented now (it constrains
-    // the block DECLARATION, which no per-pair check can express). Ward is the
-    // right stand-in: it needs a cost paid to target, which the engine has no
-    // way to demand. The point of the test is unchanged — an ability we cannot
-    // model must be REPORTED, never silently dropped.
+    // Menace was the example here, then ward, then indestructible, then SKULK —
+    // every one of them is implemented now, and the stand-in has had to move each
+    // time. (Skulk went last: `KeywordFlags.blockRestriction` carries "can't be
+    // blocked by creatures with greater power" as a payload, compared against
+    // EFFECTIVE power in `canBlock`.) HORSEMANSHIP is the current stand-in — an
+    // evasion keyword with its own separate blocking rule that nothing here
+    // models. The point of the test has never changed: an ability we cannot model
+    // must be REPORTED, never silently dropped.
     const result = compileCard(
       makeCard({
         name: 'Sneaky Beast',
@@ -469,13 +638,30 @@ describe('compileCard — templated cards outside the curated pool', () => {
         manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0, other: [] },
         power: 3,
         toughness: 3,
-        oracleText: 'Ward {2}',
-        keywords: ['Ward'],
+        oracleText: 'Horsemanship',
+        keywords: ['Horsemanship'],
       }),
     );
 
     expect(result.status).toBe('incomplete');
-    expect(result.missing.some((gap) => /ward/i.test(gap.text))).toBe(true);
+    expect(result.missing.some((gap) => /horsemanship/i.test(gap.text))).toBe(true);
+  });
+
+  it('compiles SKULK, which IS modelled now', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Sneaky Rogue',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Rogue'] },
+        manaCost: { generic: 1, W: 0, U: 0, B: 1, R: 0, G: 0, C: 0, other: [] },
+        power: 2,
+        toughness: 1,
+        oracleText: 'Skulk',
+        keywords: ['Skulk'],
+      }),
+    );
+
+    expect(result.status).toBe('complete');
+    expect(result.definition?.keywords?.blockRestriction).toEqual({ blockerPowerAtMostMine: true });
   });
 
   it('compiles menace, which IS modelled now', () => {
@@ -555,7 +741,7 @@ describe('compileCard — templated cards outside the curated pool', () => {
     ]);
   });
 
-  it('still reports a mana ability whose colours depend on the board', () => {
+  it('compiles a mana ability whose colours depend on the board', () => {
     const result = compileCard(
       makeCard({
         name: 'Board-Dependent Land',
@@ -564,10 +750,24 @@ describe('compileCard — templated cards outside the curated pool', () => {
       }),
     );
 
-    expect(result.status).toBe('incomplete');
-    expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(
-      'a mana-ability template the compiler does not recognize yet',
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    // The derivation is recorded, NOT the answer: which colours are actually
+    // available is asked of the live board every time the ability is offered, so
+    // no board's answer is ever frozen onto this shared definition.
+    // (mana-templates.test.ts pins the whole partition.)
+    expect(result.definition.manaAbilities).toEqual([{ derivedColors: 'landsYouControl' }]);
+  });
+
+  it('still reports a mana colour derived from an object the engine does not have', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Command Tower',
+        typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+        oracleText: "{T}: Add one mana of any color in your commander's color identity.",
+      }),
     );
+    expect(result.status).toBe('incomplete');
+    expect(result.missing.map((gap) => gap.missingEngineSystem).join(' | ')).toContain('commander');
   });
 
   it('compiles a self-pumping cast trigger (the printed prowess template)', () => {

@@ -69,8 +69,7 @@ export function cropRegion(image: PixelImage, rect: Rect): MutablePixelImage {
 
 /**
  * Condition a title crop for OCR: convert to greyscale, stretch the contrast so
- * the darkest pixel is black and the lightest white, and nearest-neighbour
- * upscale.
+ * the darkest pixel is black and the lightest white, and BILINEARLY upscale.
  *
  * Each step targets a specific failure mode seen on real photos — a phone
  * photo's title bar is small (so upscaling helps the engine find letter shapes),
@@ -78,6 +77,12 @@ export function cropRegion(image: PixelImage, rect: Rect): MutablePixelImage {
  * a per-crop stretch adapts), and colour carries no signal for text (so greyscale
  * removes a distraction). Deliberately NOT binarised: Tesseract does its own
  * adaptive thresholding and does it better than a global cutoff.
+ *
+ * Bilinear rather than nearest-neighbour, and this was measured, not guessed:
+ * on a real photo whose title text is ~10px tall, nearest-neighbour turns each
+ * glyph into blocks and Tesseract read confident nonsense ("Strionic
+ * Resonator" → "fRirionc Mranmpt ny"); the same crop bilinearly upscaled read
+ * nearly clean. Smooth edges are what the engine's own thresholding wants.
  *
  * The upscale is chosen to REACH A TARGET HEIGHT rather than being a fixed
  * factor, because a fixed factor is wrong at both ends: on a close-up photo it
@@ -116,10 +121,18 @@ export function prepareForOcr(
   const out = new Uint8ClampedArray(width * height * 4);
 
   for (let y = 0; y < height; y += 1) {
-    const sourceY = Math.floor(y / factor);
+    const sourceY = Math.min(crop.height - 1, y / factor);
+    const y0 = Math.floor(sourceY);
+    const y1 = Math.min(crop.height - 1, y0 + 1);
+    const fy = sourceY - y0;
     for (let x = 0; x < width; x += 1) {
-      const sourceX = Math.floor(x / factor);
-      const value = ((grey[sourceY * crop.width + sourceX] ?? 0) - offset) * scale;
+      const sourceX = Math.min(crop.width - 1, x / factor);
+      const x0 = Math.floor(sourceX);
+      const x1 = Math.min(crop.width - 1, x0 + 1);
+      const fx = sourceX - x0;
+      const top = (grey[y0 * crop.width + x0] ?? 0) * (1 - fx) + (grey[y0 * crop.width + x1] ?? 0) * fx;
+      const bottom = (grey[y1 * crop.width + x0] ?? 0) * (1 - fx) + (grey[y1 * crop.width + x1] ?? 0) * fx;
+      const value = (top * (1 - fy) + bottom * fy - offset) * scale;
       const target = (y * width + x) * 4;
       const clamped = value < 0 ? 0 : value > 255 ? 255 : value;
       out[target] = clamped;

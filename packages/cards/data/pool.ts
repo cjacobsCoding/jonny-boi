@@ -30,14 +30,16 @@
  * restriction declares it as data (`params.targets`) and the engine enforces it
  * when the cast is offered, when it is applied, and again when it resolves — so
  * "target creature", "target player" and "target spell" mean what they say, and a
- * spell with no legal target cannot be cast. What it still has no system for is
- * transform, planeswalker loyalty, dynamic P/T, flash/flashback, activated
- * abilities, and target restrictions finer than those three (an opponent-only
- * target, "nonblack creature" as a legality rather than a resolution-time fizzle).
- * Cards whose identity needs one of those are authored as the closest faithful
- * subset (documented per-card); their
- * vanilla body (P/T, keywords, mana production) is always correct so they play on
- * the battlefield. See `STUBBED_MECHANICS`.
+ * spell with no legal target cannot be cast. Activated abilities (including
+ * planeswalker LOYALTY abilities) are real: walkers enter with printed loyalty,
+ * are attackable, and die at 0. Flash is a real timing flag and a printed
+ * "Flashback {cost}" casts from the graveyard for real (then exiles).
+ * A characteristic-defining star P/T box is a real formula (Tarmogoyf), and the
+ * engine remembers a short named list of turn-scoped facts (revolt). Flashback
+ * GRANTED by another card (Snapcaster) and modes chosen at CAST time (Cryptic
+ * Command) both landed too — `STUBBED_MECHANICS` is now EMPTY, every card below
+ * plays exactly as printed, and `fidelity.test.ts` audits the whole pool with no
+ * exemptions. Keep it that way: do not add a card that would need one.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -71,11 +73,15 @@ const LAND = Object.freeze({ anyOfTypes: Object.freeze(['land']) });
  */
 export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
   // --- Basic lands (vanilla mana sources; zero custom effects) ----------------
-  { id: 'bc71ebf6-2056-41f7-be35-b2e5c34afa99', name: 'Plains', types: ['land'], produces: ['W'] },
-  { id: 'b2c6aa39-2d2a-459c-a555-fb48ba993373', name: 'Island', types: ['land'], produces: ['U'] },
-  { id: '56719f6a-1a6c-4c0a-8d21-18f7d7350b68', name: 'Swamp', types: ['land'], produces: ['B'] },
-  { id: 'a3fb7228-e76b-4e96-a40e-20b5fed75685', name: 'Mountain', types: ['land'], produces: ['R'] },
-  { id: 'b34bb2dc-c1af-4d77-b0b3-a0fb342a5fc6', name: 'Forest', types: ['land'], produces: ['G'] },
+  // `basic: true` is the printed **Basic** supertype, not decoration: the
+  // battlelands count it ("enters tapped unless you control two or more basic
+  // lands"), and land SUBTYPES cannot stand in for it — a nonbasic dual prints
+  // the same ones.
+  { id: 'bc71ebf6-2056-41f7-be35-b2e5c34afa99', name: 'Plains', types: ['land'], basic: true, subtypes: ['plains'], produces: ['W'] },
+  { id: 'b2c6aa39-2d2a-459c-a555-fb48ba993373', name: 'Island', types: ['land'], basic: true, subtypes: ['island'], produces: ['U'] },
+  { id: '56719f6a-1a6c-4c0a-8d21-18f7d7350b68', name: 'Swamp', types: ['land'], basic: true, subtypes: ['swamp'], produces: ['B'] },
+  { id: 'a3fb7228-e76b-4e96-a40e-20b5fed75685', name: 'Mountain', types: ['land'], basic: true, subtypes: ['mountain'], produces: ['R'] },
+  { id: 'b34bb2dc-c1af-4d77-b0b3-a0fb342a5fc6', name: 'Forest', types: ['land'], basic: true, subtypes: ['forest'], produces: ['G'] },
 
   // --- Mana creatures / rocks (vanilla — mana production is data, no effects) --
   {
@@ -143,10 +149,18 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Fatal Push',
     types: ['instant'],
     cost: { B: 1 },
-    // Destroy target creature with mana value ≤ 2. (Revolt's ≤4 mode needs a
-    // "permanent left the battlefield this turn" tracker the engine lacks; we
-    // model the base mode faithfully.)
-    effects: [{ primitive: 'destroyTarget', params: { targets: 'creature', maxManaValue: 2 } }],
+    // UN-STUBBED: both modes play as printed. "Destroy target creature if it
+    // has mana value 2 or less" — or 4 or less instead, when REVOLT is on (a
+    // permanent left the battlefield under your control this turn). The switch
+    // rides one `destroyTarget` ref and is read at RESOLUTION against core's
+    // turn-scoped fact memory, so a permanent that leaves in response turns
+    // revolt on before the spell resolves, exactly as the real card does.
+    effects: [
+      {
+        primitive: 'destroyTarget',
+        params: { targets: 'creature', maxManaValue: { base: 2, revolt: 4 } },
+      },
+    ],
   },
   {
     id: 'd683d985-9888-4d21-8b5f-69e69ce4a03b',
@@ -233,42 +247,43 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Cryptic Command',
     types: ['instant'],
     cost: { generic: 1, U: 3 },
-    // "Choose two —": all four printed modes, chosen for real. A mode whose target
-    // is not legal for this cast is not offered (MTG's own rule), so a Cryptic cast
-    // with nothing to counter still plays as the best legal version of itself.
-    // Chosen modes run in PRINTED order, as MTG resolves a modal spell.
-    effects: [
-      {
-        primitive: 'modal',
-        params: {
-          count: 2,
-          modes: [
-            {
-              id: 'counter',
-              label: 'Counter target spell',
-              requires: 'targetSpell',
-              effects: [{ primitive: 'counterSpell' }],
-            },
-            {
-              id: 'bounce',
-              label: "Return target permanent to its owner's hand",
-              requires: 'targetPermanent',
-              effects: [{ primitive: 'returnToHand' }],
-            },
-            {
-              id: 'tapAll',
-              label: 'Tap all creatures your opponents control',
-              effects: [{ primitive: 'tapPermanents', params: { who: 'opponent', types: ['creature'] } }],
-            },
-            {
-              id: 'draw',
-              label: 'Draw a card',
-              effects: [{ primitive: 'drawCards', params: { count: 1 } }],
-            },
-          ],
+    // "Choose two —": all four printed modes, announced AT CAST (CR 601.2b) and
+    // each aimed at cast too (CR 601.2c) — which is the whole card. A Cryptic
+    // whose modes were picked on resolution would let its controller watch the
+    // opponent's response first and then decide whether to counter it; the real
+    // card commits before anybody may respond, and so does this one.
+    //
+    // A mode with no legal target is not on the menu (MTG's own rule), so a
+    // Cryptic cast with an empty stack still plays as the best legal version of
+    // itself. Chosen modes resolve in PRINTED order, each against its own target.
+    modal: {
+      min: 2,
+      max: 2,
+      modes: [
+        {
+          id: 'counter',
+          label: 'Counter target spell',
+          targets: 'spell',
+          effects: [{ primitive: 'counterSpell', params: { targets: 'spell' } }],
         },
-      },
-    ],
+        {
+          id: 'bounce',
+          label: "Return target permanent to its owner's hand",
+          targets: 'permanent',
+          effects: [{ primitive: 'returnToHand', params: { targets: 'permanent' } }],
+        },
+        {
+          id: 'tapAll',
+          label: 'Tap all creatures your opponents control',
+          effects: [{ primitive: 'tapPermanents', params: { who: 'opponent', types: ['creature'] } }],
+        },
+        {
+          id: 'draw',
+          label: 'Draw a card',
+          effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        },
+      ],
+    },
   },
 
   // --- Ritual / ramp -----------------------------------------------------------
@@ -427,12 +442,22 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     triggers: [
       {
         condition: { on: 'castSpell', who: 'you', spellType: 'instant' },
-        effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Elemental' } }],
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: { power: 1, toughness: 1, name: 'Elemental', colors: ['R'], subtypes: ['Elemental'] },
+          },
+        ],
         label: 'Cast instant: make a 1/1 red Elemental',
       },
       {
         condition: { on: 'castSpell', who: 'you', spellType: 'sorcery' },
-        effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Elemental' } }],
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: { power: 1, toughness: 1, name: 'Elemental', colors: ['R'], subtypes: ['Elemental'] },
+          },
+        ],
         label: 'Cast sorcery: make a 1/1 red Elemental',
       },
     ],
@@ -441,12 +466,39 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     id: '2bb2eda7-3b38-4c56-870f-c3218a1056f5',
     name: 'Snapcaster Mage',
     types: ['creature'],
+    subtypes: ['Human', 'Wizard'],
     cost: { generic: 1, U: 1 },
     power: 2,
     toughness: 1,
-    keywords: {},
-    // Flash + flashback-granting ETB needs flash timing + graveyard recast; the
-    // vanilla 2/1 plays correctly.
+    // The WHOLE printed card now. Flash is a real timing flag (`castTiming`
+    // reads it), and the ETB is a targeted trigger aimed as it goes on the
+    // stack: "target instant or sorcery card in your graveyard gains flashback
+    // until end of turn. The flashback cost is equal to its mana cost."
+    //
+    // The grant is instance-scoped, expires in cleanup, and dies with a zone
+    // change (CR 400.7) — core's `card-grants.ts`; the cast path reads it
+    // through the same `flashbackCostOf` accessor that reads a printed
+    // flashback cost, so a granted recast plays exactly like Think Twice's.
+    //
+    // ⚠️ Adding `flash` here does NOT move any recorded gauntlet baseline:
+    // no meta deck runs Snapcaster (UW Control cut it precisely because it was
+    // a blank 2/1 — see `packages/sim/data/decks/uw-control.ts`), so seed 99
+    // still reproduces byte-identically. Putting it back into a deck IS a
+    // baseline-moving decision and is deliberately left to the integrator.
+    keywords: { flash: true },
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        targets: 'instantOrSorceryInYourGraveyard',
+        effects: [
+          {
+            primitive: 'grantFlashback',
+            params: { targets: 'instantOrSorceryInYourGraveyard', cost: 'itsManaCost' },
+          },
+        ],
+        label: 'Enters: target instant or sorcery in your graveyard gains flashback',
+      },
+    ],
   },
   {
     id: 'e3afc704-220f-498f-9eaa-0821b17dc24c',
@@ -455,40 +507,131 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, G: 1 },
     power: 1,
     toughness: 1,
-    // Sacrifice for a land needs an activated sac-ability + land search; vanilla
-    // 1/1 plays correctly.
+    // "Sacrifice this creature: Search your library for a basic land card, put
+    // that card onto the battlefield tapped, then shuffle." — the full printed
+    // card: a sacrifice-self activation cost funding the basic-land search
+    // (same search shape as Path to Exile's compensation, on our own library).
+    activated: [
+      {
+        cost: { sacrificeSelf: true },
+        effects: [
+          {
+            primitive: 'searchLibrary',
+            params: {
+              who: 'controller',
+              count: 1,
+              filter: LAND,
+              nameAnyOf: BASIC_LAND_NAMES,
+              destination: 'battlefield',
+              tapped: true,
+            },
+          },
+        ],
+        label: 'Sacrifice ~: search for a basic land, tapped',
+      },
+    ],
   },
   {
     id: 'edd531b9-f615-4399-8c8c-1c5e18c4acbf',
     name: 'Delver of Secrets',
     types: ['creature'],
+    subtypes: ['human', 'wizard'],
     cost: { U: 1 },
     power: 1,
     toughness: 1,
-    keywords: { flying: false },
-    // Transform (upkeep trigger flipping to a 3/2 flyer) needs a transform system;
-    // the front-face vanilla 1/1 plays correctly.
+    // "At the beginning of your upkeep, look at the top card of your library.
+    // You may reveal that card. If an instant or sorcery card is revealed this
+    // way, transform this creature." — played for real: the look/reveal is one
+    // top-of-library selection, and a matching reveal transforms the permanent
+    // to the nested back face below (core swaps `CardInstance.def`; CR 712:
+    // counters/damage/auras persist, and it turns back front-face-up on leaving
+    // the battlefield).
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          { primitive: 'transformRevealTop', params: { filter: { anyOfTypes: ['instant', 'sorcery'] } } },
+        ],
+        label: 'Upkeep: you may reveal the top card of your library — an instant or sorcery transforms this',
+      },
+    ],
+    backFace: {
+      id: 'edd531b9-f615-4399-8c8c-1c5e18c4acbf#back',
+      name: 'Insectile Aberration',
+      isBackFace: true,
+      types: ['creature'],
+      subtypes: ['human', 'insect'],
+      power: 3,
+      toughness: 2,
+      keywords: { flying: true },
+    },
   },
   {
     id: '45900b2f-f6a9-4c42-9642-008f3c1cf6dd',
     name: 'Tarmogoyf',
     types: ['creature'],
     cost: { generic: 1, G: 1 },
-    // P/T is "* / *+1" derived from graveyard card types — a dynamic characteristic
-    // the stat layer can't express yet. We pin a representative baseline (2/3) so
-    // it plays as a creature; the dynamic P/T is the documented stub.
-    power: 2,
-    toughness: 3,
+    // UN-STUBBED: the star box is a FORMULA now, not a pinned guess. Power is
+    // the number of card types among cards in ALL graveyards; toughness is that
+    // number plus one. It is applied in CR 613.3 layer 7a — before counters and
+    // before every pump — and re-derived on every read, so a fetchland cracking
+    // mid-combat grows it before state-based actions run.
+    characteristicPT: {
+      power: { countOf: 'cardTypesInAllGraveyards' },
+      toughness: { countOf: 'cardTypesInAllGraveyards', plus: 1 },
+    },
   },
 
   // --- Planeswalker ------------------------------------------------------------
   {
+    // Liliana of the Veil — UN-STUBBED: she now plays exactly as printed. Enters
+    // at 3 loyalty; each line is a sorcery-speed activated ability with a SIGNED
+    // loyalty cost (the engine enforces one loyalty ability per walker per turn,
+    // and that a minus can only be paid from loyalty actually there); she can be
+    // attacked and burned ("any target" includes her), and dies at 0 loyalty to
+    // a state-based action. She is **Legendary**, and that is now load-bearing:
+    // the legend rule (CR 704.5j) is a real state-based action shared by every
+    // legendary permanent kind, so controlling a second Liliana makes her
+    // controller choose one and bury the other.
     id: '0ba134d8-ee7d-48ec-8dc6-57942b8e9261',
     name: 'Liliana of the Veil',
     types: ['planeswalker'],
+    legendary: true,
+    subtypes: ['liliana'],
     cost: { generic: 1, B: 2 },
-    // Loyalty abilities need a planeswalker/loyalty system the engine lacks. She
-    // enters as a permanent (correct zone/cost); her abilities are the stub.
+    loyalty: 3,
+    activated: [
+      {
+        cost: { loyalty: 1 },
+        timing: 'sorcery',
+        label: '+1: Each player discards a card.',
+        // Both seats choose their own discard, APNAP — see `discardCard`.
+        effects: [{ primitive: 'discardCard', params: { who: 'eachPlayer' } }],
+      },
+      {
+        cost: { loyalty: -2 },
+        timing: 'sorcery',
+        label: '−2: Target player sacrifices a creature.',
+        // The VICTIM picks which creature leaves — an edict, not targeted removal.
+        effects: [
+          {
+            primitive: 'sacrificeChosen',
+            params: { targets: 'player', who: 'targetPlayer', filter: { anyOfTypes: ['creature'] } },
+          },
+        ],
+      },
+      {
+        cost: { loyalty: -6 },
+        timing: 'sorcery',
+        label:
+          '−6: Separate all permanents target player controls into two piles. That player sacrifices all permanents in the pile of their choice.',
+        // Controller splits, victim picks the pile — two questions, then the
+        // sacrifice happens at once. See `pileSplitSacrifice`.
+        effects: [
+          { primitive: 'pileSplitSacrifice', params: { targets: 'player', who: 'targetPlayer' } },
+        ],
+      },
+    ],
   },
 ]);
 

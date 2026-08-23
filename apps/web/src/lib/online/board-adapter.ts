@@ -20,6 +20,11 @@ import {
   effectiveToughness,
   isCreature,
   isLand,
+  isBattle,
+  isPlaneswalker,
+  defenseOf,
+  loyaltyOf,
+  protectorOf,
   manaColorsOffered,
   NO_MOD,
   type CardInstance,
@@ -34,6 +39,7 @@ import type {
   StackView,
   VisibleHandCard,
 } from '../play/view-model.js';
+import { poolColorCounts, poolRestrictionLabels } from '../play/view-model.js';
 
 /** The opposite seat. */
 function otherSeat(p: PlayerId): PlayerId {
@@ -59,6 +65,15 @@ function boardPermanent(inst: CardInstance): BoardPermanent {
     controller: inst.controller,
     isCreature: creature,
     isLand: isLand(inst.def),
+    isPlaneswalker: isPlaneswalker(inst.def),
+    // Loyalty is carried in the instance's counters, which the server sends — so
+    // the badge is authoritative online too, no engine run needed.
+    loyalty: isPlaneswalker(inst.def) ? loyaltyOf(inst) : 0,
+    isBattle: isBattle(inst.def),
+    // Defense rides the same counters record loyalty does, so it is likewise
+    // authoritative online with no engine run needed.
+    defense: isBattle(inst.def) ? defenseOf(inst) : 0,
+    protector: isBattle(inst.def) ? protectorOf(inst) : null,
     tapped: inst.tapped,
     summoningSick: inst.summoningSick,
     power: creature ? effectivePower(inst, NO_MOD) : 0,
@@ -89,8 +104,12 @@ function seatView(
     hand: player.hand ? visibleHand(player.hand) : null,
     libraryCount: player.libraryCount,
     graveyardCount: player.graveyard.length,
+    // The graveyard is a PUBLIC zone: the server sends its full contents for both
+    // seats, so listing the cards here reveals nothing the table can't see.
+    graveyard: visibleHand(player.graveyard),
     exileCount: player.exile.length,
-    manaPool: { ...player.manaPool },
+    manaPool: poolColorCounts(player.manaPool),
+    restrictedMana: poolRestrictionLabels(player.manaPool),
     hasLost: player.hasLost,
     permanents,
   };

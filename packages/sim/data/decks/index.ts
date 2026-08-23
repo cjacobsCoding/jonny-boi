@@ -15,6 +15,7 @@
  *   - Golgari Midrange  — discard + removal attrition; wins on cards.
  *   - Orzhov Lifegain   — lifelinking fliers; beats a race by winning it slower.
  *   - Mono-Green Ramp   — accelerate into creatures nothing beats on the ground.
+ *   - Selesnya Blink    — re-uses its own creatures; wins on accumulated value.
  *   - UW Control        — answers, a sweeper, and a flier to close.
  *
  * The list was re-tuned after a wave of engine correctness fixes (the livelock fix
@@ -32,6 +33,7 @@ import { MONO_BLACK_MIDRANGE } from './mono-black-midrange.js';
 import { BOROS_AGGRO } from './boros-aggro.js';
 import { ORZHOV_LIFEGAIN } from './orzhov-lifegain.js';
 import { RAKDOS_GOBLINS } from './rakdos-goblins.js';
+import { SELESNYA_BLINK } from './selesnya-blink.js';
 
 /** Every bundled sample deck, in a stable order (fastest to slowest). */
 export const SAMPLE_DECKS: readonly Deck[] = Object.freeze([
@@ -43,6 +45,13 @@ export const SAMPLE_DECKS: readonly Deck[] = Object.freeze([
   ORZHOV_LIFEGAIN,
   MONO_GREEN_STOMPY,
   UW_CONTROL,
+  // APPENDED, not slotted into the curve order above, and deliberately so: a
+  // gauntlet matchup is seeded by the opponent's INDEX (`gameSeedFor(baseSeed, i)`),
+  // so inserting a deck mid-list reseeds every deck after it and silently moves
+  // the recorded baseline. Slotting Selesnya Blink before UW Control moved UW's
+  // row from 14 to 12 while changing nothing about how either deck plays.
+  // Appending leaves all seven original rows byte-identical and adds an eighth.
+  SELESNYA_BLINK,
 ]);
 
 export {
@@ -54,4 +63,5 @@ export {
   BOROS_AGGRO,
   ORZHOV_LIFEGAIN,
   RAKDOS_GOBLINS,
+  SELESNYA_BLINK,
 };

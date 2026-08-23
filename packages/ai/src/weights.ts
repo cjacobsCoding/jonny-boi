@@ -61,6 +61,24 @@ export interface HeuristicWeights {
   readonly burnFaceLifeReference: number;
   /** Score for burn that is *lethal* to the opponent right now — take the win. */
   readonly lethalBurnScore: number;
+  /**
+   * What one point of PREVENTED combat damage is worth when deciding whether to
+   * cast a fog. Deliberately per-damage rather than a flat score: a fog is worth
+   * exactly what it stops, so a two-power poke should leave it in hand while a
+   * real attack gets it cast. A swing that would KILL is not priced here at all
+   * — it takes {@link lethalBurnScore}, because surviving is the whole game.
+   */
+  readonly fogValuePerDamagePrevented: number;
+  /**
+   * The least damage a fog must prevent to be worth the CARD it costs. Below it
+   * the pilot holds the fog — two points of life at a healthy total is not worth
+   * a card, and a pilot that fires prevention at every poke has thrown it away
+   * before the attack that mattered. Ignored when the pilot is already at or
+   * below {@link desperateLifeThreshold}, where every point does matter, and
+   * irrelevant against a LETHAL swing, which is priced at
+   * {@link lethalBurnScore} instead.
+   */
+  readonly fogMinimumDamagePrevented: number;
 
   // --- developing the board ------------------------------------------------
   /** Base score for casting a creature to develop the board. */
@@ -94,6 +112,15 @@ export interface HeuristicWeights {
   /** Extra score per keyword granted (flying/trample/lifelink all change a race
    *  more than a stat point does, so this is worth more than one stat). */
   readonly attachPerKeyword: number;
+  /** Extra score per TRIGGERED ability the attachment gives its HOST — a Sword's
+   *  "whenever equipped creature deals combat damage to a player, …".
+   *
+   *  This is the knob that makes such an Equipment worth picking up at all. The
+   *  equip score was computed from the P/T and keyword grant alone, so an
+   *  Equipment whose whole text is a host-watching trigger scored `undefined`
+   *  and was equipped by nobody, ever: a card in the pool that no game played.
+   *  Priced above a keyword because a saboteur trigger pays out every combat. */
+  readonly attachPerHostTrigger: number;
 
   // --- generic / fallback --------------------------------------------------
   /** Score for any other castable spell we don't specifically understand. Above
@@ -101,6 +128,23 @@ export interface HeuristicWeights {
   readonly genericSpellScore: number;
   /** Score for passing priority — the floor. Any positive-scoring play beats it. */
   readonly passScore: number;
+
+  // --- cycling (alternative costs) -----------------------------------------
+  /** How many lands on the battlefield count as FLOODED — the point past which a
+   *  further land in hand is worth less than an unknown card, so cycling one away
+   *  is a gain rather than a cost. Deliberately a count of lands in play rather
+   *  than a ratio: it is the number the pilot can actually see, and it is the same
+   *  number a human uses when they say "I have plenty of lands". */
+  readonly floodedLandCount: number;
+  /** Score for cycling a surplus LAND while flooded. Above `genericSpellScore`
+   *  because trading a card that does nothing for an unknown card is close to
+   *  free, but below `playLandScore` so a pilot that still wants its land drop
+   *  takes the drop first. */
+  readonly cycleFloodedScore: number;
+  /** Score for cycling anything else when the turn is ENDING and the mana would
+   *  otherwise empty unused. Just above `passScore`: it never outbids a real
+   *  play, and it stops mana from being wasted on a turn with nothing to do. */
+  readonly cycleIdleScore: number;
 
   // --- attacking -----------------------------------------------------------
   /** Minimum net "value" (see attack evaluation) for an attack to be worth making.
@@ -110,11 +154,50 @@ export interface HeuristicWeights {
   /** How much a point of damage to the opponent's face is worth when weighing an
    *  attack (aggression). */
   readonly faceDamageValue: number;
+  /** What CONNECTING is worth beyond the damage, per triggered ability that fires
+   *  on combat damage to a player — the attacker's own "whenever ~ deals combat
+   *  damage to a player, …" and the ones its Equipment gives it.
+   *
+   *  Such a creature attacks for a reason the face-damage term cannot see: a 1/1
+   *  Ragavan-shaped body is priced at one point of damage and held back, while
+   *  the card is played precisely to get it through. Counted only where the
+   *  attack is expected to CONNECT (the no-profitable-block branch) — a trigger
+   *  that fires on damage to a player pays nothing when the attacker is
+   *  blocked, so paying for it there would be a pilot attacking into removal
+   *  for a benefit it is not going to get. */
+  readonly attackSaboteurTriggerValue: number;
   /** How much losing our own creature in a trade costs us (by its power+toughness),
    *  per stat point — discourages suiciding good creatures into bad blocks. */
   readonly ownCreatureLossPerStat: number;
   /** How much killing an opponent's creature in a trade is worth, per stat point. */
   readonly killEnemyPerStat: number;
+  /** How much removing an enemy planeswalker is worth, per loyalty counter it has —
+   *  a walker generates value every turn it lives, so killing one prices like
+   *  removal: this per-loyalty term steers both attacks and burn toward walkers
+   *  that can actually be finished off. */
+  readonly walkerThreatPerLoyalty: number;
+  /** Flat value for finishing OFF an enemy planeswalker (on top of the per-loyalty
+   *  term) — the ability stream it stops is worth more than its remaining counters. */
+  readonly walkerKillBonus: number;
+  /** How much removing the last defense counter from an enemy BATTLE is worth, per
+   *  counter it has left. Priced BELOW `walkerThreatPerLoyalty` deliberately: a
+   *  walker generates value every turn it lives, whereas a battle just sits there
+   *  — the prize is the reward for defeating it, not the harm of leaving it up. */
+  readonly battleThreatPerDefense: number;
+  /** Flat value for DEFEATING an enemy battle (on top of the per-defense term) —
+   *  the reward it pays out is the whole reason to attack it, so this is what
+   *  outbids face damage once the last counter is actually reachable. */
+  readonly battleDefeatBonus: number;
+
+  // --- activating loyalty abilities -----------------------------------------
+  /** Base score for activating a loyalty ability whose effects come out at least
+   *  neutral: a PLUS ability is nearly free value each turn, so this sits above
+   *  `passScore` — a walker whose controller never activates it is an inert card. */
+  readonly loyaltyAbilityBaseScore: number;
+  /** How much each point of loyalty GAINED (a plus cost) adds to the score, and
+   *  each point spent (a minus cost) subtracts — spending toward zero must be
+   *  bought by the ability's effect value. */
+  readonly loyaltyPerCounter: number;
 
   // --- blocking ------------------------------------------------------------
   /** Below this life total the defender blocks much more readily (preserve life /
@@ -124,6 +207,15 @@ export interface HeuristicWeights {
    *  if the trade is at least this good (kills the attacker without losing more
    *  than we gain). */
   readonly blockValueThreshold: number;
+  /** How much a printed block REQUIREMENT ("~ must be blocked if able", "all
+   *  creatures able to block ~ do so") is worth when the pilot ranks creatures.
+   *  A LURE IS A THREAT, NOT A GIFT: it does not make the attacker easier to kill,
+   *  it takes the defender's blockers away from every other attacker, and a pilot
+   *  that read "must be blocked" as good news would leave the card alone and then
+   *  lose to the attack it enabled. Expressed in the same units as a point of
+   *  power or toughness, so it competes with body size on the removal-target
+   *  ranking rather than overriding it. */
+  readonly blockRequirementThreatValue: number;
 
   // --- answering player choices (choices.ts) --------------------------------
   /** What a LAND is worth when the pilot must rank cards for a choice ("which card
@@ -160,6 +252,65 @@ export interface HeuristicWeights {
    *  `choiceLandsWanted`). High enough that a pilot pitches a cheap spell before
    *  the land that would let it cast anything at all. */
   readonly choiceLandShortValue: number;
+  /**
+   * The `cardValue` a looked-at card must clear to be KEPT on top of the library
+   * by a scry or a surveil; anything at or below it is bottomed (scry) or
+   * binned (surveil).
+   *
+   * This one number is the whole scry policy, and it works because `cardValue`
+   * already knows about flooding: a land is worth `choiceLandShortValue` while
+   * its controller is below `choiceLandsWanted` and only `choiceLandValue`
+   * once the mana is built. So a threshold sitting BETWEEN those two values
+   * makes the pilot keep a land exactly while it still needs lands and bottom
+   * it the moment it is flooded — the single most valuable scry decision in
+   * real Magic — while every creature and spell (which start at
+   * `choiceCreatureBaseValue` / `choiceSpellBaseValue`) clears it and stays.
+   */
+  readonly scryKeepValueThreshold: number;
+
+  // --- choosing a COPY TARGET (CR 707) --------------------------------------
+  //
+  // A dedicated ruler, and it has to be: `cardValue` prices a card by what it
+  // is worth IN HAND (cost as a proxy) and reads EFFECTIVE stats off the board.
+  // Neither is the question here. "Which permanent should I BE?" is about
+  // PRINTED, copiable values (CR 707.2 - counters and anthems do not come
+  // along) and about what the permanent does once it is in play. These four
+  // weights price exactly that, and nothing else, so the policy is one short
+  // function a reader can check against the board.
+  /** Worth per point of PRINTED (power + toughness) on a copy target. */
+  readonly copyTargetPerStatValue: number;
+  /** Worth of one printed ability (a trigger, an activated ability, a static). */
+  readonly copyTargetAbilityValue: number;
+  /** Worth of one printed keyword (flying, deathtouch, trample, ...). */
+  readonly copyTargetKeywordValue: number;
+  /** Worth of being a MANA SOURCE at all - what a copied land is mostly for. */
+  readonly copyTargetManaSourceValue: number;
+  /**
+   * TUTORING — how far BEYOND the mana it can currently produce a pilot will
+   * still reach when a library search lets it pick any card in the deck.
+   *
+   * A tutor answered on raw card value alone fetches the deck's biggest bomb
+   * every time, including on turn two, where it is a dead card for six turns —
+   * and a fetch that is dead in most games is noise in every A/B verdict the
+   * lab produces, which is the one thing a search must not be. So a candidate
+   * whose mana value exceeds `lands in play + this` is discounted by
+   * {@link tutorUncastablePenalty} rather than banned: an unreachable card is
+   * still the right pick when it is the only thing that qualifies (a tutor may
+   * always find, and "find nothing" is worse).
+   *
+   * One, not zero: the land drop for the turn is a mana source the pilot is
+   * about to have.
+   */
+  readonly tutorReachableManaLead: number;
+  /**
+   * The value subtracted from a searched card the pilot could not cast within
+   * {@link tutorReachableManaLead} of its current mana. Large enough to sort a
+   * castable card above an uncastable one of ANY size (the biggest creature in
+   * the corpus scores well under it), small enough to leave the ordering among
+   * uncastable cards intact — so a tutor whose every candidate is out of reach
+   * still fetches the best of them.
+   */
+  readonly tutorUncastablePenalty: number;
 
   // --- scoring EFFECTS (effect-value.ts — modal-spell modes) -----------------
   // Modes are scored on the SAME scale as spells above (removal ≈ 60, develop ≈ 40,
@@ -176,6 +327,15 @@ export interface HeuristicWeights {
   /** Penalty (subtracted) for pointing an effect at our OWN board/face/spell.
    *  Large enough that such a mode always loses to any other on the menu. */
   readonly modeSelfHarmPenalty: number;
+  /** Penalty (subtracted) per extra link when a copy spell is aimed at ANOTHER
+   *  copy spell rather than at the spell that actually does something. A copy of
+   *  a copy delivers the same payload one resolution later, with one more chance
+   *  to fizzle, so it must score strictly BELOW copying that payload directly —
+   *  otherwise two copy spells aimed at each other are each other's best target
+   *  forever, which is a game that cannot end. Small on the mode scale (removal
+   *  ≈ 60, generic ≈ 25): it breaks the tie between equal payloads without ever
+   *  flipping the order of two genuinely different ones. */
+  readonly modeCopyChainPenalty: number;
   /** Base worth of bouncing an opposing permanent — the tempo floor, before what
    *  it costs them to redeploy. Deliberately low, so bouncing a land or a mana
    *  dork loses to simply drawing a card. */
@@ -206,6 +366,18 @@ export interface HeuristicWeights {
    *  point a pump at. Below `attachPerStat` on purpose: a pump wears off at end of
    *  turn, an Equipment does not. */
   readonly modePumpPerStatValue: number;
+  /**
+   * What fraction of a card's own value a GRANTED FLASHBACK is worth — the
+   * Snapcaster ETB, priced as the card advantage it is.
+   *
+   * Below 1 on purpose, and the reason is the mechanic's one real limit: the
+   * grant expires at end of turn and the card still has to be paid for, so it
+   * is worth strictly less than returning that card to hand (`returnFromGraveyard`
+   * scores the full value). Above zero by a wide margin, because a
+   * flashed-back removal spell or draw spell is the same card twice — which is
+   * exactly the card advantage the pilot already understands.
+   */
+  readonly grantedFlashbackValueShare: number;
 }
 
 /**
@@ -245,6 +417,11 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   burnFacePerDamage: 6,
   burnFaceLifeReference: 24,
   lethalBurnScore: 1000,
+  // A fog is priced between a cheap creature and a removal spell per point it
+  // saves: six damage prevented (~48) outbids developing a two-drop (~44) and
+  // stays below killing a real threat, which is the trade a fog actually is.
+  fogValuePerDamagePrevented: 8,
+  fogMinimumDamagePrevented: 3,
 
   // develop
   castCreatureBaseScore: 40,
@@ -262,20 +439,55 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   attachBaseScore: 30,
   attachPerStat: 4,
   attachPerKeyword: 6,
+  // A host-watching trigger repeats every combat, so it is worth more than the
+  // one-off a keyword grant is — and it is the ONLY term that can make a
+  // trigger-only Equipment (Skullclamp, Sword of the Animist) worth equipping.
+  attachPerHostTrigger: 10,
 
   // generic / fallback
   genericSpellScore: 25,
   passScore: 0,
 
+  // cycling
+  floodedLandCount: 5,
+  cycleFloodedScore: 45,
+  cycleIdleScore: 5,
+
   // attacking
   attackValueThreshold: 1,
   faceDamageValue: 1,
+  // One connection is worth about three points of face damage: enough that a
+  // small saboteur body clears the threshold on its own, not so much that it
+  // outweighs the rest of the attack evaluation.
+  attackSaboteurTriggerValue: 3,
   ownCreatureLossPerStat: 1,
   killEnemyPerStat: 1,
+  // A walker at N loyalty prices like a creature with ~2N stats on the table
+  // (each turn it lives is another ability), plus a flat bonus for actually
+  // finishing it — together they outbid plain face damage whenever the walker
+  // can really be killed, and never when it cannot.
+  walkerThreatPerLoyalty: 2,
+  walkerKillBonus: 8,
+  // A battle is not a recurring threat the way a walker is — it does nothing while
+  // it sits there — so each remaining counter is worth less than a loyalty point.
+  // The value is concentrated in the DEFEAT bonus, which is what a Siege's reward
+  // actually is, and that shape is what stops a pilot chipping at a battle it
+  // cannot finish (chip damage on a battle buys precisely nothing).
+  battleThreatPerDefense: 1,
+  battleDefeatBonus: 8,
+
+  // activating loyalty abilities: above genericSpellScore so a walker on the
+  // table is USED (a plus activation is close to free value every turn), with
+  // each spent counter priced so a minus must be bought by its effect value.
+  loyaltyAbilityBaseScore: 30,
+  loyaltyPerCounter: 3,
 
   // blocking
   desperateLifeThreshold: 10,
   blockValueThreshold: 0,
+  // Worth roughly a two-point body: a lure on a 1/1 is still the card that decides
+  // the combat, and this is what makes the pilot point removal at it.
+  blockRequirementThreatValue: 4,
 
   // answering choices — the ordering these produce is
   //   big creature > small creature ≈ expensive spell > cheap spell > land
@@ -296,6 +508,26 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // small body (a 2/2 scores 18) but still loses to a genuine bomb (a 6/6 scores 34).
   choiceLandsWanted: 4,
   choiceLandShortValue: 20,
+  // Between `choiceLandValue` (2 — a land you no longer need) and every other
+  // card's floor (`choiceSpellBaseValue` 8, `choiceCreatureBaseValue` 10, and a
+  // needed land's `choiceLandShortValue` 20). So: bottom flooded lands, keep
+  // everything else. See the field's doc comment for why one number suffices.
+  scryKeepValueThreshold: 5,
+  // Reach one mana past the board: the land drop for the turn is mana the pilot
+  // is about to have. The penalty is bigger than any card's value (the biggest
+  // creature in the measured corpus scores under 100), so "castable soon" is a
+  // strict sort key ahead of raw power without ever making a fetch impossible.
+  tutorReachableManaLead: 1,
+  tutorUncastablePenalty: 100,
+
+  // Copy targets. Stats dominate (a 4/4 scores 16), then abilities (an ETB
+  // trigger is worth about a point of power each way), then keywords, then the
+  // bare fact of tapping for mana - which is what separates a copied Temple
+  // from a copied Wastes without letting a Wastes outrank a real creature.
+  copyTargetPerStatValue: 2,
+  copyTargetAbilityValue: 4,
+  copyTargetKeywordValue: 2,
+  copyTargetManaSourceValue: 3,
 
   // scoring effects (modal-spell modes) — the ordering these produce is
   //   lethal > counter/kill their best thing > draw a card > bounce a real threat
@@ -303,6 +535,7 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   modeDrawCardValue: 30,
   modeSelfDeckPenalty: 1000,
   modeSelfHarmPenalty: 100,
+  modeCopyChainPenalty: 5,
   modeBounceBaseScore: 6,
   modeBouncePerManaValue: 6,
   modeTapPerPowerValue: 6,
@@ -315,4 +548,7 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // A +2/+2 until end of turn scores 8 — worth taking over nothing, comfortably
   // below removing a real threat (60+), which is the ordering that matters.
   modePumpPerStatValue: 2,
+  // Two thirds of the card: the same card again, minus the end-of-turn clock
+  // and minus having to pay for it a second time.
+  grantedFlashbackValueShare: 2 / 3,
 });

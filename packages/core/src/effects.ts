@@ -17,8 +17,12 @@ import { entersTapped } from './card.js';
 import { attachTo } from './attachments.js';
 import type { ContinuousDuration } from './internal/continuous.js';
 import { applyControlChange } from './internal/continuous.js';
+import type { ReplacementAbility } from './replacement.js';
+import { addFloatingReplacement } from './internal/replacement.js';
+import { applyEnteringDefense, applyEnteringLoyalty } from './internal/stats.js';
 import type {
   ChooseModesRequest,
+  ChooseValueRequest,
   ChoiceAnswer,
   ChoiceRequest,
   ConfirmRequest,
@@ -46,6 +50,40 @@ export interface EffectContext {
   readonly targets: ReadonlyArray<InstanceId | PlayerId>;
   /** The effect's params blob (opaque to core, defined by the primitive). */
   readonly params: Readonly<Record<string, unknown>>;
+  /**
+   * The value chosen for the spell's `{X}` cost at cast time, or `undefined`
+   * when this resolution has no X (a trigger, an ordinary spell). This is how
+   * "deals X damage" reads the number that was actually paid for — including
+   * AFTER the spell has left the stack, because the value rides the resolution
+   * frame, not the stack object.
+   */
+  readonly xValue?: number;
+  /** Whether the spell's kicker was paid at cast time ("if this spell was kicked"). */
+  readonly kicked?: boolean;
+  /**
+   * How many times the spell's MULTIKICKER was paid at cast time — what "for
+   * each time it was kicked" counts. `undefined` for a resolution with no
+   * multikicker; a single (non-multi) kicker leaves this alone and is read
+   * through {@link kicked}.
+   */
+  readonly kickCount?: number;
+  /**
+   * For a TRIGGERED ability: the player the event that set it off was about —
+   * whose step began, who drew the card, who controlled the permanent that
+   * entered or died. This is what a body's printed "**that player**" / "**them**"
+   * points at.
+   *
+   * It is NOT `controller`, and the difference is the whole reason the field
+   * exists: an "at the beginning of EACH player's draw step" ability resolves
+   * under its source's controller on both players' turns, so a body reading
+   * `controller` would make Howling Mine draw its own controller a card every
+   * turn instead of drawing whoever's draw step it is.
+   *
+   * `undefined` for spells and for triggers whose event names no player — a
+   * primitive asked for the triggering player then falls back to the controller,
+   * matching how every other player param degrades.
+   */
+  readonly triggeringPlayer?: PlayerId;
   /** Append an event to the log. */
   emit(event: GameEvent): void;
   /**
@@ -57,12 +95,36 @@ export interface EffectContext {
    */
   addContinuousEffect(mod: ContinuousModRequest): number;
   /**
+   * Register a FLOATING replacement/prevention effect (CR 614/615) — the channel
+   * every fog uses ("prevent all combat damage that would be dealt this turn"),
+   * and every shield ("prevent the next 3 damage that would be dealt to target
+   * creature"). Returns the new record's id.
+   *
+   * `controller` defaults to the source's controller and is what every `'you'` /
+   * `'opponent'` scope in the filter is read against; `duration` defaults to
+   * `'endOfTurn'`, which is what every printed one-shot prints. A shield's
+   * ceiling comes from `outcome.preventUpTo` and is consumed as it prevents.
+   */
+  addReplacementEffect(request: ReplacementEffectRequest): number;
+  /**
    * Create a token permanent on the battlefield under `controller` (defaults to the
    * source's controller) from a token card definition. Returns the new instance id.
    * Tokens enter summoning-sick (unless they have haste) and trigger ETB like any
    * permanent. Used by token-makers (e.g. a cast-trigger that makes a 1/1).
    */
   createToken(def: CardDefinition, controller?: PlayerId): InstanceId;
+  /**
+   * Create an EMBLEM in `controller`'s command zone (defaults to the source's
+   * controller) — what a planeswalker ultimate leaves behind. Returns the new
+   * instance id.
+   *
+   * An emblem is NOT a permanent: it never touches the battlefield, so it emits
+   * no `zoneChange` into it, sets off no enters-the-battlefield trigger, and can
+   * never be targeted, destroyed, exiled or wiped. Its statics and triggers are
+   * live from the moment it exists, for the rest of the game, because the
+   * continuous layer and the trigger collector both read the command zone.
+   */
+  createEmblem(def: CardDefinition, controller?: PlayerId): InstanceId;
   /**
    * Attach the SOURCE of this effect to the permanent `hostInstanceId` — the
    * channel an Aura's "enters attached to the creature it targets" and an
@@ -138,6 +200,16 @@ export interface EffectContext {
    */
   payLifeOrDecline(request: ChoiceRequestArgs<PayLifeRequest>): boolean | undefined;
   /**
+   * NAME a value — a colour, a creature type, a card type, a player ("As ~
+   * enters, choose a creature type"). `undefined` ⇒ parked; otherwise the named
+   * option's `value`, or `NOTHING_CHOSEN` (`''`) when nothing was named, which is
+   * a real answer and not a parked one.
+   *
+   * The caller stores the answer; see `recordChosenAsEntered` in `as-enters.ts`,
+   * which is the one writer both entry paths use.
+   */
+  chooseValue(request: ChoiceRequestArgs<ChooseValueRequest>): string | undefined;
+  /**
    * Schedule further effect refs to run inside THIS resolution, immediately after
    * the current one. The composition seam for modal spells and for any effect
    * whose follow-up depends on an answer — the extra effects resolve as part of
@@ -178,6 +250,19 @@ export interface ChoiceChannel {
  * The data a primitive supplies to register a continuous effect. `target` defaults
  * to the source instance; `duration` defaults to `'endOfTurn'`.
  */
+/**
+ * What a primitive asks for when it registers a floating replacement/prevention
+ * effect. The ability half is the same {@link ReplacementAbility} a card prints,
+ * so a fog and a printed prevention static say the same thing in the same words;
+ * only the lifetime fields are extra.
+ */
+export interface ReplacementEffectRequest extends ReplacementAbility {
+  /** Whose "you" the filter's controller scopes mean. Defaults to the source's controller. */
+  readonly controller?: PlayerId;
+  /** Defaults to `'endOfTurn'`, which is what every printed one-shot prints. */
+  readonly duration?: ContinuousDuration;
+}
+
 export interface ContinuousModRequest {
   readonly target?: InstanceId;
   readonly duration?: ContinuousDuration;
@@ -262,12 +347,30 @@ export function applyEffectRef(
     controller: base.controller,
     targets,
     params: ref.params ?? {},
+    xValue: base.xValue,
+    kicked: base.kicked,
+    kickCount: base.kickCount,
+    triggeringPlayer: base.triggeringPlayer,
     emit,
     addContinuousEffect(mod) {
-      return addContinuousEffectToState(base.state, base.source.instanceId, mod, emit);
+      return addContinuousEffectToState(base.state, base.source.instanceId, base.controller, mod, emit);
+    },
+    addReplacementEffect(request) {
+      return addFloatingReplacement(base.state, {
+        event: request.event,
+        applies: request.applies,
+        outcome: request.outcome,
+        sourceInstanceId: base.source.instanceId,
+        controller: request.controller ?? base.controller,
+        duration: request.duration ?? 'endOfTurn',
+        ...(request.label !== undefined ? { label: request.label } : {}),
+      });
     },
     createToken(def, controller) {
       return createTokenInState(base.state, def, controller ?? base.controller, emit);
+    },
+    createEmblem(def, controller) {
+      return createEmblemInState(base.state, def, controller ?? base.controller, emit);
     },
     attach(hostInstanceId) {
       return attachTo(base.state, base.source, hostInstanceId, emit);
@@ -297,6 +400,10 @@ export function applyEffectRef(
       const answer = ask({ ...request, kind: 'payLife', chooser: request.chooser ?? base.controller });
       return answer && answer.kind === 'payLife' ? answer.pay : undefined;
     },
+    chooseValue(request) {
+      const answer = ask({ ...request, kind: 'chooseValue', chooser: request.chooser ?? base.controller });
+      return answer && answer.kind === 'chooseValue' ? answer.value : undefined;
+    },
     enqueueEffects(refs) {
       channel?.enqueueEffects(refs);
     },
@@ -310,7 +417,10 @@ export function applyEffectRef(
 }
 
 /** The parts of an `EffectContext` the caller supplies; the rest are wired here. */
-export type EffectContextBase = Pick<EffectContext, 'state' | 'source' | 'controller'>;
+export type EffectContextBase = Pick<
+  EffectContext,
+  'state' | 'source' | 'controller' | 'xValue' | 'kicked' | 'kickCount' | 'triggeringPlayer'
+>;
 
 /**
  * Answer a question raised with no resolution to park into: normalise it, take the
@@ -354,6 +464,7 @@ export function shuffleLibraryInState(state: GameState, player: PlayerId): void 
 function addContinuousEffectToState(
   state: GameState,
   sourceInstanceId: InstanceId,
+  controller: PlayerId,
   mod: ContinuousModRequest,
   emit: (event: GameEvent) => void,
 ): number {
@@ -362,9 +473,12 @@ function addContinuousEffectToState(
   const target = mod.target ?? sourceInstanceId;
 
   // A control change is applied to the instance NOW (and recorded so expiry can
-  // revert it); every other field is a layered read left to the index.
+  // revert it); every other field is a layered read left to the index. The
+  // resolving effect's controller is the stealer when the source is a SPELL —
+  // a resolving Act of Treason is on the stack, not the battlefield, and
+  // without this fallback its control change silently did nothing.
   const controlChange = mod.takeControl
-    ? applyControlChange(state, target, sourceInstanceId, emit)
+    ? applyControlChange(state, target, sourceInstanceId, emit, controller)
     : undefined;
 
   state.continuous.push({
@@ -381,6 +495,44 @@ function addContinuousEffectToState(
   return id;
 }
 
+/**
+ * Create an emblem in a player's command zone; returns its instance id.
+ *
+ * Deliberately NOT a battlefield entry, and the differences from
+ * {@link createTokenInState} are the whole point of the object:
+ *   - it lands in `players[controller].command`, so no removal path can reach it;
+ *   - it emits `emblemCreated` and NO `zoneChange` into the battlefield, so no
+ *     enters-the-battlefield trigger fires off it (an emblem does not "enter");
+ *   - it carries none of the battlefield-only per-object state that would be
+ *     meaningless on it, beyond the shape every `CardInstance` must have.
+ *
+ * The definition is stamped `isEmblem` here rather than trusted from the caller,
+ * so an emblem is always identifiable as one however it was authored.
+ */
+function createEmblemInState(
+  state: GameState,
+  def: CardDefinition,
+  controller: PlayerId,
+  emit: (event: GameEvent) => void,
+): InstanceId {
+  const instanceId = state.nextInstanceId++;
+  const emblem: CardInstance = {
+    instanceId,
+    def: def.isEmblem === true ? def : { ...def, isEmblem: true },
+    controller,
+    owner: controller,
+    zone: 'command',
+    tapped: false,
+    summoningSick: false,
+    damageMarked: 0,
+    markedByDeathtouch: false,
+    counters: NO_COUNTERS,
+  };
+  state.players[controller].command.push(emblem);
+  emit({ type: 'emblemCreated', instanceId, controller, name: emblem.def.name });
+  return instanceId;
+}
+
 /** Create a token permanent on the battlefield; returns its instance id. */
 function createTokenInState(
   state: GameState,
@@ -391,9 +543,21 @@ function createTokenInState(
   const instanceId = state.nextInstanceId++;
   const hasHaste = Boolean(def.keywords?.haste);
   const isCreatureToken = def.types.includes('creature');
+  // CR 111.1: token-ness is a property of HOW the object was created, not of the
+  // characteristics it was created with. Stamping it here rather than trusting
+  // the caller is what makes it true of EVERY token the engine will ever make -
+  // including one built from a definition that came from somewhere else, which is
+  // exactly what a token COPY ("create a token that's a copy of target creature")
+  // will be: `copiableDefOf` returns the copied CARD, which naturally carries no
+  // token flag, and a token copy that answered "no" to "are you a token" would be
+  // wrong for the nontoken filters and would never cease to exist.
+  //
+  // The definition is REPLACED, never written into: pool definitions are frozen
+  // and shared, and this one may be a copy of one.
+  const tokenDef: CardDefinition = def.isToken === true ? def : { ...def, isToken: true };
   const token: CardInstance = {
     instanceId,
-    def,
+    def: tokenDef,
     controller,
     owner: controller,
     zone: 'battlefield',
@@ -408,7 +572,12 @@ function createTokenInState(
     // shape must match the one `cloneInstance` produces.
   };
   state.battlefield.push(token);
-  emit({ type: 'tokenCreated', instanceId, controller, name: def.name });
+  // A planeswalker token (or copy) enters with its printed loyalty, exactly as
+  // the cast walker does — one shared helper so no entry path can disagree. A
+  // battle token enters with its printed defense the same way.
+  applyEnteringLoyalty(token, emit);
+  applyEnteringDefense(token, emit);
+  emit({ type: 'tokenCreated', instanceId, controller, name: tokenDef.name });
   // A token entering is a zoneChange into the battlefield — this is what ETB
   // triggers (its own and others') observe, keeping one mechanism for "enters".
   emit({ type: 'zoneChange', instanceId, from: 'stack', to: 'battlefield' });

@@ -102,10 +102,12 @@ describe('scanCards', () => {
   });
 
   it('survives the engine throwing on one card and finishes the rest', async () => {
+    // The unreadable card is retried once on its shifted crop, so the engine
+    // throws twice before the pipeline moves on.
     const scanned = await scanCards(
       image(),
       cells(3),
-      fakeEngine(['Mountain', '__throw__', 'Mountain']),
+      fakeEngine(['Mountain', '__throw__', '__throw__', 'Mountain']),
       index,
     );
 

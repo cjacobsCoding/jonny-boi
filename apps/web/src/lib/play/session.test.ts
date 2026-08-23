@@ -12,10 +12,21 @@
  *     exercising lands, creature casts (auto-tap), burn-with-target, and combat.
  */
 import { describe, expect, it } from 'vitest';
-import { generateLegalActions, type GameAction, type PlayerId } from '@jonny-boi/core';
+import {
+  defaultAnswerFor,
+  generateLegalActions,
+  LOYALTY_COUNTER,
+  loyaltyOf,
+  type CardDefinition,
+  type CardInstance,
+  type GameAction,
+  type GameState,
+  type InstanceId,
+  type PlayerId,
+} from '@jonny-boi/core';
 import { SAMPLE_DECKS } from '@jonny-boi/sim';
-import { GameSession } from './session.js';
-import { startHotseatGame, type DeckChoice, type HotseatSetup } from './setup.js';
+import { buildDeclareAttackersAction, GameSession } from './session.js';
+import { hotseatPool, startHotseatGame, type DeckChoice, type HotseatSetup } from './setup.js';
 import { buildBoardView } from './view-model.js';
 import { optionToTarget } from './targeting.js';
 
@@ -144,6 +155,137 @@ describe('hidden-information masking', () => {
   });
 });
 
+// --- planeswalkers on the hotseat board ------------------------------------------
+
+/** A synthetic battlefield instance (mirrors the cards package's play-test helper). */
+let syntheticId = 95_000;
+function placed(def: CardDefinition, controller: PlayerId): CardInstance {
+  const inst: CardInstance = {
+    instanceId: syntheticId++,
+    def,
+    controller,
+    owner: controller,
+    zone: 'battlefield',
+    tapped: false,
+    summoningSick: false,
+    damageMarked: 0,
+    markedByDeathtouch: false,
+    attachedTo: null,
+    counters: {},
+  };
+  if (def.loyalty !== undefined && def.types.includes('planeswalker')) {
+    inst.counters = { [LOYALTY_COUNTER]: def.loyalty };
+  }
+  return inst;
+}
+
+function poolCard(name: string): CardDefinition {
+  const def = hotseatPool().getByName(name);
+  if (!def) throw new Error(`curated pool missing ${name}`);
+  return def;
+}
+
+/** Pass priority until `step` (bounded); throws on a rejection so failures are loud. */
+function advanceTo(session: GameSession, step: string, max = 200): GameSession {
+  let s = session;
+  let guard = 0;
+  while (s.state.step !== step && !s.gameOver && !s.pendingChoice && guard++ < max) {
+    const r = s.passPriority();
+    if (r.rejected) throw new Error(`unexpected rejection: ${r.rejected}`);
+    s = r.session;
+  }
+  if (s.state.step !== step) throw new Error(`never reached ${step} (at ${s.state.step})`);
+  return s;
+}
+
+/** A fresh game with `defs` placed straight onto the battlefield (A's turn 1 upkeep). */
+function gameWith(defs: readonly { def: CardDefinition; controller: PlayerId }[]): {
+  session: GameSession;
+  ids: InstanceId[];
+} {
+  const base = startGame();
+  const state = structuredClone(base.state) as GameState;
+  const ids: InstanceId[] = [];
+  for (const { def, controller } of defs) {
+    const inst = placed(def, controller);
+    state.battlefield.push(inst);
+    ids.push(inst.instanceId);
+  }
+  const session = GameSession.fromCreated({ state, events: [] }, base.registry, SEAT_NAMES);
+  return { session, ids };
+}
+
+describe('buildDeclareAttackersAction (the walker-attack seam)', () => {
+  it('carries no attackTargets key at all when nothing attacks a walker', () => {
+    expect('attackTargets' in buildDeclareAttackersAction('A', [1, 2])).toBe(false);
+    expect('attackTargets' in buildDeclareAttackersAction('A', [1, 2], {})).toBe(false);
+    // An assignment for a creature NOT attacking is dropped — and with it the key.
+    expect('attackTargets' in buildDeclareAttackersAction('A', [1], { 2: 9 })).toBe(false);
+  });
+
+  it('keeps assignments for declared attackers only', () => {
+    const action = buildDeclareAttackersAction('A', [1, 2], { 1: 9, 3: 9 });
+    expect(action.attackTargets).toEqual({ 1: 9 });
+    expect(action.attackers).toEqual([1, 2]);
+  });
+});
+
+describe('attacking a planeswalker through the session', () => {
+  it('declareAttackers with attackTargets round-trips into combat state and the event log', () => {
+    const { session, ids } = gameWith([
+      { def: poolCard('Raging Goblin'), controller: 'A' },
+      { def: poolCard('Liliana of the Veil'), controller: 'B' },
+    ]);
+    const [goblin, walker] = ids as [InstanceId, InstanceId];
+    const atCombat = advanceTo(session, 'declareAttackers');
+    const result = atCombat.declareAttackers([goblin], { [goblin]: walker });
+    expect(result.rejected).toBeNull();
+    expect(result.session.state.combat?.attackers).toEqual([goblin]);
+    expect(result.session.state.combat?.attackTargets).toEqual({ [goblin]: walker });
+    const declared = result.events.find((e) => e.type === 'attackersDeclared');
+    expect(declared && 'attackTargets' in declared ? declared.attackTargets : undefined).toEqual({
+      [goblin]: walker,
+    });
+  });
+
+  it('the default path (no walker assignments) submits the pre-walker action unchanged', () => {
+    const { session, ids } = gameWith([
+      { def: poolCard('Raging Goblin'), controller: 'A' },
+      { def: poolCard('Liliana of the Veil'), controller: 'B' },
+    ]);
+    const [goblin] = ids as [InstanceId, InstanceId];
+    const atCombat = advanceTo(session, 'declareAttackers');
+    const result = atCombat.declareAttackers([goblin], {});
+    expect(result.rejected).toBeNull();
+    expect(result.session.state.combat?.attackTargets).toBeUndefined();
+  });
+});
+
+describe('loyalty abilities surface as engine-driven ability options', () => {
+  it('offers the payable lines with printed labels and per-target menus, omitting the unpayable minus', () => {
+    const { session, ids } = gameWith([{ def: poolCard('Liliana of the Veil'), controller: 'A' }]);
+    const [walker] = ids as [InstanceId];
+    const atMain = advanceTo(session, 'precombatMain');
+    const options = atMain.abilityOptions().filter((o) => o.instanceId === walker);
+    // +1 (no target) and −2 (targets a player) are offered; −6 is unpayable at 3 loyalty.
+    expect(options.map((o) => o.abilityIndex).sort()).toEqual([0, 1]);
+    const plus = options.find((o) => o.abilityIndex === 0)!;
+    expect(plus.label).toContain('+1');
+    expect(plus.targets).toBeNull();
+    const minus = options.find((o) => o.abilityIndex === 1)!;
+    expect(minus.label).toContain('−2');
+    expect(minus.targets?.map((t) => t.target).sort()).toEqual(['A', 'B']);
+
+    // Activating the −2 at a target pays loyalty up front (engine-validated).
+    const activated = atMain.activateAbility(walker, 1, ['B']);
+    expect(activated.rejected).toBeNull();
+    const onField = activated.session.state.battlefield.find((c) => c.instanceId === walker);
+    expect(onField && loyaltyOf(onField)).toBe(1);
+    // And the engine now offers NO further loyalty ability this turn.
+    expect(activated.session.abilityOptions().some((o) => o.instanceId === walker)).toBe(false);
+  });
+});
+
 /**
  * A generic auto-pilot that drives a single seat's priority window through the REAL
  * public `GameSession` API — the same calls the UI buttons make. It greedily plays a
@@ -156,6 +298,18 @@ describe('hidden-information masking', () => {
 function autoPilotPriority(session: GameSession): GameSession {
   const me = session.priorityPlayer;
   const state = session.state;
+
+  // 0. A parked question outranks priority — the UI's ChoicePrompt is modal for
+  // exactly this reason, and a rule can ask one with no card involved (the
+  // cleanup step's discard down to maximum hand size, CR 514.1). Answer it with
+  // the engine's own default; a pilot that only ever passes would stall here and
+  // the "no dead-end" claim this test makes would be about a game it never
+  // finished.
+  const question = session.pendingChoice;
+  if (question) {
+    const r = session.answerChoice(defaultAnswerFor(question));
+    if (!r.rejected) return r.session;
+  }
 
   // 1. Play a land if we still can this turn.
   const lands = session.playableLands();

@@ -68,9 +68,11 @@ import type {
 import {
   effectiveKeywords,
   effectivePower,
+  indexReplacements,
   isCreature,
   NO_MOD,
   opponentOf,
+  projectDamage,
   remainingToughness,
 } from '@jonny-boi/core';
 
@@ -213,18 +215,19 @@ interface Combatants {
 /**
  * Assess what `attacker` can force through `defender`'s blocks.
  *
- * `index` is the continuous-effects layer (anthems, auras, until-EOT pumps). It is
- * OPTIONAL and the two call sites pass different things on purpose: the decision
- * path — where the answer is *acted on* — builds the real index, while the leaf
- * evaluator omits it and reads base + counters, exactly as every other term in
- * `evaluator.ts` already does. Building the index costs a `Map` per call, and a
- * per-leaf `Map` is precisely the kind of allocation this pilot cannot afford.
+ * `index` is the continuous-effects layer (anthems, auras, until-EOT pumps) and is
+ * REQUIRED. It used to be optional so the leaf evaluator could skip building one —
+ * which meant the evaluator solved combat on printed numbers: anthems invisible,
+ * Equipment invisible, a `*` P/T box worth zero. `indexContinuous` returns a shared
+ * empty map when nothing on the board modifies anything, so the board that
+ * motivated the omission is exactly the board that now allocates nothing; a caller
+ * that already has one for this position must pass it rather than rebuild it.
  */
 export function assessAttack(
   state: GameState,
   attacker: PlayerId,
   horizon: AttackHorizon = 'now',
-  index?: ContinuousIndex,
+  index: ContinuousIndex,
   config: TacticalConfig = DEFAULT_TACTICAL_CONFIG,
   eligible?: readonly InstanceId[],
 ): CombatAssessment {
@@ -267,7 +270,7 @@ export function assessAttack(
 export function lethalAttackers(
   state: GameState,
   attacker: PlayerId,
-  index?: ContinuousIndex,
+  index: ContinuousIndex,
   config: TacticalConfig = DEFAULT_TACTICAL_CONFIG,
   eligible?: readonly InstanceId[],
 ): readonly InstanceId[] | undefined {
@@ -298,7 +301,7 @@ export interface TacticalPicture {
 export function assessPosition(
   state: GameState,
   player: PlayerId,
-  index?: ContinuousIndex,
+  index: ContinuousIndex,
   config: TacticalConfig = DEFAULT_TACTICAL_CONFIG,
 ): TacticalPicture {
   return {
@@ -341,7 +344,7 @@ function collectCombatants(
   defender: PlayerId,
   horizon: AttackHorizon,
   restrictTo: readonly InstanceId[] | undefined,
-  index?: ContinuousIndex,
+  index: ContinuousIndex,
 ): Combatants {
   const battlefield = state.battlefield;
   growTo(battlefield.length);
@@ -352,7 +355,7 @@ function collectCombatants(
   for (let i = 0; i < battlefield.length; i++) {
     const perm = battlefield[i] as CardInstance;
     if (!isCreature(perm.def)) continue;
-    const mod = index?.get(perm.instanceId) ?? NO_MOD;
+    const mod = index.get(perm.instanceId) ?? NO_MOD;
     const keywords = effectiveKeywords(perm, mod);
 
     if (perm.controller === attacker) {
@@ -384,7 +387,72 @@ function collectCombatants(
     if (canFace) evasiveBlockers++;
     blockers++;
   }
+  applyDamageReplacements(state, attacker, defender, attackers);
   return { attackers, blockers, evasiveBlockers };
+}
+
+/**
+ * Re-price every attacker's damage through core's REPLACEMENT layer (CR 614) —
+ * a damage doubler, a Torbran-style "+2", a fog, a Dolmen Gate.
+ *
+ * This is the whole difference between a pilot that OWNS a Gratuitous Violence
+ * and one that KNOWS it: `attackerPower` feeds `maxDamage`, the guaranteed
+ * damage after optimal blocks, the lethal flag and the clock, so a doubler that
+ * did not pass through here would be a permanent the pilot paid five mana for
+ * and then attacked as if it were not on the table. The engine will double the
+ * damage whatever the pilot believes; the belief is what decides whether it
+ * attacks at all.
+ *
+ * Projected, never applied: `projectDamage` runs the identical loop with the
+ * identical CR 616.1 ordering and writes NOTHING — a pilot that spent the
+ * prevention shield it was merely asking about would corrupt the state it is
+ * evaluating.
+ *
+ * COST on an ordinary board: `indexReplacements` is one property read per
+ * permanent (and returns the shared frozen empty index by reference), then a
+ * single `.length` check ends this function. Nothing is re-walked and nothing is
+ * allocated unless the board really carries a replacement effect.
+ */
+function applyDamageReplacements(
+  state: GameState,
+  attacker: PlayerId,
+  defender: PlayerId,
+  attackers: number,
+): void {
+  const replacements = indexReplacements(state);
+  if (replacements.length === 0) return;
+  for (let i = 0; i < attackers; i++) {
+    const id = attackerInstance[i] as InstanceId;
+    const perm = findOnBattlefield(state, id);
+    if (perm === undefined) continue;
+    // Priced against the DEFENDING PLAYER as the recipient, which is where an
+    // attacker's damage goes when it is not blocked — the number every field
+    // this array feeds is about. A blocker absorbs the same doubled hit for
+    // every replacement in this vocabulary that can reach a permanent, because
+    // each of them says "a permanent or player" or "an opponent or a permanent
+    // an opponent controls"; a future one that names only players would want its
+    // own figure, and this is the one place that would change.
+    attackerPower[i] = projectDamage(
+      state,
+      replacements,
+      perm,
+      attacker,
+      undefined,
+      defender,
+      attackerPower[i] as number,
+      true,
+    ).amount;
+  }
+}
+
+/** Find a battlefield permanent by id, without allocating a closure per call. */
+function findOnBattlefield(state: GameState, id: InstanceId): CardInstance | undefined {
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    if (perm.instanceId === id) return perm;
+  }
+  return undefined;
 }
 
 /**

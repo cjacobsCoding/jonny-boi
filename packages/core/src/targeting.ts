@@ -30,22 +30,31 @@
  * object, pumps target their own source, and policing those here would break them.
  */
 
-import type { CardDefinition, EffectRef } from './card.js';
-import { isCreature } from './card.js';
-import type { CardInstance, GameState, InstanceId, PlayerId } from './state.js';
+import type { CardDefinition, EffectRef, KeywordFlags } from './card.js';
+import { hasSubtype, hasType, isCreature, isLand } from './card.js';
+import { isBattle, isPlaneswalker } from './card.js';
+import type { CardInstance, GameState, InstanceId, PlayerId, SpellStackObject, StackObject } from './state.js';
 import { PLAYER_IDS } from './state.js';
-import { indexContinuous, NO_MOD } from './internal/continuous.js';
+import type { ContinuousIndex } from './internal/continuous.js';
+import { anyContinuousModification, indexContinuous, NO_MOD } from './internal/continuous.js';
 import { effectiveKeywords } from './internal/stats.js';
+import { protectionBlocksSource } from './protection.js';
+
+/**
+ * The creature type Restoration Angel's printed line excludes. Named because a
+ * bare `'angel'` in a legality check is a behaviour-defining literal, and it has
+ * to read the same at both the enumeration and the legality site.
+ */
+const ANGEL_SUBTYPE = 'angel';
 
 /**
  * What a targeted effect may point at.
  *
- * - `'any'` — MTG's "any target": a creature **or** a player. (Planeswalkers do
- *   not exist in this engine, so "creature, player or planeswalker" is exactly
- *   this — vacuous, not approximated.)
- * - `'creature'` — "target creature" only. Never a player's face.
- * - `'player'` — "target player" / "target player or planeswalker" only. Never a
- *   creature.
+ * - `'any'` — MTG's "any target": a creature, a player, **a planeswalker, or a
+ *   battle** (CR 115.4 — since planeswalkers and battles both exist in this
+ *   engine, "any target" includes them, exactly as the reminder text says).
+ * - `'creature'` — "target creature" only. Never a player's face, never a walker.
+ * - `'player'` — "target player" only. Never a creature or a planeswalker.
  * - `'spell'` — "target spell": an object on the stack. Its point is the *timing*
  *   rule rather than the aim — a counterspell with an empty stack has no legal
  *   target and therefore **cannot be cast at all**. Without it, "Counter target
@@ -81,7 +90,129 @@ export type TargetRestriction =
    * a pilot spend mana equipping the opponent's board, which is a card playing
    * differently from its printed text.
    */
-  | 'creatureYouControl';
+  | 'creatureYouControl'
+  /**
+   * "target NON-ANGEL creature you control" — Restoration Angel's printed line.
+   *
+   * Its own restriction rather than `'creatureYouControl'` for a reason the soak
+   * would find within a thousand games: Restoration Angel blinks a creature you
+   * control, and it is itself a creature you control. Widen this to any creature
+   * and the pilot blinks the Angel with its own trigger, which re-triggers it,
+   * for ever — the same shape as the copy mirror in DESIGN §3.33.
+   *
+   * ⚠️ Named for the printed line, in the style of `instantOrSorceryInYourGraveyard`.
+   * The general form is a target that carries a {@link CardFilter} (which already
+   * spells "non-Goblin creature" as `noneOfSubtypes`) — worth building the day a
+   * SECOND non-<subtype> card lands, and not before: `TargetRestriction` is a flat
+   * string union read at 67 sites, and giving it a shape is a change of a
+   * different size from adding a member.
+   */
+  | 'nonAngelCreatureYouControl'
+  /**
+   * "target creature an OPPONENT controls" — Banisher Priest's printed line.
+   *
+   * The mirror of `creatureYouControl`, and like it (and `'opponent'`) legality
+   * depends on WHO is acting, so an absent `controller` makes every candidate
+   * illegal rather than guessed. Its own restriction rather than `'creature'`
+   * because widening it would let a pilot exile its OWN board — a card playing
+   * differently from its printed text, and in this case a strictly worse play
+   * offered as if it were legal.
+   */
+  | 'creatureAnOpponentControls'
+  /**
+   * "target artifact, enchantment, or land" — Acidic Slime's printed line, and
+   * the shape of most naturalize-family removal. One restriction rather than
+   * three, because the printed line is one target with three acceptable types.
+   */
+  | 'artifactEnchantmentOrLand'
+  /**
+   * "target player or planeswalker" — a face or a walker, never a creature.
+   * Lava Spike's printed line. Its own restriction (not `'player'`) because
+   * flattening it would make the card NARROWER than printed now that
+   * planeswalkers exist — the same infidelity this module polices, in the other
+   * direction.
+   */
+  | 'playerOrPlaneswalker'
+  /** "target creature or planeswalker" — a permanent of either kind, never a face. */
+  | 'creatureOrPlaneswalker'
+  /**
+   * "target permanent" — ANY permanent on the battlefield: a creature, a land,
+   * an artifact, an enchantment, a planeswalker. Never a player and never a
+   * spell on the stack.
+   *
+   * Its own restriction rather than a flavour of `'any'` because the two are
+   * genuinely different sets: "any target" reaches a player's face but not a
+   * land, and this reaches a land but never a face. Cryptic Command's bounce
+   * mode is the canonical printing, and flattening it either way would play the
+   * card differently from its text.
+   */
+  | 'permanent'
+  /**
+   * "target instant or sorcery card in your graveyard" — Snapcaster Mage's ETB
+   * aim, and the first restriction reaching a card in a NON-battlefield zone.
+   *
+   * Like `'opponent'` and `'creatureYouControl'`, legality depends on WHO is
+   * acting: "your graveyard" is the acting player's own, so an absent
+   * `controller` makes every candidate ILLEGAL rather than guessed — being
+   * unable to aim is the safe failure, while reaching into the wrong graveyard
+   * would be a card playing wider than printed.
+   *
+   * Hexproof/shroud/protection do not apply here by RULE, not by omission:
+   * those abilities read "this permanent", and a card in a graveyard is not a
+   * permanent (CR 110.1), so the battlefield targetability gate is correctly
+   * skipped for this restriction.
+   */
+  | 'instantOrSorceryInYourGraveyard'
+  /**
+   * "target instant or sorcery spell" — Fork, Reverberate, Narset's Reversal.
+   *
+   * Its own restriction rather than a flavour of `'spell'` because the two are
+   * genuinely different sets: `'spell'` reaches a creature spell and an
+   * artifact spell, and a card that says "instant or sorcery" may not copy one.
+   * Flattening it would let Reverberate copy a Grizzly Bears, which is a card
+   * playing WIDER than printed — the exact infidelity this module exists to
+   * prevent, and the direction that is always the wrong one to guess in.
+   *
+   * The timing consequence is `'spell'`'s and is the reason it matters as much
+   * as the aim: a copy spell with no instant or sorcery on the stack has no
+   * legal target and therefore CANNOT BE CAST, so it can never be spent for
+   * nothing.
+   */
+  | 'instantOrSorcerySpell'
+  /**
+   * "target TRIGGERED ABILITY you control" — Strionic Resonator.
+   *
+   * The stack holds two kinds of object, and every other stack-targeting
+   * restriction here deliberately means the SPELL kind ("counter target spell"
+   * cannot hit a trigger). This is the mirror: only the trigger kind, and only
+   * the ones this player controls.
+   */
+  | 'triggeredAbilityYouControl'
+  /**
+   * "creatures from the battlefield AND/OR creature cards from graveyards" —
+   * Angel of Serenity's printed line, and the pool's only two-zone target.
+   *
+   * One restriction rather than two, because the printed line is ONE target list
+   * whose members may come from either zone: "up to three" means three in total,
+   * not three of each. Both graveyards are in scope (it does not say "your").
+   */
+  | 'creatureOnBattlefieldOrInGraveyard';
+
+/**
+ * Whether a spell on the stack is an INSTANT OR SORCERY spell — the one question
+ * `'instantOrSorcerySpell'` adds over `'spell'`.
+ *
+ * Read off the card ON THE STACK, which is the object with the characteristics
+ * that matter: a modal DFC cast as its instant face, a split card's chosen half
+ * and an adventure being cast as its adventure half are all already carried in
+ * `card.def` by the cast path, so this asks nothing about layouts and is right
+ * for all three by construction. A COPY of a spell answers yes for the same
+ * reason — its definition is the copiable values of what it copies — which is
+ * what makes a copy of a copy legal, exactly as the rules do.
+ */
+function isInstantOrSorcerySpell(spell: SpellStackObject): boolean {
+  return hasType(spell.card.def, 'instant') || hasType(spell.card.def, 'sorcery');
+}
 
 /**
  * The reserved effect-param name carrying a {@link TargetRestriction}. One name,
@@ -106,7 +237,17 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'spell' ||
     value === 'artifact' ||
     value === 'opponent' ||
-    value === 'creatureYouControl'
+    value === 'creatureYouControl' ||
+    value === 'nonAngelCreatureYouControl' ||
+    value === 'creatureAnOpponentControls' ||
+    value === 'artifactEnchantmentOrLand' ||
+    value === 'playerOrPlaneswalker' ||
+    value === 'creatureOrPlaneswalker' ||
+    value === 'permanent' ||
+    value === 'instantOrSorceryInYourGraveyard' ||
+    value === 'instantOrSorcerySpell' ||
+    value === 'triggeredAbilityYouControl' ||
+    value === 'creatureOnBattlefieldOrInGraveyard'
   );
 }
 
@@ -119,6 +260,13 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
  * `null` is memoized too: "this definition declares no restriction" is the common
  * answer and must not be recomputed either.
  */
+/**
+ * The shared, frozen empty answer for a restriction that can offer nothing on
+ * this board. Shared so the no-candidate case allocates nothing on the
+ * legal-action loop, exactly like `internal/continuous.ts`’s EMPTY_INDEX.
+ */
+const NO_TARGETS: readonly (InstanceId | PlayerId)[] = Object.freeze([]);
+
 const RESTRICTION_MEMO = new WeakMap<CardDefinition, TargetRestriction | null>();
 
 /**
@@ -168,27 +316,104 @@ export function isLegalTarget(
   restriction: TargetRestriction,
   target: InstanceId | PlayerId,
   controller?: PlayerId,
+  source?: CardDefinition,
+  /** See {@link legalTargetsFor} — the instance "another" excludes. */
+  excludeInstanceId?: InstanceId,
 ): boolean {
+  // Checked first and for every restriction: "another" is orthogonal to type,
+  // and the enumeration site applies the same rule (DESIGN §3.36 — offer and
+  // apply must agree).
+  if (excludeInstanceId !== undefined && target === excludeInstanceId) return false;
   if (isPlayerTarget(target)) {
     if (restriction === 'opponent') {
       // Unknown caster ⇒ illegal, never "probably fine" (see the type's note).
       return controller !== undefined && target !== controller;
     }
-    return restriction === 'any' || restriction === 'player';
+    return restriction === 'any' || restriction === 'player' || restriction === 'playerOrPlaneswalker';
   }
   if (restriction === 'player' || restriction === 'opponent') return false;
-  if (restriction === 'spell') {
+  if (restriction === 'creatureOnBattlefieldOrInGraveyard') {
+    for (const player of PLAYER_IDS) {
+      const yard = state.players[player].graveyard;
+      for (let i = 0; i < yard.length; i++) {
+        const card = yard[i] as CardInstance;
+        if (card.instanceId === target) return isCreature(card.def);
+      }
+    }
+    // Not in a graveyard ⇒ it must be a creature on the battlefield.
+    for (const permanent of state.battlefield) {
+      if (permanent.instanceId === target) return isCreature(permanent.def);
+    }
+    return false;
+  }
+  if (restriction === 'instantOrSorceryInYourGraveyard') {
+    // "Your graveyard" needs an actor; unknown ⇒ illegal, never guessed (see
+    // the type's note). The candidate must be sitting in THAT player's
+    // graveyard right now — a card that left it mid-response is not a legal
+    // target any more, which is exactly how the resolution re-check fizzles.
+    if (controller === undefined) return false;
+    const yard = state.players[controller].graveyard;
+    for (let i = 0; i < yard.length; i++) {
+      const card = yard[i] as CardInstance;
+      if (card.instanceId !== target) continue;
+      return hasType(card.def, 'instant') || hasType(card.def, 'sorcery');
+    }
+    return false;
+  }
+  if (restriction === 'spell' || restriction === 'instantOrSorcerySpell') {
     // A *spell* on the stack — never a triggered ability, which is also a stack
     // object but is not a spell and cannot be countered by "counter target spell".
-    return state.stack.some((object) => object.kind === 'spell' && object.instanceId === target);
+    for (let i = 0; i < state.stack.length; i++) {
+      const object = state.stack[i] as StackObject;
+      if (object.kind !== 'spell' || object.instanceId !== target) continue;
+      return restriction === 'spell' || isInstantOrSorcerySpell(object);
+    }
+    return false;
+  }
+  if (restriction === 'triggeredAbilityYouControl') {
+    // Unknown actor ⇒ illegal, never "probably theirs" — the same rule
+    // `'opponent'` and `creatureYouControl` follow.
+    if (controller === undefined) return false;
+    for (let i = 0; i < state.stack.length; i++) {
+      const object = state.stack[i] as StackObject;
+      if (object.kind !== 'trigger' || object.instanceId !== target) continue;
+      return object.controller === controller;
+    }
+    return false;
   }
   const permanent = state.battlefield.find((c) => c.instanceId === target);
   if (!permanent) return false;
-  if (!isTargetableBy(state, permanent, controller)) return false;
+  if (!isTargetableBy(state, permanent, controller, source)) return false;
+  // "Target permanent": being on the battlefield IS the whole requirement, so
+  // the targetability check above is the only gate.
+  if (restriction === 'permanent') return true;
   if (restriction === 'artifact') return permanent.def.types.includes('artifact');
-  if (restriction === 'creatureYouControl') {
+  // "Target player or planeswalker": a permanent target must be a walker.
+  if (restriction === 'playerOrPlaneswalker') return isPlaneswalker(permanent.def);
+  // "Any target" reaches a creature, a player, a planeswalker OR A BATTLE
+  // (CR 115.4 as amended when battles were printed), so burn answers a Siege
+  // exactly as it answers a walker. "Creature or planeswalker" deliberately does
+  // NOT widen with it: that printed wording names two kinds, not three.
+  if (restriction === 'any') {
+    return isCreature(permanent.def) || isPlaneswalker(permanent.def) || isBattle(permanent.def);
+  }
+  if (restriction === 'creatureOrPlaneswalker') {
+    return isCreature(permanent.def) || isPlaneswalker(permanent.def);
+  }
+  if (restriction === 'artifactEnchantmentOrLand') {
+    return hasType(permanent.def, 'artifact') || hasType(permanent.def, 'enchantment') || isLand(permanent.def);
+  }
+  if (restriction === 'creatureAnOpponentControls') {
+    // Unknown actor ⇒ illegal, never "probably theirs" (see the type's note).
+    if (controller === undefined || permanent.controller === controller) return false;
+    return isCreature(permanent.def);
+  }
+  if (restriction === 'creatureYouControl' || restriction === 'nonAngelCreatureYouControl') {
     // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
     if (controller === undefined || permanent.controller !== controller) return false;
+    if (restriction === 'nonAngelCreatureYouControl' && hasSubtype(permanent.def, ANGEL_SUBTYPE)) {
+      return false;
+    }
   }
   return isCreature(permanent.def);
 }
@@ -205,30 +430,64 @@ export function isLegalTarget(
  *
  * Granted keywords are read through the continuous layer, so a creature given
  * hexproof by an aura or a pump is protected too.
+ *
+ * PROTECTION's "can't be targeted" half is checked here too, keyed on the
+ * SOURCE definition (`protection.ts`): a spell whose source has a protected
+ * quality may not aim here, whoever casts it — its own controller included,
+ * which is why protection does not share hexproof's own-controller escape.
+ * With an UNKNOWN source a protected permanent is treated as untargetable, the
+ * same conservative direction as an unknown caster under hexproof.
  */
 function isTargetableBy(
   state: GameState,
   permanent: CardInstance,
   caster: PlayerId | undefined,
+  source?: CardDefinition,
+  /**
+   * The index to judge granted keywords against, from {@link keywordIndexFor}:
+   * `null` means "nothing on this board modifies a keyword, read the printed
+   * set". Passed in so a menu builder pays for ONE index across every candidate
+   * instead of one per candidate; omit it for a single ad-hoc check.
+   */
+  index?: ContinuousIndex | null,
 ): boolean {
+  const mods = index === undefined ? keywordIndexFor(state) : index;
   // PERFORMANCE: this runs for every candidate target of every castable spell on
-  // the engine's hottest loop, and `indexContinuous` walks the whole effect list.
-  // The overwhelmingly common board has no continuous effects and no printed
-  // hexproof, so both are checked cheaply first and the index is built only when
-  // a grant could actually exist.
-  const printed = permanent.def.keywords;
-  if (state.continuous.length === 0) {
-    if (printed?.shroud === true) return false;
-    if (printed?.hexproof === true) return caster !== undefined && caster === permanent.controller;
-    return true;
-  }
-  const keywords = effectiveKeywords(
-    permanent,
-    indexContinuous(state).get(permanent.instanceId) ?? NO_MOD,
-  );
+  // the engine's hottest loop. On the overwhelmingly common board — no anthem, no
+  // attachment, no until-EOT effect — `mods` is null and the printed set is read
+  // with no aggregation and no allocation at all.
+  const keywords =
+    mods === null
+      ? (permanent.def.keywords ?? NO_KEYWORDS)
+      : effectiveKeywords(permanent, mods.get(permanent.instanceId) ?? NO_MOD);
   if (keywords.shroud === true) return false;
-  if (keywords.hexproof === true) return caster !== undefined && caster === permanent.controller;
+  if (keywords.hexproof === true && (caster === undefined || caster !== permanent.controller)) {
+    return false;
+  }
+  if (keywords.protectionFrom !== undefined && protectionBlocksSource(keywords.protectionFrom, source)) {
+    return false;
+  }
   return true;
+}
+
+/** The empty printed keyword set, shared so the fast path allocates nothing. */
+const NO_KEYWORDS: KeywordFlags = Object.freeze({});
+
+/**
+ * The continuous index targeting must judge keywords against, or `null` when
+ * nothing on the board can modify one.
+ *
+ * ⚠️ The gate is {@link anyContinuousModification} and NOT `state.continuous.length`.
+ * Layer 3 — an Aura/Equipment's grant to its host, an anthem, an emblem — is
+ * derived from the battlefield and never appears in that list, so keying the fast
+ * path on it let an opponent's burn spell target a creature holding Mask of
+ * Avacyn's granted hexproof. Costed at the module's own bar: on a board with no
+ * modifier at all the check short-circuits over property reads and allocates
+ * nothing, and when there IS one this builds the index ONCE for the whole menu
+ * where the old code rebuilt it per candidate.
+ */
+function keywordIndexFor(state: GameState): ContinuousIndex | null {
+  return anyContinuousModification(state) ? indexContinuous(state) : null;
 }
 
 /**
@@ -242,12 +501,88 @@ export function legalTargetsFor(
   state: GameState,
   restriction: TargetRestriction,
   controller?: PlayerId,
+  source?: CardDefinition,
+  /**
+   * "ANOTHER target …" — an instance this aim may not name, normally the
+   * aiming ability's own source. Optional so every existing caller is unchanged;
+   * a caller that does not pass it simply cannot express "another".
+   */
+  excludeInstanceId?: InstanceId,
 ): readonly (InstanceId | PlayerId)[] {
-  if (restriction === 'spell') {
-    return state.stack.filter((object) => object.kind === 'spell').map((object) => object.instanceId);
+  const all = enumerateTargets(state, restriction, controller, source);
+  // Applied to whatever the branches produced, so "another" works with EVERY
+  // restriction rather than needing a case in each. Same rule `isLegalTarget`
+  // applies, which is what keeps the offer and the apply in agreement.
+  return excludeInstanceId === undefined ? all : all.filter((ref) => ref !== excludeInstanceId);
+}
+
+/** Every legal target for `restriction`, before any "another" exclusion. */
+function enumerateTargets(
+  state: GameState,
+  restriction: TargetRestriction,
+  controller?: PlayerId,
+  source?: CardDefinition,
+): readonly (InstanceId | PlayerId)[] {
+  if (restriction === 'triggeredAbilityYouControl') {
+    if (controller === undefined) return [];
+    const out: (InstanceId | PlayerId)[] = [];
+    for (let i = 0; i < state.stack.length; i++) {
+      const object = state.stack[i] as StackObject;
+      if (object.kind !== 'trigger') continue;
+      if (object.controller !== controller) continue;
+      out.push(object.instanceId);
+    }
+    return out;
+  }
+  if (restriction === 'spell' || restriction === 'instantOrSorcerySpell') {
+    const wantInstantOrSorcery = restriction === 'instantOrSorcerySpell';
+    const out: (InstanceId | PlayerId)[] = [];
+    for (let i = 0; i < state.stack.length; i++) {
+      const object = state.stack[i] as StackObject;
+      if (object.kind !== 'spell') continue;
+      if (wantInstantOrSorcery && !isInstantOrSorcerySpell(object)) continue;
+      out.push(object.instanceId);
+    }
+    return out;
+  }
+  if (restriction === 'instantOrSorceryInYourGraveyard') {
+    // With no actor there is no such thing as "your graveyard", so nothing is
+    // offered — the same safe direction as 'opponent', and the one that makes an
+    // unaimable trigger leave the stack rather than resolve pointing at nothing.
+    if (controller === undefined) return NO_TARGETS;
+    const out: (InstanceId | PlayerId)[] = [];
+    const graveyard = state.players[controller].graveyard;
+    for (let g = 0; g < graveyard.length; g++) {
+      const card = graveyard[g] as CardInstance;
+      if (hasType(card.def, 'instant') || hasType(card.def, 'sorcery')) out.push(card.instanceId);
+    }
+    return out;
   }
   const targets: (InstanceId | PlayerId)[] = [];
-  if (restriction === 'any' || restriction === 'player') targets.push(...PLAYER_IDS);
+  // ONE index for the whole menu. Every `isTargetableBy` below is handed it, so a
+  // board carrying an anthem or an Equipment pays for the aggregation once rather
+  // than once per candidate (which is what the previous shape did).
+  const keywordIndex = keywordIndexFor(state);
+  if (restriction === 'creatureOnBattlefieldOrInGraveyard') {
+    const out: (InstanceId | PlayerId)[] = [];
+    for (const permanent of state.battlefield) {
+      if (isCreature(permanent.def) && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
+        out.push(permanent.instanceId);
+      }
+    }
+    // BOTH graveyards — the printed line does not say "your". A card in a
+    // graveyard has no protection/hexproof to consult (those are battlefield
+    // qualities), so it is offered on type alone.
+    for (const player of PLAYER_IDS) {
+      for (const card of state.players[player].graveyard) {
+        if (isCreature(card.def)) out.push(card.instanceId);
+      }
+    }
+    return out;
+  }
+  if (restriction === 'any' || restriction === 'player' || restriction === 'playerOrPlaneswalker') {
+    targets.push(...PLAYER_IDS);
+  }
   if (restriction === 'opponent') {
     // With no caster there is no such thing as "an opponent", so nothing is
     // offered and the spell simply cannot be cast — the safe direction.
@@ -257,19 +592,64 @@ export function legalTargetsFor(
   }
   // A hexproof/shroud permanent is never OFFERED, so a consumer picking only
   // from this menu cannot try an illegal target in the first place.
-  if (restriction === 'any' || restriction === 'creature') {
+  if (restriction === 'any' || restriction === 'creature' || restriction === 'creatureOrPlaneswalker') {
+    // "Any target" (and "creature or planeswalker") includes planeswalkers —
+    // CR 115.4 — so a walker on the battlefield is a real member of this menu.
+    // "Any target" reaches BATTLES too; the narrower two-kind wording does not.
+    const walkersToo = restriction !== 'creature';
+    const battlesToo = restriction === 'any';
     for (const permanent of state.battlefield) {
-      if (isCreature(permanent.def) && isTargetableBy(state, permanent, controller)) {
+      const kindOk =
+        isCreature(permanent.def) ||
+        (walkersToo && isPlaneswalker(permanent.def)) ||
+        (battlesToo && isBattle(permanent.def));
+      if (kindOk && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
         targets.push(permanent.instanceId);
       }
     }
   }
-  if (restriction === 'creatureYouControl' && controller !== undefined) {
+  if (restriction === 'playerOrPlaneswalker') {
+    for (const permanent of state.battlefield) {
+      if (isPlaneswalker(permanent.def) && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
+  if (restriction === 'artifactEnchantmentOrLand') {
+    for (const permanent of state.battlefield) {
+      if (
+        (hasType(permanent.def, 'artifact') ||
+          hasType(permanent.def, 'enchantment') ||
+          isLand(permanent.def)) &&
+        isTargetableBy(state, permanent, controller, source, keywordIndex)
+      ) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
+  if (restriction === 'creatureAnOpponentControls' && controller !== undefined) {
+    for (const permanent of state.battlefield) {
+      if (
+        permanent.controller !== controller &&
+        isCreature(permanent.def) &&
+        isTargetableBy(state, permanent, controller, source, keywordIndex)
+      ) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
+  if (
+    (restriction === 'creatureYouControl' || restriction === 'nonAngelCreatureYouControl') &&
+    controller !== undefined
+  ) {
     for (const permanent of state.battlefield) {
       if (
         permanent.controller === controller &&
         isCreature(permanent.def) &&
-        isTargetableBy(state, permanent, controller)
+        // The offer list and `isLegalTarget` must agree, or the menu offers a
+        // cast the apply path refuses — see DESIGN §3.36 for what that costs.
+        !(restriction === 'nonAngelCreatureYouControl' && hasSubtype(permanent.def, ANGEL_SUBTYPE)) &&
+        isTargetableBy(state, permanent, controller, source, keywordIndex)
       ) {
         targets.push(permanent.instanceId);
       }
@@ -277,9 +657,14 @@ export function legalTargetsFor(
   }
   if (restriction === 'artifact') {
     for (const permanent of state.battlefield) {
-      if (permanent.def.types.includes('artifact') && isTargetableBy(state, permanent, controller)) {
+      if (permanent.def.types.includes('artifact') && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
         targets.push(permanent.instanceId);
       }
+    }
+  }
+  if (restriction === 'permanent') {
+    for (const permanent of state.battlefield) {
+      if (isTargetableBy(state, permanent, controller, source, keywordIndex)) targets.push(permanent.instanceId);
     }
   }
   return targets;
@@ -306,7 +691,9 @@ export function illegalTargetReason(
     return `${def.name} targets exactly one ${describeRestriction(restriction)}`;
   }
   const target = targets[0]!;
-  if (!isLegalTarget(state, restriction, target, controller)) {
+  // The card being cast IS the source of its own targeting, so its protection
+  // qualities (color, types) are checked without any caller having to say so.
+  if (!isLegalTarget(state, restriction, target, controller, def)) {
     return `${def.name} can only target ${describeRestriction(restriction)}`;
   }
   return undefined;
@@ -326,13 +713,14 @@ export function illegalTargetReasonForEffects(
   effects: readonly EffectRef[],
   targets: ReadonlyArray<InstanceId | PlayerId>,
   controller?: PlayerId,
+  source?: CardDefinition,
 ): string | undefined {
   const restriction = restrictionOfEffects(effects);
   if (restriction === undefined) return undefined; // unrestricted — not policed
   if (targets.length !== 1) {
     return `${label} targets exactly one ${describeRestriction(restriction)}`;
   }
-  if (!isLegalTarget(state, restriction, targets[0]!, controller)) {
+  if (!isLegalTarget(state, restriction, targets[0]!, controller, source)) {
     return `${label} can only target ${describeRestriction(restriction)}`;
   }
   return undefined;
@@ -365,7 +753,27 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'an opponent';
     case 'creatureYouControl':
       return 'a creature you control';
+    case 'nonAngelCreatureYouControl':
+      return 'a non-Angel creature you control';
+    case 'creatureAnOpponentControls':
+      return 'a creature an opponent controls';
+    case 'artifactEnchantmentOrLand':
+      return 'an artifact, enchantment, or land';
+    case 'playerOrPlaneswalker':
+      return 'a player or a planeswalker';
+    case 'creatureOrPlaneswalker':
+      return 'a creature or a planeswalker';
+    case 'permanent':
+      return 'a permanent';
+    case 'instantOrSorceryInYourGraveyard':
+      return 'an instant or sorcery card in your graveyard';
+    case 'creatureOnBattlefieldOrInGraveyard':
+      return 'a creature on the battlefield or a creature card in a graveyard';
+    case 'triggeredAbilityYouControl':
+      return 'a triggered ability you control';
+    case 'instantOrSorcerySpell':
+      return 'an instant or sorcery spell on the stack';
     case 'any':
-      return 'any target (a creature or a player)';
+      return 'any target (a creature, a player, a planeswalker, or a battle)';
   }
 }

@@ -8,7 +8,7 @@
  * runtime or pinned by a test that fails when the world changes underneath it.
  */
 
-import type { PlayerId } from '@jonny-boi/core';
+import type { CardDefinition, PlayerId } from '@jonny-boi/core';
 import { HYBRID_PILOT_ID, MCTS_PILOT_ID } from '@jonny-boi/ai';
 
 /**
@@ -39,24 +39,108 @@ export const HERO_FIRST_INSTANCE_ID = 1;
  * are absent on purpose: a draw is reported by a `drawCard` event carrying the
  * exact instance id, which the runner already tracks precisely.
  *
+ * ⚠️ THE CR 514.1 CLEANUP DISCARD IS NOT A PRIMITIVE AND DOES NOT BELONG HERE,
+ * and it is worth saying so rather than leaving a reader to notice the absence.
+ * It is a turn-based action the engine performs, and the question it asks reads
+ * the HAND alone — the same hand in both arms while the identical-game claim
+ * still holds, because that claim is precisely "the swapped card was never
+ * drawn". The moment it IS drawn the runner has already withdrawn the claim, so
+ * a discard decision cannot make the two arms diverge behind its back. (It does
+ * change what the arms play, in both of them equally — see DESIGN §3.4a.)
+ *
  * `paired-arms.test.ts` asserts that EVERY primitive the card pool registers is
  * classified either here or in {@link LIBRARY_SAFE_PRIMITIVES}. A new primitive
  * therefore breaks the build until someone decides which side it belongs on — the
  * failure mode is a red test, never a silently wrong verdict.
  */
 export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
+  /*
+   * `ifKicked` is classified CONSERVATIVELY, and deliberately so: it is a
+   * branch wrapper whose NESTED effect refs live inside its `effects` param,
+   * where the decklist scan (which reads top-level `EffectRef.primitive` ids)
+   * cannot see them. A kicked clause that wrapped a library reader would
+   * therefore be invisible to the identical-game argument. Treating the wrapper
+   * itself as library-reading withdraws the skip for any game that resolves a
+   * kicked clause — sound whatever the clause contains, at the cost of playing
+   * a few extra variant games in kicker decks.
+   */
+  'ifKicked',
+  /*
+   * `mayEffects` is the "you may" wrapper, and it is classified CONSERVATIVELY
+   * for exactly the reason `ifKicked` is: its nested clause lives in an
+   * `effects` param the decklist scan cannot see, so a "you may search your
+   * library…" would otherwise hide a library reader from the identical-game
+   * argument. Treating the wrapper as library-reading withdraws the skip for
+   * any game that resolves an optional clause — sound whatever it contains.
+   */
+  'mayEffects',
   // Reads the top of a library and rearranges it.
   'reorderTopOfLibrary',
-  // Reads the whole library to choose a card.
+  /*
+   * Reads the whole library to choose a card — and now also ROUTES what it
+   * finds to more than one destination (Cultivate's "one onto the battlefield
+   * and the other into your hand"). The routing rides a `route` param on the
+   * same primitive id, so this one classification still covers every printed
+   * shape of the search; there is nothing new for the decklist scan to miss.
+   *
+   * ⚠️ A MANDATORY ADDITIONAL CAST COST (`CardDefinition.additionalCost`, the
+   * "As an additional cost … sacrifice a creature" family) deliberately has NO
+   * entry here and needs none: it is COST DATA, not an effect ref, it carries no
+   * nested effects for `allEffectRefs` to walk, and the zones it reads — the
+   * battlefield and its controller's own hand — are ones the runner already
+   * tracks precisely (every card that reached either emitted a `drawCard` or a
+   * `zoneChange` naming its instance id). If a future additional cost ever reads
+   * a LIBRARY, it must withdraw the skip, and the place to do that is here.
+   */
   'searchLibrary',
   // Reads the top card and BRANCHES on what it is — the filter miss is the
   // dangerous case: it looked, learned, and moved nothing.
   'revealTopCard',
   // Writes a card into the library, moving the slot we reason about.
   'putFromHandOnTop',
+  /*
+   * Teferi's Puzzle Box: writes the WHOLE HAND into the library (at the bottom)
+   * and then draws that many cards. Classified with `putFromHandOnTop` and for
+   * the same reason — it moves cards into the library, so the slot the runner
+   * reasons about is no longer the slot it started from. The bottoming ORDER is
+   * chosen by a pilot looking at a hand the swap may have changed, which is the
+   * second, independent reason: the two arms can pick different orders from the
+   * same visible moves.
+   */
+  'handToBottomThenDraw',
   // A shuffle permutes both arms identically, but the *question* ("may I shuffle?")
   // is answered by a pilot valuing a library it can see. Classified conservatively.
   'mayShuffleLibrary',
+  // Delver's upkeep: reads the top card and BRANCHES on what it is (the reveal
+  // choice's valence, and whether the source transforms). Same shape as
+  // `revealTopCard`, with the same dangerous miss: it looked, learned, and
+  // moved nothing — so a swapped top card can diverge the games invisibly.
+  'transformRevealTop',
+  /*
+   * Scry READS the top N cards and then REORDERS them — both halves break the
+   * identical-game argument. The read is the dangerous one: a scry that bottoms
+   * everything it saw has moved cards the runner tracks (each bottoming emits a
+   * `zoneChange`), but the DECISION was made by looking at cards the swap may
+   * have changed, so the two arms can diverge from the same visible moves.
+   */
+  'scry',
+  // Surveil is the same look with a graveyard for a bottom: it reads the top N
+  // and branches on what it saw.
+  'surveil',
+  /*
+   * `chooseAsEnters` NAMES A VALUE as a permanent enters (a colour, a creature
+   * type, a player). It moves no card and reveals no card — but the MENU it
+   * offers for a creature type is built from every card its chooser owns,
+   * LIBRARY INCLUDED, so the swapped card can change which types are on offer
+   * and therefore which one gets named, in a game where that card is never
+   * drawn. That is precisely the divergence the identical-game claim asserts
+   * cannot happen, so the claim is withdrawn for any game that resolves one.
+   *
+   * Classified here rather than argued away, for the same reason `mayEffects`
+   * is: a wrong verdict is far more expensive than a few extra variant games,
+   * and this primitive appears on a handful of cards.
+   */
+  'chooseAsEnters',
 ]);
 
 /**
@@ -91,6 +175,62 @@ export const OPPONENT_LIBRARY_TARGET = 'opponent';
 export const CONTROL_CHANGING_PRIMITIVES: ReadonlySet<string> = new Set<string>();
 
 /**
+ * Definition fields that let a permanent run abilities **that are not on its own
+ * decklist row** — and so break the runner's map from an instance id back to the
+ * card it was minted from.
+ *
+ * `peekCouldReadHeroLibrary` answers "could this source have read the hero's
+ * library?" by looking the source's instance id up in the pre-shuffle decklist
+ * and scanning THAT card's effect refs. A COPY effect (CR 707) makes that scan
+ * read the wrong card: a Clone whose `def` is now somebody's Temple has an ETB
+ * scry that its own decklist row does not print, so the scan would answer "no
+ * library read" for an ability that just read one. The verdict would be wrong,
+ * and confidently so.
+ *
+ * The runner therefore withdraws the identical-game skip entirely for any game
+ * whose decks contain such a card. Coarse on purpose: this is the same
+ * conservative call `ifKicked` and `mayEffects` get, for the same reason — an
+ * effect the scan cannot SEE must never default into the safe-looking bucket.
+ * It costs a few extra variant games in decks that actually play a Clone.
+ *
+ * A list rather than a boolean so the next field of this shape (a "becomes a
+ * copy" activated ability, a text-changing effect) is added here instead of
+ * being discovered by a wrong number.
+ */
+export const ABILITY_ACQUIRING_DEFINITION_FIELDS: readonly (keyof CardDefinition)[] = Object.freeze([
+  'copyAsEnters',
+]);
+
+/*
+ * ✅ ASKED AND ANSWERED for §3.30's two new copy systems, because the obvious
+ * reading is that they belong here and they do NOT.
+ *
+ * A copy of a SPELL and a TOKEN COPY both run abilities that are not on the
+ * copying card's decklist row — so far, identical to a Clone. The difference is
+ * WHICH OBJECT runs them. A Clone runs them as ITSELF: same instance id, still
+ * indexable in the pre-shuffle library, so `sourceCardFor` places it, reads the
+ * WRONG card's effect refs, and answers confidently wrong. That is the failure
+ * this list exists for, and it can only be fixed by withdrawing the skip.
+ *
+ * A copy and a token are NEW OBJECTS with minted ids, outside both decklist
+ * ranges, so `sourceCardFor` returns undefined and the runner already takes its
+ * conservative branch. Adding the primitives here would disqualify every game
+ * containing a Reverberate whether or not one was ever cast — strictly more
+ * conservative, and buying no soundness at all.
+ *
+ * The rule to apply to the NEXT copy system: it belongs here when the copy is
+ * applied to an object that KEEPS its instance id, and does not when the copy is
+ * a newly created object. "Becomes a copy" applied by an activated ability
+ * (Mirage Mirror, Thespian's Stage) is the first kind and will need a field here
+ * the day it lands.
+ */
+
+/** Whether a card can end up running abilities its decklist row does not print. */
+export function acquiresForeignAbilities(def: CardDefinition): boolean {
+  return ABILITY_ACQUIRING_DEFINITION_FIELDS.some((field) => def[field] !== undefined);
+}
+
+/**
  * Primitives that provably cannot read a library, and so leave the identical-game
  * argument intact. Listed explicitly (rather than "everything not above") so the
  * classification test can prove the two sets together cover the whole registry.
@@ -122,11 +262,22 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   // Attaching an Aura/Equipment reads only the battlefield permanent it targets.
   'attachToTarget',
   'dealDamageToEach',
+  /*
+   * `preventDamage` registers a floating prevention effect (a fog) and touches
+   * nothing else — no library is read, and the effect it creates is consulted
+   * only by the damage layer, which reads the battlefield and a life total.
+   * Paired arms stay comparable for exactly the reason `dealDamage` does.
+   */
+  'preventDamage',
   'addCounters',
   'gainLife',
   'loseLife',
   'pumpUntilEndOfTurn',
   'grantKeywordUntilEndOfTurn',
+  // The mass form reads the BATTLEFIELD (which permanents a player controls now)
+  // and writes continuous effects onto them. No library is consulted, so paired
+  // arms stay comparable for exactly the reason the single-target form does.
+  'grantKeywordToYoursUntilEndOfTurn',
   'makeToken',
   'persistReturn',
   'destroyTarget',
@@ -137,13 +288,126 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   // Countering with an optional payment reads the stack and a mana pool, and the
   // question it asks ("pay {3}?") is answered from the board, never from a library.
   'counterUnlessPaid',
+  // Ward's resolution is the same shape: a stack read, a pay-or-decline answered
+  // from the board, and a counter that moves only known cards.
+  'wardCounterUnlessPaid',
   'createToken',
   'tapTarget',
   'discardCard',
   'returnFromGraveyard',
-  'modal',
+  // NOTE: there is no `modal` primitive to classify. Modal spells are announced
+  // at CAST time (core's `ModalSpec`) and their chosen modes resolve as the
+  // ordinary primitives listed here, each classified on its own terms — which is
+  // strictly better for this table than one opaque wrapper would have been.
   'returnToHand',
   'tapPermanents',
+  // Sacrifices read and write the BATTLEFIELD only: the victim's (or the pile
+  // split's) choice is over permanents in play, and every card moved emits its
+  // zoneChange. No library is ever consulted, so paired arms stay comparable.
+  'sacrificeChosen',
+  'pileSplitSacrifice',
+  /*
+   * `createEmblem` puts a new object in the COMMAND zone built from data carried
+   * in its own params — a name plus static/trigger ABILITY records. It never
+   * reads a library, and unlike `ifKicked` it cannot come to hide one: its params
+   * hold ability descriptions (a static's filter, a trigger's condition), not
+   * nested effect refs the decklist scan would be blind to. The abilities those
+   * records describe run through the ordinary primitive path when they fire, and
+   * are classified there on their own account.
+   */
+  'createEmblem',
+  /*
+   * Granting flashback reads the GRAVEYARD (a public zone, and one whose
+   * contents the runner already tracks exactly: every card that got there
+   * announced its instance id in a `zoneChange`), writes one grant record, and
+   * branches on nothing a library holds. The recast it enables is an ordinary
+   * cast of a card the log has already named. So the identical-game argument
+   * survives it — unlike the top-of-library readers above, this one cannot see
+   * the swapped card until that card has publicly arrived in the yard.
+   */
+  'grantFlashback',
+  /*
+   * THE COPY FAMILY (CR 707) — all three SAFE, and the argument is the same one
+   * `createToken` and `makeToken` already make, so it is worth stating rather
+   * than assuming.
+   *
+   * The worry is real: `copySpell` can copy a PONDER, and `createTokenCopy` can
+   * copy a permanent whose enters-the-battlefield trigger scries. Neither of
+   * those reads is on the copying card's decklist row, so the scan
+   * `peekCouldReadHeroLibrary` performs would answer "no library read" for an
+   * effect that just read one — exactly the unsoundness
+   * `ABILITY_ACQUIRING_DEFINITION_FIELDS` exists to prevent.
+   *
+   * What makes it sound is that the created object gets a MINTED instance id.
+   * Ids are handed out hero-library-first, opponent-library-next, and a copy or
+   * a token is numbered past both ranges — so `sourceCardFor` cannot place it,
+   * and the runner's conservative "an id I cannot place" branch disqualifies the
+   * game. The read is therefore SEEN, through the copy's own id, rather than
+   * missed through the copier's. `paired-arms.test.ts` pins the id being new,
+   * because that invariant is what this classification rests on.
+   *
+   * Note what this is NOT: it is not the same case as `copyAsEnters`, which IS
+   * listed in `ABILITY_ACQUIRING_DEFINITION_FIELDS`. A Clone keeps its OWN
+   * decklist instance id while running somebody else's abilities, so the scan
+   * places it and reads the wrong card. A copy or a token has no decklist id at
+   * all. Two different failures, and only the first needs the coarse withdrawal.
+   */
+  'copySpell',
+  'createTokenCopy',
+  /*
+   * Returning a spell to its owner's hand moves ONE known card out of a public
+   * zone; it reads no library and branches on nothing hidden. Same shape as
+   * `returnToHand` above.
+   */
+  'returnSpellToHand',
+  /*
+   * BLINK (CR 400.7) — SAFE, and for a reason worth writing down because the
+   * first instinct is the wrong one.
+   *
+   * The worry: blinking a permanent re-fires its enters-the-battlefield trigger,
+   * and that trigger can absolutely read a library (blink a Wood Elves and it
+   * searches for a Forest). So does the blink "acquire" an ability whose read is
+   * invisible to the scan?
+   *
+   * No — and the difference from `copyAsEnters` is the whole argument. A blink
+   * creates no new object identity: the permanent that returns is the SAME CARD,
+   * carrying the SAME decklist instance id it has had since the opening shuffle.
+   * `sourceCardFor` therefore places it exactly as it always did, and the ETB
+   * read is attributed to the card that actually made it — Wood Elves' own row —
+   * rather than to the Cloudshift that blinked it. The scan sees the read
+   * through the right card, which is precisely what soundness requires here.
+   *
+   * The blinking CARD itself (Cloudshift, Conjurer's Closet) reads nothing: it
+   * moves one known permanent out of a public zone and back into it.
+   */
+  'blinkTarget',
+  'blinkSelf',
+  /*
+   * EXILE UNTIL THIS LEAVES (the O-Ring pair) — SAFE, same argument as blink and
+   * for the same reason: neither half creates a new object identity. A card
+   * exiled this way keeps the decklist instance id it has carried since the
+   * opening shuffle, and so does the one that comes back, so `sourceCardFor`
+   * places both exactly as it always did.
+   *
+   * Neither primitive reads a library. `exileUntilLeaves` moves a known permanent
+   * from a public zone to a public zone and stamps a link on it;
+   * `returnExiledByThis` walks the two exiles for that link and moves them back.
+   * An exiled card's own enters-trigger may of course read a library when it
+   * returns (a Wood Elves given back by a dying Fiend Hunter searches), and that
+   * read is attributed to Wood Elves' own row — which is correct, and is exactly
+   * the distinction from `copyAsEnters`.
+   */
+  'exileUntilLeaves',
+  'returnExiledByThis',
+  /*
+   * COPYING A TRIGGERED ABILITY — SAFE. The copy is a stack object, never a
+   * card: nothing is drawn, searched or revealed by the copy machinery itself,
+   * and no decklist instance changes identity. The copied ability may of course
+   * read a library when it RESOLVES (a copied "search your library" trigger
+   * searches twice), and that read is attributed to the card that printed the
+   * trigger — which is correct, and the same split `exileUntilLeaves` documents.
+   */
+  'copyTriggeredAbility',
 ]);
 
 /**

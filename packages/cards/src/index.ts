@@ -37,6 +37,7 @@ export {
   loseLife,
   pumpUntilEndOfTurn,
   grantKeywordUntilEndOfTurn,
+  grantKeywordToYoursUntilEndOfTurn,
   makeToken,
   persistReturn,
   destroyTarget,
@@ -47,6 +48,9 @@ export {
   createToken,
   tapTarget,
   attachToTarget,
+  ifKicked,
+  grantFlashback,
+  ITS_MANA_COST,
 } from './primitives.js';
 
 // The choice-driven primitives (DESIGN §3.11): the ones that ask the player a
@@ -54,16 +58,19 @@ export {
 export {
   CHOICE_PRIMITIVES,
   putFromHandOnTop,
+  handToBottomThenDraw,
   reorderTopOfLibrary,
   mayShuffleLibrary,
   searchLibrary,
   revealTopCard,
   discardCard,
   returnFromGraveyard,
-  modal,
   returnToHand,
   tapPermanents,
   counterUnlessPaid,
+  sacrificeChosen,
+  pileSplitSacrifice,
+  transformRevealTop,
 } from './choice-primitives.js';
 
 // Pool loader + registry builder.
@@ -88,11 +95,35 @@ export { EXPANDED_CARD_POOL } from '../data/expanded-pool.js';
 // get an honest list of the engine systems it would still need (`./compile`).
 export type {
   CompilableCard,
+  CompilableCardFace,
   CompileResult,
   CompileStatus,
   UnsupportedClause,
 } from './compile/index.js';
-export { compileCard, compileCards, explainUnsupported } from './compile/index.js';
+export {
+  compileCard,
+  compileCards,
+  explainUnsupported,
+  BACK_FACE_ID_SUFFIX,
+  SECOND_CASTABLE_FACE_GAP,
+  FUSE_GAP,
+  ROOM_DOOR_GAP,
+} from './compile/index.js';
+
+// The compiler's own live registries, re-exported for the About view: the rule
+// tables and keyword map say what imports as fully playable TODAY, and the
+// hint list + system-less types are its honest TODO. Reading them here (rather
+// than keeping a prose copy) is what keeps that page correct by construction.
+export type { CompileRule } from './compile/index.js';
+export {
+  EFFECT_RULES,
+  TRIGGER_RULES,
+  MANA_RULES,
+  STATIC_RULES,
+  KEYWORD_FLAGS,
+  UNSUPPORTED_HINTS,
+  TYPES_WITHOUT_SYSTEM,
+} from './compile/index.js';
 
 /**
  * Mechanics intentionally stubbed because the engine lacks the system to model them
@@ -105,38 +136,46 @@ export { compileCard, compileCards, explainUnsupported } from './compile/index.j
  * because a card that plays *nearly* right silently corrupts every A/B verdict that
  * includes it.
  *
+ * ## THE LIST IS NOW EMPTY, and that is the point of keeping it
+ * Every hand-authored pool card plays as printed. The list stays — with its
+ * whole history below — because it is the mechanism, not the content: the next
+ * card the pool cannot model faithfully belongs HERE, named, rather than being
+ * quietly shipped as an approximation. `fidelity.test.ts` audits every pool card
+ * against its real Oracle text and skips exactly the cards named here, so an
+ * empty list means the audit now covers the entire pool with no exemptions.
+ *
  * Un-stubbed by the player-choice system (DESIGN §3.11) — these now play for real,
  * asking their questions through `pendingChoice`: **Brainstorm** (ordered put-back),
  * **Ponder** (top-3 reorder + optional shuffle), **Thoughtseize** (caster picks the
- * victim's nonland card), **Eternal Witness** (chosen graveyard card), **Cryptic
- * Command** (all four modes, choose two), **Path to Exile** (the controller's
+ * victim's nonland card), **Eternal Witness** (chosen graveyard card), **Path to Exile** (the controller's
  * optional basic-land search) and **Goblin Guide** (reveal the top card, take it
  * only if it is a land). Earlier waves un-stubbed Young Pyromancer, Monastery
  * Swiftspear, Kitchen Finks and Giant Growth on the trigger + continuous layers.
+ * **Sakura-Tribe Elder** was un-stubbed by the template-gap pass: its sacrifice-
+ * self activation cost and its basic-land search both existed already, and only
+ * the "search … for a basic land card" compiler rule was missing.
+ * The second-face system (CardDefinition.backFace + core's transformPermanent)
+ * un-stubbed **Delver of Secrets** — both faces play as printed, upkeep reveal
+ * included.
+ * The planeswalker system un-stubbed **Liliana of the Veil** — all three loyalty
+ * abilities play as printed (each-player discard, the edict, the pile split).
+ * The CAST-TIME modal system un-stubbed **Cryptic Command** — all four modes,
+ * chosen (and aimed) as the spell is cast, per CR 601.2b/c, so the opponent
+ * decides whether to respond already knowing which two halves are coming.
+ * The graveyard-grant system (targeting a card in a graveyard + core's
+ * `card-grants.ts` layer) un-stubbed **Snapcaster Mage** — flash, the targeted
+ * ETB, and the granted flashback all play as printed, and the granted cast goes
+ * through the very same path a printed "Flashback {cost}" uses.
+ * Characteristic-defining P/T (CR 613.3 layer 7a) un-stubbed **Tarmogoyf** — its
+ * star box is the real formula over card types in all graveyards, re-derived on
+ * every read; and the turn-scoped fact memory un-stubbed **Fatal Push**, whose
+ * revolt mode now reads "a permanent you controlled left the battlefield this
+ * turn" at resolution. The CAST-TIME MODAL system took the last entry off this
+ * list, un-stubbing **Cryptic Command**: all four modes, announced AND aimed as
+ * the spell is cast (CR 601.2b/c), so the opponent decides whether to respond
+ * already knowing which two halves are coming.
  */
 export const STUBBED_MECHANICS: ReadonlyArray<{
   readonly card: string;
   readonly missingEngineSystem: string;
-}> = Object.freeze([
-  { card: 'Delver of Secrets', missingEngineSystem: 'transform (upkeep reveal + flip to a 3/2 flyer)' },
-  {
-    card: 'Snapcaster Mage',
-    missingEngineSystem: 'flash timing + casting a card from the graveyard (flashback)',
-  },
-  {
-    card: 'Sakura-Tribe Elder',
-    missingEngineSystem: 'activated abilities with a sacrifice cost (the basic-land search itself is now expressible)',
-  },
-  { card: 'Tarmogoyf', missingEngineSystem: 'dynamic */*+1 P/T derived from graveyard card types' },
-  { card: 'Liliana of the Veil', missingEngineSystem: 'planeswalker loyalty abilities' },
-  {
-    card: 'Fatal Push',
-    missingEngineSystem: 'revolt — a "a permanent you controlled left the battlefield this turn" tracker for the ≤4 mode',
-  },
-  {
-    // Everything Cryptic DOES is faithful; what is early is WHEN it is decided.
-    card: 'Cryptic Command',
-    missingEngineSystem:
-      'modes are chosen on resolution, not at cast: core picks targets at cast with no mode declared, so a mode is offered only when this cast happens to have a legal target for it (needs mode+target selection at cast time)',
-  },
-]);
+}> = Object.freeze([]);

@@ -151,7 +151,16 @@ export { DEFAULT_HEURISTIC_WEIGHTS } from './weights.js';
  * hotseat "auto-play this seat" control, a server filling in for a disconnected
  * seat) reaches for the same reasoning rather than reinventing it.
  */
-export { answerChoiceHeuristically, answerAction, safeFallbackAction, cardValue } from './choices.js';
+export {
+  answerChoiceHeuristically,
+  answerAction,
+  safeFallbackAction,
+  cardValue,
+  // The COPY-TARGET ruler (CR 707.2): what a permanent with these PRINTED
+  // characteristics is worth to be. Exported so the policy can be tested
+  // directly and so a UI could preview the pilot's reasoning.
+  copyTargetValue,
+} from './choices.js';
 
 // Tunable MCTS config (data-driven, designer-tunable: budget, depth, eval weights).
 export type { MctsConfig } from './mcts-config.js';

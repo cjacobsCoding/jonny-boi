@@ -1,10 +1,13 @@
-import { useState, useSyncExternalStore, type ReactElement } from 'react';
+import { useEffect, useState, useSyncExternalStore, type ReactElement } from 'react';
 import { attribution, allAvailableCards } from './lib/cards.js';
+import { BugReporter } from './components/BugReporter.js';
+import { registerStateSection } from './lib/bugreport/state-dump.js';
 import { importedCardCount, subscribeToImportedCards } from './lib/decklist/importedCards.js';
 import { useDecks } from './lib/useDecks.js';
 import { useSimWorker } from './lib/useSimWorker.js';
 import { useLabSelection } from './lib/useLabSelection.js';
 import { SAMPLE_DECKS } from '@jonny-boi/sim';
+import { AboutView } from './views/AboutView.js';
 import { CardsView } from './views/CardsView.js';
 import { DeckBuilderView } from './views/DeckBuilderView.js';
 import { LabView } from './views/LabView.js';
@@ -20,6 +23,7 @@ const VIEWS = [
   { id: 'lab', label: 'Lab' },
   { id: 'match', label: 'Watch a Game' },
   { id: 'proxies', label: 'Proxies' },
+  { id: 'about', label: 'About' },
 ] as const;
 
 type ViewId = (typeof VIEWS)[number]['id'];
@@ -49,6 +53,26 @@ export function App(): ReactElement {
   // The Lab's hero/seed/opponent choices live here too, so a result and the
   // question that produced it survive navigation together.
   const labSelection = useLabSelection(SAMPLE_DECKS.map((d) => d.name));
+
+  // What every bug report says about where the reporter WAS, without the
+  // reporter knowing anything about views or decks. Registered as a section
+  // (CLAUDE.md rule 3's seam) rather than passed in piece by piece, so any other
+  // surface can add its own state to every future report the same way.
+  useEffect(
+    () =>
+      registerStateSection('app', () =>
+        [
+          `view ${view}`,
+          `cards_available ${cardCount}`,
+          `decks ${decks.decks.length}`,
+          `active_deck ${decks.activeDeck ? `${decks.activeDeck.name} (${decks.activeDeck.cards.length} entries)` : 'none'}`,
+          ...decks.decks.map((d) => `deck ${d.name} — ${d.cards.length} entries, updated ${d.updatedAt}`),
+        ].join('\n'),
+      ),
+    [view, cardCount, decks],
+  );
+
+  const activeViewLabel = VIEWS.find((v) => v.id === view)?.label ?? view;
 
   return (
     <div className="app">
@@ -84,11 +108,19 @@ export function App(): ReactElement {
         {view === 'lab' && <LabView decks={decks} sim={labSim} selection={labSelection} />}
         {view === 'match' && <MatchView decks={decks} sim={matchSim} />}
         {view === 'proxies' && <ProxiesView decks={decks} />}
+        {view === 'about' && <AboutView />}
       </main>
 
       <footer className="app__footer">
         {cardCount} cards · {attribution}
       </footer>
+
+      {/*
+        The bug reporter mounts ONCE here, above the view switch: press B (or tap
+        the button) from any view and the screen freezes on the frame the problem
+        is on. A view would have to be navigated to, which loses that frame.
+      */}
+      <BugReporter screenName={activeViewLabel} />
     </div>
   );
 }

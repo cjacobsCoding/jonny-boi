@@ -49,6 +49,7 @@ import { applySwap, copiesSwappedBy, summarizePairedSwap } from './swap.js';
 import { DEFAULT_DECK_RULES, DEFAULT_SWAP_SCOPE, type DeckRules } from './config.js';
 import type { PairedTable } from './stats.js';
 import {
+  acquiresForeignAbilities,
   CONTROL_CHANGING_PRIMITIVES,
   HERO_FIRST_INSTANCE_ID,
   HERO_SEAT,
@@ -671,11 +672,20 @@ export function swappedInstanceIdsFor(
   return ids;
 }
 
-/** Every effect a card can run, wherever it is authored. */
+/**
+ * Every effect a card can run, wherever it is authored.
+ *
+ * "Wherever" is load-bearing: an effect this scan cannot see is one the
+ * identical-game argument silently assumes does not read the library. CYCLING is
+ * the newest such place and the sharpest example — a landcycling card's ability
+ * IS a `searchLibrary`, reading the very library the paired arms differ in, and
+ * it is authored on `def.cycling` rather than on `def.effects`.
+ */
 function allEffectRefs(def: CardDefinition): readonly EffectRef[] {
   const refs: EffectRef[] = [...(def.effects ?? [])];
   for (const trigger of def.triggers ?? []) refs.push(...trigger.effects);
   for (const ability of def.activated ?? []) refs.push(...ability.effects);
+  for (const ability of def.cycling ?? []) refs.push(...ability.effects);
   return refs;
 }
 
@@ -728,6 +738,22 @@ function decideIdenticalGameSkip(
         reason:
           `pilot "${pilot.id}" reasons over hidden library contents (it rolls out real draws), ` +
           'so a game can differ even when the swapped card is never drawn',
+      };
+    }
+  }
+
+  // A COPY effect (CR 707) detaches a permanent's abilities from its decklist
+  // row, which is the map `peekCouldReadHeroLibrary` reasons through. See
+  // `ABILITY_ACQUIRING_DEFINITION_FIELDS` for why this is withdrawn wholesale
+  // rather than handled per instance.
+  for (const deck of [baseLoaded, ...opponents]) {
+    const copier = deck.library.find((def) => acquiresForeignAbilities(def));
+    if (copier) {
+      return {
+        enabled: false,
+        reason:
+          `"${copier.name}" can enter as a COPY of another permanent, so its abilities are not the ones ` +
+          'its decklist row prints and a library read through them would be invisible to the skip',
       };
     }
   }

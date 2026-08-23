@@ -4,7 +4,11 @@
  *
  * The synthetic photos here reproduce the structure of a real one: a dark
  * surface, piles one card wide, each copy offset downward by a fixed amount so
- * its title bar shows, and the bottom card fully visible.
+ * its title bar shows, and the bottom card fully visible. The REAL-photo cases
+ * that this synthetic structure cannot reproduce — glare, washed-out edges,
+ * pale art impersonating a title plate — are pinned by `real-photo.test.ts`
+ * against an actual photo, and the unit tests here encode each of those shapes
+ * against `titlePlates` / `countCopies` directly.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -12,10 +16,15 @@ import { CARD_ASPECT_RATIO, CONTENT_VARIANCE_THRESHOLD } from './config.js';
 import { toLuminance, type PixelImage } from './detect.js';
 import {
   contentStripes,
-  copiesFromStripes,
+  copyBoundaries,
+  countCopies,
   detectStacks,
   groupIntoPiles,
+  rowBrightness,
   rowVariances,
+  titlePlates,
+  type Plate,
+  type Valley,
 } from './stacks.js';
 
 const CARD_WIDTH = 120;
@@ -56,10 +65,10 @@ function fill(image: PixelImage, rect: { x: number; y: number; width: number; he
 const CARD_BORDER = 5;
 
 /**
- * Paint one card the way a real one reads to the detector: a FLAT border strip
- * across the top (the frame edge and the sleeve lip — uniform, so low variance),
- * then a busy title plate, then a busy body. The flat strip is the separator
- * that makes each copy in a fan its own stripe.
+ * Paint one card the way a real one reads to the detector: a FLAT DARK border
+ * strip across the top (the frame edge and the sleeve lip), then a BRIGHT title
+ * plate with darker text speckle, then a busy mid-brightness body. The dark
+ * border is the valley between copies; the bright plate is what gets counted.
  */
 function paintCard(image: PixelImage, x: number, y: number): void {
   fill(image, { x, y, width: CARD_WIDTH, height: CARD_HEIGHT }, (cx, cy) => {
@@ -114,98 +123,128 @@ describe('reading a pile', () => {
     expect(Math.max(...heights.slice(0, 3))).toBeLessThan(CARD_HEIGHT * 0.5);
   });
 
-  it('counts the copies in a fanned pile', () => {
+  it('finds one title plate per copy in the brightness profile', () => {
     const image = surface(CARD_WIDTH + 60, 6 * FAN_PITCH + CARD_HEIGHT + 60);
     paintPile(image, 30, 30, 4);
+    const luma = toLuminance(image);
 
-    const stack = copiesFromStripes(stripesOf(image, 30), 30, CARD_WIDTH, CARD_HEIGHT);
+    // The pile's content starts below the first copy's flat border.
+    const pileTop = 30 + CARD_BORDER;
+    const pileHeight = 3 * FAN_PITCH + CARD_HEIGHT - CARD_BORDER;
+    const profile = rowBrightness(luma, image.width, {
+      x: 30 + 24,
+      y: pileTop,
+      width: CARD_WIDTH - 48,
+      height: pileHeight,
+    });
+    const valleys = copyBoundaries(profile, CARD_HEIGHT);
+    const plates = titlePlates(profile, valleys, pileHeight, CARD_HEIGHT);
 
-    expect(stack.count).toBe(4);
+    expect(plates).toHaveLength(4);
+    // One plate per fan offset, the bottom card's included.
+    const positions = plates.map((plate) => plate.at);
+    for (let i = 1; i < positions.length; i += 1) {
+      expect(positions[i]! - positions[i - 1]!).toBeGreaterThan(FAN_PITCH * 0.7);
+      expect(positions[i]! - positions[i - 1]!).toBeLessThan(FAN_PITCH * 1.3);
+    }
+  });
+});
+
+describe('countCopies', () => {
+  const pitch = 25;
+  const plate = (at: number): Plate => ({ start: at - 4, end: at + 4, at });
+  const valley = (position: number, depth: number): Valley => ({ position, depth });
+
+  it('counts plates on the fan pitch as copies', () => {
+    const { count } = countCopies([plate(4), plate(29), plate(54)], [], pitch);
+    expect(count).toBe(3);
   });
 
-  it('reads a single card as one copy', () => {
-    const image = surface(CARD_WIDTH + 60, CARD_HEIGHT + 60);
-    paintPile(image, 30, 30, 1);
-
-    const stack = copiesFromStripes(stripesOf(image, 30), 30, CARD_WIDTH, CARD_HEIGHT);
-
-    expect(stack.count).toBe(1);
-  });
-
-  /**
-   * The title crops come from the stripes themselves, so they land on the name
-   * wherever it actually is. Deriving them from a fraction of a reconstructed
-   * card instead put the crop into the art, because a fanned copy's true top
-   * edge is hidden under the copy above it.
-   */
-  it('offers one title crop per copy, the bottom card first', () => {
-    const image = surface(CARD_WIDTH + 60, 6 * FAN_PITCH + CARD_HEIGHT + 60);
-    paintPile(image, 30, 30, 3);
-    const stripes = stripesOf(image, 30);
-
-    const { titleBands } = copiesFromStripes(stripes, 30, CARD_WIDTH, CARD_HEIGHT);
-
-    expect(titleBands).toHaveLength(stripes.length);
-    // Bottom card first, then the fan from the top.
-    expect(titleBands[0]!.y).toBeGreaterThan(titleBands[1]!.y);
-    // Each crop starts at its stripe, and stops short of the mana cost.
-    const last = stripes[stripes.length - 1]!;
-    expect(titleBands[0]!.y).toBeLessThanOrEqual(last.start);
-    expect(titleBands[0]!.x + titleBands[0]!.width).toBeLessThan(30 + CARD_WIDTH);
-  });
-
-  /**
-   * The bottom card is fully visible, so its title, art and rules text all merge
-   * into one stripe as tall as the card. Cropping that whole stripe would feed
-   * OCR the entire card — which is exactly the confident nonsense the title-only
-   * crop exists to prevent.
-   */
-  it('crops only the title bar of the bottom card, not its whole face', () => {
-    const image = surface(CARD_WIDTH + 60, 6 * FAN_PITCH + CARD_HEIGHT + 60);
-    paintPile(image, 30, 30, 3);
-    const stripes = stripesOf(image, 30);
-    const tallest = Math.max(...stripes.map((s) => s.end - s.start + 1));
-
-    const { titleBands } = copiesFromStripes(stripes, 30, CARD_WIDTH, CARD_HEIGHT);
-
-    expect(tallest).toBeGreaterThan(CARD_HEIGHT * 0.5); // the merged stripe really is card-sized
-    expect(titleBands[0]!.height).toBeLessThan(CARD_HEIGHT * 0.25);
-  });
-
-  /**
-   * A faint card edge that never became its own stripe must not cost a copy: the
-   * offset is a median over the edges that WERE seen, and the pile's full span
-   * still reaches the last copy.
-   */
-  it('recovers a copy whose edge was too faint to see', () => {
-    const stack = copiesFromStripes(
-      [
-        { start: 0, end: 14 },
-        { start: 20, end: 34 },
-        // The edge at 60 went unseen, so copies 3 and 4 merged into one stripe.
-        { start: 40, end: 74 },
-        { start: 80, end: 94 },
-      ],
-      0,
-      CARD_WIDTH,
-      CARD_HEIGHT,
+  it('drops a band too close to its predecessor — pale art, not a copy', () => {
+    // The real-photo shape: a Thragtusk's bright green art right under the
+    // bottom card's plate, closer than any fan offset.
+    const { count } = countCopies(
+      [plate(4), plate(29), plate(46)],
+      [valley(38, 0.42)],
+      pitch,
     );
-
-    expect(stack.count).toBe(5);
+    expect(count).toBe(2);
   });
 
-  it('never reports fewer than one copy', () => {
-    expect(copiesFromStripes([{ start: 0, end: 14 }], 0, CARD_WIDTH, CARD_HEIGHT).count).toBe(1);
+  it('keeps two nearly-flush copies when a deep valley proves the card edge', () => {
+    // The real-photo shape: two Forests slid almost flush, plates 4px apart,
+    // with the upper card's edge as a deep dark line between them.
+    const { count } = countCopies(
+      [plate(4), plate(29), { start: 33, end: 34, at: 34 }],
+      [valley(31, 0.75)],
+      pitch,
+    );
+    expect(count).toBe(3);
+  });
+
+  it('does not let a shallow dip fake a flush pair', () => {
+    const { count } = countCopies(
+      [plate(4), plate(29), { start: 33, end: 34, at: 34 }],
+      [valley(31, 0.3)],
+      pitch,
+    );
+    expect(count).toBe(2);
+  });
+
+  it('reports one copy when no plates were found', () => {
+    expect(countCopies([], [], pitch).count).toBe(1);
+  });
+});
+
+describe('titlePlates', () => {
+  const cardHeight = 100;
+
+  /** A profile of dim rows with bright plates painted in. */
+  function profileWith(bands: ReadonlyArray<readonly [number, number]>, length: number, dark: ReadonlyArray<readonly [number, number]> = []): Float32Array {
+    const profile = new Float32Array(length).fill(60);
+    for (const [start, end] of bands) profile.fill(200, start, end + 1);
+    for (const [start, end] of dark) profile.fill(5, start, end + 1);
+    return profile;
+  }
+
+  it('finds the bright bands that start within the fanned zone', () => {
+    // Pile of 120 rows against a 100-row card: plates may start only in the
+    // top ~43 rows — anything lower would hang its copy off the pile.
+    const profile = profileWith([[10, 20], [40, 50], [70, 80]], 120);
+    const plates = titlePlates(profile, [], 120, cardHeight);
+
+    expect(plates.map((p) => p.start)).toEqual([10, 40]);
+  });
+
+  it('splits a bright band where a deep valley crosses it', () => {
+    const profile = profileWith([[10, 20], [23, 33]], 140, [[21, 22]]);
+    const valleys = copyBoundaries(profile, cardHeight);
+    const plates = titlePlates(profile, valleys, 140, cardHeight);
+
+    expect(plates.map((p) => p.start)).toEqual([10, 23]);
+  });
+
+  it('drops the sleeve-glare line above the top copy', () => {
+    // Bright rim at the very top, then the top card's edge as a deep valley
+    // within the glare cap, then the real plates.
+    const profile = profileWith([[2, 4], [10, 20], [40, 50]], 140, [[6, 7]]);
+    const valleys = copyBoundaries(profile, cardHeight);
+    const plates = titlePlates(profile, valleys, 140, cardHeight);
+
+    expect(plates.map((p) => p.start)).toEqual([10, 40]);
+  });
+
+  it('returns nothing for a pile shorter than a card can explain', () => {
+    expect(titlePlates(profileWith([[5, 10]], 40), [], 40, cardHeight)).toEqual([]);
   });
 });
 
 describe('grouping stripes into piles', () => {
   /**
-   * The layout a real column actually produces, and the one that defeats the
-   * simpler rules: four evenly-spaced title bars, then the bottom card's art as
-   * one band, then a stripe per line of its rules text, then the next pile.
-   * Neither "a stripe tall enough to be a card" nor "a gap of a card height"
-   * separates those — but only the title bars are evenly spaced AND equally tall.
+   * The stripes a real column produces: title bars a fan offset apart, the
+   * bottom card's art and rules-text lines a few pixels apart, then a strip of
+   * cloth, then the next pile. Everything inside one pile merges; the cloth gap
+   * splits.
    */
   const REAL_COLUMN = [
     { start: 58, end: 71 },
@@ -216,55 +255,30 @@ describe('grouping stripes into piles', () => {
     { start: 318, end: 330 }, // rules text, one stripe per line
     { start: 333, end: 345 },
     { start: 348, end: 360 },
-    { start: 534, end: 547 }, // next pile
+    { start: 534, end: 547 }, // next pile, a strip of cloth away
     { start: 572, end: 585 },
     { start: 599, end: 708 },
   ];
 
-  it('keeps only the fan’s regular rhythm, skipping the bottom card’s insides', () => {
+  it('merges a pile’s own stripes and splits piles at the cloth between them', () => {
     const piles = groupIntoPiles(REAL_COLUMN, 268);
 
-    expect(piles.map((pile) => pile.length)).toEqual([4, 2]);
-    expect(piles[0]!.map((s) => s.start)).toEqual([58, 96, 134, 172]);
-    expect(piles[1]!.map((s) => s.start)).toEqual([534, 572]);
+    expect(piles).toEqual([
+      { start: 58, end: 360 },
+      { start: 534, end: 708 },
+    ]);
   });
 
-  /**
-   * A lone card also shows two stripes — its title bar and its art — at an
-   * offset that looks like a plausible fan. What separates it from a pile of two
-   * is that the whole thing spans only ONE card, which is what the count
-   * measures; going by the number of stripes would call it two.
-   */
-  it('reads a lone card as one copy, not as a pile of two', () => {
-    const stripes = [
-      { start: 58, end: 71 },
-      { start: 99, end: 226 },
-    ];
-
-    expect(groupIntoPiles(stripes, 168)).toHaveLength(1);
-    expect(copiesFromStripes(stripes, 0, CARD_WIDTH, CARD_HEIGHT).count).toBe(1);
-  });
-
-  it('reads a pile of two whose bottom card merged into one stripe', () => {
-    // The same two-stripe shape, but spanning a card AND a fan offset.
-    const stripes = [
-      { start: 58, end: 71 },
-      { start: 99, end: 267 },
-    ];
-
-    expect(copiesFromStripes(stripes, 0, CARD_WIDTH, CARD_HEIGHT).count).toBe(2);
-  });
-
-  it('splits piles that are a whole card apart even with no other cue', () => {
+  it('drops card-wide clutter that is not card-tall — a deck box edge in shot', () => {
     const piles = groupIntoPiles(
       [
-        { start: 0, end: 13 },
-        { start: 300, end: 313 },
+        { start: 0, end: 300 },
+        { start: 500, end: 560 }, // far too short to be a card
       ],
       268,
     );
 
-    expect(piles).toHaveLength(2);
+    expect(piles).toEqual([{ start: 0, end: 300 }]);
   });
 
   it('handles a column with nothing in it', () => {

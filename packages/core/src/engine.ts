@@ -11,46 +11,84 @@
  * class-per-card hierarchy. Cards are data; systems read that data.
  */
 
-import type { GameAction } from './actions.js';
+import type { CastZone, GameAction } from './actions.js';
 import { DEFAULT_MANA_MODE } from './actions.js';
-import type { ActivatedAbility, CardDefinition, EffectRef } from './card.js';
-import { castTiming, isLand, isPermanentType, manaModesOf } from './card.js';
+import type {
+  ActivatedAbility,
+  AdditionalCastCost,
+  CardDefinition,
+  EffectRef,
+  ManaAbility,
+  ManaModeExtra,
+} from './card.js';
+import {
+  canRevealForUntapped,
+  castTiming,
+  fixedManaColorsOf,
+  backFaceCastZonesOf,
+  hasCastableBackFace,
+  isLand,
+  isPermanentType,
+  manaActivationConditionMet,
+  manaExtrasOf,
+  manaModesOf,
+  spendPurposeIfRestricted,
+  playableFaceOf,
+} from './card.js';
 import type { ChoiceAnswer, ChoiceRequest, PendingChoice, ResolutionFrame, TargetOption } from './choices.js';
 import {
+  cardOption,
   choiceOptionCount,
   cloneChoiceAnswer,
   defaultAnswerFor,
   describeChoiceAnswer,
   enumerateChoiceAnswers,
   isTrivialChoice,
+  matchesCardFilter,
   MAX_CHOICES_PER_RESOLUTION,
+  NO_ASKING_OBJECT,
   normalizeChoiceRequest,
+  NOTHING_CHOSEN,
   permanentTargetOption,
   validateChoiceAnswer,
 } from './choices.js';
+import { interveningIfHolds } from './intervening.js';
+import {
+  asEntersOptions,
+  asEntersPrompt,
+  chosenColorOf,
+  chosenSubtypeOf,
+  recordChosenAsEntered,
+} from './as-enters.js';
 import type { RulesConfig } from './config.js';
 import { DEFAULT_RULES } from './config.js';
 import type { ChoiceChannel, EffectRegistry } from './effects.js';
 import { applyEffectRef, createEffectRegistry, shuffleLibraryInState } from './effects.js';
 import type { GameEvent } from './events.js';
 import { createRng, shuffle } from './rng.js';
-import type { ManaCost, ManaProduction } from './mana.js';
+import type { ManaColor, ManaCost, ManaProduction } from './mana.js';
+import { repeatCost } from './mana.js';
 import {
   addProduction,
   canPay,
   emptyPool,
+  formatManaCost,
   MANA_COLORS,
   payCost,
   poolTotal,
 } from './mana.js';
 import type { ManaTapPlan } from './mana-plan.js';
 import { planManaPayment } from './mana-plan.js';
+import type { ManaSpendRestriction } from './spend-restriction.js';
+import { resolveSpendRestriction, restrictionNamesChosenSubtype } from './spend-restriction.js';
 import type {
   CardInstance,
   GameState,
   InstanceId,
+  ModePick,
   PlayerId,
   SpellStackObject,
+  StackObject,
   Step,
   TriggeredStackObject,
 } from './state.js';
@@ -59,6 +97,8 @@ import {
   MAIN_STEPS,
   NO_COUNTERS,
   PLAYER_IDS,
+  protectorOf,
+  spellLeaveDestination,
   STEP_ORDER,
 } from './state.js';
 import type { TargetRestriction } from './targeting.js';
@@ -71,12 +111,41 @@ import {
   restrictionOfEffects,
   targetRestrictionOf,
 } from './targeting.js';
+import { WARD_COST_PARAM, WARD_COUNTER_PRIMITIVE, effectiveWardOf } from './protection.js';
+import {
+  modalSpecOf,
+  modalSpellIsCastable,
+  modeById,
+  modeCountsFor,
+  nextUnaimedPick,
+  orderPicks,
+  picksToResolution,
+} from './modal.js';
+import {
+  addCardGrant,
+  castPermissionFor,
+  expireCardGrants,
+  flashbackCostOf,
+  hasCardGrants,
+  pruneCardGrantsFor,
+} from './card-grants.js';
+import { declineMadness } from './madness.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
+import { clearTurnFacts, turnFactHolds } from './turn-facts.js';
+import { hasNoMaximumHandSize, landPlayZonesFor } from './player-statics.js';
+import { expireFloatingReplacements, indexReplacements, replaceDraw } from './internal/replacement.js';
 import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
 import { effectiveKeywords } from './internal/stats.js';
 import { findOnBattlefield, moveToZone, resetInstanceForNewZone } from './internal/zones.js';
-import { checkStateBasedActions, loseGame, resolveWinner } from './internal/sba.js';
+import {
+  applyLegendRuleChoice,
+  checkStateBasedActions,
+  loseGame,
+  resolveWinner,
+  stateBasedActionsPossible,
+  winGame,
+} from './internal/sba.js';
 import {
   assignAndDealCombatDamage,
   canBlock,
@@ -85,7 +154,9 @@ import {
   hasAnyFirstStrike,
   tapAttackers,
 } from './internal/combat.js';
-import { entersTapped, isCreature } from './card.js';
+import { entersTapped, isAttackable, isCreature, isPlaneswalker } from './card.js';
+import { applyCopyAsEntersAnswer, askCopyAsEnters, extraLoyaltyForCopy } from './copy.js';
+import { addLoyalty, applyEnteringDefense, applyEnteringLoyalty, loyaltyOf, removeLoyalty } from './internal/stats.js';
 
 /**
  * The registry a caller that supplied none gets.
@@ -192,6 +263,13 @@ export function createGame(setup: GameSetup): EngineResult {
     consecutivePasses: 0,
     seed: setup.seed,
     rngState: rng.state,
+    // Written even though nothing is asking yet, so the field's POSITION in the
+    // object is fixed from the start. See `internal/clone.ts`: `applyAction` is
+    // `applyActionInPlace` over a clone, and the two are compared as serialized
+    // text, so a key that appears at different times in the two paths makes
+    // identical states stringify differently.
+    pendingChoice: null,
+    resolution: null,
   };
 
   // Wrap emit so events are scanned for triggers (none can fire during setup
@@ -213,7 +291,9 @@ export function createGame(setup: GameSetup): EngineResult {
   // Draw opening hands.
   for (const pid of PLAYER_IDS) {
     for (let i = 0; i < config.startingHandSize; i++) {
-      drawCard(state, pid, emit);
+      // The opening hand is drawn before anything is on the battlefield, so no
+      // replacement effect can exist to consult — the plain draw, deliberately.
+      drawOneCard(state, pid, emit);
     }
   }
 
@@ -249,8 +329,45 @@ export function createEngine(config: RulesConfig = DEFAULT_RULES, registry?: Eff
 
 // --- draw / turn machine -------------------------------------------------------
 
-/** Draw one card for a player. Empty library flags a loss (decking). */
-function drawCard(state: GameState, player: PlayerId, emit: (e: GameEvent) => void): void {
+/**
+ * Draw one card for a player, THROUGH the replacement layer (CR 614) — the same
+ * seam damage and counters consult.
+ *
+ * Exported because a draw happens in two places and must mean one thing: the
+ * turn-based draw-step draw here, and the `drawCards` primitive in
+ * `@jonny-boi/cards`. A second implementation is how "if you would draw a card,
+ * draw two instead" would end up applying to a Divination and not to a draw
+ * step.
+ *
+ * Inert when nothing in the game replaces a draw: one `.length` read, then the
+ * plain draw, exactly as before.
+ */
+export function drawCardForPlayer(state: GameState, player: PlayerId, emit: (e: GameEvent) => void): void {
+  const replacements = indexReplacements(state);
+  if (replacements.length === 0) {
+    drawOneCard(state, player, emit);
+    return;
+  }
+  // "except the FIRST one you draw in each of your draw steps" — asked BEFORE
+  // the draw, and answered by the turn fact the draw itself will set (see
+  // turn-facts.ts). This is what makes the printed exception exact rather than
+  // an assumption about how many cards a draw step draws.
+  const firstDrawStepDraw =
+    state.step === 'draw' &&
+    player === state.activePlayer &&
+    !turnFactHolds(state, 'drewInOwnDrawStep', player);
+  const result = replaceDraw(state, replacements, player, firstDrawStepDraw, emit);
+  if (result.winsGame) {
+    // Laboratory Maniac: the draw does not happen at all, so the
+    // draw-from-an-empty-library loss below is never reached.
+    winGame(state, player, 'a replacement effect won the game instead of a draw', emit);
+    return;
+  }
+  for (let i = 0; i < result.count; i++) drawOneCard(state, player, emit);
+}
+
+/** Draw one card with no replacement question asked. Empty library flags a loss (decking). */
+function drawOneCard(state: GameState, player: PlayerId, emit: (e: GameEvent) => void): void {
   const p = state.players[player];
   const top = p.library.shift();
   if (!top) {
@@ -264,6 +381,10 @@ function drawCard(state: GameState, player: PlayerId, emit: (e: GameEvent) => vo
 
 /** Begin a new turn: bump turn number, set active player, run untap/upkeep/draw. */
 function beginTurn(state: GameState, _config: RulesConfig, emit: (e: GameEvent) => void): void {
+  // A new turn: nothing has happened in it yet. Cleared as the turn BEGINS
+  // rather than at cleanup, so "this turn" still reads true for anything
+  // resolving in the previous turn's end step (see turn-facts.ts).
+  clearTurnFacts(state);
   state.turnNumber += 1;
   emit({ type: 'turnBegin', turn: state.turnNumber, activePlayer: state.activePlayer });
 
@@ -325,8 +446,19 @@ function advanceStep(state: GameState, config: RulesConfig, emit: (e: GameEvent)
   const isLastStep = idx === STEP_ORDER.length - 1;
 
   if (isLastStep) {
-    // Cleanup just finished → next player's turn.
-    passTurn(state, config, emit);
+    // ANOTHER CLEANUP STEP (CR 514.3a), not the next turn — and REACHING HERE AT
+    // ALL is what says so.
+    //
+    // A cleanup step normally hands out no priority and ends the turn itself, so
+    // the only way both players can pass on an empty stack *while the step is
+    // still cleanup* is that something during that cleanup opened a priority
+    // window (today: a discarded MADNESS card, which exiles itself and offers a
+    // cast — CR 702.35a). CR 514.3a says exactly one thing happens once the
+    // stack empties and everyone passes: another cleanup step begins, with its
+    // turn-based actions performed again. So the re-entry needs no new state —
+    // the step the game is standing in IS the flag — and it terminates, because
+    // the second pass finds a legal hand and nothing left to expire.
+    performStepTurnBasedActions(state, 'cleanup', config, emit);
     return;
   }
 
@@ -348,7 +480,7 @@ function performStepTurnBasedActions(
       // ("on the play"), who skips their first draw.
       const skipFirst = config.playerOnPlaySkipsFirstDraw && state.turnNumber === 1;
       if (!skipFirst) {
-        for (let i = 0; i < config.cardsPerDrawStep; i++) drawCard(state, state.activePlayer, emit);
+        for (let i = 0; i < config.cardsPerDrawStep; i++) drawCardForPlayer(state, state.activePlayer, emit);
       }
       checkStateBasedActions(state, emit);
       grantPriority(state);
@@ -378,12 +510,25 @@ function performStepTurnBasedActions(
       // only for observability; expiry before damage-clear mirrors MTG cleanup.
       expireContinuousEffects(state, 'endOfTurn', emit);
       pruneOrphanContinuousEffects(state);
+      // A grant made to a card in a graveyard wears off on the same clock
+      // (Snapcaster's "until end of turn"), through its own list — see
+      // `card-grants.ts` for why it is not part of the continuous layer.
+      expireCardGrants(state, 'endOfTurn', emit);
+      // A fog guarded THIS turn's combat and a "prevent the next N damage"
+      // shield lasted until end of turn; both wear off here, on the same clock
+      // and through their own list (see `internal/replacement.ts`).
+      expireFloatingReplacements(state, 'endOfTurn', emit);
       for (const inst of state.battlefield) {
         inst.damageMarked = 0;
         inst.markedByDeathtouch = false;
       }
       emptyManaPools(state, emit);
       checkStateBasedActions(state, emit);
+      // DISCARD DOWN TO MAXIMUM HAND SIZE (CR 514.1) — a turn-based action, and
+      // the active player CHOOSES which cards to keep, so it can park a question.
+      // When it does the turn stays here: accepting the answer is what calls
+      // `passTurn`, so nothing observes a hand over the limit.
+      if (raiseCleanupDiscard(state, config, emit)) break;
       // Cleanup normally grants no priority; advance straight to next turn.
       passTurn(state, config, emit);
       break;
@@ -398,6 +543,14 @@ function performStepTurnBasedActions(
 
 /** Grant the active player priority with a fresh pass counter. */
 function grantPriority(state: GameState): void {
+  // A parked question outranks priority: while one is outstanding the ONLY legal
+  // action is its chooser answering it (`generateLegalActions`), and that chooser
+  // may not be the active player. Handing the floor to the active player here
+  // would leave the board saying "your move" to a seat with nothing to do — the
+  // exact UX defect the online branch spent a session diagnosing. State-based
+  // actions can now raise such a question (the legend rule), so this is reachable
+  // from the turn machine and not only from an action handler.
+  if (state.pendingChoice) return;
   state.priorityPlayer = state.activePlayer;
   state.consecutivePasses = 0;
 }
@@ -408,6 +561,116 @@ function passTurn(state: GameState, config: RulesConfig, emit: (e: GameEvent) =>
   state.combat = null;
   state.activePlayer = otherPlayer(state.activePlayer);
   beginTurn(state, config, emit);
+}
+
+/**
+ * Raise the cleanup step's discard down to maximum hand size (CR 514.1), or do
+ * nothing when the active player is already at or under it.
+ *
+ * Returns whether a question was parked. The caller uses that answer to decide
+ * whether to pass the turn NOW or to leave the turn waiting — which is the whole
+ * reason this returns a boolean rather than being fire-and-forget: a hand over the
+ * limit must never be observed by the next turn's draw.
+ *
+ * WHY IT IS A QUESTION AND NOT A RULE-CHOSEN DISCARD: the active player chooses
+ * which cards to keep, and that choice is frequently the most important decision
+ * of a turn (which land, which removal spell). An engine that picked for them
+ * would be playing a different game, so the pick goes through the same
+ * `selectCards` machinery every other "choose N cards" uses — which means the
+ * pilots, the hotseat UI and the online client all already know how to answer it.
+ */
+function raiseCleanupDiscard(state: GameState, config: RulesConfig, emit: (e: GameEvent) => void): boolean {
+  if (state.gameOver) return false;
+  const active = state.activePlayer;
+  const hand = state.players[active].hand;
+  const excess = hand.length - config.maximumHandSize;
+  // The common case is a hand under the limit, which costs one subtraction.
+  if (excess <= 0) return false;
+  // Reliquary Tower and friends: no limit at all, so nothing is discarded. Asked
+  // only once the hand is actually over the printed limit, so the ordinary board
+  // never walks the battlefield for it.
+  if (hasNoMaximumHandSize(state, active)) return false;
+  const choice = normalizeChoiceRequest(
+    {
+      kind: 'selectCards',
+      chooser: active,
+      prompt: `Discard down to ${config.maximumHandSize} cards: choose ${excess} to discard`,
+      candidates: hand.map(cardOption),
+      min: excess,
+      max: excess,
+      fromZone: 'hand',
+      // Being SELECTED here is being discarded, so a pilot's "pick your best"
+      // steer would pick exactly wrong. `'loss'` is what tells it to part with
+      // the cards it values least.
+      valence: 'loss',
+    },
+    {
+      id: state.nextInstanceId++,
+      // ⚠️ A turn-based action has no source object, and naming one anyway is a
+      // HIDDEN-INFORMATION LEAK, not a cosmetic nicety. `choiceAsked` travels to
+      // every pilot's observation feed carrying `sourceInstanceId` unredacted
+      // (`packages/sim/src/observation.ts`), so pointing it at a card in the
+      // discarding player's HAND publishes the identity of a card nobody outside
+      // that hand may know — and instance ids are minted sequentially from the
+      // pre-shuffle library (`paired-arms-config.ts` pins that), so it is a read
+      // on the decklist, not a meaningless number. The protocol's own leak scan
+      // cannot catch it either: `collectInstanceIds` only looks at keys named
+      // `instanceId`. `NO_ASKING_OBJECT` is the sentinel every source-less
+      // question uses; nothing routes on it (the `context` marker below does),
+      // and every "look this id up" path already degrades to the source NAME.
+      sourceInstanceId: NO_ASKING_OBJECT,
+      sourceName: CLEANUP_DISCARD_SOURCE_NAME,
+    },
+  );
+  // `normalizeChoiceRequest` refuses a question with no legal answer. There always
+  // is one here (`excess < hand.length` by construction), but if that ever stopped
+  // holding the turn must still end rather than wedge.
+  if (!choice) return false;
+  state.pendingChoice = { ...choice, context: 'cleanupDiscard' };
+  state.priorityPlayer = active;
+  state.consecutivePasses = 0;
+  emit({
+    type: 'choiceAsked',
+    choiceId: choice.id,
+    chooser: choice.chooser,
+    choiceKind: choice.kind,
+    prompt: choice.prompt,
+    sourceInstanceId: choice.sourceInstanceId,
+    optionCount: choiceOptionCount(choice),
+  });
+  return true;
+}
+
+/**
+ * The `sourceName` on a cleanup discard question. The rule has no source card, and
+ * naming the rule is what a player sees in the log — "Cleanup" rather than
+ * whichever card happened to be first in hand.
+ */
+const CLEANUP_DISCARD_SOURCE_NAME = 'Cleanup';
+
+/**
+ * Discard the named cards from a player's hand, through the ONE funnel that knows
+ * a hand → graveyard move is a discard: `moveToZone`, which routes it past
+ * `discardDestination` so a madness card exiles itself here exactly as it would
+ * when an effect made the player discard it.
+ *
+ * Ids that are not in the hand are skipped rather than rejected — the caller has
+ * already validated the answer, and a defensive skip here cannot wedge a turn.
+ */
+function discardChosenCards(
+  state: GameState,
+  player: PlayerId,
+  instanceIds: readonly InstanceId[],
+  emit: (e: GameEvent) => void,
+): void {
+  for (const id of instanceIds) {
+    const card = instanceIn(state.players[player].hand, id);
+    if (!card) continue;
+    // No discard-specific event: `moveToZone` already emits the `zoneChange`
+    // (hand → graveyard) that every consumer reads a discard from, and a second
+    // event saying the same thing is one more thing to keep in step.
+    moveToZone(state, card, 'graveyard', emit, player);
+  }
 }
 
 function otherPlayer(p: PlayerId): PlayerId {
@@ -440,6 +703,32 @@ function onPassPriority(
   registry: EffectRegistry,
   emit: (e: GameEvent) => void,
 ): void {
+  // CR 704.3 — "whenever a player would get priority, the game checks for any of
+  // the listed conditions for state-based actions". This is the ONE place in the
+  // engine where a player is about to receive priority without a mutation having
+  // just happened, so it is the boundary the rule is really about.
+  //
+  // It is a BACKSTOP, not the primary mechanism: about a dozen mutation sites
+  // call the check themselves, and every path that exists today hits one of them
+  // — which is why this was latent rather than live. What it buys is that the
+  // next path which forgets stops being silent.
+  //
+  // `stateBasedActionsPossible` is the rule-7 gate in front of it: the full check
+  // walks the battlefield three times and can rebuild the continuous index, and
+  // this is the hottest loop the sim has. The gate is a single walk of pure
+  // property reads that allocates nothing, and it is conservative in the safe
+  // direction only (see its own note).
+  if (stateBasedActionsPossible(state)) {
+    checkStateBasedActions(state, emit);
+    // An SBA that ended the game ends the pass with it — nobody receives the
+    // priority this pass was handing over.
+    if (state.gameOver) return;
+    // A state-based action may PARK A QUESTION (the legend rule), and that
+    // chooser now holds the floor. Passing "around" it is exactly what
+    // `dispatchAction` refuses for every other action, so the pass stops here
+    // and resumes when the question is answered.
+    if (state.pendingChoice) return;
+  }
   emit({ type: 'priorityPassed', player: state.priorityPlayer });
   state.consecutivePasses += 1;
 
@@ -482,14 +771,45 @@ function resolveTopOfStack(
 
   const card = top.card;
 
+  // THE AS-ENTERS COPY CHOICE (CR 614.1c + CR 707), asked before anything else
+  // happens to this spell — before `stackResolved`, before a single effect runs,
+  // and above all before the permanent is on the battlefield, because the copied
+  // card is what decides its `entersTapped`, its summoning sickness, its
+  // starting loyalty and its starting defense.
+  //
+  // The stack object goes straight BACK on the stack while the question stands:
+  // nothing has been emitted and nothing has been mutated, so re-entering here
+  // after the answer resolves the spell exactly once. `copyAsEntersDecided`
+  // is what makes the second entry skip the question rather than re-ask it — a
+  // DECLINE has to stick, and "did they already choose?" cannot be read off the
+  // instance (declining leaves no trace on it, which is the whole point).
+  if (top.resolvesTo === 'battlefield' && top.copyAsEntersDecided !== true && askCopyAsEnters(state, card, emit)) {
+    state.stack.push(top);
+    return;
+  }
+
   emit({ type: 'stackResolved', instanceId: card.instanceId, name: card.def.name });
+
+  // Where the card goes when it is done: the battlefield for a permanent, and
+  // otherwise the ONE answer `spellLeaveDestination` gives — graveyard, exile
+  // for a flashback cast, or back to hand for a bought-back spell. Computed
+  // once here so the fast path, the resolution frame, and countering all read
+  // the same function rather than three opinions.
+  const leaveTo: 'battlefield' | 'graveyard' | 'exile' | 'hand' | 'ceaseToExist' =
+    top.resolvesTo === 'battlefield' ? 'battlefield' : spellLeaveDestination(top, 'resolve');
+  // A MODAL spell's script IS its announced modes: printed order, each mode's
+  // effects carrying that mode's OWN chosen target (a mode whose target has
+  // since become illegal simply does not happen, while its siblings still do —
+  // CR 608.2b). This is the whole payoff of choosing at cast time.
+  const picks = top.modePicks;
+  const modal = picks ? picksToResolution(state, card.def, picks, top.controller) : undefined;
+  const effects = modal ? modal.effects : card.def.effects;
 
   // Fast path: a spell with no script (every vanilla creature and land) never asks
   // anybody anything, so it skips the resolution frame entirely and pays nothing
   // for the choice machinery.
-  const effects = card.def.effects;
   if (!effects || effects.length === 0) {
-    finishSpellResolution(state, card, top.resolvesTo, emit);
+    finishSpellResolution(state, card, leaveTo, emit, top);
     checkStateBasedActions(state, emit);
     return;
   }
@@ -505,7 +825,13 @@ function resolveTopOfStack(
       answers: [],
       askCount: 0,
       card,
-      resolvesTo: top.resolvesTo,
+      resolvesTo: leaveTo,
+      // Cast-time choices ride the frame from here on: the resolution outlives
+      // the stack object, and "deals X damage" is read during (and after) it.
+      ...(top.xValue !== undefined ? { xValue: top.xValue } : {}),
+      ...(top.kicked !== undefined ? { kicked: top.kicked } : {}),
+      ...(top.kickCount !== undefined ? { kickCount: top.kickCount } : {}),
+      ...(modal ? { effectTargets: modal.effectTargets } : {}),
     },
     registry,
     emit,
@@ -525,6 +851,21 @@ function resolveTriggeredAbility(
   registry: EffectRegistry,
   emit: (e: GameEvent) => void,
 ): void {
+  // CR 603.4's SECOND check: a trigger whose intervening "if" has stopped
+  // holding is removed from the stack and does nothing. Checked here, before any
+  // effect runs, against the same evaluator the collector used when the ability
+  // triggered — one condition, one reader, no way for the two to disagree.
+  if (!interveningIfHolds(state, obj.intervening, obj.sourceInstanceId, obj.controller, obj.triggeringPlayer)) {
+    emit({
+      type: 'triggerFizzled',
+      sourceInstanceId: obj.sourceInstanceId,
+      controller: obj.controller,
+      label: obj.label,
+      reason: 'its intervening "if" condition is no longer true',
+    });
+    checkStateBasedActions(state, emit);
+    return;
+  }
   runResolution(
     state,
     {
@@ -537,6 +878,10 @@ function resolveTriggeredAbility(
       askCount: 0,
       sourceInstanceId: obj.sourceInstanceId,
       label: obj.label,
+      // The triggering player rides the frame from here on, for the same reason
+      // a cast's chosen X does: the resolution outlives the stack object, and
+      // "that player draws an additional card" is read during it.
+      ...(obj.triggeringPlayer !== undefined ? { triggeringPlayer: obj.triggeringPlayer } : {}),
     },
     registry,
     emit,
@@ -592,12 +937,23 @@ function runResolution(
   while (frame.next < frame.effects.length) {
     const ref = frame.effects[frame.next] as EffectRef;
     const source = frameSource(state, frame);
+    // A modal spell's effects each point where THEIR mode was aimed; everything
+    // else falls back to the one frame-wide target list, exactly as before.
+    const refTargets = frame.effectTargets?.[frame.next] ?? frame.targets;
     applyEffectRef(
       registry,
       ref,
-      { state, source, controller: frame.controller },
+      {
+        state,
+        source,
+        controller: frame.controller,
+        xValue: frame.xValue,
+        kicked: frame.kicked,
+        kickCount: frame.kickCount,
+        triggeringPlayer: frame.triggeringPlayer,
+      },
       emit,
-      frame.targets,
+      refTargets,
       createChoiceChannel(state, frame, source, emit),
     );
     if (state.pendingChoice) {
@@ -621,7 +977,7 @@ function finishResolution(state: GameState, frame: ResolutionFrame, emit: (e: Ga
   state.resolution = null;
   state.pendingChoice = null;
   if (frame.origin === 'spell' && frame.card) {
-    finishSpellResolution(state, frame.card, frame.resolvesTo ?? 'graveyard', emit);
+    finishSpellResolution(state, frame.card, frame.resolvesTo ?? 'graveyard', emit, frame);
   } else {
     emit({
       type: 'triggeredAbilityResolved',
@@ -632,16 +988,46 @@ function finishResolution(state: GameState, frame: ResolutionFrame, emit: (e: Ga
   checkStateBasedActions(state, emit);
 }
 
+/**
+ * What a resolving spell still remembers about how it was KICKED — carried from
+ * the stack object (fast path) or the resolution frame (scripted path) so a
+ * permanent entering the battlefield can record it on the instance.
+ */
+interface KickRecord {
+  readonly kicked?: boolean;
+  readonly kickCount?: number;
+}
+
 /** Move a finished spell/permanent off the stack into its destination zone. */
 function finishSpellResolution(
   state: GameState,
   card: CardInstance,
-  resolvesTo: 'battlefield' | 'graveyard',
+  resolvesTo: 'battlefield' | 'graveyard' | 'exile' | 'hand' | 'ceaseToExist',
   emit: (e: GameEvent) => void,
+  kick?: KickRecord,
 ): void {
+  // CR 704.5e — A COPY OF A SPELL GOES TO NO ZONE AT ALL. It is not a card, so
+  // there is nothing to put in a graveyard, an exile or a hand; the object
+  // simply stops existing when it finishes resolving. Handled here, at the MOVE,
+  // rather than as a state-based-action sweep for exactly the reason CR 704.5d's
+  // token rule is (`internal/zones.ts`): the SBA form would have to walk both
+  // graveyards, exiles, hands and libraries after every resolution looking for
+  // something that is never there. Nothing is pushed anywhere, so the phantom
+  // card that delirium, flashback and Tarmogoyf would all have counted never
+  // exists in the first place.
+  if (resolvesTo === 'ceaseToExist') {
+    emit({ type: 'spellCopyCeasedToExist', instanceId: card.instanceId, name: card.def.name });
+    return;
+  }
   if (resolvesTo === 'battlefield') {
     // Stack objects aren't in a player zone; place directly on battlefield.
     card.zone = 'battlefield';
+    // How many times the spell was kicked follows the PERMANENT onto the
+    // battlefield: the resolution frame dies here, but an enters-the-battlefield
+    // trigger ("create a 1/1 for each time it was kicked") resolves afterwards
+    // and must still be able to read it. A plain (non-multi) kicker records 1.
+    const times = kick?.kickCount ?? (kick?.kicked === true ? 1 : 0);
+    if (times > 0) card.timesKicked = times;
     // Evaluated BEFORE the push below, so a conditional land ("unless you
     // control two or fewer other lands") never counts itself among the others.
     card.tapped = entersTapped(card.def, {
@@ -655,6 +1041,30 @@ function finishSpellResolution(
     card.summoningSick = isCreature(card.def) ? !(card.def.keywords?.haste ?? false) : false;
     state.battlefield.push(card);
     emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: 'battlefield' });
+    // A planeswalker enters with its printed loyalty (CR 306.5b) — said AFTER the
+    // zoneChange so a replay folds "entered, then at loyalty N" in order.
+    applyEnteringLoyalty(card, emit);
+    // "…except it enters with an ADDITIONAL loyalty counter on it if it's a
+    // planeswalker" (Spark Double). Added after the printed number rather than
+    // folded into it, because that is what the card says and because the
+    // printed number is the copied walker's, not this card's. `+1/+1` counters
+    // from the same "except" tail were applied with the copy itself — loyalty
+    // is different only because a walker ENTERS with it (CR 306.5b) and the
+    // helper above sets the record wholesale.
+    const bonusLoyalty = extraLoyaltyForCopy(card, card.def.copyAsEnters);
+    if (bonusLoyalty > 0) {
+      addLoyalty(card, bonusLoyalty);
+      emit({
+        type: 'loyaltyChanged',
+        instanceId: card.instanceId,
+        delta: bonusLoyalty,
+        to: loyaltyOf(card),
+      });
+    }
+    // A battle enters with its printed defense counters (CR 310.4) by the same
+    // rule and through the same kind of shared helper, so no entry path can
+    // disagree with another about the number a permanent arrives carrying.
+    applyEnteringDefense(card, emit);
     // The event log is the replay/inspector source (DESIGN §2), and a consumer
     // folding it starts every entering permanent untapped — so arriving tapped has
     // to be SAID, not just stored. `playLand` already emits this; without the same
@@ -662,11 +1072,37 @@ function finishSpellResolution(
     if (card.tapped) emit({ type: 'tapped', instanceId: card.instanceId });
     return;
   }
-  // Spell → graveyard.
-  card.zone = 'graveyard';
-  state.players[card.owner].graveyard.push(card);
+  // Spell → graveyard, or → exile for a flashback cast (CR 702.34a: a spell
+  // cast from the graveyard is exiled instead of being put anywhere else as it
+  // leaves the stack), or → its owner's HAND when its buyback cost was paid
+  // (CR 702.27a). Same move every time; only the destination differs, and it was
+  // decided by `spellLeaveDestination` before this was called.
+  // Asked BEFORE the move, because `resetInstanceForNewZone` reverts the active
+  // face to the printed front (CR 712.8a) and the adventure half is exactly the
+  // face that is about to disappear.
+  const wasAdventure = card.def.adventure === true;
+  card.zone = resolvesTo;
+  state.players[card.owner][resolvesTo].push(card);
   resetInstanceForNewZone(card);
-  emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: 'graveyard' });
+  emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: resolvesTo });
+  // CR 715.3d: a resolved adventure exiles its card, and its owner may cast the
+  // CREATURE half from exile later. The permission is recorded as a card grant
+  // — the list that already prunes itself whenever its card changes zones — so
+  // an exiled adventurer that is somehow moved out of exile loses it with no
+  // extra bookkeeping, exactly as CR 400.7 requires.
+  if (wasAdventure && resolvesTo === 'exile') {
+    addCardGrant(
+      state,
+      {
+        targetInstanceId: card.instanceId,
+        sourceInstanceId: card.instanceId,
+        zone: 'exile',
+        duration: 'permanent',
+        castFace: 'front',
+      },
+      emit,
+    );
+  }
 }
 
 /**
@@ -758,9 +1194,19 @@ function createChoiceChannel(
     },
     enqueueEffects(refs) {
       if (refs.length === 0) return;
-      // Insert AFTER the ref now running, so a modal spell's chosen modes resolve
-      // in order as part of this same resolution (and may ask questions of their own).
+      // Insert AFTER the ref now running, so a follow-up whose shape depended on
+      // an answer resolves in order as part of this same resolution (and may ask
+      // questions of its own).
       frame.effects.splice(frame.next + 1, 0, ...refs);
+      // ⚠️ `effectTargets` is a PARALLEL array (see `ResolutionFrame`): splicing
+      // one without the other silently shifts every later effect's targets by
+      // the number of refs inserted — a modal spell's second mode would then
+      // resolve pointed at the first mode's victim. The inserted refs inherit
+      // the frame-wide targets (`undefined`), which is what an enqueued
+      // follow-up has always used.
+      if (frame.effectTargets) {
+        frame.effectTargets.splice(frame.next + 1, 0, ...refs.map(() => undefined));
+      }
     },
     shuffleLibrary(player) {
       shuffleLibraryInState(state, player);
@@ -883,6 +1329,76 @@ function applyActionToDraft(
   // the stack and hand the active player priority over them. Rejections return a
   // fresh clone of prevState, so `result.state !== state`; we only flush our draft.
   if (result.state === state && !wasRejected(result.events)) {
+    /*
+     * CR 704.3 — THE PRIORITY BOUNDARY, for every action rather than for one of
+     * them.
+     *
+     * State-based actions are checked "whenever a player would get priority",
+     * and only THEN are triggered abilities put on the stack. In this engine a
+     * player receives priority at the end of essentially every action, not only
+     * when somebody passes — so a check installed inside `onPassPriority` alone
+     * covers exactly one of the doors into that moment.
+     *
+     * That is not a hypothetical gap. Paying a spell's mandatory additional cost
+     * (CR 601.2h) sacrifices a permanent and hands the floor straight back to the
+     * caster through `finishCastChoice`, which passed priority to nobody and so
+     * ran no check: a creature that the sacrificed Equipment was the only thing
+     * keeping alive stayed on the battlefield at toughness 0 — for five turns, in
+     * the soak game that found this (seed 4222011655; `soak.test.ts` pins it).
+     * Every mutation site that hands priority back without routing through a pass
+     * is the same shape, and enumerating them is how this bug was written in the
+     * first place. So the check goes where the ACTION ends, which is the one
+     * place every door leads to.
+     *
+     * Ordering is the rule's, not a convenience: SBAs run BEFORE `collector.flush()`
+     * puts triggers on the stack, so a death this check causes queues its
+     * dies-trigger into the same flush (Blood Artist's own ability is exactly
+     * that shape) rather than being stranded in a collector nobody drains again.
+     *
+     * The three state guards are "is anybody actually receiving priority": a
+     * decided game hands out none, and a parked question or a suspended
+     * resolution means a spell is still resolving (CR 608.2) — the case `soak.ts`
+     * documents at length, where a creature genuinely does sit dead on the
+     * battlefield until the question is answered. `stateBasedActionsPossible` is
+     * the same cheap gate the pass boundary uses; see its note for the direction
+     * it may err in.
+     *
+     * ## Why the PASS is excluded, and what this costs
+     * A pass is the one action that already ran this exact check — at its START,
+     * in `onPassPriority`, where it must be, because a state-based action can end
+     * the game or park the legend rule's question and so stop the pass happening
+     * at all. Re-running it at the other end of the same action would ask the same
+     * question twice: counted over the seed-99 gauntlet, 125,918 of the 151,124
+     * actions are passes, so the exclusion is most of the work rather than a
+     * rounding error. What a pass goes on to change — a resolution, a step advance
+     * — checks at its own site (`resolveTopOfStack`, the draw/combat-damage/cleanup
+     * arms of `advanceStep`), which is the arrangement the soak has run over
+     * thousands of games.
+     *
+     * Measured, paired in ONE process (⚠️ never wall clock on this box — ten agents
+     * share it; the same build read 39–128 games/sec inside an hour, and the first
+     * attempt at this measurement returned rounds of 2,484 ms and 5,110 ms for the
+     * SAME arm):
+     *   - the 280-game seed-99 gauntlet — 24,965 extra gate calls and **zero**
+     *     extra full checks, because curated decks rarely hold an attachment. At
+     *     `sba-gate-cost.ts`'s ~240 ns for an eight-permanent board that is ~6 ms
+     *     against a ~2.3 s run, and every row comes back byte-identical.
+     *   - the full-pool soak, the worst case, where nearly every board carries an
+     *     Aura or an Equipment and the gate therefore says yes about half the time
+     *     — 11,328 extra gate calls and 6,227 extra full checks, i.e. 25.6% more
+     *     full checks (24,369 → 30,596), for **+9.5% CPU** (minimum over 14
+     *     alternating paired rounds).
+     * That is the price of the rule actually holding at the boundary it names.
+     */
+    if (
+      action.kind !== 'passPriority' &&
+      !state.gameOver &&
+      !state.pendingChoice &&
+      !state.resolution &&
+      stateBasedActionsPossible(state)
+    ) {
+      checkStateBasedActions(state, emit);
+    }
     // A suspended resolution keeps the floor: a trigger that fired mid-resolution
     // goes on the stack and waits its turn, but the chooser must still answer first.
     if (collector.flush() > 0 && !state.gameOver && !state.pendingChoice) {
@@ -891,6 +1407,15 @@ function applyActionToDraft(
       // Targets are chosen as the ability goes on the stack, which is HERE —
       // before priority, and with no resolution in progress to park a question in.
       aimPendingTriggers(state, emit);
+    }
+    // A madness window opened by this action (a discard, anywhere — a cost, a
+    // spell's effect, an opponent's Thoughtseize) hands the floor to the player
+    // who may cast the exiled card. Nothing else may act until they do or
+    // decline, which `dispatchAction` enforces; this is what makes the window a
+    // window rather than a flag nobody is ever asked about.
+    if (state.madnessWindow && !state.pendingChoice && !state.gameOver) {
+      state.priorityPlayer = state.madnessWindow.controller;
+      state.consecutivePasses = 0;
     }
   }
   return result;
@@ -914,11 +1439,43 @@ function dispatchAction(
   if (state.pendingChoice && action.kind !== 'answerChoice') {
     return rejectWith(prevState, 'a choice is awaiting an answer');
   }
+  // An open MADNESS window freezes the game the same way, and for the same
+  // reason: a card sits in exile waiting to be cast or declined, and letting
+  // anybody act around it would leave it stranded there forever. Answering a
+  // parked question is always allowed — the window can open in the middle of a
+  // suspended resolution (a discard effect that asks), and that resolution must
+  // still be able to finish.
+  if (state.madnessWindow && action.kind !== 'answerChoice') {
+    const window = state.madnessWindow;
+    const isMadnessCast =
+      action.kind === 'castSpell' &&
+      action.fromZone === 'exile' &&
+      action.instanceId === window.instanceId &&
+      action.player === window.controller;
+    const isDecline = action.kind === 'passPriority' && action.player === window.controller;
+    // Mana abilities stay legal, because a cast needs paying for: the madness
+    // cast happens while the window's controller holds priority, and CR 605.3a
+    // lets a mana ability be activated whenever a player is casting a spell.
+    // Without this the window is a trap — a pilot with untapped lands and an
+    // empty pool could never fund the cast it is being offered.
+    const isFunding = action.kind === 'tapForMana' && action.player === window.controller;
+    if (!isMadnessCast && !isDecline && !isFunding) {
+      return rejectWith(prevState, 'a madness window is awaiting its controller');
+    }
+  }
   switch (action.kind) {
     case 'answerChoice':
-      return applyAnswerChoice(state, prevState, action, effectRegistry, emit, events);
+      return applyAnswerChoice(state, prevState, action, config, effectRegistry, emit, events);
     case 'passPriority': {
       if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
+      // Passing with a madness window open DECLINES it (CR 702.35a): the card
+      // falls into the graveyard the discard would have put it in. It is a pass
+      // in name only — no priority actually changes hands and no step advances,
+      // because what the player declined to do was cast a spell, not act.
+      if (state.madnessWindow) {
+        declineMadness(state, emit);
+        return { state, events };
+      }
       onPassPriority(state, config, effectRegistry, emit);
       return { state, events };
     }
@@ -928,6 +1485,8 @@ function dispatchAction(
       return applyTapForMana(state, prevState, action, emit, events);
     case 'castSpell':
       return applyCastSpell(state, prevState, action, config, emit, events);
+    case 'cycleCard':
+      return applyCycleCard(state, prevState, action, emit, events);
     case 'activateAbility':
       return applyActivateAbility(state, prevState, action, config, emit, events);
     case 'declareAttackers':
@@ -968,6 +1527,7 @@ function applyAnswerChoice(
   state: GameState,
   prevState: GameState,
   action: Extract<GameAction, { kind: 'answerChoice' }>,
+  config: RulesConfig,
   registry: EffectRegistry,
   emit: (e: GameEvent) => void,
   events: GameEvent[],
@@ -1014,11 +1574,260 @@ function applyAnswerChoice(
   });
   state.pendingChoice = null;
 
+  // A CAST-TIME answer belongs to a spell still being cast — the stack object
+  // carrying the `awaitingCastChoice` marker this question was asked for. The
+  // extra cost is charged HERE, once, exactly like the payment kinds above
+  // (indeed the kicker IS a payMana, already charged by that block); the answer
+  // is recorded on the stack object, and the next cast question (a kicker after
+  // an X) asks immediately. When the cast is fully announced, any triggers that
+  // fired off the cast are aimed and the caster keeps priority — exactly where
+  // they would be had the spell needed no question.
+  const casting = spellOnStack(state, choice.sourceInstanceId);
+  if (casting?.awaitingCastChoice !== undefined) {
+    // The modes announced for a modal spell. Nothing is charged (modes are free
+    // — the choice IS the card), the picks are written in printed order, and the
+    // next cast question (aiming the first targeting mode) asks immediately.
+    if (casting.awaitingCastChoice === 'modes' && choice.kind === 'chooseModes' && answer.kind === 'chooseModes') {
+      recordModePicks(state, casting.instanceId, answer.modeIds, emit);
+      return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
+    }
+    // One announced mode's target. `nextUnaimedPick` names the pick being aimed
+    // — the same rule the question was raised by, so an answer cannot land on
+    // the wrong copy of a repeated mode.
+    if (
+      casting.awaitingCastChoice === 'modeTarget' &&
+      choice.kind === 'selectTargets' &&
+      answer.kind === 'selectTargets'
+    ) {
+      const index = nextUnaimedPick(casting.card.def, casting.modePicks ?? []);
+      aimModePick(state, casting.instanceId, index, answer.targets, emit);
+      return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
+    }
+    if (casting.awaitingCastChoice === 'x' && choice.kind === 'chooseNumber' && answer.kind === 'chooseNumber') {
+      const perSymbol = xCountForCast(casting);
+      let value = answer.value;
+      if (value > 0 && perSymbol > 0 && !payManaCostFromBoard(state, choice.chooser, { generic: value * perSymbol }, emit)) {
+        // The board could not honour the agreed X (only reachable from a
+        // hand-built state — the offered range was computed from this board).
+        // Recorded as what actually happened: nothing was paid, X is 0.
+        value = 0;
+      }
+      patchSpellOnStack(state, casting.instanceId, { xValue: value, awaitingCastChoice: undefined });
+      return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
+    }
+    if (casting.awaitingCastChoice === 'buyback' && choice.kind === 'payMana' && answer.kind === 'payMana') {
+      // The mana was already spent by the shared payMana block above; a payment
+      // the board could not honour arrives here as a decline, and the spell
+      // simply resolves to the graveyard like any other.
+      patchSpellOnStack(state, casting.instanceId, { boughtBack: answer.pay, awaitingCastChoice: undefined });
+      return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
+    }
+    if (casting.awaitingCastChoice === 'kicker' && choice.kind === 'payMana' && answer.kind === 'payMana') {
+      // The mana (if paid) was already spent by the shared payMana block above,
+      // and a payment the board could not honour arrives here as a decline.
+      patchSpellOnStack(state, casting.instanceId, { kicked: answer.pay, awaitingCastChoice: undefined });
+      return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
+    }
+    if (
+      casting.awaitingCastChoice === 'additionalCost' &&
+      choice.kind === 'selectCards' &&
+      answer.kind === 'selectCards'
+    ) {
+      const extra = casting.card.def.additionalCost;
+      if (extra) payAdditionalCost(state, extra, choice.chooser, answer.instanceIds, emit);
+      patchSpellOnStack(state, casting.instanceId, {
+        additionalCostPaid: true,
+        awaitingCastChoice: undefined,
+      });
+      return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
+    }
+    if (
+      casting.awaitingCastChoice === 'multikicker' &&
+      choice.kind === 'chooseNumber' &&
+      answer.kind === 'chooseNumber'
+    ) {
+      const perKick = casting.card.def.multikicker;
+      let count = answer.value;
+      if (count > 0 && perKick) {
+        // Charged ONCE, here, exactly like X — and as one payment of the
+        // repeated cost rather than N payments, so a planner that would have
+        // stranded a hybrid symbol across separate charges cannot.
+        if (!payManaCostFromBoard(state, choice.chooser, repeatCost(perKick, count), emit)) {
+          // Only reachable from a hand-built state: the offered range was
+          // computed from this board. Recorded as what actually happened.
+          count = 0;
+        }
+      }
+      patchSpellOnStack(state, casting.instanceId, {
+        kickCount: count,
+        // "If this spell was kicked" reads TRUE for any positive number of
+        // multikicks — one rider, both kicker shapes, so a card printing both
+        // (or a rider written against the single kicker) cannot disagree.
+        ...(count > 0 ? { kicked: true } : {}),
+        awaitingCastChoice: undefined,
+      });
+      return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
+    }
+  }
+
+  // A NAMING answer with no resolution behind it is a land naming a value as it
+  // entered (`raiseLandEntryChoice` parked it). The value is written onto the
+  // permanent the choice named — `appliesToInstanceId`, not "whatever asked", so
+  // a source that ever names on another permanent's behalf cannot silently
+  // record it on itself — and then the SAME step function is called again, which
+  // is what lets one land ask a naming AND a tapped question (Multiversal
+  // Passage, Temple of the Dragon Queen) instead of dropping the second.
+  //
+  // A naming asked mid-RESOLUTION (the `chooseAsEnters` primitive, for a
+  // permanent spell) is deliberately not handled here: it flows through the
+  // ordinary frame path below, and the primitive writes the value itself against
+  // the instance that is entering.
+  if (choice.context === 'asEnters' && answer.kind === 'chooseValue' && !state.resolution) {
+    const entering = findOnBattlefield(state, choice.appliesToInstanceId ?? choice.sourceInstanceId);
+    const naming = entering?.def.asEntersChoice;
+    if (entering && naming) {
+      recordChosenAsEntered(entering, naming, answer.value, emit);
+      raiseLandEntryChoice(state, entering, choice.chooser, emit);
+    }
+    checkStateBasedActions(state, emit);
+    // Aim any waiting trigger only once the land has finished asking. Two
+    // reasons, and they agree: the entry questions are REPLACEMENT effects that
+    // all happen as the permanent enters, before a landfall trigger is put on
+    // the stack (CR 614.1c) — and `aimPendingTriggers` parks a question of its
+    // own, which would overwrite the land's second question and lose it.
+    if (!state.pendingChoice) aimPendingTriggers(state, emit);
+    if (!state.pendingChoice && !state.gameOver) {
+      // The land play never surrendered priority, so its player keeps the floor.
+      state.priorityPlayer = choice.chooser;
+      state.consecutivePasses = 0;
+    }
+    return { state, events };
+  }
+
+
+  // A LEGEND-RULE answer belongs to the state-based actions, not to a resolution
+  // (CR 704.5j — the game performs the rule; the player only picks the survivor).
+  // Routed by the choice's own `context` marker rather than by "there is no frame
+  // behind it", because that description also fits the shockland question below
+  // and the two must never be confused. The rule's own re-check runs the SBAs
+  // again, so a cascade — a second duplicated name, an Aura orphaned by the copy
+  // that left — settles before anyone gets priority back.
+  if (choice.context === 'legendRule' && answer.kind === 'selectCards') {
+    const kept = answer.instanceIds[0];
+    if (kept !== undefined) applyLegendRuleChoice(state, kept, emit);
+    else checkStateBasedActions(state, emit);
+    aimPendingTriggers(state, emit);
+    if (!state.pendingChoice && !state.gameOver) {
+      state.priorityPlayer = state.activePlayer;
+      state.consecutivePasses = 0;
+    }
+    return { state, events };
+  }
+
+  // AN AS-ENTERS COPY answer (CR 614.1c + CR 707) belongs to the ENTRY PATH that
+  // raised it, not to a resolution. Routed by its own `context` marker for the
+  // same reason the legend rule is: "no frame behind it" also describes the
+  // shockland question below. Two entry paths raised it and each is finished
+  // here, because in both cases the permanent is NOT yet on the battlefield —
+  // which is precisely what makes the copied card decide how it enters.
+  if (choice.context === 'copyAsEnters' && answer.kind === 'selectCards') {
+    const chosen = answer.instanceIds;
+    // WHICH entry path raised it is read off where the copying card IS, not off
+    // a second state field: a permanent spell waiting to resolve is on the
+    // stack, and a land mid-play is still in its owner's hand. Instance ids are
+    // unique, so the two cases can never both match.
+    const waiting = spellOnStack(state, choice.sourceInstanceId);
+    if (waiting) {
+      // `resolveTopOfStack` put the stack object back untouched, so recording
+      // the decision and resolving again finishes the spell exactly once.
+      applyCopyAsEntersAnswer(state, waiting.card, chosen, emit);
+      patchSpellOnStack(state, waiting.instanceId, { copyAsEntersDecided: true });
+      resolveTopOfStack(state, config, registry, emit);
+      if (!state.pendingChoice && !state.gameOver) {
+        state.priorityPlayer = state.activePlayer;
+        state.consecutivePasses = 0;
+      }
+      return { state, events };
+    }
+    // A LAND being played. It is already on the battlefield (the entry model
+    // every land question uses — the shockland's, the reveal-land's and the
+    // naming's alike), so the copy is applied in place and then the entry ladder
+    // picks up where the copy left off: a copied land owes the COPIED card's
+    // naming, reveal and life questions, never this card's.
+    const land = findOnBattlefield(state, choice.appliesToInstanceId ?? choice.sourceInstanceId);
+    if (land) {
+      applyCopyAsEntersAnswer(state, land, chosen, emit);
+      // `entersTapped` was read off the UNCOPIED land, and the copy replaced the
+      // card it was read from — so it is re-read here, before anything can
+      // observe it. Nothing can: the `tapped` event is deferred to the end of
+      // the ladder, and answering is the only legal action while a question
+      // stands.
+      land.tapped = entersTapped(land.def, {
+        controller: land.controller,
+        battlefield: state.battlefield,
+        self: land,
+      });
+      raiseLandEntryChoice(state, land, choice.chooser, emit);
+      checkStateBasedActions(state, emit);
+      // Aim a landfall trigger only once the land has finished asking — the
+      // entry questions are all replacement effects that happen AS it enters
+      // (CR 614.1c), and `aimPendingTriggers` would park a question of its own
+      // over the ladder's next one.
+      if (!state.pendingChoice) aimPendingTriggers(state, emit);
+      if (!state.pendingChoice && !state.gameOver) {
+        // The land play never surrendered priority, so its player keeps the floor.
+        state.priorityPlayer = choice.chooser;
+        state.consecutivePasses = 0;
+      }
+      return { state, events };
+    }
+    // Neither — the spell was countered, or the state was hand-built. Nothing
+    // entered, so there is nothing to undo; the game simply continues.
+    state.priorityPlayer = state.activePlayer;
+    state.consecutivePasses = 0;
+    return { state, events };
+  }
+
+  // A CLEANUP-DISCARD answer likewise belongs to a turn-based action, and it is
+  // the one answer the TURN is waiting on: the cleanup step deliberately did not
+  // pass the turn while the question stood, so accepting it here is what ends the
+  // turn. Routed by its own `context` marker for the same reason the legend rule
+  // is — "a card selection with no frame behind it" also describes several
+  // ordinary questions.
+  if (choice.context === 'cleanupDiscard' && answer.kind === 'selectCards') {
+    discardChosenCards(state, choice.chooser, answer.instanceIds, emit);
+    checkStateBasedActions(state, emit);
+    if (state.gameOver) return { state, events };
+    // A discarded MADNESS card exiles itself and opens a window (CR 702.35a). Its
+    // controller must get the chance to cast it, so the turn does not end yet:
+    // players take priority in cleanup (CR 514.3a) and the ordinary step machine
+    // passes the turn once they are done, because cleanup is the last step.
+    if (state.madnessWindow) {
+      state.priorityPlayer = state.madnessWindow.controller;
+      state.consecutivePasses = 0;
+      return { state, events };
+    }
+    // The hand can still be over the limit only if the answer was smaller than the
+    // excess, which `validateChoiceAnswer` refuses — so this asks again purely to
+    // keep the invariant local rather than assuming a validator elsewhere.
+    if (raiseCleanupDiscard(state, config, emit)) return { state, events };
+    passTurn(state, config, emit);
+    return { state, events };
+  }
+
   // A TARGETING answer belongs to the stack, not to a resolution: it names what a
   // triggered ability points at, chosen as the ability went on the stack. Nothing
   // is resumed — the aim is recorded, and any trigger still waiting behind it asks
   // next (see `aimPendingTriggers`).
-  if (choice.kind === 'selectTargets' && answer.kind === 'selectTargets') {
+  //
+  // ⚠️ `!state.resolution` is the whole condition, not decoration — the same
+  // guard the three branches below carry. A `selectTargets` question CAN be
+  // raised from inside a resolution: "you may choose new targets for the copy"
+  // (CR 707.10) is asked by the `copySpell` primitive while the copying spell is
+  // resolving. Without this test that answer would be handed to
+  // `recordTriggerTargets`, which would aim some unrelated trigger with it and
+  // leave the suspended resolution parked forever. `spell-copy.test.ts` pins it.
+  if (choice.kind === 'selectTargets' && answer.kind === 'selectTargets' && !state.resolution) {
     recordTriggerTargets(state, answer.targets, emit);
     aimPendingTriggers(state, emit);
     if (!state.pendingChoice && !state.gameOver) {
@@ -1047,6 +1856,27 @@ function applyAnswerChoice(
     if (!state.pendingChoice && !state.gameOver) {
       // The land play never surrendered priority, so its player keeps the floor —
       // exactly where they would be had the land needed no question.
+      state.priorityPlayer = choice.chooser;
+      state.consecutivePasses = 0;
+    }
+    return { state, events };
+  }
+
+  // A CONFIRM with no resolution behind it is a reveal-land entering off a land
+  // play (`applyPlayLand` parked it; the land is the choice's source). The
+  // printed "if you don't" is all that is left: a decline taps the fresh entry.
+  if (choice.kind === 'confirm' && answer.kind === 'confirm' && !state.resolution) {
+    if (!answer.yes) {
+      const land = findOnBattlefield(state, choice.sourceInstanceId);
+      if (land && !land.tapped) {
+        land.tapped = true;
+        emit({ type: 'tapped', instanceId: land.instanceId });
+      }
+    }
+    checkStateBasedActions(state, emit);
+    aimPendingTriggers(state, emit);
+    if (!state.pendingChoice && !state.gameOver) {
+      // The land play never surrendered priority, so its player keeps the floor.
       state.priorityPlayer = choice.chooser;
       state.consecutivePasses = 0;
     }
@@ -1090,9 +1920,66 @@ function applyPlayLand(
   if (player.landsPlayedThisTurn >= config.maxLandsPerTurn) {
     return rejectWith(prevState, 'no land plays remaining this turn');
   }
-  const card = instanceIn(player.hand, action.instanceId);
-  if (!card) return rejectWith(prevState, 'that card is not in your hand');
-  if (!isLand(card.def)) return rejectWith(prevState, 'that card is not a land');
+  // WHERE FROM. The hand needs no permission. Every other zone does, and there
+  // are two different KINDS of permission, which is why they are read apart:
+  //   - `'exile'` is a permission the CARD carries — an ADVENTURER whose primary
+  //     half is a land, waiting in exile with the note its own adventure left
+  //     behind ("You may play the land later from exile"). Validated by the same
+  //     accessor the CAST path uses, so neither can be tricked into playing a card
+  //     that was merely exiled.
+  //   - `'graveyard'` / `'libraryTop'` are permissions the BOARD carries (Crucible
+  //     of Worlds, Courser of Kruphix). Re-derived here rather than trusted from
+  //     the action, so a hostile client cannot play a land out of its graveyard by
+  //     asking nicely — and a Crucible destroyed in response genuinely stops the
+  //     replay.
+  const fromZone = action.fromZone ?? 'hand';
+  let card: CardInstance | undefined;
+  if (fromZone === 'hand') {
+    card = instanceIn(player.hand, action.instanceId);
+    if (!card) return rejectWith(prevState, 'that card is not in your hand');
+  } else if (fromZone === 'exile') {
+    card = instanceIn(player.exile, action.instanceId);
+    if (!card) return rejectWith(prevState, 'that card is not in exile');
+  } else if (!landPlayZonesFor(state, action.player).includes(fromZone)) {
+    return rejectWith(prevState, `nothing you control lets you play lands from your ${fromZone}`);
+  } else if (fromZone === 'graveyard') {
+    card = instanceIn(player.graveyard, action.instanceId);
+    if (!card) return rejectWith(prevState, 'that card is not in your graveyard');
+  } else {
+    // "from the TOP of your library" is a one-card permission, not a search:
+    // index 0 is the top (`drawCard` shifts from the front), and naming any other
+    // card in the library is rejected.
+    const top = player.library[0];
+    if (!top || top.instanceId !== action.instanceId) {
+      return rejectWith(prevState, 'that card is not the top card of your library');
+    }
+    card = top;
+  }
+  const permission = fromZone === 'exile' ? castPermissionFor(state, card) : undefined;
+  if (fromZone === 'exile') {
+    if (permission === undefined) return rejectWith(prevState, 'that card has no permission to be played from exile');
+    if ((action.face ?? 'front') !== permission.face) {
+      return rejectWith(prevState, 'that face of this card may not be played from exile');
+    }
+  }
+  // Same CR 712.8b guard as casting: a transforming DFC's back face is never
+  // playable from hand.
+  if (card.def.isBackFace === true) {
+    return rejectWith(prevState, 'the back face of a double-faced card cannot be played');
+  }
+  // WHICH FACE — a modal DFC's land half is played by naming `face: 'back'`, and
+  // it is a land play like any other (it counts against the turn's land drop,
+  // checked above). `playableFaceOf` refuses a back face that is not castable,
+  // so a transforming DFC cannot be played as its back.
+  const playDef = playableFaceOf(card.def, action.face);
+  if (!playDef) return rejectWith(prevState, 'that card has no playable back face');
+  if (!isLand(playDef)) return rejectWith(prevState, 'that card is not a land');
+  // The face swap, identical to the cast path: `def` IS the active face, and
+  // `printedDef` is the way back to the front should the land ever leave.
+  if (playDef !== card.def) {
+    card.printedDef = card.def;
+    card.def = playDef;
+  }
 
   moveToZone(state, card, 'battlefield', emit, action.player);
   card.controller = action.player;
@@ -1105,54 +1992,145 @@ function applyPlayLand(
   });
   card.summoningSick = false; // lands aren't affected by summoning sickness
 
-  // A shockland asks its question HERE — at land-play time, with nothing
-  // resolving. The land has entered with the unpaid default (tapped, from
-  // `entersTapped`); a payable question is parked, and the answer either charges
-  // the life and untaps the fresh entry (nothing has been able to observe it
-  // tapped: only answering is legal while the question stands) or confirms the
-  // default. A player who cannot pay is not asked — the default already IS the
-  // only outcome, so the game does not stop.
-  const shockCost = card.def.entersTappedUnlessLifePaid;
-  if (shockCost !== undefined && canAffordLifeCost(state, action.player, shockCost)) {
-    // Entered tapped above, but the tapped event is deferred until the answer —
-    // emitted only if the decline confirms it, so a replay never shows a land
-    // flickering tapped→untapped.
-    card.tapped = false;
-    const choice = normalizeChoiceRequest(
-      {
-        kind: 'payLife',
-        chooser: action.player,
-        prompt: `Pay ${shockCost} life, or ${card.def.name} enters tapped`,
-        amount: shockCost,
-        affordable: true,
-        valence: 'neutral',
-      },
-      {
-        id: state.nextInstanceId++,
-        sourceInstanceId: card.instanceId,
-        sourceName: card.def.name,
-      },
-    );
-    if (choice) {
-      state.pendingChoice = choice;
-      emit({
-        type: 'choiceAsked',
-        choiceId: choice.id,
-        chooser: choice.chooser,
-        choiceKind: choice.kind,
-        prompt: choice.prompt,
-        sourceInstanceId: choice.sourceInstanceId,
-        optionCount: choiceOptionCount(choice),
-      });
-    }
-  } else if (card.tapped) {
-    emit({ type: 'tapped', instanceId: card.instanceId });
+  // THE AS-ENTERS COPY (CR 707 - Vesuva, Echoing Deeps) is asked HERE, once,
+  // ahead of the entry ladder rather than as another rung of it. It is not a
+  // rung because it does not answer a question ABOUT this land -- it decides
+  // WHICH LAND the ladder is then asking about: a Vesuva that copies Cavern of
+  // Souls owes Cavern's naming, and one that copies a Temple owes nothing.
+  // Asking it from the single call site also means it can never be re-asked,
+  // which matters because a DECLINE leaves no trace on the permanent (the ladder
+  // is a step function, called again after every answer, and each of its rungs
+  // needs a recorded answer to stop asking).
+  //
+  // The copy's answer picks the ladder up again (`applyAnswerChoice`); with no
+  // copy question to ask, the ladder starts immediately.
+  if (!askCopyAsEnters(state, card, emit)) {
+    raiseLandEntryChoice(state, card, action.player, emit);
   }
   player.landsPlayedThisTurn += 1;
   emit({ type: 'landPlayed', player: action.player, instanceId: card.instanceId });
   // Playing a land is a special action: the player retains priority.
   state.consecutivePasses = 0;
   return { state, events };
+}
+
+/**
+ * Ask the NEXT question a freshly-played land still owes, or settle its tapped
+ * state when it owes none.
+ *
+ * Three printed questions can land on the same permanent as it enters, and only
+ * ONE choice can be parked at a time — Multiversal Passage names a basic land
+ * type and *then* offers to pay 2 life; Temple of the Dragon Queen offers a
+ * reveal and names a colour. So this is written as a step function that asks the
+ * first unanswered question and is CALLED AGAIN from the answer handler, rather
+ * than as three independent branches that would silently drop the second one.
+ *
+ * Order is the printed order, naming first: the naming is what the land's other
+ * abilities read, and a payment question answered first would be the only one a
+ * player ever saw on a card printing both.
+ *
+ * The land has already entered with the unpaid/unrevealed default (tapped, from
+ * `entersTapped`), and the `tapped` EVENT is deferred until every question is
+ * settled — so a replay never shows a land flickering tapped→untapped, and
+ * nothing can observe the intermediate state because answering is the only legal
+ * action while a question stands.
+ */
+function raiseLandEntryChoice(
+  state: GameState,
+  card: CardInstance,
+  player: PlayerId,
+  emit: (e: GameEvent) => void,
+): void {
+  const park = (request: ChoiceRequest, context?: PendingChoice['context']): void => {
+    const normalized = normalizeChoiceRequest(request, {
+      id: state.nextInstanceId++,
+      sourceInstanceId: card.instanceId,
+      sourceName: card.def.name,
+    });
+    if (!normalized) return;
+    // The context marker is what routes the answer, exactly as the legend rule's
+    // does: "a choice with no resolution behind it" also describes the shockland
+    // question, and the two must never be confused.
+    const choice: PendingChoice =
+      context === undefined ? normalized : { ...normalized, context, appliesToInstanceId: card.instanceId };
+    state.pendingChoice = choice;
+    emit({
+      type: 'choiceAsked',
+      choiceId: choice.id,
+      chooser: choice.chooser,
+      choiceKind: choice.kind,
+      prompt: choice.prompt,
+      sourceInstanceId: choice.sourceInstanceId,
+      optionCount: choiceOptionCount(choice),
+    });
+  };
+
+  // 1. THE NAMING — "As ~ enters, choose a color / a basic land type"
+  //    (CR 614.1c). Asked only while nothing has been named yet, which is what
+  //    makes this function safe to call again after each answer.
+  const naming = card.def.asEntersChoice;
+  if (naming !== undefined && card.chosenAsEntered === undefined) {
+    const options = asEntersOptions(state, naming, player);
+    if (options.length > 0) {
+      park({
+        kind: 'chooseValue',
+        chooser: player,
+        prompt: asEntersPrompt(card.def, naming),
+        subject: naming.subject,
+        options,
+        // Naming costs nothing and unlocks the card's own abilities; the real
+        // decision is WHICH value, which a pilot makes from the board rather
+        // than from a valence.
+        valence: 'gain',
+      }, 'asEnters');
+      if (state.pendingChoice) return;
+    } else {
+      // Nothing on offer (an empty menu) settles to "nothing named" WITHOUT
+      // stopping the game — the inert default, reached honestly and announced
+      // like any other naming. Recorded rather than left absent so this step
+      // function, which is called again after every answer, cannot come back
+      // round and ask again.
+      recordChosenAsEntered(card, naming, NOTHING_CHOSEN, emit);
+    }
+  }
+
+  // 2. A REVEAL-LAND: "you may reveal an Island or Swamp card from your hand. If
+  //    you don't, this land enters tapped." A controller holding nothing to show
+  //    is not asked — the printed default is then the only outcome, and
+  //    stopping the game for it would wedge the turn.
+  const revealCondition = card.def.entersTappedUnlessRevealed;
+  if (revealCondition !== undefined && canRevealForUntapped(revealCondition, state.players[player].hand)) {
+    card.tapped = false;
+    park({
+      kind: 'confirm',
+      chooser: player,
+      prompt: `Reveal ${describeRevealTypes(revealCondition.anyOfSubtypes)} from your hand, or ${card.def.name} enters tapped`,
+      // Showing a card costs nothing and unlocks an untapped land, so a pilot
+      // with nothing better to go on should take it.
+      valence: 'gain',
+    });
+    return;
+  }
+
+  // 3. A SHOCKLAND: "you may pay N life. If you don't, it enters tapped." A
+  //    player who cannot pay is not asked — the default already IS the only
+  //    outcome, so the game does not stop.
+  const shockCost = card.def.entersTappedUnlessLifePaid;
+  if (shockCost !== undefined && canAffordLifeCost(state, player, shockCost)) {
+    card.tapped = false;
+    park({
+      kind: 'payLife',
+      chooser: player,
+      prompt: `Pay ${shockCost} life, or ${card.def.name} enters tapped`,
+      amount: shockCost,
+      affordable: true,
+      valence: 'neutral',
+    });
+    return;
+  }
+
+  // 4. Nothing left to ask — announce the entry state.
+  if (card.tapped) emit({ type: 'tapped', instanceId: card.instanceId });
 }
 
 /**
@@ -1203,9 +2181,37 @@ function aimPendingTriggers(state: GameState, emit: (e: GameEvent) => void): voi
     if (index < 0) return;
     const trigger = state.stack[index] as TriggeredStackObject;
     const restriction = trigger.awaitingTargets as TargetRestriction;
-    const candidates = legalTargetsFor(state, restriction, trigger.controller);
+    // The SOURCE card's definition rides along so a protected permanent is never
+    // offered to an ability whose source has a protected quality (a red
+    // creature's ETB damage cannot be aimed at protection-from-red). The source
+    // may already have left the battlefield; the ability still resolves, so the
+    // definition is recovered from wherever the card now is.
+    const triggerSourceDef = (findOnBattlefield(state, trigger.sourceInstanceId) ??
+      findInstanceAnywhere(state, trigger.sourceInstanceId))?.def;
+    // "ANOTHER target …": the ability's own source is excluded, at the point the
+    // candidates are built — so the menu never offers what the apply path would
+    // then refuse (DESIGN §3.36).
+    const candidates = legalTargetsFor(
+      state,
+      restriction,
+      trigger.controller,
+      triggerSourceDef,
+      trigger.awaitingTargetsExcludeSelf === true ? trigger.sourceInstanceId : undefined,
+    );
+
+    // How many to aim. Absent ⇒ exactly one, which is every trigger written
+    // before "up to three" existed.
+    const wanted = trigger.awaitingTargetCount ?? { min: SINGLE_TARGET, max: SINGLE_TARGET };
 
     if (candidates.length === 0) {
+      // "UP TO three" (min 0) is satisfied by choosing none, so the ability stays
+      // on the stack and resolves doing nothing — CR 603.3d's own distinction
+      // between a trigger that NEEDS a target and one that merely permits them.
+      // Removing it here would silently delete the rest of its effects.
+      if (wanted.min === 0) {
+        recordTriggerTargets(state, [], emit);
+        continue;
+      }
       state.stack.splice(index, 1);
       emit({
         type: 'triggerRemovedFromStack',
@@ -1224,8 +2230,11 @@ function aimPendingTriggers(state: GameState, emit: (e: GameEvent) => void): voi
         prompt: `Choose ${describeRestriction(restriction)} for ${trigger.label}`,
         candidates: candidates.map((ref) => targetOptionFor(state, ref)),
         restriction,
-        min: SINGLE_TARGET,
-        max: SINGLE_TARGET,
+        min: wanted.min,
+        // Never ask for more than exist: `normalizeChoiceRequest` clamps too, but
+        // asking for three of two candidates would make an answerable question
+        // look unanswerable to anything reading the request directly.
+        max: Math.min(wanted.max, candidates.length),
       },
       {
         id: state.nextInstanceId++,
@@ -1295,14 +2304,81 @@ function recordTriggerTargets(
     label: trigger.label,
     targets: [...targets],
   });
+  // A triggered ability aimed at an opponent's warded permanent triggers ward
+  // exactly as a spell does — "the target of a spell OR ABILITY".
+  pushWardTriggers(state, trigger.controller, targets, trigger.instanceId, emit);
+}
+
+/**
+ * WARD (CR 702.21) — for every warded permanent an OPPONENT's spell or ability
+ * has just targeted, put the "counter it unless its controller pays {N}" trigger
+ * on the stack, above the targeting object.
+ *
+ * The trigger is an ordinary trigger stack object whose one effect is core's
+ * reserved {@link WARD_COUNTER_PRIMITIVE} (implemented by `cards`, which asks
+ * the payment through the same `payMana` machinery Mana Leak uses and counters
+ * on a decline). Its TARGET is the stack object that trespassed, so the
+ * resolution knows exactly what to counter even if the stack has moved on — and
+ * a registry without the primitive degrades to `effectUnsupported`, never a
+ * crash.
+ *
+ * Own-controller targeting never triggers (ward names an opponent), and the
+ * ward cost is read through the continuous layer so a granted ward charges too.
+ */
+function pushWardTriggers(
+  state: GameState,
+  actingPlayer: PlayerId,
+  targets: ReadonlyArray<InstanceId | PlayerId>,
+  targetedStackInstanceId: InstanceId,
+  emit: (e: GameEvent) => void,
+): void {
+  for (const target of targets) {
+    if (isPlayerTarget(target)) continue;
+    const permanent = findOnBattlefield(state, target);
+    if (!permanent || permanent.controller === actingPlayer) continue;
+    const wardCost = effectiveWardOf(state, permanent);
+    if (wardCost <= 0) continue;
+    const label = `Ward {${wardCost}}`;
+    state.stack.push({
+      kind: 'trigger',
+      instanceId: state.nextInstanceId++,
+      sourceInstanceId: permanent.instanceId,
+      controller: permanent.controller,
+      effects: [
+        { primitive: WARD_COUNTER_PRIMITIVE, params: { [WARD_COST_PARAM]: { generic: wardCost } } },
+      ],
+      targets: [targetedStackInstanceId],
+      label,
+    });
+    emit({
+      type: 'triggerPutOnStack',
+      sourceInstanceId: permanent.instanceId,
+      controller: permanent.controller,
+      label,
+    });
+  }
 }
 
 /** Describe a target reference (a permanent or a seat) for a choice's option list. */
 function targetOptionFor(state: GameState, ref: InstanceId | PlayerId): TargetOption {
   if (isPlayerTarget(ref)) return { ref, name: `Player ${ref}`, controller: ref };
   const permanent = findOnBattlefield(state, ref);
-  return permanent
-    ? permanentTargetOption(permanent)
+  if (permanent) return permanentTargetOption(permanent);
+  // A target need not be a PERMANENT: a graveyard card is a legal target for
+  // `'instantOrSorceryInYourGraveyard'`, and describing it as `#7` would leave
+  // a UI rendering an unnamed button and the AI's own target scorer with
+  // nothing to read. Found wherever it actually is.
+  //
+  // THE STACK IS SEARCHED FIRST, and it was the zone this was missing: "target
+  // spell" has been a restriction since Counterspell, and a spell on the stack
+  // is in no player zone, so every counterspell's own target has been rendering
+  // as `#7`. It matters twice over now — a copy's re-aim question and the
+  // "copy target instant or sorcery spell" question are both lists OF SPELLS.
+  const onStack = spellOnStack(state, ref);
+  if (onStack) return { ref, name: onStack.card.def.name, controller: onStack.controller };
+  const card = findInstanceAnywhere(state, ref);
+  return card
+    ? { ref, name: card.def.name, controller: card.controller }
     : // Only reachable if the board changed between listing and describing, which
       // it cannot inside one action; described rather than dropped so a candidate
       // list can never come out shorter than the legality check that built it.
@@ -1346,10 +2422,119 @@ function pushManaTapActions(state: GameState, player: PlayerId, out: GameAction[
       manaCont ??= indexContinuous(state);
       if (!canActivateManaAbility(perm, manaCont)) continue;
     }
+    // The rich mana model (costs / riders / restrictions / derived colours) is
+    // read ONCE per source. The `manaAbilities` test is inlined rather than left
+    // to `manaExtrasOf` so the ordinary board — where no source has one — pays a
+    // single property read on an immutable definition and never a call, on the
+    // engine's hottest loop.
+    const extras = perm.def.manaAbilities === undefined ? undefined : manaExtrasOf(perm.def);
     for (let mode = 0; mode < modes.length; mode++) {
+      if (extras !== undefined && manaModeBlockedReason(state, perm, extras[mode]) !== undefined) {
+        continue;
+      }
       out.push({ kind: 'tapForMana', player, instanceId: perm.instanceId, mode });
     }
   }
+}
+
+/**
+ * Why `perm`'s mana mode cannot be activated right now, or `undefined` when it
+ * can. ONE answer, asked by the offer path and by the apply path, so a mode the
+ * menu shows is a mode the engine will accept — an unmet "Activate only if …" has
+ * to make the source *invisible* to the payment planner, not merely refuse after
+ * the planner has already counted on it.
+ *
+ * The mana half of an additional cost is checked against the FLOATING pool, which
+ * is exactly the gate `unpayableActivationReason` puts on an activated ability's
+ * mana cost. A filter land is therefore offered once its input mana is actually
+ * floating; the funding source is tapped first, which is how the activation
+ * happens in paper too (CR 605.3a lets you activate mana abilities while paying,
+ * and here that is simply the previous action).
+ */
+function manaModeBlockedReason(
+  state: GameState,
+  perm: CardInstance,
+  extra: ManaModeExtra | undefined,
+): string | undefined {
+  if (!extra) return undefined;
+  const { ability, derivedColor } = extra;
+  const player = state.players[perm.controller];
+  if (
+    ability.restriction &&
+    !manaActivationConditionMet(ability.restriction, {
+      controller: perm.controller,
+      battlefield: state.battlefield,
+    })
+  ) {
+    return `${perm.def.name}'s ability cannot be activated right now`;
+  }
+  if (derivedColor !== undefined) {
+    // "any color" never reaches {C}, whatever the board offers (see
+    // `ManaAbility.derivedIncludesColorless`).
+    if (derivedColor === 'C' && ability.derivedIncludesColorless !== true) {
+      return `${perm.def.name} cannot make colorless mana`;
+    }
+    if (!derivedManaColors(state, perm, ability).has(derivedColor)) {
+      return `no land makes {${derivedColor}} for ${perm.def.name} to copy`;
+    }
+  }
+  // A CHOSEN-colour mode is available only for the colour THIS permanent named as
+  // it entered. A permanent that named nothing has no available mode at all, so
+  // it taps for nothing — the inert default, refused here rather than silently
+  // downgraded to "any colour".
+  const modeChosenColor = extra.chosenColor;
+  if (modeChosenColor !== undefined && chosenColorOf(perm) !== modeChosenColor) {
+    return chosenColorOf(perm) === undefined
+      ? `${perm.def.name} has not named a color`
+      : `${perm.def.name} names a different color`;
+  }
+  const cost = ability.cost;
+  if (cost) {
+    // CR 118.4: life pays down to zero and no further.
+    if (cost.life !== undefined && cost.life > 0 && player.life < cost.life) {
+      return 'you do not have enough life to pay that cost';
+    }
+    if (
+      cost.mana &&
+      !canPay(player.manaPool, cost.mana, spendPurposeIfRestricted(player.manaPool, perm.def, 'activate'))
+    ) {
+      return `insufficient mana to activate ${perm.def.name}`;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The colours a board-derived mana ability may currently produce.
+ *
+ * Recomputed per query and never cached on the definition: the answer is a
+ * function of the battlefield, so a cached one would be a different card's answer
+ * the moment a land entered. Only sources that actually print a derived ability
+ * ever reach here, and there are a handful of those in the whole format, so the
+ * per-query set costs nothing a real board notices.
+ *
+ * The source permanent is excluded from its own derivation, and
+ * `fixedManaColorsOf` excludes every OTHER derived source too — so a pair of
+ * Reflecting Pools reads each other as producing nothing rather than looping.
+ */
+function derivedManaColors(
+  state: GameState,
+  source: CardInstance,
+  ability: ManaAbility,
+): ReadonlySet<ManaColor> {
+  const wantOpponents = ability.derivedColors === 'landsOpponentsControl';
+  const colors = new Set<ManaColor>();
+  for (const perm of state.battlefield) {
+    if (perm === source) continue;
+    const mine = perm.controller === source.controller;
+    if (wantOpponents ? mine : !mine) continue;
+    if (!isLand(perm.def)) continue;
+    // The chosen colour is read off the INSTANCE, so a Temple of the Dragon Queen
+    // that named red contributes exactly red to a Reflecting Pool — not all five,
+    // and not nothing.
+    for (const color of fixedManaColorsOf(perm.def, chosenColorOf(perm))) colors.add(color);
+  }
+  return colors;
 }
 
 /**
@@ -1385,6 +2570,16 @@ function canAffordLifeCost(state: GameState, player: PlayerId, amount: number): 
  * `payManaCostFromBoard`: the caller records what actually happened, and an
  * agreement the total cannot honour is recorded as a decline.
  */
+/**
+ * The printed land types of a reveal-land, as the prompt shows them ("an Island
+ * or Swamp card"). Built from the condition rather than stored as prose so the
+ * question a player is asked can never disagree with the condition being tested.
+ */
+function describeRevealTypes(subtypes: readonly string[]): string {
+  const named = subtypes.map((subtype) => subtype.charAt(0).toUpperCase() + subtype.slice(1));
+  return `${named.join(' or ')} card`;
+}
+
 function payLifeCost(state: GameState, player: PlayerId, amount: number, emit: (e: GameEvent) => void): boolean {
   if (!canAffordLifeCost(state, player, amount)) return false;
   const owner = state.players[player];
@@ -1427,6 +2622,11 @@ function payManaCostFromBoard(
     if (!source || source.tapped) return false;
     tapPermanentForMana(state, source, player, tap.production, emit);
   }
+  // NO SPEND PURPOSE, deliberately. This pays a cost DEMANDED BY A RESOLVING
+  // EFFECT ("unless its controller pays {3}") — it is neither casting a spell nor
+  // activating an ability, so no printed spend restriction in this engine permits
+  // it, and `payCost` refuses restricted mana for exactly that reason. An
+  // Ancient Ziggurat mana cannot pay a Mana Leak tax, and it does not here.
   const result = payCost(state.players[player].manaPool, cost);
   if (!result.ok) return false;
   state.players[player].manaPool = result.pool;
@@ -1434,21 +2634,38 @@ function payManaCostFromBoard(
   return true;
 }
 
-/** Tap a source and add its production to its controller's pool, with events. */
+/**
+ * Tap a source and add its production to its controller's pool, with events.
+ *
+ * `restriction` is what the ability printed about the MANA ("Spend this mana only
+ * to cast a creature spell"); `undefined` for every ordinary source, in which
+ * case the pool stays the plain six-colour record the hot path short-circuits on.
+ */
 function tapPermanentForMana(
   state: GameState,
   source: CardInstance,
   player: PlayerId,
   production: ManaProduction,
   emit: (e: GameEvent) => void,
+  restriction?: ManaSpendRestriction,
 ): void {
   source.tapped = true;
   emit({ type: 'tapped', instanceId: source.instanceId });
   const owner = state.players[player];
-  owner.manaPool = addProduction(owner.manaPool, production);
+  owner.manaPool = addProduction(owner.manaPool, production, restriction);
   for (const color of MANA_COLORS) {
     const amount = production[color] ?? 0;
-    if (amount > 0) emit({ type: 'manaAdded', player, color, amount });
+    if (amount <= 0) continue;
+    // The restriction rides the event because mana in a pool is PUBLIC in this
+    // engine (see `sim/observation.ts`), so a restriction on public mana is
+    // public too: it was printed on a permanent everyone can read, and the whole
+    // table watched that permanent be tapped. Emitting the plain event shape when
+    // there is none keeps every existing log line byte-identical.
+    emit(
+      restriction === undefined
+        ? { type: 'manaAdded', player, color, amount }
+        : { type: 'manaAdded', player, color, amount, spendRestriction: restriction.label },
+    );
   }
 }
 
@@ -1476,9 +2693,95 @@ function applyTapForMana(
   const production = modes[mode];
   if (!production) return rejectWith(prevState, `${source.def.name} has no mana mode ${mode}`);
 
-  tapPermanentForMana(state, source, action.player, production, emit);
+  // Everything a RICH mana ability prints beyond the colour bundle. `undefined`
+  // for every plain land and rock, so the ordinary tap is untouched by all of it.
+  const extra = manaExtrasOf(source.def)?.[mode];
+  if (extra) {
+    // Same single answer the offer path used, so a mode the menu showed is a mode
+    // this accepts — and one it hid is refused here too, even if a hostile client
+    // sends it anyway.
+    const blocked = manaModeBlockedReason(state, source, extra);
+    if (blocked) return rejectWith(prevState, blocked);
+    const player = state.players[action.player];
+    const cost = extra.ability.cost;
+    if (cost?.mana) {
+      // Paid BEFORE the production is added, which is what makes a filter land a
+      // filter rather than a free two mana: the input leaves the pool, then the
+      // output arrives.
+      const paid = payCost(
+        player.manaPool,
+        cost.mana,
+        // A mana ability IS an ability, so a restricted mana that may "activate
+        // abilities of artifacts" can legally fund an artifact filter land — and
+        // one that may only cast creature spells cannot. Same question, same
+        // helper, as every other activation.
+        spendPurposeIfRestricted(player.manaPool, source.def, 'activate'),
+      );
+      if (!paid.ok) return rejectWith(prevState, paid.reason);
+      player.manaPool = paid.pool;
+      emit({ type: 'manaCostPaid', player: action.player, cost: { ...cost.mana } });
+    }
+    if (cost?.life !== undefined && cost.life > 0) {
+      player.life -= cost.life;
+      emit({ type: 'lifeChanged', player: action.player, delta: -cost.life, to: player.life });
+    }
+  }
+
+  tapPermanentForMana(
+    state,
+    source,
+    action.player,
+    production,
+    emit,
+    spendRestrictionMadeBy(source, extra?.ability.spendRestriction),
+  );
+
+  // The RIDER runs as part of the ability's own resolution, AFTER the mana is
+  // added — a pain land's damage is not a cost you may decline, and it is damage
+  // rather than life loss, so it goes through the same player-damage shape combat
+  // and burn use. It happens even when it is lethal; the SBA pass that follows
+  // this action is what ends the game, exactly as in paper.
+  const damage = extra?.ability.rider?.damageToController ?? 0;
+  if (damage > 0) {
+    const player = state.players[action.player];
+    player.life -= damage;
+    emit({
+      type: 'damageDealt',
+      source: source.instanceId,
+      target: action.player,
+      amount: damage,
+      combat: false,
+    });
+    emit({ type: 'lifeChanged', player: action.player, delta: -damage, to: player.life });
+  }
+  // Paying life or taking a rider's damage can reach zero, and that is legal —
+  // the player's call, not the engine's to forbid (CR 118.4). Settling it needs
+  // the SBA pass, exactly as the shockland payment does: a tap that kills you
+  // must end the game here rather than leaving a corpse holding priority. Run
+  // only when something actually changed a life total, so the ordinary tap —
+  // by far the most frequent action in the game — pays nothing for it.
+  if (damage > 0 || (extra?.ability.cost?.life ?? 0) > 0) checkStateBasedActions(state, emit);
   // Mana abilities don't use the stack and don't reset priority passing.
   return { state, events };
+}
+
+/**
+ * The concrete restriction a tap of `source` puts on the mana it makes.
+ *
+ * For every card but the "…of the chosen type" three this is the printed
+ * restriction itself, returned by identity — the shared frozen object, no
+ * allocation. Cavern of Souls and friends name a creature type as they enter,
+ * and core's as-enters seam already stores that answer on the INSTANCE
+ * (`chosenAsEntered`), so the value is read from there rather than tracked a
+ * second time; substituting it here means the pool only ever holds concrete
+ * restrictions and no payment path has to find the permanent again.
+ */
+function spendRestrictionMadeBy(
+  source: CardInstance,
+  printed: ManaSpendRestriction | undefined,
+): ManaSpendRestriction | undefined {
+  if (printed === undefined || !restrictionNamesChosenSubtype(printed)) return printed;
+  return resolveSpendRestriction(printed, chosenSubtypeOf(source));
 }
 
 function applyCastSpell(
@@ -1491,15 +2794,110 @@ function applyCastSpell(
 ): EngineResult {
   if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
   const player = state.players[action.player];
-  const card = instanceIn(player.hand, action.instanceId);
-  if (!card) return rejectWith(prevState, 'that card is not in your hand');
-  if (isLand(card.def)) return rejectWith(prevState, 'lands are played, not cast');
+  const fromZone = action.fromZone ?? 'hand';
+  // The source zone is explicit and validated FIRST: a flashback cast finds its
+  // card in the caster's own graveyard (the card is cast "from your graveyard",
+  // so it is the owner's copy), and a card that has left that zone mid-response
+  // — exiled, or already flashed back — is cleanly rejected here, exactly as a
+  // hand card that was discarded in response would be.
+  const card =
+    fromZone === 'graveyard'
+      ? instanceIn(player.graveyard, action.instanceId)
+      : fromZone === 'exile'
+        ? instanceIn(player.exile, action.instanceId)
+        : instanceIn(player.hand, action.instanceId);
+  if (!card) {
+    return rejectWith(
+      prevState,
+      fromZone === 'graveyard'
+        ? 'that card is not in your graveyard'
+        : fromZone === 'exile'
+          ? 'that card is not in exile'
+          : 'that card is not in your hand',
+    );
+  }
+  // A cast from EXILE is one of exactly two things, and neither may be assumed:
+  // a MADNESS cast (the one card whose window is open), or a cast the card has
+  // been given explicit PERMISSION for — an adventurer exiled by its adventure
+  // (CR 715.3d) or a defeated Siege (CR 310.4). Both are checked here, so a
+  // pilot or a hostile client cannot cast an arbitrary exiled card by naming
+  // the zone. Madness is asked first because its window preempts the game.
+  const madnessWindowOpen =
+    fromZone === 'exile' &&
+    state.madnessWindow?.instanceId === card.instanceId &&
+    state.madnessWindow?.controller === action.player;
+  const permission = fromZone === 'exile' && !madnessWindowOpen ? castPermissionFor(state, card) : undefined;
+  const madnessCost = madnessWindowOpen ? card.def.madness : undefined;
+  if (fromZone === 'exile') {
+    if (!madnessWindowOpen && permission === undefined) {
+      return rejectWith(prevState, 'that card has no open madness window and no permission to be cast from exile');
+    }
+    if (madnessWindowOpen && madnessCost === undefined) {
+      return rejectWith(prevState, 'that card has no madness cost');
+    }
+    // The permission names ONE face. Casting the other half of an exiled
+    // adventurer (or a Siege's battle half) is not something the rules ever
+    // allow, so it is refused rather than silently redirected.
+    if (permission !== undefined && (action.face ?? 'front') !== permission.face) {
+      return rejectWith(prevState, 'that face of this card may not be cast from exile');
+    }
+  }
+  // CR 712.8b: the back face of a transforming DFC can never be cast. A card in
+  // hand is front-face-up by construction, so this is defensive — but a state
+  // built by hand (a test, a hostile online client) must be refused, not played.
+  if (card.def.isBackFace === true) {
+    return rejectWith(prevState, 'the back face of a double-faced card cannot be cast');
+  }
+  // WHICH FACE. A modal DFC is one card with two castable halves, and every
+  // characteristic below — type, cost, timing, targets, script — belongs to the
+  // face being cast, not to the front. `playableFaceOf` refuses `'back'` for a
+  // card with no CASTABLE back face, so a transforming DFC (whose back face is
+  // only ever reached by a transform instruction) is rejected here, not cast.
+  const castDef = playableFaceOf(card.def, action.face);
+  if (!castDef) return rejectWith(prevState, 'that card has no castable back face');
+  if (isLand(castDef)) return rejectWith(prevState, 'lands are played, not cast');
+  // A back half restricted to certain zones (AFTERMATH's graveyard, a Siege
+  // reward's exile) is legal only from one of them — the same table the offer
+  // loop reads, so offer and accept cannot disagree about where a half lives.
+  if (action.face === 'back' && !backFaceCastZonesOf(card.def).includes(fromZone)) {
+    return rejectWith(prevState, `the second half of ${card.def.name} cannot be cast from your ${fromZone}`);
+  }
+  // Flashback may be PRINTED or GRANTED (Snapcaster Mage). One accessor answers
+  // both, so the cast path cannot disagree with the offer loop about what a card
+  // in the graveyard costs — or about whether it may be cast at all. On a face
+  // OTHER than the front, the face's own printed cost is the answer: a grant is
+  // made on the card as the granter saw it, which is its front face.
+  //
+  // AFTERMATH is the deliberate exception: its second half is cast from the
+  // graveyard for its OWN printed cost, not for a flashback cost it does not
+  // print, so a graveyard-legal back half skips this question entirely.
+  const aftermath = fromZone === 'graveyard' && action.face === 'back';
+  // GRANT FIRST, then the face's own printed flashback.
+  //
+  // `flashbackCostOf` is the accessor the OFFER loop uses, and it is keyed on the
+  // CARD (a grant names an instance, not a face). Reading it only when the cast
+  // resolves to the whole definition is what broke a SPLIT card: `castDef` is
+  // then the half, so a Snapcaster grant on `Assault // Battery` was offered —
+  // the offer even checked affordability against the granted cost — and refused
+  // here with "that card has no flashback". Offer and apply must read the same
+  // accessor or the menu lies. Found by the full-pool soak at seed 1200969370.
+  const flashbackCost =
+    fromZone === 'graveyard' && !aftermath
+      ? (flashbackCostOf(state, card) ?? castDef.flashback)
+      : undefined;
+  if (fromZone === 'graveyard' && !aftermath && flashbackCost === undefined) {
+    return rejectWith(prevState, 'that card has no flashback');
+  }
 
   // Timing: sorcery-speed spells require your main phase, empty stack, your priority.
-  const timing = castTiming(card.def);
+  const timing = castTiming(castDef);
   const sorcerySpeedOk =
     action.player === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
-  if (timing === 'sorcery' && !sorcerySpeedOk) {
+  // A MADNESS cast happens inside its own window (CR 702.35a) — the card is cast
+  // as the madness trigger resolves, so the spell's own timing restriction does
+  // not apply and a sorcery really is cast on an opponent's turn. Every other
+  // cast is timed exactly as before.
+  if (timing === 'sorcery' && !sorcerySpeedOk && fromZone !== 'exile') {
     return rejectWith(prevState, 'this spell can only be cast at sorcery speed (your main phase, empty stack)');
   }
 
@@ -1508,22 +2906,125 @@ function applyCastSpell(
   // rejected here when handed an illegal target — the engine, not the caller, is
   // the authority, so a pilot or a UI that builds its own action cannot play a
   // card as strictly better than printed.
-  const targetProblem = illegalTargetReason(state, card.def, action.targets ?? [], action.player);
-  if (targetProblem) return rejectWith(prevState, targetProblem);
+  //
+  // A MODAL spell is exempt from the whole-card check: it has no whole-card
+  // target, because each announced mode is aimed separately at cast time (CR
+  // 601.2c). Its aims are collected by the cast-time question pipeline below and
+  // policed there, one mode at a time.
+  const modalSpec = modalSpecOf(castDef);
+  if (modalSpec) {
+    if ((action.targets?.length ?? 0) > 0) {
+      return rejectWith(prevState, `${castDef.name} chooses its targets per mode, not for the whole spell`);
+    }
+    // A modal spell that can announce NO mode cannot be cast at all (CR 601.2b):
+    // every mode names a target and none has a legal one. Judged before any cost
+    // is paid, by the very helper `generateLegalActions` offers by — so offer
+    // and accept cannot disagree.
+    if (!modalSpellIsCastable(state, castDef, action.player)) {
+      return rejectWith(prevState, `${castDef.name} has no mode you could legally choose`);
+    }
+  } else {
+    const targetProblem = illegalTargetReason(state, castDef, action.targets ?? [], action.player);
+    if (targetProblem) return rejectWith(prevState, targetProblem);
+  }
 
-  // Pay the mana cost from the floating pool.
-  const cost = card.def.cost;
+  // The MANDATORY additional cost, judged before any mana leaves the pool: a
+  // cost that cannot be paid makes the whole cast illegal (CR 601.2h), so this
+  // must refuse rather than let the spell resolve without paying. Same helper
+  // the offer loop screens with.
+  const additionalCostProblem = unpayableAdditionalCostReason(state, castDef, action.player, card.instanceId);
+  if (additionalCostProblem) return rejectWith(prevState, additionalCostProblem);
+
+  // A flashback cost may print a LIFE rider ("Flashback—{1}{U}, Pay 3 life").
+  // It is a mandatory part of the cost, not a choice, so a caster who cannot pay
+  // it simply cannot cast (CR 118.4) — checked before any mana leaves the pool,
+  // so a refusal can never strand a half-paid cost.
+  const flashbackLife = fromZone === 'graveyard' && !aftermath ? (castDef.flashbackLifeCost ?? 0) : 0;
+  if (flashbackLife > 0 && !canAffordLifeCost(state, action.player, flashbackLife)) {
+    return rejectWith(prevState, `you do not have ${flashbackLife} life to pay this flashback cost`);
+  }
+
+  // Pay the mana cost from the floating pool. A flashback cast pays the
+  // FLASHBACK cost, not the printed one — that substitution is the whole of
+  // what "cast it for its flashback cost" means at this seam.
+  //
+  // A permission may say WITHOUT PAYING ITS MANA COST (a Siege reward, CR
+  // 310.4). That is data on the grant, so the one cast path charges exactly
+  // what the card says and nothing here special-cases a layout.
+  const cost = permission?.free
+    ? undefined
+    : fromZone === 'graveyard' && !aftermath
+      ? flashbackCost
+      : madnessWindowOpen
+        ? madnessCost
+        : castDef.cost;
   if (cost) {
-    if (!canPay(player.manaPool, cost)) return rejectWith(prevState, 'insufficient mana to cast this spell');
-    const result = payCost(player.manaPool, cost);
+    // WHAT the mana is being spent on, for any restricted mana in the pool. The
+    // face being CAST is the object a restriction reads (a modal DFC's back face
+    // is its own spell with its own types), which is why `castDef` is passed
+    // rather than the card's printed front.
+    const purpose = spendPurposeIfRestricted(player.manaPool, castDef, 'cast');
+    if (!canPay(player.manaPool, cost, purpose)) {
+      return rejectWith(prevState, 'insufficient mana to cast this spell');
+    }
+    const result = payCost(player.manaPool, cost, purpose);
     if (!result.ok) return rejectWith(prevState, result.reason);
     player.manaPool = result.pool;
   }
+  // The life half of the flashback cost, charged alongside the mana. Everything
+  // above is validated, so this cannot half-pay.
+  if (flashbackLife > 0) {
+    payLifeCost(state, action.player, flashbackLife, emit);
+    /*
+     * PAYING A COST CAN KILL YOU, AND THAT HAS TO END THE GAME HERE.
+     *
+     * "Flashback—{1}{B}, Pay 3 life" at exactly 3 life is a legal thing to do
+     * (CR 118.4 — the engine does not forbid it), and the caster then receives
+     * priority, which is when state-based actions are checked (CR 704.3) and a
+     * player at 0 or less life loses (CR 704.5a). Without this the game carried
+     * on with a corpse holding priority: the soak found a player sitting at 0
+     * life, casting spells, on turn 20 of seed 3856639351.
+     *
+     * The two sibling payment paths already do exactly this — `applyTapForMana`
+     * for a pain land's rider and the shockland's pay-life choice — so this is
+     * the third copy of one rule, not a new one.
+     */
+    checkStateBasedActions(state, emit);
+  }
 
-  // Move the card to the stack.
-  removeFromHand(player, card.instanceId);
+  // Move the card to the stack, out of whichever zone it was cast from.
+  removeFromZoneArray(
+    fromZone === 'graveyard' ? player.graveyard : fromZone === 'exile' ? player.exile : player.hand,
+    card.instanceId,
+  );
+  // The madness window is CONSUMED by the cast: the card has left exile, so
+  // nothing may decline it afterwards. A permission cast never had a window and
+  // must not clear somebody else's.
+  if (madnessWindowOpen) state.madnessWindow = null;
   card.zone = 'stack';
-  const resolvesTo: SpellStackObject['resolvesTo'] = isPermanentType(card.def) ? 'battlefield' : 'graveyard';
+  // The card just changed zones, so any grant on it stops applying (CR 400.7).
+  // Nothing is lost by dropping it here: the granted cost has already been paid,
+  // and the EXILE replacement rides the stack object's own `castFrom`
+  // (`spellLeaveDestination`) rather than the grant — see card-grants.ts.
+  pruneCardGrantsFor(state, card.instanceId);
+  // THE FACE SWAP, done exactly as a transform does it: `def` IS the active face
+  // and `printedDef` is the way back to the front, so every characteristic read
+  // in the engine routes through the face being cast with no second code path. A
+  // back-face cast that later leaves for a graveyard/hand/library reverts in
+  // `resetInstanceForNewZone` (CR 712.8a).
+  if (castDef !== card.def) {
+    card.printedDef = card.def;
+    card.def = castDef;
+  }
+  // The source zone decides the exit: a permanent still resolves to the
+  // battlefield, but a flashback spell resolves to EXILE, and the stack object
+  // carries `castFrom` so countering reaches the same answer (see
+  // `spellLeaveDestination`).
+  const resolvesTo: SpellStackObject['resolvesTo'] = isPermanentType(castDef)
+    ? 'battlefield'
+    : fromZone === 'graveyard'
+      ? 'exile'
+      : 'graveyard';
   const stackObject: SpellStackObject = {
     kind: 'spell',
     instanceId: card.instanceId,
@@ -1531,16 +3032,759 @@ function applyCastSpell(
     controller: action.player,
     resolvesTo,
     targets: action.targets ?? [],
+    ...(fromZone === 'hand' ? {} : { castFrom: fromZone }),
   };
   state.stack.push(stackObject);
   emit({
     type: 'spellCast',
     player: action.player,
     instanceId: card.instanceId,
-    name: card.def.name,
-    castTypes: [...card.def.types],
+    name: castDef.name,
+    castTypes: [...castDef.types],
+    ...(fromZone === 'hand' ? {} : { fromZone }),
   });
+  // Ward (CR 702.21): targeting an opponent's warded permanent triggers the
+  // "counter unless you pay" ability, stacked ABOVE the spell so it resolves
+  // first. Raised here because "becomes the target" is a moment only the
+  // engine sees — no effect resolves and no event exists a data trigger could
+  // watch.
+  pushWardTriggers(state, action.player, stackObject.targets, card.instanceId, emit);
   // Caster retains priority after putting something on the stack.
+  state.priorityPlayer = action.player;
+  state.consecutivePasses = 0;
+  // CAST-TIME CHOICES. Every decision the caster makes while announcing this
+  // spell — which modes, what each mode points at, the value of X, whether to
+  // kick and how many times — is asked HERE: after the base cost is paid and
+  // the spell is on the stack, with nothing resolving (so, like a shockland's
+  // pay-life and a trigger's aiming, each question is parked with no resolution
+  // frame behind it). While one stands, the only legal action is answering it,
+  // and the ENGINE charges any extra cost as it accepts the answer. A question
+  // with only one legal answer (X capped at 0, an unaffordable kicker, a
+  // one-mode menu) is never asked — the forced answer is recorded and the game
+  // does not stop.
+  askNextCastChoice(state, card.instanceId, emit);
+  /*
+   * STATE-BASED ACTIONS AFTER THE ANNOUNCEMENT (CR 704.3). The caster receives
+   * priority the instant the spell is announced, and that is a check point —
+   * so casting is not exempt just because nothing has resolved yet.
+   *
+   * It matters because CASTING MOVES A CARD BETWEEN ZONES, and characteristic-
+   * defining P/T reads zones: a flashback cast takes the last instant out of a
+   * graveyard, every Tarmogoyf on the board loses a point of toughness, and one
+   * wearing a Weakness (-2/-1) is at 0 and must die. Without this the game
+   * handed priority to a player looking at a creature that should already be in
+   * a graveyard — they could respond by targeting it, and its controller could
+   * still spend it. Found by the full-pool soak (`@jonny-boi/sim`'s `soak.ts`)
+   * at turn 8 of seed 1727114651, once in ~5,000 games and 3.2 million actions.
+   *
+   * Skipped while a CAST-TIME CHOICE stands, because then the announcement is
+   * not finished and nobody has priority yet (CR 601.2) — the answer path runs
+   * the pass itself. The check is a no-op on an ordinary board, and emits
+   * nothing when nothing dies, so no event log or paired-arm comparison moves.
+   */
+  if (!state.pendingChoice) checkStateBasedActions(state, emit);
+  return { state, events };
+}
+
+/** The spell stack object with this instance id, or undefined. */
+function spellOnStack(state: GameState, instanceId: InstanceId): SpellStackObject | undefined {
+  for (let i = state.stack.length - 1; i >= 0; i--) {
+    const object = state.stack[i] as StackObject;
+    if (object.kind === 'spell' && object.instanceId === instanceId) return object;
+  }
+  return undefined;
+}
+
+/**
+ * Replace a spell stack object with a patched copy. Replaced rather than
+ * mutated for the same reason `recordTriggerTargets` replaces: a stack object
+ * is read-only data to everyone else (the masked view, the replay, a look-ahead
+ * clone), and a fresh object keeps that true without a mutable escape hatch.
+ */
+function patchSpellOnStack(
+  state: GameState,
+  instanceId: InstanceId,
+  patch: Partial<
+    Pick<
+      SpellStackObject,
+      | 'xValue'
+      | 'kicked'
+      | 'kickCount'
+      | 'modePicks'
+      | 'boughtBack'
+      | 'additionalCostPaid'
+      | 'awaitingCastChoice'
+      | 'copyAsEntersDecided'
+    >
+  >,
+): void {
+  const index = state.stack.findIndex((object) => object.kind === 'spell' && object.instanceId === instanceId);
+  if (index < 0) return;
+  const spell = state.stack[index] as SpellStackObject;
+  const next: SpellStackObject = { ...spell, ...patch };
+  // `awaitingCastChoice: undefined` must CLEAR the marker, not store undefined —
+  // a field-by-field consumer (clone.ts) keys on presence.
+  if (patch.awaitingCastChoice === undefined && 'awaitingCastChoice' in patch) {
+    delete (next as { awaitingCastChoice?: unknown }).awaitingCastChoice;
+  }
+  state.stack[index] = next;
+}
+
+/**
+ * The bound the engine offers for X: the largest value whose generic cost the
+ * caster could actually produce (floating pool + everything still untappable),
+ * answered by the SAME planner that will later make the payment — so the range
+ * on offer cannot disagree with what the board can fund.
+ *
+ * Linear from zero: the planner refuses quickly once the board runs dry, X
+ * spells are cast a handful of times per game (never on the per-decision hot
+ * path), and a closed-form sum would be a second opinion on payability that
+ * could drift from the planner's.
+ */
+function maxAffordableX(state: GameState, player: PlayerId, xCount: number): number {
+  let max = 0;
+  while (max < MAX_X_VALUE && planPaymentFor(state, player, { generic: (max + 1) * xCount }) !== undefined) {
+    max += 1;
+  }
+  return max;
+}
+
+/**
+ * A hard ceiling on the X range the engine will offer. Generous — funding it
+ * needs this much mana available AT ONCE — and present so a degenerate board
+ * cannot make the bound search (or the answer enumeration) unbounded.
+ */
+const MAX_X_VALUE = 64;
+
+/**
+ * The largest number of times `cost` could be paid on top of everything already
+ * spent — multikicker's bound, and the exact analogue of {@link maxAffordableX}.
+ *
+ * Asked of the SAME planner that will make the payment, so the range on offer
+ * cannot disagree with what the board can fund, and `repeatCost` (not a mana-
+ * value multiply) is what it plans against — three copies of a hybrid cost are
+ * three symbols the payer may satisfy in three different colours.
+ */
+function maxAffordableKicks(state: GameState, player: PlayerId, cost: ManaCost): number {
+  let max = 0;
+  while (max < MAX_X_VALUE && planPaymentFor(state, player, repeatCost(cost, max + 1)) !== undefined) {
+    max += 1;
+  }
+  return max;
+}
+
+/**
+ * How many `{X}` symbols THIS cast is paying for — the printed cost's, or the
+ * FLASHBACK cost's when the spell is being cast from a graveyard ("Flashback
+ * {X}{R}{R}{R}"). Read from the stack object rather than the definition alone,
+ * because which cost is being paid is a fact about the cast, not the card.
+ */
+function xCountForCast(spell: SpellStackObject): number {
+  const def = spell.card.def;
+  return spell.castFrom === 'graveyard' ? (def.flashbackXCost ?? 0) : (def.xCost ?? 0);
+}
+
+/**
+ * Ask the next unanswered cast-time question for a spell being cast, or record
+ * the forced answer and move on when only one answer is legal.
+ *
+ * ORDER IS THE PRINTED ANNOUNCEMENT ORDER (CR 601.2b–601.2h), and it is not
+ * cosmetic — each step's legal answers depend on the ones before it:
+ *   1. **Modes**, because everything after is about the modes you announced.
+ *   2. **Each chosen mode's targets**, in printed order (CR 601.2c).
+ *   3. **The value of X** (CR 601.2f), then
+ *   4. **the optional additional costs** — kicker, then multikicker.
+ * A question with a single legal answer is settled here instead of stopping the
+ * game to collect the inevitable, exactly as `isTrivialChoice` does mid-
+ * resolution.
+ */
+function askNextCastChoice(state: GameState, spellInstanceId: InstanceId, emit: (e: GameEvent) => void): void {
+  if (askModeChoice(state, spellInstanceId, emit)) return;
+  if (askModeTargetChoice(state, spellInstanceId, emit)) return;
+  askCostChoices(state, spellInstanceId, emit);
+}
+
+/**
+ * Step 1 — "Choose one —". Returns true when a question was parked.
+ *
+ * The menu is the modes that can legally be announced RIGHT NOW (a mode whose
+ * target does not exist is not on it), and the counts are the printed ones
+ * clamped to that menu — which is how a "Choose two" Command with only one
+ * legal mode left still casts, as the best legal version of itself.
+ */
+function askModeChoice(state: GameState, spellInstanceId: InstanceId, emit: (e: GameEvent) => void): boolean {
+  const spell = spellOnStack(state, spellInstanceId);
+  if (!spell || spell.modePicks !== undefined) return false;
+  const def = spell.card.def;
+  const spec = modalSpecOf(def);
+  if (!spec) return false;
+  const caster = spell.controller;
+  const counts = modeCountsFor(state, def, caster);
+  if (!counts) return false;
+
+  const choice = normalizeChoiceRequest(
+    {
+      kind: 'chooseModes',
+      chooser: caster,
+      prompt:
+        counts.min === counts.max
+          ? `Choose ${counts.max} — ${def.name}`
+          : `Choose up to ${counts.max} — ${def.name}`,
+      modes: counts.choosable.map((mode) => ({ id: mode.id, label: mode.label })),
+      min: counts.min,
+      max: counts.max,
+      // Choosing is the upside the caster cast the spell for; the AI prices each
+      // mode on the board rather than following this steer blindly, but the
+      // steer is what stops a neutral pilot taking the minimum every time.
+      valence: 'gain',
+      ...(spec.allowRepeats ? { allowRepeats: true } : {}),
+    },
+    { id: state.nextInstanceId++, sourceInstanceId: spell.instanceId, sourceName: def.name },
+  );
+  // Unrepresentable (a build that does not know this kind): announce as many
+  // modes as the printed floor demands, taking the menu in printed order. That
+  // is the same "safe default" `defaultAnswerFor` would produce, and it keeps a
+  // half-understood state moving instead of wedging it.
+  if (!choice) {
+    recordModePicks(state, spellInstanceId, counts.choosable.slice(0, counts.min).map((mode) => mode.id), emit);
+    return false;
+  }
+  if (isTrivialChoice(choice) || state.gameOver || state.players[caster].hasLost) {
+    const answer = defaultAnswerFor(choice);
+    emit({
+      type: 'choiceAutoAnswered',
+      choiceId: choice.id,
+      chooser: caster,
+      choiceKind: choice.kind,
+      answer,
+      reason: isTrivialChoice(choice) ? 'only one legal set of modes' : 'the chooser can no longer act',
+    });
+    recordModePicks(state, spellInstanceId, answer.kind === 'chooseModes' ? answer.modeIds : [], emit);
+    return false;
+  }
+  patchSpellOnStack(state, spellInstanceId, { awaitingCastChoice: 'modes' });
+  parkCastChoice(state, choice, emit);
+  return true;
+}
+
+/**
+ * Write the announced modes onto the stack object, in printed order, and say so
+ * in the log. Announced modes are PUBLIC information — in paper they are
+ * declared out loud as the spell is cast — so the event carries them plainly.
+ */
+function recordModePicks(
+  state: GameState,
+  spellInstanceId: InstanceId,
+  modeIds: readonly string[],
+  emit: (e: GameEvent) => void,
+): void {
+  const spell = spellOnStack(state, spellInstanceId);
+  if (!spell) return;
+  const def = spell.card.def;
+  const picks = orderPicks(def, modeIds);
+  patchSpellOnStack(state, spellInstanceId, { modePicks: picks, awaitingCastChoice: undefined });
+  emit({
+    type: 'modesChosen',
+    player: spell.controller,
+    instanceId: spell.instanceId,
+    name: def.name,
+    modes: picks.map((pick) => modeById(def, pick.modeId)?.label ?? pick.modeId),
+  });
+}
+
+/**
+ * Step 2 — aim the announced modes, one question per targeting pick, in printed
+ * order. Returns true when a question was parked.
+ *
+ * This is the half a resolution-time modal system structurally cannot do: two
+ * modes of one spell point at two different objects, and both are chosen before
+ * the opponent may respond.
+ */
+function askModeTargetChoice(
+  state: GameState,
+  spellInstanceId: InstanceId,
+  emit: (e: GameEvent) => void,
+): boolean {
+  for (;;) {
+    const spell = spellOnStack(state, spellInstanceId);
+    const picks = spell?.modePicks;
+    if (!spell || !picks) return false;
+    const def = spell.card.def;
+    const index = nextUnaimedPick(def, picks);
+    if (index < 0) return false;
+    const pick = picks[index] as ModePick;
+    const mode = modeById(def, pick.modeId);
+    const restriction = mode?.targets;
+    if (!mode || restriction === undefined) return false;
+    const caster = spell.controller;
+    const candidates = legalTargetsFor(state, restriction, caster, def);
+
+    // A mode's target can vanish between announcement and aiming only in a
+    // hand-built state (the menu was filtered by this same check a moment ago),
+    // but the branch must exist: an unaimable pick is recorded as aimed at
+    // nothing, so it contributes nothing at resolution rather than wedging the
+    // cast.
+    if (candidates.length === 0) {
+      aimModePick(state, spellInstanceId, index, [], emit);
+      continue;
+    }
+
+    const choice = normalizeChoiceRequest(
+      {
+        kind: 'selectTargets',
+        chooser: caster,
+        prompt: `Choose ${describeRestriction(restriction)} for "${mode.label}" (${def.name})`,
+        candidates: candidates.map((ref) => targetOptionFor(state, ref)),
+        restriction,
+        min: SINGLE_TARGET,
+        max: SINGLE_TARGET,
+      },
+      { id: state.nextInstanceId++, sourceInstanceId: spell.instanceId, sourceName: def.name },
+    );
+    if (!choice) {
+      aimModePick(state, spellInstanceId, index, candidates.slice(0, SINGLE_TARGET), emit);
+      continue;
+    }
+    if (isTrivialChoice(choice) || state.gameOver || state.players[caster].hasLost) {
+      const answer = defaultAnswerFor(choice);
+      emit({
+        type: 'choiceAutoAnswered',
+        choiceId: choice.id,
+        chooser: caster,
+        choiceKind: choice.kind,
+        answer,
+        reason: isTrivialChoice(choice) ? 'only one legal target' : 'the chooser can no longer act',
+      });
+      aimModePick(state, spellInstanceId, index, answer.kind === 'selectTargets' ? answer.targets : [], emit);
+      continue;
+    }
+    patchSpellOnStack(state, spellInstanceId, { awaitingCastChoice: 'modeTarget' });
+    parkCastChoice(state, choice, emit);
+    return true;
+  }
+}
+
+/**
+ * Record one mode's chosen target. The pick being aimed is named by INDEX
+ * (rather than by mode id) because the same mode may legally be chosen twice,
+ * each copy with its own aim.
+ */
+function aimModePick(
+  state: GameState,
+  spellInstanceId: InstanceId,
+  index: number,
+  targets: ReadonlyArray<InstanceId | PlayerId>,
+  emit: (e: GameEvent) => void,
+): void {
+  const spell = spellOnStack(state, spellInstanceId);
+  const picks = spell?.modePicks;
+  if (!spell || !picks || index < 0 || index >= picks.length) return;
+  const def = spell.card.def;
+  const next = picks.map((pick, i) => (i === index ? { modeId: pick.modeId, targets: [...targets] } : pick));
+  patchSpellOnStack(state, spellInstanceId, { modePicks: next, awaitingCastChoice: undefined });
+  emit({
+    type: 'modeTargetChosen',
+    player: spell.controller,
+    instanceId: spell.instanceId,
+    mode: modeById(def, (picks[index] as ModePick).modeId)?.label ?? (picks[index] as ModePick).modeId,
+    targets: [...targets],
+  });
+  // A mode aimed at an opponent's warded permanent triggers ward exactly as any
+  // other targeting does — "the target of a spell or ability".
+  pushWardTriggers(state, spell.controller, targets, spell.instanceId, emit);
+}
+
+/**
+ * Steps 3 and 4 — the value of X, then the optional additional costs. Split out
+ * of {@link askNextCastChoice} so the modal steps read as their own pipeline.
+ */
+/**
+ * The cards that could pay a spell's MANDATORY additional cost right now —
+ * permanents its caster controls for a `'sacrifice'`, cards in their hand for a
+ * `'discard'`.
+ *
+ * ONE reader, used by all three places that must agree about it: the offer loop
+ * (which must not offer an uncastable spell), the cast path (which must reject
+ * one), and the question that collects the payment. Three separate opinions
+ * about "can this be paid" is exactly how a spell becomes offerable but
+ * un-castable.
+ *
+ * The card being cast is EXCLUDED from a discard's candidates: by the time this
+ * is asked it has already left the hand for the stack, but a caller judging
+ * castability asks while it is still in hand, and a spell can never pay its own
+ * additional cost with itself (CR 601.2h — it is on the stack).
+ */
+export function additionalCostCandidates(
+  state: GameState,
+  cost: AdditionalCastCost,
+  caster: PlayerId,
+  excludeInstanceId?: InstanceId,
+): readonly CardInstance[] {
+  const source =
+    cost.kind === 'sacrifice'
+      ? state.battlefield.filter((perm) => perm.controller === caster)
+      : state.players[caster].hand;
+  const out: CardInstance[] = [];
+  for (const card of source) {
+    if (card.instanceId === excludeInstanceId) continue;
+    if (!matchesCardFilter(card, cost.filter)) continue;
+    out.push(card);
+  }
+  return out;
+}
+
+/**
+ * Why a spell's mandatory additional cost cannot be paid, or `undefined`.
+ *
+ * CR 601.2h: a cost you cannot pay makes the cast ILLEGAL — the spell is not
+ * cast at all, rather than cast without the cost. That is the entire reason
+ * this is a hard gate and not a declinable question.
+ */
+export function unpayableAdditionalCostReason(
+  state: GameState,
+  def: CardDefinition,
+  caster: PlayerId,
+  excludeInstanceId?: InstanceId,
+): string | undefined {
+  const cost = def.additionalCost;
+  if (!cost) return undefined;
+  const need = cost.count ?? 1;
+  const have = additionalCostCandidates(state, cost, caster, excludeInstanceId).length;
+  return have >= need ? undefined : `you cannot pay ${def.name}'s additional cost (${cost.label})`;
+}
+
+/**
+ * Pay a mandatory additional cost with the chosen cards, as the cast-time answer
+ * is accepted.
+ *
+ * Both halves go through the SAME zone-change funnel every other sacrifice and
+ * discard uses (`moveToZone`), which is what makes a dies/leaves-the-battlefield
+ * trigger and the madness discard replacement see it — because in the rules they
+ * genuinely do see it, and because the cost is paid BEFORE the spell finishes
+ * being cast. A cost paid through a private shortcut would be a silently
+ * different card. (When a "whenever you sacrifice a permanent" trigger event is
+ * added, this path is already the one it must watch — there is no second one.)
+ */
+function payAdditionalCost(
+  state: GameState,
+  cost: AdditionalCastCost,
+  caster: PlayerId,
+  instanceIds: readonly InstanceId[],
+  emit: (e: GameEvent) => void,
+): void {
+  for (const id of instanceIds) {
+    const card =
+      cost.kind === 'sacrifice'
+        ? state.battlefield.find((perm) => perm.instanceId === id && perm.controller === caster)
+        : state.players[caster].hand.find((held) => held.instanceId === id);
+    if (!card) continue; // already gone — never a throw (rule 6)
+    moveToZone(state, card, 'graveyard', emit, card.owner);
+    resetInstanceForNewZone(card);
+  }
+}
+
+function askCostChoices(state: GameState, spellInstanceId: InstanceId, emit: (e: GameEvent) => void): void {
+  const spell = spellOnStack(state, spellInstanceId);
+  if (!spell) return;
+  const def = spell.card.def;
+  const caster = spell.controller;
+
+  const xCount = xCountForCast(spell);
+  if (xCount > 0 && spell.xValue === undefined) {
+    const max = maxAffordableX(state, caster, xCount);
+    if (max <= 0) {
+      // X = 0 is the only value this board can fund — not a decision, so the
+      // game is not stopped to collect the inevitable (same rule as an
+      // unaffordable payMana). Recorded, then on to the next question.
+      patchSpellOnStack(state, spellInstanceId, { xValue: 0 });
+    } else {
+      const choice = normalizeChoiceRequest(
+        {
+          kind: 'chooseNumber',
+          chooser: caster,
+          prompt: `Choose a value for X (${def.name})`,
+          min: 0,
+          max,
+          // More X is the upside the caster cast the spell for — the steer a
+          // pilot answers by. It never affects which answers are legal.
+          valence: 'gain',
+        },
+        { id: state.nextInstanceId++, sourceInstanceId: spell.instanceId, sourceName: def.name },
+      );
+      if (choice) {
+        patchSpellOnStack(state, spellInstanceId, { awaitingCastChoice: 'x' });
+        parkCastChoice(state, choice, emit);
+        return;
+      }
+      patchSpellOnStack(state, spellInstanceId, { xValue: 0 });
+    }
+  }
+
+  const refreshed = spellOnStack(state, spellInstanceId);
+  if (!refreshed) return;
+  if (def.kicker && refreshed.kicked === undefined) {
+    if (!canAffordManaCost(state, caster, def.kicker)) {
+      // A caster who cannot pay is never asked — the spell is simply unkicked,
+      // the printed default.
+      patchSpellOnStack(state, spellInstanceId, { kicked: false });
+      return;
+    }
+    const choice = normalizeChoiceRequest(
+      {
+        kind: 'payMana',
+        chooser: caster,
+        prompt: `Pay the kicker ${formatManaCost(def.kicker)}? (${def.name})`,
+        cost: def.kicker,
+        affordable: true,
+        valence: 'gain',
+      },
+      { id: state.nextInstanceId++, sourceInstanceId: refreshed.instanceId, sourceName: def.name },
+    );
+    if (choice) {
+      patchSpellOnStack(state, spellInstanceId, { awaitingCastChoice: 'kicker' });
+      parkCastChoice(state, choice, emit);
+      return;
+    }
+    patchSpellOnStack(state, spellInstanceId, { kicked: false });
+  }
+
+  // MULTIKICKER — "you may pay {1}{G} any number of times as you cast this
+  // spell". Same seam as X, and for the same reason: the answer is a COUNT, so
+  // it is a `chooseNumber` bounded by what the planner can actually fund, never
+  // the single yes/no a plain kicker asks. A board that cannot fund even one
+  // extra payment yields the range 0..0, which is not a decision and is settled
+  // without stopping the game.
+  const afterKicker = spellOnStack(state, spellInstanceId);
+  if (!afterKicker) return;
+  if (def.multikicker && afterKicker.kickCount === undefined) {
+    const max = maxAffordableKicks(state, caster, def.multikicker);
+    if (max <= 0) {
+      patchSpellOnStack(state, spellInstanceId, { kickCount: 0 });
+      return;
+    }
+    const choice = normalizeChoiceRequest(
+      {
+        kind: 'chooseNumber',
+        chooser: caster,
+        prompt: `How many times do you pay the multikicker ${formatManaCost(def.multikicker)}? (${def.name})`,
+        min: 0,
+        max,
+        valence: 'gain',
+      },
+      { id: state.nextInstanceId++, sourceInstanceId: afterKicker.instanceId, sourceName: def.name },
+    );
+    if (choice) {
+      patchSpellOnStack(state, spellInstanceId, { awaitingCastChoice: 'multikicker' });
+      parkCastChoice(state, choice, emit);
+      return;
+    }
+    patchSpellOnStack(state, spellInstanceId, { kickCount: 0 });
+  }
+
+  // BUYBACK is the same shape as the plain kicker — an optional additional cost
+  // asked once, charged by the engine as the answer is accepted — and differs
+  // only in what the answer means later: not a branch inside the spell's script,
+  // but where the card goes as it resolves (`spellLeaveDestination`).
+  const afterKick = spellOnStack(state, spellInstanceId);
+  if (!afterKick) return;
+  if (def.buyback && afterKick.boughtBack === undefined) {
+    if (!canAffordManaCost(state, caster, def.buyback)) {
+      patchSpellOnStack(state, spellInstanceId, { boughtBack: false });
+      return;
+    }
+    const choice = normalizeChoiceRequest(
+      {
+        kind: 'payMana',
+        chooser: caster,
+        prompt: `Pay the buyback ${formatManaCost(def.buyback)} to return ${def.name} to your hand?`,
+        cost: def.buyback,
+        affordable: true,
+        valence: 'gain',
+      },
+      { id: state.nextInstanceId++, sourceInstanceId: afterKick.instanceId, sourceName: def.name },
+    );
+    if (choice) {
+      patchSpellOnStack(state, spellInstanceId, { awaitingCastChoice: 'buyback' });
+      parkCastChoice(state, choice, emit);
+      return;
+    }
+    patchSpellOnStack(state, spellInstanceId, { boughtBack: false });
+  }
+
+  // THE MANDATORY ADDITIONAL COST, asked last — it is paid at CR 601.2h, after
+  // X (601.2f) and the optional additional costs have been announced, so its
+  // position in this list is the printed announcement order and not a
+  // convenience.
+  //
+  // Unlike every question above it, this one has NO decline: the cast was only
+  // legal because the cost is payable (`unpayableAdditionalCostReason`, checked
+  // at the offer and again at the cast). What is being chosen is WHICH card
+  // pays, so it is a `selectCards` with min === max, and a caster with exactly
+  // enough candidates is not stopped to collect the inevitable.
+  const afterBuyback = spellOnStack(state, spellInstanceId);
+  if (!afterBuyback) return;
+  const extra = def.additionalCost;
+  if (extra && afterBuyback.additionalCostPaid === undefined) {
+    const count = extra.count ?? 1;
+    const candidates = additionalCostCandidates(state, extra, caster);
+    if (candidates.length < count) {
+      // Only reachable from a hand-built state — the cast path refused this.
+      // Recorded as unpaid so the loop cannot spin asking again.
+      patchSpellOnStack(state, spellInstanceId, { additionalCostPaid: false, awaitingCastChoice: undefined });
+      return;
+    }
+    const choice = normalizeChoiceRequest(
+      {
+        kind: 'selectCards',
+        chooser: caster,
+        prompt: `${def.name}: ${extra.label}`,
+        candidates: candidates.map((card) => cardOption(card)),
+        min: count,
+        max: count,
+        // Paying a cost is a LOSS — the pilot gives up its worst qualifying
+        // card, which is the whole skill in a sacrifice outlet.
+        valence: 'loss',
+        fromZone: extra.kind === 'sacrifice' ? 'battlefield' : 'hand',
+      },
+      { id: state.nextInstanceId++, sourceInstanceId: afterBuyback.instanceId, sourceName: def.name },
+    );
+    // A chooser who can no longer act is never stopped for a question, exactly as
+    // the mode/X questions above handle it — the cost is still PAID, because it
+    // is mandatory and the spell is already on the stack.
+    const settleHere =
+      !choice || isTrivialChoice(choice) || state.gameOver || state.players[caster].hasLost;
+    if (!settleHere) {
+      patchSpellOnStack(state, spellInstanceId, { awaitingCastChoice: 'additionalCost' });
+      parkCastChoice(state, choice, emit);
+      return;
+    }
+    // Exactly one legal set of payers (or a build that cannot represent the
+    // question): pay it here, in the same order the answer would have.
+    const forced = choice
+      ? (defaultAnswerFor(choice) as { kind: 'selectCards'; instanceIds: readonly InstanceId[] }).instanceIds
+      : candidates.slice(0, count).map((card) => card.instanceId);
+    if (choice) {
+      emit({
+        type: 'choiceAutoAnswered',
+        choiceId: choice.id,
+        chooser: caster,
+        choiceKind: choice.kind,
+        answer: { kind: 'selectCards', instanceIds: forced },
+        reason: isTrivialChoice(choice)
+          ? 'only one legal way to pay this additional cost'
+          : 'the chooser can no longer act',
+      });
+    }
+    payAdditionalCost(state, extra, caster, forced, emit);
+    patchSpellOnStack(state, spellInstanceId, { additionalCostPaid: true, awaitingCastChoice: undefined });
+  }
+}
+
+/**
+ * After one cast-time answer is recorded: ask the spell's next question if it
+ * has one, aim any triggers that fired while the cast was being finished, and —
+ * when nothing further is being asked — hand the floor back to the caster, who
+ * never surrendered priority by casting.
+ */
+function finishCastChoice(
+  state: GameState,
+  spellInstanceId: InstanceId,
+  caster: PlayerId,
+  emit: (e: GameEvent) => void,
+  events: GameEvent[],
+): EngineResult {
+  askNextCastChoice(state, spellInstanceId, emit);
+  if (!state.pendingChoice) aimPendingTriggers(state, emit);
+  if (!state.pendingChoice && !state.gameOver) {
+    state.priorityPlayer = caster;
+    state.consecutivePasses = 0;
+  }
+  return { state, events };
+}
+
+/** Park a cast-time question: the caster (its chooser) gets the floor. */
+function parkCastChoice(state: GameState, choice: PendingChoice, emit: (e: GameEvent) => void): void {
+  state.pendingChoice = choice;
+  state.priorityPlayer = choice.chooser;
+  state.consecutivePasses = 0;
+  emit({
+    type: 'choiceAsked',
+    choiceId: choice.id,
+    chooser: choice.chooser,
+    choiceKind: choice.kind,
+    prompt: choice.prompt,
+    sourceInstanceId: choice.sourceInstanceId,
+    optionCount: choiceOptionCount(choice),
+  });
+}
+
+/**
+ * CYCLE a card from hand (CR 702.29): pay the cycling cost, discard the card as
+ * the rest of that cost, and put the cycling ability on the stack.
+ *
+ * Order follows rule 602.2 exactly as `applyActivateAbility` does — validate
+ * everything, then pay the WHOLE cost, then put the ability on the stack — and
+ * the order matters here more than usual, because the discard is a COST. Being
+ * a cost is what makes cycling a madness card exile it (the discard funnel sees
+ * an ordinary discard), what makes "whenever you cycle or discard" triggers
+ * fire, and what makes the card already gone from hand while the drawn card
+ * arrives. Countering the cycling ability would not put the card back.
+ *
+ * Cycling is instant-speed: it is an activated ability with no timing
+ * restriction printed on it, so it is legal whenever its controller has
+ * priority — including on an opponent's turn, which is most of what makes a
+ * cycling land better than a tapland.
+ */
+function applyCycleCard(
+  state: GameState,
+  prevState: GameState,
+  action: Extract<GameAction, { kind: 'cycleCard' }>,
+  emit: (e: GameEvent) => void,
+  events: GameEvent[],
+): EngineResult {
+  if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
+  const player = state.players[action.player];
+  const card = instanceIn(player.hand, action.instanceId);
+  if (!card) return rejectWith(prevState, 'that card is not in your hand');
+  const index = action.abilityIndex ?? 0;
+  const ability = card.def.cycling?.[index];
+  if (!ability) return rejectWith(prevState, 'that card has no such cycling ability');
+  // Cycling is an ACTIVATED ability of a card in your hand (CR 702.29a), so
+  // restricted mana that may activate abilities of that kind of source may fund
+  // it and mana that may only cast spells may not.
+  const cyclePurpose = spendPurposeIfRestricted(player.manaPool, card.def, 'activate');
+  if (!canPay(player.manaPool, ability.cost, cyclePurpose)) {
+    return rejectWith(prevState, 'insufficient mana to cycle this card');
+  }
+  const paid = payCost(player.manaPool, ability.cost, cyclePurpose);
+  if (!paid.ok) return rejectWith(prevState, paid.reason);
+  player.manaPool = paid.pool;
+
+  // The discard half of the cost, through the SAME funnel every other discard
+  // uses — which is why a cycled madness card is exiled rather than buried.
+  moveToZone(state, card, 'graveyard', emit, card.owner);
+  resetInstanceForNewZone(card);
+  emit({ type: 'cardCycled', player: action.player, instanceId: card.instanceId, name: card.def.name });
+
+  const abilityStackId = state.nextInstanceId++;
+  state.stack.push({
+    kind: 'trigger',
+    instanceId: abilityStackId,
+    sourceInstanceId: card.instanceId,
+    controller: action.player,
+    effects: ability.effects,
+    // Cycling abilities target nothing: every printed one draws a card or
+    // searches a library, both of which act on their controller alone.
+    targets: [],
+    label: ability.label,
+  });
+  emit({
+    type: 'abilityActivated',
+    player: action.player,
+    instanceId: card.instanceId,
+    label: ability.label,
+  });
+  // The cycling player retains priority, as with casting a spell.
   state.priorityPlayer = action.player;
   state.consecutivePasses = 0;
   return { state, events };
@@ -1600,6 +3844,7 @@ function applyActivateAbility(
     ability.effects,
     action.targets ?? [],
     action.player,
+    source.def,
   );
   if (targetProblem) return rejectWith(prevState, targetProblem);
 
@@ -1607,7 +3852,11 @@ function applyActivateAbility(
   const player = state.players[action.player];
   const cost = ability.cost;
   if (cost.mana) {
-    const paid = payCost(player.manaPool, cost.mana);
+    const paid = payCost(
+      player.manaPool,
+      cost.mana,
+      spendPurposeIfRestricted(player.manaPool, source.def, 'activate'),
+    );
     if (!paid.ok) return rejectWith(prevState, paid.reason);
     player.manaPool = paid.pool;
   }
@@ -1625,10 +3874,29 @@ function applyActivateAbility(
     moveToZone(state, source, 'graveyard', emit, source.owner);
     resetInstanceForNewZone(source);
   }
+  if (cost.loyalty !== undefined) {
+    // The loyalty cost is PAID here, before the ability reaches the stack, and
+    // is not refunded if the ability is countered or fizzles (CR 602.2) — a
+    // minus ability whose target vanishes has still spent the loyalty. The
+    // 0-loyalty death from paying down to exactly zero is the SBA pass after
+    // this action settles, exactly like paying life to zero.
+    if (cost.loyalty > 0) addLoyalty(source, cost.loyalty);
+    else if (cost.loyalty < 0) removeLoyalty(source, -cost.loyalty);
+    if (cost.loyalty !== 0) {
+      emit({
+        type: 'loyaltyChanged',
+        instanceId: source.instanceId,
+        delta: cost.loyalty,
+        to: loyaltyOf(source),
+      });
+    }
+    source.loyaltyActivatedTurn = state.turnNumber;
+  }
 
+  const abilityStackId = state.nextInstanceId++;
   state.stack.push({
     kind: 'trigger',
-    instanceId: state.nextInstanceId++,
+    instanceId: abilityStackId,
     sourceInstanceId: source.instanceId,
     controller: action.player,
     effects: ability.effects,
@@ -1641,6 +3909,17 @@ function applyActivateAbility(
     instanceId: source.instanceId,
     label: ability.label,
   });
+  // Ward fires on "becomes the target of an ability an opponent controls" too.
+  pushWardTriggers(state, action.player, action.targets ?? [], abilityStackId, emit);
+
+  // Paying loyalty down to exactly zero is legal and immediately fatal to the
+  // walker (CR 704.5i) — settled before anybody acts again, because the next
+  // thing a player sees must not be a 0-loyalty walker still standing. The
+  // ability already on the stack still resolves; its source is simply gone,
+  // which `frameSource` handles with last-known information.
+  if (cost.loyalty !== undefined && cost.loyalty < 0 && loyaltyOf(source) === 0) {
+    checkStateBasedActions(state, emit);
+  }
 
   // The activating player retains priority, as with casting a spell.
   state.priorityPlayer = action.player;
@@ -1676,15 +3955,34 @@ function unpayableActivationReason(
     // to a state-based action before the ability ever resolved.
     return 'you do not have enough life to pay that cost';
   }
-  if (cost.mana && !canPay(player.manaPool, cost.mana)) return 'insufficient mana for that ability';
+  if (
+    cost.mana &&
+    !canPay(player.manaPool, cost.mana, spendPurposeIfRestricted(player.manaPool, source.def, 'activate'))
+  ) {
+    return 'insufficient mana for that ability';
+  }
+  if (cost.loyalty !== undefined) {
+    // A loyalty cost only means anything on a planeswalker carrying loyalty
+    // counters; anything else declaring one is malformed data, refused loudly.
+    if (!isPlaneswalker(source.def)) return `${source.def.name} is not a planeswalker`;
+    // One loyalty ability per permanent per turn (CR 606.3, modern form).
+    if (source.loyaltyActivatedTurn === state.turnNumber) {
+      return `${source.def.name} has already activated a loyalty ability this turn`;
+    }
+    // A minus cost removes counters, and you can never remove more than are
+    // there (CR 118.5): a walker at 4 cannot pay −6.
+    if (cost.loyalty < 0 && loyaltyOf(source) < -cost.loyalty) {
+      return `${source.def.name} does not have ${-cost.loyalty} loyalty to pay`;
+    }
+  }
   return undefined;
 }
 
-function removeFromHand(player: GameState['players'][PlayerId], id: InstanceId): void {
-  const hand = player.hand;
-  for (let i = 0; i < hand.length; i++) {
-    if ((hand[i] as CardInstance).instanceId === id) {
-      hand.splice(i, 1);
+/** Remove an instance from a zone array in place (hand or graveyard, at cast). */
+function removeFromZoneArray(zone: CardInstance[], id: InstanceId): void {
+  for (let i = 0; i < zone.length; i++) {
+    if ((zone[i] as CardInstance).instanceId === id) {
+      zone.splice(i, 1);
       return;
     }
   }
@@ -1729,10 +4027,51 @@ function applyDeclareAttackers(
     if (kw.defender) return rejectWith(prevState, `${a.def.name} has defender and cannot attack`);
   }
 
+  // Per-attacker attacked OBJECTS (a planeswalker rather than the player). Every
+  // entry must name a declared attacker, and its value must be the defending
+  // player or an attackable permanent THAT PLAYER controls — you cannot attack
+  // your own walker, the caster's seat, or a creature.
+  const attackTargets = action.attackTargets;
+  let storedTargets: Record<InstanceId, InstanceId | PlayerId> | undefined;
+  if (attackTargets !== undefined) {
+    const defender = defendingPlayerOf(state);
+    for (const key of Object.keys(attackTargets)) {
+      const attackerId = Number(key);
+      if (!declaredAttackers.has(attackerId)) {
+        return rejectWith(prevState, `attack target given for ${key}, which is not a declared attacker`);
+      }
+      const attacked = attackTargets[attackerId]!;
+      if (typeof attacked === 'string') {
+        if (attacked !== defender) return rejectWith(prevState, 'a creature can only attack the defending player');
+        continue; // the default; storing it would be redundant but is harmless
+      }
+      const object = findOnBattlefield(state, attacked);
+      if (!object) return rejectWith(prevState, `attacked permanent ${attacked} is not on the battlefield`);
+      // WHO defends the object, not who controls it. For a planeswalker those are
+      // the same player; for a BATTLE they are deliberately opposite — a Siege is
+      // protected by its controller's opponent (CR 310.11), which is exactly what
+      // makes attacking your OWN battle the printed play pattern. Deriving this
+      // through `protectorOf` rather than comparing controllers is the whole
+      // reason battles needed no second combat path.
+      if (protectorOf(object) !== defender) {
+        return rejectWith(prevState, `${object.def.name} is not defended by the defending player`);
+      }
+      if (!isAttackable(object.def)) {
+        return rejectWith(prevState, `${object.def.name} is not a permanent that can be attacked`);
+      }
+      (storedTargets ??= {})[attackerId] = attacked;
+    }
+  }
+
   state.combat.attackers = [...action.attackers];
   state.combat.attackersDeclared = true;
+  if (storedTargets !== undefined) state.combat.attackTargets = storedTargets;
   tapAttackers(state, action.attackers, emit);
-  emit({ type: 'attackersDeclared', attackers: [...action.attackers] });
+  emit({
+    type: 'attackersDeclared',
+    attackers: [...action.attackers],
+    ...(storedTargets !== undefined ? { attackTargets: { ...storedTargets } } : {}),
+  });
   // Priority passes to active player (could cast a trick), then on to blockers.
   state.priorityPlayer = action.player;
   state.consecutivePasses = 0;
@@ -1779,11 +4118,25 @@ function applyDeclareBlockers(
     if (!canBlock(a, b, cont)) return rejectWith(prevState, `${b.def.name} cannot block ${a.def.name}`);
   }
 
-  // Declaration-level restrictions (menace), which no per-pair check can see.
+  // Declaration-level restrictions (menace) AND requirements ("must be blocked if
+  // able"), neither of which a per-pair check can see. The requirement half needs
+  // every creature the defender COULD have blocked with, not only the ones they
+  // did — "if able" is a question about the whole board.
   const attackingCreatures = state.combat.attackers
     .map((id) => findOnBattlefield(state, id))
     .filter((c): c is CardInstance => c !== undefined);
-  const declarationProblem = illegalBlockDeclaration(attackingCreatures, action.blocks, cont);
+  const availableBlockers: CardInstance[] = [];
+  for (const permanent of state.battlefield) {
+    if (permanent.controller !== action.player) continue;
+    if (!isCreature(permanent.def)) continue;
+    availableBlockers.push(permanent);
+  }
+  const declarationProblem = illegalBlockDeclaration(
+    attackingCreatures,
+    action.blocks,
+    cont,
+    availableBlockers,
+  );
   if (declarationProblem) return rejectWith(prevState, declarationProblem);
 
   const blocks: Record<InstanceId, InstanceId> = {};
@@ -1805,6 +4158,55 @@ function applyDeclareBlockers(
  * Enumerate the legal actions for the current priority-holder. The AI seam: an AI
  * picks one of these against a read-only view. Always includes `passPriority`.
  */
+
+/**
+ * The two moves an open madness window offers its controller: cast the exiled
+ * card for its madness cost (once per legal target, exactly as the hand and
+ * graveyard loops do), or pass to decline.
+ *
+ * Pass is listed FIRST and unconditionally — an unaffordable madness cost must
+ * still leave a way out, or the window would deadlock the game.
+ */
+function madnessActionsFor(state: GameState): GameAction[] {
+  const window = state.madnessWindow;
+  if (!window) return [];
+  const me = window.controller;
+  const player = state.players[me];
+  const actions: GameAction[] = [{ kind: 'passPriority', player: me }];
+  // Mana sources first: the cast below is only offered once the pool already
+  // covers the madness cost, so a board of untapped lands has to be able to
+  // produce before the offer can appear at all.
+  pushManaTapActions(state, me, actions);
+  const card = instanceIn(player.exile, window.instanceId);
+  const cost = card?.def.madness;
+  if (
+    !card ||
+    cost === undefined ||
+    !canPay(player.manaPool, cost, spendPurposeIfRestricted(player.manaPool, card.def, 'cast'))
+  ) {
+    return actions;
+  }
+  const restriction = targetRestrictionOf(card.def);
+  if (restriction === undefined) {
+    actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, fromZone: 'exile' });
+    return actions;
+  }
+  for (const target of legalTargetsFor(state, restriction, me, card.def)) {
+    actions.push({
+      kind: 'castSpell',
+      player: me,
+      instanceId: card.instanceId,
+      targets: [target],
+      fromZone: 'exile',
+    });
+  }
+  return actions;
+}
+
+/**
+ * Enumerate the legal actions for the current priority-holder. The AI seam: an AI
+ * picks one of these against a read-only view. Always includes `passPriority`.
+ */
 export function generateLegalActions(state: GameState, config: RulesConfig = DEFAULT_RULES): readonly GameAction[] {
   if (state.gameOver) return [];
   // A parked question preempts the whole game: the only legal action is its
@@ -1812,6 +4214,12 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // consumer — the sim loop, MCTS, the hotseat UI and the server already ask for
   // legal actions and apply one, so they answer questions with no change at all.
   if (state.pendingChoice) return choiceActionsFor(state.pendingChoice);
+  // An open MADNESS window preempts the game the same way, with exactly two
+  // moves: cast the exiled card for its madness cost, or pass, which declines
+  // and drops it into the graveyard. Enumerated here rather than left to a
+  // consumer's imagination, so every seat — a pilot, the hotseat UI, the online
+  // client — plays madness by picking from the menu it already reads.
+  if (state.madnessWindow) return madnessActionsFor(state);
   const me = state.priorityPlayer;
   const player = state.players[me];
   const actions: GameAction[] = [];
@@ -1836,8 +4244,66 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   if (sorcerySpeedWindow && player.landsPlayedThisTurn < config.maxLandsPerTurn) {
     for (let h = 0; h < player.hand.length; h++) {
       const card = player.hand[h] as CardInstance;
+      if (card.def.isBackFace === true) continue;
       if (isLand(card.def)) {
         actions.push({ kind: 'playLand', player: me, instanceId: card.instanceId });
+      }
+      // A modal DFC whose SECOND face is a land offers that land play too — the
+      // spell//land MDFCs are exactly the card whose value is being able to
+      // choose. Both halves are offered when both are playable.
+      if (
+        hasCastableBackFace(card.def) &&
+        backFaceCastZonesOf(card.def).includes('hand') &&
+        isLand(card.def.backFace as CardDefinition)
+      ) {
+        actions.push({ kind: 'playLand', player: me, instanceId: card.instanceId, face: 'back' });
+      }
+    }
+    // Lands playable from somewhere OTHER than the hand (Crucible of Worlds,
+    // Courser of Kruphix). Gated on the shared frozen empty list, so a board with
+    // no such permanent pays one `length === 0` check and never walks a graveyard.
+    const extraZones = landPlayZonesFor(state, me);
+    if (extraZones.length > 0) {
+      if (extraZones.includes('graveyard')) {
+        for (let g = 0; g < player.graveyard.length; g++) {
+          const card = player.graveyard[g] as CardInstance;
+          if (card.def.isBackFace === true) continue;
+          if (isLand(card.def)) {
+            actions.push({ kind: 'playLand', player: me, instanceId: card.instanceId, fromZone: 'graveyard' });
+          }
+        }
+      }
+      if (extraZones.includes('libraryTop')) {
+        // ONE card, the top one — never a search. This action names a card in a
+        // hidden zone, which is safe because legal actions are generated for the
+        // priority-holder alone and this is that player's own library.
+        const top = player.library[0];
+        if (top && top.def.isBackFace !== true && isLand(top.def)) {
+          actions.push({ kind: 'playLand', player: me, instanceId: top.instanceId, fromZone: 'libraryTop' });
+        }
+      }
+    }
+    // The LAND half of an adventurer card, waiting in exile with permission
+    // (CR 715.3d, "you may play the land later from exile"). A permission the CARD
+    // carries rather than one the BOARD grants, which is why it is read separately
+    // from the zones above — and behind the same empty check as every other
+    // card-grant consumer, so a game with nothing exiled under permission walks no
+    // exile zone here either.
+    if (hasCardGrants(state)) {
+      const exile = player.exile;
+      for (let e = 0; e < exile.length; e++) {
+        const card = exile[e] as CardInstance;
+        const permission = castPermissionFor(state, card);
+        if (permission === undefined) continue;
+        const playDef = playableFaceOf(card.def, permission.face);
+        if (playDef === undefined || !isLand(playDef)) continue;
+        actions.push({
+          kind: 'playLand',
+          player: me,
+          instanceId: card.instanceId,
+          ...(permission.face === 'back' ? { face: 'back' as const } : {}),
+          fromZone: 'exile',
+        });
       }
     }
   }
@@ -1853,18 +4319,151 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // caller, and enumerating them here would change every consumer's action space.
   for (let h = 0; h < player.hand.length; h++) {
     const card = player.hand[h] as CardInstance;
-    if (isLand(card.def)) continue;
+    // A TRANSFORMING back face is never castable (CR 712.8b) — mirror
+    // `applyCastSpell`'s guard so the offered menu can only contain playable
+    // actions. A MODAL DFC is different: both of its faces are real casts, so
+    // each is offered on its own terms (own cost, own timing, own targets).
+    if (card.def.isBackFace === true) continue;
+    // `playableFaceOf` is what makes a SPLIT card work here with no branch: on
+    // one, `'front'` means its LEFT half rather than the CR 709.4 combined
+    // object nobody can cast; on everything else it is the definition itself.
+    pushCastOffers(
+      state,
+      card,
+      playableFaceOf(card.def, 'front') as CardDefinition,
+      'front',
+      me,
+      player.manaPool,
+      sorcerySpeedWindow,
+      actions,
+    );
+    // The second half - a modal DFC's other face, a split card's right half -
+    // but only when the HAND is a zone it may be cast from. Aftermath prints a
+    // right half castable only from the graveyard (CR 702.127a), and offering
+    // it here would be a strictly better card than the one printed.
+    if (hasCastableBackFace(card.def) && backFaceCastZonesOf(card.def).includes('hand')) {
+      pushCastOffers(
+        state,
+        card,
+        card.def.backFace as CardDefinition,
+        'back',
+        me,
+        player.manaPool,
+        sorcerySpeedWindow,
+        actions,
+      );
+    }
+  }
+
+  // Flashback: cast a card with a flashback cost out of YOUR OWN graveyard.
+  // Mirrors the hand loop exactly — same timing gate (a sorcery flashes back
+  // only at sorcery speed), same pool-funds-it gate, same one-offer-per-legal-
+  // target rule for restricted spells — with the flashback cost in place of the
+  // printed one and the action carrying its explicit source zone.
+  const graveyard = player.graveyard;
+  for (let g = 0; g < graveyard.length; g++) {
+    const card = graveyard[g] as CardInstance;
+    // Printed OR granted — one accessor, so a granted flashback is offered
+    // exactly as a printed one is, and costs one property read per graveyard
+    // card on a board where no grant exists anywhere.
+    // AFTERMATH (CR 702.127a) first: a right half printed "cast this spell only
+    // from your graveyard" is offered here for its OWN cost, and is the one
+    // graveyard cast that is not a flashback. A card could print both - nothing
+    // does today - so this is an extra offer, not an early exit.
+    if (hasCastableBackFace(card.def) && backFaceCastZonesOf(card.def).includes('graveyard')) {
+      pushCastOffers(
+        state,
+        card,
+        card.def.backFace as CardDefinition,
+        'back',
+        me,
+        player.manaPool,
+        sorcerySpeedWindow,
+        actions,
+        AFTERMATH_OFFER,
+      );
+    }
+    const flashbackCost = flashbackCostOf(state, card);
+    if (flashbackCost === undefined || isLand(card.def)) continue;
     const timing = castTiming(card.def);
-    const timingOk = timing === 'instant' ? true : sorcerySpeedWindow;
-    if (!timingOk) continue;
-    if (card.def.cost && !canPay(player.manaPool, card.def.cost)) continue;
-    const restriction = targetRestrictionOf(card.def);
-    if (restriction === undefined) {
-      actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId });
+    if (timing !== 'instant' && !sorcerySpeedWindow) continue;
+    if (
+      !canPay(
+        player.manaPool,
+        flashbackCost,
+        spendPurposeIfRestricted(player.manaPool, card.def, 'cast'),
+      )
+    ) {
       continue;
     }
-    for (const target of legalTargetsFor(state, restriction, me)) {
-      actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, targets: [target] });
+    // A flashback cost may print a mandatory life rider ("Flashback—{1}{U}, Pay
+    // 3 life"). It is part of the cost, so a caster who cannot pay it is not
+    // offered the cast — the same gate `applyCastSpell` enforces.
+    const lifeCost = card.def.flashbackLifeCost ?? 0;
+    if (lifeCost > 0 && !canAffordLifeCost(state, me, lifeCost)) continue;
+    // A modal spell cast from the graveyard obeys the same "can you announce a
+    // mode at all?" rule as one cast from hand.
+    if (!modalSpellIsCastable(state, card.def, me)) continue;
+    const restriction = modalSpecOf(card.def) ? undefined : targetRestrictionOf(card.def);
+    if (restriction === undefined) {
+      actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, fromZone: 'graveyard' });
+      continue;
+    }
+    for (const target of legalTargetsFor(state, restriction, me, card.def)) {
+      actions.push({
+        kind: 'castSpell',
+        player: me,
+        instanceId: card.instanceId,
+        targets: [target],
+        fromZone: 'graveyard',
+      });
+    }
+  }
+
+  // Cast a card sitting in EXILE that has been given explicit permission - an
+  // adventurer exiled by its own adventure (CR 715.3d), or a Siege exiled when
+  // its last defense counter came off (CR 310.4). The permission names the face
+  // and whether the cast is free; everything else (timing, targets, the pool
+  // funding it) is judged by the same helper every other cast offer uses.
+  //
+  // Guarded by the SAME empty check every other card-grant consumer starts with,
+  // so a game in which nothing is ever exiled with permission walks no exile
+  // zone at all. That matters: this runs once per priority decision.
+  if (hasCardGrants(state)) {
+    const exile = player.exile;
+    for (let e = 0; e < exile.length; e++) {
+      const card = exile[e] as CardInstance;
+      const permission = castPermissionFor(state, card);
+      if (permission === undefined) continue;
+      const castDef = playableFaceOf(card.def, permission.face);
+      if (castDef === undefined) continue;
+      pushCastOffers(state, card, castDef, permission.face, me, player.manaPool, sorcerySpeedWindow, actions, {
+        fromZone: 'exile',
+        free: permission.free,
+      });
+    }
+  }
+
+  // Cycle a card in hand (CR 702.29). Instant speed — cycling prints no timing
+  // restriction — so the only gate is affording the cycling cost, which mirrors
+  // the pool-funds-it gate every other offer above uses. Offered once per
+  // printed cycling ability, so a card with both cycling and landcycling is two
+  // distinct, separately scoreable actions.
+  for (let h = 0; h < player.hand.length; h++) {
+    const card = player.hand[h] as CardInstance;
+    const cycling = card.def.cycling;
+    if (!cycling || cycling.length === 0) continue;
+    for (let index = 0; index < cycling.length; index++) {
+      if (
+        !canPay(
+          player.manaPool,
+          cycling[index]!.cost,
+          spendPurposeIfRestricted(player.manaPool, card.def, 'activate'),
+        )
+      ) {
+        continue;
+      }
+      actions.push({ kind: 'cycleCard', player: me, instanceId: card.instanceId, abilityIndex: index });
     }
   }
 
@@ -1887,7 +4486,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
         actions.push({ kind: 'activateAbility', player: me, instanceId: perm.instanceId, abilityIndex: index });
         continue;
       }
-      for (const target of legalTargetsFor(state, restriction, me)) {
+      for (const target of legalTargetsFor(state, restriction, me, perm.def)) {
         actions.push({
           kind: 'activateAbility',
           player: me,
@@ -1946,6 +4545,95 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
  * builds itself, so a UI or a pilot that wants a specific ordering is not limited
  * to the menu.
  */
+/**
+ * Offer every legal way to cast ONE FACE of a card from hand, appending to
+ * `actions`.
+ *
+ * Extracted so a modal DFC's two faces go through identical logic — the whole
+ * point of a second castable face is that it is a real cast with its OWN cost,
+ * timing, target restriction and modal header, and a second inline copy of
+ * these gates is exactly where the two would drift apart.
+ */
+function pushCastOffers(
+  state: GameState,
+  card: CardInstance,
+  def: CardDefinition,
+  face: 'front' | 'back',
+  me: PlayerId,
+  pool: import('./mana.js').ManaPool,
+  sorcerySpeedWindow: boolean,
+  actions: GameAction[],
+  options?: CastOfferOptions,
+): void {
+  if (isLand(def)) return; // lands are played, not cast (the MDFC land half)
+  const timing = castTiming(def);
+  if (timing !== 'instant' && !sorcerySpeedWindow) return;
+  // `free` is a permission that says "without paying its mana cost" (a Siege
+  // reward, CR 310.4). Otherwise the face's own printed cost - which is also
+  // exactly what an AFTERMATH half cast from the graveyard pays, and which any
+  // restricted mana in the pool is only allowed to fund if this face qualifies.
+  if (
+    options?.free !== true &&
+    def.cost &&
+    !canPay(pool, def.cost, spendPurposeIfRestricted(pool, def, 'cast'))
+  ) {
+    return;
+  }
+  // A modal spell with nothing it could legally announce cannot be cast — the
+  // same judgement `applyCastSpell` makes, from the same helper.
+  if (!modalSpellIsCastable(state, def, me)) return;
+  // A MANDATORY additional cost this board cannot pay makes the cast illegal
+  // (CR 601.2h) — so the spell is not offered at all. Same helper the cast path
+  // rejects with, so offer and accept cannot disagree. The card itself is
+  // excluded from a discard's candidates: it will be on the stack by the time
+  // the cost is paid.
+  if (unpayableAdditionalCostReason(state, def, me, card.instanceId)) return;
+  // Written only for a back-face offer, so a front-face cast action stays
+  // byte-for-byte the object every consumer has always seen.
+  const faceField = face === 'back' ? ({ face: 'back' } as const) : undefined;
+  // Same rule for the source zone: absent means `'hand'`, so every cast from
+  // hand keeps producing the action object consumers have always seen.
+  const zoneField =
+    options?.fromZone !== undefined && options.fromZone !== 'hand'
+      ? ({ fromZone: options.fromZone } as const)
+      : undefined;
+  // A modal spell has no whole-card target: its aims are per mode, collected by
+  // the cast-time question pipeline. So it is offered bare, exactly once.
+  const restriction = modalSpecOf(def) ? undefined : targetRestrictionOf(def);
+  if (restriction === undefined) {
+    actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, ...faceField, ...zoneField });
+    return;
+  }
+  for (const target of legalTargetsFor(state, restriction, me, def)) {
+    actions.push({
+      kind: 'castSpell',
+      player: me,
+      instanceId: card.instanceId,
+      targets: [target],
+      ...faceField,
+      ...zoneField,
+    });
+  }
+}
+
+/**
+ * How a cast offer differs from the ordinary one from hand: which zone the card
+ * is being cast out of, and whether a permission waives its mana cost. Both
+ * default to the hand cast nearly every spell in the game makes, so the
+ * overwhelming majority of offers pass nothing at all.
+ */
+interface CastOfferOptions {
+  readonly fromZone?: CastZone;
+  readonly free?: boolean;
+}
+
+/**
+ * The offer shape an AFTERMATH half is made with: cast from the graveyard, for
+ * its own printed cost. Hoisted so the per-graveyard-card loop allocates no
+ * options object on a board where nothing prints aftermath.
+ */
+const AFTERMATH_OFFER: CastOfferOptions = { fromZone: 'graveyard' };
+
 export function choiceActionsFor(choice: PendingChoice): readonly GameAction[] {
   return enumerateChoiceAnswers(choice).map(
     (answer): GameAction => ({ kind: 'answerChoice', player: choice.chooser, choiceId: choice.id, answer }),

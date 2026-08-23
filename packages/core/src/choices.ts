@@ -38,6 +38,14 @@
  *   - {@link PayLifeChoice}      — pay life, or decline (a shockland's "you may
  *     pay 2 life"). Separate from `payMana` for the same reason `payMana` is
  *     separate from `confirm`: the engine charges the price, so it must know it.
+ *   - {@link ChooseNumberChoice} — an integer in `[min, max]` ("choose a value
+ *     for X" at cast time), with the range computed by the ENGINE from what the
+ *     chooser can actually pay.
+ *   - {@link ChooseValueChoice}  — NAME a value: a colour, a creature type, a
+ *     card type, a player ("As ~ enters, choose a creature type"). Not a
+ *     `chooseModes`, because nothing runs when it is answered — the answer is
+ *     REMEMBERED on the permanent (`CardInstance.chosenAsEntered`) and read for
+ *     as long as it is on the battlefield.
  * Library search is `selectCards` over library candidates plus the shuffle that
  * follows (`EffectContext.shuffleLibrary`), not a kind of its own.
  *
@@ -49,10 +57,10 @@
  */
 
 import type { CardType, EffectRef } from './card.js';
-import { hasSubtype } from './card.js';
-import type { ManaCost } from './mana.js';
+import { matchesCardFilter } from './card.js';
+import type { ManaColor, ManaCost } from './mana.js';
 import type { TargetRestriction } from './targeting.js';
-import { convertedManaCost, formatManaCost } from './mana.js';
+import { formatManaCost } from './mana.js';
 import type { CardInstance, GameState, InstanceId, PlayerId, ZoneName } from './state.js';
 import { PLAYER_IDS, playerZone } from './state.js';
 
@@ -83,52 +91,81 @@ export interface CardFilter {
   /** Inclusive mana-value bounds. */
   readonly minManaValue?: number;
   readonly maxManaValue?: number;
+  /**
+   * Inclusive PRINTED power/toughness bounds — "a creature card with toughness 2
+   * or less" (Recruiter of the Guard), "with power 4 or greater".
+   *
+   * PRINTED, not effective: these filters select cards in a LIBRARY, a HAND or a
+   * GRAVEYARD, where a card is not a permanent and the continuous layer has
+   * nothing to apply. The printed box is the only characteristic that exists.
+   *
+   * A card with no printed number in the box — a non-creature, or a `*` P/T
+   * whose value is a formula ({@link CardDefinition.characteristicPT}) — matches
+   * NO power/toughness bound. Treating an absent box as zero would quietly make
+   * every Ornithopter and every Tarmogoyf a legal find for "toughness 2 or less",
+   * which is not what the printed card says.
+   */
+  readonly minPower?: number;
+  readonly maxPower?: number;
+  readonly minToughness?: number;
+  readonly maxToughness?: number;
+  /**
+   * Keep only cards of at least one of these COLORS — how "White creatures you
+   * control get +1/+1" narrows an anthem, and available to every other filter
+   * consumer (searches, discards, sacrifices) through the same field. Color is
+   * read by {@link colorsOfDefinition} — the one color reader protection also
+   * uses, so "white" cannot mean two different things — which prefers a
+   * definition's printed {@link CardDefinition.colors} (every token) and falls
+   * back to mana-cost pips, hybrid included. A card with no colored pips and no
+   * printed colour (a land, most artifacts) matches no color and is excluded by
+   * any color filter.
+   */
+  readonly anyOfColors?: readonly ManaColor[];
+  /**
+   * The printed words "**token**" and "**nontoken**" — `true` keeps only tokens
+   * ("For each token you control…"), `false` keeps only nontokens ("Destroy all
+   * **nontoken** creatures", "Whenever a **nontoken** creature you control
+   * dies…"). Omit for the ordinary filter, which does not care either way.
+   *
+   * Written as one tri-state field rather than a `nontoken?: boolean` because
+   * both printed words exist and they are the same question asked twice; a
+   * second field would let a filter declare both and mean nothing.
+   *
+   * Reads {@link CardDefinition.isToken}, so it is exact for everything the
+   * engine can create — see that field for why token-ness lives on the
+   * definition.
+   */
+  readonly isToken?: boolean;
+  /**
+   * Require (`true`) or forbid (`false`) the printed **Legendary** supertype —
+   * "unless you control a legendary creature" (the Lord of the Rings lands),
+   * "Legendary creatures you control get +1/+1", "target nonlegendary creature".
+   *
+   * A supertype, not a type, so it needs its own field rather than an entry in
+   * {@link anyOfTypes}: a card is a legendary CREATURE, and folding the two would
+   * make "legendary" and "creature" alternatives instead of both being required.
+   */
+  readonly legendary?: boolean;
+  /**
+   * Require (`true`) or forbid (`false`) the printed **Basic** supertype —
+   * "unless you control a basic land", "search for a nonbasic land". Same
+   * supertype argument as {@link legendary}, and the same flag the battlelands'
+   * `minBasicLands` condition already reads.
+   */
+  readonly basic?: boolean;
 }
 
 /**
- * Whether a card instance passes a filter. An absent filter matches everything.
+ * Whether a card passes a {@link CardFilter}.
  *
- * Written with explicit loops rather than `.some(...)`: static abilities
- * (`statics.ts`) run this for every permanent on the battlefield inside the
- * continuous-layering pass, which combat and every legality check drive, and a
- * closure allocated per predicate per candidate showed up in the hot path.
+ * RE-EXPORTED, not defined here. A `CardFilter` reads only PRINTED characteristics
+ * plus the subtype a permanent named as it entered, and every one of those lives in
+ * `card.ts` — so the matcher lives there too, and this module keeps the vocabulary
+ * (the interface) while `card.ts` keeps the reader. That is what lets the
+ * enters-tapped conditions in `card.ts` ask the same question without a VALUE
+ * import back into this file, which would close a runtime cycle.
  */
-export function matchesCardFilter(card: CardInstance, filter?: CardFilter): boolean {
-  if (!filter) return true;
-  const def = card.def;
-  // The helper forms are the allocation-free, case-insensitive ones — required by
-  // the statics pass that runs this for every permanent, and by subtype matching
-  // that must treat "Mountain" and "mountain" alike.
-  if (filter.anyOfTypes !== undefined && !hasAnyType(def.types, filter.anyOfTypes)) return false;
-  if (filter.noneOfTypes !== undefined && hasAnyType(def.types, filter.noneOfTypes)) return false;
-  if (filter.anyOfSubtypes !== undefined && !hasAnySubtype(def, filter.anyOfSubtypes)) return false;
-  if (filter.noneOfSubtypes !== undefined && hasAnySubtype(def, filter.noneOfSubtypes)) return false;
-  if (filter.nameEquals !== undefined && def.name !== filter.nameEquals) return false;
-  if (filter.minManaValue !== undefined || filter.maxManaValue !== undefined) {
-    const mv = def.cost ? convertedManaCost(def.cost) : 0;
-    if (filter.minManaValue !== undefined && mv < filter.minManaValue) return false;
-    if (filter.maxManaValue !== undefined && mv > filter.maxManaValue) return false;
-  }
-  return true;
-}
-
-/** Whether a type line carries any of `wanted`. Allocation-free (see above). */
-function hasAnyType(types: readonly CardType[], wanted: readonly CardType[]): boolean {
-  for (const want of wanted) {
-    for (const type of types) {
-      if (type === want) return true;
-    }
-  }
-  return false;
-}
-
-/** Whether a definition carries any of `wanted` as a printed subtype. */
-function hasAnySubtype(def: CardInstance['def'], wanted: readonly string[]): boolean {
-  for (const want of wanted) {
-    if (hasSubtype(def, want)) return true;
-  }
-  return false;
-}
+export { matchesCardFilter };
 
 // --- options --------------------------------------------------------------------
 
@@ -150,6 +187,48 @@ export interface CardOption {
   readonly zone: ZoneName;
   /** Who controls/owns it right now. */
   readonly controller: PlayerId;
+}
+
+/**
+ * WHAT KIND OF THING is being named by a {@link ChooseValueChoice} — the printed
+ * noun after "choose a…": a colour, a creature type, a card type, a basic land
+ * type, or a player.
+ *
+ * It rides on the choice (rather than being inferred from the option list)
+ * because the ANSWERING POLICY differs per subject and nothing else can tell
+ * them apart: a list of five one-letter strings is a colour choice and a list of
+ * two seats is a player choice, and a pilot that cannot tell them apart has to
+ * guess. See `@jonny-boi/ai`'s `answerChooseValue` for the policy each subject
+ * gets and why choosing at random would make these cards noise in an A/B verdict.
+ */
+export type ChosenValueSubject = 'color' | 'creatureType' | 'cardType' | 'basicLandType' | 'player';
+
+/**
+ * The answer that means **nothing was chosen** — the ONE inert default, shared
+ * by every path that cannot ask, and explicit rather than accidental (the same
+ * discipline as a shockland's "an unasked entry is an unpaid one").
+ *
+ * Two different paths reach it:
+ *  - a permanent that enters where nobody CAN be asked — reanimated, put onto
+ *    the battlefield by another card's effect, minted as a token, hand-built in
+ *    a test — never records a value at all;
+ *  - a parked question that has to degrade (the game ended under the chooser, a
+ *    resolution blew its question budget) answers with this.
+ *
+ * Both leave `CardInstance.chosenAsEntered` absent, and **every reader of a
+ * chosen value treats absent as matching nothing**: no creature is of the
+ * unchosen type, no card is the unchosen colour, an unchosen mana mode produces
+ * nothing. That is the direction that can never play BETTER than the real card,
+ * which is the only direction an unasked default is allowed to point.
+ */
+export const NOTHING_CHOSEN = '';
+
+/** One nameable value on offer ("white", "Goblin", "artifact", "player B"). */
+export interface ChoiceValueOption {
+  /** Stable id the answer names — a `ManaColor`, a subtype, a `PlayerId`, … */
+  readonly value: string;
+  /** Human-readable text for the UI / event log. */
+  readonly label: string;
 }
 
 /** One selectable mode of a modal spell ("counter target spell", "draw a card"). */
@@ -301,6 +380,18 @@ export interface SelectCardsRequest extends ChoiceRequestBase, ChoiceCountReques
   readonly ordered?: boolean;
   /** Where the candidates came from; UI copy + AI context only. */
   readonly fromZone?: ZoneName;
+  /**
+   * Marks the scry/surveil-shaped question: the candidates are the looked-at TOP
+   * cards of a library, the chooser picks which of them STAY on top (in order),
+   * and every unchosen candidate leaves the top (scry sends it to the bottom,
+   * surveil to the graveyard). Like {@link ChoiceRequestBase.valence} this is an
+   * ANSWERING hint only — it never changes what answers are legal — but unlike
+   * valence it is not a per-card direction: keeping a card is good exactly when
+   * that card is worth drawing next, which is a judgement about the card and the
+   * board, so the AI needs to know the question's shape to answer it sensibly
+   * (bottom lands when flooded, keep the spell it can cast).
+   */
+  readonly keepOnTop?: boolean;
 }
 
 export interface SelectPlayersRequest extends ChoiceRequestBase, ChoiceCountRequest {
@@ -311,6 +402,13 @@ export interface SelectPlayersRequest extends ChoiceRequestBase, ChoiceCountRequ
 export interface ChooseModesRequest extends ChoiceRequestBase, ChoiceCountRequest {
   readonly kind: 'chooseModes';
   readonly modes: readonly ChoiceMode[];
+  /**
+   * "You may choose the same mode more than once." (Fiery Confluence, every
+   * Confluence.) Two things change when it is set, and both matter: `max` stops
+   * being clamped down to the number of distinct modes, and the answer may
+   * repeat a mode id. Absent means the ordinary rule — each mode at most once.
+   */
+  readonly allowRepeats?: boolean;
 }
 
 export interface ConfirmRequest extends ChoiceRequestBase {
@@ -351,6 +449,39 @@ export interface PayLifeRequest extends ChoiceRequestBase {
   readonly affordable?: boolean;
 }
 
+/**
+ * Choose an integer in `[min, max]` — the "at what?" question. The engine asks
+ * it at cast time for an `{X}` cost ("choose a value for X"), with `max`
+ * computed BY THE ENGINE from what the caster could actually pay, so an
+ * unpayable X is never on offer (the same honesty rule as
+ * {@link PayManaRequest.affordable}). `min` defaults to 0, which is the printed
+ * floor for X.
+ */
+export interface ChooseNumberRequest extends ChoiceRequestBase {
+  readonly kind: 'chooseNumber';
+  readonly min?: number;
+  readonly max: number;
+}
+
+/**
+ * **Name a value** — "As ~ enters, choose a creature type / a color / a player"
+ * (CR 614.1c). Exactly one option is named, and the answer is REMEMBERED on the
+ * permanent (`CardInstance.chosenAsEntered`) so the card's own later abilities,
+ * and other cards' filters, can read it for as long as it is on the battlefield.
+ *
+ * It is not a {@link ChooseModesRequest}: a mode is an EFFECT the answer selects
+ * and then discards, while this answer is a durable characteristic of the
+ * permanent — nothing runs when it is given. It is not a
+ * {@link SelectPlayersRequest} for the same reason (Stuffy Doll's chosen player
+ * is remembered for the rest of the game, not acted on once), which is why the
+ * `'player'` subject lives here rather than being split off.
+ */
+export interface ChooseValueRequest extends ChoiceRequestBase {
+  readonly kind: 'chooseValue';
+  readonly subject: ChosenValueSubject;
+  readonly options: readonly ChoiceValueOption[];
+}
+
 /** Everything a resolving effect may ask. */
 export type ChoiceRequest =
   | SelectCardsRequest
@@ -359,6 +490,8 @@ export type ChoiceRequest =
   | ConfirmRequest
   | PayManaRequest
   | PayLifeRequest
+  | ChooseNumberRequest
+  | ChooseValueRequest
   | SelectTargetsRequest;
 
 /** The kinds, as a discriminator. */
@@ -377,11 +510,50 @@ interface PendingChoiceBase {
   readonly chooser: PlayerId;
   readonly prompt: string;
   readonly valence: ChoiceValence;
-  /** The spell/permanent that asked. */
+  /**
+   * The spell/permanent that asked, or {@link NO_ASKING_OBJECT} when the
+   * question comes from a GAME RULE with no object behind it.
+   */
   readonly sourceInstanceId: InstanceId;
   readonly sourceName: string;
   readonly min: number;
   readonly max: number;
+  /**
+   * What machinery this parked choice belongs to, when it is NOT a resolving
+   * effect's question. `'legendRule'` marks the state-based legend-rule choice
+   * (CR 704.5j — "choose which to keep"), raised by the SBA pass with no
+   * resolution frame behind it; `applyAnswerChoice` routes the answer by this
+   * marker instead of guessing from the absence of a frame. Absent for every
+   * ordinary choice, so all existing states and tests read unchanged.
+   *
+   * `'asEnters'` marks the CR 614.1c NAMING ("As ~ enters, choose a creature
+   * type"), and `'copyAsEnters'` the CR 707 as-enters COPY ("you may have ~
+   * enter as a copy of any creature on the battlefield"). Both are raised by an
+   * ENTRY PATH rather than by a resolving effect, and both are routed by this
+   * marker for exactly the reason the legend rule is: "there is no frame behind
+   * it" also describes the shockland question, and the five must never be
+   * confused. They are two markers rather than one because the answers differ
+   * in kind — a naming records a VALUE on the instance, a copy replaces what the
+   * instance IS — and because a card can print both, in that order.
+   *
+   * `'cleanupDiscard'` marks the cleanup step's discard down to maximum hand size
+   * (CR 514.1) — likewise a turn-based action the GAME performs, with no
+   * resolution behind it, and the one question that parks with the TURN itself
+   * waiting on the answer.
+   */
+  readonly context?: 'legendRule' | 'cleanupDiscard' | 'asEnters' | 'copyAsEnters';
+  /**
+   * The permanent an entry-path answer applies to: the one whose
+   * `chosenAsEntered` an `'asEnters'` answer is written to, and the one a
+   * `'copyAsEnters'` answer turns into a copy.
+   *
+   * It is carried explicitly rather than reusing {@link sourceInstanceId}
+   * because the two are only accidentally equal today (the permanent asking IS
+   * the permanent remembering), and an answer that wrote to "whatever asked"
+   * would silently record the value on the wrong card the first time a source
+   * asks on another permanent's behalf. Absent for every other context.
+   */
+  readonly appliesToInstanceId?: InstanceId;
 }
 
 export interface SelectCardsChoice extends PendingChoiceBase {
@@ -389,6 +561,8 @@ export interface SelectCardsChoice extends PendingChoiceBase {
   readonly candidates: readonly CardOption[];
   readonly ordered: boolean;
   readonly fromZone?: ZoneName;
+  /** The scry/surveil shape — see {@link SelectCardsRequest.keepOnTop}. */
+  readonly keepOnTop?: boolean;
 }
 
 export interface SelectPlayersChoice extends PendingChoiceBase {
@@ -399,6 +573,8 @@ export interface SelectPlayersChoice extends PendingChoiceBase {
 export interface ChooseModesChoice extends PendingChoiceBase {
   readonly kind: 'chooseModes';
   readonly modes: readonly ChoiceMode[];
+  /** Whether one mode may be chosen several times. See the request's note. */
+  readonly allowRepeats: boolean;
 }
 
 export interface ConfirmChoice extends PendingChoiceBase {
@@ -434,6 +610,22 @@ export interface PayLifeChoice extends PendingChoiceBase {
   readonly affordable: boolean;
 }
 
+/**
+ * A number in `[min, max]` — the base's `min`/`max` ARE the numeric range here
+ * (not a selection count), so the shared normalisation and validation rules
+ * apply unchanged: `min <= answer <= max` always has at least one legal value.
+ */
+export interface ChooseNumberChoice extends PendingChoiceBase {
+  readonly kind: 'chooseNumber';
+}
+
+/** Name one value — see {@link ChooseValueRequest}. */
+export interface ChooseValueChoice extends PendingChoiceBase {
+  readonly kind: 'chooseValue';
+  readonly subject: ChosenValueSubject;
+  readonly options: readonly ChoiceValueOption[];
+}
+
 /** A question parked in `GameState.pendingChoice`, awaiting an `answerChoice`. */
 export type PendingChoice =
   | SelectCardsChoice
@@ -442,6 +634,8 @@ export type PendingChoice =
   | ConfirmChoice
   | PayManaChoice
   | PayLifeChoice
+  | ChooseNumberChoice
+  | ChooseValueChoice
   | SelectTargetsChoice;
 
 // --- answers ----------------------------------------------------------------------
@@ -457,6 +651,11 @@ export interface SelectPlayersAnswer {
 }
 export interface ChooseModesAnswer {
   readonly kind: 'chooseModes';
+  /**
+   * The chosen mode ids. On an `allowRepeats` choice a mode may appear several
+   * times, and HOW MANY times is part of the answer ("choose two, you may
+   * choose the same mode more than once" is two effects, possibly the same one).
+   */
   readonly modeIds: readonly string[];
 }
 export interface ConfirmAnswer {
@@ -489,6 +688,28 @@ export interface PayLifeAnswer {
   readonly pay: boolean;
 }
 
+export interface ChooseNumberAnswer {
+  readonly kind: 'chooseNumber';
+  /**
+   * The chosen value. For an `{X}` cast the ENGINE charges `value × xCost`
+   * generic mana as it accepts this answer — same one-charge rule as the two
+   * payment kinds — and what the spell then resolves with is what was paid.
+   */
+  readonly value: number;
+}
+
+export interface ChooseValueAnswer {
+  readonly kind: 'chooseValue';
+  /**
+   * The named option's `value`, or {@link NOTHING_CHOSEN} — which is always a
+   * legal answer, for the same reason declining a payment always is: it is the
+   * branch that cannot take anything the chooser did not agree to, and here it
+   * is also the exact value every unaskable entry path records. One inert
+   * default, spelled the same way everywhere.
+   */
+  readonly value: string;
+}
+
 /** What an `answerChoice` action carries. Plain data — clones and serializes. */
 export type ChoiceAnswer =
   | SelectCardsAnswer
@@ -497,6 +718,8 @@ export type ChoiceAnswer =
   | ConfirmAnswer
   | PayManaAnswer
   | PayLifeAnswer
+  | ChooseNumberAnswer
+  | ChooseValueAnswer
   | SelectTargetsAnswer;
 
 // --- normalisation ----------------------------------------------------------------
@@ -523,6 +746,11 @@ export function choiceOptionCount(choice: PendingChoice): number {
       return choice.affordable ? CONFIRM_OPTION_COUNT : DECLINE_ONLY_OPTION_COUNT;
     case 'payLife':
       return choice.affordable ? CONFIRM_OPTION_COUNT : DECLINE_ONLY_OPTION_COUNT;
+    case 'chooseNumber':
+      // min..max inclusive — the range IS the option list.
+      return choice.max - choice.min + 1;
+    case 'chooseValue':
+      return choice.options.length;
     default:
       return 0;
   }
@@ -545,6 +773,19 @@ function normalizeCounts(request: ChoiceCountRequest, optionCount: number): { mi
 
 /** With neither bound given, a selection asks for exactly one option. */
 const DEFAULT_CHOICE_COUNT = 1;
+
+/**
+ * The `sourceInstanceId` a question raised by a GAME RULE carries — the CR 514.1
+ * cleanup discard, and anything else the turn machine has to ask that no card
+ * asked for.
+ *
+ * Negative on purpose: instance ids are minted upward from 1 as libraries are
+ * built (`paired-arms-config.ts` pins that), so this can never collide with a
+ * real card, and every "look this id up" path (`findInstance`, the UI's card
+ * lookup) already answers `undefined` for an id it does not hold and degrades to
+ * naming the choice by its {@link ChoiceSource.sourceName} instead.
+ */
+export const NO_ASKING_OBJECT: InstanceId = -1;
 
 /** Provenance stamped onto a normalised choice. */
 export interface ChoiceSource {
@@ -580,6 +821,7 @@ export function normalizeChoiceRequest(request: ChoiceRequest, source: ChoiceSou
         min,
         max,
         ...(request.fromZone ? { fromZone: request.fromZone } : {}),
+        ...(request.keepOnTop ? { keepOnTop: true } : {}),
       };
     }
     case 'selectPlayers': {
@@ -598,8 +840,20 @@ export function normalizeChoiceRequest(request: ChoiceRequest, source: ChoiceSou
       };
     }
     case 'chooseModes': {
-      const { min, max } = normalizeCounts(request, request.modes.length);
-      return { ...base, kind: 'chooseModes', modes: request.modes.map((m) => ({ id: m.id, label: m.label })), min, max };
+      // With repeats allowed one mode can fill every slot, so the option COUNT
+      // no longer bounds the pick count — the printed number does. Clamping to
+      // `modes.length` there would silently shrink "choose three" on a two-mode
+      // Confluence, i.e. play the card as weaker than printed.
+      const allowRepeats = request.allowRepeats === true && request.modes.length > 0;
+      const { min, max } = normalizeCounts(request, allowRepeats ? MAX_REPEATED_MODE_PICKS : request.modes.length);
+      return {
+        ...base,
+        kind: 'chooseModes',
+        modes: request.modes.map((m) => ({ id: m.id, label: m.label })),
+        allowRepeats,
+        min,
+        max,
+      };
     }
     case 'confirm':
       return { ...base, kind: 'confirm', min: 1, max: 1 };
@@ -620,6 +874,28 @@ export function normalizeChoiceRequest(request: ChoiceRequest, source: ChoiceSou
         kind: 'payLife',
         amount: request.amount,
         affordable: request.affordable ?? false,
+        min: 1,
+        max: 1,
+      };
+    case 'chooseNumber': {
+      // The base's min/max carry the NUMERIC RANGE. Clamped so `0 <= min <= max`
+      // always holds — a malformed request degrades to the single value 0 rather
+      // than to a question with no legal answer.
+      const max = Math.max(0, Math.trunc(request.max));
+      const min = Math.max(0, Math.min(Math.trunc(request.min ?? 0), max));
+      return { ...base, kind: 'chooseNumber', min, max };
+    }
+    case 'chooseValue':
+      // Exactly one value is named, always — the count bounds are `1..1` and
+      // are not negotiable, so there is no `normalizeCounts` call to make.
+      // Options are COPIED for the same reason a `payMana` cost is: the request's
+      // list is usually a frozen table on a card definition, and a parked choice
+      // outlives the call that raised it.
+      return {
+        ...base,
+        kind: 'chooseValue',
+        subject: request.subject,
+        options: request.options.map((option) => ({ value: option.value, label: option.label })),
         min: 1,
         max: 1,
       };
@@ -693,14 +969,30 @@ export function validateChoiceAnswer(choice: PendingChoice, answer: ChoiceAnswer
         choice.max,
         'target',
       );
-    case 'chooseModes':
-      return validateSelection(
-        (answer as ChooseModesAnswer).modeIds,
-        choice.modes.map((m) => m.id),
-        choice.min,
-        choice.max,
-        'mode',
-      );
+    case 'chooseModes': {
+      const ids = (answer as ChooseModesAnswer).modeIds;
+      if (!choice.allowRepeats) {
+        return validateSelection(
+          ids,
+          choice.modes.map((m) => m.id),
+          choice.min,
+          choice.max,
+          'mode',
+        );
+      }
+      // The repeats form shares the count and membership rules and drops only
+      // the duplicate rule, so it is spelled out here rather than bent into
+      // `validateSelection` behind a flag no other caller would ever pass.
+      if (!Array.isArray(ids)) return invalid('the mode selection must be a list');
+      if (ids.length < choice.min) return invalid(`choose at least ${choice.min} mode(s)`);
+      if (ids.length > choice.max) return invalid(`choose at most ${choice.max} mode(s)`);
+      for (const id of ids) {
+        if (!choice.modes.some((mode) => mode.id === id)) {
+          return invalid(`${String(id)} is not one of the offered modes`);
+        }
+      }
+      return VALID;
+    }
     case 'confirm':
       return typeof (answer as ConfirmAnswer).yes === 'boolean' ? VALID : invalid('a yes/no answer must be a boolean');
     case 'payMana': {
@@ -717,6 +1009,29 @@ export function validateChoiceAnswer(choice: PendingChoice, answer: ChoiceAnswer
       if (typeof pay !== 'boolean') return invalid('a pay/decline answer must be a boolean');
       // Life may only be paid down to zero (CR 118.4) — same refusal as payMana.
       if (pay && !choice.affordable) return invalid(`you do not have ${choice.amount} life to pay`);
+      return VALID;
+    }
+    case 'chooseNumber': {
+      const value = (answer as ChooseNumberAnswer).value;
+      if (typeof value !== 'number' || !Number.isInteger(value)) {
+        return invalid('the chosen value must be a whole number');
+      }
+      // The range was computed from what the chooser could actually pay, so a
+      // value outside it is an X the board cannot fund — refused, not clamped.
+      if (value < choice.min || value > choice.max) {
+        return invalid(`choose a value between ${choice.min} and ${choice.max}`);
+      }
+      return VALID;
+    }
+    case 'chooseValue': {
+      const named = (answer as ChooseValueAnswer).value;
+      if (typeof named !== 'string') return invalid('the chosen value must be a name');
+      // Naming nothing is always legal — it is the inert default every unaskable
+      // entry path already records, so the two can never disagree.
+      if (named === NOTHING_CHOSEN) return VALID;
+      if (!choice.options.some((option) => option.value === named)) {
+        return invalid(`${named} is not one of the offered choices`);
+      }
       return VALID;
     }
     default:
@@ -743,8 +1058,16 @@ export function defaultAnswerFor(choice: PendingChoice): ChoiceAnswer {
       return { kind: 'selectPlayers', players: choice.candidates.slice(0, choice.min) };
     case 'selectTargets':
       return { kind: 'selectTargets', targets: choice.candidates.slice(0, choice.min).map((c) => c.ref) };
-    case 'chooseModes':
+    case 'chooseModes': {
+      // With repeats allowed the first mode can legally fill every required
+      // slot, which is what makes a floor of three satisfiable on a two-mode
+      // card. Without them it is the first `min` distinct modes, as ever.
+      if (choice.allowRepeats && choice.modes.length > 0) {
+        const first = (choice.modes[0] as ChoiceMode).id;
+        return { kind: 'chooseModes', modeIds: new Array<string>(choice.min).fill(first) };
+      }
       return { kind: 'chooseModes', modeIds: choice.modes.slice(0, choice.min).map((m) => m.id) };
+    }
     case 'confirm':
       // Declining is the no-op branch of "you may", so it is the safe default.
       return { kind: 'confirm', yes: false };
@@ -756,6 +1079,24 @@ export function defaultAnswerFor(choice: PendingChoice): ChoiceAnswer {
     case 'payLife':
       // Same rule, higher stakes: life is never taken without a yes.
       return { kind: 'payLife', pay: false };
+    case 'chooseNumber':
+      // The smallest legal value — for an X cost that is X = 0, the answer that
+      // spends nothing on the chooser's behalf (same rule as the payment kinds).
+      return { kind: 'chooseNumber', value: choice.min };
+    case 'chooseValue':
+      // Name NOTHING — unless exactly one value is on offer, which is not a
+      // decision but the only lawful naming (the same rule `selectTargets`
+      // applies to a single legal target).
+      //
+      // Deliberately NOT "the first option" in general: that would be an
+      // arbitrary pick dressed up as a default, and on a Cavern of Souls it
+      // would silently hand the degraded path a real, working creature type.
+      // See {@link NOTHING_CHOSEN} — the unasked default is the one that grants
+      // nothing, and it is the same value on every path that cannot ask.
+      return {
+        kind: 'chooseValue',
+        value: choice.options.length === 1 ? (choice.options[0] as ChoiceValueOption).value : NOTHING_CHOSEN,
+      };
     default:
       return { kind: 'confirm', yes: false };
   }
@@ -783,7 +1124,12 @@ export function isTrivialChoice(choice: PendingChoice): boolean {
       // as playable and then fizzle the moment the board grew a second option.)
       return choice.min === choice.max && (choice.min === 0 || choice.min === choice.candidates.length);
     case 'chooseModes':
-      return choice.min === choice.max && (choice.min === 0 || choice.min === choice.modes.length);
+      if (choice.min !== choice.max) return false;
+      if (choice.min === 0) return true;
+      // With repeats, a ONE-mode menu has exactly one legal answer whatever the
+      // count ("choose two" of one mode is that mode twice). Without them, the
+      // only forced answer is "take them all".
+      return choice.allowRepeats ? choice.modes.length === 1 : choice.min === choice.modes.length;
     case 'confirm':
       return false;
     case 'payMana':
@@ -794,6 +1140,17 @@ export function isTrivialChoice(choice: PendingChoice): boolean {
       return !choice.affordable;
     case 'payLife':
       return !choice.affordable;
+    case 'chooseNumber':
+      // A range of one value is not a decision — notably X on a board that can
+      // only fund X = 0, which must not stop the game to ask the inevitable.
+      return choice.min === choice.max;
+    case 'chooseValue':
+      // One option is not a decision. ZERO options is the degenerate case
+      // ("choose a creature type" with no type list to offer) and settles to
+      // "nothing chosen" without stopping the game. Two or more IS a decision
+      // and is always asked: auto-picking a colour would make Coldsteel Heart
+      // produce a colour its controller never named.
+      return choice.options.length <= 1;
     default:
       return true;
   }
@@ -845,6 +1202,39 @@ function boundedSubsets<T>(items: readonly T[], min: number, max: number, limit:
 }
 
 /**
+ * Multisets of `items` sized `min..max` — subsets that MAY repeat an item, for
+ * "you may choose the same mode more than once". Non-decreasing by index, so
+ * each combination appears exactly once and the order is deterministic (the
+ * same seeded sim reproduces the same menu).
+ */
+function boundedMultisets<T>(items: readonly T[], min: number, max: number, limit: number): T[][] {
+  const out: T[][] = [];
+  const current: T[] = [];
+  const walk = (start: number): void => {
+    if (out.length >= limit) return;
+    if (current.length >= min) out.push([...current]);
+    if (current.length >= max) return;
+    for (let i = start; i < items.length; i++) {
+      if (out.length >= limit) return;
+      current.push(items[i] as T);
+      // `i`, not `i + 1` — that one character is the whole difference from
+      // `boundedSubsets`: an item may be taken again.
+      walk(i);
+      current.pop();
+    }
+  };
+  walk(0);
+  return out;
+}
+
+/**
+ * The ceiling on a repeated-mode pick count. Real cards choose two or three;
+ * this exists so a malformed record cannot normalise into an unbounded
+ * enumeration.
+ */
+const MAX_REPEATED_MODE_PICKS = 16;
+
+/**
  * The answers a pilot may pick from for a pending choice — always at least one.
  *
  * For an ORDERED selection we enumerate each subset in candidate order only; a
@@ -877,9 +1267,10 @@ export function enumerateChoiceAnswers(choice: PendingChoice): ChoiceAnswer[] {
     }
     case 'chooseModes': {
       const ids = choice.modes.map((m) => m.id);
-      const answers = boundedSubsets(ids, choice.min, choice.max, limit).map(
-        (modeIds): ChoiceAnswer => ({ kind: 'chooseModes', modeIds }),
-      );
+      const combos = choice.allowRepeats
+        ? boundedMultisets(ids, choice.min, choice.max, limit)
+        : boundedSubsets(ids, choice.min, choice.max, limit);
+      const answers = combos.map((modeIds): ChoiceAnswer => ({ kind: 'chooseModes', modeIds }));
       return answers.length > 0 ? answers : [defaultAnswerFor(choice)];
     }
     case 'confirm':
@@ -902,6 +1293,26 @@ export function enumerateChoiceAnswers(choice: PendingChoice): ChoiceAnswer[] {
             { kind: 'payLife', pay: false },
           ]
         : [{ kind: 'payLife', pay: false }];
+    case 'chooseNumber': {
+      // Ascending from min, capped like every other enumeration. The cap cannot
+      // starve anyone: `max` is bounded by what the board can pay, which no real
+      // board pushes past the enumeration limit — and `applyAction` accepts any
+      // valid value besides, exactly as it does for attack subsets.
+      const answers: ChoiceAnswer[] = [];
+      for (let value = choice.min; value <= choice.max && answers.length < limit; value++) {
+        answers.push({ kind: 'chooseNumber', value });
+      }
+      return answers.length > 0 ? answers : [defaultAnswerFor(choice)];
+    }
+    case 'chooseValue': {
+      // Every offered value, capped like the rest. `NOTHING_CHOSEN` is legal but
+      // is NOT enumerated: it is the floor for a path that cannot ask, not a
+      // move a pilot should ever be handed a reason to take.
+      const answers = choice.options
+        .slice(0, limit)
+        .map((option): ChoiceAnswer => ({ kind: 'chooseValue', value: option.value }));
+      return answers.length > 0 ? answers : [defaultAnswerFor(choice)];
+    }
     default:
       return [defaultAnswerFor(choice)];
   }
@@ -945,6 +1356,10 @@ export function describeChoiceAnswer(answer: ChoiceAnswer): string {
       return answer.pay ? 'paid' : 'declined to pay';
     case 'payLife':
       return answer.pay ? 'paid life' : 'declined to pay life';
+    case 'chooseNumber':
+      return `chose ${answer.value}`;
+    case 'chooseValue':
+      return answer.value === NOTHING_CHOSEN ? 'chose nothing' : `named ${answer.value}`;
     default:
       return 'answer';
   }
@@ -983,9 +1398,55 @@ export interface ResolutionFrame {
   askCount: number;
   /** The spell card mid-resolution (absent for a trigger). */
   card?: CardInstance;
-  /** Where that card goes when the resolution finishes. */
-  resolvesTo?: 'battlefield' | 'graveyard';
+  /**
+   * Where that card goes when the resolution finishes — exile for flashback,
+   * HAND for a bought-back spell, and `'ceaseToExist'` for a COPY of a spell,
+   * which is not a card and goes to no zone at all (CR 704.5e). Computed once,
+   * as the resolution begins, by `spellLeaveDestination`, so the frame that
+   * outlives the stack object still carries the one agreed answer — including
+   * for a copy, whose `isSpellCopy` marker dies with the stack object.
+   */
+  resolvesTo?: 'battlefield' | 'graveyard' | 'exile' | 'hand' | 'ceaseToExist';
+  /**
+   * The value chosen for `{X}` when this spell was cast — carried off the stack
+   * object so "deals X damage" still reads the paid-for number AFTER the spell
+   * has left the stack (a resolution outlives its stack object). Absent for
+   * spells without an X cost and for triggers.
+   */
+  xValue?: number;
+  /** Whether the kicker was paid at cast time. Absent when there is no kicker. */
+  kicked?: boolean;
+  /**
+   * How many times the MULTIKICKER was paid at cast time, carried off the
+   * stack object for the same reason as {@link xValue}: "for each time it was
+   * kicked" is read during a resolution that outlives the stack object.
+   */
+  kickCount?: number;
+  /**
+   * PER-EFFECT targets, parallel to {@link effects} — entry `i` is what
+   * `effects[i]` points at, or `undefined` to fall back to the frame-wide
+   * {@link targets}.
+   *
+   * This exists for exactly one reason: a MODAL spell's chosen modes each
+   * aim at their own object ("Counter target spell" + "Return target permanent
+   * to its owner's hand" is two different targets in one resolution), which
+   * one frame-wide list cannot express. Everything else leaves it absent and
+   * reads `targets` exactly as before.
+   *
+   * ⚠️ It is a PARALLEL ARRAY, so anything that splices `effects` must splice
+   * this in lockstep — `enqueueEffects` does, and a test pins it. The
+   * alternative (an object per effect) would have changed a shape every
+   * consumer, every clone and every serialized state already agrees on.
+   */
+  effectTargets?: Array<ReadonlyArray<InstanceId | PlayerId> | undefined>;
   /** The ability's source permanent + label (trigger frames only). */
   sourceInstanceId?: InstanceId;
   label?: string;
+  /**
+   * The player the trigger's event was about — carried off the stack object for
+   * the same reason as {@link xValue}: the resolution outlives the stack object,
+   * and "that player draws an additional card" is read during it. Absent for
+   * spells and for triggers whose event names no player.
+   */
+  triggeringPlayer?: PlayerId;
 }

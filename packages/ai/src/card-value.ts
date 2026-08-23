@@ -15,13 +15,13 @@
 import type { CardInstance, GameState, InstanceId, PlayerId } from '@jonny-boi/core';
 import {
   convertedManaCost,
-  effectivePower,
-  effectiveToughness,
   isCreature,
   isLand,
   PLAYER_IDS,
   playerZone,
 } from '@jonny-boi/core';
+import type { ContinuousIndex } from './board-stats.js';
+import { boardIndex, OFF_BOARD_INDEX, statTotal } from './board-stats.js';
 import type { HeuristicWeights } from './weights.js';
 
 /**
@@ -39,15 +39,28 @@ import type { HeuristicWeights } from './weights.js';
 export interface CardValueContext {
   /** Lands each player controls on the battlefield. */
   readonly landsInPlay: Readonly<Record<PlayerId, number>>;
+  /**
+   * The board's continuous aggregate, built once with the land counts. A card
+   * being ranked can be a PERMANENT (a choice that picks something to sacrifice),
+   * and an anthem, an Equipment or a `*` P/T box changes what that permanent is
+   * worth — so the ruler reads the same numbers combat does.
+   */
+  readonly index: ContinuousIndex;
 }
 
-/** Read the land counts a {@link CardValueContext} needs off a live state. */
-export function cardValueContext(state: GameState): CardValueContext {
+/**
+ * Read the land counts a {@link CardValueContext} needs off a live state.
+ *
+ * `index` is accepted rather than always built because a caller that is already
+ * holding this position's continuous index (every pilot decision is) would
+ * otherwise pay for a second identical pass over the battlefield.
+ */
+export function cardValueContext(state: GameState, index: ContinuousIndex = boardIndex(state)): CardValueContext {
   const landsInPlay: Record<PlayerId, number> = { A: 0, B: 0 };
   for (const perm of state.battlefield) {
     if (isLand(perm.def)) landsInPlay[perm.controller] += 1;
   }
-  return { landsInPlay };
+  return { landsInPlay, index };
 }
 
 /**
@@ -68,7 +81,9 @@ export function cardValue(
   const def = card.def;
   if (isLand(def)) return landValue(card.controller, weights, context);
   if (isCreature(def)) {
-    const stats = effectivePower(card) + effectiveToughness(card);
+    // No context ⇒ the caller has no board (ranking cards in the abstract), so the
+    // read is printed-plus-counters and says so through `OFF_BOARD_INDEX`.
+    const stats = statTotal(card, context?.index ?? OFF_BOARD_INDEX);
     return weights.choiceCreatureBaseValue + stats * weights.choiceCreaturePerStatValue;
   }
   const manaValue = def.cost ? convertedManaCost(def.cost) : 0;

@@ -21,17 +21,25 @@ import type {
   KeywordFlags,
   ManaCost,
   PlayerId,
+  DerivedCountName,
   SpellStackObject,
   TargetRestriction,
 } from '@jonny-boi/core';
 import {
+  ceaseToExistIfToken,
   convertedManaCost,
   DEFAULT_TARGET_RESTRICTION,
+  evaluateDerivedCount,
   entersTapped,
   isCreature,
   isPlayerTarget,
   isTargetRestriction,
   MANA_COLORS,
+  pruneCardGrantsFor,
+  resetInstanceForNewZone,
+  discardDestination,
+  spellCanBeCountered,
+  spellLeaveDestination,
   TARGET_RESTRICTION_PARAM,
 } from '@jonny-boi/core';
 
@@ -46,14 +54,13 @@ import {
  * names one of these or is reported unsupported. An open expression language
  * would let the compiler accept text it only approximately understands, which
  * is the one thing the whole compiler contract forbids.
+ *
+ * It is now core's `DerivedCountName`, re-exported under the name this package
+ * has always used: characteristic-defining P/T (Tarmogoyf) counts the SAME sets
+ * from the stat layer, and two vocabularies would let "cards in your graveyard"
+ * mean one thing in a damage param and another in a P/T box.
  */
-export type DerivedCount =
-  | 'creaturesYouControl'
-  | 'creaturesOpponentControls'
-  | 'creaturesOnBattlefield'
-  | 'landsYouControl'
-  | 'cardsInYourHand'
-  | 'cardsInYourGraveyard';
+export type DerivedCount = DerivedCountName;
 
 /** A numeric param that is computed at resolution instead of printed. */
 export interface DerivedValue {
@@ -70,32 +77,70 @@ function isDerivedValue(value: unknown): value is DerivedValue {
 }
 
 /**
+ * A numeric param whose value is the X chosen when the spell was cast — how
+ * "deals X damage" / "draw X cards" is authored. The value itself lives on the
+ * resolution (`EffectContext.xValue`), charged by the engine at cast time; the
+ * param only says "read it from there".
+ */
+export interface ChosenXValue {
+  readonly chosenX: true;
+}
+
+/** The one param value meaning "the X chosen at cast time". */
+export const CHOSEN_X: ChosenXValue = Object.freeze({ chosenX: true });
+
+/** Whether a param value is the chosen-X descriptor. */
+function isChosenX(value: unknown): value is ChosenXValue {
+  return typeof value === 'object' && value !== null && (value as { chosenX?: unknown }).chosenX === true;
+}
+
+/**
+ * A numeric param with two printed values — the unkicked one and the kicked one
+ * ("deals 2 damage… if this spell was kicked, it deals 4 damage instead").
+ * Which one applies is decided by the cast-time kicked flag on the resolution,
+ * so ONE primitive ref reproduces the whole "instead" sentence and the target
+ * restriction stays on that single ref.
+ */
+export interface KickedSwitchValue {
+  readonly base: number;
+  readonly kicked: number;
+}
+
+/** Whether a param value is a base/kicked pair. */
+function isKickedSwitch(value: unknown): value is KickedSwitchValue {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { base?: unknown }).base === 'number' &&
+    typeof (value as { kicked?: unknown }).kicked === 'number'
+  );
+}
+
+/**
  * Evaluate a derived count against the CURRENT state.
  *
  * "Current" matters: the value is computed when the effect resolves, not when
  * the spell was cast, which is what the printed cards mean and what makes a
  * sweeper-then-pump sequence behave correctly.
+ *
+ * Delegates to core's `evaluateDerivedCount` — the same function the stat layer
+ * uses for a characteristic-defining P/T, so a count cannot mean two things.
  */
 export function evaluateDerived(ctx: EffectContext, value: DerivedValue): number {
-  const you = ctx.controller;
-  const them = otherPlayer(you);
-  const battlefield = ctx.state.battlefield;
-  switch (value.countOf) {
-    case 'creaturesYouControl':
-      return battlefield.filter((c) => c.controller === you && isCreature(c.def)).length;
-    case 'creaturesOpponentControls':
-      return battlefield.filter((c) => c.controller === them && isCreature(c.def)).length;
-    case 'creaturesOnBattlefield':
-      return battlefield.filter((c) => isCreature(c.def)).length;
-    case 'landsYouControl':
-      return battlefield.filter((c) => c.controller === you && c.def.types.includes('land')).length;
-    case 'cardsInYourHand':
-      return ctx.state.players[you].hand.length;
-    case 'cardsInYourGraveyard':
-      return ctx.state.players[you].graveyard.length;
-    default:
-      return 0;
+  // Every count core can answer from the BOARD is answered by core, from the one
+  // shared evaluator (so a spell's "equal to the number of X" and a `*` P/T box
+  // count the identical set). The kick count is the single exception, and it has
+  // to be: it is a fact about THIS RESOLUTION, which core's board-only evaluator
+  // has no way to see.
+  if (value.countOf === 'timesThisWasKicked') {
+    // Two readings, and both are needed. DURING the spell's own resolution the
+    // count rides the frame (`ctx.kickCount`, with a plain kicker counting as
+    // one). AFTERWARDS — an enters-the-battlefield trigger on the permanent that
+    // spell became — the frame is gone and the count lives on the instance
+    // (`timesKicked`, written as it entered).
+    return ctx.kickCount ?? (ctx.kicked === true ? 1 : (ctx.source.timesKicked ?? 0));
   }
+  return evaluateDerivedCount(ctx.state, value.countOf, ctx.controller);
 }
 
 /**
@@ -110,6 +155,11 @@ export function intParam(ctx: EffectContext, key: string, fallback: number): num
   const v = ctx.params[key];
   if (typeof v === 'number' && Number.isFinite(v)) return Math.trunc(v);
   if (isDerivedValue(v)) return evaluateDerived(ctx, v);
+  // "X" — the value chosen (and paid for) at cast time. An unchosen X reads 0,
+  // the direction that can never play better than printed.
+  if (isChosenX(v)) return ctx.xValue ?? 0;
+  // "N… or M instead, if this spell was kicked" — one ref, both printed values.
+  if (isKickedSwitch(v)) return ctx.kicked === true ? v.kicked : v.base;
   return fallback;
 }
 
@@ -133,19 +183,59 @@ export function strArrayParam(ctx: EffectContext, key: string): readonly string[
 
 /**
  * Read a `keywords` param (a `KeywordFlags`-shaped object, e.g. `{ trample: true }`)
- * keeping only the boolean-true flags. A missing/ill-typed param yields an empty
- * grant (safe no-op).
+ * into the flags a grant may set. A missing/ill-typed param yields an empty grant
+ * (safe no-op).
+ *
+ * ⚠️ THE THREE PAYLOAD KEYWORDS ARE NOT BOOLEANS, and dropping them here is
+ * silent. `protectionFrom` is a list of qualities, `ward` and `minBlockers` are
+ * numbers — so a filter of `=== true` threw all three away and turned "target
+ * creature gains protection from red until end of turn" into a spell that
+ * compiled `'complete'` and did NOTHING at resolution. (The rule's test asserted
+ * the compiled EFFECT REFS and never played the card, which is why it stayed
+ * green.) Each is copied here with the same validity check `grantInto` in core's
+ * continuous layer applies when it merges them, so the two cannot disagree about
+ * what a real grant looks like.
  */
 export function keywordsParam(ctx: EffectContext): KeywordFlags {
   const v = ctx.params.keywords;
   if (typeof v !== 'object' || v === null) return {};
   const src = v as Record<string, unknown>;
-  const out: Record<string, boolean> = {};
+  const out: Record<string, unknown> = {};
   for (const key in src) {
     if (src[key] === true) out[key] = true;
   }
+  // The PAYLOAD keywords are not booleans, so the true-filter above drops them —
+  // which is exactly how a granted ward, a granted "except by creatures with
+  // haste", or a granted protection becomes a grant of NOTHING. Each is copied
+  // through by its own shape test, and only when it carries something the engine
+  // can act on, so a malformed param still yields an inert grant rather than a
+  // half-read one.
+  const protection = src.protectionFrom;
+  if (Array.isArray(protection)) {
+    const qualities = protection.filter((q): q is string => typeof q === 'string');
+    if (qualities.length > 0) out.protectionFrom = qualities;
+  }
+  for (const numeric of NUMERIC_KEYWORD_KEYS) {
+    const value = src[numeric];
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) out[numeric] = Math.trunc(value);
+  }
+  // The one payload that is a RECORD rather than a number or a list: a comparing
+  // block restriction ("except by creatures with haste", a power bound, skulk).
+  // It cannot join `NUMERIC_KEYWORD_KEYS` for the same reason `protectionFrom`
+  // cannot — the shape test is what tells a real payload from a stray param.
+  const blockRestriction = src.blockRestriction;
+  if (typeof blockRestriction === 'object' && blockRestriction !== null) {
+    out.blockRestriction = blockRestriction;
+  }
   return out as KeywordFlags;
 }
+
+/**
+ * The keyword flags whose value is a positive NUMBER rather than a boolean.
+ * A table so adding one is a data edit here rather than another `if` above —
+ * and so the omission that made this function drop them cannot recur silently.
+ */
+const NUMERIC_KEYWORD_KEYS: readonly string[] = Object.freeze(['ward', 'minBlockers']);
 
 /**
  * Read a `ManaCost`-shaped param (`{ generic: 3 }`, `{ generic: 1, U: 1 }`) — the
@@ -231,6 +321,56 @@ export function instanceAnywhere(state: GameState, id: InstanceId): CardInstance
   return undefined;
 }
 
+/**
+ * The ONE vocabulary for "which player does this happen to", shared by every
+ * primitive that can happen to somebody other than its controller.
+ *
+ * One table rather than a `whichPlayer` string parsed separately in each
+ * primitive, because the words have to mean the same thing everywhere: Stormfist
+ * Crusader's single printed sentence ("each player draws a card and loses 1
+ * life") compiles to a draw and a life loss that MUST agree on who "each player"
+ * is, and Howling Mine's "that player" must mean the same in a draw as it would
+ * in a damage clause.
+ *
+ *   `'controller'`  (the default, and what an absent param means) — you.
+ *   `'opponent'`    — the other seat. In a two-seat game this is also what the
+ *                     printed plural "each opponent" names; there is no other
+ *                     referent.
+ *   `'targetPlayer'`— the chosen player target, falling back to the controller
+ *                     the way every other target-reading param does.
+ *   `'triggering'`  — the player the TRIGGER's event was about (`that player`,
+ *                     `them`). This is the field that does not otherwise survive
+ *                     into a resolution: an "each player's draw step" ability
+ *                     resolves under its source's controller on both turns, so
+ *                     reading `ctx.controller` here is the Howling-Mine bug.
+ *                     Falls back to the controller when the resolution carries
+ *                     no triggering player (a spell, a self-ETB trigger).
+ *   `'each'`        — BOTH seats, ACTIVE PLAYER FIRST. APNAP is the order the
+ *                     rules sequence anything that happens to each player in
+ *                     turn, and fixing it here is what makes "each player draws
+ *                     a card" reproducible from a seed rather than dependent on
+ *                     which seat the source happens to sit in.
+ *
+ * An unrecognised word resolves to the controller alone — the same safe
+ * degradation every other param has. The compiler never emits one.
+ */
+export function playersForParam(ctx: EffectContext, whichPlayer: string | undefined): readonly PlayerId[] {
+  switch (whichPlayer) {
+    case 'opponent':
+      return [otherPlayer(ctx.controller)];
+    case 'targetPlayer':
+      return [firstPlayerTarget(ctx) ?? ctx.controller];
+    case 'triggering':
+      return [ctx.triggeringPlayer ?? ctx.controller];
+    case 'each': {
+      const active = ctx.state.activePlayer;
+      return [active, otherPlayer(active)];
+    }
+    default:
+      return [ctx.controller];
+  }
+}
+
 /** The first player target among `ctx.targets`, if any. */
 export function firstPlayerTarget(ctx: EffectContext): PlayerId | undefined {
   for (const t of ctx.targets) if (isPlayerTarget(t)) return t;
@@ -310,10 +450,24 @@ export function moveOwnedCard(
   if (index < 0) return undefined;
   const [card] = source.splice(index, 1);
   if (!card) return undefined;
-  card.zone = to;
-  if (position === 'top') owner[to].unshift(card);
-  else owner[to].push(card);
-  ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from, to });
+  // A hand → graveyard move IS a discard (CR 701.8a), and madness replaces
+  // where a discarded card goes. Asked through core's shared
+  // `discardDestination` — the same one core's own `moveToZone` funnel asks — so
+  // a discard made by an effect and a discard made as a cost cannot disagree
+  // about whether a madness card is exiled.
+  const destination: OwnedZone =
+    from === 'hand' && to === 'graveyard'
+      ? (discardDestination(ctx.state, card, ctx.emit) as OwnedZone)
+      : to;
+  card.zone = destination;
+  // CR 400.7: the card is a NEW object in its new zone, so a grant made on the
+  // old one (a granted flashback on a graveyard card) does not follow it. Core's
+  // own `moveToZone` prunes for the same reason; this helper is the cards-side
+  // funnel and must agree with it — see `card-grants.ts`.
+  pruneCardGrantsFor(ctx.state, card.instanceId);
+  if (position === 'top') owner[destination].unshift(card);
+  else owner[destination].push(card);
+  ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from, to: destination });
   return card;
 }
 
@@ -339,6 +493,15 @@ export function putOntoBattlefield(
      * charged by the engine, so the entry must honour it.
      */
     readonly ignoreEntersTapped?: boolean;
+    /**
+     * Who ends up CONTROLLING it, when that is not whose zone it came from.
+     * A blink says "exile target creature you control, then return that card to
+     * the battlefield **under your control**" — and a card always goes to its
+     * OWNER's exile on the way out (CR 400.3), so for a creature you control but
+     * do not own the two players genuinely differ. Defaults to `player`, which
+     * is every other caller's case.
+     */
+    readonly controller?: PlayerId;
   } = {},
 ): CardInstance | undefined {
   const owner = ctx.state.players[player];
@@ -348,7 +511,7 @@ export function putOntoBattlefield(
   const [card] = source.splice(index, 1);
   if (!card) return undefined;
   card.zone = 'battlefield';
-  card.controller = player;
+  card.controller = options.controller ?? player;
   card.tapped = options.ignoreEntersTapped === true ? options.tapped === true : options.tapped === true || entersTapped(card.def);
   card.summoningSick = isCreature(card.def) && card.def.keywords?.haste !== true;
   card.damageMarked = 0;
@@ -369,17 +532,34 @@ export function movePermanentTo(ctx: EffectContext, perm: CardInstance, to: Owne
   if (idx < 0) return;
   ctx.state.battlefield.splice(idx, 1);
   perm.zone = to;
-  perm.tapped = false;
-  perm.damageMarked = 0;
-  perm.markedByDeathtouch = false;
-  perm.summoningSick = false;
-  perm.counters = {};
+  // CR 400.7 — the permanent is a NEW object in its new zone, so every scrap of
+  // battlefield-only state goes with the move: tapped, marked damage, summoning
+  // sickness, counters, what it was attached to, its once-per-turn loyalty
+  // marker, its kick count, the value it named as it entered, and which face is
+  // up (CR 712.8a — a bounced Aberration is a Delver in hand).
+  //
+  // ⚠️ Called, not re-implemented. This USED to be a hand-copied list and it had
+  // already drifted from core's by three fields, each of which is a card playing
+  // differently depending on WHICH funnel bounced it: an Aura came back still
+  // pointing at its old host, a planeswalker could not activate again after being
+  // replayed, and an "as ~ enters, choose a type" lord still lorded over the type
+  // it named last time. Two funnels, one answer.
+  resetInstanceForNewZone(perm);
   // A permanent always goes to its OWNER's zone, not its controller's. Its
   // `controller` field is left as it was: it is the last-known information an
   // after-the-fact effect reads (Path to Exile compensates the creature's
   // *controller* only after the creature has already been exiled).
+  // Same CR 400.7 prune as `moveOwnedCard` — a permanent carries no grant
+  // today, but the two funnels must not disagree about what a zone change does.
+  pruneCardGrantsFor(ctx.state, perm.instanceId);
   ctx.state.players[perm.owner][to].push(perm);
   ctx.emit({ type: 'zoneChange', instanceId: perm.instanceId, from: 'battlefield', to });
+  // CR 704.5d — a token that has left the battlefield ceases to exist. Core's
+  // shared implementation, called AFTER the zoneChange so every "dies" trigger
+  // still sees the move: this helper is the cards-side leave funnel and must
+  // agree with core's `moveToZone`, or whether a dead token lingers in the
+  // graveyard would depend on which primitive destroyed it.
+  ceaseToExistIfToken(ctx.state, perm, ctx.emit);
 }
 
 /**
@@ -399,8 +579,21 @@ export function targetedSpellOnStack(ctx: EffectContext): SpellStackObject | und
 }
 
 /**
- * Counter `spell`: take it off the stack and put its card into its owner's
- * graveyard without resolving.
+ * Counter `spell`: take it off the stack and put its card where a countered copy
+ * of it goes — the owner's graveyard normally, EXILE when it was cast via
+ * flashback (CR 702.34a exiles the card any time it would leave the stack, and
+ * being countered is leaving the stack), and the graveyard even when its buyback
+ * cost was paid (CR 702.27a returns it to hand only as it resolves). The destination is core's
+ * `spellLeaveDestination`, the same answer resolution uses, so countering and
+ * resolving cannot disagree about where a flashback card ends up.
+ *
+ * …AND NO ZONE AT ALL when the thing being countered is a COPY of a spell
+ * (CR 704.5e). A copy is not a card: there is nothing to put in a graveyard, and
+ * putting one there would hand the game a phantom card that delirium, flashback
+ * and Tarmogoyf all count. This is the second of the two exits from the stack,
+ * living in a different package from the first, which is exactly why the answer
+ * is a value in `spellLeaveDestination`'s return type rather than an `if` at
+ * each call site: a caller cannot type-check without handling it.
  *
  * One implementation, shared by the plain counterspell and the "unless its
  * controller pays" one. They differ ONLY in whether the payment happens first, and
@@ -410,11 +603,36 @@ export function targetedSpellOnStack(ctx: EffectContext): SpellStackObject | und
 export function counterSpellOnStack(ctx: EffectContext, spell: SpellStackObject): void {
   const idx = ctx.state.stack.indexOf(spell);
   if (idx < 0) return;
+  // "THIS SPELL CAN'T BE COUNTERED" (CR 701.5a) is enforced HERE and nowhere else,
+  // because this is the one function every counter path funnels through. It is
+  // deliberately not a TARGETING restriction: an uncounterable spell is a legal
+  // target, and the counterspell resolves, does nothing, and is still spent —
+  // refusing the target instead would hand the caster their card back.
+  if (!spellCanBeCountered(ctx.state, spell.card.def, spell.controller)) {
+    ctx.emit({
+      type: 'counterPrevented',
+      instanceId: spell.instanceId,
+      name: spell.card.def.name,
+      controller: spell.controller,
+    });
+    return;
+  }
   ctx.state.stack.splice(idx, 1);
   const card = spell.card;
-  card.zone = 'graveyard';
-  ctx.state.players[card.owner].graveyard.push(card);
-  ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: 'graveyard' });
+  // COUNTERED, not resolved — the distinction the reason argument exists for: a
+  // flashback card is exiled either way, but a bought-back spell returns to hand
+  // only as it RESOLVES, so a countered one belongs in the graveyard.
+  const to = spellLeaveDestination(spell, 'counter');
+  if (to === 'ceaseToExist') {
+    // Emitted INSTEAD of a `zoneChange`, which is the point: a log, a replay or
+    // an inspector folding zone changes must not put this object in a graveyard,
+    // because the game never did.
+    ctx.emit({ type: 'spellCopyCeasedToExist', instanceId: card.instanceId, name: card.def.name });
+    return;
+  }
+  card.zone = to;
+  ctx.state.players[card.owner][to].push(card);
+  ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to });
 }
 
 // --- misc -----------------------------------------------------------------------

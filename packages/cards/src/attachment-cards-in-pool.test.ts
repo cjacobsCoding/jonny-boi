@@ -152,6 +152,12 @@ describe('each shipped attachment says what its printed line says', () => {
     ["Serra's Embrace", 2, 2, ['flying', 'vigilance']], // "+2/+2 and has flying and vigilance."
     ['Unflinching Courage', 2, 2, ['trample', 'lifelink']], // "+2/+2 and has trample and lifelink."
     ['Gift of Orzhova', 1, 1, ['flying', 'lifelink']], // "+1/+1 and has flying and lifelink."
+    // An aura on the FRONT face of a modal DFC — the land back face changes
+    // nothing about what the aura does once it is on a creature.
+    ['Glasswing Grace', 2, 2, ['flying', 'lifelink']], // "+2/+2 and has flying and lifelink."
+    ['Aqueous Form', 0, 0, ['unblockable']], // "Enchanted creature can't be blocked."
+    ['Elephant Guide', 3, 3, []], // "Enchanted creature gets +3/+3."
+    ['Spirit Mantle', 1, 1, ['protectionFrom:creatures']], // "+1/+1 and protection from creatures."
     // Equipment
     ['Bone Saw', 1, 0, []], // "Equipped creature gets +1/+0."
     ['Bonesplitter', 2, 0, []], // "Equipped creature gets +2/+0."
@@ -167,6 +173,20 @@ describe('each shipped attachment says what its printed line says', () => {
     ['Mask of Avacyn', 1, 2, ['hexproof']], // "gets +1/+2 and has hexproof."
     ['Loxodon Warhammer', 3, 0, ['trample', 'lifelink']], // "+3/+0 and has trample and lifelink."
     ['Sword of Vengeance', 2, 0, ['firstStrike', 'vigilance', 'trample', 'haste']],
+    ['Darksteel Axe', 2, 0, []], // "Equipped creature gets +2/+0." (the Equipment itself is indestructible)
+    ['Darksteel Plate', 0, 0, ['indestructible']], // "Equipped creature has indestructible."
+    ['Whispersilk Cloak', 0, 0, ['unblockable', 'shroud']], // "can't be blocked and has shroud."
+    // Equipment that grants only keywords — no P/T line at all, which is the
+    // shape a "+0/+0 means it grants nothing" reading would silently blank.
+    ['Basilisk Collar', 0, 0, ['deathtouch', 'lifelink']], // "has deathtouch and lifelink."
+    ['Lightning Greaves', 0, 0, ['haste', 'shroud']], // "has haste and shroud."
+    ['Swiftfoot Boots', 0, 0, ['hexproof', 'haste']], // "has hexproof and haste."
+    // Equipment whose real text is a TRIGGER — the modification is only half the
+    // card, and transcribing it here is what proves the other half did not eat it.
+    ['Argentum Armor', 6, 6, []], // "Equipped creature gets +6/+6." (+ an attack trigger)
+    ['Skullclamp', 1, -1, []], // "Equipped creature gets +1/-1." (+ a dies trigger)
+    ['Sword of the Animist', 1, 1, []], // "Equipped creature gets +1/+1." (+ an attack trigger)
+    ['Sword of Fire and Ice', 2, 2, ['protectionFrom:red', 'protectionFrom:blue']],
   ];
 
   it('covers every attachment in the pool — a new card cannot slip in unread', () => {
@@ -184,9 +204,15 @@ describe('each shipped attachment says what its printed line says', () => {
       expect(modifies, `${name} grants nothing`).toBeDefined();
       expect(modifies!.power ?? 0).toBe(power);
       expect(modifies!.toughness ?? 0).toBe(toughness);
+      // A LIST-valued keyword (`protectionFrom: ['red', 'blue']`) is expanded
+      // one entry per value, so the table transcribes WHICH protection the card
+      // prints. Reading it as a bare `protectionFrom` would pass a Sword of Fire
+      // and Ice that granted protection from white.
       const granted = Object.entries(modifies!.keywords ?? {})
-        .filter(([, on]) => on)
-        .map(([keyword]) => keyword)
+        .filter(([, on]) => (Array.isArray(on) ? on.length > 0 : on))
+        .flatMap(([keyword, on]) =>
+          Array.isArray(on) ? on.map((value) => `${keyword}:${String(value)}`) : [keyword],
+        )
         .sort();
       expect(granted).toEqual([...keywords].sort());
     });
@@ -344,8 +370,15 @@ describe('the pool Equipment really equips, moves, and survives its host', () =>
     expect(host, 'Bonesplitter ended the game attached to nothing').toBeDefined();
     const equipment = game.state.battlefield.find((c) => c.def.name === 'Bonesplitter')!;
     expect(host!.controller).toBe(equipment.controller);
+    // A deck plays FOUR Bonesplitters, and stacking two on one creature is a
+    // real (and correct) line — so the assertion counts what is actually on this
+    // host rather than assuming one, exactly as the Aura test above does.
+    const onThisHost = game.state.battlefield.filter(
+      (c) => c.def.name === 'Bonesplitter' && c.attachedTo === host!.instanceId,
+    ).length;
+    expect(onThisHost).toBeGreaterThan(0);
     const mod = indexContinuous(game.state).get(host!.instanceId) ?? NO_MOD;
-    expect(effectivePower(host!, mod)).toBe((host!.def.power ?? 0) + 2);
+    expect(effectivePower(host!, mod)).toBe((host!.def.power ?? 0) + 2 * onThisHost);
   });
 
   it('an Equipment whose creature dies UNATTACHES and stays on the battlefield (CR 704.5n)', () => {

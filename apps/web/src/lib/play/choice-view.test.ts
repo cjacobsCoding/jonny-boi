@@ -10,6 +10,9 @@ import {
   emptyDraft,
   isChoiceForViewer,
   orderBadge,
+  pickCount,
+  setChooseNumber,
+  setChosenValue,
   setConfirm,
   setPayLife,
   setPayMana,
@@ -102,23 +105,59 @@ describe('choice-view — the submit gate agrees with the engine', () => {
     expect(draftStatus(choice, full).canSubmit).toBe(true);
   });
 
+  /** A "choose N modes" question, optionally the repeats form. */
+  function modes(opts: { min: number; max: number; allowRepeats?: boolean }): PendingChoice {
+    return {
+      ...BASE,
+      kind: 'chooseModes',
+      modes: [
+        { id: 'm1', label: 'Draw a card' },
+        { id: 'm2', label: 'Gain 3 life' },
+        { id: 'm3', label: 'Deal 2 damage' },
+      ],
+      allowRepeats: opts.allowRepeats ?? false,
+      min: opts.min,
+      max: opts.max,
+    };
+  }
+
+  it('lets a repeats choice pick the SAME mode twice, and counts it', () => {
+    // "You may choose the same mode more than once": clicking a picked mode adds
+    // another copy instead of deselecting it, because HOW MANY times is the
+    // answer. Without this the UI could never submit "Gain 3 life twice".
+    const choice = modes({ min: 2, max: 2, allowRepeats: true });
+    let draft = toggleOption(choice, emptyDraft(choice), 'm1');
+    draft = toggleOption(choice, draft, 'm1');
+    expect(pickCount(draft, 'm1')).toBe(2);
+    const status = draftStatus(choice, draft);
+    expect(status.canSubmit).toBe(true);
+    expect(status.answer).toEqual({ kind: 'chooseModes', modeIds: ['m1', 'm1'] });
+    // AT THE MAXIMUM a further click removes one copy instead of overflowing —
+    // so a human who over-picked can step back one without clearing the whole
+    // draft. The draft can never exceed `max`, which is what keeps it
+    // submittable at all times.
+    expect(pickCount(toggleOption(choice, draft, 'm1'), 'm1')).toBe(1);
+    // Clearing is how a repeats draft is undone.
+    expect(pickCount(clearDraft(choice, draft), 'm1')).toBe(0);
+  });
+
+  it('a NON-repeats modes choice still deselects on a second click', () => {
+    const choice = modes({ min: 0, max: 2 });
+    let draft = toggleOption(choice, emptyDraft(choice), 'm1');
+    draft = toggleOption(choice, draft, 'm1');
+    expect(pickCount(draft, 'm1')).toBe(0);
+  });
+
   it('never produces an answer the engine would reject', () => {
     const cases: PendingChoice[] = [
       selectCards({ min: 0, max: 2 }),
       selectCards({ min: 1, max: 1 }),
       selectCards({ min: 3, max: 3, ordered: true }),
       { ...BASE, kind: 'selectPlayers', candidates: ['A', 'B'], min: 1, max: 1 } as PendingChoice,
-      {
-        ...BASE,
-        kind: 'chooseModes',
-        modes: [
-          { id: 'm1', label: 'Draw a card' },
-          { id: 'm2', label: 'Gain 3 life' },
-          { id: 'm3', label: 'Deal 2 damage' },
-        ],
-        min: 2,
-        max: 2,
-      } as PendingChoice,
+      modes({ min: 2, max: 2 }),
+      // The repeats form is its own case: its draft may legally hold the SAME
+      // mode several times, which every other kind forbids.
+      modes({ min: 2, max: 2, allowRepeats: true }),
       { ...BASE, kind: 'confirm', min: 1, max: 1 } as PendingChoice,
     ];
     for (const choice of cases) {
@@ -372,5 +411,122 @@ describe('choice-view — prompt copy + viewer gating', () => {
     expect(zoneLabel('graveyard')).toBe('graveyard');
     expect(zoneLabel('somewhere-new')).toBe('somewhere-new');
     expect(zoneLabel(undefined)).toBeUndefined();
+  });
+});
+
+describe('choice-view — naming a value ("As ~ enters, choose a creature type")', () => {
+  function chooseValue(options = [{ value: 'goblin', label: 'goblin' }, { value: 'elf', label: 'elf' }]): PendingChoice {
+    return {
+      ...BASE,
+      kind: 'chooseValue',
+      prompt: 'As Cavern of Souls enters, choose a creature type',
+      sourceName: 'Cavern of Souls',
+      subject: 'creatureType',
+      options,
+      min: 1,
+      max: 1,
+    } as PendingChoice;
+  }
+
+  it('starts UNDECIDED — an empty draft must not read as "named nothing"', () => {
+    // Naming nothing IS a legal answer, so the two states have to stay
+    // distinguishable or the Confirm button would submit the moment it opened.
+    const choice = chooseValue();
+    const draft = emptyDraft(choice);
+    expect(draftToAnswer(draft)).toBeNull();
+    const status = draftStatus(choice, draft);
+    expect(status.canSubmit).toBe(false);
+    expect(status.hint).toBe('Name one.');
+  });
+
+  it('a named value submits as the engine-valid answer', () => {
+    const choice = chooseValue();
+    const status = draftStatus(choice, setChosenValue(emptyDraft(choice), 'elf'));
+    expect(status.canSubmit).toBe(true);
+    expect(status.answer).toEqual({ kind: 'chooseValue', value: 'elf' });
+    expect(validateChoiceAnswer(choice, status.answer!).ok).toBe(true);
+  });
+
+  it('behaves like a RADIO group — naming again replaces, never accumulates', () => {
+    const choice = chooseValue();
+    const draft = setChosenValue(setChosenValue(emptyDraft(choice), 'goblin'), 'elf');
+    expect(draftToAnswer(draft)).toEqual({ kind: 'chooseValue', value: 'elf' });
+  });
+
+  it('a value that was never offered is refused by the engine validator the button obeys', () => {
+    const choice = chooseValue();
+    const status = draftStatus(choice, setChosenValue(emptyDraft(choice), 'sliver'));
+    expect(status.canSubmit).toBe(false);
+  });
+
+  it('the prompt copy says the naming is public and permanent, and offers no "choose none"', () => {
+    const view = choicePromptView(chooseValue(), NAMES);
+    expect(view.requirement).toContain('creature type');
+    expect(view.requirement).toContain('announced');
+    // `optional` drives the "Choose none" button; a naming is never optional.
+    expect(view.optional).toBe(false);
+    expect(view.optionCount).toBe(2);
+  });
+
+  it('selection machinery no-ops on it — it is a scalar, not a selection', () => {
+    const choice = chooseValue();
+    const draft = setChosenValue(emptyDraft(choice), 'goblin');
+    expect(toggleOption(choice, draft, 'elf')).toBe(draft);
+    expect(clearDraft(choice, draft)).toBe(draft);
+    expect(draftValues(draft)).toEqual([]);
+  });
+});
+
+describe('choice-view — choosing a number (a value for X)', () => {
+  function chooseNumber(min = 0, max = 4): PendingChoice {
+    return {
+      ...BASE,
+      kind: 'chooseNumber',
+      prompt: 'Choose a value for X (Blaze)',
+      sourceName: 'Blaze',
+      min,
+      max,
+    } as PendingChoice;
+  }
+
+  it('starts undecided and cannot submit until a value is picked', () => {
+    const choice = chooseNumber();
+    const draft = emptyDraft(choice);
+    expect(draftToAnswer(draft)).toBeNull();
+    const status = draftStatus(choice, draft);
+    expect(status.canSubmit).toBe(false);
+    expect(status.hint).toBe('Choose a value.');
+  });
+
+  it('a picked value submits as the engine-valid chooseNumber answer', () => {
+    const choice = chooseNumber();
+    const draft = setChooseNumber(emptyDraft(choice), 3);
+    const status = draftStatus(choice, draft);
+    expect(status.canSubmit).toBe(true);
+    expect(status.answer).toEqual({ kind: 'chooseNumber', value: 3 });
+    expect(validateChoiceAnswer(choice, status.answer!).ok).toBe(true);
+  });
+
+  it('X = 0 is a submittable answer (a legal cast, not a decline)', () => {
+    const choice = chooseNumber();
+    const status = draftStatus(choice, setChooseNumber(emptyDraft(choice), 0));
+    expect(status.canSubmit).toBe(true);
+    expect(status.answer).toEqual({ kind: 'chooseNumber', value: 0 });
+  });
+
+  it('an out-of-range value is refused by the engine validator the button obeys', () => {
+    const choice = chooseNumber(0, 2);
+    const status = draftStatus(choice, setChooseNumber(emptyDraft(choice), 9));
+    expect(status.canSubmit).toBe(false);
+  });
+
+  it('selection machinery no-ops on a scalar draft, and the prompt copy names the range', () => {
+    const choice = chooseNumber(0, 4);
+    const draft = setChooseNumber(emptyDraft(choice), 2);
+    expect(toggleOption(choice, draft, 1)).toBe(draft);
+    expect(clearDraft(choice, draft)).toBe(draft);
+    const view = choicePromptView(choice, NAMES);
+    expect(view.optional).toBe(false); // no "choose none" button — 0 is a real answer
+    expect(view.requirement).toContain('from 0 to 4');
   });
 });

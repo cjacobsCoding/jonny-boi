@@ -20,6 +20,7 @@
  * definition of the card shape (no duplicated interfaces here).
  */
 import type { CardIndex, NormalizedCard, ManaCost } from '@jonny-boi/data-tools';
+import { COPY_ID_SUFFIX } from '@jonny-boi/core';
 import rawIndex from '../data/card-index.json';
 import { engineDisplayCards } from './cards/enginePool.js';
 import { importedCard, importedCards } from './decklist/importedCards.js';
@@ -67,11 +68,73 @@ const displayablePool: readonly NormalizedCard[] = [...cardsById.values()].sort(
 );
 
 /**
+ * The id suffix the card compiler stamps on a transforming DFC's BACK-face
+ * definition (`<frontId>#back` — see `BACK_FACE_ID_SUFFIX` in
+ * `@jonny-boi/cards`). Kept as a literal here so the display layer needs no
+ * dependency on the compiler package; `getCard`'s own test pins the two agree.
+ */
+export const BACK_FACE_ID_SUFFIX = '#back';
+
+/** Which face of a DFC record a back-face id refers to (0 = front). */
+const BACK_FACE_INDEX = 1;
+
+/**
+ * Synthesized display records for back faces, built lazily and memoized: a
+ * transformed permanent's `cardId` is `<frontId>#back`, and the board/hover
+ * must show the BACK face's own name, art, type line and P/T — the whole point
+ * of per-face Scryfall data. Deliberately NOT part of {@link cardsById}: a back
+ * face is not a card you can put in a deck, so it must never appear in the
+ * browser/deck-builder pool.
+ */
+const backFaceCache = new Map<string, NormalizedCard | undefined>();
+
+function backFaceRecord(backId: string): NormalizedCard | undefined {
+  if (backFaceCache.has(backId)) return backFaceCache.get(backId);
+  const frontId = backId.slice(0, -BACK_FACE_ID_SUFFIX.length);
+  const front = cardsById.get(frontId) ?? importedCard(frontId);
+  const face = front?.faces?.[BACK_FACE_INDEX];
+  const record: NormalizedCard | undefined =
+    front && face
+      ? {
+          ...front,
+          id: backId,
+          name: face.name,
+          manaCost: face.manaCost,
+          typeLine: face.typeLine,
+          rawTypeLine: face.rawTypeLine,
+          oracleText: face.oracleText,
+          power: face.power,
+          toughness: face.toughness,
+          colors: face.colors,
+          imageUris: face.imageUris,
+          // Face records carry no localImages of their own; remote art only.
+          localImages: {},
+          faces: [],
+        }
+      : undefined;
+  backFaceCache.set(backId, record);
+  return record;
+}
+
+/**
  * Resolve a card by id, or `undefined` if it is in neither the curated pool nor
  * the user's imported cards. Every display path (deck lists, curves, validation)
- * goes through here, so an imported card renders exactly like a curated one.
+ * goes through here, so an imported card renders exactly like a curated one —
+ * and a transformed DFC's back-face id (`<frontId>#back`) resolves to a record
+ * built from that face's own Scryfall data, so the board and CardHover show the
+ * active face's art.
  */
 export function getCard(id: string): NormalizedCard | undefined {
+  if (id.endsWith(BACK_FACE_ID_SUFFIX)) return backFaceRecord(id);
+  // A COPY's definition id is the COPIED card's id plus `#copy` (core's
+  // `COPY_ID_SUFFIX`) -- derived exactly as a back face is, and for the same
+  // reason: the copy is not the pool's row for that card, because the printed
+  // "except" tail may have changed its name or its types. What it should LOOK
+  // like, though, is the thing it copied, so the id resolves to that record and
+  // the board shows a Clone wearing the copied creature's art.
+  if (id.endsWith(COPY_ID_SUFFIX)) {
+    return getCard(id.slice(0, -COPY_ID_SUFFIX.length));
+  }
   return cardsById.get(id) ?? importedCard(id);
 }
 

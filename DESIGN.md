@@ -93,7 +93,9 @@ The `chooseAction` interface + read-only game view + legal-action generator; a `
 `MctsConfig`) remains *selectable* but is a research option, not a recommendation — and this paragraph
 used to claim the opposite, which is why the numbers are recorded here rather than an impression:
 
-- **Speed:** ~0.09 games/sec vs the heuristic's ~176 — a **2000×** gap. It is structural (`sims × depth`
+- **Speed:** ~0.09 games/sec vs the heuristic's ~176 — a **2000×** gap. (Both are wall clock on a quiet
+  box. This machine is now shared, and the same heuristic build reads anywhere from 39 to 87 games/sec
+  depending on what else is running — see §3.4f on why every throughput claim here should be paired.) It is structural (`sims × depth`
   engine plies per decision), not garbage, so allocation work does not reach it: a measured 19% cut in
   MCTS-side allocation moved wall clock within run-to-run noise.
 - **Strength:** measured *worse*, not better. Over 120 seeded games with seat and play rotated it won
@@ -156,8 +158,18 @@ produced the 40.8% above). ⚠️ **Two matchups were measured, and they do not 
 | Mono-Red Aggro vs Boros Aggro, n=120 | `mcts` (vanilla) | 40.8% | [32.5%, 49.8%] | 39 ms |
 | Mono-Red Aggro vs Boros Aggro, n=120 | **`hybrid`** *(pre-§3.4e)* | **60.0%** | **[51.1%, 68.3%]** | 7.07 ms (p95 66 ms) |
 | UW Control vs Golgari Midrange, n=80 | `hybrid` *(pre-§3.4e)* | 53.8% | **[42.9%, 64.3%]** | 27.7 ms (p95 155 ms) |
-| Mono-Red Aggro vs Boros Aggro, n=120 | **`hybrid`** *(current)* | **55.8%** | **[46.9%, 64.4%]** | 6.13 ms (p95 52.7 ms) |
-| UW Control vs Golgari Midrange, n=80 | `hybrid` *(current)* | 48.8% | **[38.1%, 59.5%]** | 9.05 ms (p95 88.2 ms) |
+| Mono-Red Aggro vs Boros Aggro, n=120 | **`hybrid`** *(pre-§3.4f)* | **55.8%** | **[46.9%, 64.4%]** | 6.13 ms (p95 52.7 ms) |
+| UW Control vs Golgari Midrange, n=80 | `hybrid` *(pre-§3.4f)* | 48.8% | **[38.1%, 59.5%]** | 9.05 ms (p95 88.2 ms) |
+| Mono-Red Aggro vs Boros Aggro, n=120 | **`hybrid`** *(current)* | **55.0%** | **[46.1%, 63.6%]** | 14.97 ms (p95 117 ms) |
+| UW Control vs Golgari Midrange, n=80 | `hybrid` *(current)* | 45.0% | **[34.6%, 55.9%]** | 20.95 ms (p95 154 ms) |
+
+⚠️ **The `(current)` rows were re-measured on 2026-08-19 after §3.4f** (the pilots could not see the
+board). Both intervals still include 50% and both still overlap the pre-§3.4f rows, so nothing about the
+hybrid's standing changed — which is expected for the reason this section already gives twice: the
+heuristic is simultaneously the baseline and the hybrid's own prior. ⚠️ **Do NOT read the decision-time
+columns across those two pairs of rows.** They are wall clock on a box shared by six agents, and the
+same build measured 2× apart on this machine within an hour; the throughput claim that IS defensible is
+§3.4f's paired CPU-time and allocation comparison.
 
 ⚠️ **THE MARGIN SHRANK BECAUSE THE OPPONENT GOT BETTER, AND THAT IS NOT A REGRESSION IN THIS PILOT.**
 §3.4e fixed land sequencing in the `heuristic`, which is simultaneously the **baseline this table
@@ -210,6 +222,94 @@ is the **only** kind the Lab's evaluation path may use; `millis` (`PLAY_HYBRID_C
 play only. A wall-clock budget makes the search machine-dependent and destroys the common-random-numbers
 property the paired A/B verdict rests on — the same trap `MctsConfig.maxDecisionMillis` documents. Pinned
 by a test.
+
+### 3.4f The pilots could not see the board — ✅ fixed  *(the highest-value known correctness bug)*
+`packages/ai/src/board-stats.ts`. Core's stat accessors take an `AggregatedMod` that **defaults to
+"nothing modifies this"**. In core that default means "I have already established no modification can
+apply". In `packages/ai` it meant nothing of the kind: ~40 call sites simply never passed one, so every
+pilot evaluated the **printed card**.
+
+What that cost, all of it live on `main` until this branch:
+- a **characteristic-defining `*` P/T evaluated as 0/0** — a Tarmogoyf was the least threatening object
+  on the board to every pilot, because its real numbers arrive ONLY as `AggregatedMod.basePower` (§3.11);
+- **every anthem was invisible** — a pilot with a lord out attacked, blocked, traded and priced removal
+  on numbers its own board had already changed;
+- **Auras and Equipment were invisible the same way**, so the whole attachment seam was unseen by
+  evaluation, including the pilot's own decision about which creature should carry a sword;
+- **granted keywords were read two different ways**: the rules path read the granted set, while the AI's
+  `canBlockByEvasion` read `def.keywords`, so the pilot proposed blocks the engine then rejected.
+
+**The fix is a seam, not 40 edits.** `board-stats.ts` wraps the accessors with the index **required**, the
+package no longer imports the bare-defaulting ones at all, and `bare-stats.test.ts` reads the package's
+own source and fails the build if a single-argument call reappears. That is the repo's standing
+discipline — make the wrong thing unspellable rather than remember not to spell it — applied to the one
+accessor that silently lies. One `ContinuousIndex` is built per decision and threaded; `tactical.ts`'s
+`index` parameter and `assessPosition`'s went from optional to **required**, which is what closed the
+evaluator's own "no continuous index, deliberately" hole.
+
+**Guards that FAIL on the old behaviour** (`packages/sim/src/pilot-quality.test.ts`, verified red against
+a separate `origin/main` checkout and green here): removal is aimed at the creature an anthem made
+biggest rather than the biggest printed one; a `*` P/T creature is valued above zero; a 4/4 does not
+attack into an anthem-boosted 3/3 that is really a 6/6. The third carries an explicit precondition that
+the engine offered the attack at all — without it, "declared no attackers" and "was never offered one"
+are the same observation, which is the recurring failure shape in this repo.
+
+⚠️ **MEASURED: MORE CORRECT, NOT MEASURABLY STRONGER — and it ships anyway, because it is a bug fix.**
+Fixed heuristic vs the OLD heuristic head to head, one process, seat and play rotated, paired seeds, the
+old pilot loaded from a separate `origin/main` worktree built at the same commit: measured at
+origin/main `8152d7f`, before this branch merged the indestructible/menace-blocking work that
+landed after it — that work touches both arms' successors equally and is not in either arm here.
+
+| matchup | n | fixed wins | 95% CI |
+|---|---|---|---|
+| Mono-Red Aggro vs Boros Aggro | 3,000 | **50.5%** | [48.7%, 52.3%] |
+| Mono-Green Ramp vs Rakdos Goblins | 3,000 | **51.3%** | [49.5%, 53.1%] |
+| UW Control vs Golgari Midrange | 3,000 | 47.8% (129 draws) | [46.0%, 49.6%] |
+| **pooled** | **9,000** | **49.9%** | **[48.9%, 50.9%]** |
+
+The pooled interval **straddles 50%**: on this card pool the fix is worth nothing measurable. Read the
+control row with §3.4e's warning in hand — `winRate` is wins/**games**, so its 129 timeout draws count
+against the challenger; on **decisive games only that matchup is 1,435–1,436, i.e. 49.98%**. Nothing here
+says the pilot got worse.
+
+That is not surprising and it is not a reason to hold the fix. This pool contains **no anthem** and few
+attachments, so most of what the fix corrects has nothing to act on — the behaviour that does change is
+combat tricks, Equipment hosts and granted evasion. The value is that **the moment a pool gains an anthem
+or a lord, every pilot and every A/B verdict is already correct**, instead of silently pricing the board
+wrong. The repo's own precedent (§3.4d) shipped a more-correct evaluator OFF because it was not stronger;
+this one is different in kind — a wrong reading of the game state is a defect, not a tuning choice.
+
+**Baselines re-measured on this branch (2026-08-19), because the fix moves the pilot every one of them
+is measured with or against.** Machine note: this box is shared by six agents and its wall clock drifts
+~2× between runs, so the paired ratios below are **CPU time**, and the raw games/sec figures are recorded
+only for shape.
+
+| measurement | before (origin/main, same box, same seeds) | after |
+|---|---|---|
+| Gauntlet, Mono-Red Aggro, 200 games/deck, seed 4242 | 419/1400 = **29.9%** [27.6, 32.4] | 432/1400 = **30.9%** [28.5, 33.3] |
+| — its UW Control cell (the biggest single move) | 55/200 = **27.5%** | 65/200 = **32.5%** |
+| — its Mono-Green Ramp cell (mono vs mono) | 33/200 = **16.5%** | 33/200 = **16.5%** — unchanged |
+| `hybrid` vs `heuristic`, Mono-Red vs Boros, n=120 | **55.8%** [46.9, 64.4] | **55.0%** [46.1, 63.6] |
+| `hybrid` vs `heuristic`, UW vs Golgari, n=80 | **48.8%** [38.1, 59.5] | **45.0%** [34.6, 55.9] (4 draws) |
+
+The hybrid rows barely move, and for the reason §3.4a already gives: the heuristic is simultaneously the
+baseline the hybrid is measured against **and** the hybrid's own prior and rollout policy, so both sides
+of that comparison moved together.
+
+**Throughput (rule 7) — parity, measured three ways because wall clock on this box is worthless.**
+- **Allocation** (the machine-independent metric `mcts-bench.mjs` documents — semi-space pinned to 1 MB,
+  scavenges counted): **93 scavenges over 60 games vs the old pilot's 96**, i.e. 3.14e-3 vs 3.17e-3
+  scavenges per action. The fix allocates marginally **less**, not more.
+- **CPU time per decision**, both pilots answering the **identical 4,000 captured positions**, 20
+  interleaved passes, three independent runs: **0.978× / 1.009× / 0.990×**.
+- End-to-end games/sec, paired and interleaved: within the CPU clock's 15.6 ms resolution of parity.
+
+Parity is not free and was not assumed: the first implementation built the index at the top of every
+decision and a second one inside `cardValueContext`. Three changes paid for it — the index is built
+**after** the three early returns that never read a stat (a parked question, no legal actions, only-pass),
+`cardValueContext` accepts a prebuilt index instead of building its own, and the battlefield selectors
+(`creaturesControlledBy`, `findInstance`, …) became closure-free indexed loops like the action predicates
+beside them.
 
 ### 3.4b Tree reuse between decisions — ✅ built, measured, shipped OFF  *(brief §21–22)*
 The hybrid used to throw its whole search away after every macro. It can now **re-root onto the tree it
@@ -603,6 +703,15 @@ statement is that they are not separable from zero here, not that they are worth
 | measurement | before | after |
 |---|---|---|
 | Gauntlet, Mono-Red Aggro, 40 games/deck, seed 99 | 92/280 = **32.9%** | 79/280 = **28.2%** |
+
+> 📌 **THIS FIGURE HAS SINCE MOVED, and the move is in this table's own spirit.** The 79/280 above
+> was superseded by 81/280 as later branches landed, and CR 514.1 (the cleanup discard, §3.29) took
+> it back down. Measured against `origin/main` at `ab0e41a`, the CURRENT recorded baseline for seed
+> 99 is **79/280 = 28.2%**, and switching the rule off in the same build gives **82/280 = 29.3%** —
+> so the hand-size rule is worth **three games in 280** to Mono-Red on this gauntlet. It moved
+> because the engine got MORE correct, not less: an unbounded hand was making card draw and
+> held-back reactive spells worth more than they are. §3.29 has the isolation and names the two
+> matchups it came from.
 | `hybrid` vs `heuristic`, Mono-Red vs Boros, n=120 | **60.0%** [51.1, 68.3] | **55.8%** [46.9, 64.4] |
 | `hybrid` vs `heuristic`, UW vs Golgari, n=80 | **53.8%** [42.9, 64.3] | **48.8%** [38.1, 59.5] |
 
@@ -756,8 +865,10 @@ baseline the §3.6 suggestion engine tunes against.
 The §3.1 MVP resolves spells/ETB scripts only. To faithfully simulate real meta decks it needs: a
 **triggered-ability system** (ETB/attack/cast/death triggers → the stack), a **continuous-effects / "until
 end of turn" layer** with proper cleanup-step expiry (so `pumpUntilEndOfTurn` and similar wear off — current
-behavior persists the buff and biases combat sims), and later **planeswalkers**, **transform/DFC**, and
-**dynamic P/T** (e.g. Tarmogoyf). Tracked here because §3.2 cards stubbed these mechanics against the MVP.
+behavior persists the buff and biases combat sims), and later **planeswalkers** (✅ landed — see §3.11),
+**transform/DFC**, and
+**dynamic P/T** (e.g. Tarmogoyf — ✅ landed as characteristic-defining P/T in layer 7a; see §3.11).
+Tracked here because §3.2 cards stubbed these mechanics against the MVP.
 Prioritize triggers + EOT-expiry before leaning on §3.5/§3.6 verdicts; the rest can follow.
 
 ### 3.10 Hotseat pass-and-play — two humans, one device — ✅ done
@@ -891,17 +1002,477 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   ⚠️ Green has **no mono-green Aura in the pool and that is not an oversight**: essentially every green
   Aura is an umbra (totem armor), a regenerate-granter, or dynamic (`+1/+1 for each Forest`), none of
   which the engine models. Green is served by Unflinching Courage ({1}{G}{W}) and by the Equipment.
-Still open, roughly by how often they block a real decklist:
-- *activated abilities with costs* — `{T}`/mana/sacrifice abilities; unlocks a large slice of the card
-  pool (fetchlands, mana rocks, sac outlets).
-- *static / "anthem" continuous effects* — the engine layer EXISTS (`statics.ts`, aggregated with
-  everything else), but no compiler rule reaches it yet, so an anthem still cannot be imported. Without
-  it a go-wide deck's tokens can never scale, so "wide" strategies are structurally weaker in every meta
-  the lab measures — a bias in the verdicts themselves, not just missing cards.
-- *alternative and additional costs* (suspend, spectacle, kicker), *{X} and Phyrexian costs*,
-  *dynamic P/T*, *planeswalker loyalty*, *transform/DFC*, *flash + casting from the graveyard*,
-  *revolt-style "a permanent left the battlefield this turn" trackers*.
+- ✅ *source-aware targeting + protection from [quality] + ward {N}* — `isLegalTarget` /
+  `legalTargetsFor` and the primitives' resolution re-checks now carry the SOURCE card's definition,
+  which is what protection is keyed on. **Protection** enforces all four printed halves against
+  sources with the named quality (color from cost pips incl. hybrid, colorless, multicolored,
+  artifacts, creatures, everything): can't be targeted (offer + accept + resolution re-check, no
+  hexproof-style own-controller escape), can't be dealt damage (combat and noncombat — prevented,
+  with a `damagePrevented` event so the log says why a swing did nothing), can't be
+  enchanted/equipped (`isLegalHost` + the SBA, so an Aura falls off the moment its host gains
+  protection from it), and can't be blocked (`canBlock`). An UNKNOWN source is treated as blocked —
+  the same conservative direction as hexproof's unknown caster. **Ward {N}** is raised by the engine
+  itself ("becomes the target" is a moment no data trigger can watch): targeting an opponent's
+  warded permanent stacks a trigger whose one effect is core's reserved `wardCounterUnlessPaid`
+  primitive (a seam convention like `TARGET_RESTRICTION_PARAM`; `cards` registers the
+  implementation), which asks the payment through the SAME `payMana` optional-payment machinery as
+  Mana Leak — a player who cannot pay is never asked — and counters the spell (or removes the
+  targeting ability from the stack) on a decline. Fires on spells, activated abilities and aimed
+  triggers alike; never on the controller's own targeting. Granted protection/ward layer through
+  the continuous fold (protection lists UNION, ward costs ADD — `mergeKeywordGrant`), and the
+  compiler reads `Ward {N}`, `Protection from [quality][ and from …]` and "Target creature gains
+  protection from [quality] until end of turn"; non-generic ward costs ("Ward—Pay 3 life") and
+  qualities outside the closed table ("protection from Demons") keep reporting. ⚠️ Two deliberate
+  limits: an attachment/static may NOT grant ward/protection (the compiler refuses — the targeting
+  fast path reads printed keywords when `state.continuous` is empty, and a grant it cannot see
+  would be a silently ignored ability), and — matching the long-standing hexproof shape — an
+  unrestricted "any target" spell is not policed at cast, so aiming it at a protected creature is
+  accepted and fizzles at resolution instead of being refused.
+- ✅ *the template-gap pass* — wordings the engine could already play that only lacked a rule-table
+  entry, closed as table data plus one 3-line core fix. **Statics/anthems**: "[Other] creatures you
+  control get +X/+Y / have KEYWORD" (Glorious Anthem, Fervor) now compiles onto the existing
+  `statics.ts` layer via a new `ClauseContribution.statics` field — the layer existed with no
+  compiler rule able to reach it, the exact go-wide bias the previous revision of this list called
+  out. **Basic-land search**: "Search your library for a basic land card, put it/that card onto the
+  battlefield [tapped]" (Rampant Growth) — which also **un-stubbed Sakura-Tribe Elder** (its
+  sacrifice-self cost already parsed; only the search body was missing). **Typed regrowth**: "Return
+  target TYPE card from your graveyard to your hand" (Raise Dead). **Targeted discard**: "Target
+  player/opponent discards N cards" (Mind Rot — the victim chooses, unlike the Thoughtseize form).
+  **Targeted draw/lose**: "Target player draws N cards and loses M life" (Sign in Blood; `drawCards`
+  gained a `whichPlayer: 'targetPlayer'` mode). **Act of Treason's exact templating** ("Untap that
+  creature.") — and its play test exposed that a control change from a resolving SPELL silently
+  no-oped (`applyControlChange` read the stealer from the source's battlefield presence; a sorcery is
+  never there), fixed by passing the resolving controller as the fallback stealer, with a core
+  regression test. Every closure is proven by a real card compiling `'complete'` with pinned params
+  AND playing correctly in an engine game (`compile/template-gaps.test.ts`).
+- ✅ *casting from a non-hand zone — flashback* — "Flashback {2}{U}" (Think Twice, Firebolt: cast the
+  card from your graveyard for that cost; **then exile it**). The design decision that carries the whole
+  mechanic: the SOURCE ZONE is explicit end to end. `CastSpellAction.fromZone` names it (omitted =
+  `'hand'`), `applyCastSpell` validates against the live zone and pays `CardDefinition.flashback`
+  instead of the printed cost, the stack object records `castFrom` (cloned field-by-field — the
+  `cloneStackObject` trap is pinned by a test), and every exit from the stack derives its destination
+  from that one field via `spellLeaveDestination`: resolution puts the card in EXILE, and a flashback
+  spell that is **countered** is exiled too (CR 702.34a — being countered is leaving the stack), which
+  `counterSpellOnStack` reaches through the same helper so the two exits cannot disagree. Timing is the
+  card's own (a sorcery flashes back only at sorcery speed); a card that left the graveyard in response
+  cleanly rejects; the same card cast from HAND still resolves to the graveyard. `generateLegalActions`
+  offers the cast (per legal target, pool-funded) exactly as it offers hand casts, and the heuristic's
+  `scoredSpellGoals` scores graveyard flashback candidates through the same scorer as hand spells — so
+  the hybrid search's policy candidates inherit the consideration and the mechanic is never
+  pilot-inert. Only the PLAIN mana-cost form compiles (`flashback-cost` rule); {X}/additional-cost
+  flashback stays reported against the cast-cost-modification system. Flashback GRANTED by another
+  card is no longer a gap — see the graveyard-grants entry below, which un-stubs Snapcaster Mage.
+- ✅ *effects that target and modify cards in graveyards* — the two systems Snapcaster Mage was
+  stubbed on, built together because neither is worth anything alone. **(1) Targeting a graveyard
+  card.** `TargetRestriction` gained `'instantOrSorceryInYourGraveyard'`, threaded through the
+  same three enforcement points every other restriction uses — offered by `legalTargetsFor`,
+  accepted (or refused) by `isLegalTarget`, and re-checked by the primitive at resolution, so a
+  card that leaves the graveyard in response makes the ability FIZZLE rather than grant into the
+  void. Like `'opponent'` and `'creatureYouControl'` it reads "your" off the ACTING player, and an
+  absent controller makes every candidate illegal rather than guessed. Hexproof/shroud/protection
+  are correctly not consulted: those read "this permanent", and a card in a graveyard is not one
+  (CR 110.1). **(2) Continuous effects on non-battlefield cards** live in a NEW list,
+  `GameState.cardGrants` (core's `card-grants.ts`) — deliberately NOT the continuous layer, whose
+  index is keyed on battlefield permanents, whose statics radiate from battlefield sources, and
+  whose orphan-pruning would delete a graveyard grant on sight. A grant is instance-scoped, expires
+  in cleanup like any until-end-of-turn effect, and is DROPPED the moment its card changes zones
+  (CR 400.7 — a new object) at every zone-move chokepoint, core's and `cards`'s alike. The one
+  exception mirrors CR 400.7g and needs no storage: casting on the grant reads the cost at
+  announcement, and the exile-on-leaving-the-stack replacement rides the stack object's own
+  `castFrom` (`spellLeaveDestination`), so pruning the grant as the card leaves the graveyard
+  loses nothing. **The cast path reads printed and granted flashback through ONE accessor**
+  (`flashbackCostOf`), so `generateLegalActions`, `applyCastSpell` and both pilots cannot
+  disagree about what a graveyard card costs. ⚠️ **Performance**: `cardGrants` is OPTIONAL and
+  absent in every game that grants nothing, and every reader and pruning hook starts with the same
+  one-property empty check (`hasCardGrants`) that `isLegalTarget`'s fast path uses — measured
+  allocation-identical to main (534 vs 533 median scavenges, inside the alloc bench's documented
+  ±2) with byte-identical play (30,466 actions / 63,782 events) and a byte-identical seed-99
+  gauntlet. **Snapcaster Mage is UN-STUBBED**: flash, the ETB aimed as it goes on the stack, the
+  grant priced at the target's own mana cost, the recast, and the exile after it all play as
+  printed, and the heuristic pilot casts it, aims it at the BEST spell in its graveyard
+  (`valueOfEffects`'s `grantFlashback` entry prices the grant off the card it names) and takes
+  the recast it just bought.
+- ✅ *cost modification / choice at cast time — {X} costs and kicker* — the cast-time question
+  step. Casting a spell with an `{X}` cost or a kicker parks a question with NOTHING resolving
+  (the same moment a shockland's pay-life and a trigger's aiming use): a new choice kind,
+  `chooseNumber`, for "choose a value for X", and the existing `payMana` for "pay the kicker?".
+  Three design rules carry the whole thing. **(1) The engine charges the extra cost, once, as it
+  accepts the answer** — `X × xCost` generic mana (or the kicker cost) is paid through the same
+  `payManaCostFromBoard` as an optional payment, so the base cost stays in `CardDefinition.cost`
+  (X is 0 everywhere but the stack, CR 107.3) and no mana function learned a new symbol.
+  **(2) A question with one fundable answer is never asked**: the X range is bounded by what the
+  SAME payment planner says the board can produce (`maxAffordableX`), so an unpayable X is never
+  on offer, X capped at 0 is recorded silently, and an unaffordable kicker casts the spell
+  unkicked without stopping the game. **(3) The chosen values ride the stack object into the
+  resolution** (`SpellStackObject.xValue`/`kicked` → `ResolutionFrame` → `EffectContext`), so
+  "deals X damage" and "if this spell was kicked" read what was actually paid for — including
+  after the spell has left the stack. The waiting lives ON the stack object
+  (`awaitingCastChoice`, cleared as each answer is recorded — same argument as a trigger's
+  `awaitingTargets`), and `internal/clone.ts` copies all three new fields. The compiler reads
+  `{X}` cost symbols into `xCost`, "Kicker {COST}" into `kicker`, and these templates: "deals X
+  damage / draw X cards / gain X life" (gated on the cost actually printing {X}), the
+  Burst-Lightning "deals M instead" switch (`{ base, kicked }` amounts), and "If this spell was
+  kicked, RIDER" (an `ifKicked` branch primitive enqueuing the rider into the same resolution).
+  The heuristic pilot scores an X burn at the X this board could fund and answers with the
+  maximum affordable; the hotseat/online prompt renders one button per fundable value.
+  §3.16 then closed two of this entry's deferrals: MULTIKICKER (the pay-count question) and
+  KICKED ETB CLAUSES on permanents (the count now survives onto the instance as `timesKicked`).
+  Still deliberately NOT done: X divided among targets, and "where X is …" definitions (those X's
+  are not the cast-time X and are refused).
+- ✅ *planeswalkers + loyalty* — walkers are real attackable permanents. A walker enters with its
+  printed loyalty as COUNTERS (`counters['loyalty']`, `CardDefinition.loyalty`); its `[+N]/[−N]` lines
+  compile to activated abilities with a SIGNED `cost.loyalty`, sorcery-speed, engine-enforced once per
+  walker per turn (CR 606) and never payable below zero (CR 118.5). Combat gained the GENERIC
+  attackable-object seam battles will reuse: `DeclareAttackersAction.attackTargets` maps attacker →
+  attacked permanent (gated on `isAttackable`, today = planeswalker), combat damage to a walker removes
+  loyalty (CR 120.3c), trample past a walker's loyalty carries to its controller (CR 702.19i), and a
+  walker whose attacked object left the battlefield deals no combat damage — the 2017 rules REMOVED
+  damage redirection, so none is modelled. 0 loyalty is death by state-based action (CR 704.5i).
+  Targeting gained `'playerOrPlaneswalker'` and `'creatureOrPlaneswalker'`; "any target" includes
+  walkers. **Liliana of the Veil is un-stubbed** — the +1 each-player discard (APNAP, both answers
+  collected before either card moves), the −2 edict (`sacrificeChosen` — the VICTIM picks), and the −6
+  pile split (`pileSplitSacrifice`: controller splits, victim picks the pile) all play as printed. The
+  heuristic pilot activates loyalty abilities (priced by `valueOfEffects`), diverts attackers to kill a
+  finishable walker (never chips one it cannot kill, never over a lethal race), and burns a killable
+  walker. NOT built, on purpose: emblems (ultimates that need them stay reported), the legend rule
+  (the engine has none for legendary creatures either — walkers get the same treatment), battles.
+- ✅ *scry & surveil — looking at the top of a library, and the bottom-of-library placement it
+  needed* — "Scry N" (CR 701.18) and "Surveil N" (CR 701.42) play as printed, plus the rider forms
+  ("Scry 2, then draw a card") and the enters-the-battlefield form that makes the Temple and
+  surveil-land cycles real cards. No new choice KIND was needed: the look is one ordered
+  `selectCards` over the top N with `min: 0` and a new `keepOnTop` marker — offering the candidates
+  IS the look (the choice travels to its chooser alone), the chosen cards stay on top in the chosen
+  order, and every unchosen one leaves (scry to the bottom, surveil to the graveyard). The
+  bottom-of-library placement the previous revision of this list named as the blocker is
+  `moveOwnedCard`'s existing `'bottom'` position — the same funnel every zone move already used —
+  so scry needed no new movement machinery, only the question. Scry asks a SECOND question for the
+  bottom order, and only when two or more cards are going down (one is not a decision).
+  **Both primitives obey the ask-first-then-mutate contract in full**: every answer is collected
+  before a single card moves, which is what makes a parked scry safe to replay.
+  ⚠️ **The look is hidden information, and the redaction is the interesting part.** A new
+  `cardsLookedAt` event carries a player and a COUNT and nothing else — exactly what a spectator
+  sees when somebody picks up two cards — so it is public *as printed*, while the identities never
+  leave the choice (whose `choiceAsked` observation was already redacted to an option count). The
+  consequences arrive on their own: a surveilled card's `zoneChange` into a graveyard is public,
+  a bottomed or kept card's library → library move is anonymised by the existing hidden-zone rule.
+  Both primitives are classified LIBRARY_READING in `paired-arms-config` — they read the top of a
+  library and BRANCH on what they saw, the same dangerous shape as `revealTopCard`.
+  **The AI is not inert and not random**: one documented rule with one weight
+  (`scryKeepValueThreshold`) — keep every looked-at card whose `cardValue` clears the bar, bottom
+  or bin the rest, survivors best-first because the answer is ordered. That is not arbitrary:
+  `cardValue` already prices a land by whether its controller still NEEDS lands, so the threshold
+  sitting between `choiceLandValue` and `choiceLandShortValue` makes the pilot bottom lands exactly
+  when it is flooded and keep them while it is short — the decision that carries most of a scry's
+  real value. It deliberately does not reason about the curve or about what the opponent represents;
+  both belong to the searching pilots. The hotseat prompt needed no new component — a keep-on-top
+  choice is an ordered card selection, which the prompt already numbers — only its own copy.
+  Also closed alongside it: *"Counter target spell unless its controller pays {X}"* (Condescend),
+  where the payment asked is the X the caster chose and paid for at cast time, and an X of zero is
+  a cost everybody pays, so the spell simply resolves.
+- ✅ *characteristic-defining P/T (the star box)* — a creature whose printed P/T is a FORMULA
+  (`CardDefinition.characteristicPT`) over the closed derived-count vocabulary. It is applied in
+  **CR 613.3 layer 7a**, as the creature's BASE: the continuous layer (which is the only layer
+  holding the state a formula needs) computes it into `AggregatedMod.basePower`/`baseToughness`,
+  and the stat accessors use it in place of `def.power` — so +1/+1 counters (7d), anthems and
+  pumps (7c) all add ON TOP of it, never the other way round. Nothing is stored, so nothing goes
+  stale: it re-derives on every read, and a graveyard filling MID-COMBAT changes the creature's
+  size before state-based actions run. **Tarmogoyf is un-stubbed** (power = card types among cards
+  in all graveyards, toughness that number plus one). ⚠️ The bare `effectivePower(inst)` call —
+  no aggregate — answers 0 for a star creature, because a formula is a function of the whole game
+  and that accessor holds only the instance. Every RULES path passes an aggregate, and since
+  §3.4f **so does every AI path** — `packages/ai` no longer imports the bare-defaulting accessors
+  at all, and a test fails the build if one reappears.
+- ✅ *turn-scoped fact memory (revolt)* — `core/turn-facts.ts`: a NAMED CLOSED vocabulary
+  (`permanentLeftBattlefield` = revolt, `creatureDied` = morbid, `youGainedLife`), not a general
+  event query, so the compiler can only pattern-match what it genuinely understands. Fed from the
+  engine's emit chokepoint (no new `GameEvent` — every fact derives from events already published),
+  stored as two per-player BITMASKS as flat numbers on the state (a nested record cost ~3% of sim
+  throughput on the clone path), and cleared as each turn BEGINS, so "this turn" still reads true
+  during the previous turn's end step. **Fatal Push is un-stubbed**: its `{ base: 2, revolt: 4 }`
+  mana-value switch is read at RESOLUTION, so a permanent leaving in response turns revolt on.
+- ✅ *coloured/filtered statics* — the shared `CardFilter` gained `anyOfColors`, read from cost
+  pips (hybrid included) by `colorsOfDefinition`, the same reader protection uses, so "white"
+  cannot mean two things. Honoured by `matchesCardFilter` itself, so it reaches EVERY consumer
+  (statics, library searches, discards, sacrifices, attachment hosts), not just anthems.
+- ✅ *the "you may" + trigger-timing pass* — the optional-trigger and trigger-vocabulary families,
+  measured against the most-played corpus and closed in `sole`-descending order (193 → 248 playable,
+  +55 cards; re-run `coverage-audit.mjs --input <corpus>` to check). What landed:
+  **The printed word "you may"** is now one composable wrapper, `mayEffects`: ask, then run the
+  nested clause only on a yes. It makes "When ~ enters, you may BODY" the ETB trigger the table
+  already knew plus one real question, instead of a primitive per optional card. **The option is
+  never assumed** — compiling a "you may" as its yes-half is a different card (a Reclamation Sage
+  that MUST destroy your own artifact), so both answers are legal, both are play-tested, and
+  `valence` only steers the pilot. It is ordered AFTER the plain ETB rule so a body that implements
+  its own option (Eternal Witness's `optional: true`) keeps the rule that knows most about it.
+  **Enters-tapped** gained the two remaining board cycles — slowlands ("two or more other lands")
+  and battlelands ("two or more **basic** lands", which needed `CardDefinition.basic`, because a
+  nonbasic dual prints the same land SUBTYPES and would otherwise be counted as a basic) — and one
+  new decision: **reveal-lands** ("you may reveal an Island or Swamp card from your hand"), modelled
+  exactly like the shockland, a real confirm raised at land-play time with the same unasked-default
+  rule (tapped) and no question at all for a controller with nothing to show.
+  **Trigger timing** grew from upkeep alone to draw step, first main phase and end step, as one rule
+  over a closed table of step words. **Board-watching triggers** ("whenever a creature you control
+  [with power 3 or greater] enters/dies") arrived as two events scoped by the shared `CardFilter`;
+  `triggers.ts` stays a pure matcher, with the permanent an event is about resolved by the runtime
+  and handed down at most once per event.
+  **Filtered tutors**: "search your library for a TYPE card with mana value / power / toughness N
+  [or less | or greater], reveal it, put it into your hand" — `CardFilter` gained printed P/T bounds,
+  where an ABSENT box matches no bound, so a `*` P/T is never a legal find for "toughness 2 or less".
+  Two refusals are load-bearing and deliberate: **"each player's <step>"** still reports (a
+  `who: 'any'` trigger would run its body for the source's controller every time, so "that player
+  draws an additional card" would draw for the wrong seat), and **"another creature you control"**
+  still reports (these conditions have no self-exclusion).
+- ✅ *the keyword sweep no longer double-reports Scry / Surveil / Mill* — a **defect**, not a feature,
+  and the highest-yield single fix in the census. The compiler runs a keyword sweep after the rule
+  table: anything in Scryfall's `card.keywords` it did not consume is reported. The sweep carried
+  "already handled" guards for ward, protection, enchant/equip, kicker, flashback and ability words —
+  but not for the three keywords this compiler models as effect **primitives** matched by rules
+  (`scry-n`, `surveil-n`, `scry-then-effect`, `self-mill`, `target-player-mills`). So Opt's entire text
+  compiled and the card was still `incomplete`, on the strength of the word "Scry" being reported
+  twice. The guard is shaped like the flashback one and is **evidence-based**: skip the sweep entry
+  only when the compiled assembly actually contains the backing primitive — deep-walked, because a
+  scry can sit inside an ETB trigger (the Theros temples), inside an activated ability (Castle
+  Vantress) or inside another primitive's params. A wording the rule table does *not* match compiles no
+  primitive and keeps reporting through its own clause, which is the honest half and is tested as
+  such. **Measured: 193 → 227 of the 2100-card most-played corpus (9.2% → 10.8%).**
+- ✅ *modal mana with a multiplier* — `{T}: Add three mana of any one color` is five modes of three
+  (Gilded Lotus), which `producesOptions` expresses exactly. "One color" is what makes it a choice of
+  mode; a free per-mana mix is refused rather than flattened.
+- ✅ *the mana model grew four of its five shapes* — the largest engine lever the census found, and
+  it had been mis-filed as cheap template data. Core used to model a mana source as a fixed list of
+  colour bundles: one tap, no stack, no cost beyond the tap, no rider, no condition. It now carries
+  `CardDefinition.manaAbilities` — a list of separately-printed abilities, each with its own
+  **additional cost** (`{T}, Pay 1 life:` — Mana Confluence, the horizon lands; the filter lands'
+  hybrid `{W/U}, {T}:`), **rider** (every pain land and Ancient Tomb: the damage happens as part of
+  the ability's own resolution, is NOT a cost, and so the land still works at 1 life and can kill
+  you), **activation restriction** ("Activate only if you control an Island / a red permanent /
+  three or more artifacts" — Nimbus Maze, the Verge cycle, Mox Opal), and **board-derived colours**
+  (Reflecting Pool's "any type", Exotic Orchard's "any color", which differ by that one printed
+  word). Four properties make it faithful rather than approximately right:
+  - **It is not an activated ability.** A mana ability does not use the stack (CR 605.3a) and is
+    asked during payment planning; expressing one as an `ActivatedAbility` that adds mana would make
+    a pain land respondable and would deliver its mana one stack resolution too late to fund
+    anything.
+  - **The restriction gates the OFFER, not the apply.** An unmet "Activate only if…" makes the mode
+    invisible to `generateLegalActions` and therefore to `planManaPayment` — a planner that counts a
+    source it cannot use funds spells that cannot be cast. `manaModeBlockedReason` is the single
+    answer both paths ask.
+  - **Derived colours are recomputed per query, never stored.** The mode LIST is fixed (six entries,
+    so `TapForManaAction.mode` means the same thing to the generator, the planner and the apply
+    path); which of them is *available* is a function of the live board. A derived source
+    contributes nothing to another's derivation, so two Reflecting Pools read each other as empty
+    rather than looping.
+  - **The hot path pays one property read.** `manaExtrasOf` returns `undefined` for every plain land
+    and rock, and `planManaPayment` — the engine's hottest function, deliberately built on dense
+    `Int32Array` buffers — keeps its cost/rider apparatus behind two `anyTapCost`/`anyTapPain` flags
+    that stay false on an ordinary board. The planner also now prefers the painless source when two
+    taps close the same shortfall, and refuses to plan a payment that kills its own controller.
+  **Measured PAIRED against the same cached corpus on the same day's `main`: 328 → 384 of 2100
+  (15.6% → 18.3%), +56 cards.** (Against the 229 baseline the brief was written from, the same +56.)
+- ✅ ***the fifth mana shape: a SPEND RESTRICTION on produced mana*.** The other four shapes
+  decorate the SOURCE; this one colours the MANA, and that is the whole of why it needed a different
+  design. `ManaPool` was `Record<ManaColor, number>`, so a restricted mana became indistinguishable
+  from an unrestricted one the moment it landed in the pool. **The pool carries it now**, and
+  `canPay`, `payCost`, the payment planner, the event log, the debug snapshot, the masked protocol
+  view and the AI all honour it. `ManaAbility.spendRestriction` is DATA — a disjunction of clauses
+  over the object being paid for (purpose, types, subtypes, colour/colourless, legendary) — so no
+  card has a branch, and "cast artifact spells **or** activate abilities of artifacts" is two
+  clauses rather than a Power Depot case.
+  **Measured on the cached 2100-card corpus against the matched `origin/main` (a6419e5): 510 → 516
+  playable, +6 cards, 0 regressions, and the 15-card "spend restriction" gap is gone** — dissolved
+  into six newly playable cards (Ancient Ziggurat, Somberwald Sage, Eldrazi Temple, Maelstrom of the
+  Spirit Dragon, Unclaimed Territory, Secluded Courtyard) and three precisely-named residuals, each
+  of which is a different system.
+  Five properties make it faithful rather than approximately right:
+  - **It is a SUBTRACTION, not a matching problem.** One `payCost` call funds ONE thing, so every
+    pip in it shares the same purpose and each mana is either usable for the whole payment or for
+    none of it. Hide what this purpose may not touch, run the existing algorithm on the rest: linear
+    in the number of restricted parcels, no search, and — because it is the same algorithm — no
+    second opinion about what a hybrid symbol or a generic pip costs.
+  - **`purpose === undefined` means NO.** A caller that asks "can this pool pay {2}{G}?" without
+    saying what for cannot be told yes about restricted mana. A forgotten purpose therefore produces
+    a PESSIMISTIC answer (a cast the engine could have offered), never an ILLEGAL one — which is the
+    failure that would poison a verdict. It is also why a "unless its controller pays {3}" tax
+    cannot be paid with Ancient Ziggurat mana, correctly and with no special case.
+  - **Mana you cannot spend is still mana.** `pool[color]` stays the TOTAL, restricted included, so
+    `poolTotal`, the seat panel, the replay format and the end-of-step empty are unchanged and still
+    true — a restriction changes legality, not quantity. Restricted mana that can never be spent
+    drains at end of step with its `manaPoolEmptied` event, and never earlier.
+  - **The hot path pays one property read.** `restricted` is ABSENT on every pool in a game with no
+    restricted source, and `canPay` / `payCost` / the planner each short-circuit on that `undefined`
+    before doing anything else. The planner takes the card DEFINITION and resolves the purpose
+    LAZILY — gating it on the live pool was a real bug caught by the pilot tests, because at
+    planning time the pool is empty and the restricted mana does not exist yet, so the planner
+    refused to tap Ancient Ziggurat at all and a castable creature read as uncastable.
+  - **"…of the chosen type" reads the PERMANENT, and reads it once.** Cavern of Souls, Unclaimed
+    Territory and Secluded Courtyard name a creature type as they enter, which core's as-enters seam
+    already stores on the instance (`CardInstance.chosenAsEntered`) — so this branch reads that value
+    rather than tracking a second copy of the same answer. The clause on the shared definition is a
+    DECLARATION (`subtypeChosenBySource`); the value is substituted when the mana is MADE, which is
+    the only moment both the source and its choice are in hand. The pool therefore only ever holds
+    CONCRETE restrictions, no payment path has to find a permanent, and clone/serialization stay
+    unchanged. A permanent that named NOTHING makes mana that pays for nothing — never for
+    everything, which is the direction that would hand it the best mana on the board. The compiler
+    refuses the clause outright on a card whose text never names a type, because mana that can never
+    be spent is as much a lie as mana that pays for anything.
+  - **Restricted mana is spent FIRST.** It is the least flexible resource on the board, and the
+    planner's existing "least flexible source first" ordering could not see it (Ancient Ziggurat
+    offers five colours, so `flexibility` ranked it LAST). A `restrictedRank` term joins that same
+    ordering — below `pain`, because "least flexible" must never outrank "does not kill me" — and
+    `payCost` drains restricted parcels first within a colour and prefers colours holding them when
+    paying the generic portion.
+  **A restriction on public mana is PUBLIC.** Mana in a pool is open information in this engine
+  (`sim/observation.ts`), and the restriction was printed on a permanent every seat can read, so it
+  travels on the `manaAdded` event and in the masked protocol view. Redacting it would be the worse
+  error: an opponent watching mana float off an Ancient Ziggurat and unable to see the restriction
+  would read the board as represented interaction that is not there.
+  📌 **KNOWN REACH LIMIT, pinned in the planner's comments:** a plan will not chain a restricted
+  source into ANOTHER source's mana cost (Power Depot's "activate abilities of artifacts" mana
+  paying for an artifact filter land). Same shape as the filter-land reach limit already recorded
+  above, and it can only ever decline a payment, never make an illegal one.
+  ⛔ **NOT shipped, and reported by name rather than faked: the COMMANDER.** "Add one mana of any
+  color in your commander's color identity" (Command Tower, Arcane Signet) needs a commander, a
+  command zone holding one, and a format that has both. This engine has none of them, and a fake
+  commander — any seat's "best" card, or a colour identity guessed from the decklist — would
+  silently set those two cards' output in every game the lab plays, corrupting exactly the A/B
+  verdicts they appear in. The general seam it would need ("colours derived from a named object the
+  engine tracks") is deliberately NOT built either: with one hypothetical consumer it would be a
+  guess at an interface, and the six cards previously grouped with it turned out to need something
+  else entirely (a tapped-for-mana trigger), which is now reported under its own name.
 
+Still open, roughly by how often they block a real decklist:
+- *aiming a trigger body at the player whose step or turn it is* ("At the beginning of each player's
+  draw step, **that player** draws an additional card" — Howling Mine, Kami of the Crescent Moon,
+  Font of Mythos). The trigger itself is expressible (`who: 'any'`); what is missing is the
+  triggering player riding the resolution the way `xValue` and `kicked` do, so a body can say "that
+  player" rather than "the controller",
+- *two smaller mana gaps that are cost/vocabulary rather than system*: a mana-ability cost that
+  **taps another permanent** (Springleaf Drum — a third cost component AND a choice of which
+  permanent, which nothing asks), and a spend restriction naming a creature type **chosen as the
+  permanent enters** (Cavern of Souls, Secluded Courtyard, Unclaimed Territory — the restriction
+  itself works now; what is missing is a per-INSTANCE remembered choice).
+- *a spell that **cannot be countered*** ("…and that spell can't be countered" — Cavern of Souls and
+  Delighted Halfling print it after a spend restriction, and 15 more print it on the spell itself).
+  Counterspells are real in this engine, so the clause is not vacuous and is never dropped.
+- *the two colour-derivation families this engine has no object for*, now reported separately
+  because they are not the same work: a **commander's colour identity** (Command Tower, Arcane
+  Signet) needs a format this engine does not implement and will not fake — see below — while
+  **"add one mana of any type that land produced"** (Mirari's Wake, Zendikar Resurgent, Vorinclex,
+  Kinnan, Extraplanar Lens, Incubation Druid) is an ordinary triggered ability watching a permanent
+  being tapped for mana, and is engine work somebody can simply do.
+- *the payment planner cannot CHAIN into a filter land inside one plan.* The mana half of a mana
+  ability's cost is gated on the FLOATING pool, exactly as `unpayableActivationReason` gates every
+  other activated ability, so a filter land is offered once its input is floating and not before —
+  which never offers an illegal action, and is how the land is played in paper (tap the funding
+  source, then filter). What is lost is only the planner's ability to SEE that line while answering
+  "can I afford this?" from an empty pool. Pinned as a KNOWN REACH LIMIT test rather than left to be
+  rediscovered.
+- *alternative and additional costs still open* — **cycling, buyback and madness landed in §3.17**;
+  what remains is *suspend*, *spectacle*, *evoke*, an **{X} in a cycling cost** (Shark Typhoon: an
+  activation cost has no answer-and-charge step the way a casting cost does) and a **madness cost
+  printed in words** ("Madness—Pay six {C}"). *Phyrexian costs*,
+  *fuse* (CR 702.102 — **split, aftermath, adventure and the Siege reward all landed in §3.22**;
+  what is left of that family is casting BOTH halves as one spell, and the Room/door system CR 714),
+  *flashback riders that are not mana or life* ("Flashback—{1}{U}, Discard a card" — the cast
+  pipeline can charge mana and life, and nothing else, so a discard or sacrifice rider reports),
+  *P/T formulas outside the closed count vocabulary* (a star box counting something the
+  `DerivedCountName` table does not name, or whose two halves count different things, still
+  reports — it is never guessed),
+  *damage divided among targets* ("deals X damage divided as you choose among any number of
+  targets" — needs a division the targeting layer cannot express: one spell, several targets, each
+  with its own share).
+- ✅ *the "At the beginning of…" family* — **§3.21**. The audit's biggest template cluster, and its
+  blocker was an engine seam rather than a rule table: a trigger's resolution did not carry the
+  player its event was about, so every printed "that player" had nothing to point at and every
+  "each player's / each opponent's" scope reported. `EffectContext.triggeringPlayer` closes it, and
+  the printed **intervening "if"** (CR 603.4, checked at both of the moments the rules check it)
+  landed with it. 408 → 428 playable. What still reports is named in §3.21.
+- ✅ *counters-matter templates* — the census (docs/plans/mechanic-completion-plan.md §3c) measured
+  **117 counters templates blocking 153 cards while the counters machinery was already complete**:
+  `CardInstance.counters`, the layer-7d stat pipeline, and the `addCounters` primitive all worked;
+  no printed template could reach them. Closed as rule-table data plus five small seam extensions:
+  the **group form** of `addCounters` (`each` + a controller `scope` + the shared `CardFilter`, so
+  "put a +1/+1 counter on each creature you control" counts exactly the printed set and a phrase the
+  filter cannot express — "each **attacking** creature" — rejects the line instead of widening it);
+  three new **trigger conditions** (`beginCombat`, `gainLife`, `combatDamageToPlayer`); cast triggers
+  with `who` = any/opponent; and `StaticAffects.hasCounterKind`, the one non-printed characteristic a
+  static filter may read (counters are instance state no static can change, so there is no
+  layer-dependency loop). The two BOARD-WATCHING conditions this family needed — an arrival and a
+  death — are `permanentEnters` / `permanentDies`, the names §3.17's you-may/trigger work introduced;
+  both branches invented their own names for them and they were **unified to one name per concept at
+  merge time**, with this branch's capabilities kept under those names: `excludeSelf` (the printed
+  word "another"), a colour word in the `permanentFilter`, an absent controller tail meaning
+  `who: 'any'` (Soul Warden), the landfall/constellation ability-word dresses, and the
+  "~ or another creature dies" phrasing. `packages/cards/src/counters-templates.test.ts` plays one
+  game in which a card from each branch watches the same event and asserts both fire, so a re-split
+  of the vocabulary goes red. It also uncovered a real defect: **"~ enters with N +1/+1 counters on it"
+  put on no counters at all** — they are applied as the permanent enters (CR 614.1c), while its own
+  spell is resolving and before the instance reaches the battlefield, and the primitive only looked
+  at the battlefield — so every 0/0 body printed that way (Stonecoil Serpent, Walking Ballista) died
+  on arrival. Measured on the cached 2100-card corpus: **193 → 217 playable** against the census baseline this
+  branch started from, and **328 → 352 (15.6% → 16.8%)** re-measured against `origin/main` (364a4f1) after
+  merging the siblings that landed meanwhile — the counters family itself going from 116 variants /
+  180 card-blocks / 46 sole to 106 / 146 / 38.
+  ⚠️ Still reported, by name: phasing (Slip Out the Back), doubling counters,
+  proliferate (needs a chooser over every permanent and player with a counter), counter kinds the
+  stat layer does not read (charge/quest/time/growth/keyword counters), "each **attacking** creature",
+  "**nontoken**" filters (instances carry no token flag), once-per-turn trigger limiters, granting a
+  triggered ability until end of turn, and counter-removal activation costs (`ActivationCost` has no
+  counter component).
+- ✅ *the tutor family + mandatory additional cast costs* — the two halves of "pay something to go
+  get something", closed together because the cards that print them are the same cards
+  (Diabolic Intent, Harrow, Eldritch Evolution all print both).
+  **THE TUTORS.** One primitive (`searchLibrary`) already read a library; what it lacked was
+  destinations and rule-table entries. It now takes a found card to **hand, the battlefield (tapped
+  or not) or the graveyard** through one closed `SEARCH_DESTINATIONS` table, and the rules reach it
+  for: the unrestricted tutor ("for a card"), any card TYPE, a **type/subtype union** ("an instant or
+  sorcery card"), a **colour** ("a blue instant card" — `CardFilter.anyOfColors`), the printed
+  mana-value/power/toughness bounds, a **land-type list of any length** (Farseek prints four, and
+  because it omits the word "basic" it finds a DUAL — the rule that reads it is deliberately separate
+  from the one that reads "a **basic** Swamp, Forest, or Island card", which selects the basics BY
+  NAME), and **"up to N"** counts.
+  The interesting one is the **MULTI-DESTINATION search** — Cultivate's "put one onto the battlefield
+  tapped **and the other into your hand**". It compiles to a `route` param: an ordered list of steps,
+  one per card the search may find, and **the answer's ORDER is the routing**. That is not a
+  shortcut; it means the decision is answered by the same `selectCards` a UI, an AI and a network
+  peer already know, instead of a second bespoke question — and a library holding fewer matches than
+  steps simply leaves the trailing steps unused, because "up to two" is a maximum and a search may
+  always fail to find. Both are played in real games in
+  `packages/cards/src/tutors-and-additional-costs.test.ts`, including the zero-match case.
+  **THE ADDITIONAL COST.** `CardDefinition.additionalCost` — "As an additional cost to cast this
+  spell, sacrifice a creature / discard a card" — and the reason it is NOT another `kicker` is the
+  whole feature: **an optional cost may be declined, so a caster who cannot pay it casts the spell
+  without it; this one cannot.** CR 601.2h makes an unpayable cost an ILLEGAL CAST, so a Village Rites
+  with an empty board is **not offered by `generateLegalActions` and is rejected by the cast path**,
+  from the ONE shared `unpayableAdditionalCostReason` — three opinions about "can this be paid" is
+  exactly how a spell becomes offerable and un-castable. Treating it as declinable would have printed
+  a free two-card draw.
+  It rides the EXISTING cast-question pipeline (`askCostChoices`, after X → kicker → multikicker →
+  buyback, which is the printed announcement order), the payment is performed by the engine as the
+  answer is accepted — through the SAME `moveToZone` funnel every other sacrifice and discard uses,
+  which is why **discarding a madness card to pay for Thrill of Possibility exiles it** rather than
+  burying it — and the answer rides the stack object as `additionalCostPaid` (a new
+  `internal/clone.ts` field; without it the question re-asks and the caster pays twice).
+  🧠 **The AI is not inert.** A tutor answered on raw card value alone fetches the deck's biggest bomb
+  on turn two and sits on it — noise in every A/B verdict, which is the one thing a search must not
+  be. `packages/ai/src/choices.ts` now discounts a searched card the pilot could not cast within
+  `tutorReachableManaLead` of its current lands by `tutorUncastablePenalty` — a DISCOUNT, not a ban,
+  so an unreachable card is still fetched when it is the only thing that qualifies. Paying a cost is
+  the same one ranking read from the other end: the pilot gives up its WORST qualifying permanent.
+  **Measured** on the cached 2100-card corpus, same-day `origin/main` baseline: **408 → 446 / 2100
+  playable (19.4% → 21.2%)**.
+  ⚠️ Still reported, by name: a search whose restriction no `CardFilter` can say (**"a nonlegendary
+  card"** — there is no supertype field; **"with mana value X or less"** — X is a cast-time value no
+  filter reads, which is what blocks Green Sun's Zenith and Chord of Calling; "an artifact card with a
+  mana ability"), a **union mixing a type with a subtype** (the filter would AND them, so it could
+  never find, and mixing is refused rather than guessed), a destination outside the closed table
+  ("shuffle and **put that card on top**" — Sterling Grove), a **rider on the find** ("then if you
+  control four or more lands, untap that land" — Fabled Passage), a **derived count**
+  ("up to X basic lands, where X is the number of tapped creatures you control" — Harvest Season),
+  and, on the cost side, an additional cost that is a **choice of payments** ("sacrifice an artifact
+  **or** discard a card", "discard a card **or** pay 3 life"), an **optional** one ("you may sacrifice
+  one or more creatures"), a cost the engine cannot perform (exile, pay life), and any value
+  **derived from what was sacrificed** (Fling, Life's Legacy, Eldritch Evolution, Neoform).
 ### 3.12 Scan a deck from a photo — ✅ done
 Lay the deck out, take one photo, get a decklist — entirely on-device, no upload.
 
@@ -917,30 +1488,1579 @@ detector cut apart cards laid **touching**, as a gap-hunting detector cannot. An
 **its own column**, because piles in a row are different depths and a shared row band would give a pile
 of one its tall neighbour's overhang.
 
-Down a pile's column the content comes in **stripes**: a title bar is a plate with a name on it and
-varies a lot across its width, while the card edge above it is flat. So copies are counted from
-busyness, not brightness — whose sign flips between a white-bordered card and a black one. What
-separates the copies from the bottom card's own art and its per-line rules text (which stripe too) is
-that **only the copies are regular**: a pile is fanned in one motion, so its title bars are evenly
-spaced and equally tall. Simpler boundaries were tried and are not enough — "end at a card-tall stripe"
-misses a bottom card whose body fragments into bands, and "end at a card-height gap" misses it too,
-because those bands are never that far apart. A single card looks like a pile of two (title bar, then
-art) and is told apart by spanning only one card's height. A plain grid of loose cards is read as piles
-of one; a manual rows × columns fallback covers photos neither reader can make sense of.
+Down a pile's column, **where** the pile is comes from busyness (its stripes of content, split from the
+next pile by the flat cloth between them), but **how many** copies it holds comes from **brightness** —
+and that split was learned from a real photo, not chosen up front. Busyness cannot count sleeved copies:
+with glare and jpeg noise, the dark line between two copies is every bit as "busy" as the title bars
+around it, and the stripe-rhythm counter this section used to describe misread nearly every pile of a
+real deck. What IS invariant is that every fanned copy shows the pale **title plate** its name is
+printed on, and that plate is the brightest thing in its sliver on every kind of card — dark art or
+pale, white border or black. So copies are counted as bright plate bands in the pile's brightness
+profile, one per copy, bottom card included, with three guards (all measured off the real photo): a band
+too close below another on the photo's fan pitch is the same copy's pale **art**, not a copy — unless a
+deep dark valley proves a card edge between two nearly-**flush** copies; a deep valley within the glare
+cap of the pile's top marks sleeve-rim **glare** above the first copy; and a plate cannot start lower
+than the pile's height minus a card (plus slack for a black border sunk into dark cloth). The fan pitch
+is measured across the whole photo — every pile was fanned by the same hand. A plain grid of loose cards
+is read as piles of one; a manual rows × columns fallback covers photos neither reader can make sense
+of.
 
-Only each card's **title strip** is OCR'd (greyscaled, contrast-stretched, upscaled to a target height)
-— the biggest accuracy win, since art and rules text otherwise generate confident nonsense. The crop
-comes from the **detected stripe** rather than from a fraction of a card rect, because a fanned copy's
-true top edge is buried under the copy above it: "the top 4–17% of the card" measured from the wrong
-edge lands squarely in the art. It is capped at a title bar's printed height so the bottom card, whose
-title and body merge into one stripe, does not hand OCR the whole card back. The bottom card is read
-first, and when that read is weak the fanned copies above it are read too and the best match wins:
-every copy in a pile is the same card, so extra looks are free accuracy paid for only where needed. Raw OCR is never trusted: card names are a **closed vocabulary**,
-so the text is corrected against Scryfall's full name catalog by edit distance, which turns recognition
-into cheap spelling correction. A **review grid** shows each pile's own crop with its match and its
-count, flags anything unconfident, and lets the name *and the quantity* be corrected; only then does the
-list flow into §3.11's importer, so scanned cards get the same Oracle-compiler treatment as typed ones.
-Tesseract is dynamically imported so its WASM core stays off the initial bundle.
+Only each card's **title strip** is OCR'd (greyscaled, contrast-stretched, **bilinearly** upscaled to a
+target height — nearest-neighbour blocks defeated Tesseract on a real photo's ~10px text) — the biggest
+accuracy win, since art and rules text otherwise generate confident nonsense. The crop comes from the
+**detected plate** rather than from a fraction of a card rect, because a fanned copy's true top edge is
+buried under the copy above it, and is capped at a title bar's printed height. The bottom card is read
+first; when a read is weak, each band is retried shifted down a little (a tilted photo puts the glyphs
+at the plate's lower edge) and the fanned copies above are read too, best match winning: every copy in a
+pile is the same card, so extra looks are free accuracy paid for only where needed. Tesseract runs in
+text-**block** mode, not single-line mode — a tilted crop with a sliver of the neighbouring title in it
+makes single-line mode return nothing at all. Raw OCR is never trusted: card names are a **closed
+vocabulary**, so the text is corrected against Scryfall's full name catalog by edit distance — each OCR
+line and each contiguous word run competes separately, so a name flanked by junk words still wins, with
+score ties broken toward the longer-evidence query. A **review grid** shows each pile's own crop with
+its match and its count, flags anything unconfident, and lets the name *and the quantity* be corrected;
+only then does the list flow into §3.11's importer, so scanned cards get the same Oracle-compiler
+treatment as typed ones. Tesseract is dynamically imported so its WASM core stays off the initial
+bundle. **The acceptance gate is a real photo**: `apps/web/src/lib/scan/fixtures/user-deck-photo.jpg`
+(16 sleeved piles, 59 cards, dark cloth, glare) is decoded by `real-photo.test.ts` to its exact per-pile
+counts, with real-Tesseract OCR required to resolve ≥14/16 names and to flag every miss unconfident —
+synthetic-only verification is what let this feature ship broken the first time.
+
+### 3.13 Transforming double-faced cards — ✅ done
+A second card face, and the mechanic it gates: **transform** (Innistrad-style DFCs — front face
+castable, back face never castable, transform instructions flip which face's characteristics apply).
+
+The seam is deliberately ONE swap, not a parallel read path: a front-face `CardDefinition` nests its
+complete back face (`backFace`, marked `isBackFace`, id `<frontId>#back`), and **which face is up is
+per-permanent state** — `CardInstance.def` IS the active face, with `printedDef` holding the front to
+revert to (definitions stay acyclic, so the generated pool module still writes them as literals).
+Because every consumer already reads characteristics through `inst.def`, the swap routes name, types,
+P/T, keywords, triggers, statics, mana production, targeting, the AI's evaluation and the renderer's
+art lookup through the active face with **no second code path anywhere**. `transformPermanent`
+(core `transform.ts`) is the only writer; it emits a dedicated `transformed` event.
+
+CR 712 is the contract: transforming is **not** a zone change — counters, marked damage, attachments,
+tapped state and continuous effects persist, no `zoneChange` is emitted (so no ETB/leaves trigger can
+fire off a flip) — and a permanent that leaves the battlefield turns front-face-up again in the same
+`resetInstanceForNewZone` chokepoint every leave path runs (a bounced Aberration is a Delver in hand).
+The trigger collector re-checks the active face's trigger list identity per event, so a permanent that
+transforms mid-action stops/starts triggering with the face it actually shows. Back faces are refused
+by cast/play (CR 712.8b) and never appear in the deck-builder pool; the web resolves `<id>#back`
+through per-face Scryfall data, so the board and CardHover show the active face's own art.
+
+Compiler: a `layout: 'transform'` (or `Transform`-keyword) record compiles BOTH faces through the full
+rule table and links them; it is `'complete'` only when every printed ability of both faces compiled —
+a half-modelled back face is worse than reporting it. Scryfall's card-level keyword union is attributed
+to faces by their own text, never guessed. **Delver of Secrets is un-stubbed**: the upkeep
+look/may-reveal/transform body is one primitive (`transformRevealTop`, classified library-reading for
+paired arms), asked as a single top-of-library selection whose valence follows the top card, with a
+constant public prompt so the log cannot leak a declined reveal. **Modal DFCs landed in §3.16** (a
+back face marked `backFaceCastable`, cast or played as its own half); split and adventure cards still
+report `SECOND_CASTABLE_FACE_GAP` (as do Sieges), because a half reached by its own cast path is
+not a second face.
+
+### 3.14 Online UI parity — every shipped mechanic reachable online — ✅ done
+The rule this section exists to enforce: **a mechanic the engine plays and the online board cannot
+reach is not done.** Three shipped systems had failed it — planeswalkers (attackable, loyalty
+abilities), flashback (casting from the graveyard) and cast-time costs ({X}/kicker/pay-life) were all
+in the server's `legalActions` with no affordance in `OnlineBoard`, so networked players could not use
+them at all.
+
+Parity is achieved by SHARING, not by re-implementing. The online board now renders the same
+`SeatPanel`/`ChoicePrompt`/`AbilityPrompts`/`GraveyardPanel` components the hotseat board does, and
+derives its affordances from three pure modules both boards call: `legal-actions.ts`
+(`castChoices` → hand casts, `graveyardCastChoices` → flashback casts, `abilityChoices` → the
+loyalty menu, all grouped from server offers alone, so a menu can hold no dead button),
+`auto-tap.ts` (`castSequence`/`graveyardCastableWithTaps`, which plan against the FLASHBACK cost for a
+graveyard cast) and `graveyard-cast.ts` (`graveyardPanelView`, the panel's whole view-model including
+its why-disabled copy). Casting flows through ONE chokepoint per board (`activateCard(id, zone)`), so
+click, drag-to-play and the graveyard panel cannot diverge.
+
+Three seams worth remembering:
+- **`CastSpellAction.fromZone` must survive the round trip.** The board groups casts BY ZONE and echoes
+  the zone back on submit; a graveyard cast that forgets it is looked for in the hand and rejected.
+- **Walkers are public, so masking needs nothing new.** Loyalty lives in the instance's counters and
+  `maskStateForSeat` copies the battlefield wholesale — pinned by a protocol test that asserts the
+  walker, its loyalty and its ability list survive for BOTH seats and for a spectator.
+- **Auto-pass must count graveyard plays.** A fundable flashback is a real play; without it in
+  `tapCastableCount` the board advances past the only windows the card is castable in.
+
+Proven live, not merely unit-tested: `apps/server/src/online-ui-parity.test.ts` drives the real `Room`
+with two fake-connection clients through real games and asserts the CLIENT functions the board renders
+from — a walker attacked via `buildDeclareAttackersAction` (loyalty drops, the defender's life does
+not), a flashback cast built by `castSequence(…, 'graveyard')` (card ends in EXILE, CR 702.34a), and an
+{X} question surfaced by `onlineChoiceView` to the caster while the opponent gets only the redacted
+waiting line. All four sabotage-checked RED→GREEN.
+
+### 3.15 Battles, the legend rule, and emblems — three walker-adjacent objects — ✅ done
+Three objects that sit beside planeswalkers in the rules and had no representation in the engine.
+
+**Battles (CR 310)** reuse the attackable-object seam planeswalkers built rather than reworking
+combat: `isAttackable` now answers for battles too, and `DeclareAttackersAction.attackTargets` needed
+no change at all. A battle enters with its printed **defense counters**
+(`CardDefinition.defense` -> `DEFENSE_COUNTER`, applied by `applyEnteringDefense` on every
+battlefield-entry path, exactly as loyalty is). The one genuinely new question is **who defends it**:
+a battle is protected by its controller's OPPONENT (CR 310.11), so attack legality asks
+`protectorOf(object)` rather than comparing controllers - which is what makes attacking your OWN
+Siege the printed play pattern, and lets the protector's creatures block. Combat damage and
+"any target" burn alike strip defense counters (CR 120.3d); trample carries the excess past the last
+counter to the defending player; zero defense is defeat by state-based action (`battleDefeated`).
+"Any target" reaches battles (CR 115.4) while "creature or planeswalker" deliberately does not.
+
+> **The battle SUBSYSTEM is complete; battle CARDS are still reported, and the two are different
+> claims.** Every printed battle is a Siege whose reward is *casting its back face*, which needs the
+> castable-second-face system (`SECOND_CASTABLE_FACE_GAP`, §3.13). `TYPES_WITHOUT_SYSTEM` is now
+> empty - every printed card TYPE has a system - but a real Siege still imports as `'incomplete'`,
+> naming that gap per card. Shipping the reward as a silent no-op was the alternative, and it is
+> exactly the infidelity the compiler contract exists to prevent.
+
+**The legend rule (CR 704.5j)** is ONE state-based action shared by every legendary permanent kind -
+creatures, planeswalkers, battles alike - keyed on the printed **Legendary** supertype, which the
+compiler now parses onto `CardDefinition.legendary` (supertypes were parsed and discarded before
+this). Three details make it unlike every other SBA, and all three are pinned by tests: it applies
+**per player**, not globally (each player may hold their own copy of a legend quite legally); the
+**controller chooses** which copy survives, so the rule parks a question instead of deciding, marked
+`PendingChoice.context: 'legendRule'` so the answer routes to the rule rather than to a resolution;
+and the losers go to their **owners'** graveyards, not the chooser's. Answering re-runs the SBAs, so
+a second duplicated name settles before anyone regains priority. `grantPriority` now declines to
+stomp a parked chooser, since state-based actions can raise a question from inside the turn machine.
+
+**Emblems (CR 114)** are command-zone objects with statics and triggers that **nothing can remove** -
+and that property needs no enforcement code, deliberately: every removal path in the engine
+(targeting, destroy, exile, board wipes, state-based actions) reaches only `state.battlefield`, so an
+object that never enters it is unremovable *by construction* rather than by a list of exceptions
+somebody has to keep complete. Their abilities are live from the command zone because
+`indexContinuous`/`aggregateFor` and the trigger collector both discover command-zone sources
+alongside permanents - one path, no emblem special case. The compiler's `emblem-with-ability` rule
+compiles an ultimate's emblem body through the ORDINARY static and trigger tables, so an emblem can
+only carry abilities the engine genuinely runs; a body with no rule leaves the line reported rather
+than creating an object that provably does nothing.
+
+⚠️ **The hot-path lesson, measured not assumed.** Wiring emblems into the continuous layer and the
+trigger collector cost a real **~9% throughput regression** (paired same-box quiet rounds 0.907 /
+0.919) before it was fixed - from `for (const pid of PLAYER_IDS)` allocating an iterator per call for
+a two-element list, and from the trigger collector re-walking the command zone on *every emitted
+event*. Both now read `state.players.A/.B` directly behind a `.length` guard, and the collector walks
+only when the zone's size changed (sound for emblems specifically: one can never leave, and its
+abilities come from an immutable definition). Re-measured paired: **quiet rounds 1.011 / 1.010,
+median ratio 1.010** - parity. Gauntlet seed 99 stays **byte-identical at 79/280** throughout.
+
+AI is not inert: one attack planner weighs walkers AND battles against the same power budget, finds
+battles by `protectorOf` (a controller-based search would never consider your own Siege), and buys
+chip damage on neither - on a battle it buys literally nothing, since the reward pays only on the
+last counter. The hotseat and online boards render a defense badge beside the loyalty one, in a
+different colour token because both sit in the same slot and "3 loyalty" must not read as "3 defense".
+
+### 3.16 Cast-time choices, part two — modal spells, modal DFCs, multikicker, flashback {X} — ✅ done
+Four mechanics, one seam: **every decision a caster makes while ANNOUNCING a spell**, asked before
+anybody gets priority to respond. §3.11's {X}/kicker system opened that seam; this section fills it in.
+
+**Why the timing is the whole feature.** Modes are chosen as the spell is cast (CR 601.2b) and each
+chosen mode is aimed at cast too (CR 601.2c). A modal spell whose modes were picked on RESOLUTION
+would let its controller watch the opponent's response first and only then decide whether to counter
+it — strictly better than the printed card, and nothing would look broken. That is exactly what the
+old resolution-time `modal` primitive did, so it is **deleted**, not kept alongside: two rival modal
+systems is the failure this seam exists to prevent.
+
+The data is `CardDefinition.modal` (`ModalSpec`: `min`, `max`, `allowRepeats`, and `SpellMode[]`),
+where each mode carries its own `effects` AND its own `targets` restriction — because two chosen modes
+point at two DIFFERENT objects, which one stack-object target list cannot express. `packages/core/modal.ts`
+answers the two cast-time questions purely (which modes may be announced on this board; what each
+resolves into), and the SAME helpers are read by `generateLegalActions` (the offer) and
+`applyCastSpell` (the accept), so offer and accept cannot disagree. A mode with no legal target is not
+on the menu; a modal spell that can announce nothing cannot be cast at all.
+
+The announcement rides the stack object as `modePicks` (one entry per PICK — a repeated mode appears
+once per time it was chosen, each with its own aim), and resolution flattens it in PRINTED order via
+`picksToResolution` into the frame's `effects` plus a **parallel** `effectTargets` array. That parallel
+array is the one sharp edge: `enqueueEffects` splices both in lockstep, and a test pins it — splicing
+one without the other shifts every later mode's target silently.
+
+- **Modal DFCs** (`backFaceCastable` beside `backFace`): both halves are really cast or played, each
+  with its own cost, timing, targets and script. `CastSpellAction.face`/`PlayLandAction.face` name the
+  half; the face swap is the same one a transform makes (`def` IS the active face, `printedDef` the way
+  back), so leaving for a hidden zone reverts to the front (CR 712.8a) through the existing chokepoint.
+  A transforming DFC's back face stays uncastable (CR 712.8b) — the difference between the two layouts
+  is exactly that one flag. Split, adventure and Siege cards still report `SECOND_CASTABLE_FACE_GAP`:
+  each reaches its second half by a cast path of its own (one object with two costs; a card exiled and
+  re-cast later; a face unlocked by defeating a battle), and none of those is a second FACE.
+- **Multikicker** (`CardDefinition.multikicker`): the answer is a COUNT, so the question is a
+  `chooseNumber` bounded by `maxAffordableKicks` — the same planner that will charge it, planning
+  against `repeatCost` (three copies of a hybrid symbol are three symbols, not a mana-value multiply).
+  Charged once; any positive count also sets `kicked`, so an "if this spell was kicked" rider reads
+  multikicker correctly. The count rides into resolution and then onto the PERMANENT
+  (`CardInstance.timesKicked`), which is how an ETB trigger reads it after the frame is gone.
+  "For each time it was kicked" is a derived count (`timesThisWasKicked`), so damage, draw, life,
+  counters and token counts all learned it at once with no primitive changed.
+- **Flashback {X} and the life rider**: `flashbackXCost` and `flashbackLifeCost`. The X question reads
+  the FLASHBACK cost's count, not the printed cost's (a card may print both); the life is charged with
+  the mana as a mandatory cost, so a caster who cannot pay it is neither offered the cast nor accepted.
+  A non-life rider (a discard, a sacrifice) still reports — the engine has no cast-time cost of that kind.
+
+**Cryptic Command is un-stubbed**, and it was the LAST entry in `STUBBED_MECHANICS` — every
+hand-authored pool card now plays as printed, so `fidelity.test.ts` audits the whole pool with no
+exemptions. All four modes are real; the bounce mode needed core's new `'permanent'` target
+restriction, because flattening "target permanent" to "target creature" would be a card that cannot
+bounce a land. The compiler reads every printed header ("choose one / two / one or both / up to N",
+plus "You may choose the same mode more than once") and compiles each mode through
+`compileTriggerBody`, which is the right compiler precisely because a mode, like a trigger, must
+DECLARE what it may be aimed at rather than inherit a target the caster already named.
+
+Both seats: the AI prices each mode by its BEST legal target (`valueOfMode`), which is what stops it
+choosing "counter target spell" when the only spell on the stack is its own — a spell is a legal
+target for its own counter mode, and being faithful there means the pilot, not the engine, must be the
+one that declines. Humans answer through the existing `ChoicePrompt`, with repeated modes rendered as
+a count (`×2`) rather than a toggle.
+
+### 3.17 Indestructible + the blocking restrictions — ✅ done
+Two small engine systems the mechanic census named together (`docs/plans/mechanic-completion-plan.md`
+§3c), sharing one lesson: **a rule belongs where it is expressible, and nowhere else.**
+
+**Indestructible is not a shield, it is an exemption from exactly two rules.** CR 702.12b removes
+the permanent from destruction — an effect that says "destroy", and lethal marked damage (CR 704.5g),
+with deathtouch's "any nonzero damage is lethal" (CR 702.2b) riding along. Everything else still
+works, and each is a *different* rule: **0 or less toughness** puts it into the graveyard by
+CR 704.5f, which the keyword does not mention; **sacrifice** is a cost, not destruction; **exile**
+moves it by another path. So the state-based-action pass asks the two creature-death questions
+separately and gates only the damage one on the flag — collapsing them into one guarded expression is
+the classic wrong implementation and makes a creature with no toughness immortal. The destroy
+exemption itself lives in `destroyPermanent`, the single function every printed "destroy" in the pool
+already passed through (single target, board wipe, modal destroy mode), so there is no per-caller
+check to forget.
+
+**A latent bug this exposed, worth more than either feature.** The continuous layer's `KEYWORD_KEYS`
+is a hand-maintained list of the boolean flags a GRANT may set. A flag added to `KeywordFlags` and not
+to that list works when printed and does *nothing* when granted — silently, and in one direction only.
+It had already eaten a granted hexproof once. Both new booleans are in it, `minBlockers` folds by MAX
+(two blocking requirements are both in force; the stricter decides, and summing would invent a third),
+and granted-not-printed cases are now covered by tests in both systems.
+
+**Blocking restrictions are split by what a check can SEE**, following the menace precedent:
+- **per pair** (`canBlock`): "can't be blocked", "~ can't block", flying/reach, protection. Each
+  disqualifies one specific attacker/blocker pairing.
+- **per declaration** (`illegalBlockDeclaration`): menace, and its general form "can't be blocked
+  except by N or more creatures" (`minBlockers`, of which menace is the N = 2 printing). Every
+  blocker is individually legal and only the *count* is not, so a per-pair check cannot express it.
+
+⛔ **Block REQUIREMENTS are NOT implemented, deliberately.** "Must be blocked if able" and "all
+creatures able to block ~ do so" are the other half of CR 509.1c/d, which resolves requirements and
+restrictions *together* — maximise satisfied requirements without violating any restriction. That is
+a solver, not a check, and half of it would be a card playing differently from its text. The compiler
+reports those cards by name, and the unsupported hint says which of the two things is missing.
+
+Also reported rather than approximated: a restriction whose SELECTOR compares the two creatures
+(skulk; Delney's "power 2 or less can't be blocked by power 3 or greater"), and a filtered set the
+static layer cannot read — `statics.ts` matches PRINTED characteristics only, on purpose, so
+Tetsuko's "power or toughness 1 or less" has no faithful filter and keeps reporting.
+
+**Both seats.** The pilot no longer "kills" an indestructible creature: destroy and exile are split
+into one intent flag, a destroy looks past indestructible creatures and holds the card if the whole
+enemy board is one, and a sweeper's value counts neither side's indestructible creatures. It also
+never proposes a declaration the engine would refuse — it assigns one blocker per attacker, so it
+declines to block a menacing attacker at all rather than voiding every other block in the same action.
+
+**Measured yield:** the top-2100 corpus went **229 → 252 playable** (10.9% → 12.0%) on the same cached
+corpus, via the keyword itself plus four rule-table entries it unlocked: the mass until-end-of-turn
+grant ("permanents you control gain hexproof and indestructible"), the anthem static generalised past
+"creatures" to any permanent noun (Darksteel Forge, Avacyn), the printed PHRASES "can't be blocked" /
+"can't block" as keyword names, and "target creature can't be blocked this turn". Gauntlet seed 99 is
+byte-identical to `origin/main` (79/280) with throughput at parity.
+
+### 3.18 The in-game bug reporter — ✅ done
+Ported from the same tool in Treadlight and Lightwalker, where it has been the single most effective
+route from "it did something weird" to a fixed defect. Press **B** — or tap the ⛬ button, which is the
+one that matters, because the live PWA is used on a phone with no keyboard — and from ANY view the
+screen freezes on the frame the problem is on. You scribble on that frame, type and/or **speak** what
+went wrong, and Submit hands over `bugreport_<stamp>.zip`.
+
+**The bundle is the same set of entries all three projects write**, so one habit reads a report from
+any of them: `report.md` (the same field lines), `screenshot.png`, `annotated.png`, `state_dump.txt`,
+`voice.webm` + `transcript.txt`. A browser cannot write a folder, so the web one is a zip — built by
+`lib/bugreport/zip.ts`, a ~150-line STORE-only writer, rather than a dependency, since the payloads
+(PNG, WebM) are already compressed.
+
+**A GLOBAL OVERLAY, not a view** (`components/BugReporter.tsx`, mounted once in `App.tsx`). A view
+would have to be navigated to, which loses the screen being reported about — the whole point of the
+tool. No view contains a line of code about bug reporting.
+
+**`console.txt` takes video's place.** The two games record the last N seconds of frames because a
+rendering bug has to be SEEN. Here the equivalent evidence is textual, and arguably better: the
+console/error ring (installed at app load, not at report time, or it has already missed the thing you
+opened it for) carries the warning that fired, the unsupported-mechanic signal and the thrown stack. A
+screenshot of a card grid rarely says why a verdict was wrong; the log usually does.
+
+**`state_dump.txt` is a REGISTRY, not a hardcoded list** (`lib/bugreport/state-dump.ts`). Any surface
+registers a named section with `registerStateSection` and it appears in every future report — the same
+seam the games' dumps use, and the reason theirs never go stale. Built-in sections: build (the commit
+is compiled in by `vite.config.ts`, so a report from the live PWA names the build it came from),
+environment (including installed-PWA vs browser, which changes which bugs are even possible) and
+storage. `App.tsx` registers the view, the decks and the pool size.
+
+**Defects found by RUNNING it, each now pinned by a test in `capture-policy.test.ts`:**
+- Rasterising `document.body` captures the whole SCROLLABLE page while the reporter draws in VIEWPORT
+  coordinates, so every stroke lands somewhere else. Fixed by sizing the raster to the viewport and
+  translating the clone by the scroll offset. (Lightwalker's port hit the identical bug for the
+  equivalent reason — a framebuffer bigger than the window.)
+- The frame and the ink canvas were each fitted with `object-fit: contain`, so the canvas ELEMENT
+  filled the stage while its BITMAP was letterboxed inside it — every stroke scaled and offset. They
+  now share one aspect-ratio box; the harness asserts `scaleX === scaleY`.
+- **The capture took 8–11 seconds on the two views people actually use.** The cost is not images and
+  not CSS: the rasteriser serialises the cloned DOM into an intermediate SVG, and on the Deck Builder
+  that string is **41 MB**. Nearly all of it is scrolled off the bottom. The capture now drops the
+  trailing run of children that renders below the fold — per parent, because the Deck Builder's long
+  grid is followed in DOM order by a short side panel, which defeated a document-wide version.
+  **Deck Builder 10.4 s → 0.8 s, Cards 7.3 s → 0.8 s**, with the two images compared pixel for pixel.
+- **That pruning then ate the sort dropdown's label.** `<option>` elements have no bounding box, and
+  the first rule dropped everything after the last *measurable* child — so the capture came back with
+  a blank box where "Name" should be. "Cannot anchor the run" and "may be pruned" are different
+  properties: the reporter's own launcher is `position: fixed` at the bottom of the viewport and is
+  the last node in the body, and while it anchored, nothing anywhere was pruned. Both regressions are
+  now unit tests.
+
+**The rolling clip — what happened in the seconds BEFORE `b` was pressed.** The two games read their
+framebuffer ten times a second into a ring and dump the last N seconds as video. A browser cannot:
+rasterising the DOM costs ~0.8 s a frame even optimised, and `getDisplayMedia` is a permission prompt
+Android Chrome does not implement — so on the phone this app actually ships on, screen recording is
+not available at all. The clip is therefore a **DOM session recording** (rrweb), always on from app
+load, and the report carries `replay.html`: one self-contained page, player inlined, that plays those
+seconds back with a scrubber and fetches nothing. For a bug report that is better than video — the
+replay carries the real DOM, so text is selectable and layout is inspectable. `clip.json` ships beside
+it so the events survive even if the player does not.
+
+The ring keeps whole CHUNKS, never a sliced window: a replay can only start from a full snapshot, so
+"the last 30 seconds" rounds outward to the snapshot boundary (a floor, never a ceiling). Recording
+stops the instant the reporter opens, so the clip ends where the bug is and never contains the
+overlay's own frozen frame. The submit-time stepper dials it to zero — the games' rule, kept.
+
+**That clip is what forced the archive to compress.** A full rrweb snapshot of a 95-node page is 3 MB,
+because it carries every inline style and the whole stylesheet; the first bundle with a clip in it was
+**15.7 MB**, which is a report a phone will not upload. The ZIP writer now deflates the text entries
+through the browser's own `CompressionStream` (raw deflate, method 8) and leaves already-compressed
+images alone: **clip.json 6020 KB → 189 KB, replay.html 6503 KB → 294 KB, the bundle 15.7 MB → 3.7 MB.**
+The harness inflates what it reads back, so the compressed archive is proven readable, not assumed.
+
+**How the picture itself is verified — `npm run verify:reporter -w @jonny-boi/web`.** No unit test can
+check a third-party rasteriser's pixels, and the in-app browser pane cannot either: in a backgrounded
+tab `toPng` never resolves at all, even for one header element. So the harness drives the SHIPPING
+bundle in the Chrome already installed on the machine (puppeteer-core, no browser download): it opens
+the reporter on the worst-case view, and asserts the frame is a real PNG the size of the viewport with
+thousands of distinct colours, that a dragged stroke lands within a couple of pixels of the pointer,
+and that the submitted zip contains what `report.md` says it does. It writes `frame.png` and
+`annotated.png` so a human can LOOK. `--view <label>` picks a view; `--fidelity` additionally captures
+with and without pruning and compares every pixel — the check that caught the `<option>` defect, where
+the delta was 207 against an anti-aliasing floor of 7.
+
+### 3.19 Alternative and additional casting costs — cycling, buyback, madness — ✅ done
+The third answer to "what does this card cost?", after §3.11's {X}/kicker and §3.16's modal/multikicker
+work. These three are one section because they are one question asked three ways: what a card costs,
+and **where it goes**, when it is played by some route other than "pay the printed cost from your hand".
+
+- **Cycling** (`CardDefinition.cycling`, the `cycleCard` action) — an activated ability of a card in
+  **hand**: pay the cost, **discard the card as the rest of that cost**, put the ability on the stack.
+  It is deliberately NOT an entry in `activated`: that list is activated from the battlefield by a
+  permanent, and folding the two would teach every battlefield-shaped check (summoning sickness, tap
+  costs, `findOnBattlefield`) about a zone it has never had to consider. The discard being a **cost**
+  is what makes cycling a madness card exile it, what makes a "whenever you cycle or discard" trigger
+  fire, and what makes countering the ability not give the card back. Instant speed, so a cycling land
+  becomes a card on an opponent's turn — which is the whole reason to play one over a tapland.
+- **Typecycling and landcycling** fold into cycling completely: same list, same action, same code
+  path, with the ability's effects being a **library search instead of a draw**. The searchable words
+  are a closed table (the five basic land types plus the generic "land") because each has to name
+  something `CardFilter` can genuinely select; a cycling word outside it reports rather than fetching
+  approximately the right card.
+- **Buyback** (`CardDefinition.buyback`) — an optional additional cost asked at cast time exactly as a
+  kicker is, whose answer changes not the spell's script but its **exit from the stack**. That exit is
+  one shared answer: `spellLeaveDestination(spell, reason)` in `state.ts`, which flashback already
+  owned. The `reason` argument is the whole design — a flashback card is exiled however it leaves the
+  stack, while a bought-back spell returns to hand only when it **resolves** and goes to the graveyard
+  when it is **countered** (CR 702.27a). Two exits that can disagree about where a card goes is
+  precisely the bug that helper exists to prevent, so countering asks the same function.
+- **Madness** (`CardDefinition.madness`) — not a cast-time cost at all but a **replacement on the
+  discard**, plus a cast that follows. Both discard funnels in this repo (core's `moveToZone` and the
+  cards package's `moveOwnedCard`) ask the shared `discardDestination`, so a card discarded as a cost
+  and a card discarded by an effect cannot disagree about being exiled. The exile opens a **madness
+  window** on the game state, and while it stands the legal-action generator offers exactly: mana
+  sources, the cast (`fromZone: 'exile'`, paying the madness cost, ignoring the card's printed
+  timing), and **pass — which declines**, dropping the card into the graveyard the discard would have
+  used. Modelling the window as state rather than as a trigger on the stack is what lets every seat
+  play madness with no new transport: the pilots, the hotseat UI and the online server all already
+  enumerate actions and submit one.
+
+**Both seat kinds actually use them, which is the rule against inert mechanics.** The heuristic pilot
+cycles a surplus land once it is **flooded** (`floodedLandCount` lands in play, so a further land is
+worth less than an unknown card) and cycles anything at the **end step**, where the mana would empty
+unused anyway — and it funds both through the same `planManaPayment` a spell goal uses, which is
+load-bearing: the engine offers `cycleCard` only once the pool already covers the cost, so a pilot
+that did not plan its taps would never see the action and the mechanic would be inert on a board of
+untapped lands. Madness is a one-sided judgement on purpose: the card is *already discarded*, so
+declining does not keep it, and casting is right whenever the mana exists. Humans get a hand-card menu
+when a card has more than one way to be played (a cycling land is a land drop **and** a cycling
+ability) and a prompt for the madness window, because a player who did not know the window was open
+would stall against a board that refuses every other move.
+
+**Measured** against the cached 2100-card most-played corpus with
+`packages/cards/scripts/coverage-audit.mjs --input <corpus>`: **+21 playable cards** (229 → 250
+against the main this landed on; re-measured 307 → 328 against a later one), which is
+the census's predicted yield for this system (20 sole-blocked cards) plus one. The forms that still
+report, by name: an **{X} cycling cost** (Shark Typhoon — an activation cost has no answer-and-charge
+step), a **madness cost printed in words** ("Madness—Pay six {C}"), a **cycling word with no
+expressible filter**, and **aftermath**, which is a split card and needs the `//` type rather than
+anything in this section.
+
+### 3.20 The pool a player can actually SEE — every shipped mechanic represented — ✅ done
+Sixteen engine systems shipped in two days and the built-in card pool printed almost none of them: no
+card with flashback, {X}, kicker, scry, surveil, mill, protection or ward, and exactly one
+planeswalker. Every one of those systems was reachable only by importing a decklist — which is
+another way of saying a player using the app as shipped could not see the work at all. That is the
+rule this section closes: **a feature nobody can see is not done.**
+
+The pool is **191 → 309 cards**, and the growth is a DATA edit, not an engine change: names go into
+`packages/cards/data/expansion-candidates.json`, `scripts/build-expansion.ts --fetch` resolves them
+against Scryfall, and the second (offline) pass admits only the ones the Oracle compiler reports
+`'complete'`. Nothing was hand-authored to fill a gap, because a hand-authored card would have to
+match the compiler anyway — `fidelity.test.ts` re-derives every pool card from its printed text.
+
+What the pool now shows, per mechanic: **scry** (Opt, Preordain, Serum Visions, ten Theros temples,
+Castle Vantress, Zhalfirin Void), **surveil** (Consider, Notion Rain, the ten Ravnica surveil lands),
+**mill** (Tome Scour, Glimpse the Unthinkable), **printed flashback** (21 cards — Think Twice,
+Firebolt, Lingering Souls, Call of the Herd — including Devil's Play, whose flashback cost prints
+its own {X}), **{X}** (Blaze, Mind Spring, Condescend, Death Grasp), **kicker** (Firebending Lesson,
+Tolarian Geyser), **modal spells** (15, the charm cycle), **protection** (the knights: White, Black,
+Silver, Blood, Paladin en-Vec, Mirran Crusader), **ward** (Tomakul Honor Guard, Waterfall Aerialist,
+Archive Dragon), **+1/+1 counters** (Sprite Dragon, Electrostatic Infantry, Unspeakable Symbol), and
+a **second planeswalker** (Samut, Tyrant Smasher — the only other walker in all of Magic whose every
+printed line compiles today).
+
+`packages/cards/src/pool-mechanics.test.ts` is the guard: an executable inventory that FAILS when a
+mechanic loses its last card, plus a real seeded game per mechanic proving the card plays it (Firebolt
+is recast from the graveyard and then exiled; Blaze deals the X that was paid; Abrade's mode is chosen
+at cast; Path to Exile cannot be aimed at Black Knight; ward taxes the caster and counters the spell
+when they decline).
+
+**Six systems still have no honest card, each with a measured reason** (every printed card carrying the
+mechanic was compiled; the accept count is zero): **multikicker** (0/19 — every one spends the kick
+COUNT, a derived value with no template), **emblems** (0/90 — the wrapper compiles, no emblem BODY
+does), **modal DFCs** (0/100 — the land face's "enters tapped unless you pay 3 life" has no
+template), **battles** (0/36 — Sieges are cast by a path the engine lacks), **indestructible** and
+**alternative costs** (both still in flight). They are listed in the test with their reasons and
+asserted ABSENT, so the day one becomes representable the suite says so.
+
+Two defects fell out of actually playing the new cards, which is the point of the exercise:
+- **`addCounters` threw on every real permanent.** It wrote into `CardInstance.counters` in place, and
+  that record is the shared FROZEN `NO_COUNTERS` object for anything with no counters — so the first
+  +1/+1 counter on a permanent the ENGINE created died with "object is not extensible". Nine counter
+  tests were green because they all built their instances by hand (each with its own `{}`). No pool
+  card had ever put a counter on an engine-created permanent.
+- **The fidelity audit kept its own copy of core's target-restriction list**, which had gone stale:
+  it failed "Destroy target artifact" for declaring `'artifact'`, a restriction core has enforced
+  since the attachment work. It now asks core's own `isTargetRestriction`.
+
+The corpus measurement is stated for honesty, because this section did not move it: the pool grew by
+using rules the compiler already had. Measured on the same cached corpus, it was **229 / 2100 (10.9%)**
+when this branch started and is **307 / 2100 (14.6%)** after merging §3.17's indestructible work and
+the you-may/trigger templates — all of that is compiler width, none of it is this section. This section
+widened what the SHIPPED POOL shows; widening the compiler is §3.11's backlog.
+
+Each sibling branch that landed while this one was out widened the pool again on the same one-line
+rule — names in, `'complete'` verdicts out. §3.17 gave indestructible its cards (the Darksteel family
+and the ten artifact Bridges, pool 309 → 331); §3.19 gave the alternative costs theirs (the cycling
+lands, Fiery Temper's madness, Capsize's buyback, 331 → **357**). Of the twenty-two mechanics the
+inventory audits, four still have no honest card. On the same cached corpus, compiler coverage went
+229 → 307 → **328 / 2100 (15.6%)** across those merges; none of that movement is this section's, which
+adds no compiler rule.
+
+Two more defects surfaced doing it — the generator serialized any string too long for one line as a
+character-indexed object (nothing had printed a label that long until the fetchlands compiled), and
+that broke `npm run build` while `npm run verify` stayed green, because verify lints and tests but
+never type-checks.
+
+#### The second run — pool **357 → 530**, and the three FETCH-PATH bugs that were hiding most of it
+Six more engine systems shipped after the first run (the split/aftermath/adventure/Siege second face,
+the as-enters naming, the intervening "if" and the step-trigger family, mandatory additional costs and
+multi-destination searches, the mana-ability model, and — while this branch was out — replacement
+effects and equipped-creature triggers), and every one of those branches signed off with "whoever next
+runs the pipeline gets these free." **They were not free.** Eleven systems printed ZERO pool cards,
+and three of them were blocked in the FETCH PATH rather than by the compiler, so re-running the
+generator on the old pipeline would have produced almost none of them.
+
+⚠️ **`/cards/collection` does NOT resolve a combined `"A // B"` name.** Posting
+`{ name: 'Fire // Ice' }` comes back in `not_found`; posting `{ name: 'Fire' }` returns the whole
+`Fire // Ice` record. Every split and aftermath candidate was failing to resolve, silently.
+`frontFaceName` (data-tools `verify.ts`) is now the one place that answer lives, and both the expansion
+fetch and the regenerated `starter-cards.json` go through it — the starter list is a list of things to
+ASK SCRYFALL FOR, so it carries front-face names while the index keeps the card's real name.
+
+⚠️ **A Siege's printed defense is on `card_faces[0].defense`, not at the card level.** §3.15 captured
+`defense` and the split-card work said a re-fetch would unblock battles; it did not, because
+`normalizeCard` read only `raw.defense` and every battle in Magic therefore normalized to `null`
+anyway. The front-face fallback the cost/type/text lines already took now covers `defense` and
+`loyalty` too. This is the same shape as the missing `layout` field that turned out to be twelve of
+the split-card branch's thirteen cards: **if you are measuring coverage, check the normalizer is not
+dropping the field your detector reads.**
+
+⚠️ **CR 715.2 — an ADVENTURER's mana cost is the creature's, not the two halves added up.** Scryfall
+prints `"{B} // {2}{B}"` at the top level for Foulmire Knight and reports `cmc: 1`; summing the string
+produced a four-pip cost that contradicted the card's own mana value and tripped the index's
+pip↔mana-value invariant on every adventurer at once. A SPLIT card is the opposite — CR 709.4 makes
+the combined object's cost the SUM and Scryfall's `cmc` agrees — so the fix is narrowed to the one
+layout where the printed top-level string is not the card's cost.
+
+**Every one of the eleven now has real cards. The count is the compiler's verdict, not a judgement:**
+
+| mechanic | before | after | representative cards |
+|---|---:|---:|---|
+| split cards (CR 709.4) | 0 | 5 | Assault // Battery, Integrity // Intervention, Road // Ruin, Spring // Mind, Start // Finish |
+| aftermath | 0 | 3 | Road // Ruin, Spring // Mind, Start // Finish |
+| adventure | 0 | 18 | Foulmire Knight, Order of Midnight, Rimrock Knight, Beanstalk Giant, Merfolk Secretkeeper… |
+| modal DFCs | 0 | 21 | the ten Pathway lands, plus Bala Ged Recovery, Jwari Disruption, Kazandu Mammoth… |
+| "as ~ enters, choose a…" | 0 | 8 | Adaptive Automaton, Patchwork Banner, Heraldic Banner, Vanquisher's Banner, Coldsteel Heart… |
+| mandatory additional costs | 0 | 9 | Village Rites, Thrill of Possibility, Bone Splinters, Altar's Reap, Cathartic Reunion… |
+| a search with TWO destinations | 0 | 2 | Cultivate, Kodama's Reach |
+| the mana-ability model | 0 | 50 | ten pain lands, ten filter lands, ten Talismans, ten Signets, Mox Opal, Ancient Tomb, Reflecting Pool… |
+| battles (Sieges) | 0 | 3 | Invasion of Moag, Invasion of Belenon, Invasion of Dominaria |
+| the printed intervening "if" | 0 | 3 | Howling Mine, Dragonmaster Outcast, Colossal Majesty |
+| "at the beginning of…" step triggers | 1 | 12 | Underworld Dreams, Font of Mythos, Temple Bell, Kami of the Crescent Moon… |
+| equipment with a TRIGGERED ability | 0 | 4 | Sword of Fire and Ice, Skullclamp, Sword of the Animist, Argentum Armor |
+| damage prevention (the Fog family) | 0 | 4 | Fog, Holy Day, Darkness, Moment's Peace |
+| replacement effects (CR 614/615) | 0 | 2 | Hardened Scales, Torbran, Thane of Red Fell |
+
+The last three rows are the ones this branch did NOT expect to close: `feat/replacement-effects` and
+`feat/combat-damage-and-equipment` merged to `main` while it was out, and re-running the same
+candidate list on the merged compiler admitted fifteen more cards with no edit at all. That is the
+pipeline working as designed — **names in, `'complete'` verdicts out** — and it is the argument for
+re-running it after every compiler branch rather than once every four.
+
+**Still no honest card, both MEASURED by compiling every printed card that carries the mechanic:**
+**multikicker** 0/19 (12 of the 19 blocked on the counters template alone) and **emblems** 0/90 — and
+for emblems the loyalty ULTIMATE that would make the emblem is the bigger blocker, 108 unreadable
+loyalty clauses across those 90 against 77 unreadable emblem bodies. Everything else the inventory
+audits now has a card **and a seeded game proving it plays**: `pool-mechanics.test.ts` grew from 22
+inventory entries and 11 play tests to 35 and 26.
+
+The other measured counts, for whoever picks up the next template family: battles **3/36**, modal DFCs
+**22/98**, split cards **5/124** (28 of the residual are Rooms and 17 are FUSE), aftermath **3/27**,
+adventure **18/152**, damage prevention **11/123**, equipment-with-a-trigger **13/145**, replacement
+on counters **3/17**, replacement on damage **4/32**.
+
+⚡ **Rule 7 / §3.4a: the gauntlet at seed 99 is byte-identical to the same-box `origin/main`** this
+branch merged (`b5752b2`) — **80/280**, rows 12 · 13 · 17 · 7 · 9 · 7 · 15, every one equal. ⚠️ The
+recorded 81/280 moved to 80/280 while this branch was out, and it is **not this branch's**: a
+baseline worktree at `b5752b2` with no pool change reads 80/280 too, so the one game belongs to
+`feat/block-requirements-and-statics`. **No meta deck was touched here**, deliberately: adding a card
+to a gauntlet deck moves every recorded A/B baseline and is a separate, measured decision. The
+pool-only cards that WOULD be gauntlet-worthy are named on the coordination board.
+
+📊 **The corpus number does not move, and that is the honest result: 533 / 2100 (25.4%) on
+`origin/main` at `b5752b2` and 533 / 2100 here**, measured on the same cached corpus in two worktrees
+on the same box (and 524 / 524 against the earlier `78e3299`, so it has held across two baselines). This section adds no compiler rule, and the three fetch-path fixes do not
+reach the audit's population (the top-2100 modern corpus holds exactly one battle, itself blocked on
+a "you may" template, and nine adventurers whose compile status the cost fix does not change). The
+width is in the SHIPPED POOL: **357 → 530 cards, 325 → 498 compiled**, and every card in it still
+round-trips through the compiler from its printed text.
+
+#### Three defects the bigger pool found, none of them in the pool
+`test/full-pool-soak` builds its theme decks FROM the shipped pool, so tripling the pool is also a
+much wider soak — and it broke three ways, all of them pre-existing and all of them invisible while
+the pool had no card that could reach them.
+
+⚠️ **THE PILOT PROPOSED A SPELL IT COULD NOT CAST, AND THEN PROPOSED IT AGAIN FOREVER.** The
+heuristic builds its cast actions itself rather than picking one off `generateLegalActions` — it has
+to, because it taps for mana first and the cast is not on the menu until the mana is floating. That
+makes every legality gate core applies at the OFFER a gate the pilot must apply too, and the
+mandatory additional cost (CR 601.2h) was missing: Altar's Reap with an empty board became a
+`castSpell` the engine rejected, nothing about the board changed, and the same cast came back on the
+next priority. Three soak games burned the 6000-action cap without ending. Goals are now filtered at
+`scoredSpellGoals`' single exit through core's own `unpayableAdditionalCostReason` (exported for
+this), so both consumers inherit it and there is still exactly ONE reader of the rule.
+
+⚠️ **A FREE EQUIP COST WAS AN INFINITE LOOP.** `bestEquipHost` excludes the creature the Equipment is
+already on, which stops it re-equipping the same body — but with TWO hosts and Equip {0} the pilot
+moved it A → B, found A was again the best non-host, and moved it back, at no cost, with nothing else
+on the menu ever outscoring it. `equipIsAnUpgrade` requires the destination to STRICTLY beat the host
+it is on, which makes the move monotone in `scoreEquip` so the cycle cannot close. Lightning Greaves
+was in all three capped games.
+
+⚠️ **THE SOAK'S OWN `transform-dfc` PREDICATE WENT STALE THE MOMENT THE POOL GREW.** It was
+`hasKey('backFace')` — and FOUR printed layouts hang a second half off that field (split, aftermath,
+adventure, modal DFC), none of which ever transforms. The theme deck for the mechanic was therefore
+drafted almost entirely out of cards that cannot flip, and the soak reported transform-dfc INERT
+while its one real card, Delver of Secrets, was never dealt into a game. A transforming DFC is the
+one whose back face is **not separately castable**. Same failure shape as every other stale
+predicate in this repo: it did not start wrong, it *became* wrong when the data underneath it grew.
+
+
+### 3.21 The triggering player + the intervening "if" — the "At the beginning of…" family — ✅ done
+The biggest template cluster in the coverage audit (~65 corpus cards) had ONE thing standing in front
+of it, and it was not a template: **a trigger's resolution did not know which player set it off.**
+
+`who: 'any'` fires an ability on both players' turns, but the ability resolves under its SOURCE's
+controller — so "at the beginning of **each player's** draw step, **that player** draws an additional
+card" would have drawn for Howling Mine's own controller on every turn, which is a strictly different
+(and strictly better) card. The compiler was right to refuse it, and `trigger-step-begins` carried an
+explicit `if (who !== 'you') return null;` saying so.
+
+**The fix follows the seam cast-time choices already use, rather than inventing one.** A chosen `{X}`
+rides `SpellStackObject → ResolutionFrame → EffectContext` so "deals X damage" can read it after the
+spell has left the stack. The triggering player now rides exactly the same three hops:
+
+    matchTriggers → PendingTrigger.triggeringPlayer      (answered from the EVENT, not the source)
+                  → TriggeredStackObject.triggeringPlayer (survives the clone at every action boundary)
+                  → ResolutionFrame.triggeringPlayer      (the resolution outlives the stack object)
+                  → EffectContext.triggeringPlayer        (what a body's "that player" reads)
+
+`triggeringPlayerFor` is the single place the answer is decided — the active player for a step, the
+drawer for a draw, the life-gainer for a life gain, the caster for a cast, the permanent's controller
+for an arrival or a death, and `undefined` for the events that are about no player at all. It is
+called only for triggers that actually FIRED, so the per-event scan pays nothing for it.
+
+`packages/cards` reads it through **one shared "whichPlayer" vocabulary** (`playersForParam`):
+`'controller'` · `'opponent'` · `'targetPlayer'` · `'triggering'` · `'each'` (both seats, active player
+first — APNAP, fixed here so the effect is reproducible from a seed rather than dependent on which
+seat the source sits in). `drawCards`, `loseLife` and `dealDamage` all
+speak it, so "each player", "that player" and "each opponent" mean one thing each wherever printed.
+
+**The printed intervening "if" landed with it** (`packages/core/src/intervening.ts`), because half the
+family prints one. It is part of the trigger CONDITION, not the body, because CR 603.4 checks it
+**twice**: a false condition stops the ability reaching the stack at all (nobody may respond to it),
+and one that has lapsed by resolution removes it doing nothing (`triggerFizzled`). Compiling it as an
+`if` wrapper inside the effects would have implemented only the second check. Two condition kinds
+ship — `sourceUntapped` (Howling Mine) and `controlCount` (a `CardFilter` plus a count bound, `max: 0`
+being the printed word "no") — and a `minPower` bound is read as **EFFECTIVE** power, since counters
+and anthems are what make a creature "power 4 or greater" on the board in front of the player. A
+condition outside that closed vocabulary makes its card REPORT: `splitInterveningIf` distinguishes "no
+clause" from "a clause I cannot read", and Felidar Sovereign's "if you have 40 or more life, you win
+the game" must never become "you win the game".
+
+**Also shipped:** the `drawsCard` trigger event ("whenever a player / an opponent draws a card"), the
+scope table grew `each opponent's` and the bare `each`, `combat` joined the step table, and the
+redundant `trigger-upkeep` rule was deleted — `trigger-step-begins` subsumes it and also handles the
+"you may" wrapper and the intervening "if", which `trigger-upkeep` silently could not.
+
+📊 **Measured on the cached 2100-card corpus, same file, before and after: 408 → 428 playable
+(19.4% → 20.4%), +20 cards, 0 regressions.** The twenty: Howling Mine, Kami of the Crescent Moon,
+Dictate of Kruphix, Font of Mythos, Teferi's Puzzle Box, Spiteful Visions, Scrawling Crawler,
+Stormfist Crusader, Dragonmaster Outcast, Colossal Majesty, Underworld Dreams, Fate Unraveler,
+Temple Bell, Mikokoro Center of the Sea, Forced Fruition, Corpse Knight, Kambal Consul of Allocation,
+Marauding Blight-Priest, Poison-Tip Archer, Elas il-Kor. Ten of them were never in the audit's
+"At the beginning of…" buckets at all — the draw watcher and the "each player draws" body reach them.
+
+⚡ **Rule 7:** the gauntlet at seed 99 is byte-identical to the same-box `origin/main`, and the added
+work is off the hot path by construction — `triggeringPlayerFor` runs only for a trigger that matched,
+the intervening check only for a condition that exists, and both new stack-object fields are copied
+CONDITIONALLY in `internal/clone.ts` so an ordinary trigger clones byte-for-byte as it always did.
+
+⛔ **Reported by name rather than approximated** (each is a different system, not a missing rule):
+"you win / you lose the game"; a DELAYED trigger ("at the beginning of your NEXT upkeep" — Pact of
+Negation); ~~blink (exile then return)~~ — **the immediate-return half SHIPPED in §3.35**; the
+DELAYED-return half (Flickerwisp, Eerie Interlude, Ghostway) still needs delayed triggers; token
+COPIES of a permanent (Extravagant Replication, Mechanized Production); the city's
+blessing / ascend; amass; discover; the Ring; "no maximum hand size"; a spell-cost increase or
+decrease static (God-Pharaoh's Statue, The Immortal Sun); "players can't activate loyalty abilities";
+DOUBLING power and toughness (Unnatural Growth, Zopandrel); "life lost this turn" (Wound Reflection);
+and a count derived from a REVEALED card's mana value (Dark Confidant, Twilight Prophet).
+
+⚠️ **One pre-existing infidelity this work ran into and did NOT fix, named so it is not rediscovered:
+a created token has no COLOUR.** `makeToken` builds a `CardDefinition` with no cost, and
+`colorsOfDefinition` derives colour from cost pips — so "a 1/1 **black** Faerie Rogue token" and "a
+5/5 **red** Dragon token" both enter colourless, invisible to a "black creatures you control" anthem
+or a protection-from-red. It predates this branch (every token card in the pool has it) and closing it
+needs a `colors` field on `CardDefinition` plus the colour reader honouring it — a small system, and
+one that belongs to whoever owns `makeToken`, not to a trigger branch.
+### 3.22 The second castable half — split, aftermath, adventure and the Siege reward — ✅ done
+The coverage audit's #1 and #2 gaps were one system: *casting the second half of a split, adventure or
+Siege card* (60 card-blocks) and *the "//" card type* (38). Four printed layouts, four different cast
+paths, and — as it turned out — one model.
+
+**A card may carry a second half that is really cast, plus the list of ZONES that half may be cast
+from, plus (for the two halves you earn rather than hold) a per-instance PERMISSION.** That is the
+whole design, and each layout is one configuration of it:
+
+| layout | the card's own definition | second half | cast from | pays |
+|---|---|---|---|---|
+| modal DFC (§3.16) | the front face | `backFace` | hand | its own cost |
+| **split** (CR 709) | the **combined object** (`frontFace` present) | `backFace` | hand | its own cost |
+| **aftermath** (CR 702.127a) | the combined object | `backFace` | **graveyard only** | its own cost |
+| **adventure** (CR 715) | the **creature** | `backFace` (`adventure: true`) | hand → then the creature from **exile** | its own cost |
+| **Siege** (CR 310.4) | the battle | `backFace` | **exile**, once defeated | **nothing** |
+
+**The one judgement worth reading twice: a SPLIT card's own definition is the CR 709.4 COMBINED
+object, and an ADVENTURER's is not.** A split card in a hand, graveyard or library is *neither half* —
+it has both names, the union of the type lines, and a mana value equal to the sum — while an
+adventurer card in every zone but the stack is *just the creature* (CR 715.2). Every characteristic
+read in the engine goes through `card.def`, so modelling a split card as its left half would have
+silently mis-answered every discard filter, cost reduction and "mana value 3 or less" clause. Making
+the combined object the definition, with the halves hanging off it as `frontFace`/`backFace`, makes
+all of that correct with no reader changed: `playableFaceOf` answers "which object am I casting?" for
+a split card, a modal DFC and an ordinary spell alike, so the cast path has one shape.
+
+**The permission is a card GRANT, not a new field.** "You may cast the creature later from exile" and
+"exile it, then you may cast it transformed" are the same sentence with different nouns, and both need
+exactly what `card-grants.ts` already provides: a record attached to one instance in one zone that is
+pruned the moment the card moves. CR 400.7 — the permission dies with the object — therefore falls
+out for free, and so does the clone (`cloneCardGrant` spreads, and `split-cards.test.ts` pins it).
+
+**Aftermath needed almost nothing, because the exit was already right.** `castFrom: 'graveyard'` makes
+a spell exile itself however it leaves the stack — written for flashback (CR 702.34a), and word for
+word what aftermath's "then exile it" asks for. The only new thing is the zone list, and the one
+deliberate exception in the cast path: a graveyard-legal BACK half pays its own printed cost rather
+than a flashback cost it does not print.
+
+**An adventure exiles on RESOLVE and not on COUNTER**, which is exactly the distinction
+`spellLeaveDestination(spell, reason)` exists to force a caller to state. A countered adventure goes
+to the graveyard like any other countered spell and the creature half is gone for good.
+
+**A `playLand` may now name a source zone**, for the one land play that does not come from a hand:
+a Town // Adventure card waiting in exile under its own permission.
+
+**Both seats play it.** The heuristic pilot walks the castable HALVES of every card in hand (a shallow
+synthetic instance whose `def` IS the half, so the scorer, the target-legality check and the mana
+planner all see the right cost with no second code path), plus an aftermath offer in the graveyard
+loop and an exile loop for permission casts — without which the pilot would cast Stomp and never take
+the Giant, which is strictly worse than not owning the card. The hotseat board returns one cast option
+per half, each labelled with that half's own name and cost and keyed `instanceId:face`, because the
+failure it replaces was not a missing button but a WRONG one: a single button showing the combined
+cost that cast the left half for a different price.
+
+**Reported, never approximated, each with its own named gap:** **FUSE** (CR 702.102 — one spell that
+is both halves at once, with a combined cost, two scripts and per-half targets: a second shape of
+spell, not a flag on this one) and **ROOMS** (CR 714 — Scryfall files them under the `split` layout and
+they share nothing else: a permanent whose second door is unlocked on the battlefield). Four of the
+six split-layout cards in the 2100-card corpus are Rooms. `SECOND_CASTABLE_FACE_GAP` is reworded to
+the residual it now names: a record carrying the combined `A // B` name with no per-face data to
+compile from, or a layout with no cast path at all (meld, flip).
+
+**Measured on the cached 2100-card corpus: 408 → 421 playable (19.4% → 20.0%).** Twelve of the
+thirteen come from a single missing FIELD: `normalizeCard` dropped Scryfall's `layout`, so every modal
+DFC in a fetched corpus fell through the compiler's face detection and reported this very gap. The
+layout is the only unambiguous statement of what a two-faced record means — a split card and a modal
+DFC both print two faces with two costs — and the compiler refuses to guess it from the name.
+
+⚠️ **The committed card index predates the `layout` field, so no pool card compiles as a split card
+yet.** The fetch pipeline captures it from now on; a re-fetch of the index is what puts these layouts
+in front of a player who has not imported a decklist, and that file belongs to the pool branch.
+### 3.23 "As ~ enters, choose a…" — a value NAMED as a permanent enters, and remembered — ✅ done
+The replacement-effect naming of CR 614.1c: **"As Cavern of Souls enters, choose a creature type."**
+The corpus audit named it as one gap of 27 cards, but the prompt was never the hard half. **The crux
+is that the answer has to stick to the permanent and still be readable ten turns later** — by the
+card's own anthem ("creatures you control **of the chosen type** get +1/+1"), by its own mana ability
+("add one mana **of the chosen color**"), by its own type line ("this creature **is the chosen type**
+in addition to its other types") and by its own cast trigger ("whenever you cast a spell **of the
+chosen type**"). A chosen value nothing can READ is a half-card, so this section is one choice kind
+plus **four readers**, not one prompt.
+
+**Measured, paired, on the same cached 2100-card corpus against the `origin/main` this branched from:
+408 → 414 playable (19.4% → 19.7%).** Six cards became fully playable — Adaptive Automaton, Patchwork
+Banner, Heraldic Banner, Coldsteel Heart, Vanquisher's Banner, Chronicle of Victory — and one more
+(Cloud Key) had its naming line implemented while its cost-reduction line still reports.
+
+#### The shape
+- **`ChooseValueChoice`** — a ninth choice kind. Not a `chooseModes`: nothing RUNS when it is
+  answered. It carries a `subject` (`color` / `creatureType` / `cardType` / `basicLandType` /
+  `player`) because the *answering policy* differs per subject and a list of one-letter strings is
+  otherwise indistinguishable from a list of seats.
+- **`CardInstance.chosenAsEntered`** — the memory, and the whole system. Copied by `cloneInstance`
+  (conditionally, like `attachedTo`), cleared by `resetInstanceForNewZone` (CR 400.7 — a permanent
+  that leaves is a new object and names again), and announced by a new **public** `chosenAsEnters`
+  event.
+- **`CardDefinition.asEntersChoice`** — one declaration read by every consumer: the engine, the AI's
+  policy, the UI and the About page.
+
+#### Where it is asked, and the ONE inert default
+The naming happens *while* the permanent is entering — the same moment "enters with N +1/+1 counters"
+applies — so it is raised by the two paths that hold a permanent mid-entry and can still park a
+question:
+- **playing a land** — `raiseLandEntryChoice` in `engine.ts`, beside the shockland's `payLife`;
+- **a permanent spell resolving** — the compiler puts the `chooseAsEnters` primitive FIRST in the
+  card's script, so it runs against `ctx.source` before `finishSpellResolution` puts it on the
+  battlefield. (The same seam `addCounters { self: true }` uses, and for the same reason.)
+
+**Every other entry path — reanimation, another card's "put it onto the battlefield", a token, a
+hand-built test instance — records NOTHING, and nothing named matches nothing.** That is the
+shockland's rule applied to a naming: the unasked default is explicit (`NOTHING_CHOSEN`), it is the
+same value on every path, and it is the one that can never grant an advantage, because *every* reader
+treats an absent value as the empty set rather than as "no filter". A reanimated Adaptive Automaton
+is an anthem over nobody, never over the whole board. `defaultAnswerFor` therefore names NOTHING
+rather than the first option — an arbitrary pick dressed up as a default would hand the degraded path
+a working creature type.
+
+⚠️ **A LAND CAN OWE TWO QUESTIONS AND ONLY ONE CAN BE PARKED.** Multiversal Passage names a basic land
+type and *then* offers to pay 2 life; Temple of the Dragon Queen offers a reveal and names a colour.
+`raiseLandEntryChoice` is therefore a STEP function — it asks the first unanswered question and is
+called again from the answer handler — rather than three independent branches, which would silently
+drop the second. The `tapped` event stays deferred until every question is settled, so a replay never
+shows a land flickering tapped→untapped.
+
+#### The four readers (this is the part that makes it a card)
+1. **`StaticAffects.ofChosenSubtype` / `ofChosenColor`** — an anthem narrowed by the source's own
+   naming. Safe against a layer loop (CR 613.8) for exactly the reason `hasCounterKind` is: the value
+   is instance STATE written once on entry, and no continuous effect in this model can change it.
+2. **`CardDefinition.isChosenSubtype`** — "this creature is the chosen type in addition to its other
+   types". Read through `permanentHasSubtype`, the instance-aware form of `hasSubtype`, which the
+   shared `CardFilter` now uses — so a lord that named Goblin genuinely IS a Goblin and the next
+   lord's filter sees it. (Two Adaptive Automatons pump each other, which is the printed behaviour.)
+3. **`ManaAbility.chosenColor`** — "{T}: Add one mana of the chosen color", modelled exactly like
+   `derivedColors`: the mode LIST is a fixed five (the mode index must mean the same thing to the
+   action generator, the planner and the apply path) and WHICH mode is available is the per-instance
+   question, answered by `manaModeBlockedReason`. A permanent that named nothing offers no mode and
+   taps for nothing.
+4. **`TriggerCondition.spellSubtypeIsChosen`** — "whenever you cast a creature spell of the chosen
+   type". The SPELL is resolved from the stack through the existing `TriggerSubject` seam rather than
+   by widening the `spellCast` EVENT with a subtype list — which matters, because the event is the
+   log, and widening it changed every replay's bytes and broke the self-play behaviour lock for a
+   fact the object already carried.
+
+#### Both seats
+- **The pilot names deliberately, and it is documented policy, not a shrug.** A pilot that named at
+  random would still play legal Magic — it would just play a Cavern of Souls that taps for nothing and
+  an Automaton that pumps nobody, and **the lab would then report "no measurable difference" about a
+  card that is in fact a lord**. `answerChooseValue` names the type that appears on the most of the
+  chooser's OWN cards (their deck's tribe), the colour their own cards demand most counted in
+  coloured PIPS (one triple-black bomb outweighs two cantrips), and the OPPONENT for a player naming.
+  It reads only the chooser's own zones — a player knows their decklist — and is deterministic, ties
+  breaking on core's fixed option order.
+- **Humans get a radio group** in `ChoicePrompt` (`chooseValue` is a scalar draft, undecided until a
+  value is clicked — deliberately distinguishable from "named nothing", which is a legal answer), with
+  the menu scrolling inside the prompt so Confirm is always reachable. Both event-log formatters print
+  the naming out loud.
+- **The option list for a creature type is DERIVED from the game**, not from a thousand-entry table:
+  the subtypes on cards the chooser owns, plus everything on the battlefield. That is information the
+  seat genuinely has, and it never touches the opponent's hidden zones.
+
+#### Enforced tables
+`OBSERVATION_POLICY` classifies `chosenAsEnters` as **public**, and the reasoning is deliberate rather
+than convenient: a choice ANSWER is private to its chooser (which is why the three choice events are
+redacted), but a value named as a permanent enters is announced at the table and stays legible on the
+card for as long as it is there. What is *not* public — the option list, whose length is a weak read
+on the chooser's decklist — never leaves the choice, whose `choiceAsked` observation is already
+redacted to a count. `paired-arms-config.ts` classifies `chooseAsEnters` as **library-reading**, and
+conservatively: it moves no card and reveals no card, but its creature-type menu is built from the
+chooser's library, so a swapped card can change what is on offer and therefore what gets named — the
+exact divergence the identical-game skip claims cannot happen.
+
+#### Throughput (rule 7): parity, measured
+The 24-game **self-play behaviour lock is byte-identical** — same winner, same turn count, same action
+count, same event-log hash and same final-state hash on every seed — so the engine plays the same
+games. Allocation, by the scavenge probe (nursery pinned at 1 MB, 40 seeded games, 29,899 actions
+either way): branch **561 / 560** vs `origin/main` **561 / 561** on paired runs, with wider single
+runs of 578 and 576 showing the run-to-run band. Parity, not a claim of improvement. Wall clock on
+this box is worthless (several agents), which is why neither number here is a time.
+
+#### Deferred, each with a named blocker
+The naming is stored and readable; these are printed lines that would READ it and have no rule, and
+they now report as `a "the chosen …" READER the compiler does not recognize yet` rather than as a
+missing you-may template:
+- **a spend restriction on produced mana** (Cavern of Souls, Secluded Courtyard, Unclaimed Territory)
+  — unchanged, and still the mana-pool system §3.11's census named: the pool records colour, not what
+  each mana may pay for;
+- **cost reduction by the named type** (Urza's Incubator, Morophon, Cloud Key) — the cast-cost
+  modification system, in flight on its own branch;
+- **counter formulas over the named type** (Door of Destinies, Banner of Kinship — "+1/+1 for each
+  charge counter") and **a replacement effect on OTHER permanents entering** (Metallic Mimic);
+- **copying a spell** (Reflections of Littjara), **an extra instance of a triggered ability**
+  (Roaming Throne), **an additional mana when a land is tapped** (Caged Sun, Gauntlet of Power,
+  Utopia Sprawl);
+- **"choose a NUMBER between 1 and 10"** (Talion) — a subject this engine could store, deliberately
+  left out of the closed subject table because no printed line can yet read it, and a naming nothing
+  consumes is exactly the half-card this contract forbids;
+- **fear** (Cover of Darkness) — an evasion keyword the engine does not model;
+- **Multiversal Passage's "this land is the chosen type"** — a type-changing effect that would have to
+  grant the named basic land type's mana ability.
+### 3.24 Copy effects — layer 1, beneath everything — ✅ done
+The engine had never had a copy effect, and an earlier branch was told to skip clones for exactly that
+reason. `You may have ~ enter as a copy of any creature on the battlefield` now plays as printed.
+
+**The mechanism is one swap, and it is the transform system's.** A copy is applied by swapping
+`CardInstance.def` — every characteristic read in the codebase already routes through it (combat's
+P/T, targeting's types, the trigger collector's ability list, mana production, the AI's evaluation,
+the renderer's art), so the swap IS the routing and there is no second code path anywhere.
+`CardInstance.uncopiedDef` is the way back, restored by `resetInstanceForNewZone` when the permanent
+leaves (CR 400.7 — a bounced Clone is a Clone in hand). It is a **separate field from `printedDef`**
+and not redundant with it: `printedDef` answers "which FACE is up", `uncopiedDef` answers "which CARD
+is this really", and a copy of a DFC that then transforms needs both answers at once.
+
+**LAYER 1 IS THE WHOLE FEATURE (CR 613.2).** A copy is applied beneath everything, so counters (7d),
+anthems (7c), Auras and until-end-of-turn pumps all apply **on top of** the copied characteristics —
+which falls out for free, because those layers are computed from `inst.def` plus the instance's own
+state. And **you copy the printed card (CR 706.2)**: a 1/1 wearing three +1/+1 counters is copied as a
+**1/1**, a transformed permanent is copied by its **front face**, and a permanent that is itself a copy
+is copied by what it copies — and an ADVENTURER on the battlefield is copied as its creature half,
+which needs no special case because the cast path already put that half in `def` (CR 715.2).
+`copiableDefOf` is the single answer to that question and every path asks it. `copy.test.ts` pins all of it, including a copier that keeps its own counters and its own pump.
+
+**It is an as-enters REPLACEMENT, and it joins the existing one.** `CardDefinition.copyAsEnters` sits
+beside `asEntersChoice` (§3.23's CR 614.1c naming) and the `entersTapped*` family because it is the
+same kind of thing, and it deliberately reuses §3.23's machinery rather than growing a rival:
+`'copyAsEnters'` is a second `PendingChoice.context`, and the answer applies to
+`appliesToInstanceId` exactly as a naming's does.
+
+For a **permanent spell** the engine raises it in `resolveTopOfStack`, before `stackResolved` and
+before a single effect runs — the stack object goes straight back on the stack untouched while the
+question stands, and `SpellStackObject.copyAsEntersDecided` is what makes a DECLINE stick (a decline
+leaves no trace on the instance, so without the marker the resolution would re-ask forever). Asking
+there is what lets the COPIED card decide summoning sickness, starting loyalty and starting defense.
+
+For a **land**, `applyPlayLand` asks it **once, ahead of §3.23's `raiseLandEntryChoice` ladder**,
+and it is not another rung of that ladder for a precise reason: it does not answer a question about
+this land, it decides *which land the ladder is then asking about* — a Vesuva that copies Cavern of
+Souls owes Cavern's naming, one that copies a Temple owes nothing. Asking from the single call site
+also means it can never be re-asked. The answer re-reads `entersTapped` off the copied card (nothing
+can observe the intermediate value: the `tapped` event is deferred to the end of the ladder, and
+answering is the only legal action while a question stands) and then hands control back to the
+ladder.
+
+**Compiler: two closed tables, and a card outside them reports.** `copy-as-enters` owns the whole
+printed clause including its tapped-ness and its "except …" tail — an added card type or creature
+subtype, a kept name, legendary on or off, Spark Double's extra +1/+1 and loyalty counters, Vesuva's
+"enters tapped". **Measured PAIRED against the same-day `origin/main` on the cached
+2100-card corpus: 485 → 493 playable, nothing lost** — Sculpting Steel, Mirrormade, Copy Enchantment,
+Clever Impersonator, Spark Double, Vesuva, Echoing Deeps (which copies a land card in a **graveyard**)
+and Glasspool Mimic, whose copy clause sits on a modal-DFC face and so needed §3.22's work too.
+Throughput is at parity, measured rather than assumed: 562 vs 562 scavenges over 40 identical seeded
+self-play games (29,899 actions, byte-identical in both arms).
+
+**The AI has a policy, and it needed one.** The generic `selectCards` path prices candidates with
+`cardValue`, which reads EFFECTIVE stats — so a pilot would copy the 1/1 wearing three counters over
+the printed 4/4 beside it and end up a 1/1. `copyTargetValue` prices what the copy WOULD BE from
+PRINTED characteristics (body, abilities, keywords, mana source), and the decline bar is the copier's
+own printed body scored the same way — usually zero, because a Clone's own body is a 0/0 that dies to a
+state-based action on arrival. Proven against the real heuristic pilot in real games.
+
+**`Kindred` (CR 308) became a real card type.** Its entire rules content is that the card's subtypes
+are creature types without the card being a creature, and that it counts as a card type in a graveyard
+(Tarmogoyf) — so it is a member of `CardType`, has a bit in `CARD_TYPE_BIT`, and `TYPES_WITHOUT_SYSTEM`
+stays honestly empty. A record whose ONLY type is Kindred still reports: CR 308.1 requires a second.
+
+> ✅ **The first two of these SHIPPED in §3.31** — copying a spell on the stack and token copies.
+> The paragraph below is left as written because it is the record of what this section reported and
+> WHY, and its diagnosis was exactly right; what it lists is no longer the open work. (Its "CR 706"
+> citations are also corrected to CR 707 in the source — copying objects is section 707.)
+
+**Reported by name, not half-built:** copying a SPELL on the stack (Reverberate, Narset's Reversal) and
+TOKEN copies (Rite of Replication, Kiki-Jiki) need a stack object that is **not a card** and ceases to
+exist as it resolves (CR 707.10 — `resolvesTo` has only battlefield/graveyard/exile/hand, and any of
+them would leave a phantom card in a zone that delirium, flashback and Tarmogoyf all count), plus an
+aiming moment for "you may choose new targets for the copy" and the copy carrying the original's X and
+modes (CR 706.10). Also reported: a copy that GRANTS an ability printed in quotes (Phantasmal Image's
+"becomes the target" sacrifice, Sakashima's delayed return), a copy bounded by **the amount of mana
+spent** to cast it (Mockingbird — nothing records that number), and "becomes a copy" applied by an
+activated ability rather than as the permanent enters (Mirage Mirror, Thespian's Stage).
+
+
+### 3.25 Replacement and prevention effects — a layer the engine never had — ✅ done
+CR 614/615/616. A replacement effect never goes on the stack and never "happens": it watches for an
+event that *would* happen and changes what happens instead. Three printed families that looked like
+three template buckets are **one system underneath**, and this ships as one layer that damage,
+counters and draws all consult — `packages/core/src/replacement.ts` (what a card DECLARES) and
+`packages/core/src/internal/replacement.ts` (what the layer DOES), beside `internal/continuous.ts`
+and `internal/combat.ts`.
+
+**What plays as printed now.**
+- **Counter multipliers** — "If one or more +1/+1 counters would be put on a creature you control,
+  that many **plus one** are put on it instead" (Hardened Scales, Conclave Mentor, Ozolith, Kami of
+  Whispered Hopes) and "**twice** that many" (Corpsejack Menace, Branching Evolution, Doubling
+  Season's counter half).
+- **Damage scaling** — "If a **red** source **you control** would deal damage to **an opponent or a
+  permanent an opponent controls**, it deals that much damage **plus 2** instead" (Torbran) and the
+  doubling/tripling forms (Gratuitous Violence, Fiery Emancipation, Angrath's Marauders, Twinflame
+  Tyrant, Dictate of the Twin Gods, Gisela). All three restrictions are kept: a colour read off the
+  cost pips by the same reader protection uses, a source TYPE ("a creature you control"), and whose
+  objects may be hit. A clause with no controller tail is the symmetric card and is **not** quietly
+  read as "yours".
+- **Prevention** — the one-shot form ("Prevent all combat damage that would be dealt this turn" —
+  Fog, Darkness, Spore Frog's sacrifice ability) registers a floating effect that expires in cleanup;
+  the STATIC form ("Prevent all combat damage that would be dealt to **attacking** creatures you
+  control" — Dolmen Gate) is card data whose lifetime is derived from the battlefield. The two are
+  separated by the printed tail "this turn" and by a permanent check, because compiling a Fog as a
+  static would prevent damage for the rest of the game. "Prevent **half** that damage, rounded up"
+  (Gisela's second clause) is its own outcome, since halving produces a prevented amount the log must
+  report and the rounding direction is printed.
+- **Draw replacement** — "If you would draw a card **except the first one you draw in each of your
+  draw steps**, draw two cards instead" (Teferi's Ageless Insight) and "…**while your library has no
+  cards in it, you win the game** instead" (Laboratory Maniac). The printed exception is EXACT, not
+  approximated: core records a `drewInOwnDrawStep` turn fact as the draw-step draw happens, so the
+  second and every later draw in that step really is replaced.
+
+**⚠️ THE THREE THINGS THAT ARE EASY TO GET WRONG HERE, and what this branch did instead.**
+
+**1. CR 614.5 — an effect applies AT MOST ONCE to a given event.** This is the rule that makes a
+doubling effect terminate. After a replacement modifies the event the engine re-asks which effects
+apply *to the modified event*, and Doubling Season still matches its own output. The applicable set
+is therefore a **bitmask over the candidate list**, so an effect already applied is never offered
+again and the loop runs at most `candidates.length` times **by construction** — no recursion, no
+depth counter to tune. Two doublers on one event give ×4; one doubler gives ×2 and logs exactly one
+application.
+
+**2. CR 616.1 — the ORDER is the affected player's, and it is a real choice.** Hardened Scales then
+Corpsejack Menace puts **4** counters; the other order puts **3**. This engine settles that
+decision **deterministically, in one place, for every seat and every call site**: it enumerates the
+orders (exhaustively up to `ORDER_SEARCH_MAX_CANDIDATES = 4`, canonical order beyond) and takes the
+one the affected player would take — least damage, most `+1/+1` counters, fewest counters of any
+other kind (`affectedPlayerPrefersMore`, one named objective) — with ties broken by a canonical
+order that is a function of the state alone, so a paired A/B run cannot diverge on it.
+
+⚠️ **It is settled rather than ASKED, and the reason is structural, not laziness.** The hottest call
+site is the combat damage step, which is a synchronous batch inside the turn machine: `resolveCombatDamage`
+applies every assignment before priority exists again, so there is no resolution frame to park a
+`pendingChoice` in. A layer that asked a question for a Lightning Bolt and decided silently for a
+combat hit would be exactly the drift this repo keeps having to unwind. This is the same class of
+delegated sub-decision as "which lands get tapped to pay this cost", which core's shared payment
+planner has always answered on the player's behalf (§3.11) — every order it can produce is legal, and
+the decision the CARD prints is modelled in full.
+
+**3. A prevention SHIELD is consumed, and cannot resurrect.** "Prevent the next N damage" carries
+`remaining` on its floating record; it is decremented by exactly what it prevented, written back
+*and* spliced out of `GameState.replacements` the moment it hits zero. Both writes are deliberate:
+an index built earlier **in the same damage step** still holds a reference to the record, so the
+write is what stops the second attacker in one combat re-using a spent shield, and the removal is
+what stops any later index seeing it at all. A shield declared as a PRINTED ability is refused by the
+layer outright — it would have nowhere to keep its count and would prevent N *every time, forever*,
+which is a different and much better card.
+
+**⚡ THE LAYER IS INERT AND ALLOCATION-FREE WHEN NOTHING REPLACES ANYTHING.** This sits on the damage
+and counter paths, the hottest in the game, so `indexReplacements` returns the **shared frozen empty
+array by reference** unless some permanent, emblem or floating record actually declares a
+replacement; the guard at every call site is `index.length === 0`. The discovery loop is the same
+shape as `indexContinuous`'s — an indexed `for` over `state.battlefield`, one property read per
+permanent, no iterator, no output array unless something is found — and `GameState.replacements` is
+OPTIONAL and **absent** in every game that never makes one, exactly like `cardGrants`.
+
+**Measured three ways, because wall clock on this box is worthless** (the same build read 39 and then
+108 games/sec within one session):
+| measurement | origin/main | this branch |
+|---|---|---|
+| **Allocation** — scavenges over 40 seeded self-play games, semi-space pinned to 1 MB, median of 3 | **560** | **561** (identical 29,899 actions) |
+| **The added work itself** — `indexReplacements` calls / permanent property reads over 120 games | — | **4,324 calls / 60,530 reads, zero allocation** |
+| **Gauntlet, Mono-Red Aggro, 40 games/deck, seed 99** | **81/280** | **81/280 — every matchup row equal** |
+| **CPU time**, `process.cpuUsage`, paired and interleaved, 8 pairs | median 1844 ms | median 1851 ms (**1.004×**) |
+
+⚠️ Read the CPU row with its own caveat: the BASE arm alone swung 1421–2109 ms run to run (48%) on
+this shared box, so anything under ~10% there is below the machine's resolution. The allocation row
+and the byte-identical gauntlet are the load-bearing evidence.
+
+**The AI is not blind to it, and that was two separate fixes.** `packages/ai/src/tactical.ts`
+re-prices every attacker's damage through the layer (`projectDamage`), so `maxDamage`, the guaranteed
+damage after optimal blocks, the **lethal** flag and the clock all read the doubled swing — a pilot
+that owned a Gratuitous Violence and still attacked on printed power would decline a lethal attack.
+`totalIncomingDamage` does the same for the blocking decision. Both go through `projectDamage`, which
+runs the **identical** loop with the identical ordering rule and **writes nothing** — there is no
+second copy of the arithmetic, and a pilot weighing its options cannot spend the prevention shield it
+is weighing. A new `fog` spell intent is priced by exactly what it prevents (zero in a main phase,
+`lethalBurnScore` in front of a lethal swing, with a named floor so a poke does not buy a card).
+
+⚠️ **A REAL PILOT DEFECT FELL OUT OF IT, and it was not about fogs.** `chooseBlock` used to `return`
+a pass when no block was worth making, which made **every instant-speed response in the
+declare-blockers step unreachable** for a pilot that had declined to block — a fog, a combat trick, a
+burn spell to finish the turn. "Nothing is worth blocking" is an answer to WHICH BLOCKS, not to what
+to do with priority; it now falls through to the priority logic, which ends in the same pass when
+nothing is worth casting. **Gauntlet seed 99 is unchanged** (81/280, every row equal), because the
+shipped pool contains no instant the pilot wants in that window — the fix is what makes the pool's
+next one work.
+
+**Measured PAIRED against the same-day `origin/main` (`068be3d`) on the same cached corpus:
+485 → 501 of 2100 playable (23.1% → 23.9%), +16 cards.** The same +16 was measured against the
+pre-merge main this branch started from (408 → 424), which is the useful cross-check: the families
+that landed meanwhile moved the baseline, not this work's contribution. Re-run with
+`node packages/cards/scripts/coverage-audit.mjs --input <corpus.json> --top 0`.
+
+The 16, by shape: **counter multipliers** (Hardened Scales, Branching Evolution, Corpsejack Menace),
+**damage scaling** (Torbran, Gratuitous Violence, Fiery Emancipation, Angrath's Marauders, Twinflame
+Tyrant, Dictate of the Twin Gods, Gisela), **prevention** (Fog, Darkness, Spore Frog, Dolmen Gate)
+and **draws** (Laboratory Maniac, Teferi's Ageless Insight). Several more cards in these families
+compile their replacement clause correctly and stay `incomplete` on a DIFFERENT line — Conclave
+Mentor on "gain life equal to its power", City on Fire on convoke, Iroas on devotion — which is the
+contract working, not a gap in this system.
+
+**Still reported, by name, never approximated** (each is now its own `UNSUPPORTED_HINTS` entry, so
+the audit names the residual rather than a solved system):
+- a **TOKEN-count** replacement ("twice that many of those tokens are created instead" — Doubling
+  Season's other half, Parallel Lives, Anointed Procession): the layer scales a NUMBER, and creating
+  extra objects is a different outcome;
+- a **ZONE-CHANGE** replacement ("if it would die, exile it instead" — Rest in Peace, Dauthi
+  Voidwalker): the layer changes quantities, not destinations;
+- a **LIFE-CHANGE** event (Alhammarret's Archive, Rhox Faithmender, Bloodletter of Aclazotz) — one
+  more event kind on this same layer, blocked on nothing but a chokepoint at `changeLife`;
+- a prevention **RIDER** ("prevent that damage AND put a +1/+1 counter on it for each 1 prevented" —
+  Vigor, The Mindskinner): prevention itself is implemented, the rider is not;
+- a shield bound to **a source of your choice** (Deflecting Palm) — choosing a source is a question
+  nothing asks;
+- a draw replacement whose result is a different **ACTION** (Notion Thief's skip-and-redirect,
+  Abundance's reveal-until).
+
+⚠️ **NOT YET IN THE SHIPPED POOL.** Every card above is reachable through the deck importer and plays
+as printed, but none is in `packages/cards/data/expanded-pool.ts` yet, so a player browsing the pool
+cannot see the mechanic. Closing that is a DATA edit on the §3.20 path (add the names to
+`expansion-candidates.json`, re-run `build-expansion.ts`, re-fetch data-tools, regenerate the web card
+index) — it needs the network and it rewrites three generated files, so it is deliberately left to
+whoever next runs that pipeline rather than done from this branch.
+### 3.26 The full-pool soak — proving the shipped systems work TOGETHER — ✅ done
+Twelve engine systems shipped in three days (§3.13–§3.20) and the pool went 191 → 357 cards. Every one
+of them was tested **in isolation by the agent that built it**, and almost none were ever tested
+together. The gauntlet decks in `packages/sim/data/decks` are eight curated archetypes: they exercise a
+fraction of the pool and essentially none of the collisions. No test in the repo had ever put a
+planeswalker, an Equipment, a protection creature, a modal spell and a flashback spell in one game.
+
+The soak does. `packages/sim/src/soak*.ts` plays thousands of seeded games with **randomised-but-legal**
+decks drawn from the whole pool, deliberately mixing mechanic families, and asserts INVARIANTS — not
+"it finished", which is the exact check this repo has been burned by (a combat-declaration bug once made
+games unable to END while the whole suite stayed green).
+
+**Three things it does that the existing suites do not.**
+1. **Invariants on every settled state** (`SOAK_INVARIANTS`): every action a pilot submits is legal;
+   the engine never REJECTS an action it offered; no game reaches the action cap; no stack object
+   survives a turn; state-based actions leave no dead creature, 0-loyalty walker or 0-defense battle;
+   an instance is in exactly one zone; no card in a hidden zone leaks into an observation;
+   `applyActionInPlace` stays bit-identical to `applyAction`; and no pool card resolves an
+   `effectUnsupported` no-op.
+2. **Occurrence, not coverage.** `SOAK_MECHANICS` is an inventory and the run **fails when a mechanic
+   the pool prints never fires** — the sim-side twin of `pool-mechanics.test.ts`, which fails when a
+   mechanic loses its last card. Between them, "shipped but unreachable" has nowhere to hide. Witnesses
+   are labelled `action` / `event` / `state` so a weaker claim reads as a weaker claim.
+3. **A NEW ENGINE EVENT BREAKS THE BUILD.** `SOAK_EVENT_WITNESS` is a mapped type over
+   `GameEvent['type']` (the `OBSERVATION_POLICY` idiom), so the next system to ship cannot go untested
+   by simply not being thought of.
+
+**Two tiers.** The FAST tier (`soak.test.ts`) runs in the ordinary suite every time — one anchored
+matchup per mechanic plus a block of mixed games, every invariant on every decision: **104 games,
+2,210 turns, 64,657 actions, ~17 s CPU.** The DEEP tier (`soak-deep.test.ts`, `JB_SOAK_GAMES=N`, or
+`npm run sim -- soak --games N`) plays thousands — the run that found the last defect was **5,064
+games, 106,099 turns, 3,203,620 actions, 498 s CPU**, with a 1.1% turn-cap draw rate and zero
+action-cap games. Both tiers are sized in GAMES and report CPU: wall clock on this box is worthless
+(the same build has measured 39–87 games/sec inside an hour).
+
+**What it found.** Four real defects, fixed here, and three reported. Two of the four are
+state-based-action gaps in `applyCastSpell`, and neither is reachable by any gauntlet deck — which
+is precisely why nothing before this had seen them.
+- ✅ **FIXED (core) — state-based actions did not run when a spell was CAST, only when one
+  RESOLVED.** The caster receives priority the instant a spell is announced, which is an SBA check
+  point (CR 704.3) — and casting MOVES A CARD BETWEEN ZONES, which characteristic-defining P/T reads.
+  A flashback cast takes the last instant out of a graveyard, every Tarmogoyf loses a point of
+  toughness, and one already shrunk by a Weakness is at 0 and must die; the engine handed priority
+  back to a player looking at a creature that should already be in a graveyard. Turn 8 of seed
+  1727114651 — **once in 5,064 games and 3.2 million actions.**
+- ✅ **FIXED (core) — paying a flashback LIFE cost did not end the game.** `applyCastSpell` charges
+  "Flashback—{1}{B}, Pay 3 life" and never ran the state-based-action pass, so a caster who paid
+  itself to exactly 0 kept holding priority and casting spells (turn 20 of seed 3856639351 — once in
+  4,000 games). Paying yourself to 0 is legal (CR 118.4); surviving it is not (CR 704.3 / 704.5a). One
+  `checkStateBasedActions` call — the third copy of a rule `applyTapForMana` and the shockland
+  pay-life choice already apply.
+- ✅ **FIXED (AI) — the pilot tapped five lands toward a flashback cast it could never make.** Its
+  candidate loop checked mana and not the life rider, so below the threshold it committed the taps,
+  found no cast, and passed — floating the whole pool and wasting the turn at exactly the moment it
+  was about to die. Seed 3329123684.
+- ✅ **FIXED (AI) — the pilot proposed blocks the rules forbid.** `canBlockByEvasion` in
+  `packages/ai/src/heuristic.ts` mirrored core's `canBlock` **minus its protection clause**
+  (CR 702.16e), so a white creature kept being assigned to block a Black Knight. One illegal pair
+  invalidates the WHOLE `declareBlockers` action, so the engine refused it and the harness passed
+  priority after three rejections — **the defender took the entire attack unblocked, every combat.**
+  Nothing isolated could see it: the protection tests never asked a pilot to block, and the pilot tests
+  never put a protection creature on the other side. `needsMultipleBlockers` was reading `def.keywords`
+  bare in the same function, so a GRANTED menace was invisible too. Both fixed; both regression tests
+  fail without the fix, with the engine's own message.
+- ⚠️ **REPORTED — the rich mana-ability model has no card in the pool.** §3.11's `manaAbilities`
+  (a tap cost, a rider, an activation restriction, board-derived colours) is matched by **0 of 357**
+  pool cards, so nothing a player can see exercises it. That is rule 10's inert feature; it needs a
+  pool regeneration, not an engine change.
+- ⚠️ **REPORTED — the redaction guarantee is narrower than it reads.** A buyback spell returns
+  itself to its owner's HAND as it resolves, so the public `stackResolved` observation names an
+  instance now in a hidden zone. Not an exploitable leak (the table watched that card go back), but
+  "no observation ever names a card in a hand or library" is false as stated, and
+  `observation.test.ts` passes only because none of its curated matchups plays a buyback card.
+- ⚠️ **REPORTED — no maximum hand size.** `RulesConfig` has no `maxHandSize` and the cleanup step
+  performs no discard (CR 514.1), so hands grow without bound. Adding it would move every recorded
+  win-rate baseline in §3.4a, so it is a decision, not a patch.
+
+**What the merge with the four 2026-08-20 branches showed.** Two things, and the second is a finding
+in its own right. First, **the event manifest earned its keep immediately**: `chosenAsEnters` and
+`triggerFizzled` were new `GameEvent` members, so `soak-config.ts` stopped compiling until they were
+classified — nobody had to remember to widen the soak, the build asked. Second, and worse:
+**all four systems are unreachable from the shipped pool.** Measured on the merged tree, the pool is
+still 357 cards and prints 0 split/adventure/aftermath cards, 0 modal DFCs, 0 as-enters choices, 0
+mandatory additional costs, 0 intervening-"if" triggers and 0 multi-destination searches. The compiler
+got wider and the generated pool was never regenerated — §3.20's failure, four systems later. The soak
+watches all five and says "not in the pool (not required)" out loud, and will start failing without an
+occurrence the day one card appears.
+
+**And two false alarms worth writing down, because both are the harness's own recorded failure shape.**
+Asserting state-based actions on a state that is MID-RESOLUTION reports Magma Jet ("2 damage, then
+scry 2") as leaving a dead creature on the battlefield — it does, legally, until the scry is answered
+(CR 704.3 / 608.2). And scanning an observation against the state the action STARTED from reports every
+land drop in the game as a hidden-zone leak. `soak.ts` carries both traps as comments beside the code
+that avoids them.
+### 3.27 Combat damage, and what the EQUIPPED creature does — ✅ done
+The two seams the ~38-card corpus family shares, and they are one idea seen twice: **a trigger has a
+watched object, and it is not always the card it is printed on.**
+
+**`TriggerCondition.watches` is a SCOPE, not a new event.** "Whenever equipped creature deals combat
+damage to a player" is the *same game occurrence* as the creature's own printed line — a creature
+dealt combat damage to a player — watched on a different object. So the vocabulary grew by one
+optional field (`'self' | 'attachedHost'`, absent meaning `'self'`), not by an
+`equippedDealsCombatDamage` event sitting beside `combatDamageToPlayer`. Two event names for one
+occurrence is how a matcher ends up with two answers to the same question, and every existing trigger
+is byte-identical data. The scope applies uniformly to the five self-referential events, so
+`attacks`, `dies` and the combat-damage line all read it through one `watchedInstanceId` helper.
+
+Three properties, each of which fails silently if it is got wrong:
+- **The SOURCE is still the attachment.** A Sword's trigger is controlled by the Sword's controller,
+  ordered by the Sword's battlefield position, and its "~ deals 2 damage" means the Sword. Only the
+  watched object moves — which is exactly why this is a field on the condition and not a different
+  `sourceInstanceId`.
+- **Attached to nothing matches NOTHING.** A Sword lying loose on the battlefield has an ability that
+  can never fire. A fallback to "watch myself" would be the Sword swinging on its own.
+- **The answer is the CURRENT attachment.** The trigger runtime caches one `TriggerSource` per
+  permanent and rebuilds it only when the controller or the ability list changes — so a copied
+  `attachedTo` would answer with the attachment the Equipment had when it was first seen this action.
+  `TriggerSource.permanent` is therefore a LIVE reference (one narrowly-typed field), which is what
+  makes an Equipment correct when its host dies to first-strike damage between the two damage steps,
+  and when the Equipment itself leaves the battlefield (`resetInstanceForNewZone` nulls `attachedTo`).
+  `equipped-triggers.test.ts` changes the attachment between two events of ONE action, which is the
+  case a copy gets wrong and nothing else would notice.
+
+**"When equipped creature dies" (Skullclamp) fires because of the state-based-action ORDER**, and the
+order is now pinned by a test rather than assumed: the SBA fixpoint checks attachments first and
+deaths second, so a pass emits `creatureDied` while the Equipment is still attached and only the pass
+after that unattaches it. Reversing those two would make the rule compile a trigger that silently
+never fires.
+
+**The compiler.** Six new trigger rules (`combatDamageToPlayer` and `attacks`/`dies` scoped to the
+host, each with its "you may" sibling), built on the existing `mayEffects` wrapper through a shared
+`optionalTriggerFrom` that compiles only the INNER body — the `trigger-etb-you-may` shape, so a body
+that implements its own option is not asked twice. The **assembly refuses a host-watching trigger on
+a card with no "Equip {N}"/"Enchant …" line**, for the same reason it already refused a lone
+modification: attached to nothing, forever, it could never fire.
+
+**The static half now carries the payload keywords.** "Equipped creature gets +2/+2 and has
+protection from black and from green" and "gets +1/+0 and has haste and ward {1}" reach core's
+`protectionFrom`/`ward` through `parseProtectionOrWard` — the *same* parser the printed keyword line
+uses, so an Equipment and a creature cannot disagree about which forms are real. The conjunction that
+separates two keywords is the same word that separates two protection qualities, so the split is
+re-joined before parsing. "Protection from instants and from sorceries" (Sword of Wealth and Power)
+still reports: core has no check for that quality.
+
+**Both seats, because an Equipment nothing equips is inert.** Two AI defects fell out, and both were
+invisible in a win rate:
+- the equip search gated on `attachment.modifies`, so an Equipment whose whole text is a host-watching
+  trigger (Skullclamp, Sword of the Animist) scored `undefined` and was **never equipped in any game
+  ever simulated**. It now gates on `attachment`, and `attachPerHostTrigger` prices the triggers;
+- an attacker's value counted the face damage and nothing else, so a Ragavan-shaped 1/1 was priced at
+  one point and held back. `attackSaboteurTriggerValue` counts every `combatDamageToPlayer` trigger
+  connecting would set off — the creature's own AND the ones its attachments watch it with — in the
+  branch where the attack is expected to CONNECT only, since a blocked attacker collects nothing. And
+  the walker diversion now sends the *vanilla* at the planeswalker: "combat damage to a player" pays
+  nothing there, and two same-size attackers are otherwise interchangeable, which is exactly when
+  diverting the wrong one is invisible.
+
+**Measured yield, PAIRED against the merged `origin/main` on the same cached corpus: 485 → 494
+playable (23.1% → 23.5%), +9 cards, ZERO regressions** (the two playable sets were dumped and
+diffed, not just counted). The nine: Sword of Fire and Ice, Sword of the Animist, Argentum Armor,
+Lavaspur Boots, Mask of Memory, Spirit Mantle, Aqueous Form, Akroma's Memorial and Vindicate.
+Skullclamp compiles too and is already a pool candidate.
+
+Measured alone at the branch point it was 408 → 421 (+13); four of those thirteen — Corpse Knight,
+Marauding Blight-Priest, Poison-Tip Archer, Elas il-Kor — were independently unblocked by §3.21's
+step-trigger work while this branch was out, so the paired figure is the honest one.
+
+Gauntlet seed 99 was **byte-identical** to the same-day `origin/main` (81/280, every matchup row
+equal) — the shipped pool contains no card of this family yet — and min-of-12 `process.cpuUsage` was
+2625 ms on the branch vs 2702 ms on `main`, i.e. parity inside a noise band of ±15% on a box running
+ten agents.
+
+
+⚠️ **A DEFECT THIS EXPOSED, worth more than the feature.** `keywordsParam` — the reader every
+until-end-of-turn keyword grant goes through — kept only `=== true` values, so the three PAYLOAD
+keywords were silently dropped on the way in: `protectionFrom` is a list, `ward` and `minBlockers` are
+numbers. **"Target creature gains protection from red until end of turn" has been compiling
+`'complete'` and doing nothing at all**, since the day that rule landed. Its test asserted the compiled
+EFFECT REFS and never played the card, which is exactly why the suite stayed green. Widening
+`parseKeywordList` to the payload keywords would have routed three more rule-table entries through the
+same hole, so the reader is fixed here and the new test resolves the grant through core's own
+`applyEffectRef` and reads it back through `indexContinuous` — a hand-built context passes while the
+real spell does nothing, which is the shape of the original mistake.
+
+⛔ **Still reported, by name and by clause.** Treasure tokens (Goldvein Pick, Beamtown Beatstick,
+Sword of Wealth and Power); **proliferate** (Sword of Truth and Justice, Thrummingbird, Bloated
+Contaminator); **"that player"** — the player the damage was dealt to, which no effect can be aimed at
+yet (Sword of Feast and Famine, Fallen Shinobi, Nashi); **"that many"** — the damage amount as a
+derived value (Cold-Eyed Selkie, Lathril, Gishath, The Key to the Vault); **"to a player or
+planeswalker"** and **"or battle"**, which are wider watched-object sets (Psychic Frog, Grateful
+Apparition, Beamtown Beatstick); **"up to one target"**, an optional target chosen at announcement
+(Sword of Light and Shadow, Sword of Hearth and Home); and the narrowed equip costs ("Equip legendary
+creature {3}", "Equip {4}. This ability costs {1} less…"), bestow, reconfigure and living weapon.
+
+⚠️ **The shipped POOL still contains none of these cards**, and cannot until someone runs
+`scripts/build-expansion.ts --fetch` — the generator's scratch index is a gitignored cache and the
+committed `card-index.json` has none of the Swords in it, so the regeneration is a NETWORK step that
+must not run in a gate. Skullclamp is already in `expansion-candidates.json` and now compiles, so the
+next `--fetch` picks it up for free. Until then the family is reachable by deck import only, and
+`equipped-triggers.test.ts` plays it end to end from real printed Oracle text.
+
+### 3.25 Block requirements + four rules statics — ✅ done
+The half of declare-blockers §3.17 deliberately left, and the four standalone rules statics the
+coverage audit listed as separate template buckets. One lesson runs through both: **a rule that only
+sometimes fires is worse than a rule that reports itself missing**, because the first one lies in a
+statistic and the second one shows up in a backlog.
+
+**CR 509.1c/d is a SOLVER, and the previous branch was right to say so.** A block RESTRICTION says
+what the defender may not do, and two creatures are all it needs to look at. A block REQUIREMENT says
+what they MUST do, and the rule is "satisfy the **maximum possible number** of requirements without
+violating any restriction" — a statement about *every legal declaration*, not about this one. So
+`internal/block-solver.ts` compares the declaration in hand against the best one available:
+
+- **It is inert when nothing requires anything.** One pass over the attackers reading a keyword, no
+  allocation, no board walk, no map — the same empty-check discipline `isLegalTarget` and
+  `manaExtrasOf` use. Every ordinary combat in a sim pays exactly that and nothing more.
+- **The search is small by construction.** Only the defender's creatures that could block a
+  requirement-carrying attacker are enumerated; everything else contributes nothing to any
+  requirement and is never considered. The state is the vector of "creatures committed to attacker A
+  so far, **capped at the minimum A needs**" — 1 for almost every creature, at most a small printed
+  count (menace is 2, Pathrazer of Ulamog 3). A rolling DP over the involved creatures gets the exact
+  maximum.
+- **The scoring trick that keeps the state that small:** a creature assigned to an attacker that has
+  not yet met its minimum scores nothing *yet*, and the whole group scores together the moment the
+  minimum is reached. That is precisely what "able to block" means once restrictions are accounted
+  for, and it means the state never has to remember counts beyond the minimum.
+- **The one bound is written down.** The state space is `2^n` for `n` attackers that each simply
+  require a blocker, capped at `1 << 20`; past the cap the solver maximises over the attackers that
+  fit and the rest require nothing. Reaching it takes twenty simultaneous requirement-carrying
+  attackers, which no card in this pool can print — nothing grants a requirement to a group, and the
+  compiler is the gate on what may print one. A limit nobody wrote down is a limit nobody can check.
+
+**"If able" is real, and it is where the two halves meet.** An attacker nobody can legally block
+generates no requirement at all; a **menacing lure facing one untapped creature** requires nothing,
+because that creature could not legally block it in any declaration. An implementation that checked
+the requirement without the restriction would demand an illegal declaration and wedge the combat —
+which is why requirements are resolved AFTER restrictions, in the same function, and why that exact
+case has its own test.
+
+**Comparing restrictions are a payload, not a flag.** `KeywordFlags.blockRestriction` carries
+"except by creatures with haste" (Gingerbrute), a power or toughness bound, and skulk's comparison
+against the attacker's OWN power. It is the fourth payload keyword and merges like the other three —
+field by field to the strictest of each, because two printed restrictions are both in force. Every
+bound reads EFFECTIVE stats through the index `canBlock` already threads: a 1/1 pumped by an anthem
+really has stopped being a legal blocker for "power 2 or less", and a skulking creature pumped this
+turn really is harder to block.
+
+**The AI blocks through core's own solver.** `forcedBlockAssignment` returns the creatures whose
+block was not a free choice, and the pilot assigns the rest as it likes — so the pilot and the engine
+cannot disagree about what the rule demands. It matters more here than anywhere else in combat: a
+declaration that satisfies fewer requirements than it could is rejected **wholesale**, so a pilot
+that picked its favourites first and noticed the lure second would lose every block in the action and
+be re-offered the same decision. And **a lure is a threat, not a gift** — `blockRequirementThreatValue`
+adds to a creature's effective power when the pilot ranks removal targets, so it kills the 1/1 lure
+over the 4/4 bear (and still prefers a 9/9, pinned so a later tuning pass has to decide that
+deliberately).
+
+**Four rules statics, each proven twice — once that it compiles, once that the game plays differently.**
+That second test is the whole point: a rules static is exactly the shape of feature that can compile
+`'complete'` and then do nothing.
+
+- **Changeling** is a definition flag, not a keyword flag, because it is a characteristic-defining
+  ability that applies in EVERY zone — a Changeling Outcast in a graveyard is a Zombie there. It is
+  answered inside `hasSubtype`, the one funnel every subtype question already goes through, so lords,
+  typal searches, the checkland condition and "non-Goblin" exclusions all see it without knowing the
+  keyword exists. The non-creature subtype vocabulary is an EXCLUSION list, because that is the half
+  that is closed: every set prints new creature types, and an inclusion list would silently stop a
+  changeling being a Cephalid the day Cephalids mattered.
+- **"This spell can't be countered"** is enforced where a spell actually leaves the stack, never as a
+  targeting restriction. The classic wrong implementation makes the spell an illegal target, which
+  hands the caster their counterspell back; the printed rule lets Counterspell target Supreme
+  Verdict, resolve, and do nothing. One enforcement point means the plain counterspell, "unless its
+  controller pays", every modal counter mode and the ward trigger all inherit it. The permanent-side
+  printing ("creature spells you control can't be countered") lives in `countering.ts` beside it,
+  with its lifetime derived from the board, so destroying the source in response really does work.
+- **"You have no maximum hand size"** could not ship as a flag, because ⚠️ **the engine had no maximum
+  hand size to lift** — CR 514.1 did not exist. It does now: the cleanup step discards down to
+  `RulesConfig.maximumHandSize`, and **the active player chooses which cards to keep**, through the
+  same `selectCards` machinery every other "choose N cards" uses (so the pilots, hotseat and online
+  already know how to answer it). The turn waits on that answer — accepting it is what calls
+  `passTurn` — so nothing ever observes a hand over the limit.
+- **"You may play lands from your graveyard"** is `CardDefinition.playLandsFrom`, a list of zones
+  rather than a boolean, so Courser of Kruphix's "from the top of your library" is the same field with
+  a different value. Playing a land from anywhere is still a LAND PLAY: it costs the turn's land drop,
+  needs an empty stack and a main phase, which is why it is a field on the existing action rather than
+  a second action kind. The permission is re-derived from the board at play time and never trusted
+  from the action, so a hostile client cannot ask its way into its own graveyard.
+- Plus the **general enters-tapped condition**: `controlsMatching` over the shared `CardFilter`
+  subsumes "unless you control a legendary creature" (the LOTR lands), "a basic land" and "three or
+  more other Swamps" in one entry. `CardFilter` grew `legendary` and `basic` — printed SUPERTYPES,
+  layer-safe, and reusable by every other filter consumer.
+
+⚠️ **THREE THINGS FOR WHOEVER TOUCHES THIS NEXT.**
+1. **The maximum-hand-size rule MOVES EVERY RECORDED BASELINE.** Decks that hoarded cards now discard,
+   so the self-play behaviour lock is re-pinned (`packages/core/bench/selfplay-digests.ts`) and any
+   gauntlet number measured before this is not comparable. It is a fidelity fix, not a tuning choice,
+   but it is not free and it is not silent.
+2. **A test helper that only ever passes priority now wedges.** Eleven of them did. A parked question
+   outranks priority, so a loop that walks turns has to ANSWER — `defaultAnswerFor(state.pendingChoice)`
+   — not only pass. Every helper in the suite does now, which also makes them robust against the legend
+   rule and shocklands, both of which could already have hit them.
+3. **`cloneState` now always writes `pendingChoice`/`resolution`, even as `null`.** `applyAction` is
+   `applyActionInPlace` over a clone, and `selfplay-lock.test.ts` compares the two as SERIALIZED TEXT,
+   so the paths must agree on key ORDER. A conditional key diverges the moment a choice survives an
+   action boundary — the pure path re-inserts it mid-object while the in-place path appends it — and
+   the two states stringify differently while being identical. `createGame` carries the same fields in
+   the same place for the same reason. It costs no allocation, and it closed a trap that had been
+   waiting for the first rule to park a question during self-play.
+
+⛔ **Deliberately NOT built, each with its blocker named.** The compiler reports them, and the
+unsupported hint now names the SHAPE that is missing rather than claiming the whole system is:
+- **Tetsuko Umezawa** and **Delney, Streetwise Lookout** — a static whose filter would have to read
+  EFFECTIVE power or toughness. `statics.ts` matches PRINTED characteristics by design; that is what
+  keeps the continuous pass single-pass with no CR 613.8 layer loop, and an effective-P/T filter needs
+  a fixpoint.
+- **Champion of Lambholt** — a restriction whose threshold is ANOTHER permanent's power, recomputed
+  from its source at declare-blockers time.
+- **Fighter Class** ("up to one target creature blocks it this combat if able") — a per-combat
+  TARGETED requirement, which is combat state rather than a characteristic.
+- **Archangel of Tithes** — a COST to block, which neither a restriction nor a requirement can express.
+- **Void Winnower** ("your opponents can't block with creatures with even mana values") and **Odric**.
+- **Access Tunnel / Secret Tunnel** — a filtered or two-target aim core's `TargetRestriction` cannot
+  express (still §3.17's blocker, unchanged).
+- **Typal anthem nouns** — "Other Squirrels you control have menace" needs the anthem rule's noun to
+  accept a creature SUBTYPE, and the compiler's subtype tables are closed on purpose (an unrecognised
+  word compiled as a subtype is a lord that buffs nothing, silently). It is the natural next step for
+  making changeling visible in play, and it is a rule-table edit rather than engine work.
+- **"Spells you control can't be countered THIS TURN"** (Veil of Summer) — a duration on a static.
+- **"Each opponent's maximum hand size is reduced by seven"** (Jin-Gitaxias) — the mirror of the flag
+  this section added, and a different field: it lowers a limit rather than removing one.
+
+**Measured yield:** **+9 playable cards** on the cached 2100-card corpus, measured PAIRED against a
+same-box `origin/main` worktree — and the SAME +9 against FOUR successive main baselines as this
+branch merged forward: **408 → 417**, **485 → 494**, **510 → 519**, **524 → 533 / 2100**. Four
+sibling branches landed in between and each moved the baseline; the delta did not, which is what a
+paired measurement is for. **Zero regressions:** the two playable sets were dumped and diffed, not counted.
+The nine are Supreme Verdict, Reliquary Tower, Spellbook, Crucible of Worlds, Ramunap Excavator,
+Universal Automaton, Changeling Outcast, Gingerbrute and Abandoned Air Temple. It comes from the
+solver plus ten rule-table entries — and the +9 UNDERSTATES what closed, which is worth reading before
+anyone judges the work by it. Five whole template buckets are now empty (`This spell can't be
+countered` 14, `Changeling` 9, `You may play lands from …` 12, `~ enters tapped unless you control …`
+9, `You have no maximum hand size` 8 — 52 card-blocks), but most of those cards carry a SECOND gap:
+Dovin's Veto still needs "counter target noncreature spell", Abrupt Decay still needs "destroy target
+nonland permanent with mana value 3 or less", Minas Tirith still needs an "activate only if you
+attacked with two or more creatures" condition. A blocked card is only playable when its LAST gap
+closes, so a branch that clears a bucket cleanly can still move the headline by single digits — and
+the next branch to close filtered targeting will collect the rest of this one's yield.
+
+**Throughput (rule 7), measured with `process.cpuUsage` and paired against the same `origin/main`
+worktree — wall clock on this box is worthless and was not used.** The solver is the one thing here
+that could have cost anything, so it was measured directly
+(`packages/core/bench/block-requirement-cost.ts`, five interleaved rounds, best-of):
+
+| `illegalBlockDeclaration`, 4 attackers / 5 blockers | cost per call |
+| --- | --- |
+| `origin/main` — no requirement half at all | 70 ns |
+| this branch — ordinary board, nothing requires a block | **133 ns** |
+| this branch — one "must be blocked" on the board | 4.9 µs |
+
+The inert path costs **+63 ns per call**, about 16 ns per attacker for two boolean reads, and the
+call happens ONCE per declare-blockers action — roughly **+2 µs per game**. It is that cheap because
+the empty check rides the keyword read the RESTRICTION check already had to make: one
+`effectiveKeywords` per attacker answers both halves of CR 509.1, which is what the fused loop in
+`illegalBlockDeclaration` buys. Allocation is at parity too — **582 scavenges over 30,600 actions vs
+562 over 29,899** on `origin/main` (0.0190 vs 0.0188 per action). The action counts differ because
+the games genuinely differ now: the maximum-hand-size rule adds a discard answer per over-full
+cleanup, which is also why a byte-identical gauntlet is not available as evidence for this branch and
+the self-play lock was re-pinned instead.
+
+### 3.29 A token keeps its printed face — colour, creature types, token-ness — ✅ done
+**Every token in the game entered COLOURLESS, with no creature type, and not knowing it was a token.**
+`makeToken` built a `CardDefinition` carrying a name and a P/T and nothing else; `colorsOfDefinition`
+reads colour off cost PIPS; a token has no mana cost. So "a 1/1 **black** Faerie Rogue creature token"
+and "a 5/5 **red** Dragon token" both arrived as colourless, typeless objects — invisible to a coloured
+anthem, to protection from a colour, to "destroy target nonblack creature", to every typal lord and to
+every `CardFilter.anyOfColors` query. The cards printing them still compiled `'complete'` and every
+test still passed. This is the project's signature failure shape — the card plays as something subtly
+different from what is printed — and it predated all recent work: **every** token card in the pool had
+it.
+
+**Measured, paired, on the same cached 2100-card corpus against the `origin/main` this merges into:
+533 → 545 playable (25.4% → 26.0%), +12 cards, 0 regressions** — the two full playable SETS were
+diffed, not just the counts. The shipped pool is 545 cards.
+
+#### The shape
+- **`CardDefinition.colors`** — the colour stated in WORDS, for an object that has no pips to read it
+  off. `colorsOfDefinition` **prefers it and falls back to pips**, so every printed card in the pool
+  still walks its cost exactly as before and nothing that worked changes. An **empty array is
+  meaningful**: `[]` is the printed word "colorless" (Third Path Iconoclast's Soldier), absent means
+  "read my pips". The reader normalises to canonical WUBRG and de-duplicates, so `['B','U']` and
+  `['U','B']` are one answer.
+- **`CardDefinition.isToken`**, beside `isEmblem` — on the DEFINITION rather than the instance, and
+  for a reason worth keeping: a token definition is MINTED by the effect that creates it and is never
+  shared with a card, and `cloneInstance` shares `def` **by reference**, so the flag cannot be dropped
+  by the field-by-field clone that has silently lost four fields on this project. There is no line to
+  forget. `packages/core/src/token-clone.test.ts` pins both that guarantee and its other half — the
+  cloned instance is still exactly the ten-property object it always was.
+- **`CardFilter.isToken`** — one tri-state for both printed words ("token" / "nontoken") rather than
+  two fields that could disagree.
+- **CR 704.5d** — a token that has left the battlefield **ceases to exist**, applied by BOTH
+  leave-the-battlefield funnels (core's `moveToZone` and the cards package's `movePermanentTo`)
+  through one shared `ceaseToExistIfToken`, and applied **after** the `zoneChange` event so every
+  "dies" / "leaves" trigger still fires exactly as it does for a card. Done at the MOVE rather than as
+  an SBA pass, because the SBA form would walk both players' graveyards, exiles, hands and libraries
+  after every resolution, every draw and every combat-damage step hunting for something that is nearly
+  never there. Without it a dead token sat in a graveyard for the rest of the game, inflating every
+  graveyard count the engine derives and standing there as a legal target for anything returning a
+  creature CARD.
+- **`parseTokenFace`** reads the printed descriptor's strictly ordered grammar — **colours, then
+  subtypes, then card types** — so "colorless Thopter artifact creature" and "blue and black Faerie"
+  are both read exactly. CR 111.3 names a token by its subtype LINE ("Faerie Rogue"), not by the last
+  word of it. A descriptor it cannot read completely **refuses the whole clause** rather than dropping
+  the part it missed.
+- **Typal anthems**, because token creature types with no consumer would be decoration: the anthem
+  rule now reads a subtype noun in both printed shapes — "Other **Goblin** creatures you control get
+  +1/+1 and have haste" and the bare "**Goblins** you control have haste". The bare form deliberately
+  adds **no** card type, because a Kindred Enchantment (Bitterblossom) genuinely IS a Faerie without
+  being a creature. Both read the closed `SEARCHABLE_SUBTYPES` table, which is now the compiler's
+  subtype vocabulary generally rather than only a search's.
+- **The Kindred card type** (CR 308), with its own graveyard type bit, because something counts card
+  types and leaving it out would make that count quietly one short.
+- **A symmetric anthem** prints no scope tail at all ("Black creatures get +1/+1"), so the tail is
+  optional — reading its absence as "you control" would be a strictly better card than the one printed.
+
+#### A second colour reader, found on the way
+`passesDestroyFilter` (the `nonblack` half of Doom Blade) walked `def.cost` **itself** rather than
+asking `colorsOfDefinition`. That second opinion about what "black" means was wrong twice over: it
+could not see a HYBRID pip, and it could not see a printed colour with no cost behind it — so Doom
+Blade happily destroyed a black Faerie token the printed card cannot even target. There is now one
+colour reader in the codebase.
+
+#### Cards un-reported
+Bitterblossom, **Bitterbloom Bearer** (whose token is the two-colour "blue and black" form) and
+Ophiomancer — the three the previous branch left reporting *specifically* because of this — plus
+Goblin Chieftain, Lyra Dawnbringer, Diregraf Captain, Blood Artist, Falkenrath Noble, Hornet Queen,
+Seraph Sanctuary, Harvester of Souls and Soul of the Harvest. Twelve cards this branch is solely responsible for, measured against the main it merges into.
+
+#### Enforced tables
+`OBSERVATION_POLICY` classifies the new `tokenCeasedToExist` as **public** — both seats watched the
+token hit the graveyard and both watch it stop existing, and its name was already announced by
+`tokenCreated`. `paired-arms-config.ts` needed no change: `makeToken` was already classified, and this
+branch adds no primitive. `internal/clone.ts` needed no new line, and now says so out loud, because
+that is the structural reason token-ness lives on the definition.
+
+#### Throughput (rule 7), measured properly
+Wall clock on this box is worthless — a dozen agents run concurrently, and the same build measured
+1422 ms and 1907 ms ten minutes apart. Paired `process.cpuUsage`, min-of-5 over the same in-process
+gauntlet (Mono-Red Aggro, 40 games, seed 99), branch and main measured back to back: **1875 ms vs
+1844 ms (1.02×)**, inside that spread — and an earlier interleaved A/B/A had the branch FASTER than
+main (1422 ms vs 1578 ms), which is what "inside the spread" means. The deterministic gauntlet output
+is **identical in six of seven matchup rows**; UW Control moves 15/40 → 14/40. That one game is a real
+behaviour change, not noise: the hero deck runs Young Pyromancer, whose Elemental tokens are now red
+Elementals that cease to exist when they die instead of accumulating in a graveyard the evaluator
+reads.
+#### Reported by name, not approximated
+- **Token COPIES** ("create a token that's a copy of target creature", "except it's a 4/4 black Zombie
+  Snake Druid with no mana cost"). This is the copy-effect system; copy effects LANDED while this branch was in
+  flight (`copy.ts`, CR 706 layer 1), so the missing half is now only the token-copy PRIMITIVE: a rule
+  that reads "create a token that's a copy of target creature", picks a source, and hands
+  `copyResultDef` to `ctx.createToken`. The trap it must not fall into is already disarmed — core
+  stamps token-ness in `createTokenInState`, so a copy built from `copiableDefOf` (which returns the
+  copied CARD and carries no token flag) is still a token.
+- **The predefined artifact tokens** (Treasure, Clue, Food) — they print no P/T in the clause and carry
+  an activated ability the token rule does not build.
+- **A token that enters TAPPED and/or ATTACKING** (mobilize, Anim Pakal, Myrel) — `createToken` has no
+  way to express either, so the whole clause reports rather than creating an untapped one.
+- **A token count that is derived** ("create X 1/1 Goblins, where X is Krenko's power").
+- **"Destroy all nontoken creatures"** (Hour of Reckoning) — `destroyAll` takes no `CardFilter` at all,
+  so the token flag has nothing to narrow there; that is a `destroyAll` gap, not a token one.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
@@ -964,6 +3084,1032 @@ Tesseract is dynamically imported so its WASM core stays off the initial bundle.
 - Every feature adds tests and leaves the full suite green.
 - Claim work on `COORDINATION.md` before starting; pick a unique `feat/<slug>` branch.
 
+### 3.28 Rules conformance — a CR-indexed suite with an enforced manifest — ✅ done
+
+Every other suite in this repo is organised BY FEATURE, each written by the agent that built that
+feature, asserting what that agent believed the rule was. That answers "do our tests pass?" It cannot
+answer **"which rules do we actually implement, and which do we only think we do?"** — which is the
+difference between a green suite and playing Magic correctly. A rule no feature happened to need was
+invisibly absent: there was nowhere its absence showed up.
+
+`packages/core/src/conformance` is that somewhere. **89 tests, each naming the Comprehensive Rules
+reference it affirms**, plus a manifest classifying **147 CR sections**: 35 covered here, 42 cited to
+an existing per-feature suite, 64 not-applicable *with a stated reason*, and **6 honest gaps** — with
+32 of the covered/cited sections additionally declaring an unmet remainder, because "covered" with a
+silent shortfall is the exact dishonesty this manifest exists to prevent.
+
+**The manifest is enforced four ways, three of them by the compiler** — the same default-deny shape
+as `OBSERVATION_POLICY`, `paired-arms-config.ts` and `KEYWORD_KEYS`, and for the same reason: a
+coverage manifest that can be left stale is worse than none, because it reads like an answer.
+`RULES_MANIFEST` is a mapped type over the section list, so an unclassified section fails `tsc`;
+`CrRule` is a template literal over it, so a citation cannot point out of scope; and
+`KEYWORD_RULES` / `STEP_RULES` / `ZONE_RULES` / `ACTION_RULES` are mapped over `KeywordFlags`,
+`Step`, `ZoneName` and `GameAction['kind']`, so **adding a keyword, zone, step or action to core
+stops the build until the manifest says which rule it answers to.** The fourth is a runtime one: each
+file's collected tests must equal the manifest's claims, both directions.
+
+⚠️ **Twenty-four CR citations in this repo were wrong**, in tests AND in engine source comments —
+priority is 117 not 116, the mana pool empties in 500.5 not 500.4, copying is 707 not 706, layer 7's
+sublayers are 613.4 not 613.3, `115.2b` does not exist. All were corrected against the published
+Comprehensive Rules text. An index that cites the wrong rule is confidently wrong.
+
+**The six gaps, honestly** — ⚠️ **two of which have since been CLOSED; see §3.29.** CR 402/514.1 —
+*there was no maximum hand size*; nobody ever discarded at cleanup, which changed the value of card
+draw in every recorded gauntlet baseline (**closed**). CR 704 — state-based actions were checked at
+~a dozen explicit mutation sites, not at the priority boundary CR 704.3 names (latent: every path
+that existed then did hit a site), and CR 704.5q's counter annihilation was absent (**both closed**).
+CR 613 — there is no layer system, only additive P/T deltas and keyword ORs, which is *exact*
+for everything the engine can express and is now held there by a compile-time proof. CR 615/616 —
+no prevention effects (`feat/replacement-effects` owns this). CR 707 — no copying
+(`feat/copy-effects` owns this). Also recorded as shortfalls on otherwise-covered sections: no
+mulligans (103.5), no attacker damage assignment order (510.1a), no block requirements (509.1c),
+tokens do not cease to exist (111.7).
+
+**Every claim was sabotage-checked** — the rule broken in the engine, the suite confirmed RED, the
+break reverted. **33 sabotages, 33 caught, 0 escapes**, including all four compile-time proofs and
+four attempts to corrupt the manifest itself (delete a claimed test, drop a section's
+classification, gut a not-applicable reason, empty a gap's description). A test that cannot fail is
+this repo's most-recorded defect shape — and four of the four sabotages that first came back GREEN
+were bad ANCHORS of mine, not weak tests: one patched a code path the test never enters, one changed
+a TYPE (Vitest strips types, so it cannot fail a test), and two named fields that do not exist. That
+is worth knowing: **a sabotage that stays green is a claim about your sabotage before it is a claim
+about the test.**
+
+**Today's four new systems are indexed too**, each sabotage-checked through its own suite: CR 603.4
+(the intervening "if", checked TWICE — a false condition must stop the ability reaching the stack,
+not merely fizzle it), CR 709.4 (a split card is the COMBINED object in every zone but the stack),
+CR 715.2/715.3d (an adventurer is defined by its creature half; the exile is a RESOLUTION
+replacement, so a countered adventure goes to the graveyard), CR 400.7 (a value a permanent NAMED
+dies with the object), CR 601.2h (an unpayable mandatory additional cost makes the cast illegal and
+leaves nothing half-paid) and CR 310.4 (a defeated Siege's reward cast from an EMPTY mana pool,
+which is what makes "without paying" a real claim).
+
+### 3.29 State-based actions at the priority boundary, and what the hand-size rule cost — ✅ done
+
+Two CR-conformance gaps, one measurement, and a hidden-information leak found while reviewing a
+third gap that a sibling branch had just closed.
+
+#### CR 704.3 — the game looks whenever a player WOULD get priority
+
+`checkStateBasedActions` was called from about a dozen explicit mutation sites and never from
+`onPassPriority`. Every path that existed hit one of the sites, so it was **latent, not live** — but
+it is the wrong SHAPE: CR 704.3 makes the answer independent of how the board became illegal, while a
+per-site discipline makes it depend on whoever writes the next mutation path remembering. The
+interaction matrix recorded it as GAP `sba-on-priority` with a reproduction; a sibling closed the
+announcement half (`applyCastSpell`), and this closes the priority-pass half. **Both reproductions
+are now positive tests.**
+
+⚠️ **Rule 7 is the whole difficulty.** This is the single hottest loop the sim has — a 280-game
+gauntlet passes priority **125,753 times** — and the full check walks the battlefield three times and
+can rebuild the continuous index. So the call sits behind `stateBasedActionsPossible`, a gate that is
+**conservative in one direction only**: it may say yes on a board with nothing to do (one wasted
+check), and must never say no on one that has something (a silently deferred rule).
+
+**The narrowing that made it affordable.** The first gate treated any modifier at all — an anthem, an
+until-end-of-turn pump, any `state.continuous` entry — as a reason to run the full check, and let
+**6.3%** of those 125,753 passes through. The fix is a piece of reasoning the engine can afford to
+make: `PermanentModification` is **purely additive** (the rules manifest pins that as a compile-time
+proof), so a modifier that can only ADD toughness cannot kill a creature — it can only keep one
+alive. A board whose modifiers are all positive can therefore be judged on printed base plus counters,
+which is exactly what `effectiveToughness` with no aggregate computes, and being wrong in that
+direction is safe by construction. Only a modifier that can SUBTRACT toughness sends the board to the
+real check. Pass rate **6.3% → 0.1%** (7,910 extra full checks → 96).
+
+**What it costs, measured three ways, none of them the wall clock.** ⚠️ A cross-build gauntlet
+comparison on this box read anywhere from 1.02× to 1.41× for a change that allocates nothing — that
+is noise wearing a result's clothes, and it is why the evidence below is what it is:
+
+| evidence | reading |
+|---|---|
+| **Allocation** — `scavenge-probe.ts`, nursery pinned at 1 MB both bounds | ON **587 / 584**, OFF **588 / 583** — inside the documented ±2 floor, i.e. **it allocates nothing** |
+| **Paired CPU** — both engines in ONE process, 9 interleaved rounds, 8 repeats of 24 seeded games per round, min-of-N | ON **2157 ms**, OFF **2156 ms** → **1.0005×** |
+| **Direct cost** — `packages/core/bench/sba-gate-cost.ts` | **~30 ns per permanent**: 125 / 258 / 851 ns at 4 / 8 / 16 permanents. At 125,753 boundary passes on an eight-permanent board, **~30 ms across 280 games** — against a gauntlet costing roughly 1.9 s of CPU |
+
+The workload is **proved** identical rather than assumed: the two arms play the same 24 seeded
+self-play games and their digests are compared before any timing is reported.
+
+#### CR 704.5q — the counters annihilate as a STATE-BASED ACTION now
+
+`+1/+1` and `-1/-1` counters were removed in pairs inside the `addCounters` primitive, which is right
+for the one route that calls it and wrong for every other. It was **reachable**, which the gap
+register had believed it was not: **persist** returns a creature carrying a `-1/-1` counter without
+going near `addCounters` — and it wrote a NEGATIVE `+1/+1` tally, so nothing could even ask whether
+the creature had a `-1/-1` counter on it, which is persist's own printed condition. The rule now
+lives in the state-based-action pass, the primitive no longer does it at all (one implementation of
+one rule), and persist writes a real `-1/-1` counter. The arithmetic never moved; what moved is
+whether the STATE tells the truth.
+
+#### The CR 514.1 review — and the leak
+
+The cleanup discard landed on `main` from `feat/block-requirements-and-statics` while this branch was
+building its own. Reviewed against the brief that owned it:
+
+- ✅ the maximum is a **named `RulesConfig.maximumHandSize`**, not a literal seven;
+- ✅ a player **at or under** the maximum is never asked;
+- ✅ the pilot discards **by value** through the existing `'loss'` policy — now with that policy
+  written out on `answerSelectCards` and four tests behind it, including the one that matters: an
+  unbuilt board keeps its LAND and pitches the creature, a built one does the reverse;
+- ⚠️ **CR 514.3a was half-implemented.** The madness window correctly kept the turn open, but the
+  turn then simply ended. The rule says **another cleanup step begins**. It is now re-entrant, and
+  needs no new state: reaching the turn machine's step advance *while the step is still cleanup* can
+  only mean a priority window was opened during it. (The rule's two other clauses are unreachable
+  rather than unimplemented, and the manifest says why: no `TriggerEvent` watches a card leave a
+  hand, and nothing a cleanup step does can make a state-based action applicable.)
+- 🔴 **The question named a card in the discarding player's HAND as its source** — `hand[0]`, chosen
+  to keep the field a real instance id. `choiceAsked` carries `sourceInstanceId` **unredacted** into
+  every pilot's observation feed, and instance ids are minted sequentially from the pre-shuffle
+  library, so it published a read on the decklist. The protocol's own leak scan cannot catch it
+  either: `collectInstanceIds` only looks at keys named `instanceId`. It now uses
+  `NO_ASKING_OBJECT`, the sentinel a source-less question carries.
+
+**The self-play behaviour lock is the proof of exactly that.** Regenerating it moved **only the event
+LOG hashes**: every seed keeps its winner, turn count, action count, **event count** and final-state
+hash. One field inside one event changed — and putting the old value back reproduces the previous
+hashes exactly, which is how the attribution was checked rather than assumed. The unchanged event
+counts are the second measurement in there: the new CR 704.3 check **fires nothing at all** across 24
+full games, which is what a backstop should do.
+
+#### What CR 514.1 did to the recorded baseline — isolated, not estimated
+
+The rule is a **named config value**, so it can be switched off in the same build, on the same seed,
+with the same decks, and nothing else moving. That is the measurement:
+
+| `maximumHandSize` | Mono-Red Aggro, 40 games/deck, seed 99 |
+|---|---|
+| **999** (the rule OFF — the engine as it was) | **82/280 = 29.3%** |
+| **7** (the rule ON — the engine as it should be) | **79/280 = 28.2%** |
+
+**Three games, in two matchups.** Every row is identical except **Golgari Midrange 8/40 → 7/40** and
+**UW Control 16/40 → 14/40** — the two grindy decks in the gauntlet, which is precisely where a
+hand-size limit should bite and where an aggro deck's opponent was quietly banking cards it could
+never have kept. Reproduced across two interleaved rounds, and the win counts are deterministic, so
+these are exact rather than noisy.
+
+📌 **Measured twice, and the delta GREW.** Against `origin/main` at `b5752b2` the same isolation read
+**81/280 → 80/280**, one game in one matchup. The token-characteristics fix (`ab0e41a`) then gave
+every token its real colour and creature types, the grindy decks' boards got better, and the
+hand-size rule became worth three games instead of one. Both readings are true of the engine they
+were taken on; the second is the current one.
+
+**79/280 = 28.2% is the recorded baseline for seed 99 from here on** (`origin/main` at `ab0e41a`,
+which this branch reproduces byte-for-byte, every matchup row equal). It moved because the engine got
+MORE correct, not less: an unbounded hand overvalues card draw and held-back reactive spells, which
+is exactly the quantity this product exists to measure.
+
+⛔ **CR 704.5b — a SPELL-driven draw from an empty library does not lose the game — is DEFERRED by
+decision, not by omission.** It is real, and it stays recorded (`spell-draw-decking`, cited from the
+matrix). It was not taken here for one reason: it ends games earlier and therefore moves the gauntlet
+baselines again, and measuring it in the same branch as CR 514.1 would produce one number that could
+be attributed to neither. It wants its own branch and its own isolation, and the fix belongs in
+`packages/cards/src/primitives.ts` rather than in the engine.
+
+**Sabotage-checked: 11 breaks, 11 caught, 0 escapes** — including the one that first came back GREEN
+and was the useful result of the whole pass: CR 514.3a's "another cleanup step" had NO test until the
+sabotage said so.
+
+### 3.30 The hidden-information guarantee — closing the CLASS, not the two instances — ✅ done
+
+Two agents in a row found a hidden-information leak that the scan owning that guarantee could not
+have seen. Both times the instance was fixed and the scan was not, which left the class open. This
+closes the class, states what the guarantee actually promises, and deletes one mechanism that turned
+out to be asserting nothing.
+
+#### The blind spot: the scan recognised ONE key name
+
+`collectInstanceIds` — the structural "does this message mention that card?" used by the pilot feed,
+by the masked online view and by the server's adversarial tests — collected the values of keys named
+exactly **`instanceId`**. The engine names cards under **eighteen other keys**: `sourceInstanceId`,
+`targetInstanceId`, `keptInstanceId`, `hostInstanceId`, `copiedInstanceId`, `appliesToInstanceId`,
+`source`, `target`, `targets`, `attackers`, `attackTargets`, `blocks`, `blocker`, `attacker`,
+`instanceIds`, `ref`, `attachedTo`, `recipientIs`, `effectTargets`. Every one of them walked straight
+past it — which is why the CR 514.1 cleanup discard could point `choiceAsked.sourceInstanceId` at a
+card in the discarding player's HAND, travel unredacted to every pilot, and leave the anti-cheat suite
+green. Instance ids are minted sequentially from the pre-shuffle library, so publishing one is
+publishing a read on that decklist.
+
+**A key-name PATTERN would not have fixed it either.** "Ends in `InstanceId`" still misses `source`,
+`target`, `targets`, `attackers`, `blocks` and `ref` — most of combat and all of targeting.
+
+#### What replaced it: a table the compiler will not let you skip
+
+`packages/core/src/instance-ids.ts`:
+
+- **`EVENT_ID_FIELDS`** — a mapped type over **every field of every `GameEvent`** (67 events, 187
+  fields), each classified `'none' | 'id' | 'idList' | 'idKeyedMap' | 'idPairList' | 'answer'`. Adding
+  a field to an event fails the build until somebody says whether it can name a card. Verified by
+  sabotage in the shape that actually hid last time: an **optional** field added to `tapped` broke
+  exactly one file — this one — and nothing else. `CHOICE_ANSWER_ID_FIELDS` does the same one level
+  down, for the most card-naming value in the engine.
+- **`instanceIdsNamedBy(event)`** — the exact extractor the table drives. It reads BOTH HALVES of an
+  id-keyed map (`attackTargets` is attacker-id → attacked object; a scan reading only the values
+  publishes exactly half of a leak), and it **throws** on an event type nobody classified rather than
+  returning an empty set, because "I checked and found nothing" and "I did not check" must not be the
+  same answer.
+- **`INSTANCE_ID_FIELD_NAMES`** — derived from those tables, and what the structural walker in
+  `@jonny-boi/protocol` now scans by. Classifying a new field as an id extends the walker for free.
+- **`instance-ids.test.ts`** re-derives the same set by **reading core's own source**: every property
+  in `packages/core/src` whose declared type mentions `InstanceId` must be recognised, and every name
+  in the vocabulary must still be declared somewhere. That is the half a type cannot do — `InstanceId`
+  is a bare `number`, so no conditional type distinguishes it from a life total, and an id field added
+  to a STATE type changes no event at all. It fails on exactly that.
+
+#### What the guarantee actually promises — and the sentence that was wrong
+
+The tempting one-liner is "no observation ever names a card in a hidden zone". **It is not true, has
+never been true, and writing it down is worse than the leak it describes**, because the next reader
+trusts it.
+
+> An observation names a card only if that card was on **public display at the instant the observation
+> was produced.** Equivalently: the feed never reveals the identity of a card the table has not seen.
+
+⚠️ **Hole 2, decided: the event keeps the id.** A buyback spell (Capsize, Elvish Fury) returns ITSELF
+to its owner's hand, so the public `stackResolved` names a card that is hidden by the time anyone
+looks. `stackResolved` fires while the object is still ON THE STACK — a public zone (CR 405.1) the
+whole table watched it reach when it was cast (CR 601.2a) — and the move to hand is a *separate*
+`zoneChange` that the policy already anonymises. Dropping the id would leave a pilot knowing **less
+than a spectator at a paper table**, which is the opposite failure and corrupts the represented-mana
+reasoning in `superhuman-ai-program.md` §35–37. Both the promise and the reasoning now live in
+`observation.ts`, not in a commit message.
+
+#### The wider net found a third leak the two known ones did not cover
+
+Over 300 full-pool games with the wider scan: **`continuousEffectExpired` names a card in a hidden
+zone, 10 times.** Traced to seed 3246281276, instance #70 — Elvish Fury, bought back into B's hand,
+whose until-end-of-turn pump expires at **cleanup, many actions later**, naming
+`sourceInstanceId: 70` while the card really is sitting in that hand.
+
+This is what killed the previous rule. The soak scanned "hidden BEFORE the window as well as after",
+which is a **one-window approximation** of "the table has not seen it" — and this walks straight
+through it. The scan now tracks the ids that have **never once** been anywhere but a hand or a
+library. It is deliberately more permissive, and the difference is exactly the cards the table has
+already watched; it is not more permissive about the thing that matters, and the CR 514.1 leak is
+caught by it unchanged (there is a test that reintroduces that bug and watches the scan fail).
+
+#### One mechanism deleted for asserting nothing
+
+The old scanner carried an exemption — "`stackResolved` may name a bought-back spell". Measured over
+200 full-pool games / 457,536 observations, removing it changed **nothing**, and the reason is
+structural: a spell sits on the STACK, which is not a hidden zone, for at least one whole decision
+between being cast and resolving, so the never-seen rule has already recorded it. An exemption that
+cannot fire is worse than none — it reads like the thing keeping the scan honest. Deleted, with a
+positive control that pins WHY it is unnecessary: delete the window in which the card was on the stack
+and the same three observations are reported.
+
+#### Two copies of the check became one, and the weak copies were the believed ones
+
+The scanner now lives once, in `observation.ts`, used by the soak and by `observation.test.ts`. It had
+been written twice, and the copies disagreed in the dangerous direction — the soak's already knew
+about buyback and about window timing, while the one in the file whose NAME owns the guarantee knew
+neither. `apps/server/src/security.test.ts` carried a **third**, weaker still (it stopped descending
+once it matched a key), on the one path where a leak is a cheating vector rather than a biased pilot.
+It now imports the shared one.
+
+#### And it runs over decks that PLAY the mechanics
+
+`observation.test.ts` scanned three curated gauntlet matchups. It passed on every build since it was
+written and the card list
+is precisely why: **no curated deck plays a buyback spell.** It now drives `runSoak` over the
+mechanic-anchored generated decks with the leak scan on **every** game, and asserts that every mechanic
+the pool prints actually fired — so "the decks never played it" fails the test instead of hiding under
+it. Leak sampling went **1-in-31 → every game**: measured, paired in ONE process over the same 90
+games (wall clock on this box is worthless), **6,125 ms CPU against 5,845 ms**, about 5%.
+
+#### `maskStateForSeat`: same class checked, no hole found
+
+The online half is the twin chokepoint and the more dangerous one. `packages/sim/src/masking.test.ts`
+plays full-pool decks anchored on buyback, madness, mill/scry, flashback/surveil and cycling, and
+scans **every** masked seat view and spectator view with the widened net: no card in the opponent's
+hand and no card in either library reaches a view, at any depth, under any key name. The chooser's own
+`pendingChoice` is lifted out — Thoughtseize showing the caster the victim's hand is the printed card,
+not a bug — and the other direction (a non-chooser or spectator seeing any of it) is asserted in the
+same pass. Three sabotages confirm it goes red.
+
+**Sabotage-checked: 16 breaks, 16 caught, 0 escapes**, plus one deliberate CONTROL — reintroducing the
+CR 514.1 leak *with the old narrow scan restored* comes back **GREEN**, which is the direct measurement
+of what the widening buys.
+
+⛔ **Deferred, with its blocker.** The 450-game hunt turned up one unrelated finding: an SBA violation
+at seed 4222011655 (`#34 Blood Artist has toughness 0`), in `packages/core`'s state-based-action pass.
+It is not a redaction bug, it does not reproduce inside the fast soak's game range, and fixing it here
+would put an engine change in a branch whose diff is meant to be readable as one argument. Recorded
+for its own branch with a reproducing seed. → **Closed in §3.32**: it was neither the gate nor a
+stale toughness but a mutation site with no pass behind it — paying a spell's additional cost — and
+the handoff was right, because the fix is an engine change in `applyActionToDraft`.
+
+### 3.35 Blink — exile a permanent you control and return it — ✅ done
+
+Blink was on §3.21's ⛔ named-unsupported list, which meant a Selesnya Blink deck could not exist:
+not "played badly", but *unbuildable* — the mechanic had no primitive and the pool had no enabler.
+It is now playable end to end, and **`Selesnya Blink` is the ninth sample deck**, selectable in the
+online lobby and in the gauntlet.
+
+**The whole mechanic is CR 400.7 taken seriously** — what returns is a NEW OBJECT. That is the
+payoff (the enters trigger fires again) and the cost (counters, damage and Auras do not come back;
+it returns untapped and summoning-sick), and it is why this is one primitive rather than a card
+script. `blinkTarget` composes the package's two EXISTING zone funnels — `movePermanentTo` out and
+`putOntoBattlefield` back — rather than opening a third opinion about what a zone change does;
+`effect-helpers.ts` already carries a scar comment about the last time those drifted.
+
+One shared funnel gained one option: `putOntoBattlefield` now takes an optional `controller`,
+because a card always goes to its OWNER's exile (CR 400.3) while a blink returns it under the
+BLINKER's control. For a creature you control but do not own those genuinely differ — which is the
+classic way a temporary control effect is made permanent.
+
+**One compile rule unlocked two cards**, because the wrappers already existed: the step-trigger
+prefix makes it Conjurer's Closet and the `you may` wrapper makes it optional, while the bare clause
+is Cloudshift. The pool regeneration was surgical — exactly 2 cards added, 0 changed.
+
+⚠️ **The pilot half is not optional, and the measurement is why.** With the engine working but no
+pilot valuation, Conjurer's Closet blinked **94 times across 20 games** (it is a `you may` trigger,
+which the pilot already accepts) while Cloudshift — the one-mana instant doing the same thing — was
+cast **zero times**, because an unclassified primitive scores as a "generic spell" and a generic
+spell is only offered into an empty stack. A mechanic half-played is worse than one that is absent:
+the deck looks functional while its best card rots in hand. Adding the `blink` goal took Cloudshift
+to **45 casts** and the deck from **55.9% → 61.9%**.
+
+A blink is priced as *what re-running the target's triggers is worth*, through the same
+`valueOfEffects` ruler everything else uses — and it counts the `leaves` trigger too, which is what
+makes Thragtusk (leaves: a 3/3; enters: 5 life) the best blink target in the pool by a distance. A
+creature with no such trigger scores nothing and is never chosen, so the spell is held rather than
+spent blinking a vanilla body.
+
+**Deck-order note that is easy to get wrong.** A gauntlet matchup is seeded by the opponent's INDEX
+(`gameSeedFor(baseSeed, i)`), so inserting a deck mid-list reseeds every deck after it. Slotting
+Selesnya Blink into the curve order moved UW Control's recorded row from 14 to 12 while changing
+nothing about how either deck plays. It is APPENDED instead, and all seven recorded rows stay
+byte-identical (12 · 13 · 17 · 7 · 9 · 7 · 14) with an eighth added.
+
+**Still out, named so it is not rediscovered.** The delayed-return half of the archetype —
+Flickerwisp, Eerie Interlude, Ghostway, and Charming Prince's third mode — needs DELAYED TRIGGERS
+("return it at the beginning of the next end step"), which the engine still does not have.
+Ephemerate needs rebound as well, and its blink half also prints "under its **owner's** control",
+a wording this rule does not yet match. Teleportation Circle needs "up to one target artifact or
+creature". All are left in the candidate list on purpose, so `expansion-report.json` keeps counting
+what delayed triggers would unblock.
+
+#### The pinned soak rows broke, and that is the interesting part
+
+Adding two cards re-sampled every generated deck, so **three of §3.33's four pinned rows started
+replaying a different match** and their `mustContain` guards fired. That guard worked exactly as its
+author intended — it is there so pool churn is a *finding* rather than a silent vacuous pass — but it
+left the regressions with nowhere to live: the bugs are still fixed, the positions simply are not
+dealt any more. **An 8,000-game hunt with the copy fix reverted did not re-deal the mirror once.**
+Re-pinning onto fresh seeds would only buy time until the next card is added.
+
+So a pinned row now carries its own DECKLISTS (`soak-pinned-decks.ts`), and
+`replaySoakMixedGame` takes an optional `decks` that wins over the generated pair. Card ids are
+Scryfall UUIDs and are stable across churn — only the sampling ever moved. A row is now
+self-describing and replays the exact game its bug came from for ever.
+
+⚠️ **This could easily have destroyed the coverage it was protecting**, so it was checked the only
+way that means anything: sabotage. Reverting the copy chain walk still turns all three copy rows red
+("burned the 6000-action cap", turns 11/20/18), and disabling the CR 704.3 end-of-action check still
+turns the SBA row red with its *original* violation text, `#34 Blood Artist has toughness 0`.
+`mustContain` keeps earning its place too — it now proves the pinned decklist is the right one,
+which is what a copy-paste between rows would break.
+
+📊 The deck is the strongest in the gauntlet at **61.9%** (95% vs Mono-Red, 100% vs Rakdos Goblins —
+eight 0/4 walls and a great deal of lifegain), and its bad matchups are real: 27.5% into Mono-Green
+Ramp and 37.5% into Izzet Prowess, neither of which cares about blocking. Whether the meta wants a
+62% deck is a TUNING question for the integrator, not a correctness one.
+
+### 3.33 The copy mirror — a game that could not end — ✅ done
+
+§3.32 handed off three full-pool soak games that burned the 6,000-action cap without ending
+(`gameCanEnd`): seeds **3434778477**, **1390617766**, **113343071**. They are one defect, and it is
+**not** the copy-spell engine §3.31 shipped — it is what the pilot thinks a copy is WORTH, plus a
+CR 707.10 "may" the engine had quietly made mandatory.
+
+**The position**, verbatim from the instrumented replay — stack bottom-to-top
+`[2: Dream Twist, 17: Twincast → 2]`, with a copy of the Twincast resolving above them. That copy
+inherits the Twincast's aim at the Dream Twist and may be re-aimed (CR 707.10), and its two
+candidates are exactly those two objects. Re-aim it at **17** and it copies the Twincast again,
+producing another copy with the same two candidates. Neither 2 nor 17 ever reaches the top of the
+stack. The instrumented replay of seed 1390617766 counted **1,891
+`spellCopied` events in one game** against 8 `castSpell`s — 1,894 re-aim questions asked, every
+sampled answer naming the same Twincast.
+
+**Why the pilot always chose it.** `EFFECT_VALUE.copySpell` priced a copy at `cardValue` of the
+copied CARD. A Twincast is a pricier card than a Dream Twist, so "copy the Twincast" outscored "copy
+the real spell underneath it" every single time — and the thing it bought was another copy of a
+Twincast. The valuation was self-reinforcing.
+
+The fix prices a copy by **what the copy will actually deliver**: the chain is walked to the non-copy
+spell it bottoms out at, and each extra link costs `modeCopyChainPenalty`. Copying
+`Twincast → Bolt` is therefore worth a Bolt minus one wasted resolution — correctly just *below*
+copying the Bolt directly. A chain that leads to a spell already gone from the stack is worth **0**
+(it would be countered on resolution, CR 608.2b), and `MAX_COPY_CHAIN_LINKS` stops the walk.
+
+⚠️ **The penalty is not what fixes the loop; the chain walk is.** With the penalty at 0 the three
+seeds still pass, because the two candidates then score EQUAL and the tie happens to fall to the
+real spell. That is correctness by candidate ordering, and it would come back the day the ordering
+changes — so the penalty makes the preference strict, and `copy-chain-pilot.test.ts` asserts
+`bolt > mirror` rather than only the configured gap (with the penalty zeroed, `0 === 0` passes while
+the loop is wide open).
+
+**The rules half.** `retargetCopy` asked for an EXACT number of targets, justified as "declining is
+re-choosing the same object". That holds only while the inherited target is still legal. Once the
+copied spell's own target has left the stack it is not offered, and an exact-count question then has
+no way to express "leave it alone" — CR 707.10's *may* had become *must*. Worse than forced: with
+exactly one other candidate the count made the question auto-answerable, so the engine silently
+aimed the copy at the only other copy spell without asking anyone. It now asks with `min: 0` in that
+case, and an empty answer keeps the dead aim so the copy is countered on resolution.
+
+**Verified.** All three seeds are pinned in `soak.test.ts` (named by their cards, as that file
+requires) and each reproduces in ~200 ms. Sabotage-checked three ways — reverting the chain walk
+turns all 4 pilot tests and all 3 pinned seeds red; zeroing the penalty turns 2 pilot tests red;
+reverting the CR 707.10 `min` turns the optionality tests red. Gauntlet seed 99 **byte-identical**
+at 79/280, rows 12 · 13 · 17 · 7 · 9 · 7 · 14 — no curated deck holds a copy spell, so curated play
+cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
+
+⚠️ **The deep tier's `gameCanEnd` is now GREEN — 0 action-cap hits in 2,000 games, where it was 3.**
+The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
+now also fixed.
+
+### 3.42 The pilot could not price "you may" — ✅ done
+
+Found by asking a narrow question honestly: *are all 60 cards in Selesnya Blink functional?* They are
+— every card resolves, every primitive is registered, and 40 games cast Cloudshift 63 times,
+Conjurer's Closet 30 and Restoration Angel 27. But the same measurement showed **171 cards exiled and
+only 161 returned**, and the missing ten were the deck's OWN TOKENS: 9 Soldiers and a Beast, blinked
+and destroyed (CR 111.7 — a token in exile ceases to exist and nothing returns it).
+
+**The cause was not blink.** `mayEffects` — "you may &lt;body&gt;" — had **no entry in the AI's value
+table at all**. An unpriced primitive scores the flat `modeUnknownEffectScore`, and the nested body is
+never looked at. So a pilot AIMING an optional trigger scored every candidate identically and fell
+through to the FIRST one offered; Conjurer's Closet ate its own Soldier token while a Thragtusk stood
+next to it. Ten pool cards route through `mayEffects`, so this was never a blink bug.
+
+Two entries added, both recursing through the same `valueOfEffects` ruler:
+- `mayEffects` — worth exactly what its body is worth. Safe in both directions: declining is answered
+  elsewhere, so pricing the body cannot force a bad "yes", it only lets the pilot tell candidates apart.
+- `blinkTarget` — priced by what re-entering re-triggers (both halves: Thragtusk's leave AND its
+  enter). Deliberately NOT routed through `againstTarget`, which penalises aiming at your own board —
+  backwards for an effect whose whole point is your own permanents. ⚠️ A TOKEN is priced as a LOSS.
+
+📊 **Tokens blinked away: 10 per 40 games → 1.** Selesnya Blink's gauntlet **63.0% → 71.0%**
+(non-overlapping CIs: 59.6–66.3 vs 67.8–74.0), biggest against Mono-Green Ramp (33→51) and Orzhov
+Lifegain (41→58). ⚠️ **This MOVES recorded baselines** — Mono-Red is unchanged (224/800) but UW Control
+shifts 434→426/800, because its opponents now play their optional cards better.
+
+⚠️ Three fixture bugs while writing the test, each making it disagree with the game for a reason not
+in the code under test: a hand-built ETB that omitted the printed `who` param, and a state with an
+EMPTY LIBRARY (which prices any draw as decking yourself). The test now uses REAL pool cards and a
+real library.
+
+### 3.41 Angel of Serenity, and the Angel type swept — ✅ done
+
+The last card §3.38 left blocked, and the two engine gaps it stood on.
+
+**Multi-target triggers.** Trigger targeting was single-target everywhere:
+`TriggeredAbility.targets` named ONE restriction and the engine asked for exactly one. Angel of
+Serenity wants "up to three". The fix is small because the engine was already asking a `selectTargets`
+choice to aim a trigger — it was just hard-coded `min: 1, max: 1`. `targetCount?: {min, max}` on the
+ability now drives it, absent ⇒ exactly one, so no existing trigger changes. **Targets are still
+chosen as the ability goes on the stack (CR 603.3d)** — this asks for a range, it does not defer the
+choice to resolution.
+
+⚠️ `min: 0` is what makes "UP TO three" different from "three": with no legal targets the ability must
+STAY on the stack and resolve doing nothing, where a must-target trigger is removed. Removing it would
+silently delete the rest of its text.
+
+**Multi-zone targets.** `creatureOnBattlefieldOrInGraveyard` — the pool's only target list spanning
+two zones. One restriction, not two, because "up to three" is three in TOTAL across both. Both
+graveyards are in scope: the card does not say "your". A graveyard card is NOT a permanent, so
+`exileUntilLeaves` grew a second path — the battlefield leave-funnel does not apply to it.
+
+📊 **The Angel type swept**: every modern-legal Angel offered to the compiler, **6 → 32 playable** —
+Avacyn, Akroma, Archangel of Thune, Lyra, Gisela, Angel of Despair, Emeria Angel and the rest. 143 of
+the 169 candidates are still rejected, and that is the honest number: they need ~71 DISTINCT templates
+between them, a long tail rather than one task.
+
+⚠️ Gauntlet seed 99 byte-identical (224/800) — 26 cards entering the pool must not, and did not, move
+a curated-deck baseline.
+
+### 3.40 The pilot pays for its own abilities — ✅ done
+
+Two independent bugs stood between Strionic Resonator and being a real card, and §3.39 named only one
+of them — wrongly.
+
+**Bug 1: a one-line hole in a validator.** `isTargetRestriction` is the guard `restrictionOfEffects`
+consults before it will believe a `targets` param. The new `triggeredAbilityYouControl` word was added
+to the union, the legality check, the enumerator and the description — and not to the validator. So
+the restriction read back as `undefined`, the engine offered the activation **never**, and the pilot
+scored the ability **zero**. §3.39 measured that as "122 opportunities, 0 offers" and concluded the
+pilot could not plan mana. The measurement was right and the conclusion was wrong.
+
+⚠️ **The lesson is the shape, not the line.** A restriction word has FIVE homes — union, validator,
+`isLegalTarget`, `enumerateTargets`, `describeRestriction` — and missing the validator fails SILENTLY
+and looks exactly like an AI that is not clever enough. If you add a restriction, grep for an existing
+one and confirm five hits.
+
+**Bug 2 (real, and the one §3.39 guessed at): the pilot never floats mana for an ability.** The engine
+offers an activation only once the pool ALREADY covers its cost, and the pilot never taps
+speculatively — so every mana-costed activated ability was invisible to it. `bestEquipPlay` had solved
+this for Equip alone, with a comment saying exactly why. `bestFundedActivation` generalises it: walk
+the battlefield, score with `valueOfEffects` (the same ruler loyalty, modal spells and triggers use),
+fund with `planManaPayment`, emit the next tap or the activation.
+
+Both fixes were needed — with only the validator fixed, `trigger-copy` still reported inert.
+
+The old comment said other abilities were "left unused until they can be scored honestly". This is
+that ruler rather than a guess, and an ability it cannot price still scores 0 and still goes unused.
+Loyalty, Equip and land-fetch keep their own scorers; two paths bidding for one ability would
+double-count it.
+
+📊 **Gauntlet seed 99 byte-identical to main** on both Mono-Red Aggro (224/800) and UW Control
+(434/800, 53 timeout draws) — every row, not just the total. The curated decks hold no ability this
+path can price, so the new behaviour appears only where such cards exist. `trigger-copy` is now a
+registered, FIRING soak mechanic.
+
+⚠️ Its loop-draw test was rewritten too: the first version pinned a soak seed where the heuristic
+walked into the Dualcaster/Rite loop, and this very change made the pilot WIN that game instead. A
+test that goes red because the pilot got better was measuring the wrong thing — it now pins the
+mechanism and the boundary, and asserts only that the copy-mirror board TERMINATES.
+
+### 3.39 Copying a triggered ability, and a game the rules end — ✅ done
+
+Strionic Resonator: "{2}, {T}: Copy target triggered ability you control." The stack holds two kinds
+of object and only one of them was copiable. A trigger is already the resolved shape of an ability —
+a controller, a source, effect refs and its targets — so copying one is copying that record, which is
+why it lives beside the spell copier rather than inside it (the two share no field but an id and a
+controller).
+
+**Adding one card to the pool turned the soak red, and the card was not in the failing game.** The
+anchored decks are a pure function of the pool, so a 529th card reshuffles every one of them — and the
+new pairing dealt **Dualcaster Mage + Rite of Replication**, which is a genuine MANDATORY infinite
+loop in paper Magic: neither half is a "may", so no player can decline their way out. It made 2,138
+tokens and burned the 6,000-action cap.
+
+⚠️ **The rules already answer this and the engine did not.** CR 104.4b — "if the game somehow enters a
+loop of mandatory actions, repeating a sequence of events with no way to stop, the game is a draw."
+`SimConfig.maxActionsPerTurn` (2,000 — two orders of magnitude above a real turn) ends such a game as
+`{kind: 'loop'}`, which is deliberately NOT `'timeout'`: a timeout means "we gave up and the verdict is
+suspect", a loop means "the rules end it here". The soak counts loop-draws and prints them rather than
+failing on them — legal, but a rising count is a finding.
+
+⚠️ **This is NOT the §3.33 copy mirror.** That loop produced nothing and was fixed by pricing a copy by
+its payload. This one produces a real 2/2 every iteration, so the valuation is right to like it; what
+is missing is any way to stop. Do not "fix" it in the pilot.
+
+~~**Known gap: the sim pilot cannot use Strionic Resonator.**~~ **CORRECTED in §3.40 — the diagnosis
+here was wrong.** The measurement (122 opportunities, 0 offers) was real, but the cause was not the
+pilot's mana planning: `isTargetRestriction` had never been given the new restriction word, so
+`restrictionOfEffects` answered `undefined`, the engine never offered the activation and the pilot
+scored it zero. A missing line in a validator, wearing the costume of an AI limitation. See §3.40 —
+and note that "measured, not assumed" was true of the SYMPTOM and said nothing about the CAUSE.
+
+📊 Pool 528 → 529 compiled.
+
+### 3.38 Exile-until-this-leaves, and imports that never re-compile — ✅ done
+
+A deck builder reporting six cards unplayable. Four of them now play; the fix has two halves and the
+first one matters more than the cards.
+
+**Imports were a CACHE that never expired.** A failed import stored the compiler's verdict from the
+day it was imported, and nothing ever revisited it — so every template added from here would have had
+a dead zone: the card stays broken in your deck until you think to delete and re-import it.
+`Cloudshift` demonstrated it, still reading "needs a filtered-targeting template" a whole release
+after §3.35 shipped the rule that compiles it. Failed entries are now re-compiled once per session on
+load, so a template landing today fixes a deck imported last month. Cheap by construction — only
+failed entries, only once, and a card that still does not compile keeps its reasons intact.
+
+**The O-Ring system** (`exile-until-leaves.ts`) — "exile target creature an opponent controls until
+this creature leaves the battlefield". Two printings, one machine: Banisher Priest folds both
+abilities into one sentence (so that compile rule emits TWO triggers from one clause), while Fiend
+Hunter prints them separately and compiles through the existing `trigger-leaves`.
+
+⚠️ **The link is the mechanic.** The exiled card records WHO exiled it, not the reverse — two jailers
+on the battlefield have each taken their own prisoner, and killing one must return exactly its own. A
+"return everything in exile" implementation passes the obvious test and fails that one, which is why
+the two-jailer case is pinned and sabotage-checked.
+
+⚠️ **"ANOTHER target creature" is load-bearing, and is now a FLAG rather than a fourth one-off
+restriction.** Let Fiend Hunter name itself and it exiles itself → leaves → returns itself →
+triggers again, unbounded (§3.33's shape). §3.37 warned against adding more `nonSomethingSomething`
+members to the restriction union, so "another" is `TriggeredAbility.targetsExcludeSelf` — orthogonal
+to the restriction, applied once where candidates are enumerated and again in `isLegalTarget`,
+because §3.36 is what happens when those disagree.
+
+Two new restrictions were still needed for the printed lines: `creatureAnOpponentControls` (Banisher
+Priest) and `artifactEnchantmentOrLand` (Acidic Slime). Both are type-shaped rather than
+adjective-shaped, which is the axis the union is actually good at.
+
+**Still blocked, honestly:** `Angel of Serenity` targets "up to three other target creatures from the
+battlefield **and/or creature cards from graveyards**" — multi-zone targeting the engine has no
+vocabulary for. `Strionic Resonator` copies a TRIGGERED ABILITY, which is a copy system for stack
+objects that are not spells. Both are real engine work, not templates.
+
+📊 Pool 524 → 528 compiled (surgical: 4 added, 0 changed).
+
+### 3.37 Restoration Angel, and a curated card reported as broken — ✅ done
+
+Two user-facing defects from one report: a deck builder showing **"⚠ 10 cards not playable"** over a
+list that included `Thragtusk`, `Cloudshift` and `Conjurer's Closet`.
+
+**Three of those ten were curated pool cards, playable all along.** `unsupportedReason` consulted only
+the IMPORTED-card store, so a card that is BOTH curated and imported was judged by the import — even
+though `importedCards.ts` promises the store is "deliberately additive: nothing here can shadow a
+curated card" and `deckHealth.ts` promises "cards in the curated pool are always playable". Both were
+true as documentation and false as code. It is the ORDINARY case, not a corner: you paste a real
+decklist, part of it is already in the pool, and anything the compiler could not read at IMPORT time
+was reported broken forever. Thragtusk was named for wanting "leaves-the-battlefield triggers" the
+engine has had for months.
+
+The store is also a CACHE of an import-time verdict, which is the same bug's second half: Cloudshift
+still read "needs a filtered-targeting template" after §3.35 shipped the rule that compiles it.
+Asking the pool first fixes that permanently for curated cards. ⚠️ An UNCURATED failed import still
+carries its import-time verdict until re-imported — deliberately, and the third test pins that a
+genuinely unreadable card is still reported, because silencing every warning would be the worse bug.
+
+**Restoration Angel now compiles**, which needed the one thing the report called "a filtered-targeting
+template": `nonAngelCreatureYouControl`. The exclusion is load-bearing, not flavour — the Angel is
+itself a creature you control, so a blink that could name it would re-trigger its own enters ability
+for ever, the same shape as §3.33's copy mirror. Both the enumeration site and `isLegalTarget` apply
+the filter, because §3.36 is what happens when those two disagree.
+
+⚠️ **Named for the printed line, not generalised — on purpose.** `CardFilter` already spells
+"non-Goblin creature" as `noneOfSubtypes`, so the general form is a target restriction that carries a
+filter. `TargetRestriction` is a flat string union read at **67 non-test sites**, and giving it a
+shape is a change of a different order from adding a member. The comment on the new member names the
+trigger for doing it: the second non-<subtype> card.
+
+📊 Selesnya Blink now runs 2× Restoration Angel over the 2× Angel of Mercy (flash makes it the only
+instant-speed blink in the deck): **60.9%**, essentially unmoved from 61.9%, and its bad matchups
+stay bad (30% into Mono-Green Ramp, 40% into Izzet Prowess).
+
+### 3.36 A granted flashback on a SPLIT card — the menu lied — ✅ done
+
+The last violation keeping the deep tier red, and the third distinct defect the copy-mirror hunt
+turned up behind the first. **The tier is now GREEN: 0 violations in 2,000 games.**
+
+Snapcaster Mage grants flashback to a CARD in a graveyard. A split card (CR 709) is one card with
+two halves, so casting it from the graveyard resolves to a HALF — and `castDef` is then not
+`card.def`. `applyCastSpell` consulted the grant only when those two were the same object and
+otherwise read the half's PRINTED flashback, which a split half does not have:
+
+```ts
+castDef === card.def ? flashbackCostOf(state, card) : castDef.flashback
+```
+
+Meanwhile `generateLegalActions` offers the graveyard cast using `flashbackCostOf(state, card)` —
+which DOES find the grant, and even checks affordability against it. So the menu offered a cast the
+apply path then refused with "that card has no flashback", for ever. Soak seed **1200969370**, an
+`Assault // Battery` already spent as Assault.
+
+Both sides now read the same accessor (`flashbackCostOf(state, card) ?? castDef.flashback`), which
+also settles the cost question without needing a ruling: the number the apply path charges is the
+number the offer already validated.
+
+⚠️ **The invariant that caught it is worth more than the fix.** "The engine never rejects an action
+it offered" is not a rules check — it is an internal-consistency check between two code paths that
+must agree, and nothing else in the suite compares them. It failed silently in the sense that
+matters: no crash, no wrong result, just an action refused every single time it was offered.
+
+### 3.34 A spell returned to hand kept the face it was cast as — ✅ done
+
+Not a copy-pricing bug and not caused by §3.33: §3.33 changes which games get played in copy-spell
+decks, and one of the 2,000 walks into a defect that was already there. §3.35's two new pool cards
+then re-dealt every generated match and it surfaced again at a different instance, which is how we
+know it is the CLASS and not one unlucky game.
+
+**The violation** (turn 22, draw step; the instance id moves with the pool):
+
+```
+✗ every action a pilot submits came from generateLegalActions
+    castSpell#7 was never offered (10 legal actions: passPriority, tapForMana)
+✗ the engine never rejects an action it offered
+    the engine rejected an offered action: the back face of a double-faced card cannot be cast
+```
+
+The action is `{kind:'castSpell', instanceId:7, targets:['B'], face:'back'}`, submitted **82 times**
+in that one game.
+
+⚠️ **This section first shipped with the WRONG diagnosis, and the way it was wrong is worth keeping.**
+It said the pilot was building a `castSpell` for a modal DFC whose back face is a LAND
+(`Skyclave Cleric // Skyclave Basilica`), and prescribed a guard in the pilot's
+`castableHalvesInHand`. That guard was written, and it fixed nothing: the caller already drops a land
+half one line later (`if (isLand(def)) continue;`), so the guard was unreachable. The seed had gone
+green for an unrelated reason — §3.35 changed the pool and re-dealt it — and the "fix" was only ever
+confirmed against that. **`targets:['B']` was the tell all along: a land does not target a player.**
+
+**What is actually wrong.** Tracing every event naming the instance gives three lines and the whole
+story: it is DRAWN, it is CAST as its back half ("Blow Off Steam"), and it moves **stack → hand** —
+Narset's Reversal returning it. `returnSpellToHand` pushed the instance into the hand array with
+three hand-rolled lines and no CR 400.7 reset, so the card arrived in hand still wearing the
+back-face definition. A back face cannot be cast from hand (CR 712.8b), so the engine refused it
+every time the pilot offered it, and the card was a dead draw for the rest of the game.
+
+The fix CALLS core's own `resetInstanceForNewZone` (plus `pruneCardGrantsFor`) rather than
+re-implementing what a zone change clears — the same discipline `movePermanentTo` states at length,
+and the two funnels had drifted for exactly the reason that comment warns about.
+
+**The regression is CONSTRUCTIVE, not a seed.** `returned-spell-face.test.ts` builds the position
+directly: cast a modal DFC's back half, bounce it with Narset's Reversal, assert the card in hand is
+front-face-up AND castable again. A seed would have been re-dealt by the next pool change — which is
+precisely what happened to the first attempt at this section. Sabotage-checked: removing the reset
+turns both tests red.
+
+### 3.32 The other doors into the priority boundary — CR 704.3 for every action — ✅ done
+
+§3.29 put `checkStateBasedActions` on the priority boundary and called it a backstop for "the next
+mutation path that forgets". It was installed on **one** of the doors into that moment, and the next
+path had already forgotten.
+
+**This section is §3.32, not §3.31**: `feat/spell-and-token-copies` published a §3.31 while this
+branch was in flight, and renumbering a section other branches already cite would break more than it
+tidies.
+
+#### The reproduction
+
+The 450-game redaction hunt (§3.30) filed one unrelated violation and deferred it: seed
+**4222011655**, `#34 Blood Artist has toughness 0` while still on the battlefield — CR 704.5f says a
+creature at 0 toughness is put into its owner's graveyard. It did not reproduce inside the fast tier
+because it is **mixed game 112** and the fast tier plays 40.
+
+Inverting `gameSeedFor` narrowed it to that one index in seconds, and from there to a single game that
+replays in **200 ms**. What it shows:
+
+- Turn 8: B enchants A's Blood Artist (a 0/1) with **Weakness** (−2/−1). It does not die, because A's
+  **Trusty Machete** is equipped to it. Net: alive, correctly.
+- Turn 13, draw step: A casts **Costly Plunder**, whose mandatory additional cost (CR 601.2h) is
+  "sacrifice an artifact or creature". Two artifacts qualify, so the cost parks a `selectCards`
+  question. A answers it with the Machete.
+- The Machete leaves. The Blood Artist is now a −2/0 — and it sits there for the **next five turns**.
+
+#### Which of the three it was
+
+Three candidates were on the table and two of them were wrong, which is worth recording because both
+were plausible and both would have been fixed in the wrong place:
+
+- **Not the narrowed gate.** `stateBasedActionsPossible` returned **`true`** on the offending board —
+  the Weakness is an attachment and the gate treats either end of an attachment as "always look". The
+  §3.29 narrowing is innocent.
+- **Not a stale or lazily-computed toughness.** Calling `checkStateBasedActions` **by hand** on that
+  exact state killed the creature immediately and emitted the whole correct cascade — `creatureDied`,
+  the zone change, the Weakness unattaching and following it to the graveyard.
+- **It was a mutation site that changed state and never re-checked.** Instrumenting the engine showed
+  the pilot being handed two consecutive views at turn 13's draw step with **no check between them**:
+  the first with the Machete and toughness 1, the second without it and toughness 0. Paying the
+  additional cost runs through `finishCastChoice`, which hands the floor **straight back to the
+  caster** — nobody passed priority, so `onPassPriority` never ran, so nothing looked.
+
+#### The seam
+
+CR 704.3 says state-based actions are checked *whenever a player would receive priority*, and *then*
+triggered abilities go on the stack. In this engine a player receives priority at the end of
+essentially every action. So the check moved from one action's handler to **where an action ends** —
+`applyActionToDraft`, after dispatch, before `collector.flush()` puts triggers on the stack. That
+ordering is the rule's own: a death this check causes queues its dies-trigger into the same flush
+rather than being stranded in a collector nobody drains again — and Blood Artist's own ability is
+exactly that shape. Three guards say "is anybody actually receiving priority": not a decided game, and
+not a parked question or a suspended resolution, which mean a spell is still resolving (CR 608.2 — the
+case `soak.ts` documents at length, where a creature genuinely does sit dead until the question is
+answered).
+
+**The pass is excluded, and that is not a special case in disguise.** A pass is the one action that
+already ran this exact check — at its START, in `onPassPriority`, where it must be, because a
+state-based action can end the game or park the legend rule's question and so stop the pass happening
+at all. What a pass then goes on to change checks at its own site (`resolveTopOfStack`, and the
+draw/combat-damage/cleanup arms of `advanceStep`). Enumerating *mutation sites* is what produced this
+bug; enumerating *action kinds* is a closed list the compiler checks, and this covers all of it.
+
+#### What it costs
+
+⚠️ **Wall clock is worthless on this box and so, it turns out, is a small number of CPU rounds** — the
+first paired attempt returned rounds of 2,484 ms and 5,110 ms **for the same arm**. So the added work
+was counted deterministically first, and only then timed.
+
+| workload | extra gate calls | extra FULL checks | cost |
+|---|---|---|---|
+| seed-99 gauntlet (280 games) | 24,965 | **0** | ~6 ms of ~2.3 s (~0.3%), every row byte-identical |
+| full-pool soak (worst case) | 11,328 | 6,227 (24,369 → 30,596, +25.6%) | **+9.5% CPU** |
+
+Of the gauntlet's 151,124 actions, **125,918 are passes** — which is why excluding them is most of the
+work rather than a rounding error. The gauntlet reaches **zero** extra full checks because curated
+decks rarely hold an attachment; that is also why the gauntlet cannot see this bug and the soak can.
+The +9.5% is the minimum over 14 alternating paired rounds in one process, on full-pool boards where
+nearly every game has an Aura or an Equipment out and the gate therefore says yes about half the time.
+That is the price of the rule holding at the boundary it names.
+
+#### Gauntlet: 79/280, unmoved
+
+Byte-identical per-opponent rows with the check on and off, measured in the same process: Boros 12/40,
+Rakdos 13/40, Izzet 17/40, Golgari 7/40, Orzhov 9/40, Mono-Green 7/40, UW 14/40.
+
+#### The sibling hunt — 2,056 games, zero SBA-class violations left
+
+One instance of this shape usually means more, so the deep tier ran at 2,000 games **on the merged
+tree**: 2,056 games, 39,116 turns, 1,122,195 actions, 348,608 ms CPU. **Not one state-based-action
+violation** — no 0-toughness creature, no 0-loyalty walker, no 0-defense battle, no illegally attached
+Aura, no player at 0 life still playing. The class this branch opened is closed.
+
+⚠️ **It did surface three failures, and they are NOT this branch's.** Three games burned the
+6,000-action cap without ending (`gameCanEnd`): seeds **3434778477** (turn 20), **1390617766**
+(turn 11) and **113343071** (turn 18). Replaying all three through `replaySoakMixedGame` with the new
+check toggled ON and OFF in one process gives the **identical** violation set both ways, at both
+on-the-play assignments — so they are pre-existing on `origin/main`, not a behaviour change here.
+Their decks say why: every one pairs a copy spell (`Reverberate`, `Twincast`, `Narset's Reversal`)
+with an extra-draw engine (`Howling Mine`, `Font of Mythos`, `Kami of the Crescent Moon`), which is
+§3.31's cards meeting a card-advantage board. **`origin/main`'s deep tier is currently RED for that
+reason** and it needs its own branch; closing it here would bury an engine fix under an unrelated
+one, which is exactly the call §3.30 made about this bug.
+
+> ✅ **Closed in §3.33.** The extra-draw engines were a coincidence of the decklists, not the cause —
+> all three are the same copy-mirror loop, fixed in how the pilot prices a copy (plus a CR 707.10
+> "may" the engine had made mandatory). The deep tier is green again.
+
+#### A regression test that could have been green for the wrong reason
+
+`soak-config.ts` promises a violation is "a bug report you can paste into a new test". It was only half
+true: the seed and both decklists printed, but the only way to reach the game they describe was to
+re-run the whole tier and hope `mixedGames` was large enough to contain it. `replaySoakMixedGame`
+closes that — one seed, one game, 200 ms — and `soak.test.ts` gains a PINNED list.
+
+**The sabotage that survived is the finding worth keeping.** Mutating one bit of the replay's
+opponent-deck seed left the pinned row **passing**: it replayed a different match, found nothing, and
+read exactly like a fix holding. "No violations" is also what the wrong game reports. The replay now
+returns both decklists beside the violations, and every pinned row names the cards without which the
+position cannot exist (`Blood Artist`, `Trusty Machete`, `Costly Plunder`, `Weakness`) — asserted
+*before* the outcome, so the row fails loudly when pool churn stops dealing the position instead of
+passing vacuously forever.
+
+**Sabotage-checked: 4 breaks, 3 caught immediately, 1 escape — and the escape was fixed and re-checked
+red.**
+
+### 3.31 Copies that are NOT CARDS — a spell copy on the stack, and a token copy — ✅ done
+§3.24 shipped copying ONTO an object that already exists: a Clone entering the battlefield swaps its
+own `def`, so the copy inherits a card, an owner and a zone to go home to. It reported the other half
+of the family **by name rather than half-building it**, and the reason it gave is the whole of this
+section: *"a copy of a SPELL needs a stack object that is not a card and ceases to exist as it
+resolves — `resolvesTo` has only battlefield/graveyard/exile/hand, and any of them would leave a
+phantom card in a zone that delirium, flashback and Tarmogoyf all count."* That is exactly right, and
+it is the trap this section had to disarm before anything else.
+
+**CR 704.5e IS THE FEATURE, AND IT IS ASKED IN ONE PLACE.** `spellLeaveDestination` gains a fourth
+answer, `'ceaseToExist'`, and it is asked **first** — before flashback's exile, before buyback's
+return to hand, before the graveyard. Both exits from the stack already funnel through that one
+function, and they live in **two different packages** (resolution in core's `finishSpellResolution`,
+countering in the cards package's `counterSpellOnStack`), which is precisely why the answer is a
+value in a RETURN TYPE rather than an `if` at each call site: neither caller type-checks without
+handling it, and the compiler caught the second one the moment the type widened. Nothing is ever
+pushed into a zone, so the phantom does not exist to be cleaned up — the same argument §3.29 makes
+for doing CR 704.5d at the MOVE rather than as a state-based sweep.
+
+The one copy that DOES keep an object is a copy of a **permanent spell**, and what it keeps is a
+**token** — stamped on the DEFINITION in `makeSpellCopy`, because a definition field survives the
+per-action clone by construction (`internal/clone.ts` shares `def` by reference and says so), where a
+new instance field is a line a field-by-field copy can forget. It then ceases to exist by the token
+rule the moment it leaves the battlefield, so that exit leaves no card either.
+
+**The copy IS a `SpellStackObject`, and that is the design.** A copy of a spell is a spell: it can be
+countered, it is a legal "target spell", and it resolves through the very same code — so there is no
+second resolution path to keep in step, exactly as swapping `def` gave §3.24's copy no second
+characteristic path. Two things differ, both consequences of it not being a card: its `CardInstance`
+is **minted** (a fresh id, `zone: 'stack'`, the original's copiable values), and it carries
+`isSpellCopy`. `internal/clone.ts` copies that field, with a test, because dropping it would put a
+phantom card in a graveyard at the very next action boundary.
+
+**Every decision made for the original comes with it (CR 707.10)** — its targets, the value of X,
+whether it was kicked and how many times, and a modal spell's announced modes *with each mode's own
+aim*, deep-copied so re-aiming the copy cannot re-aim a spell its controller may not even control.
+What deliberately does NOT come across is the bookkeeping of a CAST, because a copy is not cast:
+`castFrom` (whose only job is to exile a flashback CARD), `boughtBack`, `additionalCostPaid`,
+`awaitingCastChoice`. None could change where the copy goes anyway — `isSpellCopy` outranks them —
+so carrying them would only state a falsehood in the state a UI and a replay both read.
+
+**"You may choose new targets for the copy" is an aiming moment the engine did not have.** Targets
+are chosen as a spell is CAST or as a trigger goes on the stack; nothing aimed an object the engine
+itself had just created. It happens inside the copying spell's RESOLUTION, so it is asked through the
+ordinary resolution channel and the existing suspend/resume machinery carries it — no new transport,
+and it replays from a seed. `spellCopyAimSlots` is what makes a MODAL copy work: the slots are the
+announced modes, each re-aimed on its own, and a slot with no target is never offered (the permission
+changes what a target is, never how many there are).
+
+⚠️ **Two latent engine bugs had to be fixed to get there, and both predate this branch.**
+- `applyAnswerChoice` routed **every** `selectTargets` answer to `recordTriggerTargets`, with no
+  `!state.resolution` guard — the three sibling branches beside it all carry one. A target answer
+  raised from inside a resolution would have aimed some unrelated trigger and left the suspended
+  resolution parked forever.
+- `targetOptionFor` never searched the **stack**, so every counterspell's own target has been
+  rendering to the UI and to the AI's target scorer as `#7`. "Target spell" has been a restriction
+  since Counterspell; it matters twice over now, because both the copy question and the re-aim
+  question are lists OF SPELLS.
+
+**The compiler: two rules, and the residual reports something TRUE.** `copy-target-spell` owns the
+whole printed idiom on ONE LINE ("Copy target instant or sorcery spell[, then return it to its
+owner's hand]. You may choose new targets for the copy.") rather than sentence by sentence, because
+the permission is not an effect of its own — splitting them would make the second sentence a vacuous
+rule. `create-token-copy` parses its tails from the END (the kicked count, then the "except …"), so a
+selector containing a comma cannot be mistaken for an exception, and it reuses §3.24's
+`parseCopyException` unchanged: "except it has haste" means exactly one thing in this codebase.
+`instantOrSorcerySpell` is a new target restriction and is deliberately not `'spell'` — flattening it
+would let Reverberate copy a Grizzly Bears, which is a card playing WIDER than printed.
+
+The obsoleted hint is replaced by **two precise ones**, because the residual is not one thing: a
+**DELAYED triggered ability** ("Sacrifice it at the beginning of the next end step" — CR 603.7, the
+single biggest remaining token-copy blocker, and a card compiled without that clause would be a
+permanent hasty copy with no drawback, i.e. strictly better than printed), and a **copy-creating
+template outside the closed tables** — an activated/triggered ABILITY on the stack, a
+"nonlegendary"/"another"/"token" selector, a token that enters tapped, "copy THAT spell" naming the
+spell that triggered the ability, a follow-up sentence about the token just created, an "except …"
+tail on a SPELL copy (Fork's "except that the copy is red"), or a copy count conditional on the zone
+the spell was cast from.
+
+📊 **Measured, paired, same cached 2100-card corpus, against the `origin/main` this merges into:
+545 → 550 playable, +5, 0 regressions** — the two full playable SETS were diffed, not the counts.
+Reverberate, Reiterate, Narset's Reversal, Rite of Replication, Giant Adephage. The residual copy
+family is 29 cards and is still the corpus's #1 gap, but it is now named honestly: almost all of it
+is delayed triggers and ability-copying, neither of which is this system.
+
+🃏 **The shipped pool is 545 → 553**, names in and `'complete'` verdicts out, nothing hand-authored:
+Reverberate, Twincast, Reiterate, Narset's Reversal, **Dualcaster Mage** (a spell copy from an ETB
+TRIGGER, aimed as the trigger goes on the stack), Rite of Replication, Cackling Counterpart and Giant
+Adephage. The blocked candidates stay in `expansion-candidates.json` on purpose — they are the
+coverage probe for what the family still needs.
+
+⚠️ **THE FULL-POOL SOAK REPORTED THE MECHANIC INERT, AND IT WAS THE PILOT.** The pool printed
+`spell-copy` and no soak game ever fired it. Nothing was wrong with the engine: the heuristic
+classifies spells by INTENT, `copySpell` was in no intent, so a Reverberate classified as a "generic
+spell" — and a generic spell is only ever offered with an **empty stack**. The pilot could not cast
+it at all. A `copySpell` intent now holds it up like a counterspell and answers the top of the stack;
+the soak going green is the end-to-end proof that the mechanic is reachable in a real game, and it is
+the strongest argument yet for §3.26 existing.
+
+**The pilot needed a policy for the re-aim, too, and the failure mode was not subtle.**
+`answerSelectTargets` had exactly two cases (a modal cast; a trigger). The copy re-aim is a third,
+asked from inside a resolution — and with nothing to price, every candidate scores zero and the pilot
+degrades to the FIRST offered, which for a copy of a Lightning Bolt is very often **its own face**.
+The copy is not on the stack when the question is asked (the primitive builds it locally and pushes
+only once every question is answered, because a parked question re-runs the whole ref), so the pilot
+reads the spell being COPIED — named by the resolving frame's own target — from public state.
+
+⚡ **Rule 7, measured rather than assumed.** The gauntlet at seed 99 is **byte-identical** to this
+branch's `origin/main`: **79/280**, rows 12 · 13 · 17 · 7 · 9 · 7 · 14. Scavenge probe over 40
+identical seeded self-play games (30,600 actions, equal in both arms): **584/583 here vs 584/585 for
+the same worktree at HEAD, interleaved** — and 606 at the branch point, so this branch allocates
+slightly LESS (`legalTargetsFor`'s `'spell'` branch stopped building two intermediate arrays).
+
+🧪 **21 tests across five packages, and 20 of 21 sabotages RED on the first pass.** The one that
+survived is worth reading: nulling ONE of the two `spell-copy` soak witnesses changes nothing,
+because they cover each other exactly as `tokenCreated`/`tokenCeasedToExist` do — and the case that
+matters (a copy created but never ceasing to exist, i.e. the phantom) fires only the first, so it
+would still fail. Nulling both goes red. Two real product bugs were found by the tests rather than by
+review: `createTokenCopy` never implemented the `self` selector the compiler emits (so every
+self-copying trigger made nothing), and `spellCopyAimRestriction` read `targetRestrictionOf`
+literally, which answers `undefined` for the default `'any'` — Lightning Bolt, the most-copied card
+in Magic, could never have been re-aimed.
+
+⚠️ **A trap that cost an hour and is now written down in the test that hit it:** `applyAction` takes
+`(state, action, CONFIG, REGISTRY)` **positionally**. Passing `{ registry, config }` — which reads
+like an options object, and which other suites in this repo do — hands the object to `config` and
+leaves the registry undefined, so every primitive degrades to `effectUnsupported` and the test stays
+GREEN while proving nothing.
+
+📚 **CR 707, not CR 706.** Copying objects is section **707**; 706 is rolling a die, and no card in
+the pool has one. The repo cited 706 in 24 files. `conformance/rules-manifest.ts` already had it
+right, and five independent anchors in that same file confirm the numbering (708 face-down, 709
+split, 712 DFC, 715 adventurer), so the citation is corrected throughout the source.
+
+**Reported by name, not half-built** (each is a system, not a template): a **delayed triggered
+ability** created at resolution (CR 603.7) — Kiki-Jiki, Twinflame, Splinter Twin, The Fire Crystal,
+Orthion, Jaxis, Molten Duplication and Mimic Vat are all blocked on this one clause and nothing else;
+**copying an activated or triggered ABILITY** (Lithoform Engine, Return the Favor), which needs a
+target restriction that can reach a `TriggeredStackObject`; a token that **enters tapped** (Skyclave
+Relic, Kambal, Delina); **"whenever you cast a spell, copy THAT spell"** (Reflections of Littjara,
+Jin-Gitaxias, Sword of Wealth and Power), where the copy is of the spell that triggered the ability
+and a trigger carries its triggering PLAYER but not the stack object; a **follow-up sentence about
+the object just created** ("That token gains haste" — Helm of the Host), deliberately not folded into
+the copy's keywords because a grant is layer 6 on THAT object and is not among the copiable values a
+second copy would take; and an **"except …" tail on a SPELL copy** (Fork's "except that the copy is
+red"), for which `CopyExceptions` has no colour field.
+
+**Re-gated after merging `origin/main` at `b01cedf`** (which brought CR 704.3 at the priority
+boundary, CR 704.5q and the CR 514.1 cleanup discard). `npm run verify` exit 0, `npm run build`
+exit 0, **4981 passed / 0 failed**, and the gauntlet at seed 99 is STILL byte-identical —
+**79/280**, rows 12 · 13 · 17 · 7 · 9 · 7 · 14. The corpus measurement is unmoved by the merge and
+is properly paired: main’s compiler is untouched since the branch point (the only file it changed
+under `packages/cards/src/compile` is a test), so its playable set is still exactly the 545 captured
+there, and the merged branch’s 550 differs from it by **five additions and zero removals**. Every
+generated pool artefact was diffed against `origin/main` by NAME rather than by count —
+`starter-cards.json`, `expanded-pool.ts` and both card indexes are strict supersets, so the merge
+dropped nothing of main’s.
+
+**And re-gated a SECOND time after `origin/main` moved again to `98488b2`** (the
+hidden-information guarantee, §3.30). That merge brought `packages/core/src/instance-ids.ts` — an
+enforced table of WHERE AN INSTANCE ID CAN HIDE, mapped over every field of every event — and it
+broke the build until this section’s three new events were classified in it. They are, and all five
+of their id fields name objects on the STACK or the BATTLEFIELD, never a card in a hand or a
+library, which is the same fact that makes them `'public'` observations.
+
+⚠️ **That table’s own source scan checks a FIELD NAME, not a field of an event** — so declaring
+`spellCopied` all-`'none'` leaves it green, because `instanceId` and `copiedInstanceId` are
+classified by `becameCopy` and `tokenCreated`. A sabotage found that, and two cases now ask the real
+reader (`instanceIdsNamedBy`) per EVENT, which is what makes these entries load-bearing.
+
+**This section is §3.31, not §3.30**: `fix/redaction-guarantee` published a §3.30 while this branch
+was out, so the number moved rather than collide. `npm run verify` exit 0, `npm run build` exit 0,
+**5007 passed / 0 failed**, gauntlet at seed 99 still **79/280** with the same seven rows.
 ## 7. Definition of done
 Tests green · status flipped in §3 · committed with explicit paths · pushed · a build delivered to test.
 Workers push branches; the integrator merges + ships (COORDINATION.md).

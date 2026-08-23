@@ -6,6 +6,9 @@
  * a typed failure reason, never throwing.
  */
 
+import type { ManaSpendPurpose, ManaSpendRestriction, RestrictedMana } from './spend-restriction.js';
+import { restrictionAllows } from './spend-restriction.js';
+
 /** The five MTG colors plus colorless mana. */
 export type ManaColor = 'W' | 'U' | 'B' | 'R' | 'G' | 'C';
 
@@ -39,8 +42,41 @@ export interface ManaCost {
   readonly hybrid?: readonly (readonly ManaColor[])[];
 }
 
-/** A floating mana pool: counts of each color currently available. */
-export type ManaPool = Record<ManaColor, number>;
+/**
+ * A floating mana pool: counts of each color currently available, plus — only
+ * when some source on the board printed one — the SPEND RESTRICTIONS attached to
+ * part of that mana.
+ *
+ * ## The invariant, in one line
+ * `pool[color]` is the TOTAL mana of that colour, restricted mana INCLUDED; the
+ * `restricted` parcels record which slice of it is not freely spendable, and
+ * their per-colour amounts never exceed `pool[color]`.
+ *
+ * Totals-inclusive rather than a second bucket on purpose. Everything in the
+ * engine and the UI that asks "how much mana is floating?" — {@link poolTotal},
+ * the seat panel, the end-of-step empty, the replay format — is asking a question
+ * about QUANTITY, and quantity is not what a restriction changes. A player with
+ * Ancient Ziggurat mana floating really does have that mana, publicly, and it
+ * really does drain at end of step. Only LEGALITY differs, and every legality
+ * question in the codebase already funnels through {@link canPay} /
+ * {@link payCost}, which is exactly where the subtraction belongs.
+ *
+ * ## The hot path pays nothing
+ * `restricted` is ABSENT on every pool in a game containing no restricted
+ * source, which is very nearly all of them. Each payment path takes one
+ * `=== undefined` property read and then runs code byte-identical to what it ran
+ * before this system existed. Do not "normalise" the field to an empty array:
+ * that would put a length check and a live array on the hottest path in the sim
+ * to describe something that is not there.
+ */
+export type ManaPool = Record<ManaColor, number> & {
+  /**
+   * Parcels of restricted mana, in the order they were added — which is also the
+   * order they are SPENT in, so payments stay deterministic and sims reproduce.
+   * Absent when there is none (see above).
+   */
+  readonly restricted?: readonly RestrictedMana[];
+};
 
 /**
  * The exact mana a *single* activation of a mana ability adds to the pool — one
@@ -65,11 +101,81 @@ export function productionTotal(production: ManaProduction): number {
   return total;
 }
 
-/** Add every color of a production mode to a pool, returning a new pool. */
-export function addProduction(pool: ManaPool, production: ManaProduction): ManaPool {
+/**
+ * Add every color of a production mode to a pool, returning a new pool.
+ *
+ * `restriction` is the spend restriction the SOURCE printed on the mana it just
+ * made ("Spend this mana only to cast a creature spell"). Omitted for every
+ * ordinary source, in which case this is exactly the function it always was.
+ */
+export function addProduction(
+  pool: ManaPool,
+  production: ManaProduction,
+  restriction?: ManaSpendRestriction,
+): ManaPool {
   const next = { ...pool };
   for (const color of MANA_COLORS) next[color] += production[color] ?? 0;
-  return next;
+  if (restriction === undefined) return next;
+  // One parcel per COLOUR of the mode, because a restriction is carried by
+  // individual mana and a mode may add several colours at once (Gwenna). Merging
+  // by colour would be wrong the moment two sources print DIFFERENT restrictions.
+  const parcels: RestrictedMana[] = pool.restricted ? [...pool.restricted] : [];
+  for (const color of MANA_COLORS) {
+    const amount = production[color] ?? 0;
+    if (amount > 0) parcels.push(Object.freeze({ color, amount, restriction }));
+  }
+  return withRestricted(next, parcels);
+}
+
+/**
+ * A pool carrying exactly these parcels — dropping the field entirely when there
+ * are none, so a pool that spends its last restricted mana returns to the shape
+ * the hot path short-circuits on.
+ */
+function withRestricted(pool: ManaPool, parcels: readonly RestrictedMana[]): ManaPool {
+  if (parcels.length === 0) {
+    // `delete` deoptimises the object into dictionary mode, and this object is
+    // about to be read six times per payment. Rebuild the plain shape instead.
+    return { W: pool.W, U: pool.U, B: pool.B, R: pool.R, G: pool.G, C: pool.C };
+  }
+  return { ...pool, restricted: parcels };
+}
+
+/**
+ * How much of `pool`'s `color` may fund `purpose` — the whole of it when no
+ * restricted mana exists, which is the answer on essentially every board.
+ *
+ * The subtraction, not a filter: restricted mana this purpose may not touch is
+ * simply invisible to the payment, and the existing algorithm runs on what is
+ * left (see spend-restriction.ts for why that is complete rather than greedy).
+ */
+export function usableMana(
+  pool: ManaPool,
+  color: ManaColor,
+  purpose: ManaSpendPurpose | undefined,
+): number {
+  const parcels = pool.restricted;
+  if (parcels === undefined) return pool[color];
+  let usable = pool[color];
+  for (let i = 0; i < parcels.length; i++) {
+    const parcel = parcels[i] as RestrictedMana;
+    if (parcel.color !== color) continue;
+    if (!restrictionAllows(parcel.restriction, purpose)) usable -= parcel.amount;
+  }
+  return usable;
+}
+
+/**
+ * Mana in `pool` that NO purpose could ever spend on anything — i.e. mana whose
+ * restriction cannot be met by the object being paid for. Used by the UI and the
+ * log to explain a pool that looks bigger than the spells it can cast.
+ */
+export function restrictedTotal(pool: ManaPool): number {
+  const parcels = pool.restricted;
+  if (parcels === undefined) return 0;
+  let total = 0;
+  for (let i = 0; i < parcels.length; i++) total += (parcels[i] as RestrictedMana).amount;
+  return total;
 }
 
 /** An empty pool with every color at zero. */
@@ -139,10 +245,114 @@ export type PaymentResult =
  * (a deterministic order so sims reproduce). Returns the leftover pool on
  * success, or a reason on failure. Pure — never mutates `pool`.
  */
-export function payCost(pool: ManaPool, cost: ManaCost): PaymentResult {
+export function payCost(
+  pool: ManaPool,
+  cost: ManaCost,
+  purpose?: ManaSpendPurpose,
+): PaymentResult {
+  // THE HOT PATH. No restricted mana anywhere in this pool ⇒ this is the exact
+  // function it was before spend restrictions existed: one property read, then
+  // the original algorithm on the original object.
+  if (pool.restricted !== undefined) return payWithRestrictions(pool, cost, purpose);
   const hybrids = cost.hybrid ?? [];
-  if (hybrids.length > 0) return payWithHybrids(pool, cost, hybrids);
-  return payFixedCost(pool, cost);
+  if (hybrids.length > 0) return payWithHybrids(pool, cost, hybrids, GENERIC_SPEND_ORDER);
+  return payFixedCost(pool, cost, GENERIC_SPEND_ORDER);
+}
+
+/**
+ * Pay from a pool that holds restricted mana.
+ *
+ * Three steps, none of which is a search:
+ *  1. Hide what this purpose may not touch ({@link usableMana}) and pay from the
+ *     rest with the ordinary algorithm — so hybrid symbols, generic pips and the
+ *     failure reasons are decided by exactly one implementation.
+ *  2. Prefer to spend the RESTRICTED mana. It is the least flexible resource on
+ *     the board: an Ancient Ziggurat mana that is not spent on this creature
+ *     spell is very likely never spent at all. The preference is expressed as a
+ *     generic-spend ORDER (colours holding usable restricted mana first) plus a
+ *     within-colour drain order, and it cannot change feasibility — generic mana
+ *     is fungible, which is the same argument `canPayFixed` already relies on.
+ *  3. Subtract what was spent from the real pool and from the parcels.
+ */
+function payWithRestrictions(
+  pool: ManaPool,
+  cost: ManaCost,
+  purpose: ManaSpendPurpose | undefined,
+): PaymentResult {
+  const usable = usablePool(pool, purpose);
+  const order = restrictedFirstSpendOrder(pool, purpose);
+  const hybrids = cost.hybrid ?? [];
+  const paid =
+    hybrids.length > 0
+      ? payWithHybrids(usable, cost, hybrids, order)
+      : payFixedCost(usable, cost, order);
+  if (!paid.ok) return paid;
+
+  const next: ManaPool = { W: pool.W, U: pool.U, B: pool.B, R: pool.R, G: pool.G, C: pool.C };
+  const parcels: RestrictedMana[] = [...(pool.restricted as readonly RestrictedMana[])];
+  for (let i = 0; i < MANA_COLORS.length; i++) {
+    const color = MANA_COLORS[i] as ManaColor;
+    let spent = usable[color] - paid.pool[color];
+    if (spent <= 0) continue;
+    next[color] -= spent;
+    // Drain the usable parcels of this colour, oldest first, so a pool holding
+    // two differently-restricted mana of the same colour spends them in a fixed,
+    // reproducible order.
+    for (let p = 0; p < parcels.length && spent > 0; p++) {
+      const parcel = parcels[p] as RestrictedMana;
+      if (parcel.color !== color) continue;
+      if (!restrictionAllows(parcel.restriction, purpose)) continue;
+      const take = parcel.amount < spent ? parcel.amount : spent;
+      parcels[p] = Object.freeze({ ...parcel, amount: parcel.amount - take });
+      spent -= take;
+    }
+  }
+  return { ok: true, pool: withRestricted(next, parcels.filter(hasMana)) };
+}
+
+/** A parcel that still holds mana — spent-out parcels are dropped, not kept at 0. */
+function hasMana(parcel: RestrictedMana): boolean {
+  return parcel.amount > 0;
+}
+
+/** The colour amounts of `pool` that `purpose` may actually spend, as a plain pool. */
+function usablePool(pool: ManaPool, purpose: ManaSpendPurpose | undefined): ManaPool {
+  return {
+    W: usableMana(pool, 'W', purpose),
+    U: usableMana(pool, 'U', purpose),
+    B: usableMana(pool, 'B', purpose),
+    R: usableMana(pool, 'R', purpose),
+    G: usableMana(pool, 'G', purpose),
+    C: usableMana(pool, 'C', purpose),
+  };
+}
+
+/**
+ * {@link GENERIC_SPEND_ORDER}, rotated so colours holding spendable RESTRICTED
+ * mana come first — the "spend the least flexible resource" preference, applied
+ * to the generic portion of a cost. Relative order inside each half is the
+ * canonical one, so the result is still fully deterministic.
+ */
+function restrictedFirstSpendOrder(
+  pool: ManaPool,
+  purpose: ManaSpendPurpose | undefined,
+): readonly ManaColor[] {
+  const parcels = pool.restricted as readonly RestrictedMana[];
+  const first: ManaColor[] = [];
+  const rest: ManaColor[] = [];
+  for (let i = 0; i < GENERIC_SPEND_ORDER.length; i++) {
+    const color = GENERIC_SPEND_ORDER[i] as ManaColor;
+    let restrictedHere = false;
+    for (let p = 0; p < parcels.length; p++) {
+      const parcel = parcels[p] as RestrictedMana;
+      if (parcel.color === color && restrictionAllows(parcel.restriction, purpose)) {
+        restrictedHere = true;
+        break;
+      }
+    }
+    (restrictedHere ? first : rest).push(color);
+  }
+  return first.length === 0 ? GENERIC_SPEND_ORDER : first.concat(rest);
 }
 
 /**
@@ -162,6 +372,7 @@ function payWithHybrids(
   pool: ManaPool,
   cost: ManaCost,
   hybrids: readonly (readonly ManaColor[])[],
+  genericOrder: readonly ManaColor[],
 ): PaymentResult {
   const choice: ManaColor[] = [];
 
@@ -178,7 +389,7 @@ function payWithHybrids(
         C: cost.C ?? 0,
       };
       for (const color of choice) folded[color] = (folded[color] ?? 0) + 1;
-      const result = payFixedCost(pool, folded as ManaCost);
+      const result = payFixedCost(pool, folded as ManaCost, genericOrder);
       return result.ok ? result : null;
     }
     for (const color of hybrids[index] ?? []) {
@@ -204,12 +415,21 @@ function payWithHybrids(
 /**
  * The order generic mana is spent in: colourless first, then WUBRG. Fixed (and
  * hoisted to module scope, not rebuilt per payment) so sims reproduce exactly.
+ *
+ * Generic mana is fungible, so the order cannot change WHETHER a cost is payable
+ * — only which colours are left over. That is what makes it safe for
+ * {@link restrictedFirstSpendOrder} to hand a different permutation in when
+ * restricted mana is on the table.
  */
 const GENERIC_SPEND_ORDER: readonly ManaColor[] = ['C', 'W', 'U', 'B', 'R', 'G'];
 
 /** Pay a cost with no hybrid symbols — the original fixed-symbol algorithm. */
-function payFixedCost(pool: ManaPool, cost: ManaCost): PaymentResult {
-  const remaining = { ...pool };
+function payFixedCost(
+  pool: ManaPool,
+  cost: ManaCost,
+  genericOrder: readonly ManaColor[],
+): PaymentResult {
+  const remaining: ManaPool = { W: pool.W, U: pool.U, B: pool.B, R: pool.R, G: pool.G, C: pool.C };
 
   // 1. Pay each specific color requirement from its own color. Iterating
   // `MANA_COLORS` (which is W,U,B,R,G,C — the same order this always used) rather
@@ -227,9 +447,9 @@ function payFixedCost(pool: ManaPool, cost: ManaCost): PaymentResult {
 
   // 2. Pay generic from leftover mana, spending colorless first, then WUBRG.
   let generic = cost.generic ?? 0;
-  for (let i = 0; i < GENERIC_SPEND_ORDER.length; i++) {
+  for (let i = 0; i < genericOrder.length; i++) {
     if (generic <= 0) break;
-    const color = GENERIC_SPEND_ORDER[i] as ManaColor;
+    const color = genericOrder[i] as ManaColor;
     const take = Math.min(generic, remaining[color]);
     remaining[color] -= take;
     generic -= take;
@@ -257,10 +477,63 @@ function payFixedCost(pool: ManaPool, cost: ManaCost): PaymentResult {
  * mana left over afterwards — which is fungible, so the ORDER generic is spent in
  * cannot change feasibility — must cover the generic portion.
  */
-export function canPay(pool: ManaPool, cost: ManaCost): boolean {
+/**
+ * The cost of paying `cost` exactly `times` times — the shape multikicker
+ * needs ("you may pay {1}{G} any number of times as you cast this spell").
+ *
+ * Repeating a cost is NOT the same as scaling its mana value: each repetition
+ * is its own set of symbols, so three copies of `{G/W}` are three hybrid
+ * symbols the payer may satisfy with three DIFFERENT colours. Multiplying the
+ * hybrid list rather than counting it keeps that true, which is why this lives
+ * here beside `payCost` instead of being an ad-hoc `generic * n` at the call
+ * site.
+ *
+ * `times <= 0` yields an empty cost — the free, pay-nothing repetition count.
+ */
+export function repeatCost(cost: ManaCost, times: number): ManaCost {
+  const n = Math.max(0, Math.trunc(times));
+  if (n === 0) return {};
+  if (n === 1) return cost;
+  const out: Record<string, unknown> = {};
+  if (cost.generic) out.generic = cost.generic * n;
+  for (const color of MANA_COLORS) {
+    const count = cost[color];
+    if (count) out[color] = count * n;
+  }
+  if (cost.hybrid && cost.hybrid.length > 0) {
+    const hybrid: (readonly ManaColor[])[] = [];
+    for (let i = 0; i < n; i++) hybrid.push(...cost.hybrid);
+    out.hybrid = hybrid;
+  }
+  return out as ManaCost;
+}
+
+export function canPay(pool: ManaPool, cost: ManaCost, purpose?: ManaSpendPurpose): boolean {
+  // THE HOT PATH — see `payCost`. One property read on a pool with no restricted
+  // mana, and everything below is the code that was here before.
+  if (pool.restricted !== undefined) return canPayRestricted(pool, cost, purpose);
   const hybrids = cost.hybrid;
   if (hybrids !== undefined && hybrids.length > 0) return canPayWithHybrids(pool, cost, hybrids);
   return canPayFixed(pool, cost, undefined);
+}
+
+/**
+ * Feasibility against a pool holding restricted mana: the same question asked of
+ * the mana this purpose may actually touch.
+ *
+ * Deliberately `payCost`'s step 1 and nothing more — one implementation of "what
+ * is hidden from this payment", so the offer path and the apply path can never
+ * disagree about whether a spell is castable.
+ */
+function canPayRestricted(
+  pool: ManaPool,
+  cost: ManaCost,
+  purpose: ManaSpendPurpose | undefined,
+): boolean {
+  const usable = usablePool(pool, purpose);
+  const hybrids = cost.hybrid;
+  if (hybrids !== undefined && hybrids.length > 0) return canPayWithHybrids(usable, cost, hybrids);
+  return canPayFixed(usable, cost, undefined);
 }
 
 /**

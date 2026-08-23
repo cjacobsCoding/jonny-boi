@@ -30,8 +30,18 @@ export interface OcrEngine {
 const CHARACTER_WHITELIST =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ',-";
 
-/** Tesseract's page-segmentation mode 7: treat the image as a single text line. */
-const SINGLE_LINE_MODE = '7';
+/**
+ * Tesseract's page-segmentation mode 6: a uniform block of text.
+ *
+ * A title crop is nominally ONE line, but mode 7 ("single text line") turned
+ * out to be the fragile choice on a real photo: a tilted pile puts a sliver of
+ * the neighbouring copy's title into the crop, and mode 7 then finds no line at
+ * all and returns empty — it did so on legible crops reading "Sunpetal Grove"
+ * and "Thragtusk". Mode 6 reads every line it can see; the matcher scores each
+ * line against the vocabulary and keeps the best, so the extra sliver costs
+ * nothing.
+ */
+const TEXT_BLOCK_MODE = '6';
 
 /**
  * Wrap a pixel buffer in an `ImageData`. The copy is deliberate: our buffers are
@@ -70,7 +80,7 @@ export async function createOcrEngine(
   });
   await worker.setParameters({
     tessedit_char_whitelist: CHARACTER_WHITELIST,
-    tessedit_pageseg_mode: SINGLE_LINE_MODE as never,
+    tessedit_pageseg_mode: TEXT_BLOCK_MODE as never,
   });
 
   return {

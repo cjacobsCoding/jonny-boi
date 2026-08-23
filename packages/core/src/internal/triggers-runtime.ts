@@ -17,9 +17,11 @@
  */
 
 import type { GameEvent } from '../events.js';
-import type { GameState, InstanceId } from '../state.js';
+import type { CardInstance, GameState, InstanceId } from '../state.js';
+import { recordTurnFacts } from '../turn-facts.js';
 import type { PendingTrigger, TriggerSource } from '../triggers.js';
 import { matchTriggers, orderPendingTriggers } from '../triggers.js';
+import { interveningIfHolds } from '../intervening.js';
 
 /**
  * A trigger collector bound to a draft state and a base emit. Call `emit` exactly
@@ -62,6 +64,30 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
   // event was one array plus one `TriggerSource` per triggerful permanent, several
   // times per action, for a scan that almost never matches anything.
   let snapshot: TriggerSource[] | null = null;
+  /**
+   * How many objects were in the two command zones the last time they were
+   * walked. `-1` forces the first pass. See `rememberSources` for why a size
+   * comparison is a sufficient staleness check for emblems specifically.
+   */
+  let lastCommandCount = -1;
+
+  /** Fold one command zone's triggerful objects into the known-source set. */
+  const rememberCommandZone = (command: readonly CardInstance[]): void => {
+    for (let i = 0; i < command.length; i++) {
+      const object = command[i] as CardInstance;
+      const triggers = object.def.triggers;
+      if (triggers === undefined || triggers.length === 0) continue;
+      const known = seenSources?.get(object.instanceId);
+      if (known !== undefined && known.controller === object.controller && known.triggers === triggers) continue;
+      (seenSources ??= new Map()).set(object.instanceId, {
+        instanceId: object.instanceId,
+        controller: object.controller,
+        name: object.def.name,
+        triggers,
+      });
+      snapshot = null;
+    }
+  };
 
   /**
    * Fold the currently-on-battlefield triggerful permanents into the known set.
@@ -74,26 +100,135 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
    * existing key would not move it and we no longer re-set at all.
    */
   const rememberSources = (): void => {
+    // EMBLEMS trigger from the COMMAND zone (CR 114) — "at the beginning of your
+    // upkeep…" printed on an emblem fires exactly as it would on a permanent,
+    // and keeps firing for the rest of the game because nothing can remove the
+    // emblem. They fold into the SAME known-source set rather than being scanned
+    // separately, so the APNAP ordering, the label, the stack push and the
+    // resolution are all one path with no emblem special case.
+    //
+    // ⚠️ PERFORMANCE, and it is not a micro-detail: this function runs on EVERY
+    // emitted event — hundreds of thousands per sim — so anything done here is
+    // done on the engine's hottest path. Two things keep it free:
+    //
+    //  1. the command zones are read DIRECTLY rather than through
+    //     `for (const pid of PLAYER_IDS)`, because that loop allocates an array
+    //     iterator per event for a two-element list;
+    //  2. the contents are only walked when the zone's SIZE has changed. An
+    //     emblem can never leave (that is the whole point of the object) and its
+    //     abilities come from an immutable definition, so an unchanged count
+    //     means an unchanged set — unlike the battlefield below, where a
+    //     permanent's controller can change or its face can swap under a stable
+    //     count.
+    const commandA = state.players.A.command;
+    const commandB = state.players.B.command;
+    const commandCount = commandA.length + commandB.length;
+    if (commandCount !== lastCommandCount) {
+      lastCommandCount = commandCount;
+      rememberCommandZone(commandA);
+      rememberCommandZone(commandB);
+    }
     const battlefield = state.battlefield;
     for (let i = 0; i < battlefield.length; i++) {
       const inst = battlefield[i] as (typeof battlefield)[number];
       const triggers = inst.def.triggers;
-      if (triggers === undefined || triggers.length === 0) continue;
+      if (triggers === undefined || triggers.length === 0) {
+        // A permanent that TRANSFORMED to a triggerless face mid-action must be
+        // FORGOTTEN, not kept as last-known-information: it is still on the
+        // battlefield, so its current face — not the one it used to show —
+        // governs what can trigger. (Last-known-info is only for permanents
+        // that have LEFT, which the map otherwise exists to serve.) The `?.`
+        // keeps the triggerless-board fast path allocation-free.
+        if (seenSources?.delete(inst.instanceId)) snapshot = null;
+        continue;
+      }
       const known = seenSources?.get(inst.instanceId);
-      if (known !== undefined && known.controller === inst.controller) continue;
+      // `known.triggers === triggers` is the transform check: abilities come
+      // from the immutable DEFINITION, but `inst.def` is the ACTIVE face and a
+      // transform swaps it — so identity of the trigger list, not presence of
+      // the entry, is what proves the cached source is still current.
+      //
+      // `chosenAsEntered` joins the staleness check because it is WRITTEN AFTER
+      // the permanent is already on the battlefield (the naming is answered a
+      // moment later, by the choice the entry raised) — so a cached source
+      // captured at the instant of arrival would carry no named value, and the
+      // trigger narrowed by it would silently never fire. One string comparison,
+      // and only for permanents that have triggers at all.
+      //
+      // NOTE what is deliberately NOT in this check: the permanent's ATTACHMENT.
+      // An Equipment moving from one creature to another does not invalidate the
+      // entry, because the entry carries the live instance (`permanent`) rather
+      // than a copy of `attachedTo` — `matchTriggers` reads the current value at
+      // match time. Adding `attachedTo` here would rebuild the source on every
+      // equip for no benefit, and would still be a COPY at the moment of the
+      // rebuild.
+      if (
+        known !== undefined &&
+        known.controller === inst.controller &&
+        known.triggers === triggers &&
+        known.chosenAsEntered === inst.chosenAsEntered
+      ) {
+        continue;
+      }
       (seenSources ??= new Map()).set(inst.instanceId, {
         instanceId: inst.instanceId,
         controller: inst.controller,
         name: inst.def.name,
         triggers,
+        // The live permanent, read only by a `watches: 'attachedHost'` condition
+        // ("Whenever equipped creature deals combat damage to a player"). A
+        // reference costs nothing to store and is the ONLY way the answer stays
+        // current for an Equipment whose host dies to first-strike damage
+        // between the two combat-damage steps of one action.
+        permanent: inst,
+        ...(inst.chosenAsEntered !== undefined ? { chosenAsEntered: inst.chosenAsEntered } : {}),
       });
       snapshot = null;
     }
   };
   rememberSources();
 
+  /**
+   * Find the permanent a zone change is ABOUT — what the board-watching triggers
+   * ("whenever a creature you control enters/dies") read.
+   *
+   * Searched battlefield-first and then every player's graveyard, because the
+   * two events those triggers watch leave the card in exactly those places by
+   * the time the event is emitted: an entry has already landed on the
+   * battlefield, and a death has already landed in a graveyard. A card found in
+   * neither yields `undefined`, and `subjectMatches` treats that as no match —
+   * a trigger never fires on a permanent nobody can identify.
+   */
+  const resolveSubject = (instanceId: InstanceId) => {
+    for (const perm of state.battlefield) {
+      if (perm.instanceId === instanceId) return { controller: perm.controller, card: perm };
+    }
+    // A SPELL BEING CAST is on the stack, not in a zone — this is what a cast
+    // trigger narrowed by a creature type reads ("whenever you cast a creature
+    // spell of the chosen type"). Searched after the battlefield because that is
+    // where the overwhelming majority of lookups find their answer, and searched
+    // at all only because the alternative was widening the `spellCast` EVENT
+    // with a subtype list every replay would then carry.
+    for (const object of state.stack) {
+      if (object.kind === 'spell' && object.card.instanceId === instanceId) {
+        return { controller: object.controller, card: object.card };
+      }
+    }
+    for (const player of Object.values(state.players)) {
+      for (const card of player.graveyard) {
+        if (card.instanceId === instanceId) return { controller: card.controller, card };
+      }
+    }
+    return undefined;
+  };
+
   const emit = (event: GameEvent): void => {
     baseEmit(event);
+    // Fold the event into the turn's fact memory (revolt / morbid / lifegain).
+    // Done HERE, before any early-out below, because this wrapper is the one
+    // chokepoint every emitted event passes through — the same argument that
+    // put trigger matching here rather than in the turn machine.
+    recordTurnFacts(state, event);
     // Refresh the known-source set so a permanent that entered earlier in this same
     // action can trigger on a later event.
     rememberSources();
@@ -102,10 +237,20 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     // an empty source list always returns nothing.
     if (seenSources === null) return;
     snapshot ??= [...seenSources.values()];
-    const matched = matchTriggers(snapshot, event);
+    const matched = matchTriggers(snapshot, event, resolveSubject);
     if (matched.length === 0) return;
-    if (queue === null) queue = [];
-    for (const m of matched) queue.push(m);
+    for (const m of matched) {
+      // CR 603.4's FIRST check: an ability whose intervening "if" is false does
+      // not trigger at all — it never reaches the stack, so nobody may respond
+      // to it. Done here rather than inside `matchTriggers` because the answer
+      // needs the game state and `triggers.ts` is a pure matcher.
+      if (
+        !interveningIfHolds(state, m.ability.condition.intervening, m.sourceInstanceId, m.controller, m.triggeringPlayer)
+      ) {
+        continue;
+      }
+      (queue ??= []).push(m);
+    }
   };
 
   const flush = (): number => {
@@ -126,11 +271,21 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
         effects: pending.ability.effects,
         targets: [],
         label,
+        // Carried onto the stack object so the body can say "that player" — see
+        // `PendingTrigger.triggeringPlayer`. Conditional so every trigger that
+        // names no player is pushed byte-for-byte as it always was.
+        ...(pending.triggeringPlayer !== undefined ? { triggeringPlayer: pending.triggeringPlayer } : {}),
+        // Carried for CR 603.4's second check, made as the ability resolves.
+        ...(pending.ability.condition.intervening !== undefined
+          ? { intervening: pending.ability.condition.intervening }
+          : {}),
         // An ability that declares what it targets goes on the stack UNAIMED; the
         // engine asks its controller immediately afterwards (`aimPendingTriggers`),
         // which is when the rules say targets are chosen. Absent for every other
         // trigger, so those are pushed byte-for-byte as they always were.
         ...(pending.ability.targets ? { awaitingTargets: pending.ability.targets } : {}),
+        ...(pending.ability.targetsExcludeSelf === true ? { awaitingTargetsExcludeSelf: true } : {}),
+        ...(pending.ability.targetCount ? { awaitingTargetCount: pending.ability.targetCount } : {}),
       });
       baseEmit({
         type: 'triggerPutOnStack',

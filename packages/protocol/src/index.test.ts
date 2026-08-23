@@ -114,6 +114,55 @@ describe('maskStateForSeat', () => {
   });
 });
 
+// --- planeswalkers are PUBLIC (nothing about them may be redacted) -----------------
+
+/**
+ * A walker's LOYALTY is public information — it lives in the instance's counters,
+ * printed on the battlefield for the whole table to read. The online board draws
+ * its loyalty badge, its attackability and its loyalty-ability menu straight out of
+ * the masked view, so if masking dropped or blanked any of it the client could not
+ * show the mechanic at all. These pin that it survives for BOTH seats, the walker's
+ * controller and their opponent alike, and for a spectator.
+ */
+describe('planeswalker visibility through masking', () => {
+  const liliana: CardDefinition = {
+    id: 'lili',
+    name: 'Liliana of the Veil',
+    types: ['planeswalker'],
+    cost: { generic: 1, B: 2 },
+    loyalty: 3,
+    activated: [{ cost: { loyalty: 1 }, timing: 'sorcery', label: '+1: Each player discards a card.', effects: [] }],
+  };
+
+  function stateWithWalker(): GameState {
+    const state = makeState();
+    const walker: CardInstance = {
+      ...inst(700, 'B', 'battlefield'),
+      def: liliana,
+      counters: { loyalty: 3 },
+    };
+    state.battlefield = [...state.battlefield, walker];
+    return state;
+  }
+
+  it.each(['A', 'B'] as const)('shows seat %s the walker, its loyalty and its abilities', (seat) => {
+    const view = maskStateForSeat(stateWithWalker(), seat);
+    const walker = view.battlefield.find((c) => c.instanceId === 700);
+    expect(walker, 'the walker is missing from the masked battlefield').toBeDefined();
+    expect(walker?.counters.loyalty, 'loyalty is public and must survive masking').toBe(3);
+    expect(walker?.def.types).toContain('planeswalker');
+    // The loyalty-ability MENU is derived from `def.activated` + the server's legal
+    // actions; a masked-away ability list would leave the menu permanently empty.
+    expect(walker?.def.activated).toHaveLength(1);
+    expect(walker?.controller).toBe('B');
+  });
+
+  it('shows a spectator the same public walker', () => {
+    const walker = maskStateForSpectator(stateWithWalker()).battlefield.find((c) => c.instanceId === 700);
+    expect(walker?.counters.loyalty).toBe(3);
+  });
+});
+
 // --- pending-choice masking ------------------------------------------------------
 
 /** A's hidden card ids, B's hidden card ids (see `makeState`). */
@@ -166,6 +215,63 @@ describe('collectInstanceIds (structural leak scan)', () => {
     node.self = node;
     expect([...collectInstanceIds(node)]).toEqual([3]);
   });
+
+  /*
+   * ⚠️ THE HOLE THIS SCAN USED TO HAVE, PINNED.
+   *
+   * It recognised keys named exactly `instanceId`. Everything below names a card
+   * under a different key, and every one of them used to be invisible — which is
+   * how a `choiceAsked.sourceInstanceId` pointing into a player's HAND travelled
+   * to every pilot with a green anti-cheat suite.
+   *
+   * The vocabulary is not written here or in `index.ts`: it comes from core's
+   * `INSTANCE_ID_FIELD_NAMES`, which is derived from a mapped type over every
+   * field of every `GameEvent`. These cases are the check that the wiring is
+   * real, not the definition of what counts.
+   */
+  it('finds an id under EVERY name the engine spells it with', () => {
+    const cases: ReadonlyArray<readonly [string, unknown]> = [
+      ['sourceInstanceId', { sourceInstanceId: 11 }],
+      ['targetInstanceId', { targetInstanceId: 11 }],
+      ['keptInstanceId', { keptInstanceId: 11 }],
+      ['hostInstanceId', { hostInstanceId: 11 }],
+      ['copiedInstanceId', { copiedInstanceId: 11 }],
+      ['appliesToInstanceId', { appliesToInstanceId: 11 }],
+      ['source', { source: 11 }],
+      ['target', { target: 11 }],
+      ['ref', { ref: 11 }],
+      ['attachedTo', { attachedTo: 11 }],
+      ['recipientIs', { recipientIs: 11 }],
+      ['targets (array)', { targets: [11, 'A'] }],
+      ['attackers (array)', { attackers: [11] }],
+      ['instanceIds (array)', { instanceIds: [11] }],
+      ['blocks (id-keyed map)', { blocks: { 11: 12 } }],
+      ['attackTargets (id-keyed map)', { attackTargets: { 11: 'B' } }],
+      ['nested in an array of objects', { blocks: [{ blocker: 11, attacker: 12 }] }],
+      ['nested at depth', { a: [{ b: { sourceInstanceId: 11 } }] }],
+      // The BACKSTOP: names declared OUTSIDE core, where no table forces a
+      // classification (`swappedInstanceIds` in the sim, `knownInstanceIds` in a
+      // pilot's belief state) — caught by the `…instanceId(s)` suffix rule.
+      ['a conventionally-named key core has never heard of', { swappedInstanceIds: [11] }],
+      ['…and a scalar one', { victimInstanceId: 11 }],
+    ];
+    const missed = cases.filter(([, value]) => !collectInstanceIds(value).has(11)).map(([name]) => name);
+    expect(missed, 'these ways of naming a card are invisible to the anti-cheat scan').toEqual([]);
+  });
+
+  it('reads the KEYS of an id-keyed map, not only its values', () => {
+    // `attackTargets` is attacker-id → attacked object. A scan that read only the
+    // values would report exactly half of a leak, and read as thorough.
+    expect([...collectInstanceIds({ attackTargets: { 41: 'B' } })]).toEqual([41]);
+    expect([...collectInstanceIds({ blocks: { 41: 42 } })].sort((a, b) => a - b)).toEqual([41, 42]);
+  });
+
+  it('still ignores a number that only LOOKS like an id', () => {
+    // The widening must not become "collect every number": instance ids are
+    // minted from 1 upward, so they collide constantly with counts and totals.
+    const ids = collectInstanceIds({ life: 20, choiceId: 7, optionCount: 42, id: 3, handCount: 5, turnNumber: 9 });
+    expect([...ids]).toEqual([]);
+  });
 });
 
 describe('pendingChoice masking', () => {
@@ -180,7 +286,11 @@ describe('pendingChoice masking', () => {
     expect(choice).not.toBeNull();
     expect(isRedactedChoice(choice!)).toBe(false);
     // Thoughtseize really does show the caster the victim's hand — that is the card.
-    expect(collectInstanceIds(choice)).toEqual(new Set([901, 902]));
+    // 500 is the ASKING CARD itself (`sourceInstanceId`, sitting on the public
+    // stack). It shows up here only because the scan was widened past the single
+    // key name `instanceId`; under the old scan the Thoughtseize was invisible to
+    // it — which is the blind spot two real hidden-information leaks hid in.
+    expect(collectInstanceIds(choice)).toEqual(new Set([500, 901, 902]));
     expect(choice).toMatchObject({ prompt: 'Choose a nonland card to discard', chooser: 'A' });
   });
 
