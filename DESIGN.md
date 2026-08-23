@@ -3526,6 +3526,108 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
+### 3.46 The deck-neutral pilot A/B — the yardstick §3.45 used, committed as a tool — ✅ done
+
+§3.45 built four combat-math improvements, measured them, and shipped **one**. The evidence that
+picked the survivor was a deck-neutral pilot A/B — and that harness was ad hoc. It existed for one
+afternoon in one worktree and never reached the repo, which meant the decisive evidence for a shipped
+decision could not be reproduced, and the next agent to touch the pilot would be handed the very
+number that had already fooled two attempts. This section commits it:
+
+```
+npm run sim -- pilot-ab [--pilot-a id] [--pilot-b id] [--games N] [--seed S]
+```
+
+**Why a gauntlet row cannot answer "is this pilot stronger?"** `runGauntlet` puts the SAME pilot in
+both seats, so a gauntlet win-rate is a property of the **meta**, not of the pilot: a change that
+suits one archetype tilts the meta toward it while the pilot is also playing the other side of every
+game. The concrete case is §3.45's third row. Teaching `attackIsProfitable` the same combat truth as
+the block side, then allocating the defender's blockers, took **Selesnya Blink from 71% to 74%** — a
+headline improvement by the only number two earlier attempts were judged on — while **losing the
+deck-neutral A/B against `main` 1406–1422**. The 74% build is a *worse* pilot that happens to flatter
+a deck built out of walls. The gauntlet row and the pilot's strength moved in opposite directions,
+and the row is the one that lies.
+
+**The design.** Pilot A plays pilot B over every unordered pair of the nine sample decks (36 pairs),
+in **both orientations**, on **matched seeds**:
+
+- orientation 1 — A drives deck one (seat A), B drives deck two
+- orientation 2 — B drives deck one (seat A), A drives deck two
+
+Both orientations of a pair run off the same pair seed, so game *i* of one is game *i* of the other:
+same decks, same seats, same shuffle, same player on the play. Three confounders then cancel
+**exactly**, not on average:
+
+- **Deck strength** — each pilot drives every deck the same games on the same seeds (800 each at the
+  default). A pilot cannot profit from being handed the stronger archetype, because it is handed both.
+  The per-deck table is printed, because "the change only helps one archetype" is visible there and
+  nowhere else.
+- **Seat** — each pilot occupies seat A in exactly half the games.
+- **On the play** — `onPlayFor` alternates by game index, which the two orientations share, so A leads
+  on even indices in one and odd indices in the other. Exactly half, for any game count, odd or even.
+
+**The control is what makes a reading meaningful, and it is an identity.** Run one pilot id against
+itself and the two orientations are not merely comparable, they are *the same game* — identical decks
+in identical seats with identical pilots and identical seeds. Every slot must therefore split and the
+record must come out exactly level. `npm run sim -- pilot-ab` with no arguments **is** that control:
+it prints a CONTROL banner, checks the balance, and **exits non-zero if the record is not level**,
+because an unbalanced control means the harness is broken or a pilot carries state across games, and
+either way every other number on the page is void. Measured on `main`:
+
+> `heuristic` **3532 – 3532** `heuristic` over **7,200 games** (7,064 decisive, 136 timeout draws),
+> **3,600 of 3,600 matched slots split**, 0 decided, McNemar p = 1 — `CONTROL OK`. Every deck is level
+> on its own row too: Mono-Red 241–241, Boros 339–339, Rakdos 305–305, Izzet 291–291, Golgari 410–410,
+> Orzhov 462–462, Mono-Green 518–518, UW 407–407, Selesnya 559–559.
+
+That exact balance is what makes §3.45's 51.2% evidence rather than noise. (§3.45's ad-hoc run
+recorded 3546–3546 on its own seeding; the digits are seeding, the *identity* is the point.)
+
+**Statistics: the matched SLOT is the unit, not the game.** A slot is one (deck pair, game index) —
+two games, one per orientation. A slot is either **split** (each pilot took one game, or nobody did)
+or **decided** (one pilot took both). Decided slots are precisely the discordant pairs of McNemar's
+test, so the significance call reuses `mcNemarTest` and `decideVerdict` — the same functions, the same
+alpha and the same minimum sample as the card-swap verdict, not a second statistics stack. The
+headline game record also carries a Wilson interval, labelled in the output as **descriptive**: games
+arrive in matched pairs, so that interval treats as independent things that are not, and the verdict
+is built on the slot table instead.
+
+**⚠️ What it cannot do, said plainly.** It compares two **registered pilot ids** (`heuristic`,
+`hybrid`, `mcts`, `random`) — not two **builds** of one id, which is what §3.45 actually needed. A
+process can hold only one build of `heuristic`. Two protocols work, and the help text and
+`PILOT_AB_BUILD_COMPARISON_NOTE` say so at the point of use:
+
+1. **Register the new behaviour under a second id — the exact method.** `AiRegistry.registerPilot` is
+   a public seam and a re-registered id replaces the old one, so a working branch can expose its build
+   as e.g. `heuristic-next` beside the old one and run `--pilot-a heuristic --pilot-b heuristic-next`
+   in one process. Both builds then play the same matched-seed matrix against each other. Delete the
+   temporary id before merge.
+2. **A common opponent across branches — weaker, but needs no code.** Run
+   `--pilot-a heuristic --pilot-b random --seed S --games N` on each branch and compare the shares.
+   This assumes strength is transitive through the yardstick, which is an assumption and not a fact,
+   and `random` is a poor yardstick besides. A hint, never a verdict.
+
+What does **not** work, and is the trap worth naming: running the same-id control on two branches and
+comparing. It is exactly 50% on every branch by construction and carries no information at all.
+
+**Cost.** Default 100 games per pair per orientation = 36 × 2 × 100 = **7,200 games**, measured at
+**137.7 s → 52.3 games/sec** (on a box also running other agents' builds, so a floor rather than a
+ceiling) — cheap enough to actually be run, which is the difference between a yardstick and a good
+intention.
+`--games` scales it; the search pilots are three orders of magnitude slower and are not a sensible
+default here.
+
+**Scope, and what is deliberately left open.** This landed as `packages/sim` only — a CLI tool and
+one exported function, no pilot behaviour touched, no baseline moved. `runPilotAb` is exported from
+the package index precisely so the web Lab's inspector can drive it later without a second copy of
+the loop; that wiring is unclaimed and belongs to whoever owns `apps/web` next.
+
+**Verified.** `packages/sim/src/pilot-ab.test.ts` pins the control identity (exactly level, every slot
+split, `p = 1`), the design's mirror symmetry (exchanging the contestants must swap every column
+exactly — the statement that no seat or ordering bias can leak in), the exposure balance, determinism,
+and **power**: `heuristic` vs `random` must read STRONGER, or the harness could not detect a difference
+it was built to find. Observed at `--games 20`: **1437–0 over 720 slots**, every deck swept.
+Full suite **5295 passed / 0 failed** (5 skipped, 266 files), `npm run verify` exit 0.
+
 ### 3.45 The pilot could not see deathtouch — ✅ done  *(and two bigger "fixes" that measured worse)*
 
 The question was *why does the heuristic pilot play Selesnya Blink worse than it should* — 71.0% in the
@@ -3549,7 +3651,8 @@ Zero in every deck that prints none of those keywords, and the counts land on ex
 predicate, two call sites, four rules missing. `combat-math.ts` is that predicate written once.
 
 ⚠️ **Only the BLOCK decision uses it, and the other three-quarters of the obvious fix are recorded
-here because they were built, measured and rejected.** The yardstick is a **deck-neutral pilot A/B**:
+here because they were built, measured and rejected.** The yardstick is a **deck-neutral pilot A/B**
+— since §3.46 a committed command, `npm run sim -- pilot-ab`, rather than the ad-hoc script it was here:
 for all 36 pairs of sample decks, new-pilot-on-X vs old-on-Y *and* old-on-X vs new-on-Y on the same
 seeds, so deck strength and seat cancel. Its control (main vs main) is exactly **3546–3546** over
 7,200 games, which is what makes the rest of the column readable:

@@ -9,6 +9,8 @@
  *   - n-game matchup + Wilson CI: `runMatchup` → `MatchupResult`.
  *   - Deck vs the gauntlet:       `runGauntlet` → `GauntletResult`.
  *   - THE A/B swap test:          `evaluateSwap` → `SwapEvaluation` (verdict).
+ *   - THE PILOT A/B (deck-neutral):`runPilotAb` → `PilotAbResult` (verdict) — the
+ *                                 question a gauntlet row cannot answer.
  *   - Statistics (pure):          `wilsonInterval`, `mcNemarTest`, …
  *   - Reporter registry (§2 seam):`createDefaultReporterRegistry`, `Reporter`.
  *   - Named config:               `DEFAULT_SIM_CONFIG`, `DEFAULT_STATS_CONFIG`,
@@ -95,6 +97,33 @@ export {
 } from './swap.js';
 export type { SwapScope } from './config.js';
 export { DEFAULT_SWAP_SCOPE } from './config.js';
+
+/**
+ * THE DECK-NEUTRAL PILOT A/B (DESIGN §3.46) — "is this pilot stronger?", asked so
+ * that no single deck can answer for it.
+ *
+ * Exported as a tool, not just a CLI command: the gauntlet's win-rate is a
+ * property of the meta (both seats run the same pilot), so anything that wants to
+ * judge a PILOT change — the CLI, a Lab button, a future regression job — must
+ * call this rather than read a gauntlet row. See `pilot-ab.ts` for the case that
+ * proves it.
+ */
+export type {
+  DeckPair,
+  PilotAbContestants,
+  PilotAbDeckRow,
+  PilotAbOptions,
+  PilotAbResult,
+  PilotAbSlots,
+  PilotAbVerdict,
+} from './pilot-ab.js';
+export {
+  deckPairsOf,
+  DEFAULT_PILOT_AB_GAMES_PER_ORIENTATION,
+  ORIENTATIONS_PER_PAIR,
+  PILOT_AB_BUILD_COMPARISON_NOTE,
+  runPilotAb,
+} from './pilot-ab.js';
 
 // The incremental paired-arm runner (shared base arm + provably-identical games).
 export type {

@@ -8,6 +8,11 @@
  *   gauntlet <deck> [opts]                  deck vs every sample deck
  *   swap <deck> --out X --in Y [opts]       the paired A/B single-card-swap verdict
  *   suggest <deck> [opts]                   rank candidate swaps that improve the deck
+ *   pilot-ab [opts]                         THE DECK-NEUTRAL PILOT A/B: pilot X vs
+ *                                           pilot Y over every deck pair in both
+ *                                           orientations on matched seeds — the
+ *                                           question the gauntlet cannot answer
+ *                                           (see pilot-ab.ts)
  *   soak [--games N] [--seed S]             the FULL-POOL SOAK: randomised legal
  *                                           decks from the whole pool, every
  *                                           invariant checked, every mechanic
@@ -29,7 +34,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { loadCardPool, buildRegistry } from '@jonny-boi/cards';
 import type { CardPool } from '@jonny-boi/cards';
 import { createDefaultAiRegistry, DEFAULT_PILOT_ID, SELECTABLE_PILOT_IDS } from '@jonny-boi/ai';
-import type { Pilot } from '@jonny-boi/ai';
+import type { AiRegistry, Pilot } from '@jonny-boi/ai';
 import type { EffectRegistry } from '@jonny-boi/core';
 import { SAMPLE_DECKS } from '../data/decks/index.js';
 import type { Deck, LoadedDeck } from './deck.js';
@@ -40,6 +45,14 @@ import { evaluateSwap, type SwapEvaluation } from './swap.js';
 import { suggestSwaps, type SuggestionReport } from './suggest.js';
 import type { HistoryRejection, SuggestionHistory } from './suggest-history.js';
 import { DEFAULT_SUGGEST_CONFIG } from './suggest-config.js';
+import {
+  deckPairsOf,
+  DEFAULT_PILOT_AB_GAMES_PER_ORIENTATION,
+  ORIENTATIONS_PER_PAIR,
+  PILOT_AB_BUILD_COMPARISON_NOTE,
+  runPilotAb,
+  type PilotAbResult,
+} from './pilot-ab.js';
 import { DEFAULT_SIM_CONFIG, DEFAULT_STATS_CONFIG, DEFAULT_SWAP_SCOPE, FIDELITY_CAVEAT, type SwapScope } from './config.js';
 import { SOAK_BASE_SEED, SOAK_DEEP_DEFAULT_GAMES, SOAK_DEEP_ENV_VAR, SOAK_MECHANIC_SEED_ATTEMPTS } from './soak-config.js';
 import { formatSoakReport, runSoak } from './soak.js';
@@ -47,6 +60,12 @@ import type { ProportionCI } from './stats.js';
 
 const PROGRAM = 'jonny-boi sim';
 const DEFAULT_SEED = 0xc0ffee;
+
+/**
+ * Deck pairs a `pilot-ab` run covers — derived from the deck registry, so adding
+ * a sample deck updates the help text and the cost estimate without an edit here.
+ */
+const PILOT_AB_PAIR_COUNT = deckPairsOf(SAMPLE_DECKS.length).length;
 
 const USAGE = `${PROGRAM} — headless MTG gauntlet / A-B card-swap lab
 
@@ -57,6 +76,7 @@ Usage:
   npm run sim -- swap <deck> --out "<card>" --in "<card>" [--games N] [--seed S] [--pilot id] [--scope one|playset]
   npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--max-candidates K] [--seed S]
                                [--pilot id] [--history <file>] [--no-adaptive]
+  npm run sim -- pilot-ab [--pilot-a id] [--pilot-b id] [--games N] [--seed S]
   npm run sim -- soak [--games N] [--seed S] [--pilot id]
 
 Notes:
@@ -91,6 +111,25 @@ Notes:
     shortlist and prints the same answer.
   • --no-adaptive runs the legacy fixed-budget sweep (every candidate, same games)
     for comparison.
+  • pilot-ab answers the question the GAUNTLET CANNOT: is one pilot stronger than
+    another, independent of which archetype the change happens to suit? A gauntlet
+    runs the same pilot in both seats, so its win-rate is a property of the meta:
+    a §3.45 build took Selesnya Blink from 71% to 74% while measuring 47.5%
+    head-to-head against the pilot it replaced. pilot-ab plays A against B over
+    every unordered pair of the ${SAMPLE_DECKS.length} sample decks in BOTH orientations on matched
+    seeds, so deck strength, seat and who is on the play all cancel exactly.
+      --games N is games per pair PER ORIENTATION (default ${DEFAULT_PILOT_AB_GAMES_PER_ORIENTATION}); the run costs
+        pairs × ${ORIENTATIONS_PER_PAIR} × N games, i.e. ${PILOT_AB_PAIR_COUNT} × ${ORIENTATIONS_PER_PAIR} × ${DEFAULT_PILOT_AB_GAMES_PER_ORIENTATION} = ${PILOT_AB_PAIR_COUNT * ORIENTATIONS_PER_PAIR * DEFAULT_PILOT_AB_GAMES_PER_ORIENTATION} by default.
+      --pilot-a / --pilot-b default to "${DEFAULT_PILOT_ID}". Equal ids run THE CONTROL:
+        the two orientations are then literally the same game, so the record must
+        come out EXACTLY level. It exits non-zero if it does not — that balance is
+        what makes a 51.2% reading evidence rather than noise.
+    ⚠️ It compares two REGISTERED PILOT IDS, not two BUILDS of one id — a process
+    can hold only one build of "${DEFAULT_PILOT_ID}". To compare builds, register the new
+    behaviour under a second id (\`AiRegistry.registerPilot\` is a public seam; a
+    re-registered id replaces the old one) and run the two ids head-to-head in one
+    process. Running the same-id control on two branches proves nothing: it is
+    exactly 50% on both by construction.
   • soak plays RANDOMISED-BUT-LEGAL decks built from the whole card pool — not the
     curated gauntlet — checking every invariant in \`soak-config.ts\` on every
     settled state and FAILING if a mechanic the pool prints never fires. Exit code
@@ -112,6 +151,9 @@ interface Flags {
   readonly games?: number;
   readonly seed?: number;
   readonly pilot?: string;
+  /** pilot-ab: the two contestants. Each defaults to `--pilot`, then to the default pilot. */
+  readonly pilotA?: string;
+  readonly pilotB?: string;
   /** Swap one copy or the whole playset (A/B test). */
   readonly scope?: SwapScope;
   readonly out?: string;
@@ -135,6 +177,8 @@ function parseFlags(args: readonly string[]): Flags {
   let games: number | undefined;
   let seed: number | undefined;
   let pilot: string | undefined;
+  let pilotA: string | undefined;
+  let pilotB: string | undefined;
   let scope: SwapScope | undefined;
   let out: string | undefined;
   let inCard: string | undefined;
@@ -159,6 +203,12 @@ function parseFlags(args: readonly string[]): Flags {
         break;
       case '--pilot':
         pilot = requireValue(arg, args[++i]);
+        break;
+      case '--pilot-a':
+        pilotA = requireValue(arg, args[++i]);
+        break;
+      case '--pilot-b':
+        pilotB = requireValue(arg, args[++i]);
         break;
       case '--scope': {
         const value = requireValue(arg, args[++i]);
@@ -192,7 +242,7 @@ function parseFlags(args: readonly string[]): Flags {
     }
   }
 
-  return { positionals, games, seed, pilot, scope, out, in: inCard, cut, maxCandidates, history, noAdaptive, help };
+  return { positionals, games, seed, pilot, pilotA, pilotB, scope, out, in: inCard, cut, maxCandidates, history, noAdaptive, help };
 }
 
 function requireValue(flag: string, value: string | undefined): string {
@@ -248,17 +298,37 @@ function loadOrThrow(deck: Deck, pool: CardPool): LoadedDeck {
   }
 }
 
-function resolvePilots(flags: Flags): MatchupPilots {
-  const id = flags.pilot ?? DEFAULT_PILOT_ID;
-  const registry = createDefaultAiRegistry();
+/**
+ * Resolve one selectable pilot id to a fresh instance, with the CLI's one-line
+ * error for an unknown id. Shared by every subcommand so the accepted set stays
+ * `SELECTABLE_PILOT_IDS` and nothing grows a second list.
+ */
+function resolvePilot(registry: AiRegistry, id: string): Pilot {
   const known = new Set(SELECTABLE_PILOT_IDS);
   if (!known.has(id)) {
     throw new CliError(`unknown pilot "${id}". Available: ${[...known].map((p) => `"${p}"`).join(', ')}`);
   }
-  const pilotA = registry.getPilot(id);
-  const pilotB = registry.getPilot(id);
-  if (!pilotA || !pilotB) throw new CliError(`could not instantiate pilot "${id}"`);
-  return { pilotA: pilotA as Pilot, pilotB: pilotB as Pilot };
+  const pilot = registry.getPilot(id);
+  if (!pilot) throw new CliError(`could not instantiate pilot "${id}"`);
+  return pilot;
+}
+
+function resolvePilots(flags: Flags): MatchupPilots {
+  const id = flags.pilot ?? DEFAULT_PILOT_ID;
+  const registry = createDefaultAiRegistry();
+  return { pilotA: resolvePilot(registry, id), pilotB: resolvePilot(registry, id) };
+}
+
+/**
+ * The two CONTESTANTS of a `pilot-ab` run (not seats — each takes both seats).
+ * Either side falls back to `--pilot`, then to the default pilot, so a bare
+ * `pilot-ab` runs the same-pilot balance control.
+ */
+function resolveContestants(flags: Flags): { readonly pilotA: Pilot; readonly pilotB: Pilot } {
+  const registry = createDefaultAiRegistry();
+  const idA = flags.pilotA ?? flags.pilot ?? DEFAULT_PILOT_ID;
+  const idB = flags.pilotB ?? flags.pilot ?? DEFAULT_PILOT_ID;
+  return { pilotA: resolvePilot(registry, idA), pilotB: resolvePilot(registry, idB) };
 }
 
 // --- formatting ----------------------------------------------------------------
@@ -408,6 +478,115 @@ function cmdGauntlet(flags: Flags): number {
   console.log(FIDELITY_NOTE);
   return 0;
 }
+
+/**
+ * `pilot-ab` — the deck-neutral pilot head-to-head (DESIGN §3.46).
+ *
+ * Exits non-zero when a CONTROL run (same id both sides) comes out unbalanced,
+ * because that is not a close result — it means the harness or a pilot's
+ * cross-game state is broken and every other number on the page is void.
+ */
+function cmdPilotAb(flags: Flags): number {
+  const lab = makeLab();
+  const pilots = resolveContestants(flags);
+  const games = flags.games ?? DEFAULT_PILOT_AB_GAMES_PER_ORIENTATION;
+  if (games < 1) throw new CliError('--games must be at least 1');
+  const seed = flags.seed ?? DEFAULT_SEED;
+  const decks = SAMPLE_DECKS.map((d) => loadOrThrow(d, lab.pool));
+
+  const isControl = pilots.pilotA.id === pilots.pilotB.id;
+  console.log(
+    `Deck-neutral pilot A/B: "${pilots.pilotA.id}" (A) vs "${pilots.pilotB.id}" (B) — ` +
+      `every pair of ${decks.length} decks, both orientations, ${games} games each, seed ${seed}`,
+  );
+  if (isControl) {
+    console.log(
+      '\nCONTROL RUN — the same pilot id on both sides. The two orientations of every\n' +
+        'pair are then literally the same game, so the record MUST come out exactly\n' +
+        'level and every slot MUST be a split. Any imbalance is a bug in the harness\n' +
+        'or a pilot carrying state across games.',
+    );
+  }
+
+  // Progress, not an ETA: a search pilot can be three orders of magnitude slower
+  // than the heuristic, so a projected finish time here would be fiction.
+  const start = performance.now();
+  const result: PilotAbResult = runPilotAb({
+    decks,
+    pilots,
+    registry: lab.registry,
+    gamesPerOrientation: games,
+    baseSeed: seed,
+    onPair: (done, total) => {
+      if (done % PILOT_AB_PROGRESS_EVERY_PAIRS === 0 && done < total) {
+        console.log(`  … ${done}/${total} deck pairs`);
+      }
+    },
+  });
+  const elapsed = (performance.now() - start) / 1000;
+
+  console.log(
+    '\nPer deck — "Drives" is how many games EACH pilot drove that deck, on the same\n' +
+      'seeds. Equal by construction: that is the deck-neutrality. A wins/B wins are the\n' +
+      'games each pilot won WHILE DRIVING it.',
+  );
+  console.log(
+    table(
+      ['Deck', 'Drives', 'A wins', 'B wins', 'Draws', "A's share (95% CI)"],
+      result.perDeck.map((row) => [
+        row.deck,
+        String(row.gamesDriven),
+        String(row.winsA),
+        String(row.winsB),
+        String(row.draws),
+        ciStr(row.shareA),
+      ]),
+    ),
+  );
+
+  console.log(
+    `\nHead-to-head: ${pilots.pilotA.id} ${result.winsA} – ${result.winsB} ${pilots.pilotB.id}` +
+      ` over ${result.winsA + result.winsB} decisive games` +
+      (result.draws > 0 ? ` (${result.draws} timeout draws)` : ''),
+  );
+  console.log(`  A's share: ${ciStr(result.shareA)}  — descriptive; the pairing lives in the slot table below`);
+  console.log(
+    `\nMatched slots (one per deck pair × game index, i.e. the same game played both ways): ${result.slots.total}`,
+  );
+  console.log(
+    `  A ahead ${result.slots.aheadA} · B ahead ${result.slots.aheadB} · split ${result.slots.level}`,
+  );
+  console.log(
+    `  McNemar p-value: ${result.pValue.toExponential(2)} (decided slots: ${result.mcNemar.discordant})`,
+  );
+
+  const verdictLine =
+    result.verdict === 'inconclusive'
+      ? `INCONCLUSIVE — no measurable difference between "${pilots.pilotA.id}" and "${pilots.pilotB.id}"`
+      : `"${pilots.pilotA.id}" is ${result.verdict.toUpperCase()} than "${pilots.pilotB.id}"`;
+  console.log(
+    `\nVERDICT: ${verdictLine} (alpha ${DEFAULT_STATS_CONFIG.alpha}, ${result.slots.total} matched slots)`,
+  );
+
+  if (isControl) {
+    console.log(
+      result.balanced
+        ? `CONTROL OK — exactly ${result.winsA}–${result.winsB} and ${result.slots.level}/${result.slots.total} slots split.`
+        : 'CONTROL FAILED — the same pilot on both sides did NOT come out level. ' +
+            'Every reading from this harness is void until that is explained.',
+    );
+  }
+
+  console.log(
+    `\n${result.totalGames} games in ${elapsed.toFixed(2)}s → ${rateStr(result.totalGames, elapsed)}`,
+  );
+  console.log(`\n${PILOT_AB_BUILD_COMPARISON_NOTE}`);
+  console.log(FIDELITY_NOTE);
+  return isControl && !result.balanced ? 1 : 0;
+}
+
+/** How often `pilot-ab` prints a progress line, in deck pairs. */
+const PILOT_AB_PROGRESS_EVERY_PAIRS = 6;
 
 function cmdSwap(flags: Flags): number {
   const [heroSel] = flags.positionals;
@@ -713,6 +892,8 @@ function run(argv: readonly string[]): number {
       return cmdSwap(flags);
     case 'suggest':
       return cmdSuggest(flags);
+    case 'pilot-ab':
+      return cmdPilotAb(flags);
     case 'soak':
       return cmdSoak(flags);
     default:
