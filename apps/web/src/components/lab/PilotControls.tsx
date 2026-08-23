@@ -36,16 +36,24 @@ export function PilotPicker({
   pilotId,
   onPilot,
   disabled,
+  label,
 }: {
   pilotId: string;
   onPilot: (id: string) => void;
   disabled?: boolean;
+  /**
+   * Override the field label. The Lab runs BOTH seats on one pilot ("AI pilot
+   * (both seats)"), which is actively wrong wording in the Play tab, where the
+   * pilot is only your opponent. Same picker, same blurbs and cost hints — one
+   * word of copy differs, which is not worth a second component.
+   */
+  label?: string;
 }): ReactElement {
   const profile = pilotProfile(pilotId);
   const cost = relativeCostText(pilotId);
   return (
     <label className="lab-field pilot-field">
-      <span className="section-label">AI pilot (both seats)</span>
+      <span className="section-label">{label ?? 'AI pilot (both seats)'}</span>
       <select
         className="select"
         value={pilotId}

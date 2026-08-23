@@ -23,6 +23,18 @@ export interface HotseatConfig {
   /** Seed used when the player doesn't enter one (kept deterministic for replays). */
   readonly defaultSeed: number;
   /**
+   * Pause before the AI opponent takes each action, in milliseconds.
+   *
+   * Not decoration: without it the pilot resolves its whole turn between two
+   * frames, and the human sees the board teleport from their end step to their
+   * next untap with a wall of new log lines and no idea what happened. A short
+   * beat makes each play legible. It is also what keeps a long AI turn from
+   * blocking the main thread in one synchronous burst.
+   */
+  readonly aiThinkMs: number;
+  /** Default name for the AI opponent's seat. */
+  readonly defaultAiName: string;
+  /**
    * A safety cap on automatic engine advancement (e.g. when a player passes and the
    * engine resolves a chain of steps with nothing to do). Bounds any internal loop
    * so a pathological state can never hang the UI — mirrors the sim's action cap.
@@ -38,6 +50,8 @@ export const HOTSEAT_CONFIG: HotseatConfig = Object.freeze({
   defaultNameA: 'Player 1',
   defaultNameB: 'Player 2',
   defaultSeed: 12345,
+  aiThinkMs: 450,
+  defaultAiName: 'Computer',
   maxAutoAdvanceSteps: 512,
 });
 
