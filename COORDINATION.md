@@ -88,6 +88,10 @@ throughput (games/sec) from regressing.
 | fix/land-sequencing | worker | packages/ai (new: land-sequencing.ts + test; heuristic/weights/index/bench + tactical-suite.test), DESIGN §3.4e + §3.4a/§3.4d baseline notes | 🚧 PUSHED, not merged — branches off main; **moves the recorded heuristic baselines** |
 | feat/optional-payment | DESKTOP-90PJPM4 (integrator) | packages/core (choices/effects/engine/events/mana/clone + new optional-payment.test.ts), packages/cards (choice-primitives/primitives/effect-helpers/compile rules+text+compile + new test), packages/ai (choices/effect-value/heuristic/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
 | feat/trigger-targets | DESKTOP-90PJPM4 (integrator) | packages/core (triggers/state/choices/engine/events/clone + new trigger-targets.test.ts), packages/cards (compile types/compile/rules + new test), packages/ai (choices/effect-value/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
+| feat/modal-one-or-more | DESKTOP-90PJPM4 (integrator) | packages/core (targeting + 1 test fixture), packages/cards (compile rules/text + new modal-one-or-more.test.ts), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
+| feat/cost-reduction | DESKTOP-90PJPM4 (integrator) | packages/core (card/engine/index + new cost-reduction.test.ts), packages/cards (compile rules/compile/types), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
+| feat/karoo-lands | DESKTOP-90PJPM4 (integrator) | packages/core (card/engine), packages/cards (choice-primitives + compile rules/compile/types + new karoo-lands.test.ts), packages/sim (1 classification line), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
+| feat/copy-templates | DESKTOP-90PJPM4 (integrator) | packages/core (targeting/state/engine/clone/intervening), packages/cards (compile rules+compile+types + new copy-templates.test.ts), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/shocklands | worker | packages/core (card/choices/effects/engine/index + new shockland.test.ts), packages/cards (choice-primitives/effect-helpers/compile rules+text+types+compile + activated.test + new shockland.test.ts), packages/ai (choices.ts), apps/web (choice-view + ChoicePrompt + choice-session.test), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED |
 | feat/about-mechanics | worker | apps/web (new views/AboutView.tsx + views/about.css + lib/about/mechanics.ts+test; App.tsx nav), packages/cards (export-only edits: compile/compile.ts, compile/index.ts, index.ts) | ✅ MERGED |
 | feat/source-aware-targeting | worker | packages/core (protection.ts NEW + card/targeting/attachments/events/engine/index + internal stats/continuous/combat + protection.test.ts NEW), packages/cards (primitives + choice-primitives `wardCounterUnlessPaid` + compile rules/compile + ward-protection.test.ts NEW + 2 reworded tests), packages/sim (2 classification lines), packages/ai (heuristic source threading), apps/web (2 formatter cases + about/mechanics.ts entries), DESIGN §3.11 | 🚧 PUSHED, not merged |
@@ -182,6 +186,102 @@ _Append dated notes here; keep them short. Newest at top._
   to +3.5% — longer games, not slower code).
 
 - 2026-08-23 worker: `fix/blink-rules-fidelity` ✅ MERGED + DEPLOYED — DESIGN §3.44. Off `main`. **5217 / 0**, verify 0.
+
+- 2026-08-23 integrator: **`feat/modal-one-or-more` MERGED + DEPLOYED** — the "Choose one or
+  more —" header plus `enchantment` / `land` / `planeswalker` as target restrictions of their
+  own; Casualties of War compiles with all five modes. Audit: **585 → 586**. `npm run verify`
+  green, build exit 0.
+  👉 The header rides the existing count table with an unbounded ceiling the build site
+  already clamps to the menu (`max = modes.length`); the cast-time mode/aim pipeline needed
+  nothing — it was built mode-count-agnostic.
+  ⚠️ **One existing test changed because its FIXTURE went stale, not its property:**
+  `targeting.test.ts` used `'planeswalker'` as its junk-restriction example, and that word is a
+  real restriction now. When you promote a word into a closed vocabulary, grep the tests for the
+  word being used as the canonical NON-member.
+  (Integrator)
+
+- 2026-08-23 integrator: **`feat/cost-reduction` MERGED + DEPLOYED** — "TYPE/COLOUR spells you
+  cast cost {N} less to cast" (Goblin Electromancer, the whole Medallion cycle, Etherium
+  Sculptor). Audit: **571 → 585 playable**. `npm run verify` **5255 / 0**, build exit 0.
+  👉 **`castManaCostFor(state, caster, castDef, base)`** — ONE exported helper applied at BOTH
+  the offer (`offerCastsOf`) and the pay (`applyCastSpell`), so a spell a Medallion makes
+  affordable is offered AND accepted. It wraps whatever cost is actually being paid — printed,
+  flashback, madness — because CR 601.2f applies reductions to alternative costs too. Reduces
+  the GENERIC portion only (never a pip: {U}{U} under Sapphire Medallion stays {U}{U}); copies
+  stack; controller-scoped.
+  👉 Data model: `CardDefinition.castCostReduction = { amount, filter? }` with the shared
+  `CardFilter` naming the spell scope (types or colours). Compile rule is a CLOSED scope list
+  (instant-and-sorcery / creature / noncreature / artifact / enchantment / five colours);
+  "spells your OPPONENTS cast cost more" is a different system and does not match.
+  ⚠️ **KNOWN, deliberate gap: the PILOTS do not read reductions when planning taps.** The menu
+  is engine-built so nothing illegal happens, but a pilot funds the PRINTED cost — it may
+  overtap (mana floats, wasted) or skip a cast the reduction made affordable (its own
+  affordability check is printed-cost). No gauntlet deck carries a reducer today, so no recorded
+  baseline moves; whoever teaches the planners should route them through `castManaCostFor`.
+  (Integrator)
+
+- 2026-08-23 integrator: **`feat/karoo-lands` MERGED + DEPLOYED** — the two most-repeated missing
+  clauses in the corpus, closed together. Audit (same corpus): **559 → 571 playable**. `npm run
+  verify` **5248 / 0**, build exit 0. The whole karoo cycle (Dimir Aqueduct + 9 cousins) and the
+  Exploration family compile complete.
+  👉 **`returnChosenToHand`** (choice-primitives): "return a land you control to its owner's
+  hand" is a CHOICE, not a target — the printed line names no target, so the permanent is picked as
+  the trigger resolves, by its controller, `sacrificeChosen`'s exact shape. The menu includes the
+  karoo ITSELF on purpose (bouncing it is a legal, sometimes right, play). Classified LIBRARY_SAFE.
+  👉 **`CardDefinition.additionalLandPlays`** + engine helper `maxLandPlaysFor` — ONE definition
+  read at both the offer (`generateLegalActions`) and the apply (`applyPlayLand`), so the menu can
+  never offer a land drop the engine refuses. Controller-scoped; copies stack ("two additional
+  lands" = 2).
+  ⚠️ **Rule-table placement trap:** a permanent's plain static line ("You may play an additional
+  land…") is dispatched against STATIC_RULES — a rule for it in EFFECT_RULES never fires and the
+  card silently keeps reporting. Check `compileAbilityLine`'s dispatch order before adding a rule.
+  ❌ NOT done: Dryad of the Ilysian Grove (its other line needs land-type-changing statics),
+  Oracle of Mul Daya (play-from-library), The Gitrog Monster (several systems). The clause
+  compiles on all of them; the cards stay honestly blocked on their other lines.
+  (Integrator)
+
+- 2026-08-23 integrator: **`feat/copy-templates` MERGED + DEPLOYED** — the corpus's top gap
+  family, four extensions in one branch. `npm run verify` **5218 / 0**, build exit 0. Audit
+  (same saved corpus, before/after): **555 → 559 playable** — Lithoform Engine, Extravagant
+  Replication, Skyclave Relic now compile complete.
+  ❗ **NEW: the stack can tell an ACTIVATED ability from a TRIGGERED one.**
+  `TriggeredStackObject.origin: 'activated'` is stamped by `applyActivateAbility` and cycling
+  (absence = a genuine trigger). This FIXED a live infidelity: `'triggeredAbilityYouControl'`
+  (Strionic Resonator) accepted activated abilities — quietly wider than printed — and now
+  refuses them; the new `'activatedOrTriggeredAbilityYouControl'` takes both. ⚠️ Anyone adding
+  a stack-object field: `internal/clone.ts` copies field by field — add it there or the next
+  action drops it silently.
+  👉 **Four new target restrictions**: `instantOrSorcerySpellYouControl`,
+  `permanentSpellYouControl` (the complement — permanent spells; copies of those already become
+  tokens via `spell-copy.ts`), `activatedOrTriggeredAbilityYouControl`,
+  `nonlandPermanentYouControl`. All controller-scoped ones refuse an unknown actor.
+  👉 **`compileTriggerBody` now lifts a targeted part when the rule is unflagged but its
+  effects DECLARE a restriction** — `create-token-copy` cannot carry `needsChosenTarget` (its
+  `~` selector targets nothing), so before this a targeted token copy inside a trigger compiled
+  with NO ability targets and would have resolved blank. Also lifts `excludeSelf` from ref
+  params onto the ability (`targetsExcludeSelf`) — a flag left on the ref alone excludes
+  nothing, because the ABILITY is what gets aimed.
+  👉 **Tapped token copies** ("create two TAPPED tokens that are copies…") ride the same
+  `CopyExceptions.entersTapped` Vesuva uses. Found while doing it: **the plural head "tokens
+  that are copies" NEVER matched** — the old alternation needed the literal "thats are copies"
+  — so every plural-head token-copy card was reporting on a typo-shaped regex, not on a missing
+  system.
+  👉 **ETB intervening "if"**: `trigger-etb` now splits the printed "if COND," with the same
+  closed vocabulary the step-trigger family uses, plus a new `InterveningIf` kind
+  `sourceKicked` ("if it was kicked" — reads the `timesKicked` the kicked entry already wrote,
+  which is written BEFORE the zoneChange emit, so the queue-time check sees it). An unreadable
+  "if" still refuses the whole line. Note: `sourceKicked` fails when the source has left the
+  battlefield — narrower than CR (a historical fact stays true), the safe direction.
+  ⚠️ **Audit workflow trap:** `coverage-audit.mjs` reads the built DIST — regenerating the
+  backlog after a rules edit without `npm run build` writes the OLD hints into the file. Also:
+  `--save-corpus` + `--input` makes the before/after measurement offline and identical-corpus.
+  ❌ **NOT done, deliberately** (each still reporting): "nonlegendary"/"token" target selectors,
+  "copy THAT spell" (needs the triggering spell threaded into the trigger context), for-each
+  iteration (Second Harvest, Kambal), follow-up sentences about the token just created, "except"
+  tails on SPELL copies, quoted granted abilities (Electroduplicate's sacrifice rider). Most of
+  the 29-card family is ALSO blocked by Spree/Class/d20 — the audit's per-card counts overstate
+  what any one fix frees.
+  (Integrator)- 2026-08-23 worker: `fix/blink-rules-fidelity` ✅ MERGED + DEPLOYED — DESIGN §3.44. Off `main`. **5217 / 0**, verify 0.
   Owns packages/core + packages/cards only; does not touch packages/ai or apps/web.
 
   A printed-card audit of all 16 distinct **Selesnya Blink** cards against fresh Scryfall Oracle text.
@@ -244,7 +344,6 @@ _Append dated notes here; keep them short. Newest at top._
 
   Reused the Lab's `PilotPicker` with an overridable label (the Lab's "AI pilot (both seats)" is
   actively wrong copy in the Play tab). apps/web ONLY — no engine change, no baseline moved.
-
 - 2026-08-22 integrator: **`feat/shocklands` DEPLOYED to main** (Deploy PWA green, run
   32623813098). Merged the newest `main` into the branch first (it had meanwhile gained
   §3.41/§3.42 and the soak suite) — clean auto-merge — then `npm run verify` on the union:

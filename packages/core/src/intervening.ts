@@ -46,6 +46,13 @@ import { effectivePower } from './internal/stats.js';
  */
 export type InterveningIf =
   | { readonly kind: 'sourceUntapped' }
+  /**
+   * "**if it was kicked**" (Skyclave Relic's ETB). Read off the source
+   * permanent's `timesKicked`, which the kicked entry wrote for exactly this
+   * reader; a source that has left the battlefield, or that entered unkicked,
+   * fails the condition rather than defaulting to true.
+   */
+  | { readonly kind: 'sourceKicked' }
   | {
       readonly kind: 'controlCount';
       /** Whose permanents are counted. `'triggering'` is the player the event was about. */
@@ -76,6 +83,15 @@ export function interveningIfHolds(
 ): boolean {
   if (condition === undefined) return true;
   switch (condition.kind) {
+    case 'sourceKicked': {
+      const battlefield = state.battlefield;
+      for (let i = 0; i < battlefield.length; i++) {
+        const permanent = battlefield[i]!;
+        if (permanent.instanceId !== sourceInstanceId) continue;
+        return (permanent.timesKicked ?? 0) > 0;
+      }
+      return false;
+    }
     case 'sourceUntapped': {
       const battlefield = state.battlefield;
       for (let i = 0; i < battlefield.length; i++) {

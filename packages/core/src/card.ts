@@ -668,6 +668,33 @@ export interface CardDefinition {
    */
   readonly entersTappedUnlessLifePaid?: number;
   /**
+   * "You may play an additional land on each of your turns." (Exploration,
+   * Dryad of the Ilysian Grove; Azusa prints two.) While a permanent with this
+   * is on the battlefield, its CONTROLLER's land plays per turn go up by this
+   * many — read by {@link maxLandPlaysFor} at the two places the engine asks
+   * (offering the play, and applying it), so the offer and the apply cannot
+   * disagree. Copies stack, exactly as the printed cards do.
+   */
+  readonly additionalLandPlays?: number;
+  /**
+   * "Instant and sorcery spells you cast cost {1} less to cast." (Goblin
+   * Electromancer; the Medallion cycle prints the one-colour form.) While this
+   * permanent is on the battlefield, its CONTROLLER'S matching spells cost
+   * `amount` less GENERIC mana — CR 601.2f's arithmetic: a reduction never
+   * touches coloured pips, so `{U}{U}` under a Sapphire Medallion still costs
+   * `{U}{U}`. `filter` names which spells qualify through the same `CardFilter`
+   * everything else reads (types, colours); absent means every spell you cast.
+   *
+   * Read by the engine's `castManaCostFor` at BOTH the offer and the pay, and
+   * it applies to whichever cost is actually being paid (printed, flashback,
+   * madness) — CR 601.2f applies reductions to alternative costs too. Copies
+   * stack.
+   */
+  readonly castCostReduction?: {
+    readonly amount: number;
+    readonly filter?: import('./choices.js').CardFilter;
+  };
+  /**
    * A "reveal-land" (the Shadows over Innistrad / Strixhaven cycles): "As ~
    * enters, you may **reveal** an Island or Swamp card from your hand. If you
    * don't, this land enters tapped." The value is the printed land types the

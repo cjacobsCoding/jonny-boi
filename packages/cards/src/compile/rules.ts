@@ -161,6 +161,11 @@ const CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'creatureYouControl';
 const NON_ANGEL_CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'nonAngelCreatureYouControl';
 /** "target triggered ability you control" — Strionic Resonator. */
 const TRIGGERED_ABILITY_YOU_CONTROL_TARGET: TargetRestriction = 'triggeredAbilityYouControl';
+const ACTIVATED_OR_TRIGGERED_ABILITY_YOU_CONTROL_TARGET: TargetRestriction =
+  'activatedOrTriggeredAbilityYouControl';
+const INSTANT_OR_SORCERY_SPELL_YOU_CONTROL_TARGET: TargetRestriction = 'instantOrSorcerySpellYouControl';
+const PERMANENT_SPELL_YOU_CONTROL_TARGET: TargetRestriction = 'permanentSpellYouControl';
+const NONLAND_PERMANENT_YOU_CONTROL_TARGET: TargetRestriction = 'nonlandPermanentYouControl';
 /** "target creature an opponent controls" — Banisher Priest. */
 const CREATURE_AN_OPPONENT_CONTROLS_TARGET: TargetRestriction = 'creatureAnOpponentControls';
 /** "target artifact, enchantment, or land" — the naturalize family. */
@@ -260,6 +265,10 @@ const MODAL_HEADER_COUNTS: Readonly<Record<string, { min: number; max: number }>
   two: { min: 2, max: 2 },
   three: { min: 3, max: 3 },
   'one or both': { min: 1, max: 2 },
+  // "Choose one or more —" (Casualties of War, Sublime Epiphany): the max is
+  // every mode on the menu, expressed as an unbounded ceiling the build site
+  // already clamps to `modes.length`.
+  'one or more': { min: 1, max: Number.MAX_SAFE_INTEGER },
   'up to one': { min: 0, max: 1 },
   'up to two': { min: 0, max: 2 },
   'up to three': { min: 0, max: 3 },
@@ -1712,6 +1721,20 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'destroy-target-simple-permanent',
+    description:
+      `"Destroy target enchantment / land / planeswalker" (Casualties of War's modes; Stone Rain)`,
+    // One rule for the three single-type destroys the artifact rule above does
+    // not cover, each mapping to its own restriction so the printed word is the
+    // whole of what may be aimed at.
+    pattern: /^destroy target (enchantment|land|planeswalker)$/,
+    needsChosenTarget: true,
+    build(match) {
+      const kind = match[1] as TargetRestriction;
+      return effects({ primitive: 'destroyTarget', params: { targets: kind } });
+    },
+  },
+  {
     id: 'destroy-target-permanent',
     description: '"Destroy target permanent"',
     // The unrestricted form (Argentum Armor's attack trigger, Vindicate's body).
@@ -2226,6 +2249,63 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'copy-target-spell-you-control',
+    description:
+      '"Copy target instant or sorcery spell you control. You may choose new targets for the copy." (Lithoform Engine, Kitsa)',
+    // The controller scope is the whole card: widening it to any spell would let
+    // a pilot fork the opponent's removal, which the printed text cannot do.
+    pattern:
+      /^copy target instant or sorcery spell you control(\. you may choose new targets for the copy)?$/,
+    needsChosenTarget: true,
+    build(match) {
+      return effects({
+        primitive: 'copySpell',
+        params: {
+          targets: INSTANT_OR_SORCERY_SPELL_YOU_CONTROL_TARGET,
+          mayRetarget: match[1] !== undefined,
+        },
+      });
+    },
+  },
+  {
+    id: 'copy-target-permanent-spell-you-control',
+    description:
+      '"Copy target permanent spell you control. (The copy becomes a token.)" (Lithoform Engine) — CR 707.10a',
+    // The reminder sentence is reminder text and has already been stripped; the
+    // token-ness it reminds about is `spell-copy.ts`'s own behaviour for every
+    // permanent-spell copy, so this rule adds nothing but the restriction.
+    pattern:
+      /^copy target permanent spell you control(\. you may choose new targets for the copy)?$/,
+    needsChosenTarget: true,
+    build(match) {
+      return effects({
+        primitive: 'copySpell',
+        params: {
+          targets: PERMANENT_SPELL_YOU_CONTROL_TARGET,
+          mayRetarget: match[1] !== undefined,
+        },
+      });
+    },
+  },
+  {
+    id: 'copy-target-activated-or-triggered-ability',
+    description:
+      '"Copy target activated or triggered ability you control. You may choose new targets for the copy." (Lithoform Engine) — CR 707.10',
+    // Both kinds sit on the stack as one object kind here, so the primitive is
+    // the SAME one Strionic Resonator uses — what differs is only the
+    // restriction, which accepts the `origin: 'activated'` objects the
+    // triggered-only wording must refuse.
+    pattern:
+      /^copy target activated or triggered ability you control(\. you may choose new targets for the copy)?$/,
+    needsChosenTarget: true,
+    build() {
+      return effects({
+        primitive: 'copyTriggeredAbility',
+        params: { targets: ACTIVATED_OR_TRIGGERED_ABILITY_YOU_CONTROL_TARGET, count: 1 },
+      });
+    },
+  },
+  {
     id: 'create-token-copy',
     description:
       `"Create [N] token[s] that's a copy of <selector>[, except <clauses>][. If this spell was kicked, create five of those tokens instead]" (Rite of Replication, Cackling Counterpart, Giant Adephage) — CR 707.2`,
@@ -2233,9 +2313,32 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // tables the as-enters copy uses (`parseCopyException`), so "except it has
     // haste" means one thing in this codebase rather than two. A selector or a
     // clause outside them returns null and the card reports.
-    pattern: /^create (a|an|one|two|three|four|five) tokens? that(?:'s a copy|s are copies) of (.+)$/,
+    // "a TAPPED token that's a copy" (Kambal) / "two tapped tokens that are
+    // copies" (Skyclave Relic): the adjective becomes the same `entersTapped`
+    // exception Vesuva's printed "enter tapped" already uses, so tapped-ness has
+    // one meaning across every copy the compiler makes.
+    pattern:
+      /^create (a|an|one|two|three|four|five) (tapped )?(?:tokens? that's a copy|tokens that are copies) of (.+)$/,
     build(match, ctx) {
-      return buildTokenCopy(match[1] ?? 'a', match[2] ?? '', ctx);
+      return buildTokenCopy(match[1] ?? 'a', match[3] ?? '', ctx, match[2] !== undefined);
+    },
+  },
+  {
+    id: 'return-chosen-land-you-control',
+    description:
+      '"Return a land you control to its owner\'s hand" (the karoo lands\' ETB) — a chosen permanent, not a target',
+    // No printed "target", so this is a resolution-time CHOICE by the
+    // controller — which is exactly what lets it sit inside a trigger with no
+    // aiming step, and what makes bouncing the karoo itself legal.
+    pattern: /^return an? (land|creature|permanent) you control to its owner's hand$/,
+    build(match) {
+      const noun = match[1] ?? '';
+      const filter =
+        noun === 'permanent' ? {} : { anyOfTypes: [noun as CardType] };
+      return effects({
+        primitive: 'returnChosenToHand',
+        params: { count: 1, ...(Object.keys(filter).length > 0 ? { filter } : {}) },
+      });
     },
   },
   {
@@ -3282,6 +3385,7 @@ function triggerFrom(
         effects: body.effects,
         label,
         ...(body.targets ? { targets: body.targets } : {}),
+        ...(body.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
       },
     ],
   };
@@ -3366,6 +3470,7 @@ function optionalTriggerFrom(
         effects,
         label,
         ...(compiled.targets ? { targets: compiled.targets } : {}),
+            ...(compiled.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
       },
     ],
   };
@@ -3440,6 +3545,12 @@ const INTERVENING_IF_RULES: readonly {
     // folded "this artifact" into `~`.
     pattern: /^~ is untapped$/,
     build: (): InterveningIf => ({ kind: 'sourceUntapped' }),
+  },
+  {
+    // "if it was kicked" (Skyclave Relic's ETB). The kicked entry wrote
+    // `timesKicked` onto the permanent for exactly this reader.
+    pattern: /^(?:it|~) was kicked$/,
+    build: (): InterveningIf => ({ kind: 'sourceKicked' }),
   },
   {
     // "if you control three or more artifacts" / "an artifact" / "no snakes" /
@@ -3630,10 +3741,22 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'trigger-etb',
-    description: '"When ~ enters (the battlefield), BODY"',
+    description: '"When ~ enters (the battlefield), [if COND,] BODY"',
     pattern: /^when ~ enters(?: the battlefield)?, (.+)$/,
     build(match, ctx) {
-      return triggerFrom(ctx, { on: 'etb' }, match[1] ?? '', `Enters: ${match[1] ?? ''}`);
+      // The printed intervening "if" (CR 603.4), split with the same closed
+      // vocabulary the step-trigger family uses — "if it was kicked, create two
+      // tapped tokens…" (Skyclave Relic). `'unreadable'` refuses the whole line:
+      // compiling the body as though the condition were not there would fire the
+      // trigger on every unkicked entry, a strictly better card than printed.
+      const split = splitInterveningIf(match[1] ?? '');
+      if (split === 'unreadable') return null;
+      return triggerFrom(
+        ctx,
+        { on: 'etb', ...(split.condition ? { intervening: split.condition } : {}) },
+        split.body,
+        `Enters: ${match[1] ?? ''}`,
+      );
     },
   },
   {
@@ -3665,6 +3788,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
             effects: effectRefs,
             label: `Enters: you may ${body}`,
             ...(compiled.targets ? { targets: compiled.targets } : {}),
+            ...(compiled.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
           },
         ],
       };
@@ -3746,6 +3870,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
             effects: effectRefs,
             label: `${scope} ${step}: ${match[3] ?? ''}`,
             ...(compiled.targets ? { targets: compiled.targets } : {}),
+            ...(compiled.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
           },
         ],
       };
@@ -3822,6 +3947,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
             effects: effectRefs,
             label: `${another ? 'another ' : ''}${tokenWord ? `${tokenWord} ` : ''}${noun} (${who}) ${match[10]}: ${body}`,
             ...(compiled.targets ? { targets: compiled.targets } : {}),
+            ...(compiled.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
           },
         ],
       };
@@ -4072,7 +4198,55 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
 // --- mana abilities -------------------------------------------------------------
 
 /** Card-level static properties printed as their own ability line. */
+/**
+ * The spell scopes a printed cost reduction may name, each as the `CardFilter`
+ * the engine's `castManaCostFor` matches the CAST FACE against. Closed for the
+ * usual reason: a scope read loosely reduces spells the printed card does not.
+ */
+const CAST_REDUCTION_SCOPES: Readonly<Record<string, CardFilter>> = Object.freeze({
+  'instant and sorcery': { anyOfTypes: ['instant', 'sorcery'] },
+  creature: { anyOfTypes: ['creature'] },
+  noncreature: { noneOfTypes: ['creature'] },
+  artifact: { anyOfTypes: ['artifact'] },
+  enchantment: { anyOfTypes: ['enchantment'] },
+  white: { anyOfColors: ['W'] },
+  blue: { anyOfColors: ['U'] },
+  black: { anyOfColors: ['B'] },
+  red: { anyOfColors: ['R'] },
+  green: { anyOfColors: ['G'] },
+});
+
 export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
+  {
+    id: 'cast-cost-reduction',
+    description:
+      '"Instant and sorcery spells you cast cost {1} less to cast." (Goblin Electromancer; the Medallion cycle prints the colour form)',
+    // A CLOSED list of spell scopes, each mapping to the shared `CardFilter`.
+    // "Spells your opponents cast cost more" is a different system (a tax on the
+    // other seat) and deliberately does not match.
+    pattern:
+      /^(instant and sorcery|creature|artifact|enchantment|noncreature|white|blue|black|red|green) spells you cast cost \{(\d+)\} less to cast$/,
+    build(match) {
+      const amount = Number.parseInt(match[2] ?? '', 10);
+      if (!Number.isFinite(amount) || amount <= 0) return null;
+      const scope = match[1] ?? '';
+      const filter = CAST_REDUCTION_SCOPES[scope];
+      if (filter === undefined) return null;
+      return { castCostReduction: { amount, ...(Object.keys(filter).length > 0 ? { filter } : {}) } };
+    },
+  },
+  {
+    id: 'additional-land-plays',
+    description:
+      '"You may play an additional land on each of your turns." (Exploration, Dryad of the Ilysian Grove) / "…two additional lands" (Azusa)',
+    pattern: /^you may play (an|two|three) additional lands? on each of your turns$/,
+    build(match) {
+      const counts: Record<string, number> = { an: 1, two: 2, three: 3 };
+      const extra = counts[match[1] ?? ''];
+      if (extra === undefined) return null;
+      return { additionalLandPlays: extra };
+    },
+  },
   {
     /**
      * "If one or more +1/+1 counters would be put on a creature you control,
@@ -5539,6 +5713,13 @@ function buildCopyAsEnters(
  */
 const TOKEN_COPY_SELECTORS: Readonly<Record<string, Readonly<Record<string, unknown>>>> = Object.freeze({
   'target creature': { targets: CREATURE_TARGET },
+  // "a copy of ANOTHER target nonland permanent you control" (Extravagant
+  // Replication). "Another" rides as `excludeSelf`, which the trigger-body
+  // compiler lifts onto the ability so the aiming pass never offers the source.
+  'another target nonland permanent you control': {
+    targets: NONLAND_PERMANENT_YOU_CONTROL_TARGET,
+    excludeSelf: true,
+  },
   'target creature you control': { targets: CREATURE_YOU_CONTROL_TARGET },
   'target artifact': { targets: ARTIFACT_TARGET },
   'target permanent': { targets: PERMANENT_TARGET },
@@ -5578,7 +5759,12 @@ const TOKEN_COPY_COUNTS: Readonly<Record<string, number>> = Object.freeze({
  * Parsing from the end rather than with one greedy regex is what keeps a
  * selector containing a comma from being mistaken for an "except" clause.
  */
-function buildTokenCopy(countWord: string, rest: string, ctx: RuleContext): ClauseContribution | null {
+function buildTokenCopy(
+  countWord: string,
+  rest: string,
+  ctx: RuleContext,
+  tapped = false,
+): ClauseContribution | null {
   const count = TOKEN_COPY_COUNTS[countWord];
   if (count === undefined) return null;
   let body = rest.trim();
@@ -5596,7 +5782,9 @@ function buildTokenCopy(countWord: string, rest: string, ctx: RuleContext): Clau
     body = body.slice(0, body.length - (kicked[0] ?? '').length).trim();
   }
 
-  let except: CopyExceptions = {};
+  // The printed word "tapped" is an exception in core's own vocabulary, exactly
+  // as it is for Vesuva's as-enters copy.
+  let except: CopyExceptions = tapped ? { entersTapped: true } : {};
   const exceptAt = body.indexOf(', except ');
   if (exceptAt >= 0) {
     const exceptText = body.slice(exceptAt + ', except '.length);
@@ -6543,7 +6731,7 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     //    on the zone the spell was cast from.
     pattern: /\bcopy (?:that|target) (?:spell|instant|sorcery|activated)\b|tokens? that(?:'?s| are) (?:a )?cop(?:y|ies)/,
     missingEngineSystem:
-      'a COPY-CREATING template outside the compiler’s closed tables (copying a spell on the stack and token copies are BOTH implemented — what is missing is this selector or tail: an activated/triggered ABILITY on the stack, a "nonlegendary"/"another"/"token" target, a token that enters tapped, "copy THAT spell" naming the spell that triggered the ability, a follow-up sentence about the token just created, an "except …" tail on a SPELL copy, or a copy COUNT conditional on where the spell was cast from)',
+      'a COPY-CREATING template outside the compiler’s closed tables (spell/ability copies — the "you control" scopes included — token copies, TAPPED token copies, and "another target nonland permanent you control" are all implemented; what is missing is this selector or tail: a "nonlegendary"/"token" target, "copy THAT spell" naming the spell that triggered the ability, a follow-up sentence about the token just created, an "except …" tail on a SPELL copy, a for-each iteration, or a copy COUNT conditional on where the spell was cast from)',
   },
   {
     // Everything else in the family: a selector or an "except" clause outside

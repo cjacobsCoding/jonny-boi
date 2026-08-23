@@ -236,6 +236,9 @@ export function acquiresForeignAbilities(def: CardDefinition): boolean {
  * classification test can prove the two sets together cover the whole registry.
  */
 export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
+  // Bounces a CHOSEN battlefield permanent to its owner's hand — reads the
+  // battlefield and a hand, never a library.
+  'returnChosenToHand',
   'dealDamage',
   // Drawing is safe *because* every drawn card announces its instance id.
   'drawCards',

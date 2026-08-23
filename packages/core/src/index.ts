@@ -583,6 +583,7 @@ export {
   generateLegalActions,
   choiceActionsFor,
   canAffordManaCost,
+  castManaCostFor,
   // CR 601.2h. Exported because a PILOT builds its cast actions itself rather
   // than picking one off the menu, so it needs the same reader the offer loop
   // and the cast path already use — three opinions about "can this be paid" is

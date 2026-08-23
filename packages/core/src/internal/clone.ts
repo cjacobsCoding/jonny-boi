@@ -174,6 +174,7 @@ function cloneStackObject(o: StackObject): StackObject {
       // trigger's "still needs aiming" marker on the clone `applyAction` makes at
       // every action boundary, silently resolving it at nothing.
       ...(o.awaitingTargets !== undefined ? { awaitingTargets: o.awaitingTargets } : {}),
+      ...(o.origin !== undefined ? { origin: o.origin } : {}),
       ...(o.awaitingTargetsExcludeSelf !== undefined
         ? { awaitingTargetsExcludeSelf: o.awaitingTargetsExcludeSelf }
         : {}),

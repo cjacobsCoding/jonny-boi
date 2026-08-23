@@ -1918,7 +1918,7 @@ function applyPlayLand(
   if (state.stack.length > 0) return rejectWith(prevState, 'cannot play a land while the stack is non-empty');
   if (!MAIN_STEPS.includes(state.step)) return rejectWith(prevState, 'lands can only be played during a main phase');
   const player = state.players[action.player];
-  if (player.landsPlayedThisTurn >= config.maxLandsPerTurn) {
+  if (player.landsPlayedThisTurn >= maxLandPlaysFor(state, action.player, config)) {
     return rejectWith(prevState, 'no land plays remaining this turn');
   }
   // WHERE FROM. The hand needs no permission. Every other zone does, and there
@@ -2557,6 +2557,79 @@ export function canAffordManaCost(state: GameState, player: PlayerId, cost: Mana
 }
 
 /**
+ * The mana cost `caster` actually pays to cast a spell with `castDef`'s face,
+ * starting from `base` (the printed cost, or the flashback/madness cost when
+ * that is the mode being paid) — CR 601.2f: battlefield cost reductions apply
+ * to whatever cost is chosen, and they reduce the GENERIC portion only, never a
+ * coloured pip.
+ *
+ * ONE definition, read by the offer (`offerCastsOf`) and the pay
+ * (`applyCastSpell`), so a spell a Medallion makes affordable is offered AND
+ * accepted — the offer/apply discipline everything else here follows. The
+ * common board (no reducer anywhere) returns `base` untouched after a single
+ * battlefield walk with no allocation.
+ */
+export function castManaCostFor(
+  state: GameState,
+  caster: PlayerId,
+  castDef: CardDefinition,
+  base: ManaCost | undefined,
+): ManaCost | undefined {
+  if (!base) return base;
+  let reduction = 0;
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const permanent = battlefield[i] as CardInstance;
+    if (permanent.controller !== caster) continue;
+    const grant = permanent.def.castCostReduction;
+    if (grant === undefined) continue;
+    if (grant.filter !== undefined && !matchesCardFilter(SPELL_FILTER_PROBE(castDef), grant.filter)) continue;
+    reduction += grant.amount;
+  }
+  if (reduction <= 0) return base;
+  const generic = Math.max(0, (base.generic ?? 0) - reduction);
+  // Rebuilt without the generic key when it hits zero, so the reduced cost has
+  // the same sparse shape a card printing no generic would have.
+  const { generic: _dropped, ...rest } = base;
+  return generic > 0 ? { ...rest, generic } : rest;
+}
+
+/**
+ * Wrap a definition as the minimal `CardInstance`-shaped probe `matchesCardFilter`
+ * reads (it only touches `.def`). A module-level scratch object, reused, because
+ * the offer loop asks this once per hand card per decision on the sim's hottest
+ * path — and never escaping this module is what keeps the reuse safe.
+ */
+const SPELL_PROBE = { def: undefined as unknown as CardDefinition };
+function SPELL_FILTER_PROBE(def: CardDefinition): CardInstance {
+  SPELL_PROBE.def = def;
+  return SPELL_PROBE as unknown as CardInstance;
+}
+
+/**
+ * How many lands `player` may play this turn: the config's base plus every
+ * "you may play an additional land" permanent they control (Exploration,
+ * Dryad of the Ilysian Grove — copies stack, as printed).
+ *
+ * ONE definition, read by both the offer (`generateLegalActions`) and the apply
+ * (`applyPlayLand`), so the menu can never offer a land drop the engine then
+ * refuses — the same offer/apply discipline as everything else (DESIGN §3.36).
+ * A permanent someone else controls grants nothing: the printed line says
+ * "you", and the battlefield walk filters by controller.
+ */
+function maxLandPlaysFor(state: GameState, player: PlayerId, config: RulesConfig): number {
+  let max = config.maxLandsPerTurn;
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const permanent = battlefield[i] as CardInstance;
+    if (permanent.controller !== player) continue;
+    const extra = permanent.def.additionalLandPlays;
+    if (extra !== undefined && extra > 0) max += extra;
+  }
+  return max;
+}
+
+/**
  * Whether `player` may pay `amount` life: CR 118.4 — life is a resource down to
  * exactly zero. Paying to zero is legal (and promptly lethal via the SBAs),
  * which is the player's call to make, not the engine's to forbid.
@@ -2952,13 +3025,18 @@ function applyCastSpell(
   // A permission may say WITHOUT PAYING ITS MANA COST (a Siege reward, CR
   // 310.4). That is data on the grant, so the one cast path charges exactly
   // what the card says and nothing here special-cases a layout.
-  const cost = permission?.free
-    ? undefined
-    : fromZone === 'graveyard' && !aftermath
-      ? flashbackCost
-      : madnessWindowOpen
-        ? madnessCost
-        : castDef.cost;
+  const cost = castManaCostFor(
+    state,
+    action.player,
+    castDef,
+    permission?.free
+      ? undefined
+      : fromZone === 'graveyard' && !aftermath
+        ? flashbackCost
+        : madnessWindowOpen
+          ? madnessCost
+          : castDef.cost,
+  );
   if (cost) {
     // WHAT the mana is being spent on, for any restricted mana in the pool. The
     // face being CAST is the object a restriction reads (a modal DFC's back face
@@ -3778,6 +3856,8 @@ function applyCycleCard(
     // searches a library, both of which act on their controller alone.
     targets: [],
     label: ability.label,
+    // Cycling is an ACTIVATED ability (CR 702.29a) — see `origin` on the type.
+    origin: 'activated',
   });
   emit({
     type: 'abilityActivated',
@@ -3903,6 +3983,8 @@ function applyActivateAbility(
     effects: ability.effects,
     targets: action.targets ?? [],
     label: ability.label,
+    // An activated ability, loyalty included — see `origin` on the type.
+    origin: 'activated',
   });
   emit({
     type: 'abilityActivated',
@@ -4245,7 +4327,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   const sorcerySpeedWindow = me === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
 
   // Play a land (sorcery-speed, land plays remaining).
-  if (sorcerySpeedWindow && player.landsPlayedThisTurn < config.maxLandsPerTurn) {
+  if (sorcerySpeedWindow && player.landsPlayedThisTurn < maxLandPlaysFor(state, me, config)) {
     for (let h = 0; h < player.hand.length; h++) {
       const card = player.hand[h] as CardInstance;
       if (card.def.isBackFace === true) continue;
@@ -4576,12 +4658,14 @@ function pushCastOffers(
   // reward, CR 310.4). Otherwise the face's own printed cost - which is also
   // exactly what an AFTERMATH half cast from the graveyard pays, and which any
   // restricted mana in the pool is only allowed to fund if this face qualifies.
-  if (
-    options?.free !== true &&
-    def.cost &&
-    !canPay(pool, def.cost, spendPurposeIfRestricted(pool, def, 'cast'))
-  ) {
-    return;
+  if (options?.free !== true) {
+    // The cost judged here is the cost the cast path will CHARGE — reductions
+    // included — or a Medallion would make a spell payable that the menu never
+    // offers.
+    const offered = castManaCostFor(state, me, def, def.cost);
+    if (offered && !canPay(pool, offered, spendPurposeIfRestricted(pool, def, 'cast'))) {
+      return;
+    }
   }
   // A modal spell with nothing it could legally announce cannot be cast — the
   // same judgement `applyCastSpell` makes, from the same helper.

@@ -136,10 +136,13 @@ describe('targetRestrictionOf — the restriction is read off the card DATA', ()
   });
 
   it('ignores a junk restriction value rather than trusting it', () => {
+    // 'planeswalker' was this test's junk example until it became a REAL
+    // restriction (Casualties of War's mode) — the junk word has to be one no
+    // future card could plausibly promote.
     const junk = spellDef('junk', 'instant', [
-      { primitive: 'dealDamage', params: { amount: 3, targets: 'planeswalker' } },
+      { primitive: 'dealDamage', params: { amount: 3, targets: 'telepathicOctopus' } },
     ]);
-    expect(isTargetRestriction('planeswalker')).toBe(false);
+    expect(isTargetRestriction('telepathicOctopus')).toBe(false);
     expect(targetRestrictionOf(junk)).toBeUndefined();
   });
 });

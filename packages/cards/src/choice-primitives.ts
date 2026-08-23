@@ -1030,6 +1030,45 @@ export const sacrificeChosen: EffectPrimitive = (ctx) => {
   }
 };
 
+/**
+ * `returnChosenToHand` — "return a land you control to its owner's hand" (the
+ * karoo lands: Dimir Aqueduct, Simic Growth Chamber and their eight cousins).
+ *
+ * A CHOICE, not a target: the printed line names no target, so the permanent is
+ * picked as the trigger resolves, by its controller, from a filtered menu — the
+ * same shape as `sacrificeChosen` one primitive up. The menu includes the source
+ * itself on purpose: a karoo may legally bounce ITSELF (the printed line says "a
+ * land you control", and returning the karoo is a real play when it is the only
+ * land), so no exclusion is applied unless `params.excludeSelf` asks for one.
+ *
+ * Valence `'loss'` — giving up a permanent costs the chooser, so a pilot returns
+ * its least valuable candidate.
+ */
+export const returnChosenToHand: EffectPrimitive = (ctx) => {
+  const count = intParam(ctx, 'count', 1);
+  if (count <= 0) return;
+  const who = playerParam(ctx, 'who', 'controller');
+  if (!who) return;
+  const candidates = collectCardOptions(ctx.state, 'battlefield', {
+    controller: who,
+    filter: filterParam(ctx),
+  }).filter((option) => boolParam(ctx, 'excludeSelf', false) === false || option.instanceId !== ctx.source.instanceId);
+  const chosen = ctx.chooseCards({
+    chooser: who,
+    prompt: `Return ${count} permanent(s) to hand`,
+    candidates,
+    min: count,
+    max: count,
+    valence: 'loss',
+    fromZone: 'battlefield',
+  });
+  if (!chosen) return; // parked — nothing mutated
+  for (const id of chosen) {
+    const perm = ctx.state.battlefield.find((c) => c.instanceId === id);
+    if (perm) movePermanentTo(ctx, perm, 'hand');
+  }
+};
+
 /** The two pile ids the split offers — data the UI/AI answer refers back to. */
 const PILE_ONE = 'pile1';
 const PILE_TWO = 'pile2';
@@ -1144,6 +1183,7 @@ export const chooseAsEnters: EffectPrimitive = (ctx) => {
 };
 
 export const CHOICE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object.freeze({
+  returnChosenToHand,
   [AS_ENTERS_PRIMITIVE]: chooseAsEnters,
   putFromHandOnTop,
   handToBottomThenDraw,

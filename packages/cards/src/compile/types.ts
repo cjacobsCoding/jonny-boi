@@ -158,6 +158,10 @@ export interface ClauseContribution {
   readonly entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   /** Set when the text charges a LIFE price to enter untapped (a shockland). */
   readonly entersTappedUnlessLifePaid?: number;
+  /** Set by "you may play an additional land on each of your turns". */
+  readonly additionalLandPlays?: number;
+  /** Set by "TYPE/COLOUR spells you cast cost {N} less to cast". */
+  readonly castCostReduction?: import('@jonny-boi/core').CardDefinition['castCostReduction'];
   /** Set when the text asks for a REVEAL to enter untapped (a reveal-land). */
   readonly entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
   /**
@@ -350,4 +354,6 @@ export interface TriggerBodyResult {
   readonly effects: readonly import('@jonny-boi/core').EffectRef[];
   /** What the ability targets, or `undefined` when it targets nothing. */
   readonly targets?: import('@jonny-boi/core').TargetRestriction;
+  /** A printed "ANOTHER target …" — the ability's own source is excluded. */
+  readonly targetsExcludeSelf?: boolean;
 }
