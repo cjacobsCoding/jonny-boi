@@ -471,6 +471,60 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     ),
   exileTarget: (_params, ctx) => againstTarget(ctx, (perm) => removalValue(perm, ctx.weights, ctx.index)),
 
+  /**
+   * BLINK — "exile it, then return it". Priced by what re-entering is WORTH,
+   * which is the enters trigger it fires again (and the leaves trigger it fires
+   * on the way out — blinking Thragtusk collects both halves).
+   *
+   * Deliberately NOT routed through `againstTarget`: that prices hitting an
+   * OPPONENT'S permanent and penalises aiming at your own, which is backwards
+   * here. A blink is something you do TO YOUR OWN board, and the self-harm
+   * penalty would have made every legal aim negative.
+   *
+   * ⚠️ A TOKEN is the trap. Blinking one destroys it outright (CR 111.7 — it
+   * ceases to exist in exile and nothing returns), so it is priced as the loss
+   * of a creature rather than as zero. Without this the whole table answered 0
+   * for every candidate, the pilot fell through to the FIRST offered one, and
+   * Conjurer's Closet spent its trigger eating its own Soldier tokens — measured
+   * at ~10 destroyed tokens per 40 games before this entry existed.
+   */
+  /**
+   * "YOU MAY <body>" — worth exactly what the body is worth.
+   *
+   * ⚠️ Its absence made every optional card invisible to the pilot. An unknown
+   * primitive scores `modeUnknownEffectScore`, so `mayEffects` answered a flat
+   * constant and the nested body was never looked at — which meant a pilot
+   * AIMING an optional trigger scored every candidate identically and fell
+   * through to the FIRST one offered. Conjurer's Closet ate its own Soldier
+   * tokens that way (9 of them per 40 games) while a Thragtusk stood next to it.
+   *
+   * Recursing is the whole fix, and it is safe in both directions: the option to
+   * DECLINE is answered elsewhere (`answerConfirm` reads the same value and says
+   * no to a negative one), so pricing the body here cannot force a bad "yes" —
+   * it only lets the pilot tell two candidates apart.
+   */
+  mayEffects: (params, ctx) => {
+    const inner = params['effects'];
+    return Array.isArray(inner) ? valueOfEffects(inner as readonly EffectRef[], ctx) : 0;
+  },
+
+  blinkTarget: (_params, ctx) => {
+    const perm = firstTargetPermanent(ctx);
+    if (!perm) return 0;
+    if (perm.def.isToken === true) {
+      return -removalValue(perm, ctx.weights, ctx.index);
+    }
+    const triggers = perm.def.triggers ?? [];
+    let worth = 0;
+    for (const trigger of triggers) {
+      if (trigger.condition.on !== 'etb' && trigger.condition.on !== 'leaves') continue;
+      worth += valueOfEffects(trigger.effects, { ...ctx, targets: [] });
+    }
+    // A body with nothing to re-trigger comes back summoning sick and shorn of
+    // its counters, so blinking it is a small loss rather than a neutral move.
+    return worth > 0 ? worth : -ctx.weights.modeSelfHarmPenalty;
+  },
+
   /** Tapping one permanent is a fraction of tapping a board; price it per power. */
   tapTarget: (_params, ctx) =>
     againstTarget(ctx, (perm) =>
