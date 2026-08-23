@@ -152,6 +152,16 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-22 integrator: **`feat/shocklands` DEPLOYED to main** (Deploy PWA green, run
+  32623813098). Merged the newest `main` into the branch first (it had meanwhile gained
+  §3.41/§3.42 and the soak suite) — clean auto-merge — then `npm run verify` on the union:
+  **5207 passed / 0 failed**, build exit 0. Also added the payLife answer-boundary tests (both
+  sides of `desperateLifeThreshold`) and the web pay-life prompt drafting tests.
+  ⚠️ **Trap:** after merging a main that gained new packages, `npm run build` failed with
+  "Cannot find module '@jonny-boi/core'" from protocol/cards — a STALE `npm install`, not a type
+  error. Re-run `npm install` in the worktree before debugging anyone's types.
+  (Integrator)
+
 - 2026-08-22 DESKTOP-90PJPM4: `fix/blink-aim` ✅ MERGED + DEPLOYED — DESIGN §3.42. Off `main`. **5201 / 0**, verify 0.
 
   Answering "are all 60 Selesnya Blink cards functional?" — they ARE — surfaced a much wider AI bug.
