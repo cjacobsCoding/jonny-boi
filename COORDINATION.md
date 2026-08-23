@@ -88,6 +88,7 @@ throughput (games/sec) from regressing.
 | fix/land-sequencing | worker | packages/ai (new: land-sequencing.ts + test; heuristic/weights/index/bench + tactical-suite.test), DESIGN §3.4e + §3.4a/§3.4d baseline notes | 🚧 PUSHED, not merged — branches off main; **moves the recorded heuristic baselines** |
 | feat/optional-payment | DESKTOP-90PJPM4 (integrator) | packages/core (choices/effects/engine/events/mana/clone + new optional-payment.test.ts), packages/cards (choice-primitives/primitives/effect-helpers/compile rules+text+compile + new test), packages/ai (choices/effect-value/heuristic/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
 | feat/trigger-targets | DESKTOP-90PJPM4 (integrator) | packages/core (triggers/state/choices/engine/events/clone + new trigger-targets.test.ts), packages/cards (compile types/compile/rules + new test), packages/ai (choices/effect-value/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
+| feat/karoo-lands | DESKTOP-90PJPM4 (integrator) | packages/core (card/engine), packages/cards (choice-primitives + compile rules/compile/types + new karoo-lands.test.ts), packages/sim (1 classification line), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/copy-templates | DESKTOP-90PJPM4 (integrator) | packages/core (targeting/state/engine/clone/intervening), packages/cards (compile rules+compile+types + new copy-templates.test.ts), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/shocklands | worker | packages/core (card/choices/effects/engine/index + new shockland.test.ts), packages/cards (choice-primitives/effect-helpers/compile rules+text+types+compile + activated.test + new shockland.test.ts), packages/ai (choices.ts), apps/web (choice-view + ChoicePrompt + choice-session.test), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED |
 | feat/about-mechanics | worker | apps/web (new views/AboutView.tsx + views/about.css + lib/about/mechanics.ts+test; App.tsx nav), packages/cards (export-only edits: compile/compile.ts, compile/index.ts, index.ts) | ✅ MERGED |
@@ -154,6 +155,26 @@ throughput (games/sec) from regressing.
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-23 integrator: **`feat/karoo-lands` MERGED + DEPLOYED** — the two most-repeated missing
+  clauses in the corpus, closed together. Audit (same corpus): **559 → 571 playable**. `npm run
+  verify` **5248 / 0**, build exit 0. The whole karoo cycle (Dimir Aqueduct + 9 cousins) and the
+  Exploration family compile complete.
+  👉 **`returnChosenToHand`** (choice-primitives): "return a land you control to its owner's
+  hand" is a CHOICE, not a target — the printed line names no target, so the permanent is picked as
+  the trigger resolves, by its controller, `sacrificeChosen`'s exact shape. The menu includes the
+  karoo ITSELF on purpose (bouncing it is a legal, sometimes right, play). Classified LIBRARY_SAFE.
+  👉 **`CardDefinition.additionalLandPlays`** + engine helper `maxLandPlaysFor` — ONE definition
+  read at both the offer (`generateLegalActions`) and the apply (`applyPlayLand`), so the menu can
+  never offer a land drop the engine refuses. Controller-scoped; copies stack ("two additional
+  lands" = 2).
+  ⚠️ **Rule-table placement trap:** a permanent's plain static line ("You may play an additional
+  land…") is dispatched against STATIC_RULES — a rule for it in EFFECT_RULES never fires and the
+  card silently keeps reporting. Check `compileAbilityLine`'s dispatch order before adding a rule.
+  ❌ NOT done: Dryad of the Ilysian Grove (its other line needs land-type-changing statics),
+  Oracle of Mul Daya (play-from-library), The Gitrog Monster (several systems). The clause
+  compiles on all of them; the cards stay honestly blocked on their other lines.
+  (Integrator)
 
 - 2026-08-23 integrator: **`feat/copy-templates` MERGED + DEPLOYED** — the corpus's top gap
   family, four extensions in one branch. `npm run verify` **5218 / 0**, build exit 0. Audit

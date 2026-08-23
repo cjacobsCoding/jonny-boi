@@ -668,6 +668,15 @@ export interface CardDefinition {
    */
   readonly entersTappedUnlessLifePaid?: number;
   /**
+   * "You may play an additional land on each of your turns." (Exploration,
+   * Dryad of the Ilysian Grove; Azusa prints two.) While a permanent with this
+   * is on the battlefield, its CONTROLLER's land plays per turn go up by this
+   * many — read by {@link maxLandPlaysFor} at the two places the engine asks
+   * (offering the play, and applying it), so the offer and the apply cannot
+   * disagree. Copies stack, exactly as the printed cards do.
+   */
+  readonly additionalLandPlays?: number;
+  /**
    * A "reveal-land" (the Shadows over Innistrad / Strixhaven cycles): "As ~
    * enters, you may **reveal** an Island or Swamp card from your hand. If you
    * don't, this land enters tapped." The value is the printed land types the

@@ -2306,6 +2306,24 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'return-chosen-land-you-control',
+    description:
+      '"Return a land you control to its owner\'s hand" (the karoo lands\' ETB) — a chosen permanent, not a target',
+    // No printed "target", so this is a resolution-time CHOICE by the
+    // controller — which is exactly what lets it sit inside a trigger with no
+    // aiming step, and what makes bouncing the karoo itself legal.
+    pattern: /^return an? (land|creature|permanent) you control to its owner's hand$/,
+    build(match) {
+      const noun = match[1] ?? '';
+      const filter =
+        noun === 'permanent' ? {} : { anyOfTypes: [noun as CardType] };
+      return effects({
+        primitive: 'returnChosenToHand',
+        params: { count: 1, ...(Object.keys(filter).length > 0 ? { filter } : {}) },
+      });
+    },
+  },
+  {
     id: 'counter-target-spell',
     description: '"Counter target spell"',
     pattern: /^counter target spell$/,
@@ -4163,6 +4181,18 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
 
 /** Card-level static properties printed as their own ability line. */
 export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
+  {
+    id: 'additional-land-plays',
+    description:
+      '"You may play an additional land on each of your turns." (Exploration, Dryad of the Ilysian Grove) / "…two additional lands" (Azusa)',
+    pattern: /^you may play (an|two|three) additional lands? on each of your turns$/,
+    build(match) {
+      const counts: Record<string, number> = { an: 1, two: 2, three: 3 };
+      const extra = counts[match[1] ?? ''];
+      if (extra === undefined) return null;
+      return { additionalLandPlays: extra };
+    },
+  },
   {
     /**
      * "If one or more +1/+1 counters would be put on a creature you control,

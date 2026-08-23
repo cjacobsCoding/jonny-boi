@@ -5,15 +5,15 @@
 
 | | cards | share |
 |---|---:|---:|
-| Fully playable today | 559 | 26.6% |
-| Blocked by a missing system | 1541 | 73.4% |
+| Fully playable today | 571 | 27.2% |
+| Blocked by a missing system | 1529 | 72.8% |
 
 Ranked by **how many cards each system unblocks**, so the top row is the
 highest-value engine work available.
 
-Of the 1542 distinct gaps, **27** are named **engine systems** (136 card-blocks — real work) and **1515** are **template gaps** (2209 card-blocks — text no compiler rule matched, typically one rule-table entry each). The two cost wildly different amounts, so every entry below carries its kind, and the `--json` output carries it as `kind`.
+Of the 1540 distinct gaps, **27** are named **engine systems** (136 card-blocks — real work) and **1513** are **template gaps** (2189 card-blocks — text no compiler rule matched, typically one rule-table entry each). The two cost wildly different amounts, so every entry below carries its kind, and the `--json` output carries it as `kind`.
 
-Showing the top 25 of **1542** distinct gaps. The remaining 1517 account for 2080 card-blocks between them — a long tail of one-off templates, not a second tier of systems. Re-run with a larger `--top` to see it.
+Showing the top 25 of **1540** distinct gaps. The remaining 1515 account for 2069 card-blocks between them — a long tail of one-off templates, not a second tier of systems. Re-run with a larger `--top` to see it.
 
 ## a COPY-CREATING template outside the compiler’s closed tables (spell/ability copies — the "you control" scopes included — token copies, TAPPED token copies, and "another target nonland permanent you control" are all implemented; what is missing is this selector or tail: a "nonlegendary"/"token" target, "copy THAT spell" naming the spell that triggered the ability, a follow-up sentence about the token just created, an "except …" tail on a SPELL copy, a for-each iteration, or a copy COUNT conditional on where the spell was cast from)
 
@@ -71,14 +71,6 @@ Showing the top 25 of **1542** distinct gaps. The remaining 1517 account for 208
 - **Cards:** Mulldrifter, Tireless Tracker, Endurance, Forensic Gadgeteer, Shriekmaw, Profane Tutor, Search for Tomorrow, Hero of Bladehold, +4 more
 - **Example clause:** `Evoke {2}{U}`
 
-## a "you may / choose" template the compiler does not recognize yet — starting "You may play an additional…"
-
-- **Kind:** template gap (rule-table entry)
-- **Blocks 11 card(s)** (0.5% of corpus)
-- **Occurrences:** 11
-- **Cards:** Explore, Dryad of the Ilysian Grove, Oracle of Mul Daya, Icetill Explorer, The Gitrog Monster, Loot, Exuberant Explorer, Wayward Swordtooth, Case of the Locked Hothouse, +3 more
-- **Example clause:** `You may play an additional land this turn.`
-
 ## a "you may / choose" template the compiler does not recognize yet — starting "Whenever ~ deals combat damage…"
 
 - **Kind:** template gap (rule-table entry)
@@ -94,14 +86,6 @@ Showing the top 25 of **1542** distinct gaps. The remaining 1517 account for 208
 - **Occurrences:** 10
 - **Cards:** Bolas's Citadel, Mystic Forge, Realmwalker, The Reality Chip, Augur of Autumn, Elven Chorus, One with the Multiverse, Crystal Skull, Isu Spyglass, +2 more
 - **Example clause:** `You may look at the top card of your library any time.`
-
-## a rules template the compiler does not recognize yet — starting "When ~ enters, return a…"
-
-- **Kind:** template gap (rule-table entry)
-- **Blocks 10 card(s)** (0.5% of corpus)
-- **Occurrences:** 10
-- **Cards:** Simic Growth Chamber, Golgari Rot Farm, Dimir Aqueduct, Orzhov Basilica, Izzet Boilerworks, Gruul Turf, Azorius Chancery, Boros Garrison, +2 more
-- **Example clause:** `When ~ enters, return a land you control to its owner's hand.`
 
 ## an "at the beginning of…" trigger BODY the compiler does not recognize yet (the trigger itself — every printed scope, the "you may" form, the intervening "if", and the triggering player a body points at — is implemented) — starting "At the beginning of each…"
 
@@ -214,3 +198,19 @@ Showing the top 25 of **1542** distinct gaps. The remaining 1517 account for 208
 - **Occurrences:** 6
 - **Cards:** Mox Amber, Plaza of Heroes, Twitching Doll, The Grey Havens, Ilysian Caryatid, Primal Amulet
 - **Example clause:** `{T}: Add one mana of any color among legendary creatures and planeswalkers you control.`
+
+## a rules template the compiler does not recognize yet — starting "When ~ enters, create a…"
+
+- **Kind:** template gap (rule-table entry)
+- **Blocks 6 card(s)** (0.3% of corpus)
+- **Occurrences:** 6
+- **Cards:** Avenger of Zendikar, Gilded Goose, Urza, Lord High Artificer, Rosie Cotton of South Lane, Prosperous Innkeeper, Night of the Sweets' Revenge
+- **Example clause:** `When ~ enters, create a 0/1 green Plant creature token for each land you control.`
+
+## a filtered-targeting template the compiler does not recognize yet — starting "Destroy target artifact or enchantment…"
+
+- **Kind:** template gap (rule-table entry)
+- **Blocks 6 card(s)** (0.3% of corpus)
+- **Occurrences:** 6
+- **Cards:** Nature's Claim, Krosan Grip, Disenchant, Wear Down, Naturalize, Sundering Growth
+- **Example clause:** `Destroy target artifact or enchantment. Its controller gains 4 life.`

@@ -158,6 +158,8 @@ export interface ClauseContribution {
   readonly entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   /** Set when the text charges a LIFE price to enter untapped (a shockland). */
   readonly entersTappedUnlessLifePaid?: number;
+  /** Set by "you may play an additional land on each of your turns". */
+  readonly additionalLandPlays?: number;
   /** Set when the text asks for a REVEAL to enter untapped (a reveal-land). */
   readonly entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
   /**

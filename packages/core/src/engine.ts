@@ -1918,7 +1918,7 @@ function applyPlayLand(
   if (state.stack.length > 0) return rejectWith(prevState, 'cannot play a land while the stack is non-empty');
   if (!MAIN_STEPS.includes(state.step)) return rejectWith(prevState, 'lands can only be played during a main phase');
   const player = state.players[action.player];
-  if (player.landsPlayedThisTurn >= config.maxLandsPerTurn) {
+  if (player.landsPlayedThisTurn >= maxLandPlaysFor(state, action.player, config)) {
     return rejectWith(prevState, 'no land plays remaining this turn');
   }
   // WHERE FROM. The hand needs no permission. Every other zone does, and there
@@ -2554,6 +2554,29 @@ function derivedManaColors(
  */
 export function canAffordManaCost(state: GameState, player: PlayerId, cost: ManaCost): boolean {
   return planPaymentFor(state, player, cost) !== undefined;
+}
+
+/**
+ * How many lands `player` may play this turn: the config's base plus every
+ * "you may play an additional land" permanent they control (Exploration,
+ * Dryad of the Ilysian Grove — copies stack, as printed).
+ *
+ * ONE definition, read by both the offer (`generateLegalActions`) and the apply
+ * (`applyPlayLand`), so the menu can never offer a land drop the engine then
+ * refuses — the same offer/apply discipline as everything else (DESIGN §3.36).
+ * A permanent someone else controls grants nothing: the printed line says
+ * "you", and the battlefield walk filters by controller.
+ */
+function maxLandPlaysFor(state: GameState, player: PlayerId, config: RulesConfig): number {
+  let max = config.maxLandsPerTurn;
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const permanent = battlefield[i] as CardInstance;
+    if (permanent.controller !== player) continue;
+    const extra = permanent.def.additionalLandPlays;
+    if (extra !== undefined && extra > 0) max += extra;
+  }
+  return max;
 }
 
 /**
@@ -4249,7 +4272,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   const sorcerySpeedWindow = me === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
 
   // Play a land (sorcery-speed, land plays remaining).
-  if (sorcerySpeedWindow && player.landsPlayedThisTurn < config.maxLandsPerTurn) {
+  if (sorcerySpeedWindow && player.landsPlayedThisTurn < maxLandPlaysFor(state, me, config)) {
     for (let h = 0; h < player.hand.length; h++) {
       const card = player.hand[h] as CardInstance;
       if (card.def.isBackFace === true) continue;
