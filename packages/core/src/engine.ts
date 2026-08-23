@@ -3777,6 +3777,8 @@ function applyCycleCard(
     // searches a library, both of which act on their controller alone.
     targets: [],
     label: ability.label,
+    // Cycling is an ACTIVATED ability (CR 702.29a) — see `origin` on the type.
+    origin: 'activated',
   });
   emit({
     type: 'abilityActivated',
@@ -3902,6 +3904,8 @@ function applyActivateAbility(
     effects: ability.effects,
     targets: action.targets ?? [],
     label: ability.label,
+    // An activated ability, loyalty included — see `origin` on the type.
+    origin: 'activated',
   });
   emit({
     type: 'abilityActivated',

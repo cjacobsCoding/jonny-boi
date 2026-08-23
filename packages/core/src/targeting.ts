@@ -196,7 +196,36 @@ export type TargetRestriction =
    * whose members may come from either zone: "up to three" means three in total,
    * not three of each. Both graveyards are in scope (it does not say "your").
    */
-  | 'creatureOnBattlefieldOrInGraveyard';
+  | 'creatureOnBattlefieldOrInGraveyard'
+  /**
+   * "target instant or sorcery spell YOU CONTROL" — Lithoform Engine's middle
+   * mode, Kitsa. The controller scope is the whole point: the printed card can
+   * only fork its OWN spells, and widening it to `instantOrSorcerySpell` would
+   * let a pilot copy the opponent's removal at them — a strictly better card.
+   */
+  | 'instantOrSorcerySpellYouControl'
+  /**
+   * "target PERMANENT spell you control" — Lithoform Engine's top mode. A
+   * permanent spell is a spell on the stack that is NOT an instant or sorcery;
+   * the copy resolves into a token (`spell-copy.ts` stamps token-ness), which is
+   * already how every permanent-spell copy resolves here.
+   */
+  | 'permanentSpellYouControl'
+  /**
+   * "target activated or triggered ability you control" — Lithoform Engine's
+   * bottom mode, Return the Favor's mode. Both kinds sit on the stack as
+   * `kind: 'trigger'` objects; what separates this from
+   * `triggeredAbilityYouControl` is that it ALSO accepts the ones stamped
+   * `origin: 'activated'`, which the triggered-only wording must refuse.
+   */
+  | 'activatedOrTriggeredAbilityYouControl'
+  /**
+   * "target nonland permanent you control" — Extravagant Replication's printed
+   * line (with "another", which rides separately as `targetsExcludeSelf`). Its
+   * own member because `permanent` reaches lands and this must not: copying a
+   * land for value is not what the printed card offers.
+   */
+  | 'nonlandPermanentYouControl';
 
 /**
  * Whether a spell on the stack is an INSTANT OR SORCERY spell — the one question
@@ -247,6 +276,10 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'instantOrSorceryInYourGraveyard' ||
     value === 'instantOrSorcerySpell' ||
     value === 'triggeredAbilityYouControl' ||
+    value === 'instantOrSorcerySpellYouControl' ||
+    value === 'permanentSpellYouControl' ||
+    value === 'activatedOrTriggeredAbilityYouControl' ||
+    value === 'nonlandPermanentYouControl' ||
     value === 'creatureOnBattlefieldOrInGraveyard'
   );
 }
@@ -360,23 +393,42 @@ export function isLegalTarget(
     }
     return false;
   }
-  if (restriction === 'spell' || restriction === 'instantOrSorcerySpell') {
+  if (
+    restriction === 'spell' ||
+    restriction === 'instantOrSorcerySpell' ||
+    restriction === 'instantOrSorcerySpellYouControl' ||
+    restriction === 'permanentSpellYouControl'
+  ) {
     // A *spell* on the stack — never a triggered ability, which is also a stack
     // object but is not a spell and cannot be countered by "counter target spell".
     for (let i = 0; i < state.stack.length; i++) {
       const object = state.stack[i] as StackObject;
       if (object.kind !== 'spell' || object.instanceId !== target) continue;
-      return restriction === 'spell' || isInstantOrSorcerySpell(object);
+      if (restriction === 'spell') return true;
+      // The "you control" scopes: unknown actor ⇒ illegal, never "probably
+      // mine" — the same rule every other controller-scoped restriction follows.
+      if (restriction === 'instantOrSorcerySpellYouControl') {
+        return controller !== undefined && object.controller === controller && isInstantOrSorcerySpell(object);
+      }
+      if (restriction === 'permanentSpellYouControl') {
+        return controller !== undefined && object.controller === controller && !isInstantOrSorcerySpell(object);
+      }
+      return isInstantOrSorcerySpell(object);
     }
     return false;
   }
-  if (restriction === 'triggeredAbilityYouControl') {
+  if (restriction === 'triggeredAbilityYouControl' || restriction === 'activatedOrTriggeredAbilityYouControl') {
     // Unknown actor ⇒ illegal, never "probably theirs" — the same rule
     // `'opponent'` and `creatureYouControl` follow.
     if (controller === undefined) return false;
     for (let i = 0; i < state.stack.length; i++) {
       const object = state.stack[i] as StackObject;
       if (object.kind !== 'trigger' || object.instanceId !== target) continue;
+      // "Copy target TRIGGERED ability" must refuse an activated one on the
+      // stack (CR 603 vs 602 — different words on the printed card); the
+      // "activated or triggered" wording takes both. The marker is stamped by
+      // `applyActivateAbility`; its absence means a genuine triggered ability.
+      if (restriction === 'triggeredAbilityYouControl' && object.origin === 'activated') return false;
       return object.controller === controller;
     }
     return false;
@@ -407,6 +459,11 @@ export function isLegalTarget(
     // Unknown actor ⇒ illegal, never "probably theirs" (see the type's note).
     if (controller === undefined || permanent.controller === controller) return false;
     return isCreature(permanent.def);
+  }
+  if (restriction === 'nonlandPermanentYouControl') {
+    // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
+    if (controller === undefined || permanent.controller !== controller) return false;
+    return !isLand(permanent.def);
   }
   if (restriction === 'creatureYouControl' || restriction === 'nonAngelCreatureYouControl') {
     // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
@@ -523,24 +580,40 @@ function enumerateTargets(
   controller?: PlayerId,
   source?: CardDefinition,
 ): readonly (InstanceId | PlayerId)[] {
-  if (restriction === 'triggeredAbilityYouControl') {
+  if (restriction === 'triggeredAbilityYouControl' || restriction === 'activatedOrTriggeredAbilityYouControl') {
     if (controller === undefined) return [];
     const out: (InstanceId | PlayerId)[] = [];
     for (let i = 0; i < state.stack.length; i++) {
       const object = state.stack[i] as StackObject;
       if (object.kind !== 'trigger') continue;
       if (object.controller !== controller) continue;
+      // Same split as the legality arm: the triggered-only wording refuses the
+      // activated-origin objects; the "activated or triggered" one takes both.
+      if (restriction === 'triggeredAbilityYouControl' && object.origin === 'activated') continue;
       out.push(object.instanceId);
     }
     return out;
   }
-  if (restriction === 'spell' || restriction === 'instantOrSorcerySpell') {
-    const wantInstantOrSorcery = restriction === 'instantOrSorcerySpell';
+  if (
+    restriction === 'spell' ||
+    restriction === 'instantOrSorcerySpell' ||
+    restriction === 'instantOrSorcerySpellYouControl' ||
+    restriction === 'permanentSpellYouControl'
+  ) {
+    const yoursOnly =
+      restriction === 'instantOrSorcerySpellYouControl' || restriction === 'permanentSpellYouControl';
+    // Controller-scoped with no actor ⇒ nothing offered (the safe direction).
+    if (yoursOnly && controller === undefined) return NO_TARGETS;
+    const wantInstantOrSorcery =
+      restriction === 'instantOrSorcerySpell' || restriction === 'instantOrSorcerySpellYouControl';
+    const wantPermanentSpell = restriction === 'permanentSpellYouControl';
     const out: (InstanceId | PlayerId)[] = [];
     for (let i = 0; i < state.stack.length; i++) {
       const object = state.stack[i] as StackObject;
       if (object.kind !== 'spell') continue;
+      if (yoursOnly && object.controller !== controller) continue;
       if (wantInstantOrSorcery && !isInstantOrSorcerySpell(object)) continue;
+      if (wantPermanentSpell && isInstantOrSorcerySpell(object)) continue;
       out.push(object.instanceId);
     }
     return out;
@@ -621,6 +694,17 @@ function enumerateTargets(
         (hasType(permanent.def, 'artifact') ||
           hasType(permanent.def, 'enchantment') ||
           isLand(permanent.def)) &&
+        isTargetableBy(state, permanent, controller, source, keywordIndex)
+      ) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
+  if (restriction === 'nonlandPermanentYouControl' && controller !== undefined) {
+    for (const permanent of state.battlefield) {
+      if (
+        permanent.controller === controller &&
+        !isLand(permanent.def) &&
         isTargetableBy(state, permanent, controller, source, keywordIndex)
       ) {
         targets.push(permanent.instanceId);
@@ -773,6 +857,14 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'a triggered ability you control';
     case 'instantOrSorcerySpell':
       return 'an instant or sorcery spell on the stack';
+    case 'instantOrSorcerySpellYouControl':
+      return 'an instant or sorcery spell you control';
+    case 'permanentSpellYouControl':
+      return 'a permanent spell you control';
+    case 'activatedOrTriggeredAbilityYouControl':
+      return 'an activated or triggered ability you control';
+    case 'nonlandPermanentYouControl':
+      return 'a nonland permanent you control';
     case 'any':
       return 'any target (a creature, a player, a planeswalker, or a battle)';
   }

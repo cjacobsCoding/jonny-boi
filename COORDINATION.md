@@ -88,6 +88,7 @@ throughput (games/sec) from regressing.
 | fix/land-sequencing | worker | packages/ai (new: land-sequencing.ts + test; heuristic/weights/index/bench + tactical-suite.test), DESIGN §3.4e + §3.4a/§3.4d baseline notes | 🚧 PUSHED, not merged — branches off main; **moves the recorded heuristic baselines** |
 | feat/optional-payment | DESKTOP-90PJPM4 (integrator) | packages/core (choices/effects/engine/events/mana/clone + new optional-payment.test.ts), packages/cards (choice-primitives/primitives/effect-helpers/compile rules+text+compile + new test), packages/ai (choices/effect-value/heuristic/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
 | feat/trigger-targets | DESKTOP-90PJPM4 (integrator) | packages/core (triggers/state/choices/engine/events/clone + new trigger-targets.test.ts), packages/cards (compile types/compile/rules + new test), packages/ai (choices/effect-value/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
+| feat/copy-templates | DESKTOP-90PJPM4 (integrator) | packages/core (targeting/state/engine/clone/intervening), packages/cards (compile rules+compile+types + new copy-templates.test.ts), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/shocklands | worker | packages/core (card/choices/effects/engine/index + new shockland.test.ts), packages/cards (choice-primitives/effect-helpers/compile rules+text+types+compile + activated.test + new shockland.test.ts), packages/ai (choices.ts), apps/web (choice-view + ChoicePrompt + choice-session.test), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED |
 | feat/about-mechanics | worker | apps/web (new views/AboutView.tsx + views/about.css + lib/about/mechanics.ts+test; App.tsx nav), packages/cards (export-only edits: compile/compile.ts, compile/index.ts, index.ts) | ✅ MERGED |
 | feat/source-aware-targeting | worker | packages/core (protection.ts NEW + card/targeting/attachments/events/engine/index + internal stats/continuous/combat + protection.test.ts NEW), packages/cards (primitives + choice-primitives `wardCounterUnlessPaid` + compile rules/compile + ward-protection.test.ts NEW + 2 reworded tests), packages/sim (2 classification lines), packages/ai (heuristic source threading), apps/web (2 formatter cases + about/mechanics.ts entries), DESIGN §3.11 | 🚧 PUSHED, not merged |
@@ -151,6 +152,49 @@ throughput (games/sec) from regressing.
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-23 integrator: **`feat/copy-templates` MERGED + DEPLOYED** — the corpus's top gap
+  family, four extensions in one branch. `npm run verify` **5218 / 0**, build exit 0. Audit
+  (same saved corpus, before/after): **555 → 559 playable** — Lithoform Engine, Extravagant
+  Replication, Skyclave Relic now compile complete.
+  ❗ **NEW: the stack can tell an ACTIVATED ability from a TRIGGERED one.**
+  `TriggeredStackObject.origin: 'activated'` is stamped by `applyActivateAbility` and cycling
+  (absence = a genuine trigger). This FIXED a live infidelity: `'triggeredAbilityYouControl'`
+  (Strionic Resonator) accepted activated abilities — quietly wider than printed — and now
+  refuses them; the new `'activatedOrTriggeredAbilityYouControl'` takes both. ⚠️ Anyone adding
+  a stack-object field: `internal/clone.ts` copies field by field — add it there or the next
+  action drops it silently.
+  👉 **Four new target restrictions**: `instantOrSorcerySpellYouControl`,
+  `permanentSpellYouControl` (the complement — permanent spells; copies of those already become
+  tokens via `spell-copy.ts`), `activatedOrTriggeredAbilityYouControl`,
+  `nonlandPermanentYouControl`. All controller-scoped ones refuse an unknown actor.
+  👉 **`compileTriggerBody` now lifts a targeted part when the rule is unflagged but its
+  effects DECLARE a restriction** — `create-token-copy` cannot carry `needsChosenTarget` (its
+  `~` selector targets nothing), so before this a targeted token copy inside a trigger compiled
+  with NO ability targets and would have resolved blank. Also lifts `excludeSelf` from ref
+  params onto the ability (`targetsExcludeSelf`) — a flag left on the ref alone excludes
+  nothing, because the ABILITY is what gets aimed.
+  👉 **Tapped token copies** ("create two TAPPED tokens that are copies…") ride the same
+  `CopyExceptions.entersTapped` Vesuva uses. Found while doing it: **the plural head "tokens
+  that are copies" NEVER matched** — the old alternation needed the literal "thats are copies"
+  — so every plural-head token-copy card was reporting on a typo-shaped regex, not on a missing
+  system.
+  👉 **ETB intervening "if"**: `trigger-etb` now splits the printed "if COND," with the same
+  closed vocabulary the step-trigger family uses, plus a new `InterveningIf` kind
+  `sourceKicked` ("if it was kicked" — reads the `timesKicked` the kicked entry already wrote,
+  which is written BEFORE the zoneChange emit, so the queue-time check sees it). An unreadable
+  "if" still refuses the whole line. Note: `sourceKicked` fails when the source has left the
+  battlefield — narrower than CR (a historical fact stays true), the safe direction.
+  ⚠️ **Audit workflow trap:** `coverage-audit.mjs` reads the built DIST — regenerating the
+  backlog after a rules edit without `npm run build` writes the OLD hints into the file. Also:
+  `--save-corpus` + `--input` makes the before/after measurement offline and identical-corpus.
+  ❌ **NOT done, deliberately** (each still reporting): "nonlegendary"/"token" target selectors,
+  "copy THAT spell" (needs the triggering spell threaded into the trigger context), for-each
+  iteration (Second Harvest, Kambal), follow-up sentences about the token just created, "except"
+  tails on SPELL copies, quoted granted abilities (Electroduplicate's sacrifice rider). Most of
+  the 29-card family is ALSO blocked by Spree/Class/d20 — the audit's per-card counts overstate
+  what any one fix frees.
+  (Integrator)
 
 - 2026-08-22 integrator: **`feat/shocklands` DEPLOYED to main** (Deploy PWA green, run
   32623813098). Merged the newest `main` into the branch first (it had meanwhile gained

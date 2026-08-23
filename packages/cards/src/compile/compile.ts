@@ -991,22 +991,36 @@ export function compileCard(card: CompilableCard): CompileResult {
 
       const refs: EffectRef[] = [];
       let restriction: TargetRestriction | undefined;
+      let excludeSelf = false;
       let targetingParts = 0;
       for (const part of parts) {
         const partEffects = part.contribution.effects ?? [];
         refs.push(...partEffects);
-        if (!ruleNeedsChosenTarget(part.ruleId)) continue;
+        // A part targets when its RULE says so — or when its effects DECLARE a
+        // restriction even though the rule is unflagged. The second arm exists
+        // for `create-token-copy`: its selectors include self-referential forms
+        // that target nothing, so the rule cannot carry the flag, but "a copy of
+        // another target nonland permanent you control" declares its restriction
+        // in the ref and must be aimed like any other targeted body.
+        const declared = restrictionOfEffects(partEffects);
+        if (!ruleNeedsChosenTarget(part.ruleId) && declared === undefined) continue;
         targetingParts += 1;
         // `restrictionOfEffects` deliberately reports nothing for the default
         // "any target" (core does not police it), but a trigger still has to be
         // AIMED at something — so the default is what "any target" means.
-        restriction = restrictionOfEffects(partEffects) ?? DEFAULT_TARGET_RESTRICTION;
+        restriction = declared ?? DEFAULT_TARGET_RESTRICTION;
+        // A printed "ANOTHER target …" rides the effect ref as `excludeSelf` and
+        // is lifted onto the ABILITY here, because the ability is what gets
+        // aimed — the aiming pass reads `targetsExcludeSelf` when it builds the
+        // candidate menu, and a flag left on the ref alone would exclude nothing.
+        excludeSelf = partEffects.some((ref) => ref.params?.excludeSelf === true);
       }
       // Two targets in one trigger is a template of its own; refusing keeps the
       // card reported rather than silently aiming both halves at one object.
       if (targetingParts > 1) return null;
       if (refs.length === 0) return null;
-      return restriction === undefined ? { effects: refs } : { effects: refs, targets: restriction };
+      if (restriction === undefined) return { effects: refs };
+      return { effects: refs, targets: restriction, ...(excludeSelf ? { targetsExcludeSelf: true } : {}) };
     },
   };
 

@@ -559,6 +559,18 @@ export interface TriggeredStackObject {
    */
   readonly awaitingTargetCount?: { readonly min: number; readonly max: number };
   /**
+   * Stamped `'activated'` when this stack object is an ACTIVATED ability
+   * (`applyActivateAbility`, cycling); absent for a genuine triggered ability.
+   *
+   * The two share this one stack-object kind on purpose (identical from the
+   * stack's point of view), but a printed card may name only one of them:
+   * "copy target TRIGGERED ability" (Strionic Resonator) must refuse an
+   * activated ability, and "target activated or triggered ability" takes both.
+   * Without the marker the triggered-only wording was quietly wider than
+   * printed.
+   */
+  readonly origin?: 'activated';
+  /**
    * The player the EVENT that set this ability off was about — the referent of
    * a body's "that player" / "them". Rides the stack object so it survives into
    * the resolution frame and then into `EffectContext`, exactly the way a cast's
