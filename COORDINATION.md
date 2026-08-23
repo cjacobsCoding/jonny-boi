@@ -139,6 +139,7 @@ throughput (games/sec) from regressing.
 | fix/max-hand-size-and-sba | worker | packages/core (`internal/sba.ts` CR 704.5q + the CR 704.3 gate + `resolveWinner`; `engine.ts` boundary call + CR 514.3a re-entrant cleanup + `NO_ASKING_OBJECT` source; `choices.ts` the sentinel; `index.ts` +2 exports; NEW `bench/sba-gate-cost.ts`; `sba.test.ts`, `selfplay-lock.test.ts` re-pinned, `planeswalker.test.ts` turn-runner, conformance `cr4xx`/`cr5xx`/`cr7xx` + `rules-manifest.ts`), packages/cards (`primitives.ts` persist counter kind + the primitive stops annihilating, `counters.test.ts`, `engine-cards.test.ts`, 3 interaction cells + the GAP register), packages/ai (`choices.ts` the discard policy written out + `choices.test.ts`), packages/sim (`paired-arms-config.ts` comment only), DESIGN §3.29 + §3.4a + §3.28, COORDINATION | 🚧 PUSHED, not merged |
 | fix/redaction-guarantee | worker | packages/core (NEW `instance-ids.ts` + `instance-ids.test.ts`, `index.ts` +4 exports — **no engine behaviour change**), packages/protocol (`index.ts` `collectInstanceIds` widened, `index.test.ts` +3), packages/sim (`observation.ts` the shared scanner + the guarantee restated, `observation.test.ts` REWRITTEN onto soak-anchored decks, `soak.ts` uses the shared scanner + reports `leakScanObservations`, `soak-config.ts` leak sampling 31→1, NEW `masking.test.ts`), apps/server (`security.test.ts` drops its local narrow copy), DESIGN §3.30, TESTING.md, COORDINATION | 🚧 PUSHED, not merged |
 | fix/sba-toughness-violation | worker | packages/core (`engine.ts` — the CR 704.3 check moved to the END of every action in `applyActionToDraft`; `sba.test.ts` +1), packages/sim (`soak.ts` NEW `replaySoakMixedGame` + `SoakReplayResult` + `describeMatchup`, `soak.test.ts` NEW pinned-replay block), DESIGN §3.32 (+ §3.30's deferral note closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | ✅ MERGED + DEPLOYED |
+| fix/blink-aim | DESKTOP-90PJPM4 (worker) | packages/ai/src/effect-value.ts (+2 value entries: mayEffects recursion, blinkTarget), NEW packages/ai/src/blink-value.test.ts, DESIGN §3.42, COORDINATION | 🚧 PUSHED, not merged |
 | feat/angels | DESKTOP-90PJPM4 (worker) | packages/core (targeting.ts +1 multi-zone restriction across all five homes, triggers.ts +targetCount, state.ts + internal/triggers-runtime.ts + internal/clone.ts threading, engine.ts trigger aiming reads a range), packages/cards (exile-until-leaves.ts graveyard path, NEW angel-of-serenity.test.ts, compile/rules.ts +1 rule, pool.test.ts count, data/expansion-candidates.json + GENERATED data/*), packages/data-tools/data (GENERATED), apps/web/src/data/card-index.json (GENERATED), DESIGN §3.41, COORDINATION | ✅ MERGED + DEPLOYED |
 | feat/pilot-pays-for-abilities | DESKTOP-90PJPM4 (worker) | packages/core/src/targeting.ts (ONE line — the missing validator entry), packages/ai/src/heuristic.ts (NEW bestFundedActivation + wiring in choosePriorityAction), packages/sim/src/soak-config.ts (trigger-copy re-registered as a witnessed mechanic), packages/sim/src/loop-draw.test.ts (rewritten to pin the mechanism), DESIGN §3.40 + §3.39 correction, COORDINATION | ✅ MERGED + DEPLOYED |
 | feat/copy-triggered-ability | DESKTOP-90PJPM4 (worker) | packages/core (targeting.ts +triggeredAbilityYouControl, events.ts +triggerCopied, instance-ids.ts), packages/cards (NEW trigger-copy-primitives.ts + trigger-copy.test.ts, compile/rules.ts +1 effect rule, primitives.ts, pool.test.ts count, GENERATED data/*), packages/ai (effect-value.ts +copyTriggeredAbility), packages/sim (config.ts +maxActionsPerTurn, match.ts loop outcome, soak.ts loopDraws, soak-config.ts, paired-arms-config.ts, NEW loop-draw.test.ts), apps/web GENERATED card-index.json, DESIGN §3.39, COORDINATION | ✅ MERGED + DEPLOYED |
@@ -150,6 +151,29 @@ throughput (games/sec) from regressing.
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-22 DESKTOP-90PJPM4: `fix/blink-aim` 🚧 PUSHED — DESIGN §3.42. Off `main`. **5201 / 0**, verify 0.
+
+  Answering "are all 60 Selesnya Blink cards functional?" — they ARE — surfaced a much wider AI bug.
+  The deck exiled 171 cards and returned 161; the missing ten were its OWN TOKENS (9 Soldier, 1 Beast)
+  blinked and destroyed.
+
+  ⚠️ **`mayEffects` had NO ENTRY in the AI value table.** An unpriced primitive scores the flat
+  unknown constant and its nested body is never read — so a pilot aiming an OPTIONAL trigger scored
+  every candidate identically and took the FIRST offered. **Ten pool cards route through
+  `mayEffects`**, so this was never a blink bug. If you add a wrapper primitive, add its value entry
+  in the same commit or every card behind it becomes invisible to the pilot.
+
+  `blinkTarget` priced too — by what re-entering re-triggers, deliberately NOT via `againstTarget`
+  (which penalises aiming at your own board, backwards for blink), and a TOKEN priced as a LOSS.
+
+  📊 Tokens blinked away 10/40 games → 1. Selesnya Blink gauntlet **63.0% → 71.0%**, non-overlapping
+  CIs. ⚠️ **BASELINES MOVE**: Mono-Red unchanged (224/800), UW Control 434 → 426/800 — its opponents
+  now play optional cards better. Re-record if you depend on those rows.
+
+  ⚠️ Three FIXTURE bugs while writing the test, all making it disagree with the game for reasons not
+  in the code: an ETB missing the printed `who` param, and an EMPTY LIBRARY (which prices any draw as
+  decking yourself). Use real pool cards and give seats a library.
 
 - 2026-08-22 DESKTOP-90PJPM4: `feat/angels` ✅ MERGED + DEPLOYED — DESIGN §3.41. Off `main`. **5196 / 0**,
   verify 0, gauntlet seed 99 byte-identical (224/800).

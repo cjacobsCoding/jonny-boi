@@ -3526,6 +3526,37 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
+### 3.42 The pilot could not price "you may" — ✅ done
+
+Found by asking a narrow question honestly: *are all 60 cards in Selesnya Blink functional?* They are
+— every card resolves, every primitive is registered, and 40 games cast Cloudshift 63 times,
+Conjurer's Closet 30 and Restoration Angel 27. But the same measurement showed **171 cards exiled and
+only 161 returned**, and the missing ten were the deck's OWN TOKENS: 9 Soldiers and a Beast, blinked
+and destroyed (CR 111.7 — a token in exile ceases to exist and nothing returns it).
+
+**The cause was not blink.** `mayEffects` — "you may &lt;body&gt;" — had **no entry in the AI's value
+table at all**. An unpriced primitive scores the flat `modeUnknownEffectScore`, and the nested body is
+never looked at. So a pilot AIMING an optional trigger scored every candidate identically and fell
+through to the FIRST one offered; Conjurer's Closet ate its own Soldier token while a Thragtusk stood
+next to it. Ten pool cards route through `mayEffects`, so this was never a blink bug.
+
+Two entries added, both recursing through the same `valueOfEffects` ruler:
+- `mayEffects` — worth exactly what its body is worth. Safe in both directions: declining is answered
+  elsewhere, so pricing the body cannot force a bad "yes", it only lets the pilot tell candidates apart.
+- `blinkTarget` — priced by what re-entering re-triggers (both halves: Thragtusk's leave AND its
+  enter). Deliberately NOT routed through `againstTarget`, which penalises aiming at your own board —
+  backwards for an effect whose whole point is your own permanents. ⚠️ A TOKEN is priced as a LOSS.
+
+📊 **Tokens blinked away: 10 per 40 games → 1.** Selesnya Blink's gauntlet **63.0% → 71.0%**
+(non-overlapping CIs: 59.6–66.3 vs 67.8–74.0), biggest against Mono-Green Ramp (33→51) and Orzhov
+Lifegain (41→58). ⚠️ **This MOVES recorded baselines** — Mono-Red is unchanged (224/800) but UW Control
+shifts 434→426/800, because its opponents now play their optional cards better.
+
+⚠️ Three fixture bugs while writing the test, each making it disagree with the game for a reason not
+in the code under test: a hand-built ETB that omitted the printed `who` param, and a state with an
+EMPTY LIBRARY (which prices any draw as decking yourself). The test now uses REAL pool cards and a
+real library.
+
 ### 3.41 Angel of Serenity, and the Angel type swept — ✅ done
 
 The last card §3.38 left blocked, and the two engine gaps it stood on.
