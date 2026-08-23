@@ -141,6 +141,7 @@ throughput (games/sec) from regressing.
 | fix/sba-toughness-violation | worker | packages/core (`engine.ts` — the CR 704.3 check moved to the END of every action in `applyActionToDraft`; `sba.test.ts` +1), packages/sim (`soak.ts` NEW `replaySoakMixedGame` + `SoakReplayResult` + `describeMatchup`, `soak.test.ts` NEW pinned-replay block), DESIGN §3.32 (+ §3.30's deferral note closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | ✅ MERGED + DEPLOYED |
 | feat/play-vs-ai | DESKTOP-90PJPM4 (worker) | apps/web ONLY (lib/play/seat.ts +solo transport, NEW lib/play/ai-seat.ts + test, lib/play/play-config.ts +2 knobs, views/PlayView.tsx, components/play/SetupScreen.tsx, components/lab/PilotControls.tsx label prop, styles.css +1 rule), DESIGN §3.43, COORDINATION | ✅ MERGED + DEPLOYED |
 | fix/blink-aim | DESKTOP-90PJPM4 (worker) | packages/ai/src/effect-value.ts (+2 value entries: mayEffects recursion, blinkTarget), NEW packages/ai/src/blink-value.test.ts, DESIGN §3.42, COORDINATION | ✅ MERGED + DEPLOYED |
+| fix/pilot-blink-weak-rows | DESKTOP-90PJPM4 (worker) | packages/ai ONLY (NEW combat-math.ts + combat-math.test.ts + combat-math-pilot.test.ts; heuristic.ts — one import, the `pickBlocker` value line, and a ⚠️ doc-comment on `attackIsProfitable`; weights.ts +1 weight), DESIGN §3.43, COORDINATION. **No core, cards, sim or web change.** ⚠️ **MOVES two recorded baselines**: Mono-Green Ramp 491 → 537/800 and UW Control 426 → 413/800. Mono-Red Aggro byte-identical (224/800). | 🚧 PUSHED, not merged |
 | feat/angels | DESKTOP-90PJPM4 (worker) | packages/core (targeting.ts +1 multi-zone restriction across all five homes, triggers.ts +targetCount, state.ts + internal/triggers-runtime.ts + internal/clone.ts threading, engine.ts trigger aiming reads a range), packages/cards (exile-until-leaves.ts graveyard path, NEW angel-of-serenity.test.ts, compile/rules.ts +1 rule, pool.test.ts count, data/expansion-candidates.json + GENERATED data/*), packages/data-tools/data (GENERATED), apps/web/src/data/card-index.json (GENERATED), DESIGN §3.41, COORDINATION | ✅ MERGED + DEPLOYED |
 | feat/pilot-pays-for-abilities | DESKTOP-90PJPM4 (worker) | packages/core/src/targeting.ts (ONE line — the missing validator entry), packages/ai/src/heuristic.ts (NEW bestFundedActivation + wiring in choosePriorityAction), packages/sim/src/soak-config.ts (trigger-copy re-registered as a witnessed mechanic), packages/sim/src/loop-draw.test.ts (rewritten to pin the mechanism), DESIGN §3.40 + §3.39 correction, COORDINATION | ✅ MERGED + DEPLOYED |
 | feat/copy-triggered-ability | DESKTOP-90PJPM4 (worker) | packages/core (targeting.ts +triggeredAbilityYouControl, events.ts +triggerCopied, instance-ids.ts), packages/cards (NEW trigger-copy-primitives.ts + trigger-copy.test.ts, compile/rules.ts +1 effect rule, primitives.ts, pool.test.ts count, GENERATED data/*), packages/ai (effect-value.ts +copyTriggeredAbility), packages/sim (config.ts +maxActionsPerTurn, match.ts loop outcome, soak.ts loopDraws, soak-config.ts, paired-arms-config.ts, NEW loop-draw.test.ts), apps/web GENERATED card-index.json, DESIGN §3.39, COORDINATION | ✅ MERGED + DEPLOYED |
@@ -153,6 +154,32 @@ throughput (games/sec) from regressing.
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-23 DESKTOP-90PJPM4: `fix/pilot-blink-weak-rows` 🚧 PUSHED — DESIGN §3.45. Off `main`.
+  **5218 / 0**, `verify` 0. packages/ai ONLY.
+
+  Chasing "why does the pilot play Selesnya Blink worse than it should". Mana and card usage were
+  CLEARED first — 2,241 main-phase passes, **zero** while holding a spell `planManaPayment` could fund.
+  The real hole: `attackIsProfitable` and `pickBlocker` both answered *who dies* with
+  `blockerPower >= attackerToughness`, blind to **deathtouch, first strike, indestructible, marked
+  damage and trample**. Per 100 games: **946** attacks priced as safe into an untapped Deadly Recluse
+  (Mono-Green), 242 into Vampire Nighthawk (Orzhov), 146 first-strike misreads (Boros), **0** in the
+  five decks printing none of those keywords.
+
+  ⚠️ **BRING A DECK-NEUTRAL YARDSTICK OR THE GAUNTLET WILL LIE TO YOU.** Both seats run this pilot, so
+  a gauntlet row moves when a change SUITS one archetype. Fixing the attack side too and allocating the
+  defender's blockers takes Selesnya to **74.1%** — and loses a deck-neutral pilot A/B to `main`
+  1406–1422. The A/B is all 36 deck pairs played both ways on the same seeds; its control (main vs
+  main) is exactly 3546–3546 over 7,200 games. What shipped scores **3627–3455 (51.2%, p≈0.04)**.
+
+  Also rejected, with numbers in §3.45: pricing prevented damage as a block BONUS (1343–1484). Shipped
+  as a PENALTY on trample overflow instead, so it can only change WHICH body blocks, never whether.
+
+  📊 Selesnya 568 → **575/800** (Orzhov 58→63, Golgari 69→72, Mono-Green 51→52, Boros 72→70, **Izzet
+  unmoved at 54 and unexplained**). ⚠️ **BASELINES MOVE**: Mono-Green Ramp **491 → 537/800**, UW Control
+  **426 → 413/800**. Mono-Red Aggro **byte-identical (224/800)** — the change alters **224 of 433,776
+  decisions and every one is a block declaration**. Throughput at parity (deterministic actions +0.05%
+  to +3.5% — longer games, not slower code).
 
 - 2026-08-23 worker: `fix/blink-rules-fidelity` ✅ MERGED + DEPLOYED — DESIGN §3.44. Off `main`. **5217 / 0**, verify 0.
   Owns packages/core + packages/cards only; does not touch packages/ai or apps/web.
