@@ -225,7 +225,13 @@ export type TargetRestriction =
    * own member because `permanent` reaches lands and this must not: copying a
    * land for value is not what the printed card offers.
    */
-  | 'nonlandPermanentYouControl';
+  | 'nonlandPermanentYouControl'
+  /** "target enchantment" — an enchantment permanent (Casualties of War's mode). */
+  | 'enchantment'
+  /** "target land" — a land on the battlefield, never one in a hand or yard. */
+  | 'land'
+  /** "target planeswalker" — a walker only, never a face ('playerOrPlaneswalker' reaches both). */
+  | 'planeswalker';
 
 /**
  * Whether a spell on the stack is an INSTANT OR SORCERY spell — the one question
@@ -280,6 +286,9 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'permanentSpellYouControl' ||
     value === 'activatedOrTriggeredAbilityYouControl' ||
     value === 'nonlandPermanentYouControl' ||
+    value === 'enchantment' ||
+    value === 'land' ||
+    value === 'planeswalker' ||
     value === 'creatureOnBattlefieldOrInGraveyard'
   );
 }
@@ -440,6 +449,9 @@ export function isLegalTarget(
   // the targetability check above is the only gate.
   if (restriction === 'permanent') return true;
   if (restriction === 'artifact') return permanent.def.types.includes('artifact');
+  if (restriction === 'enchantment') return hasType(permanent.def, 'enchantment');
+  if (restriction === 'land') return isLand(permanent.def);
+  if (restriction === 'planeswalker') return isPlaneswalker(permanent.def);
   // "Target player or planeswalker": a permanent target must be a walker.
   if (restriction === 'playerOrPlaneswalker') return isPlaneswalker(permanent.def);
   // "Any target" reaches a creature, a player, a planeswalker OR A BATTLE
@@ -746,6 +758,19 @@ function enumerateTargets(
       }
     }
   }
+  if (restriction === 'enchantment' || restriction === 'land' || restriction === 'planeswalker') {
+    for (const permanent of state.battlefield) {
+      const kindOk =
+        restriction === 'enchantment'
+          ? hasType(permanent.def, 'enchantment')
+          : restriction === 'land'
+            ? isLand(permanent.def)
+            : isPlaneswalker(permanent.def);
+      if (kindOk && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
   if (restriction === 'permanent') {
     for (const permanent of state.battlefield) {
       if (isTargetableBy(state, permanent, controller, source, keywordIndex)) targets.push(permanent.instanceId);
@@ -865,6 +890,12 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'an activated or triggered ability you control';
     case 'nonlandPermanentYouControl':
       return 'a nonland permanent you control';
+    case 'enchantment':
+      return 'an enchantment';
+    case 'land':
+      return 'a land';
+    case 'planeswalker':
+      return 'a planeswalker';
     case 'any':
       return 'any target (a creature, a player, a planeswalker, or a battle)';
   }

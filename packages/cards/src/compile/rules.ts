@@ -265,6 +265,10 @@ const MODAL_HEADER_COUNTS: Readonly<Record<string, { min: number; max: number }>
   two: { min: 2, max: 2 },
   three: { min: 3, max: 3 },
   'one or both': { min: 1, max: 2 },
+  // "Choose one or more —" (Casualties of War, Sublime Epiphany): the max is
+  // every mode on the menu, expressed as an unbounded ceiling the build site
+  // already clamps to `modes.length`.
+  'one or more': { min: 1, max: Number.MAX_SAFE_INTEGER },
   'up to one': { min: 0, max: 1 },
   'up to two': { min: 0, max: 2 },
   'up to three': { min: 0, max: 3 },
@@ -1714,6 +1718,20 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     needsChosenTarget: true,
     build() {
       return effects({ primitive: 'destroyTarget', params: { targets: ARTIFACT_TARGET } });
+    },
+  },
+  {
+    id: 'destroy-target-simple-permanent',
+    description:
+      `"Destroy target enchantment / land / planeswalker" (Casualties of War's modes; Stone Rain)`,
+    // One rule for the three single-type destroys the artifact rule above does
+    // not cover, each mapping to its own restriction so the printed word is the
+    // whole of what may be aimed at.
+    pattern: /^destroy target (enchantment|land|planeswalker)$/,
+    needsChosenTarget: true,
+    build(match) {
+      const kind = match[1] as TargetRestriction;
+      return effects({ primitive: 'destroyTarget', params: { targets: kind } });
     },
   },
   {

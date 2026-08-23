@@ -202,7 +202,7 @@ export function splitAbilities(oracleText: string): string[] {
  * optional here rather than required.
  */
 const MODAL_HEADER =
-  /^choose\s+(?:one or both|up to \w+|one|two|three|four|five)\s*\.?\s*(?:you may choose the same mode more than once\s*\.?\s*)?[—-]?\s*$/i;
+  /^choose\s+(?:one or both|one or more|up to \w+|one|two|three|four|five)\s*\.?\s*(?:you may choose the same mode more than once\s*\.?\s*)?[—-]?\s*$/i;
 
 /** A printed mode line, which Oracle text bullets. */
 const MODE_BULLET = /^[•·]\s*/;

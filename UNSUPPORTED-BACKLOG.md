@@ -5,22 +5,22 @@
 
 | | cards | share |
 |---|---:|---:|
-| Fully playable today | 585 | 27.9% |
-| Blocked by a missing system | 1515 | 72.1% |
+| Fully playable today | 586 | 27.9% |
+| Blocked by a missing system | 1514 | 72.1% |
 
 Ranked by **how many cards each system unblocks**, so the top row is the
 highest-value engine work available.
 
-Of the 1531 distinct gaps, **27** are named **engine systems** (136 card-blocks — real work) and **1504** are **template gaps** (2162 card-blocks — text no compiler rule matched, typically one rule-table entry each). The two cost wildly different amounts, so every entry below carries its kind, and the `--json` output carries it as `kind`.
+Of the 1519 distinct gaps, **27** are named **engine systems** (135 card-blocks — real work) and **1492** are **template gaps** (2144 card-blocks — text no compiler rule matched, typically one rule-table entry each). The two cost wildly different amounts, so every entry below carries its kind, and the `--json` output carries it as `kind`.
 
-Showing the top 25 of **1531** distinct gaps. The remaining 1506 account for 2042 card-blocks between them — a long tail of one-off templates, not a second tier of systems. Re-run with a larger `--top` to see it.
+Showing the top 25 of **1519** distinct gaps. The remaining 1494 account for 2024 card-blocks between them — a long tail of one-off templates, not a second tier of systems. Re-run with a larger `--top` to see it.
 
 ## a COPY-CREATING template outside the compiler’s closed tables (spell/ability copies — the "you control" scopes included — token copies, TAPPED token copies, and "another target nonland permanent you control" are all implemented; what is missing is this selector or tail: a "nonlegendary"/"token" target, "copy THAT spell" naming the spell that triggered the ability, a follow-up sentence about the token just created, an "except …" tail on a SPELL copy, a for-each iteration, or a copy COUNT conditional on where the spell was cast from)
 
 - **Kind:** engine system
-- **Blocks 25 card(s)** (1.2% of corpus)
-- **Occurrences:** 25
-- **Cards:** Scute Swarm, Helm of the Host, Second Harvest, Return the Favor, Caretaker's Talent, Reflections of Littjara, Springheart Nantuko, Mechanized Production, +17 more
+- **Blocks 24 card(s)** (1.1% of corpus)
+- **Occurrences:** 24
+- **Cards:** Scute Swarm, Helm of the Host, Second Harvest, Return the Favor, Caretaker's Talent, Reflections of Littjara, Springheart Nantuko, Mechanized Production, +16 more
 - **Example clause:** `Landfall — Whenever a land you control enters, create a 1/1 green Insect creature token. If you control six or more lands, create a token that's a copy of ~ instead.`
 
 ## an "at the beginning of…" trigger BODY the compiler does not recognize yet (the trigger itself — every printed scope, the "you may" form, the intervening "if", and the triggering player a body points at — is implemented) — starting "At the beginning of your…"

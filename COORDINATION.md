@@ -88,6 +88,7 @@ throughput (games/sec) from regressing.
 | fix/land-sequencing | worker | packages/ai (new: land-sequencing.ts + test; heuristic/weights/index/bench + tactical-suite.test), DESIGN §3.4e + §3.4a/§3.4d baseline notes | 🚧 PUSHED, not merged — branches off main; **moves the recorded heuristic baselines** |
 | feat/optional-payment | DESKTOP-90PJPM4 (integrator) | packages/core (choices/effects/engine/events/mana/clone + new optional-payment.test.ts), packages/cards (choice-primitives/primitives/effect-helpers/compile rules+text+compile + new test), packages/ai (choices/effect-value/heuristic/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
 | feat/trigger-targets | DESKTOP-90PJPM4 (integrator) | packages/core (triggers/state/choices/engine/events/clone + new trigger-targets.test.ts), packages/cards (compile types/compile/rules + new test), packages/ai (choices/effect-value/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
+| feat/modal-one-or-more | DESKTOP-90PJPM4 (integrator) | packages/core (targeting + 1 test fixture), packages/cards (compile rules/text + new modal-one-or-more.test.ts), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/cost-reduction | DESKTOP-90PJPM4 (integrator) | packages/core (card/engine/index + new cost-reduction.test.ts), packages/cards (compile rules/compile/types), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/karoo-lands | DESKTOP-90PJPM4 (integrator) | packages/core (card/engine), packages/cards (choice-primitives + compile rules/compile/types + new karoo-lands.test.ts), packages/sim (1 classification line), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/copy-templates | DESKTOP-90PJPM4 (integrator) | packages/core (targeting/state/engine/clone/intervening), packages/cards (compile rules+compile+types + new copy-templates.test.ts), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
@@ -156,6 +157,19 @@ throughput (games/sec) from regressing.
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-23 integrator: **`feat/modal-one-or-more` MERGED + DEPLOYED** — the "Choose one or
+  more —" header plus `enchantment` / `land` / `planeswalker` as target restrictions of their
+  own; Casualties of War compiles with all five modes. Audit: **585 → 586**. `npm run verify`
+  green, build exit 0.
+  👉 The header rides the existing count table with an unbounded ceiling the build site
+  already clamps to the menu (`max = modes.length`); the cast-time mode/aim pipeline needed
+  nothing — it was built mode-count-agnostic.
+  ⚠️ **One existing test changed because its FIXTURE went stale, not its property:**
+  `targeting.test.ts` used `'planeswalker'` as its junk-restriction example, and that word is a
+  real restriction now. When you promote a word into a closed vocabulary, grep the tests for the
+  word being used as the canonical NON-member.
+  (Integrator)
 
 - 2026-08-23 integrator: **`feat/cost-reduction` MERGED + DEPLOYED** — "TYPE/COLOUR spells you
   cast cost {N} less to cast" (Goblin Electromancer, the whole Medallion cycle, Etherium
