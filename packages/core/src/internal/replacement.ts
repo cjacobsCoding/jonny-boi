@@ -764,6 +764,65 @@ export function replaceDraw(
 }
 
 /**
+ * The number of tokens ONE funnel call actually creates, after replacements —
+ * "if one or more tokens would be created under your control, twice that many
+ * of those tokens are created instead" (Anointed Procession and family).
+ *
+ * Called once per token the creating effect asked for; `times` outcomes compose
+ * per call exactly as they would per batch (2 x N calls = 2N), which is the
+ * arithmetic reason the compiler only ever emits multiplicative token
+ * replacements. `tokenDef` rides as the event's recipient so a printed
+ * "creature tokens" filter (Ojer Taq) reads the definition being created.
+ */
+export function replaceTokenCount(
+  state: GameState,
+  index: ReplacementIndex,
+  controller: PlayerId,
+  tokenDef: CardDefinition,
+  count: number,
+  emit: (e: GameEvent) => void,
+): number {
+  if (index.length === 0 || count <= 0) return count;
+  const probe = TOKEN_PROBE(tokenDef);
+  const event: ReplaceableEvent = {
+    kind: 'tokens',
+    recipient: probe,
+    affectedPlayer: controller,
+    combat: false,
+    amount: count,
+    prevented: 0,
+    winsGame: false,
+  };
+  runReplacements(state, index, event, emit);
+  return event.amount;
+}
+
+/**
+ * A reusable `CardInstance`-shaped probe wrapping the definition a token event
+ * is about — `matchesCardFilter` reads only `.def`, and the id is a sentinel no
+ * real instance carries so `excludeSource`/`recipientIs` can never match it.
+ * Module-level and reused: this sits on the token-creation path, and nothing
+ * built from it escapes `appliesTo`.
+ */
+const TOKEN_PROBE_SENTINEL_ID = -1;
+const TOKEN_PROBE_SCRATCH = {
+  instanceId: TOKEN_PROBE_SENTINEL_ID,
+  controller: 'A',
+  owner: 'A',
+  zone: 'battlefield',
+  tapped: false,
+  summoningSick: false,
+  damageMarked: 0,
+  markedByDeathtouch: false,
+  counters: {},
+  def: undefined as unknown as CardDefinition,
+};
+function TOKEN_PROBE(def: CardDefinition): CardInstance {
+  TOKEN_PROBE_SCRATCH.def = def;
+  return TOKEN_PROBE_SCRATCH as unknown as CardInstance;
+}
+
+/**
  * Whether `def` counts as a source of the colour(s) a filter names — exported so
  * the AI can price a Torbran without re-deriving colour. Thin, but it keeps the
  * "a red source" reading in one place, the same one protection uses.

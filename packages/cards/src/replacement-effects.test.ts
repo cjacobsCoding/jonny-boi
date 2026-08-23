@@ -268,7 +268,10 @@ describe('the printed lines compile with EXACTLY their printed filter', () => {
 });
 
 describe('the compiler refuses what it cannot build, by name', () => {
-  it('refuses a TOKEN doubler rather than compiling it as a counter doubler', () => {
+  it('compiles the TOKEN doubler alongside the counter doubler — Doubling Season whole', () => {
+    // This test used to pin the refusal; the token-count replacement exists now
+    // (feat/token-doublers), so what it pins instead is the pairing: BOTH
+    // printed halves compile, each to its own event kind.
     const doublingSeason = compileCard(
       scryfall({
         name: 'Doubling Season',
@@ -278,16 +281,11 @@ describe('the compiler refuses what it cannot build, by name', () => {
           'If an effect would create one or more tokens under your control, it creates twice that many of those tokens instead.\nIf an effect would put one or more counters on a permanent you control, it puts twice that many of those counters on that permanent instead.',
       }),
     );
-    expect(doublingSeason.status).toBe('incomplete');
-    expect(doublingSeason.missing.map((m) => m.text.toLowerCase()).join(' ')).toContain('tokens');
-    // The half it CAN build is still built, and built right — an incomplete card
-    // is not a broken one, it is one the importer refuses to treat as playable.
-    expect(doublingSeason.definition.replacements?.[0]).toMatchObject({
-      event: 'counters',
-      outcome: { times: 2 },
-    });
-    // "one or more COUNTERS" with no kind printed really does mean every kind.
-    expect(doublingSeason.definition.replacements?.[0]?.applies.counterKind).toBeUndefined();
+    expect(doublingSeason.status, JSON.stringify(doublingSeason.missing)).toBe('complete');
+    expect(doublingSeason.definition.replacements?.map((r) => [r.event, r.outcome.times])).toEqual([
+      ['tokens', 2],
+      ['counters', 2],
+    ]);
   });
 
   it('does not compile a fog printed on an INSTANT as a permanent static', () => {

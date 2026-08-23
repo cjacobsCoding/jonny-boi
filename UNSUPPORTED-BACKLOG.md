@@ -5,15 +5,15 @@
 
 | | cards | share |
 |---|---:|---:|
-| Fully playable today | 586 | 27.9% |
-| Blocked by a missing system | 1514 | 72.1% |
+| Fully playable today | 589 | 28.0% |
+| Blocked by a missing system | 1511 | 72.0% |
 
 Ranked by **how many cards each system unblocks**, so the top row is the
 highest-value engine work available.
 
-Of the 1519 distinct gaps, **27** are named **engine systems** (135 card-blocks — real work) and **1492** are **template gaps** (2144 card-blocks — text no compiler rule matched, typically one rule-table entry each). The two cost wildly different amounts, so every entry below carries its kind, and the `--json` output carries it as `kind`.
+Of the 1519 distinct gaps, **27** are named **engine systems** (128 card-blocks — real work) and **1492** are **template gaps** (2144 card-blocks — text no compiler rule matched, typically one rule-table entry each). The two cost wildly different amounts, so every entry below carries its kind, and the `--json` output carries it as `kind`.
 
-Showing the top 25 of **1519** distinct gaps. The remaining 1494 account for 2024 card-blocks between them — a long tail of one-off templates, not a second tier of systems. Re-run with a larger `--top` to see it.
+Showing the top 25 of **1519** distinct gaps. The remaining 1494 account for 2023 card-blocks between them — a long tail of one-off templates, not a second tier of systems. Re-run with a larger `--top` to see it.
 
 ## a COPY-CREATING template outside the compiler’s closed tables (spell/ability copies — the "you control" scopes included — token copies, TAPPED token copies, and "another target nonland permanent you control" are all implemented; what is missing is this selector or tail: a "nonlegendary"/"token" target, "copy THAT spell" naming the spell that triggered the ability, a follow-up sentence about the token just created, an "except …" tail on a SPELL copy, a for-each iteration, or a copy COUNT conditional on where the spell was cast from)
 
@@ -46,14 +46,6 @@ Showing the top 25 of **1519** distinct gaps. The remaining 1494 account for 202
 - **Occurrences:** 12
 - **Cards:** Black Market Connections, Braids, Arisen Nightmare, Ripples of Undeath, Emeria, the Sky Ruin, Bonehoard Dracosaur, Soulherder, Thousand Moons Smithy, Party Thrasher, +4 more
 - **Example clause:** `At the beginning of your first main phase, choose one or more —`
-
-## a TOKEN-count replacement (the CR 614 layer scales damage, counters and draws; creating extra objects is a different outcome)
-
-- **Kind:** engine system
-- **Blocks 12 card(s)** (0.6% of corpus)
-- **Occurrences:** 12
-- **Cards:** Doubling Season, Academy Manufactor, Anointed Procession, Parallel Lives, Mondrak, Glory Dominus, Elspeth, Storm Slayer, Peregrin Took, Ojer Taq, Deepest Foundation, +4 more
-- **Example clause:** `If an effect would create one or more tokens under your control, it creates twice that many of those tokens instead.`
 
 ## a "you may / choose" template the compiler does not recognize yet — starting "When ~ enters, you may…"
 
@@ -214,3 +206,11 @@ Showing the top 25 of **1519** distinct gaps. The remaining 1494 account for 202
 - **Occurrences:** 6
 - **Cards:** Nature's Claim, Krosan Grip, Disenchant, Wear Down, Naturalize, Sundering Growth
 - **Example clause:** `Destroy target artifact or enchantment. Its controller gains 4 life.`
+
+## a rules template the compiler does not recognize yet — starting "Your opponents can't cast spells…"
+
+- **Kind:** template gap (rule-table entry)
+- **Blocks 6 card(s)** (0.3% of corpus)
+- **Occurrences:** 6
+- **Cards:** Kutzil, Malamet Exemplar, Silence, Voice of Victory, Drannith Magistrate, Void Winnower, Dragonlord Dromoka
+- **Example clause:** `Your opponents can't cast spells during your turn.`

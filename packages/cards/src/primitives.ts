@@ -738,24 +738,12 @@ export const createToken: EffectPrimitive = (ctx) => {
   const power = intParam(ctx, 'power', 1);
   const toughness = intParam(ctx, 'toughness', 1);
   const name = strParam(ctx, 'name') ?? 'Token';
-  for (let i = 0; i < count; i++) {
-    const instanceId = ctx.state.nextInstanceId++;
-    const token: CardInstance = {
-      instanceId,
-      def: { id: `token:${name}`, name, types: ['creature'], power, toughness },
-      controller: ctx.controller,
-      owner: ctx.controller,
-      zone: 'battlefield',
-      tapped: false,
-      summoningSick: true,
-      damageMarked: 0,
-      markedByDeathtouch: false,
-    attachedTo: null,
-      counters: {},
-    };
-    ctx.state.battlefield.push(token);
-    ctx.emit({ type: 'zoneChange', instanceId, from: 'stack', to: 'battlefield' });
-  }
+  // Routed through `ctx.createToken` — the ONE funnel every token entry uses —
+  // rather than the hand-built instance this used to push. The hand-rolled copy
+  // skipped `tokenCreated` (so ETB observers missed it) and, once token-count
+  // replacements landed, would have dodged every Anointed Procession printed.
+  const def: CardDefinition = { id: `token:${name}`, name, types: ['creature'], power, toughness, isToken: true };
+  for (let i = 0; i < count; i++) ctx.createToken(def);
 };
 
 /**

@@ -58,7 +58,7 @@ import type { InstanceId, PlayerId } from './state.js';
  * these, so a wording naming anything else reports rather than compiling into
  * a watcher for an event the engine never raises.
  */
-export type ReplacementEventKind = 'damage' | 'counters' | 'draw';
+export type ReplacementEventKind = 'damage' | 'counters' | 'draw' | 'tokens';
 
 /**
  * Every event kind, in canonical order — the closed vocabulary itself, exported
@@ -68,6 +68,13 @@ export const REPLACEMENT_EVENT_KINDS: readonly ReplacementEventKind[] = Object.f
   'damage',
   'counters',
   'draw',
+  // "If one or more tokens would be created under your control, twice that
+  // many…" (Anointed Procession, Parallel Lives, Doubling Season's token half,
+  // Mondrak). MULTIPLICATIVE outcomes only: token creation runs one funnel call
+  // per token, and `times` composes per call while `plus` would compound per
+  // token instead of per batch — so the compiler refuses a "plus" wording
+  // rather than mis-counting it.
+  'tokens',
 ]);
 
 /**
@@ -248,6 +255,8 @@ export function replacementIsInert(ability: ReplacementAbility): boolean {
  * (`-1/-1` above all) is not.
  */
 export function affectedPlayerPrefersMore(kind: ReplacementEventKind, counterKind?: string): boolean {
+  // More tokens under your control is always the good direction.
+  if (kind === 'tokens') return true;
   if (kind === 'counters') return counterKind === PLUS_ONE_COUNTER;
   // A bigger draw is a bigger draw; damage is damage.
   return kind === 'draw';

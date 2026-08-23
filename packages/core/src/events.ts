@@ -247,7 +247,7 @@ export type GameEvent =
       /** The permanent (or resolving spell) the replacement effect comes from. */
       readonly source: InstanceId;
       /** Which event family was replaced. */
-      readonly event: 'damage' | 'counters' | 'draw';
+      readonly event: 'damage' | 'counters' | 'draw' | 'tokens';
       readonly from: number;
       readonly to: number;
       /** How much of `from` this effect PREVENTED (0 for a pure multiplier). */

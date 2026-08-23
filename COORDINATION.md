@@ -88,6 +88,7 @@ throughput (games/sec) from regressing.
 | fix/land-sequencing | worker | packages/ai (new: land-sequencing.ts + test; heuristic/weights/index/bench + tactical-suite.test), DESIGN §3.4e + §3.4a/§3.4d baseline notes | 🚧 PUSHED, not merged — branches off main; **moves the recorded heuristic baselines** |
 | feat/optional-payment | DESKTOP-90PJPM4 (integrator) | packages/core (choices/effects/engine/events/mana/clone + new optional-payment.test.ts), packages/cards (choice-primitives/primitives/effect-helpers/compile rules+text+compile + new test), packages/ai (choices/effect-value/heuristic/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
 | feat/trigger-targets | DESKTOP-90PJPM4 (integrator) | packages/core (triggers/state/choices/engine/events/clone + new trigger-targets.test.ts), packages/cards (compile types/compile/rules + new test), packages/ai (choices/effect-value/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
+| feat/token-doublers | DESKTOP-90PJPM4 (integrator) | packages/core (replacement/internal-replacement/effects/events), packages/cards (primitives + compile rules + replacement-effects.test reversed + new token-doublers.test.ts), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/modal-one-or-more | DESKTOP-90PJPM4 (integrator) | packages/core (targeting + 1 test fixture), packages/cards (compile rules/text + new modal-one-or-more.test.ts), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/cost-reduction | DESKTOP-90PJPM4 (integrator) | packages/core (card/engine/index + new cost-reduction.test.ts), packages/cards (compile rules/compile/types), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/karoo-lands | DESKTOP-90PJPM4 (integrator) | packages/core (card/engine), packages/cards (choice-primitives + compile rules/compile/types + new karoo-lands.test.ts), packages/sim (1 classification line), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
@@ -155,9 +156,58 @@ throughput (games/sec) from regressing.
 | feat/blink-selesnya | DESKTOP-90PJPM4 (worker) | packages/cards (NEW blink-primitives.ts + blink-play.test.ts; primitives.ts registration, effect-helpers.ts +1 option, compile/rules.ts +1 rule; GENERATED data/expanded-pool.ts + expansion-report.json + expansion-candidates.json), packages/data-tools/data (GENERATED card-index.json + starter-cards.json), apps/web/src/data/card-index.json (regenerated), packages/ai (heuristic.ts blink goal + picker), packages/sim (NEW data/decks/selesnya-blink.ts + decks/index.ts), DESIGN §3.35 + §3.21 note, COORDINATION. **Gauntlet seed 99 rows byte-identical; new 8th row.** | ✅ MERGED + DEPLOYED |
 | fix/soak-action-cap | DESKTOP-90PJPM4 (worker) | packages/ai (`effect-value.ts` copySpell chain pricing + `willFizzleOnResolution`; `weights.ts` +1 weight; NEW `copy-chain-pilot.test.ts`), packages/cards (`copy-primitives.ts` CR 707.10 `min`; NEW `copy-retarget-optional.test.ts`), packages/sim (`soak.test.ts` +3 pinned rows), DESIGN §3.33 (+ §3.32's handoff closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | 🚧 PUSHED, not merged |
 | fix/blink-rules-fidelity | worker | packages/core (NEW `combat-removal.ts`; `state.ts` +`CombatState.removedFromCombat`, `attachments.ts` +`unattachDependentsOf`, `internal/continuous.ts` +`dropContinuousEffectsFor`, `internal/combat.ts` damage step, `internal/clone.ts`, `internal/replacement.ts` `isAttacking`, `engine.ts` 3 lines in declare-blockers, `instance-ids.ts` +1 field name, `index.ts` exports), packages/cards (`blink-primitives.ts` +3 calls + doc; `data/pool.ts` +10 printed `subtypes` lines; `fidelity.test.ts` +1 standing type-line guard; `restoration-angel.test.ts` +1 case; NEW `selesnya-blink-fidelity.test.ts`), DESIGN §3.44, COORDINATION. **No generated data regenerated; no soak or gauntlet row moved.** | ✅ MERGED + DEPLOYED |
+| feat/pilot-ab-harness | worker | packages/sim ONLY (NEW `pilot-ab.ts` + `pilot-ab.test.ts`; `cli.ts` — new `pilot-ab` subcommand, `--pilot-a`/`--pilot-b`, and a shared `resolvePilot` helper the old `resolvePilots` now reuses; `index.ts` exports), DESIGN §3.46, COORDINATION. **No core, cards, ai or web change — NO pilot behaviour touched.** Adds a tool, moves no baseline. | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-23 worker: `feat/pilot-ab-harness` 🚧 PUSHED, not merged — DESIGN §3.46. Off `main` (2777ebc).
+  **5295 / 0**, `verify` 0. **packages/sim ONLY — no pilot behaviour changed, no baseline moved.**
+
+  §3.45's decisive evidence was a deck-neutral pilot A/B that lived for one afternoon in one worktree
+  and never reached the repo. It is now a command: `npm run sim -- pilot-ab [--pilot-a id] [--pilot-b id]
+  [--games N] [--seed S]`. It plays A against B over all 36 pairs of the 9 sample decks in BOTH
+  orientations on matched seeds, so deck strength, seat and who is on the play cancel EXACTLY, and it
+  prints a per-deck table — which is the only place "this change only helps one archetype" is visible.
+
+  ⚠️ **Run the control before you believe any reading.** Same id on both sides makes the two
+  orientations literally the same game, so the record MUST be exactly level; the command **exits
+  non-zero** if it is not. On current `main`: **3532–3532 over 7,200 games** (7,064 decisive, 136
+  draws), **3,600/3,600 slots split**, `CONTROL OK`, 137.7 s → 52.3 games/sec. (§3.45's ad-hoc run
+  recorded 3546–3546 on its own seeding — the identity is the point, not the digits.)
+
+  ⚠️ **It compares two REGISTERED PILOT IDS, not two BUILDS of one id** — a process holds only one
+  build of `heuristic`. To compare builds, register yours under a second id (`AiRegistry.registerPilot`
+  is a public seam and a re-registered id replaces the old one), run `--pilot-a heuristic --pilot-b
+  heuristic-next` in ONE process, and delete the temporary id before merge. Running the same-id control
+  on two branches proves nothing: it is exactly 50% on both by construction. Said in the help text, in
+  `PILOT_AB_BUILD_COMPARISON_NOTE`, and in §3.46.
+
+  Statistics reuse the existing machinery — `mcNemarTest` + `decideVerdict` on the matched SLOT (one
+  deck-pair × game index = the same game played both ways), same alpha as the card-swap verdict. The
+  game-level Wilson interval is printed but labelled DESCRIPTIVE: games arrive in matched pairs.
+  Power check: `heuristic` vs `random` at `--games 20` reads **1437–0 over 720 slots**, STRONGER.
+
+  `runPilotAb` is exported from the sim index so the Lab can drive it; that wiring is unclaimed.
+
+- 2026-08-23 integrator: **`feat/token-doublers` MERGED + DEPLOYED** — the token-count
+  replacement (Anointed Procession, Parallel Lives, **Doubling Season now compiles WHOLE**,
+  Mondrak's wording, Ojer Taq's creature-only triple). Audit: **586 → 589**. Verify green,
+  build exit 0.
+  👉 New `ReplacementEventKind` `'tokens'`, evaluated at the ONE token funnel
+  (`ctx.createToken` → `createTokenInState`): the count is replaced per funnel call, and
+  `times` composes per call exactly as per batch — which is the arithmetic reason the compiler
+  emits MULTIPLICATIVE token replacements only and refuses a "plus one" wording rather than
+  compounding it per token. The created def rides the event as its recipient, so a printed
+  "creature tokens" filter reads what is actually being made.
+  ❗ **Leave-it-better with teeth: the legacy `createToken` primitive hand-built instances past
+  the funnel** — skipping `tokenCreated` (ETB observers missed those tokens) and, once doublers
+  landed, it would have silently dodged every Procession printed. It now routes through
+  `ctx.createToken`.
+  ⚠️ One existing test REVERSED because the world changed under it, not because it was wrong:
+  `replacement-effects.test.ts` pinned "refuses a TOKEN doubler"; it now pins Doubling Season
+  compiling whole with both halves paired to their own event kinds.
+  (Integrator)
 
 - 2026-08-23 DESKTOP-90PJPM4: `fix/pilot-blink-weak-rows` ✅ MERGED + DEPLOYED — DESIGN §3.45. Off `main`.
   **5218 / 0**, `verify` 0. packages/ai ONLY.
@@ -186,7 +236,6 @@ _Append dated notes here; keep them short. Newest at top._
   to +3.5% — longer games, not slower code).
 
 - 2026-08-23 worker: `fix/blink-rules-fidelity` ✅ MERGED + DEPLOYED — DESIGN §3.44. Off `main`. **5217 / 0**, verify 0.
-
 - 2026-08-23 integrator: **`feat/modal-one-or-more` MERGED + DEPLOYED** — the "Choose one or
   more —" header plus `enchantment` / `land` / `planeswalker` as target restrictions of their
   own; Casualties of War compiles with all five modes. Audit: **585 → 586**. `npm run verify`
