@@ -161,7 +161,7 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
-- 2026-08-23 worker: `feat/pilot-ab-harness` 🚧 PUSHED, not merged — DESIGN §3.46. Off `main` (2777ebc).
+- 2026-08-23 worker: `feat/pilot-ab-harness` ✅ MERGED + DEPLOYED, not merged — DESIGN §3.46. Off `main` (2777ebc).
   **5295 / 0**, `verify` 0. **packages/sim ONLY — no pilot behaviour changed, no baseline moved.**
 
   §3.45's decisive evidence was a deck-neutral pilot A/B that lived for one afternoon in one worktree
