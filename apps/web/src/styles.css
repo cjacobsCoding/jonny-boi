@@ -1955,6 +1955,7 @@ button {
   gap: var(--space-4);
   margin-top: var(--space-5);
 }
+.play-mode__pilot { margin-top: var(--space-4); max-width: 32rem; }
 .play-mode__card {
   display: flex;
   flex-direction: column;

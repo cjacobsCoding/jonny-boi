@@ -36,8 +36,11 @@ function buildMenu(decks: DecksApi): DeckMenuItem[] {
 export function SetupScreen({
   decks,
   onStart,
+  aiSeat,
 }: {
   decks: DecksApi;
+  /** In a SOLO game, the seat the computer plays. Absent for pass-and-play. */
+  aiSeat?: 'A' | 'B';
   onStart: (args: {
     nameA: string;
     nameB: string;
@@ -49,8 +52,8 @@ export function SetupScreen({
 }): ReactElement {
   const menu = useMemo(() => buildMenu(decks), [decks]);
 
-  const [nameA, setNameA] = useState(HOTSEAT_CONFIG.defaultNameA);
-  const [nameB, setNameB] = useState(HOTSEAT_CONFIG.defaultNameB);
+  const [nameA, setNameA] = useState(aiSeat === 'A' ? HOTSEAT_CONFIG.defaultAiName : HOTSEAT_CONFIG.defaultNameA);
+  const [nameB, setNameB] = useState(aiSeat === 'B' ? HOTSEAT_CONFIG.defaultAiName : HOTSEAT_CONFIG.defaultNameB);
   const [keyA, setKeyA] = useState(menu[0]?.key ?? '');
   const [keyB, setKeyB] = useState(menu[1]?.key ?? menu[0]?.key ?? '');
   const [seedText, setSeedText] = useState(String(HOTSEAT_CONFIG.defaultSeed));
@@ -68,10 +71,11 @@ export function SetupScreen({
 
   return (
     <div className="play-setup">
-      <h2 className="play-setup__title">Pass-and-Play Setup</h2>
+      <h2 className="play-setup__title">{aiSeat ? 'Solo Setup' : 'Pass-and-Play Setup'}</h2>
       <p className="play-setup__intro">
-        Two players, one device. Pick decks and names, then hand the device back and forth — each
-        player only ever sees their own hand.
+        {aiSeat
+          ? 'Pick your deck and the deck the computer plays. Its hand stays hidden, exactly like a human opponent’s.'
+          : 'Two players, one device. Pick decks and names, then hand the device back and forth — each player only ever sees their own hand.'}
       </p>
 
       <div className="play-setup__seats">
@@ -82,19 +86,29 @@ export function SetupScreen({
           const key = isA ? keyA : keyB;
           const setKey = isA ? setKeyA : setKeyB;
           const problems = isA ? problemsA : problemsB;
+          const isAi = aiSeat === seat;
           return (
             <div key={seat} className="play-setup__seat">
-              <div className="section-label">Player {isA ? 'One' : 'Two'} (seat {seat})</div>
-              <label className="play-setup__field">
-                <span>Name</span>
-                <input
-                  className="input"
-                  value={name}
-                  maxLength={24}
-                  onChange={(e) => setName(e.target.value)}
-                  aria-label={`Seat ${seat} name`}
-                />
-              </label>
+              <div className="section-label">
+                {isAi ? `Computer (seat ${seat})` : `${aiSeat ? 'You' : `Player ${isA ? 'One' : 'Two'}`} (seat ${seat})`}
+              </div>
+              {/*
+                The computer's seat has no name field: naming your opponent is a
+                thing you do for a person sitting next to you, and an editable
+                "Computer" box is a decision the player did not ask to make.
+              */}
+              {!isAi && (
+                <label className="play-setup__field">
+                  <span>Name</span>
+                  <input
+                    className="input"
+                    value={name}
+                    maxLength={24}
+                    onChange={(e) => setName(e.target.value)}
+                    aria-label={`Seat ${seat} name`}
+                  />
+                </label>
+              )}
               <label className="play-setup__field">
                 <span>Deck</span>
                 <select className="select" value={key} onChange={(e) => setKey(e.target.value)} aria-label={`Seat ${seat} deck`}>

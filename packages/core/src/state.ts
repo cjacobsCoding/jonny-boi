@@ -617,6 +617,23 @@ export interface CombatState {
    * `internal/clone.ts` — a field-by-field cloner drops what it does not know.
    */
   attackTargets?: Record<InstanceId, InstanceId | PlayerId>;
+  /**
+   * Ids that have been REMOVED FROM COMBAT (CR 506.4) while their instance is
+   * still — or again — on the battlefield. See `combat-removal.ts` for the whole
+   * story: a blink returns the same id to the battlefield, so the id-based reads
+   * that handle every other departure cannot tell the returned NEW OBJECT
+   * (CR 400.7) from the one that left.
+   *
+   * An OVERLAY on `attackers`/`blocks`, never a rewrite of them, because those
+   * two are the declaration and other rules are read off it — deleting a removed
+   * blocker's entry would turn its attacker into an unblocked one.
+   *
+   * OPTIONAL and usually absent, like `attackTargets`, so every pre-existing
+   * consumer reads combat exactly as before and a combat with no blink allocates
+   * nothing. Anyone adding a field here must also edit `cloneCombat` in
+   * `internal/clone.ts` — a field-by-field cloner drops what it does not know.
+   */
+  removedFromCombat?: InstanceId[];
 }
 
 /** The whole game world as one plain-data object. */

@@ -41,6 +41,7 @@ import {
 import { isBattle, isPlaneswalker } from '../card.js';
 import { protectionBlocksSource } from '../protection.js';
 import { findOnBattlefield } from './zones.js';
+import { attackingCreatureIds, isRemovedFromCombat } from '../combat-removal.js';
 import type { ContinuousIndex } from './continuous.js';
 import { indexContinuous, NO_MOD } from './continuous.js';
 import { blockRequirementProblem } from './block-solver.js';
@@ -248,12 +249,14 @@ function dealsNormal(inst: CardInstance, index: ContinuousIndex): boolean {
 export function hasAnyFirstStrike(state: GameState, combat: GameState['combat']): boolean {
   if (!combat) return false;
   const index = indexContinuous(state);
-  for (const id of combat.attackers) {
+  for (const id of attackingCreatureIds(combat)) {
     const a = findOnBattlefield(state, id);
     if (a && dealsFirstStrike(a, index)) return true;
   }
   for (const blockerIdStr of Object.keys(combat.blocks)) {
-    const b = findOnBattlefield(state, Number(blockerIdStr));
+    const blockerId = Number(blockerIdStr);
+    if (isRemovedFromCombat(combat, blockerId)) continue;
+    const b = findOnBattlefield(state, blockerId);
     if (b && dealsFirstStrike(b, index)) return true;
   }
   return false;
@@ -447,9 +450,14 @@ function runDamageStep(
   const blockedAttackers = new Set<InstanceId>(Object.values(combat.blocks));
 
   // Group *living* blockers by the attacker they block, for lethal assignment.
+  // A blocker REMOVED from combat (CR 506.4 — blinked away and back as a new
+  // object) is skipped here exactly as a dead one is: it absorbs no damage. Its
+  // `blocks` entry still stands above, so its attacker stays blocked.
   const blockersByAttacker = new Map<InstanceId, CardInstance[]>();
   for (const [blockerIdStr, attackerId] of Object.entries(combat.blocks)) {
-    const blocker = findOnBattlefield(state, Number(blockerIdStr));
+    const blockerId = Number(blockerIdStr);
+    if (isRemovedFromCombat(combat, blockerId)) continue;
+    const blocker = findOnBattlefield(state, blockerId);
     if (!blocker) continue;
     const list = blockersByAttacker.get(attackerId) ?? [];
     list.push(blocker);
@@ -457,7 +465,7 @@ function runDamageStep(
   }
 
   // Attackers deal damage.
-  for (const attackerId of combat.attackers) {
+  for (const attackerId of attackingCreatureIds(combat)) {
     const attacker = findOnBattlefield(state, attackerId);
     if (!attacker || !participates(attacker)) continue;
     const atkPower = power(attacker, index);
@@ -496,9 +504,13 @@ function runDamageStep(
     }
   }
 
-  // Blockers deal damage back to the attacker they block.
+  // Blockers deal damage back to the attacker they block. Neither half may have
+  // been removed from combat: a blinked blocker deals nothing, and nothing is
+  // dealt back to a blinked ATTACKER, which is no longer being blocked at all.
   for (const [blockerIdStr, attackerId] of Object.entries(combat.blocks)) {
-    const blocker = findOnBattlefield(state, Number(blockerIdStr));
+    const blockerId = Number(blockerIdStr);
+    if (isRemovedFromCombat(combat, blockerId) || isRemovedFromCombat(combat, attackerId)) continue;
+    const blocker = findOnBattlefield(state, blockerId);
     const attacker = findOnBattlefield(state, attackerId);
     if (!blocker || !attacker || !participates(blocker)) continue;
     const blkPower = power(blocker, index);

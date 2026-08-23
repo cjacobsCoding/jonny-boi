@@ -253,6 +253,9 @@ function cloneCombat(c: CombatState | null): CombatState | null {
     // Copied only when present — absent means "everyone attacks the player", and
     // most combats never declare an attack on a permanent at all.
     ...(c.attackTargets !== undefined ? { attackTargets: { ...c.attackTargets } } : {}),
+    // Copied only when present — absent means "nothing has left combat", which
+    // is every combat that contains no blink (see `combat-removal.ts`).
+    ...(c.removedFromCombat !== undefined ? { removedFromCombat: [...c.removedFromCombat] } : {}),
   };
 }
 

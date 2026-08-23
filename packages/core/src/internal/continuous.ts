@@ -707,3 +707,25 @@ export function pruneOrphanContinuousEffects(state: GameState): void {
   if (state.continuous.every((e) => live.has(e.targetInstanceId))) return;
   state.continuous = state.continuous.filter((e) => live.has(e.targetInstanceId));
 }
+
+/**
+ * Drop every floating continuous effect aimed at ONE instance, because the object
+ * those effects were applying to has stopped existing (CR 400.7).
+ *
+ * The same job {@link pruneOrphanContinuousEffects} does by scanning, asked about
+ * a single id instead — and it exists because that scan asks "is the id still on
+ * the battlefield?", which a BLINK answers "yes" about a genuinely new object.
+ * Without this a Giant Growth survives being blinked, and — the other direction —
+ * a stolen creature's control-change effect survives too, so blinking it hands
+ * the creature BACK at end of turn instead of keeping it.
+ *
+ * A dropped `controlChange` is deliberately never reverted: the effect ended
+ * because its object is gone, and the returning permanent's controller is set by
+ * whatever put it back (for a blink, the blinker — CR 400.7 again). That is
+ * exactly what makes a blinked theft permanent.
+ */
+export function dropContinuousEffectsFor(state: GameState, instanceId: InstanceId): void {
+  if (state.continuous.length === 0) return;
+  if (!state.continuous.some((e) => e.targetInstanceId === instanceId)) return;
+  state.continuous = state.continuous.filter((e) => e.targetInstanceId !== instanceId);
+}

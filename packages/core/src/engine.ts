@@ -154,6 +154,7 @@ import {
   hasAnyFirstStrike,
   tapAttackers,
 } from './internal/combat.js';
+import { attackingCreatureIds } from './combat-removal.js';
 import { entersTapped, isAttackable, isCreature, isPlaneswalker } from './card.js';
 import { applyCopyAsEntersAnswer, askCopyAsEnters, extraLoyaltyForCopy } from './copy.js';
 import { addLoyalty, applyEnteringDefense, applyEnteringLoyalty, loyaltyOf, removeLoyalty } from './internal/stats.js';
@@ -4116,7 +4117,10 @@ function applyDeclareBlockers(
     if (!a) return rejectWith(prevState, `attacker ${attacker} is not on the battlefield`);
     if (b.controller !== action.player) return rejectWith(prevState, `you do not control ${b.def.name}`);
     if (!isCreature(b.def)) return rejectWith(prevState, `${b.def.name} is not a creature`);
-    if (!state.combat.attackers.includes(attacker)) {
+    // The declaration MINUS anything removed from combat: a creature blinked
+    // away after attackers were declared is not attacking any more (CR 506.4),
+    // and blocking it would be a wasted, illegal declaration.
+    if (!attackingCreatureIds(state.combat).includes(attacker)) {
       return rejectWith(prevState, `${a.def.name} is not attacking`);
     }
     if (!canBlock(a, b, cont)) return rejectWith(prevState, `${b.def.name} cannot block ${a.def.name}`);
@@ -4126,7 +4130,7 @@ function applyDeclareBlockers(
   // able"), neither of which a per-pair check can see. The requirement half needs
   // every creature the defender COULD have blocked with, not only the ones they
   // did — "if able" is a question about the whole board.
-  const attackingCreatures = state.combat.attackers
+  const attackingCreatures = attackingCreatureIds(state.combat)
     .map((id) => findOnBattlefield(state, id))
     .filter((c): c is CardInstance => c !== undefined);
   const availableBlockers: CardInstance[] = [];

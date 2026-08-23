@@ -406,4 +406,33 @@ describe('pool audit — every card claimed faithful really is', () => {
       expect(targetRestrictionOf(card) !== undefined, card.name).toBe(narrow);
     }
   });
+
+  /**
+   * SUBTYPES are behaviour, and the {@link behaviour} signature above cannot see
+   * them: it deliberately covers only what a card DOES, leaving the frame to the
+   * compiler's ground-truth suite — which tests the COMPILER, not a definition
+   * somebody typed by hand.
+   *
+   * Ten hand-authored curated cards had fallen through that gap with an empty
+   * type line, and one of them mattered on its own: **Serra Angel was not an
+   * Angel**, so Restoration Angel's printed "target NON-ANGEL creature you
+   * control" would happily have blinked it (DESIGN §3.43). The same hole was
+   * hiding a Goblin from Goblin Chieftain and a Snake from Ophiomancer.
+   *
+   * Asked of the FRONT face: a DFC's pool definition carries the front face's
+   * types at top level (the back is its own `backFace` record) while the index's
+   * merged `typeLine` splices both with a literal `//` between them.
+   */
+  it('every card carries its printed creature/land types', () => {
+    for (const card of CARD_POOL) {
+      const scryfall = scryfallById.get(card.id);
+      if (!scryfall) continue; // reported by the per-card audit above
+      const face = scryfall.faces?.[0]?.typeLine ?? scryfall.typeLine;
+      const printed = [...face.subtypes].map((s) => s.toLowerCase()).sort();
+      const declared = [...(card.subtypes ?? [])].map((s) => s.toLowerCase()).sort();
+      expect(declared, `${card.name} — printed "${face.types.join(' ')} — ${face.subtypes.join(' ')}"`).toEqual(
+        printed,
+      );
+    }
+  });
 });
