@@ -86,6 +86,7 @@ import type { TargetRestriction, TriggeredAbility } from '@jonny-boi/core';
 import { cardValue, cardValueContext } from './card-value.js';
 import type { ContinuousIndex } from './board-stats.js';
 import { boardIndex, keywordsOf, power, statTotal, toughness, toughnessLeft } from './board-stats.js';
+import { resolveFight } from './combat-math.js';
 import { resolutionValueContext, valueOfEffects, valueOfMode } from './effect-value.js';
 import { answerChoiceHeuristically, safeFallbackAction } from './choices.js';
 import { bestLandDrop, describeLandDrop, rankLandDrops, totalAvailableMana } from './land-sequencing.js';
@@ -2132,6 +2133,30 @@ function planWalkerAttack(
  * best single blocker, the expected outcome's value clears the threshold. We model
  * the opponent blocking with the cheapest creature that profitably trades; if no
  * such blocker exists the attacker connects for face damage.
+ *
+ * ⚠️ **THIS READS THE PRINTED BOXES ON PURPOSE, AND THE PURPOSE IS A
+ * MEASUREMENT (DESIGN §3.43).** `pickBlocker` asks `resolveFight` who dies;
+ * this does not, so the pilot knowingly over-rates its own attacks into a
+ * deathtoucher — 946 of them per 100 gauntlet games against Mono-Green Ramp.
+ * Two further things were built, measured and REJECTED, and re-deriving them is
+ * a day of work that ends where it started:
+ *
+ *  1. **Teaching this function `resolveFight` too.** Correct, and it makes the
+ *     pilot passive: nothing profitably attacks into a Deadly Recluse, both
+ *     seats sit, and the board locks. Selesnya Blink vs Mono-Green Ramp went
+ *     51% → 27%, the gauntlet's timeout draws 10 → 29 and throughput 45 → 43
+ *     games/sec (20 g/s in that matchup) — a stalled game is not a better one.
+ *  2. **Also allocating the defender's blockers**, so one 1/2 cannot deter three
+ *     attackers at once. That un-stalls it beautifully (draws 29 → 1, throughput
+ *     to 63 g/s, Selesnya to 74%) and it loses the deck-neutral A/B against
+ *     `main`'s pilot 1406–1422 — because it frees marginal attackers and this
+ *     pilot has NO model of the crack-back it just tapped out for.
+ *
+ * The gauntlet row and the pilot's strength moved in opposite directions, and
+ * the row is the one that lies: both seats run this pilot, so a change that
+ * suits one archetype tilts the meta rather than raising the ceiling. The
+ * honest next step is a crack-back model (what my board can still block after
+ * these attackers tap), not another pass at this predicate.
  */
 function attackIsProfitable(
   attacker: CardInstance,
@@ -2324,6 +2349,10 @@ function chooseBlock(
  * Pick the best unused blocker for an attacker, or undefined to take the damage.
  * When desperate (facing lethal / low life) we chump-block to survive even at a
  * loss; otherwise we block only for a favourable-or-even trade.
+ *
+ * Who dies is `resolveFight`'s answer, not the printed boxes — so a deathtoucher
+ * is a blocker, a first-striker that kills outright is not a trade, and against a
+ * TRAMPLER the body chosen is the one that soaks the most (DESIGN §3.43).
  */
 function pickBlocker(
   attacker: CardInstance,
@@ -2348,12 +2377,18 @@ function pickBlocker(
     if (!canBlockByEvasion(attacker, b, index)) continue;
     const bPower = power(b, index);
     const bTough = toughness(b, index);
-    const blockerDies = aPower >= bTough;
-    const attackerDies = bPower >= aTough;
-    // Trade value to US: gain by killing the attacker, lose by losing our blocker.
+    // Who actually dies — deathtouch, first strike, indestructible and damage
+    // already marked, rather than `aPower >= bTough`. See `combat-math.ts` for
+    // the four cards' worth of difference that makes, and for why the ATTACK
+    // decision deliberately still reads the printed boxes.
+    const outcome = resolveFight(attacker, b, index);
+    const { attackerDies, blockerDies } = outcome;
+    // Trade value to US: gain by killing the attacker, lose by losing our blocker,
+    // and pay for whatever this body fails to stop — see `blockTrampleLeakPerPoint`.
     const value =
       (attackerDies ? weights.killEnemyPerStat * (aPower + aTough) : 0) -
-      (blockerDies ? weights.ownCreatureLossPerStat * (bPower + bTough) : 0);
+      (blockerDies ? weights.ownCreatureLossPerStat * (bPower + bTough) : 0) -
+      weights.blockTrampleLeakPerPoint * outcome.damageThrough;
     if (value > bestValue) {
       bestValue = value;
       best = b;

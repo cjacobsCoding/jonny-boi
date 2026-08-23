@@ -207,6 +207,26 @@ export interface HeuristicWeights {
    *  if the trade is at least this good (kills the attacker without losing more
    *  than we gain). */
   readonly blockValueThreshold: number;
+  /**
+   * What one point of TRAMPLE OVERFLOW costs when choosing which body to put in
+   * front of an attacker, in the same stat-point units as
+   * {@link ownCreatureLossPerStat}.
+   *
+   * A block is otherwise priced purely as a trade of bodies, which says every
+   * chump block against a 7/7 trampler is identical — so the pilot picks the
+   * cheapest creature it owns and six damage walks over a 1/1 that an 0/4 wall
+   * standing next to it would have cut to three. This term is what tells those
+   * two apart.
+   *
+   * ⚠️ It is deliberately a PENALTY on what leaks, never a bonus for what is
+   * soaked. The bonus version was measured — a "damage prevented" reward that
+   * makes the pilot block more often — and it is worse: at 1 point per damage it
+   * loses a deck-neutral A/B to `main`'s pilot 1343–1484, because a wall that
+   * chump-blocks is a wall that is not there next turn. Priced as a penalty it
+   * can only change WHICH block is made, never WHETHER, so it cannot reintroduce
+   * that. Zero for every attacker without trample, which is nearly all of them.
+   */
+  readonly blockTrampleLeakPerPoint: number;
   /** How much a printed block REQUIREMENT ("~ must be blocked if able", "all
    *  creatures able to block ~ do so") is worth when the pilot ranks creatures.
    *  A LURE IS A THREAT, NOT A GIFT: it does not make the attacker easier to kill,
@@ -485,6 +505,11 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // blocking
   desperateLifeThreshold: 10,
   blockValueThreshold: 0,
+  // One point of life ≈ one stat point, the exchange rate the rest of combat
+  // already uses (`faceDamageValue` is 1 on the same scale). At 1 an 0/4 wall
+  // (4 stats) outranks a 1/1 token in front of a 7/7 trampler by exactly the
+  // three points of life the swap is worth.
+  blockTrampleLeakPerPoint: 1,
   // Worth roughly a two-point body: a lure on a 1/1 is still the card that decides
   // the combat, and this is what makes the pilot point removal at it.
   blockRequirementThreatValue: 4,
