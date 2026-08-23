@@ -114,6 +114,19 @@ describe('Restoration Angel', () => {
     expect(targets, 'Angel of Mercy is an Angel; the printed line excludes it').not.toContain(other);
   });
 
+  it('excludes SERRA ANGEL too — the exclusion reads the type line, not the pool file', () => {
+    // Serra Angel is in the hand-authored curated pool rather than the generated
+    // one, and it used to carry NO subtypes at all — so the engine did not know
+    // it was an Angel and this blink would have taken it (DESIGN §3.43). The
+    // restriction was always right; the card's type line was missing.
+    const reg = buildRegistry();
+    const s = openBoard(reg);
+    place(s, RESTO, 'A');
+    const serra = place(s, getByName('Serra Angel'), 'A');
+    const targets = legalTargetsFor(s, 'nonAngelCreatureYouControl', 'A', RESTO);
+    expect(targets, 'an Angel is an Angel wherever its definition lives').not.toContain(serra);
+  });
+
   it('DOES target an ordinary creature — the card still works', () => {
     const reg = buildRegistry();
     const s = openBoard(reg);

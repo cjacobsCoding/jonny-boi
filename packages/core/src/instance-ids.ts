@@ -236,6 +236,8 @@ const NON_EVENT_INSTANCE_ID_FIELDS = [
   'attacker',
   /** `CombatState.blocks` keys + `BlockAssignment.blocker`. */
   'blocker',
+  /** `CombatState.removedFromCombat` — ids taken out of combat (CR 506.4). */
+  'removedFromCombat',
   /** `ChoiceCandidate.ref` — the object an option refers to. */
   'ref',
   /** `SelectCardsAnswer.instanceIds` — the cards an answer picked. */
