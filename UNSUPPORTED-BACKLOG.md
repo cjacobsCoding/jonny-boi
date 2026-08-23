@@ -5,15 +5,15 @@
 
 | | cards | share |
 |---|---:|---:|
-| Fully playable today | 571 | 27.2% |
-| Blocked by a missing system | 1529 | 72.8% |
+| Fully playable today | 585 | 27.9% |
+| Blocked by a missing system | 1515 | 72.1% |
 
 Ranked by **how many cards each system unblocks**, so the top row is the
 highest-value engine work available.
 
-Of the 1540 distinct gaps, **27** are named **engine systems** (136 card-blocks — real work) and **1513** are **template gaps** (2189 card-blocks — text no compiler rule matched, typically one rule-table entry each). The two cost wildly different amounts, so every entry below carries its kind, and the `--json` output carries it as `kind`.
+Of the 1531 distinct gaps, **27** are named **engine systems** (136 card-blocks — real work) and **1504** are **template gaps** (2162 card-blocks — text no compiler rule matched, typically one rule-table entry each). The two cost wildly different amounts, so every entry below carries its kind, and the `--json` output carries it as `kind`.
 
-Showing the top 25 of **1540** distinct gaps. The remaining 1515 account for 2069 card-blocks between them — a long tail of one-off templates, not a second tier of systems. Re-run with a larger `--top` to see it.
+Showing the top 25 of **1531** distinct gaps. The remaining 1506 account for 2042 card-blocks between them — a long tail of one-off templates, not a second tier of systems. Re-run with a larger `--top` to see it.
 
 ## a COPY-CREATING template outside the compiler’s closed tables (spell/ability copies — the "you control" scopes included — token copies, TAPPED token copies, and "another target nonland permanent you control" are all implemented; what is missing is this selector or tail: a "nonlegendary"/"token" target, "copy THAT spell" naming the spell that triggered the ability, a follow-up sentence about the token just created, an "except …" tail on a SPELL copy, a for-each iteration, or a copy COUNT conditional on where the spell was cast from)
 

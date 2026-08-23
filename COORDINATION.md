@@ -88,6 +88,7 @@ throughput (games/sec) from regressing.
 | fix/land-sequencing | worker | packages/ai (new: land-sequencing.ts + test; heuristic/weights/index/bench + tactical-suite.test), DESIGN §3.4e + §3.4a/§3.4d baseline notes | 🚧 PUSHED, not merged — branches off main; **moves the recorded heuristic baselines** |
 | feat/optional-payment | DESKTOP-90PJPM4 (integrator) | packages/core (choices/effects/engine/events/mana/clone + new optional-payment.test.ts), packages/cards (choice-primitives/primitives/effect-helpers/compile rules+text+compile + new test), packages/ai (choices/effect-value/heuristic/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
 | feat/trigger-targets | DESKTOP-90PJPM4 (integrator) | packages/core (triggers/state/choices/engine/events/clone + new trigger-targets.test.ts), packages/cards (compile types/compile/rules + new test), packages/ai (choices/effect-value/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
+| feat/cost-reduction | DESKTOP-90PJPM4 (integrator) | packages/core (card/engine/index + new cost-reduction.test.ts), packages/cards (compile rules/compile/types), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/karoo-lands | DESKTOP-90PJPM4 (integrator) | packages/core (card/engine), packages/cards (choice-primitives + compile rules/compile/types + new karoo-lands.test.ts), packages/sim (1 classification line), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/copy-templates | DESKTOP-90PJPM4 (integrator) | packages/core (targeting/state/engine/clone/intervening), packages/cards (compile rules+compile+types + new copy-templates.test.ts), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/shocklands | worker | packages/core (card/choices/effects/engine/index + new shockland.test.ts), packages/cards (choice-primitives/effect-helpers/compile rules+text+types+compile + activated.test + new shockland.test.ts), packages/ai (choices.ts), apps/web (choice-view + ChoicePrompt + choice-session.test), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED |
@@ -155,6 +156,26 @@ throughput (games/sec) from regressing.
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-23 integrator: **`feat/cost-reduction` MERGED + DEPLOYED** — "TYPE/COLOUR spells you
+  cast cost {N} less to cast" (Goblin Electromancer, the whole Medallion cycle, Etherium
+  Sculptor). Audit: **571 → 585 playable**. `npm run verify` **5255 / 0**, build exit 0.
+  👉 **`castManaCostFor(state, caster, castDef, base)`** — ONE exported helper applied at BOTH
+  the offer (`offerCastsOf`) and the pay (`applyCastSpell`), so a spell a Medallion makes
+  affordable is offered AND accepted. It wraps whatever cost is actually being paid — printed,
+  flashback, madness — because CR 601.2f applies reductions to alternative costs too. Reduces
+  the GENERIC portion only (never a pip: {U}{U} under Sapphire Medallion stays {U}{U}); copies
+  stack; controller-scoped.
+  👉 Data model: `CardDefinition.castCostReduction = { amount, filter? }` with the shared
+  `CardFilter` naming the spell scope (types or colours). Compile rule is a CLOSED scope list
+  (instant-and-sorcery / creature / noncreature / artifact / enchantment / five colours);
+  "spells your OPPONENTS cast cost more" is a different system and does not match.
+  ⚠️ **KNOWN, deliberate gap: the PILOTS do not read reductions when planning taps.** The menu
+  is engine-built so nothing illegal happens, but a pilot funds the PRINTED cost — it may
+  overtap (mana floats, wasted) or skip a cast the reduction made affordable (its own
+  affordability check is printed-cost). No gauntlet deck carries a reducer today, so no recorded
+  baseline moves; whoever teaches the planners should route them through `castManaCostFor`.
+  (Integrator)
 
 - 2026-08-23 integrator: **`feat/karoo-lands` MERGED + DEPLOYED** — the two most-repeated missing
   clauses in the corpus, closed together. Audit (same corpus): **559 → 571 playable**. `npm run

@@ -677,6 +677,24 @@ export interface CardDefinition {
    */
   readonly additionalLandPlays?: number;
   /**
+   * "Instant and sorcery spells you cast cost {1} less to cast." (Goblin
+   * Electromancer; the Medallion cycle prints the one-colour form.) While this
+   * permanent is on the battlefield, its CONTROLLER'S matching spells cost
+   * `amount` less GENERIC mana — CR 601.2f's arithmetic: a reduction never
+   * touches coloured pips, so `{U}{U}` under a Sapphire Medallion still costs
+   * `{U}{U}`. `filter` names which spells qualify through the same `CardFilter`
+   * everything else reads (types, colours); absent means every spell you cast.
+   *
+   * Read by the engine's `castManaCostFor` at BOTH the offer and the pay, and
+   * it applies to whichever cost is actually being paid (printed, flashback,
+   * madness) — CR 601.2f applies reductions to alternative costs too. Copies
+   * stack.
+   */
+  readonly castCostReduction?: {
+    readonly amount: number;
+    readonly filter?: import('./choices.js').CardFilter;
+  };
+  /**
    * A "reveal-land" (the Shadows over Innistrad / Strixhaven cycles): "As ~
    * enters, you may **reveal** an Island or Swamp card from your hand. If you
    * don't, this land enters tapped." The value is the printed land types the

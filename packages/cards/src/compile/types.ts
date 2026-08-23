@@ -160,6 +160,8 @@ export interface ClauseContribution {
   readonly entersTappedUnlessLifePaid?: number;
   /** Set by "you may play an additional land on each of your turns". */
   readonly additionalLandPlays?: number;
+  /** Set by "TYPE/COLOUR spells you cast cost {N} less to cast". */
+  readonly castCostReduction?: import('@jonny-boi/core').CardDefinition['castCostReduction'];
   /** Set when the text asks for a REVEAL to enter untapped (a reveal-land). */
   readonly entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
   /**

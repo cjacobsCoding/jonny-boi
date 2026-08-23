@@ -4180,7 +4180,43 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
 // --- mana abilities -------------------------------------------------------------
 
 /** Card-level static properties printed as their own ability line. */
+/**
+ * The spell scopes a printed cost reduction may name, each as the `CardFilter`
+ * the engine's `castManaCostFor` matches the CAST FACE against. Closed for the
+ * usual reason: a scope read loosely reduces spells the printed card does not.
+ */
+const CAST_REDUCTION_SCOPES: Readonly<Record<string, CardFilter>> = Object.freeze({
+  'instant and sorcery': { anyOfTypes: ['instant', 'sorcery'] },
+  creature: { anyOfTypes: ['creature'] },
+  noncreature: { noneOfTypes: ['creature'] },
+  artifact: { anyOfTypes: ['artifact'] },
+  enchantment: { anyOfTypes: ['enchantment'] },
+  white: { anyOfColors: ['W'] },
+  blue: { anyOfColors: ['U'] },
+  black: { anyOfColors: ['B'] },
+  red: { anyOfColors: ['R'] },
+  green: { anyOfColors: ['G'] },
+});
+
 export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
+  {
+    id: 'cast-cost-reduction',
+    description:
+      '"Instant and sorcery spells you cast cost {1} less to cast." (Goblin Electromancer; the Medallion cycle prints the colour form)',
+    // A CLOSED list of spell scopes, each mapping to the shared `CardFilter`.
+    // "Spells your opponents cast cost more" is a different system (a tax on the
+    // other seat) and deliberately does not match.
+    pattern:
+      /^(instant and sorcery|creature|artifact|enchantment|noncreature|white|blue|black|red|green) spells you cast cost \{(\d+)\} less to cast$/,
+    build(match) {
+      const amount = Number.parseInt(match[2] ?? '', 10);
+      if (!Number.isFinite(amount) || amount <= 0) return null;
+      const scope = match[1] ?? '';
+      const filter = CAST_REDUCTION_SCOPES[scope];
+      if (filter === undefined) return null;
+      return { castCostReduction: { amount, ...(Object.keys(filter).length > 0 ? { filter } : {}) } };
+    },
+  },
   {
     id: 'additional-land-plays',
     description:

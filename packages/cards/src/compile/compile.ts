@@ -301,6 +301,7 @@ interface Assembly {
   entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   entersTappedUnlessLifePaid?: number;
   additionalLandPlays?: number;
+  castCostReduction?: CardDefinition['castCostReduction'];
   entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
   copyAsEnters?: import('@jonny-boi/core').CopyAsEntersSpec;
   /** The printed "As ~ enters, choose a…" naming, once some line prints it. */
@@ -386,6 +387,7 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.additionalLandPlays !== undefined) {
     assembly.additionalLandPlays = (assembly.additionalLandPlays ?? 0) + contribution.additionalLandPlays;
   }
+  if (contribution.castCostReduction !== undefined) assembly.castCostReduction = contribution.castCostReduction;
   if (contribution.copyAsEnters !== undefined) assembly.copyAsEnters = contribution.copyAsEnters;
   if (contribution.entersTappedUnlessRevealed !== undefined) {
     assembly.entersTappedUnlessRevealed = contribution.entersTappedUnlessRevealed;
@@ -1266,6 +1268,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(assembly.additionalLandPlays !== undefined
       ? { additionalLandPlays: assembly.additionalLandPlays }
       : {}),
+    ...(assembly.castCostReduction !== undefined ? { castCostReduction: assembly.castCostReduction } : {}),
     ...(assembly.asEntersChoice !== undefined ? { asEntersChoice: assembly.asEntersChoice } : {}),
     ...(assembly.isChosenSubtype ? { isChosenSubtype: true } : {}),
     ...(xCount > 0 ? { xCost: xCount } : {}),
