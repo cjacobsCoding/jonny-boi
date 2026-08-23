@@ -3526,6 +3526,63 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
+### 3.43 The pilot could not see deathtouch — ✅ done  *(and two bigger "fixes" that measured worse)*
+
+The question was *why does the heuristic pilot play Selesnya Blink worse than it should* — 71.0% in the
+gauntlet, with three weak rows: Mono-Green Ramp 51, Izzet Prowess 54, Orzhov Lifegain 58.
+
+**What was measured first, before anything was changed.** Replaying the exact seed-99 games with the
+pilot wrapped in a probe ruled out the obvious suspects: across 100 games it passed its own main phase
+**2,241 times and never once while holding a spell `planManaPayment` could fund** — no unspent mana,
+no card stuck in hand. What it did do was mis-read combat:
+
+| the pilot's blind spot, per 100 games | Mono-Green | Orzhov | Boros | the other five |
+|---|---|---|---|---|
+| attacks priced as safe into an untapped **deathtoucher** | 946 | 242 | — | **0** |
+| **first-strike** fights scored as trades | — | — | 146 | **0** |
+| attackers left unblocked with a legal untapped blocker | 1,416 (4,203 dmg) | 126 | 279 | — |
+
+Zero in every deck that prints none of those keywords, and the counts land on exactly the weak rows.
+`attackIsProfitable` and `pickBlocker` both answered "who dies" with the same two lines —
+`blockerPower >= attackerToughness` — which is blind to **deathtouch** (CR 702.2b), **first strike**
+(CR 702.7b), **indestructible** (CR 702.12b), **marked damage** and **trample** (CR 702.19b). One
+predicate, two call sites, four rules missing. `combat-math.ts` is that predicate written once.
+
+⚠️ **Only the BLOCK decision uses it, and the other three-quarters of the obvious fix are recorded
+here because they were built, measured and rejected.** The yardstick is a **deck-neutral pilot A/B**:
+for all 36 pairs of sample decks, new-pilot-on-X vs old-on-Y *and* old-on-X vs new-on-Y on the same
+seeds, so deck strength and seat cancel. Its control (main vs main) is exactly **3546–3546** over
+7,200 games, which is what makes the rest of the column readable:
+
+| build | deck-neutral A/B vs `main` | what it did to the gauntlet |
+|---|---|---|
+| **block side only (shipped)** | **3627–3455 = 51.2%** (p ≈ 0.04) | Selesnya 568 → 575, Mono-Red byte-identical |
+| + the same fix in `attackIsProfitable` | 1400–1395 = 50.1% | **Selesnya vs Mono-Green 51 → 27**, draws 10 → 29, 43 g/s |
+| + allocating the defender's blockers | 1406–1422 = 49.7% | Selesnya → 74%, draws → 1, 63 g/s |
+| + "damage prevented" as a block BONUS | 1343–1484 = 47.5% | Selesnya → 74%, Mono-Green-as-hero −40 |
+
+**The gauntlet row and the pilot's strength moved in opposite directions, and the row is the one that
+lies.** Both seats run this pilot, so a change that suits one archetype tilts the meta instead of
+raising the ceiling — the 74% build is a *worse* pilot that happens to flatter a deck built out of
+walls. Teaching the attack decision the truth is correct in isolation and makes both seats refuse
+every attack into a Deadly Recluse, at which point the board locks and the lab collects timeout draws;
+allocating blockers un-stalls that and then loses, because freeing marginal attackers taps out a pilot
+with **no model of the crack-back**. That model, not another pass at the predicate, is the honest next
+step, and the ⚠️ on `attackIsProfitable` says so at the call site.
+
+**What shipped** is `resolveFight` in `pickBlocker` plus one weight, `blockTrampleLeakPerPoint`, which
+prices trample overflow as a PENALTY on the body chosen — never a bonus for blocking, so it can only
+change *which* block is made and never *whether*. The bonus form is the 47.5% row above: a wall that
+chump-blocks is a wall that is not there next turn.
+
+📊 Selesnya Blink **568 → 575/800**, Mono-Green Ramp row 51 → 52, Orzhov 58 → 63, Golgari 69 → 72,
+Boros 72 → 70, and Izzet Prowess **unmoved at 54** — that row has no keyword this touches and remains
+unexplained. ⚠️ **BASELINES MOVE for two decks**: Mono-Green Ramp as hero **491 → 537/800** (it finally
+blocks with its own Deadly Recluse) and UW Control **426 → 413/800**. Mono-Red Aggro is **byte-identical
+at 224/800**, which is the shape of the whole change: **224 of 433,776 decisions differ, and every one
+of them is a block declaration.** Throughput at parity — deterministic engine actions +0.05% (Mono-Red)
+to +3.5% (Mono-Green), which is slightly longer games rather than slower code.
+
 ### 3.42 The pilot could not price "you may" — ✅ done
 
 Found by asking a narrow question honestly: *are all 60 cards in Selesnya Blink functional?* They are
