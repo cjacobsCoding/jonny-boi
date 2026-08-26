@@ -12,7 +12,7 @@ import {
   normalizeRoomCode,
   resolveServerUrl,
 } from '../../lib/online/online-config.js';
-import { validateChoice } from '../../lib/play/setup.js';
+import { validateChoiceForOnline } from '../../lib/play/setup.js';
 import { HOTSEAT_CONFIG } from '../../lib/play/play-config.js';
 import { ConnectionIndicator } from './ConnectionIndicator.js';
 import { OnlineBoard } from './OnlineBoard.js';
@@ -259,7 +259,10 @@ function LobbyScreen({
   const { state } = online;
   const [deckKey, setDeckKey] = useState(menu[0]?.key ?? '');
   const choice = menu.find((m) => m.key === deckKey)?.choice;
-  const problems = choice ? validateChoice(choice) : ['Pick a deck.'];
+  // ONLINE, not local: the server knows only the curated pool — see
+  // `validateChoiceForOnline` for why validating with the local pool here would be
+  // a false green.
+  const problems = choice ? validateChoiceForOnline(choice) : ['Pick a deck.'];
   const deckOk = !!choice && problems.length === 0;
 
   const me = state.yourSeat;
