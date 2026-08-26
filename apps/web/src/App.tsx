@@ -1,8 +1,9 @@
-import { useEffect, useState, useSyncExternalStore, type ReactElement } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactElement } from 'react';
 import { attribution, allAvailableCards } from './lib/cards.js';
 import { BugReporter } from './components/BugReporter.js';
 import { registerStateSection } from './lib/bugreport/state-dump.js';
 import { importedCardCount, subscribeToImportedCards } from './lib/decklist/importedCards.js';
+import { NAV_FITS, computeNavOverflow, type NavOverflow } from './lib/nav-overflow.js';
 import { useDecks } from './lib/useDecks.js';
 import { useSimWorker } from './lib/useSimWorker.js';
 import { useLabSelection } from './lib/useLabSelection.js';
@@ -42,6 +43,35 @@ export function App(): ReactElement {
 
   const [view, setView] = useState<ViewId>('cards');
   const decks = useDecks();
+
+  // On phones the nav is a swipe strip with a hidden scrollbar, and a clipped
+  // edge used to end in flat background — four of the seven tabs were
+  // undiscoverable at 390px (TMB-JB-0002). Measure the strip and mark each
+  // edge that still hides tabs; styles.css turns the marks into an edge fade
+  // plus a chevron. Desktop never overflows, so the marks stay off there.
+  const navRef = useRef<HTMLElement | null>(null);
+  const [navMore, setNavMore] = useState<NavOverflow>(NAV_FITS);
+  useEffect(() => {
+    const nav = navRef.current;
+    if (nav === null) return undefined;
+    const measure = (): void => {
+      const next = computeNavOverflow(nav.scrollLeft, nav.clientWidth, nav.scrollWidth);
+      // Preserve identity when nothing changed so scroll events don't re-render.
+      setNavMore((prev) => (prev.start === next.start && prev.end === next.end ? prev : next));
+    };
+    measure();
+    nav.addEventListener('scroll', measure, { passive: true });
+    // Rotation/resize moves the overflow edge without any scroll event. Fall
+    // back to window resize where ResizeObserver is missing (old WebViews).
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(nav);
+    if (observer === null) window.addEventListener('resize', measure);
+    return () => {
+      nav.removeEventListener('scroll', measure);
+      observer?.disconnect();
+      if (observer === null) window.removeEventListener('resize', measure);
+    };
+  }, []);
 
   // The sim workers live HERE, above the views, so a run survives navigation.
   // Owned by `LabView`/`MatchView` they were destroyed the moment you switched
@@ -86,19 +116,25 @@ export function App(): ReactElement {
             deck lab
           </span>
         </div>
-        <nav className="app__nav" aria-label="Primary">
-          {VIEWS.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              className={`nav-link${view === id ? ' nav-link--active' : ''}`}
-              aria-current={view === id ? 'page' : undefined}
-              onClick={() => setView(id)}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
+        <div
+          className={`app__nav-wrap${navMore.start ? ' app__nav-wrap--more-start' : ''}${
+            navMore.end ? ' app__nav-wrap--more-end' : ''
+          }`}
+        >
+          <nav className="app__nav" aria-label="Primary" ref={navRef}>
+            {VIEWS.map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                className={`nav-link${view === id ? ' nav-link--active' : ''}`}
+                aria-current={view === id ? 'page' : undefined}
+                onClick={() => setView(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+        </div>
       </header>
 
       <main className="app__main">

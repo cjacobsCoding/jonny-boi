@@ -80,6 +80,8 @@
   --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.35);
   --shadow-pop: 0 8px 32px rgba(0, 0, 0, 0.55);
   --transition: 140ms ease;
+  /* Width of the "more tabs this way" fade at a clipped end of the nav strip. */
+  --nav-fade-width: var(--space-6);
 }
 
 * {
@@ -151,9 +153,86 @@ button {
   line-height: 1;
 }
 
+/* Hosts the nav strip plus its overflow cues. Sizes to its content, so on
+   desktop it is invisible in the layout — the header row reads exactly as if
+   the nav were its direct child. */
+.app__nav-wrap {
+  position: relative;
+  display: flex;
+}
+
 .app__nav {
   display: flex;
   gap: var(--space-1);
+}
+
+/*
+ * Overflow cues (TMB-JB-0002). When the nav is a swipe strip (phones), a
+ * clipped edge used to end in flat background — indistinguishable from a
+ * complete row, so the tabs past it were undiscoverable. App.tsx measures the
+ * strip (computeNavOverflow) and sets a --more-* class per edge that still
+ * hides tabs; that edge then fades out under a chevron, so the row reads as a
+ * window onto a longer list. Both cues vanish when everything fits, so
+ * desktop renders untouched. The gradient is a mask (the CONTENT fades), not
+ * an overlay, so it needs no color that matches the translucent, blurred
+ * header behind it.
+ */
+.app__nav-wrap--more-end .app__nav {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - var(--nav-fade-width)),
+    transparent
+  );
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--nav-fade-width)), transparent);
+}
+
+.app__nav-wrap--more-start .app__nav {
+  -webkit-mask-image: linear-gradient(
+    to left,
+    #000 calc(100% - var(--nav-fade-width)),
+    transparent
+  );
+  mask-image: linear-gradient(to left, #000 calc(100% - var(--nav-fade-width)), transparent);
+}
+
+.app__nav-wrap--more-start.app__nav-wrap--more-end .app__nav {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--nav-fade-width),
+    #000 calc(100% - var(--nav-fade-width)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--nav-fade-width),
+    #000 calc(100% - var(--nav-fade-width)),
+    transparent
+  );
+}
+
+/* The chevrons sit in the faded zone the mask just cleared. Decorative only:
+   assistive tech already reaches every tab, so they are pseudo-content. */
+.app__nav-wrap::before,
+.app__nav-wrap::after {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-fg-muted);
+  font-size: var(--text-base);
+  line-height: 1;
+  pointer-events: none;
+}
+
+.app__nav-wrap--more-start::before {
+  content: '‹';
+  left: 0;
+}
+
+.app__nav-wrap--more-end::after {
+  content: '›';
+  right: 0;
 }
 
 .nav-link {
@@ -391,7 +470,11 @@ button {
 .chip-color--C { background: var(--mana-c); color: var(--mana-c-ink); }
 
 .result-count {
-  color: var(--color-fg-faint);
+  /* Muted, not faint: this is the live feedback for every filter (the only
+     number on the toolbar), and the faint token measured 3.88:1 at ~9px —
+     under the 4.5:1 body-text floor (TMB-JB-0003). Muted clears it with room
+     (7.1:1 on the toolbar ground). */
+  color: var(--color-fg-muted);
   font-size: var(--text-xs);
   margin-left: auto;
 }
@@ -1897,7 +1980,14 @@ button {
   }
   /* The nav becomes its own scroll strip instead of stretching the page: the
      tabs stay on one line, reachable by swiping the header, and `main` keeps
-     the full viewport width. */
+     the full viewport width. The strip hides its scrollbar, so the
+     .app__nav-wrap--more-* fades + chevrons above are the ONLY thing telling
+     a phone user the row continues (TMB-JB-0002) — do not remove one without
+     the other. */
+  .app__nav-wrap {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
   .app__nav {
     flex: 1 1 auto;
     min-width: 0;

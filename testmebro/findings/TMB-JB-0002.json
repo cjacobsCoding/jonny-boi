@@ -1,0 +1,65 @@
+{
+  "id": "TMB-JB-0002",
+  "project": "jonny-boi",
+  "rubric": "ui-visual",
+  "persona": "first-timer",
+  "session": "20260821_145226_jonny-boi_ui-visual",
+  "created": "2026-08-21T21:59:41Z",
+  "updated": "2026-08-26T14:55:14Z",
+  "build": {
+    "vcs_rev": "d56b275126651ee806fedb280253cf5b61de91bd",
+    "vcs_dirty": true,
+    "binary": "D:\\Cool Stuff\\Claude\\jonny-boi\\apps\\web\\dist\\index.html",
+    "binary_sha256": "f821edd5950ba44ccd63a0a833b36d23f56dc9a9f6aeac7ed05bfa1f8847ef79",
+    "binary_mtime": "2026-08-21T21:53:14.661613+00:00"
+  },
+  "surface": "deck_builder",
+  "title": "At 390px the top nav is clipped after Play with no overflow cue, hiding four of eight destinations",
+  "severity": "major",
+  "confidence": "confirmed",
+  "category": "ui-visual",
+  "what_happened": "On the phone capture (390x844) the top bar shows the wordmark and then Cards, Deck Builder, Play - and then it just stops. Lab, Watch a Game, Proxies and About are all present at 1280px and none of them are on screen at 390px. Cropped the right end of that bar at 6x: 'Play' ends around x=358 and the remaining 32px to the frame edge is flat background. There is no fade-out, no chevron, no ellipsis, no scrollbar track and no hamburger button anywhere in the bar. The same bar renders the same way on the about capture, so it is the shared component and not one page's layout.",
+  "expected": "Either the whole nav is reachable at 390px - collapsed into a menu button - or the row shows that it continues: a gradient fade at the cut, a chevron, or a visible scroll track. Right now the row ends exactly where a complete row would end, so there is nothing to distinguish 'this is all of it' from 'there is more off-screen'.",
+  "why_it_matters": "A first-time visitor on a phone concludes the app has three sections. The Lab is the entire point of this product - AI pilots, gauntlet runs, card-swap verdicts - and it is one of the four that fall off the edge. They never open it, and they judge the whole thing on a card browser and a deck list. The cost is not a cosmetic one: it is the feature the product is named for, invisible on the platform CLAUDE.md says it ships to.",
+  "repro": [
+    "npm run build, then serve apps/web/dist",
+    "Open the deck builder at a 390x844 viewport",
+    "Look at the top nav: it ends after Play with no indication that Lab, Watch a Game, Proxies and About exist"
+  ],
+  "evidence": [
+    {
+      "path": "crops/mobile_x240y4w150h48_z6.png",
+      "kind": "crop",
+      "sha256": "28d002bff16f9c8c9373b2bc9222067d303825021aca5e12afdc32e041a6dc5d",
+      "note": "The right end of the 390px nav bar at 6x. 'Play' is the last item and the strip to the frame edge is flat background - no fade, no chevron, no scroll track.",
+      "region": "240,4,150,48"
+    },
+    {
+      "path": "shots/deck_builder/mobile.png",
+      "kind": "screenshot",
+      "sha256": "8818e8a2f21a02fd9f7927df17b92489e57594b15d78bcff023d612e8c5d42d0",
+      "note": "Parent frame at 390x844. Compare the nav with shots/deck_builder/desktop.png, which shows all eight destinations.",
+      "region": "0,0,390,54"
+    },
+    {
+      "path": "shots/about/mobile.png",
+      "kind": "screenshot",
+      "sha256": "4269855cfeec691ba6c8b42b3d8fa1a3d724e035fa84ec45b32e98de9fee67ca",
+      "note": "The same bar clipped identically on a different page, which is what makes this the shared component rather than one page's layout.",
+      "region": "0,0,390,54"
+    }
+  ],
+  "suggested_fix": "Collapse the nav below a breakpoint into a menu button, or - if horizontal scrolling is the intent - make the scroll visible: a mask-image fade at the trailing edge plus a persistent scroll indicator, so the row reads as a window onto a longer list rather than as a complete one.",
+  "references": [
+    "CLAUDE.md",
+    "DESIGN.md"
+  ],
+  "status": "fixed",
+  "status_note": "phone nav strip now marks a clipped edge: mask fade + chevron (.app__nav-wrap--more-* classes) driven by pure computeNavOverflow() in apps/web/src/lib/nav-overflow.ts; cues vanish when all tabs fit, so desktop renders unchanged. After-capture at 390x844 in evidence/TMB-JB-0002/after: chevron at the filed crop rect, fade over the cut tab mid-scroll, cues swap ends at full scroll; desktop 1280x800 identical. Tests: nav-overflow.test.ts + styles-regressions.test.ts (watched red pre-fix)",
+  "tags": [
+    "responsive",
+    "navigation",
+    "mobile"
+  ],
+  "fingerprint": "13cafbfc14ba140a"
+}

@@ -1,0 +1,36 @@
+{
+  "finding": "TMB-JB-0003",
+  "session": "20260821_145226_jonny-boi_ui-visual",
+  "evidence": [
+    {
+      "path": "crops/desktop_x664y120w190h30_z6.png",
+      "kind": "crop",
+      "state": "copied",
+      "durable_path": "evidence/TMB-JB-0003/crops/desktop_x664y120w190h30_z6.png",
+      "bytes": 5929,
+      "sha256": "de5d4599cb64f0ca99f1ef6a6393eb172ed717bd1156a1f62e02055247e7f405",
+      "reason": "",
+      "regenerate": "tmb capture jonny-boi --surface deck_builder"
+    },
+    {
+      "path": "crops/desktop_x890y428w350h22_z4.png",
+      "kind": "crop",
+      "state": "copied",
+      "durable_path": "evidence/TMB-JB-0003/crops/desktop_x890y428w350h22_z4.png",
+      "bytes": 3099,
+      "sha256": "ada76fd5fa95d0295bde2b55d44c9a8dfec614ab78c4755edc2eb6926bab8053",
+      "reason": "",
+      "regenerate": "tmb capture jonny-boi --surface deck_builder"
+    },
+    {
+      "path": "shots/deck_builder/desktop.png",
+      "kind": "screenshot",
+      "state": "copied",
+      "durable_path": "evidence/TMB-JB-0003/shots/deck_builder/desktop.png",
+      "bytes": 735578,
+      "sha256": "f44627fc17a82a07c2d65be2b36739101ba59128544204655645fea15d05d81b",
+      "reason": "",
+      "regenerate": "tmb capture jonny-boi --surface deck_builder"
+    }
+  ]
+}
