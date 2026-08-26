@@ -2049,7 +2049,7 @@ function chooseAttack(
  *     damage for a discount the opponent controls.
  * The defender may still block the diverted attackers — that is combat.
  */
-function planWalkerAttack(
+export function planWalkerAttack(
   view: PilotView,
   opp: PlayerId,
   chosen: readonly InstanceId[],
@@ -2235,7 +2235,7 @@ function attackIsProfitable(
  * unblocked branch of the attack evaluation, and it stops at one property read
  * per permanent for every board with no attachment on it.
  */
-function saboteurTriggerCount(attacker: CardInstance, view: PilotView): number {
+export function saboteurTriggerCount(attacker: CardInstance, view: PilotView): number {
   let count = countCombatDamageTriggers(attacker.def.triggers, 'self');
   const battlefield = view.battlefield;
   for (let i = 0; i < battlefield.length; i++) {
@@ -2353,8 +2353,14 @@ function chooseBlock(
  * Who dies is `resolveFight`'s answer, not the printed boxes — so a deathtoucher
  * is a blocker, a first-striker that kills outright is not a trade, and against a
  * TRAMPLER the body chosen is the one that soaks the most (DESIGN §3.43).
+ *
+ * Exported (with `canBlockByEvasion`, `needsMultipleBlockers`, `planWalkerAttack`,
+ * `saboteurTriggerCount` and `totalIncomingDamage`) for `combat-forecast.ts`
+ * (DESIGN §3.47): the lookahead pilot predicts the DEFENDER's response with this
+ * exact function, so the model and the modelled defender cannot drift apart.
+ * Export-only — no behaviour here changed.
  */
-function pickBlocker(
+export function pickBlocker(
   attacker: CardInstance,
   blockers: readonly CardInstance[],
   used: Set<InstanceId>,
@@ -2653,7 +2659,7 @@ function biggestThreat(
 }
 
 /** Total unblocked-if-unblocked damage the listed attackers represent. */
-function totalIncomingDamage(
+export function totalIncomingDamage(
   view: PilotView,
   attackerIds: readonly InstanceId[],
   index: ContinuousIndex,
@@ -2714,7 +2720,7 @@ function isIndestructible(perm: CardInstance, index: ContinuousIndex): boolean {
  * and said it for the same reason the rest of the file did: nothing passed an
  * index. See `board-stats.ts`.)
  */
-function canBlockByEvasion(
+export function canBlockByEvasion(
   attacker: CardInstance,
   blocker: CardInstance,
   index: ContinuousIndex,
@@ -2799,7 +2805,7 @@ const MENACE_BLOCKERS_NEEDED = 2;
  * set. Two answers to one question is exactly the shape `board-stats.ts` exists
  * to make unspellable.
  */
-function needsMultipleBlockers(attacker: CardInstance, index: ContinuousIndex): boolean {
+export function needsMultipleBlockers(attacker: CardInstance, index: ContinuousIndex): boolean {
   const ak = keywordsOf(attacker, index);
   return Boolean(ak.menace) || (ak.minBlockers ?? 0) > 1;
 }

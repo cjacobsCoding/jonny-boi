@@ -92,6 +92,18 @@ export { MCTS_PILOT_ID, createMctsPilot } from './mcts.js';
 export { HYBRID_PILOT_ID, createHybridPilot } from './hybrid.js';
 
 /**
+ * THE LOOKAHEAD PILOT (DESIGN §3.47) — the heuristic with a forecast-searched
+ * combat step: candidate attack plans played forward in closed form through the
+ * defender's best-response blocks, the crack-back they leave open, and the
+ * multi-turn race, at heuristic speed. `combat-forecast.ts` is exported as its
+ * own seam so the Lab's inspector (or a test) can ask "what did the forecast
+ * see" without a pilot in the loop.
+ */
+export { LOOKAHEAD_PILOT_ID, createLookaheadPilot } from './lookahead.js';
+export type { AttackPlanChoice, ForecastWeights, PlanForecast } from './combat-forecast.js';
+export { chooseAttackPlan, DEFAULT_FORECAST_WEIGHTS } from './combat-forecast.js';
+
+/**
  * The hybrid search's knobs and the evaluation seam (§29–31 of the program
  * brief): `evaluateState` / `evaluatePolicy`, initially backed by the heuristic
  * so a learned model can drop in later without the search changing.
@@ -191,6 +203,7 @@ import { RANDOM_PILOT_ID, createRandomPilot } from './random.js';
 import { HEURISTIC_PILOT_ID, createHeuristicPilot } from './heuristic.js';
 import { MCTS_PILOT_ID, createMctsPilot } from './mcts.js';
 import { HYBRID_PILOT_ID, createHybridPilot } from './hybrid.js';
+import { LOOKAHEAD_PILOT_ID, createLookaheadPilot } from './lookahead.js';
 
 /**
  * Build a registry pre-loaded with the built-in pilots. The sim/web call this to
@@ -210,6 +223,7 @@ export function registerBuiltInPilots(registry: AiRegistry): void {
   registry.registerPilot(HEURISTIC_PILOT_ID, () => createHeuristicPilot());
   registry.registerPilot(MCTS_PILOT_ID, () => createMctsPilot());
   registry.registerPilot(HYBRID_PILOT_ID, () => createHybridPilot());
+  registry.registerPilot(LOOKAHEAD_PILOT_ID, () => createLookaheadPilot());
 }
 
 /**
@@ -253,16 +267,21 @@ export const DEFAULT_PILOT_ID = HEURISTIC_PILOT_ID;
  *
  * These are the brief's §59 selectable MODES: `heuristic` (the fast policy
  * baseline), `mcts` (VANILLA_MCTS — the research control the hybrid must beat),
- * `hybrid` (policy prior + PUCT + heuristic leaf evaluation) and `random` (the
- * determinism/sanity baseline). Having all four selectable from data is what
- * makes "test every change against the previous best" a command rather than a
- * code change.
+ * `hybrid` (policy prior + PUCT + heuristic leaf evaluation), `random` (the
+ * determinism/sanity baseline) and `lookahead` (§3.47 — the heuristic with a
+ * forecast-searched combat step). Having every pilot selectable from data is
+ * what makes "test every change against the previous best" a command rather
+ * than a code change.
  */
 export const SELECTABLE_PILOT_IDS: readonly string[] = [
   HEURISTIC_PILOT_ID,
   HYBRID_PILOT_ID,
   MCTS_PILOT_ID,
   RANDOM_PILOT_ID,
+  // Appended rather than slotted next to `heuristic` on purpose: consumers that
+  // pick "the first non-default id" (the web history-store's test does) keep the
+  // pilot they were written against, and the Lab picker simply grows a row.
+  LOOKAHEAD_PILOT_ID,
 ];
 
 /**

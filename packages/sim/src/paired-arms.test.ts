@@ -20,6 +20,7 @@ import { loadCardPool, buildRegistry, CORE_PRIMITIVE_IDS } from '@jonny-boi/card
 import {
   createDefaultAiRegistry,
   HEURISTIC_PILOT_ID,
+  LOOKAHEAD_PILOT_ID,
   HYBRID_PILOT_ID,
   MCTS_PILOT_ID,
   RANDOM_PILOT_ID,
@@ -220,6 +221,9 @@ describe('the identical-game skip is exact', () => {
       RANDOM_PILOT_ID, // no look-ahead
       MCTS_PILOT_ID, // searches; reads the library
       HYBRID_PILOT_ID, // searches; reads the library
+      // Forecasts combat in closed form from the PUBLIC board only — no state
+      // clone, no rollout, never a hidden zone (DESIGN §3.47).
+      LOOKAHEAD_PILOT_ID,
     ]);
     for (const id of SELECTABLE_PILOT_IDS) {
       expect(classified.has(id), `pilot "${id}" is unclassified — decide whether it reads the hidden library, add it to PILOTS_THAT_READ_HIDDEN_LIBRARY if it searches, then list it here`).toBe(true);
