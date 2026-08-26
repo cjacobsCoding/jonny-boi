@@ -3526,6 +3526,37 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
+### 3.48 A deck with imported cards could not be played at all — ✅ done
+
+The user scanned a Selesnya Blink deck, the builder called it healthy, and every play path refused to
+start it: `unknown card "<uuid>" (not in the pool by id or name)` and `deck size 52 is below the
+minimum of 60` — the missing eight being two imported cards that silently failed to resolve.
+
+**The seam existed and was never wired.** `importedDefinitions()`'s own doc-comment says it is "for
+`loadCardPool({ extraCards })`" — and `hotseatPool()` (the pool behind Solo, pass-and-play, and lobby
+validation) passed nothing. So the app imported the card, compiled it, showed it in the browser, put
+it in the deck builder, reported the deck healthy in deck health… and then refused to play it. The
+chain was complete except for its last link.
+
+The fix is one argument plus a memo invalidation: `hotseatPool()` now loads
+`{ extraCards: importedDefinitions() }` and subscribes to the store so a card imported mid-session is
+playable without a reload. Unplayable imports still cannot sneak in — `importedDefinitions()` returns
+only entries that COMPILED, and `loadCardPool` drops any extra whose id collides with a curated card.
+
+⚠️ **Online play is deliberately the opposite answer.** The server rebuilds decks from its OWN curated
+pool and the wire format carries only `{ cardId, count }` — no definitions travel. Validating the
+lobby with the local pool would be a FALSE GREEN: ready locally, `invalidDeck` from the server a
+moment later, which is the same failure moved somewhere worse. `validateChoiceForOnline` validates
+against the curated pool alone, and rewrites `unknown card "<uuid>"` into the card's NAME with a plain
+explanation ("one of your imported cards — online play only supports the built-in pool"), because a
+bare UUID at the user is how this bug report started.
+
+Pinned by `imported-deck-playable.test.ts` (7 tests): rejected when never imported (the control),
+playable once registered, the GENERAL invariant (everything the store calls playable is in the play
+pool), failed-compile imports stay out, an import can never shadow a curated id, mid-session imports
+invalidate the memo, and online still refuses by name. Sabotage-checked: reverting the wiring turns
+exactly the three wiring tests red.
+
 ### 3.46 The deck-neutral pilot A/B — the yardstick §3.45 used, committed as a tool — ✅ done
 
 §3.45 built four combat-math improvements, measured them, and shipped **one**. The evidence that
