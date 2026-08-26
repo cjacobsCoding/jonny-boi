@@ -2,6 +2,7 @@ import { useState, type ReactElement } from 'react';
 import type { InstanceId, PlayerId } from '@jonny-boi/core';
 import type { VisibleHandCard } from '../../lib/play/view-model.js';
 import { PlayCard } from './PlayCard.js';
+import { CardZoomOverlay } from './CardZoomOverlay.js';
 
 /**
  * The London mulligan decision for one player. They see their drawn hand (face-up —
@@ -32,6 +33,8 @@ export function MulliganScreen({
   const mustBottom = mulligansTaken; // London: bottom one card per mulligan taken
   const [deciding, setDeciding] = useState<'choose' | 'bottom'>(mustBottom > 0 ? 'choose' : 'choose');
   const [selected, setSelected] = useState<Set<InstanceId>>(new Set());
+  /** The card being inspected full-size, if any (report 20260825_210026). */
+  const [zoomed, setZoomed] = useState<VisibleHandCard | null>(null);
 
   const toggle = (id: InstanceId): void => {
     setSelected((cur) => {
@@ -68,16 +71,39 @@ export function MulliganScreen({
 
       <div className="mulligan__hand">
         {hand.map((c) => (
-          <PlayCard
+          // Full faces: the opening hand is exactly where a player reads cards
+          // (report 20260825_205937), and each slot carries its own zoom.
+          <div
             key={c.instanceId}
-            cardId={c.cardId}
-            name={c.name}
-            badge={c.isLand ? 'Land' : undefined}
-            selected={selected.has(c.instanceId)}
-            onClick={deciding === 'bottom' ? () => toggle(c.instanceId) : undefined}
-          />
+            className="hand-card-slot"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setZoomed(c);
+            }}
+          >
+            <PlayCard
+              cardId={c.cardId}
+              name={c.name}
+              face="full"
+              badge={c.isLand ? 'Land' : undefined}
+              selected={selected.has(c.instanceId)}
+              onClick={deciding === 'bottom' ? () => toggle(c.instanceId) : undefined}
+            />
+            <button
+              type="button"
+              className="hand-card-slot__zoom"
+              aria-label={`Inspect ${c.name}`}
+              title={`Inspect ${c.name}`}
+              onClick={() => setZoomed(c)}
+            >
+              🔍
+            </button>
+          </div>
         ))}
       </div>
+      {zoomed && (
+        <CardZoomOverlay cardId={zoomed.cardId} name={zoomed.name} onClose={() => setZoomed(null)} />
+      )}
 
       <div className="mulligan__actions">
         {deciding === 'choose' ? (

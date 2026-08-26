@@ -75,3 +75,11 @@ export const STEP_LABELS: Readonly<Record<string, string>> = Object.freeze({
 export function stepLabel(step: string): string {
   return STEP_LABELS[step] ?? step;
 }
+
+/**
+ * Drag-to-play: how far (px, straight-line) a pressed card must travel before the
+ * press commits to being a drag. Below this a release is a plain click/tap — the
+ * threshold is what keeps tap-to-play alive on touch screens, where every tap
+ * would otherwise register as a zero-distance drag and die on release.
+ */
+export const DRAG_START_THRESHOLD_PX = 8;

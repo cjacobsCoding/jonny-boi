@@ -29,7 +29,7 @@ import {
   releaseDrag,
   type DragState,
 } from './drag-to-play.js';
-import { DRAG_START_THRESHOLD_PX } from './online-config.js';
+import { DRAG_START_THRESHOLD_PX } from './play-config.js';
 
 /** The attribute a draggable card wrapper carries (value: its instance id). */
 export const DRAG_ID_ATTR = 'data-drag-id';

@@ -3526,6 +3526,36 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
+### 3.51 Four bug reports from one Solo session — ✅ done
+
+The in-app reporter earned its keep: one evening of Solo play filed four bundles, each with a clip,
+a screenshot and the frozen state. All four fixed, each verified live before shipping.
+
+**The information leak (report 210108).** After the human kept their hand, the mulligan flow rendered
+the COMPUTER'S seven face-up for the whole `aiThinkMs` delay — the flow was built for two humans
+passing a device, and seat B stopped being a human. Fixed structurally: `mulliganPresentationFor`
+(pure, tested) routes the AI's decision window to `AiMulliganScreen`, whose props carry a hand
+COUNT — the card identities cannot reach the screen that shows during the think delay, so no future
+effect reordering can leak them again. Handoffs addressed to the computer are acknowledged before
+paint (`AutoReady`, a layout effect). Verified with a 60 ms DOM sampler across the window: 0 faces,
+7 backs, then the board.
+
+**Cut-off card names (205937).** A 96px chip squeezed "Angel of Serenity" plus three pips into one
+row; no ellipsis rule wins that fight. Hand and mulligan cards now render the FULL card image
+(`face="full"`) — the printed card carries its own name and cost, so there is nothing left to
+truncate. Chip fallback names (no-art tokens) wrap instead of ellipsizing.
+
+**"Show me the full card" (210026).** One `CardZoomOverlay` serves every play surface: a 🔍 on each
+hand/mulligan slot (a SIBLING of the card, never a nested button — a PlayCard with an onClick is
+itself a `<button>`), right-click/long-press on the slot, Escape/click/✕ to close, and a readable
+text face for cards with no image.
+
+**Drag-to-play in Solo/pass-and-play (210220).** The online board's drag machinery had no online
+dependency — it lived in `lib/online` purely for a file claim — so it moved to `lib/play` and both
+boards now share it. The drop routes through the SAME `onHandCardClick` chokepoint as a click
+(multi-way menus included), re-looking up affordances on drop so a stale gesture cannot fire.
+Verified live: ghost, zone highlight, and a Guildgate played (entering tapped) by drag.
+
 ### 3.48 A deck with imported cards could not be played at all — ✅ done
 
 The user scanned a Selesnya Blink deck, the builder called it healthy, and every play path refused to

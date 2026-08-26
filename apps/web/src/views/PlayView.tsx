@@ -20,6 +20,8 @@ import { buildBoardView } from '../lib/play/view-model.js';
 import { SetupScreen } from '../components/play/SetupScreen.js';
 import { MulliganScreen } from '../components/play/MulliganScreen.js';
 import { HandoffScreen } from '../components/play/HandoffScreen.js';
+import { AiMulliganScreen, AutoReady } from '../components/play/AiMulliganScreen.js';
+import { handoffIsToComputer, mulliganPresentationFor } from '../lib/play/solo-screen.js';
 import { PlayBoard } from '../components/play/PlayBoard.js';
 import { EndScreen } from '../components/play/EndScreen.js';
 import { OnlinePlay } from '../components/online/OnlinePlay.js';
@@ -440,22 +442,36 @@ function LocalPlay({ decks, ai }: { decks: DecksApi; ai?: AiSeatConfig }): React
 
   if (phase.kind === 'handoff') {
     const to = phase.to;
+    const acknowledge = (): void => {
+      setRevealed(to);
+      setPhase(phase.next === 'mulligan' ? { kind: 'mulligan' } : { kind: 'play' });
+    };
+    // A handoff addressed to the COMPUTER is acknowledged before paint — there is
+    // no human to pick up the device, and every frame of that screen reads as a
+    // hang (solo-screen.ts owns the rule; report 20260825_210108 is why).
+    if (handoffIsToComputer(to, ai?.seat)) {
+      return <AutoReady onReady={acknowledge} />;
+    }
     return (
       <div className="play-view">
-        <HandoffScreen
-          toName={config.names[to]}
-          context={phase.context}
-          onReady={() => {
-            setRevealed(to);
-            setPhase(phase.next === 'mulligan' ? { kind: 'mulligan' } : { kind: 'play' });
-          }}
-        />
+        <HandoffScreen toName={config.names[to]} context={phase.context} onReady={acknowledge} />
       </div>
     );
   }
 
   if (phase.kind === 'mulligan' && mulligan) {
     const seat = mulligan.deciding;
+    // THE LEAK FIX (report 20260825_210108): while the COMPUTER decides its
+    // mulligan, render backs only. `AiMulliganScreen` takes a hand COUNT — the
+    // card identities never reach the screen that shows during the think delay.
+    if (mulliganPresentationFor(seat, ai?.seat).kind === 'aiDeciding') {
+      const handSize = session.state.players[seat].hand.length;
+      return (
+        <div className="play-view">
+          <AiMulliganScreen name={config.names[seat]} handCount={handSize} />
+        </div>
+      );
+    }
     const view = buildBoardView(session.state, seat, config.names);
     return (
       <div className="play-view">
@@ -486,6 +502,9 @@ function LocalPlay({ decks, ai }: { decks: DecksApi; ai?: AiSeatConfig }): React
       : session.state.activePlayer === priority
         ? 'to take your turn'
         : 'to respond (you have priority)';
+    if (handoffIsToComputer(priority, ai?.seat)) {
+      return <AutoReady onReady={() => setRevealed(priority)} />;
+    }
     return (
       <div className="play-view">
         <HandoffScreen
