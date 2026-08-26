@@ -56,13 +56,16 @@ function choose(pilot: ReturnType<typeof createLookaheadPilot>, state: GameState
 }
 
 describe('registration — the §2 seam carries the new pilot everywhere', () => {
-  it('registers under its id, selectable, and the DEFAULT is still the heuristic', () => {
+  it('registers under its id, selectable — and the integrator made it the DEFAULT', () => {
     const registry = createDefaultAiRegistry();
     expect(registry.getPilot(LOOKAHEAD_PILOT_ID)?.id).toBe(LOOKAHEAD_PILOT_ID);
     expect(SELECTABLE_PILOT_IDS).toContain(LOOKAHEAD_PILOT_ID);
-    // §3.47 ships a CANDIDATE, not a coup: flipping the default is the
-    // integrator's measured decision, not a side effect of landing the pilot.
-    expect(DEFAULT_PILOT_ID).toBe(HEURISTIC_PILOT_ID);
+    // §3.47 shipped a CANDIDATE, not a coup — and the integrator then took the
+    // measured decision it asked for: pilot-ab re-verified at 3754–3274
+    // (STRONGER, p < 1e-16, every deck row ≥ 51%) at 99% of heuristic
+    // throughput, so the default flipped. The heuristic remains selectable.
+    expect(DEFAULT_PILOT_ID).toBe(LOOKAHEAD_PILOT_ID);
+    expect(SELECTABLE_PILOT_IDS).toContain(HEURISTIC_PILOT_ID);
   });
 
   it('declares no game observer, like every built-in pilot', () => {

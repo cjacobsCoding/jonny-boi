@@ -432,9 +432,16 @@ export function isLegalTarget(
         if (card.instanceId === target) return isCreature(card.def);
       }
     }
-    // Not in a graveyard ⇒ it must be a creature on the battlefield.
+    // Not in a graveyard ⇒ it must be a creature on the battlefield — and the
+    // battlefield half goes through the SAME hexproof/shroud/protection gate the
+    // enumerator applies (CR 115.1c). §3.49's invariant layer caught this half
+    // answering on type alone: the menu never offered an opponent's hexproof
+    // creature, but a hand-built action aimed at one was accepted. A graveyard
+    // card has no such qualities to consult, which is why only this half gates.
     for (const permanent of state.battlefield) {
-      if (permanent.instanceId === target) return isCreature(permanent.def);
+      if (permanent.instanceId === target) {
+        return isCreature(permanent.def) && isTargetableBy(state, permanent, controller, source);
+      }
     }
     return false;
   }

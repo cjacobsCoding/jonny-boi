@@ -3526,6 +3526,22 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
+### 3.50 The default pilot is now `lookahead` — ✅ done
+
+§3.47 shipped the pilot as a candidate and left the flip as "the integrator's measured call". Taken,
+with the measurement re-run rather than inherited: **pilot-ab 3754–3274 over 7,200 games (STRONGER,
+McNemar p < 1e-16), every deck row ≥ 51%, 75.7 games/sec mixed** — and the guard test on
+`DEFAULT_PILOT_ID` changed deliberately, per its own contract, with the evidence in its body.
+
+Also in this batch: the live hexproof divergence §3.49 pinned (`isLegalTarget`'s two-zone battlefield
+half skipped `isTargetableBy`) is FIXED in core, and the `it.fails` pin promoted to a plain test in
+the same commit, exactly as the pin's doc demanded.
+
+⚠️ **Recorded seed-99 baselines MOVED with the default** (that is what flipping the default means) —
+new rows: Mono-Red Aggro **257/800 (32.1%)**, Selesnya Blink **615/800 (76.9%)**, UW Control
+**377/800 (47.1%)**, Mono-Green Ramp **552/800 (69.0%)**. The old heuristic rows remain reproducible
+with `--pilot heuristic`.
+
 ### 3.49 The invariant layer — catching the §3.37–§3.45 classes, not the instances — ✅ done
 
 Eight defects across §3.37–§3.45 (§3.40's validator hole, §3.42's two unpriced primitives, §3.44's

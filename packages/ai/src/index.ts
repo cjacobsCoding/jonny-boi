@@ -260,7 +260,15 @@ export function registerBuiltInPilots(registry: AiRegistry): void {
  * `pilot-quality.test.ts` (same waste metric), because this constant has already
  * been silently flipped back by a merge once.
  */
-export const DEFAULT_PILOT_ID = HEURISTIC_PILOT_ID;
+// §3.47 flipped this to `lookahead`, and the bar the doc above sets was met with
+// the committed yardstick rather than a hand-run: pilot-ab 3754–3274 over 7,200
+// games (STRONGER, McNemar p < 1e-16), EVERY deck row ≥ 51% (a broad gain, not an
+// archetype tilt), at 99% of the heuristic's single-matchup throughput (87.6 vs
+// 88.5 games/sec) and 75.7 g/s on the full mixed run. The lookahead pilot IS the
+// heuristic everywhere except the attack declaration, which it decides by an
+// adversarial plan search — so every throughput argument above survives intact.
+// Re-verify any time: `npm run sim -- pilot-ab --pilot-a lookahead --pilot-b heuristic`.
+export const DEFAULT_PILOT_ID = LOOKAHEAD_PILOT_ID;
 
 /**
  * The pilot ids a consumer may select from data (CLI flag, UI picker).

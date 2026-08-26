@@ -298,7 +298,9 @@ describe('known divergence (found by this invariant, not fixed by it)', () => {
    * a plain `it` inside the agreement sweep above (drop `withProtectedCreature`
    * special-casing and fold the hexproof creature into the main zoo).
    */
-  it.fails('two-zone creature targeting honours hexproof on the battlefield half', () => {
+  // PROMOTED from `it.fails` in the same commit that fixed the divergence —
+  // exactly the hand-off the pin's doc demanded.
+  it('two-zone creature targeting honours hexproof on the battlefield half', () => {
     const zoo = buildZoo(true);
     const { offered, legal } = offerAndLegal(zoo, 'creatureOnBattlefieldOrInGraveyard', 'A');
     expect(offered).toEqual(legal);

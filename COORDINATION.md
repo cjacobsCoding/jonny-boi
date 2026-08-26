@@ -166,6 +166,15 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-26 DESKTOP-90PJPM4 (integrator): **§3.47 + §3.49 MERGED; §3.50 default flipped to
+  `lookahead`.** Re-verified before merging: pilot-ab 3754–3274 (STRONGER, p<1e-16), every deck row
+  ≥51%, 75.7 g/s mixed. §3.49's live finding (two-zone legality skipped the hexproof gate on its
+  battlefield half) FIXED in core; its `it.fails` pin promoted in the same commit. ⚠️ **Seed-99
+  baselines RE-RECORDED under the new default**: Mono-Red 257/800 · Selesnya Blink 615/800 ·
+  UW Control 377/800 · Mono-Green 552/800. Old rows reproduce with `--pilot heuristic`. Also carried:
+  §3.49's unpriced-primitive ledger (20 entries) is now enforced — pricing them is open packages/ai
+  work. (Integrator)
+
 - 2026-08-26 worker: `test/completeness-invariants` 🚧 PUSHED, not merged — DESIGN §3.49. **verify
   exit 0, 5320 passed / 0 failed** (5 skipped; 5295 → 5320 is exactly the layer's +25). TEST FILES
   ONLY + two export-only runtime lists; no baseline can move. The §3.37–§3.45 postmortem answered:

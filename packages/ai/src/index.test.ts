@@ -13,6 +13,7 @@ import {
   DEFAULT_PILOT_ID,
   getPilot,
   HEURISTIC_PILOT_ID,
+  LOOKAHEAD_PILOT_ID,
   MCTS_PILOT_ID,
   PACKAGE_NAME,
   RANDOM_PILOT_ID,
@@ -39,8 +40,12 @@ describe('@jonny-boi/ai package', () => {
  * head-to-head measurement in the commit message.
  */
 describe('the default pilot', () => {
-  it('is the heuristic — the throughput path users actually get', () => {
-    expect(DEFAULT_PILOT_ID).toBe(HEURISTIC_PILOT_ID);
+  it('is the lookahead pilot — measurably stronger at heuristic speed (§3.47)', () => {
+    // Changed DELIBERATELY, per this guard's own contract: fresh measurement in
+    // hand — pilot-ab 3754–3274 (p < 1e-16), every deck row ≥ 51%, throughput at
+    // 99% of the heuristic's. The lookahead delegates everything but the attack
+    // declaration to the heuristic, so the anti-MCTS reasoning above still holds.
+    expect(DEFAULT_PILOT_ID).toBe(LOOKAHEAD_PILOT_ID);
   });
 
   it('still offers MCTS as a selectable choice', () => {
