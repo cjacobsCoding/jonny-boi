@@ -158,10 +158,19 @@ throughput (games/sec) from regressing.
 | fix/soak-action-cap | DESKTOP-90PJPM4 (worker) | packages/ai (`effect-value.ts` copySpell chain pricing + `willFizzleOnResolution`; `weights.ts` +1 weight; NEW `copy-chain-pilot.test.ts`), packages/cards (`copy-primitives.ts` CR 707.10 `min`; NEW `copy-retarget-optional.test.ts`), packages/sim (`soak.test.ts` +3 pinned rows), DESIGN §3.33 (+ §3.32's handoff closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | 🚧 PUSHED, not merged |
 | fix/blink-rules-fidelity | worker | packages/core (NEW `combat-removal.ts`; `state.ts` +`CombatState.removedFromCombat`, `attachments.ts` +`unattachDependentsOf`, `internal/continuous.ts` +`dropContinuousEffectsFor`, `internal/combat.ts` damage step, `internal/clone.ts`, `internal/replacement.ts` `isAttacking`, `engine.ts` 3 lines in declare-blockers, `instance-ids.ts` +1 field name, `index.ts` exports), packages/cards (`blink-primitives.ts` +3 calls + doc; `data/pool.ts` +10 printed `subtypes` lines; `fidelity.test.ts` +1 standing type-line guard; `restoration-angel.test.ts` +1 case; NEW `selesnya-blink-fidelity.test.ts`), DESIGN §3.44, COORDINATION. **No generated data regenerated; no soak or gauntlet row moved.** | ✅ MERGED + DEPLOYED |
 | feat/pilot-ab-harness | worker | packages/sim ONLY (NEW `pilot-ab.ts` + `pilot-ab.test.ts`; `cli.ts` — new `pilot-ab` subcommand, `--pilot-a`/`--pilot-b`, and a shared `resolvePilot` helper the old `resolvePilots` now reuses; `index.ts` exports), DESIGN §3.46, COORDINATION. **No core, cards, ai or web change — NO pilot behaviour touched.** Adds a tool, moves no baseline. | 🚧 PUSHED, not merged |
+| fix/tmb-ui-findings | worker | apps/web ONLY (styles.css nav-overflow cues + `.result-count` token, views/about.css stat tiles, components/bug-reporter.css launcher, App.tsx nav wrap + measure effect, NEW lib/nav-overflow.ts + lib/contrast.ts + their tests, NEW styles-regressions.test.ts) + testmebro/findings/* bookkeeping, COORDINATION. **No packages/* change.** Fixes TMB-JB-0001..0004. | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-26 worker: `fix/tmb-ui-findings` 🚧 PUSHED — the four open TestMeBro findings, all moved
+  in-progress → fixed (verification via `tmb verify` still pending). TMB-JB-0002 (major): the phone
+  nav strip now fades a clipped edge under a chevron, driven by a pure `computeNavOverflow()` —
+  desktop unchanged. TMB-JB-0003: pool count `--color-fg-faint` → `--color-fg-muted`, 3.88:1 → 7.1:1.
+  TMB-JB-0004: bug-reporter launcher no longer dims via `opacity: 0.45`; faint ring + muted dots
+  clear 3:1 (4.1/3.3/6.1). TMB-JB-0001: About stat values bottom-pinned to one baseline. New
+  `styles-regressions.test.ts` pins the token ratios + rule structure (watched red pre-fix).
+  **apps/web only — no packages/* files touched** (concurrent agents own packages/ai + tests).
 - 2026-08-24 DESKTOP-90PJPM4: `fix/play-imported-decks` ✅ MERGED + DEPLOYED — DESIGN §3.48. **A saved deck
   holding ANY imported (scanned/pasted) card was unplayable in every play path** — `hotseatPool()`
   was curated-only, though `importedDefinitions()`'s own doc says it exists for

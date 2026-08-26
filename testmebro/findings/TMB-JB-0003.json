@@ -1,0 +1,64 @@
+{
+  "id": "TMB-JB-0003",
+  "project": "jonny-boi",
+  "rubric": "ui-visual",
+  "persona": "first-timer",
+  "session": "20260821_145226_jonny-boi_ui-visual",
+  "created": "2026-08-21T21:59:41Z",
+  "updated": "2026-08-26T14:55:26Z",
+  "build": {
+    "vcs_rev": "d56b275126651ee806fedb280253cf5b61de91bd",
+    "vcs_dirty": true,
+    "binary": "D:\\Cool Stuff\\Claude\\jonny-boi\\apps\\web\\dist\\index.html",
+    "binary_sha256": "f821edd5950ba44ccd63a0a833b36d23f56dc9a9f6aeac7ed05bfa1f8847ef79",
+    "binary_mtime": "2026-08-21T21:53:14.661613+00:00"
+  },
+  "surface": "deck_builder",
+  "title": "Card-pool count 560 cards measures 3.88:1 at about 9px, under the 4.5:1 body-text floor",
+  "severity": "minor",
+  "confidence": "confirmed",
+  "category": "accessibility",
+  "what_happened": "The pool count at the right end of the toolbar is the dimmest text on the page. Sampled at 1:1 over rect 800,136,56,14: the glyph core is #6b7785 and the plate immediately behind it is #121921, which tmb contrast puts at 3.88:1. Cropped at 6x, the digits measure about 9px cap height, so this is body text and the applicable floor is 4.5:1, not the 3:1 large-text line. For comparison, the gauntlet warning eleven rows below it is #d6b94e on #171d26 = 8.80:1 on the same ground, so the interface is capable of much better here and this one label was set darker than the rest.",
+  "expected": "A live count that changes as filters are applied should clear the 4.5:1 body floor against its own background. The same grey family one or two steps lighter - the #a0aec0-ish tone the tile labels on About already use - would do it without changing the design.",
+  "why_it_matters": "This is the only number on the toolbar and it is the feedback for every filter the player touches: type a name, click a colour, and this is what tells you whether the pool went from 560 to 12 or to 0. At 3.88:1 it reads as disabled chrome, so a first-timer filtering to nothing sees an empty grid and no explanation, because the one label that would have explained it is the one they cannot read.",
+  "repro": [
+    "npm run build, then serve apps/web/dist",
+    "Open the deck builder at 1280x800",
+    "Sample the pool count at rect 800,136,56,14 - glyph core #6b7785, plate #121921, 3.88:1 against a 4.5:1 floor at ~9px"
+  ],
+  "evidence": [
+    {
+      "path": "crops/desktop_x664y120w190h30_z6.png",
+      "kind": "crop",
+      "sha256": "de5d4599cb64f0ca99f1ef6a6393eb172ed717bd1156a1f62e02055247e7f405",
+      "note": "The count at 6x nearest-neighbour. Read the digit height off this crop before picking a floor: about 9px at 1:1, which is body text.",
+      "region": "664,120,190,30"
+    },
+    {
+      "path": "crops/desktop_x890y428w350h22_z4.png",
+      "kind": "crop",
+      "sha256": "ada76fd5fa95d0295bde2b55d44c9a8dfec614ab78c4755edc2eb6926bab8053",
+      "note": "The comparison case on the same ground: the gauntlet warning at #d6b94e on #171d26 = 8.80:1. Same page, same background family, more than twice the ratio.",
+      "region": "890,428,350,22"
+    },
+    {
+      "path": "shots/deck_builder/desktop.png",
+      "kind": "screenshot",
+      "sha256": "f44627fc17a82a07c2d65be2b36739101ba59128544204655645fea15d05d81b",
+      "note": "Parent frame. The count sits at the right end of the toolbar row, beside the type filter pills.",
+      "region": "800,136,56,14"
+    }
+  ],
+  "suggested_fix": "Lift the muted-text token used for this count by a step or two, or give the count the same treatment as the other live values on the page. It is a token change, not a layout one.",
+  "references": [
+    "CLAUDE.md"
+  ],
+  "status": "fixed",
+  "status_note": ".result-count moved from --color-fg-faint to --color-fg-muted (token swap, as the takeover note diagnosed). Re-measured on a fresh capture at the filed rect 800,136,56,14: glyph core #9aa6b2 on plate #121921 = 7.14:1, was 3.88:1 against the 4.5:1 body floor (evidence/TMB-JB-0003/after). Ratio + rule pinned in styles-regressions.test.ts",
+  "tags": [
+    "contrast",
+    "wcag",
+    "toolbar"
+  ],
+  "fingerprint": "96661b145904bfe5"
+}

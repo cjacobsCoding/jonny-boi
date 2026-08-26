@@ -20,21 +20,25 @@
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  border: 1px solid var(--color-border-strong);
+  /* Present but quiet — and still FINDABLE. This used to dim the whole button
+     with `opacity: 0.45`, which composited it to 1.09:1 against the page and
+     its icon to 2.27:1 against its own fill: a help-shaped control only
+     visible to someone who already knew it was there (TMB-JB-0004). Quiet now
+     comes from the muted token family at full opacity; the faint ring clears
+     the 3:1 non-text floor (WCAG 1.4.11) against both the page (4.1:1) and
+     the fill (3.3:1), and the muted dots clear it against the fill (6.1:1). */
+  border: 1px solid var(--color-fg-faint);
   background: var(--color-surface-raised);
   color: var(--color-fg-muted);
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
-  /* Present but quiet: it must be reachable at any moment without competing with
-     the app's own controls for attention. */
-  opacity: 0.45;
-  transition: opacity 120ms ease, color 120ms ease;
+  transition: border-color 120ms ease, color 120ms ease;
 }
 
 .bugreport-launcher:hover,
 .bugreport-launcher:focus-visible {
-  opacity: 1;
+  border-color: var(--color-fg-muted);
   color: var(--color-accent-soft);
 }
 

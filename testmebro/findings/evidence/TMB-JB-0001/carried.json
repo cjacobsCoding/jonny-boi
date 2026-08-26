@@ -1,0 +1,30 @@
+{
+  "finding": "TMB-JB-0001",
+  "session": "20260821_104815_jonny-boi",
+  "evidence": [
+    {
+      "path": "crops/desktop_x144y250w995h112_z3.png",
+      "kind": "crop",
+      "sha256_recorded": "d39089d9fa84838b6a6c5d68b332408c63a6ee2606cbc0931ea23dec413161a7",
+      "state": "copied",
+      "durable_path": "evidence/TMB-JB-0001/crops/desktop_x144y250w995h112_z3.png",
+      "bytes": 21446,
+      "sha256": "d39089d9fa84838b6a6c5d68b332408c63a6ee2606cbc0931ea23dec413161a7",
+      "sha256_matches": true,
+      "reason": "",
+      "regenerate": "tmb capture jonny-boi --surface about"
+    },
+    {
+      "path": "shots/about/desktop.png",
+      "kind": "screenshot",
+      "sha256_recorded": "29d68ef8ea54114e40592cccd95ed911a9ac4aa16872c740b3b1d12b2939a1aa",
+      "state": "copied",
+      "durable_path": "evidence/TMB-JB-0001/shots/about/desktop.png",
+      "bytes": 159223,
+      "sha256": "29d68ef8ea54114e40592cccd95ed911a9ac4aa16872c740b3b1d12b2939a1aa",
+      "sha256_matches": true,
+      "reason": "",
+      "regenerate": "tmb capture jonny-boi --surface about"
+    }
+  ]
+}

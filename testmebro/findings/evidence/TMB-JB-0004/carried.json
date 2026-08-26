@@ -1,0 +1,56 @@
+{
+  "finding": "TMB-JB-0004",
+  "session": "20260821_211308_jonny-boi",
+  "evidence": [
+    {
+      "path": "crops/desktop_x1216y738w60h56_z8.png",
+      "kind": "crop",
+      "state": "copied",
+      "durable_path": "evidence/TMB-JB-0004/crops/desktop_x1216y738w60h56_z8.png",
+      "bytes": 5064,
+      "sha256": "86c942f03e482033870e128d1a6fdf796a8bec976b82c38cf80dcb104a19f518",
+      "reason": "",
+      "regenerate": "tmb capture jonny-boi --surface about"
+    },
+    {
+      "path": "crops/desktop_x1200y724w80h76_z6.png",
+      "kind": "crop",
+      "state": "copied",
+      "durable_path": "evidence/TMB-JB-0004/crops/desktop_x1200y724w80h76_z6.png",
+      "bytes": 5065,
+      "sha256": "3bf266c0c81ce1cf6ba9af4d33d34b823cd9658d48a1cdd504b88f577e3e2822",
+      "reason": "",
+      "regenerate": "tmb capture jonny-boi --surface about"
+    },
+    {
+      "path": "shots/about/desktop.png",
+      "kind": "screenshot",
+      "state": "copied",
+      "durable_path": "evidence/TMB-JB-0004/shots/about/desktop.png",
+      "bytes": 159223,
+      "sha256": "29d68ef8ea54114e40592cccd95ed911a9ac4aa16872c740b3b1d12b2939a1aa",
+      "reason": "",
+      "regenerate": "tmb capture jonny-boi --surface about"
+    },
+    {
+      "path": "shots/deck_builder/desktop.png",
+      "kind": "screenshot",
+      "state": "copied",
+      "durable_path": "evidence/TMB-JB-0004/shots/deck_builder/desktop.png",
+      "bytes": 729626,
+      "sha256": "21284362da1d063360f1aafd7ce6e65fb5eada5c7b543b8ab3ceb3af92a94eef",
+      "reason": "",
+      "regenerate": "tmb capture jonny-boi --surface about"
+    },
+    {
+      "path": "shots/lab/desktop.png",
+      "kind": "screenshot",
+      "state": "copied",
+      "durable_path": "evidence/TMB-JB-0004/shots/lab/desktop.png",
+      "bytes": 63795,
+      "sha256": "7d1d0a3aa73e100b256f33e023e5615888624e3d82fb95a98ee2cec96535a04d",
+      "reason": "",
+      "regenerate": "tmb capture jonny-boi --surface about"
+    }
+  ]
+}

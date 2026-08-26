@@ -1,0 +1,58 @@
+{
+  "id": "TMB-JB-0001",
+  "project": "jonny-boi",
+  "rubric": "ui-visual",
+  "persona": "first-timer",
+  "session": "20260821_104815_jonny-boi",
+  "created": "2026-08-21T17:53:08Z",
+  "updated": "2026-08-26T14:55:15Z",
+  "build": {
+    "vcs_rev": "d56b275126651ee806fedb280253cf5b61de91bd",
+    "vcs_dirty": true,
+    "binary": "D:\\Cool Stuff\\Claude\\jonny-boi\\apps\\web\\dist\\index.html",
+    "binary_sha256": "586b11c5546ee869b69ea25272eee505ca184f19ae18a30e749aaa3194128018",
+    "binary_mtime": "2026-08-21T17:49:02.350256+00:00"
+  },
+  "surface": "about",
+  "title": "About stat row: the six numbers sit on two baselines because the value follows a variable-height label",
+  "severity": "minor",
+  "confidence": "confirmed",
+  "category": "ui-visual",
+  "what_happened": "The row of six stat tiles under the About intro shows its values at two different heights. CARDS PLAYABLE AS PRINTED (560), IMPORT TEMPLATES RECOGNIZED (188), KEYWORDS ENFORCED (15) and ENGINE SYSTEMS STILL MISSING (24) all have labels that wrap to two lines, and their numbers sit low in the tile. EFFECT PRIMITIVES (70) and TEMPLATE GAPS (34) have one-line labels, and their numbers sit roughly 18 px higher. Scanning the row left to right, the numbers step down, down, down, up, down, up.",
+  "expected": "Six equal-height tiles presenting one comparable statistic each should present their values on one shared baseline, so the eye can scan the row as a row. The tiles are already the same height, so the misalignment is not a sizing problem - only the value's vertical position inside the tile is wrong.",
+  "why_it_matters": "This row is the About page's headline evidence: it is the first thing that quantifies what the engine can and cannot do. A ragged baseline makes six numbers that are meant to be compared read as six unrelated boxes, and it is the one place on the four screens captured where the layout looks unconsidered rather than authored - which undercuts the page's own argument about rigour.",
+  "repro": [
+    "1. Run npm run build and serve apps/web.",
+    "2. Open the app at desktop width (1280x800) and click About in the top nav.",
+    "3. Look at the row of six stat tiles directly beneath the intro paragraph.",
+    "4. Observe that the numbers 70 and 34 sit visibly higher than 560, 188, 15 and 24."
+  ],
+  "evidence": [
+    {
+      "path": "crops/desktop_x144y250w995h112_z3.png",
+      "kind": "crop",
+      "sha256": "d39089d9fa84838b6a6c5d68b332408c63a6ee2606cbc0931ea23dec413161a7",
+      "note": "The stat row at 3x. Lay a straightedge under 560 and carry it right: it passes through the middle of 70 and 34 rather than under them.",
+      "region": "144,250,995,112"
+    },
+    {
+      "path": "shots/about/desktop.png",
+      "kind": "screenshot",
+      "sha256": "29d68ef8ea54114e40592cccd95ed911a9ac4aa16872c740b3b1d12b2939a1aa",
+      "note": "The full 1280x800 About frame the crop was taken from, for context on where the row sits in the page.",
+      "region": "144,250,995,112"
+    }
+  ],
+  "suggested_fix": "Give the tile a column layout that pushes the value to the bottom (e.g. flex-direction: column with margin-top:auto on the value, or a fixed min-height on the label block sized to two lines). Either pins every value to one baseline without changing the tile height.",
+  "references": [
+    "CLAUDE.md"
+  ],
+  "status": "fixed",
+  "status_note": "about__stat is now a flex column and the dd bottom-pins with margin: auto 0 0 - all six values share one baseline at the filed rect 144,250,995,112 (evidence/TMB-JB-0001/after). CSS-only; structure pinned in styles-regressions.test.ts",
+  "tags": [
+    "about",
+    "stat-tiles",
+    "alignment"
+  ],
+  "fingerprint": "43d9666d5e035dee"
+}

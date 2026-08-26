@@ -1,0 +1,36 @@
+{
+  "finding": "TMB-JB-0002",
+  "session": "20260821_145226_jonny-boi_ui-visual",
+  "evidence": [
+    {
+      "path": "crops/mobile_x240y4w150h48_z6.png",
+      "kind": "crop",
+      "state": "copied",
+      "durable_path": "evidence/TMB-JB-0002/crops/mobile_x240y4w150h48_z6.png",
+      "bytes": 4541,
+      "sha256": "28d002bff16f9c8c9373b2bc9222067d303825021aca5e12afdc32e041a6dc5d",
+      "reason": "",
+      "regenerate": "tmb capture jonny-boi --surface deck_builder"
+    },
+    {
+      "path": "shots/deck_builder/mobile.png",
+      "kind": "screenshot",
+      "state": "copied",
+      "durable_path": "evidence/TMB-JB-0002/shots/deck_builder/mobile.png",
+      "bytes": 279677,
+      "sha256": "8818e8a2f21a02fd9f7927df17b92489e57594b15d78bcff023d612e8c5d42d0",
+      "reason": "",
+      "regenerate": "tmb capture jonny-boi --surface deck_builder"
+    },
+    {
+      "path": "shots/about/mobile.png",
+      "kind": "screenshot",
+      "state": "copied",
+      "durable_path": "evidence/TMB-JB-0002/shots/about/mobile.png",
+      "bytes": 66564,
+      "sha256": "4269855cfeec691ba6c8b42b3d8fa1a3d724e035fa84ec45b32e98de9fee67ca",
+      "reason": "",
+      "regenerate": "tmb capture jonny-boi --surface deck_builder"
+    }
+  ]
+}
