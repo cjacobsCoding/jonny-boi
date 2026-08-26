@@ -3526,6 +3526,14 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
+### 3.49 The invariant layer — catching the §3.37–§3.45 classes, not the instances — 🚧 in progress
+
+Eight defects (§3.37, §3.38, §3.40, §3.41, §3.42, §3.44, §3.45) were each caught by a person and got
+a regression test only afterwards; ~5,300 tests saw none of them coming, because every one was a rule
+enforced by a PROXY that usually holds. This adds the completeness/invariant test layer that checks
+the classes — invariants that scale with DATA rather than with more examples. Detail lands with the
+branch (`test/completeness-invariants`).
+
 ### 3.46 The deck-neutral pilot A/B — the yardstick §3.45 used, committed as a tool — ✅ done
 
 §3.45 built four combat-math improvements, measured them, and shipped **one**. The evidence that

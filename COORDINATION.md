@@ -157,9 +157,19 @@ throughput (games/sec) from regressing.
 | fix/soak-action-cap | DESKTOP-90PJPM4 (worker) | packages/ai (`effect-value.ts` copySpell chain pricing + `willFizzleOnResolution`; `weights.ts` +1 weight; NEW `copy-chain-pilot.test.ts`), packages/cards (`copy-primitives.ts` CR 707.10 `min`; NEW `copy-retarget-optional.test.ts`), packages/sim (`soak.test.ts` +3 pinned rows), DESIGN §3.33 (+ §3.32's handoff closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | 🚧 PUSHED, not merged |
 | fix/blink-rules-fidelity | worker | packages/core (NEW `combat-removal.ts`; `state.ts` +`CombatState.removedFromCombat`, `attachments.ts` +`unattachDependentsOf`, `internal/continuous.ts` +`dropContinuousEffectsFor`, `internal/combat.ts` damage step, `internal/clone.ts`, `internal/replacement.ts` `isAttacking`, `engine.ts` 3 lines in declare-blockers, `instance-ids.ts` +1 field name, `index.ts` exports), packages/cards (`blink-primitives.ts` +3 calls + doc; `data/pool.ts` +10 printed `subtypes` lines; `fidelity.test.ts` +1 standing type-line guard; `restoration-angel.test.ts` +1 case; NEW `selesnya-blink-fidelity.test.ts`), DESIGN §3.44, COORDINATION. **No generated data regenerated; no soak or gauntlet row moved.** | ✅ MERGED + DEPLOYED |
 | feat/pilot-ab-harness | worker | packages/sim ONLY (NEW `pilot-ab.ts` + `pilot-ab.test.ts`; `cli.ts` — new `pilot-ab` subcommand, `--pilot-a`/`--pilot-b`, and a shared `resolvePilot` helper the old `resolvePilots` now reuses; `index.ts` exports), DESIGN §3.46, COORDINATION. **No core, cards, ai or web change — NO pilot behaviour touched.** Adds a tool, moves no baseline. | 🚧 PUSHED, not merged |
+| test/completeness-invariants | worker | TEST FILES ONLY (NEW: packages/core/src/targeting-completeness.test.ts, packages/cards/src/zone-leave-invariants.test.ts + pool-frame-integrity.test.ts, packages/ai/src/effect-value-parity.test.ts, packages/sim/src/offer-apply-exhaustive.test.ts, apps/web/src/lib/decklist/poolAlwaysPlayable.test.ts) + two EXPORT-ONLY runtime lists (packages/core/src/targeting.ts `ALL_TARGET_RESTRICTIONS` + index export, packages/ai/src/effect-value.ts `PRICED_PRIMITIVE_IDS`), DESIGN §3.49, COORDINATION. **No behaviour change — no baseline can move.** | 🚧 IN FLIGHT |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-25 worker: CLAIMED `test/completeness-invariants` — DESIGN §3.49 (§3.47 is in use by a
+  concurrent agent; §3.48 left free for it to grow into). The §3.37–§3.45 postmortem: ~5,300 tests
+  caught none of those eight defects because each rule was enforced by a proxy. This branch adds the
+  invariant layer that checks the CLASSES — restriction-word completeness across all five homes,
+  primitive/value parity + wrapper recursion, zone-leave state invariants swept over every pool-drawn
+  leave funnel, pool frame vs the offline Scryfall index, curated-pool-beats-import for EVERY card,
+  and exhaustive offer/apply agreement. TEST FILES ONLY plus two export-only runtime lists (core
+  targeting, ai effect-value). No behaviour change; no baseline can move.
 
 - 2026-08-23 worker: `feat/pilot-ab-harness` ✅ MERGED + DEPLOYED, not merged — DESIGN §3.46. Off `main` (2777ebc).
   **5295 / 0**, `verify` 0. **packages/sim ONLY — no pilot behaviour changed, no baseline moved.**
