@@ -241,7 +241,7 @@ _Append dated notes here; keep them short. Newest at top._
   clear 3:1 (4.1/3.3/6.1). TMB-JB-0001: About stat values bottom-pinned to one baseline. New
   `styles-regressions.test.ts` pins the token ratios + rule structure (watched red pre-fix).
   **apps/web only — no packages/* files touched** (concurrent agents own packages/ai + tests).
-- 2026-08-26 DESKTOP-90PJPM4: `fix/play-reports` ✅ MERGED (deploy: gh-pages holds the build; GitHub's Pages builder is wedged platform-side — a watcher confirms when it serves) — DESIGN §3.51. Four in-app bug reports
+- 2026-08-26 DESKTOP-90PJPM4: `fix/play-reports` ✅ MERGED + DEPLOYED (GitHub's Pages builder recovered; every fix marker verified in the live bundle) — DESIGN §3.51. Four in-app bug reports
   from one Solo session, all fixed + verified live. ⚠️ The big one was an INFORMATION LEAK: after
   keeping, the mulligan flow showed the COMPUTER'S hand face-up for the whole `aiThinkMs` delay.
   Fixed structurally (`AiMulliganScreen` takes a hand COUNT — identities cannot reach that screen),
