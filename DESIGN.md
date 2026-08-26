@@ -3526,22 +3526,92 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
-### 3.47 The `lookahead` pilot — combat plans searched ahead, at heuristic speed — 🚧 in progress
+### 3.47 The `lookahead` pilot — combat plans searched ahead, at heuristic speed — ✅ done
 
 The user's ask: *"actual smartness without sacrificing speed … looking ahead several possible
-turns."* The search family cannot be that pilot: measured in this branch on Mono-Red vs Boros,
-`hybrid` runs **0.105 games/sec** against the heuristic's **57.8** — ~550× — so a full-width
-game-tree search is three orders of magnitude away from gauntlet/A-B duty. What CAN look ahead at
-heuristic speed is a bounded adversarial search over the decision the pilot measurably gets wrong
-(§3.45's table): the attack declaration. The plan: a new registered pilot id `lookahead` that
-delegates everything except the attack step to the unmodified heuristic, and decides attacks by
-forecasting each candidate attack plan — the defender's best-response blocks priced by
-`resolveFight` (allocation, so one wall cannot deter three attackers), then the **crack-back**
-(what my board can still block after these attackers tap — the model the ⚠️ on
-`attackIsProfitable` names), then a closed-form multi-turn race (both clocks after the exchange).
-Success = decisively beats `heuristic` on `npm run sim -- pilot-ab` at a meaningful sample AND
-stays within a small factor of its throughput; both numbers to be recorded here, honest negatives
-included. Default pilot untouched; every recorded baseline must stay byte-identical.
+turns."* This lands a new registered pilot id, **`lookahead`** — selectable everywhere
+(`--pilot lookahead`, the Lab picker, `SELECTABLE_PILOT_IDS`), **not the default** — that is the
+unmodified heuristic at every decision except one: the attack declaration, the decision §3.45
+measured the heuristic getting wrong. There it runs a bounded adversarial search over attack
+plans, each played forward **in closed form** (no state clone, no engine call):
+
+1. **The defender's answer** — predicted with the defending pilot's OWN code
+   (`forcedBlockAssignment`, then `pickBlocker` per attacker, same order, same weights), so the
+   model and the modelled defender cannot drift. Who dies is `resolveFight`'s answer. This is the
+   ALLOCATION §3.45's first rejected build lacked: one wall deters one attacker, never three.
+2. **The crack-back** — the model the ⚠️ on `attackIsProfitable` names: after these attackers
+   tap, what can their whole surviving board force through the blockers I have LEFT (vigilance
+   keeps a body home; my tapped stay tapped through their turn)? A port of the tactical solver's
+   greedy prevention bound, so it is a floor, never a guess.
+3. **The race** — both clocks after the exchange, saturated like the solver's: the closed-form
+   value of just-keep-attacking, which is the several-turns-ahead question in this engine.
+
+The candidate family is `∅` + singletons + greedy prefixes + all-in + toggle refinement —
+`O(n²·m)` integer arithmetic once per attack step. A **proven** kill (`lethalAttackers`, exact)
+is taken before any forecast runs. Deterministic: no RNG, fixed tie-breaks, and candidate plans
+are normalised to the engine's eligibility order so the stable power-sort ties resolve
+identically in the model and at the table.
+
+**📊 The verdict, on §3.46's committed yardstick** (`npm run sim -- pilot-ab --pilot-a lookahead
+--pilot-b heuristic`, default 7,200 games, default seed):
+
+> **lookahead 3754 – 3274 heuristic** (53.4%, CI 52.2–54.6; 172 timeout draws vs the control's
+> 136) · matched slots **361 A-ahead / 100 B-ahead** of 461 decided · McNemar p < 10⁻¹⁶ ·
+> **VERDICT: STRONGER** · **7,200 games in 148 s → 48.5 games/sec**, throughput parity with the
+> heuristic on the same box and tool (its own control ran 40–52 g/s; single-matchup
+> `match --games 100`: **87.6 vs 88.5 g/s = 99%**).
+
+Per-deck, EVERY row ≥ 51%: Mono-Red 56.3 · Boros 55.6 · Rakdos 54.8 · Mono-Green 54.3 · Selesnya
+52.9 · UW 52.8 · Orzhov 52.5 · Izzet 51.7 · Golgari 51.1 — a broad-based gain, not an archetype
+tilt (compare §3.45's shipped fix: 51.2% overall). The same-id control (`--pilot-a lookahead
+--pilot-b lookahead`) is exactly level — the pilot carries no cross-game state.
+
+**⚠️ The honest attribution, measured so nobody re-derives it.** Two more 7,200-game runs in one
+process (§3.46 protocol #1):
+
+| arm | result | reading |
+|---|---|---|
+| ablation (crack-back + race terms ZEROED) vs `heuristic` | 3772–3278 (53.5%), slots 348/81, p ≈ 0 | the PLAN-LEVEL search alone carries the whole measured gain |
+| full vs that ablation, head-to-head | **3542–3541** (50.0%), slots 141/138, p = 0.905 | the crack-back/race terms add nothing measurable **on this meta** |
+
+So why do the terms ship ON? They cost nothing (the full model ran 58 g/s, faster than the
+heuristic control), and they are the only guard on the catastrophic line §3.45 documented —
+tapping out into a proven lethal counterattack — which the unit tests pin on constructed boards
+(`lookahead-pilot.test.ts`: same board, heuristic attacks, lookahead holds) but which is
+evidently too rare across these nine decks to move 7,200 games. Both readings are true at once:
+the guard works where it fires, and it fires rarely. Why does allocation-only WIN here when
+§3.45's allocation build lost 1406–1422? Because that build freed attackers with per-attacker
+rules inside `attackIsProfitable`; this one compares WHOLE plans (deaths priced by `resolveFight`
+on both sides, trample-through, saboteurs) against the do-nothing plan with a threshold — the
+plan-level comparison is itself most of the discipline the crack-back was expected to add.
+
+**⚠️ The search family's wall, verified rather than inherited.** `hybrid` on Mono-Red vs Boros,
+seed 42, one session: **0.105 games/sec** against the heuristic's 57.8 — ~550× per game (the web
+Solo tile's "~1400×" is the right order but ~2.5× overstated on this box). Strength:
+`pilot-ab --pilot-a hybrid --pilot-b heuristic --games 2 --seed 7` reads 77–64 (54.6%, CI
+46.4–62.6), slots 7/1, **p = 0.077 — INCONCLUSIVE**, and those 144 games took 905 s; the default
+7,200-game yardstick would take **~12.6 hours**. §3.4a's recorded 60.0%/120 games is
+directionally consistent and remains unproven at yardstick scale — the throughput is why. `mcts`
+(claimed 40.8%) was not re-run: the family's wall is established by its stronger member.
+
+**Baselines: nothing moved.** The default pilot is untouched (`DEFAULT_PILOT_ID` still
+`heuristic`, pinned); the only `heuristic.ts` change is `export` on five existing combat helpers
+so the forecast predicts blocks with the modelled defender's own functions. Gauntlet seed 99
+re-measured, byte-identical: Mono-Red **224/800**, Selesnya Blink **575/800**, UW Control
+**413/800**, Mono-Green Ramp **537/800**.
+
+**Files.** `packages/ai/src/combat-forecast.ts` (the forecast + `ForecastWeights`, every knob
+named data), `lookahead.ts` (the pilot: intercept one decision, delegate the rest),
+`combat-forecast.test.ts` + `lookahead-pilot.test.ts` (18 tests: allocation, the crack-back hold
+the heuristic gets wrong, the vigilance pair that isolates the model, proven-kill routing,
+determinism, shared-instance statelessness, registration), registration in `index.ts`, one
+classification line in `packages/sim/src/paired-arms.test.ts` (reads no hidden zone), and the two
+data rows in `apps/web/src/lib/sim/pilots.ts` that its own guard test demands for every
+selectable pilot — display copy plus the MEASURED relative game cost (1: 48.5 vs 40–52 g/s on
+the yardstick, 87.6 vs 88.5 single-matchup). While there: `hybrid`'s tile still says ~1400×; this
+branch measured ~550× on its box — the copy is the web owner's to re-measure, not this branch's
+to guess. Flipping the default is the integrator's call: the case is 53.4% at parity cost, one
+command re-checks it.
 
 ### 3.46 The deck-neutral pilot A/B — the yardstick §3.45 used, committed as a tool — ✅ done
 

@@ -32,6 +32,7 @@ import {
   DEFAULT_PILOT_ID,
   HEURISTIC_PILOT_ID,
   HYBRID_PILOT_ID,
+  LOOKAHEAD_PILOT_ID,
   MCTS_PILOT_ID,
   RANDOM_PILOT_ID,
   SELECTABLE_PILOT_IDS,
@@ -74,6 +75,12 @@ export interface PilotProfile {
  *    doc-comment: ~29 s per game in Node against a heuristic gauntlet running at
  *    ~110–120 games/sec (~8.5 ms per game). The browser worker measured ~66 s per
  *    game, i.e. worse still, so this is the optimistic end.
+ *  - `lookahead` — **1**, measured on the §3.47 branch: the deck-neutral pilot
+ *    A/B (7,200 games, half of them driven by this pilot) ran 48.5 games/sec
+ *    against the heuristic control's 40–52 on the same box and tool, and a
+ *    single-matchup `match --games 100` timed 87.6 vs the heuristic's 88.5
+ *    (99%). Its forecast is closed-form arithmetic once per attack step — no
+ *    state clone, no rollout — which is why a searching pilot can sit at 1.
  *  - `random` — **1**, an upper bound rather than a measurement: picking uniformly
  *    from the legal actions is strictly cheaper than scoring them, and the engine's
  *    own game loop dominates either way. Being wrong here can only over-state the
@@ -89,6 +96,7 @@ export interface PilotProfile {
 const RELATIVE_GAME_COST: Readonly<Record<string, number>> = {
   [HEURISTIC_PILOT_ID]: 1,
   [HYBRID_PILOT_ID]: 1400,
+  [LOOKAHEAD_PILOT_ID]: 1,
   [MCTS_PILOT_ID]: 3400,
   [RANDOM_PILOT_ID]: 1,
 };
@@ -111,6 +119,12 @@ const PILOT_COPY: Readonly<Record<string, { label: string; blurb: string }>> = {
       // an overstated blurb is worse than none, because the whole product is a
       // claim to measure honestly.
       'Policy-guided search over funded plays. Head-to-head against the current heuristic it measures 55.8% on fast tactical boards (95% CI 46.9–64.4) and 48.8% on grindy control boards (CI 38.1–59.5) — both intervals include 50%, so at this sample size it is not a proven improvement. Costs ~1,400× the run time.',
+  },
+  [LOOKAHEAD_PILOT_ID]: {
+    label: 'Lookahead',
+    blurb:
+      // MEASURED numbers (DESIGN §3.47) — re-measure and rewrite if either pilot changes.
+      'The heuristic with a forecast-searched combat step: each attack plan is played through the defender’s best-response blocks, the crack-back and the race, in closed form. Measured 53.4% against the heuristic over 7,200 deck-neutral games (p < 10⁻¹⁶) at the same run time.',
   },
   [MCTS_PILOT_ID]: {
     label: 'MCTS',

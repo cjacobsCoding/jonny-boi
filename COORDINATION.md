@@ -157,20 +157,44 @@ throughput (games/sec) from regressing.
 | fix/soak-action-cap | DESKTOP-90PJPM4 (worker) | packages/ai (`effect-value.ts` copySpell chain pricing + `willFizzleOnResolution`; `weights.ts` +1 weight; NEW `copy-chain-pilot.test.ts`), packages/cards (`copy-primitives.ts` CR 707.10 `min`; NEW `copy-retarget-optional.test.ts`), packages/sim (`soak.test.ts` +3 pinned rows), DESIGN §3.33 (+ §3.32's handoff closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | 🚧 PUSHED, not merged |
 | fix/blink-rules-fidelity | worker | packages/core (NEW `combat-removal.ts`; `state.ts` +`CombatState.removedFromCombat`, `attachments.ts` +`unattachDependentsOf`, `internal/continuous.ts` +`dropContinuousEffectsFor`, `internal/combat.ts` damage step, `internal/clone.ts`, `internal/replacement.ts` `isAttacking`, `engine.ts` 3 lines in declare-blockers, `instance-ids.ts` +1 field name, `index.ts` exports), packages/cards (`blink-primitives.ts` +3 calls + doc; `data/pool.ts` +10 printed `subtypes` lines; `fidelity.test.ts` +1 standing type-line guard; `restoration-angel.test.ts` +1 case; NEW `selesnya-blink-fidelity.test.ts`), DESIGN §3.44, COORDINATION. **No generated data regenerated; no soak or gauntlet row moved.** | ✅ MERGED + DEPLOYED |
 | feat/pilot-ab-harness | worker | packages/sim ONLY (NEW `pilot-ab.ts` + `pilot-ab.test.ts`; `cli.ts` — new `pilot-ab` subcommand, `--pilot-a`/`--pilot-b`, and a shared `resolvePilot` helper the old `resolvePilots` now reuses; `index.ts` exports), DESIGN §3.46, COORDINATION. **No core, cards, ai or web change — NO pilot behaviour touched.** Adds a tool, moves no baseline. | 🚧 PUSHED, not merged |
-| feat/fast-lookahead | worker | packages/ai ONLY (NEW `combat-forecast.ts` + `lookahead.ts` + their tests; `index.ts` registration/exports; minimal ADDITIVE exports of existing private helpers from `heuristic.ts` — no heuristic behaviour change), DESIGN §3.47, COORDINATION. **Default pilot untouched; recorded gauntlet baselines must stay byte-identical.** | 🚧 IN FLIGHT |
+| feat/fast-lookahead | worker | packages/ai (NEW `combat-forecast.ts` + `lookahead.ts` + `combat-forecast.test.ts` + `lookahead-pilot.test.ts`; `index.ts` registration/exports; `heuristic.ts` — `export` added to five existing combat helpers + one doc note, NO behaviour change), packages/sim/src/paired-arms.test.ts (ONE classification line its new-pilot guard demands), apps/web/src/lib/sim/pilots.ts (the TWO data rows — `PILOT_COPY` + `RELATIVE_GAME_COST` — that `pilots.test.ts` demands for any new selectable pilot, measured figures only) + apps/web/src/lib/play/ai-seat.ts (one id-list comment un-staled), DESIGN §3.47, COORDINATION. **Default pilot untouched; gauntlet seed-99 baselines re-measured byte-identical (224/575/413/537 per 800).** | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
-- 2026-08-25 worker: CLAIMED `feat/fast-lookahead` — DESIGN §3.47. A fast lookahead pilot (new id
-  `lookahead`, selectable, NOT the default): bounded adversarial search over attack plans — the
-  defender's best-response blocks priced by `resolveFight`, the **crack-back model** the ⚠️ on
-  `attackIsProfitable` names as the honest next step, and a closed-form multi-turn race forecast —
-  at near-heuristic cost. Yardstick: `npm run sim -- pilot-ab --pilot-a lookahead --pilot-b heuristic`
-  (two REGISTERED ids in one process — the exact method, not the cross-branch trap). packages/ai only;
-  `SELECTABLE_PILOT_IDS` carries the id to the CLI/UI with no sim edit. Measured so far on this box:
-  hybrid = 0.105 games/sec on Mono-Red vs Boros (heuristic 57.8) — ~550× — so the search family is
-  not close to default-cheap; this branch attacks the same blind spots with arithmetic lookahead.
+- 2026-08-25 worker: `feat/fast-lookahead` 🚧 PUSHED, not merged — DESIGN §3.47. **The `lookahead`
+  pilot beats `heuristic` on the committed yardstick at throughput parity**:
+  `npm run sim -- pilot-ab --pilot-a lookahead --pilot-b heuristic` (default 7,200 games) reads
+  **3754–3274 (53.4%, CI 52.2–54.6), slots 361/100, McNemar p < 1e-16, VERDICT: STRONGER, 48.5
+  games/sec** (heuristic control 40–52 g/s same box; single-matchup 87.6 vs 88.5 g/s = 99%).
+  Every deck row ≥ 51% — broad-based, not an archetype tilt. Selectable (`--pilot lookahead`,
+  Lab picker), **NOT the default** — flipping `DEFAULT_PILOT_ID` is the integrator's measured
+  call; one command re-checks the case.
+
+  What it is: the unmodified heuristic everywhere except the ATTACK declaration (§3.45's measured
+  blind spot), which is chosen by a closed-form plan search — the defender's response predicted
+  with the defender's own `pickBlocker`/`forcedBlockAssignment`, deaths priced by `resolveFight`,
+  then the crack-back (the ⚠️-named model) and both clocks. No state clone, no engine call, no
+  RNG; deterministic; same-id control exactly level.
+
+  ⚠️ Attribution, measured (both 7,200 games, one process): the ablation with crack-back + race
+  ZEROED also beats heuristic (3772–3278, p ≈ 0), and full-vs-ablation is a wash (3542–3541,
+  p = 0.905) — the PLAN-LEVEL comparison carries the gain on this meta; the crack-back terms are
+  free insurance for the tap-out-into-lethal line the unit tests pin (heuristic attacks, lookahead
+  holds, same board). Do not re-derive: numbers and the why are in §3.47.
+
+  ⚠️ Hybrid, verified not inherited: 0.105 g/s vs heuristic 57.8 on Mono-Red/Boros (~550×; the web
+  tile's "~1400×" is ~2.5× overstated on this box — apps/web copy is unclaimed and worth a
+  re-measure by its owner). Strength at pilot-ab `--games 2`: 54.6% (CI 46.4–62.6), p = 0.077,
+  INCONCLUSIVE — 144 games took 905 s; the default yardstick would take ~12.6 h. §3.4a's 60.0%
+  remains unproven at yardstick scale.
+
+  Gauntlet seed-99 baselines byte-identical (Mono-Red 224, Selesnya 575, UW 413, Mono-Green 537
+  per 800). packages/ai + ONE line in `packages/sim/src/paired-arms.test.ts` (its new-pilot guard
+  demands a classification; `lookahead` reads no hidden zone) + the TWO data rows in
+  `apps/web/src/lib/sim/pilots.ts` its guard test demands for any selectable pilot (display copy
+  + measured cost 1; one stale id-list comment in `ai-seat.ts` fixed in the same commit).
+  `heuristic.ts`: `export` on five existing helpers only.
 
 - 2026-08-23 worker: `feat/pilot-ab-harness` ✅ MERGED + DEPLOYED, not merged — DESIGN §3.46. Off `main` (2777ebc).
   **5295 / 0**, `verify` 0. **packages/sim ONLY — no pilot behaviour changed, no baseline moved.**

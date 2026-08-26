@@ -19,7 +19,7 @@ import type { GameSession } from './session.js';
 /** Which seat the computer plays, and with which pilot. */
 export interface AiSeatConfig {
   readonly seat: PlayerId;
-  /** A `SELECTABLE_PILOT_IDS` member — 'heuristic', 'hybrid', 'mcts', 'random'. */
+  /** A `SELECTABLE_PILOT_IDS` member — 'heuristic', 'hybrid', 'mcts', 'random', 'lookahead'. */
   readonly pilotId: string;
 }
 
