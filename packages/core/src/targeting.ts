@@ -294,6 +294,56 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
 }
 
 /**
+ * Every member of {@link TargetRestriction}, spelled once as a value so the
+ * union has a RUNTIME form. `satisfies Record<TargetRestriction, true>` is what
+ * keeps this list honest in BOTH directions at compile time: a union member
+ * missing here is a type error, and a key that is not a union member is a type
+ * error — so the list cannot drift from the type it mirrors, which is the
+ * property a hand-kept array or a source-parsing test could not give.
+ *
+ * EXPORT-ONLY: nothing in the engine reads {@link ALL_TARGET_RESTRICTIONS}.
+ * It exists for the §3.49 completeness invariant. A restriction word has FIVE
+ * homes — this union, {@link isTargetRestriction}, {@link isLegalTarget}, the
+ * enumerator behind {@link legalTargetsFor}, and {@link describeRestriction} —
+ * and §3.40 was a word given four of the five: the validator miss made
+ * `restrictionOfEffects` read the declared restriction back as `undefined`,
+ * silently, wearing the costume of an AI limitation. The invariant sweeps this
+ * list through all five homes so the NEXT word fails loudly until every home
+ * knows it.
+ */
+const TARGET_RESTRICTION_MEMBERS = {
+  any: true,
+  creature: true,
+  player: true,
+  spell: true,
+  artifact: true,
+  opponent: true,
+  creatureYouControl: true,
+  nonAngelCreatureYouControl: true,
+  creatureAnOpponentControls: true,
+  artifactEnchantmentOrLand: true,
+  playerOrPlaneswalker: true,
+  creatureOrPlaneswalker: true,
+  permanent: true,
+  instantOrSorceryInYourGraveyard: true,
+  instantOrSorcerySpell: true,
+  triggeredAbilityYouControl: true,
+  creatureOnBattlefieldOrInGraveyard: true,
+  instantOrSorcerySpellYouControl: true,
+  permanentSpellYouControl: true,
+  activatedOrTriggeredAbilityYouControl: true,
+  nonlandPermanentYouControl: true,
+  enchantment: true,
+  land: true,
+  planeswalker: true,
+} as const satisfies Record<TargetRestriction, true>;
+
+/** See {@link TARGET_RESTRICTION_MEMBERS} — the union as a frozen runtime list. */
+export const ALL_TARGET_RESTRICTIONS: readonly TargetRestriction[] = Object.freeze(
+  Object.keys(TARGET_RESTRICTION_MEMBERS) as TargetRestriction[],
+);
+
+/**
  * Memo for {@link targetRestrictionOf}. Card definitions are immutable and shared
  * (the pool is frozen; every instance points at the same object), and this is read
  * for every card in hand on every `generateLegalActions` — the engine's hottest
