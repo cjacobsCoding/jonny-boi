@@ -157,10 +157,27 @@ throughput (games/sec) from regressing.
 | fix/soak-action-cap | DESKTOP-90PJPM4 (worker) | packages/ai (`effect-value.ts` copySpell chain pricing + `willFizzleOnResolution`; `weights.ts` +1 weight; NEW `copy-chain-pilot.test.ts`), packages/cards (`copy-primitives.ts` CR 707.10 `min`; NEW `copy-retarget-optional.test.ts`), packages/sim (`soak.test.ts` +3 pinned rows), DESIGN §3.33 (+ §3.32's handoff closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | 🚧 PUSHED, not merged |
 | fix/blink-rules-fidelity | worker | packages/core (NEW `combat-removal.ts`; `state.ts` +`CombatState.removedFromCombat`, `attachments.ts` +`unattachDependentsOf`, `internal/continuous.ts` +`dropContinuousEffectsFor`, `internal/combat.ts` damage step, `internal/clone.ts`, `internal/replacement.ts` `isAttacking`, `engine.ts` 3 lines in declare-blockers, `instance-ids.ts` +1 field name, `index.ts` exports), packages/cards (`blink-primitives.ts` +3 calls + doc; `data/pool.ts` +10 printed `subtypes` lines; `fidelity.test.ts` +1 standing type-line guard; `restoration-angel.test.ts` +1 case; NEW `selesnya-blink-fidelity.test.ts`), DESIGN §3.44, COORDINATION. **No generated data regenerated; no soak or gauntlet row moved.** | ✅ MERGED + DEPLOYED |
 | feat/pilot-ab-harness | worker | packages/sim ONLY (NEW `pilot-ab.ts` + `pilot-ab.test.ts`; `cli.ts` — new `pilot-ab` subcommand, `--pilot-a`/`--pilot-b`, and a shared `resolvePilot` helper the old `resolvePilots` now reuses; `index.ts` exports), DESIGN §3.46, COORDINATION. **No core, cards, ai or web change — NO pilot behaviour touched.** Adds a tool, moves no baseline. | 🚧 PUSHED, not merged |
-| test/completeness-invariants | worker | TEST FILES ONLY (NEW: packages/core/src/targeting-completeness.test.ts, packages/cards/src/zone-leave-invariants.test.ts + pool-frame-integrity.test.ts, packages/ai/src/effect-value-parity.test.ts, packages/sim/src/offer-apply-exhaustive.test.ts, apps/web/src/lib/decklist/poolAlwaysPlayable.test.ts) + two EXPORT-ONLY runtime lists (packages/core/src/targeting.ts `ALL_TARGET_RESTRICTIONS` + index export, packages/ai/src/effect-value.ts `PRICED_PRIMITIVE_IDS`), DESIGN §3.49, COORDINATION. **No behaviour change — no baseline can move.** | 🚧 IN FLIGHT |
+| test/completeness-invariants | worker | TEST FILES ONLY (NEW: packages/core/src/targeting-completeness.test.ts, packages/cards/src/zone-leave-invariants.test.ts + pool-frame-integrity.test.ts, packages/ai/src/effect-value-parity.test.ts, packages/sim/src/offer-apply-exhaustive.test.ts, apps/web/src/lib/decklist/poolAlwaysPlayable.test.ts) + two EXPORT-ONLY runtime lists (packages/core/src/targeting.ts `ALL_TARGET_RESTRICTIONS`, packages/ai/src/effect-value.ts `PRICED_PRIMITIVE_IDS` — no index.ts change, tests import the modules directly), DESIGN §3.49, COORDINATION. **No behaviour change — no baseline can move.** All EIGHT §3.37–§3.45 fixes reverted one at a time: the generic layer went red every time (table in §3.49). | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-26 worker: `test/completeness-invariants` 🚧 PUSHED, not merged — DESIGN §3.49. **verify
+  exit 0, 5320 passed / 0 failed** (5 skipped; 5295 → 5320 is exactly the layer's +25). TEST FILES
+  ONLY + two export-only runtime lists; no baseline can move. The §3.37–§3.45 postmortem answered:
+  five invariants that quantify over live registries and pool data — restriction words × five homes
+  (the union pinned to a runtime list by `satisfies`), primitive/value parity with an ENFORCED
+  unpriced ledger + a generic wrapper-recursion property, zone-leave invariants (CR 506.4 /
+  704.5m/n / 400.7) swept by casting every castable pool card at a rigged board through the
+  engine's own offers, whole-frame pool integrity vs the offline index, and whole-menu offer/apply.
+  **Acceptance: all eight fixes reverted one at a time; the generic layer went red each time**
+  (§3.49 table). Layer costs 969ms of test time.
+  👉 Found on `main`, for whoever owns the fixes: (1) `isLegalTarget` skips hexproof/shroud on the
+  battlefield half of `creatureOnBattlefieldOrInGraveyard` — REAL divergence, pinned `it.fails` in
+  core's completeness suite, one-line fix wanted in `targeting.ts`; (2) TWENTY registered
+  primitives are unpriced (15 pool-reachable — `scry` ×29, `attachToTarget` ×42, `addCounters`
+  ×19, `ifKicked` a wrapper whose kicked body is never read) — each a §3.42-class pilot blind
+  spot, carried on the enforced ledger in `effect-value-parity.test.ts` until priced.
 
 - 2026-08-25 worker: CLAIMED `test/completeness-invariants` — DESIGN §3.49 (§3.47 is in use by a
   concurrent agent; §3.48 left free for it to grow into). The §3.37–§3.45 postmortem: ~5,300 tests

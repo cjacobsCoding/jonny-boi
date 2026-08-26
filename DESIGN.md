@@ -3526,13 +3526,109 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
-### 3.49 The invariant layer — catching the §3.37–§3.45 classes, not the instances — 🚧 in progress
+### 3.49 The invariant layer — catching the §3.37–§3.45 classes, not the instances — ✅ done
 
-Eight defects (§3.37, §3.38, §3.40, §3.41, §3.42, §3.44, §3.45) were each caught by a person and got
-a regression test only afterwards; ~5,300 tests saw none of them coming, because every one was a rule
-enforced by a PROXY that usually holds. This adds the completeness/invariant test layer that checks
-the classes — invariants that scale with DATA rather than with more examples. Detail lands with the
-branch (`test/completeness-invariants`).
+Eight defects across §3.37–§3.45 (§3.40's validator hole, §3.42's two unpriced primitives, §3.44's
+four, §3.37's shadowed pool) were each found by a person, and each got a regression test only
+AFTERWARDS; ~5,300 tests saw none of them coming. The postmortem shape is identical every time:
+**a rule enforced by a PROXY that usually holds** — a validator that usually lists every word, a
+value table that usually prices every primitive, "the id is no longer on the battlefield" standing
+in for "it left combat". Example-shaped tests cannot see a proxy fail, because every example was
+written by someone who already knew the rule. This layer quantifies over the LIVE REGISTRIES AND
+POOL DATA instead, so it scales with the data and catches the class without knowing the instance.
+
+- **Restriction-word completeness** (`packages/core/src/targeting-completeness.test.ts`). A
+  restriction word has FIVE homes (§3.40's lesson) and the union is a type — invisible at runtime.
+  It now has a runtime form: `ALL_TARGET_RESTRICTIONS`, derived from a record pinned by
+  `satisfies Record<TargetRestriction, true>`, which the compiler holds equal to the union in BOTH
+  directions — chosen over parsing the source, which drifts with formatting, because this list
+  physically cannot drift from the type it mirrors (`npm run verify` type-checks). The sweep: every
+  member passes `isTargetRestriction`, round-trips through `restrictionOfEffects` (the exact read
+  §3.40 broke), and owns a distinct `describeRestriction` string; and on a ZOO board holding a
+  candidate of every kind (both trigger origins, both spell kinds, both graveyards, a walker, a
+  battle), the enumerator's OFFER set EQUALS the legality check's ACCEPT set for every member and
+  every actor — an unhandled word falls to the creature default on one side but not the other, and
+  the sets split.
+- **Primitive/value parity** (`packages/ai/src/effect-value-parity.test.ts`). Every id the value
+  table prices (now exported as `PRICED_PRIMITIVE_IDS`) must be registered; every registered id
+  must be priced **or carried on an enforced ledger** (`KNOWN_UNPRICED`, the §3.28 manifest
+  pattern — a stale row fails, a silent gap fails). Every primitive referenced ANYWHERE in pool
+  data is registered — including refs NESTED inside another ref's params, which `loadCardPool`'s
+  top-level validation never walks. And every WRAPPER primitive the pool uses (discovered
+  structurally: any param carrying nested refs) must price a rich body differently from an empty
+  one — the exact "flat constant, body never read" failure of §3.42.
+- **Zone-leave invariants** (`packages/cards/src/zone-leave-invariants.test.ts`). §3.44's three
+  rules restated as state invariants over the event log: after any action whose events say X left
+  the battlefield — **I1** (CR 506.4) a same-id RETURN is out of combat; **I2** (CR 704.5m/n)
+  nothing attached to X before the leave is still attached after; **I3** (CR 400.7) no continuous
+  effect from before the leave still targets X, a gain-control-until-end-of-turn included. The
+  funnels are DISCOVERED, not listed: every castable pool card is cast — through the engine's own
+  offer menu, so the sweep doubles as offer/apply agreement over real casts — at a rigged board
+  (an aura'd, equipped, pumped creature; an enchanted opposing creature; a STOLEN creature), at
+  sorcery speed (906 casts, 45 distinct leave-causing cards) and, instants only, inside declared
+  combat (150 casts, 25), plus the combat-damage death itself. A new leave funnel added to the
+  pool is swept the day it lands, and enforced floors keep the sweep from ever passing vacuously.
+- **Pool frame integrity** (`packages/cards/src/pool-frame-integrity.test.ts`). Every pool card's
+  printed FRAME against the OFFLINE Scryfall index (`data-tools/data/card-index.json`, never a
+  fetch): types (front face, or the faces' union for a split card — CR 708.4), subtypes, the
+  legendary flag (the legend rule keys on it), power/toughness, loyalty, defense. The §3.44
+  "Serra Angel was not an Angel" class closed on every axis, not just the one that bit: a
+  hand-authored 4/5 that is printed 4/4 now fails exactly like a missing Angel line.
+- **Offer/apply agreement, whole-menu** (`packages/sim/src/offer-apply-exhaustive.test.ts`). The
+  soak already proves the action a pilot CHOSE was offered (`checkActionLegality`) and accepted
+  (`noRejectedActions`) — one action per decision; both are reused as-is, not duplicated. This
+  completes the quantifier: two seeded random-walk games (the blink deck vs the control deck,
+  picked by archetype with index fallbacks), and at EVERY decision point EVERY offered action is
+  applied, any `actionRejected` a failure — floors enforce >400 decisions and >2,000 menu
+  applications so the walk cannot quietly stop playing. The web half of §3.37 gets the same
+  treatment (`apps/web/src/lib/decklist/poolAlwaysPlayable.test.ts`): a poisoned import store
+  remembering a FAILED verdict for every pool card, and every card must still read playable.
+
+📊 **The acceptance run — each real fix reverted in turn, the generic layer red every time, and no
+test naming the bug, the card, or the rule it was written for** (failure messages name cards the
+sweeps DISCOVER from data, which is the point):
+
+| # | defect (the fix reverted) | invariant that went red | result |
+|---|---|---|---|
+| 1 | §3.40 — `isTargetRestriction` loses `triggeredAbilityYouControl` | validator sweep + `restrictionOfEffects` round-trip | RED, 2 tests |
+| 2 | §3.42 — `mayEffects` unpriced | registered⇒priced parity AND wrapper-recursion property | RED, 2 tests |
+| 3 | §3.42 — `blinkTarget` unpriced | registered⇒priced parity | RED, 1 test |
+| 4 | §3.44 — blinked attacker stays in combat | I1, combat sweep (funnel it found: Cloudshift) | RED, 1 test |
+| 5 | §3.44 — Aura/Equipment survive the blink | I2, both sweeps (Cloudshift AND Restoration Angel) | RED, 2 tests |
+| 6 | §3.44 — until-EOT effects survive; stolen creature handed back | I3, both sweeps — the pump and the gain-control rows both named | RED, 2 tests |
+| 7 | §3.44 — ten hand-authored cards lose `subtypes` (the fix's exact hunk reverse-applied) | frame integrity, subtypes axis — all ten named | RED, 1 test |
+| 8 | §3.37 — `unsupportedReason` stops asking the pool first | pool-beats-import for EVERY card — 587 flagged at once | RED, 2 tests |
+
+⚠️ **Built the invariants, found two things on `main` — reported, not papered over:**
+- **A real offer/apply divergence** (out of this branch's test-only scope to fix):
+  `isLegalTarget('creatureOnBattlefieldOrInGraveyard')` answers the battlefield half WITHOUT the
+  `isTargetableBy` gate, so an opponent's HEXPROOF creature is accepted by the apply/resolve path
+  while the enumerator correctly never offers it — a hand-built action can aim Angel of Serenity's
+  trigger at a creature the printed rules protect (CR 115.1c). Pinned as `it.fails` in
+  `targeting-completeness.test.ts` with the one-line fix named (route that branch through
+  `isTargetableBy`); the pin flips red the day someone fixes it, forcing promotion into the main
+  agreement sweep.
+- **Twenty registered primitives have no value entry** — 15 reachable from pool refs (`scry` ×29,
+  `attachToTarget` ×42, `addCounters` ×19, `surveil` ×13, `mill` ×6, `ifKicked` ×3 — a WRAPPER
+  whose kicked body is never read — and nine more). Each scores the flat `modeUnknownEffectScore`:
+  the §3.42 blindness, wider than §3.42 knew. Carried on the ENFORCED `KNOWN_UNPRICED` ledger with
+  a reason per row; pricing them is `packages/ai` behaviour work, owned elsewhere at §3.49 time.
+
+**What this layer still cannot catch, plainly:** a restriction word implemented with the SAME
+wrong semantics in both behavioural homes (the agreement holds; only a per-word semantics oracle
+would see it); a priced primitive whose value is wrong in sign or size (parity is presence, not
+correctness); leave funnels no pool card can cast at this rig — loyalty-death, the legend rule
+(the pool holds no legendary card today), sacrifice-as-activation-cost paths the rig never offers,
+and the delayed-return blinks §3.35 deliberately kept out of the pool; and offer/apply holes in
+states two random-walk games never visit. Each is named here rather than half-covered.
+
+📊 Rule 7: no engine change — two EXPORT-ONLY runtime lists (`ALL_TARGET_RESTRICTIONS`,
+`PRICED_PRIMITIVE_IDS`), nothing reads them at play time, so games/sec is untouched by
+construction. The layer's own test bodies total **969ms** (zone-leave 572, offer/apply 249,
+targeting 64, web 45, parity 24, frame 15). Full suite, same box and worker settings:
+**5295 → 5320 passed** (+25, exactly this layer), 0 failed, 227.4s before vs 207.3s after — the
+wall-clock delta is shared-box noise, not a speedup claim. `npm run verify` exit 0
+(lint 0 errors · generated-data check · build · 5320 passed / 5 skipped / 0 failed).
 
 ### 3.46 The deck-neutral pilot A/B — the yardstick §3.45 used, committed as a tool — ✅ done
 
