@@ -9,6 +9,10 @@
  * path behaves identically for mouse and finger; the DOM glue lives in
  * `useDragToPlay.ts` and stays thin because every decision is made here.
  *
+ * Shared by BOTH boards. It was born in `lib/online` purely to respect that
+ * branch's file claim; bug report 20260825_210220 asked for the same gesture in
+ * solo/pass-and-play, so it now lives here where both can reach it.
+ *
  * The machine is deliberately conservative about what counts as a drag:
  * - a press is only ARMED — nothing visible happens, and a release before the
  *   movement threshold is a plain click (the existing click path handles it);

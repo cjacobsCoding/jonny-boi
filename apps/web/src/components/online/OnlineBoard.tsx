@@ -12,7 +12,7 @@ import { stepLabel } from '../../lib/play/play-config.js';
 import { maskedViewToBoardView } from '../../lib/online/board-adapter.js';
 import { castSequence, castableWithTaps, graveyardCastableWithTaps } from '../../lib/online/auto-tap.js';
 import { alreadyPassedFrame, shouldAutoPass } from '../../lib/online/auto-pass.js';
-import { DRAG_ID_ATTR, useDragToPlay } from '../../lib/online/useDragToPlay.js';
+import { DRAG_ID_ATTR, useDragToPlay } from '../../lib/play/useDragToPlay.js';
 import { idleTurnNote, reasonCardIsDisabled } from '../../lib/online/why-disabled.js';
 import { graveyardPanelView } from '../../lib/play/graveyard-cast.js';
 import { AUTO_PASS_DELAY_MS, AUTO_PASS_EMPTY_PRIORITY } from '../../lib/online/online-config.js';
@@ -37,6 +37,7 @@ import { GraveyardPanel } from '../play/GraveyardPanel.js';
 import { SeatPanel, type PermInteraction } from '../play/SeatPanel.js';
 import { StackPanel } from '../play/StackPanel.js';
 import { PlayCard, CardBack } from '../play/PlayCard.js';
+import { CardZoomOverlay } from '../play/CardZoomOverlay.js';
 import '../play/action-bar.css';
 
 /**
@@ -134,6 +135,8 @@ export function OnlineBoard({
   const [pendingAbility, setPendingAbility] = useState<AbilityOption | null>(null);
   const [blockAssign, setBlockAssign] = useState<Map<InstanceId, InstanceId>>(new Map());
   const [activeBlockTarget, setActiveBlockTarget] = useState<InstanceId | null>(null);
+  /** The card being inspected full-size, if any (report 20260825_210026). */
+  const [zoomed, setZoomed] = useState<{ cardId: string; name: string } | null>(null);
   /** The viewer's graveyard panel (the flashback affordance's entry point). */
   const [graveyardOpen, setGraveyardOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -661,21 +664,39 @@ export function OnlineBoard({
                       ? { touchAction: 'none' }
                       : undefined
                 }
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setZoomed({ cardId: c.cardId, name: c.name });
+                }}
               >
                 <PlayCard
                   cardId={c.cardId}
                   name={c.name}
+                  face="full"
                   badge={c.isLand ? 'Land' : cast ? 'castable' : tapCard ? 'tap mana' : undefined}
                   disabled={!actionable}
                   reason={actionable ? undefined : reasonCardIsDisabled(disabledContext, c)}
                   onClick={actionable ? () => activateCard(c.instanceId, 'hand') : undefined}
                 />
+                <button
+                  type="button"
+                  className="hand-card-slot__zoom"
+                  aria-label={`Inspect ${c.name}`}
+                  title={`Inspect ${c.name}`}
+                  onClick={() => setZoomed({ cardId: c.cardId, name: c.name })}
+                >
+                  🔍
+                </button>
               </div>
             );
           })}
           {(view.self.hand?.length ?? 0) === 0 && <span className="seat__empty">Empty hand</span>}
         </div>
       </div>
+
+      {zoomed && (
+        <CardZoomOverlay cardId={zoomed.cardId} name={zoomed.name} onClose={() => setZoomed(null)} />
+      )}
 
       {/* Action bar. */}
       <div className="action-bar">

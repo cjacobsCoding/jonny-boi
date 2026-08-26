@@ -16,6 +16,7 @@ export function PlayCard({
   disabled,
   badge,
   reason,
+  face = 'chip',
   onClick,
 }: {
   cardId: string;
@@ -25,6 +26,15 @@ export function PlayCard({
   /** Small corner annotation (e.g. "Land", "instant"). */
   badge?: string;
   /**
+   * How much of the card to show. `'chip'` is the compact art-crop tile (stack,
+   * prompts, battlefield contexts). `'full'` renders the ENTIRE card image —
+   * the fix for bug report 20260825_205937 ("Cut off card title - not ok!!!"):
+   * a 96px chip squeezed "Angel of Serenity" plus three pips into one row, and
+   * no ellipsis rule can win that fight. The printed card already carries its
+   * own name and cost, so the full face has nothing left to truncate.
+   */
+  face?: 'chip' | 'full';
+  /**
    * Why this card can't be used right now. Shown as the tooltip instead of the bare
    * name, so a greyed card explains itself rather than looking like a dead control.
    */
@@ -32,14 +42,20 @@ export function PlayCard({
   onClick?: () => void;
 }): ReactElement {
   const card = getCard(cardId);
+  const fullFace = face === 'full' ? (card ? cardImage(card, 'normal') : undefined) : undefined;
   const art = card ? cardImage(card, 'art_crop') : undefined;
   // The name alone is useless on a card the player just tried and failed to use.
   const tooltip = reason ? `${name} — ${reason}` : name;
-  const className = `play-card${selected ? ' play-card--selected' : ''}${
-    disabled ? ' play-card--disabled' : ''
-  }${onClick && !disabled ? ' play-card--actionable' : ''}`;
+  const className = `play-card${face === 'full' && fullFace ? ' play-card--full' : ''}${
+    selected ? ' play-card--selected' : ''
+  }${disabled ? ' play-card--disabled' : ''}${onClick && !disabled ? ' play-card--actionable' : ''}`;
 
-  const inner = (
+  const inner = fullFace ? (
+    <>
+      <img className="play-card__face" src={fullFace} alt={name} loading="lazy" decoding="async" />
+      {badge && <span className="play-card__badge">{badge}</span>}
+    </>
+  ) : (
     <>
       <div className="play-card__art">
         {art ? (

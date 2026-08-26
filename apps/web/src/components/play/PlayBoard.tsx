@@ -14,6 +14,8 @@ import { SeatPanel, type PermInteraction } from './SeatPanel.js';
 import { StackPanel } from './StackPanel.js';
 import { GameLog } from './GameLog.js';
 import { PlayCard, CardBack } from './PlayCard.js';
+import { DRAG_ID_ATTR, useDragToPlay } from '../../lib/play/useDragToPlay.js';
+import { CardZoomOverlay } from './CardZoomOverlay.js';
 import { ChoicePrompt } from './ChoicePrompt.js';
 import { GraveyardPanel } from './GraveyardPanel.js';
 import { AbilityMenuPrompt, AbilityTargetPrompt } from './AbilityPrompts.js';
@@ -218,6 +220,23 @@ export function PlayBoard({
     }
     if (casts[0]) onCastClick(casts[0]);
   };
+
+  // Drag a hand card onto your battlefield — the gesture bug report
+  // 20260825_210220 asked for, identical to the online board's. The drop routes
+  // through the SAME `onHandCardClick` chokepoint as a click, so a drag cannot
+  // diverge from what clicking the card would have done (menus for multi-way
+  // cards included). The re-lookup on drop is deliberate: the frame may have
+  // changed mid-gesture, and stale affordances must not fire.
+  /** The card being inspected full-size, if any (report 20260825_210026). */
+  const [zoomed, setZoomed] = useState<{ cardId: string; name: string } | null>(null);
+
+  const { drag, dropRef, handProps: dragHandProps } = useDragToPlay((id) => {
+    const land = playableLands.includes(id);
+    const casts = castOptions.filter((o) => o.instanceId === id);
+    const cycles = cycleOptions.filter((o) => o.instanceId === id);
+    if (!isViewersPriority || (!land && casts.length === 0 && cycles.length === 0)) return;
+    onHandCardClick(id, land, casts);
+  });
 
   /**
    * Activate a graveyard card from the panel. Routed through the SAME
@@ -484,13 +503,20 @@ export function PlayBoard({
 
       {/* Viewer (bottom) — own hand face-up. */}
       <div className="play-board__self">
-        <SeatPanel
-          seat={view.self}
-          isActive={view.activePlayer === view.self.id}
-          hasPriority={isViewersPriority}
-          interaction={selfInteraction}
-          onGraveyardClick={() => setGraveyardOpen((open) => !open)}
-        />
+        {/* The seat panel doubles as the drag-to-play drop zone, exactly as on
+            the online board: dashed while a card is in flight, solid when over. */}
+        <div
+          ref={dropRef}
+          className={`drop-zone${drag ? ' drop-zone--active' : ''}${drag?.overDrop ? ' drop-zone--over' : ''}`}
+        >
+          <SeatPanel
+            seat={view.self}
+            isActive={view.activePlayer === view.self.id}
+            hasPriority={isViewersPriority}
+            interaction={selfInteraction}
+            onGraveyardClick={() => setGraveyardOpen((open) => !open)}
+          />
+        </div>
         {/* The opened graveyard. Flashback casts live in `legalActions` but the
             hand was the only clickable zone, so they were unreachable — this is
             that affordance, routed through the same cast chokepoint. */}
@@ -502,7 +528,7 @@ export function PlayBoard({
             onClose={() => setGraveyardOpen(false)}
           />
         )}
-        <div className="play-hand" aria-label={`${view.self.name} hand`}>
+        <div className="play-hand" aria-label={`${view.self.name} hand`} {...dragHandProps}>
           {(view.self.hand ?? []).map((c) => {
             const land = playableLands.includes(c.instanceId);
             // A split card contributes ONE option per half; the badge summarises
@@ -524,20 +550,55 @@ export function PlayBoard({
                   : cycles.length > 0
                     ? 'cycling'
                     : undefined;
+            const dragging = drag?.id === c.instanceId ? drag : null;
             return (
-              <PlayCard
+              // The wrapper is the drag handle (see the online board): the
+              // attribute marks it draggable for the delegated handlers, the
+              // transform is the ghost, touch-action keeps phones from turning
+              // the gesture into a scroll.
+              <div
                 key={c.instanceId}
-                cardId={c.cardId}
-                name={c.name}
-                badge={badge}
-                disabled={!actionable}
-                onClick={actionable ? () => onHandCardClick(c.instanceId, land, casts) : undefined}
-              />
+                className={`hand-card-slot${dragging ? ' hand-card-slot--dragging' : ''}`}
+                {...(actionable ? { [DRAG_ID_ATTR]: c.instanceId } : {})}
+                style={
+                  dragging
+                    ? { touchAction: 'none', transform: `translate(${dragging.dx}px, ${dragging.dy}px)` }
+                    : actionable
+                      ? { touchAction: 'none' }
+                      : undefined
+                }
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setZoomed({ cardId: c.cardId, name: c.name });
+                }}
+              >
+                <PlayCard
+                  cardId={c.cardId}
+                  name={c.name}
+                  face="full"
+                  badge={badge}
+                  disabled={!actionable}
+                  onClick={actionable ? () => onHandCardClick(c.instanceId, land, casts) : undefined}
+                />
+                <button
+                  type="button"
+                  className="hand-card-slot__zoom"
+                  aria-label={`Inspect ${c.name}`}
+                  title={`Inspect ${c.name}`}
+                  onClick={() => setZoomed({ cardId: c.cardId, name: c.name })}
+                >
+                  🔍
+                </button>
+              </div>
             );
           })}
           {(view.self.hand?.length ?? 0) === 0 && <span className="seat__empty">Empty hand</span>}
         </div>
       </div>
+
+      {zoomed && (
+        <CardZoomOverlay cardId={zoomed.cardId} name={zoomed.name} onClose={() => setZoomed(null)} />
+      )}
 
       {/* Action bar. */}
       <ActionBar

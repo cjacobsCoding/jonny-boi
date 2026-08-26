@@ -2160,6 +2160,41 @@ button {
 .play-card--back { display: flex; align-items: center; justify-content: center; width: 64px; height: 88px; background: repeating-linear-gradient(45deg, #1a2330, #1a2330 6px, #222e3d 6px, #222e3d 12px); border: 1px solid var(--color-border-strong); }
 .play-card__back-mark { font-size: var(--text-lg); color: var(--color-accent-soft); }
 
+/* Full-card faces (hand + mulligan): the whole printed card, so nothing needs a
+   truncating footer — report 20260825_205937. Sizes are tokens, not literals. */
+:root {
+  --play-card-full-w: 148px;
+  --card-zoom-max-h: min(80vh, 640px);
+}
+.play-card--full { width: var(--play-card-full-w); aspect-ratio: 63 / 88; background: var(--color-bg); }
+.play-card__face { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* The zoom affordance on a hand/mulligan slot — a sibling of the card, never a
+   nested button (a PlayCard with an onClick is itself a <button>). */
+.hand-card-slot__zoom {
+  position: absolute; top: 2px; right: 2px; z-index: 2;
+  width: 26px; height: 26px; border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-raised); color: var(--color-fg);
+  font-size: var(--text-sm); line-height: 1; cursor: zoom-in;
+  opacity: 0.55;
+}
+.hand-card-slot__zoom:hover, .hand-card-slot__zoom:focus-visible { opacity: 1; }
+
+/* The full-card overlay (report 20260825_210026). */
+.card-zoom { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgb(0 0 0 / 65%); cursor: zoom-out; }
+.card-zoom__body { position: relative; }
+.card-zoom__img { max-height: var(--card-zoom-max-h); max-width: 92vw; border-radius: 12px; box-shadow: 0 10px 40px rgb(0 0 0 / 60%); display: block; }
+.card-zoom__close { position: absolute; top: -14px; right: -14px; }
+.card-zoom__fallback { max-width: 340px; background: var(--color-surface); border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); padding: var(--space-4); display: grid; gap: var(--space-2); }
+.card-zoom__fallback-name { font-weight: 700; font-size: var(--text-lg); }
+.card-zoom__fallback-type { color: var(--color-fg-muted); }
+.card-zoom__fallback-text { white-space: pre-wrap; margin: 0; }
+
+/* Chip fallback names may wrap to two lines rather than ellipsize — a truncated
+   name on a card with no art was unreadable twice over. */
+.play-card__fallback { white-space: normal; }
+
 /* Drag-to-play (online board): the slot wraps one hand card; while dragged it rides
    the pointer above everything, and the viewer's seat panel becomes the drop zone. */
 .hand-card-slot { position: relative; }
