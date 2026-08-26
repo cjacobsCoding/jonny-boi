@@ -157,9 +157,20 @@ throughput (games/sec) from regressing.
 | fix/soak-action-cap | DESKTOP-90PJPM4 (worker) | packages/ai (`effect-value.ts` copySpell chain pricing + `willFizzleOnResolution`; `weights.ts` +1 weight; NEW `copy-chain-pilot.test.ts`), packages/cards (`copy-primitives.ts` CR 707.10 `min`; NEW `copy-retarget-optional.test.ts`), packages/sim (`soak.test.ts` +3 pinned rows), DESIGN §3.33 (+ §3.32's handoff closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | 🚧 PUSHED, not merged |
 | fix/blink-rules-fidelity | worker | packages/core (NEW `combat-removal.ts`; `state.ts` +`CombatState.removedFromCombat`, `attachments.ts` +`unattachDependentsOf`, `internal/continuous.ts` +`dropContinuousEffectsFor`, `internal/combat.ts` damage step, `internal/clone.ts`, `internal/replacement.ts` `isAttacking`, `engine.ts` 3 lines in declare-blockers, `instance-ids.ts` +1 field name, `index.ts` exports), packages/cards (`blink-primitives.ts` +3 calls + doc; `data/pool.ts` +10 printed `subtypes` lines; `fidelity.test.ts` +1 standing type-line guard; `restoration-angel.test.ts` +1 case; NEW `selesnya-blink-fidelity.test.ts`), DESIGN §3.44, COORDINATION. **No generated data regenerated; no soak or gauntlet row moved.** | ✅ MERGED + DEPLOYED |
 | feat/pilot-ab-harness | worker | packages/sim ONLY (NEW `pilot-ab.ts` + `pilot-ab.test.ts`; `cli.ts` — new `pilot-ab` subcommand, `--pilot-a`/`--pilot-b`, and a shared `resolvePilot` helper the old `resolvePilots` now reuses; `index.ts` exports), DESIGN §3.46, COORDINATION. **No core, cards, ai or web change — NO pilot behaviour touched.** Adds a tool, moves no baseline. | 🚧 PUSHED, not merged |
+| feat/fast-lookahead | worker | packages/ai ONLY (NEW `combat-forecast.ts` + `lookahead.ts` + their tests; `index.ts` registration/exports; minimal ADDITIVE exports of existing private helpers from `heuristic.ts` — no heuristic behaviour change), DESIGN §3.47, COORDINATION. **Default pilot untouched; recorded gauntlet baselines must stay byte-identical.** | 🚧 IN FLIGHT |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-25 worker: CLAIMED `feat/fast-lookahead` — DESIGN §3.47. A fast lookahead pilot (new id
+  `lookahead`, selectable, NOT the default): bounded adversarial search over attack plans — the
+  defender's best-response blocks priced by `resolveFight`, the **crack-back model** the ⚠️ on
+  `attackIsProfitable` names as the honest next step, and a closed-form multi-turn race forecast —
+  at near-heuristic cost. Yardstick: `npm run sim -- pilot-ab --pilot-a lookahead --pilot-b heuristic`
+  (two REGISTERED ids in one process — the exact method, not the cross-branch trap). packages/ai only;
+  `SELECTABLE_PILOT_IDS` carries the id to the CLI/UI with no sim edit. Measured so far on this box:
+  hybrid = 0.105 games/sec on Mono-Red vs Boros (heuristic 57.8) — ~550× — so the search family is
+  not close to default-cheap; this branch attacks the same blind spots with arithmetic lookahead.
 
 - 2026-08-23 worker: `feat/pilot-ab-harness` ✅ MERGED + DEPLOYED, not merged — DESIGN §3.46. Off `main` (2777ebc).
   **5295 / 0**, `verify` 0. **packages/sim ONLY — no pilot behaviour changed, no baseline moved.**

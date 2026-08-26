@@ -3526,6 +3526,23 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
+### 3.47 The `lookahead` pilot — combat plans searched ahead, at heuristic speed — 🚧 in progress
+
+The user's ask: *"actual smartness without sacrificing speed … looking ahead several possible
+turns."* The search family cannot be that pilot: measured in this branch on Mono-Red vs Boros,
+`hybrid` runs **0.105 games/sec** against the heuristic's **57.8** — ~550× — so a full-width
+game-tree search is three orders of magnitude away from gauntlet/A-B duty. What CAN look ahead at
+heuristic speed is a bounded adversarial search over the decision the pilot measurably gets wrong
+(§3.45's table): the attack declaration. The plan: a new registered pilot id `lookahead` that
+delegates everything except the attack step to the unmodified heuristic, and decides attacks by
+forecasting each candidate attack plan — the defender's best-response blocks priced by
+`resolveFight` (allocation, so one wall cannot deter three attackers), then the **crack-back**
+(what my board can still block after these attackers tap — the model the ⚠️ on
+`attackIsProfitable` names), then a closed-form multi-turn race (both clocks after the exchange).
+Success = decisively beats `heuristic` on `npm run sim -- pilot-ab` at a meaningful sample AND
+stays within a small factor of its throughput; both numbers to be recorded here, honest negatives
+included. Default pilot untouched; every recorded baseline must stay byte-identical.
+
 ### 3.46 The deck-neutral pilot A/B — the yardstick §3.45 used, committed as a tool — ✅ done
 
 §3.45 built four combat-math improvements, measured them, and shipped **one**. The evidence that
