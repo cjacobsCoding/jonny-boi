@@ -807,6 +807,19 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
   },
 });
 
+/**
+ * The primitive ids the value table prices, as a RUNTIME list — the keys of
+ * {@link EFFECT_VALUE}, frozen at module load.
+ *
+ * EXPORT-ONLY: nothing in this package reads it. It exists for the §3.49
+ * parity invariant, which compares "registered in the cards package" against
+ * "priced here" — the exact seam §3.42's two defects fell through (`mayEffects`
+ * and `blinkTarget` were registered, unpriced, and scored the flat
+ * `modeUnknownEffectScore` with their bodies never read). A test that parsed
+ * this file's source instead would drift with formatting; the keys cannot.
+ */
+export const PRICED_PRIMITIVE_IDS: readonly string[] = Object.freeze(Object.keys(EFFECT_VALUE));
+
 /** "Tap all creatures" is the overwhelmingly common form, so it is the default. */
 const DEFAULT_TAP_TYPES: readonly string[] = Object.freeze(['creature']);
 
