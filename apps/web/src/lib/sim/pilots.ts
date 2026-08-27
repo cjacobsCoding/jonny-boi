@@ -63,14 +63,14 @@ export interface PilotProfile {
  *
  *  - `heuristic` — **1 by definition.** It is the baseline the others are quoted
  *    against, and it is `DEFAULT_PILOT_ID`.
- *  - `hybrid` — **~1400×**, the figure `feat/hybrid-search` reported (as a
- *    per-decision ratio) when it declined to make the hybrid the default: "the
- *    Lab's stock gauntlet would go from seconds to hours". Cross-checked against
- *    that branch's own decision timings, which is why it is safe to carry it over
- *    as a per-GAME ratio: 7.07 ms per decision on aggro boards and 27.7 ms on
- *    control boards, over the few hundred decisions in a game, is seconds to tens
- *    of seconds per game — and 1400 × the heuristic's ~8.5 ms game is ~12 s. The
- *    two routes agree to well within the order of magnitude this estimate claims.
+ *  - `hybrid` — **~550×**, re-measured END TO END on §3.47's branch exactly as
+ *    this table's own warning demands: 0.105 games/sec against the heuristic's
+ *    57.8 on the same box and matchups. The previous figure here (~1400×) came
+ *    from `feat/hybrid-search`'s per-DECISION ratio carried over as a game
+ *    ratio, and it overstated the cost ~2.5× — the engine's share of a game
+ *    dilutes a pure decision multiplier, which is precisely why the warning
+ *    below says to measure whole games. Still far too slow to default: the
+ *    7,200-game yardstick would take ~12.6 hours under it.
  *  - `mcts` — **~3400×**, from the two throughputs in `DEFAULT_PILOT_ID`'s own
  *    doc-comment: ~29 s per game in Node against a heuristic gauntlet running at
  *    ~110–120 games/sec (~8.5 ms per game). The browser worker measured ~66 s per
@@ -95,7 +95,7 @@ export interface PilotProfile {
  */
 const RELATIVE_GAME_COST: Readonly<Record<string, number>> = {
   [HEURISTIC_PILOT_ID]: 1,
-  [HYBRID_PILOT_ID]: 1400,
+  [HYBRID_PILOT_ID]: 550,
   [LOOKAHEAD_PILOT_ID]: 1,
   [MCTS_PILOT_ID]: 3400,
   [RANDOM_PILOT_ID]: 1,
@@ -118,7 +118,7 @@ const PILOT_COPY: Readonly<Record<string, { label: string; blurb: string }>> = {
       // changed. Re-measure and rewrite this line whenever either pilot changes;
       // an overstated blurb is worse than none, because the whole product is a
       // claim to measure honestly.
-      'Policy-guided search over funded plays. Head-to-head against the current heuristic it measures 55.8% on fast tactical boards (95% CI 46.9–64.4) and 48.8% on grindy control boards (CI 38.1–59.5) — both intervals include 50%, so at this sample size it is not a proven improvement. Costs ~1,400× the run time.',
+      'Policy-guided search over funded plays. On the deck-neutral yardstick it measures 54.6% against the heuristic (95% CI 46.4–62.6, p=0.077) — the interval includes 50%, so it is not a proven improvement at any sample size anyone can afford: the full 7,200-game yardstick would take ~12.6 hours at its ~550× run cost.',
   },
   [LOOKAHEAD_PILOT_ID]: {
     label: 'Lookahead',

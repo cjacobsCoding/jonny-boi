@@ -19,7 +19,7 @@ import './pilot.css';
  *   - {@link PilotPicker} — the choice, in the config bar beside the hero and the
  *     seed, because it is the same kind of thing: part of the question.
  *   - {@link RunCostNote} — the price of that choice, next to the Run button,
- *     BEFORE the run. The hybrid pilot is ~1400× the heuristic's decision cost, so
+ *     BEFORE the run. The hybrid pilot is ~550× the heuristic's end-to-end game cost, so
  *     the same gauntlet is thirty seconds or most of a day depending on this one
  *     dropdown. A warning that appears after the fact is not a warning.
  *   - {@link PilotStamp} — the label on a finished result. A win rate is a

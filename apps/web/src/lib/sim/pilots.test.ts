@@ -121,7 +121,9 @@ describe('the run-cost estimate', () => {
 describe('what the picker says about a choice', () => {
   it('says nothing extra for the baseline pilot, and quotes the ratio otherwise', () => {
     expect(relativeCostText(DEFAULT_PILOT_ID)).toBeNull();
-    expect(relativeCostText(HYBRID_PILOT_ID)).toMatch(/×1,400/);
+    // §3.47 re-measured end to end (0.105 vs 57.8 g/s): ~550×, not the
+    // per-decision-derived 1,400× this row previously pinned.
+    expect(relativeCostText(HYBRID_PILOT_ID)).toMatch(/×550/);
     expect(relativeCostText(UNKNOWN_PILOT)).toMatch(/not measured/);
   });
 
