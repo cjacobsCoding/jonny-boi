@@ -2203,7 +2203,9 @@ button {
 .seat { padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
 .seat--active { border-color: var(--color-accent); }
 .seat--lost { opacity: 0.55; }
-.seat__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+/* No space-between: life lives INSIDE the id cluster now (see SeatPanel.tsx),
+   so the header is one left-aligned row rather than two far-flung ends. */
+.seat__head { display: flex; align-items: center; gap: var(--space-2); }
 .seat__id { display: flex; align-items: center; gap: var(--space-2); }
 .seat__name { font-size: var(--text-lg); }
 .seat__tag {
@@ -2215,7 +2217,10 @@ button {
   padding: 0 var(--space-1);
 }
 .seat__tag--priority { color: var(--color-accent-soft); border-color: var(--color-accent); }
-.seat__life { font-size: var(--text-xl); font-weight: 700; }
+.seat__life { font-size: var(--text-xl); font-weight: 700; display: inline-flex; align-items: baseline; gap: var(--space-1); }
+/* The heart is a marker, not a headline — slightly smaller and softened so the
+   NUMBER stays the thing the eye lands on. */
+.seat__life > span[aria-hidden] { font-size: 0.7em; color: var(--color-error); opacity: 0.85; }
 .seat__life--low { color: var(--color-error); }
 .seat__zones { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: var(--space-2) 0; font-size: var(--text-sm); color: var(--color-fg-muted); }
 .seat__mana { display: inline-flex; gap: var(--space-1); }
