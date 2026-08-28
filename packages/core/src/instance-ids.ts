@@ -178,6 +178,19 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
   triggerCopied: { instanceId: 'id', copiedInstanceId: 'id', controller: 'none', label: 'none' },
   spellCopyCeasedToExist: { instanceId: 'id', name: 'none' },
   tokenCopyCreated: { instanceId: 'id', copiedInstanceId: 'id', controller: 'none', name: 'none' },
+
+  /*
+   * DELAYED TRIGGERED ABILITIES (CR 603.7). `id` is the ABILITY's own id — a
+   * number minted from the same counter that names no card, exactly like
+   * `replacementExpired.id`, and precisely why this table is driven by declared
+   * types rather than by "collect every number". `sourceInstanceId` IS a card,
+   * and it is always the object whose effect created the ability: a permanent on
+   * the battlefield or a spell resolving off the stack, both of which the whole
+   * table watched. Never a card in a hand or a library — which is what makes
+   * both events `'public'` in `OBSERVATION_POLICY`.
+   */
+  delayedTriggerCreated: { id: 'none', sourceInstanceId: 'id', controller: 'none', label: 'none' },
+  delayedTriggerFired: { id: 'none', sourceInstanceId: 'id', controller: 'none', label: 'none' },
   // `choiceId` is the QUESTION's id, not a card's. `sourceInstanceId` is a card's
   // — and is the field the CR 514.1 cleanup discard once pointed at a card in the
   // discarding player's hand (see `NO_ASKING_OBJECT` in `choices.ts`).
@@ -248,6 +261,13 @@ const NON_EVENT_INSTANCE_ID_FIELDS = [
   'appliesToInstanceId',
   /** `ReplacementQuery.recipientIs` — the object a replacement is asked about. */
   'recipientIs',
+  /**
+   * `DelayedTriggeredAbility.removesFromBattlefield` — the permanents a pending
+   * delayed ability (CR 603.7) will remove. Always tokens the whole table
+   * watched be created, but the scan is driven by the DECLARED TYPE, not by what
+   * the values happen to be today.
+   */
+  'removesFromBattlefield',
   /** `GameState.nextInstanceId` — the id source. Not a card, but it IS an id. */
   'nextInstanceId',
 ] as const;

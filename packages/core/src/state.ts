@@ -19,6 +19,7 @@ import type { ManaPool } from './mana.js';
 import { emptyPool } from './mana.js';
 import type { ContinuousEffect } from './internal/continuous.js';
 import type { FloatingReplacement } from './internal/replacement.js';
+import type { DelayedTriggeredAbility } from './delayed.js';
 import type { CardGrant } from './card-grants.js';
 import type { PendingChoice, ResolutionFrame } from './choices.js';
 import type { TargetRestriction } from './targeting.js';
@@ -682,6 +683,24 @@ export interface GameState {
    * paths stay exactly as fast as they were.
    */
   replacements?: FloatingReplacement[];
+  /**
+   * DELAYED triggered abilities (CR 603.7) — "sacrifice it at the beginning of
+   * the next end step", "at the beginning of your next upkeep, pay {3}{U}{U}".
+   * See `delayed.ts`.
+   *
+   * ⚠️ **This field IS the mechanism by which a delayed ability survives its
+   * source leaving.** The ability is created by an effect in mid-resolution and
+   * belongs to no object: it is not on the stack (nobody may respond to it until
+   * its moment arrives) and not on a permanent (Kiki-Jiki may be destroyed the
+   * instant it has tapped), so a home on the STATE is the only one that outlives
+   * both. The record is removed the moment it MATCHES, which is what makes
+   * CR 603.7a's "it triggers only once" structural rather than a flag.
+   *
+   * OPTIONAL and normally ABSENT, like `cardGrants` and `replacements`: every
+   * state serialized (or hand-built in a test) before this existed stays valid,
+   * and a game that never creates one pays a single property read per event.
+   */
+  delayedTriggers?: DelayedTriggeredAbility[];
   combat: CombatState | null;
   /** Set once the game is decided. */
   winner: PlayerId | null;

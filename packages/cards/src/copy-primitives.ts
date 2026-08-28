@@ -22,9 +22,11 @@ import type {
   EffectContext,
   EffectPrimitive,
   InstanceId,
+  KeywordFlags,
   PlayerId,
   SpellStackObject,
   TargetRestriction,
+  TokenEntryOptions,
 } from '@jonny-boi/core';
 import {
   describeRestriction,
@@ -227,9 +229,14 @@ export const createTokenCopy: EffectPrimitive = (ctx) => {
   // replacement of the count, which is why this is a max and not a sum.
   const count = kickedCount > 0 && ctx.kicked === true ? kickedCount : Math.max(0, intParam(ctx, 'count', 1));
   const def = tokenCopyDefOf(source, exceptParam(ctx));
-  for (let i = 0; i < count; i++) {
-    const instanceId = ctx.createToken(def);
-    // Said out loud, and NOT folded into `tokenCreated` (which `createToken`
+  // ONE call with the count: "create FIVE tokens that are copies of…" is a
+  // single CR 614 event, so a Doubling Season replaces the 5 once rather than
+  // five separate 1s. What comes back may be MORE than `count` (a doubler), so
+  // every sentence after this reads the returned LIST rather than the number
+  // that was asked for.
+  const created = ctx.createTokens(def, count, undefined, tokenEntryParam(ctx));
+  for (const instanceId of created) {
+    // Said out loud, and NOT folded into `tokenCreated` (which `createTokens`
     // emits for this object like any other, so every ETB trigger sees the entry
     // unchanged): this is the only record of WHICH board object the token is a
     // copy of.
@@ -241,7 +248,107 @@ export const createTokenCopy: EffectPrimitive = (ctx) => {
       name: def.name,
     });
   }
+  grantToCreated(ctx, created);
+  createDelayedRemoval(ctx, created);
 };
+
+/**
+ * The FOLLOW-UP SENTENCE about the object the previous one created — "It gains
+ * haste." (Orthion, Mimic Vat, Jaxis), "It gains haste until end of turn."
+ * (Molten Duplication), "That token gains haste." (Helm of the Host).
+ *
+ * ⚠️ **Deliberately a layer-6 GRANT on the token, and NOT a keyword folded into
+ * the copy's definition** — which is exactly the reasoning `feat/copy-effects`
+ * gave for reporting the sentence rather than approximating it. A grant is not
+ * among the copiable values (CR 707.2), so a SECOND copy taken of this token
+ * must NOT inherit the haste, while "except it has haste" — which IS part of the
+ * copy — must. Folding the two together would look identical on the board and be
+ * wrong exactly one copy later.
+ *
+ * The duration is the printed one: `'permanent'` for the bare sentence (the
+ * grant lasts as long as the object does) and `'endOfTurn'` when the card prints
+ * "until end of turn". The two are indistinguishable on every card that also
+ * prints a delayed sacrifice — the token is gone before cleanup either way — and
+ * saying it exactly costs nothing.
+ */
+function grantToCreated(ctx: EffectContext, created: readonly InstanceId[]): void {
+  if (created.length === 0) return;
+  const keywords = grantedKeywordsParam(ctx);
+  if (keywords === undefined) return;
+  const duration = ctx.params.grantUntilEndOfTurn === true ? 'endOfTurn' : 'permanent';
+  for (const instanceId of created) {
+    ctx.addContinuousEffect({ target: instanceId, duration, keywords });
+  }
+}
+
+/**
+ * "Sacrifice it at the beginning of the next end step" (Kiki-Jiki, The Fire
+ * Crystal, Orthion, Molten Duplication) · "Exile those tokens at the beginning
+ * of the next end step" (Twinflame, Mimic Vat) — CR 603.7.
+ *
+ * ONE delayed ability for the whole batch, because that is what the printed
+ * plural says: Orthion's "Sacrifice **them**" is one ability that sacrifices
+ * five tokens, not five abilities that sacrifice one each. The ids are baked
+ * into the body's params here, at the only moment anything knows them.
+ *
+ * An empty batch creates nothing: the printed sentence names tokens that do not
+ * exist, and an ability with nothing to do would still put an object on the
+ * stack for a spectator to explain.
+ */
+function createDelayedRemoval(ctx: EffectContext, created: readonly InstanceId[]): void {
+  if (created.length === 0) return;
+  const action = ctx.params.delayedRemoval;
+  if (action !== 'sacrifice' && action !== 'exile') return;
+  const plural = created.length > 1;
+  const label = `${action === 'exile' ? 'Exile' : 'Sacrifice'} ${plural ? 'them' : 'it'} at the beginning of the next end step`;
+  ctx.createDelayedTrigger({
+    // The SAME trigger vocabulary a printed "at the beginning of the end step"
+    // uses — `endStep` already means it. `who: 'any'` is the printed word "the":
+    // the next end step is whoever's turn comes first, not specifically its
+    // controller's.
+    condition: { on: 'endStep', who: 'any' },
+    effects: [
+      {
+        primitive: action === 'exile' ? 'exileNamed' : 'sacrificeNamed',
+        params: { instanceIds: [...created] },
+      },
+    ],
+    label,
+    // Declared for the PILOT: the token this makes is a COST, and a pilot that
+    // could not see the removal coming would hold a creature back to block with
+    // something the rules are about to take away anyway.
+    removesFromBattlefield: [...created],
+  });
+}
+
+/**
+ * The keywords a follow-up sentence GRANTS to the created tokens, or `undefined`
+ * when the card prints no such sentence. Validated shallowly for the same reason
+ * {@link exceptParam} is: the compiler never emits a malformed one, so this
+ * guards hand-authored data.
+ */
+function grantedKeywordsParam(ctx: EffectContext): KeywordFlags | undefined {
+  const raw = ctx.params.grantKeywords;
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const keywords = raw as KeywordFlags;
+  for (const key in keywords) {
+    if (keywords[key as keyof KeywordFlags] === true) return keywords;
+  }
+  return undefined;
+}
+
+/**
+ * How the printed instruction says the token copies ARRIVE — "create a **tapped**
+ * token that's a copy of…" (Skyclave Relic), "**tapped and attacking**" (Delina).
+ * `undefined` when it says neither, so an ordinary token copy is created exactly
+ * as it always was.
+ */
+function tokenEntryParam(ctx: EffectContext): TokenEntryOptions | undefined {
+  const tapped = ctx.params.tapped === true;
+  const attacking = ctx.params.attacking === true;
+  if (!tapped && !attacking) return undefined;
+  return { ...(tapped ? { tapped } : {}), ...(attacking ? { attacking } : {}) };
+}
 
 /**
  * What `createTokenCopy` copies — three printed selectors, one lookup:

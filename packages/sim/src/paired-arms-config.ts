@@ -239,6 +239,17 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   // Bounces a CHOSEN battlefield permanent to its owner's hand — reads the
   // battlefield and a hand, never a library.
   'returnChosenToHand',
+  /*
+   * THE DELAYED-ABILITY BODIES (CR 603.7) — both SAFE, and the argument is
+   * simpler than the copy family's above: each moves permanents named by an
+   * EXPLICIT list of instance ids that a primitive baked in at the moment it
+   * created those objects. They read no library, ask no question and branch on
+   * nothing hidden; a permanent that has already gone is skipped. The ids are
+   * minted token ids, so the same "an id I cannot place" branch that already
+   * covers a token copy covers anything downstream of these.
+   */
+  'sacrificeNamed',
+  'exileNamed',
   'dealDamage',
   // Drawing is safe *because* every drawn card announces its instance id.
   'drawCards',

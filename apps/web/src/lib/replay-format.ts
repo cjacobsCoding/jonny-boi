@@ -95,6 +95,16 @@ export function describeEvent(event: GameEvent, name: NameResolver): LogLine | n
       // CR 704.5e — and it is emitted INSTEAD of a `zoneChange`, so a reader
       // folding this log must not put the object in a graveyard.
       return { text: `The copy of ${event.name} ceases to exist.` };
+    case 'delayedTriggerCreated':
+      // CR 603.7. Worth its own line, and not bookkeeping: it is the entire
+      // drawback of the hasty token that just arrived, and a reader who could
+      // not see it would be looking at a permanent creature.
+      return { text: `Delayed: ${event.label}.`, tone: 'trigger' };
+    case 'delayedTriggerFired':
+      // The moment arrived. `triggerPutOnStack` follows for the same ability —
+      // from here it IS an ordinary trigger — so this line says only that the
+      // delayed one is what set it off.
+      return { text: `Delayed ability triggers: ${event.label}.`, tone: 'trigger' };
     case 'triggerPutOnStack':
       return { text: `Trigger: ${event.label}.`, tone: 'trigger' };
     case 'triggeredAbilityResolved':

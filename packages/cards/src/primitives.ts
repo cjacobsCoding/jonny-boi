@@ -35,9 +35,11 @@ import type {
   EffectRef,
   EffectRegistry,
   GameEvent,
+  InstanceId,
   PlayerId,
   ReplacementIndex,
   StaticAbility,
+  TokenEntryOptions,
   TriggeredAbility,
 } from '@jonny-boi/core';
 import {
@@ -493,8 +495,26 @@ export const makeToken: EffectPrimitive = (ctx) => {
     ...(colors === undefined ? {} : { colors: colors as CardDefinition['colors'] }),
     ...(isEmptyKeywords(keywords) ? {} : { keywords }),
   };
-  for (let i = 0; i < count; i++) ctx.createToken(def);
+  // ONE call with the count, not a loop of ones: "create **two** 1/1 tokens" is
+  // a single CR 614 event, so a doubler must see the 2 and replace it once (see
+  // `EffectContext.createTokens`).
+  ctx.createTokens(def, count, undefined, tokenEntryParam(ctx));
 };
+
+/**
+ * How the printed instruction says the token ARRIVES — "create a **tapped**
+ * Treasure token" (Skyclave Relic, Kambal), "**tapped and attacking**" (Delina,
+ * Mobilize).
+ *
+ * `undefined` when it says neither, so a token-maker that prints nothing extra
+ * passes nothing extra and the entry path is byte-for-byte what it always was.
+ */
+function tokenEntryParam(ctx: EffectContext): TokenEntryOptions | undefined {
+  const tapped = ctx.params.tapped === true;
+  const attacking = ctx.params.attacking === true;
+  if (!tapped && !attacking) return undefined;
+  return { ...(tapped ? { tapped } : {}), ...(attacking ? { attacking } : {}) };
+}
 
 /**
  * `createEmblem` — put an EMBLEM into the controller's command zone (CR 114), the
@@ -738,13 +758,76 @@ export const createToken: EffectPrimitive = (ctx) => {
   const power = intParam(ctx, 'power', 1);
   const toughness = intParam(ctx, 'toughness', 1);
   const name = strParam(ctx, 'name') ?? 'Token';
-  // Routed through `ctx.createToken` — the ONE funnel every token entry uses —
-  // rather than the hand-built instance this used to push. The hand-rolled copy
-  // skipped `tokenCreated` (so ETB observers missed it) and, once token-count
-  // replacements landed, would have dodged every Anointed Procession printed.
-  const def: CardDefinition = { id: `token:${name}`, name, types: ['creature'], power, toughness, isToken: true };
-  for (let i = 0; i < count; i++) ctx.createToken(def);
+  // ⚠️ Routed through `ctx.createTokens` rather than hand-building an instance,
+  // which is what this used to do. THREE things were silently missing from the
+  // hand-built object, and all three are properties of BEING a token rather than
+  // of this particular card: CR 111.1's token-ness stamp (so the object never
+  // ceased to exist when it left the battlefield — a phantom in a graveyard that
+  // delirium and Tarmogoyf both count), the `tokenCreated` event every watcher
+  // of "a token entered" reads, and now the CR 614 token-count replacement
+  // (Doubling Season did not double it). One funnel, or the funnel is not one.
+  ctx.createTokens({ id: `token:${name}`, name, types: ['creature'], power, toughness }, count);
 };
+
+// --- the bodies a DELAYED triggered ability runs (CR 603.7) --------------------
+//
+// "Sacrifice **it** at the beginning of the next end step" (Kiki-Jiki),
+// "Exile **those tokens** at the beginning of the next end step" (Twinflame).
+//
+// The "it" is an object the compiler could not name: it did not exist when the
+// card was compiled. So these two read their subject from `params.instanceIds`,
+// which the primitive that CREATED the object baked in as it created the delayed
+// ability (see `createTokenCopy`). That is why no field on the stack object, the
+// resolution frame or the `EffectContext` names a delayed ability's subject —
+// the body already carries it, in the one place that survives the stack push,
+// the per-action clone and a serialize by construction.
+//
+// TWO primitives rather than one with a flag, because they are two outcomes and
+// not two spellings: a sacrifice is a DEATH (dies-triggers see it, it lands in a
+// graveyard), an exile is not. A permanent that has already gone is skipped —
+// the delayed ability still resolved, it simply found nothing, which is exactly
+// what the printed card does.
+
+/**
+ * `sacrificeNamed` — sacrifice each permanent named by `params.instanceIds`.
+ * The delayed body behind "Sacrifice it at the beginning of the next end step".
+ */
+export const sacrificeNamed: EffectPrimitive = (ctx) => {
+  for (const id of namedInstanceIds(ctx)) {
+    const perm = permanentById(ctx.state, id);
+    if (!perm) continue;
+    if (isCreature(perm.def)) {
+      ctx.emit({ type: 'creatureDied', instanceId: perm.instanceId, name: perm.def.name });
+    } else if (isPlaneswalker(perm.def)) {
+      ctx.emit({ type: 'planeswalkerDied', instanceId: perm.instanceId, name: perm.def.name });
+    }
+    movePermanentTo(ctx, perm, 'graveyard');
+  }
+};
+
+/**
+ * `exileNamed` — exile each permanent named by `params.instanceIds`. The delayed
+ * body behind "Exile those tokens at the beginning of the next end step".
+ */
+export const exileNamed: EffectPrimitive = (ctx) => {
+  for (const id of namedInstanceIds(ctx)) {
+    const perm = permanentById(ctx.state, id);
+    if (perm) movePermanentTo(ctx, perm, 'exile');
+  }
+};
+
+/**
+ * The instance ids a delayed body was created ABOUT, validated shallowly.
+ *
+ * A malformed param yields nothing rather than throwing (DESIGN §1.6 robust):
+ * the ids are written by a primitive, never by hand-authored card data, so this
+ * guards a future authoring mistake rather than a live branch.
+ */
+function namedInstanceIds(ctx: EffectContext): readonly InstanceId[] {
+  const raw = ctx.params.instanceIds;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((id): id is InstanceId => typeof id === 'number' && Number.isFinite(id));
+}
 
 /**
  * `tapTarget` — tap the target permanent (used by tap-down effects; one mode of
@@ -1463,6 +1546,10 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   addMana,
   counterSpell,
   createToken,
+  // The bodies a DELAYED triggered ability runs (CR 603.7) — see their comment
+  // block for why the subject rides in their params rather than on the context.
+  sacrificeNamed,
+  exileNamed,
   tapTarget,
   mill,
   fight,

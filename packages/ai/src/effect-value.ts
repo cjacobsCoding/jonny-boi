@@ -33,6 +33,7 @@
  */
 
 import type {
+  CardDefinition,
   CardInstance,
   EffectRef,
   GameState,
@@ -406,6 +407,26 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     // answered by the pilot's kicker policy on its own terms.
     const count = Math.max(intParam(params, 'count', 1), 0);
     const stats = (source.def.power ?? 0) + (source.def.toughness ?? 0);
+    /*
+     * ⚠️ A TOKEN THE CARD SACRIFICES AT END OF TURN IS NOT A CREATURE, AND
+     * PRICING IT AS ONE IS THE WHOLE TRAP (CR 603.7 — Kiki-Jiki, Molten
+     * Duplication, The Fire Crystal). What that activation buys is ONE ATTACK,
+     * and the printed cards say so out loud by granting the token haste in the
+     * same breath. A pilot that valued it as a permanent body would tap
+     * Kiki-Jiki in its main phase with nothing to attack into and hand the
+     * opponent a free turn.
+     *
+     * So the temporary token is priced as the face damage it can actually
+     * deliver — and a temporary token that CANNOT attack (no haste from the
+     * copy's "except" tail, from a follow-up grant, or from the copied card
+     * itself) is worth nothing at all, which is the honest answer: it arrives
+     * summoning-sick and is sacrificed before it could ever be untapped.
+     */
+    if (params.delayedRemoval !== undefined) {
+      return temporaryTokenCanAttack(params, source.def)
+        ? count * ctx.weights.faceDamageValue * Math.max(source.def.power ?? 0, 0)
+        : 0;
+    }
     return count * (ctx.weights.castCreatureBaseScore + ctx.weights.castCreaturePerStat * stats);
   },
 
@@ -844,6 +865,31 @@ function tokenValue(params: Readonly<Record<string, unknown>>, ctx: EffectValueC
   const count = Math.max(intParam(params, 'count', 1), 0);
   const stats = intParam(params, 'power', 1) + intParam(params, 'toughness', 1);
   return count * (weights.castCreatureBaseScore + weights.castCreaturePerStat * stats);
+}
+
+/**
+ * Whether a token this ref creates could ATTACK on the turn it arrives — the
+ * only value a token that is sacrificed at the beginning of the next end step
+ * can ever deliver.
+ *
+ * Three printed sources of haste, and all three are read because all three are
+ * real: the copy's own "except it has haste" tail (Kiki-Jiki, Twinflame), a
+ * follow-up "It gains haste" sentence (Orthion, Molten Duplication), and the
+ * copied card simply having it (a token copy of a Goblin Guide). Reading only
+ * one would price two of the three cards at zero.
+ */
+function temporaryTokenCanAttack(params: Readonly<Record<string, unknown>>, copied: CardDefinition): boolean {
+  if (copied.keywords?.haste === true) return true;
+  const except = params.except;
+  if (except !== null && typeof except === 'object') {
+    const added = (except as { readonly addKeywords?: { readonly haste?: boolean } }).addKeywords;
+    if (added?.haste === true) return true;
+  }
+  const granted = params.grantKeywords;
+  if (granted !== null && typeof granted === 'object') {
+    if ((granted as { readonly haste?: boolean }).haste === true) return true;
+  }
+  return false;
 }
 
 /**

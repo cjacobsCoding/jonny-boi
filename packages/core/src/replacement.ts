@@ -17,6 +17,22 @@
  *   - **draws** — "If you would draw a card …, draw two cards instead", "if you
  *     would draw a card while your library has no cards in it, you **win the
  *     game** instead" (Laboratory Maniac).
+ *   - **tokens** — "If an effect would create one or more tokens under your
+ *     control, it creates **twice that many** of those tokens instead"
+ *     (Doubling Season's other half, Parallel Lives, Anointed Procession,
+ *     Mondrak, Elspeth Storm Slayer).
+ *
+ * ## Why "tokens" needed no new rule, only a fourth kind
+ * It scales a QUANTITY — how many of the tokens the effect was already going to
+ * create — which is the one thing this layer does. It reads no field
+ * {@link ReplacementApplies} did not already have (the affected player is the
+ * one the tokens are created under, so `recipientController` says "under **your**
+ * control" and a clause without that tail is the symmetric card), it terminates
+ * by the same CR 614.5 bitmask, and it is ordered by the same CR 616.1 search.
+ * The only genuinely new line is `affectedPlayerPrefersMore`'s answer, below.
+ * A printed clause that creates a DIFFERENT object instead ("those tokens plus
+ * an additional Food token" — Peregrin Took; "instead create one of each" —
+ * Academy Manufactor) is not a quantity and is reported, not approximated.
  *
  * The three differ only in WHAT is being replaced. They share the applicability
  * filter ({@link ReplacementApplies}), the modification ({@link ReplacementOutcome}),
@@ -258,6 +274,12 @@ export function affectedPlayerPrefersMore(kind: ReplacementEventKind, counterKin
   // More tokens under your control is always the good direction.
   if (kind === 'tokens') return true;
   if (kind === 'counters') return counterKind === PLUS_ONE_COUNTER;
-  // A bigger draw is a bigger draw; damage is damage.
-  return kind === 'draw';
+  // A bigger draw is a bigger draw; damage is damage. MORE TOKENS is the fourth
+  // answer, and it is the same shape as the draw: the affected player is the one
+  // the tokens are created UNDER, and every printed token-count replacement is a
+  // card that player chose to play for exactly this. (Symmetric doublers exist —
+  // Primal Vigor — and this still answers for whoever is being asked, which is
+  // what CR 616.1 says: the order is the AFFECTED player's, not the ability
+  // controller's.)
+  return kind === 'draw' || kind === 'tokens';
 }

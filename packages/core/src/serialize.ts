@@ -85,6 +85,24 @@ export interface SerializedState {
     readonly defense?: number;
   }>;
   /**
+   * DELAYED triggered abilities waiting for their moment (CR 603.7) — "sacrifice
+   * it at the beginning of the next end step".
+   *
+   * In the snapshot because a board carrying one is UNREADABLE without it: the
+   * hasty 4/4 in front of you is either a permanent creature or one that dies at
+   * end of turn, and nothing else on the board distinguishes them. Present only
+   * when there is one, so every snapshot of a game without them is unchanged.
+   */
+  readonly delayedTriggers?: ReadonlyArray<{
+    readonly id: number;
+    readonly controller: PlayerId;
+    readonly sourceInstanceId: number;
+    readonly label: string;
+    /** The trigger event it waits on (`'endStep'`, `'upkeep'`, …). */
+    readonly on: string;
+    readonly createdOnTurn: number;
+  }>;
+  /**
    * The question the game is currently waiting on, if any — so the debug
    * inspector can show WHY a game is parked and who owes an answer, instead of a
    * board that mysteriously refuses to advance.
@@ -145,6 +163,18 @@ export function serializeState(state: GameState): SerializedState {
         ...(isBattle(c.def) ? { defense: defenseOf(c) } : {}),
       };
     }),
+    ...(state.delayedTriggers && state.delayedTriggers.length > 0
+      ? {
+          delayedTriggers: state.delayedTriggers.map((d) => ({
+            id: d.id,
+            controller: d.controller,
+            sourceInstanceId: d.sourceInstanceId,
+            label: d.ability.label ?? '',
+            on: d.ability.condition.on,
+            createdOnTurn: d.createdOnTurn,
+          })),
+        }
+      : {}),
     ...(state.pendingChoice ? { pendingChoice: serializePendingChoice(state.pendingChoice) } : {}),
   };
 }
@@ -201,6 +231,14 @@ export function dumpState(state: GameState): string {
     }
   }
   if (s.stackSize > 0) lines.push(`  stack: ${s.stackSize} object(s)`);
+  // The one thing a board with a hasty token copy on it cannot be read without:
+  // whether that creature is permanent or dies at end of turn.
+  if (s.delayedTriggers) {
+    lines.push('  delayed triggers:');
+    for (const d of s.delayedTriggers) {
+      lines.push(`    (${d.controller}) on ${d.on} — ${d.label} [from ${d.sourceInstanceId}, turn ${d.createdOnTurn}]`);
+    }
+  }
   if (s.pendingChoice) {
     const c = s.pendingChoice;
     lines.push(`  awaiting ${c.kind} from ${c.chooser}: "${c.prompt}" (${c.min}-${c.max} of ${c.optionCount})`);

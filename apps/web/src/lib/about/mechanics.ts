@@ -498,6 +498,24 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'primitive', id: 'createTokenCopy' },
       },
       {
+        title: 'Delayed triggered abilities (Kiki-Jiki)',
+        detail:
+          'CR 603.7: "Sacrifice it at the beginning of the next end step." The ability is created while a spell or ability RESOLVES — it is on no object and on no stack, which is exactly why it still fires when the permanent that made it has been destroyed in response. It triggers ONCE, at its named moment, and then ceases to exist: the record is removed the instant it matches, so an ability countered on the stack cannot come back for another try. "The NEXT end step" needs no clock — it waits for the next beginning-of-the-end-step event, so one created DURING an end step waits for the following turn (CR 603.7e). Kiki-Jiki, Molten Duplication and every hasty token copy in the pool are this clause and nothing else.',
+        witness: { kind: 'primitive', id: 'sacrificeNamed' },
+      },
+      {
+        title: 'A token that is temporary, and a pilot that prices it',
+        detail:
+          'The token a delayed sacrifice is attached to is a COST, not a free body: it dies at end of turn whatever happens, so attacking with it is the whole point and chump-blocking with it is free. The pilot reads the delayed ability off the game state and treats such a creature as expendable — it attacks into blocks it would otherwise refuse, and it will not spend removal protecting something the rules are about to remove anyway.',
+        witness: { kind: 'engine', api: 'delayedRemovalTargets' },
+      },
+      {
+        title: 'Doubling Season’s OTHER half — a token-count replacement',
+        detail:
+          '"If an effect would create one or more tokens under your control, it creates twice that many of those tokens instead" (Doubling Season, Parallel Lives, Anointed Procession, Mondrak). It is the SAME CR 614 layer that doubles damage and counters, given a fourth event kind rather than a system of its own — so it terminates by the same apply-once rule (two doublers give ×4, one gives ×2 and logs exactly one application) and is ordered by the same deterministic rule. Every token in the engine passes through one funnel, so it doubles a token copy, a Saproling and a Treasure alike. A clause that would create a DIFFERENT object instead ("plus an additional Food token", "instead create one of each") is reported, never approximated.',
+        witness: { kind: 'rule', id: 'replacement-tokens-multiplied' },
+      },
+      {
         title: 'Split cards (Fire // Ice)',
         detail:
           'One card, two halves, either castable for its own cost. While it sits in a hand, graveyard or library it is NEITHER half: CR 709.4 gives it the combined name, the union of the type lines and a mana value equal to the sum of both — which is what a discard filter or a "mana value 3 or less" clause reads. Casting one puts THAT half on the stack, and the card reverts to the combined object on the way out.',

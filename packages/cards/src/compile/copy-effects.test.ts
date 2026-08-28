@@ -229,16 +229,37 @@ describe('the residuals are reported by NAME, never as "copying is missing"', ()
   });
 
   it('a token copy whose SELECTOR is outside the closed table still reports', () => {
+    // "ANOTHER target creature you control" (Orthion, Jaxis, The Jolly Balloon
+    // Man). Deliberately still outside the table, and for a named reason: the
+    // printed word excludes the ASKING INSTANCE, while core's target vocabulary
+    // is checked against a source DEFINITION and never learns which object is
+    // asking — so compiling it as plain "target creature you control" would let
+    // the card copy itself, which is a card playing wider than printed.
+    //
+    // (This test used to use "nonlegendary", which the table now holds — and it
+    // had already stopped proving what it claimed, because a bare sentence
+    // printed on a CREATURE reports for an entirely different reason.)
     const result = compiled({
-      name: 'Kiki Test',
-      types: ['Creature'],
-      oracleText: "Create a token that's a copy of target nonlegendary creature you control.",
+      name: 'Orthion Test',
+      types: ['Sorcery'],
+      power: null,
+      toughness: null,
+      oracleText: "Create a token that's a copy of another target creature you control.",
     });
     expect(result.status).toBe('incomplete');
     expect(result.missing[0]?.missingEngineSystem).toMatch(/COPY-CREATING template/);
   });
 
-  it('the DELAYED sacrifice is reported by name — dropping it would be strictly better', () => {
+  /*
+   * ⚠️ THIS TEST USED TO ASSERT THE OPPOSITE — "the DELAYED sacrifice is
+   * reported by name" — and its reasoning was exactly right: a token copy
+   * compiled WITHOUT the sacrifice clause is a permanent hasty copy with no
+   * drawback, i.e. strictly better than the printed card. DESIGN §3.32 built the
+   * delayed triggered ability, so the clause compiles now; what the old test was
+   * really protecting is that the drawback is never silently dropped, and that
+   * is what is asserted here instead.
+   */
+  it('the DELAYED sacrifice compiles as a real clause, never dropped', () => {
     const result = compiled({
       name: 'Twin Test',
       types: ['Sorcery'],
@@ -247,8 +268,12 @@ describe('the residuals are reported by NAME, never as "copying is missing"', ()
       oracleText:
         "Create a token that's a copy of target creature, except it has haste. Sacrifice it at the beginning of the next end step.",
     });
-    expect(result.status).toBe('incomplete');
-    expect(result.missing[0]?.missingEngineSystem).toMatch(/DELAYED triggered ability/);
+    expect(result.status).toBe('complete');
+    const params = result.definition.effects?.[0]?.params as Record<string, unknown> | undefined;
+    expect(params?.delayedRemoval).toBe('sacrifice');
+    // The "except" tail is still the COPY's, not a grant — two different things,
+    // and a second copy taken of the token would inherit one and not the other.
+    expect(params?.except).toMatchObject({ addKeywords: { haste: true } });
   });
 
   it('a "becomes a copy" activated ability reports as a TEMPLATE, not a system', () => {

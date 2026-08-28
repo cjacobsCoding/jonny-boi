@@ -56,6 +56,7 @@ import {
   castPermissionFor,
   castTiming,
   convertedManaCost,
+  delayedRemovalTargets,
   forcedBlockAssignment,
   hasCardGrants,
   hasCastableBackFace,
@@ -2169,6 +2170,21 @@ function attackIsProfitable(
   const myTough = toughness(attacker, index);
   if (myPower <= 0) return false; // a 0-power attacker accomplishes nothing
 
+  /*
+   * ⚠️ A CREATURE THE RULES ARE ABOUT TO TAKE AWAY IS FREE TO ATTACK WITH, and
+   * this is the line that makes a delayed sacrifice (CR 603.7) a COST the pilot
+   * actually prices. Kiki-Jiki's token is sacrificed at the beginning of the
+   * next end step whatever happens, so trading it for a blocker is pure profit
+   * and holding it back as a blocker throws it away for nothing — attacking with
+   * it is the entire point of the card.
+   *
+   * Expressed as "the opponent gains nothing by killing it" rather than as a
+   * bonus, because that is exactly what is true: the opponent's best block is
+   * still weighed, their own blocker is still a real loss to them, and only OUR
+   * side of the trade is written down to zero.
+   */
+  const doomed = delayedRemovalTargets(view).has(attacker.instanceId);
+
   // The opponent will block if a blocker kills us and the trade favours them.
   // Find the blocker that would profitably kill us; if one exists, weigh the trade.
   let bestEnemyValue = -Infinity; // value to the OPPONENT of their best block
@@ -2178,7 +2194,7 @@ function attackIsProfitable(
     eligibleBlockers += 1;
     const bPower = power(b, index);
     const bTough = toughness(b, index);
-    const attackerDies = bPower >= myTough;
+    const attackerDies = !doomed && bPower >= myTough;
     const blockerDies = myPower >= bTough;
     // Value to the opponent: they gain by killing our creature, lose by losing theirs.
     const enemyValue =
@@ -2316,8 +2332,11 @@ function chooseBlock(
     }
   }
 
+  // Read ONCE per block decision, not per candidate: it is the shared frozen
+  // empty set by reference in every game with no delayed ability at all.
+  const doomed = delayedRemovalTargets(view);
   for (const attacker of attackers) {
-    const blocker = pickBlocker(attacker, availableBlockers, used, desperate, weights, index);
+    const blocker = pickBlocker(attacker, availableBlockers, used, desperate, weights, index, doomed);
     if (blocker) {
       blocks.push({ blocker: blocker.instanceId, attacker: attacker.instanceId });
       used.add(blocker.instanceId);
@@ -2367,6 +2386,8 @@ export function pickBlocker(
   desperate: boolean,
   weights: HeuristicWeights,
   index: ContinuousIndex,
+  /** Permanents a delayed ability will remove anyway — see {@link attackIsProfitable}. */
+  doomed: ReadonlySet<InstanceId>,
 ): CardInstance | undefined {
   // A creature that can only be blocked by two or more is one this pilot cannot
   // block at all: it assigns a single blocker per attacker, and a lone blocker on
@@ -3066,11 +3087,14 @@ function collectBlockCandidates(
   // Both the value-judged block and the survival block, when they differ: under
   // pressure "chump to live" and "only trade profitably" are genuinely different
   // plans, and which is right is precisely what a search can work out.
+  // The same read as `chooseBlock`'s, hoisted out of both loops: a creature a
+  // delayed ability will remove anyway is the free chump block.
+  const doomed = delayedRemovalTargets(view);
   for (const mode of desperate ? [true] : [false, true]) {
     const used = new Set<InstanceId>();
     const blocks: { blocker: InstanceId; attacker: InstanceId }[] = [];
     for (const attacker of attackers) {
-      const blocker = pickBlocker(attacker, available, used, mode, weights, index);
+      const blocker = pickBlocker(attacker, available, used, mode, weights, index, doomed);
       if (blocker) {
         blocks.push({ blocker: blocker.instanceId, attacker: attacker.instanceId });
         used.add(blocker.instanceId);

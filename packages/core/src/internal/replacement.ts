@@ -3,14 +3,21 @@
  * The card-facing declaration half is `../replacement.ts`, which is also where
  * the family is introduced.
  *
- * ## ONE seam, three call sites
- * Damage, counters and draws all ask the SAME question through the same
- * function. That is the whole point of the module: the once-per-event rule, the
- * ordering rule and the shield bookkeeping exist once, so a damage doubler and a
- * counter doubler cannot end up with two different ideas of what "instead"
- * means. The three exported façades ({@link replaceDamage},
- * {@link replaceCounters}, {@link replaceDraw}) only build the event record and
- * unpack the result; {@link runReplacements} is the single engine.
+ * ## ONE seam, four call sites
+ * Damage, counters, draws and TOKEN COUNTS all ask the SAME question through the
+ * same function. That is the whole point of the module: the once-per-event rule,
+ * the ordering rule and the shield bookkeeping exist once, so a damage doubler
+ * and a token doubler cannot end up with two different ideas of what "instead"
+ * means. The four exported façades ({@link replaceDamage},
+ * {@link replaceCounters}, {@link replaceDraw}, {@link replaceTokens}) only build
+ * the event record and unpack the result; {@link runReplacements} is the single
+ * engine.
+ *
+ * ⚠️ The token kind needed **no third rule** — it is the strongest evidence the
+ * layer generalises. It scales a quantity (how many of the tokens an effect was
+ * already creating), so it reuses `ReplacementApplies` unchanged, terminates by
+ * the same CR 614.5 bitmask, and is ordered by the same CR 616.1 search. The
+ * only line it added anywhere is `affectedPlayerPrefersMore`'s answer for it.
  *
  * ## CR 614.5 — an effect applies AT MOST ONCE to a given event
  * This is the rule that makes a doubling effect terminate. After a replacement
@@ -156,7 +163,12 @@ export const ORDER_SEARCH_MAX_CANDIDATES = 4;
  */
 export interface ReplaceableEvent {
   readonly kind: ReplacementEventKind;
-  /** The permanent/spell dealing the damage or putting the counters. */
+  /**
+   * The permanent/spell dealing the damage or putting the counters. Absent for a
+   * draw and for a TOKEN creation, neither of which has a source object the
+   * printed clauses ever ask about ("if **an effect** would create one or more
+   * tokens" names no source at all).
+   */
   readonly source?: CardInstance;
   /** Its controller — read separately because a resolving spell may have left play. */
   readonly sourceController?: PlayerId;

@@ -196,6 +196,18 @@ export type SoakMechanicId =
   | 'spell-copy'
   | 'trigger-copy'
   | 'token-copy'
+  // A DELAYED triggered ability (CR 603.7) — an ability created during a
+  // resolution that fires once at a named later moment. Its own id and NOT a
+  // flavour of `triggered-ability`: every printed trigger emits
+  // `triggerPutOnStack`, so a deck with one Young Pyromancer would "prove" the
+  // delayed machinery works. What is specific to it is that the ability
+  // belonged to no object when its moment came.
+  | 'delayed-trigger'
+  // The CR 614 TOKEN-COUNT replacement (Doubling Season's other half). Separate
+  // from `replacement-effect` for the same reason: that id is witnessed by any
+  // counter or damage multiplier, and creating extra OBJECTS is the outcome
+  // this one had to add.
+  | 'token-count-replacement'
   // "This spell can't be countered", whose whole observable behaviour is a counter
   // effect resolving and doing NOTHING — so the prevented-counter event is the
   // only witness there is.
@@ -529,6 +541,42 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     witnessKind: 'event',
     printedBy: (_c, t) => t.includes('"createTokenCopy"'),
   },
+  {
+    id: 'delayed-trigger',
+    label: 'a DELAYED triggered ability fired at its named later moment (CR 603.7)',
+    witnessKind: 'event',
+    /*
+     * The printed witness is the PARAM the compiler emits for the clause
+     * ("sacrifice it at the beginning of the next end step"), not a primitive
+     * id: the delayed ability is created by whatever primitive read that param,
+     * and naming the param is what keeps this true when a second primitive
+     * starts creating one.
+     */
+    printedBy: (_c, t) => t.includes('"delayedRemoval"'),
+    /*
+     * ⚠️ IT NEEDS SOMETHING TO COPY, exactly as `spell-copy` does — every card
+     * in the pool that creates a delayed ability today does so while creating a
+     * TOKEN COPY of a creature, and a deck whose only creature is the copier
+     * itself gives Kiki-Jiki no legal (nonlegendary) target at all. So the
+     * enabler is any nonlegendary creature worth copying, packed into the same
+     * deck. Without it the soak would report the mechanic inert and be
+     * reporting the DECK rather than the engine.
+     */
+    enabledBy: (card) => card.types.includes('creature') && card.legendary !== true,
+  },
+  {
+    id: 'token-count-replacement',
+    label: 'a TOKEN-COUNT replacement changed how many tokens an effect created (CR 614)',
+    witnessKind: 'event',
+    // The DEFINITION FIELD plus the event kind, named exactly — the same shape
+    // (and the same lesson) as `copy-effect`'s predicate: `"replacements"` alone
+    // would be satisfied by a Hardened Scales, which proves nothing about
+    // creating extra objects.
+    printedBy: (_c, t) => t.includes('"event":"tokens"'),
+    // And something to double: a doubler in a deck that makes no tokens is a
+    // dead enchantment, and the soak would be reporting the deck.
+    enabledBy: (_c, t) => t.includes('makeToken') || t.includes('createTokenCopy'),
+  },
   { id: 'graveyard-recursion', label: 'graveyard recursion — a card returned from a graveyard', witnessKind: 'event', printedBy: (_c, t) => t.includes('returnFromGraveyard') || t.includes('persistReturn') },
   {
     id: 'optional-payment',
@@ -736,6 +784,18 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   // which is the cheap end-to-end proof that the cease-to-exist rule ran.
   tokenCeasedToExist: 'token',
   triggerPutOnStack: 'triggered-ability',
+  /*
+   * THE DELAYED-ABILITY PAIR (CR 603.7), and the split between them is the whole
+   * point. `delayedTriggerCreated` says the ability EXISTS — which a resolution
+   * that merely ran the right primitive would also produce — and
+   * `delayedTriggerFired` says it reached its named later moment and went on the
+   * stack, which is the half that can only happen if the record survived every
+   * action boundary in between, including its source leaving the battlefield.
+   * A game that creates one and never fires it witnesses the mechanic once and
+   * is exactly the failure this pairing exists to expose.
+   */
+  delayedTriggerCreated: 'delayed-trigger',
+  delayedTriggerFired: 'delayed-trigger',
   triggerTargetsChosen: 'trigger-targets',
   controlChanged: 'control-change',
   damagePrevented: 'damage-prevention',
