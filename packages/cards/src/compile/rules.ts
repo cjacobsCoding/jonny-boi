@@ -166,6 +166,7 @@ const ACTIVATED_OR_TRIGGERED_ABILITY_YOU_CONTROL_TARGET: TargetRestriction =
 const INSTANT_OR_SORCERY_SPELL_YOU_CONTROL_TARGET: TargetRestriction = 'instantOrSorcerySpellYouControl';
 const PERMANENT_SPELL_YOU_CONTROL_TARGET: TargetRestriction = 'permanentSpellYouControl';
 const NONLAND_PERMANENT_YOU_CONTROL_TARGET: TargetRestriction = 'nonlandPermanentYouControl';
+const TOKEN_YOU_CONTROL_TARGET: TargetRestriction = 'tokenYouControl';
 /** "target creature an opponent controls" — Banisher Priest. */
 const CREATURE_AN_OPPONENT_CONTROLS_TARGET: TargetRestriction = 'creatureAnOpponentControls';
 /** "target artifact, enchantment, or land" — the naturalize family. */
@@ -2334,6 +2335,46 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       /^create (a|an|one|two|three|four|five) (tapped )?(?:tokens? that's a copy|tokens that are copies) of (.+)$/,
     build(match, ctx) {
       return buildTokenCopy(match[1] ?? 'a', match[3] ?? '', ctx, match[2] !== undefined);
+    },
+  },
+  {
+    id: 'for-each-token-copy',
+    description:
+      `"For each token you control, create a token that's a copy of that permanent." (Second Harvest) — CR 707.2, one copy per original`,
+    // An ITERATION, not a target: no aiming step, one copy of EACH matching
+    // permanent. The primitive snapshots the match list before creating
+    // anything, so the copies are never themselves copied.
+    pattern: /^for each token you control, create a token that's a copy of that permanent$/,
+    build() {
+      return effects({ primitive: 'createTokenCopy', params: { forEachTokenYouControl: true } });
+    },
+  },
+  {
+    id: 'create-token-conditional-instead',
+    description:
+      `"Create <token>. If you control N or more <noun>, create <other token> instead." (Scute Swarm) — a resolution-time substitution`,
+    // The word "instead" makes the two sentences ONE instruction: exactly one
+    // branch runs, decided as the ability resolves. Both halves must themselves
+    // compile — a half this table cannot read reports the whole line, never a
+    // card that always (or never) makes the better token.
+    pattern: new RegExp(`^(create .+?)\\. if you control ${COUNT_TOKEN} or more ([a-z]+?)s?, (create .+?) instead$`),
+    build(match, ctx) {
+      const min = parseCount(match[2]);
+      const filter = searchFilterFrom(match[3] ?? '');
+      if (min === null || filter === null) return null;
+      // Target-free by construction: the substitute runs inside a resolution
+      // with no aiming step of its own, so a targeted half would aim at nothing.
+      const base = ctx.compileEffectClause(match[1]!, { targetFree: true });
+      const instead = ctx.compileEffectClause(match[4]!, { targetFree: true });
+      if (!base || base.length === 0 || !instead || instead.length === 0) return null;
+      return effects({
+        primitive: 'substituteIf',
+        params: {
+          condition: { kind: 'controlCount', filter, min },
+          effects: [...instead],
+          otherwise: [...base],
+        },
+      });
     },
   },
   {
@@ -5844,6 +5885,10 @@ const TOKEN_COPY_SELECTORS: Readonly<Record<string, Readonly<Record<string, unkn
   // printed word is the entire reason Kiki-Jiki cannot copy itself.
   'target nonlegendary creature you control': { targets: NONLEGENDARY_CREATURE_YOU_CONTROL_TARGET },
   'target artifact': { targets: ARTIFACT_TARGET },
+  // "a copy of target TOKEN you control" (Caretaker's Talent). Its own
+  // restriction, reading the CR 111.1 token-ness stamp — "token" is a property
+  // of how the object was made, which no type-line filter can express.
+  'target token you control': { targets: TOKEN_YOU_CONTROL_TARGET },
   'target artifact or creature you control': { targets: ARTIFACT_OR_CREATURE_YOU_CONTROL_TARGET },
   'target permanent': { targets: PERMANENT_TARGET },
   // "a copy of equipped creature" (Helm of the Host) / "of enchanted artifact"
@@ -6936,7 +6981,7 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     //    on the zone the spell was cast from.
     pattern: /\bcopy (?:that|target) (?:spell|instant|sorcery|activated)\b|tokens? that(?:'?s| are) (?:a )?cop(?:y|ies)/,
     missingEngineSystem:
-      'a COPY-CREATING template outside the compiler’s closed tables (spell/ability copies with the "you control" scopes, token copies — tapped, "nonlegendary"/"artifact or creature" targets, a haste-grant follow-up sentence and a delayed "sacrifice/exile it at the beginning of the next end step" are ALL implemented; what is missing is this selector or tail: a "token" target, "copy THAT spell" naming the spell that triggered the ability, an "except …" tail on a SPELL copy, a for-each iteration, or a copy COUNT conditional on where the spell was cast from)',
+      'a COPY-CREATING template outside the compiler’s closed tables (spell/ability copies with the "you control" scopes, token copies — tapped, "nonlegendary"/"artifact or creature" targets, a haste-grant follow-up sentence and a delayed "sacrifice/exile it at the beginning of the next end step" are ALL implemented; so are the "token you control" target, the "for each token you control" iteration and the "create a copy … instead" board-conditional substitution; what is missing is this selector or tail: "copy THAT spell" naming the spell that triggered the ability, an "except …" tail on a SPELL copy, or a copy COUNT conditional on where the spell was cast from)',
   },
   {
     // Everything else in the family: a selector or an "except" clause outside

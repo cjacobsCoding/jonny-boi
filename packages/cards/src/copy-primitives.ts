@@ -222,6 +222,30 @@ function targetOptionFor(
  * the battlefield (CR 704.5d). One place, not two.
  */
 export const createTokenCopy: EffectPrimitive = (ctx) => {
+  // "FOR EACH token you control, create a token that's a copy of that
+  // permanent" (Second Harvest) — an ITERATION, not a target: one copy per
+  // matching permanent, each copying its own original. The match list is
+  // SNAPSHOT before anything is created (CR 608.2c reads "for each" once), so
+  // the copies this resolution makes are never themselves copied.
+  if (ctx.params.forEachTokenYouControl === true) {
+    const originals = ctx.state.battlefield.filter(
+      (permanent) => permanent.controller === ctx.controller && permanent.def.isToken === true,
+    );
+    for (const original of originals) {
+      const def = tokenCopyDefOf(original, exceptParam(ctx));
+      const created = ctx.createTokens(def, 1, undefined, tokenEntryParam(ctx));
+      for (const instanceId of created) {
+        ctx.emit({
+          type: 'tokenCopyCreated',
+          instanceId,
+          copiedInstanceId: original.instanceId,
+          controller: ctx.controller,
+          name: def.name,
+        });
+      }
+    }
+    return;
+  }
   const source = copySourceFor(ctx);
   if (!source) return;
   const kickedCount = intParam(ctx, 'kickedCount', 0);

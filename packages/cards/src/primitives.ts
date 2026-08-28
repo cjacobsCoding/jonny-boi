@@ -64,6 +64,7 @@ import {
   protectionPreventsDamage,
   drawCardForPlayer,
   indexReplacements,
+  interveningIfHolds,
   replaceCounters,
   replaceDamage,
 } from '@jonny-boi/core';
@@ -1364,6 +1365,58 @@ function nestedEffectRefs(ctx: EffectContext): readonly EffectRef[] {
 }
 
 /**
+ * `substituteIf` — the printed word **"instead"** on a board condition:
+ * "Create a 1/1 green Insect creature token. If you control six or more lands,
+ * create a token that's a copy of this creature **instead**." (Scute Swarm.)
+ *
+ * ONE wrapper carrying BOTH printed instructions, because "instead" is a
+ * substitution, not an addition: exactly one branch runs, decided at RESOLUTION
+ * (CR 608.2) — a seventh land played in response to the trigger upgrades the
+ * Insect to a Swarm copy, exactly as in paper.
+ *
+ * The condition is core's own {@link InterveningIf} vocabulary evaluated by the
+ * same `interveningIfHolds` a trigger's printed intervening "if" uses — one
+ * reader, so "you control six or more lands" cannot mean two things. It is NOT
+ * a trigger intervening "if" (CR 603.4), though: a false condition here still
+ * runs the base branch; it never stops the ability.
+ *
+ * Params:
+ *   - `condition` — the InterveningIf deciding which branch runs.
+ *   - `effects`   — the "instead" branch, run when the condition HOLDS.
+ *   - `otherwise` — the base printed instruction, run when it does not.
+ *
+ * A malformed condition runs the BASE branch — the card plays as its weaker
+ * half, never its stronger one and never a crash.
+ */
+export const substituteIf: EffectPrimitive = (ctx) => {
+  const condition = ctx.params.condition;
+  const holds =
+    condition !== null &&
+    typeof condition === 'object' &&
+    !Array.isArray(condition) &&
+    interveningIfHolds(
+      ctx.state,
+      condition as Parameters<typeof interveningIfHolds>[1],
+      ctx.source.instanceId,
+      ctx.controller,
+    );
+  const refs = holds ? nestedEffectRefs(ctx) : nestedEffectRefsIn(ctx, 'otherwise');
+  if (refs.length > 0) ctx.enqueueEffects(refs);
+};
+
+/** {@link nestedEffectRefs} for a wrapper param other than `effects`. */
+function nestedEffectRefsIn(ctx: EffectContext, key: string): readonly EffectRef[] {
+  const raw = ctx.params[key];
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (entry): entry is EffectRef =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      typeof (entry as { primitive?: unknown }).primitive === 'string',
+  );
+}
+
+/**
  * `mayEffects` — the printed word **"you may"**, as one composable wrapper: ask
  * the controller yes/no, and run the nested clause only on a yes.
  *
@@ -1530,6 +1583,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   gainControl,
   ifKicked,
   mayEffects,
+  substituteIf,
   dealDamage,
   drawCards,
   gainLife,

@@ -74,6 +74,13 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
    * any game that resolves an optional clause — sound whatever it contains.
    */
   'mayEffects',
+  /*
+   * `substituteIf` is the "…instead" branch wrapper (Scute Swarm), classified
+   * conservatively for the same reason as `ifKicked` and `mayEffects`: both its
+   * branches live in params (`effects` / `otherwise`) the decklist scan cannot
+   * see, so either branch could hide a library reader.
+   */
+  'substituteIf',
   // Reads the top of a library and rearranges it.
   'reorderTopOfLibrary',
   /*

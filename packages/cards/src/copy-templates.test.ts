@@ -290,3 +290,221 @@ describe('a tapped token copy, resolved through the real primitive', () => {
     expect(created.every((token) => token.tapped)).toBe(true);
   });
 });
+
+// --- the §3.53 tails: for-each, the token target, and the "instead" substitution ----
+
+describe('compiling the remaining copy tails', () => {
+  it('compiles Second Harvest — the for-each iteration', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Second Harvest',
+        typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+        manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 0, G: 2, C: 0, other: [] },
+        oracleText: "For each token you control, create a token that's a copy of that permanent.",
+      }),
+    );
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    const ref = result.definition.effects?.[0];
+    expect(ref?.primitive).toBe('createTokenCopy');
+    expect(ref?.params?.forEachTokenYouControl).toBe(true);
+  });
+
+  it('compiles the "target token you control" selector (Caretaker\'s Talent\'s level-2 body)', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Token Copier',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        oracleText: "Create a token that's a copy of target token you control.",
+      }),
+    );
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.effects?.[0]?.params?.targets).toBe('tokenYouControl');
+  });
+
+  it('compiles Scute Swarm — the board-conditional "instead" substitution, both halves intact', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Scute Swarm',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Insect'] },
+        manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0, other: [] },
+        power: '1',
+        toughness: '1',
+        oracleText:
+          'Landfall — Whenever a land you control enters, create a 1/1 green Insect creature token. If you control six or more lands, create a token that\'s a copy of this creature instead.',
+      }),
+    );
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    const ref = result.definition.triggers?.[0]?.effects[0];
+    expect(ref?.primitive).toBe('substituteIf');
+    const params = ref?.params as {
+      condition?: { kind?: string; min?: number; filter?: { anyOfTypes?: string[] } };
+      effects?: Array<{ primitive: string }>;
+      otherwise?: Array<{ primitive: string }>;
+    };
+    expect(params.condition?.kind).toBe('controlCount');
+    expect(params.condition?.min).toBe(6);
+    expect(params.condition?.filter?.anyOfTypes).toEqual(['land']);
+    // The "instead" half copies the source; the base half makes the Insect.
+    expect(params.effects?.[0]?.primitive).toBe('createTokenCopy');
+    expect(params.otherwise?.[0]?.primitive).toBe('makeToken');
+  });
+
+  it('still REFUSES an "instead" whose condition it cannot read', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Odd Swarm',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        oracleText:
+          "Create a 1/1 green Insect creature token. If you have exactly 13 life, create a token that's a copy of target creature instead.",
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+});
+
+describe('the tokenYouControl target (CR 111.1 stamp, not a name heuristic)', () => {
+  function boardWith(defs: Array<{ id: number; isToken?: boolean; controller: PlayerId }>): GameState {
+    return {
+      nextInstanceId: 100,
+      battlefield: defs.map((d) => ({
+        instanceId: d.id,
+        controller: d.controller,
+        owner: d.controller,
+        zone: 'battlefield',
+        tapped: false,
+        summoningSick: false,
+        damageMarked: 0,
+        markedByDeathtouch: false,
+        counters: {},
+        def: {
+          id: `t${d.id}`,
+          name: `Perm ${d.id}`,
+          types: ['creature'],
+          ...(d.isToken ? { isToken: true } : {}),
+        },
+      })),
+      stack: [],
+      continuous: [],
+      players: {
+        A: { exile: [], hand: [], graveyard: [], library: [], command: [] },
+        B: { exile: [], hand: [], graveyard: [], library: [], command: [] },
+      },
+    } as unknown as GameState;
+  }
+
+  it('offers only your own tokens — never a printed card, never theirs, never with an unknown actor', () => {
+    const s = boardWith([
+      { id: 1, isToken: true, controller: 'A' },
+      { id: 2, controller: 'A' },
+      { id: 3, isToken: true, controller: 'B' },
+    ]);
+    expect(legalTargetsFor(s, 'tokenYouControl', 'A')).toEqual([1]);
+    expect(isLegalTarget(s, 'tokenYouControl', 2, 'A')).toBe(false);
+    expect(isLegalTarget(s, 'tokenYouControl', 3, 'A')).toBe(false);
+    expect(legalTargetsFor(s, 'tokenYouControl', undefined)).toEqual([]);
+  });
+});
+
+describe('the for-each token copy, resolved through the real primitive', () => {
+  it('copies each of YOUR tokens once, snapshot before anything is created', () => {
+    const registry = buildRegistry();
+    const primitive = registry.get('createTokenCopy');
+    const instance = (id: number, isToken: boolean, controller: PlayerId): Record<string, unknown> => ({
+      instanceId: id,
+      controller,
+      owner: controller,
+      zone: 'battlefield',
+      tapped: false,
+      summoningSick: false,
+      damageMarked: 0,
+      markedByDeathtouch: false,
+      counters: {},
+      def: { id: `d${id}`, name: `Perm ${id}`, types: ['creature'], ...(isToken ? { isToken: true } : {}) },
+    });
+    const state = {
+      nextInstanceId: 100,
+      battlefield: [instance(1, true, 'A'), instance(2, false, 'A'), instance(3, true, 'B')],
+      stack: [],
+      players: {
+        A: { exile: [], hand: [], graveyard: [], library: [] },
+        B: { exile: [], hand: [], graveyard: [], library: [] },
+      },
+    } as unknown as GameState;
+    const copiedOf: number[] = [];
+    const events: Array<Record<string, unknown>> = [];
+    primitive!({
+      state,
+      source: state.battlefield[1],
+      controller: 'A' as PlayerId,
+      targets: [],
+      params: { forEachTokenYouControl: true },
+      emit: (e: Record<string, unknown>) => events.push(e),
+      ask: () => undefined,
+      createTokens(def: CardDefinition) {
+        const id = (state as { nextInstanceId: number }).nextInstanceId++;
+        // Stamped a token, exactly as core's funnel does — so the snapshot
+        // discipline is what keeps this new arrival out of the iteration.
+        (state.battlefield as unknown[]).push({ ...instance(id, true, 'A'), def: { ...def, isToken: true } });
+        return [id];
+      },
+    } as never);
+    for (const e of events) {
+      if (e.type === 'tokenCopyCreated') copiedOf.push(e.copiedInstanceId as number);
+    }
+    // Exactly A's one token was copied — not A's nontoken, not B's token, and
+    // not the copy this very resolution created.
+    expect(copiedOf).toEqual([1]);
+  });
+});
+
+describe('substituteIf picks its branch from the board at resolution', () => {
+  function run(landCount: number): string[] {
+    const registry = buildRegistry();
+    const primitive = registry.get('substituteIf');
+    expect(primitive).toBeDefined();
+    const land = (id: number): Record<string, unknown> => ({
+      instanceId: id,
+      controller: 'A',
+      owner: 'A',
+      zone: 'battlefield',
+      tapped: false,
+      summoningSick: false,
+      damageMarked: 0,
+      markedByDeathtouch: false,
+      counters: {},
+      def: { id: `l${id}`, name: `Land ${id}`, types: ['land'] },
+    });
+    const state = {
+      nextInstanceId: 100,
+      battlefield: Array.from({ length: landCount }, (_, i) => land(10 + i)),
+      stack: [],
+      players: {
+        A: { exile: [], hand: [], graveyard: [], library: [] },
+        B: { exile: [], hand: [], graveyard: [], library: [] },
+      },
+    } as unknown as GameState;
+    const enqueued: string[] = [];
+    primitive!({
+      state,
+      source: { instanceId: 1, def: { id: 's', name: 'Source', types: ['creature'] } },
+      controller: 'A' as PlayerId,
+      targets: [],
+      params: {
+        condition: { kind: 'controlCount', filter: { anyOfTypes: ['land'] }, min: 6 },
+        effects: [{ primitive: 'createTokenCopy', params: { self: true } }],
+        otherwise: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Insect' } }],
+      },
+      emit: () => {},
+      ask: () => undefined,
+      enqueueEffects: (refs: Array<{ primitive: string }>) => {
+        for (const ref of refs) enqueued.push(ref.primitive);
+      },
+    } as never);
+    return enqueued;
+  }
+
+  it('five lands make the Insect; six make the copy — the printed upgrade, decided live', () => {
+    expect(run(5)).toEqual(['makeToken']);
+    expect(run(6)).toEqual(['createTokenCopy']);
+  });
+});

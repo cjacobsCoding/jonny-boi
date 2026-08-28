@@ -38,12 +38,14 @@ import type {
   EffectRef,
   GameState,
   InstanceId,
+  InterveningIf,
   ManaCost,
   PlayerId,
   TargetRestriction,
 } from '@jonny-boi/core';
 import {
   canAffordManaCost,
+  interveningIfHolds,
   convertedManaCost,
   isCreature,
   MANA_COLORS,
@@ -108,6 +110,13 @@ export function valueOfEffect(ref: EffectRef, ctx: EffectValueContext): number {
 }
 
 const EMPTY_PARAMS: Readonly<Record<string, unknown>> = Object.freeze({});
+
+/**
+ * The instance id `substituteIf`'s ruler hands `interveningIfHolds` when no
+ * source is known: no battlefield object ever carries it, so a source-reading
+ * condition resolves false and the base branch is priced.
+ */
+const NO_SOURCE_INSTANCE: InstanceId = -1;
 
 /** One entry in the value registry: price this effect's params on this board. */
 type EffectValuer = (params: Readonly<Record<string, unknown>>, ctx: EffectValueContext) => number;
@@ -955,6 +964,29 @@ const LEDGERED_EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.fre
    *    pay the kicker yet, the same "not yet paid for" caution
    *    `createTokenCopy` documents for Rite of Replication's kicked five.
    */
+  /**
+   * "<base>. IF you control …, <other> INSTEAD" (Scute Swarm) — a WRAPPER with
+   * two branches, of which exactly one runs. Priced as the branch the CURRENT
+   * board would pick: the primitive decides with `interveningIfHolds`, and
+   * `EffectValueContext` carries the same state, so the ruler and the engine
+   * cannot disagree. A malformed condition prices the base branch, exactly as
+   * the primitive runs it.
+   */
+  substituteIf: (params, ctx) => {
+    const condition = params['condition'];
+    // The ruler knows no source instance, so a source-reading condition
+    // (`sourceUntapped`, `sourceKicked`) prices the BASE branch — the same
+    // weaker-half fallback the primitive uses for a condition it cannot read.
+    // The one condition the compiler emits (`controlCount`) never reads it.
+    const holds =
+      condition !== null &&
+      typeof condition === 'object' &&
+      !Array.isArray(condition) &&
+      interveningIfHolds(ctx.state, condition as InterveningIf, NO_SOURCE_INSTANCE, ctx.player);
+    const branch = holds ? params['effects'] : params['otherwise'];
+    return Array.isArray(branch) ? valueOfEffects(branch as readonly EffectRef[], ctx) : 0;
+  },
+
   ifKicked: (params, ctx) => {
     const inner = params['effects'];
     if (!Array.isArray(inner)) return 0;

@@ -245,6 +245,13 @@ export type TargetRestriction =
    * land for value is not what the printed card offers.
    */
   | 'nonlandPermanentYouControl'
+  /**
+   * "target token you control" — Caretaker's Talent's level-2 aim. Reads the
+   * CR 111.1 token-ness stamp (`def.isToken`), which `createOneTokenInState`
+   * writes on every token however it was made — so a token copy of a printed
+   * card is offered and the printed card itself never is.
+   */
+  | 'tokenYouControl'
   /** "target enchantment" — an enchantment permanent (Casualties of War's mode). */
   | 'enchantment'
   /** "target land" — a land on the battlefield, never one in a hand or yard. */
@@ -307,6 +314,7 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'permanentSpellYouControl' ||
     value === 'activatedOrTriggeredAbilityYouControl' ||
     value === 'nonlandPermanentYouControl' ||
+    value === 'tokenYouControl' ||
     value === 'enchantment' ||
     value === 'land' ||
     value === 'planeswalker' ||
@@ -356,6 +364,7 @@ const TARGET_RESTRICTION_MEMBERS = {
   permanentSpellYouControl: true,
   activatedOrTriggeredAbilityYouControl: true,
   nonlandPermanentYouControl: true,
+  tokenYouControl: true,
   enchantment: true,
   land: true,
   planeswalker: true,
@@ -556,6 +565,13 @@ export function isLegalTarget(
     // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
     if (controller === undefined || permanent.controller !== controller) return false;
     return !isLand(permanent.def);
+  }
+  if (restriction === 'tokenYouControl') {
+    // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
+    if (controller === undefined || permanent.controller !== controller) return false;
+    // The CR 111.1 stamp, not a name heuristic: a token copy of a printed card
+    // answers true, the printed card answers false.
+    return permanent.def.isToken === true;
   }
   if (restriction === 'artifactOrCreatureYouControl') {
     // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
@@ -816,6 +832,17 @@ function enumerateTargets(
       }
     }
   }
+  if (restriction === 'tokenYouControl' && controller !== undefined) {
+    for (const permanent of state.battlefield) {
+      if (
+        permanent.controller === controller &&
+        permanent.def.isToken === true &&
+        isTargetableBy(state, permanent, controller, source, keywordIndex)
+      ) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
   if (restriction === 'creatureAnOpponentControls' && controller !== undefined) {
     for (const permanent of state.battlefield) {
       if (
@@ -1002,6 +1029,8 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'an activated or triggered ability you control';
     case 'nonlandPermanentYouControl':
       return 'a nonland permanent you control';
+    case 'tokenYouControl':
+      return 'a token you control';
     case 'enchantment':
       return 'an enchantment';
     case 'land':

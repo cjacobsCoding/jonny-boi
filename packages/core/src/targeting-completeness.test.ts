@@ -60,6 +60,8 @@ const ENCHANTMENT: CardDefinition = { id: 'zoo-enchantment', name: 'zoo-enchantm
 const LAND = landDef('zoo-land', 'G');
 const WALKER: CardDefinition = { id: 'zoo-walker', name: 'zoo-walker', types: ['planeswalker'], loyalty: 3 };
 const BATTLE: CardDefinition = { id: 'zoo-battle', name: 'zoo-battle', types: ['battle'], defense: 3 };
+// A token BEAR — the CR 111.1 stamp is what `tokenYouControl` reads.
+const TOKEN_BEAR: CardDefinition = { ...creatureDef('zoo-token-bear', 1, 1), isToken: true } as CardDefinition;
 const INSTANT = spellDef('zoo-instant', 'instant', []);
 const SORCERY = spellDef('zoo-sorcery', 'sorcery', []);
 
@@ -181,6 +183,7 @@ function buildZoo(withProtectedCreature = false): GameState {
   placePermanent(state, LAND, 'A');
   placePermanent(state, WALKER, 'A');
   placePermanent(state, BATTLE, 'A');
+  placePermanent(state, TOKEN_BEAR, 'A');
   placePermanent(state, BEAR, 'B');
   placePermanent(state, ARTIFACT, 'B');
   placePermanent(state, LAND, 'B');
