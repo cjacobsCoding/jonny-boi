@@ -64,11 +64,23 @@ export function SeatPanel({
       <header className="seat__head">
         <div className="seat__id">
           <span className="seat__name">{seat.name}</span>
+          {/*
+           * Life sits BESIDE the name, not across the panel from it. It used to
+           * be pushed to the far edge by a space-between header — an unlabeled
+           * "20" a full panel-width from every other number — and a bug report
+           * called it exactly that: "way off to the side, far from anything
+           * else - hard to notice". The heart is what makes a bare number read
+           * as a life total at a glance.
+           */}
+          <span
+            className={`seat__life${seat.life <= 5 ? ' seat__life--low' : ''}`}
+            title="Life total"
+            aria-label={`${seat.name} life`}
+          >
+            <span aria-hidden="true">❤</span> {seat.life}
+          </span>
           {isActive && <span className="seat__tag">active turn</span>}
           {hasPriority && <span className="seat__tag seat__tag--priority">priority</span>}
-        </div>
-        <div className={`seat__life${seat.life <= 5 ? ' seat__life--low' : ''}`} aria-label={`${seat.name} life`}>
-          {seat.life}
         </div>
       </header>
 
