@@ -162,9 +162,19 @@ throughput (games/sec) from regressing.
 | test/completeness-invariants | worker | TEST FILES ONLY (NEW: packages/core/src/targeting-completeness.test.ts, packages/cards/src/zone-leave-invariants.test.ts + pool-frame-integrity.test.ts, packages/ai/src/effect-value-parity.test.ts, packages/sim/src/offer-apply-exhaustive.test.ts, apps/web/src/lib/decklist/poolAlwaysPlayable.test.ts) + two EXPORT-ONLY runtime lists (packages/core/src/targeting.ts `ALL_TARGET_RESTRICTIONS`, packages/ai/src/effect-value.ts `PRICED_PRIMITIVE_IDS` — no index.ts change, tests import the modules directly), DESIGN §3.49, COORDINATION. **No behaviour change — no baseline can move.** All EIGHT §3.37–§3.45 fixes reverted one at a time: the generic layer went red every time (table in §3.49). | 🚧 PUSHED, not merged |
 | feat/fast-lookahead | worker | packages/ai (NEW `combat-forecast.ts` + `lookahead.ts` + `combat-forecast.test.ts` + `lookahead-pilot.test.ts`; `index.ts` registration/exports; `heuristic.ts` — `export` added to five existing combat helpers + one doc note, NO behaviour change), packages/sim/src/paired-arms.test.ts (ONE classification line its new-pilot guard demands), apps/web/src/lib/sim/pilots.ts (the TWO data rows — `PILOT_COPY` + `RELATIVE_GAME_COST` — that `pilots.test.ts` demands for any new selectable pilot, measured figures only) + apps/web/src/lib/play/ai-seat.ts (one id-list comment un-staled), DESIGN §3.47, COORDINATION. **Default pilot untouched; gauntlet seed-99 baselines re-measured byte-identical (224/575/413/537 per 800).** | 🚧 PUSHED, not merged |
 | fix/tmb-ui-findings | worker | apps/web ONLY (styles.css nav-overflow cues + `.result-count` token, views/about.css stat tiles, components/bug-reporter.css launcher, App.tsx nav wrap + measure effect, NEW lib/nav-overflow.ts + lib/contrast.ts + their tests, NEW styles-regressions.test.ts) + testmebro/findings/* bookkeeping, COORDINATION. **No packages/* change.** Fixes TMB-JB-0001..0004. | 🚧 PUSHED, not merged |
+| feat/pilot-pricing | worker | packages/ai ONLY (`effect-value.ts` — prices for the §3.49 unpriced-primitive ledger + the `LEDGER_PRICING_OFF_WEIGHTS` ablation preset; `weights.ts` new named weights; `choices.ts` — `answerSelectTargets` up-to-N clamp; `effect-value-parity.test.ts` ledger shrunk; NEW `ledger-pricing.test.ts`), DESIGN §3.52, COORDINATION. **No core, cards, sim or web change.** ⚠️ Prices change how the DEFAULT pilot aims triggers/modes/activations — pilot-ab verdict + seed-99 deltas + throughput cost in the §3.52 note before merge. | 🚧 CLAIMED, in progress |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-27 worker: CLAIMED `feat/pilot-pricing` — DESIGN **§3.52** (the §3.49 handoff: 20 registered
+  primitives unpriced, 15 pool-reachable, each a §3.42-class blind spot). Scope: packages/ai ONLY —
+  honest `EFFECT_VALUE` entries by params shape through the existing rulers, wrappers recursing
+  (`ifKicked`), the ledger shrunk, and the old value model kept reachable as a weights preset
+  (`LAND_SEQUENCING_OFF_WEIGHTS` pattern) so the pilot-ab old-vs-new comparison and the throughput
+  cost both run in ONE process. A price that measures worse ships as a finding, not a price.
+  Also carrying the user's new directive: pilot-side cost measured (interleaved best-of-N g/s,
+  default pilot, before vs after) and reported next to the strength verdict.
 
 - 2026-08-26 DESKTOP-90PJPM4 (integrator): **§3.47 + §3.49 MERGED; §3.50 default flipped to
   `lookahead`.** Re-verified before merging: pilot-ab 3754–3274 (STRONGER, p<1e-16), every deck row
