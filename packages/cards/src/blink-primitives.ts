@@ -92,7 +92,12 @@ function blinkOne(ctx: EffectContext, permanent: CardInstance): CardInstance | u
   removeFromCombat(ctx.state.combat, id);
   unattachDependentsOf(ctx.state, id, ctx.emit);
   dropContinuousEffectsFor(ctx.state, id);
-  return putOntoBattlefield(ctx, owner, id, 'exile', { controller: ctx.controller });
+  // "…return that card to the battlefield under ITS OWNER'S control"
+  // (Teleportation Circle) vs "…under YOUR control" (Cloudshift, Thassa). The
+  // printed words differ on exactly one board: a permanent you control but do
+  // not own — the first hands it back, the second keeps it for good.
+  const returnController = ctx.params.ownerControl === true ? owner : ctx.controller;
+  return putOntoBattlefield(ctx, owner, id, 'exile', { controller: returnController });
 }
 
 /** Is this permanent a legal thing for THIS effect to blink? */

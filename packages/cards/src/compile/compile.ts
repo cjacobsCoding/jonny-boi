@@ -1019,6 +1019,7 @@ export function compileCard(card: CompilableCard): CompileResult {
       const refs: EffectRef[] = [];
       let restriction: TargetRestriction | undefined;
       let excludeSelf = false;
+      let upToCount: number | undefined;
       let targetingParts = 0;
       for (const part of parts) {
         const partEffects = part.contribution.effects ?? [];
@@ -1041,13 +1042,28 @@ export function compileCard(card: CompilableCard): CompileResult {
         // aimed — the aiming pass reads `targetsExcludeSelf` when it builds the
         // candidate menu, and a flag left on the ref alone would exclude nothing.
         excludeSelf = partEffects.some((ref) => ref.params?.excludeSelf === true);
+        // A printed "UP TO N target …" rides the effect ref as `upToTargets`
+        // and is lifted onto the ability the same way: the aiming pass reads
+        // `targetCount` when it collects the chosen targets, and a number left
+        // on the ref alone would clamp nothing.
+        for (const ref of partEffects) {
+          const upTo = ref.params?.upToTargets;
+          if (typeof upTo === 'number' && Number.isFinite(upTo) && upTo > 0) {
+            upToCount = upTo;
+          }
+        }
       }
       // Two targets in one trigger is a template of its own; refusing keeps the
       // card reported rather than silently aiming both halves at one object.
       if (targetingParts > 1) return null;
       if (refs.length === 0) return null;
       if (restriction === undefined) return { effects: refs };
-      return { effects: refs, targets: restriction, ...(excludeSelf ? { targetsExcludeSelf: true } : {}) };
+      return {
+        effects: refs,
+        targets: restriction,
+        ...(excludeSelf ? { targetsExcludeSelf: true } : {}),
+        ...(upToCount !== undefined ? { targetCount: { min: 0, max: upToCount } } : {}),
+      };
     },
   };
 

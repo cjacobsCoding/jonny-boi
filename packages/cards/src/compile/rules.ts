@@ -2160,11 +2160,27 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
      * wordings for the same effect over the years, and a rule that matched only
      * today's phrasing would silently reject the other printing.
      */
+    // "up to one" (Thassa, Teleportation Circle) rides the ref as `upToTargets`
+    // — the trigger-body compiler lifts it onto the ability as a `targetCount`
+    // of 0..1, so declining is a real answer. "other" is the same
+    // `excludeSelf` lift Extravagant Replication uses. "under its owner's
+    // control" (Teleportation Circle) is a DIFFERENT return for a permanent you
+    // control but do not own, carried as `ownerControl` — see `blinkOne`.
     pattern:
-      /^exile target creature you control, then return (?:that card|it) to the battlefield under your control$/,
+      /^exile (up to one )?(other )?target (creature|artifact or creature) you control, then return (?:that card|it) to the battlefield under (your|its owner's) control$/,
     needsChosenTarget: true,
-    build() {
-      return effects({ primitive: 'blinkTarget', params: { targets: CREATURE_YOU_CONTROL_TARGET } });
+    build(match) {
+      const restriction =
+        match[3] === 'artifact or creature' ? ARTIFACT_OR_CREATURE_YOU_CONTROL_TARGET : CREATURE_YOU_CONTROL_TARGET;
+      return effects({
+        primitive: 'blinkTarget',
+        params: {
+          targets: restriction,
+          ...(match[1] !== undefined ? { upToTargets: 1 } : {}),
+          ...(match[2] !== undefined ? { excludeSelf: true } : {}),
+          ...(match[4] === "its owner's" ? { ownerControl: true } : {}),
+        },
+      });
     },
   },
   {
@@ -3451,6 +3467,7 @@ function triggerFrom(
         label,
         ...(body.targets ? { targets: body.targets } : {}),
         ...(body.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
+        ...(body.targetCount ? { targetCount: body.targetCount } : {}),
       },
     ],
   };
@@ -3536,6 +3553,7 @@ function optionalTriggerFrom(
         label,
         ...(compiled.targets ? { targets: compiled.targets } : {}),
             ...(compiled.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
+        ...(compiled.targetCount ? { targetCount: compiled.targetCount } : {}),
       },
     ],
   };
@@ -3854,6 +3872,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
             label: `Enters: you may ${body}`,
             ...(compiled.targets ? { targets: compiled.targets } : {}),
             ...(compiled.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
+        ...(compiled.targetCount ? { targetCount: compiled.targetCount } : {}),
           },
         ],
       };
@@ -3936,6 +3955,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
             label: `${scope} ${step}: ${match[3] ?? ''}`,
             ...(compiled.targets ? { targets: compiled.targets } : {}),
             ...(compiled.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
+        ...(compiled.targetCount ? { targetCount: compiled.targetCount } : {}),
           },
         ],
       };
@@ -4013,6 +4033,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
             label: `${another ? 'another ' : ''}${tokenWord ? `${tokenWord} ` : ''}${noun} (${who}) ${match[10]}: ${body}`,
             ...(compiled.targets ? { targets: compiled.targets } : {}),
             ...(compiled.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
+        ...(compiled.targetCount ? { targetCount: compiled.targetCount } : {}),
           },
         ],
       };

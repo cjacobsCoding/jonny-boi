@@ -356,4 +356,10 @@ export interface TriggerBodyResult {
   readonly targets?: import('@jonny-boi/core').TargetRestriction;
   /** A printed "ANOTHER target …" — the ability's own source is excluded. */
   readonly targetsExcludeSelf?: boolean;
+  /**
+   * A printed "UP TO N target …" — the aim may choose fewer, zero included.
+   * Hoisted from the effect ref's `upToTargets` param exactly as
+   * `targetsExcludeSelf` is, because the ability is what gets aimed.
+   */
+  readonly targetCount?: { readonly min: number; readonly max: number };
 }
