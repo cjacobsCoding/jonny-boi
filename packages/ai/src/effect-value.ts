@@ -51,6 +51,7 @@ import {
   matchesCardFilter,
   modalSpecOf,
   opponentOf,
+  PLAYER_IDS,
 } from '@jonny-boi/core';
 import type { CardFilter } from '@jonny-boi/core';
 import { cardValue, findInstance, type CardValueContext } from './card-value.js';
@@ -89,9 +90,20 @@ export function valueOfEffects(refs: readonly EffectRef[], ctx: EffectValueConte
   return total;
 }
 
-/** The value of one effect ref — a registry lookup, never a chain of `if`s. */
+/**
+ * The value of one effect ref — a registry lookup, never a chain of `if`s.
+ *
+ * TWO tables, one lookup order: `EFFECT_VALUE` always applies;
+ * `LEDGERED_EFFECT_VALUE` (the §3.52 prices for what the §3.49 ledger carried)
+ * applies only while `weights.priceLedgeredEffects` is on. The gate costs
+ * nothing on the ids the first table already prices — the boolean is read only
+ * on a first-table miss — and turning it off reproduces the pre-§3.52 model
+ * exactly, which is what keeps the §3.52 A/B re-runnable in one process.
+ */
 export function valueOfEffect(ref: EffectRef, ctx: EffectValueContext): number {
-  const score = EFFECT_VALUE[ref.primitive];
+  const score =
+    EFFECT_VALUE[ref.primitive] ??
+    (ctx.weights.priceLedgeredEffects ? LEDGERED_EFFECT_VALUE[ref.primitive] : undefined);
   return score ? score(ref.params ?? EMPTY_PARAMS, ctx) : ctx.weights.modeUnknownEffectScore;
 }
 
@@ -829,8 +841,358 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
 });
 
 /**
- * The primitive ids the value table prices, as a RUNTIME list — the keys of
- * {@link EFFECT_VALUE}, frozen at module load.
+ * §3.52 — prices for the primitives the §3.49 ledger carried as acknowledged
+ * blind spots. A second frozen table rather than more entries in the first for
+ * ONE reason: `weights.priceLedgeredEffects` can turn exactly this table off,
+ * which reproduces the pre-§3.52 value model (every id below scoring the flat
+ * `modeUnknownEffectScore`, wrapper bodies unread) so the strength and
+ * throughput comparisons behind §3.52 stay re-runnable in one process — the
+ * same discipline `LAND_SEQUENCING_OFF_WEIGHTS` established for §3.4e.
+ *
+ * Every entry prices by PARAMS SHAPE through the rulers the first table
+ * already uses (`valueOfEffects`, `cardValue`, `removalValue`, the board
+ * index); none of them knows a card name (DESIGN §1 — cards-package knowledge
+ * stays out of this package).
+ */
+const LEDGERED_EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
+  /**
+   * SCRY N — selection without card advantage, so it is priced off the same
+   * `modeSelectionValue` ruler as `reorderTopOfLibrary`, deepened per extra
+   * look and CAPPED at a draw's value: scry can converge on a draw's worth,
+   * never beat it (the invariant the selection weight's doc states). An empty
+   * library scries nothing and prices zero — which is also when this must
+   * lose to literally any other mode.
+   *
+   * ⚠️ Its absence was the ledger's most common blindness (29 pool refs): a
+   * scry-2 activation scored the same flat constant as anything unknown, so
+   * `bestFundedActivation` could never tell Castle Vantress from a blank.
+   */
+  scry: (params, ctx) => {
+    const who = subjectPlayer(params, 'who', 'controller', ctx);
+    if (who === undefined) return 0;
+    if (ctx.state.players[who].library.length === 0) return 0;
+    const value = selectionDepthValue(intParam(params, 'count', 1), ctx.weights);
+    return who === ctx.player ? value : -value;
+  },
+
+  /**
+   * SURVEIL N — same selection shape as scry, same price. The one printed
+   * difference (rejects go to the GRAVEYARD, not the bottom) is worth more
+   * only to a deck with graveyard synergies, and this vocabulary deliberately
+   * carries no synergy model — that omission is stated here rather than
+   * half-guessed with a bonus no measurement backs.
+   */
+  surveil: (params, ctx) => {
+    const who = subjectPlayer(params, 'who', 'controller', ctx);
+    if (who === undefined) return 0;
+    if (ctx.state.players[who].library.length === 0) return 0;
+    const value = selectionDepthValue(intParam(params, 'count', 1), ctx.weights);
+    return who === ctx.player ? value : -value;
+  },
+
+  /**
+   * +1/+1 / -1/-1 COUNTERS — a PERMANENT stat change, priced per stat point at
+   * `modeCounterPerStatValue` (between a pump that wears off and an Equipment
+   * grant). The sign logic mirrors `pumpUntilEndOfTurn` exactly, because the
+   * aiming mistake is the same one: a buff belongs on OUR creature and a
+   * shrink on THEIRS, and a flat price had the pilot unable to tell the two
+   * candidates apart ("put two +1/+1 counters on target creature" aimed at the
+   * first thing offered — the §3.42 failure, 19 pool refs wide).
+   *
+   * Three printed forms, all priced:
+   *  - the GROUP form (`each` + `scope` + `filter`) sums the stat swing over
+   *    every matching creature, ours positive, theirs negative;
+   *  - `self` (or a fallback with no target) is the source's own body —
+   *    priced as our side, which is whose trigger/cast is being scored;
+   *  - the aimed form reads the target: a lethal shrink prices as removal
+   *    (`toughnessLeft` — marked damage counts, CR 704.5g), a trim per stat.
+   */
+  addCounters: (params, ctx) => {
+    const amount = intParam(params, 'amount', 0);
+    if (amount === 0) return 0;
+    const weights = ctx.weights;
+    const statSwing = 2 * amount; // ±N/±N is 2N stat points, signed
+    if (boolParam(params, 'each')) {
+      const scope = strParam(params, 'scope') ?? 'you';
+      const filter = filterParamOf(params);
+      let net = 0;
+      for (const perm of ctx.state.battlefield) {
+        if (!isCreature(perm.def)) continue;
+        if (scope === 'you' && perm.controller !== ctx.player) continue;
+        if (scope === 'opponent' && perm.controller === ctx.player) continue;
+        if (filter && !matchesCardFilter(perm, filter)) continue;
+        net += perm.controller === ctx.player ? statSwing : -statSwing;
+      }
+      return net * weights.modeCounterPerStatValue;
+    }
+    const target = boolParam(params, 'self') ? undefined : firstTargetPermanent(ctx);
+    if (!target) {
+      // The source's own body ("~ enters with N +1/+1 counters"): our side.
+      return statSwing * weights.modeCounterPerStatValue;
+    }
+    if (amount > 0) {
+      return target.controller === ctx.player
+        ? statSwing * weights.modeCounterPerStatValue
+        : -weights.modeSelfHarmPenalty;
+    }
+    // -1/-1 counters: shrink-removal, the pump entry's negative branch.
+    if (target.controller === ctx.player) return -weights.modeSelfHarmPenalty;
+    return -amount >= toughnessLeft(target, ctx.index)
+      ? removalValue(target, weights, ctx.index)
+      : -statSwing * weights.modeCounterPerStatValue;
+  },
+
+  /**
+   * "IF THIS SPELL WAS KICKED, [body]" — a WRAPPER, and §3.42's exact shape:
+   * unpriced, its body was never read, so a kicker payoff was invisible. It
+   * recurses through the same `valueOfEffects` ruler as `mayEffects`, scaled
+   * by what is actually known about the kicker:
+   *
+   *  - a RESOLUTION that recorded the answer (`state.resolution.kicked`) uses
+   *    the truth — full body value kicked, zero unkicked;
+   *  - before that (a card being weighed, a mode being compared) the body is
+   *    worth `kickedClauseValueShare` of itself: the pilot has not agreed to
+   *    pay the kicker yet, the same "not yet paid for" caution
+   *    `createTokenCopy` documents for Rite of Replication's kicked five.
+   */
+  ifKicked: (params, ctx) => {
+    const inner = params['effects'];
+    if (!Array.isArray(inner)) return 0;
+    const kicked = ctx.state.resolution?.kicked;
+    if (kicked === false) return 0;
+    const body = valueOfEffects(inner as readonly EffectRef[], ctx);
+    return kicked === true ? body : body * ctx.weights.kickedClauseValueShare;
+  },
+
+  /**
+   * JAIL — "exile target … until this leaves" (O-Ring, Banisher Priest, Angel
+   * of Serenity). Priced by WHERE the aim lands, which is the whole decision
+   * (the engine parks a real `selectTargets` for these triggers, and a flat
+   * price meant the first candidate offered always won):
+   *
+   *  - an opponent's PERMANENT — removal, at removal's own price. The release
+   *    rider (it comes back if the jailer leaves) is real and unpriced here:
+   *    pricing it would need the opponent's removal held to our jailer's face,
+   *    which no other entry models either;
+   *  - our own graveyard CARD — a banked return (Angel of Serenity brings it
+   *    to HAND when she leaves), worth a share of the card;
+   *  - an opponent's graveyard card — denial that hands the card back to
+   *    their hand on release: a wash, priced zero;
+   *  - our own PERMANENT — the mistake the §3.42 class keeps making, priced
+   *    as one.
+   */
+  exileUntilLeaves: (_params, ctx) => {
+    let id: InstanceId | undefined;
+    for (const t of ctx.targets) {
+      if (t !== 'A' && t !== 'B') {
+        id = t;
+        break;
+      }
+    }
+    if (id === undefined) return 0;
+    const perm = ctx.state.battlefield.find((c) => c.instanceId === id);
+    if (perm) {
+      if (perm.controller === ctx.player) return -ctx.weights.modeSelfHarmPenalty;
+      return removalValue(perm, ctx.weights, ctx.index);
+    }
+    for (const owner of PLAYER_IDS) {
+      const yard = ctx.state.players[owner].graveyard;
+      for (let i = 0; i < yard.length; i++) {
+        if (yard[i]!.instanceId !== id) continue;
+        if (owner !== ctx.player) return 0;
+        return cardValue(yard[i], ctx.weights, ctx.cards) * ctx.weights.modeJailOwnYardShare;
+      }
+    }
+    return 0; // already gone — the usual dead-aim answer
+  },
+
+  /**
+   * The RELEASE half of the jail — "return the exiled cards". It runs off the
+   * jailer's own leave trigger, never as a play the pilot chooses, and WHAT it
+   * would release is written in a cards-package-private stamp on the exiled
+   * instances that this package deliberately does not read (DESIGN §1 — no
+   * cross-package state knowledge). Priced ZERO: honest about not knowing,
+   * and strictly better than the flat unknown constant it replaces, which
+   * counted freeing the opponent's jailed creature as UPSIDE every time a
+   * blink of the jailer was scored.
+   */
+  returnExiledByThis: () => 0,
+
+  /**
+   * THEFT-FOR-THE-TURN (Act of Treason): worth the stolen body's power at
+   * `modeTheftPerPowerValue` — it cannot block us this turn AND it swings for
+   * us, which is why the rate sits above tapping the same body and far below
+   * killing it (they get it back at cleanup). `Math.max(power, 1)` for the
+   * same reason `tapTarget` has it: stealing a 0-power wall still denies the
+   * block. Stealing our own creature does nothing and prices as the mistake.
+   */
+  gainControl: (_params, ctx) => {
+    const perm = firstTargetPermanent(ctx);
+    if (!perm || !isCreature(perm.def)) return 0;
+    if (perm.controller === ctx.player) return -ctx.weights.modeSelfHarmPenalty;
+    return ctx.weights.modeTheftPerPowerValue * Math.max(effPower(perm, ctx.index), 1);
+  },
+
+  /**
+   * The MASS keyword grant ("creatures you control gain indestructible until
+   * end of turn" — Boros Charm's third mode). Worth a pump-sized amount per
+   * body per keyword: real, scales with the board it actually reaches, and
+   * ZERO on an empty board — where the flat unknown constant used to make
+   * this mode beat drawing a card on a board with nothing to protect.
+   * What it deliberately does not price: the sweeper it might blank (that
+   * needs the opponent's hand) — so it stays a floor, never a headline.
+   */
+  grantKeywordToYoursUntilEndOfTurn: (params, ctx) => {
+    const kw = params['keywords'];
+    if (typeof kw !== 'object' || kw === null) return 0;
+    let kwCount = 0;
+    for (const key in kw as Record<string, unknown>) {
+      if ((kw as Record<string, unknown>)[key] === true) kwCount++;
+    }
+    if (kwCount === 0) return 0;
+    const types = strArrayParam(params, 'anyOfTypes');
+    const toOpponent = strParam(params, 'scope') === 'opponent';
+    const beneficiary = toOpponent ? opponentOf(ctx.player) : ctx.player;
+    let bodies = 0;
+    for (const perm of ctx.state.battlefield) {
+      if (perm.controller !== beneficiary) continue;
+      if (types.length > 0) {
+        const permTypes: readonly string[] = perm.def.types;
+        if (!types.some((t) => permTypes.includes(t))) continue;
+      }
+      bodies++;
+    }
+    const value = bodies * kwCount * ctx.weights.modePumpPerStatValue;
+    return toOpponent ? -value : value;
+  },
+
+  /**
+   * MILL — a real clock only in bulk, so each card is worth the small
+   * `modeMillPerCardValue` against an opponent… until the mill would EMPTY
+   * the library, which is the near-win the decking rule makes it (they lose
+   * on their next draw) and prices as one. Self-mill is the same rate as a
+   * LOSS — the graveyard value it might feed (flashback, Snapcaster) is a
+   * synergy this vocabulary does not model, stated rather than guessed — and
+   * self-mill that would empty our own library prices as the catastrophe the
+   * draw entry already knows (`modeSelfDeckPenalty`).
+   */
+  mill: (params, ctx) => {
+    const amount = intParam(params, 'amount', 0);
+    if (amount <= 0) return 0;
+    const victim = boolParam(params, 'self')
+      ? ctx.player
+      : (firstPlayerTarget(ctx) ?? opponentOf(ctx.player));
+    const library = ctx.state.players[victim].library.length;
+    if (library === 0) return 0;
+    if (victim === ctx.player) {
+      return amount >= library ? -ctx.weights.modeSelfDeckPenalty : -ctx.weights.modeMillPerCardValue * amount;
+    }
+    return amount >= library ? ctx.weights.lethalBurnScore : ctx.weights.modeMillPerCardValue * amount;
+  },
+
+  /**
+   * DAMAGE TO EACH — the Pyroclasm/Guttersnipe family. The creature half is
+   * `destroyAll`'s trade (kill theirs, lose ours, same per-stat weights and
+   * the same scaling) gated by whether `amount` actually kills each body
+   * (`toughnessLeft`, so marked damage counts) and skipping indestructible
+   * exactly as the sweeper entry does; survivors are not priced, also exactly
+   * like the sweeper (chip on a survivor buys nothing here). The player half
+   * prices like `dealDamage`'s face: lethal wins, otherwise a chip — and the
+   * self half of "each player" is a life LOSS at the same rate `loseLife`
+   * charges, or the game if it would finish us.
+   */
+  dealDamageToEach: (params, ctx) => {
+    const amount = intParam(params, 'amount', 0);
+    if (amount <= 0) return 0;
+    const weights = ctx.weights;
+    let net = 0;
+    if (boolParam(params, 'creatures')) {
+      let stats = 0;
+      for (const perm of ctx.state.battlefield) {
+        if (!isCreature(perm.def)) continue;
+        if (isIndestructible(ctx, perm)) continue;
+        if (toughnessLeft(perm, ctx.index) > amount) continue;
+        const total = statTotal(perm, ctx.index);
+        stats += perm.controller === ctx.player ? -total * weights.ownCreatureLossPerStat : total * weights.killEnemyPerStat;
+      }
+      net += stats * weights.removalPerPowerOfTarget;
+    }
+    const hitsEveryPlayer = boolParam(params, 'players');
+    if (hitsEveryPlayer || boolParam(params, 'opponents')) {
+      const opponent = opponentOf(ctx.player);
+      net += amount >= ctx.state.players[opponent].life ? weights.lethalBurnScore : weights.burnFaceBaseScore;
+    }
+    if (hitsEveryPlayer) {
+      net -=
+        amount >= ctx.state.players[ctx.player].life
+          ? weights.lethalBurnScore
+          : lifeSwing(amount, ctx, EMPTY_PARAMS);
+    }
+    return net;
+  },
+
+  /**
+   * "As ~ enters, choose a …" — the naming itself moves nothing on the board;
+   * the payoff is the STATIC that reads the named value, and statics are
+   * priced where statics live. Zero is the honest price of the ref, and it
+   * fixes a real distortion: the flat unknown constant made every
+   * name-a-value card's cast score carry twenty points of phantom value.
+   */
+  chooseAsEnters: () => 0,
+
+  /**
+   * The Puzzle-Box wheel half — a hand swapped for the same number of fresh
+   * cards. No card advantage either way, so it prices as SELECTION for
+   * whoever's hand it churns (ours positive, theirs negative), and zero on an
+   * empty hand, where the printed card also does nothing.
+   */
+  handToBottomThenDraw: (params, ctx) => {
+    const who = subjectPlayer(params, 'who', 'controller', ctx);
+    if (who === undefined) return 0;
+    if (ctx.state.players[who].hand.length === 0) return 0;
+    return who === ctx.player ? ctx.weights.modeSelectionValue : -ctx.weights.modeSelectionValue;
+  },
+
+  /**
+   * The PERSIST return — the dead creature comes back, smaller. Worth a
+   * creature cast's base minus the -1/-1 counters' permanent stat cost, floored
+   * at zero. The body's own size is deliberately not read: this ref is priced
+   * without its source (the value context carries targets, not the dying
+   * card), and a base-plus-shrink floor is the honest number that remains.
+   */
+  persistReturn: (params, ctx) => {
+    const minus = Math.max(intParam(params, 'minusCounters', 1), 0);
+    return Math.max(
+      ctx.weights.castCreatureBaseScore - minus * 2 * ctx.weights.modeCounterPerStatValue,
+      0,
+    );
+  },
+
+  /**
+   * The Delver flip check — look at the top card, maybe transform. The LOOK
+   * is real selection-adjacent value every upkeep; the flip's odds depend on
+   * what the library holds, which this vocabulary cannot see and does not
+   * guess at. Selection value, flat.
+   */
+  transformRevealTop: (_params, ctx) => ctx.weights.modeSelectionValue,
+});
+
+/**
+ * The §3.46 build-comparison preset: merge over any weight set to run the
+ * PRE-§3.52 value model in the same process as the shipped one — the exact
+ * pattern `LAND_SEQUENCING_OFF_WEIGHTS` committed for §3.4e, and the way
+ * §3.52's pilot-ab verdict and throughput cost were measured (old model and
+ * new model as two registered pilot ids, one process, matched seeds).
+ */
+export const LEDGER_PRICING_OFF_WEIGHTS: Readonly<Partial<HeuristicWeights>> = Object.freeze({
+  priceLedgeredEffects: false,
+});
+
+/**
+ * The primitive ids the value tables price, as a RUNTIME list — the keys of
+ * {@link EFFECT_VALUE} and {@link LEDGERED_EFFECT_VALUE}, frozen at module
+ * load. (The ledgered table's ids belong here unconditionally: the ablation
+ * switch exists for measurement, and the DEFAULT weights price them.)
  *
  * EXPORT-ONLY: nothing in this package reads it. It exists for the §3.49
  * parity invariant, which compares "registered in the cards package" against
@@ -839,10 +1201,24 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
  * `modeUnknownEffectScore` with their bodies never read). A test that parsed
  * this file's source instead would drift with formatting; the keys cannot.
  */
-export const PRICED_PRIMITIVE_IDS: readonly string[] = Object.freeze(Object.keys(EFFECT_VALUE));
+export const PRICED_PRIMITIVE_IDS: readonly string[] = Object.freeze([
+  ...Object.keys(EFFECT_VALUE),
+  ...Object.keys(LEDGERED_EFFECT_VALUE),
+]);
 
 /** "Tap all creatures" is the overwhelmingly common form, so it is the default. */
 const DEFAULT_TAP_TYPES: readonly string[] = Object.freeze(['creature']);
+
+/**
+ * What looking `count` cards deep (scry/surveil) is worth: the selection value
+ * of the first look plus a diminishing share per extra card, capped at a
+ * draw — deep selection converges on a card, it never becomes more than one.
+ */
+function selectionDepthValue(count: number, weights: HeuristicWeights): number {
+  if (count <= 0) return 0;
+  const value = weights.modeSelectionValue * (1 + (count - 1) * weights.modeSelectionExtraCardShare);
+  return Math.min(value, weights.modeDrawCardValue);
+}
 
 /** Life gained/lost by whoever the effect names, valued from `ctx.player`'s seat. */
 function lifeSwing(

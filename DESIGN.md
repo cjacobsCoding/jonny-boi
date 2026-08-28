@@ -3526,6 +3526,127 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
+### 3.52 Pricing the §3.49 ledger — fourteen blind spots opened, and what the yardstick could not see — ✅ done
+
+§3.49 left twenty registered primitives on an enforced unpriced ledger, each scoring the flat
+`modeUnknownEffectScore` — the §3.42 class: every candidate ties, the first offered wins, and a
+wrapper's nested body is never read. This section prices **fourteen** of them (every pool-reachable
+row but one), through the same rulers everything else already uses — `valueOfEffects` recursion,
+`cardValue`, `removalValue`, the continuous board index — by **params shape only** (no card names in
+`packages/ai`). Highlights of what each price fixes, with the honest caveat stated at the entry:
+
+- **`scry` / `surveil`** — selection deepened per look, CAPPED at a draw's value; an empty library
+  prices zero. Surveil deliberately prices *identical* to scry: the graveyard upside needs a synergy
+  model this vocabulary does not have, and a guessed bonus is exactly what §3.45 warns about.
+- **`addCounters`** — the `pumpUntilEndOfTurn` sign logic (ours/buff, theirs/shrink, lethal shrink =
+  removal via `toughnessLeft`) at a new PERMANENT-stat rate (`modeCounterPerStatValue`, between the
+  pump that wears off and the Equipment grant), all three printed forms (aimed / `self` / `each`).
+- **`ifKicked`** — a WRAPPER that now recurses (§3.49's generic wrapper property enforces it): full
+  body when `state.resolution.kicked` says paid, zero when it says unpaid, and
+  `kickedClauseValueShare` of the body before the pilot has agreed to pay (the `createTokenCopy`
+  "not yet paid for" caution).
+- **`exileUntilLeaves`** — the jail aimed as the card is played: an opponent's permanent prices as
+  removal, our own graveyard card as a banked half-card (`modeJailOwnYardShare` — Angel of Serenity
+  returns it to HAND when she leaves), their graveyard card as the wash it is (the tuck-to-their-hand
+  rider cancels the denial), and our own permanent as the self-harm mistake. **`returnExiledByThis`**
+  (the release half) prices ZERO — what it would free is written in a cards-package-private stamp
+  this package refuses to read, and zero at least stops a release counting as UPSIDE in a blink score.
+- **`gainControl`** — theft-for-the-turn at `modeTheftPerPowerValue` per power: above tapping the
+  same body, far below killing it. **`grantKeywordToYoursUntilEndOfTurn`** — per body it actually
+  reaches, ZERO on an empty board (where the flat constant used to outbid drawing a card).
+  **`mill`** — small pressure per card, the near-win (`lethalBurnScore`) when it empties a library,
+  negative for self-mill and `modeSelfDeckPenalty` when it would empty our own.
+  **`dealDamageToEach`** — `destroyAll`'s two-sided trade gated by `toughnessLeft` per body plus
+  `dealDamage`'s face pricing (lethal wins; "each player" charges our life at the `loseLife` rate).
+  **`chooseAsEnters`** ZERO (the naming is free; the static that reads it is priced where statics
+  live), **`handToBottomThenDraw`** ±selection by whose hand wheels, **`persistReturn`** a
+  creature-return floor shrunk by its -1/-1 counters, **`transformRevealTop`** a selection-sized look.
+
+**The "up to N" clamp the prices unlock.** `answerSelectTargets` took `choice.max` targets always —
+as good as anything while every candidate tied at the flat constant, and a measurable blunder once
+real prices exist (an Angel of Serenity filling "up to three" with its controller's own creatures).
+It now takes every target worth more than not aiming, never fewer than `choice.min` —
+`answerChooseModes`' exact rule — and keeps the old take-the-cap behaviour when the effects cannot
+be priced at all (an unknown ability is probably still doing something: the `modeUnknownEffectScore`
+presumption, kept consistent).
+
+**⚠️ `attachToTarget` (42 pool cards) STAYS on the ledger, and that is the measured finding, not an
+omission.** The brief-level claim was "42 cards of Auras/Equipment aimed by a pilot that scores every
+host identically". The code says otherwise: every live decision that aims this ref goes AROUND the
+value table — the 24 Equip activations through `bestEquipPlay` (host-aware: `scoreEquip` +
+`equipIsAnUpgrade`), the 18 Aura casts through the `attachment` intent (`biggestThreat` host, the
+grant's own sign choosing whose board) — and no pool trigger, mode, or funded activation carries the
+ref where `valueOfEffects` would read it. The ref also CANNOT be priced honestly by params shape:
+its value IS the source card's `attachment.modifies`, and `EffectValueContext` does not carry the
+source. A price here would be dead code wearing a green checkmark; the sharpened ledger row says so,
+and the parity sweep holds the row up for re-judging the day a trigger or mode ever carries it. The
+five pool-unreachable rows (`createEmblem`, `fight`, `returnChosenToHand`, `wardCounterUnlessPaid`,
+`blinkSelf`) stay ledgered unchanged. **Ledger: 20 rows → 6.**
+
+**📊 The yardstick could not see this change — and proving WHY is the finding.** On §3.46's committed
+yardstick (`pilot-ab`, new pricing vs the exact pre-§3.52 model as a second registered id, §3.46
+protocol #1, 7,200 games): **3530–3530, every one of the nine deck rows EXACTLY level, 3,600 of
+3,600 matched slots split, 0 decided, p = 1** — not "no significant difference" but **byte-identical
+play**, the same shape as the same-id control. The reason is structural: across all nine sample
+decks exactly ONE card (Kitchen Finks, Orzhov) references ANY newly priced primitive, and its
+`persistReturn` sits in a dies trigger no decision ever aims. The gauntlet meta simply never
+consults these prices. That is simultaneously the strongest possible **neutral-safe** result (the
+change cannot regress what it cannot touch) and an honest statement that the nine-deck matrix is
+blind to pool-facing pilot improvements — Lab-built decks, imports, and the suggestion engine are
+where they bite.
+
+**📊 So the strength proof ran the same committed harness on a deck that DOES consult them**
+(`runPilotAb` with a fourth deck built from pool cards — Banisher Priest, Fiend Hunter, Angel of
+Serenity, Youthful Valkyrie, Restoration Angel — against three unmodified sample decks, 6 pairs ×
+2 orientations × 150 games = 1,800 games, matched seeds):
+
+> **priced 1013 – 768 pre-§3.52** (19 draws) · matched slots **132 A-ahead / 10 B-ahead** of 142
+> decided · McNemar p ≈ 0 (< 1e-16) · **VERDICT: STRONGER** · 59.3 games/sec
+
+| deck driven | priced wins | pre-§3.52 wins | priced share |
+|---|---|---|---|
+| Serenity Jail (the aim-heavy fixture) | 332 | 208 | **61.5%** |
+| Mono-Green Ramp | 313 | 234 | 57.2% |
+| UW Control | 241 | 208 | 53.7% |
+| Mono-Red Aggro | 127 | 118 | 51.8% |
+
+The priced pilot wins driving EVERY deck — including the unmodified sample decks, because the games
+they gain are the ones where the OLD pilot mis-aims the jail across the table (its Banisher Priest
+exiling its own board is a win handed to whoever is opposite).
+
+**📊 Throughput (the §3.50-era directive: smarter must not mean slower).** Interleaved best-of-5,
+one process, 60 games per burst per arm, alternating order so box drift cancels:
+
+| matchup | priced (ON) best / median | pre-§3.52 (OFF) best / median | reading |
+|---|---|---|---|
+| Mono-Red vs Boros (identical play) | 129.4 / 125.7 g/s | 131.7 / 125.7 g/s | −1.7% best, 0.0% median — noise |
+| Selesnya vs UW (identical play) | 59.8 / 58.4 g/s | 60.6 / 58.8 g/s | −1.4% best, −0.7% median — noise |
+| Serenity Jail vs Mono-Green (prices ACTIVE) | **52.6 / 51.9 g/s** | 48.2 / 45.9 g/s | ON is **9–13% FASTER** |
+
+The first two rows isolate the pricing layer's pure overhead (their games are byte-identical between
+arms): nothing measurable. The third conflates per-decision cost with game length — and lands on the
+right side anyway, because correct aiming ends games sooner (§3.45's "longer games, not slower code"
+caveat, in reverse). The gate itself costs previously-priced ids NOTHING by construction: the
+`priceLedgeredEffects` boolean is read only on a first-table miss. Yardstick mixed run: 72.6 g/s on
+a box also running another agent's builds (§3.50 recorded 75.7 quiet).
+
+**⚠️ Recorded seed-99 baselines: UNMOVED, byte-identical** — Mono-Red **257/800**, Selesnya Blink
+**615/800**, UW Control **377/800**, Mono-Green Ramp **552/800** (the §3.50 rows exactly), which is
+what the byte-identical yardstick predicts: no sample-deck decision routes through the new prices.
+
+**Reproducibility.** The pre-§3.52 value model stays reachable forever as data:
+`LEDGER_PRICING_OFF_WEIGHTS` (exported beside `LAND_SEQUENCING_OFF_WEIGHTS`, same pattern) makes
+every §3.52 entry score the flat constant again with wrapper bodies unread — so both the strength
+and throughput comparisons above re-run in ONE process from a registered second id, any time.
+
+**Files.** `packages/ai` ONLY: `effect-value.ts` (the `LEDGERED_EFFECT_VALUE` table + the one-read
+gate + the preset), `weights.ts` (seven named weights, each with its ordering argument),
+`choices.ts` (the up-to-N clamp + `countPositive`), `effect-value-parity.test.ts` (ledger 20 → 6,
+`attachToTarget` reason rewritten to the measured one), NEW `ledger-pricing.test.ts` (32 tests:
+per-entry §3.42-style pairs — right aim wins, self-harm negative, dead aims zero — the Angel of
+Serenity real-consumer aim through `answerChoiceHeuristically`, and the OFF-switch contract pinned
+in both directions).
+
 ### 3.50 The default pilot is now `lookahead` — ✅ done
 
 §3.47 shipped the pilot as a candidate and left the flip as "the integrator's measured call". Taken,

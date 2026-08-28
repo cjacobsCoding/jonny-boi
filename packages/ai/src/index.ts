@@ -158,6 +158,15 @@ export type { HeuristicWeights } from './weights.js';
 export { DEFAULT_HEURISTIC_WEIGHTS } from './weights.js';
 
 /**
+ * THE §3.52 ABLATION PRESET — merge over any weight set to run the pre-§3.52
+ * value model (the §3.49 ledger's primitives scoring the flat unknown constant
+ * again). Exported for the same reason `LAND_SEQUENCING_OFF_WEIGHTS` is: it is
+ * how the §3.52 strength and throughput comparisons run both arms in ONE
+ * process, and how anyone re-checks them later.
+ */
+export { LEDGER_PRICING_OFF_WEIGHTS } from './effect-value.js';
+
+/**
  * Answering core's player CHOICES. Pilots use these automatically; they are
  * exported so any other consumer that has to answer on a player's behalf (a
  * hotseat "auto-play this seat" control, a server filling in for a disconnected
