@@ -1092,62 +1092,151 @@ export function replaySoakMixedGame(options: SoakReplayOptions): SoakReplayResul
   return { violations: played.violations, decks: describeMatchup(deckA, deckB, nameOf) };
 }
 
-export function runSoak(options: SoakOptions): SoakReport {
-  const sim = soakSimConfig(options.sim);
-  const index = indexPoolForSoak(options.pool.cards);
-  const nameOf = (id: string) => options.pool.get(id)?.name ?? id;
-  const required = requiredMechanicsOf(index);
+/**
+ * The serialisable knobs one soak slice re-runs under — everything in
+ * `SoakOptions` that is DATA rather than a live object, so a worker thread can
+ * be handed them over `postMessage` and rebuild identical options against its
+ * own pool/registry/pilot (DESIGN §3.53).
+ */
+export interface SoakSliceSettings {
+  readonly mixedGames: number;
+  readonly anchorAttempts?: number;
+  readonly sim?: SimConfig;
+  readonly leakScanEvery?: number;
+  readonly equivalenceEvery?: number;
+}
 
-  /*
-   * The sampled checks apply to BOTH halves. The anchored half is where the
-   * exotic systems live (a transform deck, a madness deck), so scanning only the
-   * mixed half would aim the two most expensive checks away from the cards most
-   * likely to break them. The stride runs over the global game index, so the
-   * anchored games at 0, 31, 62 … are the ones that get scanned.
-   */
-  const withSampling: SoakOptions = {
+/** Rebuild full `SoakOptions` from a live context + slice settings (worker side). */
+export function soakOptionsFor(
+  context: { readonly pool: CardPool; readonly registry: EffectRegistry; readonly pilot: Pilot },
+  settings: SoakSliceSettings,
+  baseSeed: number,
+): SoakOptions {
+  return {
+    pool: context.pool,
+    registry: context.registry,
+    pilot: context.pilot,
+    mixedGames: settings.mixedGames,
+    baseSeed,
+    ...(settings.anchorAttempts !== undefined ? { anchorAttempts: settings.anchorAttempts } : {}),
+    ...(settings.sim !== undefined ? { sim: settings.sim } : {}),
+    ...(settings.leakScanEvery !== undefined ? { leakScanEvery: settings.leakScanEvery } : {}),
+    ...(settings.equivalenceEvery !== undefined ? { equivalenceEvery: settings.equivalenceEvery } : {}),
+  };
+}
+
+/**
+ * One PART of a soak run — the anchored half, or a contiguous range of the
+ * mixed half. Every field is an exact count or an ordered list, so parts played
+ * on different worker threads concatenate (in canonical order) into precisely
+ * the run the single thread would have produced — including
+ * {@link SoakReport.mechanicGames}'s insertion order, which decides tie order
+ * in the printed report and is why `firedPerGame` is an ORDERED list of lists
+ * rather than a pre-summed map.
+ */
+export interface SoakPartial {
+  readonly games: number;
+  readonly turns: number;
+  readonly actions: number;
+  readonly timeouts: number;
+  readonly actionCapHits: number;
+  readonly loopDraws: number;
+  readonly wins: Readonly<Record<PlayerId, number>>;
+  readonly violations: readonly SoakViolation[];
+  /** Mechanics witnessed per game, in game order (a game's Set, in firing order). */
+  readonly firedPerGame: readonly (readonly SoakMechanicId[])[];
+  readonly leakScanObservations: number;
+}
+
+/** The mutable accumulator behind one {@link SoakPartial}. */
+interface SoakPartAccumulator {
+  games: number;
+  turns: number;
+  actions: number;
+  timeouts: number;
+  actionCapHits: number;
+  loopDraws: number;
+  readonly wins: Record<PlayerId, number>;
+  readonly violations: SoakViolation[];
+  readonly firedPerGame: SoakMechanicId[][];
+  leakScanObservations: number;
+}
+
+function emptySoakPart(): SoakPartAccumulator {
+  return {
+    games: 0,
+    turns: 0,
+    actions: 0,
+    timeouts: 0,
+    actionCapHits: 0,
+    loopDraws: 0,
+    wins: { A: 0, B: 0 },
+    violations: [],
+    firedPerGame: [],
+    leakScanObservations: 0,
+  };
+}
+
+/**
+ * The sampled checks apply to BOTH halves. The anchored half is where the
+ * exotic systems live (a transform deck, a madness deck), so scanning only the
+ * mixed half would aim the two most expensive checks away from the cards most
+ * likely to break them. The stride runs over the GLOBAL game index, so the
+ * anchored games at 0, 31, 62 … are the ones that get scanned.
+ */
+function withSoakSampling(options: SoakOptions): SoakOptions {
+  return {
     ...options,
     leakScanEvery: options.leakScanEvery ?? SOAK_LEAK_SCAN_SAMPLE_EVERY,
     equivalenceEvery: options.equivalenceEvery ?? SOAK_EQUIVALENCE_SAMPLE_EVERY,
   };
+}
 
-  const violations: SoakViolation[] = [];
-  const mechanicGames = new Map<SoakMechanicId, number>();
-  const wins: Record<PlayerId, number> = { A: 0, B: 0 };
-  let games = 0;
-  let turns = 0;
-  let actions = 0;
-  let timeouts = 0;
-  let actionCapHits = 0;
-  let loopDraws = 0;
-  let leakScanObservations = 0;
-  const cpuStart = process.cpuUsage();
+/** Fold one played game into a part. `tick` reports games played IN THIS PART. */
+function accountGame(
+  part: SoakPartAccumulator,
+  played: { readonly violations: readonly SoakViolation[]; readonly scanned: number; readonly mechanics: ReadonlySet<SoakMechanicId> },
+  result: MatchResult | null,
+  sim: SimConfig,
+  tick: ((gamesInPart: number) => void) | undefined,
+): void {
+  part.violations.push(...played.violations);
+  part.leakScanObservations += played.scanned;
+  part.firedPerGame.push([...played.mechanics]);
+  part.games++;
+  if (!result) return; // a game the invariants aborted still counts, but is not ticked — pre-§3.53 behaviour, exactly
+  part.turns += result.turns;
+  part.actions += result.actions;
+  if (result.outcome.kind === 'win') part.wins[result.outcome.winner]++;
+  else part.timeouts++;
+  if (result.actions >= sim.maxActionsPerGame) part.actionCapHits++;
+  if (result.outcome.kind === 'loop') part.loopDraws++;
+  tick?.(part.games);
+}
 
-  const total =
-    options.mixedGames + (options.anchorAttempts ? required.length * options.anchorAttempts : 0);
+/**
+ * THE ANCHORED HALF — one matchup per mechanic the pool prints, retrying up to
+ * `anchorAttempts` seeds until the mechanic fires. Inherently SEQUENTIAL: the
+ * global game index each game runs at (which decides whether the sampled
+ * leak/equivalence checks land on it) depends on how many attempts every
+ * earlier mechanic took, so this half is one indivisible part.
+ */
+export function runSoakAnchored(
+  options: SoakOptions,
+  tick?: (gamesInPart: number) => void,
+): SoakPartial {
+  const sim = soakSimConfig(options.sim);
+  const index = indexPoolForSoak(options.pool.cards);
+  const nameOf = (id: string) => options.pool.get(id)?.name ?? id;
+  const required = requiredMechanicsOf(index);
+  const withSampling = withSoakSampling(options);
+  const part = emptySoakPart();
 
-  const tally = (fired: ReadonlySet<SoakMechanicId>) => {
-    for (const id of fired) mechanicGames.set(id, (mechanicGames.get(id) ?? 0) + 1);
-  };
-
-  const account = (result: MatchResult | null) => {
-    games++;
-    if (!result) return;
-    turns += result.turns;
-    actions += result.actions;
-    if (result.outcome.kind === 'win') wins[result.outcome.winner]++;
-    else timeouts++;
-    if (result.actions >= sim.maxActionsPerGame) actionCapHits++;
-    if (result.outcome.kind === 'loop') loopDraws++;
-    options.onGame?.(games, total);
-  };
-
-  // --- the anchored half ------------------------------------------------------
   const attempts = options.anchorAttempts ?? 0;
   for (let m = 0; m < required.length && attempts > 0; m++) {
     const mechanic = required[m]!;
     for (let attempt = 0; attempt < attempts; attempt++) {
-      const gameIndex = games;
+      const gameIndex = part.games;
       const seed = gameSeedFor(options.baseSeed, m * attempts + attempt);
       const deckA = buildAnchoredDeck(index, mechanic, seed);
       // The opponent is anchored on a DIFFERENT mechanic, rotating, so an
@@ -1157,28 +1246,84 @@ export function runSoak(options: SoakOptions): SoakReport {
       const deckB = buildAnchoredDeck(index, other, seed ^ 0x5bf03635) ?? buildMixedDeck(index, seed ^ 0x5bf03635);
       if (!deckA) break; // the pool cannot anchor it — reported by the inert list
       const played = playOne(withSampling, deckA, deckB, seed, gameIndex, sim, nameOf);
-      violations.push(...played.violations);
-      leakScanObservations += played.scanned;
-      tally(played.mechanics);
-      account(played.result);
+      accountGame(part, played, played.result, sim, tick);
       if (played.mechanics.has(mechanic)) break; // it fired — stop spending seeds
     }
   }
+  return part;
+}
 
-  // --- the mixed half ---------------------------------------------------------
-  for (let g = 0; g < options.mixedGames; g++) {
-    const gameIndex = games;
+/**
+ * MIXED games `[gameStart, gameEnd)` of the run's `mixedGames` — the parallel
+ * unit. Each game's seed and decks are pure functions of its ABSOLUTE mixed
+ * index `g`, and its global game index is `firstGameIndex + g` (the anchored
+ * half's game count — the caller knows it because the anchored half ran first),
+ * so a range plays byte-identical games to that stretch of the sequential run,
+ * sampled checks included.
+ */
+export function runSoakMixedRange(
+  options: SoakOptions,
+  firstGameIndex: number,
+  gameStart: number,
+  gameEnd: number,
+  tick?: (gamesInPart: number) => void,
+): SoakPartial {
+  const sim = soakSimConfig(options.sim);
+  const index = indexPoolForSoak(options.pool.cards);
+  const nameOf = (id: string) => options.pool.get(id)?.name ?? id;
+  const withSampling = withSoakSampling(options);
+  const part = emptySoakPart();
+
+  for (let g = gameStart; g < gameEnd; g++) {
+    const gameIndex = firstGameIndex + g;
     const seed = gameSeedFor(options.baseSeed ^ 0x1d872b41, g);
     const deckA = buildMixedDeck(index, seed);
     const deckB = buildMixedDeck(index, seed ^ 0x27d4eb2f);
     const played = playOne(withSampling, deckA, deckB, seed, gameIndex, sim, nameOf);
-    violations.push(...played.violations);
-    leakScanObservations += played.scanned;
-    tally(played.mechanics);
-    account(played.result);
+    accountGame(part, played, played.result, sim, tick);
+  }
+  return part;
+}
+
+/**
+ * Reduce parts (in canonical order: anchored first, then mixed ranges by game
+ * start) to the one `SoakReport`. Tallies are replayed game by game, in order,
+ * so the mechanics map's insertion order — and therefore the printed report —
+ * is identical to the single-threaded run's.
+ */
+export function finishSoak(
+  pool: CardPool,
+  parts: readonly SoakPartial[],
+  cpuMillis: number,
+): SoakReport {
+  const required = requiredMechanicsOf(indexPoolForSoak(pool.cards));
+  const mechanicGames = new Map<SoakMechanicId, number>();
+  const wins: Record<PlayerId, number> = { A: 0, B: 0 };
+  const violations: SoakViolation[] = [];
+  let games = 0;
+  let turns = 0;
+  let actions = 0;
+  let timeouts = 0;
+  let actionCapHits = 0;
+  let loopDraws = 0;
+  let leakScanObservations = 0;
+
+  for (const part of parts) {
+    games += part.games;
+    turns += part.turns;
+    actions += part.actions;
+    timeouts += part.timeouts;
+    actionCapHits += part.actionCapHits;
+    loopDraws += part.loopDraws;
+    wins.A += part.wins.A;
+    wins.B += part.wins.B;
+    violations.push(...part.violations);
+    leakScanObservations += part.leakScanObservations;
+    for (const fired of part.firedPerGame) {
+      for (const id of fired) mechanicGames.set(id, (mechanicGames.get(id) ?? 0) + 1);
+    }
   }
 
-  const cpu = process.cpuUsage(cpuStart);
   return {
     games,
     turns,
@@ -1192,8 +1337,26 @@ export function runSoak(options: SoakOptions): SoakReport {
     requiredMechanics: required,
     inertMechanics: required.filter((id) => (mechanicGames.get(id) ?? 0) === 0),
     leakScanObservations,
-    cpuMillis: (cpu.user + cpu.system) / 1000,
+    cpuMillis,
   };
+}
+
+export function runSoak(options: SoakOptions): SoakReport {
+  const required = requiredMechanicsOf(indexPoolForSoak(options.pool.cards));
+  const total =
+    options.mixedGames + (options.anchorAttempts ? required.length * options.anchorAttempts : 0);
+  const cpuStart = process.cpuUsage();
+
+  // Anchored, then mixed — the split is the parallel seam (`parallel-slices.ts`
+  // runs the same two functions on worker threads); run sequentially here it
+  // reproduces the pre-§3.53 loop game for game, which `soak.test.ts` pins.
+  const anchored = runSoakAnchored(options, (n) => options.onGame?.(n, total));
+  const mixed = runSoakMixedRange(options, anchored.games, 0, options.mixedGames, (n) =>
+    options.onGame?.(anchored.games + n, total),
+  );
+
+  const cpu = process.cpuUsage(cpuStart);
+  return finishSoak(options.pool, [anchored, mixed], (cpu.user + cpu.system) / 1000);
 }
 
 // ---------------------------------------------------------------------------

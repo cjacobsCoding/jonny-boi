@@ -280,19 +280,273 @@ function outcomeCode(result: MatchResult): number {
 }
 
 /** A mutable per-deck accumulator, frozen into a `PilotAbDeckRow` at the end. */
-interface DeckTally {
+export interface DeckTally {
   winsA: number;
   winsB: number;
   draws: number;
 }
 
 /**
+ * The integer tallies from a SLICE of one deck pair: games `[gameStart, gameEnd)`
+ * of both orientations. This is the parallel unit — everything in it is an exact
+ * integer count, so summing slices in any order reconstructs the whole run's
+ * totals bit-for-bit, and every probability/interval/verdict is computed once at
+ * the end by {@link finishPilotAb}. The pair's two orientations always live in
+ * the SAME slice because a matched slot needs both of its games to be scored.
+ */
+export interface PilotAbSliceTallies {
+  readonly winsA: number;
+  readonly winsB: number;
+  readonly draws: number;
+  readonly aheadA: number;
+  readonly aheadB: number;
+  readonly level: number;
+  /** Wins/draws credited while a pilot drove the pair's FIRST deck. */
+  readonly firstDeck: DeckTally;
+  /** Wins/draws credited while a pilot drove the pair's SECOND deck. */
+  readonly secondDeck: DeckTally;
+}
+
+/** What {@link playPilotAbPairSlice} needs — one pair, one game range. */
+export interface PilotAbPairSliceOptions {
+  readonly deckOne: LoadedDeck;
+  readonly deckTwo: LoadedDeck;
+  readonly pilots: PilotAbContestants;
+  readonly registry: EffectRegistry;
+  /** The pair's shared seed — `gameSeedFor(baseSeed, pairIndex)`, computed by the caller. */
+  readonly pairSeed: number;
+  /** Games per orientation of the WHOLE run (the range below slices into it). */
+  readonly gamesPerOrientation: number;
+  /** First game index of the slice (inclusive). */
+  readonly gameStart: number;
+  /** One past the last game index. */
+  readonly gameEnd: number;
+  readonly runOpts: RunOptions;
+  /**
+   * Scratch buffer for orientation one's outcomes, ≥ `gameEnd` long. Optional:
+   * the sequential runner reuses ONE buffer across every pair (allocation
+   * discipline, CLAUDE.md rule 7); a worker slicing a single pair lets this
+   * default to a fresh buffer.
+   */
+  readonly scratch?: Int8Array;
+}
+
+/**
+ * Play games `[gameStart, gameEnd)` of BOTH orientations of one deck pair and
+ * tally them. Every seed and on-the-play assignment derives from the game's
+ * ABSOLUTE index (via `runMatchup`'s range), so a slice plays byte-identical
+ * games to that stretch of the whole run — the same property the web Lab's
+ * gauntlet shards stand on, extended to the matched-pair unit.
+ */
+export function playPilotAbPairSlice(options: PilotAbPairSliceOptions): PilotAbSliceTallies {
+  const { deckOne, deckTwo, pilots, registry, pairSeed, runOpts } = options;
+  const range = { gameStart: options.gameStart, gameEnd: options.gameEnd };
+  const firstOrientation = options.scratch ?? new Int8Array(options.gameEnd);
+
+  const firstDeck: DeckTally = { winsA: 0, winsB: 0, draws: 0 };
+  const secondDeck: DeckTally = { winsA: 0, winsB: 0, draws: 0 };
+  let winsA = 0;
+  let winsB = 0;
+  let draws = 0;
+  let aheadA = 0;
+  let aheadB = 0;
+  let level = 0;
+
+  // Orientation one: pilot A takes seat A (deck one), pilot B takes seat B.
+  // `MatchupPilots.pilotA/pilotB` name SEATS, not contestants.
+  runMatchup(
+    makeSeats(deckOne, deckTwo, { pilotA: pilots.pilotA, pilotB: pilots.pilotB }, registry),
+    options.gamesPerOrientation,
+    pairSeed,
+    {
+      ...runOpts,
+      range,
+      onGame: (result, index) => {
+        firstOrientation[index] = outcomeCode(result);
+      },
+    },
+  );
+
+  // Orientation two: the contestants swap decks. Same seats, same seeds.
+  runMatchup(
+    makeSeats(deckOne, deckTwo, { pilotA: pilots.pilotB, pilotB: pilots.pilotA }, registry),
+    options.gamesPerOrientation,
+    pairSeed,
+    {
+      ...runOpts,
+      range,
+      onGame: (result, index) => {
+        const one = firstOrientation[index] as number;
+        const two = outcomeCode(result);
+
+        // Who won each of the slot's two games. In orientation one seat A is
+        // pilot A; in orientation two seat A is pilot B.
+        const aWonOne = one === OUTCOME_SEAT_A;
+        const bWonOne = one === OUTCOME_SEAT_B;
+        const bWonTwo = two === OUTCOME_SEAT_A;
+        const aWonTwo = two === OUTCOME_SEAT_B;
+
+        const scoreA = (aWonOne ? 1 : 0) + (aWonTwo ? 1 : 0);
+        const scoreB = (bWonOne ? 1 : 0) + (bWonTwo ? 1 : 0);
+        winsA += scoreA;
+        winsB += scoreB;
+        if (one === OUTCOME_DRAW) draws++;
+        if (two === OUTCOME_DRAW) draws++;
+
+        // Credit each win to the deck its pilot was DRIVING.
+        if (aWonOne) firstDeck.winsA++;
+        if (bWonOne) secondDeck.winsB++;
+        if (bWonTwo) firstDeck.winsB++;
+        if (aWonTwo) secondDeck.winsA++;
+        // A drawn game is a drawn game for both decks that played it.
+        if (one === OUTCOME_DRAW) {
+          firstDeck.draws++;
+          secondDeck.draws++;
+        }
+        if (two === OUTCOME_DRAW) {
+          firstDeck.draws++;
+          secondDeck.draws++;
+        }
+
+        if (scoreA > scoreB) aheadA++;
+        else if (scoreB > scoreA) aheadB++;
+        else level++;
+      },
+    },
+  );
+
+  return { winsA, winsB, draws, aheadA, aheadB, level, firstDeck, secondDeck };
+}
+
+/** The mutable whole-run accumulator {@link foldSliceTallies} folds into. */
+export interface PilotAbTotals {
+  winsA: number;
+  winsB: number;
+  draws: number;
+  aheadA: number;
+  aheadB: number;
+  level: number;
+  /** One tally per deck, indexed as the run's deck list is. */
+  readonly perDeck: DeckTally[];
+}
+
+/** A zeroed accumulator for a run over `deckCount` decks. */
+export function emptyPilotAbTotals(deckCount: number): PilotAbTotals {
+  return {
+    winsA: 0,
+    winsB: 0,
+    draws: 0,
+    aheadA: 0,
+    aheadB: 0,
+    level: 0,
+    perDeck: Array.from({ length: deckCount }, () => ({ winsA: 0, winsB: 0, draws: 0 })),
+  };
+}
+
+/**
+ * Fold one pair-slice's tallies into the run totals. Integer addition — exact
+ * and commutative — so the totals cannot depend on which slice landed first,
+ * which is what lets a parallel host and the sequential loop share this fold.
+ */
+export function foldSliceTallies(totals: PilotAbTotals, pair: DeckPair, slice: PilotAbSliceTallies): void {
+  totals.winsA += slice.winsA;
+  totals.winsB += slice.winsB;
+  totals.draws += slice.draws;
+  totals.aheadA += slice.aheadA;
+  totals.aheadB += slice.aheadB;
+  totals.level += slice.level;
+  const first = totals.perDeck[pair.first] as DeckTally;
+  const second = totals.perDeck[pair.second] as DeckTally;
+  first.winsA += slice.firstDeck.winsA;
+  first.winsB += slice.firstDeck.winsB;
+  first.draws += slice.firstDeck.draws;
+  second.winsA += slice.secondDeck.winsA;
+  second.winsB += slice.secondDeck.winsB;
+  second.draws += slice.secondDeck.draws;
+}
+
+/** What {@link finishPilotAb} needs beyond the summed totals. */
+export interface FinishPilotAbInput {
+  readonly decks: readonly LoadedDeck[];
+  readonly pilotAId: string;
+  readonly pilotBId: string;
+  readonly pairsCount: number;
+  readonly gamesPerOrientation: number;
+  readonly stats: StatsConfig;
+  readonly totals: PilotAbTotals;
+}
+
+/**
+ * Reduce summed totals to the one `PilotAbResult` — THE single place the
+ * statistics and the verdict are computed, shared by the sequential runner and
+ * the CLI's parallel host so the two can never disagree about what the numbers
+ * mean. Every input is an integer total; nothing here depends on the order the
+ * games were played in.
+ */
+export function finishPilotAb(input: FinishPilotAbInput): PilotAbResult {
+  const { totals, stats, gamesPerOrientation: games } = input;
+  const { winsA, winsB, draws, aheadA, aheadB, level } = totals;
+  const decisive = winsA + winsB;
+  // McNemar reads only the discordant cells. The level slots are the concordant
+  // ones: they all go in `bothWon` so the table totals to the slot count, rather
+  // than being apportioned across `bothWon`/`neither` on a distinction this
+  // design does not make.
+  const paired: PairedTable = { bothWon: level, baseOnly: aheadA, variantOnly: aheadB, neither: 0 };
+  const mcNemar = mcNemarTest(paired);
+  const shareA = wilsonInterval(winsA, decisive, stats.z);
+  const slots: PilotAbSlots = { total: input.pairsCount * games, aheadA, aheadB, level };
+  // The verdict rule is `decideVerdict`'s, unchanged: significance AND a minimum
+  // sample, with the sign of the effect choosing the direction. The sample is
+  // counted in matched SLOTS, because that is the independent unit here.
+  const verdict =
+    PILOT_VERDICT_OF[
+      decideVerdict(shareA.p - EVEN_SHARE, mcNemar.pValue, slots.total, stats.alpha, stats.minGamesForVerdict)
+    ];
+
+  return {
+    pilotA: input.pilotAId,
+    pilotB: input.pilotBId,
+    deckPairs: input.pairsCount,
+    gamesPerOrientation: games,
+    totalGames: input.pairsCount * games * ORIENTATIONS_PER_PAIR,
+    winsA,
+    winsB,
+    draws,
+    shareA,
+    slots,
+    paired,
+    mcNemar,
+    pValue: mcNemar.pValue,
+    verdict,
+    perDeck: input.decks.map((deck, i) => {
+      const t = totals.perDeck[i] as DeckTally;
+      return Object.freeze({
+        deck: deck.name,
+        // Every deck meets each of the others once per orientation, and the two
+        // orientations put a different pilot behind it.
+        gamesDriven: games * (input.decks.length - 1),
+        winsA: t.winsA,
+        winsB: t.winsB,
+        draws: t.draws,
+        shareA: wilsonInterval(t.winsA, t.winsA + t.winsB, stats.z),
+      });
+    }),
+    control: input.pilotAId === input.pilotBId,
+    balanced: winsA === winsB,
+  };
+}
+
+/**
  * Play the whole deck-neutral matrix and reduce it to one verdict.
  *
- * Allocation discipline (CLAUDE.md rule 7): the only per-pair allocation is the
- * reused `Int8Array` holding orientation one's outcomes until orientation two
- * catches up, plus whatever `runMatchup` itself keeps. Per-game results are
+ * Allocation discipline (CLAUDE.md rule 7): the only cross-pair allocation is
+ * the reused `Int8Array` holding orientation one's outcomes until orientation
+ * two catches up, plus whatever `runMatchup` itself keeps. Per-game results are
  * folded on the fly and never retained.
+ *
+ * Structured as slice → fold → finish so the CLI's parallel host runs the SAME
+ * three functions over worker-played slices and cannot produce different
+ * numbers — `parallel.test.ts` asserts the two paths field-for-field.
  */
 export function runPilotAb(options: PilotAbOptions): PilotAbResult {
   const { decks, pilots, registry } = options;
@@ -308,135 +562,36 @@ export function runPilotAb(options: PilotAbOptions): PilotAbResult {
   // Orientation one's per-game winner, held only until orientation two replays
   // the same slot. One allocation for the whole run.
   const firstOrientation = new Int8Array(games);
-
-  const perDeck: DeckTally[] = decks.map(() => ({ winsA: 0, winsB: 0, draws: 0 }));
-  let winsA = 0;
-  let winsB = 0;
-  let draws = 0;
-  let aheadA = 0;
-  let aheadB = 0;
-  let level = 0;
+  const totals = emptyPilotAbTotals(decks.length);
 
   for (let p = 0; p < pairs.length; p++) {
-    const { first, second } = pairs[p] as DeckPair;
-    const deckOne = decks[first] as LoadedDeck;
-    const deckTwo = decks[second] as LoadedDeck;
-    const tallyOne = perDeck[first] as DeckTally;
-    const tallyTwo = perDeck[second] as DeckTally;
+    const pair = pairs[p] as DeckPair;
     // Both orientations of a pair share this seed, which is what matches game i
     // of one to game i of the other.
     const pairSeed = gameSeedFor(options.baseSeed, p);
-
-    // Orientation one: pilot A takes seat A (deck one), pilot B takes seat B.
-    // `MatchupPilots.pilotA/pilotB` name SEATS, not contestants.
-    runMatchup(
-      makeSeats(deckOne, deckTwo, { pilotA: pilots.pilotA, pilotB: pilots.pilotB }, registry),
-      games,
+    const slice = playPilotAbPairSlice({
+      deckOne: decks[pair.first] as LoadedDeck,
+      deckTwo: decks[pair.second] as LoadedDeck,
+      pilots,
+      registry,
       pairSeed,
-      {
-        ...runOpts,
-        onGame: (result, index) => {
-          firstOrientation[index] = outcomeCode(result);
-        },
-      },
-    );
-
-    // Orientation two: the contestants swap decks. Same seats, same seeds.
-    runMatchup(
-      makeSeats(deckOne, deckTwo, { pilotA: pilots.pilotB, pilotB: pilots.pilotA }, registry),
-      games,
-      pairSeed,
-      {
-        ...runOpts,
-        onGame: (result, index) => {
-          const one = firstOrientation[index] as number;
-          const two = outcomeCode(result);
-
-          // Who won each of the slot's two games. In orientation one seat A is
-          // pilot A; in orientation two seat A is pilot B.
-          const aWonOne = one === OUTCOME_SEAT_A;
-          const bWonOne = one === OUTCOME_SEAT_B;
-          const bWonTwo = two === OUTCOME_SEAT_A;
-          const aWonTwo = two === OUTCOME_SEAT_B;
-
-          const scoreA = (aWonOne ? 1 : 0) + (aWonTwo ? 1 : 0);
-          const scoreB = (bWonOne ? 1 : 0) + (bWonTwo ? 1 : 0);
-          winsA += scoreA;
-          winsB += scoreB;
-          if (one === OUTCOME_DRAW) draws++;
-          if (two === OUTCOME_DRAW) draws++;
-
-          // Credit each win to the deck its pilot was DRIVING.
-          if (aWonOne) tallyOne.winsA++;
-          if (bWonOne) tallyTwo.winsB++;
-          if (bWonTwo) tallyOne.winsB++;
-          if (aWonTwo) tallyTwo.winsA++;
-          // A drawn game is a drawn game for both decks that played it.
-          if (one === OUTCOME_DRAW) {
-            tallyOne.draws++;
-            tallyTwo.draws++;
-          }
-          if (two === OUTCOME_DRAW) {
-            tallyOne.draws++;
-            tallyTwo.draws++;
-          }
-
-          if (scoreA > scoreB) aheadA++;
-          else if (scoreB > scoreA) aheadB++;
-          else level++;
-        },
-      },
-    );
-
+      gamesPerOrientation: games,
+      gameStart: 0,
+      gameEnd: games,
+      runOpts,
+      scratch: firstOrientation,
+    });
+    foldSliceTallies(totals, pair, slice);
     options.onPair?.(p + 1, pairs.length);
   }
 
-  const decisive = winsA + winsB;
-  // McNemar reads only the discordant cells. The level slots are the concordant
-  // ones: they all go in `bothWon` so the table totals to the slot count, rather
-  // than being apportioned across `bothWon`/`neither` on a distinction this
-  // design does not make.
-  const paired: PairedTable = { bothWon: level, baseOnly: aheadA, variantOnly: aheadB, neither: 0 };
-  const mcNemar = mcNemarTest(paired);
-  const shareA = wilsonInterval(winsA, decisive, stats.z);
-  const slots: PilotAbSlots = { total: pairs.length * games, aheadA, aheadB, level };
-  // The verdict rule is `decideVerdict`'s, unchanged: significance AND a minimum
-  // sample, with the sign of the effect choosing the direction. The sample is
-  // counted in matched SLOTS, because that is the independent unit here.
-  const verdict =
-    PILOT_VERDICT_OF[
-      decideVerdict(shareA.p - EVEN_SHARE, mcNemar.pValue, slots.total, stats.alpha, stats.minGamesForVerdict)
-    ];
-
-  return {
-    pilotA: pilots.pilotA.id,
-    pilotB: pilots.pilotB.id,
-    deckPairs: pairs.length,
+  return finishPilotAb({
+    decks,
+    pilotAId: pilots.pilotA.id,
+    pilotBId: pilots.pilotB.id,
+    pairsCount: pairs.length,
     gamesPerOrientation: games,
-    totalGames: pairs.length * games * ORIENTATIONS_PER_PAIR,
-    winsA,
-    winsB,
-    draws,
-    shareA,
-    slots,
-    paired,
-    mcNemar,
-    pValue: mcNemar.pValue,
-    verdict,
-    perDeck: decks.map((deck, i) => {
-      const t = perDeck[i] as DeckTally;
-      return Object.freeze({
-        deck: deck.name,
-        // Every deck meets each of the others once per orientation, and the two
-        // orientations put a different pilot behind it.
-        gamesDriven: games * (decks.length - 1),
-        winsA: t.winsA,
-        winsB: t.winsB,
-        draws: t.draws,
-        shareA: wilsonInterval(t.winsA, t.winsA + t.winsB, stats.z),
-      });
-    }),
-    control: pilots.pilotA.id === pilots.pilotB.id,
-    balanced: winsA === winsB,
-  };
+    stats,
+    totals,
+  });
 }

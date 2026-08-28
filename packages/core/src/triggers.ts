@@ -601,6 +601,97 @@ function whoMatches(who: TriggerWho | undefined, actingPlayer: PlayerId, sourceC
 const NO_PENDING_TRIGGERS: readonly PendingTrigger[] = Object.freeze([]);
 
 /**
+ * Which `GameEvent` types each `TriggerEvent` can EVER match — read straight off
+ * `conditionMatches`, where every case tests `event.type` against exactly one
+ * type. The collector uses it as a prefilter: an event whose type no live
+ * trigger watches cannot match anything, so the per-source scan is skipped
+ * entirely (§3.53 — this scan was measured at ~5% of a whole gauntlet).
+ *
+ * ⚠️ CORRECTNESS CONTRACT: for every condition kind, this list must be a
+ * SUPERSET of the event types its `conditionMatches` case can return true for.
+ * Two guards hold it:
+ *   - the `Record<TriggerEvent, …>` shape — adding a `TriggerEvent` without
+ *     classifying it here stops the build (the manifest pattern:
+ *     `KEYWORD_KEYS`, `RULES_MANIFEST`);
+ *   - `trigger-event-prefilter.test.ts` fires every condition kind's canonical
+ *     event through `conditionMatches` and asserts the matched type is listed,
+ *     so a case rewritten onto a new event type goes red, not silent.
+ */
+export const TRIGGER_EVENT_SOURCES: Readonly<Record<TriggerEvent, readonly GameEvent['type'][]>> =
+  Object.freeze({
+    etb: ['zoneChange'],
+    attacks: ['attackersDeclared'],
+    dies: ['creatureDied'],
+    leaves: ['zoneChange'],
+    castSpell: ['spellCast'],
+    upkeep: ['stepBegin'],
+    drawStep: ['stepBegin'],
+    precombatMain: ['stepBegin'],
+    endStep: ['stepBegin'],
+    beginCombat: ['stepBegin'],
+    gainLife: ['gainLife'],
+    combatDamageToPlayer: ['damageDealt'],
+    permanentEnters: ['zoneChange'],
+    permanentDies: ['zoneChange'],
+    drawsCard: ['drawCard'],
+  });
+
+/**
+ * One BIT per distinct watchable event type, assigned at module init from
+ * `TRIGGER_EVENT_SOURCES` itself so the two can never drift. Eight types today
+ * — comfortably inside a small integer — and the collector's per-event
+ * prefilter becomes one AND instead of a Set lookup.
+ */
+const EVENT_TYPE_BITS: Partial<Record<GameEvent['type'], number>> = {};
+{
+  let nextBit = 0;
+  for (const types of Object.values(TRIGGER_EVENT_SOURCES)) {
+    for (const type of types) {
+      if (EVENT_TYPE_BITS[type] === undefined) EVENT_TYPE_BITS[type] = 1 << nextBit++;
+    }
+  }
+}
+
+/** The prefilter bit for an event type — 0 for a type no trigger can ever watch. */
+export function eventTypeWatchBit(type: GameEvent['type']): number {
+  return EVENT_TYPE_BITS[type] ?? 0;
+}
+
+/**
+ * The mask of event types ONE trigger list can match, memoised on the list —
+ * ability lists live on immutable `CardDefinition`s, so each definition answers
+ * once per process (the `RESTRICTION_MEMO` pattern).
+ */
+const TRIGGER_LIST_MASK_MEMO = new WeakMap<readonly TriggeredAbility[], number>();
+
+function watchMaskOfTriggerList(triggers: readonly TriggeredAbility[]): number {
+  const cached = TRIGGER_LIST_MASK_MEMO.get(triggers);
+  if (cached !== undefined) return cached;
+  let mask = 0;
+  for (let t = 0; t < triggers.length; t++) {
+    for (const type of TRIGGER_EVENT_SOURCES[(triggers[t] as TriggeredAbility).condition.on]) {
+      mask |= EVENT_TYPE_BITS[type] as number;
+    }
+  }
+  TRIGGER_LIST_MASK_MEMO.set(triggers, mask);
+  return mask;
+}
+
+/**
+ * The union mask over a whole source set — the collector's prefilter key,
+ * rebuilt only when the source set changes (the same cadence as its snapshot
+ * list), never per event. An event whose `eventTypeWatchBit` is not in the
+ * mask cannot match any of these sources' triggers.
+ */
+export function watchedEventMaskOf(sources: readonly TriggerSource[]): number {
+  let mask = 0;
+  for (let s = 0; s < sources.length; s++) {
+    mask |= watchMaskOfTriggerList((sources[s] as TriggerSource).triggers);
+  }
+  return mask;
+}
+
+/**
  * Scan a set of trigger sources against one event and return every ability that
  * fired, as `PendingTrigger`s in source-declaration order. The engine then applies
  * APNAP ordering across sources (see orderPendingTriggers).

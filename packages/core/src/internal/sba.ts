@@ -436,36 +436,89 @@ export function stateBasedActionsPossible(state: GameState): boolean {
   const battlefield = state.battlefield;
   for (let i = 0; i < battlefield.length; i++) {
     const perm = battlefield[i] as CardInstance;
-    const def = perm.def;
+    const facts = sbaGateFactsOf(perm.def);
     // An attachment is BOTH a modifier source (layer 3a) and its own state-based
-    // action (CR 704.5m/n), so either end of the relationship is enough.
-    if (def.attachment !== undefined || perm.attachedTo != null) return true;
-    // A `*` power/toughness is a function of the whole game and moves with no
-    // event on this permanent at all.
-    if (def.characteristicPT !== undefined) return true;
-    // A static that can only ADD toughness cannot kill anything — see above.
-    if (def.statics !== undefined && staticsCanShrink(def.statics)) return true;
+    // action (CR 704.5m/n), so either end of the relationship is enough. The
+    // def-side half (attachment / characteristicPT / a shrinking static) is one
+    // memoised bit — see {@link sbaGateFactsOf}.
+    if (facts.alwaysLook || perm.attachedTo != null) return true;
     // CR 704.5j — two legendary permanents may share a name. Counting is enough;
     // deciding whether the names actually match is the real check's job.
-    if (def.legendary === true && ++legendary > 1) return true;
+    if (facts.legendary && ++legendary > 1) return true;
+    if (perm.counters === NO_COUNTERS) {
+      // No counters at all on a walker or a battle IS zero loyalty / zero defense.
+      if (facts.walkerOrBattleOnly) return true;
+      if (!facts.creature) continue;
+      // The overwhelmingly common permanent: a counter-free creature. Its
+      // effective toughness is exactly the printed base (`effectiveToughness`
+      // with the empty aggregate = base + zero counter shift), memoised on the
+      // definition — so the whole CR 704.5f/g question is two integer reads.
+      if (facts.baseToughness <= 0) return true;
+      if (perm.damageMarked > 0 && (facts.baseToughness - perm.damageMarked <= 0 || perm.markedByDeathtouch)) {
+        return true;
+      }
+      continue;
+    }
     // Counters are read by `effectiveToughness` below for a creature, but for a
     // walker and a battle they ARE the box (CR 704.5i / 704.5x), and CR 704.5q is
-    // about the two standard kinds coexisting. One reference comparison for the
-    // counter-free permanent that is nearly every permanent.
-    if (perm.counters !== NO_COUNTERS) {
-      if (isPlaneswalker(def) && !isCreature(def) && loyaltyOf(perm) <= 0) return true;
-      if (isBattle(def) && !isCreature(def) && defenseOf(perm) <= 0) return true;
-      if ((perm.counters[PLUS_ONE_COUNTER] ?? 0) > 0 && (perm.counters[MINUS_ONE_COUNTER] ?? 0) > 0) return true;
-    } else if ((isPlaneswalker(def) || isBattle(def)) && !isCreature(def)) {
-      // No counters at all on a walker or a battle IS zero loyalty / zero defense.
-      return true;
-    }
-    if (!isCreature(def)) continue;
+    // about the two standard kinds coexisting.
+    if (facts.walkerNotCreature && loyaltyOf(perm) <= 0) return true;
+    if (facts.battleNotCreature && defenseOf(perm) <= 0) return true;
+    if ((perm.counters[PLUS_ONE_COUNTER] ?? 0) > 0 && (perm.counters[MINUS_ONE_COUNTER] ?? 0) > 0) return true;
+    if (!facts.creature) continue;
     // CR 704.5f / 704.5g, read with the aggregate that is genuinely empty here.
     if (effectiveToughness(perm) <= 0) return true;
     if (perm.damageMarked > 0 && (remainingToughness(perm) <= 0 || perm.markedByDeathtouch)) return true;
   }
   return false;
+}
+
+/**
+ * The def-derived half of the gate's per-permanent question, memoised on the
+ * immutable `CardDefinition` — the `RESTRICTION_MEMO` / `FETCH_MEMO` pattern.
+ *
+ * The gate runs at every end-of-action boundary (§3.32) and re-derived these
+ * five answers from 8–12 property reads per permanent per call; they are
+ * functions of the definition alone, so each definition answers once per
+ * process. A transform/copy swaps `perm.def` to a DIFFERENT definition object,
+ * which simply misses the cache and memoises the other face — staleness is
+ * impossible because the key IS the identity the answers derive from.
+ */
+interface SbaGateFacts {
+  /** attachment / `*` P/T / a shrinking static: the rows the gate must always send to the real check. */
+  readonly alwaysLook: boolean;
+  readonly legendary: boolean;
+  readonly creature: boolean;
+  readonly walkerNotCreature: boolean;
+  readonly battleNotCreature: boolean;
+  /** = walkerNotCreature || battleNotCreature (the counter-free instant-true row). */
+  readonly walkerOrBattleOnly: boolean;
+  /** Printed toughness (0 for a non-creature) — the counter-free creature's effective toughness. */
+  readonly baseToughness: number;
+}
+
+const SBA_GATE_MEMO = new WeakMap<CardInstance['def'], SbaGateFacts>();
+
+function sbaGateFactsOf(def: CardInstance['def']): SbaGateFacts {
+  const cached = SBA_GATE_MEMO.get(def);
+  if (cached !== undefined) return cached;
+  const creature = isCreature(def);
+  const walkerNotCreature = isPlaneswalker(def) && !creature;
+  const battleNotCreature = isBattle(def) && !creature;
+  const facts: SbaGateFacts = {
+    alwaysLook:
+      def.attachment !== undefined ||
+      def.characteristicPT !== undefined ||
+      (def.statics !== undefined && staticsCanShrink(def.statics)),
+    legendary: def.legendary === true,
+    creature,
+    walkerNotCreature,
+    battleNotCreature,
+    walkerOrBattleOnly: walkerNotCreature || battleNotCreature,
+    baseToughness: def.toughness ?? 0,
+  };
+  SBA_GATE_MEMO.set(def, facts);
+  return facts;
 }
 
 /** Whether any of these static abilities can SUBTRACT toughness. */
