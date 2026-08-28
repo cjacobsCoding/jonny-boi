@@ -50,24 +50,17 @@ import { DEFAULT_HEURISTIC_WEIGHTS } from './weights.js';
  * plain sight.
  */
 const KNOWN_UNPRICED: Readonly<Record<string, string>> = Object.freeze({
-  addCounters: 'x19 in pool — a +1/+1-counter payoff is invisible when aiming or choosing modes',
-  attachToTarget: 'x42 in pool — an Equip/attach effect scores flat (bestEquipPlay prices the PLAY, not this ref)',
-  chooseAsEnters: 'x6 in pool — the named-value choice body is not priced',
+  attachToTarget:
+    'x42 in pool, and STAYING ledgered after §3.52, measured rather than assumed: every live decision ' +
+    'that aims this ref goes around the value table — the 24 Equip activations through bestEquipPlay ' +
+    '(host-aware: scoreEquip + equipIsAnUpgrade) and the 18 Aura casts through the attachment intent ' +
+    '(biggestThreat host, helpful/harmful by the grant’s sign) — and the ref itself cannot be priced by ' +
+    'params shape: its value IS the source card’s `attachment.modifies`, which EffectValueContext does ' +
+    'not carry. A price here would be dead code wearing a green checkmark. If a TRIGGER or MODE ever ' +
+    'carries this ref, the parity sweep holds this row up for re-judging.',
   createEmblem: 'unreachable from pool refs today; an emblem would score flat',
-  dealDamageToEach: 'x4 in pool — a sweeper scores flat, blind to what it would kill',
-  exileUntilLeaves: 'x3 in pool — an O-Ring scores flat, blind to what it would jail',
   fight: 'unreachable from pool refs today; a fight would score flat, blind to both bodies',
-  gainControl: 'x2 in pool — a theft scores flat, blind to what it would steal',
-  grantKeywordToYoursUntilEndOfTurn: 'x1 in pool — a team keyword grant scores flat',
-  handToBottomThenDraw: 'x1 in pool — a wheel-half scores flat',
-  ifKicked: 'x3 in pool — a WRAPPER: the kicked body is never read, so a kicker payoff is invisible',
-  mill: 'x6 in pool — milling scores flat, blind to how deep',
-  persistReturn: 'x1 in pool — the persist return is not priced when weighing removal against it',
   returnChosenToHand: 'unreachable from pool refs today',
-  returnExiledByThis: 'x3 in pool — the O-Ring release half; scores flat',
-  scry: 'x29 in pool — the pool’s most common unpriced effect; scry N scores flat for every N',
-  surveil: 'x13 in pool — same blindness as scry',
-  transformRevealTop: 'x1 in pool — the reveal-and-transform body scores flat',
   wardCounterUnlessPaid: 'unreachable from pool refs today; ward’s tax is priced elsewhere',
   blinkSelf: 'unreachable from pool refs today; the pilot’s blink goal prices the PLAY, not this ref',
 });

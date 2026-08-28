@@ -670,7 +670,31 @@ function answerSelectTargets(
   // A 'loss' valence would mean somebody is making US aim it, so take the worst.
   const worstFirst = choice.valence === 'loss';
   scored.sort((a, b) => (worstFirst ? a.value - b.value : b.value - a.value) || a.index - b.index);
-  return { kind: 'selectTargets', targets: scored.slice(0, choice.max).map((s) => s.ref) };
+  // HOW MANY to aim at is a decision too, when the printed words are "up to"
+  // (min < max) and the effects were actually priced. The rule is
+  // `answerChooseModes`' exactly: take every target worth more than not aiming,
+  // never fewer than the floor — and on a 'loss', exactly the floor. Before the
+  // §3.52 prices existed every candidate scored the same flat constant, so
+  // "take `max`" was as good as anything; with real prices, filling an
+  // Angel of Serenity's "up to three" with its controller's own creatures is a
+  // measurable blunder, not a tiebreak. Unpriceable effects (an empty list —
+  // nothing to score with) keep the old take-the-cap behaviour: an unknown
+  // ability is probably still doing something, the same presumption
+  // `modeUnknownEffectScore` encodes.
+  const take =
+    effects.length === 0
+      ? choice.max
+      : worstFirst
+        ? choice.min
+        : Math.max(choice.min, Math.min(choice.max, countPositive(scored)));
+  return { kind: 'selectTargets', targets: scored.slice(0, take).map((s) => s.ref) };
+}
+
+/** How many scored candidates are worth more than not aiming at all. */
+function countPositive(scored: readonly { readonly value: number }[]): number {
+  let n = 0;
+  for (const candidate of scored) if (candidate.value > 0) n++;
+  return n;
 }
 
 /**

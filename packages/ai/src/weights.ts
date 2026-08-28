@@ -398,6 +398,76 @@ export interface HeuristicWeights {
    * exactly the card advantage the pilot already understands.
    */
   readonly grantedFlashbackValueShare: number;
+
+  // --- pricing the §3.49 ledger (effect-value.ts — §3.52) --------------------
+  /**
+   * THE §3.52 ABLATION SWITCH. `true` (the default) prices the primitives the
+   * §3.49 ledger carried as blind spots — scry, addCounters, exileUntilLeaves,
+   * ifKicked and the rest of `LEDGERED_EFFECT_VALUE`. `false` reproduces the
+   * pre-§3.52 value model EXACTLY: every one of those ids scores the flat
+   * `modeUnknownEffectScore` and a wrapper's nested body goes unread — which is
+   * how the §3.52 pilot-ab verdict and its throughput cost are re-checkable in
+   * ONE process, forever (the `LAND_SEQUENCING_OFF_WEIGHTS` pattern; see
+   * `LEDGER_PRICING_OFF_WEIGHTS` in effect-value.ts).
+   */
+  readonly priceLedgeredEffects: boolean;
+  /**
+   * How much of `modeSelectionValue` each look BEYOND the first is worth when a
+   * scry/surveil digs N deep. Below 1 because the second look filters a library
+   * the first look already improved; above 0 because scry 3 plainly beats
+   * scry 1. The total is capped at `modeDrawCardValue` — selection can converge
+   * on a draw's worth but must never beat it (the invariant
+   * `modeSelectionValue`'s own doc states for a single look).
+   */
+  readonly modeSelectionExtraCardShare: number;
+  /**
+   * What one PERMANENT stat point (half a +1/+1 counter) is worth. Sits between
+   * `modePumpPerStatValue` (wears off at cleanup, 2) and `attachPerStat`
+   * (permanent but detachable, 4) — a counter outlives the turn, survives
+   * nothing leaving, and cannot be unequipped, so pricing it at the pump rate
+   * had the pilot treat "put two +1/+1 counters on target creature" as a
+   * end-of-turn trick, and at the attach rate it would outbid real Equipment.
+   */
+  readonly modeCounterPerStatValue: number;
+  /**
+   * What fraction of its body a KICKED clause (`ifKicked`) is worth while the
+   * kicker has not been paid — the pricing moment for a card in hand or a mode
+   * being weighed. Below 1 because the clause only fires if the pilot later
+   * agrees to pay (`createTokenCopy` prices the same "not yet paid for"
+   * caution); above 0 because a rich kicked body is exactly what separates two
+   * kicker cards (§3.42's wrapper lesson — a flat price reads no body at all).
+   * A RESOLUTION that already knows (`state.resolution.kicked`) uses the truth
+   * instead: full value kicked, zero unkicked.
+   */
+  readonly kickedClauseValueShare: number;
+  /**
+   * What one point of a STOLEN creature's power is worth for the turn (the Act
+   * of Treason template: untap it, swing with it, it cannot block). Strictly
+   * above `modeTapPerPowerValue` (6) — theft denies the block exactly as a tap
+   * does AND turns the body around for a swing — and well below removal's
+   * per-power aggregate on a real threat, because they get the creature back
+   * at cleanup.
+   */
+  readonly modeTheftPerPowerValue: number;
+  /**
+   * What fraction of a card's value jailing it OUT OF OUR OWN GRAVEYARD is
+   * worth (the Angel of Serenity aim at its controller's yard — the card comes
+   * back to HAND only when the jailer leaves: later, maybe never). Between the
+   * zero an opponent's-yard jail scores (the return-to-their-hand rider
+   * roughly cancels the denial) and the full removal value a battlefield jail
+   * scores, so the aiming order is: their board, then our yard, then their
+   * yard, and never our own board.
+   */
+  readonly modeJailOwnYardShare: number;
+  /**
+   * What one milled card is worth against an opponent. Small — in this pool a
+   * milled card is usually noise (no graveyard-synergy model is priced here,
+   * and that omission is deliberate and documented at the entry) — but
+   * positive, so a dedicated mill spell still beats passing; emptying a
+   * library outright is priced as the near-win it is (`lethalBurnScore`), and
+   * milling YOURSELF prices negative at this same rate.
+   */
+  readonly modeMillPerCardValue: number;
 }
 
 /**
@@ -576,4 +646,24 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // Two thirds of the card: the same card again, minus the end-of-turn clock
   // and minus having to pay for it a second time.
   grantedFlashbackValueShare: 2 / 3,
+
+  // pricing the §3.49 ledger (§3.52) — ON by default; `false` is the one-knob
+  // reproduction of the pre-§3.52 pilot for A/B forensics.
+  priceLedgeredEffects: true,
+  // Half the first look per extra card: scry 1 = 10, scry 2 = 15, scry 3 = 20,
+  // converging on (never passing) a draw at 30.
+  modeSelectionExtraCardShare: 0.5,
+  // A +1/+1 counter (2 stat points) scores 6 — above the same pump at 4,
+  // below the same grant on an Equipment at 8.
+  modeCounterPerStatValue: 3,
+  // Half the body until the kicker is actually paid.
+  kickedClauseValueShare: 0.5,
+  // Stealing a 4-power body scores 40 — above tapping it (24), below killing
+  // it (84), which is the printed card's actual rate.
+  modeTheftPerPowerValue: 10,
+  // Half the card: a body banked for a return that needs the jailer to leave.
+  modeJailOwnYardShare: 0.5,
+  // Six cards of mill (12) sits under drawing one card (30): mill is a plan,
+  // not value, until the library actually empties.
+  modeMillPerCardValue: 2,
 });
