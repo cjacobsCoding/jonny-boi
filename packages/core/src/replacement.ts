@@ -56,8 +56,7 @@
  * ## What is deliberately NOT here
  * This models replacement effects that change a **quantity** (or prevent the
  * event outright). Replacement effects that change WHERE an object goes ("if it
- * would die, exile it instead"), that create different objects ("twice that many
- * tokens"), or that substitute a whole different action ("instead, that player
+ * would die, exile it instead"), or that substitute a whole different action ("instead, that player
  * skips that draw and you draw a card") are a different vocabulary and are
  * REPORTED by the compiler, never approximated.
  */
@@ -271,8 +270,6 @@ export function replacementIsInert(ability: ReplacementAbility): boolean {
  * (`-1/-1` above all) is not.
  */
 export function affectedPlayerPrefersMore(kind: ReplacementEventKind, counterKind?: string): boolean {
-  // More tokens under your control is always the good direction.
-  if (kind === 'tokens') return true;
   if (kind === 'counters') return counterKind === PLUS_ONE_COUNTER;
   // A bigger draw is a bigger draw; damage is damage. MORE TOKENS is the fourth
   // answer, and it is the same shape as the draw: the affected player is the one

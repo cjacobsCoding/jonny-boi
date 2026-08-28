@@ -27,7 +27,7 @@ import {
   entersTapped,
   indexReplacements,
   normalizeChoiceRequest,
-  replaceTokens,
+  replaceTokenCount,
   validateChoiceAnswer,
 } from '@jonny-boi/core';
 import {
@@ -165,14 +165,14 @@ function ctxFor(
     },
     // The BATCH form, which is the engine's real funnel — `createToken` is this
     // with a count of one, exactly as in `effects.ts`. The CR 614 token-count
-    // replacement runs here through core's OWN `replaceTokens` rather than a
+    // replacement runs here through core's OWN `replaceTokenCount` rather than a
     // stand-in: a fixture that skipped it would let a primitive pass its unit
     // test while Doubling Season silently failed to double what it created.
     createTokens(def, count, controller, options) {
       const ctrl = controller ?? source.controller;
       const requested = Math.max(0, Math.trunc(count));
       if (requested === 0) return [];
-      const actual = replaceTokens(state, indexReplacements(state), ctrl, requested, (e) => events.push(e));
+      const actual = replaceTokenCount(state, indexReplacements(state), ctrl, def, requested, (e) => events.push(e));
       const made: InstanceId[] = [];
       for (let i = 0; i < actual; i++) {
         const instanceId = state.nextInstanceId++;

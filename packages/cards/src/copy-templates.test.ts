@@ -270,14 +270,19 @@ describe('a tapped token copy, resolved through the real primitive', () => {
       params: { self: true, count: 2, except: { entersTapped: true } },
       emit: () => {},
       ask: () => undefined,
-      createToken(def: CardDefinition) {
-        // Mirror core's own accessor question: `entersTapped(def)` is what the
-        // real `ctx.createToken` consults, and the exception rides the def.
-        const tapped = def.entersTapped === true;
-        created.push({ tapped });
-        const id = (state as { nextInstanceId: number }).nextInstanceId++;
-        (state.battlefield as unknown[]).push({ ...bear, instanceId: id, tapped, def });
-        return id;
+      createTokens(def: CardDefinition, count: number, _controller?: unknown, options?: { tapped?: boolean }) {
+        // Mirror core's own funnel question: `entersTapped(def)` OR the creation
+        // options — the exception rides the def, the printed word rides the
+        // options, and either is enough.
+        const ids: number[] = [];
+        for (let i = 0; i < count; i++) {
+          const tapped = def.entersTapped === true || options?.tapped === true;
+          created.push({ tapped });
+          const id = (state as { nextInstanceId: number }).nextInstanceId++;
+          (state.battlefield as unknown[]).push({ ...bear, instanceId: id, tapped, def });
+          ids.push(id);
+        }
+        return ids;
       },
     } as never);
 

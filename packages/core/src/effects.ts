@@ -17,11 +17,9 @@ import { entersTapped } from './card.js';
 import { attachTo } from './attachments.js';
 import type { ContinuousDuration } from './internal/continuous.js';
 import { applyControlChange } from './internal/continuous.js';
-import { hasAnyReplacement, indexReplacements, replaceTokenCount } from './internal/replacement.js';
 import type { ReplacementAbility } from './replacement.js';
-import { addFloatingReplacement, indexReplacements, replaceTokens } from './internal/replacement.js';
+import { addFloatingReplacement, hasAnyReplacement, indexReplacements, replaceTokenCount } from './internal/replacement.js';
 import type { TriggerCondition } from './triggers.js';
-import type { DelayedTriggeredAbility } from './delayed.js';
 import { createDelayedTrigger } from './delayed.js';
 import { applyEnteringDefense, applyEnteringLoyalty } from './internal/stats.js';
 import type {

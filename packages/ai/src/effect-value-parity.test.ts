@@ -53,6 +53,13 @@ const KNOWN_UNPRICED: Readonly<Record<string, string>> = Object.freeze({
   addCounters: 'x19 in pool — a +1/+1-counter payoff is invisible when aiming or choosing modes',
   attachToTarget: 'x42 in pool — an Equip/attach effect scores flat (bestEquipPlay prices the PLAY, not this ref)',
   chooseAsEnters: 'x6 in pool — the named-value choice body is not priced',
+  // The two delayed-ability bodies (CR 603.7). Never chosen BY a pilot: they run
+  // only as the body of a delayed trigger the engine fires, with their subject
+  // baked into params — so a price would steer nothing. The doomed-chump combat
+  // pricing (delayedRemovalTargets) is where the pilot actually reasons about
+  // them.
+  sacrificeNamed: 'delayed-trigger body only — never on a pilot menu; combat prices the doom instead',
+  exileNamed: 'delayed-trigger body only — never on a pilot menu; combat prices the doom instead',
   createEmblem: 'unreachable from pool refs today; an emblem would score flat',
   dealDamageToEach: 'x4 in pool — a sweeper scores flat, blind to what it would kill',
   exileUntilLeaves: 'x3 in pool — an O-Ring scores flat, blind to what it would jail',

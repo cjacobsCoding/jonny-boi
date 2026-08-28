@@ -92,6 +92,25 @@ export type TargetRestriction =
    */
   | 'creatureYouControl'
   /**
+   * "target NONLEGENDARY creature you control" — Kiki-Jiki's aim, and Fable of
+   * the Mirror-Breaker's.
+   *
+   * Its own restriction rather than an approximation of 'creatureYouControl',
+   * and the direction is the whole reason: a card that may not copy a legend
+   * compiled as one that may is a card playing WIDER than printed — in this
+   * family the difference between a fair rare and an infinite combo with every
+   * legendary creature ever printed. (Kiki-Jiki is itself legendary, so the
+   * printed word is exactly what stops it copying itself.)
+   */
+  | 'nonlegendaryCreatureYouControl'
+  /**
+   * "target artifact or creature you control" — Molten Duplication's aim.
+   * Neither 'creatureYouControl' widened nor 'permanent' narrowed: the first
+   * cannot reach the Sol Ring the card is often pointed at, the second reaches
+   * a land and the opponent's board. Controller-dependent like its neighbours.
+   */
+  | 'artifactOrCreatureYouControl'
+  /**
    * "target NON-ANGEL creature you control" — Restoration Angel's printed line.
    *
    * Its own restriction rather than `'creatureYouControl'` for a reason the soak
@@ -273,6 +292,8 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'artifact' ||
     value === 'opponent' ||
     value === 'creatureYouControl' ||
+    value === 'nonlegendaryCreatureYouControl' ||
+    value === 'artifactOrCreatureYouControl' ||
     value === 'nonAngelCreatureYouControl' ||
     value === 'creatureAnOpponentControls' ||
     value === 'artifactEnchantmentOrLand' ||
@@ -320,6 +341,8 @@ const TARGET_RESTRICTION_MEMBERS = {
   opponent: true,
   creatureYouControl: true,
   nonAngelCreatureYouControl: true,
+  nonlegendaryCreatureYouControl: true,
+  artifactOrCreatureYouControl: true,
   creatureAnOpponentControls: true,
   artifactEnchantmentOrLand: true,
   playerOrPlaneswalker: true,
@@ -534,12 +557,25 @@ export function isLegalTarget(
     if (controller === undefined || permanent.controller !== controller) return false;
     return !isLand(permanent.def);
   }
-  if (restriction === 'creatureYouControl' || restriction === 'nonAngelCreatureYouControl') {
+  if (restriction === 'artifactOrCreatureYouControl') {
+    // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
+    if (controller === undefined || permanent.controller !== controller) return false;
+    return isCreature(permanent.def) || permanent.def.types.includes('artifact');
+  }
+  if (
+    restriction === 'creatureYouControl' ||
+    restriction === 'nonAngelCreatureYouControl' ||
+    restriction === 'nonlegendaryCreatureYouControl'
+  ) {
     // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
     if (controller === undefined || permanent.controller !== controller) return false;
     if (restriction === 'nonAngelCreatureYouControl' && hasSubtype(permanent.def, ANGEL_SUBTYPE)) {
       return false;
     }
+    // The printed word "nonlegendary", read off the CURRENT definition — which
+    // is what a copy effect has to read: a token copy of a legend is legendary,
+    // and a Clone that copied one is too.
+    if (restriction === 'nonlegendaryCreatureYouControl' && permanent.def.legendary === true) return false;
   }
   return isCreature(permanent.def);
 }
@@ -792,13 +828,17 @@ function enumerateTargets(
     }
   }
   if (
-    (restriction === 'creatureYouControl' || restriction === 'nonAngelCreatureYouControl') &&
+    (restriction === 'creatureYouControl' ||
+      restriction === 'nonAngelCreatureYouControl' ||
+      restriction === 'nonlegendaryCreatureYouControl') &&
     controller !== undefined
   ) {
+    const excludeLegends = restriction === 'nonlegendaryCreatureYouControl';
     for (const permanent of state.battlefield) {
       if (
         permanent.controller === controller &&
         isCreature(permanent.def) &&
+        !(excludeLegends && permanent.def.legendary === true) &&
         // The offer list and `isLegalTarget` must agree, or the menu offers a
         // cast the apply path refuses — see DESIGN §3.36 for what that costs.
         !(restriction === 'nonAngelCreatureYouControl' && hasSubtype(permanent.def, ANGEL_SUBTYPE)) &&
@@ -824,6 +864,17 @@ function enumerateTargets(
             ? isLand(permanent.def)
             : isPlaneswalker(permanent.def);
       if (kindOk && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
+  if (restriction === 'artifactOrCreatureYouControl' && controller !== undefined) {
+    for (const permanent of state.battlefield) {
+      if (
+        permanent.controller === controller &&
+        (isCreature(permanent.def) || permanent.def.types.includes('artifact')) &&
+        isTargetableBy(state, permanent, controller, source, keywordIndex)
+      ) {
         targets.push(permanent.instanceId);
       }
     }
@@ -919,6 +970,10 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'an opponent';
     case 'creatureYouControl':
       return 'a creature you control';
+    case 'nonlegendaryCreatureYouControl':
+      return 'a nonlegendary creature you control';
+    case 'artifactOrCreatureYouControl':
+      return 'an artifact or creature you control';
     case 'nonAngelCreatureYouControl':
       return 'a non-Angel creature you control';
     case 'creatureAnOpponentControls':

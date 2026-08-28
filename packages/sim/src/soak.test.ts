@@ -170,6 +170,9 @@ const WITNESSED_WITH_EXTRA_CONTEXT: ReadonlySet<SoakMechanicId> = new Set([
   'counters',
   'additional-cast-cost',
   'tutor-route',
+  // Witnessed by replacementApplied PLUS its payload: the event type alone is
+  // every replacement family at once, and the tokens family is the payload.
+  'token-count-replacement',
 ]);
 
 describe('the fast soak', () => {

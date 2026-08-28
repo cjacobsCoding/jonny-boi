@@ -24,6 +24,7 @@ import {
   isSplitCard,
   modalSpecOf,
   playableFaceOf,
+  delayedRemovalTargets,
 } from '@jonny-boi/core';
 import {
   CARD_POOL,
@@ -787,6 +788,8 @@ const CORE_ENGINE_API = {
   backFaceCastZonesOf,
   /** Permission to cast a card out of exile (an adventure, a defeated Siege). */
   castPermissionFor,
+  /** The permanents a DELAYED ability (CR 603.7) will remove at its moment. */
+  delayedRemovalTargets,
 } as const;
 
 /** A minimal real-shaped card wrapped around a witness's Oracle text. */

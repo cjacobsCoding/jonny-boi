@@ -2412,9 +2412,13 @@ export function pickBlocker(
     const { attackerDies, blockerDies } = outcome;
     // Trade value to US: gain by killing the attacker, lose by losing our blocker,
     // and pay for whatever this body fails to stop — see `blockTrampleLeakPerPoint`.
+    // A blocker the rules will remove at end of turn anyway costs us NOTHING
+    // when it dies — the free chump block. Only OUR side of the trade is
+    // written down to zero; the attacker's fate is still the real fight.
+    const blockerLossCounts = blockerDies && !doomed.has(b.instanceId);
     const value =
       (attackerDies ? weights.killEnemyPerStat * (aPower + aTough) : 0) -
-      (blockerDies ? weights.ownCreatureLossPerStat * (bPower + bTough) : 0) -
+      (blockerLossCounts ? weights.ownCreatureLossPerStat * (bPower + bTough) : 0) -
       weights.blockTrampleLeakPerPoint * outcome.damageThrough;
     if (value > bestValue) {
       bestValue = value;

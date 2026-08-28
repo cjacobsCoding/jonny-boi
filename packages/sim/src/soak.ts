@@ -714,6 +714,13 @@ function createGameWatcher(inner: Pilot): GameWatcher {
           );
         }
         break;
+      case 'replacementApplied':
+        // The generic id is credited by the one-type-one-mechanic table; what
+        // the TYPE alone cannot say is WHICH family was replaced, and creating
+        // extra OBJECTS is the outcome 'token-count-replacement' had to add —
+        // crediting it off any counter doubler would prove nothing about it.
+        if (event.event === 'tokens') mechanics.add('token-count-replacement');
+        break;
       case 'counterAdded':
         // Loyalty and defense have their own events; crediting those kinds here
         // would let a planeswalker entering play satisfy the +1/+1 requirement.

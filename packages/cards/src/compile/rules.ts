@@ -6936,7 +6936,7 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     //    on the zone the spell was cast from.
     pattern: /\bcopy (?:that|target) (?:spell|instant|sorcery|activated)\b|tokens? that(?:'?s| are) (?:a )?cop(?:y|ies)/,
     missingEngineSystem:
-      'a COPY-CREATING template outside the compiler’s closed tables (spell/ability copies — the "you control" scopes included — token copies, TAPPED token copies, and "another target nonland permanent you control" are all implemented; what is missing is this selector or tail: a "nonlegendary"/"token" target, "copy THAT spell" naming the spell that triggered the ability, a follow-up sentence about the token just created, an "except …" tail on a SPELL copy, a for-each iteration, or a copy COUNT conditional on where the spell was cast from)',
+      'a COPY-CREATING template outside the compiler’s closed tables (spell/ability copies with the "you control" scopes, token copies — tapped, "nonlegendary"/"artifact or creature" targets, a haste-grant follow-up sentence and a delayed "sacrifice/exile it at the beginning of the next end step" are ALL implemented; what is missing is this selector or tail: a "token" target, "copy THAT spell" naming the spell that triggered the ability, an "except …" tail on a SPELL copy, a for-each iteration, or a copy COUNT conditional on where the spell was cast from)',
   },
   {
     // Everything else in the family: a selector or an "except" clause outside

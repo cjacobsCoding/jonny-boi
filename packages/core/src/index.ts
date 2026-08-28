@@ -403,11 +403,11 @@ export {
   expireFloatingReplacements,
   hasAnyReplacement,
   indexReplacements,
+  replaceTokenCount,
   projectDamage,
   replaceCounters,
   replaceDamage,
   replaceDraw,
-  replaceTokens,
   runReplacements,
 } from './internal/replacement.js';
 

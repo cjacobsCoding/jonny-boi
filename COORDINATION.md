@@ -89,6 +89,7 @@ throughput (games/sec) from regressing.
 | feat/optional-payment | DESKTOP-90PJPM4 (integrator) | packages/core (choices/effects/engine/events/mana/clone + new optional-payment.test.ts), packages/cards (choice-primitives/primitives/effect-helpers/compile rules+text+compile + new test), packages/ai (choices/effect-value/heuristic/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
 | feat/trigger-targets | DESKTOP-90PJPM4 (integrator) | packages/core (triggers/state/choices/engine/events/clone + new trigger-targets.test.ts), packages/cards (compile types/compile/rules + new test), packages/ai (choices/effect-value/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
 | feat/token-doublers | DESKTOP-90PJPM4 (integrator) | packages/core (replacement/internal-replacement/effects/events), packages/cards (primitives + compile rules + replacement-effects.test reversed + new token-doublers.test.ts), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
+| feat/delayed-triggers-v2 | DESKTOP-90PJPM4 (integrator) | packages/core (new delayed.ts + effects/events/state/targeting/serialize/clone/index/instance-ids), packages/cards (primitives/copy-primitives/compile + new delayed-and-token-count.test.ts), packages/ai (heuristic/combat-forecast/effect-value + parity ledger), packages/sim (soak/soak-config/observation/paired-arms), apps/web (about mechanics + play/replay format), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/modal-one-or-more | DESKTOP-90PJPM4 (integrator) | packages/core (targeting + 1 test fixture), packages/cards (compile rules/text + new modal-one-or-more.test.ts), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/cost-reduction | DESKTOP-90PJPM4 (integrator) | packages/core (card/engine/index + new cost-reduction.test.ts), packages/cards (compile rules/compile/types), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/karoo-lands | DESKTOP-90PJPM4 (integrator) | packages/core (card/engine), packages/cards (choice-primitives + compile rules/compile/types + new karoo-lands.test.ts), packages/sim (1 classification line), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
@@ -165,6 +166,35 @@ throughput (games/sec) from regressing.
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-28 integrator: **`feat/delayed-triggers-v2` MERGED + DEPLOYED — CR 603.7 delayed
+  triggered abilities; KIKI-JIKI, MIRROR BREAKER COMPILES COMPLETE.** Audit (same saved corpus):
+  **589 → 593**. `npm run verify` **5389 / 0**, build exit 0.
+  👉 The system is a Aug-20 WIP branch (`feat/delayed-triggers`, 5 commits) SALVAGED by merging
+  it onto today's main: `GameState.delayedTriggers` (a record living on the STATE, not on any
+  object, so Kiki's token is sacrificed even after Kiki dies); it reuses `TriggerCondition` /
+  `conditionMatches` / the APNAP queue rather than coining rivals; "the NEXT end step" falls out
+  of event matching (the current step's `stepBegin` already fired) — CR 603.7e with no turn
+  arithmetic; fires ONCE structurally (the record is removed at MATCH, so a countered delayed
+  ability does not come back). Subjects ride the body's `params.instanceIds`
+  (`sacrificeNamed`/`exileNamed`), baked in by the primitive that created the objects.
+  Also in: `nonlegendaryCreatureYouControl` + `artifactOrCreatureYouControl` targets, the
+  haste-grant follow-up sentence, tapped-token entry OPTIONS on the one funnel, and the pilot
+  prices a doomed permanent as a free attacker/chump (`delayedRemovalTargets`, wired into
+  combat-forecast too so the forecast cannot disagree with the live pilot).
+  ⚠️ **SALVAGE-MERGE TRAPS, for whoever next revives an old branch:** (1) both histories had
+  independently implemented the token-count replacement, and git AUTO-MERGED the two funnels
+  into one file with two `createOneTokenInState` declarations, one recursive — a clean-looking
+  merge that did not compile; reconcile the funnel BY HAND and let tsc referee. (2) A blanket
+  keep-HEAD on a conflicted file silently drops the branch's adjacent additions (it cost the two
+  new target restrictions until the compiler errored). (3) The branch's own test fixtures
+  mirror core APIs (`primitives.test.ts` re-implements the funnel) — they chase the API you
+  KEEP, not the one the branch shipped with.
+  👉 New soak witness: `token-count-replacement` is credited from `replacementApplied` ONLY when
+  the payload says `event === 'tokens'` — the type alone is every replacement family at once.
+  `sacrificeNamed`/`exileNamed` carried on the AI's unpriced ledger with the honest reason (they
+  are never on a pilot's menu; combat prices the doom instead).
+  (Integrator)
 
 - 2026-08-26 DESKTOP-90PJPM4 (integrator): **§3.47 + §3.49 MERGED; §3.50 default flipped to
   `lookahead`.** Re-verified before merging: pilot-ab 3754–3274 (STRONGER, p<1e-16), every deck row

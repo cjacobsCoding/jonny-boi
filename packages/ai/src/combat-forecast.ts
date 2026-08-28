@@ -53,6 +53,7 @@
  */
 
 import type { CardInstance, GameState, InstanceId, PlayerId } from '@jonny-boi/core';
+import { delayedRemovalTargets } from '@jonny-boi/core';
 import {
   forcedBlockAssignment,
   indexReplacements,
@@ -375,9 +376,12 @@ function forecastPlan(ctx: ForecastContext, plan: readonly CardInstance[]): Plan
         }
       }
     }
+    // A creature a delayed ability will remove anyway is a free chump block —
+    // the same read the live pilot makes, so the forecast cannot disagree with it.
+    const doomed = delayedRemovalTargets(ctx.view);
     for (let i = 0; i < sorted.length; i++) {
       const attacker = sorted[i] as CardInstance;
-      const blocker = pickBlocker(attacker, ctx.defenders, used, desperate, weights, index);
+      const blocker = pickBlocker(attacker, ctx.defenders, used, desperate, weights, index, doomed);
       if (blocker) {
         (blockersOf[i] as CardInstance[]).push(blocker);
         used.add(blocker.instanceId);
