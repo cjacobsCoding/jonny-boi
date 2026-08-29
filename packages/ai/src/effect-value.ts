@@ -118,6 +118,9 @@ const EMPTY_PARAMS: Readonly<Record<string, unknown>> = Object.freeze({});
  */
 const NO_SOURCE_INSTANCE: InstanceId = -1;
 
+/** Food's printed "You gain 3 life", mirrored from the cards package's def. */
+const FOOD_TOKEN_LIFE_GAIN = 3;
+
 /** One entry in the value registry: price this effect's params on this board. */
 type EffectValuer = (params: Readonly<Record<string, unknown>>, ctx: EffectValueContext) => number;
 
@@ -684,6 +687,28 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
 
   /** A body on the board, priced like casting one. */
   makeToken: (params, ctx) => tokenValue(params, ctx),
+
+  /**
+   * The rules-defined artifact tokens (CR 111.10). Each is a BANKED effect the
+   * pilot cracks later, so each is priced as a share of the effect it banks:
+   * a Clue is a draw the deck has to still afford, a Food is its printed life
+   * gain, a Treasure is a mana the next spell spends — all discounted by the
+   * bank's own weight because a token on the board is not the effect in hand.
+   */
+  createPredefinedToken: (params, ctx) => {
+    const weights = ctx.weights;
+    const count = Math.max(intParam(params, 'count', 1), 0);
+    const kind = params['token'];
+    const banked =
+      kind === 'clue'
+        ? weights.modeDrawCardValue
+        : kind === 'food'
+          ? lifeSwing(FOOD_TOKEN_LIFE_GAIN, ctx, EMPTY_PARAMS)
+          : kind === 'treasure'
+            ? weights.modeDrawCardValue // a floating mana ≈ the tempo of a draw
+            : 0;
+    return count * banked * weights.bankedEffectValueShare;
+  },
   createToken: (params, ctx) => tokenValue(params, ctx),
 
   /**

@@ -81,6 +81,13 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
    * see, so either branch could hide a library reader.
    */
   'substituteIf',
+  /*
+   * `createPredefinedToken` mints a Clue, whose crack ability draws a card at
+   * runtime — a library read the decklist scan cannot see (the draw lives on
+   * the TOKEN's definition, not on any deck card). Same conservative call as
+   * the wrappers: any game that makes one withdraws the identical-game skip.
+   */
+  'createPredefinedToken',
   // Reads the top of a library and rearranges it.
   'reorderTopOfLibrary',
   /*

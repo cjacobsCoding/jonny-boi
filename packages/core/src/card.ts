@@ -1489,6 +1489,14 @@ export interface ManaAbilityCost {
    * gate every other mana-costed activation in this engine uses.
    */
   readonly mana?: ManaCost;
+  /**
+   * "{T}, **Sacrifice this artifact**: Add one mana of any color" — the
+   * Treasure token, Lotus Petal. The source leaves for the graveyard through
+   * the same death path a sacrifice cost on an activated ability uses, AFTER
+   * the mana is added (the observable order is identical to paying first —
+   * both are one atomic action — and the production still needs the source).
+   */
+  readonly sacrificeSelf?: boolean;
 }
 
 /**

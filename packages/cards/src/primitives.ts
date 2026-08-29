@@ -91,6 +91,7 @@ import {
   targetedSpellOnStack,
 } from './effect-helpers.js';
 import { CHOICE_PRIMITIVES } from './choice-primitives.js';
+import { PREDEFINED_TOKEN_DEFS } from './predefined-tokens.js';
 import { COPY_PRIMITIVES } from './copy-primitives.js';
 import { EXILE_UNTIL_LEAVES_PRIMITIVES } from './exile-until-leaves.js';
 import { TRIGGER_COPY_PRIMITIVES } from './trigger-copy-primitives.js';
@@ -458,6 +459,28 @@ const TOKEN_TYPES: readonly CardType[] = ['artifact', 'creature', 'enchantment',
  * colourless Soldier artifact creature) are not conflated by anything keying on
  * id — the UI's art lookup, a log line, an AI's card memo.
  */
+/**
+ * `createPredefinedToken` — "Create a Treasure token" / "…a Clue token" /
+ * "…a Food token" (CR 111.10).
+ *
+ * The rules define these faces once, globally, so the primitive looks the
+ * definition up in {@link PREDEFINED_TOKEN_DEFS} rather than assembling one
+ * from params — every card that names a Treasure means exactly that object,
+ * abilities included. A `token` value outside the table is a safe no-op (the
+ * compiler never emits one; this guards hand-authored data).
+ *
+ * Params: `token` ('treasure' | 'clue' | 'food'), `count` (default 1),
+ * `tapped` (the printed word "tapped").
+ */
+export const createPredefinedToken: EffectPrimitive = (ctx) => {
+  const kind = strParam(ctx, 'token');
+  const def = kind === undefined ? undefined : PREDEFINED_TOKEN_DEFS[kind];
+  if (def === undefined) return;
+  const count = intParam(ctx, 'count', 1);
+  // ONE call with the count — a single CR 614 event, exactly as `makeToken`.
+  ctx.createTokens(def, count, undefined, ctx.params.tapped === true ? { tapped: true } : undefined);
+};
+
 export const makeToken: EffectPrimitive = (ctx) => {
   const count = intParam(ctx, 'count', 1);
   const power = intParam(ctx, 'power', 1);
@@ -1591,6 +1614,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   pumpUntilEndOfTurn,
   grantKeywordUntilEndOfTurn,
   grantKeywordToYoursUntilEndOfTurn,
+  createPredefinedToken,
   makeToken,
   createEmblem,
   persistReturn,

@@ -441,6 +441,14 @@ export interface HeuristicWeights {
    */
   readonly kickedClauseValueShare: number;
   /**
+   * What a BANKED effect is worth as a share of the effect itself — the
+   * predefined artifact tokens (a Clue is a draw the pilot must still pay {2}
+   * to take, a Treasure is a mana the next spell spends). Below 1 because the
+   * bank still costs a crack; above 0 because a Treasure-maker beating a blank
+   * is exactly what the pilot must be able to see.
+   */
+  readonly bankedEffectValueShare: number;
+  /**
    * What one point of a STOLEN creature's power is worth for the turn (the Act
    * of Treason template: untap it, swing with it, it cannot block). Strictly
    * above `modeTapPerPowerValue` (6) — theft denies the block exactly as a tap
@@ -658,6 +666,8 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   modeCounterPerStatValue: 3,
   // Half the body until the kicker is actually paid.
   kickedClauseValueShare: 0.5,
+  // A banked Clue/Treasure/Food is most of its effect, minus the crack cost.
+  bankedEffectValueShare: 0.75,
   // Stealing a 4-power body scores 40 — above tapping it (24), below killing
   // it (84), which is the printed card's actual rate.
   modeTheftPerPowerValue: 10,

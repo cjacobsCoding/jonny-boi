@@ -2834,7 +2834,21 @@ function applyTapForMana(
   // must end the game here rather than leaving a corpse holding priority. Run
   // only when something actually changed a life total, so the ordinary tap —
   // by far the most frequent action in the game — pays nothing for it.
-  if (damage > 0 || (extra?.ability.cost?.life ?? 0) > 0) checkStateBasedActions(state, emit);
+  // "{T}, Sacrifice this artifact:" — the Treasure shape. Paid through the
+  // same graveyard path an activated ability's `sacrificeSelf` uses, so
+  // leaves/dies triggers see it; ordered AFTER the production because the tap
+  // needs the source, and the one atomic action makes the order unobservable.
+  if (extra?.ability.cost?.sacrificeSelf === true) {
+    moveToZone(state, source, 'graveyard', emit, source.owner);
+    resetInstanceForNewZone(source);
+  }
+  if (
+    damage > 0 ||
+    (extra?.ability.cost?.life ?? 0) > 0 ||
+    extra?.ability.cost?.sacrificeSelf === true
+  ) {
+    checkStateBasedActions(state, emit);
+  }
   // Mana abilities don't use the stack and don't reset priority passing.
   return { state, events };
 }

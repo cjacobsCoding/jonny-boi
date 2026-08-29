@@ -242,6 +242,24 @@ describe('the printed cards this family was measured against', () => {
     );
   });
 
+  it('plays Goldvein Pick — the Treasure trigger is a data lookup now', () => {
+    const pick = playable(
+      scryfall({
+        name: 'Goldvein Pick',
+        cost: { generic: 2 },
+        types: ['Artifact'],
+        subtypes: ['Equipment'],
+        keywords: ['Equip'],
+        oracleText:
+          'Whenever equipped creature deals combat damage to a player, create a Treasure token.\nEquip {2}',
+      }),
+    );
+    expect(pick.triggers?.[0]?.effects[0]).toEqual({
+      primitive: 'createPredefinedToken',
+      params: { token: 'treasure' },
+    });
+  });
+
   it('plays Mask of Memory — the whole card is one optional clause', () => {
     // "You may draw two cards. If you do, discard a card." The option is
     // all-or-nothing, so "if you do" is exactly "the may was taken" — and the
@@ -272,11 +290,9 @@ describe('the printed cards this family was measured against', () => {
     // compiling a near-miss — an approximate Sword biases every A/B verdict that
     // contains it.
     const cases: ReadonlyArray<{ name: string; text: string; clause: string }> = [
-      {
-        name: 'Goldvein Pick',
-        text: 'Whenever equipped creature deals combat damage to a player, create a Treasure token.',
-        clause: 'whenever equipped creature deals combat damage to a player, create a treasure token',
-      },
+      // Goldvein Pick left this list when the predefined artifact tokens
+      // landed — its trigger body is now "create a Treasure token", a data
+      // lookup, and the card compiles complete (asserted below).
       {
         name: 'Sword of Feast and Famine',
         text: 'Whenever equipped creature deals combat damage to a player, that player discards a card and you untap all lands you control.',

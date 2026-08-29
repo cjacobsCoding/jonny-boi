@@ -864,7 +864,8 @@ interface TokenFace {
  *    typeless one would be invisible to every typal effect in the game.
  *  - **A type line without `creature`.** The predefined artifact tokens
  *    (Treasure, Clue, Food) print no P/T here and carry an activated ability
- *    this rule does not build; they stay reported.
+ *    this rule does not build; the `create-predefined-token` rule handles them
+ *    as a data lookup, and any OTHER non-creature token stays reported.
  */
 function parseTokenFace(descriptor: string): TokenFace | null {
   const words = descriptor
@@ -2676,6 +2677,29 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
         params.keywords = keywords;
       }
       return effects({ primitive: 'makeToken', params });
+    },
+  },
+  {
+    id: 'create-predefined-token',
+    description:
+      '"Create [N] [tapped] Treasure/Clue/Food token(s)" (CR 111.10) — the rules-defined artifact tokens, as one data lookup',
+    // The face is defined by the RULES, not the card, so the whole sentence is
+    // a lookup into `PREDEFINED_TOKEN_DEFS` — abilities included. Blood, Map,
+    // Incubator and the rest stay OUT of the alternation until their
+    // definitions (and the systems those need) exist; matching the noun without
+    // the face would create a nameless brick.
+    pattern: new RegExp(`^create ${COUNT_TOKEN} (tapped )?(treasure|clue|food) tokens?$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      if (count === null) return null;
+      return effects({
+        primitive: 'createPredefinedToken',
+        params: {
+          token: match[3],
+          ...(count !== TOKEN_DEFAULT_COUNT ? { count } : {}),
+          ...(match[2] !== undefined ? { tapped: true } : {}),
+        },
+      });
     },
   },
   {
