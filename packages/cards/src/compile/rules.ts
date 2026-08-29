@@ -580,6 +580,11 @@ const SEARCHABLE_SUBTYPES: ReadonlySet<string> = new Set([
   // Artifact/enchantment types.
   'equipment',
   'aura',
+  // The predefined artifact tokens, countable now that the engine mints them
+  // ("if you control ten or more Treasures" — Revel in Riches).
+  'treasure',
+  'clue',
+  'food',
   // Creature types named by the tutors and the typal lords in the most-played
   // corpus. Extended one printed card at a time - see the doc comment.
   'goblin',
@@ -2677,6 +2682,34 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
         params.keywords = keywords;
       }
       return effects({ primitive: 'makeToken', params });
+    },
+  },
+  {
+    id: 'investigate',
+    description: '"Investigate" (CR 701.51) — exactly "create a Clue token", as the rules define it',
+    pattern: /^investigate$/,
+    build() {
+      return effects({ primitive: 'createPredefinedToken', params: { token: 'clue' } });
+    },
+  },
+  {
+    id: 'win-the-game',
+    description: '"You win the game" (Revel in Riches, Hellkite Tyrant) — CR 104.2a',
+    // The sentence alone; the printed condition in front of it is the trigger's
+    // intervening "if" (CR 603.4), which the trigger compiler already checks
+    // twice. Compiling the sentence unconditionally here is therefore SAFE only
+    // because an unreadable condition refuses the whole line before this runs.
+    pattern: /^you win the game$/,
+    build() {
+      return effects({ primitive: 'winTheGame' });
+    },
+  },
+  {
+    id: 'lose-the-game',
+    description: '"You lose the game" (Pact of Negation\'s unpaid upkeep) — CR 104.3a',
+    pattern: /^you lose the game$/,
+    build() {
+      return effects({ primitive: 'loseTheGame' });
     },
   },
   {

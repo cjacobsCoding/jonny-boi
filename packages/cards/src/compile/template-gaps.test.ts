@@ -281,13 +281,13 @@ describe('template gaps — the neighbouring wordings still refuse honestly', ()
   it('STILL REFUSES a search whose noun is outside the closed subtype table', () => {
     // The contract that replaced the blanket refusal above: the tutor compiles
     // only when the printed word names something `CardFilter` can select. A
-    // "Clue card" search would otherwise compile into a filter matching nothing
+    // "Contraption card" search would otherwise compile into a filter matching nothing
     // — a tutor that can never find, which is strictly worse than reporting.
     const result = compileCard(
       makeCard({
-        name: 'Test Clue Tutor',
+        name: 'Test Contraption Tutor',
         typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
-        oracleText: 'Search your library for a Clue card, put it onto the battlefield, then shuffle.',
+        oracleText: 'Search your library for a Contraption card, put it onto the battlefield, then shuffle.',
       }),
     );
     expect(result.status).toBe('incomplete');

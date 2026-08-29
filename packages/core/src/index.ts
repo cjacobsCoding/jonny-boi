@@ -661,6 +661,10 @@ export { attackedObjectOf } from './internal/combat.js';
  * engine already runs it at every mutation site and at the priority boundary.
  */
 export { checkStateBasedActions, stateBasedActionsPossible } from './internal/sba.js';
+// The two game-deciding verbs, exported for the cards package's "you win/lose
+// the game" primitives — ONE implementation, so an alt-win card and the SBA
+// pass can never disagree about what winning means.
+export { loseGame, winGame } from './internal/sba.js';
 
 // Debug / inspector seam
 export type { SerializedState } from './serialize.js';

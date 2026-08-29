@@ -263,6 +263,9 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
    * covers a token copy covers anything downstream of these.
    */
   'sacrificeNamed',
+  // Flip a seat's win/loss flag through core's one verb — no zone read at all.
+  'winTheGame',
+  'loseTheGame',
   'exileNamed',
   'dealDamage',
   // Drawing is safe *because* every drawn card announces its instance id.

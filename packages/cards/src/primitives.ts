@@ -65,6 +65,8 @@ import {
   drawCardForPlayer,
   indexReplacements,
   interveningIfHolds,
+  loseGame,
+  winGame,
   replaceCounters,
   replaceDamage,
 } from '@jonny-boi/core';
@@ -317,6 +319,25 @@ export const gainLife: EffectPrimitive = (ctx) => {
   const player = useTarget ? firstPlayerTarget(ctx) ?? ctx.controller : ctx.controller;
   changeLife(ctx, player, amount);
   ctx.emit({ type: 'gainLife', player, amount });
+};
+
+/**
+ * `winTheGame` — the printed sentence "You win the game" (Revel in Riches,
+ * Hellkite Tyrant, Chimil). Core's own `winGame` verb, so an alt-win and the
+ * SBA pass can never disagree about what winning means; the pass that follows
+ * the resolution is what settles `gameOver`, exactly as a lethal SBA does.
+ */
+export const winTheGame: EffectPrimitive = (ctx) => {
+  winGame(ctx.state, ctx.controller, `${ctx.source.def.name}: you win the game`, ctx.emit);
+};
+
+/**
+ * `loseTheGame` — the printed sentence "You lose the game" (Pact of Negation's
+ * unpaid upkeep). The controller's own loss, through the same one `loseGame`
+ * verb every other loss uses.
+ */
+export const loseTheGame: EffectPrimitive = (ctx) => {
+  loseGame(ctx.state, ctx.controller, `${ctx.source.def.name}: you lose the game`, ctx.emit);
 };
 
 /**
@@ -1610,6 +1631,8 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   dealDamage,
   drawCards,
   gainLife,
+  winTheGame,
+  loseTheGame,
   loseLife,
   pumpUntilEndOfTurn,
   grantKeywordUntilEndOfTurn,

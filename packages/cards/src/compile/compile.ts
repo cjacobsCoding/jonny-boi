@@ -92,6 +92,13 @@ const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freez
   scry: 'scry',
   surveil: 'surveil',
   mill: 'mill',
+  // Scryfall tags a card "Treasure" / "Food" / "Investigate" when its text
+  // creates the predefined token; the compiled evidence is the lookup
+  // primitive. A wording the create rule did not match compiles none and
+  // still reports through its own missing entry.
+  treasure: 'createPredefinedToken',
+  food: 'createPredefinedToken',
+  investigate: 'createPredefinedToken',
 });
 
 /**

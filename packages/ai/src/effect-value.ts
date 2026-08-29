@@ -688,6 +688,11 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
   /** A body on the board, priced like casting one. */
   makeToken: (params, ctx) => tokenValue(params, ctx),
 
+  // "You win the game" IS the lethal outcome, priced at lethal's own weight —
+  // and its mirror is the one price that must always be refused.
+  winTheGame: (_params, ctx) => ctx.weights.lethalBurnScore,
+  loseTheGame: (_params, ctx) => -ctx.weights.lethalBurnScore,
+
   /**
    * The rules-defined artifact tokens (CR 111.10). Each is a BANKED effect the
    * pilot cracks later, so each is priced as a share of the effect it banks:

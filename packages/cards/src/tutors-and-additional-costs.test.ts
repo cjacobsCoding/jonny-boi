@@ -227,8 +227,8 @@ describe('compiling library searches', () => {
   it('REFUSES a subtype outside the closed table — a tutor that can never find is worse than a reported card', () => {
     const result = compileCard(
       cardRecord({
-        name: 'Test Clue Tutor',
-        oracleText: 'Search your library for a Clue card, reveal it, put it into your hand, then shuffle.',
+        name: 'Test Contraption Tutor',
+        oracleText: 'Search your library for a Contraption card, reveal it, put it into your hand, then shuffle.',
       }),
     );
     expect(result.status).toBe('incomplete');
