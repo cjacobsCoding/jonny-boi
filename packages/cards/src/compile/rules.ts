@@ -2922,6 +2922,41 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'may-cost-then-effect',
+    description:
+      '"You may sacrifice a land / discard a card. If you do, EFFECT" (Springbloom Druid, Formidable Speaker) — a cost-gated option, all-or-nothing',
+    // The COST alternation is CLOSED to the two shapes the wrapper primitive
+    // can pre-check for payability (see `mayCostEffects`): a cost it could not
+    // check would let "you may sacrifice a land" grant the payoff on an empty
+    // board. The payoff must itself compile, target-free — it runs inside the
+    // resolution with no aiming step of its own.
+    pattern: /^you may (sacrifice an? (?:creature|land|artifact|permanent)|discard a card)\. if you do, (.+)$/,
+    build(match, ctx) {
+      const costText = match[1]!;
+      const sacrifice = costText.match(/^sacrifice an? (creature|land|artifact|permanent)$/);
+      const cost =
+        sacrifice !== null
+          ? {
+              primitive: 'sacrificeChosen',
+              params: {
+                who: 'controller',
+                ...(sacrifice[1] === 'permanent' ? {} : { filter: { anyOfTypes: [sacrifice[1] as CardType] } }),
+              },
+            }
+          : { primitive: 'discardCard', params: { who: 'controller' } };
+      const payoff = ctx.compileEffectClause(match[2]!, { targetFree: true });
+      if (!payoff || payoff.length === 0) return null;
+      return effects({
+        primitive: 'mayCostEffects',
+        params: {
+          cost: [cost],
+          effects: [...payoff],
+          prompt: `You may ${costText}. If you do, ${match[2]}`,
+        },
+      });
+    },
+  },
+  {
     id: 'target-player-sacrifices',
     description: '"Target player sacrifices a creature" (the edict template; Liliana\'s −2)',
     pattern: /^target (player|opponent) sacrifices an? (creature|land|artifact|permanent)$/,

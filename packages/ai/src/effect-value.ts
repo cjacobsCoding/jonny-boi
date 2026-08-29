@@ -553,6 +553,21 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     return Array.isArray(inner) ? valueOfEffects(inner as readonly EffectRef[], ctx) : 0;
   },
 
+  /**
+   * "YOU MAY <cost>. IF YOU DO, <payoff>" — both halves priced and SUMMED,
+   * exactly the trade the confirm decides: the cost's own entry carries its
+   * negative sign, so a payoff that does not cover it prices below zero and
+   * `answerConfirm` declines. Same recursion contract as `mayEffects`.
+   */
+  mayCostEffects: (params, ctx) => {
+    const cost = params['cost'];
+    const payoff = params['effects'];
+    return (
+      (Array.isArray(cost) ? valueOfEffects(cost as readonly EffectRef[], ctx) : 0) +
+      (Array.isArray(payoff) ? valueOfEffects(payoff as readonly EffectRef[], ctx) : 0)
+    );
+  },
+
   blinkTarget: (_params, ctx) => {
     const perm = firstTargetPermanent(ctx);
     if (!perm) return 0;

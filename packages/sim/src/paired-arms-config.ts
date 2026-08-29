@@ -74,6 +74,9 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
    * any game that resolves an optional clause — sound whatever it contains.
    */
   'mayEffects',
+  // The cost-gated "you may <cost>. If you do, <payoff>" wrapper — its payoff
+  // param can hide a library search, same argument as `mayEffects`.
+  'mayCostEffects',
   /*
    * `substituteIf` is the "…instead" branch wrapper (Scute Swarm), classified
    * conservatively for the same reason as `ifKicked` and `mayEffects`: both its

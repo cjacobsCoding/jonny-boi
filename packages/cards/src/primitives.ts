@@ -1409,6 +1409,59 @@ function nestedEffectRefs(ctx: EffectContext): readonly EffectRef[] {
 }
 
 /**
+ * `mayCostEffects` — the printed shape **"You may <cost>. If you do,
+ * <payoff>."** (Springbloom Druid, Formidable Speaker.)
+ *
+ * One wrapper, all-or-nothing: a YES pays the cost and takes the payoff, a NO
+ * does neither — "If you do" means exactly "the may was taken", the same
+ * reading Mask of Memory's test pins. What makes this a separate primitive
+ * from `mayEffects` is the PAYABILITY gate: "you may sacrifice a land" with no
+ * land is not an option in paper, and running the payoff after a cost that
+ * silently no-opped would be a strictly better card than printed.
+ *
+ * The gate is a CLOSED check over the cost shapes the compiler emits
+ * (`sacrificeChosen` — a matching permanent exists; `discardCard` — the hand
+ * has a card). A cost ref outside that vocabulary makes the whole thing a safe
+ * no-op: the card plays as its weaker half, never its stronger one.
+ *
+ * Params: `cost` (the cost clause's refs), `effects` (the payoff), `prompt`.
+ */
+export const mayCostEffects: EffectPrimitive = (ctx) => {
+  const cost = nestedEffectRefsIn(ctx, 'cost');
+  const payoff = nestedEffectRefs(ctx);
+  if (cost.length === 0 || payoff.length === 0) return;
+  if (!costIsPayable(ctx, cost)) return;
+  const yes = ctx.confirm({
+    chooser: ctx.controller,
+    prompt: strParam(ctx, 'prompt') ?? 'You may pay this cost',
+    // Always a price: the printed sentence charges the controller something.
+    valence: 'loss',
+  });
+  if (yes === undefined) return; // parked — nothing mutated
+  if (!yes) return;
+  ctx.enqueueEffects([...cost, ...payoff]);
+};
+
+/** Whether every cost ref could actually be paid RIGHT NOW — closed vocabulary. */
+function costIsPayable(ctx: EffectContext, cost: readonly EffectRef[]): boolean {
+  for (const ref of cost) {
+    const filter = ref.params?.filter as CardFilter | undefined;
+    if (ref.primitive === 'sacrificeChosen') {
+      const hasCandidate = ctx.state.battlefield.some(
+        (perm) => perm.controller === ctx.controller && matchesCardFilter(perm, filter),
+      );
+      if (!hasCandidate) return false;
+    } else if (ref.primitive === 'discardCard') {
+      if (ctx.state.players[ctx.controller].hand.length === 0) return false;
+    } else {
+      // An unknown cost shape cannot be checked — refuse the option entirely.
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * `substituteIf` — the printed word **"instead"** on a board condition:
  * "Create a 1/1 green Insect creature token. If you control six or more lands,
  * create a token that's a copy of this creature **instead**." (Scute Swarm.)
@@ -1627,6 +1680,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   gainControl,
   ifKicked,
   mayEffects,
+  mayCostEffects,
   substituteIf,
   dealDamage,
   drawCards,
