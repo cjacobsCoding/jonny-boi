@@ -87,6 +87,21 @@ describe('compiling "create a … token" against the closed table', () => {
     expect(tapped.definition.effects?.[0]?.params).toEqual({ token: 'treasure', tapped: true });
   });
 
+  it("compiles Professional Face-Breaker's group trigger line", () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Group Coins',
+        typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
+        oracleText:
+          'Whenever one or more creatures you control deal combat damage to a player, create a Treasure token.',
+      }),
+    );
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    const trigger = result.definition.triggers?.[0];
+    expect(trigger?.condition.on).toBe('groupCombatDamageToPlayer');
+    expect(trigger?.effects[0]?.primitive).toBe('createPredefinedToken');
+  });
+
   it('still REFUSES a predefined token whose face is not authored (Blood)', () => {
     const result = compileCard(
       makeCard({

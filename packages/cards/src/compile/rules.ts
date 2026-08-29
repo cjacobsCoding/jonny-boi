@@ -4205,6 +4205,21 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'trigger-group-combat-damage-to-player',
+    description: '"Whenever one or more creatures you control deal combat damage to a player, BODY"',
+    // A GROUP trigger: fires once per damage batch however many creatures
+    // connected — core's `groupCombatDamageToPlayer` and its runtime dedup.
+    pattern: /^whenever one or more creatures you control deal combat damage to a player, (.+)$/,
+    build(match, ctx) {
+      return triggerFrom(
+        ctx,
+        { on: 'groupCombatDamageToPlayer' },
+        match[1] ?? '',
+        `Your creatures deal combat damage to a player: ${match[1] ?? ''}`,
+      );
+    },
+  },
+  {
     id: 'trigger-combat-damage-to-player',
     description: '"Whenever ~ deals combat damage to a player, BODY"',
     pattern: /^whenever ~ deals combat damage to a player, (.+)$/,

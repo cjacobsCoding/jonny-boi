@@ -20,7 +20,7 @@ import type { CardType, EffectRef } from './card.js';
 import type { GameEvent } from './events.js';
 import type { CardFilter } from './choices.js';
 import { matchesCardFilter } from './choices.js';
-import { permanentHasSubtype } from './card.js';
+import { isCreature, permanentHasSubtype } from './card.js';
 import type { CardInstance, InstanceId, PlayerId, Step } from './state.js';
 import type { TargetRestriction } from './targeting.js';
 import type { InterveningIf } from './intervening.js';
@@ -87,6 +87,16 @@ export type TriggerEvent =
   | 'beginCombat'
   | 'gainLife'
   | 'combatDamageToPlayer'
+  /**
+   * "Whenever ONE OR MORE creatures you control deal combat damage to a
+   * player" (Professional Face-Breaker, Spiteful Banditry). A GROUP event: the
+   * printed ability fires ONCE per damage batch however many creatures
+   * connected, which the runtime enforces by deduplicating the pending queue
+   * per (source, ability) — see `matchTriggers`' caller. The matcher here
+   * answers only "did THIS damage event qualify": combat, to a player, dealt
+   * by a creature whose controller satisfies `who` (default `'you'`).
+   */
+  | 'groupCombatDamageToPlayer'
   | 'permanentEnters'
   | 'permanentDies'
   | 'drawsCard';
@@ -443,6 +453,17 @@ export function conditionMatches(
       if (event.type !== 'drawCard') return false;
       return whoMatches(condition.who, event.player, sourceController);
     }
+    case 'groupCombatDamageToPlayer': {
+      // One qualifying damage event is enough to FIRE; firing once per batch
+      // is the caller's dedup, not this matcher's concern. The damaging
+      // creature is the event's SUBJECT (resolved by the runtime exactly as a
+      // board-watching trigger's is); an unresolvable source fails the match —
+      // a trigger firing on an unknown permanent would do more than printed.
+      if (event.type !== 'damageDealt' || !event.combat || typeof event.target !== 'string') return false;
+      if (subject === undefined) return false;
+      if (!isCreature(subject.card.def)) return false;
+      return whoMatches(condition.who ?? 'you', subject.controller, sourceController);
+    }
     case 'combatDamageToPlayer': {
       // A player target is a PlayerId ('A'/'B'); an InstanceId is a number, so
       // the string test is what distinguishes "to a player" from "to a
@@ -620,10 +641,15 @@ export function matchTriggers(
   const subjectOf = (): TriggerSubject | undefined => {
     if (!subjectResolved) {
       subjectResolved = true;
-      subject =
-        resolveSubject && (event.type === 'zoneChange' || event.type === 'spellCast')
+      subject = resolveSubject
+        ? event.type === 'zoneChange' || event.type === 'spellCast'
           ? resolveSubject(event.instanceId)
-          : undefined;
+          : // A damage event's subject is the DAMAGING object (the group
+            // combat-damage trigger reads its controller and creatureness).
+            event.type === 'damageDealt' && typeof event.source === 'number'
+            ? resolveSubject(event.source)
+            : undefined
+        : undefined;
     }
     return subject;
   };
@@ -638,6 +664,8 @@ export function matchTriggers(
       const watchesBoard =
         ability.condition.on === 'permanentEnters' ||
         ability.condition.on === 'permanentDies' ||
+        // The group combat-damage trigger reads the DAMAGING creature.
+        ability.condition.on === 'groupCombatDamageToPlayer' ||
         // A cast trigger narrowed by the chosen creature type needs the SPELL
         // object, for the same reason and through the same seam.
         ability.condition.spellSubtypeIsChosen === true;

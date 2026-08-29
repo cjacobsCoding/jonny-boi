@@ -298,6 +298,20 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
       ) {
         continue;
       }
+      // "Whenever ONE OR MORE creatures … deal combat damage" fires ONCE per
+      // batch (CR 603.2 — the printed word "one or more" is a single event
+      // however many objects qualify). Combat damage lands as one run of
+      // events inside one action, and the queue is flushed per action — so
+      // "already queued this flush window" IS "already fired for this batch".
+      if (
+        m.ability.condition.on === 'groupCombatDamageToPlayer' &&
+        queue !== null &&
+        queue.some(
+          (q) => q.sourceInstanceId === m.sourceInstanceId && q.abilityIndex === m.abilityIndex,
+        )
+      ) {
+        continue;
+      }
       (queue ??= []).push(m);
     }
   };
