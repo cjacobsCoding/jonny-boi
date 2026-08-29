@@ -145,6 +145,12 @@ export type TargetRestriction =
    */
   | 'artifactEnchantmentOrLand'
   /**
+   * "target artifact or enchantment" — the naturalize pair without the land
+   * (Reclamation Sage, Naturalize itself). Its own member because widening to
+   * the three-type form would let the card hit a land the printed one cannot.
+   */
+  | 'artifactOrEnchantment'
+  /**
    * "target player or planeswalker" — a face or a walker, never a creature.
    * Lava Spike's printed line. Its own restriction (not `'player'`) because
    * flattening it would make the card NARROWER than printed now that
@@ -304,6 +310,7 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'nonAngelCreatureYouControl' ||
     value === 'creatureAnOpponentControls' ||
     value === 'artifactEnchantmentOrLand' ||
+    value === 'artifactOrEnchantment' ||
     value === 'playerOrPlaneswalker' ||
     value === 'creatureOrPlaneswalker' ||
     value === 'permanent' ||
@@ -353,6 +360,7 @@ const TARGET_RESTRICTION_MEMBERS = {
   artifactOrCreatureYouControl: true,
   creatureAnOpponentControls: true,
   artifactEnchantmentOrLand: true,
+  artifactOrEnchantment: true,
   playerOrPlaneswalker: true,
   creatureOrPlaneswalker: true,
   permanent: true,
@@ -555,6 +563,9 @@ export function isLegalTarget(
   }
   if (restriction === 'artifactEnchantmentOrLand') {
     return hasType(permanent.def, 'artifact') || hasType(permanent.def, 'enchantment') || isLand(permanent.def);
+  }
+  if (restriction === 'artifactOrEnchantment') {
+    return hasType(permanent.def, 'artifact') || hasType(permanent.def, 'enchantment');
   }
   if (restriction === 'creatureAnOpponentControls') {
     // Unknown actor ⇒ illegal, never "probably theirs" (see the type's note).
@@ -821,6 +832,16 @@ function enumerateTargets(
       }
     }
   }
+  if (restriction === 'artifactOrEnchantment') {
+    for (const permanent of state.battlefield) {
+      if (
+        (hasType(permanent.def, 'artifact') || hasType(permanent.def, 'enchantment')) &&
+        isTargetableBy(state, permanent, controller, source, keywordIndex)
+      ) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
   if (restriction === 'nonlandPermanentYouControl' && controller !== undefined) {
     for (const permanent of state.battlefield) {
       if (
@@ -1007,6 +1028,8 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'a creature an opponent controls';
     case 'artifactEnchantmentOrLand':
       return 'an artifact, enchantment, or land';
+    case 'artifactOrEnchantment':
+      return 'an artifact or enchantment';
     case 'playerOrPlaneswalker':
       return 'a player or a planeswalker';
     case 'creatureOrPlaneswalker':

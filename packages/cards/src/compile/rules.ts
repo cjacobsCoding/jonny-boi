@@ -1747,10 +1747,13 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // One rule for the three single-type destroys the artifact rule above does
     // not cover, each mapping to its own restriction so the printed word is the
     // whole of what may be aimed at.
-    pattern: /^destroy target (enchantment|land|planeswalker)$/,
+    pattern: /^destroy target (enchantment|land|planeswalker|artifact or enchantment)$/,
     needsChosenTarget: true,
     build(match) {
-      const kind = match[1] as TargetRestriction;
+      // "artifact or enchantment" (Reclamation Sage, Naturalize) is one target
+      // with two acceptable types — its own restriction, spelled here.
+      const kind: TargetRestriction =
+        match[1] === 'artifact or enchantment' ? 'artifactOrEnchantment' : (match[1] as TargetRestriction);
       return effects({ primitive: 'destroyTarget', params: { targets: kind } });
     },
   },
