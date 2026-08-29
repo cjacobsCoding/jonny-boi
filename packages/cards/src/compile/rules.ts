@@ -203,6 +203,7 @@ const PERMANENT_TARGET: TargetRestriction = 'permanent';
  * it against the acting player's own graveyard; see `targeting.ts`.
  */
 const GRAVEYARD_SPELL_TARGET: TargetRestriction = 'instantOrSorceryInYourGraveyard';
+const CREATURE_CARD_IN_YOUR_GRAVEYARD_TARGET: TargetRestriction = 'creatureCardInYourGraveyard';
 
 
 /**
@@ -2919,6 +2920,29 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const params: Record<string, unknown> = { who: 'eachPlayer' };
       if (count !== 1) params.count = count;
       return effects({ primitive: 'discardCard', params });
+    },
+  },
+  {
+    id: 'move-target-from-graveyard',
+    description:
+      '"Put target creature card from your graveyard on top of your library" (Mortuary Mire) / "Return target creature card from your graveyard to your hand" (Unearth)',
+    // TARGETED (an opponent may respond; a card that leaves the yard fizzles
+    // it), unlike the chosen `returnFromGraveyard` family — the printed word
+    // "target" is the whole difference. ⚠️ Deliberately ONLY the
+    // top-of-library form: the "…to your hand" wording (Raise Dead) already
+    // compiles through `returnFromGraveyard`, and a whole pool of pilots and
+    // fixtures pin that shape — re-routing it to a targeted primitive is its
+    // own change, not a rider on this rule.
+    pattern: /^put target creature card from your graveyard on top of your library$/,
+    needsChosenTarget: true,
+    build() {
+      return effects({
+        primitive: 'moveTargetFromGraveyard',
+        params: {
+          targets: CREATURE_CARD_IN_YOUR_GRAVEYARD_TARGET,
+          to: 'libraryTop',
+        },
+      });
     },
   },
   {

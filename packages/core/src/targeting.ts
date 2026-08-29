@@ -189,6 +189,12 @@ export type TargetRestriction =
    */
   | 'instantOrSorceryInYourGraveyard'
   /**
+   * "target creature card in/from your graveyard" — the reanimate family's aim
+   * (Mortuary Mire, Unearth). Same actor rule as its instant/sorcery sibling:
+   * no actor, no "your graveyard", nothing offered.
+   */
+  | 'creatureCardInYourGraveyard'
+  /**
    * "target instant or sorcery spell" — Fork, Reverberate, Narset's Reversal.
    *
    * Its own restriction rather than a flavour of `'spell'` because the two are
@@ -315,6 +321,7 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'creatureOrPlaneswalker' ||
     value === 'permanent' ||
     value === 'instantOrSorceryInYourGraveyard' ||
+    value === 'creatureCardInYourGraveyard' ||
     value === 'instantOrSorcerySpell' ||
     value === 'triggeredAbilityYouControl' ||
     value === 'instantOrSorcerySpellYouControl' ||
@@ -365,6 +372,7 @@ const TARGET_RESTRICTION_MEMBERS = {
   creatureOrPlaneswalker: true,
   permanent: true,
   instantOrSorceryInYourGraveyard: true,
+  creatureCardInYourGraveyard: true,
   instantOrSorcerySpell: true,
   triggeredAbilityYouControl: true,
   creatureOnBattlefieldOrInGraveyard: true,
@@ -496,6 +504,16 @@ export function isLegalTarget(
       const card = yard[i] as CardInstance;
       if (card.instanceId !== target) continue;
       return hasType(card.def, 'instant') || hasType(card.def, 'sorcery');
+    }
+    return false;
+  }
+  if (restriction === 'creatureCardInYourGraveyard') {
+    if (controller === undefined) return false;
+    const yard = state.players[controller].graveyard;
+    for (let i = 0; i < yard.length; i++) {
+      const card = yard[i] as CardInstance;
+      if (card.instanceId !== target) continue;
+      return isCreature(card.def);
     }
     return false;
   }
@@ -760,6 +778,16 @@ function enumerateTargets(
     for (let g = 0; g < graveyard.length; g++) {
       const card = graveyard[g] as CardInstance;
       if (hasType(card.def, 'instant') || hasType(card.def, 'sorcery')) out.push(card.instanceId);
+    }
+    return out;
+  }
+  if (restriction === 'creatureCardInYourGraveyard') {
+    if (controller === undefined) return NO_TARGETS;
+    const out: (InstanceId | PlayerId)[] = [];
+    const graveyard = state.players[controller].graveyard;
+    for (let g = 0; g < graveyard.length; g++) {
+      const card = graveyard[g] as CardInstance;
+      if (isCreature(card.def)) out.push(card.instanceId);
     }
     return out;
   }
@@ -1036,6 +1064,8 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'a creature or a planeswalker';
     case 'permanent':
       return 'a permanent';
+    case 'creatureCardInYourGraveyard':
+      return 'a creature card in your graveyard';
     case 'instantOrSorceryInYourGraveyard':
       return 'an instant or sorcery card in your graveyard';
     case 'creatureOnBattlefieldOrInGraveyard':

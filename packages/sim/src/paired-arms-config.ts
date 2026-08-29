@@ -94,6 +94,14 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
   // Reads the top of a library and rearranges it.
   'reorderTopOfLibrary',
   /*
+   * `moveTargetFromGraveyard` can WRITE the library ('libraryTop'): the moved
+   * card changes every draw after it, so a game that resolves one is no longer
+   * comparable to its pair. Classified with the readers because the effect on
+   * the identical-game argument is the same, whichever direction the deck
+   * changes.
+   */
+  'moveTargetFromGraveyard',
+  /*
    * Reads the whole library to choose a card — and now also ROUTES what it
    * finds to more than one destination (Cultivate's "one onto the battlefield
    * and the other into your hand"). The routing rides a `route` param on the

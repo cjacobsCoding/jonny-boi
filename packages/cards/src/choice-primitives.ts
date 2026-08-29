@@ -41,6 +41,7 @@ import type {
 import {
   NOTHING_CHOSEN,
   asEntersOptions,
+  isLegalTarget,
   asEntersPrompt,
   collectCardOptions,
   formatManaCost,
@@ -529,6 +530,38 @@ function discardEachPlayer(ctx: EffectContext, count: number): void {
     for (const id of chosen[i]!) moveOwnedCard(ctx, order[i]!, id, 'hand', 'graveyard');
   }
 }
+
+/**
+ * `moveTargetFromGraveyard` — a TARGETED graveyard card changes zones: "put
+ * target creature card from your graveyard on top of your library" (Mortuary
+ * Mire) / "return target creature card from your graveyard to your hand"
+ * (Unearth's cousins).
+ *
+ * Targeted, unlike its chosen sibling `returnFromGraveyard` one primitive
+ * down: the printed word "target" means the aim happens as the ability goes on
+ * the stack, an opponent may respond to it, and a card that left the graveyard
+ * in response makes the resolution fizzle — all three re-checked here through
+ * the same `isLegalTarget` every targeting primitive asks.
+ *
+ * Params: `targets` (the restriction, e.g. `'creatureCardInYourGraveyard'`),
+ * `to` (`'hand'` or `'libraryTop'`).
+ */
+export const moveTargetFromGraveyard: EffectPrimitive = (ctx) => {
+  const target = ctx.targets[0];
+  if (target === undefined || isPlayerTarget(target)) return;
+  const restriction = strParam(ctx, 'targets');
+  if (restriction === undefined) return;
+  if (!isLegalTarget(ctx.state, restriction as never, target, ctx.controller, ctx.source.def)) return;
+  const inYard = ctx.state.players[ctx.controller].graveyard.some((c) => c.instanceId === target);
+  if (!inYard) return;
+  const to = strParam(ctx, 'to');
+  if (to === 'hand') {
+    moveOwnedCard(ctx, ctx.controller, target, 'graveyard', 'hand');
+  } else if (to === 'libraryTop') {
+    moveOwnedCard(ctx, ctx.controller, target, 'graveyard', 'library', 'top');
+  }
+  // An unknown destination moves nothing — the weaker card, never a guess.
+};
 
 /**
  * `returnFromGraveyard` — return `params.count` (default 1) **chosen** cards from a
@@ -1192,6 +1225,7 @@ export const CHOICE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Obje
   searchLibrary,
   revealTopCard,
   discardCard,
+  moveTargetFromGraveyard,
   returnFromGraveyard,
   returnToHand,
   tapPermanents,

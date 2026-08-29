@@ -796,6 +796,22 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
   },
 
   /** Regrowth is worth the best card actually sitting in the yard. */
+  /**
+   * The TARGETED graveyard move (Mortuary Mire's top-of-library, Unearth's
+   * to-hand). Priced by the aimed card itself — the aim IS the decision — with
+   * the library-top form worth a share of the hand form: the card still costs
+   * the next draw to actually take.
+   */
+  moveTargetFromGraveyard: (params, ctx) => {
+    let worth = 0;
+    for (const target of ctx.targets) {
+      if (target === 'A' || target === 'B') continue;
+      const card = ctx.state.players[ctx.player].graveyard.find((c) => c.instanceId === target);
+      if (card) worth += cardValue(card, ctx.weights, ctx.cards);
+    }
+    return params['to'] === 'hand' ? worth : worth * ctx.weights.bankedEffectValueShare;
+  },
+
   returnFromGraveyard: (params, ctx) => {
     const who = subjectPlayer(params, 'who', 'controller', ctx);
     if (who === undefined) return 0;

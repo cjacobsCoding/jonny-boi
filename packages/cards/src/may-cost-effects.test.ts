@@ -137,3 +137,71 @@ describe('the payability gate, resolved through the real primitive', () => {
     expect(run(false)).toEqual({ asked: false, enqueued: [] });
   });
 });
+
+describe('the targeted graveyard move (Mortuary Mire family)', () => {
+  it('compiles both printed destinations', () => {
+    const top = compileCard(
+      makeCard({
+        name: 'Mire Land',
+        typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+        oracleText:
+          'When this land enters, you may put target creature card from your graveyard on top of your library.',
+      }),
+    );
+    expect(top.status, JSON.stringify(top.missing)).toBe('complete');
+    const trigger = top.definition.triggers?.[0];
+    expect(trigger?.targets).toBe('creatureCardInYourGraveyard');
+    // "…to your hand" (Raise Dead) stays on `returnFromGraveyard` — the whole
+    // pool pins that shape; this rule owns only the top-of-library form.
+    const hand = compileCard(
+      makeCard({
+        name: 'Small Unearth',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        oracleText: 'Return target creature card from your graveyard to your hand.',
+      }),
+    );
+    expect(hand.definition.effects?.[0]?.primitive).not.toBe('moveTargetFromGraveyard');
+  });
+
+  it('the primitive moves the aimed card to the top of the library, and fizzles on a gone card', () => {
+    const registry = buildRegistry();
+    const primitive = registry.get('moveTargetFromGraveyard');
+    const dead: Record<string, unknown> = {
+      instanceId: 9,
+      controller: 'A',
+      owner: 'A',
+      zone: 'graveyard',
+      tapped: false,
+      summoningSick: false,
+      damageMarked: 0,
+      markedByDeathtouch: false,
+      counters: {},
+      def: { id: 'd9', name: 'Dead Bear', types: ['creature'] } as CardDefinition,
+    };
+    const state = {
+      nextInstanceId: 100,
+      battlefield: [],
+      stack: [],
+      continuous: [],
+      players: {
+        A: { exile: [], hand: [], graveyard: [dead], library: [], command: [] },
+        B: { exile: [], hand: [], graveyard: [], library: [], command: [] },
+      },
+    } as unknown as GameState;
+    const ctx = {
+      state,
+      source: { instanceId: 1, def: { id: 's', name: 'Mire', types: ['land'] } },
+      controller: 'A' as PlayerId,
+      targets: [9],
+      params: { targets: 'creatureCardInYourGraveyard', to: 'libraryTop' },
+      emit: () => {},
+      ask: () => undefined,
+    };
+    primitive!(ctx as never);
+    expect(state.players.A.graveyard).toHaveLength(0);
+    expect(state.players.A.library[0]?.instanceId).toBe(9);
+    // Aimed at a card no longer there: a clean fizzle, nothing moves twice.
+    primitive!(ctx as never);
+    expect(state.players.A.library).toHaveLength(1);
+  });
+});
