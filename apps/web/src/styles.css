@@ -2293,6 +2293,11 @@ button {
 /* Drag-to-play (online board): the slot wraps one hand card; while dragged it rides
    the pointer above everything, and the viewer's seat panel becomes the drop zone. */
 .hand-card-slot { position: relative; }
+/* Native image-drag is the gesture-killer: it cancels our pointer drag AND eats
+   the click (reports 20260827_205353/205443). draggable={false} on the imgs is
+   the fix; these are the CSS belt-and-braces for engines that honour them. */
+.play-card img { -webkit-user-drag: none; user-select: none; }
+.play-hand, .mulligan__hand { user-select: none; }
 .hand-card-slot--dragging { z-index: 30; pointer-events: none; }
 .hand-card-slot--dragging .play-card { box-shadow: 0 6px 18px rgb(0 0 0 / 45%); transform: scale(1.05); }
 .drop-zone { border-radius: var(--radius-md); }

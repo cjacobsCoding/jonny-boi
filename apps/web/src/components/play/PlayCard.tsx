@@ -52,14 +52,32 @@ export function PlayCard({
 
   const inner = fullFace ? (
     <>
-      <img className="play-card__face" src={fullFace} alt={name} loading="lazy" decoding="async" />
+      {/*
+        draggable={false} IS the land-play fix (bug reports 20260827_205353 +
+        205443). An <img> is natively draggable, and this one fills the whole
+        card — so pressing a card and moving a few pixels started a BROWSER
+        image-drag: it cancels the pointer stream (our drag machine never
+        commits) and swallows the mouseup (the click never fires). The reporter's
+        clip shows three mousedowns on a hand card with no mouseup ever recorded.
+        Synthetic-event tests cannot catch this: dispatched pointers never start
+        a native drag. Belt and braces live on the hand containers (onDragStart
+        preventDefault) and in CSS (user-drag: none).
+      */}
+      <img
+        className="play-card__face"
+        src={fullFace}
+        alt={name}
+        loading="lazy"
+        decoding="async"
+        draggable={false}
+      />
       {badge && <span className="play-card__badge">{badge}</span>}
     </>
   ) : (
     <>
       <div className="play-card__art">
         {art ? (
-          <img src={art} alt={name} loading="lazy" decoding="async" />
+          <img src={art} alt={name} loading="lazy" decoding="async" draggable={false} />
         ) : (
           <span className="play-card__fallback">{name}</span>
         )}

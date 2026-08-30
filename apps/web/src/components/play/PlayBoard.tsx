@@ -528,7 +528,12 @@ export function PlayBoard({
             onClose={() => setGraveyardOpen(false)}
           />
         )}
-        <div className="play-hand" aria-label={`${view.self.name} hand`} {...dragHandProps}>
+        <div
+          className="play-hand"
+          aria-label={`${view.self.name} hand`}
+          {...dragHandProps}
+          onDragStart={(e) => e.preventDefault()}
+        >
           {(view.self.hand ?? []).map((c) => {
             const land = playableLands.includes(c.instanceId);
             // A split card contributes ONE option per half; the badge summarises
