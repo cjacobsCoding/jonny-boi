@@ -544,7 +544,9 @@ function discardEachPlayer(ctx: EffectContext, count: number): void {
  * the same `isLegalTarget` every targeting primitive asks.
  *
  * Params: `targets` (the restriction, e.g. `'creatureCardInYourGraveyard'`),
- * `to` (`'hand'` or `'libraryTop'`).
+ * `to` (`'hand'`, `'libraryTop'`, or `'battlefield'` — the reanimate form,
+ * which goes through the same `putOntoBattlefield` funnel every other arrival
+ * uses, so ETB triggers and summoning sickness behave exactly as a cast's).
  */
 export const moveTargetFromGraveyard: EffectPrimitive = (ctx) => {
   const target = ctx.targets[0];
@@ -559,6 +561,11 @@ export const moveTargetFromGraveyard: EffectPrimitive = (ctx) => {
     moveOwnedCard(ctx, ctx.controller, target, 'graveyard', 'hand');
   } else if (to === 'libraryTop') {
     moveOwnedCard(ctx, ctx.controller, target, 'graveyard', 'library', 'top');
+  } else if (to === 'battlefield') {
+    const owner = ctx.state.players[ctx.controller].graveyard.find((c) => c.instanceId === target)?.owner;
+    if (owner !== undefined) {
+      putOntoBattlefield(ctx, owner, target, 'graveyard', { controller: ctx.controller });
+    }
   }
   // An unknown destination moves nothing — the weaker card, never a guess.
 };

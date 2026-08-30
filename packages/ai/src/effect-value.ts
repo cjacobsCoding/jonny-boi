@@ -809,7 +809,9 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
       const card = ctx.state.players[ctx.player].graveyard.find((c) => c.instanceId === target);
       if (card) worth += cardValue(card, ctx.weights, ctx.cards);
     }
-    return params['to'] === 'hand' ? worth : worth * ctx.weights.bankedEffectValueShare;
+    // Only the library-top form is discounted — the card still costs the next
+    // draw to actually take; hand and battlefield deliver it now.
+    return params['to'] === 'libraryTop' ? worth * ctx.weights.bankedEffectValueShare : worth;
   },
 
   returnFromGraveyard: (params, ctx) => {

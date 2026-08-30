@@ -205,3 +205,18 @@ describe('the targeted graveyard move (Mortuary Mire family)', () => {
     expect(state.players.A.library).toHaveLength(1);
   });
 });
+
+describe('the reanimate form (to the battlefield)', () => {
+  it('compiles both printed wordings to the battlefield destination', () => {
+    for (const text of [
+      'Return target creature card from your graveyard to the battlefield.',
+      'Put target creature card from your graveyard onto the battlefield.',
+    ]) {
+      const result = compileCard(
+        makeCard({ name: 'Test Reanimate', typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] }, oracleText: text }),
+      );
+      expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+      expect(result.definition.effects?.[0]?.params?.to).toBe('battlefield');
+    }
+  });
+});

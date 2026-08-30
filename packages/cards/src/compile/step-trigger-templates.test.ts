@@ -415,7 +415,10 @@ describe('the refusals that keep the family honest', () => {
     expect(result.definition.triggers ?? []).toEqual([]);
   });
 
-  it('REFUSES a readable condition whose BODY has no rule', () => {
+  it('COMPILES the Hellkite Tyrant upkeep win (the probe that used to refuse here)', () => {
+    // This clause left the refusal list when "you win the game" and the word
+    // "twenty" landed: the condition is the ordinary controlCount intervening
+    // "if", the body is one winTheGame ref.
     const result = compileCard(
       makeCard({
         name: 'Hellkite Tyrant',
@@ -424,6 +427,19 @@ describe('the refusals that keep the family honest', () => {
         toughness: 5,
         oracleText:
           'At the beginning of your upkeep, if you control twenty or more artifacts, you win the game.',
+      }),
+    );
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers?.[0]?.effects[0]?.primitive).toBe('winTheGame');
+  });
+
+  it('REFUSES a readable condition whose BODY has no rule', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Odd Body',
+        typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
+        oracleText:
+          'At the beginning of your upkeep, if you control twenty or more artifacts, exchange control of two target artifacts.',
       }),
     );
     expect(result.status).toBe('incomplete');

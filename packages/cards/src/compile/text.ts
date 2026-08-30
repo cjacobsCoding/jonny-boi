@@ -36,6 +36,10 @@ const NUMBER_WORDS: Readonly<Record<string, number>> = Object.freeze({
   eight: 8,
   nine: 9,
   ten: 10,
+  // Printed one card at a time, like the subtype table: "twenty or more
+  // artifacts" (Hellkite Tyrant), "thirteen cards in your hand" (Triskaidekaphile).
+  thirteen: 13,
+  twenty: 20,
   x: Number.NaN, // "X" is a chosen value — deliberately not a number we can use.
 });
 

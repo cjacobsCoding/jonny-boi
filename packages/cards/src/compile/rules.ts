@@ -2933,14 +2933,16 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // compiles through `returnFromGraveyard`, and a whole pool of pilots and
     // fixtures pin that shape — re-routing it to a targeted primitive is its
     // own change, not a rider on this rule.
-    pattern: /^put target creature card from your graveyard on top of your library$/,
+    pattern:
+      /^(?:put target creature card from your graveyard (on top of your library)|(?:return|put) target creature card from your graveyard (?:to|onto) the battlefield)$/,
     needsChosenTarget: true,
-    build() {
+    build(match) {
       return effects({
         primitive: 'moveTargetFromGraveyard',
         params: {
           targets: CREATURE_CARD_IN_YOUR_GRAVEYARD_TARGET,
-          to: 'libraryTop',
+          // The reanimate form (Unburial Rites' wording) or Mortuary Mire's top.
+          to: match[1] !== undefined ? 'libraryTop' : 'battlefield',
         },
       });
     },
