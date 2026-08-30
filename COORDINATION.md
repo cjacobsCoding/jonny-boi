@@ -1,4 +1,11 @@
-# Agent coordination (multiple agents, multiple machines)
+#- 2026-08-27 DESKTOP-90PJPM4 (integrator): `fix/native-drag-hijack` — §3.54, the land-play killer.
+  §3.51's full-face <img> was natively draggable; a press-plus-wobble started a BROWSER image drag,
+  cancelling our pointer machine AND eating the click. Clip-proven (three mousedowns, no mouseup).
+  ⚠️ Synthetic pointers can NEVER catch this class — the structural pin renders PlayCard and
+  requires draggable="false" on every img. If you add an <img> anywhere near a gesture surface,
+  set draggable={false} or the no-native-drag test will (rightly) fail.
+
+ Agent coordination (multiple agents, multiple machines)
 
 **jonny-boi** is built by several Claude agents — **including agents on different machines** that all
 push to one repo. This file is the **shared cross-machine channel**: the repo is the only thing every

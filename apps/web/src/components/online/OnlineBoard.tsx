@@ -640,7 +640,12 @@ export function OnlineBoard({
             onClose={() => setGraveyardOpen(false)}
           />
         )}
-        <div className="play-hand" aria-label={`${view.self.name} hand`} {...dragHandProps}>
+        <div
+          className="play-hand"
+          aria-label={`${view.self.name} hand`}
+          {...dragHandProps}
+          onDragStart={(e) => e.preventDefault()}
+        >
           {(view.self.hand ?? []).map((c) => {
             const isLand = lands.has(c.instanceId);
             const cast = casts.get(c.instanceId);

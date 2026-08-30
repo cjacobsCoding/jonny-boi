@@ -69,7 +69,7 @@ export function MulliganScreen({
             }`}
       </p>
 
-      <div className="mulligan__hand">
+      <div className="mulligan__hand" onDragStart={(e) => e.preventDefault()}>
         {hand.map((c) => (
           // Full faces: the opening hand is exactly where a player reads cards
           // (report 20260825_205937), and each slot carries its own zoom.

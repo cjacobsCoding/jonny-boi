@@ -740,6 +740,31 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.54 Native image-drag ate the game — ✅ done
+
+Bug reports 20260827_205353 and _205443, five days after §3.51 shipped full-card
+faces: "I still cant drag and release cards onto the battlefield" and "I cant
+play lands by click on them in my hand anymore either - so theres literally no
+way to advance."
+
+**One cause, both symptoms.** §3.51 filled each hand card with an <img>, and an
+image is natively draggable by default. Press a card and move a few pixels — the
+natural motion of someone who has been TRYING to drag — and the browser starts
+its own image ghost-drag: the pointer stream gets pointercancel (our drag
+machine never commits) and the mouseup is swallowed (the click never fires). The
+reporter's clip is unambiguous: three mousedowns on a hand card, zero mouseups,
+zero clicks — against a working control click on a button seconds earlier.
+
+⚠️ **Synthetic pointer tests cannot catch this class.** Dispatched PointerEvents
+never start a native drag, which is why every drag test stayed green while real
+mice failed. The pin is STRUCTURAL instead (no-native-drag.test.ts): render the
+real PlayCard both ways through renderToStaticMarkup and require
+draggable="false" on every <img> it emits. Sabotage-checked red/green.
+
+Fix: draggable={false} on both card images, user-drag/user-select CSS guards,
+and onDragStart preventDefault on all three hand containers (PlayBoard,
+OnlineBoard, MulliganScreen) as belt-and-braces.
+
 ### 3.5 Sim harness + statistics — ✅ done
 Headless `runMatch`/`runMatchup`/`runGauntlet`; win-rate with **Wilson confidence intervals**; the **A/B
 single-card-swap** test (paired / common-random-numbers + **McNemar's test**) that returns a significance
