@@ -87,6 +87,25 @@ describe('compiling "create a … token" against the closed table', () => {
     expect(tapped.definition.effects?.[0]?.params).toEqual({ token: 'treasure', tapped: true });
   });
 
+  it("compiles Bident of Thassa's per-creature trigger line, plain and optional", () => {
+    for (const [text, wrapped] of [
+      ['Whenever a creature you control deals combat damage to a player, draw a card.', false],
+      ['Whenever a creature you control deals combat damage to a player, you may draw a card.', true],
+    ] as const) {
+      const result = compileCard(
+        makeCard({
+          name: 'Bident Probe',
+          typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
+          oracleText: text,
+        }),
+      );
+      expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+      const trigger = result.definition.triggers?.[0];
+      expect(trigger?.condition.on).toBe('creatureCombatDamageToPlayer');
+      expect(trigger?.effects[0]?.primitive).toBe(wrapped ? 'mayEffects' : 'drawCards');
+    }
+  });
+
   it("compiles Professional Face-Breaker's group trigger line", () => {
     const result = compileCard(
       makeCard({

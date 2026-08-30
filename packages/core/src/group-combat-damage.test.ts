@@ -112,6 +112,51 @@ function runUnblockedCombat(state: GameState, attackerIds: readonly InstanceId[]
   return advanceToStep(s, 'postcombatMain', reg);
 }
 
+/** The PER-CREATURE sibling (Bident of Thassa): once per connecting creature. */
+const PER_CREATURE_WATCHER: CardDefinition = {
+  id: 'per-creature-watcher',
+  name: 'Per-Creature Watcher',
+  types: ['enchantment'],
+  triggers: [
+    {
+      condition: { on: 'creatureCombatDamageToPlayer' },
+      effects: [{ primitive: 'testMarkFired' }],
+      label: 'A creature you control deals combat damage to a player: mark',
+    },
+  ],
+};
+
+describe('the PER-CREATURE combat-damage trigger fires once per creature', () => {
+  it('three unblocked attackers → three resolutions', () => {
+    const { reg, fired } = harness();
+    const g = createGame({ seed: 22, decks: { A: deckOf(ISLAND, 40), B: deckOf(ISLAND, 40) }, registry: reg });
+    const state = g.state;
+    let nextId = state.nextInstanceId;
+    const place = (def: CardDefinition): number => {
+      const id = nextId++;
+      state.battlefield.push({
+        instanceId: id,
+        def,
+        controller: 'A',
+        owner: 'A',
+        zone: 'battlefield',
+        tapped: false,
+        summoningSick: false,
+        damageMarked: 0,
+        markedByDeathtouch: false,
+        counters: {},
+      });
+      return id;
+    };
+    place(PER_CREATURE_WATCHER);
+    const attackerIds = [place(creatureDef('X1', 2, 2)), place(creatureDef('X2', 2, 2)), place(creatureDef('X3', 2, 2))];
+    state.nextInstanceId = nextId;
+    const atStep = advanceToStep(state, 'declareAttackers', reg);
+    runUnblockedCombat(atStep, attackerIds, reg);
+    expect(fired.length).toBe(3);
+  });
+});
+
 describe('the group combat-damage trigger fires once per batch', () => {
   it('THREE unblocked attackers → the trigger resolves exactly ONCE', () => {
     const { reg, fired } = harness();

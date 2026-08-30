@@ -4266,6 +4266,21 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'trigger-creature-combat-damage-to-player',
+    description: '"Whenever a creature you control deals combat damage to a player, [you may] BODY" (Bident of Thassa)',
+    // PER-CREATURE: three connecting creatures fire it three times — the group
+    // "one or more" wording one rule down is the once-per-batch sibling.
+    pattern: /^whenever a creature you control deals combat damage to a player, (you may )?(.+)$/,
+    build(match, ctx) {
+      const body = match[2] ?? '';
+      const condition = { on: 'creatureCombatDamageToPlayer' } as const;
+      const label = `A creature you control deals combat damage to a player: ${match[1] ?? ''}${body}`;
+      return match[1] !== undefined
+        ? optionalTriggerFrom(ctx, condition, body, label)
+        : triggerFrom(ctx, condition, body, label);
+    },
+  },
+  {
     id: 'trigger-group-combat-damage-to-player',
     description: '"Whenever one or more creatures you control deal combat damage to a player, BODY"',
     // A GROUP trigger: fires once per damage batch however many creatures

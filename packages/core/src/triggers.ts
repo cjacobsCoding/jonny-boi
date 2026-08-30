@@ -97,6 +97,13 @@ export type TriggerEvent =
    * by a creature whose controller satisfies `who` (default `'you'`).
    */
   | 'groupCombatDamageToPlayer'
+  /**
+   * "Whenever A CREATURE YOU CONTROL deals combat damage to a player" (Bident
+   * of Thassa, Reconnaissance Mission). The PER-CREATURE sibling of the group
+   * kind above: three connecting creatures fire it three times, which is why
+   * it shares the matcher but never the runtime's per-batch dedup.
+   */
+  | 'creatureCombatDamageToPlayer'
   | 'permanentEnters'
   | 'permanentDies'
   | 'drawsCard';
@@ -453,6 +460,10 @@ export function conditionMatches(
       if (event.type !== 'drawCard') return false;
       return whoMatches(condition.who, event.player, sourceController);
     }
+    // The per-creature kind answers the same per-event question as the group
+    // kind — the difference (once per batch vs once per creature) lives in the
+    // runtime's dedup, which keys on the GROUP kind alone.
+    case 'creatureCombatDamageToPlayer':
     case 'groupCombatDamageToPlayer': {
       // One qualifying damage event is enough to FIRE; firing once per batch
       // is the caller's dedup, not this matcher's concern. The damaging
@@ -664,8 +675,10 @@ export function matchTriggers(
       const watchesBoard =
         ability.condition.on === 'permanentEnters' ||
         ability.condition.on === 'permanentDies' ||
-        // The group combat-damage trigger reads the DAMAGING creature.
+        // The group and per-creature combat-damage triggers read the DAMAGING
+        // creature.
         ability.condition.on === 'groupCombatDamageToPlayer' ||
+        ability.condition.on === 'creatureCombatDamageToPlayer' ||
         // A cast trigger narrowed by the chosen creature type needs the SPELL
         // object, for the same reason and through the same seam.
         ability.condition.spellSubtypeIsChosen === true;
