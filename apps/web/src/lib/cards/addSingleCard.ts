@@ -19,7 +19,7 @@ import { compileCard } from '@jonny-boi/cards';
 import type { UnsupportedClause } from '@jonny-boi/cards';
 import { normalizeCard } from '@jonny-boi/data-tools/pure';
 import type { NormalizedCard, RawScryfallCard } from '@jonny-boi/data-tools/pure';
-import { getCard } from '../cards.js';
+import { getCard, getCardByName } from '../cards.js';
 import { registerImportedCards } from '../decklist/importedCards.js';
 import { lookupCardByName, type LookupOptions, type NamedLookup } from '../scryfall/named.js';
 import type { FetchLike } from '../scryfall/collection.js';
@@ -74,8 +74,12 @@ export async function addCardByName(
   }
 
   // Already in the curated pool or previously imported: adding again would be a
-  // no-op, and saying so is more useful than a silent success.
-  if (getCard(card.id)) return { kind: 'alreadyKnown', card };
+  // no-op, and saying so is more useful than a silent success. Checked by id AND
+  // by name — the fuzzy endpoint returns Scryfall's default printing, whose id
+  // rarely matches the printing the pool ships, and a second printing of a known
+  // card is a duplicate, not a new card. Answer with the record we already have.
+  const known = getCard(card.id) ?? getCardByName(card.name);
+  if (known) return { kind: 'alreadyKnown', card: known };
 
   const compiled = compileCard(card);
   if (compiled.status === 'complete') {

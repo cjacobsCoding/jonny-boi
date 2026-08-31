@@ -16,14 +16,19 @@ import {
   unsupportedMechanics,
   unsupportedMechanicCount,
 } from './unsupportedRegistry.js';
-import { clearImportedCards, importedDefinitions, unsupportedReason } from '../decklist/importedCards.js';
+import { clearImportedCards, importedCards, importedDefinitions, unsupportedReason } from '../decklist/importedCards.js';
 import type { FetchLike } from '../scryfall/collection.js';
 
-/** A raw Scryfall card object, in the shape `normalizeCard` expects. */
+/**
+ * A raw Scryfall card object, in the shape `normalizeCard` expects. The default
+ * name is deliberately NOT a real card: adding checks the curated pool by name,
+ * so a fixture named after a pool card (it was 'Grizzly Bears' until the pool
+ * grew one) stops reading as "new" the day the pool absorbs it.
+ */
 function rawCard(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: '11111111-2222-3333-4444-555555555555',
-    name: 'Grizzly Bears',
+    name: 'Grizzled Test Bears',
     mana_cost: '{1}{G}',
     cmc: 2,
     type_line: 'Creature — Bear',
@@ -70,7 +75,7 @@ beforeEach(() => {
 describe('fuzzy name lookup', () => {
   it('finds a card from an approximate, wrongly-cased name', async () => {
     const fetchImpl = stubFetch([{ match: /cards\/named/, body: rawCard() }]);
-    const result = await lookupCardByName('grizly bears', fetchImpl, NO_WAIT);
+    const result = await lookupCardByName('grizled test bears', fetchImpl, NO_WAIT);
     expect(result.kind).toBe('found');
     // It must use the FUZZY parameter — exact matching is what deck import does,
     // and it would reject this spelling outright.
@@ -121,7 +126,7 @@ describe('fuzzy name lookup', () => {
 describe('adding a card to the pool', () => {
   it('adds a fully-supported card and makes it available to the engine', async () => {
     const fetchImpl = stubFetch([{ match: /cards\/named/, body: rawCard() }]);
-    const result = await addCardByName('grizly bears', fetchImpl, NO_WAIT);
+    const result = await addCardByName('grizled test bears', fetchImpl, NO_WAIT);
 
     expect(result.kind).toBe('added');
     // A vanilla creature compiles completely, so it reaches the engine pool.
@@ -175,6 +180,35 @@ describe('adding a card to the pool', () => {
     ]);
     const result = await addCardByName('lightning bolt', fetchImpl, NO_WAIT);
     expect(result.kind).toBe('alreadyKnown');
+  });
+
+  it('recognises a DIFFERENT PRINTING of a curated card and refuses to duplicate it', async () => {
+    // The fuzzy endpoint returns Scryfall's default printing, whose id rarely
+    // matches the printing the pool ships. Same name = same card: adding it must
+    // not create a second, identical row in the card browser (the "two Acidic
+    // Slimes" bug).
+    const fetchImpl = stubFetch([
+      {
+        match: /cards\/named/,
+        body: rawCard({
+          id: '99999999-8888-7777-6666-555555555555', // NOT the pool's printing
+          name: 'Lightning Bolt',
+          type_line: 'Instant',
+          oracle_text: 'Lightning Bolt deals 3 damage to any target.',
+          power: null,
+          toughness: null,
+          mana_cost: '{R}',
+        }),
+      },
+    ]);
+    const result = await addCardByName('lightning bolt', fetchImpl, NO_WAIT);
+    expect(result.kind).toBe('alreadyKnown');
+    // The answer names the record we already have — the curated printing.
+    if (result.kind === 'alreadyKnown') {
+      expect(result.card.id).toBe('4457ed35-7c10-48c8-9776-456485fdf070');
+    }
+    // And nothing entered the import store.
+    expect(importedCards()).toHaveLength(0);
   });
 
   it('passes an ambiguous name straight through with its suggestions', async () => {

@@ -24,6 +24,7 @@ import { COPY_ID_SUFFIX } from '@jonny-boi/core';
 import rawIndex from '../data/card-index.json';
 import { engineDisplayCards } from './cards/enginePool.js';
 import { importedCard, importedCards } from './decklist/importedCards.js';
+import { normalizeName } from './scryfall/collection.js';
 
 /** The bundled, normalized card index. */
 export const cardIndex: CardIndex = rawIndex as CardIndex;
@@ -65,6 +66,19 @@ const cardsById: ReadonlyMap<string, NormalizedCard> = (() => {
  */
 const displayablePool: readonly NormalizedCard[] = [...cardsById.values()].sort((a, b) =>
   a.name.localeCompare(b.name),
+);
+
+/**
+ * The curated pool's records by NORMALIZED NAME — the shadow check for imports.
+ *
+ * Everything else here joins on Scryfall id, but an id names a PRINTING, not a
+ * card: the fuzzy add-card lookup returns Scryfall's default printing, and a
+ * deck imported before a card joined the curated pool keeps whatever printing
+ * was fetched then. Either way the store can hold the same CARD under a second
+ * id, and only the name says so.
+ */
+const displayableByName: ReadonlyMap<string, NormalizedCard> = new Map(
+  displayablePool.map((card) => [normalizeName(card.name), card]),
 );
 
 /**
@@ -139,15 +153,42 @@ export function getCard(id: string): NormalizedCard | undefined {
 }
 
 /**
+ * Resolve a card by NAME (case- and space-insensitively), preferring the curated
+ * record. This is the "do we already have this card?" question, and it must be
+ * asked by name: an id only identifies a printing, so a by-id lookup happily
+ * waves a second printing of a curated card into the pool as if it were new.
+ */
+export function getCardByName(name: string): NormalizedCard | undefined {
+  const key = normalizeName(name);
+  const pooled = displayableByName.get(key);
+  if (pooled) return pooled;
+  return importedCards().find((card) => normalizeName(card.name) === key);
+}
+
+/**
  * Every card available to the user right now: the curated pool plus everything
  * deck import has added, name-sorted. Recomputed per call because the imported
  * set changes at runtime; the lists are small enough that this is cheaper than
  * cache invalidation.
+ *
+ * Deduplicated by NAME, curated record first: the import store keys on Scryfall
+ * id, so a different PRINTING of a curated card (an old import from before the
+ * card joined the pool, or a fuzzy-lookup add that returned another set's copy)
+ * sits in the store under a second id — and showed in the browser as a second,
+ * identical card. The store entry itself is kept (a saved deck may reference
+ * its id, and {@link getCard} must keep resolving it); it just stops being
+ * offered as if it were a different card.
  */
 export function allAvailableCards(): readonly NormalizedCard[] {
   const imported = importedCards();
   if (imported.length === 0) return displayablePool;
-  return [...displayablePool, ...imported].sort((a, b) => a.name.localeCompare(b.name));
+  const extras = new Map<string, NormalizedCard>();
+  for (const card of imported) {
+    const key = normalizeName(card.name);
+    if (!displayableByName.has(key) && !extras.has(key)) extras.set(key, card);
+  }
+  if (extras.size === 0) return displayablePool;
+  return [...displayablePool, ...extras.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**

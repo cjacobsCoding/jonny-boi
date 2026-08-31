@@ -740,6 +740,40 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.55 Two identical Acidic Slimes in the card library — ✅ done
+
+Reported directly: the Cards browser showed the same card twice. The static data
+is clean — 587 cards, no duplicate name or id in the bundled index or the merged
+engine pool (both checked) — so the second Slime lives in the PERSISTED
+imported-card store as a different PRINTING: same name, different Scryfall id.
+
+**An id names a printing, not a card.** Every display join is by Scryfall id,
+and the store legitimately acquires a second printing of a curated card two
+ways: "+ Add card" resolves through Scryfall's FUZZY endpoint, which returns
+Scryfall's default printing — almost never the printing the pool ships — so the
+by-id "already known?" check waved it in as new (reproducible today); and a deck
+imported before its cards joined the curated pool keeps whatever printing was
+fetched then, which collides the day the pool absorbs the card (the pool has
+been growing by hundreds of compiled cards).
+
+Fixed at both ends, deliberately WITHOUT touching the store:
+`allAvailableCards()` dedupes by normalized name with the curated record winning
+— the store entry survives because a saved deck may reference the imported
+printing's id and `getCard` must keep resolving it, or that deck goes blank; and
+`addCardByName` now answers `alreadyKnown` by id OR by name (new
+`getCardByName` in `lib/cards.ts`), returning the record we already have.
+Side benefit: `copyGauntletDeck`'s by-name index previously let an imported
+printing shadow the curated record; the curated printing now wins
+deterministically.
+
+Pinned by `apps/web/src/lib/duplicate-printings.test.ts` (one row per name, the
+curated id wins, the imported id still resolves, novel imports still appear) and
+a new addSingleCard case adding a different printing of Lightning Bolt.
+⚠️ Trap for the next agent: never name a test fixture after a real card. The
+addSingleCard fixture was 'Grizzly Bears', which is now a REAL pool card — the
+moment the pool absorbed it, the "adds a new card" test started (correctly)
+answering `alreadyKnown`. It is 'Grizzled Test Bears' now.
+
 ### 3.54 Native image-drag ate the game — ✅ done
 
 Bug reports 20260827_205353 and _205443, five days after §3.51 shipped full-card
