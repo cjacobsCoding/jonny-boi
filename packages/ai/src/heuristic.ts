@@ -91,6 +91,7 @@ import { resolveFight } from './combat-math.js';
 import { resolutionValueContext, valueOfEffects, valueOfMode } from './effect-value.js';
 import { answerChoiceHeuristically, safeFallbackAction } from './choices.js';
 import { bestLandDrop, describeLandDrop, rankLandDrops, totalAvailableMana } from './land-sequencing.js';
+import { manaPreferenceOf } from './mana-preference.js';
 import type { DecisionContext, DecisionTrace, Pilot, PilotView } from './pilot.js';
 import type { HeuristicWeights } from './weights.js';
 import { DEFAULT_HEURISTIC_WEIGHTS } from './weights.js';
@@ -351,6 +352,7 @@ function decideMadness(ctx: DecisionContext, weights: HeuristicWeights): GameAct
       legalActions,
       exiled!.def,
       'cast',
+      manaPreferenceOf(weights),
     );
     const next = plan?.[0];
     if (next) {
@@ -766,7 +768,7 @@ function bestFundedActivation(
       if (score <= weights.passScore) continue;
       if (best !== undefined && score <= best.score) continue;
 
-      const plan = planManaPayment(view as GameState, me, mana, legalActions, perm.def, 'activate');
+      const plan = planManaPayment(view as GameState, me, mana, legalActions, perm.def, 'activate', manaPreferenceOf(weights));
       if (!plan) continue; // cannot fund it right now
 
       const action: GameAction =
@@ -859,6 +861,7 @@ function bestEquipPlay(
         legalActions,
         perm.def,
         'activate',
+        manaPreferenceOf(weights),
       );
       if (!plan) continue; // cannot fund it this turn
       const action: GameAction =
@@ -1024,6 +1027,7 @@ function bestSpellGoal(
       ctx.legalActions,
       goal.card.def,
       'cast',
+      manaPreferenceOf(weights),
     );
     if (plan) return { goal, plan };
   }
@@ -1976,6 +1980,7 @@ function bestCycle(ctx: DecisionContext, weights: HeuristicWeights): CycleGoal |
         ctx.legalActions,
         card.def,
         'activate',
+        manaPreferenceOf(weights),
       );
       if (!plan) continue;
       best = {
@@ -3225,6 +3230,7 @@ function collectPriorityCandidates(
       legalActions,
       goal.card.def,
       'cast',
+      manaPreferenceOf(weights),
     );
     if (!plan) continue; // cannot be funded from this board — not an option at all
     const plies: GameAction[] = [];
@@ -3297,6 +3303,7 @@ function bestEquipMacro(
         legalActions,
         perm.def,
         'activate',
+        manaPreferenceOf(weights),
       );
       if (!plan) continue;
       const plies: GameAction[] = [];

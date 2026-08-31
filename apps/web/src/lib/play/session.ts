@@ -25,9 +25,11 @@ import {
   hasCardGrants,
   hasCastableBackFace,
   isLand,
+  manaPaymentChoiceExists,
   planManaPayment,
   playableFaceOf,
   spendPurposeIfRestricted,
+  SPARE_USEFUL_MANA_SOURCES,
   type CardDefinition,
   type CardInstance,
   type CastZone,
@@ -51,6 +53,20 @@ import {
   type TargetOption,
   type TargetRequirement,
 } from './targeting.js';
+
+/**
+ * WHICH source the auto-tap spends when several could (§3.60).
+ *
+ * A human wants the expendable card gone: the Forest, not the Llanowar Elves
+ * that was going to block. Named here rather than passed inline at each call
+ * site so every hotseat auto-tap — a cast, a flashback, a cycling ability, and
+ * the "can I afford it?" that lights the button up — is one policy decision.
+ *
+ * ⚠️ This is deliberately NOT core's default. The planner is shared with the AI
+ * pilots and the sim's seeded baselines are pinned byte-identical, so the
+ * preference is something a caller opts into; see `mana-source-preference.ts`.
+ */
+const HUMAN_MANA_PREFERENCE = SPARE_USEFUL_MANA_SOURCES;
 
 /** The result of submitting an action: the next session and any rejection reason. */
 export interface SubmitResult {
@@ -1013,8 +1029,56 @@ export class GameSession {
       this.legalActions(),
       def,
       kind,
+      HUMAN_MANA_PREFERENCE,
     );
     return plan && plan.length > 0 ? (plan[0] as ManaTapPlan) : null;
+  }
+
+  /**
+   * Is there a GENUINE choice of which sources fund this cast — the gate on
+   * offering the mana picker (§3.60)?
+   *
+   * Delegates to core so hotseat and online cannot disagree about when a
+   * decision exists, and plans against the SAME preference the auto-tap would
+   * use, so "here is the plan" and "was there another one" are answers about one
+   * payment rather than two.
+   *
+   * ⚠️ Costs a handful of planner calls (see `manaPaymentChoiceExists`). Ask it
+   * about the casts that would actually TAP something, not about every card in
+   * hand on every frame.
+   */
+  manaChoiceForCast(option: CastOption): boolean {
+    if (!option.cost) return false;
+    const def = this.definitionForCast(option);
+    if (!def) return false;
+    return manaPaymentChoiceExists(
+      this.state,
+      this.priorityPlayer,
+      option.cost,
+      this.legalActions(),
+      def,
+      'cast',
+      HUMAN_MANA_PREFERENCE,
+    );
+  }
+
+  /**
+   * The definition a cast option actually casts — the HALF for a split card or
+   * an adventure, the printed card otherwise. Resolved from the option's own
+   * zone and face, the same two facts `castWithAutoTap` re-derives the cost from,
+   * so the spend purpose a payment is planned under matches what will be cast.
+   */
+  private definitionForCast(option: CastOption): CardDefinition | undefined {
+    const player = this.priorityPlayer;
+    const zone =
+      option.fromZone === 'graveyard'
+        ? this.state.players[player].graveyard
+        : option.fromZone === 'exile'
+          ? this.state.players[player].exile
+          : this.state.players[player].hand;
+    const card = zone.find((c) => c.instanceId === option.instanceId);
+    if (!card) return undefined;
+    return playableFaceOf(card.def, option.face) ?? card.def;
   }
 
   /**
@@ -1041,6 +1105,10 @@ export class GameSession {
         this.legalActions(),
         def,
         kind,
+        // The SAME preference the auto-tap plans with. A divergence here would be
+        // the exact bug this module's header warns about: "affordable" answered by
+        // one policy and the taps chosen by another.
+        HUMAN_MANA_PREFERENCE,
       ) !== undefined
     );
   }

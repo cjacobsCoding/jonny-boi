@@ -55,6 +55,7 @@ import type {
   ManaColor,
   ManaCost,
   ManaPool,
+  ManaSourcePreference,
   PlayerId,
 } from '@jonny-boi/core';
 import {
@@ -70,6 +71,7 @@ import {
 import { cardValue } from './card-value.js';
 import type { PilotView } from './pilot.js';
 import type { HeuristicWeights } from './weights.js';
+import { manaPreferenceOf } from './mana-preference.js';
 
 /**
  * One land the pilot could play this window, with the sequencing merit that says
@@ -362,6 +364,7 @@ function scoreLandDrops(
       capWithLand,
       availableMana,
       availableWithLand: availableMana + bestManaYield(card.def),
+      manaPreference: manaPreferenceOf(weights),
     });
     if (value > 0) anyUnlock = true;
     unlocked.push(value);
@@ -397,6 +400,13 @@ interface UnlockQuery {
   readonly capWithLand: Int32Array;
   readonly availableMana: number;
   readonly availableWithLand: number;
+  /**
+   * The §3.60 source preference the pilot funds real casts under. Carried here
+   * so "would this land unlock that spell?" is asked of the SAME planner policy
+   * that will later pay for it — a probe answered under one policy and a payment
+   * made under another is one pilot disagreeing with itself.
+   */
+  readonly manaPreference: ManaSourcePreference;
 }
 
 /**
@@ -443,8 +453,15 @@ function bestUnlockedValue(
     let already = query.payableNow[i];
     if (already === undefined) {
       already = couldPay(query.pips, i, query.colorCap, query.availableMana)
-        ? planManaPayment(view as unknown as GameState, me, cost, legalActions, spell.def, 'cast') !==
-          undefined
+        ? planManaPayment(
+            view as unknown as GameState,
+            me,
+            cost,
+            legalActions,
+            spell.def,
+            'cast',
+            query.manaPreference,
+          ) !== undefined
         : false;
       query.payableNow[i] = already;
     }
@@ -461,8 +478,15 @@ function bestUnlockedValue(
     // make does not exist yet, so a purpose gated on the live pool would be
     // `undefined` and the land would look like it unlocks nothing.
     if (
-      planManaPayment(withLand, me, cost, actionsWithLand as GameAction[], spell.def, 'cast') ===
-      undefined
+      planManaPayment(
+        withLand,
+        me,
+        cost,
+        actionsWithLand as GameAction[],
+        spell.def,
+        'cast',
+        query.manaPreference,
+      ) === undefined
     ) {
       continue;
     }

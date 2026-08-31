@@ -1,0 +1,85 @@
+/*
+ * "Let me choose which mana pays" (§3.60) — the picker prompt, the hand card's
+ * per-cast chip, and the action bar's persisted toggle.
+ *
+ * Its own file rather than an append to `styles.css`, following `action-bar.css`
+ * and `play-resume.css`: several agents work this repo in parallel and a shared
+ * stylesheet is the file they collide in. Every colour, radius and space here is
+ * a shared token — nothing is a raw literal that could drift from the theme.
+ */
+
+/* The prompt reuses `.target-prompt`'s modal shell, so it sits at the same
+   elevation and reads like every other picker; these add only its own rows. */
+.mana-picker__owed {
+  font-weight: 700;
+  font-size: var(--text-base);
+  color: var(--color-fg);
+  padding: var(--space-2) 0;
+}
+
+/* The source list can outgrow a phone: give it its own scroll rather than
+   pushing Confirm off the bottom of the screen. */
+.mana-picker__sources {
+  max-height: 40vh;
+  overflow-y: auto;
+  align-content: start;
+}
+
+/* A source already spent on this payment stays in place, struck through, so the
+   list never shuffles under the player's finger mid-decision. */
+.mana-picker__sources .btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+  text-decoration: line-through;
+}
+
+.mana-picker__always {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  padding: var(--space-2) 0;
+  cursor: pointer;
+}
+
+/*
+ * The per-cast way in: a small chip beside the hand card's zoom button, shown
+ * ONLY on a cast that has a genuinely different way to be funded. Mirrors
+ * `.hand-card-slot__zoom` exactly so the two read as one family of affordances.
+ */
+.hand-card-slot__choose-mana {
+  position: absolute;
+  top: 32px;
+  right: 2px;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-raised);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+.hand-card-slot__choose-mana:hover,
+.hand-card-slot__choose-mana:focus-visible {
+  opacity: 1;
+}
+
+/* The action bar's persisted toggle. Pressed state is carried by the accent
+   border rather than a fill, so it reads as "armed" beside the primary
+   attack/block buttons without competing with them for the eye. */
+.btn--toggle {
+  border-style: dashed;
+  color: var(--color-fg-muted);
+}
+
+.btn--toggle-on {
+  border-style: solid;
+  border-color: var(--color-accent);
+  color: var(--color-fg);
+}

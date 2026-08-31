@@ -17,6 +17,8 @@ import type { CardDefinition } from './card.js';
 import { manaExtrasOf, manaModesOf, spendPurposeFor } from './card.js';
 import type { ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
 import { addProduction, canPay, MANA_COLORS, payCost, usableMana } from './mana.js';
+import type { ManaSourcePreference } from './mana-source-preference.js';
+import { MANA_SOURCE_PREFERENCE_DEFAULT, manaSourceCollateral } from './mana-source-preference.js';
 import type { ManaSpendKind, ManaSpendPurpose, ManaSpendRestriction } from './spend-restriction.js';
 import { resolveSpendRestriction, restrictionAllows, restrictionNamesChosenSubtype } from './spend-restriction.js';
 import { chosenSubtypeOf } from './as-enters.js';
@@ -187,6 +189,13 @@ const scratch = {
   /** Per source permanent (a "group" — its modes are alternatives). */
   sourceId: [] as InstanceId[],
   sourceUntapped: [] as boolean[],
+  /**
+   * What tapping each SOURCE costs its controller beyond the mana — a creature's
+   * body, a spent `{T}` ability (see `mana-source-preference.ts`). Per group
+   * rather than per tap because it is a property of the permanent, not of which
+   * colour it makes. Left at zero and never read on the default policy.
+   */
+  sourceCollateral: [] as number[],
   /** Tap indices ordered by group, so a group's modes are contiguous. */
   order: [] as number[],
   groupBegin: [] as number[],
@@ -205,6 +214,12 @@ const scratch = {
  * keep the any-colour Bird) and then the smallest producer (don't crack a 2-mana
  * rock for a single pip). Tapping a permanent removes it from the candidate pool,
  * so the loop always terminates.
+ *
+ * `preference` chooses WHICH source pays when every other term ties — see
+ * `mana-source-preference.ts`. It defaults to the policy that reproduces the
+ * pre-§3.60 ranking exactly, so every existing caller (both pilots, every
+ * recorded sim baseline) is untouched by construction; the human cast paths opt
+ * in to sparing the useful source.
  */
 export function planManaPayment(
   view: ManaPlanView,
@@ -213,6 +228,7 @@ export function planManaPayment(
   legalActions: readonly GameAction[],
   spendFor?: CardDefinition,
   spendKind: ManaSpendKind = 'cast',
+  preference: ManaSourcePreference = MANA_SOURCE_PREFERENCE_DEFAULT,
 ): ManaTapPlan[] | undefined {
   // ⚠️ THE PURPOSE IS TAKEN AS A DEFINITION, NOT AS A BUILT `ManaSpendPurpose`,
   // AND IT IS RESOLVED LAZILY. Both halves matter.
@@ -295,6 +311,12 @@ export function planManaPayment(
   // already holds some. Stays false on every ordinary board, and keeps the whole
   // restriction apparatus below out of the ranking loop.
   let anyRestricted = current.restricted !== undefined;
+  // The collateral policy, resolved ONCE. Both stay false on the default policy,
+  // where the scoring below never runs and the ladder is byte-identical to what
+  // it always was.
+  const collateralRank = preference.collateralRank;
+  const collateralOn = collateralRank !== 'off';
+  const collateralOutranksFlexibility = collateralRank === 'aboveFlexibility';
   let lastDef: CardDefinition | undefined;
   let lastPerm: CardInstance | undefined;
   for (let i = 0; i < legalActions.length; i++) {
@@ -375,6 +397,12 @@ export function planManaPayment(
       group = sourceCount;
       s.sourceId[sourceCount] = action.instanceId;
       s.sourceUntapped[sourceCount] = true;
+      // Priced ONCE per permanent, here rather than in the ranking loop — it is a
+      // property of the source, not of which colour it makes. `lastPerm` is the
+      // permanent this action names: a group is created the first time an id is
+      // seen, and that is exactly when the scan above resolved it.
+      s.sourceCollateral[sourceCount] =
+        collateralOn && lastPerm ? manaSourceCollateral(lastPerm, preference.collateral) : 0;
       sourceCount += 1;
     }
     s.tapGroup[tapCount] = group;
@@ -431,11 +459,17 @@ export function planManaPayment(
     let bestPain = Infinity;
     let bestRestrictedRank = Infinity;
     let bestFlexibility = Infinity;
+    let bestCollateral = Infinity;
     let bestSize = Infinity;
 
     for (let g = 0; g < sourceCount; g++) {
       if (!s.sourceUntapped[g]) continue;
       const flexibility = s.groupSize[g] as number; // how many colours this source could have made
+      // WHAT TAPPING THIS SOURCE COSTS BEYOND THE MANA — a creature's body, a
+      // spent `{T}` ability. Zero for every source on the default policy, where
+      // the two comparisons it feeds below are dead and the ladder is exactly
+      // the pre-§3.60 one.
+      const collateral = s.sourceCollateral[g] as number;
       const begin = s.groupBegin[g] as number;
       for (let k = 0; k < flexibility; k++) {
         const tap = s.order[begin + k] as number;
@@ -487,19 +521,28 @@ export function planManaPayment(
         // Zero on every ordinary board (`anyRestricted` is false), where the whole
         // comparison below is byte-identical to what it always was.
         const restrictedRank = anyRestricted && s.tapRestriction[tap] !== undefined ? 0 : 1;
-        const better =
-          distance < bestDistance ||
-          (distance === bestDistance && pain < bestPain) ||
-          (distance === bestDistance && pain === bestPain && restrictedRank < bestRestrictedRank) ||
-          (distance === bestDistance &&
-            pain === bestPain &&
-            restrictedRank === bestRestrictedRank &&
-            flexibility < bestFlexibility) ||
-          (distance === bestDistance &&
-            pain === bestPain &&
-            restrictedRank === bestRestrictedRank &&
-            flexibility === bestFlexibility &&
-            size < bestSize);
+        // THE TIE-BREAK LADDER, most significant term first: the first term that
+        // DIFFERS decides, exactly as a lexicographic comparison does. Spelled as
+        // a short-circuiting chain rather than the flat disjunction it replaced —
+        // same answer, strictly fewer comparisons (7 rather than 15 in the
+        // all-tied case), and adding a rung no longer means re-stating every rung
+        // above it.
+        //
+        // SPARING THE USEFUL SOURCE sits below `pain` and `restrictedRank` on
+        // purpose: keeping a blocker must never outrank "this tap does not kill
+        // me", nor strand a restricted mana that would otherwise go unspent. Its
+        // placement relative to `flexibility` is the policy's own choice (see
+        // `ManaCollateralRank`); on the default policy every `collateral` is 0,
+        // both branches are dead, and this is the pre-§3.60 ladder.
+        let better: boolean;
+        if (distance !== bestDistance) better = distance < bestDistance;
+        else if (pain !== bestPain) better = pain < bestPain;
+        else if (restrictedRank !== bestRestrictedRank) better = restrictedRank < bestRestrictedRank;
+        else if (collateralOutranksFlexibility && collateral !== bestCollateral)
+          better = collateral < bestCollateral;
+        else if (flexibility !== bestFlexibility) better = flexibility < bestFlexibility;
+        else if (collateral !== bestCollateral) better = collateral < bestCollateral;
+        else better = size < bestSize;
         if (better) {
           bestTap = tap;
           bestGroup = g;
@@ -507,6 +550,7 @@ export function planManaPayment(
           bestPain = pain;
           bestRestrictedRank = restrictedRank;
           bestFlexibility = flexibility;
+          bestCollateral = collateral;
           bestSize = size;
         }
       }
@@ -564,6 +608,96 @@ export function planManaPayment(
     });
   }
   return plan;
+}
+
+/**
+ * Is there a GENUINE choice of which sources fund `cost` — more than one
+ * meaningfully different way to pay — or would every legal plan spend the same
+ * kinds of permanent?
+ *
+ * This is the gate on asking the player to pick. Asking when there is nothing to
+ * pick is nagging, and nagging is how a helpful prompt turns into a thing people
+ * switch off, so the predicate is deliberately CONSERVATIVE: it answers `false`
+ * unless it can name a payment that gives up something different.
+ *
+ * ## "Meaningfully different" is by CARD, not by instance
+ *
+ * Two untapped Forests are not a decision — the player loses a Forest either
+ * way — so plans are compared by the multiset of source CARD IDENTITIES, not by
+ * instance id. `Forest + Forest` paying `{G}{G}` is one choice; `Forest + Forest`
+ * where a Llanowar Elves could take one of the slots is two, and this says so.
+ *
+ * 📌 KNOWN SCOPE, and it is deliberate: this asks which PERMANENTS get spent,
+ * not which COLOUR a modal source makes. A dual land's colour is already its own
+ * question, asked by the manual-tap prompt whenever a player taps one by hand
+ * (`isModalTap`), and folding it in here would fire on every payment a dual land
+ * happens to be in — most of which consume the mana immediately and cannot tell
+ * the difference.
+ *
+ * ⚠️ NOT for the hot path. It plans once per source in the auto plan (mean 3.4
+ * sources on real boards), so it costs a handful of `planManaPayment` calls and
+ * a few small arrays. Call it when a player is about to be asked something — on
+ * a cast click — never once per castable card per frame.
+ */
+export function manaPaymentChoiceExists(
+  view: ManaPlanView,
+  player: PlayerId,
+  cost: ManaCost,
+  legalActions: readonly GameAction[],
+  spendFor?: CardDefinition,
+  spendKind: ManaSpendKind = 'cast',
+  preference: ManaSourcePreference = MANA_SOURCE_PREFERENCE_DEFAULT,
+): boolean {
+  const auto = planManaPayment(view, player, cost, legalActions, spendFor, spendKind, preference);
+  // Unpayable ⇒ nothing to choose between. Empty ⇒ the floating pool already
+  // covers it and no tap happens at all, so there is nothing to pick either.
+  if (auto === undefined || auto.length === 0) return false;
+  const autoKey = sourceIdentityKey(view.battlefield, auto);
+  for (let i = 0; i < auto.length; i++) {
+    const excluded = (auto[i] as ManaTapPlan).instanceId;
+    const without = legalActions.filter(
+      (action) =>
+        !(
+          action.kind === 'tapForMana' &&
+          action.player === player &&
+          action.instanceId === excluded
+        ),
+    );
+    const alternative = planManaPayment(
+      view,
+      player,
+      cost,
+      without,
+      spendFor,
+      spendKind,
+      preference,
+    );
+    if (alternative === undefined) continue; // that source was load-bearing
+    if (sourceIdentityKey(view.battlefield, alternative) !== autoKey) return true;
+  }
+  return false;
+}
+
+/**
+ * A plan's identity as the multiset of cards it spends — sorted so two plans
+ * that spend the same kinds of permanent in a different ORDER compare equal
+ * (the order a greedy planner happens to pick taps in is not a decision anyone
+ * is making). Falls back to the instance id for a tap whose permanent has left
+ * the battlefield, which cannot happen for a plan just made against this view
+ * but keeps the key total rather than throwing.
+ */
+function sourceIdentityKey(
+  battlefield: readonly CardInstance[],
+  plan: readonly ManaTapPlan[],
+): string {
+  const ids: string[] = [];
+  for (let i = 0; i < plan.length; i++) {
+    const tap = plan[i] as ManaTapPlan;
+    const perm = findOnBattlefield(battlefield, tap.instanceId);
+    ids.push(perm ? perm.def.id : `#${tap.instanceId}`);
+  }
+  ids.sort();
+  return ids.join('|');
 }
 
 /**

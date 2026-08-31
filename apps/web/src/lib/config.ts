@@ -28,6 +28,13 @@ export const DEFAULT_DECK_NAME = 'New Deck';
 export const PLAY_RESUME_STORAGE_KEY = 'jonny-boi.play.inProgress.v1';
 
 /**
+ * localStorage key for "always let me choose which mana pays" (§3.60). A player
+ * PREFERENCE, not game state: it outlives any one game and applies to the next
+ * one, which is why it is not in the resume record.
+ */
+export const MANA_CHOICE_STORAGE_KEY = 'jonny-boi.play.chooseMana.v1';
+
+/**
  * sessionStorage key for the "this reload was triggered by an app UPDATE" flag
  * (see `lib/update/updater.ts`). Written immediately before an update-triggered
  * reload — never by user navigation — and consumed (removed) on the next boot,

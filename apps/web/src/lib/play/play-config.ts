@@ -77,6 +77,14 @@ export function stepLabel(step: string): string {
 }
 
 /**
+ * How long a board toast (a rejection reason, a "pick an attacker first" hint)
+ * stays on screen, in milliseconds. Named here because it was three different
+ * inline literals across the board's handlers, which is exactly the drift DESIGN
+ * §1.3 forbids: the same class of message vanishing at three different speeds.
+ */
+export const TOAST_MS = 2600;
+
+/**
  * Drag-to-play: how far (px, straight-line) a pressed card must travel before the
  * press commits to being a drag. Below this a release is a plain click/tap — the
  * threshold is what keeps tap-to-play alive on touch screens, where every tap

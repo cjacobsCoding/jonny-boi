@@ -17,7 +17,17 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { planManaPayment, distanceToPayable, type ManaPlanView } from './mana-plan.js';
+import {
+  planManaPayment,
+  manaPaymentChoiceExists,
+  distanceToPayable,
+  type ManaPlanView,
+} from './mana-plan.js';
+import {
+  MANA_SOURCE_PREFERENCE_DEFAULT,
+  SPARE_USEFUL_MANA_SOURCES,
+  SPARE_USEFUL_MANA_SOURCES_FIRST,
+} from './mana-source-preference.js';
 import type { GameAction } from './actions.js';
 import type { CardDefinition } from './card.js';
 import type { ManaCost, ManaPool } from './mana.js';
@@ -41,6 +51,27 @@ const TWO_COLORLESS_ROCK: CardDefinition = {
   name: 'Two-Colorless Rock',
   types: ['artifact'],
   produces: ['C', 'C'],
+};
+/**
+ * THE REPORTED CASE. A mana creature that makes exactly what a Forest makes:
+ * same colour, same size, same (single) mode, so every pre-§3.60 tie-break term
+ * ties with a Forest and the ranking fell through to enumeration order.
+ */
+const LLANOWAR_ELVES: CardDefinition = {
+  id: 'LlanowarElves',
+  name: 'Llanowar Elves',
+  types: ['creature'],
+  power: 1,
+  toughness: 1,
+  produces: ['G'],
+};
+/** A land that also prints a `{T}` ability — tapping it for mana spends that too. */
+const TAP_ABILITY_LAND: CardDefinition = {
+  id: 'TapAbilityLand',
+  name: 'Tap-Ability Land',
+  types: ['land'],
+  produces: ['G'],
+  activated: [{ cost: { tap: true }, effects: [], label: '{T}: Do a thing.' }],
 };
 
 function permanent(instanceId: InstanceId, def: CardDefinition, controller: PlayerId = 'A'): CardInstance {
@@ -178,6 +209,245 @@ describe('planManaPayment — which source it spends', () => {
     interleaved.push(birdTaps[2] as GameAction, birdTaps[3] as GameAction, birdTaps[4] as GameAction);
     const plan = planManaPayment(board([bird, forest]), 'A', { G: 1 }, interleaved);
     expect(taps(plan)).toEqual(['2:0']);
+  });
+});
+
+describe('planManaPayment — sparing the useful source (§3.60)', () => {
+  /**
+   * The user report, verbatim: "it should be choosing the least useful mana
+   * cards — like basic lands for example. Right now it's like auto choosing
+   * mana-elfs when it could have chosen basic lands."
+   *
+   * The Elves is offered FIRST here on purpose. That is the shape that made the
+   * bug reachable: every other term ties, so whichever the engine happened to
+   * enumerate first won. A fix that only worked when the land came first would
+   * be no fix at all.
+   */
+  it('taps the Forest, not the Llanowar Elves, for {G}', () => {
+    const elves = permanent(1, LLANOWAR_ELVES);
+    const forest = permanent(2, FOREST);
+    const perms = [elves, forest];
+    const plan = planManaPayment(
+      board(perms),
+      'A',
+      { G: 1 },
+      offeredTaps(perms),
+      undefined,
+      'cast',
+      SPARE_USEFUL_MANA_SOURCES,
+    );
+    expect(taps(plan)).toEqual(['2:0']);
+  });
+
+  it('still taps the Forest when the Forest is the one offered first', () => {
+    const forest = permanent(1, FOREST);
+    const elves = permanent(2, LLANOWAR_ELVES);
+    const perms = [forest, elves];
+    const plan = planManaPayment(
+      board(perms),
+      'A',
+      { G: 1 },
+      offeredTaps(perms),
+      undefined,
+      'cast',
+      SPARE_USEFUL_MANA_SOURCES,
+    );
+    expect(taps(plan)).toEqual(['1:0']);
+  });
+
+  it('spends the Elves once the lands run out rather than refusing to cast', () => {
+    // Sparing a source is a PREFERENCE, never a refusal: two green pips with one
+    // Forest and one Elves must still be payable, and must spend both.
+    const elves = permanent(1, LLANOWAR_ELVES);
+    const forest = permanent(2, FOREST);
+    const perms = [elves, forest];
+    const plan = planManaPayment(
+      board(perms),
+      'A',
+      { G: 2 },
+      offeredTaps(perms),
+      undefined,
+      'cast',
+      SPARE_USEFUL_MANA_SOURCES,
+    );
+    expect(taps(plan)).toEqual(['2:0', '1:0']); // Forest first, then the Elves
+  });
+
+  it('prefers the plain land over one whose {T} ability it would also spend', () => {
+    const utility = permanent(1, TAP_ABILITY_LAND);
+    const forest = permanent(2, FOREST);
+    const perms = [utility, forest];
+    const plan = planManaPayment(
+      board(perms),
+      'A',
+      { G: 1 },
+      offeredTaps(perms),
+      undefined,
+      'cast',
+      SPARE_USEFUL_MANA_SOURCES,
+    );
+    expect(taps(plan)).toEqual(['2:0']);
+  });
+
+  it('gives up the {T} ability before it gives up a creature body', () => {
+    // Both cost the controller something; the body is the dearer loss, so the
+    // utility land goes first. This is the ORDER the collateral weights encode.
+    const elves = permanent(1, LLANOWAR_ELVES);
+    const utility = permanent(2, TAP_ABILITY_LAND);
+    const perms = [elves, utility];
+    const plan = planManaPayment(
+      board(perms),
+      'A',
+      { G: 1 },
+      offeredTaps(perms),
+      undefined,
+      'cast',
+      SPARE_USEFUL_MANA_SOURCES,
+    );
+    expect(taps(plan)).toEqual(['2:0']);
+  });
+
+  it('never lets sparing a body outrank keeping the least flexible source', () => {
+    // The conservative placement: an any-colour BIRD is a creature (collateral)
+    // and a Forest is not, but the Bird is also the flexible source the old
+    // ladder already spared — and flexibility still wins, so this placement can
+    // only ever decide ties the old ladder decided by enumeration order.
+    const bird = permanent(1, ANY_COLOR_BIRD);
+    const forest = permanent(2, FOREST);
+    const perms = [bird, forest];
+    const plan = planManaPayment(
+      board(perms),
+      'A',
+      { G: 1 },
+      offeredTaps(perms),
+      undefined,
+      'cast',
+      SPARE_USEFUL_MANA_SOURCES,
+    );
+    expect(taps(plan)).toEqual(['2:0']);
+  });
+
+  it('promotes the term above flexibility on the aboveFlexibility policy', () => {
+    // The measurement arm: with the collateral term promoted, a creature that
+    // could have made five colours is spared in favour of the plain Island that
+    // is worth nothing to keep — the opposite call to the default ladder's, and
+    // the reason the placement is a measurable question rather than an argued one.
+    const bird = permanent(1, ANY_COLOR_BIRD);
+    const island = permanent(2, ISLAND);
+    const perms = [bird, island];
+    const cost: ManaCost = { U: 1 };
+    expect(
+      taps(planManaPayment(board(perms), 'A', cost, offeredTaps(perms), undefined, 'cast', SPARE_USEFUL_MANA_SOURCES)),
+    ).toEqual(['2:0']);
+    expect(
+      taps(
+        planManaPayment(
+          board(perms),
+          'A',
+          cost,
+          offeredTaps(perms),
+          undefined,
+          'cast',
+          SPARE_USEFUL_MANA_SOURCES_FIRST,
+        ),
+      ),
+    ).toEqual(['2:0']);
+    // Where the two placements genuinely differ: the Bird is BOTH the flexible
+    // source and the creature, so put the flexibility on the expendable side —
+    // a two-colour land against a mono-colour mana creature.
+    const dual: CardDefinition = { id: 'Dual', name: 'Dual', types: ['land'], producesOptions: [{ G: 1 }, { U: 1 }] };
+    const duals = [permanent(3, dual), permanent(4, LLANOWAR_ELVES)];
+    expect(
+      taps(planManaPayment(board(duals), 'A', { G: 1 }, offeredTaps(duals), undefined, 'cast', SPARE_USEFUL_MANA_SOURCES)),
+    ).toEqual(['4:0']); // flexibility first: spend the mono-colour Elves, keep the dual
+    expect(
+      taps(
+        planManaPayment(
+          board(duals),
+          'A',
+          { G: 1 },
+          offeredTaps(duals),
+          undefined,
+          'cast',
+          SPARE_USEFUL_MANA_SOURCES_FIRST,
+        ),
+      ),
+    ).toEqual(['3:0']); // collateral first: spend the dual, keep the body
+  });
+
+  /**
+   * ⚠️ THE BYTE-IDENTITY CONTRACT. The planner is shared with both AI pilots and
+   * the sim's recorded seeded baselines. The DEFAULT policy must therefore keep
+   * the pre-§3.60 answer exactly, including the enumeration-order tie the report
+   * complains about — the preference is what fixes that, not the default.
+   */
+  it('leaves the default policy answering exactly as it did before', () => {
+    const elves = permanent(1, LLANOWAR_ELVES);
+    const forest = permanent(2, FOREST);
+    const perms = [elves, forest];
+    const offered = offeredTaps(perms);
+    expect(taps(planManaPayment(board(perms), 'A', { G: 1 }, offered))).toEqual(['1:0']);
+    expect(
+      taps(planManaPayment(board(perms), 'A', { G: 1 }, offered, undefined, 'cast', MANA_SOURCE_PREFERENCE_DEFAULT)),
+    ).toEqual(['1:0']);
+  });
+});
+
+describe('manaPaymentChoiceExists — only ask when the choice is real (§3.60)', () => {
+  it('says yes when a Forest and a Llanowar Elves could each pay', () => {
+    const elves = permanent(1, LLANOWAR_ELVES);
+    const forest = permanent(2, FOREST);
+    const perms = [elves, forest];
+    expect(manaPaymentChoiceExists(board(perms), 'A', { G: 1 }, offeredTaps(perms))).toBe(true);
+  });
+
+  it('says NO when two identical Forests could pay — that is not a decision', () => {
+    // The nag guard. Losing a Forest is losing a Forest; which physical card it
+    // was is not something to interrupt a player for.
+    const perms = [permanent(1, FOREST), permanent(2, FOREST)];
+    expect(manaPaymentChoiceExists(board(perms), 'A', { G: 1 }, offeredTaps(perms))).toBe(false);
+  });
+
+  it('says NO when every source is needed', () => {
+    const perms = [permanent(1, FOREST), permanent(2, ISLAND)];
+    expect(manaPaymentChoiceExists(board(perms), 'A', { G: 1, U: 1 }, offeredTaps(perms))).toBe(false);
+  });
+
+  it('says NO when there is only one source at all', () => {
+    const perms = [permanent(1, FOREST)];
+    expect(manaPaymentChoiceExists(board(perms), 'A', { G: 1 }, offeredTaps(perms))).toBe(false);
+  });
+
+  it('says NO when the floating pool already pays and nothing would be tapped', () => {
+    const perms = [permanent(1, FOREST), permanent(2, LLANOWAR_ELVES)];
+    expect(manaPaymentChoiceExists(board(perms, { G: 1 }), 'A', { G: 1 }, offeredTaps(perms))).toBe(false);
+  });
+
+  it('says NO when the cost cannot be paid at all', () => {
+    const perms = [permanent(1, ISLAND)];
+    expect(manaPaymentChoiceExists(board(perms), 'A', { G: 1 }, offeredTaps(perms))).toBe(false);
+  });
+
+  it('sees a choice hidden behind interchangeable sources', () => {
+    // Two Forests and an Elves paying {G}{G}: the auto plan spends both Forests,
+    // but "a Forest and the Elves" is a genuinely different thing to give up.
+    // Excluding one Forest is what surfaces it — excluding ALL Forests would
+    // wrongly report "no choice" here.
+    const perms = [permanent(1, FOREST), permanent(2, FOREST), permanent(3, LLANOWAR_ELVES)];
+    expect(manaPaymentChoiceExists(board(perms), 'A', { G: 2 }, offeredTaps(perms))).toBe(true);
+  });
+
+  it('sees a choice between one big source and two small ones', () => {
+    const perms = [permanent(1, TWO_COLORLESS_ROCK), permanent(2, FOREST), permanent(3, ISLAND)];
+    expect(manaPaymentChoiceExists(board(perms), 'A', { generic: 2 }, offeredTaps(perms))).toBe(true);
+  });
+
+  it('ignores the other seat’s sources entirely', () => {
+    const mine = permanent(1, FOREST);
+    const theirs = permanent(2, FOREST, 'B');
+    const view = board([mine, theirs]);
+    const offered = [...offeredTaps([mine]), ...offeredTaps([theirs], 'B')];
+    expect(manaPaymentChoiceExists(view, 'A', { G: 1 }, offered)).toBe(false);
   });
 });
 

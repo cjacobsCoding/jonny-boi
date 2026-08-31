@@ -167,6 +167,15 @@ export { DEFAULT_HEURISTIC_WEIGHTS } from './weights.js';
 export { LEDGER_PRICING_OFF_WEIGHTS } from './effect-value.js';
 
 /**
+ * THE §3.60 ABLATION PRESET — merge over any weight set to make the pilot spare
+ * its useful mana sources (spend the Forest, keep the Llanowar Elves). Exported
+ * for the same reason the two presets above are: it is how the strength
+ * comparison behind the §3.60 pilot default runs BOTH arms in one process, and
+ * how anyone re-checks that decision later without editing code.
+ */
+export { SPARE_MANA_SOURCES_WEIGHTS, manaPreferenceOf } from './mana-preference.js';
+
+/**
  * Answering core's player CHOICES. Pilots use these automatically; they are
  * exported so any other consumer that has to answer on a player's behalf (a
  * hotseat "auto-play this seat" control, a server filling in for a disconnected

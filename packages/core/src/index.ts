@@ -585,7 +585,28 @@ export {
 // Mana payment planning — shared by the AI pilots and the hotseat/online auto-tap
 // so "which lands do I tap" has exactly one implementation.
 export type { ManaTapPlan, ManaPlanView } from './mana-plan.js';
-export { planManaPayment, distanceToPayable } from './mana-plan.js';
+export { planManaPayment, manaPaymentChoiceExists, distanceToPayable } from './mana-plan.js';
+
+/**
+ * WHICH source pays when several could (§3.60). A named, defaulted policy rather
+ * than a hard-coded ranking, because the planner is shared with the pilots and
+ * the sim's seeded baselines are pinned byte-identical:
+ * `MANA_SOURCE_PREFERENCE_DEFAULT` is the pre-§3.60 ladder exactly, and a caller
+ * that wants the Forest spent before the mana elf asks for
+ * `SPARE_USEFUL_MANA_SOURCES` by name.
+ */
+export type {
+  ManaSourcePreference,
+  ManaCollateralRank,
+  ManaCollateralWeights,
+} from './mana-source-preference.js';
+export {
+  MANA_SOURCE_PREFERENCE_DEFAULT,
+  SPARE_USEFUL_MANA_SOURCES,
+  SPARE_USEFUL_MANA_SOURCES_FIRST,
+  MANA_COLLATERAL_WEIGHTS,
+  manaSourceCollateral,
+} from './mana-source-preference.js';
 
 // Engine
 export type { DeckList, GameSetup, EngineResult, Engine } from './engine.js';

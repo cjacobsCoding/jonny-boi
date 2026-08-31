@@ -169,6 +169,82 @@ describe('auto-tap taps the right sources, and only as many as needed', () => {
     expect(forest!.tapped, 'the Forest cannot make {R} and should be untapped').toBe(false);
   });
 
+  /**
+   * THE §3.60 REPORT, end to end through the real pool and the real session:
+   * *"it should be choosing the least useful mana cards — like basic lands for
+   * example. Right now it's like auto choosing mana-elfs when it could have
+   * chosen basic lands."*
+   *
+   * The Elves is placed FIRST, which is the shape that made the old behaviour
+   * reachable: colour, size and flexibility all tie with a Forest, so the
+   * ranking fell through to the engine's enumeration order and the elf paid.
+   */
+  it('taps the Forest, not the Llanowar Elves, when either could pay {G}', () => {
+    let elves!: CardInstance;
+    let forest!: CardInstance;
+    let spell!: CardInstance;
+    const session = sculpted((state) => {
+      elves = place(state, card('Llanowar Elves'), 'A');
+      forest = place(state, card('Forest'), 'A');
+      spell = toHand(state, card('Giant Growth'), 'A'); // {G}
+    });
+
+    const result = session.castWithAutoTap(spell.instanceId, [elves.instanceId]);
+    expect(result.rejected).toBeFalsy();
+    const after = (id: number) => result.session.state.battlefield.find((p) => p.instanceId === id);
+    expect(after(forest.instanceId)!.tapped, 'the Forest should have paid').toBe(true);
+    expect(after(elves.instanceId)!.tapped, 'the Elves should still be able to block').toBe(false);
+  });
+
+  it('still spends the Elves when the lands have run out', () => {
+    // Sparing a body is a preference, never a refusal: two green pips off one
+    // Forest and one Elves must still cast, spending both.
+    let elves!: CardInstance;
+    let spell!: CardInstance;
+    const session = sculpted((state) => {
+      elves = place(state, card('Llanowar Elves'), 'A');
+      place(state, card('Forest'), 'A');
+      spell = toHand(state, card('Eternal Witness'), 'A'); // {1}{G}{G} — needs three
+    });
+
+    // Three mana are owed and only two sources exist, so this must fail cleanly
+    // rather than half-tapping; the affordability check agrees.
+    const option = session.castOptions().find((o) => o.instanceId === spell.instanceId);
+    expect(option).toBeUndefined();
+
+    // With a third source it casts, and the Elves is spent because it has to be.
+    const richer = sculpted((state) => {
+      elves = place(state, card('Llanowar Elves'), 'A');
+      place(state, card('Forest'), 'A');
+      place(state, card('Forest'), 'A');
+      spell = toHand(state, card('Eternal Witness'), 'A');
+    });
+    const result = richer.castWithAutoTap(spell.instanceId, []);
+    expect(result.rejected).toBeFalsy();
+    const elf = result.session.state.battlefield.find((p) => p.instanceId === elves.instanceId);
+    expect(elf!.tapped, 'the last source owed has to be spent').toBe(true);
+  });
+
+  it('reports a genuine mana choice, and no choice when the sources are alike', () => {
+    let spell!: CardInstance;
+    const mixed = sculpted((state) => {
+      place(state, card('Llanowar Elves'), 'A');
+      place(state, card('Forest'), 'A');
+      spell = toHand(state, card('Giant Growth'), 'A');
+    });
+    const mixedOption = mixed.castOptions().find((o) => o.instanceId === spell.instanceId);
+    expect(mixed.manaChoiceForCast(mixedOption!)).toBe(true);
+
+    // Two Forests are not a decision — losing a Forest is losing a Forest.
+    const alike = sculpted((state) => {
+      place(state, card('Forest'), 'A');
+      place(state, card('Forest'), 'A');
+      spell = toHand(state, card('Giant Growth'), 'A');
+    });
+    const alikeOption = alike.castOptions().find((o) => o.instanceId === spell.instanceId);
+    expect(alike.manaChoiceForCast(alikeOption!)).toBe(false);
+  });
+
   it('does not count a summoning-sick mana creature as available', () => {
     let bolt!: CardInstance;
     const session = sculpted((state) => {

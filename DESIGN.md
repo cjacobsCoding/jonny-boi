@@ -830,6 +830,137 @@ Tests: `filter.test.ts` (+13), NEW `replay-transport.test.ts` (6),
 NEW `printings/entryPrinting.test.ts` (24), NEW `storage.test.ts` (6),
 NEW `deck-entry-names.test.ts` (11).
 
+### 3.60 Which mana pays — spare the useful source, and let the player choose — ✅ done
+
+Two reports, one subject: *"when I drag a spell out to cast, if there are multiple options for mana and
+its going to auto-select for me, it should be choosing the least useful mana cards — like basic lands
+for example. Right now it's like auto choosing mana-elfs when it could have chosen basic lands."* and
+*"There should also be an easy way to make the game have you specify which mana to use when you
+actually have unique options."*
+
+**The defect was a missing rung, not a wrong one.** `planManaPayment` already ranked candidate taps
+`distance → pain → restrictedRank → flexibility → size`, and for `Llanowar Elves` versus `Forest`
+paying `{G}` every one of those ties: same colour, same size, one mode each. The ladder therefore fell
+through to the engine's **enumeration order**, and the elf paid. Nothing in it knew that tapping a
+Forest costs its controller nothing while tapping a creature costs a blocker.
+
+**COLLATERAL UTILITY is the new rung** (`packages/core/src/mana-source-preference.ts`): what tapping a
+source costs BEYOND the mana. A creature body (`creatureBody`, the dearest — an attacker this turn and
+a blocker until it untaps), a printed `{T}` ability the tap would spend (`tapAbility`, cheaper because
+it returns on the next untap), zero for a basic land. Both are named weights, and the price is read
+off `CardInstance.def` — the face that is up and the card a copy is copying — so a permanent that is
+not a creature **right now** is not charged for a body it does not have.
+
+**⚠️ It is a named, DEFAULTED POLICY PARAMETER, not a behaviour change.** This planner is shared with
+both AI pilots and the sim's seeded baselines are pinned byte-identical (engineering rule 7), so
+changing the ranking for everyone would silently change how the AI plays in every measurement ever
+recorded. `planManaPayment` therefore takes a `ManaSourcePreference`:
+
+| preset | ladder | who uses it |
+|---|---|---|
+| `MANA_SOURCE_PREFERENCE_DEFAULT` | `distance → pain → restricted → flexibility → size` | **the default** — pilots, the engine's own auto-tap, everything that does not opt in |
+| `SPARE_USEFUL_MANA_SOURCES` | `… → flexibility → **collateral** → size` | the hotseat + online **human** cast paths |
+| `SPARE_USEFUL_MANA_SOURCES_FIRST` | `… → restricted → **collateral** → flexibility → size` | the measurement arm (see below) |
+
+Both live placements sit strictly BELOW `pain` and `restrictedRank`: keeping a blocker must never
+outrank "this tap does not kill me", nor strand a restricted mana that would otherwise go unspent.
+The shipped human placement is the conservative one — it can only ever decide a tie the old ladder
+decided by enumeration order, which is exactly the reported bug and nothing else.
+
+The `better` comparison was rewritten from a flat disjunction (`d < bd || (d === bd && p < bp) || …`)
+into a short-circuiting lexicographic chain. Same answer, **strictly fewer comparisons** (7 rather
+than 15 in the all-tied case), and adding a rung no longer means re-stating every rung above it.
+Collateral is priced ONCE per source at collection time into a scratch row, never inside the ranking
+loop, and is `0` for every source under the default policy — where both of its branches are dead.
+
+**📊 THE PILOT'S DEFAULT STAYS OFF, and that is the measurement's verdict, not an omission.**
+`HeuristicWeights.spareUsefulManaSources` (default `false`) is the one-knob switch, threaded through
+all nine `planManaPayment` call sites in `heuristic.ts` + `land-sequencing.ts` via
+`manaPreferenceOf(weights)` — one policy per pilot, so the "would this land unlock that spell?" probe
+can never be answered under a different policy from the payment that follows.
+
+> **`runPilotAb`, spare-mana (A) vs shipped (B), nine sample decks, 36 pairs × 2 orientations ×
+> 100 games = 7,200 games, seed 99:** **3535 – 3530** (135 draws) · matched slots **7 A-ahead /
+> 4 B-ahead / 3,589 SPLIT of 3,600** · McNemar p = **0.55** (11 decided) · **VERDICT: INCONCLUSIVE**
+> · 95.1 games/sec.
+
+Every deck row lands within 0.2% of level. **3,589 of 3,600 matched slots are byte-identical play** —
+the gauntlet meta simply does not present the tie often enough to matter, and when it does the game
+does not turn on it. So the result *permits* the flip (it is neutral, not worse) and there is no
+reason to take it: flipping a shared default would move **every recorded seed-99 baseline** — the
+numbers say Mono-Green Ramp 566↔562 and UW Control 382↔379 — in exchange for +5 games in 7,065, which
+is noise. Per §3.50's standing rule for `DEFAULT_PILOT_ID`, a shared default moves on evidence of a
+gain, never on the theory that it ought to. **Recommendation: leave it off; revisit if the pool ever
+grows a mana-creature-dense archetype.**
+
+**⚠️ Recorded seed-99 gauntlet baselines: UNMOVED, byte-identical** — Mono-Red **257/800**,
+Selesnya Blink **615/800**, UW Control **377/800**, Mono-Green Ramp **552/800** (the §3.50/§3.52 rows
+exactly), which is what the defaulted parameter guarantees by construction.
+
+Reproducibility: `SPARE_MANA_SOURCES_WEIGHTS` is exported from `@jonny-boi/ai` beside
+`LAND_SEQUENCING_OFF_WEIGHTS` and `LEDGER_PRICING_OFF_WEIGHTS`, so both arms re-run in ONE process
+any time. **Honest gap:** `SPARE_USEFUL_MANA_SOURCES_FIRST` (the promoted placement) is implemented
+and unit-tested but NOT pilot-measured — the pilot does not adopt the preference at all, so there was
+nothing to measure it against. It exists so the placement stays falsifiable rather than argued.
+
+**THE PICKER — "let me choose my mana", and only when there is something to choose.** The heart of the
+feature is the gate, so it is a pure, directly-tested core predicate rather than a UI heuristic:
+`manaPaymentChoiceExists` plans the payment, then re-plans with each planned source excluded, and
+answers `true` only when some alternative spends a **different multiset of CARDS**. Two untapped
+Forests are not a decision (you lose a Forest either way) and it says so; `Forest + Forest` where a
+Llanowar Elves could take one of the slots **is** two, and it says that too. Unpayable and
+already-covered-by-the-pool both answer `false`, so a picker can never open with one button in it —
+not even on an explicit per-cast request (`shouldAskForMana`'s hard gate).
+
+The hotseat picker (`lib/play/mana-picker.ts` + `PlayBoard`) is a paused cast holding a **private
+working `GameSession`**: taps fold into it, the board renders from it (so tapped lands, the pool
+readout and the live `Still needed: {1}{G}` line all come off the one derivation a committed tap
+uses), Confirm casts through `castWithAutoTap` — which taps nothing more, because the pool already
+covers the cost — and **Cancel is `setManaPicker(null)`**. Dropping the working session IS the
+rollback: it carries its own taps and its own §3.58 action-log entries away with it, so a cancelled
+cast leaves no trace, no untap loop and no compensating action. Sources are clickable on the board or
+in the prompt's list, whose rows follow the §3.57 owner conventions (`Forest (yours) — G`); a modal
+source collapses to one "any colour" row that hands off to the existing which-colour prompt. Two ways
+in: a persisted `Choose mana` toggle in the action bar (localStorage, default off) and a per-cast `⛁`
+chip that appears **only** on a hand card whose cast has a genuine choice.
+
+**📌 The ONLINE seat gets half of this, and the split is deliberate.** Its auto-tap plans under the
+same `SPARE_USEFUL_MANA_SOURCES`, so an online player's elf is spared exactly as the hotseat's is.
+The PICKER is hotseat-only: it wants a private working session to fold taps into and discard on
+cancel, and the online seat has none — it holds a redacted view and every tap is a server round trip,
+so cancelling there means un-tapping *through the server*, a different mechanism rather than a
+re-render of this one. The gate when it is built is the same `manaPaymentChoiceExists`; a wrapper for
+it is deliberately NOT parked in `auto-tap.ts` in the meantime, because an exported helper with no
+caller is dead code wearing a green checkmark (the §3.52 rule, applied to my own work).
+
+**Tests (47 new).** The literal report is pinned twice — in core (`Llanowar Elves` offered FIRST, the
+shape that made the bug reachable, must tap the Forest) and end-to-end through the real pool and a
+real `GameSession` (`mana-sources.test.ts`), where ablating the preference back to the default makes
+it fail with "the Forest should have paid: expected false to be true". Plus: the byte-identity
+contract (default policy still answers with the elf), the ordering rules (body dearer than `{T}`
+ability; flexibility still outranks collateral), sparing is a preference and never a refusal, the
+current-face/current-copy read, and nine cases on the choice predicate including the two-Forests
+nag guard.
+
+**📸 Proved in a real browser, not only in vitest.** `node apps/web/scripts/verify-mana-choice.mjs`
+drives the BUILT app in headless Chrome through a real Mono-Green Ramp solo game — lands played, a
+mana creature cast, no state poked — and asserts the two promises where they actually live:
+**19/19 checks, exit 0.** With an Elvish Mystic and a Forest both untapped, the auto-tap *"spent a
+Forest"* and *"did NOT spend the mana creature — it can still block"*; the `⛁` chip appeared on the
+cast with a genuine choice and on 4 of 9 cards, not all of them; the picker read `Still needed:
+{3}{G}` → `{3}` → `Fully paid — confirm to cast` as sources were clicked, with Confirm disabled until
+the pool covered the cost; and **Cancel left every source untapped and the hand unchanged**.
+Screenshots in `apps/web/verify-out/mana-choice/`.
+
+**Files.** `packages/core` (NEW `mana-source-preference.ts` + test; `mana-plan.ts` the rung + the
+predicate, `mana-plan.test.ts`, `index.ts` exports), `packages/ai` (NEW `mana-preference.ts`;
+`weights.ts` one flag, `heuristic.ts` + `land-sequencing.ts` call sites, `index.ts` export),
+`apps/web` (NEW `lib/play/mana-picker.ts` + `mana-choice-pref.ts` + `mana-picker.test.ts` +
+`components/play/mana-picker.css`; `lib/play/session.ts` opts in + `manaChoiceForCast`,
+`lib/online/auto-tap.ts` opts in (auto-tap only — no online picker, see above), `components/play/PlayBoard.tsx` the picker,
+`lib/config.ts` + `lib/play/play-config.ts` named keys/knobs, `lib/play/mana-sources.test.ts`;
+NEW `scripts/verify-mana-choice.mjs` — the browser harness, 19 checks), `eslint.config.js` (the
+existing puppeteer-harness globals block gains the new harness + `Event`).
 ### 3.59 The blocking half of the combat-hint bug — ✅ done
 
 Found by playing the SHIPPED build rather than a dev server: with §3.57 deployed, a Solo game at
@@ -852,7 +983,6 @@ nothing to declare, *neither* combat step ever tells a seat to use what it lacks
 responding seat in *either* step gets response copy. A future edit to one branch cannot silently
 re-open the other. Sabotage-checked: reverting the rule reddens exactly the three new behavioral
 tests.
-
 ### 3.58 Games survive everything — state persistence, exact resume, and updates that wait their turn — ✅ done
 
 The requirement, verbatim: *"I want the games to save off their state and when an update applies,

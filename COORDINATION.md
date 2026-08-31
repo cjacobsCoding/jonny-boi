@@ -194,9 +194,38 @@ throughput (games/sec) from regressing.
 
 | fix/report-sweep | worker | apps/web ONLY, all NON-Play surfaces. **Type chips:** `lib/filter.ts` + `filter.test.ts`. **Transport icons:** `lib/replay-config.ts` + `components/match/PlaybackControls.tsx` + NEW `lib/replay-transport.test.ts`. **Per-deck-entry printings:** NEW `lib/printings/entryPrinting.ts` + `entryPrinting.test.ts`, `lib/deck.ts`, `lib/storage.ts` + NEW `storage.test.ts`, `lib/useDecks.ts`, NEW `components/DeckEntryPrinting.tsx`, `views/DeckBuilderView.tsx`, `views/ProxiesView.tsx` (the deck→sheet art bridge, inside `loadDeck` only), `styles.css` (own `report-sweep` section appended at EOF). **Deck entries remember their card name** (`DeckEntry.name`, the `unknown card "<uuid>"` report): `lib/deck.ts`, `lib/storage.ts`, `lib/decklist/buildDeck.ts` + `gauntletDecks.ts` + `applySwapToDeck.ts` (one entry-construction line each), NEW `lib/deck-entry-names.test.ts`. DESIGN §3.61, COORDINATION. ⚠️ **Touches NOTHING under views/PlayView.tsx, components/play/**, components/online/**, lib/play/**, lib/online/** or packages/core/src/mana-plan.ts** — the concurrent mana/cast agent owns those. | ✅ MERGED + DEPLOYED |
 
+| feat/mana-choice | worker | packages/core (NEW mana-source-preference.ts + test; mana-plan.ts + mana-plan.test.ts; index.ts exports), packages/ai (NEW mana-preference.ts; weights.ts one flag, heuristic.ts + land-sequencing.ts call sites, index.ts export), apps/web (NEW lib/play/mana-picker.ts + mana-choice-pref.ts + mana-picker.test.ts + components/play/mana-picker.css; lib/play/session.ts + mana-sources.test.ts + play-config.ts, lib/online/auto-tap.ts, components/play/PlayBoard.tsx, lib/config.ts), DESIGN §3.60, COORDINATION. **Does NOT touch packages/sim, apps/server, styles.css, or lib/play/persist.ts.** ⚠️ PILOT UNCHANGED BY CONSTRUCTION — the preference is a defaulted parameter and the pilot default is OFF; seed-99 baselines re-measured BYTE-IDENTICAL (257/615/377/552 per 800). | 🚧 PUSHED, not merged |
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-31 worker: `feat/mana-choice` 🚧 PUSHED, not merged — DESIGN §3.60, the two mana reports.
+  (1) Auto-tap now spends the EXPENDABLE source: a new COLLATERAL rung in core’s tie-break ladder prices
+  what tapping costs beyond the mana (a creature body, a spent `{T}` ability; a basic land = 0), read off
+  the CURRENT face/copy rather than the printed card. (2) A mana PICKER: click your own sources, a live
+  "Still needed: {1}{G}" readout, Confirm/Cancel — gated by a tested core predicate so it never opens when
+  every legal plan taps the same cards (two Forests is not a decision).
+  ⚠️ **INTEGRATOR — THE ONE THING THAT DECIDES MERGEABILITY: PILOT BEHAVIOUR IS UNCHANGED.** The
+  preference is a named, DEFAULTED `ManaSourcePreference` parameter on `planManaPayment`;
+  `MANA_SOURCE_PREFERENCE_DEFAULT` reproduces the pre-§3.60 ladder exactly and every pilot call site
+  resolves to it (`HeuristicWeights.spareUsefulManaSources: false`). Only the HUMAN cast paths opt in.
+  Re-measured rather than assumed: seed-99 gauntlet **257 / 615 / 377 / 552 per 800**, byte-identical to
+  the §3.50/§3.52 rows. And measured for the pilot too: `runPilotAb` 7,200 games seed 99, spare-mana
+  3535–3530, **3,589 of 3,600 matched slots SPLIT**, McNemar p = 0.55, INCONCLUSIVE — i.e. neutral, so
+  the flip is permitted and deliberately NOT taken: it would move every recorded baseline (Mono-Green
+  566↔562, UW 382↔379) for +5 games in 7,065. Re-runnable from `SPARE_MANA_SOURCES_WEIGHTS`, exported
+  beside `LEDGER_PRICING_OFF_WEIGHTS`.
+  §3.58 respected: the picker holds a PRIVATE working `GameSession` and Cancel simply drops it, so the
+  discarded taps carry their own action-log entries away — nothing reaches `onSubmit` until Confirm.
+  Picker rows follow the §3.57 owner conventions. Gate: **5,694 passed / 0 failed**, lint 0 errors
+  (5 pre-existing warnings), card-index clean, `npm run build` exit 0. Honest gap: the promoted-placement
+  preset `SPARE_USEFUL_MANA_SOURCES_FIRST` is unit-tested but NOT pilot-measured — the pilot does not
+  adopt the preference at all, so there was nothing to measure it against.- 2026-08-30 worker: `feat/game-resume` claimed — DESIGN §3.58 (games persist + resume exactly;
+  updates defer during a live game and apply with state/screen/scroll restored). Owns the files in
+  the in-flight row. Two shared files touched minimally and additively: `App.tsx` (flag-driven
+  initial view + `<UpdatePill/>` mount) and `vite.config.ts` (registerType → 'prompt'; autoUpdate's
+  generated SW skipWaiting()s itself on install, so a waiting update CANNOT be deferred under it —
+  the old bundle's lazy chunks can be purged out from under the running page). The §3.57 agent's
+  components/play/* + styles.css appends are untouched; the pill ships its own CSS file.
 - 2026-08-30 worker: `fix/report-sweep` claimed — DESIGN §3.61, a triage-then-fix sweep of three
   in-app bug reports on the **non-Play** surfaces (Cards browser type chips, the Watch-a-Game
   transport icons, per-deck-entry alternate printings). Owns the files in the in-flight row and
@@ -219,13 +248,7 @@ _Append dated notes here; keep them short. Newest at top._
   it (its blast radius is the engine's card compiler, deck grouping and the mana curve); I worked
   around it in the web filter layer, which is a display concern. It is still worth a real fix.
 
-- 2026-08-30 worker: `feat/game-resume` claimed — DESIGN §3.58 (games persist + resume exactly;
-  updates defer during a live game and apply with state/screen/scroll restored). Owns the files in
-  the in-flight row. Two shared files touched minimally and additively: `App.tsx` (flag-driven
-  initial view + `<UpdatePill/>` mount) and `vite.config.ts` (registerType → 'prompt'; autoUpdate's
-  generated SW skipWaiting()s itself on install, so a waiting update CANNOT be deferred under it —
-  the old bundle's lazy chunks can be purged out from under the running page). The §3.57 agent's
-  components/play/* + styles.css appends are untouched; the pill ships its own CSS file.
+
 - 2026-08-30 worker: `feat/play-clarity` 🚧 PUSHED, not merged — DESIGN §3.57. All four Solo clarity
   reports fixed, apps/web only, verified live (headless capture run against a real Solo game; evidence
   screenshots in the worktree's qa/screens/). (1) Every picker row carries its OWNER — "yours" /

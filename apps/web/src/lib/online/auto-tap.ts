@@ -19,6 +19,7 @@
  */
 import {
   planManaPayment,
+  SPARE_USEFUL_MANA_SOURCES,
   type CardInstance,
   type CastZone,
   type GameAction,
@@ -27,6 +28,15 @@ import {
   type ManaPlanView,
   type PlayerId,
 } from '@jonny-boi/core';
+
+/**
+ * WHICH source the online seat spends when several could — the same §3.60 policy
+ * the hotseat uses (`lib/play/session.ts`), because it is the same human making
+ * the same decision through a different transport. A seat that auto-tapped its
+ * mana elf online and its Forest at the table would be one client contradicting
+ * the other.
+ */
+const HUMAN_MANA_PREFERENCE = SPARE_USEFUL_MANA_SOURCES;
 
 /**
  * The cost this cast pays: the printed cost from hand, the flashback cost from
@@ -68,6 +78,7 @@ export function castSequence(
         legalActions,
         card.def,
         'cast',
+        HUMAN_MANA_PREFERENCE,
       )
     : [];
   if (!plan) return null;
@@ -108,7 +119,9 @@ export function castableWithTaps(
   for (const card of hand) {
     const cost = card.def.cost;
     if (!cost) continue;
-    if (planManaPayment(view, player, cost, legalActions, card.def, 'cast')) out.add(card.instanceId);
+    if (planManaPayment(view, player, cost, legalActions, card.def, 'cast', HUMAN_MANA_PREFERENCE)) {
+      out.add(card.instanceId);
+    }
   }
   return out;
 }
@@ -137,7 +150,27 @@ export function graveyardCastableWithTaps(
     if (cost === undefined) continue;
     const instantSpeed = card.def.timing === 'instant' || card.def.types.includes('instant');
     if (!instantSpeed && !sorceryWindowOpen) continue;
-    if (planManaPayment(view, player, cost, legalActions, card.def, 'cast')) out.add(card.instanceId);
+    if (planManaPayment(view, player, cost, legalActions, card.def, 'cast', HUMAN_MANA_PREFERENCE)) {
+      out.add(card.instanceId);
+    }
   }
   return out;
 }
+
+/**
+ * 📌 THE ONLINE MANA PICKER IS NOT BUILT (§3.60), deliberately and honestly.
+ *
+ * This seat gets the half that needed no UI — every plan above is made under
+ * {@link HUMAN_MANA_PREFERENCE}, so an online player's auto-tap spares the mana
+ * elf exactly as the hotseat's does. The PICKER is hotseat-only: it wants a
+ * private working session to fold taps into and discard on cancel, and this seat
+ * has no session — it holds a redacted view and every tap is a server round
+ * trip, so cancelling means un-tapping through the server rather than dropping
+ * an object. That is a different mechanism, not a re-render of this one.
+ *
+ * When it is built, the gate is core's `manaPaymentChoiceExists` called with
+ * `HUMAN_MANA_PREFERENCE` — the same predicate `GameSession.manaChoiceForCast`
+ * asks — so the two seats cannot disagree about when a decision exists. A
+ * wrapper for it is NOT parked here in the meantime: an exported helper with no
+ * caller is dead code wearing a green checkmark.
+ */
