@@ -44,14 +44,6 @@ import {
   strParam,
 } from './effect-helpers.js';
 
-/**
- * The link, written onto the EXILED card: the instance that sent it there.
- *
- * A widened `CardInstance` rather than a core field, because this is a
- * cards-package mechanic and core has no opinion about it. Set only on cards
- * actually exiled this way, so no other instance grows the property (the same
- * shape discipline `resetInstanceForNewZone` documents).
- */
 /** Where a returning card goes. Battlefield is the default (O-Ring, Fiend Hunter). */
 type ReturnTo = 'battlefield' | 'hand';
 
@@ -78,7 +70,7 @@ export const exileUntilLeaves: EffectPrimitive = (ctx) => {
   let done = 0;
   for (const id of ids) {
     if (done >= max) break;
-    console.log("[EUL]", JSON.stringify({targets: ctx.targets, restriction, controller: ctx.controller, id, legal: isLegalTarget(ctx.state, restriction, id, ctx.controller, ctx.source.def), onField: ctx.state.battlefield.some((c) => c.instanceId === id)})); if (!isLegalTarget(ctx.state, restriction, id, ctx.controller, ctx.source.def)) continue;
+    if (!isLegalTarget(ctx.state, restriction, id, ctx.controller, ctx.source.def)) continue;
 
     const permanent = permanentById(ctx.state, id);
     let owner: PlayerId;

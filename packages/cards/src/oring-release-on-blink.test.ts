@@ -25,21 +25,16 @@ function act(state: GameState, action: GameAction) {
 }
 function drain(state: GameState, pick?: (q: NonNullable<GameState["pendingChoice"]>) => unknown) {
   let s = state, guard = 0;
-  const trail: string[] = [];
   while ((s.stack.length > 0 || s.pendingChoice) && guard++ < 80) {
     if (s.pendingChoice) {
       const q = s.pendingChoice;
       const answer = (pick ? pick(q) : null) ?? defaultAnswerFor(q);
-      const r = act(s, { kind: "answerChoice", player: q.chooser, choiceId: q.id, answer: answer as never });
-      for (const e of r.events) trail.push(e.type + ((e as {reason?:string}).reason ? " ["+(e as {reason:string}).reason+"]" : ""));
-      s = r.state;
+      s = act(s, { kind: "answerChoice", player: q.chooser, choiceId: q.id, answer: answer as never }).state;
     } else {
-      const r = act(s, { kind: "passPriority", player: s.priorityPlayer });
-      for (const e of r.events) trail.push(e.type + ((e as {reason?:string}).reason ? " ["+(e as {reason:string}).reason+"]" : ""));
-      s = r.state;
+      s = act(s, { kind: "passPriority", player: s.priorityPlayer }).state;
     }
   }
-  return { s, trail };
+  return { s };
 }
 function toMain(state: GameState): GameState {
   let s = state, guard = 0;
@@ -85,8 +80,6 @@ describe("Angel of Serenity x a Closet-style blink", () => {
     // On the re-entry ETB question, decline to jail anything (choose none).
     d = drain(r.state, (q) => q.kind === "selectTargets" ? { kind: "selectTargets", targets: [] } : null);
     s = d.s;
-    console.log("TRAIL:\n  " + d.trail.filter((t)=>/trigger|zone|choice|exile|Removed/i.test(t)).join("\n  "));
-    console.log("B exile:", s.players.B.exile.map((c)=>c.def.name), "B hand size:", s.players.B.hand.length);
     expect(s.players.B.exile.length, "nothing may stay jailed after the jailer left").toBe(0);
     const hand = s.players.B.hand.map((c) => c.instanceId);
     expect(hand).toEqual(expect.arrayContaining([bear, wolf]));

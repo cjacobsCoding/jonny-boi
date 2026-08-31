@@ -73,21 +73,16 @@ describe("Banisher Priest end to end", () => {
     const priest = put(s, "Banisher Priest", "A", { hand: true });
     s.players.A.manaPool = { W: 5, U: 0, B: 0, R: 0, G: 0, C: 5 } as never;
 
-    const trail: string[] = [];
     let r = act(s, { kind: "castSpell", player: "A", instanceId: priest, targets: [] });
     expect(r.rejected).toBeNull();
-    for (const e of r.events) trail.push(e.type + (("reason" in e) ? " [" + (e as {reason:string}).reason + "]" : ""));
     s = r.state;
     // resolve the spell (both pass)
     let guard = 0;
     while (s.stack.length > 0 && guard++ < 50 && !s.pendingChoice) {
       r = act(s, { kind: "passPriority", player: s.priorityPlayer });
       expect(r.rejected).toBeNull();
-      for (const e of r.events) trail.push(e.type + (("reason" in e) ? " [" + (e as {reason:string}).reason + "]" : ""));
       s = r.state;
     }
-    console.log("EVENT TRAIL:\n  " + trail.join("\n  "));
-    console.log("after cast+resolve: stack=", s.stack.map((o) => (o as {kind:string}).kind), "pending=", s.pendingChoice?.prompt, "choices offered=", s.pendingChoice?.kind);
     // One candidate auto-answers (CR-correct); a manual answer only exists when 2+.
     if (s.pendingChoice) {
       const q = s.pendingChoice;
@@ -100,9 +95,7 @@ describe("Banisher Priest end to end", () => {
       if (s.pendingChoice) { const q2 = s.pendingChoice; s = act(s, { kind: "answerChoice", player: q2.chooser, choiceId: q2.id, answer: defaultAnswerFor(q2) }).state; }
       else s = act(s, { kind: "passPriority", player: s.priorityPlayer }).state;
     }
-    const bearOnField = s.battlefield.some((c) => c.instanceId === bear);
     const bearInExile = s.players.B.exile.some((c) => c.instanceId === bear);
-    console.log("bear on field:", bearOnField, "in exile:", bearInExile);
     expect(bearInExile, "the chosen creature must be exiled").toBe(true);
   });
 });
@@ -123,18 +116,15 @@ describe("Gatecreeper Vine end to end", () => {
       }
       s = act(s, { kind: "passPriority", player: s.priorityPlayer }).state;
     }
-    console.log("prompts seen:", prompts);
     expect(prompts.length, "the may-search question must be asked").toBeGreaterThan(0);
 
     // Say YES — the actual card picker must follow (user: "DID NOT get to search").
     const q = s.pendingChoice!;
     r = act(s, { kind: "answerChoice", player: q.chooser, choiceId: q.id, answer: { kind: "confirm", yes: true } });
     expect(r.rejected).toBeNull();
-    for (const e of r.events) if (/choice|search|Removed/i.test(e.type)) console.log("  after-yes:", JSON.stringify(e).slice(0, 240));
     s = r.state;
     let g2 = 0;
     while (!s.pendingChoice && s.stack.length > 0 && g2++ < 20) s = act(s, { kind: "passPriority", player: s.priorityPlayer }).state;
-    console.log("after yes: pending=", s.pendingChoice?.kind, s.pendingChoice?.prompt?.slice(0,60));
     expect(s.pendingChoice?.kind, "the search picker must follow a yes").toBe("selectCards");
   });
 });
