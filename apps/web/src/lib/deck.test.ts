@@ -134,9 +134,24 @@ describe('export / import round-trip', () => {
     deck = addCard(deck, counterspell);
     const exported = toExport(deck);
     expect(exported.name).toBe('Export Me');
-    expect(exported.cards).toContainEqual({ cardId: BIRDS_ID, count: 1 });
+    const entry = exported.cards.find((card) => card.cardId === BIRDS_ID);
+    expect(entry).toBeDefined();
+    expect(entry!.count).toBe(1);
     // cardId must be the Scryfall UUID for sim compatibility.
     expect(exported.cards[0]!.cardId).toMatch(/^[0-9a-f-]{36}$/);
+    // `cardId` + `count` are the contract; anything else is additive and the sim
+    // ignores it. Asserted as a WHITELIST rather than exact equality so a future
+    // additive field is a deliberate edit here, not a silent shape change —
+    // `name` was added exactly this way (see deck-entry-names.test.ts).
+    for (const card of exported.cards) {
+      expect(Object.keys(card).sort()).toEqual(['cardId', 'count', 'name']);
+    }
+  });
+
+  it('carries the card name so an unresolvable id can still be named', () => {
+    let deck = createDeck('Export Me');
+    deck = addCard(deck, birds);
+    expect(toExport(deck).cards[0]!.name).toBe(birds.name);
   });
 
   it('imports a valid export back into a deck', () => {
