@@ -20,10 +20,117 @@ import type { GameEvent } from '../events.js';
 import type { CardInstance, GameState, InstanceId } from '../state.js';
 import { recordTurnFacts } from '../turn-facts.js';
 import type { PendingTrigger, TriggerSource } from '../triggers.js';
-import { matchTriggers, orderPendingTriggers } from '../triggers.js';
+import { eventTypeWatchBit, matchTriggers, orderPendingTriggers, watchedEventMaskOf } from '../triggers.js';
 import { interveningIfHolds } from '../intervening.js';
 import type { DelayedTriggeredAbility } from '../delayed.js';
 import { matchDelayedTriggers, pendingFromDelayed, removeDelayedTrigger } from '../delayed.js';
+
+/**
+ * Which event types can COINCIDE with a change to the trigger-SOURCE set — the
+ * battlefield's membership, a permanent's active face (`def` identity), its
+ * controller, its `chosenAsEntered`, or the command zones. `rememberSources`
+ * used to re-walk the battlefield on EVERY emitted event to stay current;
+ * profiled on a seed-99 gauntlet under the default pilot that walk alone was
+ * ~4.6% of the whole run (§3.53). Every mutation that can change the set emits
+ * one of the `true` rows *before* the next event anything could match, so
+ * rescanning only on those keeps the set exactly as current as the per-event
+ * walk did.
+ *
+ * ⚠️ THE CONTRACT: a `false` row asserts "emitting this event NEVER coincides
+ * with a source-set change". The safe direction for any new or doubtful type is
+ * `true` — a wasted rescan costs nanoseconds; a missed one silently drops a
+ * trigger, this repo's most-feared defect shape. The `Record<GameEvent['type'],
+ * boolean>` shape makes the classification TOTAL: adding an event type without
+ * classifying it stops the build (the `KEYWORD_KEYS` / `RULES_MANIFEST`
+ * default-deny pattern). The end-to-end pins hold it too: `selfplay-lock`
+ * digests, the seed-99 gauntlet rows and the soak all replay full event logs
+ * that would move if a trigger fired late or not at all.
+ */
+export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = Object.freeze({
+  // --- battlefield membership changes (or may accompany one) ------------------
+  zoneChange: true,
+  tokenCreated: true,
+  tokenCopyCreated: true,
+  tokenCeasedToExist: true,
+  creatureDied: true,
+  planeswalkerDied: true,
+  battleDefeated: true,
+  attachmentPutIntoGraveyard: true,
+  legendRuleApplied: true,
+  landPlayed: true,
+  // --- identity/controller/naming changes on a stable board -------------------
+  becameCopy: true,
+  transformed: true,
+  controlChanged: true,
+  chosenAsEnters: true,
+  // --- command-zone growth (emblems trigger from there, CR 114) ---------------
+  emblemCreated: true,
+  // --- everything below never moves/reshapes a source. The set may change on
+  // the SAME ACTION (a resolution killing a creature), but that mutation emits
+  // its own `true` row above before the next matchable event. ------------------
+  abilityActivated: false,
+  actionRejected: false,
+  attachmentFailed: false,
+  attackersDeclared: false,
+  blockersDeclared: false,
+  cardCycled: false,
+  cardGrantAdded: false,
+  cardGrantExpired: false,
+  cardsLookedAt: false,
+  cardsMilled: false,
+  choiceAbandoned: false,
+  choiceAnswered: false,
+  choiceAsked: false,
+  choiceAutoAnswered: false,
+  continuousEffectAdded: false,
+  continuousEffectExpired: false,
+  counterAdded: false,
+  counterPrevented: false,
+  damageDealt: false,
+  damagePrevented: false,
+  defenseChanged: false,
+  drawCard: false,
+  effectApplied: false,
+  effectUnsupported: false,
+  gainLife: false,
+  gameOver: false,
+  gameStart: false,
+  lifeChanged: false,
+  loyaltyChanged: false,
+  madnessDeclined: false,
+  madnessWindowOpened: false,
+  manaAdded: false,
+  manaCostPaid: false,
+  manaPoolEmptied: false,
+  modeTargetChosen: false,
+  modesChosen: false,
+  permanentAttached: false,
+  permanentUnattached: false,
+  playerLost: false,
+  priorityPassed: false,
+  replacementApplied: false,
+  replacementExpired: false,
+  spellCast: false,
+  spellCopied: false,
+  spellCopyCeasedToExist: false,
+  stackResolved: false,
+  stepBegin: false,
+  tapped: false,
+  triggerCopied: false,
+  triggerFizzled: false,
+  triggerPutOnStack: false,
+  triggerRemovedFromStack: false,
+  triggerTargetsChosen: false,
+  triggeredAbilityResolved: false,
+  turnBegin: false,
+  untapped: false,
+  // Post-§3.53 additions, classified as the map demands (that is its job):
+  // choosing a modal trigger's mode and delayed-ability lifecycle events say
+  // nothing about which PERMANENTS carry triggers.
+  triggerModesChosen: false,
+  delayedTriggerCreated: false,
+  delayedTriggerFired: false,
+});
 
 /**
  * A trigger collector bound to a draft state and a base emit. Call `emit` exactly
@@ -66,6 +173,10 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
   // event was one array plus one `TriggerSource` per triggerful permanent, several
   // times per action, for a scan that almost never matches anything.
   let snapshot: TriggerSource[] | null = null;
+  // The mask of event types the snapshot's triggers can match at all — rebuilt
+  // with the snapshot, consulted per event (one AND) so a mana tap never pays
+  // for a trigger scan.
+  let watchedMask = 0;
   /**
    * How many objects were in the two command zones the last time they were
    * walked. `-1` forces the first pass. See `rememberSources` for why a size
@@ -273,19 +384,32 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     // chokepoint every emitted event passes through — the same argument that
     // put trigger matching here rather than in the turn machine.
     recordTurnFacts(state, event);
-    // Refresh the known-source set so a permanent that entered earlier in this same
-    // action can trigger on a later event.
-    rememberSources();
+    // Refresh the known-source set so a permanent that entered earlier in this
+    // same action can trigger on a later event — but only on an event that can
+    // coincide with the set actually changing. `SOURCE_SET_EVENTS` (above) is
+    // the total, compile-checked classification; running the walk on every
+    // event was ~4.6% of a profiled gauntlet, almost all of it re-proving that
+    // a mana tap changed nothing.
+    if (SOURCE_SET_EVENTS[event.type]) rememberSources();
     // The delayed scan runs BEFORE the battlefield early-out below, and that
     // ordering is load-bearing: a delayed ability belongs to no permanent, so a
     // board with no triggerful permanent at all (Kiki-Jiki destroyed in response
     // to its own activation) must still sacrifice the token at end of turn.
+    // (The classified refresh above and this scan are independent: the prefilter
+    // gates only the SOURCE-SET walk, never delayed collection.)
     collectDelayed(event);
     // Perf early-exit: with no triggerful permanent ever seen this action, no event
     // can match — skip the scan entirely. Behavior is unchanged: matchTriggers over
     // an empty source list always returns nothing.
     if (seenSources === null) return;
-    snapshot ??= [...seenSources.values()];
+    if (snapshot === null) {
+      snapshot = [...seenSources.values()];
+      watchedMask = watchedEventMaskOf(snapshot);
+    }
+    // Second early-exit: an event no live trigger's condition can EVER match —
+    // `TRIGGER_EVENT_SOURCES` is the per-condition contract — skips the
+    // per-source scan the same way an empty source set does.
+    if ((watchedMask & eventTypeWatchBit(event.type)) === 0) return;
     const matched = matchTriggers(snapshot, event, resolveSubject);
     if (matched.length === 0) return;
     for (const m of matched) {

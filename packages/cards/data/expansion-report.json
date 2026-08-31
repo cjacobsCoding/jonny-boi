@@ -46,7 +46,6 @@
         "Brazen Borrower // Petty Theft",
         "Catch // Release",
         "Chainer's Edict",
-        "Charming Prince",
         "Commit // Memory",
         "Consign // Oblivion",
         "Crater's Claws",
@@ -93,7 +92,6 @@
         "Incinerate",
         "Insult // Injury",
         "Invasion of Alara // Awaken the Maelstrom",
-        "Invasion of Fiora // Marchesa, Resolute Monarch",
         "Invasion of Kaladesh // Aetherwing, Golden-Scale Flagship",
         "Invasion of Kaldheim // Pyre of the World Tree",
         "Invasion of Kamigawa // Rooftop Saboteurs",
@@ -386,8 +384,7 @@
         "Righteous Valkyrie",
         "Shalai, Voice of Plenty",
         "Sublime Archangel",
-        "Thraben Watcher",
-        "Voltstorm Angel"
+        "Thraben Watcher"
       ]
     },
     {
@@ -526,20 +523,6 @@
       ]
     },
     {
-      "missingEngineSystem": "a library-look/reorder template the compiler does not recognize yet",
-      "cards": [
-        "Anticipate",
-        "Charming Prince",
-        "Firja, Judge of Valor",
-        "Impulse",
-        "Invasion of Pyrulea // Gargantuan Slabhorn",
-        "Notion Rain",
-        "Sea Gate Oracle",
-        "Sleight of Hand",
-        "Vanguard Seraph"
-      ]
-    },
-    {
       "missingEngineSystem": "a group-damage template the compiler does not recognize yet",
       "cards": [
         "Aurelia, the Law Above",
@@ -565,6 +548,19 @@
         "Multiversal Passage",
         "Urza's Incubator",
         "Voice of All"
+      ]
+    },
+    {
+      "missingEngineSystem": "a library-look/reorder template the compiler does not recognize yet",
+      "cards": [
+        "Anticipate",
+        "Firja, Judge of Valor",
+        "Impulse",
+        "Invasion of Pyrulea // Gargantuan Slabhorn",
+        "Notion Rain",
+        "Sea Gate Oracle",
+        "Sleight of Hand",
+        "Vanguard Seraph"
       ]
     },
     {
@@ -844,10 +840,6 @@
     {
       "name": "Ajani Goldmane",
       "missing": [
-        {
-          "text": "−1: Put a +1/+1 counter on each creature you control. Those creatures gain vigilance until end of turn.",
-          "missingEngineSystem": "a loyalty-ability template the compiler does not recognize yet"
-        },
         {
           "text": "−6: Create a white Avatar creature token. It has \"This token's power and toughness are each equal to your life total.\"",
           "missingEngineSystem": "a loyalty-ability template the compiler does not recognize yet"
@@ -1731,20 +1723,8 @@
       "name": "Charming Prince",
       "missing": [
         {
-          "text": "When ~ enters, choose one —",
+          "text": "When ~ enters, choose one — • Scry 2. • You gain 3 life. • Exile another target creature you own. Return it to the battlefield under your control at the beginning of the next end step.",
           "missingEngineSystem": "a \"you may / choose\" template the compiler does not recognize yet"
-        },
-        {
-          "text": "• Scry 2.",
-          "missingEngineSystem": "a library-look/reorder template the compiler does not recognize yet"
-        },
-        {
-          "text": "• You gain 3 life.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
-        },
-        {
-          "text": "• Exile another target creature you own. Return it to the battlefield under your control at the beginning of the next end step.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
         }
       ]
     },
@@ -2975,16 +2955,8 @@
       "name": "Invasion of Fiora // Marchesa, Resolute Monarch",
       "missing": [
         {
-          "text": "When ~ enters, choose one or both —",
+          "text": "When ~ enters, choose one or both — • Destroy all legendary creatures. • Destroy all nonlegendary creatures.",
           "missingEngineSystem": "a \"you may / choose\" template the compiler does not recognize yet"
-        },
-        {
-          "text": "• Destroy all legendary creatures.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
-        },
-        {
-          "text": "• Destroy all nonlegendary creatures.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
         },
         {
           "text": "Whenever ~ attacks, remove all counters from up to one target permanent.",
@@ -5218,16 +5190,8 @@
           "missingEngineSystem": "a rules template the compiler does not recognize yet"
         },
         {
-          "text": "At the beginning of combat on your turn, you may pay {E}{E}. When you do, choose one —",
+          "text": "At the beginning of combat on your turn, you may pay {E}{E}. When you do, choose one — • ~ gains vigilance and lifelink until end of turn. • Other creatures you control get +1/+1 until end of turn.",
           "missingEngineSystem": "a \"you may / choose\" template the compiler does not recognize yet"
-        },
-        {
-          "text": "• ~ gains vigilance and lifelink until end of turn.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
-        },
-        {
-          "text": "• Other creatures you control get +1/+1 until end of turn.",
-          "missingEngineSystem": "a static-buff template the compiler does not recognize yet"
         }
       ]
     },

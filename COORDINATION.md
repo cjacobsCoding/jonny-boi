@@ -183,12 +183,31 @@ throughput (games/sec) from regressing.
 | test/completeness-invariants | worker | TEST FILES ONLY (NEW: packages/core/src/targeting-completeness.test.ts, packages/cards/src/zone-leave-invariants.test.ts + pool-frame-integrity.test.ts, packages/ai/src/effect-value-parity.test.ts, packages/sim/src/offer-apply-exhaustive.test.ts, apps/web/src/lib/decklist/poolAlwaysPlayable.test.ts) + two EXPORT-ONLY runtime lists (packages/core/src/targeting.ts `ALL_TARGET_RESTRICTIONS`, packages/ai/src/effect-value.ts `PRICED_PRIMITIVE_IDS` — no index.ts change, tests import the modules directly), DESIGN §3.49, COORDINATION. **No behaviour change — no baseline can move.** All EIGHT §3.37–§3.45 fixes reverted one at a time: the generic layer went red every time (table in §3.49). | 🚧 PUSHED, not merged |
 | feat/fast-lookahead | worker | packages/ai (NEW `combat-forecast.ts` + `lookahead.ts` + `combat-forecast.test.ts` + `lookahead-pilot.test.ts`; `index.ts` registration/exports; `heuristic.ts` — `export` added to five existing combat helpers + one doc note, NO behaviour change), packages/sim/src/paired-arms.test.ts (ONE classification line its new-pilot guard demands), apps/web/src/lib/sim/pilots.ts (the TWO data rows — `PILOT_COPY` + `RELATIVE_GAME_COST` — that `pilots.test.ts` demands for any new selectable pilot, measured figures only) + apps/web/src/lib/play/ai-seat.ts (one id-list comment un-staled), DESIGN §3.47, COORDINATION. **Default pilot untouched; gauntlet seed-99 baselines re-measured byte-identical (224/575/413/537 per 800).** | 🚧 PUSHED, not merged |
 | fix/tmb-ui-findings | worker | apps/web ONLY (styles.css nav-overflow cues + `.result-count` token, views/about.css stat tiles, components/bug-reporter.css launcher, App.tsx nav wrap + measure effect, NEW lib/nav-overflow.ts + lib/contrast.ts + their tests, NEW styles-regressions.test.ts) + testmebro/findings/* bookkeeping, COORDINATION. **No packages/* change.** Fixes TMB-JB-0001..0004. | 🚧 PUSHED, not merged |
+| perf/sim-throughput | worker | packages/sim (NEW `parallel-config.ts` + `parallel-slices.ts` + `parallel-host.ts` + `parallel-worker.ts` + `parallel.test.ts` + `parallel-host.test.ts`; `cli.ts` `--workers` + async commands; `pilot-ab.ts` slice/fold/finish refactor; `soak.ts` anchored/mixed-range/finish split — both behaviour-pinned unchanged), packages/core (`triggers.ts` watch masks + `internal/triggers-runtime.ts` `SOURCE_SET_EVENTS` + `internal/sba.ts` gate memo + NEW `trigger-event-prefilter.test.ts` — profiled cuts, NO behaviour change: seed-99 rows 257/615/377/552 per 800 byte-identical, selfplay-lock digests + match-inplace + pilot-ab control green), DESIGN §3.53, COORDINATION. **Does NOT touch packages/ai** (concurrent agent owns it). | 🚧 PUSHED, not merged |
 | (fix/duplicate-printings) | DESKTOP-90PJPM4 (integrator) | apps/web ONLY (lib/cards.ts name-dedupe + `getCardByName`, lib/cards/addSingleCard.ts by-name known check, addSingleCard.test.ts fixture rename + new case, NEW lib/duplicate-printings.test.ts), DESIGN §3.55, COORDINATION | ✅ committed direct to main |
 | feat/pilot-pricing | worker | packages/ai ONLY (`effect-value.ts` — `LEDGERED_EFFECT_VALUE` prices for 14 of the §3.49 ledger's 20 rows + the one-read gate + `LEDGER_PRICING_OFF_WEIGHTS`; `weights.ts` +7 named weights; `choices.ts` `answerSelectTargets` up-to-N clamp; `index.ts` one export-from line; `effect-value-parity.test.ts` ledger 20→6, `attachToTarget` reason rewritten to the measured one; NEW `ledger-pricing.test.ts` 32 tests), DESIGN §3.52, COORDINATION. **No core, cards, sim or web change.** ⚠️ Seed-99 baselines BYTE-IDENTICAL (257/615/377/552 per 800) and the 9-deck pilot-ab is byte-identical too (3600/3600 slots split — the meta holds ONE card that touches these prices); the strength case is the targeted `runPilotAb` STRONGER p≈0 in §3.52. | ✅ MERGED + DEPLOYED |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-27 worker: `perf/sim-throughput` 🚧 PUSHED, not merged — DESIGN §3.53. **The sim runs
+  faster on both axes, results byte-identical.** (1) `--workers` worker_threads host for
+  match/gauntlet/swap/pilot-ab/soak on the RunRange seam; sequential-vs-parallel proven equal by
+  `parallel.test.ts` (toEqual + JSON.stringify on scrambled grids), `parallel-host.test.ts` (real
+  threads), CLI output diffs, and the seed-99 rows 257/615/377/552 per 800 replayed both ways.
+  Measured (6C/12T box, quiet window, best-of-2): pilot-ab 7,200 games 95.5 → **236 g/s at
+  `--workers 4` (2.47×, ~30 s)**; gauntlet 800 89.6 → 149 (1.66×); soak 656 60.3 s → 35.1 s
+  (1.72×). ⚠️ 11 workers LOSE to 4 (187 vs 236 — SMT oversubscription; short runs eat startup:
+  gauntlet w11 1.07×) — numbers in §3.53 so nobody re-derives them. AUTO sizing hires only when
+  games pay startup; `--workers 1` = the old path bit-for-bit. suggest NOT fanned out (round-
+  stateful; says so out loud). (2) Engine event-path cuts, profiled first: SOURCE_SET_EVENTS
+  classified rescan + TRIGGER_EVENT_SOURCES watch-mask prefilter + SBA-gate def memo — **+15–20%
+  single-thread** (interleaved A/B builds, best-of-5 88.6 → 106.0 g/s), selfplay-lock digests /
+  match-inplace / pilot-ab control / soak / 5397-test suite all green, 0 failed. The banked speed
+  is the budget `feat/pilot-pricing`'s richer pricing spends from — the merged result stays net
+  faster (2.47× parallel × 1.15–1.2 single-thread ≈ 2.8–3× on the yardstick run).
+  Verify-equivalent gate: vitest 5397/0 + lint 0 errors + card-index check clean.
+  Runnable proof: `npm run sim -- pilot-ab --workers 4` (and `--seed 99` reproduces the control).
 - 2026-08-30 integrator: **duplicate-printings fix committed direct to main (§3.55)** — the card
   browser showed two identical Acidic Slimes: the imported-card store held a second PRINTING (same
   name, different Scryfall id) of a curated card, and `allAvailableCards()` concatenated with no

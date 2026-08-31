@@ -3775,6 +3775,129 @@ new rows: Mono-Red Aggro **257/800 (32.1%)**, Selesnya Blink **615/800 (76.9%)**
 **377/800 (47.1%)**, Mono-Green Ramp **552/800 (69.0%)**. The old heuristic rows remain reproducible
 with `--pilot heuristic`.
 
+### 3.53 The whole simulation runs faster — a parallel CLI host, and the engine's event path cut — ✅ done
+
+The goal, sharpened by the user mid-build: **bank enough raw speed to pay for the pilot getting
+smarter, and then some.** Two levers, measured separately so that claim stays checkable: a
+`worker_threads` host that fans the CLI's grid commands out over cores (multiplies whatever the
+single thread does), and profiled single-thread cuts on the engine's hottest per-event/per-action
+paths (pays everywhere — CLI, the Lab's Web Workers, Solo).
+
+#### Lever 1 — the parallel CLI host (`--workers`, byte-identical by construction and by test)
+
+The sim's loops were built for a parallel host from the start — every seed and on-the-play
+assignment is a function of a game's ABSOLUTE (opponent × game) indices (`RunRange`), which is the
+seam the web Lab has fanned out on since §3.5. The CLI never grew that host; now it has one:
+
+- `packages/sim/src/parallel-slices.ts` — the PURE layer: slice plans (`planMatchupSlices`,
+  `planPairedSlices`, `planPilotAbSlices`, `planSoakMixedSlices`), the per-slice executors both the
+  worker and the tests call, and the mergers that reassemble results **byte-identically** (integer
+  counts summed in canonical order; every CI/p-value/verdict computed once at the end by the same
+  functions the sequential path calls — `wilsonInterval`, `summarizePairedSwap`, `finishPilotAb`,
+  `finishSoak`).
+- `packages/sim/src/parallel-host.ts` + `parallel-worker.ts` — the only Node-only files: a
+  long-lived worker pool fed one slice at a time from a shared queue (AI game lengths vary hugely;
+  over-partitioning per `SLICES_PER_WORKER` keeps the tail from stranding cores). Any worker error
+  is fatal to the whole run — a gauntlet quietly missing one slice would print numbers that look
+  complete.
+- `packages/sim/src/parallel-config.ts` — the policy numbers, none inline: `--workers N` forces a
+  pool (capped by how finely the run can usefully be cut); absent, AUTO hires
+  `min(cores − 1, units, games/150)` workers and stays sequential when hiring cannot pay for the
+  ~1–2 s/worker startup (pool + engine load). `--workers 1` forces the plain sequential path.
+- Wired to **`gauntlet`, `match`, `swap`, `pilot-ab`, and `soak`** (the mixed half; the anchored
+  half's game indices depend on each mechanic's retry count, so it is sequential by nature and runs
+  on the host WHILE the workers boot, hiding their startup). To make the pilot-ab cut shareable,
+  `runPilotAb` was refactored into slice → fold → finish (`playPilotAbPairSlice` /
+  `foldSliceTallies` / `finishPilotAb`); the sequential runner and the merge run the SAME three
+  functions, so they cannot disagree. Both orientations of a pair always live in one slice — a
+  matched slot needs both of its games.
+- **`suggest` is NOT fanned out** (honest negative): the adaptive search is stateful across rounds
+  (`driveAdaptiveSearch` yields round → barrier → round). The CLI would need the web Lab's
+  round-by-round host (`apps/web/src/lib/sim/run.ts`, base-slot + variant-slice phases) ported onto
+  this pool — mechanical but large, and out of this change's blast radius. The CLI says so out loud
+  when `--workers` is passed to it rather than silently running sequential.
+
+**Proof, not promise:** `parallel.test.ts` runs small grids both ways — plan → execute (in
+deliberately scrambled completion order) → merge vs. the sequential functions — and requires
+`toEqual` AND `JSON.stringify` equality (key order, float bits) for gauntlet, match, swap
+(self-swap sanity case included), pilot-ab (control stays EXACTLY balanced; a real contest with an
+odd game count merges identically) and soak (mechanics-map insertion order and the PRINTED report
+compared). `parallel-host.test.ts` spawns the real pool — the engine had only ever been proven in
+browser Web Workers; this is the `worker_threads` proof — and checks byte-identity through actual
+threads, warm-pool reuse across batches, and that a worker failure rejects the run loudly. CLI-level
+diffs of full outputs (seq vs `--workers N`) come out identical to the byte for every command,
+timing line aside. **Seed-99 baselines replayed through the host: Mono-Red 257/800 · Selesnya Blink
+615/800 · UW Control 377/800 · Mono-Green 552/800 — byte-identical, sequential and parallel.**
+
+Measured on the reference box (Ryzen 5 5600H — **6 physical cores / 12 threads**, ~7.3 GB RAM,
+shared with other agents; quiet window, arms interleaved in one session, BEST of 2 passes per arm
+because background load only ever subtracts; default `lookahead` pilot, seed 99):
+
+| command (games) | 1 worker | 2 workers | 4 workers | 11 workers |
+|---|---|---|---|---|
+| `gauntlet Mono-Red --games 100` (800) | 89.6 g/s | 137 (1.53×) | 149 (1.66×) | 96 (1.07×) |
+| `pilot-ab` (7,200, the §3.46 control) | 95.5 g/s | 160 (1.68×) | **236 (2.47×)** | 187 (1.96×) |
+| `soak --games 600` (656) | 60.3 s wall | — | 35.1 s (1.72×) | — |
+
+The headline: **the 7,200-game pilot-ab drops from ~75–112 s to ~30 s** (`--workers 4`), control
+still EXACTLY 3532–3532 with 3600/3600 slots split at every worker count. Two real walls, with
+numbers so nobody re-derives them: (1) **short runs pay the startup** — the 800-game gauntlet is
+~9 s of work, so 11 pool loads eat the win (1.07×, WORSE than 4 workers); AUTO's `games/150` cap
+exists precisely to stop that hire. (2) **11 workers oversubscribe 6 physical cores** — even on the
+long run, 11 workers (187 g/s) LOSE to 4 (236 g/s): SMT siblings and the host fight for the same
+execution units, and the parallel soak's total CPU roughly doubles (67 s → 142 s) for its 1.72×
+wall win. On this box the sweet spot is `--workers 4`; `min(cores−1, …)` is the DEFAULT, not the
+optimum, and the flag is there to beat it.
+
+Worker memory is real: each worker holds its own card pool (~150 MB) — the help text says so, and
+on a memory-tight box `--workers 2..4` is the sane call. Progress lines survive parallelism with the
+same text (milestones are printed as the cumulative count crosses them; pilot-ab counts a pair done
+when its last slice lands).
+
+#### Lever 2 — the single-thread engine cuts (profiled first, then cut; every pin byte-identical)
+
+`node --cpu-prof` over a 400-game seed-99 gauntlet under the default pilot, before → after
+(self-time, same workload):
+
+| hot spot | before | after | what changed |
+|---|---|---|---|
+| `rememberSources` (trigger collector) | 4.6% | 2.3% | re-walked the battlefield on EVERY emitted event to keep the trigger-source set current; now re-walks only on events that can coincide with the set changing — `SOURCE_SET_EVENTS`, a TOTAL `Record<GameEvent['type'], boolean>` classification (the `KEYWORD_KEYS` default-deny shape: a new event type stops the build until classified; the safe direction is `true`). The remaining 2.3% is the per-action construction scan — see the honest negative below. |
+| `matchTriggers` + per-event scan | 1.7% | off the profile | a per-event **watch-mask prefilter**: `TRIGGER_EVENT_SOURCES` (in `triggers.ts`, next to `conditionMatches`) declares which event types each trigger kind can EVER match; the collector ORs per-def masks (memoised on the immutable trigger list, `RESTRICTION_MEMO` pattern) and drops non-watched events with one AND. `trigger-event-prefilter.test.ts` fires every condition kind's canonical event through the REAL `conditionMatches` and asserts the matched type is listed — the direction that catches a case rewritten onto a new event type. |
+| `stateBasedActionsPossible` (§3.32's end-of-action gate) | 3.7% | ~1.5% | the def-derived half of its per-permanent question (attachment / `*` P/T / shrinking static / legendary / kind / printed toughness) memoised per `CardDefinition` in a WeakMap; the counter-free creature — nearly every permanent — now answers CR 704.5f/g in two integer reads. Staleness impossible: the key IS the identity the answers derive from (a transform swaps to a different def object and simply memoises the other face). |
+| `watchedEventTypesOf` (transient) | (new) 1.5% | gone | first draft rebuilt a `Set` per collector; replaced by the integer masks above. Left here because a "fix" that shows up as a new hot line is a finding worth recording. |
+
+Single-thread throughput delta — five rounds alternating BUILDS in one session (arm A = main's
+core, arm B = this branch's, rebuilt each swap; 800-game seed-99 gauntlet, sequential): best-of-5
+**88.6 → 106.0 g/s (+19.6%)**, medians 76.1 → 96.6; the two cleanest same-round pairs read +13.9%
+and +19.6%. Call it **≈ +15–20% single-thread** — the profile deltas above account for it, and it
+compounds with the worker multiplier (95.5 g/s × 2.47 ≈ 236 measured). That, plus the four seed-99
+gauntlet rows, the `selfplay-lock` full-event-log digests, `match-inplace` exactness pins, the
+pilot-ab control identity, the interaction matrix and the soak all green and byte-identical, is
+what "faster with no behaviour change" means here.
+
+**Honest negatives** (measured or reasoned, so nobody re-derives them):
+- The remaining `rememberSources` cost is the ONCE-PER-ACTION construction scan (the collector must
+  know what was on the battlefield at action start for CR 603.6d last-known-info). Killing it needs
+  a cross-ACTION source cache keyed on the `GameState`, whose staleness blast radius (any direct
+  state surgery between in-place actions goes silently unseen) was judged not worth ~2% on this
+  repo's history of silent-trigger bugs. If it is ever attempted: `WeakMap<GameState, cache>` with
+  collector write-back, probed by battlefield length + `nextInstanceId`.
+- `runMatch`'s per-decision context literal and per-event fan-out loop measure ~3% self but reusing
+  the context object would let a pilot that retained it observe mutation — a contract change, not a
+  cut. Declined.
+- Wall clock on this box swings >2x with other agents' load (30.3/30.3 GB commit was observed
+  mid-build); every number above is from interleaved runs in one quiet session, and the profile
+  percentages are of the same workload's own total.
+
+#### Files
+`packages/sim`: `parallel-config.ts`, `parallel-slices.ts`, `parallel-host.ts`,
+`parallel-worker.ts`, `parallel.test.ts`, `parallel-host.test.ts` (all NEW); `cli.ts` (`--workers`
++ async commands), `pilot-ab.ts` (slice/fold/finish refactor, behaviour pinned unchanged),
+`soak.ts` (anchored/mixed-range/finish split, behaviour pinned unchanged).
+`packages/core`: `triggers.ts` (`TRIGGER_EVENT_SOURCES`, watch masks), `internal/triggers-runtime.ts`
+(`SOURCE_SET_EVENTS`, conditional rescan + mask prefilter), `internal/sba.ts` (gate memo), NEW
+`trigger-event-prefilter.test.ts`.
+
 ### 3.49 The invariant layer — catching the §3.37–§3.45 classes, not the instances — ✅ done
 
 Eight defects across §3.37–§3.45 (§3.40's validator hole, §3.42's two unpriced primitives, §3.44's

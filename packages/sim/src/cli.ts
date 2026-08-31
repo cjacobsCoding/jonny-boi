@@ -39,9 +39,28 @@ import type { EffectRegistry } from '@jonny-boi/core';
 import { SAMPLE_DECKS } from '../data/decks/index.js';
 import type { Deck, LoadedDeck } from './deck.js';
 import { loadDeck, DeckLoadError } from './deck.js';
-import { makeSeats, runMatchup, type MatchupPilots, type MatchupResult } from './matchup.js';
+import { gameSeedFor, makeSeats, runMatchup, type MatchupPilots, type MatchupResult } from './matchup.js';
 import { runGauntlet, type GauntletResult } from './gauntlet.js';
-import { evaluateSwap, type SwapEvaluation } from './swap.js';
+import { applySwap, evaluateSwap, type SwapEvaluation } from './swap.js';
+import { autoWorkerCount, explicitWorkerCount } from './parallel-config.js';
+import {
+  maxUsefulSlices,
+  mergeGauntletFromSlices,
+  mergeMatchupsFromSlices,
+  mergePilotAbFromSlices,
+  mergeSoakFromParts,
+  mergeSwapFromSlices,
+  planMatchupSlices,
+  planPairedSlices,
+  planPilotAbSlices,
+  planSoakMixedSlices,
+  type MatchupSliceResult,
+  type PairedSliceResult,
+  type PilotAbSliceResult,
+  type SoakPartResult,
+  type WorkerInitSpec,
+} from './parallel-slices.js';
+import { createWorkerPool, machineParallelism, runJobsOnWorkers } from './parallel-host.js';
 import { suggestSwaps, type SuggestionReport } from './suggest.js';
 import type { HistoryRejection, SuggestionHistory } from './suggest-history.js';
 import { DEFAULT_SUGGEST_CONFIG } from './suggest-config.js';
@@ -55,7 +74,15 @@ import {
 } from './pilot-ab.js';
 import { DEFAULT_SIM_CONFIG, DEFAULT_STATS_CONFIG, DEFAULT_SWAP_SCOPE, FIDELITY_CAVEAT, type SwapScope } from './config.js';
 import { SOAK_BASE_SEED, SOAK_DEEP_DEFAULT_GAMES, SOAK_DEEP_ENV_VAR, SOAK_MECHANIC_SEED_ATTEMPTS } from './soak-config.js';
-import { formatSoakReport, runSoak } from './soak.js';
+import {
+  formatSoakReport,
+  requiredMechanicsOf,
+  runSoak,
+  runSoakAnchored,
+  type SoakReport,
+  type SoakSliceSettings,
+} from './soak.js';
+import { indexPoolForSoak } from './soak-decks.js';
 import type { ProportionCI } from './stats.js';
 
 const PROGRAM = 'jonny-boi sim';
@@ -71,13 +98,13 @@ const USAGE = `${PROGRAM} — headless MTG gauntlet / A-B card-swap lab
 
 Usage:
   npm run sim -- decks
-  npm run sim -- match <deckA> <deckB> [--games N] [--seed S] [--pilot ${SELECTABLE_PILOT_IDS.join('|')}]
-  npm run sim -- gauntlet <deck> [--games N] [--seed S] [--pilot ${SELECTABLE_PILOT_IDS.join('|')}]
-  npm run sim -- swap <deck> --out "<card>" --in "<card>" [--games N] [--seed S] [--pilot id] [--scope one|playset]
+  npm run sim -- match <deckA> <deckB> [--games N] [--seed S] [--pilot ${SELECTABLE_PILOT_IDS.join('|')}] [--workers W]
+  npm run sim -- gauntlet <deck> [--games N] [--seed S] [--pilot ${SELECTABLE_PILOT_IDS.join('|')}] [--workers W]
+  npm run sim -- swap <deck> --out "<card>" --in "<card>" [--games N] [--seed S] [--pilot id] [--scope one|playset] [--workers W]
   npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--max-candidates K] [--seed S]
                                [--pilot id] [--history <file>] [--no-adaptive]
-  npm run sim -- pilot-ab [--pilot-a id] [--pilot-b id] [--games N] [--seed S]
-  npm run sim -- soak [--games N] [--seed S] [--pilot id]
+  npm run sim -- pilot-ab [--pilot-a id] [--pilot-b id] [--games N] [--seed S] [--workers W]
+  npm run sim -- soak [--games N] [--seed S] [--pilot id] [--workers W]
 
 Notes:
   • Decks and cards may be given by NAME (quote names with spaces) or by id.
@@ -91,6 +118,15 @@ Notes:
                on the same protocol, i.e. WORSE than the heuristic it rolls out
                with, and ~5x the hybrid's decision cost. See DESIGN §3.4/§3.4a.
   • --games N is games per matchup (default ${DEFAULT_SIM_CONFIG.defaultGames}).
+  • --workers W fans the run out over W worker threads (match/gauntlet/swap/
+    pilot-ab/soak). Results are BYTE-IDENTICAL to the sequential run — same rows,
+    same CIs, same verdicts — because every game's seed comes from its absolute
+    (opponent × game) index and slices merge as exact integer counts; only the
+    wall clock changes. Without the flag the CLI decides for itself: parallel
+    when the run is big enough to pay the workers' ~1–2s startup, sequential
+    otherwise (thresholds in parallel-config.ts). --workers 1 forces sequential.
+    Each worker holds its own card pool (~150 MB); on a memory-tight box prefer
+    2–4. suggest is not yet fanned out — see DESIGN §3.53.
   • swap --scope controls HOW MANY copies move (default "${DEFAULT_SWAP_SCOPE}"):
       playset — replace every copy: "does this card belong in the deck at all?"
       one     — replace a single copy: "is the last copy earning its slot?"
@@ -166,6 +202,12 @@ interface Flags {
   readonly history?: string;
   /** suggest: use the legacy fixed-budget sweep instead of the adaptive search. */
   readonly noAdaptive: boolean;
+  /**
+   * Worker threads to fan the run out over. Absent = AUTO (parallel when the
+   * run is big enough to pay the workers' startup — see `parallel-config.ts`);
+   * 1 = force the plain sequential path; N = force N workers.
+   */
+  readonly workers?: number;
   readonly help: boolean;
 }
 
@@ -186,6 +228,7 @@ function parseFlags(args: readonly string[]): Flags {
   let maxCandidates: number | undefined;
   let history: string | undefined;
   let noAdaptive = false;
+  let workers: number | undefined;
   let help = false;
 
   for (let i = 0; i < args.length; i++) {
@@ -236,13 +279,16 @@ function parseFlags(args: readonly string[]): Flags {
       case '--no-adaptive':
         noAdaptive = true;
         break;
+      case '--workers':
+        workers = parseIntFlag(arg, args[++i]);
+        break;
       default:
         if (arg.startsWith('--')) throw new CliError(`unknown option "${arg}"`);
         positionals.push(arg);
     }
   }
 
-  return { positionals, games, seed, pilot, pilotA, pilotB, scope, out, in: inCard, cut, maxCandidates, history, noAdaptive, help };
+  return { positionals, games, seed, pilot, pilotA, pilotB, scope, out, in: inCard, cut, maxCandidates, history, noAdaptive, workers, help };
 }
 
 function requireValue(flag: string, value: string | undefined): string {
@@ -331,6 +377,28 @@ function resolveContestants(flags: Flags): { readonly pilotA: Pilot; readonly pi
   return { pilotA: resolvePilot(registry, idA), pilotB: resolvePilot(registry, idB) };
 }
 
+/**
+ * How many workers this run gets. Explicit `--workers` wins (capped by how
+ * finely the run can usefully be cut); otherwise the AUTO policy sizes the pool
+ * from the games waiting vs. worker startup cost, returning 1 — the sequential
+ * path, bit-for-bit as always — when hiring cannot pay. Both policies live in
+ * `parallel-config.ts`; this is just the seam that applies them.
+ */
+function plannedWorkers(flags: Flags, totalGames: number, unitCount: number, gamesPerUnit: number): number {
+  const units = maxUsefulSlices(unitCount, gamesPerUnit);
+  if (flags.workers !== undefined) {
+    if (flags.workers < 1) throw new CliError('--workers must be at least 1');
+    return explicitWorkerCount(flags.workers, units);
+  }
+  return autoWorkerCount(totalGames, units, machineParallelism());
+}
+
+/** The throughput suffix naming the pool, so a parallel reading is never
+ * mistaken for a single-thread one when someone quotes it later. */
+function workersNote(workers: number): string {
+  return workers > 1 ? ` (${workers} workers)` : '';
+}
+
 // --- formatting ----------------------------------------------------------------
 
 function pct(p: number): string {
@@ -413,7 +481,7 @@ function cmdDecks(): number {
   return 0;
 }
 
-function cmdMatch(flags: Flags): number {
+async function cmdMatch(flags: Flags): Promise<number> {
   const [a, b] = flags.positionals;
   if (!a || !b) throw new CliError('match needs two decks: match <deckA> <deckB>');
   const lab = makeLab();
@@ -422,10 +490,25 @@ function cmdMatch(flags: Flags): number {
   const pilots = resolvePilots(flags);
   const games = flags.games ?? DEFAULT_SIM_CONFIG.defaultGames;
   const seed = flags.seed ?? DEFAULT_SEED;
+  const workers = plannedWorkers(flags, games, 1, games);
 
-  const seats = makeSeats(deckA, deckB, pilots, lab.registry);
   const start = performance.now();
-  const result: MatchupResult = runMatchup(seats, games, seed);
+  let result: MatchupResult;
+  if (workers > 1) {
+    // A match is a one-opponent gauntlet whose matchup seed is the run seed
+    // itself — the same games, sliced by absolute game index and merged back.
+    const jobs = planMatchupSlices(1, games, workers, () => seed);
+    const init: WorkerInitSpec = {
+      heroName: deckA.name,
+      opponentNames: [deckB.name],
+      pilotId: flags.pilot ?? DEFAULT_PILOT_ID,
+    };
+    const slices = (await runJobsOnWorkers(jobs, init, workers)) as readonly MatchupSliceResult[];
+    result = mergeMatchupsFromSlices(slices)[0] as MatchupResult;
+  } else {
+    const seats = makeSeats(deckA, deckB, pilots, lab.registry);
+    result = runMatchup(seats, games, seed);
+  }
   const elapsed = (performance.now() - start) / 1000;
 
   console.log(`Matchup: "${deckA.name}" (A) vs "${deckB.name}" (B) — ${games} games, seed ${seed}`);
@@ -439,12 +522,12 @@ function cmdMatch(flags: Flags): number {
     ),
   );
   if (result.draws > 0) console.log(`Timeout draws: ${result.draws}`);
-  console.log(`\n${games} games in ${elapsed.toFixed(2)}s → ${rateStr(games, elapsed)}`);
+  console.log(`\n${games} games in ${elapsed.toFixed(2)}s → ${rateStr(games, elapsed)}${workersNote(workers)}`);
   console.log(FIDELITY_NOTE);
   return 0;
 }
 
-function cmdGauntlet(flags: Flags): number {
+async function cmdGauntlet(flags: Flags): Promise<number> {
   const [heroSel] = flags.positionals;
   if (!heroSel) throw new CliError('gauntlet needs a deck: gauntlet <deck>');
   const lab = makeLab();
@@ -458,9 +541,24 @@ function cmdGauntlet(flags: Flags): number {
   const gauntletDecks = SAMPLE_DECKS.filter((d) => d.name !== heroDeck.name).map((d) =>
     loadOrThrow(d, lab.pool),
   );
+  const workers = plannedWorkers(flags, games * gauntletDecks.length, gauntletDecks.length, games);
 
   const start = performance.now();
-  const result: GauntletResult = runGauntlet(hero, gauntletDecks, pilots, games, seed, lab.registry);
+  let result: GauntletResult;
+  if (workers > 1) {
+    // Matchup i's seed is `gameSeedFor(seed, i)` — exactly `runGauntlet`'s
+    // derivation, stamped on the jobs so a worker never re-derives policy.
+    const jobs = planMatchupSlices(gauntletDecks.length, games, workers, (i) => gameSeedFor(seed, i));
+    const init: WorkerInitSpec = {
+      heroName: hero.name,
+      opponentNames: gauntletDecks.map((d) => d.name),
+      pilotId: flags.pilot ?? DEFAULT_PILOT_ID,
+    };
+    const slices = (await runJobsOnWorkers(jobs, init, workers)) as readonly MatchupSliceResult[];
+    result = mergeGauntletFromSlices(slices);
+  } else {
+    result = runGauntlet(hero, gauntletDecks, pilots, games, seed, lab.registry);
+  }
   const elapsed = (performance.now() - start) / 1000;
 
   console.log(`Gauntlet: "${hero.name}" vs ${gauntletDecks.length} decks — ${games} games each, seed ${seed}\n`);
@@ -474,7 +572,9 @@ function cmdGauntlet(flags: Flags): number {
     `\nOverall: ${result.totalWins}/${result.totalGames} = ${ciStr(result.overallWinRate)}` +
       (result.totalDraws > 0 ? `  (${result.totalDraws} timeout draws)` : ''),
   );
-  console.log(`${result.totalGames} games in ${elapsed.toFixed(2)}s → ${rateStr(result.totalGames, elapsed)}`);
+  console.log(
+    `${result.totalGames} games in ${elapsed.toFixed(2)}s → ${rateStr(result.totalGames, elapsed)}${workersNote(workers)}`,
+  );
   console.log(FIDELITY_NOTE);
   return 0;
 }
@@ -486,13 +586,15 @@ function cmdGauntlet(flags: Flags): number {
  * because that is not a close result — it means the harness or a pilot's
  * cross-game state is broken and every other number on the page is void.
  */
-function cmdPilotAb(flags: Flags): number {
+async function cmdPilotAb(flags: Flags): Promise<number> {
   const lab = makeLab();
   const pilots = resolveContestants(flags);
   const games = flags.games ?? DEFAULT_PILOT_AB_GAMES_PER_ORIENTATION;
   if (games < 1) throw new CliError('--games must be at least 1');
   const seed = flags.seed ?? DEFAULT_SEED;
   const decks = SAMPLE_DECKS.map((d) => loadOrThrow(d, lab.pool));
+  const pairCount = deckPairsOf(decks.length).length;
+  const workers = plannedWorkers(flags, pairCount * ORIENTATIONS_PER_PAIR * games, pairCount, games);
 
   const isControl = pilots.pilotA.id === pilots.pilotB.id;
   console.log(
@@ -510,19 +612,47 @@ function cmdPilotAb(flags: Flags): number {
 
   // Progress, not an ETA: a search pilot can be three orders of magnitude slower
   // than the heuristic, so a projected finish time here would be fiction.
+  const onPairDone = (done: number, total: number): void => {
+    if (done % PILOT_AB_PROGRESS_EVERY_PAIRS === 0 && done < total) {
+      console.log(`  … ${done}/${total} deck pairs`);
+    }
+  };
   const start = performance.now();
-  const result: PilotAbResult = runPilotAb({
-    decks,
-    pilots,
-    registry: lab.registry,
-    gamesPerOrientation: games,
-    baseSeed: seed,
-    onPair: (done, total) => {
-      if (done % PILOT_AB_PROGRESS_EVERY_PAIRS === 0 && done < total) {
-        console.log(`  … ${done}/${total} deck pairs`);
-      }
-    },
-  });
+  let result: PilotAbResult;
+  if (workers > 1) {
+    const jobs = planPilotAbSlices(pairCount, games, workers, seed);
+    const init: WorkerInitSpec = {
+      deckNames: decks.map((d) => d.name),
+      pilotAId: pilots.pilotA.id,
+      pilotBId: pilots.pilotB.id,
+    };
+    // The same "… k/N deck pairs" milestones as the sequential run: a pair
+    // counts as done when its LAST slice lands, whichever worker played it.
+    const outstanding = new Map<number, number>();
+    for (const job of jobs) outstanding.set(job.pairIndex, (outstanding.get(job.pairIndex) ?? 0) + 1);
+    let pairsDone = 0;
+    const slices = (await runJobsOnWorkers(jobs, init, workers, undefined, (sliceResult) => {
+      if (sliceResult.kind !== 'pilot-ab-slice') return;
+      const left = (outstanding.get(sliceResult.pairIndex) ?? 0) - 1;
+      outstanding.set(sliceResult.pairIndex, left);
+      if (left === 0) onPairDone(++pairsDone, pairCount);
+    })) as readonly PilotAbSliceResult[];
+    result = mergePilotAbFromSlices(slices, {
+      decks,
+      pilotAId: pilots.pilotA.id,
+      pilotBId: pilots.pilotB.id,
+      gamesPerOrientation: games,
+    });
+  } else {
+    result = runPilotAb({
+      decks,
+      pilots,
+      registry: lab.registry,
+      gamesPerOrientation: games,
+      baseSeed: seed,
+      onPair: onPairDone,
+    });
+  }
   const elapsed = (performance.now() - start) / 1000;
 
   console.log(
@@ -578,7 +708,7 @@ function cmdPilotAb(flags: Flags): number {
   }
 
   console.log(
-    `\n${result.totalGames} games in ${elapsed.toFixed(2)}s → ${rateStr(result.totalGames, elapsed)}`,
+    `\n${result.totalGames} games in ${elapsed.toFixed(2)}s → ${rateStr(result.totalGames, elapsed)}${workersNote(workers)}`,
   );
   console.log(`\n${PILOT_AB_BUILD_COMPARISON_NOTE}`);
   console.log(FIDELITY_NOTE);
@@ -588,7 +718,7 @@ function cmdPilotAb(flags: Flags): number {
 /** How often `pilot-ab` prints a progress line, in deck pairs. */
 const PILOT_AB_PROGRESS_EVERY_PAIRS = 6;
 
-function cmdSwap(flags: Flags): number {
+async function cmdSwap(flags: Flags): Promise<number> {
   const [heroSel] = flags.positionals;
   if (!heroSel) throw new CliError('swap needs a deck: swap <deck> --out X --in Y');
   if (!flags.out || !flags.in) throw new CliError('swap needs --out <card> and --in <card>');
@@ -601,21 +731,42 @@ function cmdSwap(flags: Flags): number {
   const gauntletDecks = SAMPLE_DECKS.filter((d) => d.name !== baseDeck.name).map((d) =>
     loadOrThrow(d, lab.pool),
   );
+  const workers = plannedWorkers(flags, games * gauntletDecks.length * 2, gauntletDecks.length, games);
 
   let evaluation: SwapEvaluation;
   const start = performance.now();
   try {
-    evaluation = evaluateSwap(
-      baseDeck,
-      { out: flags.out, in: flags.in },
-      gauntletDecks,
-      pilots,
-      games,
-      seed,
-      lab.pool,
-      lab.registry,
-      { swapScope: flags.scope },
-    );
+    if (workers > 1) {
+      const scope = flags.scope ?? DEFAULT_SWAP_SCOPE;
+      // Validate the swap HERE, cheaply, before hiring anyone: an unknown card
+      // or an out-card not in the deck must print the same one-line error the
+      // sequential path prints, not a worker stack.
+      applySwap(baseDeck, { out: flags.out, in: flags.in }, lab.pool, scope);
+      const jobs = planPairedSlices(gauntletDecks.length, games, workers, seed, {
+        out: flags.out,
+        in: flags.in,
+        scope,
+      });
+      const init: WorkerInitSpec = {
+        heroName: baseDeck.name,
+        opponentNames: gauntletDecks.map((d) => d.name),
+        pilotId: flags.pilot ?? DEFAULT_PILOT_ID,
+      };
+      const slices = (await runJobsOnWorkers(jobs, init, workers)) as readonly PairedSliceResult[];
+      evaluation = mergeSwapFromSlices(slices, { out: flags.out, in: flags.in });
+    } else {
+      evaluation = evaluateSwap(
+        baseDeck,
+        { out: flags.out, in: flags.in },
+        gauntletDecks,
+        pilots,
+        games,
+        seed,
+        lab.pool,
+        lab.registry,
+        { swapScope: flags.scope },
+      );
+    }
   } catch (err) {
     if (err instanceof DeckLoadError) throw new CliError(err.message);
     throw new CliError(err instanceof Error ? err.message : String(err));
@@ -643,7 +794,9 @@ function cmdSwap(flags: Flags): number {
   );
   console.log(`McNemar p-value: ${evaluation.pValue.toExponential(2)} (discordant pairs: ${evaluation.mcNemar.discordant})`);
   console.log(`\nVERDICT: the swap is ${evaluation.verdict.toUpperCase()} (alpha ${DEFAULT_STATS_CONFIG.alpha}, n=${evaluation.nGames})`);
-  console.log(`\n${matchesPlayed} matches in ${elapsed.toFixed(2)}s → ${(matchesPlayed / elapsed).toFixed(0)} games/sec`);
+  console.log(
+    `\n${matchesPlayed} matches in ${elapsed.toFixed(2)}s → ${(matchesPlayed / elapsed).toFixed(0)} games/sec${workersNote(workers)}`,
+  );
   console.log(FIDELITY_NOTE);
   return 0;
 }
@@ -651,6 +804,13 @@ function cmdSwap(flags: Flags): number {
 function cmdSuggest(flags: Flags): number {
   const [heroSel] = flags.positionals;
   if (!heroSel) throw new CliError('suggest needs a deck: suggest <deck> [--cut "<card>"] [--max-candidates K]');
+  if (flags.workers !== undefined && flags.workers !== 1) {
+    // Honest, not silent: the adaptive search is stateful across rounds and its
+    // parallel host (the web Lab's round-by-round fan-out) is not wired to the
+    // CLI yet — see DESIGN §3.53. Ignoring the flag quietly would let a user
+    // believe they measured a parallel run.
+    console.log('note: --workers is not wired to suggest yet (the adaptive search is round-stateful); running sequentially. See DESIGN §3.53.');
+  }
   const lab = makeLab();
   const baseDeck = resolveDeck(heroSel);
   const pilots = resolvePilots(flags);
@@ -838,27 +998,81 @@ function writeHistoryFile(path: string, history: SuggestionHistory): void {
  * build has measured 39–87 games/sec inside an hour, so a projected finish time
  * here would be fiction.
  */
-function cmdSoak(flags: Flags): number {
+async function cmdSoak(flags: Flags): Promise<number> {
   const lab = makeLab();
   const games = flags.games ?? SOAK_DEEP_DEFAULT_GAMES;
   const seed = flags.seed ?? SOAK_BASE_SEED;
+  const pilotId = flags.pilot ?? DEFAULT_PILOT_ID;
   const pilot = resolvePilots(flags).pilotA;
+  // Only the MIXED half fans out (the anchored half's game indices depend on
+  // how many retries each mechanic took, so it is sequential by nature and
+  // plays on the host while the workers warm up).
+  const workers = plannedWorkers(flags, games, 1, games);
   console.log(`Soak: ${games} mixed games + one anchored matchup per mechanic, seed ${seed}, pilot "${pilot.id}"`);
 
   const progressEvery = Math.max(1, Math.floor(games / SOAK_PROGRESS_LINES));
-  const report = runSoak({
-    pool: lab.pool,
-    registry: lab.registry,
-    pilot,
-    mixedGames: games,
-    anchorAttempts: SOAK_MECHANIC_SEED_ATTEMPTS,
-    baseSeed: seed,
-    onGame: (played, total) => {
-      if (played % progressEvery === 0) console.log(`  … ${played}/${total} games`);
-    },
-  });
+  let report: SoakReport;
+  if (workers > 1) {
+    const settings: SoakSliceSettings = { mixedGames: games, anchorAttempts: SOAK_MECHANIC_SEED_ATTEMPTS };
+    const pool = createWorkerPool({ pilotId }, workers);
+    try {
+      // The SAME progress denominator the sequential run prints: mixed games
+      // plus the anchored half's WORST CASE (every mechanic using every retry).
+      const requiredCount = requiredMechanicsOf(indexPoolForSoak(lab.pool.cards)).length;
+      const total = games + requiredCount * SOAK_MECHANIC_SEED_ATTEMPTS;
+      // Progress can arrive in batched ticks, so print every milestone the
+      // cumulative count crossed — the same lines, in the same order, as the
+      // per-game sequential printer.
+      let lastMilestone = 0;
+      const printMilestones = (played: number): void => {
+        for (let m = lastMilestone + progressEvery; m <= played; m += progressEvery) {
+          console.log(`  … ${m}/${total} games`);
+          lastMilestone = m;
+        }
+      };
+      // Worker threads share this process, so cpuUsage() here counts every
+      // thread — the same total the sequential run reports, plus startup.
+      const cpuStart = process.cpuUsage();
+      const anchored = runSoakAnchored(
+        {
+          pool: lab.pool,
+          registry: lab.registry,
+          pilot,
+          mixedGames: games,
+          anchorAttempts: SOAK_MECHANIC_SEED_ATTEMPTS,
+          baseSeed: seed,
+        },
+        printMilestones,
+      );
+      const jobs = planSoakMixedSlices(games, anchored.games, workers, seed, settings);
+      const results = (await pool.run(jobs, (gamesPlayed) => {
+        printMilestones(anchored.games + gamesPlayed);
+      })) as readonly SoakPartResult[];
+      const cpu = process.cpuUsage(cpuStart);
+      report = mergeSoakFromParts(
+        [{ kind: 'soak-part', jobId: -1, order: 0, part: anchored }, ...results],
+        lab.pool,
+        (cpu.user + cpu.system) / 1000,
+      );
+    } finally {
+      await pool.close();
+    }
+  } else {
+    report = runSoak({
+      pool: lab.pool,
+      registry: lab.registry,
+      pilot,
+      mixedGames: games,
+      anchorAttempts: SOAK_MECHANIC_SEED_ATTEMPTS,
+      baseSeed: seed,
+      onGame: (played, total) => {
+        if (played % progressEvery === 0) console.log(`  … ${played}/${total} games`);
+      },
+    });
+  }
 
   console.log(`\n${formatSoakReport(report)}`);
+  if (workers > 1) console.log(`(mixed half fanned out over ${workers} workers; report is byte-identical to sequential)`);
   const failed =
     report.violations.length > 0 || report.actionCapHits > 0 || report.inertMechanics.length > 0;
   console.log(failed ? '\nSOAK FAILED — see above.' : '\nSoak clean.');
@@ -868,7 +1082,7 @@ function cmdSoak(flags: Flags): number {
 /** How many progress lines a soak prints, whatever its size. */
 const SOAK_PROGRESS_LINES = 20;
 
-function run(argv: readonly string[]): number {
+async function run(argv: readonly string[]): Promise<number> {
   const args = argv.slice(2);
   if (args.length === 0) {
     console.log(USAGE);
@@ -901,9 +1115,9 @@ function run(argv: readonly string[]): number {
   }
 }
 
-function main(): number {
+async function main(): Promise<number> {
   try {
-    return run(process.argv);
+    return await run(process.argv);
   } catch (err) {
     if (err instanceof CliError) {
       console.error(`error: ${err.message}`);
@@ -915,6 +1129,12 @@ function main(): number {
   }
 }
 
-process.exit(main());
+main().then(
+  (code) => process.exit(code),
+  (err) => {
+    console.error(`error: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  },
+);
 
 
