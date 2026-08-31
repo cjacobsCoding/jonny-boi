@@ -842,6 +842,10 @@ export function OnlineBoard({
                           masked.combat !== null &&
                           !masked.combat.attackersDeclared,
                         hasAttackers: (attackTemplate?.attackers.length ?? 0) > 0,
+                        // The server offers a declareBlockers template only to
+                        // the seat that may block, so its presence IS the window.
+                        isBlockWindow: inBlockStep,
+                        hasBlockers: eligibleBlockers.size > 0,
                         hasEnemyWalkers: enemyWalkers.length > 0,
                         mainPhaseFlavor: 'online',
                       }))}

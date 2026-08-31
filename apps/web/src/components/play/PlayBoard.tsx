@@ -827,6 +827,10 @@ export function PlayBoard({
   const barHint = actionBarHint(step, {
     isAttackWindow,
     hasAttackers: eligibleAttackers.size > 0,
+    // `inBlockStep` already means "the defender, holding priority, in the
+    // declare-blockers step" — precisely the window the hint asks about.
+    isBlockWindow: inBlockStep,
+    hasBlockers: eligibleBlockers.size > 0,
     hasEnemyWalkers: enemyWalkers.length > 0,
     mainPhaseFlavor: 'hotseat',
   });

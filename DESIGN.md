@@ -867,11 +867,33 @@ predicate, `mana-plan.test.ts`, `index.ts` exports), `packages/ai` (NEW `mana-pr
 `weights.ts` one flag, `heuristic.ts` + `land-sequencing.ts` call sites, `index.ts` export),
 `apps/web` (NEW `lib/play/mana-picker.ts` + `mana-choice-pref.ts` + `mana-picker.test.ts` +
 `components/play/mana-picker.css`; `lib/play/session.ts` opts in + `manaChoiceForCast`,
-`lib/online/auto-tap.ts` opts in + `castManaChoiceExists`, `components/play/PlayBoard.tsx` the picker,
+`lib/online/auto-tap.ts` opts in (auto-tap only — no online picker, see above), `components/play/PlayBoard.tsx` the picker,
 `lib/config.ts` + `lib/play/play-config.ts` named keys/knobs, `lib/play/mana-sources.test.ts`;
 NEW `scripts/verify-mana-choice.mjs` — the browser harness, 19 checks), `eslint.config.js` (the
 existing puppeteer-harness globals block gains the new harness + `Event`).
 
+### 3.59 The blocking half of the combat-hint bug — ✅ done
+
+Found by playing the SHIPPED build rather than a dev server: with §3.57 deployed, a Solo game at
+Turn 2 declare-blockers, defending an attacking Goblin Guide with an empty battlefield, still read
+*"Tap an attacker, then your creature, to block."* — copy naming a creature the player does not
+have. It is the same defect §3.57 fixed one step earlier in combat, surviving because that fix
+treated the attack branch as the bug rather than as one instance of a shape.
+
+The rule now has one shape for both combat steps: **am I the seat DECLARING** (a defender who is not
+in their own block window is merely responding, exactly as `isAttackWindow` already handled the
+attacker's side) **and do I have anything to declare WITH** (else say so plainly). `HintContext`
+gained `isBlockWindow` + `hasBlockers`; both boards feed them from state they already computed
+(`inBlockStep` IS the window on both — hotseat derives it from priority + defender, online from the
+server's `declareBlockers` template being offered at all).
+
+The copy names the **"No blocks" button**, not "pass": both boards render that button for the whole
+block step, including this case — which is why the old wording was actively misleading rather than
+merely unhelpful. ⚠️ The tests pin the SYMMETRY, not just the two strings: one case asserts that with
+nothing to declare, *neither* combat step ever tells a seat to use what it lacks, and that a
+responding seat in *either* step gets response copy. A future edit to one branch cannot silently
+re-open the other. Sabotage-checked: reverting the rule reddens exactly the three new behavioral
+tests.
 ### 3.58 Games survive everything — state persistence, exact resume, and updates that wait their turn — ✅ done
 
 The requirement, verbatim: *"I want the games to save off their state and when an update applies,

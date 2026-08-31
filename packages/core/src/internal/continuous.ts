@@ -63,8 +63,9 @@
 import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
 import type { BooleanKeywordName, KeywordFlags } from '../card.js';
 import { unionProtection } from '../card.js';
-import { intersectBlockRestrictions } from './stats.js';
+import { effectivePower, effectiveToughness, intersectBlockRestrictions } from './stats.js';
 import type { GameEvent } from '../events.js';
+import type { StaticAbility } from '../statics.js';
 import { modificationIsInert, staticAppliesTo, staticIsInert, staticsOf } from '../statics.js';
 import { characteristicValue } from '../derived.js';
 
@@ -388,6 +389,9 @@ export function indexContinuous(state: GameState): ContinuousIndex {
   }
 
   const map = new Map<InstanceId, MutableMod>();
+  // Statics whose FILTER reads effective P/T, held back until every P/T layer
+  // has been folded (see the layer-3b loop below).
+  let deferred: { ability: StaticAbility; source: CardInstance }[] | null = null;
   // Layer 7a FIRST — a characteristic-defining base is what the other layers
   // then modify. (Arithmetically the folds commute, so the order is about the
   // model being honest rather than about the number, and it is the order that
@@ -416,6 +420,14 @@ export function indexContinuous(state: GameState): ContinuousIndex {
     for (const source of sources) {
       for (const ability of staticsOf(source.def)) {
         if (staticIsInert(ability)) continue;
+        // A selector that reads EFFECTIVE P/T cannot be answered yet — the
+        // numbers it reads are what this very pass is computing. Deferred to
+        // the settled-P/T pass below, which is exact because such a static may
+        // grant keywords only (see `StaticAffects.maxEffectivePower`).
+        if (readsEffectiveStats(ability.affects)) {
+          (deferred ??= []).push({ ability, source });
+          continue;
+        }
         const power = ability.power ?? 0;
         const toughness = ability.toughness ?? 0;
         const keywords = ability.keywords;
@@ -435,6 +447,25 @@ export function indexContinuous(state: GameState): ContinuousIndex {
     agg.power += eff.power ?? 0;
     agg.toughness += eff.toughness ?? 0;
     grantInto(agg, eff.keywords);
+  }
+  // The SETTLED-P/T pass: statics whose selector reads a creature's effective
+  // power or toughness ("creatures you control with power 2 or less can't be
+  // blocked"). Every P/T layer above has finished, so the numbers these read
+  // are final — and because such a static may grant KEYWORDS ONLY, nothing it
+  // writes can feed back into a number anything else read. A P/T delta on one
+  // of these is dropped rather than applied out of layer order: the compiler
+  // never emits it, and applying it would silently reorder the layers.
+  if (deferred !== null) {
+    const battlefield = state.battlefield;
+    for (const { ability, source } of deferred) {
+      const keywords = ability.keywords;
+      if (keywords === undefined) continue;
+      for (const candidate of battlefield) {
+        if (!staticAppliesTo(ability, source, candidate)) continue;
+        if (!withinEffectiveBounds(ability.affects, candidate, map.get(candidate.instanceId))) continue;
+        grantInto(accumulatorFor(map, candidate.instanceId), keywords);
+      }
+    }
   }
   return map;
 }
@@ -728,4 +759,33 @@ export function dropContinuousEffectsFor(state: GameState, instanceId: InstanceI
   if (state.continuous.length === 0) return;
   if (!state.continuous.some((e) => e.targetInstanceId === instanceId)) return;
   state.continuous = state.continuous.filter((e) => e.targetInstanceId !== instanceId);
+}
+
+/** Whether this filter reads a value the layer system itself produces. */
+function readsEffectiveStats(affects: StaticAbility['affects']): boolean {
+  return affects.maxEffectivePower !== undefined || affects.maxEffectivePowerOrToughness !== undefined;
+}
+
+/**
+ * Whether `candidate` is within the filter's effective-P/T bounds, read off
+ * the SETTLED accumulator (`mod`) rather than the printed box — an anthem
+ * lifts a creature out of "power 2 or less", exactly as it does in paper.
+ */
+function withinEffectiveBounds(
+  affects: StaticAbility['affects'],
+  candidate: CardInstance,
+  mod: MutableMod | undefined,
+): boolean {
+  const settled = mod ?? NO_MOD;
+  const max = affects.maxEffectivePower;
+  if (max !== undefined && effectivePower(candidate, settled) > max) return false;
+  const either = affects.maxEffectivePowerOrToughness;
+  if (
+    either !== undefined &&
+    effectivePower(candidate, settled) > either &&
+    effectiveToughness(candidate, settled) > either
+  ) {
+    return false;
+  }
+  return true;
 }
