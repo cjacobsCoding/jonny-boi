@@ -184,10 +184,14 @@ async function main() {
     page.on('pageerror', (err) => console.log('  pageerror:', String(err).slice(0, 200)));
 
     // ---- load + install the SW, then reload once so the page is controlled ----
-    await page.goto(preview.url, { waitUntil: 'networkidle2' });
+    // `domcontentloaded`, never `networkidle2`: the landing view pulls hundreds of
+    // Scryfall card images, so "the network went quiet" depends on an external host
+    // and times out on a cold cache. Every navigation here is followed by an
+    // explicit wait for what the next assertion actually needs.
+    await page.goto(preview.url, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.app__nav');
     await page.evaluate(() => navigator.serviceWorker?.ready);
-    await page.reload({ waitUntil: 'networkidle2' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
     const controlled = await page.evaluate(() => navigator.serviceWorker?.controller !== null);
     check('service worker installs and controls the page', controlled);
 
@@ -252,7 +256,7 @@ async function main() {
     await shot(page, '01-live-board.png');
 
     // ---- hard reload: manual navigation, so the MENU offers the resume ---------------
-    await page.reload({ waitUntil: 'networkidle2' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.app__nav');
     await shot(page, '02-after-hard-reload.png');
     await clickButton(page, /^Play$/);
@@ -311,7 +315,7 @@ async function main() {
       () => document.querySelector('script[type="module"]')?.getAttribute('src') ?? '',
     );
     await Promise.all([
-      page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60_000 }),
+      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60_000 }),
       clickButton(page, /← Play menu/),
     ]);
     await page.waitForSelector('.app__nav');
