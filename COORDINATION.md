@@ -186,7 +186,9 @@ throughput (games/sec) from regressing.
 | perf/sim-throughput | worker | packages/sim (NEW `parallel-config.ts` + `parallel-slices.ts` + `parallel-host.ts` + `parallel-worker.ts` + `parallel.test.ts` + `parallel-host.test.ts`; `cli.ts` `--workers` + async commands; `pilot-ab.ts` slice/fold/finish refactor; `soak.ts` anchored/mixed-range/finish split — both behaviour-pinned unchanged), packages/core (`triggers.ts` watch masks + `internal/triggers-runtime.ts` `SOURCE_SET_EVENTS` + `internal/sba.ts` gate memo + NEW `trigger-event-prefilter.test.ts` — profiled cuts, NO behaviour change: seed-99 rows 257/615/377/552 per 800 byte-identical, selfplay-lock digests + match-inplace + pilot-ab control green), DESIGN §3.53, COORDINATION. **Does NOT touch packages/ai** (concurrent agent owns it). | 🚧 PUSHED, not merged |
 | (fix/duplicate-printings) | DESKTOP-90PJPM4 (integrator) | apps/web ONLY (lib/cards.ts name-dedupe + `getCardByName`, lib/cards/addSingleCard.ts by-name known check, addSingleCard.test.ts fixture rename + new case, NEW lib/duplicate-printings.test.ts), DESIGN §3.55, COORDINATION | ✅ committed direct to main |
 | feat/pilot-pricing | worker | packages/ai ONLY (`effect-value.ts` — `LEDGERED_EFFECT_VALUE` prices for 14 of the §3.49 ledger's 20 rows + the one-read gate + `LEDGER_PRICING_OFF_WEIGHTS`; `weights.ts` +7 named weights; `choices.ts` `answerSelectTargets` up-to-N clamp; `index.ts` one export-from line; `effect-value-parity.test.ts` ledger 20→6, `attachToTarget` reason rewritten to the measured one; NEW `ledger-pricing.test.ts` 32 tests), DESIGN §3.52, COORDINATION. **No core, cards, sim or web change.** ⚠️ Seed-99 baselines BYTE-IDENTICAL (257/615/377/552 per 800) and the 9-deck pilot-ab is byte-identical too (3600/3600 slots split — the meta holds ONE card that touches these prices); the strength case is the targeted `runPilotAb` STRONGER p≈0 in §3.52. | ✅ MERGED + DEPLOYED |
-| feat/game-resume | worker | apps/web ONLY (lib/play/session.ts — the action log; NEW lib/play/persist.ts + persist.test.ts; NEW lib/update/update-decision.ts + updater.ts + both tests; NEW components/UpdatePill.tsx + components/update-pill.css; NEW views/play-resume.css; views/PlayView.tsx resume wiring; main.tsx SW-update flow; lib/config.ts keys; NEW scripts/verify-game-resume.mjs — the browser E2E harness, 18 checks). ⚠️ MINIMAL shared-file touches, noted here per the rules: `App.tsx` (initial view from the update-resume flag + screen reporting + one `<UpdatePill/>` mount — does NOT touch nav/measure logic), `vite.config.ts` (`registerType: 'autoUpdate'` → `'prompt'` — one value; see §3.58 for why autoUpdate cannot defer safely), and `eslint.config.js` (the existing puppeteer-harness globals block gains the new harness + 2 globals). Does NOT touch components/play/* or styles.css (concurrent §3.57 agent owns those); lib/play/setup.ts was claimed but needed NO change. DESIGN §3.58, COORDINATION | 🚧 PUSHED, not merged |
+| feat/game-resume | worker | apps/web ONLY (lib/play/session.ts — the action log; NEW lib/play/persist.ts + persist.test.ts; NEW lib/update/update-decision.ts + updater.ts + both tests; NEW components/UpdatePill.tsx + components/update-pill.css; NEW views/play-resume.css; views/PlayView.tsx resume wiring; main.tsx SW-update flow; lib/config.ts keys; NEW scripts/verify-game-resume.mjs — the browser E2E harness, 18 checks). ⚠️ MINIMAL shared-file touches, noted here per the rules: `App.tsx` (initial view from the update-resume flag + screen reporting + one `<UpdatePill/>` mount — does NOT touch nav/measure logic), `vite.config.ts` (`registerType: 'autoUpdate'` → `'prompt'` — one value; see §3.58 for why autoUpdate cannot defer safely), and `eslint.config.js` (the existing puppeteer-harness globals block gains the new harness + 2 globals). Does NOT touch components/play/* or styles.css (concurrent §3.57 agent owns those); lib/play/setup.ts was claimed but needed NO change. DESIGN §3.58, COORDINATION | ✅ MERGED |
+
+| feat/play-clarity | worker | apps/web ONLY — components/play/** (ChoicePrompt, AbilityPrompts, SeatPanel, BoardPermanentTile, PlayBoard + NEW AnimationLayer.tsx + CombatLines.tsx + jail-tile.test.ts), components/online/OnlineBoard.tsx, lib/play/** NEW option-labels/jail-view/animations/combat-lines/action-hints (+5 test files) + play-config.ts anim knobs (NOT session.ts / setup.ts — the game-persistence agent owns those two; view-model untouched too), styles.css (play-clarity section, appended), DESIGN §3.57, COORDINATION | ✅ MERGED |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
@@ -198,6 +200,36 @@ _Append dated notes here; keep them short. Newest at top._
   generated SW skipWaiting()s itself on install, so a waiting update CANNOT be deferred under it —
   the old bundle's lazy chunks can be purged out from under the running page). The §3.57 agent's
   components/play/* + styles.css appends are untouched; the pill ships its own CSS file.
+- 2026-08-30 worker: `feat/play-clarity` 🚧 PUSHED, not merged — DESIGN §3.57. All four Solo clarity
+  reports fixed, apps/web only, verified live (headless capture run against a real Solo game; evidence
+  screenshots in the worktree's qa/screens/). (1) Every picker row carries its OWNER — "yours" /
+  "Computer’s" from the CHOOSER's perspective — and the ZONE when candidates span zones or sit off the
+  battlefield: ChoicePrompt cards+targets (the old note printed the raw seat id "(A)"), ability-target
+  prompts, hotseat cast targets, online target sets. Pure rules in `lib/play/option-labels.ts`; zone
+  lookups go through a RefIndex built ONLY from public zones + the viewer's own hand — an id the wire
+  never sent degrades to `#id`, so labels cannot leak. (2) `exiledUntilLeavesBy` exiles render TUCKED
+  under their jailer with the top peeking out (both boards; click/right-click zooms). (3) Zone-change
+  animations off `session.events`: draw = card BACK flying library→hand (NO identity on a draw
+  descriptor — hidden info stays hidden mid-flight), mill/discard fly the face, deaths fade a ghost
+  where the tile stood; blocker→attacker SVG lines, dashed while assigning, solid once declared, both
+  boards. Reduced motion derives NOTHING; timings named in ANIMATION_CONFIG. ⚠️ Death ghosts position
+  from LAST-KNOWN tile rects kept per-instance for the board's life — a 2-deep window measurably loses
+  the rect to the auto-advance commit burst (first live game showed a panel-wide ghost). (4) The
+  declare-attackers hint matches the buttons: no eligible attackers → "You have no attackers — pass to
+  continue." (one tested hint rule for both boards, `lib/play/action-hints.ts`). Bonus: §3.54's
+  draggable=false was MISSING on battlefield tile art (click targets) — pinned + fixed via the new
+  jail-tile structural test. Honest scope notes: online zone-change sprites NOT built (frames carry
+  formatted log lines, not GameEvents); Angel of Serenity's zone-spanning picker verified by unit
+  tests, not screenshot (7 mana — the capture game ended first). Gate: vitest full suite green + lint
+  0 errors + card-index check clean.
+- 2026-08-30 worker: claiming `feat/play-clarity` (§3.57) — the Solo-session clarity reports:
+  (1) owner + zone labels on EVERY picker row (ChoicePrompt cards/targets, ability target prompts,
+  cast target prompts; hotseat AND online — shared components), (2) jailed cards tucked under their
+  jailer on the battlefield tile (`exiledUntilLeavesBy`, both boards), (3) zone-change animations
+  (draw/mill/discard/death) off the session event log + SVG blocker lines during combat,
+  (4) the "attack with none" hint when the seat has no attackers. apps/web only; deliberately NOT
+  touching lib/play/session.ts or setup.ts (concurrent §3.58 agent owns them) — animations read
+  `session.events` as already exposed.
 - 2026-08-27 worker: `perf/sim-throughput` 🚧 PUSHED, not merged — DESIGN §3.53. **The sim runs
   faster on both axes, results byte-identical.** (1) `--workers` worker_threads host for
   match/gauntlet/swap/pilot-ab/soak on the RunRange seam; sequential-vs-parallel proven equal by

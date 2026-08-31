@@ -1,4 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { actionBarHint } from '../../lib/play/action-hints.js';
+import { blockerLinePairs } from '../../lib/play/combat-lines.js';
+import { groupJailedByJailer, jailSourcesOf } from '../../lib/play/jail-view.js';
+import {
+  describeTargetSetWithOwners,
+  makeRefIndex,
+  type KnownRef,
+} from '../../lib/play/option-labels.js';
+import { CombatLines } from '../play/CombatLines.js';
 import type {
   CardDefinition,
   CardInstance,
@@ -564,6 +573,56 @@ export function OnlineBoard({
     [yourTurn, masked, step, names, lands],
   );
 
+  // --- §3.57 clarity systems -------------------------------------------------------
+  /** The board container: the combat-lines canvas measures inside it. */
+  const boardRootRef = useRef<HTMLDivElement>(null);
+
+  /** Jailed cards tucked under their jailer — the exile zones are PUBLIC. */
+  const jails = useMemo(
+    () =>
+      groupJailedByJailer(
+        jailSourcesOf([...masked.players.A.exile, ...masked.players.B.exile]),
+        new Set(masked.battlefield.map((perm) => perm.instanceId)),
+      ),
+    [masked],
+  );
+
+  /**
+   * Owner/zone lookup over the PUBLIC halves of the masked view plus the
+   * viewer's OWN hand — exactly the zones the server already sent this seat,
+   * so no label can say more than the wire did.
+   */
+  const refIndex = useMemo(() => {
+    const refs: KnownRef[] = [];
+    for (const perm of masked.battlefield) {
+      refs.push({ instanceId: perm.instanceId, name: perm.def.name, controller: perm.controller, zone: 'battlefield' });
+    }
+    for (const pid of ['A', 'B'] as const) {
+      for (const dead of masked.players[pid].graveyard) {
+        refs.push({ instanceId: dead.instanceId, name: dead.def.name, controller: pid, zone: 'graveyard' });
+      }
+      for (const exiled of masked.players[pid].exile) {
+        refs.push({ instanceId: exiled.instanceId, name: exiled.def.name, controller: pid, zone: 'exile' });
+      }
+    }
+    for (const obj of masked.stack) {
+      if (obj.kind === 'spell') {
+        refs.push({ instanceId: obj.instanceId, name: obj.card.def.name, controller: obj.controller, zone: 'stack' });
+      }
+    }
+    for (const held of masked.players[masked.viewer].hand ?? []) {
+      refs.push({ instanceId: held.instanceId, name: held.def.name, controller: masked.viewer, zone: 'hand' });
+    }
+    return makeRefIndex(refs, masked.viewer, names);
+  }, [masked, names]);
+
+  /** Which blocker→attacker lines to draw this frame (pure rule, tested). */
+  const combatLines = blockerLinePairs({
+    step,
+    declaredBlocks: view.combat?.blocks,
+    draftAssign: blockAssign,
+  });
+
   /** Is there ANY move available — a card, a mana source, or a combat declaration? */
   const hasAnyPlay =
     lands.size > 0 ||
@@ -580,7 +639,7 @@ export function OnlineBoard({
   const flashbackCount = graveyardCasts.size + graveyardTapCastable.size;
 
   return (
-    <div className="play-board">
+    <div className="play-board" ref={boardRootRef}>
       <div className="play-board__status">
         <span className="play-board__turn">{statusText}</span>
         <span className="play-board__priority">
@@ -598,6 +657,8 @@ export function OnlineBoard({
           isActive={view.activePlayer === view.opponent.id}
           hasPriority={view.priorityPlayer === view.opponent.id}
           interaction={opponentInteraction}
+          jails={jails}
+          onInspectCard={setZoomed}
         />
         <div className="play-hand play-hand--hidden" aria-label={`${view.opponent.name} hand (hidden)`}>
           {Array.from({ length: view.opponent.handCount }).map((_, i) => (
@@ -627,6 +688,8 @@ export function OnlineBoard({
             hasPriority={view.priorityPlayer === view.self.id}
             interaction={selfInteraction}
             onGraveyardClick={() => setGraveyardOpen((open) => !open)}
+            jails={jails}
+            onInspectCard={setZoomed}
           />
         </div>
         {/* The opened graveyard. Flashback casts arrive in `legalActions` but the
@@ -770,7 +833,18 @@ export function OnlineBoard({
                     // generic step hint next to a hand of dead cards.
                     autoPass
                     ? 'Nothing to do this step — advancing…'
-                    : (idleNote ?? hintFor(step, enemyWalkers.length > 0))}
+                    : (idleNote ??
+                      actionBarHint(step, {
+                        // The active player's own declare window, pre-declaration;
+                        // once attackers are declared this seat is responding.
+                        isAttackWindow:
+                          masked.activePlayer === masked.viewer &&
+                          masked.combat !== null &&
+                          !masked.combat.attackersDeclared,
+                        hasAttackers: (attackTemplate?.attackers.length ?? 0) > 0,
+                        hasEnemyWalkers: enemyWalkers.length > 0,
+                        mainPhaseFlavor: 'online',
+                      }))}
             </span>
           </>
         )}
@@ -790,6 +864,7 @@ export function OnlineBoard({
           choice={ownChoice}
           names={names}
           onAnswer={(answer) => submit(answerChoiceAction(masked.viewer, ownChoice, answer))}
+          zoneOf={refIndex.zoneOf}
         />
       )}
 
@@ -809,6 +884,7 @@ export function OnlineBoard({
       {pendingAbility && pendingAbility.targets !== null && (
         <AbilityTargetPrompt
           ability={pendingAbility}
+          annotateTarget={refIndex.noteOf}
           onPick={(target) =>
             submit({
               kind: 'activateAbility',
@@ -866,7 +942,9 @@ export function OnlineBoard({
               )}
               {pendingCast.targetSets.map((set, i) => (
                 <button key={i} type="button" className="btn" onClick={() => commitCast(set)}>
-                  {describeTargetSet(view, names, set)}
+                  {/* Owner + zone ride every row (§3.57) — resolved through the
+                      public-zone index, so a graveyard target names its yard. */}
+                  {describeTargetSetWithOwners(set, refIndex)}
                 </button>
               ))}
             </div>
@@ -882,6 +960,9 @@ export function OnlineBoard({
           {toast}
         </div>
       )}
+
+      {/* Blocker→attacker lines (§3.57) — same overlay as the hotseat board. */}
+      <CombatLines lines={combatLines} containerRef={boardRootRef} measureKey={frame} />
     </div>
   );
 }
@@ -918,30 +999,6 @@ function nameOfPerm(
   return all.find((p) => p.instanceId === id)?.name ?? `#${id}`;
 }
 
-/** Render a legal target set as a readable label. */
-function describeTargetSet(
-  view: ReturnType<typeof maskedViewToBoardView>,
-  names: Readonly<Record<PlayerId, string>>,
-  set: ReadonlyArray<InstanceId | PlayerId>,
-): string {
-  if (set.length === 0) return 'No target';
-  return set
-    .map((t) => (t === 'A' || t === 'B' ? `${names[t]} (player)` : nameOfPerm(view, t)))
-    .join(', ');
-}
-
-function hintFor(step: string, hasEnemyWalkers = false): string {
-  switch (step) {
-    case 'precombatMain':
-    case 'postcombatMain':
-      return 'Play a land, tap your sources for mana, then cast from your hand — or pass to advance.';
-    case 'declareAttackers':
-      return hasEnemyWalkers
-        ? 'Tap your creatures to attack, then click an enemy planeswalker to attack it instead of the player. Confirm when done.'
-        : 'Tap your creatures to attack, then confirm — or attack with none.';
-    case 'declareBlockers':
-      return 'Tap an attacker, then your creature, to block. Confirm when done.';
-    default:
-      return 'Cast instants in response, or pass priority to continue.';
-  }
-}
+// The per-step hint and the target-set labels both moved to shared, tested
+// modules (`lib/play/action-hints.ts`, `lib/play/option-labels.ts`) so the two
+// boards render identical copy from one rule (§3.57).

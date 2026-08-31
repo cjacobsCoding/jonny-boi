@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import type { InstanceId, PlayerId } from '@jonny-boi/core';
 import type { BoardPermanent, SeatView } from '../../lib/play/view-model.js';
+import type { JailedCardView } from '../../lib/play/jail-view.js';
 import { BoardPermanentTile } from './BoardPermanentTile.js';
 
 /** Order mana colors consistently (WUBRG + C) for the pool readout. */
@@ -29,6 +30,8 @@ export function SeatPanel({
   hasPriority,
   interaction,
   onGraveyardClick,
+  jails,
+  onInspectCard,
 }: {
   seat: SeatView;
   isActive: boolean;
@@ -40,6 +43,15 @@ export function SeatPanel({
    * before, so seats without a panel are unchanged.
    */
   onGraveyardClick?: () => void;
+  /**
+   * jailer instance id → the cards it exiled "until it leaves the battlefield"
+   * (§3.57). Built by the board from the PUBLIC exile zones via the pure
+   * `jail-view` grouping; a jailer with an entry renders its prisoners tucked
+   * underneath its tile.
+   */
+  jails?: ReadonlyMap<InstanceId, readonly JailedCardView[]>;
+  /** Zoom any card this panel peeks (today: a jailed prisoner). */
+  onInspectCard?: (card: { cardId: string; name: string }) => void;
 }): ReactElement {
   const lands = seat.permanents.filter((p) => p.isLand);
   const nonlands = seat.permanents.filter((p) => !p.isLand);
@@ -55,6 +67,8 @@ export function SeatPanel({
         selected={interaction?.selectedIds.has(p.instanceId) ?? false}
         marker={interaction?.markers?.get(p.instanceId)}
         onClick={selectable && interaction ? () => interaction.onClick(p.instanceId) : undefined}
+        jailed={jails?.get(p.instanceId)}
+        onInspectJailed={onInspectCard}
       />
     );
   };
@@ -84,21 +98,31 @@ export function SeatPanel({
         </div>
       </header>
 
+      {/* The zone counters double as ANIMATION ANCHORS (§3.57): the flying
+          card-back/face sprites measure these `data-anim-anchor` elements for
+          their start/end points. Data attributes only — no behavior. */}
       <div className="seat__zones">
-        <span title="Cards in hand">✋ {seat.handCount}</span>
-        <span title="Library">📚 {seat.libraryCount}</span>
+        <span title="Cards in hand" data-anim-anchor={`hand-count:${seat.id}`}>
+          ✋ {seat.handCount}
+        </span>
+        <span title="Library" data-anim-anchor={`library:${seat.id}`}>
+          📚 {seat.libraryCount}
+        </span>
         {onGraveyardClick ? (
           <button
             type="button"
             className="seat__zone-btn"
             title="Open graveyard"
             aria-label={`Open ${seat.name} graveyard (${seat.graveyardCount} cards)`}
+            data-anim-anchor={`graveyard:${seat.id}`}
             onClick={onGraveyardClick}
           >
             ⚰ {seat.graveyardCount}
           </button>
         ) : (
-          <span title="Graveyard">⚰ {seat.graveyardCount}</span>
+          <span title="Graveyard" data-anim-anchor={`graveyard:${seat.id}`}>
+            ⚰ {seat.graveyardCount}
+          </span>
         )}
         {seat.exileCount > 0 && <span title="Exile">✦ {seat.exileCount}</span>}
         {manaEntries.length > 0 && (
@@ -128,7 +152,11 @@ export function SeatPanel({
       </div>
 
       <div className="seat__board">
-        <div className="seat__row" aria-label={`${seat.name} creatures and other permanents`}>
+        <div
+          className="seat__row"
+          aria-label={`${seat.name} creatures and other permanents`}
+          data-anim-anchor={`board:${seat.id}`}
+        >
           {nonlands.length === 0 ? <span className="seat__empty">No creatures</span> : nonlands.map(renderPerm)}
         </div>
         <div className="seat__row seat__row--lands" aria-label={`${seat.name} lands`}>

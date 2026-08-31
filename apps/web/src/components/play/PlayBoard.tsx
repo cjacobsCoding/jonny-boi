@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import type { InstanceId, PlayerId } from '@jonny-boi/core';
 import type {
   AbilityOption,
@@ -22,6 +22,13 @@ import { AbilityMenuPrompt, AbilityTargetPrompt } from './AbilityPrompts.js';
 import { graveyardPanelView } from '../../lib/play/graveyard-cast.js';
 import { isChoiceForViewer, waitingForChoiceText } from '../../lib/play/choice-view.js';
 import { isModalTap, manaTapMenu, tappableIds, type ManaTapOption } from '../../lib/play/mana-tap.js';
+import { actionBarHint } from '../../lib/play/action-hints.js';
+import { blockerLinePairs } from '../../lib/play/combat-lines.js';
+import { groupJailedByJailer, jailSourcesOf } from '../../lib/play/jail-view.js';
+import { describeCastTarget, makeRefIndex, type KnownRef } from '../../lib/play/option-labels.js';
+import type { AnimationCardInfo } from '../../lib/play/animations.js';
+import { AnimationLayer, useZoneAnimations } from './AnimationLayer.js';
+import { CombatLines } from './CombatLines.js';
 import './action-bar.css';
 
 /**
@@ -229,6 +236,102 @@ export function PlayBoard({
   // changed mid-gesture, and stale affordances must not fire.
   /** The card being inspected full-size, if any (report 20260825_210026). */
   const [zoomed, setZoomed] = useState<{ cardId: string; name: string } | null>(null);
+
+  // --- §3.57 clarity systems -------------------------------------------------------
+  /** The board container: the combat-lines canvas and the animation anchors' root. */
+  const boardRootRef = useRef<HTMLDivElement>(null);
+
+  /** Jailed cards tucked under their jailer (both seats' PUBLIC exile zones). */
+  const jails = useMemo(
+    () =>
+      groupJailedByJailer(
+        jailSourcesOf([...session.state.players.A.exile, ...session.state.players.B.exile]),
+        new Set(session.state.battlefield.map((perm) => perm.instanceId)),
+      ),
+    [session],
+  );
+
+  /** Owner/zone lookup over the PUBLIC board + the viewer's own hand (§3.57 labels). */
+  const refIndex = useMemo(() => {
+    const refs: KnownRef[] = [];
+    const state = session.state;
+    for (const perm of state.battlefield) {
+      refs.push({ instanceId: perm.instanceId, name: perm.def.name, controller: perm.controller, zone: 'battlefield' });
+    }
+    for (const pid of ['A', 'B'] as const) {
+      for (const dead of state.players[pid].graveyard) {
+        refs.push({ instanceId: dead.instanceId, name: dead.def.name, controller: pid, zone: 'graveyard' });
+      }
+      for (const exiled of state.players[pid].exile) {
+        refs.push({ instanceId: exiled.instanceId, name: exiled.def.name, controller: pid, zone: 'exile' });
+      }
+    }
+    for (const obj of state.stack) {
+      if (obj.kind === 'spell') {
+        refs.push({ instanceId: obj.instanceId, name: obj.card.def.name, controller: obj.controller, zone: 'stack' });
+      }
+    }
+    // The viewer's OWN hand only — the one hidden zone this viewer may see.
+    for (const held of state.players[viewer].hand) {
+      refs.push({ instanceId: held.instanceId, name: held.def.name, controller: viewer, zone: 'hand' });
+    }
+    return makeRefIndex(refs, viewer, names);
+  }, [session, viewer, names]);
+
+  /**
+   * Identities the animation layer may need after an object left the board (a
+   * token that died ceases to exist and is in NO zone afterwards). Only ever
+   * fed from PUBLIC battlefield rows; append-only for the life of the board.
+   */
+  const boardIdentityRef = useRef(new Map<InstanceId, AnimationCardInfo>());
+
+  /** Resolve a moved card's public identity for the animation descriptors. */
+  const animLookup = useCallback(
+    (id: InstanceId): AnimationCardInfo | undefined => {
+      for (const pid of ['A', 'B'] as const) {
+        const player = session.state.players[pid];
+        for (const zone of [player.graveyard, player.exile]) {
+          const hit = zone.find((card) => card.instanceId === id);
+          if (hit) return { cardId: hit.def.id, name: hit.def.name, owner: pid };
+        }
+      }
+      // A ceased token: fall back to what the battlefield last said it was.
+      return boardIdentityRef.current.get(id);
+    },
+    [session],
+  );
+
+  const { sprites, retire } = useZoneAnimations(session.events, animLookup);
+
+  /**
+   * LAST-KNOWN tile rect per instance, refreshed after every commit and never
+   * evicted: the death ghost positions itself where the tile last stood, and
+   * "last stood" must survive the burst of auto-advance commits between the
+   * death event and the ghost's mount (a 2-deep window was measured losing the
+   * rect to exactly that burst). Memory: one DOMRect per instance that ever
+   * hit the battlefield — trivially small next to the game itself. The walk is
+   * a board's worth of getBoundingClientRect calls per commit, nothing next to
+   * a re-render.
+   */
+  const tileRectsRef = useRef(new Map<InstanceId, DOMRect>());
+  useEffect(() => {
+    const root = boardRootRef.current;
+    if (!root) return;
+    const rects = tileRectsRef.current;
+    for (const el of root.querySelectorAll('[data-perm-id]')) {
+      if (!(el instanceof HTMLElement)) continue;
+      const id = Number(el.dataset['permId']);
+      if (!Number.isNaN(id)) rects.set(id, el.getBoundingClientRect());
+    }
+    // Record public identities beside the rects (same walk over the view).
+    const identities = boardIdentityRef.current;
+    for (const seat of [view.self, view.opponent]) {
+      for (const perm of seat.permanents) {
+        identities.set(perm.instanceId, { cardId: perm.cardId, name: perm.name, owner: seat.id });
+      }
+    }
+  });
+  const tileRectOf = useCallback((id: InstanceId): DOMRect | undefined => tileRectsRef.current.get(id), []);
 
   const { drag, dropRef, handProps: dragHandProps } = useDragToPlay((id) => {
     const land = playableLands.includes(id);
@@ -469,8 +572,30 @@ export function PlayBoard({
   // --- render --------------------------------------------------------------------
   const statusText = `Turn ${view.turnNumber} · ${stepLabel(step)} · ${names[view.activePlayer]}'s turn`;
 
+  // Which blocker→attacker lines to draw this frame (pure rule, tested).
+  const combatLines = blockerLinePairs({
+    step,
+    declaredBlocks: view.combat?.blocks,
+    draftAssign: blockAssign,
+  });
+
+  // The §3.57 hint rule: the copy must describe the buttons that exist. The
+  // attack window is the ACTIVE player's own declare step, pre-declaration;
+  // everyone else in that step is merely responding.
+  const isAttackWindow =
+    step === 'declareAttackers' &&
+    session.state.activePlayer === viewer &&
+    session.state.combat !== null &&
+    !session.state.combat.attackersDeclared;
+  const barHint = actionBarHint(step, {
+    isAttackWindow,
+    hasAttackers: eligibleAttackers.size > 0,
+    hasEnemyWalkers: enemyWalkers.length > 0,
+    mainPhaseFlavor: 'hotseat',
+  });
+
   return (
-    <div className="play-board">
+    <div className="play-board" ref={boardRootRef}>
       <div className="play-board__status">
         <span className="play-board__turn">{statusText}</span>
         <span className="play-board__priority">{names[view.priorityPlayer]} has priority</span>
@@ -486,8 +611,14 @@ export function PlayBoard({
           isActive={view.activePlayer === view.opponent.id}
           hasPriority={view.priorityPlayer === view.opponent.id}
           interaction={opponentInteraction}
+          jails={jails}
+          onInspectCard={setZoomed}
         />
-        <div className="play-hand play-hand--hidden" aria-label={`${view.opponent.name} hand (hidden)`}>
+        <div
+          className="play-hand play-hand--hidden"
+          aria-label={`${view.opponent.name} hand (hidden)`}
+          data-anim-anchor={`hand:${view.opponent.id}`}
+        >
           {Array.from({ length: view.opponent.handCount }).map((_, i) => (
             <CardBack key={i} index={i} />
           ))}
@@ -515,6 +646,8 @@ export function PlayBoard({
             hasPriority={isViewersPriority}
             interaction={selfInteraction}
             onGraveyardClick={() => setGraveyardOpen((open) => !open)}
+            jails={jails}
+            onInspectCard={setZoomed}
           />
         </div>
         {/* The opened graveyard. Flashback casts live in `legalActions` but the
@@ -531,6 +664,7 @@ export function PlayBoard({
         <div
           className="play-hand"
           aria-label={`${view.self.name} hand`}
+          data-anim-anchor={`hand:${view.self.id}`}
           {...dragHandProps}
           onDragStart={(e) => e.preventDefault()}
         >
@@ -610,6 +744,7 @@ export function PlayBoard({
         session={session}
         viewer={viewer}
         step={step}
+        hint={barHint}
         waitingText={
           pendingChoice && !isChoiceForViewer(pendingChoice, viewer)
             ? waitingForChoiceText(pendingChoice, names)
@@ -619,7 +754,6 @@ export function PlayBoard({
         }
         isViewersPriority={isViewersPriority}
         inBlockStep={inBlockStep}
-        hasEnemyWalkers={enemyWalkers.length > 0}
         chosenAttackers={chosenAttackers}
         blockAssign={blockAssign}
         eligibleAttackers={eligibleAttackers}
@@ -642,6 +776,7 @@ export function PlayBoard({
           choice={pendingChoice}
           names={names}
           onAnswer={(answer) => run(() => session.answerChoice(answer))}
+          zoneOf={refIndex.zoneOf}
         />
       )}
 
@@ -784,6 +919,7 @@ export function PlayBoard({
             run(() => session.activateAbility(pendingAbility.instanceId, pendingAbility.abilityIndex, [target]))
           }
           onCancel={() => setPendingAbility(null)}
+          annotateTarget={refIndex.noteOf}
         />
       )}
 
@@ -801,7 +937,8 @@ export function PlayBoard({
                   className="btn"
                   onClick={() => commitCast([optionToTarget(opt)])}
                 >
-                  {opt.kind === 'player' ? `${opt.name} (player)` : opt.name}
+                  {/* Owner rides every row (§3.57): "Wall (yours)" vs "Wall (Computer’s)". */}
+                  {describeCastTarget(opt, viewer, names)}
                 </button>
               ))}
             </div>
@@ -817,6 +954,17 @@ export function PlayBoard({
           {toast}
         </div>
       )}
+
+      {/* Blocker→attacker lines (§3.57) — decorative overlay, tested pairing rule. */}
+      <CombatLines lines={combatLines} containerRef={boardRootRef} measureKey={session} />
+
+      {/* Transient zone-change sprites (§3.57) — draw/mill/discard/death. */}
+      <AnimationLayer
+        sprites={sprites}
+        boardRootRef={boardRootRef}
+        tileRectOf={tileRectOf}
+        onDone={retire}
+      />
     </div>
   );
 }
@@ -827,7 +975,7 @@ function ActionBar({
   step,
   isViewersPriority,
   inBlockStep,
-  hasEnemyWalkers,
+  hint,
   chosenAttackers,
   blockAssign,
   eligibleAttackers,
@@ -843,8 +991,8 @@ function ActionBar({
   waitingText?: string;
   isViewersPriority: boolean;
   inBlockStep: boolean;
-  /** The defender controls at least one attackable planeswalker (hint wording). */
-  hasEnemyWalkers: boolean;
+  /** The per-step guidance line — the shared, tested `actionBarHint` rule. */
+  hint: string;
   chosenAttackers: Set<InstanceId>;
   blockAssign: Map<InstanceId, InstanceId>;
   eligibleAttackers: Set<InstanceId>;
@@ -889,7 +1037,7 @@ function ActionBar({
       <button type="button" className="btn" onClick={onPass}>
         {passLabel(step)}
       </button>
-      <span className="action-bar__hint">{hintFor(step, hasEnemyWalkers)}</span>
+      <span className="action-bar__hint">{hint}</span>
     </div>
   );
 }
@@ -897,22 +1045,6 @@ function ActionBar({
 function passLabel(step: string): string {
   if (step === 'declareAttackers' || step === 'declareBlockers') return 'Pass priority';
   return 'Pass / advance';
-}
-
-function hintFor(step: string, hasEnemyWalkers = false): string {
-  switch (step) {
-    case 'precombatMain':
-    case 'postcombatMain':
-      return 'Play a land or cast a spell from your hand, or pass to advance.';
-    case 'declareAttackers':
-      return hasEnemyWalkers
-        ? 'Tap your creatures to attack, then click an enemy planeswalker to attack it instead of the player. Confirm when done.'
-        : 'Tap your creatures to attack, then confirm — or attack with none.';
-    case 'declareBlockers':
-      return 'Tap an attacker, then your creature, to block. Confirm when done.';
-    default:
-      return 'Cast instants in response, or pass priority to continue.';
-  }
 }
 
 function otherOf(p: PlayerId): PlayerId {
