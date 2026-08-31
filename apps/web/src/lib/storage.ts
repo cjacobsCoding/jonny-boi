@@ -4,6 +4,7 @@
  * back to an empty deck set (DESIGN.md §6: graceful fallbacks).
  */
 import type { Deck, DeckEntry } from './deck.js';
+import { getCard } from './cards.js';
 import { isEntryPrinting } from './printings/entryPrinting.js';
 import { DECKS_STORAGE_KEY, ACTIVE_DECK_STORAGE_KEY } from './config.js';
 
@@ -84,6 +85,14 @@ function normalizeEntry(raw: unknown): DeckEntry[] {
   const entry = raw as Record<string, unknown>;
   if (typeof entry.cardId !== 'string' || typeof entry.count !== 'number') return [];
   const normalized: DeckEntry = { cardId: entry.cardId, count: entry.count };
+  // Backfill the name from the pool on the way in, so a deck saved before
+  // `DeckEntry.name` existed becomes self-describing the moment it is loaded on a
+  // build that still has the card — rather than only from its next edit onward,
+  // which is far too late to help the deck that has already gone stale.
+  const name =
+    getCard(entry.cardId)?.name ??
+    (typeof entry.name === 'string' && entry.name.trim() ? entry.name : undefined);
+  if (name) normalized.name = name;
   if (isEntryPrinting(entry.printing)) normalized.printing = entry.printing;
   return [normalized];
 }

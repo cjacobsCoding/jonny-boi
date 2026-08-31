@@ -24,6 +24,21 @@ export interface DeckEntry {
   /** Number of copies in the deck. */
   count: number;
   /**
+   * The card's name as it was known WHEN THE ENTRY WAS MADE — a tombstone, not
+   * a second source of truth. `cardId` still identifies the card; this is only
+   * ever read when that id no longer resolves.
+   *
+   * A saved deck used to be `{ cardId, count }` and nothing else, so an entry
+   * whose id left the pool became unexplainable: the deck refused to start with
+   * `unknown card "f413a83d-…"`, and there was no way — for the user OR for us —
+   * to learn which card that was. The name is knowable at every point an entry
+   * is created (import resolved it, the pool grid was showing it), and throwing
+   * it away is what made the failure permanent. Optional because decks saved
+   * before this field existed do not have it, and a missing name must degrade to
+   * the old message rather than to a lie.
+   */
+  name?: string;
+  /**
    * A non-default Scryfall PRINTING chosen for this slot — art only, never
    * identity. Absent means "the pool's printing", which is what every deck saved
    * before this field existed says, so old decks need no migration.
@@ -54,7 +69,7 @@ export interface Deck {
  */
 export interface DeckExport {
   name: string;
-  cards: Array<{ cardId: string; count: number; printing?: EntryPrinting }>;
+  cards: Array<{ cardId: string; count: number; name?: string; printing?: EntryPrinting }>;
 }
 
 /** Generate a stable-enough local id for a new deck. */
@@ -103,7 +118,7 @@ export function addCard(deck: Deck, card: NormalizedCard): Deck {
     ? deck.cards.map((entry) =>
         entry.cardId === card.id ? { ...entry, count: entry.count + 1 } : entry,
       )
-    : [...deck.cards, { cardId: card.id, count: 1 }];
+    : [...deck.cards, { cardId: card.id, count: 1, name: card.name }];
   return { ...deck, cards, updatedAt: new Date().toISOString() };
 }
 
@@ -241,6 +256,24 @@ function formatList(items: readonly string[]): string {
   return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
 }
 
+/**
+ * What to say about a deck entry whose card id no longer resolves.
+ *
+ * Never a bare uuid. A deck that will not start is bad; a deck that will not
+ * start and cannot tell you WHICH of its sixty cards is at fault is a dead end —
+ * the reported symptom was `unknown card "f413a83d-a40d-434c-b20a-4c707c0527fa"`,
+ * which no player can act on. When the entry recorded a name we lead with it and
+ * keep the id for a bug report. When it did not (a deck saved before
+ * `DeckEntry.name` existed), we say the name is unrecoverable rather than
+ * pretending, and point at the fix that is actually available: re-import.
+ */
+export function describeMissingCard(entry: DeckEntry): string {
+  const copies = `${entry.count} cop${entry.count === 1 ? 'y' : 'ies'}`;
+  return entry.name
+    ? `“${entry.name}” (${copies}) isn’t in the card pool — re-import it or swap it out. [id ${entry.cardId}]`
+    : `A card in this deck (${copies}) isn’t in the pool, and this deck was saved before names were recorded, so it can only be identified by id ${entry.cardId} — re-import the deck to name it.`;
+}
+
 /** True when a deck contains a card the engine cannot simulate yet. */
 export function hasUnsupportedCards(deck: Deck): boolean {
   return deck.cards.some((entry) => unsupportedReason(entry.cardId) !== undefined);
@@ -272,10 +305,7 @@ export function validateDeck(deck: Deck): DeckIssue[] {
   for (const entry of deck.cards) {
     const card = getCard(entry.cardId);
     if (!card) {
-      issues.push({
-        message: `Unknown card in deck (id ${entry.cardId}).`,
-        severity: 'warning',
-      });
+      issues.push({ message: describeMissingCard(entry), severity: 'warning' });
       continue;
     }
 
@@ -318,6 +348,10 @@ export function toExport(deck: Deck): DeckExport {
       };
       // Only present when actually chosen, so a deck with no custom art exports
       // byte-for-byte the JSON it always did.
+      // The name goes with it: an exported deck is the copy that travels to
+      // another machine, and it is exactly the copy most likely to meet a pool
+      // that lacks one of its cards.
+      if (entry.name) exported.name = entry.name;
       if (entry.printing) exported.printing = entry.printing;
       return exported;
     }),
@@ -346,6 +380,14 @@ export function fromExport(data: unknown): Deck {
     const count = entry.count;
     if (typeof cardId === 'string' && typeof count === 'number' && count > 0) {
       const parsed: DeckEntry = { cardId, count: Math.floor(count) };
+      // Prefer the name the pool knows NOW over the one in the file: the file's
+      // is a tombstone for an id we cannot resolve, and if we can resolve it the
+      // pool is the better authority. Falling back to the file's is the whole
+      // point — that is the case where the id is about to go unexplainable.
+      const known = getCard(cardId)?.name;
+      const recorded = typeof entry.name === 'string' && entry.name.trim() ? entry.name : undefined;
+      const resolvedName = known ?? recorded;
+      if (resolvedName) parsed.name = resolvedName;
       // A malformed printing is dropped, not rejected: the deck itself is fine,
       // and losing an art choice must never cost you the import (rule 6).
       if (isEntryPrinting(entry.printing)) parsed.printing = entry.printing;
