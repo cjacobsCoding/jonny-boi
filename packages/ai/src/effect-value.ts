@@ -1443,6 +1443,21 @@ export function modeEffectsFor(state: GameState, sourceInstanceId: InstanceId): 
   // — and `findInstance` (built for board/hand/graveyard questions) does not
   // look there. Searching only through it returned an empty mode list, which
   // silently degraded every mode choice to printed order.
+  // A modal TRIGGER's mode question (CR 603.3c): the spec lives on the stack
+  // object itself (`awaitingModes`), not on the card's spell-level `modal` —
+  // Felidar Retreat's DEFINITION carries no modal at all. Checked first, and
+  // keyed on the trigger's SOURCE (the id the choice names), which is unique
+  // while a mode question is open.
+  const waitingTrigger = state.stack.find(
+    (o) => o.kind === 'trigger' && o.awaitingModes !== undefined && o.sourceInstanceId === sourceInstanceId,
+  );
+  if (waitingTrigger?.kind === 'trigger' && waitingTrigger.awaitingModes !== undefined) {
+    return waitingTrigger.awaitingModes.modes.map((mode) => ({
+      id: mode.id,
+      effects: mode.effects,
+      ...(mode.targets !== undefined ? { targets: mode.targets } : {}),
+    }));
+  }
   const onStack = state.stack.find((o) => o.kind === 'spell' && o.instanceId === sourceInstanceId);
   const source = (onStack?.kind === 'spell' ? onStack.card : undefined) ?? findInstance(state, sourceInstanceId);
   const spec = source ? modalSpecOf(source.def) : undefined;

@@ -560,6 +560,12 @@ export interface TriggeredStackObject {
    */
   readonly awaitingTargetCount?: { readonly min: number; readonly max: number };
   /**
+   * A modal trigger waiting for its "Choose one —" answer (CR 603.3c) — the
+   * ability's ModalSpec, carried on the stack object exactly as
+   * {@link awaitingTargets} is. Cleared when the answer replaces `effects`.
+   */
+  awaitingModes?: import('./card.js').ModalSpec;
+  /**
    * Stamped `'activated'` when this stack object is an ACTIVATED ability
    * (`applyActivateAbility`, cycling); absent for a genuine triggered ability.
    *

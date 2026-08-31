@@ -20,6 +20,7 @@ import type {
   EffectRef,
   ManaAbility,
   ManaModeExtra,
+  ModalSpec,
 } from './card.js';
 import {
   canRevealForUntapped,
@@ -1838,6 +1839,20 @@ function applyAnswerChoice(
     return { state, events };
   }
 
+  // A MODE answer with no resolution behind it belongs to a modal TRIGGER on
+  // the stack (CR 603.3c) — the cast-time mode question was already consumed by
+  // the casting branch above, so what reaches here is the trigger's. Same shape
+  // as the targeting branch: record, then let any waiting trigger ask next.
+  if (choice.kind === 'chooseModes' && answer.kind === 'chooseModes' && !state.resolution) {
+    recordTriggerModes(state, answer.modeIds, emit);
+    aimPendingTriggers(state, emit);
+    if (!state.pendingChoice && !state.gameOver) {
+      state.priorityPlayer = state.activePlayer;
+      state.consecutivePasses = 0;
+    }
+    return { state, events };
+  }
+
   // A LIFE payment with no resolution behind it is a shockland entering off a
   // land play (`applyPlayLand` parked it; the land is the choice's source). The
   // life was already charged above; what is left is the printed "if you don't":
@@ -2175,6 +2190,11 @@ function canActivateManaAbility(
  * in that order is the order they were put on the stack in.
  */
 function aimPendingTriggers(state: GameState, emit: (e: GameEvent) => void): void {
+  // MODES FIRST (CR 601.2b's order, applied to triggers by 603.3c: choose
+  // modes, then targets): a modal trigger's chosen modes are what decide
+  // whether it targets at all. Parks a question of its own; the target pass
+  // below then never runs until it is answered.
+  if (askTriggerModes(state, emit)) return;
   // Bounded by the stack, and each pass either aims a trigger, removes one, or
   // parks a question — so it cannot spin.
   for (;;) {
@@ -2276,6 +2296,104 @@ function aimPendingTriggers(state: GameState, emit: (e: GameEvent) => void): voi
     });
     return;
   }
+}
+
+/**
+ * Ask the "Choose one —" question for a modal TRIGGER waiting on the stack
+ * (CR 603.3c). Returns true when a question was parked. The compiler only
+ * emits TARGET-FREE modes for triggers today, so every printed mode is
+ * choosable; the counts are the spec's own, clamped to the menu.
+ */
+function askTriggerModes(state: GameState, emit: (e: GameEvent) => void): boolean {
+  for (;;) {
+    const trigger = state.stack.find(
+      (object): object is TriggeredStackObject => object.kind === 'trigger' && object.awaitingModes !== undefined,
+    );
+    if (!trigger) return false;
+    const spec = trigger.awaitingModes as ModalSpec;
+    const max = Math.min(spec.max, spec.allowRepeats ? spec.max : spec.modes.length);
+    const choice = normalizeChoiceRequest(
+      {
+        kind: 'chooseModes',
+        chooser: trigger.controller,
+        prompt: spec.min === max ? `Choose ${max} — ${trigger.label}` : `Choose up to ${max} — ${trigger.label}`,
+        modes: spec.modes.map((mode) => ({ id: mode.id, label: mode.label })),
+        min: Math.min(spec.min, max),
+        max,
+        valence: 'gain',
+        ...(spec.allowRepeats ? { allowRepeats: true } : {}),
+      },
+      {
+        id: state.nextInstanceId++,
+        sourceInstanceId: trigger.sourceInstanceId,
+        sourceName: nameOfInstance(state, trigger.sourceInstanceId) ?? trigger.label,
+      },
+    );
+    if (!choice) {
+      // Unrepresentable: take the printed floor in printed order — the same
+      // safe default the cast-time mode question uses.
+      recordTriggerModes(state, spec.modes.slice(0, Math.min(spec.min, max)).map((mode) => mode.id), emit);
+      continue;
+    }
+    if (isTrivialChoice(choice) || state.gameOver || state.players[trigger.controller].hasLost) {
+      const answer = defaultAnswerFor(choice);
+      emit({
+        type: 'choiceAutoAnswered',
+        choiceId: choice.id,
+        chooser: trigger.controller,
+        choiceKind: choice.kind,
+        answer,
+        reason: isTrivialChoice(choice) ? 'only one legal set of modes' : 'the chooser can no longer act',
+      });
+      recordTriggerModes(state, answer.kind === 'chooseModes' ? answer.modeIds : [], emit);
+      continue;
+    }
+    state.pendingChoice = choice;
+    state.priorityPlayer = choice.chooser;
+    state.consecutivePasses = 0;
+    emit({
+      type: 'choiceAsked',
+      choiceId: choice.id,
+      chooser: choice.chooser,
+      choiceKind: choice.kind,
+      prompt: choice.prompt,
+      sourceInstanceId: choice.sourceInstanceId,
+      optionCount: choiceOptionCount(choice),
+    });
+    return true;
+  }
+}
+
+/**
+ * Write the chosen modes onto the trigger that was waiting: its (empty)
+ * effects become the chosen modes' effects, in the printed order they were
+ * picked, and the marker is cleared. The waiting trigger is unique — only one
+ * mode question is ever open.
+ */
+function recordTriggerModes(state: GameState, modeIds: readonly string[], emit: (e: GameEvent) => void): void {
+  const trigger = state.stack.find(
+    (object): object is TriggeredStackObject => object.kind === 'trigger' && object.awaitingModes !== undefined,
+  );
+  if (!trigger) return;
+  const spec = trigger.awaitingModes as ModalSpec;
+  const effects: EffectRef[] = [];
+  const chosenLabels: string[] = [];
+  for (const id of modeIds) {
+    const mode = spec.modes.find((candidate) => candidate.id === id);
+    if (!mode) continue;
+    effects.push(...mode.effects);
+    chosenLabels.push(mode.label);
+  }
+  (trigger as { effects: readonly EffectRef[] }).effects = effects;
+  delete trigger.awaitingModes;
+  emit({
+    type: 'triggerModesChosen',
+    sourceInstanceId: trigger.sourceInstanceId,
+    controller: trigger.controller,
+    label: trigger.label,
+    modeIds: [...modeIds],
+    modeLabels: chosenLabels,
+  });
 }
 
 /** A printed targeted trigger names exactly one target (see `TriggeredAbility.targets`). */

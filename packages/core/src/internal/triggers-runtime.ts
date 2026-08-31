@@ -349,6 +349,10 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
         ...(pending.ability.targets ? { awaitingTargets: pending.ability.targets } : {}),
         ...(pending.ability.targetsExcludeSelf === true ? { awaitingTargetsExcludeSelf: true } : {}),
         ...(pending.ability.targetCount ? { awaitingTargetCount: pending.ability.targetCount } : {}),
+        // A modal trigger goes on the stack UNCHOSEN; the engine asks its
+        // controller immediately afterwards (`aimPendingTriggers`), which is
+        // when CR 603.3c says modes are chosen.
+        ...(pending.ability.modal ? { awaitingModes: pending.ability.modal } : {}),
       });
       baseEmit({
         type: 'triggerPutOnStack',

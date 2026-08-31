@@ -379,6 +379,19 @@ export type GameEvent =
     }
   | {
       /**
+       * A modal trigger's "Choose one —" was answered (CR 603.3c). Public —
+       * the chosen modes are announced as the ability sits on the stack, and
+       * responses are made knowing them.
+       */
+      readonly type: 'triggerModesChosen';
+      readonly sourceInstanceId: InstanceId;
+      readonly controller: PlayerId;
+      readonly label: string;
+      readonly modeIds: readonly string[];
+      readonly modeLabels: readonly string[];
+    }
+  | {
+      /**
        * A triggered ability was removed from the stack WITHOUT resolving,
        * because its printed intervening "if" had stopped being true by the time
        * it would have resolved (CR 603.4's second check).

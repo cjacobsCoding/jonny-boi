@@ -146,6 +146,7 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
   counterAdded: { instanceId: 'id', kind: 'none', amount: 'none' },
   chosenAsEnters: { instanceId: 'id', name: 'none', subject: 'none', value: 'none', described: 'none' },
   triggerPutOnStack: { sourceInstanceId: 'id', controller: 'none', label: 'none' },
+  triggerModesChosen: { sourceInstanceId: 'id', controller: 'none', label: 'none', modeIds: 'none', modeLabels: 'none' },
   triggerFizzled: { sourceInstanceId: 'id', controller: 'none', label: 'none', reason: 'none' },
   triggerTargetsChosen: { sourceInstanceId: 'id', controller: 'none', label: 'none', targets: 'idList' },
   modesChosen: { player: 'none', instanceId: 'id', name: 'none', modes: 'none' },

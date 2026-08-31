@@ -1003,6 +1003,16 @@ export function compileCard(card: CompilableCard): CompileResult {
       // stack now), so what this has to work out is what may be aimed at.
       const clauses = [normalizeClause(text)];
       const whole = applyRules(EFFECT_RULES, clauses[0]!, ctx);
+      // A "Choose one —" body IS a ModalSpec, not an effect list: hand it up so
+      // the trigger assembly can put it on the ability (CR 603.3c). V1 accepts
+      // only TARGET-FREE modes — a mode needing an aim of its own would need
+      // per-mode targeting on the trigger stack object, which does not exist
+      // yet, and offering the card without it would change what it can do.
+      if (whole?.contribution.modal !== undefined) {
+        const spec = whole.contribution.modal;
+        if (spec.modes.some((mode) => mode.targets !== undefined)) return null;
+        return { effects: [], modal: spec };
+      }
       const matched = whole ? [whole] : null;
       const parts =
         matched ??

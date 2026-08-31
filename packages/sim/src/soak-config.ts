@@ -174,6 +174,7 @@ export type SoakMechanicId =
   | 'attachment'
   | 'token'
   | 'triggered-ability'
+  | 'modal-trigger'
   | 'trigger-targets'
   | 'control-change'
   | 'damage-prevention'
@@ -443,6 +444,7 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
   { id: 'attachment', label: 'attachments — an Aura or Equipment attached', witnessKind: 'event', printedBy: (c) => (c as { attachment?: unknown }).attachment !== undefined },
   { id: 'token', label: 'tokens — a token created', witnessKind: 'event', printedBy: (_c, t) => t.includes('createToken') || t.includes('makeToken') },
   { id: 'triggered-ability', label: 'triggered abilities — one put on the stack', witnessKind: 'event', printedBy: (c) => ((c as { triggers?: readonly unknown[] }).triggers ?? []).length > 0 },
+  { id: 'modal-trigger', label: 'modal triggers — a "Choose one —" body answered on the stack', witnessKind: 'event', printedBy: (c) => ((c as { triggers?: readonly { modal?: unknown }[] }).triggers ?? []).some((t) => t.modal !== undefined) },
   {
     id: 'trigger-targets',
     label: 'trigger targets — a trigger aimed as it went on the stack',
@@ -784,6 +786,9 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   // which is the cheap end-to-end proof that the cease-to-exist rule ran.
   tokenCeasedToExist: 'token',
   triggerPutOnStack: 'triggered-ability',
+  // A modal trigger's mode answer — its own mechanic, so soak proves a modal
+  // TRIGGER actually got chosen in anger, not merely pushed.
+  triggerModesChosen: 'modal-trigger',
   /*
    * THE DELAYED-ABILITY PAIR (CR 603.7), and the split between them is the whole
    * point. `delayedTriggerCreated` says the ability EXISTS — which a resolution

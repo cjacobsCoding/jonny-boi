@@ -371,6 +371,8 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
    */
   chosenAsEnters: 'public',
   triggerPutOnStack: 'public',
+  // Chosen modes are announced on the stack — everyone responds knowing them.
+  triggerModesChosen: 'public',
   /*
    * A trigger removed from the stack because its intervening "if" lapsed. Public
    * for the same reason the push is: everyone watched the ability go on the

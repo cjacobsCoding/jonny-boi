@@ -362,4 +362,11 @@ export interface TriggerBodyResult {
    * `targetsExcludeSelf` is, because the ability is what gets aimed.
    */
   readonly targetCount?: { readonly min: number; readonly max: number };
+  /**
+   * A "Choose one —" TRIGGER body (Felidar Retreat): the whole body is a
+   * ModalSpec and `effects` is empty — the engine asks as the ability goes on
+   * the stack (CR 603.3c) and the chosen modes' effects replace it. Only
+   * emitted with every mode TARGET-FREE; a targeted mode refuses the body.
+   */
+  readonly modal?: import('@jonny-boi/core').ModalSpec;
 }

@@ -284,6 +284,8 @@ const MODAL_HEADER_COUNTS: Readonly<Record<string, { min: number; max: number }>
   // every mode on the menu, expressed as an unbounded ceiling the build site
   // already clamps to `modes.length`.
   'one or more': { min: 1, max: Number.MAX_SAFE_INTEGER },
+  // "Choose any number —" (Rankle, Master of Pranks): zero is a legal answer.
+  'any number': { min: 0, max: Number.MAX_SAFE_INTEGER },
   'up to one': { min: 0, max: 1 },
   'up to two': { min: 0, max: 2 },
   'up to three': { min: 0, max: 3 },
@@ -1917,6 +1919,24 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const second = ctx.compileEffectClause(match[2] ?? '', { targetFree: true });
       if (second === null || second.length === 0) return null;
       return { effects: [...first, ...second] };
+    },
+  },
+  {
+    id: 'put-counters-on-each-then-grant',
+    description:
+      '"Put a +1/+1 counter on each creature you control. Those creatures gain KEYWORDS until end of turn." (Felidar Retreat)',
+    // ONE rule for the sentence pair because "those creatures" is the previous
+    // sentence's set — and both sets are read off the board at the SAME
+    // resolution moment, so "each creature you control" twice IS the printed
+    // meaning, exactly (nothing can enter or leave between the two).
+    pattern: /^put a (\+1\/\+1) counter on each creature you control\. those creatures gain (.+) until end of turn$/,
+    build(match) {
+      const keywords = parseKeywordList(match[2] ?? '');
+      if (keywords === null) return null;
+      return effects(
+        { primitive: 'addCounters', params: { amount: 1, each: true, scope: 'you' } },
+        { primitive: 'grantKeywordToYoursUntilEndOfTurn', params: { keywords, anyOfTypes: ['creature'] } },
+      );
     },
   },
   {
@@ -3588,7 +3608,9 @@ function triggerFrom(
   label: string,
 ): ClauseContribution | null {
   const body = ctx.compileTriggerBody(bodyText);
-  if (body === null || body.effects.length === 0) return null;
+  // A MODAL body has empty effects on purpose — the chosen modes' effects
+  // replace them as the ability goes on the stack.
+  if (body === null || (body.effects.length === 0 && body.modal === undefined)) return null;
   return {
     triggers: [
       {
@@ -3598,6 +3620,7 @@ function triggerFrom(
         ...(body.targets ? { targets: body.targets } : {}),
         ...(body.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
         ...(body.targetCount ? { targetCount: body.targetCount } : {}),
+        ...(body.modal ? { modal: body.modal } : {}),
       },
     ],
   };
@@ -3684,6 +3707,8 @@ function optionalTriggerFrom(
         ...(compiled.targets ? { targets: compiled.targets } : {}),
             ...(compiled.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
         ...(compiled.targetCount ? { targetCount: compiled.targetCount } : {}),
+            ...(compiled.modal ? { modal: compiled.modal } : {}),
+            ...(compiled.modal ? { modal: compiled.modal } : {}),
       },
     ],
   };
@@ -4003,6 +4028,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
             ...(compiled.targets ? { targets: compiled.targets } : {}),
             ...(compiled.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
         ...(compiled.targetCount ? { targetCount: compiled.targetCount } : {}),
+            ...(compiled.modal ? { modal: compiled.modal } : {}),
+            ...(compiled.modal ? { modal: compiled.modal } : {}),
           },
         ],
       };
@@ -4070,7 +4097,10 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       const optional = body.startsWith('you may ');
       const inner = optional ? body.slice('you may '.length) : body;
       const compiled = ctx.compileTriggerBody(inner);
-      if (compiled === null || compiled.effects.length === 0) return null;
+      // A MODAL body has empty effects on purpose (the chosen modes replace
+      // them); it is never optional-wrapped here.
+      if (compiled === null || (compiled.effects.length === 0 && compiled.modal === undefined)) return null;
+      if (compiled.modal !== undefined && optional) return null;
       const effectRefs = optional ? mayEffectsFrom(inner, compiled.effects) : compiled.effects;
       if (effectRefs === null || effectRefs.length === 0) return null;
       return {
@@ -4086,6 +4116,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
             ...(compiled.targets ? { targets: compiled.targets } : {}),
             ...(compiled.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
         ...(compiled.targetCount ? { targetCount: compiled.targetCount } : {}),
+            ...(compiled.modal ? { modal: compiled.modal } : {}),
+            ...(compiled.modal ? { modal: compiled.modal } : {}),
           },
         ],
       };
@@ -4147,7 +4179,10 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       const optional = body.startsWith('you may ');
       const inner = optional ? body.slice('you may '.length) : body;
       const compiled = ctx.compileTriggerBody(inner);
-      if (compiled === null || compiled.effects.length === 0) return null;
+      // A MODAL body has empty effects on purpose (the chosen modes replace
+      // them); it is never optional-wrapped here.
+      if (compiled === null || (compiled.effects.length === 0 && compiled.modal === undefined)) return null;
+      if (compiled.modal !== undefined && optional) return null;
       const effectRefs = optional ? mayEffectsFrom(inner, compiled.effects) : compiled.effects;
       if (effectRefs === null) return null;
       return {
@@ -4164,6 +4199,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
             ...(compiled.targets ? { targets: compiled.targets } : {}),
             ...(compiled.targetsExcludeSelf ? { targetsExcludeSelf: true } : {}),
         ...(compiled.targetCount ? { targetCount: compiled.targetCount } : {}),
+            ...(compiled.modal ? { modal: compiled.modal } : {}),
+            ...(compiled.modal ? { modal: compiled.modal } : {}),
           },
         ],
       };

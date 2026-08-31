@@ -206,7 +206,11 @@ export function splitAbilities(oracleText: string): string[] {
  * optional here rather than required.
  */
 const MODAL_HEADER =
-  /^choose\s+(?:one or both|one or more|up to \w+|one|two|three|four|five)\s*\.?\s*(?:you may choose the same mode more than once\s*\.?\s*)?[—-]?\s*$/i;
+  /^choose\s+(?:one or both|one or more|any number|up to \w+|one|two|three|four|five)\s*\.?\s*(?:you may choose the same mode more than once\s*\.?\s*)?[—-]?\s*$/i;
+
+/** The same header printed at the END of a trigger line. */
+const MODAL_HEADER_AT_END =
+  /,\s*choose\s+(?:one or both|one or more|any number|up to \w+|one|two|three|four|five)\s*\.?\s*[—-]\s*$/i;
 
 /** A printed mode line, which Oracle text bullets. */
 const MODE_BULLET = /^[•·]\s*/;
@@ -228,7 +232,10 @@ function joinModalBlocks(lines: readonly string[]): string[] {
   const out: string[] = [];
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i]!;
-    if (!MODAL_HEADER.test(line)) {
+    // A modal TRIGGER prints its header at the END of the trigger line
+    // ("Whenever a land you control enters, choose one —") — same fold, so
+    // one rule can see the trigger, its header and its modes together.
+    if (!MODAL_HEADER.test(line) && !MODAL_HEADER_AT_END.test(line)) {
       out.push(line);
       continue;
     }

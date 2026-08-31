@@ -283,6 +283,14 @@ export interface TriggeredAbility {
    * resolution — the engine simply asks for a range instead of exactly one.
    */
   readonly targetCount?: { readonly min: number; readonly max: number };
+  /**
+   * "Choose one —" printed as a TRIGGER body (Felidar Retreat, Rankle). Modes
+   * are chosen as the ability goes on the stack (CR 603.3c), the same moment
+   * targets are; the runtime carries the spec onto the stack object as
+   * `awaitingModes` and the engine asks before priority resumes. When set,
+   * `effects` is empty and the chosen modes' effects replace it.
+   */
+  readonly modal?: import('./card.js').ModalSpec;
 }
 
 /**
