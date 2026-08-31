@@ -8,6 +8,7 @@
  */
 import type { NormalizedCard } from '@jonny-boi/data-tools';
 import { getCard, isBasicLand, primaryType } from './cards.js';
+import { isEntryPrinting, type EntryPrinting } from './printings/entryPrinting.js';
 import { unsupportedReason } from './decklist/importedCards.js';
 import {
   MAX_COPIES_PER_CARD,
@@ -22,6 +23,16 @@ export interface DeckEntry {
   cardId: string;
   /** Number of copies in the deck. */
   count: number;
+  /**
+   * A non-default Scryfall PRINTING chosen for this slot — art only, never
+   * identity. Absent means "the pool's printing", which is what every deck saved
+   * before this field existed says, so old decks need no migration.
+   *
+   * It is art-only on purpose: `cardId` still decides what the card IS, so the
+   * sim, the engine and the 4-of rule are all untouched by a printing choice.
+   * See `printings/entryPrinting.ts` for why the image URL lives here.
+   */
+  printing?: EntryPrinting;
 }
 
 /** A saved deck. `id` is a local UUID; `cardId`s reference the card pool. */
@@ -33,10 +44,17 @@ export interface Deck {
   updatedAt: string;
 }
 
-/** The portable export/import shape (sim-compatible — cardId = Scryfall UUID). */
+/**
+ * The portable export/import shape (sim-compatible — cardId = Scryfall UUID).
+ *
+ * `printing` rides along OPTIONALLY: the sim reads `cardId` and `count` and
+ * ignores the rest, so carrying it keeps the contract stable while making an
+ * export/import round-trip lossless. Dropping it would quietly throw away every
+ * art choice in the deck the first time someone copied the JSON.
+ */
 export interface DeckExport {
   name: string;
-  cards: Array<{ cardId: string; count: number }>;
+  cards: Array<{ cardId: string; count: number; printing?: EntryPrinting }>;
 }
 
 /** Generate a stable-enough local id for a new deck. */
@@ -109,6 +127,8 @@ export function removeCard(deck: Deck, cardId: string): Deck {
 export interface ResolvedEntry {
   card: NormalizedCard;
   count: number;
+  /** The slot's chosen printing, when it is not on the pool's default art. */
+  printing?: EntryPrinting;
 }
 
 /** Resolve a deck's entries to card records, dropping ids not in the pool. */
@@ -116,7 +136,10 @@ export function resolveEntries(deck: Deck): ResolvedEntry[] {
   const resolved: ResolvedEntry[] = [];
   for (const entry of deck.cards) {
     const card = getCard(entry.cardId);
-    if (card) resolved.push({ card, count: entry.count });
+    if (!card) continue;
+    const item: ResolvedEntry = { card, count: entry.count };
+    if (entry.printing) item.printing = entry.printing;
+    resolved.push(item);
   }
   return resolved;
 }
@@ -288,7 +311,16 @@ export function validateDeck(deck: Deck): DeckIssue[] {
 export function toExport(deck: Deck): DeckExport {
   return {
     name: deck.name,
-    cards: deck.cards.map((entry) => ({ cardId: entry.cardId, count: entry.count })),
+    cards: deck.cards.map((entry) => {
+      const exported: DeckExport['cards'][number] = {
+        cardId: entry.cardId,
+        count: entry.count,
+      };
+      // Only present when actually chosen, so a deck with no custom art exports
+      // byte-for-byte the JSON it always did.
+      if (entry.printing) exported.printing = entry.printing;
+      return exported;
+    }),
   };
 }
 
@@ -313,7 +345,11 @@ export function fromExport(data: unknown): Deck {
     const cardId = entry.cardId;
     const count = entry.count;
     if (typeof cardId === 'string' && typeof count === 'number' && count > 0) {
-      cards.push({ cardId, count: Math.floor(count) });
+      const parsed: DeckEntry = { cardId, count: Math.floor(count) };
+      // A malformed printing is dropped, not rejected: the deck itself is fine,
+      // and losing an art choice must never cost you the import (rule 6).
+      if (isEntryPrinting(entry.printing)) parsed.printing = entry.printing;
+      cards.push(parsed);
     }
   }
   return { id: newDeckId(), name, cards, updatedAt: new Date().toISOString() };

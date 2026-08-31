@@ -6,6 +6,11 @@ import {
   removeCard as removeCardFromDeck,
   createDeck,
 } from './deck.js';
+import {
+  withEntryPrinting,
+  withoutEntryPrinting,
+  type EntryPrinting,
+} from './printings/entryPrinting.js';
 import { DEFAULT_DECK_NAME } from './config.js';
 import {
   loadDecks,
@@ -24,6 +29,12 @@ export interface DecksApi {
   renameActive: (name: string) => void;
   addCard: (card: NormalizedCard) => void;
   removeCard: (cardId: string) => void;
+  /**
+   * Choose the Scryfall printing this slot of the active deck uses, or pass
+   * `null` to go back to the pool's default art. Art only — the card's identity
+   * is its `cardId` and this never touches it.
+   */
+  setEntryPrinting: (cardId: string, printing: EntryPrinting | null) => void;
   /** Replace the active deck wholesale (used by import). */
   replaceActive: (deck: Deck) => void;
   /** Add an externally-created deck and make it active (used by import). */
@@ -117,6 +128,16 @@ export function useDecks(): DecksApi {
     [updateActive],
   );
 
+  const setEntryPrinting = useCallback(
+    (cardId: string, printing: EntryPrinting | null) =>
+      updateActive((deck) =>
+        printing === null
+          ? withoutEntryPrinting(deck, cardId)
+          : withEntryPrinting(deck, cardId, printing),
+      ),
+    [updateActive],
+  );
+
   const replaceActive = useCallback(
     (deck: Deck) => updateActive((current) => ({ ...deck, id: current.id })),
     [updateActive],
@@ -140,6 +161,7 @@ export function useDecks(): DecksApi {
     renameActive,
     addCard,
     removeCard,
+    setEntryPrinting,
     replaceActive,
     importDeck,
     updateDeck,
