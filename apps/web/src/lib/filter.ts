@@ -47,10 +47,55 @@ function matchesColors(card: NormalizedCard, colors: ReadonlySet<string>): boole
   return false;
 }
 
-/** True when the card satisfies the type filter (its type line includes any). */
+/**
+ * The token `parseTypeLine` leaves behind where a combined type line joins its
+ * two halves ("Instant // Sorcery" parses to `['Instant', '//', 'Sorcery']`). It
+ * is a separator, not a card type, so it must never be matchable.
+ */
+const FACE_SEPARATOR_TOKEN = '//';
+
+/**
+ * Every card type this card can be filtered by — its own type line PLUS each
+ * face's, minus the `//` separator token.
+ *
+ * A one-face card's answer is just its own types. A multi-face card's is the
+ * union, and that union is the whole point: `parseTypeLine` reads a *combined*
+ * type line, and only the FIRST face's types survive it intact. Whether a back
+ * face's type is visible at all comes down to whether the front face happens to
+ * have a subtype dash —
+ *
+ *   "Sorcery // Land"              → types ['Sorcery', '//', 'Land']  ✔ Land
+ *   "Creature — Elephant // Land"  → types ['Creature']               ✘ Land
+ *
+ * — so `Bala Ged Recovery` answered the Land chip and `Kazandu Mammoth`, the
+ * same kind of card, did not. Twenty of the pool's fifty multi-face cards had a
+ * face no chip could reach, and the three `Battle — Siege // …` Invasions
+ * matched no chip at all. Reading the faces makes the answer depend on the card
+ * instead of on its punctuation.
+ *
+ * Exported so the pool's own coverage is directly testable, not inferred from
+ * the browser's result count.
+ */
+export function filterableTypes(card: NormalizedCard): ReadonlySet<string> {
+  const types = new Set<string>();
+  const collect = (list: readonly string[] | undefined): void => {
+    for (const type of list ?? []) {
+      if (type !== FACE_SEPARATOR_TOKEN) types.add(type);
+    }
+  };
+  collect(card.typeLine.types);
+  for (const face of card.faces ?? []) collect(face.typeLine?.types);
+  return types;
+}
+
+/** True when the card satisfies the type filter (any face carries any type). */
 function matchesTypes(card: NormalizedCard, types: ReadonlySet<string>): boolean {
   if (types.size === 0) return true;
-  return card.typeLine.types.some((type) => types.has(type));
+  const own = filterableTypes(card);
+  for (const type of types) {
+    if (own.has(type)) return true;
+  }
+  return false;
 }
 
 /** Comparison helper for the active sort order. */
