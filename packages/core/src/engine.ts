@@ -2311,13 +2311,36 @@ function askTriggerModes(state: GameState, emit: (e: GameEvent) => void): boolea
     );
     if (!trigger) return false;
     const spec = trigger.awaitingModes as ModalSpec;
-    const max = Math.min(spec.max, spec.allowRepeats ? spec.max : spec.modes.length);
+    // A mode that TARGETS is choosable only while a legal target exists
+    // (CR 603.3d) — the menu never offers an aim the target pass would then
+    // have nothing for. Target-free modes are always choosable.
+    const triggerSourceDef = (findOnBattlefield(state, trigger.sourceInstanceId) ??
+      findInstanceAnywhere(state, trigger.sourceInstanceId))?.def;
+    const choosable = spec.modes.filter(
+      (mode) =>
+        mode.targets === undefined ||
+        legalTargetsFor(state, mode.targets, trigger.controller, triggerSourceDef).length > 0,
+    );
+    if (choosable.length === 0) {
+      // Nothing on the menu at all: the ability leaves the stack doing nothing.
+      const index = state.stack.indexOf(trigger);
+      if (index >= 0) state.stack.splice(index, 1);
+      emit({
+        type: 'triggerRemovedFromStack',
+        sourceInstanceId: trigger.sourceInstanceId,
+        controller: trigger.controller,
+        label: trigger.label,
+        reason: 'no choosable mode',
+      });
+      continue;
+    }
+    const max = Math.min(spec.max, spec.allowRepeats ? spec.max : choosable.length);
     const choice = normalizeChoiceRequest(
       {
         kind: 'chooseModes',
         chooser: trigger.controller,
         prompt: spec.min === max ? `Choose ${max} — ${trigger.label}` : `Choose up to ${max} — ${trigger.label}`,
-        modes: spec.modes.map((mode) => ({ id: mode.id, label: mode.label })),
+        modes: choosable.map((mode) => ({ id: mode.id, label: mode.label })),
         min: Math.min(spec.min, max),
         max,
         valence: 'gain',
@@ -2332,7 +2355,7 @@ function askTriggerModes(state: GameState, emit: (e: GameEvent) => void): boolea
     if (!choice) {
       // Unrepresentable: take the printed floor in printed order — the same
       // safe default the cast-time mode question uses.
-      recordTriggerModes(state, spec.modes.slice(0, Math.min(spec.min, max)).map((mode) => mode.id), emit);
+      recordTriggerModes(state, choosable.slice(0, Math.min(spec.min, max)).map((mode) => mode.id), emit);
       continue;
     }
     if (isTrivialChoice(choice) || state.gameOver || state.players[trigger.controller].hasLost) {
@@ -2386,6 +2409,15 @@ function recordTriggerModes(state: GameState, modeIds: readonly string[], emit: 
   }
   (trigger as { effects: readonly EffectRef[] }).effects = effects;
   delete trigger.awaitingModes;
+  // A chosen TARGETED mode (choose-one only — the compiler enforces it) hands
+  // its aim to the ordinary target pass: the trigger's single target list is
+  // exactly one pick's aim, and target-free siblings' effects ignore it.
+  const targetedMode = modeIds
+    .map((id) => spec.modes.find((candidate) => candidate.id === id))
+    .find((mode) => mode?.targets !== undefined);
+  if (targetedMode?.targets !== undefined) {
+    (trigger as { awaitingTargets?: TargetRestriction }).awaitingTargets = targetedMode.targets;
+  }
   emit({
     type: 'triggerModesChosen',
     sourceInstanceId: trigger.sourceInstanceId,

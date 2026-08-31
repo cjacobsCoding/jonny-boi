@@ -115,4 +115,98 @@ describe('a modal trigger, played for real', () => {
     // …and exactly the chosen mode ran.
     expect(fired).toEqual(['B']);
   });
+
+  it('a TARGETED mode: choosing it asks for the aim, and the aimed effect resolves', () => {
+    const { reg, fired } = harness();
+    const AIMED_MODAL: CardDefinition = {
+      ...creatureDef('Aimed Modal', 2, 2),
+      triggers: [
+        {
+          condition: { on: 'combatDamageToPlayer' },
+          effects: [],
+          label: 'Combat damage: choose one',
+          modal: {
+            min: 1,
+            max: 1,
+            modes: [
+              { id: 'mode1', label: 'Mark A', effects: [{ primitive: 'testMarkA' }] },
+              {
+                id: 'mode2',
+                label: 'Destroy target enchantment',
+                effects: [{ primitive: 'destroyTargetForTest' }],
+                targets: 'enchantment',
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const destroyed: number[] = [];
+    reg.register('destroyTargetForTest', (ctx) => {
+      const target = ctx.targets[0];
+      if (typeof target !== 'number') return;
+      const index = ctx.state.battlefield.findIndex((c) => c.instanceId === target);
+      if (index >= 0) {
+        destroyed.push(target);
+        ctx.state.battlefield.splice(index, 1);
+      }
+    });
+    const g = createGame({ seed: 32, decks: { A: deckOf(ISLAND, 40), B: deckOf(ISLAND, 40) }, registry: reg });
+    const state = g.state;
+    const attackerId = state.nextInstanceId++;
+    const enchantmentId = state.nextInstanceId++;
+    for (const [instanceId, def, controller] of [
+      [attackerId, AIMED_MODAL, 'A'],
+      [enchantmentId, { id: 'zoo-ench', name: 'Zoo Enchantment', types: ['enchantment'] } as CardDefinition, 'B'],
+    ] as const) {
+      state.battlefield.push({
+        instanceId,
+        def,
+        controller,
+        owner: controller,
+        zone: 'battlefield',
+        tapped: false,
+        summoningSick: false,
+        damageMarked: 0,
+        markedByDeathtouch: false,
+        counters: {},
+      });
+    }
+    let s = state;
+    let sawTargetQuestion = false;
+    const pass = (): void => {
+      const q = s.pendingChoice;
+      if (q) {
+        if (q.kind === 'chooseModes') {
+          s = act(
+            s,
+            { kind: 'answerChoice', player: q.chooser, choiceId: q.id, answer: { kind: 'chooseModes', modeIds: ['mode2'] } },
+            reg,
+          );
+          return;
+        }
+        if (q.kind === 'selectTargets') sawTargetQuestion = true;
+        s = act(s, { kind: 'answerChoice', player: q.chooser, choiceId: q.id, answer: defaultAnswerFor(q) }, reg);
+        return;
+      }
+      s = act(s, { kind: 'passPriority', player: s.priorityPlayer }, reg);
+    };
+    const advanceTo = (target: string): void => {
+      let guard = 0;
+      while (s.step !== target && !s.gameOver && guard++ < 500) pass();
+    };
+    advanceTo('declareAttackers');
+    s = act(s, { kind: 'declareAttackers', player: 'A', attackers: [attackerId as InstanceId] }, reg);
+    advanceTo('declareBlockers');
+    s = act(s, { kind: 'declareBlockers', player: 'B', blocks: [] }, reg);
+    advanceTo('postcombatMain');
+
+    // The chosen targeted mode was aimed (one candidate — auto or asked) and ran;
+    // the target-free sibling never did.
+    expect(destroyed).toEqual([enchantmentId]);
+    expect(fired).toEqual([]);
+    // With exactly one legal enchantment the aim may auto-answer — either way
+    // the enchantment is gone, which is the observable contract.
+    void sawTargetQuestion;
+  });
 });

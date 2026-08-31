@@ -70,7 +70,7 @@ describe('compiling modal triggers', () => {
     expect(result.definition.triggers?.[0]?.modal?.modes).toHaveLength(2);
   });
 
-  it('still REFUSES a modal trigger with a TARGETED mode (V1 boundary)', () => {
+  it('compiles a CHOOSE-ONE modal trigger with a targeted mode (Glissa/Aether Channeler shape)', () => {
     const result = compileCard(
       makeCard({
         name: 'Aimed Modal',
@@ -79,6 +79,21 @@ describe('compiling modal triggers', () => {
         toughness: '2',
         oracleText:
           'Whenever this creature deals combat damage to a player, choose one —\n• Draw a card.\n• Destroy target enchantment.',
+      }),
+    );
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers?.[0]?.modal?.modes[1]?.targets).toBe('enchantment');
+  });
+
+  it('still REFUSES a targeted mode on a wider-than-one spec (per-pick aims do not exist)', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Wide Aimed Modal',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Human'] },
+        power: '2',
+        toughness: '2',
+        oracleText:
+          'Whenever this creature deals combat damage to a player, choose any number —\n• Draw a card.\n• Destroy target enchantment.',
       }),
     );
     expect(result.status).toBe('incomplete');
