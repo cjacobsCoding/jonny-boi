@@ -187,8 +187,19 @@ throughput (games/sec) from regressing.
 | (fix/duplicate-printings) | DESKTOP-90PJPM4 (integrator) | apps/web ONLY (lib/cards.ts name-dedupe + `getCardByName`, lib/cards/addSingleCard.ts by-name known check, addSingleCard.test.ts fixture rename + new case, NEW lib/duplicate-printings.test.ts), DESIGN §3.55, COORDINATION | ✅ committed direct to main |
 | feat/pilot-pricing | worker | packages/ai ONLY (`effect-value.ts` — `LEDGERED_EFFECT_VALUE` prices for 14 of the §3.49 ledger's 20 rows + the one-read gate + `LEDGER_PRICING_OFF_WEIGHTS`; `weights.ts` +7 named weights; `choices.ts` `answerSelectTargets` up-to-N clamp; `index.ts` one export-from line; `effect-value-parity.test.ts` ledger 20→6, `attachToTarget` reason rewritten to the measured one; NEW `ledger-pricing.test.ts` 32 tests), DESIGN §3.52, COORDINATION. **No core, cards, sim or web change.** ⚠️ Seed-99 baselines BYTE-IDENTICAL (257/615/377/552 per 800) and the 9-deck pilot-ab is byte-identical too (3600/3600 slots split — the meta holds ONE card that touches these prices); the strength case is the targeted `runPilotAb` STRONGER p≈0 in §3.52. | ✅ MERGED + DEPLOYED |
 
+| feat/play-clarity | worker | apps/web ONLY — components/play/** (ChoicePrompt, AbilityPrompts, SeatPanel, BoardPermanentTile, PlayBoard + NEW AnimationLayer.tsx + CombatLines.tsx), components/online/OnlineBoard.tsx, lib/play/** NEW option-labels/jail-view/animations/combat-lines/action-hints (+tests) + play-config.ts anim knobs + view-model (NOT session.ts / setup.ts — the game-persistence agent owns those two), styles.css (play-clarity section, appended), DESIGN §3.57, COORDINATION | 🚧 IN FLIGHT |
+
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-30 worker: claiming `feat/play-clarity` (§3.57) — the Solo-session clarity reports:
+  (1) owner + zone labels on EVERY picker row (ChoicePrompt cards/targets, ability target prompts,
+  cast target prompts; hotseat AND online — shared components), (2) jailed cards tucked under their
+  jailer on the battlefield tile (`exiledUntilLeavesBy`, both boards), (3) zone-change animations
+  (draw/mill/discard/death) off the session event log + SVG blocker lines during combat,
+  (4) the "attack with none" hint when the seat has no attackers. apps/web only; deliberately NOT
+  touching lib/play/session.ts or setup.ts (concurrent §3.58 agent owns them) — animations read
+  `session.events` as already exposed.
 
 - 2026-08-27 worker: `perf/sim-throughput` 🚧 PUSHED, not merged — DESIGN §3.53. **The sim runs
   faster on both axes, results byte-identical.** (1) `--workers` worker_threads host for
