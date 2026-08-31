@@ -703,6 +703,27 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
   /** A body on the board, priced like casting one. */
   makeToken: (params, ctx) => tokenValue(params, ctx),
 
+  /**
+   * PROLIFERATE — worth what the board offers it: one more counter on each of
+   * my countered permanents (the pilot never has to pick the opponent's), plus
+   * deepening any -1/-1s already on theirs. Priced per permanent at the same
+   * per-stat counter weight a placed +1/+1 uses; a board with no counters at
+   * all prices zero, which is exactly what the primitive does there.
+   */
+  proliferate: (_params, ctx) => {
+    let worth = 0;
+    for (const permanent of ctx.state.battlefield) {
+      const counterKinds = Object.entries(permanent.counters).filter(([, count]) => count > 0);
+      if (counterKinds.length === 0) continue;
+      if (permanent.controller === ctx.player) {
+        worth += ctx.weights.modeCounterPerStatValue * counterKinds.length;
+      } else if (permanent.counters['-1/-1'] !== undefined && permanent.counters['-1/-1'] > 0) {
+        worth += ctx.weights.modeCounterPerStatValue;
+      }
+    }
+    return worth;
+  },
+
   // "You win the game" IS the lethal outcome, priced at lethal's own weight —
   // and its mirror is the one price that must always be refused.
   winTheGame: (_params, ctx) => ctx.weights.lethalBurnScore,

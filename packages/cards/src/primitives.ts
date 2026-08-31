@@ -1145,6 +1145,58 @@ const COUNTER_SCOPE_DEFAULT = 'you';
  * group form `each` + `scope` + `filter` ("put a +1/+1 counter on each creature
  * you control"), which counts every matching creature instead of one target.
  */
+/**
+ * `proliferate` — CR 701.27: "choose any number of permanents and/or players
+ * with a counter on them, then give each another counter of each kind already
+ * there."
+ *
+ * PERMANENTS ONLY, and that is exact rather than approximate in THIS engine:
+ * `GameState` gives players no counter record at all, and every card that
+ * would put one on a player (poison, energy, experience) reports `incomplete`
+ * — so "each player with a counter" is provably empty in every game the
+ * engine can produce. If a player-counter system ever lands, this primitive
+ * must grow the player half in the same change.
+ *
+ * Each added counter goes through {@link addCountersOfKind} — the one CR 614
+ * counter site — so a Hardened Scales scales a proliferated +1/+1 exactly as
+ * it scales a placed one.
+ */
+export const proliferate: EffectPrimitive = (ctx) => {
+  const candidates = ctx.state.battlefield.filter((permanent) =>
+    Object.values(permanent.counters).some((count) => count > 0),
+  );
+  if (candidates.length === 0) return;
+  const chosen = ctx.chooseCards({
+    chooser: ctx.controller,
+    prompt: 'Proliferate: choose any number of permanents with counters',
+    candidates: candidates.map((permanent) => ({
+      instanceId: permanent.instanceId,
+      cardId: permanent.def.id,
+      name: permanent.def.name,
+      zone: 'battlefield' as const,
+      controller: permanent.controller,
+    })),
+    min: 0,
+    max: candidates.length,
+    // "Any number" cuts both ways — your +1/+1s grow, their -1/-1s deepen —
+    // and the pilot's card scoring is what sorts good picks from bad; the
+    // valence only steers a pilot with no opinion.
+    valence: 'gain',
+    fromZone: 'battlefield',
+  });
+  if (!chosen) return; // parked
+  for (const id of chosen) {
+    const permanent = ctx.state.battlefield.find((c) => c.instanceId === id);
+    if (!permanent) continue;
+    // Snapshot the kinds BEFORE adding: the counter this step adds must not
+    // count itself (CR 701.27a reads the state as proliferate resolves).
+    const kinds = Object.entries(permanent.counters)
+      .filter(([, count]) => count > 0)
+      .map(([kind]) => kind);
+    for (const kind of kinds) addCountersOfKind(ctx, permanent, kind, 1);
+  }
+};
+
 export const addCounters: EffectPrimitive = (ctx) => {
   const amount = intParam(ctx, 'amount', 0);
   if (amount === 0) return;
@@ -1231,6 +1283,17 @@ function putCountersOn(ctx: EffectContext, target: CardInstance, amount: number)
   // that the counters now genuinely EXIST as the card says they do, so state can
   // be inspected ("does it have a -1/-1 counter?") and the two kinds annihilate.
   const kind = amount < 0 ? MINUS_ONE_COUNTER : PLUS_ONE_COUNTER;
+  addCountersOfKind(ctx, target, kind, Math.abs(amount));
+}
+
+/**
+ * Put `amount` counters of an ARBITRARY kind on a permanent, through the one
+ * CR 614 counter site (`replaceCounters`) and the one `counterAdded` event.
+ * Split out of {@link putCountersOn} so proliferate can add a charge, night or
+ * loyalty counter through exactly the funnel a +1/+1 uses — a second write
+ * site is how a Hardened Scales stops applying to one of them.
+ */
+function addCountersOfKind(ctx: EffectContext, target: CardInstance, kind: string, amount: number): void {
   // THE REPLACEMENT LAYER (CR 614) — "that many PLUS ONE are put on it instead"
   // (Hardened Scales), "TWICE that many" (Corpsejack Menace). This is the ONE
   // counter site in the engine, which is what makes those cards apply to a spell,
@@ -1243,7 +1306,7 @@ function putCountersOn(ctx: EffectContext, target: CardInstance, amount: number)
     ctx.source,
     target,
     kind,
-    Math.abs(amount),
+    amount,
     ctx.emit,
   );
   if (magnitude <= 0) return;
@@ -1711,6 +1774,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   dealDamageToEach,
   preventDamage,
   addCounters,
+  proliferate,
   attachToTarget,
   grantFlashback,
   ...CHOICE_PRIMITIVES,

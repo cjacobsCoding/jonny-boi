@@ -312,6 +312,8 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
    */
   'preventDamage',
   'addCounters',
+  // Reads and writes battlefield counter records only — no library, no hand.
+  'proliferate',
   'gainLife',
   'loseLife',
   'pumpUntilEndOfTurn',
