@@ -5631,6 +5631,57 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
      * so the filter reads them without the layer-dependency loop that keeps
      * every other non-printed characteristic out of `StaticAffects`.
      */
+    /**
+     * A static whose reach depends on EFFECTIVE P/T — "Creatures you control
+     * with power or toughness 1 or less can't be blocked" (Tetsuko Umezawa),
+     * "Creatures you control with power 2 or less can't be blocked by
+     * creatures with power 3 or greater" (Delney, Streetwise Lookout).
+     *
+     * KEYWORD-GRANTING ONLY, and the restriction is load-bearing: core folds
+     * these against SETTLED P/T after every P/T layer (see
+     * `StaticAffects.maxEffectivePower`), so an anthem correctly lifts a
+     * creature out of the selector — and a P/T delta here would need its own
+     * output as input.
+     */
+    id: 'static-effective-pt-evasion',
+    description:
+      `"Creatures you control with power[ or toughness] N or less can't be blocked[ by creatures with power M or greater]"`,
+    pattern: new RegExp(
+      `^creatures you control with power( or toughness)? ${COUNT_TOKEN} or less can'?t be blocked` +
+        `(?: by creatures with power ${COUNT_TOKEN} or (?:greater|more))?$`,
+    ),
+    build(match, ctx) {
+      const isPermanent = ctx.card.typeLine.types.every((type) => !/^(instant|sorcery)$/i.test(type));
+      if (!isPermanent) return null;
+      const bound = parseCount(match[2]);
+      if (bound === null) return null;
+      const blockerBound = match[3] === undefined ? null : parseCount(match[3]);
+      if (match[3] !== undefined && blockerBound === null) return null;
+      // No blocker clause ⇒ plain unblockable. With one, the printed exclusion
+      // inverts exactly as `cant-be-blocked-by-power-or-toughness` inverts it:
+      // "by power M or greater" excluded ⇒ a legal blocker has at most M - 1.
+      const keywords =
+        blockerBound === null
+          ? { unblockable: true }
+          : { blockRestriction: { maxBlockerPower: blockerBound - 1 } };
+      return {
+        statics: [
+          {
+            affects: {
+              anyOfTypes: ['creature'],
+              controller: 'you',
+              ...(match[1] === undefined
+                ? { maxEffectivePower: bound }
+                : { maxEffectivePowerOrToughness: bound }),
+            },
+            keywords,
+            label: match[0],
+          },
+        ],
+      };
+    },
+  },
+  {
     id: 'static-counters-grant',
     description: `"Creatures you control with +1/+1 counters on them have KEYWORD / can't be blocked"`,
     pattern: new RegExp(

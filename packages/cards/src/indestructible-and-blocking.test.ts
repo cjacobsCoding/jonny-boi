@@ -170,17 +170,36 @@ describe('the compiler understands the blocking restrictions', () => {
   });
 
   it('STILL reports the restrictions whose SELECTOR this engine cannot express', () => {
-    // What is left after the solver, named rather than approximated: a static
-    // whose filter would have to read EFFECTIVE power (Tetsuko, Delney —
-    // `statics.ts` matches printed characteristics by design, to keep the
-    // continuous pass single-pass), and a comparison against ANOTHER permanent's
-    // power (Champion of Lambholt).
+    // What is left after the solver, named rather than approximated: a
+    // comparison against ANOTHER permanent's power (Champion of Lambholt).
+    //
+    // The EFFECTIVE-P/T selector left this list when core gained its settled-P/T
+    // static pass — Tetsuko and Delney compile now, and are asserted just below.
     for (const oracleText of [
-      "Creatures you control with power or toughness 1 or less can't be blocked.",
       "Creatures with power less than Champion's power can't block creatures you control.",
     ]) {
       const result = compileCard(record({ name: 'Champion', oracleText }));
       expect(result.status).not.toBe('complete');
+    }
+  });
+
+  it('COMPILES the effective-P/T selectors (Tetsuko, Delney) as keyword-granting statics', () => {
+    for (const [oracleText, expected] of [
+      [
+        "Creatures you control with power or toughness 1 or less can't be blocked.",
+        { maxEffectivePowerOrToughness: 1 },
+      ],
+      [
+        "Creatures you control with power 2 or less can't be blocked by creatures with power 3 or greater.",
+        { maxEffectivePower: 2 },
+      ],
+    ] as const) {
+      const result = compileCard(record({ name: 'Champion', oracleText }));
+      expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+      expect(result.definition.statics?.[0]?.affects).toMatchObject(expected);
+      // KEYWORD-granting only: a P/T delta here would need its own output.
+      expect(result.definition.statics?.[0]?.power).toBeUndefined();
+      expect(result.definition.statics?.[0]?.toughness).toBeUndefined();
     }
   });
 });

@@ -122,6 +122,24 @@ export interface StaticAffects extends CardFilter {
    * matches-nothing rule when nothing was named, as {@link ofChosenSubtype}.
    */
   readonly ofChosenColor?: boolean;
+  /**
+   * An EFFECTIVE-power ceiling — the printed "creatures you control **with
+   * power 2 or less**" (Delney, Streetwise Lookout) — and its
+   * power-or-toughness sibling ("**with power or toughness 1 or less**",
+   * Tetsuko Umezawa, Fugitive).
+   *
+   * ⚠️ These are the ONE part of a static filter that reads a value the layer
+   * system itself produces, so they carry a hard rule enforced in
+   * `indexContinuous`: a static using them may grant KEYWORDS ONLY, never a
+   * P/T delta. The pass then stays exact and non-iterative — every P/T layer
+   * settles first, and these statics fold in afterwards against the settled
+   * numbers, so an anthem correctly lifts a creature OUT of "power 2 or less"
+   * and nothing can depend on its own output (CR 613.8's dependency, in the
+   * one shape the pool actually prints).
+   */
+  readonly maxEffectivePower?: number;
+  /** As {@link maxEffectivePower}, satisfied when EITHER stat is within it. */
+  readonly maxEffectivePowerOrToughness?: number;
 }
 
 /**
