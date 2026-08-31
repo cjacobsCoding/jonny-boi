@@ -85,6 +85,39 @@ describe('compiling modal triggers', () => {
     expect(result.definition.triggers?.[0]?.modal?.modes[1]?.targets).toBe('enchantment');
   });
 
+  it("compiles the \"hasn't been chosen THIS TURN\" memory (Gala Greeters)", () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Gala Greeters',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Elf'] },
+        power: '2',
+        toughness: '2',
+        oracleText:
+          "Whenever another creature you control enters, choose one that hasn't been chosen this turn —\n" +
+          '• Put a +1/+1 counter on this creature.\n' +
+          '• Create a tapped Treasure token.\n' +
+          '• You gain 2 life.',
+      }),
+    );
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers?.[0]?.modal?.notChosenThisTurn).toBe(true);
+    expect(result.definition.triggers?.[0]?.modal?.modes).toHaveLength(3);
+  });
+
+  it('still REFUSES the TURNLESS memory — a game-long memory nothing models', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Silent Hallcreeper',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Spirit'] },
+        power: '2',
+        toughness: '2',
+        oracleText:
+          "Whenever this creature deals combat damage to a player, choose one that hasn't been chosen —\n• Draw a card.\n• You gain 2 life.",
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+
   it('still REFUSES a targeted mode on a wider-than-one spec (per-pick aims do not exist)', () => {
     const result = compileCard(
       makeCard({

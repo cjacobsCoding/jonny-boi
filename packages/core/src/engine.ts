@@ -406,6 +406,10 @@ function beginTurn(state: GameState, _config: RulesConfig, emit: (e: GameEvent) 
   // their turn (they've been controlled since the turn began).
   for (const inst of state.battlefield) {
     if (inst.controller === state.activePlayer) inst.summoningSick = false;
+    // "…that hasn't been chosen THIS TURN" — the printed memory resets for
+    // EVERY permanent as the turn begins, not just the active player's: the
+    // words are about the turn, not about who controls the object.
+    if (inst.modesChosenThisTurn !== undefined) delete inst.modesChosenThisTurn;
   }
 
   // Upkeep step (priority window).
@@ -2316,10 +2320,15 @@ function askTriggerModes(state: GameState, emit: (e: GameEvent) => void): boolea
     // have nothing for. Target-free modes are always choosable.
     const triggerSourceDef = (findOnBattlefield(state, trigger.sourceInstanceId) ??
       findInstanceAnywhere(state, trigger.sourceInstanceId))?.def;
+    // "…that hasn't been chosen this turn": the memory lives on the SOURCE
+    // permanent, so a source that has left takes an empty memory with it —
+    // which is right, since the object doing the remembering is gone.
+    const alreadyChosen = findOnBattlefield(state, trigger.sourceInstanceId)?.modesChosenThisTurn;
     const choosable = spec.modes.filter(
       (mode) =>
-        mode.targets === undefined ||
-        legalTargetsFor(state, mode.targets, trigger.controller, triggerSourceDef).length > 0,
+        (mode.targets === undefined ||
+          legalTargetsFor(state, mode.targets, trigger.controller, triggerSourceDef).length > 0) &&
+        !(spec.notChosenThisTurn === true && alreadyChosen?.includes(mode.id) === true),
     );
     if (choosable.length === 0) {
       // Nothing on the menu at all: the ability leaves the stack doing nothing.
@@ -2409,6 +2418,13 @@ function recordTriggerModes(state: GameState, modeIds: readonly string[], emit: 
   }
   (trigger as { effects: readonly EffectRef[] }).effects = effects;
   delete trigger.awaitingModes;
+  // Remember what was taken, on the SOURCE permanent, for the printed
+  // "…that hasn't been chosen this turn". Recorded at the moment of the
+  // answer — the next trigger from the same object this turn sees it.
+  if (spec.notChosenThisTurn === true && modeIds.length > 0) {
+    const source = findOnBattlefield(state, trigger.sourceInstanceId);
+    if (source) source.modesChosenThisTurn = [...(source.modesChosenThisTurn ?? []), ...modeIds];
+  }
   // A chosen TARGETED mode (choose-one only — the compiler enforces it) hands
   // its aim to the ordinary target pass: the trigger's single target list is
   // exactly one pick's aim, and target-free siblings' effects ignore it.

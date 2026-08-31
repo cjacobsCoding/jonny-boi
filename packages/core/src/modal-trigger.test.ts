@@ -116,6 +116,91 @@ describe('a modal trigger, played for real', () => {
     expect(fired).toEqual(['B']);
   });
 
+  it("the \"hasn't been chosen this turn\" memory takes the taken mode off the next menu", () => {
+    const { reg } = harness();
+    const TOKEN_BODY: CardDefinition = { id: 'tok-body', name: 'Body', types: ['creature'], power: 1, toughness: 1 };
+    reg.register('testMakeBody', (ctx) => void ctx.createTokens(TOKEN_BODY, 1));
+    // The watcher makes a body on tap; its own trigger watches creatures
+    // entering — so two activations in ONE turn ask the mode question twice,
+    // through the engine's real path.
+    const MEMORY_WATCHER: CardDefinition = {
+      id: 'memory-watcher',
+      name: 'Memory Watcher',
+      types: ['creature'],
+      power: 0,
+      toughness: 3,
+      activated: [{ cost: { tap: true }, effects: [{ primitive: 'testMakeBody' }], label: '{T}: make a body' }],
+      triggers: [
+        {
+          condition: { on: 'permanentEnters', who: 'you', permanentFilter: { anyOfTypes: ['creature'] } },
+          effects: [],
+          label: 'A creature entered: choose one that has not been chosen this turn',
+          modal: {
+            min: 1,
+            max: 1,
+            notChosenThisTurn: true,
+            modes: [
+              { id: 'mode1', label: 'Mark A', effects: [{ primitive: 'testMarkA' }] },
+              { id: 'mode2', label: 'Mark B', effects: [{ primitive: 'testMarkB' }] },
+            ],
+          },
+        },
+      ],
+    };
+    const g = createGame({ seed: 33, decks: { A: deckOf(ISLAND, 40), B: deckOf(ISLAND, 40) }, registry: reg });
+    const state = g.state;
+    const makerIds = [state.nextInstanceId++, state.nextInstanceId++];
+    for (const instanceId of makerIds) {
+      state.battlefield.push({
+        instanceId,
+        def: MEMORY_WATCHER,
+        controller: 'A',
+        owner: 'A',
+        zone: 'battlefield',
+        tapped: false,
+        summoningSick: false,
+        damageMarked: 0,
+        markedByDeathtouch: false,
+        counters: {},
+      });
+    }
+
+    const menus: string[][] = [];
+    let s = state;
+    const pass = (): void => {
+      const q = s.pendingChoice;
+      if (q) {
+        if (q.kind === 'chooseModes') menus.push(q.modes.map((mode) => mode.id));
+        s = act(s, { kind: 'answerChoice', player: q.chooser, choiceId: q.id, answer: defaultAnswerFor(q) }, reg);
+        return;
+      }
+      s = act(s, { kind: 'passPriority', player: s.priorityPlayer }, reg);
+    };
+    let guard = 0;
+    while (s.step !== 'precombatMain' && !s.gameOver && guard++ < 500) pass();
+    // BOTH makers tap in the same turn. Each arrival triggers BOTH watchers, so
+    // the first maker's own trigger is the one whose memory this asserts.
+    for (const instanceId of makerIds) {
+      s = act(s, { kind: 'activateAbility', player: 'A', instanceId, abilityIndex: 0 }, reg);
+      let inner = 0;
+      while (s.stack.length > 0 && !s.gameOver && inner++ < 100) pass();
+    }
+
+    // Two arrivals × two watchers = four mode decisions in ONE turn, and the
+    // memory is what makes the second pair different: with mode1 already taken
+    // only mode2 remains CHOOSABLE, which is a one-option question the engine
+    // auto-answers — so exactly two questions were ever PARKED.
+    expect(menus).toEqual([
+      ['mode1', 'mode2'],
+      ['mode1', 'mode2'],
+    ]);
+    // Each watcher took mode1 and then mode2 — never mode1 twice, which is only
+    // possible if the memory removed it from the second decision.
+    for (const instanceId of makerIds) {
+      expect(s.battlefield.find((c) => c.instanceId === instanceId)?.modesChosenThisTurn).toEqual(['mode1', 'mode2']);
+    }
+  });
+
   it('a TARGETED mode: choosing it asks for the aim, and the aimed effect resolves', () => {
     const { reg, fired } = harness();
     const AIMED_MODAL: CardDefinition = {

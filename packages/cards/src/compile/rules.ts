@@ -1684,14 +1684,21 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // whole block. Each mode compiles through the ordinary effect rules, which
     // means a modal card can only ever offer modes the engine can really run.
     pattern: new RegExp(
-      `^choose\\s+(${MODAL_HEADER_PHRASE})\\s*\\.?\\s*(?:(${REPEATED_MODES_PHRASE})\\s*\\.?\\s*)?[—-]\\s*(•.+)$`,
+      `^choose\\s+(${MODAL_HEADER_PHRASE})( that hasn't been chosen(?: this turn)?)?\\s*\\.?\\s*(?:(${REPEATED_MODES_PHRASE})\\s*\\.?\\s*)?[—-]\\s*(•.+)$`,
     ),
     build(match, ctx) {
       const counts = MODAL_HEADER_COUNTS[match[1]!.toLowerCase()];
       if (counts === undefined) return null;
-      const allowRepeats = match[2] !== undefined;
+      // "…that hasn't been chosen THIS TURN" is a per-permanent memory the
+      // engine keeps (`CardInstance.modesChosenThisTurn`). The TURNLESS form
+      // is a game-long memory nothing models, so it refuses rather than
+      // silently resetting every turn — a strictly wider card.
+      const memory = match[2]?.trim();
+      if (memory !== undefined && !memory.endsWith('this turn')) return null;
+      const notChosenThisTurn = memory !== undefined;
+      const allowRepeats = match[3] !== undefined;
 
-      const bodies = match[3]!
+      const bodies = match[4]!
         .split('•')
         .map((mode) => mode.trim())
         .filter((mode) => mode.length > 0);
@@ -1729,6 +1736,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
           min: Math.min(counts.min, max),
           max,
           ...(allowRepeats ? { allowRepeats: true } : {}),
+          ...(notChosenThisTurn ? { notChosenThisTurn: true } : {}),
           modes,
         },
       };

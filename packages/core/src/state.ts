@@ -242,6 +242,27 @@ export interface CardInstance {
    */
   chosenAsEntered?: string;
   /**
+   * Modes this permanent's modal trigger has already chosen THIS TURN — the
+   * printed memory in "choose one that hasn't been chosen **this turn**" (Gala
+   * Greeters, Monument to Endurance).
+   *
+   * Per INSTANCE, not per card: two copies of Gala Greeters each remember
+   * their own picks. Cleared for every permanent at the start of each turn
+   * (see `beginTurn`), which is the printed words and the whole of them — the
+   * TURNLESS form ("choose one that hasn't been chosen", Silent Hallcreeper)
+   * is a game-long memory this field deliberately does not model, and the
+   * compiler refuses that wording rather than resetting it every turn.
+   *
+   * Written only on a permanent whose trigger prints the memory, for the same
+   * object-shape/throughput reason as {@link attachedTo}. Anyone adding a field
+   * here must also edit `internal/clone.ts`.
+   */
+  // A READONLY array on a WRITABLE property: the engine replaces the list
+  // wholesale (never pushes), which is also what keeps a cloned draft state
+  // from rewriting the previous one, and what lets the AI's DeepReadonly view
+  // of an instance stay assignable to this type.
+  modesChosenThisTurn?: readonly string[];
+  /**
    * The permanent that exiled this card "until it leaves the battlefield"
    * (the O-Ring link — Banisher Priest, Fiend Hunter, Angel of Serenity).
    *
