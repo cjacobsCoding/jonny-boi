@@ -185,6 +185,16 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-27 DESKTOP-90PJPM4: `fix/banisher-and-resume` 🚧 building — DESIGN §3.55. Two engine-real
+  Solo bugs fixed: (1) `exiledUntilLeavesBy` was an ad-hoc instance prop DROPPED BY `cloneInstance`'s
+  fixed field list — jailers never released their prisoners; now a core field + a
+  `clone-completeness` invariant that reds on ANY per-object field the clone forgets. (2) Gatecreeper's
+  "basic land OR Gate" was filter∩names = ∅ — the picker auto-answered empty; `CardFilter.anyOf` is a
+  real disjunction now. ⚠️ If you pair `filter` with `nameAnyOf` in searchLibrary params, that is an
+  INTERSECTION — reach for `anyOf` when the printed line says "or". Banisher's case was CR-correct
+  (no legal target) — the log now SAYS so instead of nothing. Pool 555→573 via regen under current
+  templates (18 joiners, full-suite gated). (Integrator)
+
 - 2026-08-29 integrator: **`feat/per-creature-combat-damage` MERGED + DEPLOYED — 'whenever A CREATURE YOU CONTROL deals combat damage to a player' (Bident of Thassa)**. New condition kind `creatureCombatDamageToPlayer` sharing the group kind's matcher (same per-event question) but NEVER its runtime dedup — three connecting creatures fire it three times, proven in a real game. One compile rule covers the plain and 'you may' forms. Corpus 611 → 612/2100.
 - 2026-08-29 integrator: **`feat/upkeep-bodies` MERGED + DEPLOYED — the reanimate wording + the number words**. `moveTargetFromGraveyard` gained `to: battlefield` (through `putOntoBattlefield`, so ETBs and summoning sickness behave exactly as a cast's); 'Return/Put target creature card from your graveyard to/onto the battlefield' compiles. NUMBER_WORDS gained 'thirteen' and 'twenty' (one printed card at a time: Triskaidekaphile, Hellkite Tyrant) — Hellkite's upkeep WIN line now compiles and the step-trigger refusal probe that pinned it as unreadable was flipped to a compiles-complete probe (stale-probe trap again: adding a system makes old refusal fixtures fail as 'expected incomplete'; sweep test probes when a family lands). Corpus 610 → 611/2100.
 - 2026-08-29 integrator: **`feat/graveyard-target` MERGED + DEPLOYED — 'put target creature card from your graveyard on top of your library' (Mortuary Mire)**. New `creatureCardInYourGraveyard` TargetRestriction (mirrors the instant/sorcery sibling) + TARGETED `moveTargetFromGraveyard` primitive (to: hand|libraryTop; re-checks legality at resolution, fizzles on a gone card). ⚠️ Trap hit and documented in the rule: the '…to your hand' wording (Raise Dead) ALREADY compiles through the chosen `returnFromGraveyard` and a pool of pilots/fixtures pin that shape — my first cut re-routed it and broke four suites. The rule now owns ONLY the top-of-library form; re-routing Raise Dead to a faithful targeted shape is its own future change. Classified library-WRITING conservative in paired-arms (a card put on top changes every later draw). Corpus 609 → 610/2100.

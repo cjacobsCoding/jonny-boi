@@ -8,6 +8,10 @@
  * machine: something goes to exile with a LINK back to the permanent that sent
  * it, and comes back when that permanent goes away.
  *
+ * The link is a CORE CardInstance field (§3.55) — it MUST survive core's
+ * per-action clone, and an ad-hoc property does not: it lived until the next
+ * action's clone and then vanished, which made every release a silent no-op.
+ *
  * The link is what makes this a system rather than a card script. Two Fiend
  * Hunters on the battlefield have each exiled their own creature, and killing one
  * must return exactly its own — so the exiled card records WHO exiled it rather
@@ -48,10 +52,6 @@ import {
  * actually exiled this way, so no other instance grows the property (the same
  * shape discipline `resetInstanceForNewZone` documents).
  */
-interface ExiledCard extends CardInstance {
-  exiledUntilLeavesBy?: InstanceId;
-}
-
 /** Where a returning card goes. Battlefield is the default (O-Ring, Fiend Hunter). */
 type ReturnTo = 'battlefield' | 'hand';
 
@@ -78,7 +78,7 @@ export const exileUntilLeaves: EffectPrimitive = (ctx) => {
   let done = 0;
   for (const id of ids) {
     if (done >= max) break;
-    if (!isLegalTarget(ctx.state, restriction, id, ctx.controller, ctx.source.def)) continue;
+    console.log("[EUL]", JSON.stringify({targets: ctx.targets, restriction, controller: ctx.controller, id, legal: isLegalTarget(ctx.state, restriction, id, ctx.controller, ctx.source.def), onField: ctx.state.battlefield.some((c) => c.instanceId === id)})); if (!isLegalTarget(ctx.state, restriction, id, ctx.controller, ctx.source.def)) continue;
 
     const permanent = permanentById(ctx.state, id);
     let owner: PlayerId;
@@ -103,7 +103,7 @@ export const exileUntilLeaves: EffectPrimitive = (ctx) => {
     // Stamped AFTER the move: `resetInstanceForNewZone` runs inside the
     // battlefield funnel and would otherwise be free to clear the link.
     const exiled = ctx.state.players[owner].exile.find((c) => c.instanceId === id);
-    if (exiled) (exiled as ExiledCard).exiledUntilLeavesBy = ctx.source.instanceId;
+    if (exiled) exiled.exiledUntilLeavesBy = ctx.source.instanceId;
     done += 1;
   }
 };
@@ -135,9 +135,9 @@ export const returnExiledByThis: EffectPrimitive = (ctx) => {
   for (const owner of PLAYER_IDS) {
     const zone = ctx.state.players[owner].exile;
     // Snapshot: returning mutates the array being walked.
-    const mine = zone.filter((c) => (c as ExiledCard).exiledUntilLeavesBy === source);
+    const mine = zone.filter((c) => c.exiledUntilLeavesBy === source);
     for (const card of mine) {
-      delete (card as ExiledCard).exiledUntilLeavesBy;
+      delete card.exiledUntilLeavesBy;
       if (to === 'hand') {
         const index = zone.findIndex((c) => c.instanceId === card.instanceId);
         if (index < 0) continue;

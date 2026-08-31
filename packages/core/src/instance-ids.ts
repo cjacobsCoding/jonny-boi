@@ -243,7 +243,12 @@ export const CHOICE_ANSWER_ID_FIELDS: { readonly [K in ChoiceAnswer['kind']]: An
  * because "why is this here" is the question a reader will have.
  */
 const NON_EVENT_INSTANCE_ID_FIELDS = [
-  /** `CardInstance.attachedTo` — the host an Aura/Equipment is attached to. */
+  /**
+   * \`CardInstance.exiledUntilLeavesBy\` — the O-Ring jail link (§3.55): the
+   * permanent that exiled this card "until it leaves the battlefield".
+   */
+  'exiledUntilLeavesBy',
+  /** \`CardInstance.attachedTo\` — the host an Aura/Equipment is attached to. */
   'attachedTo',
   /** `CombatState.blocks` values + `BlockAssignment.attacker` (block-solver). */
   'attacker',

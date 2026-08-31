@@ -190,11 +190,13 @@ describe('each shipped attachment says what its printed line says', () => {
   ];
 
   it('covers every attachment in the pool — a new card cannot slip in unread', () => {
-    const listed = new Set(PRINTED.map(([name]) => name));
+    // Coverage means SOME independent second reading exists — a modification
+    // row in PRINTED, or a trigger-only row in PURE_TRIGGER (§3.55).
+    const listed = new Set([...PRINTED.map(([name]) => name), ...PURE_TRIGGER.map(([name]) => name)]);
     const unlisted = attachments.filter((card) => !listed.has(card.name)).map((card) => card.name);
     expect(
       unlisted,
-      'add the card to PRINTED with its printed modification transcribed from the Oracle text',
+      'add the card to PRINTED (modification) or PURE_TRIGGER (trigger-only), transcribed from the Oracle text',
     ).toEqual([]);
   });
 
@@ -218,6 +220,34 @@ describe('each shipped attachment says what its printed line says', () => {
     });
   }
 });
+
+  /**
+   * Attachments whose ENTIRE printed text is a trigger — no stat line, no
+   * keyword grant. The first of these (Helm of the Host, §3.55) failed the
+   * PRINTED loop precisely because that loop demands a modification, which for
+   * every earlier card was the right demand. This list is the same independent
+   * second reading for the trigger shape: the card must declare NO
+   * modification (a phantom +0/+0 here would hide a compiler regression) and
+   * must carry the printed trigger, transcribed.
+   */
+  const PURE_TRIGGER: ReadonlyArray<readonly [name: string, triggerContains: string]> = [
+    // "At the beginning of combat on your turn, create a token that's a copy of
+    // equipped creature, except the token isn't legendary and it gains haste."
+    ['Helm of the Host', 'copy of equipped creature'],
+  ];
+
+  for (const [name, triggerContains] of PURE_TRIGGER) {
+    it(`${name} is trigger-only, exactly as printed`, () => {
+      const card = poolCard(name);
+      expect(card.attachment, `${name} must still BE an attachment`).toBeDefined();
+      expect(card.attachment!.modifies, `${name} prints no modification — a phantom one is a compiler bug`).toBeUndefined();
+      const labels = (card.triggers ?? []).map((t) => (t.label ?? '').toLowerCase());
+      expect(
+        labels.some((l) => l.includes(triggerContains.toLowerCase())),
+        `${name} must carry its printed trigger`,
+      ).toBe(true);
+    });
+  }
 
 // --- and now play them ----------------------------------------------------------
 

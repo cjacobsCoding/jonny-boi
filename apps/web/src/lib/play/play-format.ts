@@ -121,6 +121,12 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
       return {
         text: `${r.playerName(event.player)} looks at the top ${event.amount} card${event.amount === 1 ? '' : 's'} of their library.`,
       };
+    case 'triggerRemovedFromStack':
+      // A trigger with no legal target dies silently in the rules (CR 603.3d) —
+      // but on screen "nothing happened" reads as a bug, and became one bug
+      // report verbatim ("it didnt seem to actually exile the chosen creature"
+      // — cast with an empty enemy board). Say WHY nothing happened. §3.55.
+      return { text: `${event.label} — nothing happens (${event.reason}).`, tone: 'trigger' };
     case 'triggerPutOnStack':
       return { text: `Trigger: ${event.label}.`, tone: 'trigger' };
     case 'triggeredAbilityResolved':

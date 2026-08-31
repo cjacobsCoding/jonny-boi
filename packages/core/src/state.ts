@@ -241,6 +241,17 @@ export interface CardInstance {
    * here must also edit `internal/clone.ts`.
    */
   chosenAsEntered?: string;
+  /**
+   * The permanent that exiled this card "until it leaves the battlefield"
+   * (the O-Ring link — Banisher Priest, Fiend Hunter, Angel of Serenity).
+   *
+   * A CORE field even though the mechanic lives in the cards package, for one
+   * hard-won reason: the pure `applyAction` path deep-clones state through
+   * `cloneInstance`'s FIXED field list, so a link written as an ad-hoc extra
+   * property survived exactly one action and then silently vanished — the
+   * jailer left, the release trigger ran, and found nothing to free. §3.55.
+   */
+  exiledUntilLeavesBy?: InstanceId;
 }
 
 /**

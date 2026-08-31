@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 555 cards.
+ * 573 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -1918,6 +1918,26 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  {
+    id: 'e67bd8eb-66db-48af-82f8-74f5595f1928',
+    name: 'Curious Pair',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 1,
+    toughness: 3,
+    subtypes: ['human', 'peasant'],
+    backFace: {
+      id: 'e67bd8eb-66db-48af-82f8-74f5595f1928#back',
+      name: 'Treats to Share',
+      types: ['sorcery'],
+      cost: { G: 1 },
+      subtypes: ['adventure'],
+      effects: [{ primitive: 'createPredefinedToken', params: { token: 'food' } }],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
   // Choose one —
   // • Return target creature card from your graveyard to your hand.
   // • Darigaaz's Charm deals 3 damage to any target.
@@ -2418,6 +2438,14 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     subtypes: ['zombie'],
     entersTapped: true,
   },
+  // Destroy target artifact or enchantment.
+  {
+    id: 'a7e97fa9-4b72-4548-b854-5be5f18a6f1a',
+    name: 'Disenchant',
+    types: ['instant'],
+    cost: { generic: 1, W: 1 },
+    effects: [{ primitive: 'destroyTarget', params: { targets: 'artifactOrEnchantment' } }],
+  },
   // Target creature gets -2/-2 until end of turn.
   {
     id: '77eafe49-b9c5-461d-89c5-cec217dd2974',
@@ -2477,6 +2505,28 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['sorcery'],
     cost: { generic: 2, U: 1 },
     effects: [{ primitive: 'drawCards', params: { count: 2 } }],
+  },
+  // If an effect would create one or more tokens under your control, it creates twice that many of those tokens instead.
+  // If an effect would put one or more counters on a permanent you control, it puts twice that many of those counters on that permanent instead.
+  {
+    id: '01546b7d-a233-4176-8843-d732074dc5b6',
+    name: 'Doubling Season',
+    types: ['enchantment'],
+    cost: { generic: 4, G: 1 },
+    replacements: [
+      {
+        event: 'tokens',
+        applies: { recipientController: 'you' },
+        outcome: { times: 2 },
+        label: 'if an effect would create one or more tokens under your control, it creates twice that many of those tokens instead',
+      },
+      {
+        event: 'counters',
+        applies: { recipientController: 'you' },
+        outcome: { times: 2 },
+        label: 'if an effect would put one or more counters on a permanent you control, it puts twice that many of those counters on that permanent instead',
+      },
+    ],
   },
   // Create two 1/1 red Goblin creature tokens.
   {
@@ -2756,6 +2806,25 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // Flying
+  // When this creature enters, return a permanent you control to its owner's hand.
+  {
+    id: '3834d3b0-9b66-465a-a8dc-22875a819fd9',
+    name: 'Emancipation Angel',
+    types: ['creature'],
+    cost: { generic: 1, W: 2 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'returnChosenToHand', params: { count: 1 } }],
+        label: 'Enters: return a permanent you control to its owner\'s hand',
+      },
+    ],
+  },
   {
     id: '52e439d0-a263-4d53-9ae3-fa1f8aa8293e',
     name: 'Embereth Shieldbreaker',
@@ -2921,6 +2990,27 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
           destination: 'battlefield',
           tapped: true,
         },
+      },
+    ],
+  },
+  // At the beginning of your upkeep, create a token that's a copy of another target nonland permanent you control.
+  {
+    id: '3a646245-b8b7-4f91-a312-d5eea9a9e49a',
+    name: 'Extravagant Replication',
+    types: ['enchantment'],
+    cost: { generic: 4, U: 2 },
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'createTokenCopy',
+            params: { targets: 'nonlandPermanentYouControl', excludeSelf: true, count: 1 },
+          },
+        ],
+        label: 'your upkeep: create a token that\'s a copy of another target nonland permanent you control',
+        targets: 'nonlandPermanentYouControl',
+        targetsExcludeSelf: true,
       },
     ],
   },
@@ -3111,6 +3201,25 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         condition: { on: 'leaves' },
         effects: [{ primitive: 'returnExiledByThis', params: { to: 'battlefield' } }],
         label: 'Leaves: return the exiled card to the battlefield under its owner\'s control',
+      },
+    ],
+  },
+  // Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)
+  // When this creature enters, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")
+  {
+    id: 'ad69f48e-c387-4376-a04f-37d3992c7946',
+    name: 'Fierce Witchstalker',
+    types: ['creature'],
+    cost: { generic: 2, G: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { trample: true },
+    subtypes: ['wolf'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'createPredefinedToken', params: { token: 'food' } }],
+        label: 'Enters: create a food token',
       },
     ],
   },
@@ -3434,8 +3543,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
                   params: {
                     who: 'controller',
                     count: 1,
-                    filter: { anyOfSubtypes: ['gate'] },
-                    nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+                    filter: { anyOf: [{ anyOfTypes: ['land'], basic: true }, { anyOfSubtypes: ['gate'] }] },
                     destination: 'hand',
                     reveal: true,
                   },
@@ -3950,6 +4058,46 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     entersTapped: true,
     producesOptions: [{ G: 1 }, { U: 1 }],
     triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'surveil' }], label: 'Enters: surveil 1' }],
+  },
+  // At the beginning of combat on your turn, create a token that's a copy of equipped creature, except the token isn't legendary. That token gains haste.
+  // Equip {5}
+  {
+    id: '83b43aba-bf9c-4da2-967d-9daa632e97d2',
+    name: 'Helm of the Host',
+    types: ['artifact'],
+    cost: { generic: 4 },
+    legendary: true,
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'beginCombat', who: 'you' },
+        effects: [
+          {
+            primitive: 'createTokenCopy',
+            params: {
+              equipped: true,
+              count: 1,
+              except: { legendary: false },
+              grantKeywords: { haste: true },
+            },
+          },
+        ],
+        label: 'Begin combat: create a token that\'s a copy of equipped creature, except the token isn\'t legendary. that token gains haste',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 5 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {5}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {5}',
+    },
   },
   // {T}: Add {W}.
   {
@@ -4536,6 +4684,36 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     },
     backFaceCastable: true,
   },
+  // Haste
+  // {T}: Create a token that's a copy of target nonlegendary creature you control, except it has haste. Sacrifice it at the beginning of the next end step.
+  {
+    id: 'a34b7416-cfe3-4a1e-a8c1-a3056b747519',
+    name: 'Kiki-Jiki, Mirror Breaker',
+    types: ['creature'],
+    cost: { generic: 2, R: 3 },
+    power: 2,
+    toughness: 2,
+    legendary: true,
+    keywords: { haste: true },
+    subtypes: ['goblin', 'shaman'],
+    activated: [
+      {
+        cost: { tap: true },
+        effects: [
+          {
+            primitive: 'createTokenCopy',
+            params: {
+              targets: 'nonlegendaryCreatureYouControl',
+              count: 1,
+              except: { addKeywords: { haste: true } },
+              delayedRemoval: 'sacrifice',
+            },
+          },
+        ],
+        label: '{t}: create a token that\'s a copy of target nonlegendary creature you control, except it has haste. sacrifice it at the beginning of the next end step',
+      },
+    ],
+  },
   // Whenever you cast an instant or sorcery spell, this creature gets +3/+0 until end of turn.
   {
     id: 'eac8c196-8477-4b79-9875-21afa1e61708',
@@ -4769,6 +4947,48 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
           count: 2,
           keywords: { flying: true },
         },
+      },
+    ],
+  },
+  // {2}, {T}: Copy target activated or triggered ability you control. You may choose new targets for the copy.
+  // {3}, {T}: Copy target instant or sorcery spell you control. You may choose new targets for the copy.
+  // {4}, {T}: Copy target permanent spell you control. (The copy becomes a token.)
+  {
+    id: '0bf299da-1854-4153-baea-3cee2eb01ee8',
+    name: 'Lithoform Engine',
+    types: ['artifact'],
+    cost: { generic: 4 },
+    legendary: true,
+    activated: [
+      {
+        cost: { mana: { generic: 2 }, tap: true },
+        effects: [
+          {
+            primitive: 'copyTriggeredAbility',
+            params: { targets: 'activatedOrTriggeredAbilityYouControl', count: 1 },
+          },
+        ],
+        label: '{2}, {t}: copy target activated or triggered ability you control. you may choose new targets for the copy',
+      },
+      {
+        cost: { mana: { generic: 3 }, tap: true },
+        effects: [
+          {
+            primitive: 'copySpell',
+            params: { targets: 'instantOrSorcerySpellYouControl', mayRetarget: true },
+          },
+        ],
+        label: '{3}, {t}: copy target instant or sorcery spell you control. you may choose new targets for the copy',
+      },
+      {
+        cost: { mana: { generic: 4 }, tap: true },
+        effects: [
+          {
+            primitive: 'copySpell',
+            params: { targets: 'permanentSpellYouControl', mayRetarget: false },
+          },
+        ],
+        label: '{4}, {t}: copy target permanent spell you control',
       },
     ],
   },
@@ -5313,6 +5533,16 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // Exile target creature you control, then return it to the battlefield under its owner's control.
+  // Flashback {3}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'a3ec6b5d-08ec-4ae0-b1db-c4b87a1849c7',
+    name: 'Momentary Blink',
+    types: ['instant'],
+    cost: { generic: 1, W: 1 },
+    flashback: { generic: 3, U: 1 },
+    effects: [{ primitive: 'blinkTarget', params: { targets: 'creatureYouControl', ownerControl: true } }],
+  },
   // Return target creature card from your graveyard to your hand.
   // Flashback {4}{B} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
   {
@@ -5397,6 +5627,14 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       { primitive: 'copySpell', params: { targets: 'instantOrSorcerySpell', mayRetarget: true } },
       { primitive: 'returnSpellToHand', params: { targets: 'instantOrSorcerySpell' } },
     ],
+  },
+  // Destroy target artifact or enchantment.
+  {
+    id: 'bdb3ca68-ec1f-4e16-81cc-d23f8f52c728',
+    name: 'Naturalize',
+    types: ['instant'],
+    cost: { generic: 1, G: 1 },
+    effects: [{ primitive: 'destroyTarget', params: { targets: 'artifactOrEnchantment' } }],
   },
   // Search your library for a Forest card, put that card onto the battlefield, then shuffle.
   {
@@ -5960,6 +6198,33 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     subtypes: ['wurm'],
     madness: { generic: 2, R: 1 },
   },
+  // When this creature enters, you may destroy target artifact or enchantment.
+  {
+    id: '032ec6e2-6cc3-4a97-9cc7-3233f5e11904',
+    name: 'Reclamation Sage',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 2,
+    toughness: 1,
+    subtypes: ['elf', 'shaman'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may destroy target artifact or enchantment',
+              valence: 'gain',
+              effects: [{ primitive: 'destroyTarget', params: { targets: 'artifactOrEnchantment' } }],
+            },
+          },
+        ],
+        label: 'Enters: you may destroy target artifact or enchantment',
+        targets: 'artifactOrEnchantment',
+      },
+    ],
+  },
   // {T}: Add one mana of any type that a land you control could produce.
   {
     id: '67f43ac6-2a58-4b53-b5d7-0330e2a252e2',
@@ -6034,6 +6299,41 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       isBackFace: true,
     },
     backFaceCastable: true,
+  },
+  // Flying
+  // At the beginning of your upkeep, you may return target creature card from your graveyard to the battlefield.
+  {
+    id: '08d1a5d1-141d-48e3-ac22-c2529191cb13',
+    name: 'Reya Dawnbringer',
+    types: ['creature'],
+    cost: { generic: 6, W: 3 },
+    power: 4,
+    toughness: 6,
+    legendary: true,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may return target creature card from your graveyard to the battlefield',
+              valence: 'gain',
+              effects: [
+                {
+                  primitive: 'moveTargetFromGraveyard',
+                  params: { targets: 'creatureCardInYourGraveyard', to: 'battlefield' },
+                },
+              ],
+            },
+          },
+        ],
+        label: 'your upkeep: you may return target creature card from your graveyard to the battlefield',
+        targets: 'creatureCardInYourGraveyard',
+      },
+    ],
   },
   // Ward {3} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {3}.)
   {
@@ -7162,6 +7462,16 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 1, toughness: 1, keywords: { haste: true } },
     },
   },
+  // Create a Treasure token. (It's an artifact with "{T}, Sacrifice this token: Add one mana of any color.")
+  // Flashback {2}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'c34c17c7-3827-49a2-be25-67f44fdfe150',
+    name: 'Strike It Rich',
+    types: ['sorcery'],
+    cost: { R: 1 },
+    flashback: { generic: 2, R: 1 },
+    effects: [{ primitive: 'createPredefinedToken', params: { token: 'treasure' } }],
+  },
   // {2}, {T}: Copy target triggered ability you control. You may choose new targets for the copy. (A triggered ability uses the words "when," "whenever," or "at.")
   {
     id: 'cf751552-156f-4f81-ac94-9814dce099f9',
@@ -7576,6 +7886,27 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // At the beginning of your end step, exile up to one target artifact or creature you control, then return that card to the battlefield under its owner's control.
+  {
+    id: 'c786a0aa-d86f-42c3-a7ea-5cb6ab72b5ec',
+    name: 'Teleportation Circle',
+    types: ['enchantment'],
+    cost: { generic: 3, W: 1 },
+    triggers: [
+      {
+        condition: { on: 'endStep', who: 'you' },
+        effects: [
+          {
+            primitive: 'blinkTarget',
+            params: { targets: 'artifactOrCreatureYouControl', upToTargets: 1, ownerControl: true },
+          },
+        ],
+        label: 'your end step: exile up to one target artifact or creature you control, then return that card to the battlefield under its owner\'s control',
+        targets: 'artifactOrCreatureYouControl',
+        targetCount: { min: 0, max: 1 },
+      },
+    ],
+  },
   // Whenever you cast a noncreature spell, put a +1/+1 counter on this creature.
   {
     id: '60ac490c-b489-4ad2-bcc2-3babaabf8ccb',
@@ -7827,6 +8158,23 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     effects: [
       { primitive: 'mill', params: { amount: 2, targets: 'player' } },
       { primitive: 'drawCards', params: { count: 1 } },
+    ],
+  },
+  // When this creature enters, investigate. (Create a Clue token. It's an artifact with "{2}, Sacrifice this token: Draw a card.")
+  {
+    id: 'caa02547-66e3-4e27-a2d3-5e94f3e7a069',
+    name: 'Thraben Inspector',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 1,
+    toughness: 2,
+    subtypes: ['human', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'createPredefinedToken', params: { token: 'clue' } }],
+        label: 'Enters: investigate',
+      },
     ],
   },
   // When this creature enters, you gain 5 life.
@@ -8601,6 +8949,29 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     keywords: { flying: true, ward: 2 },
     subtypes: ['djinn', 'wizard'],
   },
+  // Target creature gets +2/+2 until end of turn.
+  {
+    id: '4744b086-fea2-4992-bfef-68c58cdf9cf0',
+    name: 'Wax // Wane',
+    types: ['instant'],
+    cost: { W: 1, G: 1 },
+    frontFace: {
+      id: '4744b086-fea2-4992-bfef-68c58cdf9cf0',
+      name: 'Wax',
+      types: ['instant'],
+      cost: { G: 1 },
+      effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2, targets: 'creature' } }],
+    },
+    backFace: {
+      id: '4744b086-fea2-4992-bfef-68c58cdf9cf0#back',
+      name: 'Wane',
+      types: ['instant'],
+      cost: { W: 1 },
+      effects: [{ primitive: 'destroyTarget', params: { targets: 'enchantment' } }],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
   // {2}, {T}, Sacrifice this artifact: Search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.
   {
     id: '31f15274-301b-47c5-ba19-0ced04520878',
@@ -8687,6 +9058,30 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 2,
     keywords: { firstStrike: true, protectionFrom: ['black'] },
     subtypes: ['human', 'knight'],
+  },
+  // Flash
+  // When this creature enters, return a creature you control to its owner's hand.
+  {
+    id: 'e8d6084b-9b72-438e-a30a-851b888f3e4d',
+    name: 'Whitemane Lion',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flash: true },
+    subtypes: ['cat'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'returnChosenToHand',
+            params: { count: 1, filter: { anyOfTypes: ['creature'] } },
+          },
+        ],
+        label: 'Enters: return a creature you control to its owner\'s hand',
+      },
+    ],
   },
   // As an additional cost to cast this spell, discard a card.
   // Draw two cards.

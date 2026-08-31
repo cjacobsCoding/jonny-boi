@@ -452,6 +452,10 @@ function choosePriorityAction(
   // rather than firing as a reflex, so an ability only happens when it beats the
   // land drop and the spell it is spending the mana against.
   const activation = bestFundedActivation(ctx, weights, index);
+  // Offered-but-unowned activations (Kiki's tap) compete on the same scale.
+  const offered = bestOfferedActivation(ctx, weights, index);
+  const bestActivation =
+    offered && (!activation || offered.score > activation.score) ? offered : activation;
 
   // Lands outrank most spells: developing mana is almost always correct. We play
   // a land unless a spell scores higher than the land (e.g. lethal burn now).
@@ -465,7 +469,7 @@ function choosePriorityAction(
   const spellScore = bestSpell ? bestSpell.goal.score : -Infinity;
   const equipScore = equip ? equip.score : -Infinity;
   const cycleScore = cycle ? cycle.score : -Infinity;
-  const activationScore = activation ? activation.score : -Infinity;
+  const activationScore = bestActivation ? bestActivation.score : -Infinity;
 
   if (
     landScore >= spellScore &&
@@ -485,8 +489,8 @@ function choosePriorityAction(
     return emit(ctx, equip.action, ctx.trace ? equip.label : NO_REASON, equipScore);
   }
 
-  if (activation && activationScore >= spellScore && activationScore > weights.passScore) {
-    return emit(ctx, activation.action, ctx.trace ? activation.label : NO_REASON, activationScore);
+  if (bestActivation && activationScore >= spellScore && activationScore > weights.passScore) {
+    return emit(ctx, bestActivation.action, ctx.trace ? bestActivation.label : NO_REASON, activationScore);
   }
 
   if (bestSpell && bestSpell.goal.score > weights.passScore && spellScore >= cycleScore) {
@@ -609,6 +613,56 @@ function fetchesALand(ability: { readonly effects: readonly EffectRef[] }): bool
  * (Mirrors core's `RESTRICTION_MEMO` for exactly the same reason.)
  */
 const FETCH_MEMO = new WeakMap<{ readonly effects: readonly EffectRef[] }, boolean>();
+
+/**
+ * The best OFFERED activation the specialised scorers do not own (§3.55).
+ *
+ * §3.40 built \`bestFundedActivation\` for abilities the engine CANNOT offer
+ * (their mana is not yet floating) and deliberately left offered ones to their
+ * owners: land-fetch (\`bestAbility\`), loyalty (\`bestLoyaltyActivation\`), Equip
+ * (\`bestEquipPlay\`). That partition had a hole: a TAP-COST value ability —
+ * Kiki-Jiki — is offered by the engine (nothing to fund), is none of those
+ * three, and so fell through EVERY scorer. The pilot never activated it once,
+ * which surfaced as the soak reporting \`delayed-trigger\` inert the day Kiki
+ * entered the pool: the mechanic was fine, the pilot was blind.
+ *
+ * Scored with the same \`valueOfEffects\` ruler as everything else, aimed with
+ * the targets the engine already enumerated on the offered action. Fetch,
+ * loyalty and Equip actions are excluded so no ability is priced twice.
+ */
+function bestOfferedActivation(
+  ctx: DecisionContext,
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+): { readonly action: GameAction; readonly score: number; readonly label: string } | undefined {
+  const { view, legalActions } = ctx;
+  const me = view.priorityPlayer;
+  let best: { action: GameAction; score: number; label: string } | undefined;
+  let cards: ReturnType<typeof cardValueContext> | undefined;
+  for (const action of legalActions) {
+    if (action.kind !== "activateAbility") continue;
+    const source = findInstance(view, action.instanceId);
+    const ability = source?.def.activated?.[action.abilityIndex];
+    if (!ability) continue;
+    // Owned elsewhere — never price an ability twice.
+    if (ability.cost.loyalty !== undefined) continue;
+    if (fetchesALand(ability)) continue;
+    if (source!.def.attachment !== undefined) continue;
+    cards ??= cardValueContext(view as GameState, index);
+    const score = valueOfEffects(ability.effects, {
+      state: view as GameState,
+      player: me,
+      targets: action.targets ?? [],
+      weights,
+      cards,
+      index,
+    });
+    if (score <= weights.passScore) continue;
+    if (best !== undefined && score <= best.score) continue;
+    best = { action, score, label: ctx.trace ? `activate ${ability.label}` : NO_REASON };
+  }
+  return best;
+}
 
 /**
  * The best MANA-COSTED ACTIVATED ABILITY worth using right now, together with the

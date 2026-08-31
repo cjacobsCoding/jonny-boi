@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-22T07:15:15.433Z",
+  "generatedAt": "2026-08-31T03:41:34.583Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 587,
+  "requested": 605,
   "unresolved": [],
   "cards": [
     {
@@ -6922,6 +6922,122 @@
       "faces": []
     },
     {
+      "id": "e67bd8eb-66db-48af-82f8-74f5595f1928",
+      "name": "Curious Pair // Treats to Share",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Peasant",
+          "//",
+          "Sorcery"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Peasant // Sorcery — Adventure",
+      "oracleText": "",
+      "power": 1,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Food"
+      ],
+      "set": "eld",
+      "collectorNumber": "150",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/f/7f78a570-d776-42f2-a609-6da0156c8de7.jpg?1783932614",
+        "normal": "https://cards.scryfall.io/normal/front/7/f/7f78a570-d776-42f2-a609-6da0156c8de7.jpg?1783932614",
+        "large": "https://cards.scryfall.io/large/front/7/f/7f78a570-d776-42f2-a609-6da0156c8de7.jpg?1783932614",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/f/7f78a570-d776-42f2-a609-6da0156c8de7.jpg?1783932614"
+      },
+      "localImages": {
+        "normal": "curious-pair-treats-to-share-normal.jpg",
+        "art_crop": "curious-pair-treats-to-share-art_crop.jpg"
+      },
+      "layout": "adventure",
+      "isDoubleFaced": true,
+      "faces": [
+        {
+          "name": "Curious Pair",
+          "manaCost": {
+            "generic": 1,
+            "W": 0,
+            "U": 0,
+            "B": 0,
+            "R": 0,
+            "G": 1,
+            "C": 0,
+            "other": []
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Creature"
+            ],
+            "subtypes": [
+              "Human",
+              "Peasant"
+            ]
+          },
+          "rawTypeLine": "Creature — Human Peasant",
+          "oracleText": "",
+          "power": 1,
+          "toughness": 3,
+          "colors": [],
+          "imageUris": {}
+        },
+        {
+          "name": "Treats to Share",
+          "manaCost": {
+            "generic": 0,
+            "W": 0,
+            "U": 0,
+            "B": 0,
+            "R": 0,
+            "G": 1,
+            "C": 0,
+            "other": []
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Sorcery"
+            ],
+            "subtypes": [
+              "Adventure"
+            ]
+          },
+          "rawTypeLine": "Sorcery — Adventure",
+          "oracleText": "Create a Food token. (Then exile this card. You may cast the creature later from exile. A Food token is an artifact with \"{2}, {T}, Sacrifice this token: You gain 3 life.\")",
+          "power": null,
+          "toughness": null,
+          "colors": [],
+          "imageUris": {}
+        }
+      ]
+    },
+    {
       "id": "7ee01801-5e42-4916-a359-64e9975090a7",
       "name": "Darigaaz's Charm",
       "manaCost": {
@@ -7808,10 +7924,10 @@
       "collectorNumber": "732",
       "rarity": "common",
       "imageUris": {
-        "small": "https://cards.scryfall.io/small/front/a/0/a0bdf4d1-576f-41b6-a077-8725be608331.jpg?1783903957",
-        "normal": "https://cards.scryfall.io/normal/front/a/0/a0bdf4d1-576f-41b6-a077-8725be608331.jpg?1783903957",
-        "large": "https://cards.scryfall.io/large/front/a/0/a0bdf4d1-576f-41b6-a077-8725be608331.jpg?1783903957",
-        "art_crop": "https://cards.scryfall.io/art_crop/front/a/0/a0bdf4d1-576f-41b6-a077-8725be608331.jpg?1783903957"
+        "small": "https://cards.scryfall.io/small/front/a/0/a0bdf4d1-576f-41b6-a077-8725be608331.jpg?1787563157",
+        "normal": "https://cards.scryfall.io/normal/front/a/0/a0bdf4d1-576f-41b6-a077-8725be608331.jpg?1787563157",
+        "large": "https://cards.scryfall.io/large/front/a/0/a0bdf4d1-576f-41b6-a077-8725be608331.jpg?1787563157",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/0/a0bdf4d1-576f-41b6-a077-8725be608331.jpg?1787563157"
       },
       "localImages": {
         "normal": "dazzling-angel-normal.jpg",
@@ -8757,6 +8873,57 @@
       "faces": []
     },
     {
+      "id": "a7e97fa9-4b72-4548-b854-5be5f18a6f1a",
+      "name": "Disenchant",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Destroy target artifact or enchantment.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "fdn",
+      "collectorNumber": "572",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/a/7ac43e16-8b14-46f2-877a-600ea918766b.jpg?1783908940",
+        "normal": "https://cards.scryfall.io/normal/front/7/a/7ac43e16-8b14-46f2-877a-600ea918766b.jpg?1783908940",
+        "large": "https://cards.scryfall.io/large/front/7/a/7ac43e16-8b14-46f2-877a-600ea918766b.jpg?1783908940",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/a/7ac43e16-8b14-46f2-877a-600ea918766b.jpg?1783908940"
+      },
+      "localImages": {
+        "normal": "disenchant-normal.jpg",
+        "art_crop": "disenchant-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "77eafe49-b9c5-461d-89c5-cec217dd2974",
       "name": "Disfigure",
       "manaCost": {
@@ -9058,6 +9225,57 @@
       "localImages": {
         "normal": "doom-blade-normal.jpg",
         "art_crop": "doom-blade-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "01546b7d-a233-4176-8843-d732074dc5b6",
+      "name": "Doubling Season",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "If an effect would create one or more tokens under your control, it creates twice that many of those tokens instead.\nIf an effect would put one or more counters on a permanent you control, it puts twice that many of those counters on that permanent instead.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "fdn",
+      "collectorNumber": "216",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.jpg?1783909062",
+        "normal": "https://cards.scryfall.io/normal/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.jpg?1783909062",
+        "large": "https://cards.scryfall.io/large/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.jpg?1783909062",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/2/f2c4f80e-84a0-463b-82c3-5c6503809351.jpg?1783909062"
+      },
+      "localImages": {
+        "normal": "doubling-season-normal.jpg",
+        "art_crop": "doubling-season-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -9829,6 +10047,61 @@
       "faces": []
     },
     {
+      "id": "3834d3b0-9b66-465a-a8dc-22875a819fd9",
+      "name": "Emancipation Angel",
+      "manaCost": {
+        "generic": 1,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying\nWhen this creature enters, return a permanent you control to its owner's hand.",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "jmp",
+      "collectorNumber": "102",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/b/9b2a972a-a953-485d-920d-8f4f978ef758.jpg?1783930474",
+        "normal": "https://cards.scryfall.io/normal/front/9/b/9b2a972a-a953-485d-920d-8f4f978ef758.jpg?1783930474",
+        "large": "https://cards.scryfall.io/large/front/9/b/9b2a972a-a953-485d-920d-8f4f978ef758.jpg?1783930474",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/b/9b2a972a-a953-485d-920d-8f4f978ef758.jpg?1783930474"
+      },
+      "localImages": {
+        "normal": "emancipation-angel-normal.jpg",
+        "art_crop": "emancipation-angel-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "52e439d0-a263-4d53-9ae3-fa1f8aa8293e",
       "name": "Embereth Shieldbreaker // Battle Display",
       "manaCost": {
@@ -10292,10 +10565,10 @@
       "collectorNumber": "79",
       "rarity": "rare",
       "imageUris": {
-        "small": "https://cards.scryfall.io/small/front/d/1/d11c5fe0-1528-4c94-a8cc-42bcab9d7487.jpg?1785759427",
-        "normal": "https://cards.scryfall.io/normal/front/d/1/d11c5fe0-1528-4c94-a8cc-42bcab9d7487.jpg?1785759427",
-        "large": "https://cards.scryfall.io/large/front/d/1/d11c5fe0-1528-4c94-a8cc-42bcab9d7487.jpg?1785759427",
-        "art_crop": "https://cards.scryfall.io/art_crop/front/d/1/d11c5fe0-1528-4c94-a8cc-42bcab9d7487.jpg?1785759427"
+        "small": "https://cards.scryfall.io/small/front/d/1/d11c5fe0-1528-4c94-a8cc-42bcab9d7487.jpg?1787743263",
+        "normal": "https://cards.scryfall.io/normal/front/d/1/d11c5fe0-1528-4c94-a8cc-42bcab9d7487.jpg?1787743263",
+        "large": "https://cards.scryfall.io/large/front/d/1/d11c5fe0-1528-4c94-a8cc-42bcab9d7487.jpg?1787743263",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/1/d11c5fe0-1528-4c94-a8cc-42bcab9d7487.jpg?1787743263"
       },
       "localImages": {
         "normal": "exotic-orchard-normal.jpg",
@@ -10398,6 +10671,57 @@
       "localImages": {
         "normal": "explosive-vegetation-normal.jpg",
         "art_crop": "explosive-vegetation-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "3a646245-b8b7-4f91-a312-d5eea9a9e49a",
+      "name": "Extravagant Replication",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 2,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "At the beginning of your upkeep, create a token that's a copy of another target nonland permanent you control.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "fdn",
+      "collectorNumber": "154",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/a/6a41dfae-bc7e-4105-8f7e-fd0109197ad8.jpg?1783909081",
+        "normal": "https://cards.scryfall.io/normal/front/6/a/6a41dfae-bc7e-4105-8f7e-fd0109197ad8.jpg?1783909081",
+        "large": "https://cards.scryfall.io/large/front/6/a/6a41dfae-bc7e-4105-8f7e-fd0109197ad8.jpg?1783909081",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/a/6a41dfae-bc7e-4105-8f7e-fd0109197ad8.jpg?1783909081"
+      },
+      "localImages": {
+        "normal": "extravagant-replication-normal.jpg",
+        "art_crop": "extravagant-replication-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -10996,6 +11320,62 @@
       "localImages": {
         "normal": "fiend-hunter-normal.jpg",
         "art_crop": "fiend-hunter-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "ad69f48e-c387-4376-a04f-37d3992c7946",
+      "name": "Fierce Witchstalker",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Wolf"
+        ]
+      },
+      "rawTypeLine": "Creature — Wolf",
+      "oracleText": "Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)\nWhen this creature enters, create a Food token. (It's an artifact with \"{2}, {T}, Sacrifice this token: You gain 3 life.\")",
+      "power": 4,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Food",
+        "Trample"
+      ],
+      "set": "eld",
+      "collectorNumber": "154",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/6/d63a6be2-ae9a-4758-9d5c-0297ef9af57c.jpg?1783932611",
+        "normal": "https://cards.scryfall.io/normal/front/d/6/d63a6be2-ae9a-4758-9d5c-0297ef9af57c.jpg?1783932611",
+        "large": "https://cards.scryfall.io/large/front/d/6/d63a6be2-ae9a-4758-9d5c-0297ef9af57c.jpg?1783932611",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/6/d63a6be2-ae9a-4758-9d5c-0297ef9af57c.jpg?1783932611"
+      },
+      "localImages": {
+        "normal": "fierce-witchstalker-normal.jpg",
+        "art_crop": "fierce-witchstalker-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -14153,10 +14533,10 @@
       "collectorNumber": "734",
       "rarity": "common",
       "imageUris": {
-        "small": "https://cards.scryfall.io/small/front/0/6/069cfaa5-bba4-4503-b54e-b98fa9f0a0fc.jpg?1783903956",
-        "normal": "https://cards.scryfall.io/normal/front/0/6/069cfaa5-bba4-4503-b54e-b98fa9f0a0fc.jpg?1783903956",
-        "large": "https://cards.scryfall.io/large/front/0/6/069cfaa5-bba4-4503-b54e-b98fa9f0a0fc.jpg?1783903956",
-        "art_crop": "https://cards.scryfall.io/art_crop/front/0/6/069cfaa5-bba4-4503-b54e-b98fa9f0a0fc.jpg?1783903956"
+        "small": "https://cards.scryfall.io/small/front/0/6/069cfaa5-bba4-4503-b54e-b98fa9f0a0fc.jpg?1787563133",
+        "normal": "https://cards.scryfall.io/normal/front/0/6/069cfaa5-bba4-4503-b54e-b98fa9f0a0fc.jpg?1787563133",
+        "large": "https://cards.scryfall.io/large/front/0/6/069cfaa5-bba4-4503-b54e-b98fa9f0a0fc.jpg?1787563133",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/6/069cfaa5-bba4-4503-b54e-b98fa9f0a0fc.jpg?1787563133"
       },
       "localImages": {
         "normal": "healer-s-hawk-normal.jpg",
@@ -14269,6 +14649,59 @@
       "localImages": {
         "normal": "hedge-maze-normal.jpg",
         "art_crop": "hedge-maze-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "83b43aba-bf9c-4da2-967d-9daa632e97d2",
+      "name": "Helm of the Host",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Legendary Artifact — Equipment",
+      "oracleText": "At the beginning of combat on your turn, create a token that's a copy of equipped creature, except the token isn't legendary. That token gains haste.\nEquip {5}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "msc",
+      "collectorNumber": "200",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/0/70ffc71f-328d-421d-926b-6f2e45ffb812.jpg?1783903218",
+        "normal": "https://cards.scryfall.io/normal/front/7/0/70ffc71f-328d-421d-926b-6f2e45ffb812.jpg?1783903218",
+        "large": "https://cards.scryfall.io/large/front/7/0/70ffc71f-328d-421d-926b-6f2e45ffb812.jpg?1783903218",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/0/70ffc71f-328d-421d-926b-6f2e45ffb812.jpg?1783903218"
+      },
+      "localImages": {
+        "normal": "helm-of-the-host-normal.jpg",
+        "art_crop": "helm-of-the-host-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -14431,10 +14864,10 @@
       "collectorNumber": "735",
       "rarity": "uncommon",
       "imageUris": {
-        "small": "https://cards.scryfall.io/small/front/2/e/2e1705da-dc35-4bcb-82d4-b77712e79af3.jpg?1783903956",
-        "normal": "https://cards.scryfall.io/normal/front/2/e/2e1705da-dc35-4bcb-82d4-b77712e79af3.jpg?1783903956",
-        "large": "https://cards.scryfall.io/large/front/2/e/2e1705da-dc35-4bcb-82d4-b77712e79af3.jpg?1783903956",
-        "art_crop": "https://cards.scryfall.io/art_crop/front/2/e/2e1705da-dc35-4bcb-82d4-b77712e79af3.jpg?1783903956"
+        "small": "https://cards.scryfall.io/small/front/2/e/2e1705da-dc35-4bcb-82d4-b77712e79af3.jpg?1787563129",
+        "normal": "https://cards.scryfall.io/normal/front/2/e/2e1705da-dc35-4bcb-82d4-b77712e79af3.jpg?1787563129",
+        "large": "https://cards.scryfall.io/large/front/2/e/2e1705da-dc35-4bcb-82d4-b77712e79af3.jpg?1787563129",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/e/2e1705da-dc35-4bcb-82d4-b77712e79af3.jpg?1787563129"
       },
       "localImages": {
         "normal": "herald-of-faith-normal.jpg",
@@ -15015,10 +15448,10 @@
       "collectorNumber": "736",
       "rarity": "common",
       "imageUris": {
-        "small": "https://cards.scryfall.io/small/front/7/9/79016cf3-6eea-4b21-9ff3-f187d606e19a.jpg?1783903956",
-        "normal": "https://cards.scryfall.io/normal/front/7/9/79016cf3-6eea-4b21-9ff3-f187d606e19a.jpg?1783903956",
-        "large": "https://cards.scryfall.io/large/front/7/9/79016cf3-6eea-4b21-9ff3-f187d606e19a.jpg?1783903956",
-        "art_crop": "https://cards.scryfall.io/art_crop/front/7/9/79016cf3-6eea-4b21-9ff3-f187d606e19a.jpg?1783903956"
+        "small": "https://cards.scryfall.io/small/front/7/9/79016cf3-6eea-4b21-9ff3-f187d606e19a.jpg?1787563124",
+        "normal": "https://cards.scryfall.io/normal/front/7/9/79016cf3-6eea-4b21-9ff3-f187d606e19a.jpg?1787563124",
+        "large": "https://cards.scryfall.io/large/front/7/9/79016cf3-6eea-4b21-9ff3-f187d606e19a.jpg?1787563124",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/9/79016cf3-6eea-4b21-9ff3-f187d606e19a.jpg?1787563124"
       },
       "localImages": {
         "normal": "inspiring-overseer-normal.jpg",
@@ -16469,6 +16902,64 @@
       ]
     },
     {
+      "id": "a34b7416-cfe3-4a1e-a8c1-a3056b747519",
+      "name": "Kiki-Jiki, Mirror Breaker",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 3,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Goblin",
+          "Shaman"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Goblin Shaman",
+      "oracleText": "Haste\n{T}: Create a token that's a copy of target nonlegendary creature you control, except it has haste. Sacrifice it at the beginning of the next end step.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Haste"
+      ],
+      "set": "ima",
+      "collectorNumber": "136",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/2/a2ff0ee3-9600-4c7d-acec-6ec90595384e.jpg?1783935527",
+        "normal": "https://cards.scryfall.io/normal/front/a/2/a2ff0ee3-9600-4c7d-acec-6ec90595384e.jpg?1783935527",
+        "large": "https://cards.scryfall.io/large/front/a/2/a2ff0ee3-9600-4c7d-acec-6ec90595384e.jpg?1783935527",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/2/a2ff0ee3-9600-4c7d-acec-6ec90595384e.jpg?1783935527"
+      },
+      "localImages": {
+        "normal": "kiki-jiki-mirror-breaker-normal.jpg",
+        "art_crop": "kiki-jiki-mirror-breaker-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "eac8c196-8477-4b79-9875-21afa1e61708",
       "name": "Kiln Fiend",
       "manaCost": {
@@ -17485,6 +17976,55 @@
       "faces": []
     },
     {
+      "id": "0bf299da-1854-4153-baea-3cee2eb01ee8",
+      "name": "Lithoform Engine",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Legendary Artifact",
+      "oracleText": "{2}, {T}: Copy target activated or triggered ability you control. You may choose new targets for the copy.\n{3}, {T}: Copy target instant or sorcery spell you control. You may choose new targets for the copy.\n{4}, {T}: Copy target permanent spell you control. (The copy becomes a token.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "znr",
+      "collectorNumber": "245",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/6/6683416a-5820-4cd0-b28a-60a53239e9ef.jpg?1783929315",
+        "normal": "https://cards.scryfall.io/normal/front/6/6/6683416a-5820-4cd0-b28a-60a53239e9ef.jpg?1783929315",
+        "large": "https://cards.scryfall.io/large/front/6/6/6683416a-5820-4cd0-b28a-60a53239e9ef.jpg?1783929315",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/6/6683416a-5820-4cd0-b28a-60a53239e9ef.jpg?1783929315"
+      },
+      "localImages": {
+        "normal": "lithoform-engine-normal.jpg",
+        "art_crop": "lithoform-engine-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "68954295-54e3-4303-a6bc-fc4547a4e3a3",
       "name": "Llanowar Elves",
       "manaCost": {
@@ -18014,10 +18554,10 @@
       "collectorNumber": "738",
       "rarity": "mythic",
       "imageUris": {
-        "small": "https://cards.scryfall.io/small/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.jpg?1783903956",
-        "normal": "https://cards.scryfall.io/normal/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.jpg?1783903956",
-        "large": "https://cards.scryfall.io/large/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.jpg?1783903956",
-        "art_crop": "https://cards.scryfall.io/art_crop/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.jpg?1783903956"
+        "small": "https://cards.scryfall.io/small/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.jpg?1787563101",
+        "normal": "https://cards.scryfall.io/normal/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.jpg?1787563101",
+        "large": "https://cards.scryfall.io/large/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.jpg?1787563101",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.jpg?1787563101"
       },
       "localImages": {
         "normal": "lyra-dawnbringer-normal.jpg",
@@ -19447,6 +19987,60 @@
       "faces": []
     },
     {
+      "id": "a3ec6b5d-08ec-4ae0-b1db-c4b87a1849c7",
+      "name": "Momentary Blink",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Exile target creature you control, then return it to the battlefield under its owner's control.\nFlashback {3}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "U",
+        "W"
+      ],
+      "keywords": [
+        "Flashback"
+      ],
+      "set": "dmr",
+      "collectorNumber": "15",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/1/619c620d-1920-40d1-98d4-df5607f84d26.jpg?1783918511",
+        "normal": "https://cards.scryfall.io/normal/front/6/1/619c620d-1920-40d1-98d4-df5607f84d26.jpg?1783918511",
+        "large": "https://cards.scryfall.io/large/front/6/1/619c620d-1920-40d1-98d4-df5607f84d26.jpg?1783918511",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/1/619c620d-1920-40d1-98d4-df5607f84d26.jpg?1783918511"
+      },
+      "localImages": {
+        "normal": "momentary-blink-normal.jpg",
+        "art_crop": "momentary-blink-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "dafd2713-d1bc-474b-b390-d2ff20b5375e",
       "name": "Monastery Swiftspear",
       "manaCost": {
@@ -19906,6 +20500,57 @@
       "localImages": {
         "normal": "narset-s-reversal-normal.jpg",
         "art_crop": "narset-s-reversal-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "bdb3ca68-ec1f-4e16-81cc-d23f8f52c728",
+      "name": "Naturalize",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Destroy target artifact or enchantment.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "m19",
+      "collectorNumber": "190",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/9/390c40ba-2464-44ae-8d67-93c72ab3c425.jpg?1783934532",
+        "normal": "https://cards.scryfall.io/normal/front/3/9/390c40ba-2464-44ae-8d67-93c72ab3c425.jpg?1783934532",
+        "large": "https://cards.scryfall.io/large/front/3/9/390c40ba-2464-44ae-8d67-93c72ab3c425.jpg?1783934532",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/9/390c40ba-2464-44ae-8d67-93c72ab3c425.jpg?1783934532"
+      },
+      "localImages": {
+        "normal": "naturalize-normal.jpg",
+        "art_crop": "naturalize-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -21302,10 +21947,10 @@
       "collectorNumber": "765",
       "rarity": "uncommon",
       "imageUris": {
-        "small": "https://cards.scryfall.io/small/front/3/0/304c635c-de4d-46ee-8ab0-e5c4d55b61b3.jpg?1783903945",
-        "normal": "https://cards.scryfall.io/normal/front/3/0/304c635c-de4d-46ee-8ab0-e5c4d55b61b3.jpg?1783903945",
-        "large": "https://cards.scryfall.io/large/front/3/0/304c635c-de4d-46ee-8ab0-e5c4d55b61b3.jpg?1783903945",
-        "art_crop": "https://cards.scryfall.io/art_crop/front/3/0/304c635c-de4d-46ee-8ab0-e5c4d55b61b3.jpg?1783903945"
+        "small": "https://cards.scryfall.io/small/front/3/0/304c635c-de4d-46ee-8ab0-e5c4d55b61b3.jpg?1787562509",
+        "normal": "https://cards.scryfall.io/normal/front/3/0/304c635c-de4d-46ee-8ab0-e5c4d55b61b3.jpg?1787562509",
+        "large": "https://cards.scryfall.io/large/front/3/0/304c635c-de4d-46ee-8ab0-e5c4d55b61b3.jpg?1787562509",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/0/304c635c-de4d-46ee-8ab0-e5c4d55b61b3.jpg?1787562509"
       },
       "localImages": {
         "normal": "pelakka-wurm-normal.jpg",
@@ -22327,6 +22972,60 @@
       "faces": []
     },
     {
+      "id": "032ec6e2-6cc3-4a97-9cc7-3233f5e11904",
+      "name": "Reclamation Sage",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elf",
+          "Shaman"
+        ]
+      },
+      "rawTypeLine": "Creature — Elf Shaman",
+      "oracleText": "When this creature enters, you may destroy target artifact or enchantment.",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "fdn",
+      "collectorNumber": "231",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/9/1918ea65-ab7f-4d40-97fd-a656c892a2a1.jpg?1783909055",
+        "normal": "https://cards.scryfall.io/normal/front/1/9/1918ea65-ab7f-4d40-97fd-a656c892a2a1.jpg?1783909055",
+        "large": "https://cards.scryfall.io/large/front/1/9/1918ea65-ab7f-4d40-97fd-a656c892a2a1.jpg?1783909055",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/9/1918ea65-ab7f-4d40-97fd-a656c892a2a1.jpg?1783909055"
+      },
+      "localImages": {
+        "normal": "reclamation-sage-normal.jpg",
+        "art_crop": "reclamation-sage-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "67f43ac6-2a58-4b53-b5d7-0330e2a252e2",
       "name": "Reflecting Pool",
       "manaCost": {
@@ -22657,6 +23356,63 @@
           }
         }
       ]
+    },
+    {
+      "id": "08d1a5d1-141d-48e3-ac22-c2529191cb13",
+      "name": "Reya Dawnbringer",
+      "manaCost": {
+        "generic": 6,
+        "W": 3,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 9,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Angel",
+      "oracleText": "Flying\nAt the beginning of your upkeep, you may return target creature card from your graveyard to the battlefield.",
+      "power": 4,
+      "toughness": 6,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "uma",
+      "collectorNumber": "32",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/4/44b45bdd-829a-4fc1-ad37-17c2bd57fac8.jpg?1783933857",
+        "normal": "https://cards.scryfall.io/normal/front/4/4/44b45bdd-829a-4fc1-ad37-17c2bd57fac8.jpg?1783933857",
+        "large": "https://cards.scryfall.io/large/front/4/4/44b45bdd-829a-4fc1-ad37-17c2bd57fac8.jpg?1783933857",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/4/44b45bdd-829a-4fc1-ad37-17c2bd57fac8.jpg?1783933857"
+      },
+      "localImages": {
+        "normal": "reya-dawnbringer-normal.jpg",
+        "art_crop": "reya-dawnbringer-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
     },
     {
       "id": "ec47cf67-2580-464f-8118-7eabea5be11c",
@@ -24688,10 +25444,10 @@
       "collectorNumber": "740",
       "rarity": "uncommon",
       "imageUris": {
-        "small": "https://cards.scryfall.io/small/front/b/8/b8c5e74c-96e7-4a1f-93b7-14d776fe4b2d.jpg?1783903955",
-        "normal": "https://cards.scryfall.io/normal/front/b/8/b8c5e74c-96e7-4a1f-93b7-14d776fe4b2d.jpg?1783903955",
-        "large": "https://cards.scryfall.io/large/front/b/8/b8c5e74c-96e7-4a1f-93b7-14d776fe4b2d.jpg?1783903955",
-        "art_crop": "https://cards.scryfall.io/art_crop/front/b/8/b8c5e74c-96e7-4a1f-93b7-14d776fe4b2d.jpg?1783903955"
+        "small": "https://cards.scryfall.io/small/front/b/8/b8c5e74c-96e7-4a1f-93b7-14d776fe4b2d.jpg?1787563091",
+        "normal": "https://cards.scryfall.io/normal/front/b/8/b8c5e74c-96e7-4a1f-93b7-14d776fe4b2d.jpg?1787563091",
+        "large": "https://cards.scryfall.io/large/front/b/8/b8c5e74c-96e7-4a1f-93b7-14d776fe4b2d.jpg?1787563091",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/8/b8c5e74c-96e7-4a1f-93b7-14d776fe4b2d.jpg?1787563091"
       },
       "localImages": {
         "normal": "serra-angel-normal.jpg",
@@ -25127,10 +25883,10 @@
       "collectorNumber": "763",
       "rarity": "uncommon",
       "imageUris": {
-        "small": "https://cards.scryfall.io/small/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.jpg?1783903946",
-        "normal": "https://cards.scryfall.io/normal/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.jpg?1783903946",
-        "large": "https://cards.scryfall.io/large/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.jpg?1783903946",
-        "art_crop": "https://cards.scryfall.io/art_crop/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.jpg?1783903946"
+        "small": "https://cards.scryfall.io/small/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.jpg?1787562519",
+        "normal": "https://cards.scryfall.io/normal/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.jpg?1787562519",
+        "large": "https://cards.scryfall.io/large/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.jpg?1787562519",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.jpg?1787562519"
       },
       "localImages": {
         "normal": "shivan-dragon-normal.jpg",
@@ -27107,6 +27863,60 @@
       "faces": []
     },
     {
+      "id": "c34c17c7-3827-49a2-be25-67f44fdfe150",
+      "name": "Strike It Rich",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Sorcery"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Sorcery",
+      "oracleText": "Create a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")\nFlashback {2}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Treasure",
+        "Flashback"
+      ],
+      "set": "mh2",
+      "collectorNumber": "143",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/c/1c7c2814-a617-4123-acdf-1b01b2768210.jpg?1783926837",
+        "normal": "https://cards.scryfall.io/normal/front/1/c/1c7c2814-a617-4123-acdf-1b01b2768210.jpg?1783926837",
+        "large": "https://cards.scryfall.io/large/front/1/c/1c7c2814-a617-4123-acdf-1b01b2768210.jpg?1783926837",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/c/1c7c2814-a617-4123-acdf-1b01b2768210.jpg?1783926837"
+      },
+      "localImages": {
+        "normal": "strike-it-rich-normal.jpg",
+        "art_crop": "strike-it-rich-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "cf751552-156f-4f81-ac94-9814dce099f9",
       "name": "Strionic Resonator",
       "manaCost": {
@@ -28664,6 +29474,57 @@
       "faces": []
     },
     {
+      "id": "c786a0aa-d86f-42c3-a7ea-5cb6ab72b5ec",
+      "name": "Teleportation Circle",
+      "manaCost": {
+        "generic": 3,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "At the beginning of your end step, exile up to one target artifact or creature you control, then return that card to the battlefield under its owner's control.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "afr",
+      "collectorNumber": "39",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/0/90140bc0-4a9c-4422-b07c-3400c7ccde56.jpg?1783926523",
+        "normal": "https://cards.scryfall.io/normal/front/9/0/90140bc0-4a9c-4422-b07c-3400c7ccde56.jpg?1783926523",
+        "large": "https://cards.scryfall.io/large/front/9/0/90140bc0-4a9c-4422-b07c-3400c7ccde56.jpg?1783926523",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/0/90140bc0-4a9c-4422-b07c-3400c7ccde56.jpg?1783926523"
+      },
+      "localImages": {
+        "normal": "teleportation-circle-normal.jpg",
+        "art_crop": "teleportation-circle-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "60ac490c-b489-4ad2-bcc2-3babaabf8ccb",
       "name": "Tempest Angler",
       "manaCost": {
@@ -29700,6 +30561,62 @@
       "localImages": {
         "normal": "thoughtseize-normal.jpg",
         "art_crop": "thoughtseize-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "caa02547-66e3-4e27-a2d3-5e94f3e7a069",
+      "name": "Thraben Inspector",
+      "manaCost": {
+        "generic": 0,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Soldier"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Soldier",
+      "oracleText": "When this creature enters, investigate. (Create a Clue token. It's an artifact with \"{2}, Sacrifice this token: Draw a card.\")",
+      "power": 1,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Investigate"
+      ],
+      "set": "inr",
+      "collectorNumber": "45",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/8/08a5007f-06a0-40fa-a252-c38baa6b5c6f.jpg?1783908171",
+        "normal": "https://cards.scryfall.io/normal/front/0/8/08a5007f-06a0-40fa-a252-c38baa6b5c6f.jpg?1783908171",
+        "large": "https://cards.scryfall.io/large/front/0/8/08a5007f-06a0-40fa-a252-c38baa6b5c6f.jpg?1783908171",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/8/08a5007f-06a0-40fa-a252-c38baa6b5c6f.jpg?1783908171"
+      },
+      "localImages": {
+        "normal": "thraben-inspector-normal.jpg",
+        "art_crop": "thraben-inspector-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -31707,10 +32624,10 @@
       "collectorNumber": "750",
       "rarity": "common",
       "imageUris": {
-        "small": "https://cards.scryfall.io/small/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.jpg?1783903950",
-        "normal": "https://cards.scryfall.io/normal/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.jpg?1783903950",
-        "large": "https://cards.scryfall.io/large/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.jpg?1783903950",
-        "art_crop": "https://cards.scryfall.io/art_crop/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.jpg?1783903950"
+        "small": "https://cards.scryfall.io/small/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.jpg?1787562979",
+        "normal": "https://cards.scryfall.io/normal/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.jpg?1787562979",
+        "large": "https://cards.scryfall.io/large/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.jpg?1787562979",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.jpg?1787562979"
       },
       "localImages": {
         "normal": "unsummon-normal.jpg",
@@ -31812,10 +32729,10 @@
       "collectorNumber": "757",
       "rarity": "uncommon",
       "imageUris": {
-        "small": "https://cards.scryfall.io/small/front/7/a/7aff07f9-9528-4149-9af0-f4e3c66c9dc5.jpg?1783903949",
-        "normal": "https://cards.scryfall.io/normal/front/7/a/7aff07f9-9528-4149-9af0-f4e3c66c9dc5.jpg?1783903949",
-        "large": "https://cards.scryfall.io/large/front/7/a/7aff07f9-9528-4149-9af0-f4e3c66c9dc5.jpg?1783903949",
-        "art_crop": "https://cards.scryfall.io/art_crop/front/7/a/7aff07f9-9528-4149-9af0-f4e3c66c9dc5.jpg?1783903949"
+        "small": "https://cards.scryfall.io/small/front/7/a/7aff07f9-9528-4149-9af0-f4e3c66c9dc5.jpg?1787562825",
+        "normal": "https://cards.scryfall.io/normal/front/7/a/7aff07f9-9528-4149-9af0-f4e3c66c9dc5.jpg?1787562825",
+        "large": "https://cards.scryfall.io/large/front/7/a/7aff07f9-9528-4149-9af0-f4e3c66c9dc5.jpg?1787562825",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/a/7aff07f9-9528-4149-9af0-f4e3c66c9dc5.jpg?1787562825"
       },
       "localImages": {
         "normal": "vampire-nighthawk-normal.jpg",
@@ -32689,6 +33606,114 @@
       "faces": []
     },
     {
+      "id": "4744b086-fea2-4992-bfef-68c58cdf9cf0",
+      "name": "Wax // Wane",
+      "manaCost": {
+        "generic": 0,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant",
+          "//",
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant // Instant",
+      "oracleText": "Target creature gets +2/+2 until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G",
+        "W"
+      ],
+      "colorIdentity": [
+        "G",
+        "W"
+      ],
+      "keywords": [],
+      "set": "dmr",
+      "collectorNumber": "211",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/9/f93b22de-93f3-4f05-8960-fa6a539ea882.jpg?1783918422",
+        "normal": "https://cards.scryfall.io/normal/front/f/9/f93b22de-93f3-4f05-8960-fa6a539ea882.jpg?1783918422",
+        "large": "https://cards.scryfall.io/large/front/f/9/f93b22de-93f3-4f05-8960-fa6a539ea882.jpg?1783918422",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/9/f93b22de-93f3-4f05-8960-fa6a539ea882.jpg?1783918422"
+      },
+      "localImages": {
+        "normal": "wax-wane-normal.jpg",
+        "art_crop": "wax-wane-art_crop.jpg"
+      },
+      "layout": "split",
+      "isDoubleFaced": true,
+      "faces": [
+        {
+          "name": "Wax",
+          "manaCost": {
+            "generic": 0,
+            "W": 0,
+            "U": 0,
+            "B": 0,
+            "R": 0,
+            "G": 1,
+            "C": 0,
+            "other": []
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Instant"
+            ],
+            "subtypes": []
+          },
+          "rawTypeLine": "Instant",
+          "oracleText": "Target creature gets +2/+2 until end of turn.",
+          "power": null,
+          "toughness": null,
+          "colors": [],
+          "imageUris": {}
+        },
+        {
+          "name": "Wane",
+          "manaCost": {
+            "generic": 0,
+            "W": 1,
+            "U": 0,
+            "B": 0,
+            "R": 0,
+            "G": 0,
+            "C": 0,
+            "other": []
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Instant"
+            ],
+            "subtypes": []
+          },
+          "rawTypeLine": "Instant",
+          "oracleText": "Destroy target enchantment.",
+          "power": null,
+          "toughness": null,
+          "colors": [],
+          "imageUris": {}
+        }
+      ]
+    },
+    {
       "id": "31f15274-301b-47c5-ba19-0ced04520878",
       "name": "Wayfarer's Bauble",
       "manaCost": {
@@ -32946,6 +33971,61 @@
       "localImages": {
         "normal": "white-knight-normal.jpg",
         "art_crop": "white-knight-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "e8d6084b-9b72-438e-a30a-851b888f3e4d",
+      "name": "Whitemane Lion",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Cat"
+        ]
+      },
+      "rawTypeLine": "Creature — Cat",
+      "oracleText": "Flash\nWhen this creature enters, return a creature you control to its owner's hand.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flash"
+      ],
+      "set": "dmr",
+      "collectorNumber": "35",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/3/a358def9-65a0-4741-896c-b2a8c8947768.jpg?1783918502",
+        "normal": "https://cards.scryfall.io/normal/front/a/3/a358def9-65a0-4741-896c-b2a8c8947768.jpg?1783918502",
+        "large": "https://cards.scryfall.io/large/front/a/3/a358def9-65a0-4741-896c-b2a8c8947768.jpg?1783918502",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/3/a358def9-65a0-4741-896c-b2a8c8947768.jpg?1783918502"
+      },
+      "localImages": {
+        "normal": "whitemane-lion-normal.jpg",
+        "art_crop": "whitemane-lion-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
