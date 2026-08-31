@@ -187,11 +187,33 @@ throughput (games/sec) from regressing.
 | (fix/duplicate-printings) | DESKTOP-90PJPM4 (integrator) | apps/web ONLY (lib/cards.ts name-dedupe + `getCardByName`, lib/cards/addSingleCard.ts by-name known check, addSingleCard.test.ts fixture rename + new case, NEW lib/duplicate-printings.test.ts), DESIGN §3.55, COORDINATION | ✅ committed direct to main |
 | feat/pilot-pricing | worker | packages/ai ONLY (`effect-value.ts` — `LEDGERED_EFFECT_VALUE` prices for 14 of the §3.49 ledger's 20 rows + the one-read gate + `LEDGER_PRICING_OFF_WEIGHTS`; `weights.ts` +7 named weights; `choices.ts` `answerSelectTargets` up-to-N clamp; `index.ts` one export-from line; `effect-value-parity.test.ts` ledger 20→6, `attachToTarget` reason rewritten to the measured one; NEW `ledger-pricing.test.ts` 32 tests), DESIGN §3.52, COORDINATION. **No core, cards, sim or web change.** ⚠️ Seed-99 baselines BYTE-IDENTICAL (257/615/377/552 per 800) and the 9-deck pilot-ab is byte-identical too (3600/3600 slots split — the meta holds ONE card that touches these prices); the strength case is the targeted `runPilotAb` STRONGER p≈0 in §3.52. | ✅ MERGED + DEPLOYED |
 
-| feat/play-clarity | worker | apps/web ONLY — components/play/** (ChoicePrompt, AbilityPrompts, SeatPanel, BoardPermanentTile, PlayBoard + NEW AnimationLayer.tsx + CombatLines.tsx), components/online/OnlineBoard.tsx, lib/play/** NEW option-labels/jail-view/animations/combat-lines/action-hints (+tests) + play-config.ts anim knobs + view-model (NOT session.ts / setup.ts — the game-persistence agent owns those two), styles.css (play-clarity section, appended), DESIGN §3.57, COORDINATION | 🚧 IN FLIGHT |
+| feat/play-clarity | worker | apps/web ONLY — components/play/** (ChoicePrompt, AbilityPrompts, SeatPanel, BoardPermanentTile, PlayBoard + NEW AnimationLayer.tsx + CombatLines.tsx + jail-tile.test.ts), components/online/OnlineBoard.tsx, lib/play/** NEW option-labels/jail-view/animations/combat-lines/action-hints (+5 test files) + play-config.ts anim knobs (NOT session.ts / setup.ts — the game-persistence agent owns those two; view-model untouched too), styles.css (play-clarity section, appended), DESIGN §3.57, COORDINATION | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-30 worker: `feat/play-clarity` 🚧 PUSHED, not merged — DESIGN §3.57. All four Solo clarity
+  reports fixed, apps/web only, verified live (headless capture run against a real Solo game; evidence
+  screenshots in the worktree's qa/screens/). (1) Every picker row carries its OWNER — "yours" /
+  "Computer’s" from the CHOOSER's perspective — and the ZONE when candidates span zones or sit off the
+  battlefield: ChoicePrompt cards+targets (the old note printed the raw seat id "(A)"), ability-target
+  prompts, hotseat cast targets, online target sets. Pure rules in `lib/play/option-labels.ts`; zone
+  lookups go through a RefIndex built ONLY from public zones + the viewer's own hand — an id the wire
+  never sent degrades to `#id`, so labels cannot leak. (2) `exiledUntilLeavesBy` exiles render TUCKED
+  under their jailer with the top peeking out (both boards; click/right-click zooms). (3) Zone-change
+  animations off `session.events`: draw = card BACK flying library→hand (NO identity on a draw
+  descriptor — hidden info stays hidden mid-flight), mill/discard fly the face, deaths fade a ghost
+  where the tile stood; blocker→attacker SVG lines, dashed while assigning, solid once declared, both
+  boards. Reduced motion derives NOTHING; timings named in ANIMATION_CONFIG. ⚠️ Death ghosts position
+  from LAST-KNOWN tile rects kept per-instance for the board's life — a 2-deep window measurably loses
+  the rect to the auto-advance commit burst (first live game showed a panel-wide ghost). (4) The
+  declare-attackers hint matches the buttons: no eligible attackers → "You have no attackers — pass to
+  continue." (one tested hint rule for both boards, `lib/play/action-hints.ts`). Bonus: §3.54's
+  draggable=false was MISSING on battlefield tile art (click targets) — pinned + fixed via the new
+  jail-tile structural test. Honest scope notes: online zone-change sprites NOT built (frames carry
+  formatted log lines, not GameEvents); Angel of Serenity's zone-spanning picker verified by unit
+  tests, not screenshot (7 mana — the capture game ended first). Gate: vitest full suite green + lint
+  0 errors + card-index check clean.
 - 2026-08-30 worker: claiming `feat/play-clarity` (§3.57) — the Solo-session clarity reports:
   (1) owner + zone labels on EVERY picker row (ChoicePrompt cards/targets, ability target prompts,
   cast target prompts; hotseat AND online — shared components), (2) jailed cards tucked under their
