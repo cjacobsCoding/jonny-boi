@@ -3192,3 +3192,135 @@ button {
 .graveyard-panel__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
 .graveyard-panel__title { font-size: var(--text-sm); color: var(--color-fg-muted); }
 .graveyard-panel__cards { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* ============================================================================
+   §3.57 play-clarity — picker owner/zone labels, jailed-card stacks, zone
+   animations + blocker lines. Appended (like the graveyard-panel block above)
+   to keep merge conflicts small.
+   ========================================================================== */
+
+/* The board hosts two absolutely-positioned overlays (combat lines, sprites). */
+.play-board { position: relative; }
+
+/* --- picker owner/zone labels ------------------------------------------- */
+.choice-card-opt { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.choice-card-opt__meta {
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.choice-card-opt__meta--yours { color: var(--color-accent-soft); border-color: var(--color-accent); }
+.choice-option__note { color: var(--color-fg-muted); font-size: var(--text-xs); }
+
+/* --- jailed cards tucked under their jailer ------------------------------ */
+/* The jailer's tile keeps its own size; each prisoner peeks out from behind
+   the top edge, offset per stack slot (--jail-slot set inline). */
+.perm-stack { position: relative; padding-top: 14px; }
+.perm-stack > :last-child { position: relative; z-index: 1; }
+.perm-stack__jailed {
+  position: absolute;
+  top: 0;
+  left: calc(6px + (var(--jail-slot) * 14px));
+  width: 72px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--color-border-strong);
+  border-bottom: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--color-surface);
+  overflow: hidden;
+  cursor: zoom-in;
+  z-index: 0;
+  filter: saturate(0.55) brightness(0.9);
+}
+.perm-stack__jailed:hover, .perm-stack__jailed:focus-visible {
+  filter: none;
+  z-index: 2;
+  height: 40px;
+  top: -8px;
+}
+.perm-stack__jailed img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.perm-stack__jailed-name {
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+  padding: 0 2px;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.perm-stack__jailed-tag {
+  position: absolute;
+  inset: auto 0 0 0;
+  font-size: 9px;
+  line-height: 1.2;
+  padding: 0 2px;
+  background: rgb(0 0 0 / 62%);
+  color: #fff;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* --- zone-change animation layer ----------------------------------------- */
+/* Fixed overlay: sprites use viewport coordinates measured off the anchors.
+   Below the prompt dialogs (z 50/55) — a question always outranks a flourish. */
+.anim-layer { position: fixed; inset: 0; pointer-events: none; z-index: 45; }
+.anim-sprite {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-raised);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 45%);
+  overflow: hidden;
+  transition-property: transform;
+  transition-timing-function: cubic-bezier(0.3, 0.7, 0.4, 1);
+  will-change: transform;
+}
+.anim-sprite img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.anim-sprite__back { font-size: var(--text-lg); color: var(--color-accent-soft); }
+.anim-sprite--draw { background: var(--color-surface); }
+.anim-ghost {
+  position: fixed;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  opacity: 0.95;
+  transition-property: transform, opacity, filter;
+  transition-timing-function: ease-in;
+  will-change: transform, opacity;
+}
+.anim-ghost img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.anim-ghost__name { font-size: var(--text-xs); color: var(--color-fg-muted); padding: var(--space-1); }
+.anim-ghost--leaving { transform: scale(0.55) rotate(4deg); opacity: 0; filter: saturate(0.2); }
+
+/* --- blocker lines --------------------------------------------------------- */
+.combat-lines { position: absolute; inset: 0; pointer-events: none; z-index: 5; overflow: visible; }
+.combat-lines line { stroke-width: 2.5; stroke-linecap: round; }
+.combat-lines circle { stroke: none; }
+.combat-lines__declared line { stroke: var(--color-error); }
+.combat-lines__declared circle { fill: var(--color-error); }
+.combat-lines__draft line { stroke: var(--color-accent); stroke-dasharray: 6 5; }
+.combat-lines__draft circle { fill: var(--color-accent); }
+
+/* Reduced motion: the pure layer already derives nothing, and any sprite that
+   slips through renders inert (no transition — it retires on its timer). */
+@media (prefers-reduced-motion: reduce) {
+  .anim-sprite, .anim-ghost { transition: none !important; visibility: hidden; }
+}

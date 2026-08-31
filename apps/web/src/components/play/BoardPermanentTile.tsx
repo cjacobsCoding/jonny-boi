@@ -1,7 +1,8 @@
-import type { ReactElement } from 'react';
+import type { CSSProperties, ReactElement } from 'react';
 import { getCard, cardImage } from '../../lib/cards.js';
 import { CardHover } from '../CardHover.js';
 import type { BoardPermanent } from '../../lib/play/view-model.js';
+import type { JailedCardView } from '../../lib/play/jail-view.js';
 import './planeswalker.css';
 
 /** Short keyword abbreviations shown as chips on a creature. */
@@ -30,6 +31,8 @@ export function BoardPermanentTile({
   selectable,
   marker,
   onClick,
+  jailed,
+  onInspectJailed,
 }: {
   perm: BoardPermanent;
   selected?: boolean;
@@ -37,6 +40,15 @@ export function BoardPermanentTile({
   /** A small overlay label (e.g. "ATK", "→ blocks X"). */
   marker?: string;
   onClick?: () => void;
+  /**
+   * Cards THIS permanent exiled "until it leaves the battlefield" (§3.57):
+   * rendered tucked underneath the tile with their tops peeking out, so a
+   * Banisher Priest visibly HOLDS its prisoner. Grouped by the pure
+   * `jail-view` model; absent/empty renders the tile exactly as before.
+   */
+  jailed?: readonly JailedCardView[];
+  /** Zoom a peeked prisoner (routes to the shared CardZoomOverlay). */
+  onInspectJailed?: (card: JailedCardView) => void;
 }): ReactElement {
   const card = getCard(perm.cardId);
   const art = card ? cardImage(card, 'art_crop') : undefined;
@@ -63,7 +75,10 @@ export function BoardPermanentTile({
     <>
       <div className="perm__art">
         {art ? (
-          <img src={art} alt={perm.name} loading="lazy" decoding="async" />
+          // draggable={false} — §3.54's standing rule: battlefield tiles are
+          // click targets (attack/block/target selection), and a native image
+          // drag would eat the pointer stream exactly as it did in the hand.
+          <img src={art} alt={perm.name} loading="lazy" decoding="async" draggable={false} />
         ) : (
           <span className="perm__fallback">{perm.name}</span>
         )}
@@ -115,20 +130,96 @@ export function BoardPermanentTile({
 
   // Wrapped so hovering a permanent raises the full, readable card — the tile
   // itself is only an art crop, and a player needs the rules text to decide.
-  if (onClick && selectable) {
-    return (
+  // `data-perm-id` marks the tile as a measurable anchor for the combat lines
+  // and the death-ghost animation (§3.57) — data only, no behavior.
+  const tile =
+    onClick && selectable ? (
       <CardHover cardId={perm.cardId}>
-        <button type="button" className={className} onClick={onClick} title={title} aria-pressed={selected}>
+        <button
+          type="button"
+          className={className}
+          data-perm-id={perm.instanceId}
+          onClick={onClick}
+          title={title}
+          aria-pressed={selected}
+        >
           {body}
         </button>
       </CardHover>
+    ) : (
+      <CardHover cardId={perm.cardId}>
+        <div className={className} data-perm-id={perm.instanceId} title={title}>
+          {body}
+        </div>
+      </CardHover>
     );
-  }
+
+  // No prisoners → exactly the DOM this tile always rendered.
+  if (!jailed || jailed.length === 0) return tile;
+
   return (
-    <CardHover cardId={perm.cardId}>
-      <div className={className} title={title}>
-        {body}
-      </div>
-    </CardHover>
+    <div className="perm-stack">
+      {jailed.map((prisoner, index) => (
+        <JailedPeek
+          key={prisoner.instanceId}
+          prisoner={prisoner}
+          index={index}
+          jailerName={perm.name}
+          onInspect={onInspectJailed}
+        />
+      ))}
+      {tile}
+    </div>
+  );
+}
+
+/**
+ * One tucked prisoner, peeking out from behind its jailer's top edge. A button
+ * (click or right-click zooms it) because a card you can barely see is exactly
+ * the card you need to inspect.
+ */
+function JailedPeek({
+  prisoner,
+  index,
+  jailerName,
+  onInspect,
+}: {
+  prisoner: JailedCardView;
+  index: number;
+  jailerName: string;
+  onInspect?: (card: JailedCardView) => void;
+}): ReactElement {
+  const card = getCard(prisoner.cardId);
+  const art = card ? cardImage(card, 'art_crop') : undefined;
+  const label = `${prisoner.name} — exiled until ${jailerName} leaves the battlefield`;
+  const inspect = onInspect ? () => onInspect(prisoner) : undefined;
+  return (
+    <button
+      type="button"
+      className="perm-stack__jailed"
+      style={{ '--jail-slot': index } as CSSProperties}
+      title={label}
+      aria-label={label}
+      onClick={inspect}
+      onContextMenu={
+        inspect
+          ? (e) => {
+              e.preventDefault();
+              inspect();
+            }
+          : undefined
+      }
+    >
+      {/* draggable={false} — §3.54's rule: no image near a gesture surface may
+          start a native drag. */}
+      {art ? (
+        <img src={art} alt="" loading="lazy" decoding="async" draggable={false} />
+      ) : (
+        <span className="perm-stack__jailed-name">{prisoner.name}</span>
+      )}
+      <span className="perm-stack__jailed-tag" aria-hidden="true">
+        ⛓ {prisoner.name}
+      </span>
+    </button>
   );
 }

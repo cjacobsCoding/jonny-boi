@@ -16,6 +16,12 @@ import {
   type ChoiceDraft,
   type ChoiceOptionValue,
 } from '../../lib/play/choice-view.js';
+import {
+  annotateCardOptions,
+  annotateTargetOptions,
+  formatOwnerZone,
+  type ZoneOfRef,
+} from '../../lib/play/option-labels.js';
 import { PlayCard } from './PlayCard.js';
 
 /**
@@ -38,11 +44,18 @@ export function ChoicePrompt({
   choice,
   names,
   onAnswer,
+  zoneOf,
 }: {
   choice: PendingChoice;
   names: Readonly<Record<PlayerId, string>>;
   /** Submit the finished answer through the session's `answerChoice` action. */
   onAnswer: (answer: ChoiceAnswer) => void;
+  /**
+   * Resolve where a TARGET candidate publicly sits (battlefield / graveyard /
+   * stack), built by the board from PUBLIC zones only — see `makeRefIndex`.
+   * Optional: without it target rows still carry their owner, just no zone.
+   */
+  zoneOf?: ZoneOfRef;
 }): ReactElement {
   const [draft, setDraft] = useState<ChoiceDraft>(() => emptyDraft(choice));
   const cardRef = useRef<HTMLDivElement>(null);
@@ -93,13 +106,15 @@ export function ChoicePrompt({
 
         <div className="choice-prompt__options">
           {choice.kind === 'selectCards' && (
-            <CardOptions choice={choice} draft={draft} onPick={pick} />
+            <CardOptions choice={choice} draft={draft} names={names} onPick={pick} />
           )}
           {choice.kind === 'selectPlayers' && (
             <PlayerOptions choice={choice} draft={draft} names={names} onPick={pick} />
           )}
           {choice.kind === 'chooseModes' && <ModeOptions choice={choice} draft={draft} onPick={pick} />}
-          {choice.kind === 'selectTargets' && <TargetOptions choice={choice} draft={draft} onPick={pick} />}
+          {choice.kind === 'selectTargets' && (
+            <TargetOptions choice={choice} draft={draft} names={names} onPick={pick} zoneOf={zoneOf} />
+          )}
           {choice.kind === 'confirm' && (
             <BinaryOptions
               chosen={draft.kind === 'confirm' ? draft.yes : null}
@@ -172,33 +187,51 @@ export function ChoicePrompt({
  * The candidate cards. Reuses the shared `PlayCard` chip (same Scryfall art as the
  * hand and stack), badged with its 1-based position when the choice is ORDERED so
  * the human can see the sequence they are building — which is literally the answer.
+ *
+ * Every card carries an OWNER line ("yours" / "Computer’s"), and a ZONE when the
+ * candidates span zones — Angel of Serenity offers battlefield creatures beside
+ * graveyard cards, and rows that don't say which is which were §3.57's report 1.
+ * The facts come from the choice's own candidate snapshots (`option-labels`),
+ * never from a lookup that could reach hidden zones.
  */
 function CardOptions({
   choice,
   draft,
+  names,
   onPick,
 }: {
   choice: Extract<PendingChoice, { kind: 'selectCards' }>;
   draft: ChoiceDraft;
+  names: Readonly<Record<PlayerId, string>>;
   onPick: (value: ChoiceOptionValue) => void;
 }): ReactElement {
   const picked = new Set(draft.kind === 'selectCards' ? draft.instanceIds : []);
   if (choice.candidates.length === 0) {
     return <p className="choice-prompt__empty">No cards to choose from.</p>;
   }
+  const notes = annotateCardOptions(choice.candidates, choice.chooser, names);
   return (
     <div className="choice-prompt__cards">
-      {choice.candidates.map((c) => {
+      {choice.candidates.map((c, index) => {
         const order = orderBadge(choice, draft, c.instanceId);
+        const note = notes[index];
         return (
-          <PlayCard
-            key={c.instanceId}
-            cardId={c.cardId}
-            name={c.name}
-            selected={picked.has(c.instanceId)}
-            badge={order !== undefined ? `#${order}` : undefined}
-            onClick={() => onPick(c.instanceId)}
-          />
+          <div key={c.instanceId} className="choice-card-opt">
+            <PlayCard
+              cardId={c.cardId}
+              name={c.name}
+              selected={picked.has(c.instanceId)}
+              badge={order !== undefined ? `#${order}` : undefined}
+              onClick={() => onPick(c.instanceId)}
+            />
+            {note && (
+              <span
+                className={`choice-card-opt__meta${note.owner === 'yours' ? ' choice-card-opt__meta--yours' : ''}`}
+              >
+                {formatOwnerZone(note)}
+              </span>
+            )}
+          </div>
         );
       })}
     </div>
@@ -323,34 +356,53 @@ function NameableValueOptions({
  * as a permanent, which is why this renders the choice's own `TargetOption`
  * snapshots (name + controller) rather than reusing the card chips: there is no
  * card to draw for "Player B".
+ *
+ * §3.57 report 1: the note used to print the RAW seat id ("(A)"), which told the
+ * player nothing. Every row now says whose the thing is in words ("yours" /
+ * "Computer’s"), plus WHERE it sits when the candidates span zones or come from
+ * somewhere other than the battlefield (Angel of Serenity's list mixes both).
  */
 function TargetOptions({
   choice,
   draft,
+  names,
   onPick,
+  zoneOf,
 }: {
   choice: Extract<PendingChoice, { kind: 'selectTargets' }>;
   draft: ChoiceDraft;
+  names: Readonly<Record<PlayerId, string>>;
   onPick: (value: ChoiceOptionValue) => void;
+  zoneOf?: ZoneOfRef;
 }): ReactElement {
   const picked = new Set<ChoiceOptionValue>(draft.kind === 'selectTargets' ? draft.targets : []);
   if (choice.candidates.length === 0) {
     return <p className="choice-prompt__empty">Nothing legal to point at.</p>;
   }
+  const notes = annotateTargetOptions(choice.candidates, choice.chooser, names, zoneOf);
   return (
     <div className="choice-prompt__list">
-      {choice.candidates.map((candidate) => (
-        <button
-          key={String(candidate.ref)}
-          type="button"
-          className={`choice-option${picked.has(candidate.ref) ? ' choice-option--selected' : ''}`}
-          aria-pressed={picked.has(candidate.ref)}
-          onClick={() => onPick(candidate.ref)}
-        >
-          {candidate.name}
-          <span className="choice-option__note"> ({candidate.controller})</span>
-        </button>
-      ))}
+      {choice.candidates.map((candidate, index) => {
+        const note = notes[index];
+        const noteText =
+          note === 'player' ? 'player' : note !== undefined ? formatOwnerZone(note) : undefined;
+        // A seat candidate renders by its DISPLAY name — the engine's snapshot
+        // says "Player B", which is the id, not the human.
+        const label =
+          note === 'player' ? (names[candidate.ref as PlayerId] ?? candidate.name) : candidate.name;
+        return (
+          <button
+            key={String(candidate.ref)}
+            type="button"
+            className={`choice-option${picked.has(candidate.ref) ? ' choice-option--selected' : ''}`}
+            aria-pressed={picked.has(candidate.ref)}
+            onClick={() => onPick(candidate.ref)}
+          >
+            {label}
+            {noteText && <span className="choice-option__note"> ({noteText})</span>}
+          </button>
+        );
+      })}
     </div>
   );
 }

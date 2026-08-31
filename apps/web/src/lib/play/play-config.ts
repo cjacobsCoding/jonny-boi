@@ -83,3 +83,36 @@ export function stepLabel(step: string): string {
  * would otherwise register as a zero-distance drag and die on release.
  */
 export const DRAG_START_THRESHOLD_PX = 8;
+
+/** Zone-change animation knobs (§3.57) — every timing named, none inline. */
+export interface AnimationConfig {
+  /** Flight time of the card-back sprite from library to hand (a draw). */
+  readonly drawFlightMs: number;
+  /** Flight time of a card sprite into the graveyard (a mill or a discard). */
+  readonly graveFlightMs: number;
+  /** How long a dying permanent's ghost takes to fade/shrink away. */
+  readonly deathFadeMs: number;
+  /**
+   * Delay between sprites spawned by ONE action, so "draw three" reads as
+   * three cards rather than one thick blur.
+   */
+  readonly staggerMs: number;
+  /**
+   * Most sprites one batch of events may spawn. A board wipe or a big mill is
+   * a fact the log tells better than twenty overlapping sprites would — past
+   * the cap the remaining moves simply happen, exactly as before this feature.
+   */
+  readonly maxPerBatch: number;
+  /** Sprite size (width, px) for the flying card back / face. */
+  readonly spriteWidthPx: number;
+}
+
+/** The default animation configuration (see {@link AnimationConfig}). */
+export const ANIMATION_CONFIG: AnimationConfig = Object.freeze({
+  drawFlightMs: 550,
+  graveFlightMs: 480,
+  deathFadeMs: 500,
+  staggerMs: 90,
+  maxPerBatch: 10,
+  spriteWidthPx: 52,
+});

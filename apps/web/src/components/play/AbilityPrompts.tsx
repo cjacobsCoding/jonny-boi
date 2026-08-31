@@ -41,15 +41,25 @@ export function AbilityMenuPrompt({
   );
 }
 
-/** The chosen ability's targets — one button per engine-offered legal target. */
+/**
+ * The chosen ability's targets — one button per engine-offered legal target.
+ *
+ * `annotateTarget` (optional) is the §3.57 owner/zone note: the boards build it
+ * from PUBLIC zones (`makeRefIndex`) so "Mortuary Mire — return which creature
+ * card?" says whose graveyard each candidate sits in. The option labels
+ * themselves keep coming from the session/server offer; the note only adds.
+ */
 export function AbilityTargetPrompt({
   ability,
   onPick,
   onCancel,
+  annotateTarget,
 }: {
   ability: AbilityOption;
   onPick: (target: InstanceId | PlayerId) => void;
   onCancel: () => void;
+  /** Owner/zone note for one target ("yours · graveyard"), or undefined for none. */
+  annotateTarget?: (target: InstanceId | PlayerId) => string | undefined;
 }): ReactElement {
   return (
     <div className="target-prompt" role="dialog" aria-label="Choose a target for the ability">
@@ -58,16 +68,20 @@ export function AbilityTargetPrompt({
           {ability.sourceName} — {ability.label} Choose a target.
         </div>
         <div className="target-prompt__options">
-          {(ability.targets ?? []).map((choice) => (
-            <button
-              key={typeof choice.target === 'string' ? `p:${choice.target}` : `i:${choice.target}`}
-              type="button"
-              className="btn"
-              onClick={() => onPick(choice.target)}
-            >
-              {choice.label}
-            </button>
-          ))}
+          {(ability.targets ?? []).map((choice) => {
+            const note = annotateTarget?.(choice.target);
+            return (
+              <button
+                key={typeof choice.target === 'string' ? `p:${choice.target}` : `i:${choice.target}`}
+                type="button"
+                className="btn"
+                onClick={() => onPick(choice.target)}
+              >
+                {choice.label}
+                {note && <span className="choice-option__note"> ({note})</span>}
+              </button>
+            );
+          })}
         </div>
         <button type="button" className="btn btn--ghost" onClick={onCancel}>
           Cancel

@@ -740,6 +740,56 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.57 Play clarity — whose card is it, where is it, and what just happened — ✅ done
+
+Four reports from one Solo session, all the same underlying complaint: the board KNOWS more than it
+SAYS. All UI-side (`apps/web` only), all built on data the engine already carried.
+
+**Owner + zone on every picker row (reports: Angel of Serenity, Acidic Slime).** Every candidate row
+in every picker now says WHOSE it is — "yours" / "Computer’s", from the CHOOSER's perspective — and
+WHERE it sits when that isn't obvious. The rules live in one pure module, `lib/play/option-labels.ts`:
+`selectCards` rows read owner off the choice's own `CardOption.controller` and show the zone when the
+candidate set SPANS zones (Angel of Serenity mixes battlefield + both graveyards; a single-zone list
+leaves the zone to the requirement line that already says it); `selectTargets` rows read
+`TargetOption.controller` (the old note printed the raw seat id — "(A)" — which is exactly what the
+report complained about) and resolve zones through a `RefIndex` built ONLY from public zones + the
+viewer's own hand, so an id the wire never sent degrades to `#id` and can never leak. The same index
+annotates ability-target prompts and the online cast prompt's target sets; the hotseat cast prompt
+labels through `describeCastTarget`. Both boards thread the same components — hotseat and online
+render identical copy. ⚠️ The discipline to keep: labels are a pure function of the candidate
+snapshot (or the public-zone index) — never resolve a label through anything that can see a hidden
+zone.
+
+**Jailed cards sit under their jailer (report: Banisher Priest / Angel of Serenity).** An exile with
+`exiledUntilLeavesBy` (§3.56's core field) renders TUCKED under the jailer's battlefield tile, top
+edge peeking out (art, chain-tag, hover to raise, click/right-click zooms via the shared
+`CardZoomOverlay`). The grouping is pure and tested (`lib/play/jail-view.ts`): exile lists + links in
+→ per-jailer stacks out; a link whose jailer is gone falls back to the plain exile count rather than
+inventing a stack. Works on BOTH boards — the exile zones are public in the hotseat state and the
+online masked view alike.
+
+**Zone-change animations + blocker lines (report: "no animation... can't tell what is going on").**
+A pure fold (`lib/play/animations.ts`, tested) turns freshly-appended session events into sprite
+descriptors: `drawCard` → a card BACK flying library→hand for EITHER seat (a draw descriptor carries
+NO identity — hidden info stays hidden even in flight); `zoneChange` library→graveyard → a mill,
+hand→graveyard → a discard (face art — public by then); battlefield→graveyard/exile → a death ghost
+fading/shrinking where the tile stood (positioned by rects captured the commit BEFORE removal, with
+identities for ceased tokens remembered from the battlefield). `prefers-reduced-motion` derives
+NOTHING at the source and the CSS kills transitions besides; every timing is a named knob in
+`play-config.ts` (`ANIMATION_CONFIG`), and one batch is capped so a board wipe doesn't spawn twenty
+ghosts. Blocker lines: an SVG overlay connects each blocker tile to the attacker it blocks — dashed
+while the defender is still assigning, solid once declared, on both boards; WHICH lines exist is the
+tested `blockerLinePairs` rule. Scope note, honestly: the ONLINE board draws the combat lines and the
+jail stacks, but not the draw/mill/death sprites — frames carry pre-formatted log lines, not
+`GameEvent`s, so the event fold has nothing to read there (future work: ship events in the frame).
+
+**The no-attackers hint (report 4).** The declare-attackers hint promised "or attack with none" while
+the only button on screen was "Pass priority" — the engine offers no declare-attackers action for a
+seat with no eligible attackers. The per-step hint is now ONE tested rule for both boards
+(`lib/play/action-hints.ts`): the active player with an absent/empty attack template reads "You have
+no attackers — pass to continue."; a defender holding priority in the same step reads the response
+copy, not attack copy.
+
 ### 3.55 Two identical Acidic Slimes in the card library — ✅ done
 
 Reported directly: the Cards browser showed the same card twice. The static data
