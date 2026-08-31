@@ -4,6 +4,8 @@ import { BugReporter } from './components/BugReporter.js';
 import { registerStateSection } from './lib/bugreport/state-dump.js';
 import { importedCardCount, subscribeToImportedCards } from './lib/decklist/importedCards.js';
 import { NAV_FITS, computeNavOverflow, type NavOverflow } from './lib/nav-overflow.js';
+import { appUpdater, updateResumeFlag } from './lib/update/updater.js';
+import { UpdatePill } from './components/UpdatePill.js';
 import { useDecks } from './lib/useDecks.js';
 import { useSimWorker } from './lib/useSimWorker.js';
 import { useLabSelection } from './lib/useLabSelection.js';
@@ -29,6 +31,21 @@ const VIEWS = [
 
 type ViewId = (typeof VIEWS)[number]['id'];
 
+/** Narrow an arbitrary string (e.g. from the update-resume flag) to a ViewId. */
+function asViewId(value: string | undefined): ViewId | null {
+  return VIEWS.some((v) => v.id === value) ? (value as ViewId) : null;
+}
+
+/**
+ * The view the app opens on. Normally 'cards' — but when THIS load was caused
+ * by an app update applying itself (lib/update/updater.ts wrote the flag just
+ * before reloading), it is the view the user was on, so the update is
+ * invisible instead of a teleport to the front page.
+ */
+function initialView(): ViewId {
+  return asViewId(updateResumeFlag()?.view) ?? 'cards';
+}
+
 /**
  * App shell: a sticky professional header (brand + nav), the active view, and a
  * footer carrying the Scryfall attribution (etiquette). Routing is local state —
@@ -41,8 +58,20 @@ export function App(): ReactElement {
   useSyncExternalStore(subscribeToImportedCards, importedCardCount, importedCardCount);
   const cardCount = allAvailableCards().length;
 
-  const [view, setView] = useState<ViewId>('cards');
+  const [view, setView] = useState<ViewId>(initialView);
   const decks = useDecks();
+
+  // The updater needs to know the current view so an update-triggered reload
+  // can bring the user back to it, and — once, after an update reload — the
+  // viewport is put back where it was. (The Play view separately restores its
+  // own game + scroll from the persisted game record.)
+  useEffect(() => {
+    appUpdater.reportAppView(view);
+  }, [view]);
+  useEffect(() => {
+    const flag = updateResumeFlag();
+    if (flag) window.scrollTo(0, flag.scrollY);
+  }, []);
 
   // On phones the nav is a swipe strip with a hidden scrollbar, and a clipped
   // edge used to end in flat background — four of the seven tabs were
@@ -157,6 +186,8 @@ export function App(): ReactElement {
         is on. A view would have to be navigated to, which loses that frame.
       */}
       <BugReporter screenName={activeViewLabel} />
+      {/* The "update ready" pill — app-shell chrome, visible from any view. */}
+      <UpdatePill />
     </div>
   );
 }

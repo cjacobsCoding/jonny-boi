@@ -199,6 +199,18 @@ export class GameSession {
     readonly events: readonly GameEvent[],
     readonly registry: EffectRegistry,
     readonly names: Readonly<Record<PlayerId, string>>,
+    /**
+     * Every engine action this session has ACCEPTED, in order — the game's own
+     * replay script. The engine is deterministic (the RNG lives in `GameState`),
+     * so `createGame(seed, decks)` + this list rebuilds the exact state; that is
+     * what `lib/play/persist.ts` stores instead of serializing `GameState`
+     * (whose card definitions are huge and whose shape drifts). Appended only in
+     * {@link submit} on SUCCESS: a rejected action returns the original session,
+     * and the roll-back paths (`castWithAutoTap`'s failed cast discarding its
+     * taps) fall out for free because the discarded sessions carry the discarded
+     * entries away with them.
+     */
+    readonly actions: readonly GameAction[],
   ) {}
 
   /** Wrap a freshly-created game + its setup events. */
@@ -207,7 +219,7 @@ export class GameSession {
     registry: EffectRegistry,
     names: Readonly<Record<PlayerId, string>>,
   ): GameSession {
-    return new GameSession(created.state, [...created.events], registry, names);
+    return new GameSession(created.state, [...created.events], registry, names, []);
   }
 
   /** The seat that currently holds priority (whose action menu to show). */
@@ -278,6 +290,7 @@ export class GameSession {
       [...this.events, ...result.events],
       this.registry,
       this.names,
+      [...this.actions, action],
     );
     return { session: next, rejected: null, events: result.events };
   }
@@ -915,7 +928,10 @@ export class GameSession {
       { type: 'playerLost', player: loser, reason: 'conceded the game' },
       { type: 'gameOver', winner },
     ];
-    return new GameSession(next, [...this.events, ...events], this.registry, this.names);
+    // The action log is carried unchanged: a concession is not an engine action
+    // (nothing could replay it), and a conceded game is OVER — persistence clears
+    // its record rather than ever replaying up to here.
+    return new GameSession(next, [...this.events, ...events], this.registry, this.names, this.actions);
   }
 
   // --- mulligan support (London style) -----------------------------------------
@@ -953,7 +969,10 @@ export class GameSession {
         p.library.push(card); // bottom of library
       }
     }
-    return new GameSession(next, this.events, this.registry, this.names);
+    // Not an engine action, so it CANNOT ride the action log — persistence
+    // records keeps/bottoms in its own mulligan transcript (persist.ts) and
+    // replays them through this same method.
+    return new GameSession(next, this.events, this.registry, this.names, this.actions);
   }
 
   // --- internals ---------------------------------------------------------------
