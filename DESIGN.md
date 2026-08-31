@@ -740,9 +740,9 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
-### 3.60 Three reports off the non-Play surfaces: a filter that half-worked, two identical play buttons, and art per deck slot — ✅ done
+### 3.61 Four reports off the non-Play surfaces: a filter that half-worked, two identical play buttons, art per deck slot, and a deck that could not name its own broken card — ✅ done
 
-Three in-app bug reports, triaged against `main` before anything was written, because a report filed
+Four in-app bug reports, triaged against `main` before anything was written, because a report filed
 several sessions ago is a claim about a build that no longer exists.
 
 **The Cards type chips (report 211945) — the literal claim did not reproduce; the real defect did.**
@@ -789,15 +789,46 @@ only place art is actually printed. The two models stay separate at a seam (`dec
 rather than sharing a store: a deck entry is keyed by card id and belongs to one deck, a Proxies
 override is keyed by name and applies to whatever list is pasted in.
 
+**A deck that could not name its own broken card (reported live off the deployed build).** Solo setup
+refused to start with `unknown card "f413a83d-a40d-434c-b20a-4c707c0527fa" … deck size 56 is below the
+minimum of 60`. The id is a real Scryfall uuid for a card outside the 605-card pool, and the saved
+record was `{ cardId, count }` and nothing else — so neither the player nor we could learn which of
+the sixty cards had gone missing, and nothing said anything was wrong until a game was started.
+
+The out-of-pool id is not the root cause. **The name was known at every point the entry could have
+been created, and was thrown away anyway** — `buildDeck.ts`'s `toEntries` held the whole resolved
+`NormalizedCard` and kept only `card.id`. So `DeckEntry` gains an optional `name`: a tombstone, not a
+second source of truth, read only when `cardId` stops resolving. It is recorded by every construction
+site that knows it (`addCard`, the importer's `toEntries`, `copyGauntletDeck`, `applySwapToDeck`),
+carried through export/import, and **backfilled from the pool on load** — so a deck saved before the
+field existed becomes self-describing the moment it is opened on a build that still has the card,
+rather than only from its next edit onward. `validateDeck` now leads with the name and keeps the id in
+brackets for a bug report; with no name recorded it says the name is unrecoverable and points at
+re-import instead of inventing one. Pinned by `deck-entry-names.test.ts`, 7 of whose 11 cases fail
+without the change.
+
+⚠️ Two parts of that report are deliberately NOT done here and are still open: the `unknown card
+"<uuid>"` string itself comes from `packages/sim/src/deck.ts`, whose wire `DeckEntry` is
+`{ cardId, count }` — carrying the name there is a cross-package contract change, and the Play-side
+"Not ready" text that surfaces it lives in `lib/play/setup.ts`, which a concurrent agent owns. Note
+`resolveCard` there already does `pool.get(ref) ?? pool.getByName(ref)`, so passing the recorded name
+as the ref would let out-of-pool-by-id cards resolve BY NAME and fix the deck rather than just
+explaining it — the obvious next move, in `lib/sim-format.ts` plus the sim's payload type.
+Import-time refusal of an out-of-pool card is also not done (the importer's review step reports
+`notFound`/`blocked`, but not "resolved to an id our pool lacks").
+
 Also fixed in passing: `storage.ts` used to `filter()` stored deck entries and hand the RAW objects
 back typed as `{ cardId, count }`, so anything else riding on a stored entry entered the deck model
 untyped. Entries are now rebuilt field by field.
 
 Files: `lib/filter.ts`, `lib/replay-config.ts`, `components/match/PlaybackControls.tsx`,
-`lib/deck.ts`, `lib/storage.ts`, `lib/useDecks.ts`, NEW `lib/printings/entryPrinting.ts`,
-NEW `components/DeckEntryPrinting.tsx`, `views/DeckBuilderView.tsx`, `views/ProxiesView.tsx`,
-`styles.css` (own appended section). Tests: `filter.test.ts` (+13), NEW `replay-transport.test.ts`
-(6), NEW `printings/entryPrinting.test.ts` (24), NEW `storage.test.ts` (6).
+`lib/deck.ts`, `lib/storage.ts`, `lib/useDecks.ts`, `lib/decklist/buildDeck.ts`,
+`lib/decklist/gauntletDecks.ts`, `lib/decklist/applySwapToDeck.ts`,
+NEW `lib/printings/entryPrinting.ts`, NEW `components/DeckEntryPrinting.tsx`,
+`views/DeckBuilderView.tsx`, `views/ProxiesView.tsx`, `styles.css` (own appended section).
+Tests: `filter.test.ts` (+13), NEW `replay-transport.test.ts` (6),
+NEW `printings/entryPrinting.test.ts` (24), NEW `storage.test.ts` (6),
+NEW `deck-entry-names.test.ts` (11).
 
 ### 3.58 Games survive everything — state persistence, exact resume, and updates that wait their turn — ✅ done
 
