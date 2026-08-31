@@ -23,6 +23,9 @@ import { CardDetail } from '../components/CardDetail.js';
 import { ManaCurveChart } from '../components/ManaCurveChart.js';
 import { ImportDeckDialog } from '../components/ImportDeckDialog.js';
 import { AddCardDialog } from '../components/AddCardDialog.js';
+import { DeckEntryPrinting } from '../components/DeckEntryPrinting.js';
+import { usePrints } from '../lib/proxy/usePrints.js';
+import { customPrintingCount } from '../lib/printings/entryPrinting.js';
 import { deckToDecklist } from '../lib/proxy/deckToText.js';
 import { copyText } from '../lib/clipboard.js';
 import './deck-health.css';
@@ -87,6 +90,9 @@ function DeckPanel({
   const [ioOpen, setIoOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [addCardOpen, setAddCardOpen] = useState(false);
+  // ONE printings lookup for the whole deck list — see DeckEntryPrinting for why
+  // a hook per row would cross-talk between cards.
+  const prints = usePrints();
 
   if (!active) {
     return (
@@ -103,6 +109,8 @@ function DeckPanel({
   const atTarget = size >= MIN_DECK_SIZE;
   // Can this deck actually be PLAYED, as opposed to merely being legal?
   const health = assessDeckHealth(active.cards.map((e) => ({ cardId: e.cardId, count: e.count })));
+
+  const customPrinting = customPrintingCount(active);
 
   const exportJson = JSON.stringify(toExport(active), null, 2);
 
@@ -156,6 +164,16 @@ function DeckPanel({
         </strong>
       </div>
 
+      {/* Chosen printings are invisible in a text deck list, so the count says
+          they exist at all — otherwise the only way to find out a slot is on
+          custom art is to open its picker. */}
+      {customPrinting > 0 && (
+        <div className="deck-stat-row deck-stat-row--printings">
+          <span>Custom printings</span>
+          <strong>{customPrinting}</strong>
+        </div>
+      )}
+
       <div>
         <div className="section-label">Mana curve</div>
         <ManaCurveChart bars={curve} />
@@ -194,7 +212,7 @@ function DeckPanel({
               <div className="deck-group__title">
                 {group.type} ({group.count})
               </div>
-              {group.entries.map(({ card, count }) => (
+              {group.entries.map(({ card, count, printing }) => (
                 <div key={card.id} className="deck-entry">
                   <span className="deck-entry__count">{count}×</span>
                   <span
@@ -244,6 +262,16 @@ function DeckPanel({
                   >
                     +
                   </button>
+                  {/* Which PRINTING this slot uses. Art only — the card's
+                      identity is its id, so this never touches legality,
+                      the curve, or anything the sim reads. */}
+                  <DeckEntryPrinting
+                    card={card}
+                    printing={printing}
+                    prints={prints}
+                    onChoose={decks.setEntryPrinting}
+                    onReset={(cardId) => decks.setEntryPrinting(cardId, null)}
+                  />
                 </div>
               ))}
             </div>

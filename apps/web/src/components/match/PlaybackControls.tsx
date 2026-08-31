@@ -1,5 +1,9 @@
 import type { ReactElement } from 'react';
-import { PLAYBACK_SPEEDS } from '../../lib/replay-config.js';
+import {
+  PLAYBACK_SPEEDS,
+  TRANSPORT_BUTTONS,
+  type TransportButtonId,
+} from '../../lib/replay-config.js';
 import type { ReplayPlayback } from './useReplayPlayback.js';
 import type { KeyMoment } from '../../lib/replay-fold.js';
 
@@ -36,49 +40,52 @@ export function PlaybackControls({
     return { ...m, fraction: lastFrame > 0 ? frame / lastFrame : 0 };
   });
 
+  // What each button DOES, keyed by the same id `TRANSPORT_BUTTONS` uses. The
+  // config owns how a button reads; this owns what it does — so the "no two
+  // controls look alike" rule stays checkable in one place (replay-config), and
+  // adding a control means adding a row there plus a behaviour here.
+  const behaviour: Record<
+    TransportButtonId,
+    { onClick: () => void; disabled: boolean; className: string }
+  > = {
+    restart: {
+      onClick: playback.restart,
+      disabled: playback.atStart && !playback.playing,
+      className: 'btn',
+    },
+    stepBack: { onClick: playback.stepBack, disabled: playback.atStart, className: 'btn' },
+    playPause: {
+      onClick: playback.toggle,
+      disabled: frameCount === 0 || (playback.atEnd && !playback.playing),
+      className: 'btn btn--primary replay-play',
+    },
+    stepForward: {
+      onClick: playback.stepForward,
+      disabled: playback.atEnd,
+      className: 'btn',
+    },
+  };
+
   return (
     <div className="replay-transport">
       <div className="replay-buttons">
-        <button
-          type="button"
-          className="btn"
-          onClick={playback.restart}
-          disabled={playback.atStart && !playback.playing}
-          aria-label="Restart"
-          title="Restart"
-        >
-          ⏮
-        </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={playback.stepBack}
-          disabled={playback.atStart}
-          aria-label="Step back"
-          title="Step back"
-        >
-          ◀
-        </button>
-        <button
-          type="button"
-          className="btn btn--primary replay-play"
-          onClick={playback.toggle}
-          disabled={frameCount === 0 || (playback.atEnd && !playback.playing)}
-          aria-label={playback.playing ? 'Pause' : 'Play'}
-          title={playback.playing ? 'Pause' : 'Play'}
-        >
-          {playback.playing ? '⏸' : '▶'}
-        </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={playback.stepForward}
-          disabled={playback.atEnd}
-          aria-label="Step forward"
-          title="Step forward"
-        >
-          ▶
-        </button>
+        {TRANSPORT_BUTTONS.map((button) => {
+          const face = playback.playing && button.whilePlaying ? button.whilePlaying : button;
+          const { onClick, disabled, className } = behaviour[button.id];
+          return (
+            <button
+              key={button.id}
+              type="button"
+              className={className}
+              onClick={onClick}
+              disabled={disabled}
+              aria-label={face.label}
+              title={face.label}
+            >
+              {face.glyph}
+            </button>
+          );
+        })}
 
         <div className="replay-speeds" role="group" aria-label="Playback speed">
           {PLAYBACK_SPEEDS.map((speed) => (

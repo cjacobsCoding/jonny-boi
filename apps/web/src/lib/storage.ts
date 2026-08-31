@@ -3,7 +3,9 @@
  * or partial storage never white-screens the app — it logs a warning and falls
  * back to an empty deck set (DESIGN.md §6: graceful fallbacks).
  */
-import type { Deck } from './deck.js';
+import type { Deck, DeckEntry } from './deck.js';
+import { getCard } from './cards.js';
+import { isEntryPrinting } from './printings/entryPrinting.js';
 import { DECKS_STORAGE_KEY, ACTIVE_DECK_STORAGE_KEY } from './config.js';
 
 /** Read all saved decks from localStorage, recovering gracefully on bad data. */
@@ -64,15 +66,33 @@ function normalizeDeck(value: Partial<Deck>): Deck {
   return {
     id: value.id ?? `deck-${Date.now().toString(36)}`,
     name: typeof value.name === 'string' && value.name.trim() ? value.name : 'Untitled Deck',
-    cards: Array.isArray(value.cards)
-      ? value.cards.filter(
-          (entry): entry is { cardId: string; count: number } =>
-            typeof entry === 'object' &&
-            entry !== null &&
-            typeof (entry as { cardId?: unknown }).cardId === 'string' &&
-            typeof (entry as { count?: unknown }).count === 'number',
-        )
-      : [],
+    cards: Array.isArray(value.cards) ? value.cards.flatMap(normalizeEntry) : [],
     updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : new Date().toISOString(),
   };
+}
+
+/**
+ * Rebuild one stored entry, or drop it if it is not an entry at all.
+ *
+ * Rebuilt field by field rather than passed through, so what comes out of
+ * storage is exactly a {@link DeckEntry} and nothing else: the old version
+ * filtered the raw objects and returned them as-is, which typed away whatever
+ * else was on them. A chosen printing is kept only when it is well-formed —
+ * a corrupt one costs you the art, never the card.
+ */
+function normalizeEntry(raw: unknown): DeckEntry[] {
+  if (typeof raw !== 'object' || raw === null) return [];
+  const entry = raw as Record<string, unknown>;
+  if (typeof entry.cardId !== 'string' || typeof entry.count !== 'number') return [];
+  const normalized: DeckEntry = { cardId: entry.cardId, count: entry.count };
+  // Backfill the name from the pool on the way in, so a deck saved before
+  // `DeckEntry.name` existed becomes self-describing the moment it is loaded on a
+  // build that still has the card — rather than only from its next edit onward,
+  // which is far too late to help the deck that has already gone stale.
+  const name =
+    getCard(entry.cardId)?.name ??
+    (typeof entry.name === 'string' && entry.name.trim() ? entry.name : undefined);
+  if (name) normalized.name = name;
+  if (isEntryPrinting(entry.printing)) normalized.printing = entry.printing;
+  return [normalized];
 }

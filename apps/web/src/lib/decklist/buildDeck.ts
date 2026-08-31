@@ -53,15 +53,25 @@ export interface BuildResult {
 /** Default name when a list carries none. */
 const FALLBACK_DECK_NAME = 'Imported Deck';
 
-/** Merge duplicate lines of the same card into single deck entries. */
+/**
+ * Merge duplicate lines of the same card into single deck entries.
+ *
+ * The NAME is recorded alongside the id. This is the exact point at which it
+ * used to be lost: a resolved line holds the whole `NormalizedCard`, and the old
+ * version kept only `card.id`. An import can legitimately resolve a name to a
+ * Scryfall id that is not in the curated pool, and once the name was gone that
+ * deck could only ever report itself as `unknown card "<uuid>"`.
+ */
 function toEntries(lines: readonly ResolvedLine[]): DeckEntry[] {
-  const counts = new Map<string, number>();
+  const merged = new Map<string, DeckEntry>();
   for (const line of lines) {
-    const id = line.card?.id;
-    if (!id) continue;
-    counts.set(id, (counts.get(id) ?? 0) + line.qty);
+    const card = line.card;
+    if (!card) continue;
+    const existing = merged.get(card.id);
+    if (existing) existing.count += line.qty;
+    else merged.set(card.id, { cardId: card.id, count: line.qty, name: card.name });
   }
-  return [...counts.entries()].map(([cardId, count]) => ({ cardId, count }));
+  return [...merged.values()];
 }
 
 /**

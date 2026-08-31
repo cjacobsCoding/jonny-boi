@@ -192,8 +192,32 @@ throughput (games/sec) from regressing.
 
 | feat/play-clarity | worker | apps/web ONLY — components/play/** (ChoicePrompt, AbilityPrompts, SeatPanel, BoardPermanentTile, PlayBoard + NEW AnimationLayer.tsx + CombatLines.tsx + jail-tile.test.ts), components/online/OnlineBoard.tsx, lib/play/** NEW option-labels/jail-view/animations/combat-lines/action-hints (+5 test files) + play-config.ts anim knobs (NOT session.ts / setup.ts — the game-persistence agent owns those two; view-model untouched too), styles.css (play-clarity section, appended), DESIGN §3.57, COORDINATION | ✅ MERGED |
 
+| fix/report-sweep | worker | apps/web ONLY, all NON-Play surfaces. **Type chips:** `lib/filter.ts` + `filter.test.ts`. **Transport icons:** `lib/replay-config.ts` + `components/match/PlaybackControls.tsx` + NEW `lib/replay-transport.test.ts`. **Per-deck-entry printings:** NEW `lib/printings/entryPrinting.ts` + `entryPrinting.test.ts`, `lib/deck.ts`, `lib/storage.ts` + NEW `storage.test.ts`, `lib/useDecks.ts`, NEW `components/DeckEntryPrinting.tsx`, `views/DeckBuilderView.tsx`, `views/ProxiesView.tsx` (the deck→sheet art bridge, inside `loadDeck` only), `styles.css` (own `report-sweep` section appended at EOF). **Deck entries remember their card name** (`DeckEntry.name`, the `unknown card "<uuid>"` report): `lib/deck.ts`, `lib/storage.ts`, `lib/decklist/buildDeck.ts` + `gauntletDecks.ts` + `applySwapToDeck.ts` (one entry-construction line each), NEW `lib/deck-entry-names.test.ts`. DESIGN §3.61, COORDINATION. ⚠️ **Touches NOTHING under views/PlayView.tsx, components/play/**, components/online/**, lib/play/**, lib/online/** or packages/core/src/mana-plan.ts** — the concurrent mana/cast agent owns those. | 🚧 PUSHED, not merged |
+
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-30 worker: `fix/report-sweep` claimed — DESIGN §3.61, a triage-then-fix sweep of three
+  in-app bug reports on the **non-Play** surfaces (Cards browser type chips, the Watch-a-Game
+  transport icons, per-deck-entry alternate printings). Owns the files in the in-flight row and
+  nothing else. **I do not touch any Play surface** (`views/PlayView.tsx`, `components/play/**`,
+  `components/online/**`, `lib/play/**`, `lib/online/**`, `packages/core/src/mana-plan.ts`) — a
+  concurrent agent owns the mana/cast path. My `styles.css` change is a single appended section at
+  the very end of the file, marked `report-sweep`, so a concurrent append merges cleanly.
+  ⚠️ **Handover for whoever owns `packages/sim` + `lib/play/setup.ts`:** a deck entry now carries
+  `DeckEntry.name`, so the `unknown card "<uuid>"` failure can finally be explained. Two halves of
+  that report are still OPEN and are yours, not mine: the raw-uuid string is built in
+  `packages/sim/src/deck.ts` (its wire `DeckEntry` is `{ cardId, count }` — adding the name is a
+  cross-package contract change), and the Play "Not ready" text that surfaces it is in
+  `lib/play/setup.ts`, which I am scoped out of. Worth knowing: `resolveCard` there already does
+  `pool.get(ref) ?? pool.getByName(ref)`, so feeding it the recorded NAME for an entry whose id the
+  engine pool lacks would RESOLVE the card instead of just naming it — `lib/sim-format.ts` plus the
+  sim payload type. Import-time refusal of an out-of-pool card is also still open.
+  ⚠️ Finding for whoever owns `packages/data-tools`: `parseTypeLine` puts the literal `//` token
+  into `ParsedTypeLine.types`, and it only parses the FIRST face's types — for
+  `"Creature — Elephant // Land"` the back face's `Land` lands in `subtypes`. I did **not** change
+  it (its blast radius is the engine's card compiler, deck grouping and the mana curve); I worked
+  around it in the web filter layer, which is a display concern. It is still worth a real fix.
 
 - 2026-08-30 worker: `feat/game-resume` claimed — DESIGN §3.58 (games persist + resume exactly;
   updates defer during a live game and apply with state/screen/scroll restored). Owns the files in
