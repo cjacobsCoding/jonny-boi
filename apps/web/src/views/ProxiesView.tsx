@@ -15,6 +15,8 @@ import {
   type OverrideMap,
 } from '../lib/proxy/overrides.js';
 import type { PrintOption } from '../lib/proxy/prints.js';
+import { deckPrintingOverrides } from '../lib/printings/entryPrinting.js';
+import { getCard } from '../lib/cards.js';
 import { readImageAsDataUrl, validateUpload } from '../lib/proxy/upload.js';
 import {
   CUT_GUIDE_WIDTH_MM,
@@ -199,9 +201,18 @@ export function ProxiesView({ decks }: { decks: DecksApi }): ReactElement {
 
   const loadDeck = (id: string) => {
     const deck = decks.decks.find((d) => d.id === id);
-    if (deck) {
-      setText(deckToDecklist(deck));
-      resolver.reset();
+    if (!deck) return;
+    setText(deckToDecklist(deck));
+    resolver.reset();
+    // Carry the deck's per-slot printing choices in with it — art you picked in
+    // the builder is art you want on the sheet, and the sheet is the only place
+    // it can actually be printed. Folded ON TOP of the existing overrides so an
+    // upload for a card this deck says nothing about survives.
+    const fromDeck = deckPrintingOverrides(deck, (cardId) => getCard(cardId)?.name);
+    if (fromDeck.length > 0) {
+      commitOverrides(
+        fromDeck.reduce((map, [name, override]) => setOverride(map, name, override), overrides),
+      );
     }
   };
 

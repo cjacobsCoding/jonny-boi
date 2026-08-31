@@ -77,8 +77,8 @@ export function applySwapToDeck(
       if (entry.cardId === outCardId) {
         const remaining = entry.count - moved;
         return remaining > 0
-          ? [{ ...entry, count: remaining }, { cardId: inCardId, count: moved }]
-          : [{ cardId: inCardId, count: moved }];
+          ? [{ ...entry, count: remaining }, { cardId: inCardId, count: moved, name: inCard.name }]
+          : [{ cardId: inCardId, count: moved, name: inCard.name }];
       }
       return [entry];
     })

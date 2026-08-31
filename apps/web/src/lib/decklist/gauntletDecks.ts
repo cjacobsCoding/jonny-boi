@@ -100,7 +100,7 @@ export function copyGauntletDeck(sample: SimDeck, nameSuffix = ' (copy)'): Gaunt
     // Merge duplicates rather than emitting two entries for one card.
     const existing = cards.find((c) => c.cardId === card.id);
     if (existing) existing.count += entry.count;
-    else cards.push({ cardId: card.id, count: entry.count });
+    else cards.push({ cardId: card.id, count: entry.count, name: card.name });
   }
 
   const deck: Deck = { ...createDeck(`${sample.name}${nameSuffix}`), cards };
