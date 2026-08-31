@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import type { InstanceId, PlayerId } from '@jonny-boi/core';
+import type { InstanceId, ManaCost, PlayerId } from '@jonny-boi/core';
 import type {
   AbilityOption,
   GameSession,
@@ -9,7 +9,7 @@ import type {
 } from '../../lib/play/session.js';
 import { buildBoardView } from '../../lib/play/view-model.js';
 import { optionToTarget, type TargetOption } from '../../lib/play/targeting.js';
-import { stepLabel } from '../../lib/play/play-config.js';
+import { stepLabel, TOAST_MS } from '../../lib/play/play-config.js';
 import { SeatPanel, type PermInteraction } from './SeatPanel.js';
 import { StackPanel } from './StackPanel.js';
 import { GameLog } from './GameLog.js';
@@ -22,6 +22,17 @@ import { AbilityMenuPrompt, AbilityTargetPrompt } from './AbilityPrompts.js';
 import { graveyardPanelView } from '../../lib/play/graveyard-cast.js';
 import { isChoiceForViewer, waitingForChoiceText } from '../../lib/play/choice-view.js';
 import { isModalTap, manaTapMenu, tappableIds, type ManaTapOption } from '../../lib/play/mana-tap.js';
+import {
+  manaPickerRows,
+  manaStillNeeded,
+  stillNeededText,
+  type ManaPickerSource,
+} from '../../lib/play/mana-picker.js';
+import {
+  loadManaChoicePref,
+  saveManaChoicePref,
+  shouldAskForMana,
+} from '../../lib/play/mana-choice-pref.js';
 import { actionBarHint } from '../../lib/play/action-hints.js';
 import { blockerLinePairs } from '../../lib/play/combat-lines.js';
 import { groupJailedByJailer, jailSourcesOf } from '../../lib/play/jail-view.js';
@@ -30,6 +41,56 @@ import type { AnimationCardInfo } from '../../lib/play/animations.js';
 import { AnimationLayer, useZoneAnimations } from './AnimationLayer.js';
 import { CombatLines } from './CombatLines.js';
 import './action-bar.css';
+import './mana-picker.css';
+
+/**
+ * A cast option's identity — instance, zone AND face, because one instance can
+ * offer several casts (a split card's two halves; a card castable from hand and
+ * from the graveyard) and they are funded independently. The same three facts
+ * `CastOption` itself is keyed on inside the session.
+ */
+function castOptionKey(option: CastOption): string {
+  return `${option.instanceId}:${option.fromZone ?? 'hand'}:${option.face ?? 'front'}`;
+}
+
+/** A shared empty cost, so the no-picker render allocates nothing per frame. */
+const EMPTY_COST: ManaCost = Object.freeze({});
+
+/**
+ * The first of a hand card's cast options that has a genuine choice of funding
+ * sources, or undefined. A split card offers two casts of one instance and they
+ * are funded independently, so the chip has to name WHICH one it is offering.
+ */
+function manaChoiceCast(
+  casts: readonly CastOption[],
+  withChoice: ReadonlySet<string>,
+): CastOption | undefined {
+  return casts.find((option) => withChoice.has(castOptionKey(option)));
+}
+
+/**
+ * A cast paused so the player can say WHICH sources pay for it (§3.60).
+ *
+ * The `working` session is the whole rollback story: taps are folded into it and
+ * nothing reaches `onSubmit` until Confirm, so Cancel is `setManaPicker(null)`
+ * and the game is exactly where it was — no untap loop, no compensating action,
+ * no half-tapped board.
+ */
+interface ManaPickerState {
+  /** The cast that is waiting, with the cost it will actually be charged. */
+  readonly cast: CastOption;
+  /** Targets already chosen for it (the target prompt runs first). */
+  readonly targets: readonly (InstanceId | PlayerId)[];
+  /** The session with this payment's taps folded in so far. */
+  readonly working: GameSession;
+  /**
+   * The sources that were tappable when the picker opened, snapshotted so rows
+   * stay put as they are spent (see `manaPickerRows`).
+   */
+  readonly sources: readonly ManaPickerSource[];
+  /** Which of them this payment has already spent. */
+  readonly spent: ReadonlySet<InstanceId>;
+}
 
 /**
  * The in-game board for the player who currently holds priority (the `viewer`). It
@@ -43,7 +104,7 @@ import './action-bar.css';
  * which threads a brand-new session up to the PlayView.
  */
 export function PlayBoard({
-  session,
+  session: committedSession,
   viewer,
   onSubmit,
   onConcede,
@@ -54,6 +115,21 @@ export function PlayBoard({
   onSubmit: (run: () => SubmitResult) => void;
   onConcede: () => void;
 }): ReactElement {
+  /**
+   * A cast whose mana the player is placing by hand (§3.60). While it stands, it
+   * holds a WORKING session — a private fold of `tapForMana` submits that the
+   * board renders from and that is committed on Confirm. Cancel simply drops it,
+   * and the discarded session carries its own taps and its own action-log
+   * entries away with it (§3.58), so a cancelled cast leaves no trace at all.
+   */
+  const [manaPicker, setManaPicker] = useState<ManaPickerState | null>(null);
+  /**
+   * THE BOARD'S SOURCE OF TRUTH. Everything below reads `session`, so the
+   * picker's uncommitted taps light up the board, empty the pool readout, and
+   * feed the "still needed" line through exactly the same derivations a
+   * committed tap does — one code path, not a preview that can disagree.
+   */
+  const session = manaPicker?.working ?? committedSession;
   const names = session.names;
   const view = useMemo(() => buildBoardView(session.state, viewer, names), [session, viewer, names]);
   const step = session.state.step;
@@ -61,6 +137,9 @@ export function PlayBoard({
   // --- transient interaction state ---------------------------------------------
   // A pending cast awaiting a target selection.
   const [pendingCast, setPendingCast] = useState<CastOption | null>(null);
+  // Whether THAT cast asked for the mana picker (the per-cast way in), carried
+  // across the target prompt so the request survives choosing a target.
+  const [pendingCastAsks, setPendingCastAsks] = useState(false);
   // Attacker selection (active player, declareAttackers).
   const [chosenAttackers, setChosenAttackers] = useState<Set<InstanceId>>(new Set());
   // Per-attacker walker assignment: attacker -> the defending planeswalker it
@@ -82,9 +161,12 @@ export function PlayBoard({
   // cycling land is both a land drop and a cycling ability), awaiting the pick.
   const [handChoice, setHandChoice] = useState<InstanceId | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  /** "Always let me choose my mana" — the persisted §3.60 preference. */
+  const [alwaysChooseMana, setAlwaysChooseMana] = useState<boolean>(loadManaChoicePref);
 
   const resetTransient = (): void => {
     setPendingCast(null);
+    setPendingCastAsks(false);
     setChosenAttackers(new Set());
     setWalkerAssign(new Map());
     setBlockAssign(new Map());
@@ -93,13 +175,18 @@ export function PlayBoard({
     setAbilitySource(null);
     setPendingAbility(null);
     setHandChoice(null);
+    setManaPicker(null);
+  };
+
+  const notify = (message: string): void => {
+    setToast(message);
+    window.setTimeout(() => setToast(null), TOAST_MS);
   };
 
   const run = (fn: () => SubmitResult): void => {
     const result = fn();
     if (result.rejected) {
-      setToast(result.rejected);
-      window.setTimeout(() => setToast(null), 2600);
+      notify(result.rejected);
       return;
     }
     resetTransient();
@@ -170,7 +257,116 @@ export function PlayBoard({
       return;
     }
     const only = options[0] as ManaTapOption;
-    run(() => session.tapForMana(only.instanceId, only.mode));
+    tapSource(only.instanceId, only.mode);
+  };
+
+  /**
+   * Tap one source — the ONE path both the free-hand board tap and the picker's
+   * rows take. While a picker stands the tap folds into its private working
+   * session; otherwise it commits as it always has. Splitting these would be two
+   * answers to "what does clicking a land do".
+   */
+  const tapSource = (instanceId: InstanceId, mode: number | undefined): void => {
+    setPendingManaTap(null);
+    if (!manaPicker) {
+      run(() => session.tapForMana(instanceId, mode));
+      return;
+    }
+    const tapped = manaPicker.working.tapForMana(instanceId, mode);
+    if (tapped.rejected) {
+      notify(tapped.rejected);
+      return;
+    }
+    const spent = new Set(manaPicker.spent);
+    spent.add(instanceId);
+    setManaPicker({ ...manaPicker, working: tapped.session, spent });
+  };
+
+  // --- the §3.60 mana picker --------------------------------------------------------
+  /**
+   * Which castable cards have a GENUINE choice of funding sources — the set that
+   * earns a "choose mana" affordance and the gate on opening the picker.
+   *
+   * Only asked for options that would actually TAP something: a cast the pool
+   * already covers taps nothing, so there is nothing to choose. That prune is
+   * what keeps a per-card predicate (which plans once per source in the auto
+   * plan) off the render path for a hand of lands.
+   */
+  const castsWithManaChoice = useMemo(() => {
+    const ids = new Set<string>();
+    if (!isViewersPriority) return ids;
+    // Re-read the option lists off the session rather than closing over the
+    // conditional locals: the session memoizes both, so this is the same work,
+    // and the memo's dependencies stay the two values that actually drive it.
+    for (const option of [...session.castOptions(), ...session.graveyardCastOptions()]) {
+      if (option.affordableNow || !option.affordableWithTap) continue;
+      if (session.manaChoiceForCast(option)) ids.add(castOptionKey(option));
+    }
+    return ids;
+  }, [session, isViewersPriority]);
+
+  /** The live "still needed: {1}{G}" readout, against the WORKING pool. */
+  const manaOwed = manaPicker
+    ? manaStillNeeded(session.state.players[session.priorityPlayer].manaPool, manaPicker.cast.cost ?? {})
+    : EMPTY_COST;
+
+  /**
+   * Whether Confirm may fire. Read off the ENGINE'S own offer — the paused cast
+   * re-derived from the working session, whose `affordableNow` is the engine
+   * saying the floating pool covers the cost. The readout above is a label;
+   * this is the decision, and the two must not be the same opinion twice.
+   */
+  const manaPickerReady =
+    manaPicker !== null &&
+    [...castOptions, ...graveyardCasts, ...madnessCasts].some(
+      (option) =>
+        castOptionKey(option) === castOptionKey(manaPicker.cast) && option.affordableNow,
+    );
+
+  /** Open the picker for a cast whose targets are already settled. */
+  const openManaPicker = (cast: CastOption, targets: readonly (InstanceId | PlayerId)[]): void => {
+    const sources: ManaPickerSource[] = [];
+    for (const [instanceId, options] of tapMenu) {
+      const perm = session.state.battlefield.find((p) => p.instanceId === instanceId);
+      if (!perm || perm.controller !== viewer) continue;
+      sources.push({ instanceId, name: perm.def.name, controller: perm.controller, options });
+    }
+    resetTransient();
+    setManaPicker({ cast, targets, working: committedSession, sources, spent: new Set() });
+  };
+
+  /**
+   * Commit the picked payment. The pool already covers the cost (Confirm is
+   * disabled until it does), so `castWithAutoTap` taps NOTHING more — it just
+   * casts, and its own rollback still guards a cast the engine refuses.
+   */
+  const confirmManaPicker = (): void => {
+    const picker = manaPicker;
+    if (!picker) return;
+    const result = picker.working.castWithAutoTap(
+      picker.cast.instanceId,
+      picker.targets,
+      picker.cast.fromZone ?? 'hand',
+      picker.cast.face,
+    );
+    if (result.rejected) {
+      notify(result.rejected);
+      return;
+    }
+    setManaPicker(null);
+    resetTransient();
+    onSubmit(() => result);
+  };
+
+  /** Abandon the payment. Dropping the working session IS the rollback. */
+  const cancelManaPicker = (): void => {
+    setManaPicker(null);
+    setPendingManaTap(null);
+  };
+
+  const setAlwaysChoose = (always: boolean): void => {
+    setAlwaysChooseMana(always);
+    saveManaChoicePref(always);
   };
 
   // --- targeting -----------------------------------------------------------------
@@ -178,19 +374,45 @@ export function PlayBoard({
     ? session.targetsFor(pendingCast.requirement)
     : [];
 
-  const commitCast = (targets: readonly (InstanceId | PlayerId)[]): void => {
-    const cast = pendingCast;
-    if (!cast) return;
+  /**
+   * Finish a cast whose targets are settled: either hand the payment to the
+   * player (§3.60) or auto-tap it exactly as before.
+   *
+   * `requested` is the per-cast way in — the hand card's "choose mana" chip —
+   * and it is still subject to the same "is there a real choice?" gate as the
+   * persisted setting, so neither route can raise a picker with one button in it.
+   */
+  const startCast = (
+    cast: CastOption,
+    targets: readonly (InstanceId | PlayerId)[],
+    requested = false,
+  ): void => {
+    const ask = shouldAskForMana({
+      always: alwaysChooseMana,
+      requested,
+      choiceExists: castsWithManaChoice.has(castOptionKey(cast)),
+    });
+    if (ask) {
+      openManaPicker(cast, targets);
+      return;
+    }
     // `fromZone` rides the option: a flashback cast names its graveyard source
     // (and pays the flashback cost inside castWithAutoTap); hand casts omit it.
     run(() => session.castWithAutoTap(cast.instanceId, targets, cast.fromZone ?? 'hand', cast.face));
   };
 
-  const onCastClick = (opt: CastOption): void => {
+  const commitCast = (targets: readonly (InstanceId | PlayerId)[]): void => {
+    const cast = pendingCast;
+    if (!cast) return;
+    startCast(cast, targets, pendingCastAsks);
+  };
+
+  const onCastClick = (opt: CastOption, requested = false): void => {
     if (opt.needsTarget) {
       setPendingCast(opt);
+      setPendingCastAsks(requested);
     } else {
-      run(() => session.castWithAutoTap(opt.instanceId, [], opt.fromZone ?? 'hand', opt.face));
+      startCast(opt, [], requested);
     }
   };
 
@@ -409,8 +631,7 @@ export function PlayBoard({
    */
   const onAssignAttackWalker = (walkerId: InstanceId): void => {
     if (chosenAttackers.size === 0) {
-      setToast('Select attackers first, then click the planeswalker to attack it.');
-      window.setTimeout(() => setToast(null), 2600);
+      notify('Select attackers first, then click the planeswalker to attack it.');
       return;
     }
     setWalkerAssign((cur) => {
@@ -444,8 +665,7 @@ export function PlayBoard({
     }
     if (eligibleBlockers.has(id)) {
       if (activeBlockTarget === null) {
-        setToast('Pick an attacker to block first.');
-        window.setTimeout(() => setToast(null), 2000);
+        notify('Pick an attacker to block first.');
         return;
       }
       setBlockAssign((cur) => {
@@ -462,6 +682,23 @@ export function PlayBoard({
   const opponentInteraction = buildOpponentInteraction();
 
   function buildSelfInteraction(): PermInteraction | undefined {
+    // THE PICKER OWNS THE BOARD while it stands: the only thing to do is choose
+    // sources, so nothing else may steal a click. Spent sources stay marked so
+    // the player can see the payment they are assembling.
+    if (manaPicker) {
+      const markers = new Map<InstanceId, string>();
+      for (const id of manaPicker.spent) markers.set(id, 'paying');
+      for (const id of tappable) {
+        const options = tapMenu.get(id) ?? [];
+        markers.set(id, isModalTap(options) ? 'pay: any' : `pay: ${options[0]?.label ?? ''}`);
+      }
+      return {
+        selectableIds: tappable,
+        selectedIds: new Set(manaPicker.spent),
+        markers,
+        onClick: onTapForMana,
+      };
+    }
     if (step === 'declareAttackers' && isViewersPriority) {
       // An attacker aimed at a walker says so on its marker; the rest read "ATK"
       // (attacking the player) exactly as before.
@@ -728,6 +965,21 @@ export function PlayBoard({
                 >
                   🔍
                 </button>
+                {/* THE PER-CAST WAY IN (§3.60). Shown only on a cast that has a
+                    genuinely different way to be funded, so it is an offer where
+                    there is something to offer and absent everywhere else — no
+                    dead control, and no nag on the cards it cannot help. */}
+                {manaChoiceCast(casts, castsWithManaChoice) && (
+                  <button
+                    type="button"
+                    className="hand-card-slot__choose-mana"
+                    aria-label={`Choose which mana pays for ${c.name}`}
+                    title={`Choose which mana pays for ${c.name}`}
+                    onClick={() => onCastClick(manaChoiceCast(casts, castsWithManaChoice) as CastOption, true)}
+                  >
+                    ⛁
+                  </button>
+                )}
               </div>
             );
           })}
@@ -757,6 +1009,8 @@ export function PlayBoard({
         chosenAttackers={chosenAttackers}
         blockAssign={blockAssign}
         eligibleAttackers={eligibleAttackers}
+        alwaysChooseMana={alwaysChooseMana}
+        onAlwaysChooseMana={setAlwaysChoose}
         onPass={() => run(() => session.passPriority())}
         onDeclareAttackers={(ids) =>
           run(() => session.declareAttackers(ids, Object.fromEntries(walkerAssign)))
@@ -793,7 +1047,7 @@ export function PlayBoard({
                   key={opt.mode ?? 0}
                   type="button"
                   className="btn"
-                  onClick={() => run(() => session.tapForMana(opt.instanceId, opt.mode))}
+                  onClick={() => tapSource(opt.instanceId, opt.mode)}
                 >
                   {opt.label}
                 </button>
@@ -802,6 +1056,55 @@ export function PlayBoard({
             <button type="button" className="btn btn--ghost" onClick={() => setPendingManaTap(null)}>
               Cancel
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* §3.60 — WHICH sources pay for this spell. Click them on the board or in
+          this list; the readout counts the cost down live. Confirm casts with
+          exactly what is tapped, Cancel drops the whole working session and the
+          board is back where it started. */}
+      {manaPicker && !pendingManaTap && (
+        <div className="target-prompt mana-picker" role="dialog" aria-label="Choose which mana pays">
+          <div className="target-prompt__card">
+            <div className="target-prompt__title">Pay for {manaPicker.cast.name}</div>
+            <div className="mana-picker__owed" role="status">
+              {stillNeededText(manaOwed)}
+            </div>
+            <div className="target-prompt__options mana-picker__sources">
+              {manaPickerRows(manaPicker.sources, manaPicker.spent, viewer, names).map((row) => (
+                <button
+                  key={row.instanceId}
+                  type="button"
+                  className={`btn${row.spent ? ' btn--ghost' : ''}`}
+                  disabled={row.spent}
+                  onClick={() => onTapForMana(row.instanceId)}
+                >
+                  {row.spent ? `✓ ${row.label}` : row.label}
+                </button>
+              ))}
+            </div>
+            <label className="mana-picker__always">
+              <input
+                type="checkbox"
+                checked={alwaysChooseMana}
+                onChange={(e) => setAlwaysChoose(e.currentTarget.checked)}
+              />
+              Always let me choose my mana
+            </label>
+            <div className="target-prompt__options">
+              <button
+                type="button"
+                className="btn"
+                disabled={!manaPickerReady}
+                onClick={confirmManaPicker}
+              >
+                Confirm &amp; cast
+              </button>
+              <button type="button" className="btn btn--ghost" onClick={cancelManaPicker}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -980,6 +1283,8 @@ function ActionBar({
   blockAssign,
   eligibleAttackers,
   waitingText,
+  alwaysChooseMana,
+  onAlwaysChooseMana,
   onPass,
   onDeclareAttackers,
   onDeclareBlockers,
@@ -996,6 +1301,9 @@ function ActionBar({
   chosenAttackers: Set<InstanceId>;
   blockAssign: Map<InstanceId, InstanceId>;
   eligibleAttackers: Set<InstanceId>;
+  /** The persisted "always let me choose my mana" preference (§3.60). */
+  alwaysChooseMana: boolean;
+  onAlwaysChooseMana: (always: boolean) => void;
   onPass: () => void;
   onDeclareAttackers: (ids: readonly InstanceId[]) => void;
   onDeclareBlockers: (blocks: readonly { blocker: InstanceId; attacker: InstanceId }[]) => void;
@@ -1036,6 +1344,19 @@ function ActionBar({
       )}
       <button type="button" className="btn" onClick={onPass}>
         {passLabel(step)}
+      </button>
+      {/* §3.60 — the persisted "let me place my own mana" setting, always in
+          reach rather than buried in a settings screen: it is a decision players
+          change mid-game, spell by spell. Pressed = the picker opens for every
+          cast that has a real choice; unpressed = auto-tap, as before. */}
+      <button
+        type="button"
+        className={`btn btn--toggle${alwaysChooseMana ? ' btn--toggle-on' : ''}`}
+        aria-pressed={alwaysChooseMana}
+        title="Always let me choose which mana pays"
+        onClick={() => onAlwaysChooseMana(!alwaysChooseMana)}
+      >
+        {alwaysChooseMana ? '⛁ Choosing mana' : '⛁ Auto mana'}
       </button>
       <span className="action-bar__hint">{hint}</span>
     </div>

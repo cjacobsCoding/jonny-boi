@@ -411,6 +411,23 @@ export interface HeuristicWeights {
    * `LEDGER_PRICING_OFF_WEIGHTS` in effect-value.ts).
    */
   readonly priceLedgeredEffects: boolean;
+
+  // --- which mana source pays (core's mana-source-preference.ts — §3.60) ------
+  /**
+   * THE §3.60 SWITCH. `false` (the default) plans every payment under core's
+   * `MANA_SOURCE_PREFERENCE_DEFAULT`, which is the pre-§3.60 tie-break ladder
+   * EXACTLY — so every recorded seeded baseline and every pilot-ab number taken
+   * before this section still describes this pilot. `true` spares the useful
+   * source: with colour, size and flexibility all tied, the Forest pays and the
+   * Llanowar Elves keeps blocking.
+   *
+   * Defaulted OFF rather than ON because the human report this preference came
+   * from is about a HUMAN's board, and "obviously right for a person" is not
+   * evidence about a pilot. The measurement that decides it is DESIGN §3.60;
+   * flipping this constant is what "the pilot adopts it" would mean, and it must
+   * carry that measurement in its own body the way `DEFAULT_PILOT_ID` does.
+   */
+  readonly spareUsefulManaSources: boolean;
   /**
    * How much of `modeSelectionValue` each look BEYOND the first is worth when a
    * scry/surveil digs N deep. Below 1 because the second look filters a library
@@ -658,6 +675,10 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // pricing the §3.49 ledger (§3.52) — ON by default; `false` is the one-knob
   // reproduction of the pre-§3.52 pilot for A/B forensics.
   priceLedgeredEffects: true,
+  // Sparing the useful mana source (§3.60) — OFF by default, so this pilot plans
+  // every payment exactly as it did before the section and every recorded
+  // baseline still describes it. See the field's doc for what flipping it costs.
+  spareUsefulManaSources: false,
   // Half the first look per extra card: scry 1 = 10, scry 2 = 15, scry 3 = 20,
   // converging on (never passing) a draw at 30.
   modeSelectionExtraCardShare: 0.5,
