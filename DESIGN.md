@@ -834,6 +834,15 @@ source collapses to one "any colour" row that hands off to the existing which-co
 in: a persisted `Choose mana` toggle in the action bar (localStorage, default off) and a per-cast `⛁`
 chip that appears **only** on a hand card whose cast has a genuine choice.
 
+**📌 The ONLINE seat gets half of this, and the split is deliberate.** Its auto-tap plans under the
+same `SPARE_USEFUL_MANA_SOURCES`, so an online player's elf is spared exactly as the hotseat's is.
+The PICKER is hotseat-only: it wants a private working session to fold taps into and discard on
+cancel, and the online seat has none — it holds a redacted view and every tap is a server round trip,
+so cancelling there means un-tapping *through the server*, a different mechanism rather than a
+re-render of this one. The gate when it is built is the same `manaPaymentChoiceExists`; a wrapper for
+it is deliberately NOT parked in `auto-tap.ts` in the meantime, because an exported helper with no
+caller is dead code wearing a green checkmark (the §3.52 rule, applied to my own work).
+
 **Tests (47 new).** The literal report is pinned twice — in core (`Llanowar Elves` offered FIRST, the
 shape that made the bug reachable, must tap the Forest) and end-to-end through the real pool and a
 real `GameSession` (`mana-sources.test.ts`), where ablating the preference back to the default makes

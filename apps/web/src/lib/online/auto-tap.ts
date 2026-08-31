@@ -18,7 +18,6 @@
  * Nothing here bypasses server authority — a rejected step just stops the sequence.
  */
 import {
-  manaPaymentChoiceExists,
   planManaPayment,
   SPARE_USEFUL_MANA_SOURCES,
   type CardInstance,
@@ -159,27 +158,19 @@ export function graveyardCastableWithTaps(
 }
 
 /**
- * Is there a GENUINE choice of which sources fund this cast (§3.60) — the gate
- * on offering the ONLINE seat's mana picker, answered by the same core predicate
- * the hotseat asks. `false` for a cast with no cost and for a graveyard cast of
- * a card with no flashback, both of which have no payment to choose about.
+ * 📌 THE ONLINE MANA PICKER IS NOT BUILT (§3.60), deliberately and honestly.
+ *
+ * This seat gets the half that needed no UI — every plan above is made under
+ * {@link HUMAN_MANA_PREFERENCE}, so an online player's auto-tap spares the mana
+ * elf exactly as the hotseat's does. The PICKER is hotseat-only: it wants a
+ * private working session to fold taps into and discard on cancel, and this seat
+ * has no session — it holds a redacted view and every tap is a server round
+ * trip, so cancelling means un-tapping through the server rather than dropping
+ * an object. That is a different mechanism, not a re-render of this one.
+ *
+ * When it is built, the gate is core's `manaPaymentChoiceExists` called with
+ * `HUMAN_MANA_PREFERENCE` — the same predicate `GameSession.manaChoiceForCast`
+ * asks — so the two seats cannot disagree about when a decision exists. A
+ * wrapper for it is NOT parked here in the meantime: an exported helper with no
+ * caller is dead code wearing a green checkmark.
  */
-export function castManaChoiceExists(
-  view: ManaPlanView,
-  player: PlayerId,
-  card: CardInstance,
-  legalActions: readonly GameAction[],
-  fromZone: CastZone = 'hand',
-): boolean {
-  const cost = castCost(card, fromZone);
-  if (!cost) return false;
-  return manaPaymentChoiceExists(
-    view,
-    player,
-    cost,
-    legalActions,
-    card.def,
-    'cast',
-    HUMAN_MANA_PREFERENCE,
-  );
-}
