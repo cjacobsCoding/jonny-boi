@@ -862,6 +862,13 @@ recorded. `planManaPayment` therefore takes a `ManaSourcePreference`:
 | `SPARE_USEFUL_MANA_SOURCES` | `… → flexibility → **collateral** → size` | the hotseat + online **human** cast paths |
 | `SPARE_USEFUL_MANA_SOURCES_FIRST` | `… → restricted → **collateral** → flexibility → size` | the measurement arm (see below) |
 
+⚠️ Both human paths are PINNED, one per path. The hotseat pin (`mana-sources.test.ts`, "taps the
+Forest, not the Llanowar Elves") shipped with the feature; the ONLINE pin
+(`online/auto-tap.test.ts`, §3.60) was added at integration after an ablation found the online half
+had none — the preference was wired into `castSequence` and nothing would have gone red if it
+regressed. Both are sabotage-checked: replacing the path's preference with the engine default
+reddens that path's test and only that one.
+
 Both live placements sit strictly BELOW `pain` and `restrictedRank`: keeping a blocker must never
 outrank "this tap does not kill me", nor strand a restricted mana that would otherwise go unspent.
 The shipped human placement is the conservative one — it can only ever decide a tie the old ladder

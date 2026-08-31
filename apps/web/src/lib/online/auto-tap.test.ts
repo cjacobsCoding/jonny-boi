@@ -193,3 +193,38 @@ describe('the online seat can cast spells', () => {
     expect(after.stack).toHaveLength(1);
   });
 });
+
+/**
+ * §3.60 shipped the "spare the useful source" preference to the ONLINE seat's
+ * auto-tap as well as the hotseat's, but only the hotseat path was pinned — an
+ * ablation of the online preference reddened nothing, so the online half of the
+ * fix could have rotted silently. This is that missing pin, and it is the
+ * reported complaint verbatim: "it's like auto choosing mana-elfs when it could
+ * have chosen basic lands".
+ */
+describe('online auto-tap spares the useful sources (§3.60)', () => {
+  it('taps the Forest and leaves the mana creature untapped when either could pay', () => {
+    let bear!: CardInstance;
+    let forest!: CardInstance;
+    let elves!: CardInstance;
+    const state = sculpted((s) => {
+      forest = place(s, card('Forest'), 'A');
+      elves = place(s, card('Llanowar Elves'), 'A');
+      elves.summoningSick = false; // it has been around; tapping it IS an option
+      bear = toHand(s, card('Grizzly Bears'), 'A'); // {1}{G} — needs both sources
+      place(s, card('Forest'), 'A'); // the spare land that makes the choice real
+    });
+    const masked = maskStateForSeat(state, 'A');
+    const legal = generateLegalActions(state, DEFAULT_RULES);
+
+    const sequence = castSequence(masked, 'A', bear, [], legal);
+    expect(sequence, 'two Forests can pay {1}{G} without the elf').not.toBeNull();
+
+    const after = applySequence(state, sequence!);
+    const elfAfter = after.battlefield.find((c) => c.instanceId === elves.instanceId);
+    const forestAfter = after.battlefield.find((c) => c.instanceId === forest.instanceId);
+    // The whole point: the body that can still block or attack is the one left up.
+    expect(elfAfter?.tapped, 'the mana creature must be spared').toBe(false);
+    expect(forestAfter?.tapped, 'a basic land should have paid instead').toBe(true);
+  });
+});
