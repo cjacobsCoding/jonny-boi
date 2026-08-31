@@ -740,6 +740,65 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.60 Three reports off the non-Play surfaces: a filter that half-worked, two identical play buttons, and art per deck slot — ✅ done
+
+Three in-app bug reports, triaged against `main` before anything was written, because a report filed
+several sessions ago is a claim about a build that no longer exists.
+
+**The Cards type chips (report 211945) — the literal claim did not reproduce; the real defect did.**
+Selecting Instant *does* narrow the browser, and always did: every one of the seven chips was driven
+in a real browser and measured (605 → 207 / 95 / 75 / 110 / 34 / 2 / 125), alone and intersected with
+a live name search. What the chips did not do was find every card of the type they name. They matched
+`card.typeLine.types`, which `parseTypeLine` derives from the *combined* type line, so only the FRONT
+face survives it — and whether a back face's type survives at all depends on whether the front face
+happens to carry a subtype dash:
+
+```
+"Sorcery // Land"              → types ['Sorcery', '//', 'Land']   ✔ answers the Land chip
+"Creature — Elephant // Land"  → types ['Creature']                ✘ does not
+```
+
+So `Bala Ged Recovery` was under Land and `Kazandu Mammoth`, the same kind of card, was not. Twenty of
+the pool's fifty multi-face cards had a face no chip could reach, the three `Battle — Siege // …`
+Invasions matched **no chip at all**, and the literal `//` separator was itself offered as a card type.
+Fixed at the display seam with a new pure `filterableTypes(card)` in `lib/filter.ts` — the union of the
+card's own types and every face's, minus `//`. Counts after: 209 / 103 / 86 / 110 / 35 / 2 / 130.
+⚠️ Deliberately NOT fixed in `data-tools`: `parseTypeLine` feeds the card compiler, deck grouping and
+the mana curve, so its blast radius is the engine. The underlying parse bug is logged in COORDINATION
+for whoever owns that package. Nine tests in `filter.test.ts` fail without the fix.
+
+**The Watch-a-Game transport (report 211032) — reproduced exactly.** The bar rendered
+`⏮ ◀ ▶ ▶`: Play and Step-forward were both U+25B6, two identical play triangles side by side, with
+nothing to say which advanced one frame. Nothing was wrong with either button alone — the defect
+existed only BETWEEN them, which is why review missed it and why the fix makes the bar **data**:
+`TRANSPORT_BUTTONS` in `lib/replay-config.ts`, one list `PlaybackControls` maps over, so "no two
+controls look alike" is a property one test can check instead of four literals in four JSX blocks.
+Restart gives up `⏮` (which reads as "skip to the start" — Step-back's actual job) for `↺`, freeing
+`⏮`/`⏭` for the step pair and leaving the bare triangle meaning play and nothing else.
+
+**Alternate printings per deck slot (report 210919) — built, honestly scoped.** The printing data is
+**not** local: `card-index.json` carries exactly one printing per card, and alternates come from
+Scryfall on demand. That client already existed for Proxies (`lib/proxy/prints.ts` + `usePrints`, with
+a TTL cache), so a deck slot reuses it wholesale rather than opening a second client for the identical
+question. `DeckEntry` gains an optional `printing` — art only; `cardId` still decides what the card
+IS, so legality, the curve and everything the sim reads are untouched. The chosen printing's image URL
+is written onto the entry (exactly as the Proxies overrides already do) so the choice renders after a
+reload with no network. It survives storage, export and re-import, and loading the deck into **Proxies**
+carries the choices with it — art you cannot print would be a joke of a feature, and the sheet is the
+only place art is actually printed. The two models stay separate at a seam (`deckPrintingOverrides`)
+rather than sharing a store: a deck entry is keyed by card id and belongs to one deck, a Proxies
+override is keyed by name and applies to whatever list is pasted in.
+
+Also fixed in passing: `storage.ts` used to `filter()` stored deck entries and hand the RAW objects
+back typed as `{ cardId, count }`, so anything else riding on a stored entry entered the deck model
+untyped. Entries are now rebuilt field by field.
+
+Files: `lib/filter.ts`, `lib/replay-config.ts`, `components/match/PlaybackControls.tsx`,
+`lib/deck.ts`, `lib/storage.ts`, `lib/useDecks.ts`, NEW `lib/printings/entryPrinting.ts`,
+NEW `components/DeckEntryPrinting.tsx`, `views/DeckBuilderView.tsx`, `views/ProxiesView.tsx`,
+`styles.css` (own appended section). Tests: `filter.test.ts` (+13), NEW `replay-transport.test.ts`
+(6), NEW `printings/entryPrinting.test.ts` (24), NEW `storage.test.ts` (6).
+
 ### 3.58 Games survive everything — state persistence, exact resume, and updates that wait their turn — ✅ done
 
 The requirement, verbatim: *"I want the games to save off their state and when an update applies,
