@@ -206,11 +206,11 @@ export function splitAbilities(oracleText: string): string[] {
  * optional here rather than required.
  */
 const MODAL_HEADER =
-  /^choose\s+(?:one or both|one or more|any number|up to \w+|one|two|three|four|five)\s*\.?\s*(?:you may choose the same mode more than once\s*\.?\s*)?[—-]?\s*$/i;
+  /^choose\s+(?:one or both|one or more|any number|up to \w+|one|two|three|four|five)(?:\s+that hasn't been chosen(?:\s+this turn)?)?\s*\.?\s*(?:you may choose the same mode more than once\s*\.?\s*)?[—-]?\s*$/i;
 
 /** The same header printed at the END of a trigger line. */
 const MODAL_HEADER_AT_END =
-  /,\s*choose\s+(?:one or both|one or more|any number|up to \w+|one|two|three|four|five)\s*\.?\s*[—-]\s*$/i;
+  /,\s*choose\s+(?:one or both|one or more|any number|up to \w+|one|two|three|four|five)(?:\s+that hasn't been chosen(?:\s+this turn)?)?\s*\.?\s*[—-]\s*$/i;
 
 /** A printed mode line, which Oracle text bullets. */
 const MODE_BULLET = /^[•·]\s*/;

@@ -1057,6 +1057,15 @@ export interface ModalSpec {
   readonly max: number;
   /** "You may choose the same mode more than once." */
   readonly allowRepeats?: boolean;
+  /**
+   * "Choose one that hasn't been chosen THIS TURN —" (Gala Greeters, Monument
+   * to Endurance): a mode this object already took this turn is off the menu.
+   * Only meaningful on a TRIGGER's spec — the memory lives on the permanent
+   * (`CardInstance.modesChosenThisTurn`), and a spell has no permanent to
+   * remember with. The turnless wording is deliberately NOT this flag; see the
+   * instance field.
+   */
+  readonly notChosenThisTurn?: boolean;
   readonly modes: readonly SpellMode[];
 }
 

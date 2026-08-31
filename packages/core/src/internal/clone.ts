@@ -65,6 +65,11 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // a field that is almost always null. Copying it conditionally keeps the ordinary
   // instance byte-for-byte the object it has always been.
   if (inst.attachedTo != null) copy.attachedTo = inst.attachedTo;
+  // Same conditional-copy rule as `attachedTo`: only a permanent whose modal
+  // trigger prints "that hasn't been chosen this turn" ever carries this, and
+  // the array is COPIED (not shared) — a draft state that appended to the
+  // previous state's list would rewrite history.
+  if (inst.modesChosenThisTurn !== undefined) copy.modesChosenThisTurn = [...inst.modesChosenThisTurn];
   // Same conditional-copy argument as `attachedTo`: only a planeswalker whose
   // loyalty ability has been activated ever carries this, and an unconditional
   // extra property on every clone measurably costs sim throughput.
