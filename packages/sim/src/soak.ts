@@ -1172,6 +1172,32 @@ export function runSoak(options: SoakOptions): SoakReport {
     }
   }
 
+  // --- sequenced-witness overtime (additive; own seed lane) --------------------
+  // Runs ONLY for mechanics the grid left unfired that declare extra attempts,
+  // with seeds derived off a salted lane — so the grid above keeps byte-for-byte
+  // the seeds it always had, and a mechanic opting in cannot re-roll any other
+  // mechanic's witness. See SoakMechanic.extraAnchorAttempts for the two-cast
+  // sequence measurement this exists for.
+  for (let m = 0; m < required.length && attempts > 0; m++) {
+    const mechanic = required[m]!;
+    const extra = SOAK_MECHANICS.find((entry) => entry.id === mechanic)?.extraAnchorAttempts ?? 0;
+    if (extra <= 0 || (mechanicGames.get(mechanic) ?? 0) > 0) continue;
+    for (let attempt = 0; attempt < extra; attempt++) {
+      const gameIndex = games;
+      const seed = gameSeedFor(options.baseSeed ^ 0x7a3c9e15, m * extra + attempt);
+      const deckA = buildAnchoredDeck(index, mechanic, seed);
+      if (!deckA) break;
+      const other = required[(m + 1 + attempt) % required.length]!;
+      const deckB = buildAnchoredDeck(index, other, seed ^ 0x5bf03635) ?? buildMixedDeck(index, seed ^ 0x5bf03635);
+      const played = playOne(withSampling, deckA, deckB, seed, gameIndex, sim, nameOf);
+      violations.push(...played.violations);
+      leakScanObservations += played.scanned;
+      tally(played.mechanics);
+      account(played.result);
+      if (played.mechanics.has(mechanic)) break;
+    }
+  }
+
   // --- the mixed half ---------------------------------------------------------
   for (let g = 0; g < options.mixedGames; g++) {
     const gameIndex = games;

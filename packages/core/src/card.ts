@@ -2114,6 +2114,15 @@ export function canRevealForUntapped(
  */
 export function matchesCardFilter(card: ChoiceBearingPermanent, filter?: CardFilter): boolean {
   if (!filter) return true;
+  // The disjunction (see CardFilter.anyOf): one more conjunct clause — the
+  // card must match at least one branch, AND whatever the siblings say.
+  if (filter.anyOf !== undefined) {
+    let any = false;
+    for (let i = 0; i < filter.anyOf.length; i++) {
+      if (matchesCardFilter(card, filter.anyOf[i])) { any = true; break; }
+    }
+    if (!any) return false;
+  }
   const def = card.def;
   // The helper forms are the allocation-free, case-insensitive ones — required by
   // the statics pass that runs this for every permanent, and by subtype matching

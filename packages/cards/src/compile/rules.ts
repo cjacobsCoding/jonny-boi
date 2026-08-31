@@ -3193,8 +3193,10 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
         params: {
           who: 'controller',
           count: 1,
-          filter: { anyOfSubtypes: [subtype] },
-          nameAnyOf: BASIC_LAND_NAMES,
+          // A true OR (§3.55): the old encoding intersected a Gate-subtype filter
+          // with a basic-name list — the empty set — so the picker auto-answered
+          // an empty selection and the search silently found nothing.
+          filter: { anyOf: [{ anyOfTypes: ['land'], basic: true }, { anyOfSubtypes: [subtype] }] },
           destination: 'hand',
           reveal: true,
         },

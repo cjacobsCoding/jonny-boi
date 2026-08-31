@@ -73,6 +73,18 @@ import { PLAYER_IDS, playerZone } from './state.js';
  * the same filter the engine used.
  */
 export interface CardFilter {
+  /**
+   * DISJUNCTION: the card matches when it matches ANY branch (each branch a
+   * full CardFilter, same rules). Composes as one more AND clause with any
+   * sibling fields on this filter.
+   *
+   * Exists because printed search lines disjoin over DIFFERENT characteristics
+   * — "a basic land card OR a Gate card" (Gatecreeper Vine) — and the old
+   * encoding (a subtype filter INTERSECTED with a basic-name list) matched
+   * nothing: the picker auto-answered an empty selection and the search
+   * silently found nothing. §3.56.
+   */
+  readonly anyOf?: readonly CardFilter[];
   /** Keep only cards with at least one of these types (omit ⇒ any type). */
   readonly anyOfTypes?: readonly CardType[];
   /** Drop cards with any of these types (this is how "nonland" is written). */

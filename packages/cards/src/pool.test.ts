@@ -23,7 +23,7 @@ const SEED = 1234;
 /** Hand-authored cards (`CURATED_CARD_POOL`) — the reviewed-against-engine set. */
 const EXPECTED_CURATED_SIZE = 32;
 /** Cards the Oracle compiler built faithfully (`EXPANDED_CARD_POOL`). */
-const EXPECTED_COMPILED_SIZE = 555; // +§3.41: Angel of Serenity + a sweep of the whole Angel type
+const EXPECTED_COMPILED_SIZE = 573; // +§3.55: the data refresh alongside the search-OR fix — 18 cards that now compile under current templates
 const EXPECTED_POOL_SIZE = EXPECTED_CURATED_SIZE + EXPECTED_COMPILED_SIZE;
 
 // --- pool loading + validation -------------------------------------------------

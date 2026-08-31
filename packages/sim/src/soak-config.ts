@@ -79,6 +79,15 @@ export const SOAK_BASE_SEED = 0x50a4;
 export const SOAK_MECHANIC_SEED_ATTEMPTS = 6;
 
 /**
+ * Extra attempts for SEQUENCED witnesses (see SoakMechanic.extraAnchorAttempts).
+ * Sized from the measurement in that doc: across the two committed base seeds
+ * the sequence fired within 6 once and within 20 both times; 14 extra puts every
+ * caller at 20 total, and the loop stops at first fire so a healthy seed lane
+ * pays for none of them.
+ */
+export const SOAK_SEQUENCED_EXTRA_ATTEMPTS = 14;
+
+/**
  * Deep-tier games between full in-place-vs-cloning equivalence replays.
  *
  * The replay costs a second full game, so it samples rather than doubling the
@@ -262,6 +271,20 @@ export interface SoakMechanic {
    * be reporting the deck, not the engine.
    */
   readonly enabledBy?: (card: CardDefinition, serialized: string) => boolean;
+  /**
+   * EXTRA anchored attempts, run only if the standard grid did not fire this
+   * mechanic — on their OWN seed lane, so declaring them cannot re-roll any
+   * other mechanic's already-green witness (the grid's seed stride stays
+   * untouched). For mechanics whose witness is an ORDERED TWO-CAST SEQUENCE
+   * (resolve a five-drop, THEN resolve a token spell) rather than a single
+   * resolution: the default six attempts are a coin flip on such a sequence,
+   * and which base seed a caller uses decides the toss — soak.test's seeds
+   * fired token-count-replacement while observation.test's did not, with both
+   * runs fully deterministic. Same failure mode damage-prevention documents;
+   * different remedy because no single-cast arrangement exists for "double a
+   * token that another card must first make".
+   */
+  readonly extraAnchorAttempts?: number;
 }
 
 /**
@@ -578,6 +601,7 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     // And something to double: a doubler in a deck that makes no tokens is a
     // dead enchantment, and the soak would be reporting the deck.
     enabledBy: (_c, t) => t.includes('makeToken') || t.includes('createTokenCopy'),
+    extraAnchorAttempts: SOAK_SEQUENCED_EXTRA_ATTEMPTS,
   },
   { id: 'graveyard-recursion', label: 'graveyard recursion — a card returned from a graveyard', witnessKind: 'event', printedBy: (_c, t) => t.includes('returnFromGraveyard') || t.includes('persistReturn') },
   {

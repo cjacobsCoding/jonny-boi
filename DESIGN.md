@@ -773,6 +773,59 @@ a new addSingleCard case adding a different printing of Lightning Bolt.
 addSingleCard fixture was 'Grizzly Bears', which is now a REAL pool card — the
 moment the pool absorbed it, the "adds a new card" test started (correctly)
 answering `alreadyKnown`. It is 'Grizzled Test Bears' now.
+### 3.56 Two silent no-ops: the jail link the clone dropped, and the search OR that intersected — ✅ done
+
+Two user-reported Solo bugs, both "the card consented and then nothing happened", both engine-real and
+reproduced end to end before fixing.
+
+**The jail link died in the clone.** Angel of Serenity jailed two creatures; a Closet blink removed and
+returned the Angel; the release trigger fired — and freed nothing. `exiledUntilLeavesBy` was an ad-hoc
+property the cards package wrote onto instances, and core's pure `applyAction` path deep-clones state
+through `cloneInstance`'s FIXED field list: the link survived exactly one action and vanished on the
+next clone. It is now a real `CardInstance` field, cloned beside `timesKicked`/`chosenAsEntered`.
+
+⚠️ **The class is guarded, not just the case.** `clone-completeness.test.ts` builds an instance with
+EVERY optional field populated and requires an action-path clone to round-trip the full own-key set —
+add a per-object field without teaching the clone and it goes red before any card misbehaves.
+
+**The search OR that was an AND.** Gatecreeper Vine's "search for a basic land card OR a Gate card"
+was encoded as a Gate-subtype filter INTERSECTED with a basic-name list — the empty set. Zero
+candidates meant the picker auto-answered an empty selection ("only one legal answer"), so the user
+said yes to searching and the search silently found nothing. §3.38's claim that the primitive "unions
+a name list with a filter" was never true; Path to Exile only worked because basics ⊂ lands.
+`CardFilter` now carries `anyOf` — a real disjunction, evaluated as one more AND clause so sibling
+fields still constrain — and the rule emits `{ anyOf: [basic land, gate] }`. Pinned end to end:
+consent → picker with real candidates → the fetched card in hand; and negatively: Temple Garden
+(nonbasic, non-Gate, land types galore) is NOT offered.
+
+**Banisher Priest's "didn't exile":** the engine was correct — with no legal target the trigger leaves
+the stack by rule (CR 603.3d), silently. The fix is VISIBILITY: the game log now prints
+"<label> — nothing happens (no legal target …)" so a rules-correct fizzle stops reading as a bug.
+
+**And one census lesson about seeds.** `token-count-replacement` became must-witness the moment
+Doubling Season entered — and its witness is an ORDERED TWO-CAST SEQUENCE (resolve a five-drop, then
+resolve any token spell), which the default six anchored attempts fire on one committed base seed and
+miss on the other, both runs fully deterministic. The remedy is not a bigger global knob:
+`SoakMechanic.extraAnchorAttempts` runs overtime attempts ONLY for a still-unfired mechanic that
+declares them, on a SALTED SEED LANE — so opting in cannot re-roll any other mechanic's already-green
+witness, and a healthy lane pays for none of them (the loop stops at first fire). Probed healthy at
+28 fires across 20 anchored games before wiring.
+
+**The refresh's guards then caught two more real things.** (1) Kiki-Jiki exposed OFFERED-ACTIVATION
+BLINDNESS: §3.40's partition (land-fetch / loyalty / Equip / funded-by-tapping) owned every activation
+shape EXCEPT a tap-cost value ability the engine offers outright — the pilot never activated Kiki
+once, and the soak's inert-mechanic guard reported `delayed-trigger` dead the day the card entered
+the pool. `bestOfferedActivation` closes the hole with the same `valueOfEffects` ruler, aimed by the
+engine's own enumerated targets; pinned by `kiki-offered-activation.test.ts` (the engine offers it,
+the pilot takes it). (2) Helm of the Host is the pool's first attachment with NO modification line, so
+the attachment census gained a first-class PURE_TRIGGER shape — asserting the modification is ABSENT
+(a phantom +0/+0 would hide a compiler regression) and the printed trigger present — and the coverage
+sweep now unions both tables. The new `exiledUntilLeavesBy` field is classified in the instance-id
+vocabulary, so the leak scanner walks it.
+
+📊 Regenerating the pool under current templates brought in 18 cards that now compile (Doubling
+Season, Kiki-Jiki, Naturalize, Momentary Blink, …) — the pipeline working as designed; pool 555 → 573,
+gated by the same suite as always.
 
 ### 3.54 Native image-drag ate the game — ✅ done
 

@@ -96,6 +96,9 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // boundary after it entered — and blank it INVISIBLY, because "nothing chosen"
   // is a legal state that matches nothing rather than a crash.
   if (inst.chosenAsEntered !== undefined) copy.chosenAsEntered = inst.chosenAsEntered;
+  // The O-Ring link (§3.56): dropping this here is how "release the jailed
+  // cards" became a no-op — the link only ever lived until the next clone.
+  if (inst.exiledUntilLeavesBy !== undefined) copy.exiledUntilLeavesBy = inst.exiledUntilLeavesBy;
   // NOTE FOR THE NEXT FIELD, because this copy has now dropped one four times:
   // a fact that belongs to the CARD rather than to this object's runtime state
   // needs no line here at all. `def` is shared by reference above, so a
