@@ -2689,6 +2689,15 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'proliferate',
+    description:
+      '"Proliferate" (CR 701.27) — permanents only, which is EXACT here: this engine gives players no counter record at all',
+    pattern: /^proliferate$/,
+    build() {
+      return effects({ primitive: 'proliferate' });
+    },
+  },
+  {
     id: 'investigate',
     description: '"Investigate" (CR 701.51) — exactly "create a Clue token", as the rules define it',
     pattern: /^investigate$/,
@@ -7310,8 +7319,7 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // begin-combat, and the step-beginning triggers in every printed scope with
     // their intervening "if". What lands here
     // is a counters TEMPLATE with no rule — and, named so nobody re-builds
-    // finished work: phasing, DOUBLING counters, proliferate
-    // (needs a chooser over every permanent and player with a counter), counter
+    // finished work: phasing, DOUBLING counters, counter
     // kinds the stat layer does not read (charge/quest/time/growth/keyword
     // counters), "each ATTACKING creature", once-per-turn trigger limiters,
     // granting a triggered ability until end of turn, and removing a counter as

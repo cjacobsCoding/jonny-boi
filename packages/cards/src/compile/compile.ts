@@ -99,6 +99,7 @@ const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freez
   treasure: 'createPredefinedToken',
   food: 'createPredefinedToken',
   investigate: 'createPredefinedToken',
+  proliferate: 'proliferate',
 });
 
 /**
