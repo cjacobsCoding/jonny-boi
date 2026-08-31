@@ -740,6 +740,72 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.58 Games survive everything — state persistence, exact resume, and updates that wait their turn — ✅ done
+
+The requirement, verbatim: *"I want the games to save off their state and when an update applies,
+it should come in without breaking or interrupting things, and remember exactly what screen you
+were on, where your view was on the screen, and what state the game was exactly in."*
+
+**Persist the inputs, replay the game.** The engine is deterministic — the RNG cursor lives inside
+`GameState` — so `createGame(seed, decks)` plus the ordered list of accepted actions rebuilds the
+exact state, bit for bit. The persisted record (`apps/web/src/lib/play/persist.ts`, one versioned
+localStorage key) is therefore the game's INPUTS: the RESOLVED decklists (a builder edit must not
+rewrite history under a live game), the base seed, starting player, AI seat + pilot, the mulligan
+transcript, `GameSession.actions`, and screen hints ({revealed viewer, scrollY, turn}). `GameState`
+itself is never serialized — its card definitions are huge and its shape moves with every engine
+feature, so a snapshot would eventually resurrect a game the rules disagree with. Restore replays
+the record through the SAME calls the live view makes, and the suite pins the result down to the
+serialized state snapshot, the RNG cursor, and every zone's instance ids — then drives live and
+restored sessions 40 further pilot steps in lockstep to prove the restored game IS the game, not a
+lookalike.
+
+**Two flows live outside the action log, so they ride their own transcript.** A mulligan re-creates
+the whole game from a derived seed, and a keep bottoms cards via `bottomCards` — a pre-game library
+manipulation, not an action. The reshuffle-seed formula moved INTO persist.ts (`mulliganReseed`) and
+PlayView now imports it: one formula, two callers, zero drift. `GameSession` grew the `actions` log
+itself (appended only on ACCEPTED submits), which makes the auto-tap rollback correct for free — a
+failed cast returns the pre-tap session, and the discarded taps carry their log entries away.
+
+**Saves are debounced, flushed, and cleared.** Every committed change (action, mulligan step,
+reveal, scroll) debounce-writes one record (250 ms, named in config.ts); pagehide/visibility-hidden
+and surface unmount force-flush, so navigating away mid-game now SAVES the game instead of killing
+it (the Play menu offers "Resume game" with a discard option). Game over, concede, discard and new
+game clear the record. Storage is best-effort everywhere — quota, private mode, corrupt, oversized
+or alien blobs all degrade to a clean fresh start (pinned by tests, including "never write what
+decode would refuse").
+
+**Updates wait their turn.** `main.tsx` no longer reloads on `controllerchange`. The PWA registers
+with `registerType: 'prompt'` — REQUIRED, not stylistic: the 'autoUpdate' worker `skipWaiting()`s
+itself on install, and once it controls the page it can purge the old build's lazy chunks out from
+under the running app, so autoUpdate cannot defer safely. The whole policy is one pure function
+(`lib/update/update-decision.ts`): no waiting build → nothing; waiting build + no live game → apply
+NOW; waiting build + live game → show a small non-blocking pill ("Update ready — applies when this
+game ends") and apply the moment the game is left. "Live" includes the end screen on purpose —
+yanking the results away at the instant of victory is still an interruption — and the ONLINE surface
+defers the same way (its reconnect flow is untouched; we simply never reload while it is mounted).
+Before any update-triggered reload the coordinator (`lib/update/updater.ts`) force-flushes the
+persisted game and writes a sessionStorage resume flag {view, scrollY}; the reloaded app returns to
+that view, restores the viewport, and — for the Play view — auto-resumes the game with no menu stop.
+The flag is written ONLY on the update path (pinned), so user navigation can never fake a restore,
+and it is consumed once per load (StrictMode-safe memo) so tomorrow's launch starts normally.
+
+**What resume deliberately does NOT promise.** (1) The AI's rng stream restarts on resume: the
+restored STATE is exact, but the pilot's future tie-breaks may differ from the unreloaded
+counterfactual — future choices are not part of "restore exactly". (2) One record slot: starting a
+new game supersedes the saved one. (3) Online games are server-authoritative and out of scope for
+state persistence (the update pill still defers during them). (4) A record that no longer replays —
+a deleted imported card, an action an older rules build accepted — fails WHOLE with a reason and is
+cleared; a partially replayed game would be a different game wearing the same clothes.
+
+📊 Proven in a real browser, not only in vitest: `node apps/web/scripts/verify-game-resume.mjs`
+(build first) drives the SHIPPING bundle in Chrome — real service worker, real reload, real
+localStorage — and asserts 18 checks: a Solo game driven to a PARKED CHOICE (the cleanup discard
+question), hard reload, resume via the menu banner → the rendered board text, the re-presented
+question, and scrollY all EXACTLY equal; then a rebuild mid-game → the pill defers (page provably
+not reloaded), leaving the game applies the update (bundle hash changes), returns to the Play view
+with the flag consumed, and the game resumes exactly on the NEW build. Screenshots land in
+`apps/web/verify-out/game-resume/`.
+
 ### 3.55 Two identical Acidic Slimes in the card library — ✅ done
 
 Reported directly: the Cards browser showed the same card twice. The static data

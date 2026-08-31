@@ -79,8 +79,12 @@ function replayPlayerAssets(): Plugin {
 
 /**
  * Vite config for the PWA shell. `vite-plugin-pwa` generates the service worker
- * (offline shell) and injects the web manifest; `registerType: 'autoUpdate'`
- * keeps installed clients current without a manual update prompt.
+ * (offline shell) and injects the web manifest. `registerType: 'prompt'` makes
+ * a new build install and then WAIT (no self-skipWaiting) so `main.tsx`'s
+ * update policy decides when it takes over — required for deferring updates
+ * past a live game, because the 'autoUpdate' worker activates itself on
+ * install and can purge the running page's old chunks. Clients stay current:
+ * the app applies a waiting update itself the moment no game is live.
  */
 export default defineConfig({
   base: DEPLOY_BASE,
@@ -93,7 +97,7 @@ export default defineConfig({
     replayPlayerAssets(),
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: [
         'icons/favicon-32.png',
         'icons/favicon-16.png',

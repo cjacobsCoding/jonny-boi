@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState, type ReactElement } from 'react';
 import { createRng, type InstanceId, type PlayerId } from '@jonny-boi/core';
 import { createDefaultAiRegistry, DEFAULT_PILOT_ID } from '@jonny-boi/ai';
 import type { DecksApi } from '../lib/useDecks.js';
@@ -7,6 +7,20 @@ import {
   startHotseatGame,
   type DeckChoice,
 } from '../lib/play/setup.js';
+import {
+  buildPlayRecord,
+  clearSavedGame,
+  createGameSaver,
+  mulliganReseed,
+  readSavedGame,
+  rebuildFromRecord,
+  type MulliganProgress,
+  type MulliganStep,
+  type PlayRecord,
+  type RebuildResult,
+  type RebuiltGame,
+} from '../lib/play/persist.js';
+import { appUpdater, markUpdateResumeHandled, updateResumeFlag } from '../lib/update/updater.js';
 import {
   createLocalHotseatTransport,
   createSoloVsAiTransport,
@@ -25,6 +39,7 @@ import { handoffIsToComputer, mulliganPresentationFor } from '../lib/play/solo-s
 import { PlayBoard } from '../components/play/PlayBoard.js';
 import { EndScreen } from '../components/play/EndScreen.js';
 import { OnlinePlay } from '../components/online/OnlinePlay.js';
+import './play-resume.css';
 
 /** The high-level phase the hotseat is in. */
 type Phase =
@@ -42,15 +57,11 @@ interface GameConfig {
   readonly startingPlayer: PlayerId;
 }
 
-/** Mulligan progress for both seats. */
-interface MulliganState {
-  /** Seat currently deciding (we resolve A then B, each behind a handoff). */
-  readonly deciding: PlayerId;
-  /** How many mulligans each seat has taken so far. */
-  readonly taken: Record<PlayerId, number>;
-  /** Seats that have finalized their keep. */
-  readonly done: Record<PlayerId, boolean>;
-}
+/**
+ * Mulligan progress for both seats — persist.ts's shape, shared so the live
+ * flow and the saved-game replay can never disagree about what it means.
+ */
+type MulliganState = MulliganProgress;
 
 /**
  * The Play view: a self-contained pass-and-play (hotseat) MTG game on one device.
@@ -82,40 +93,123 @@ function humanSeatOf(ai: AiSeatConfig): PlayerId {
 /** Solo vs the computer, Local (pass-and-play), or Online play. */
 type PlayMode = 'choose' | 'solo' | 'local' | 'online';
 
+/** The Play mode a saved record belongs to (solo iff it names an AI seat). */
+function modeOfRecord(record: PlayRecord): PlayMode {
+  return record.setup.ai ? 'solo' : 'local';
+}
+
+/** A short "when" for the resume banner without a date-formatting dependency. */
+function savedAgo(savedAt: number, now: number = Date.now()): string {
+  const minutes = Math.max(0, Math.round((now - savedAt) / 60_000));
+  if (minutes < 1) return 'moments ago';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} d ago`;
+}
+
 /**
  * The Play tab: a landing that lets the player choose Local (pass-and-play on one
  * device) or Online (two devices over the internet). Local reuses the full hotseat
  * flow (`LocalPlay`); Online drops into the networked client (`OnlinePlay`). Both
  * reuse the same board components and theme.
+ *
+ * RESUME lives here: an in-progress Solo/local game persists itself (persist.ts),
+ * so the menu offers "Resume game" — and when this page load was caused by an app
+ * UPDATE applying itself (the updater's flag), the game is resumed automatically,
+ * with no menu stop, because the user never chose to leave it.
  */
 export function PlayView({ decks }: { decks: DecksApi }): ReactElement {
-  const [mode, setMode] = useState<PlayMode>('choose');
+  // One boot-time read: the saved game (if any) and whether THIS load is an
+  // update-resume. useState (not useMemo) so StrictMode's double-invoke reads
+  // the memoized flag, and the values stay put for the life of the mount.
+  //
+  // Auto-resume requires the flag to say a game was LIVE at the moment the
+  // update reloaded — merely being on the Play tab is not enough, or an update
+  // applied on the menu would teleport the user back into a game they had
+  // already left. (Under the deferral policy a live-game reload cannot happen
+  // today, so this arm is exact-by-construction rather than load-bearing; the
+  // menu's "Resume game" banner below is the everyday path.)
+  const [boot] = useState(() => {
+    const saved = readSavedGame();
+    const flag = updateResumeFlag();
+    const auto = flag?.view === 'play' && flag.gameLive && saved !== null;
+    return { saved, auto };
+  });
+  // The saved game the MENU offers (re-read when returning to the menu).
+  const [savedGame, setSavedGame] = useState<PlayRecord | null>(boot.saved);
+  // The record a mounted LocalPlay should restore, when the user chose (or the
+  // update flow chose for them) to resume rather than start fresh.
+  const [resumeRecord, setResumeRecord] = useState<PlayRecord | null>(boot.auto ? boot.saved : null);
+  const [mode, setMode] = useState<PlayMode>(boot.auto && boot.saved ? modeOfRecord(boot.saved) : 'choose');
   // Which pilot the computer plays. Held HERE rather than inside the game so it
   // survives "back to the menu" and a rematch — a player who picked Hybrid once
-  // should not be silently demoted to the default on their next game.
-  const [pilotId, setPilotId] = useState<string>(DEFAULT_PILOT_ID);
+  // should not be silently demoted to the default on their next game. Seeded
+  // from the saved game so a resumed solo game faces the SAME opponent.
+  const [pilotId, setPilotId] = useState<string>(boot.saved?.setup.ai?.pilotId ?? DEFAULT_PILOT_ID);
+
+  // The auto-resume is a one-shot: once the Play view has acted on the update
+  // flag, a LATER visit must not force the user back into a game they left.
+  useEffect(() => {
+    markUpdateResumeHandled();
+  }, []);
+
+  // An ONLINE game's state is the server's (out of scope for persistence), but
+  // the update policy must still defer while one may be underway: the surface
+  // being mounted IS the game's lifetime (the socket dies with it).
+  useEffect(() => {
+    if (mode !== 'online') return undefined;
+    appUpdater.reportGameLive('online-play', 'online-game');
+    return () => appUpdater.reportGameLive('online-play', null);
+  }, [mode]);
+
+  const backToMenu = useCallback((): void => {
+    setMode('choose');
+    setResumeRecord(null);
+    // Re-read: a game left mid-way was just saved by LocalPlay's unmount flush,
+    // a finished one just cleared itself — the banner must reflect that.
+    setSavedGame(readSavedGame());
+  }, []);
+
+  const resumeSaved = useCallback((): void => {
+    if (!savedGame) return;
+    setResumeRecord(savedGame);
+    if (savedGame.setup.ai) setPilotId(savedGame.setup.ai.pilotId);
+    setMode(modeOfRecord(savedGame));
+  }, [savedGame]);
+
+  const discardSaved = useCallback((): void => {
+    clearSavedGame();
+    setSavedGame(null);
+  }, []);
 
   if (mode === 'solo') {
+    const soloResume = resumeRecord?.setup.ai ? resumeRecord : undefined;
     return (
       <>
         <div className="play-view play-view--mode-bar">
-          <button type="button" className="btn btn--ghost play-mode__back" onClick={() => setMode('choose')}>
+          <button type="button" className="btn btn--ghost play-mode__back" onClick={backToMenu}>
             ← Play menu
           </button>
         </div>
-        <LocalPlay decks={decks} ai={{ seat: AI_SEAT, pilotId }} />
+        <LocalPlay
+          decks={decks}
+          ai={{ seat: soloResume?.setup.ai?.seat ?? AI_SEAT, pilotId: soloResume?.setup.ai?.pilotId ?? pilotId }}
+          {...(soloResume ? { resume: soloResume } : {})}
+        />
       </>
     );
   }
   if (mode === 'local') {
+    const localResume = resumeRecord && !resumeRecord.setup.ai ? resumeRecord : undefined;
     return (
       <>
         <div className="play-view play-view--mode-bar">
-          <button type="button" className="btn btn--ghost play-mode__back" onClick={() => setMode('choose')}>
+          <button type="button" className="btn btn--ghost play-mode__back" onClick={backToMenu}>
             ← Play menu
           </button>
         </div>
-        <LocalPlay decks={decks} />
+        <LocalPlay decks={decks} {...(localResume ? { resume: localResume } : {})} />
       </>
     );
   }
@@ -123,7 +217,7 @@ export function PlayView({ decks }: { decks: DecksApi }): ReactElement {
     return (
       <>
         <div className="play-view play-view--mode-bar">
-          <button type="button" className="btn btn--ghost play-mode__back" onClick={() => setMode('choose')}>
+          <button type="button" className="btn btn--ghost play-mode__back" onClick={backToMenu}>
             ← Play menu
           </button>
         </div>
@@ -139,6 +233,23 @@ export function PlayView({ decks }: { decks: DecksApi }): ReactElement {
       <div className="play-mode">
         <h2 className="play-setup__title">Play Magic</h2>
         <p className="play-setup__intro">Choose how you want to play.</p>
+        {savedGame && (
+          <div className="play-resume" role="status">
+            <div className="play-resume__summary">
+              <strong>Game in progress</strong> — {savedGame.setup.names.A} vs {savedGame.setup.names.B},
+              turn {savedGame.ui.turn} ({savedGame.setup.ai ? 'Solo' : 'pass-and-play'}), saved{' '}
+              {savedAgo(savedGame.savedAt)}.
+            </div>
+            <div className="play-resume__actions">
+              <button type="button" className="btn" onClick={resumeSaved}>
+                Resume game
+              </button>
+              <button type="button" className="btn btn--ghost" onClick={discardSaved}>
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
         <div className="play-mode__choices">
           <button type="button" className="play-mode__card" onClick={() => setMode('solo')}>
             <span className="play-mode__icon" aria-hidden="true">🤖</span>
@@ -177,6 +288,19 @@ export function PlayView({ decks }: { decks: DecksApi }): ReactElement {
   );
 }
 
+/** The phase a REBUILT game re-enters at (mirrors the live flow's gates). */
+function restoredPhase(game: RebuiltGame, ai?: AiSeatConfig): Phase {
+  if (game.mulligan.done.A && game.mulligan.done.B) return { kind: 'play' };
+  return ai
+    ? { kind: 'mulligan' }
+    : {
+        kind: 'handoff',
+        to: game.mulligan.deciding,
+        context: 'to decide on your opening hand',
+        next: 'mulligan',
+      };
+}
+
 /**
  * The local game — pass-and-play by default, or SOLO when `ai` names a seat.
  *
@@ -185,16 +309,141 @@ export function PlayView({ decks }: { decks: DecksApi }): ReactElement {
  * who supplies seat B's actions) and every other line — mulligans, the board,
  * the log, rematch, concede — is identical. A forked `SoloPlay` would have been
  * a second copy of all of it, drifting the first time either was touched.
+ *
+ * PERSISTENCE: every committed change (an accepted action, a mulligan step, a
+ * reveal, a scroll) debounce-writes one localStorage record (persist.ts), and
+ * `resume` rebuilds a mount from such a record by deterministic replay — same
+ * seed, same decks, same actions, exact same state. The record clears itself
+ * on game over / concede / new game.
  */
-function LocalPlay({ decks, ai }: { decks: DecksApi; ai?: AiSeatConfig }): ReactElement {
-  const [phase, setPhase] = useState<Phase>({ kind: 'setup' });
-  const [config, setConfig] = useState<GameConfig | null>(null);
-  const [seed, setSeed] = useState<number>(HOTSEAT_CONFIG.defaultSeed);
-  const [session, setSession] = useState<GameSession | null>(null);
-  const [transport, setTransport] = useState<SeatTransport | null>(null);
-  const [mulligan, setMulligan] = useState<MulliganState | null>(null);
+function LocalPlay({
+  decks,
+  ai,
+  resume,
+}: {
+  decks: DecksApi;
+  ai?: AiSeatConfig;
+  resume?: PlayRecord;
+}): ReactElement {
+  // Rebuild once per mount, in the initializer so the first paint is already
+  // the restored game (no flash of the setup screen). Pure, so StrictMode's
+  // double-invoke merely replays twice.
+  const [restored] = useState<RebuildResult | null>(() => (resume ? rebuildFromRecord(resume) : null));
+  const resumed = restored?.ok === true ? restored.game : null;
+
+  const [phase, setPhase] = useState<Phase>(() => {
+    if (restored && !restored.ok) {
+      return { kind: 'error', message: `Couldn't resume the saved game — ${restored.reason}` };
+    }
+    return resumed ? restoredPhase(resumed, ai) : { kind: 'setup' };
+  });
+  const [config, setConfig] = useState<GameConfig | null>(() =>
+    resumed && resume
+      ? {
+          names: resume.setup.names,
+          choiceA: resumed.choiceA,
+          choiceB: resumed.choiceB,
+          startingPlayer: resume.setup.startingPlayer,
+        }
+      : null,
+  );
+  const [seed, setSeed] = useState<number>(() => resume?.setup.seed ?? HOTSEAT_CONFIG.defaultSeed);
+  const [session, setSession] = useState<GameSession | null>(() => resumed?.session ?? null);
+  const [transport, setTransport] = useState<SeatTransport | null>(() => {
+    if (!resumed || !resume) return null;
+    const seats: Record<PlayerId, SeatInfo> = {
+      A: { id: 'A', name: resume.setup.names.A },
+      B: { id: 'B', name: resume.setup.names.B },
+    };
+    return ai ? createSoloVsAiTransport(seats, humanSeatOf(ai)) : createLocalHotseatTransport(seats);
+  });
+  const [mulligan, setMulligan] = useState<MulliganState | null>(() => resumed?.mulligan ?? null);
   // Who last confirmed they're looking at the screen (for play-phase handoffs).
-  const [revealed, setRevealed] = useState<PlayerId | null>(null);
+  const [revealed, setRevealed] = useState<PlayerId | null>(() =>
+    resumed && resume ? (resume.ui.revealed ?? (ai ? humanSeatOf(ai) : null)) : null,
+  );
+  // The mulligan TRANSCRIPT — every re-shuffle and keep, in order. Not derivable
+  // from `mulligan` (counts lose the order and the bottomed ids), and not engine
+  // actions (see persist.ts) — this is the record's third replay ingredient.
+  const [transcript, setTranscript] = useState<readonly MulliganStep[]>(() =>
+    resumed && resume ? resume.mulligans : [],
+  );
+
+  // A rebuild failure means the record is poison (deck deleted, actions from an
+  // older rules build) — clear it so every later visit starts clean.
+  useEffect(() => {
+    if (restored && !restored.ok) clearSavedGame();
+  }, [restored]);
+
+  // --- persistence -----------------------------------------------------------------
+  const saver = useMemo(() => createGameSaver(), []);
+  const liveId = useId();
+
+  // The updater force-flushes pending writes before any update-triggered reload.
+  useEffect(() => appUpdater.registerFlush(() => saver.flush()), [saver]);
+
+  // Report this surface's liveness so a waiting update DEFERS during the game
+  // (including its end screen — leaving is the user's moment, not ours) and
+  // applies the moment the surface is gone or back at setup.
+  useEffect(() => {
+    if (!session || phase.kind === 'setup' || phase.kind === 'error') {
+      appUpdater.reportGameLive(liveId, null);
+      return undefined;
+    }
+    appUpdater.reportGameLive(liveId, session.gameOver ? 'game-over' : 'game');
+    return () => appUpdater.reportGameLive(liveId, null);
+  }, [liveId, session, phase]);
+
+  // THE SAVE: one debounced record per committed change. Everything the record
+  // needs is in deps, so no committed state can be missed; the saver collapses
+  // bursts (auto-tap chains, AI turns) into one write.
+  useEffect(() => {
+    if (!config || !session) return;
+    if (phase.kind === 'setup' || phase.kind === 'error') return;
+    if (session.gameOver) {
+      // Game decided (win, loss, draw, concede): nothing to resume any more.
+      saver.clear();
+      return;
+    }
+    saver.save(
+      buildPlayRecord({
+        names: config.names,
+        choiceA: config.choiceA,
+        choiceB: config.choiceB,
+        startingPlayer: config.startingPlayer,
+        seed,
+        ...(ai ? { ai: { seat: ai.seat, pilotId: ai.pilotId } } : {}),
+        mulligans: transcript,
+        session,
+        ui: { revealed, scrollY: typeof window === 'undefined' ? 0 : window.scrollY },
+      }),
+    );
+  }, [config, session, phase, seed, ai, transcript, revealed, saver]);
+
+  // Scroll rides the record too ("where your view was on the screen"), and the
+  // pending write is flushed on hide/unmount so a tab kill or a navigation away
+  // loses at most the debounce window.
+  useEffect(() => {
+    const onScroll = (): void => saver.saveScroll(window.scrollY);
+    const onHide = (): void => saver.flush();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('pagehide', onHide);
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('pagehide', onHide);
+      document.removeEventListener('visibilitychange', onHide);
+      saver.flush();
+    };
+  }, [saver]);
+
+  // Put the viewport back where it was, once, after the restored game painted.
+  const restoredScrollY = resumed && resume ? resume.ui.scrollY : null;
+  useEffect(() => {
+    if (restoredScrollY !== null) window.scrollTo(0, restoredScrollY);
+    // Once per mount, deliberately: later scrolling is the user's.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // --- start / rematch -----------------------------------------------------------
   const beginGame = useCallback((cfg: GameConfig, gameSeed: number): void => {
@@ -209,6 +458,9 @@ function LocalPlay({ decks, ai }: { decks: DecksApi; ai?: AiSeatConfig }): React
       setPhase({ kind: 'error', message: msg });
       return;
     }
+    // A new game supersedes whatever record was stored (there is one slot).
+    saver.clear();
+    setTranscript([]);
     const seats: Record<PlayerId, SeatInfo> = {
       A: { id: 'A', name: cfg.names.A },
       B: { id: 'B', name: cfg.names.B },
@@ -229,7 +481,7 @@ function LocalPlay({ decks, ai }: { decks: DecksApi; ai?: AiSeatConfig }): React
         ? { kind: 'mulligan' }
         : { kind: 'handoff', to: cfg.startingPlayer, context: 'to decide on your opening hand', next: 'mulligan' },
     );
-  }, [ai]);
+  }, [ai, saver]);
 
   const onStart = useCallback(
     (args: { nameA: string; nameB: string; choiceA: DeckChoice; choiceB: DeckChoice; seed: number; startingPlayer: PlayerId }): void => {
@@ -254,11 +506,13 @@ function LocalPlay({ decks, ai }: { decks: DecksApi; ai?: AiSeatConfig }): React
   }, [config, seed, beginGame]);
 
   const newGame = useCallback((): void => {
+    saver.clear();
     setSession(null);
     setMulligan(null);
     setConfig(null);
+    setTranscript([]);
     setPhase({ kind: 'setup' });
-  }, []);
+  }, [saver]);
 
   // --- mulligan flow -------------------------------------------------------------
   // A mulligan reshuffles: rebuild the game from a derived seed so the engine does
@@ -271,7 +525,9 @@ function LocalPlay({ decks, ai }: { decks: DecksApi; ai?: AiSeatConfig }): React
     const seat = mulligan.deciding;
     const nextTaken = mulligan.taken[seat] + 1;
     // Derive a fresh seed per mulligan so the reshuffle differs deterministically.
-    const reSeed = (seed * 2654435761 + nextTaken) >>> 0;
+    // The formula lives in persist.ts because a saved game's replay must derive
+    // the IDENTICAL seed (one formula, two callers, zero drift).
+    const reSeed = mulliganReseed(seed, nextTaken);
     const started = startHotseatGame({
       choiceA: config.choiceA,
       choiceB: config.choiceB,
@@ -281,6 +537,7 @@ function LocalPlay({ decks, ai }: { decks: DecksApi; ai?: AiSeatConfig }): React
     if (!started.ok) return; // decks were already validated; defensive no-op
     setSession(GameSession.fromCreated(started.game.created, started.game.registry, config.names));
     setMulligan({ ...mulligan, taken: { ...mulligan.taken, [seat]: nextTaken } });
+    setTranscript((t) => [...t, { kind: 'mulligan', seat }]);
   }, [config, mulligan, session, seed]);
 
   const onKeep = useCallback(
@@ -289,6 +546,7 @@ function LocalPlay({ decks, ai }: { decks: DecksApi; ai?: AiSeatConfig }): React
       const seat = mulligan.deciding;
       const kept = session.bottomCards(seat, bottomed);
       setSession(kept);
+      setTranscript((t) => [...t, { kind: 'keep', seat, bottomed }]);
       const nextDone = { ...mulligan.done, [seat]: true };
       const other: PlayerId = seat === 'A' ? 'B' : 'A';
       if (!nextDone[other]) {
@@ -358,7 +616,10 @@ function LocalPlay({ decks, ai }: { decks: DecksApi; ai?: AiSeatConfig }): React
     [ai],
   );
   // Seeded from the game seed so a solo game replays identically, like every
-  // other seeded thing here. Rebuilt per game, not per action.
+  // other seeded thing here. Rebuilt per game, not per action. (After a RESUME
+  // the stream restarts from the top — the restored STATE is exact, but the
+  // pilot's future tie-breaks may draw different randomness than the unreloaded
+  // session would have. Future choices are not part of "restore exactly".)
   const aiRng = useMemo(() => createRng((seed ^ 0x5bf03635) >>> 0), [seed]);
 
   useEffect(() => {

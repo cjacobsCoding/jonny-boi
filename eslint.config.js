@@ -82,11 +82,13 @@ export default tseslint.config(
     // BROWSER. Lint sees one file and flags every `document`/`Image`/`btoa` in
     // the inner half as undefined — 19 errors that are all false. Declaring the
     // browser globals here is what makes the real errors in this file visible.
-    files: ['**/scripts/verify-bug-reporter.mjs'],
+    files: ['**/scripts/verify-bug-reporter.mjs', '**/scripts/verify-game-resume.mjs'],
     languageOptions: {
       globals: {
         document: 'readonly',
         window: 'readonly',
+        navigator: 'readonly',
+        sessionStorage: 'readonly',
         Image: 'readonly',
         btoa: 'readonly',
         atob: 'readonly',
