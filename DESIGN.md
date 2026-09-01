@@ -740,6 +740,51 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.70 Cost assistance — Convoke, Improvise and Delve are one mechanic (CR 702.51/126/66) — ✅ done
+
+Convoke was the #1 item on the honest backlog by BOTH independent measures — 46 cards by mechanic and
+46 by clause shape, the two tools agreeing for the first time (§3.68). It was built as a class rather
+than a card: Convoke, Improvise and Delve are one shape wearing three names.
+
+- a RESOURCE the caster owns — an untapped creature, an untapped artifact, a card in the graveyard;
+- CONSUMED in a particular way — tapped, tapped, exiled;
+- each paying **one mana** toward this spell.
+
+The only real difference is what one resource may pay for: a convoking creature pays "{1} or one mana
+of that creature's color" and so can cover a coloured pip, while an improvising artifact and a delved
+card pay generic only. That is one boolean in `COST_ASSISTS`, not a branch in the planner — and a
+fourth mechanic of this shape is a ROW.
+
+📊 **+70 cards: 4,793 → 4,863 of 31,091** — 46 + 12 + 12, exactly what the report predicted, because
+all three printed lines are bare keywords with the mechanic in stripped reminder text.
+
+⚠️ **THE ASSIST IS THE MINIMUM THAT MAKES THE SPELL PAYABLE, NEVER THE MAXIMUM.** Every one of these
+mechanics is optional, so tapping fewer is always legal — and the resources are anything but free: a
+convoked creature cannot block this turn and a delved card is gone for good. A planner that consumed
+everything it legally could would be obeying the rules while throwing the game. So the planner asks
+`canPay` after **every** step and stops the moment the cost is covered, and it returns `undefined`
+when the pool already pays, because acting there would tap creatures for a spell that needed no help.
+
+⚠️ **Coloured pips are assigned FIRST.** Only a resource of that exact colour can pay one, so spending
+a green creature on generic and then finding the {G} unpayable is the ordering bug this is written to
+avoid. Generic is filled afterwards, one at a time, from whatever is left.
+
+**Offer and pay share the planner.** `pushCastOffers` asks only on the branch that was about to
+refuse — a board with no assist card pays one property read for the question — and `applyCastSpell`
+re-plans from the live board before charging any mana. Nothing is tapped for a cast that is then
+rejected, because the mana half is checked against the plan's own `remaining` first.
+
+⚠️ **Honest limits, both of them legal choices rather than approximations.** A hybrid pip really can
+be paid by a convoking creature of either colour and this planner leaves it to real mana; and a card
+printing "Convoke, delve" (there is exactly one) **reports** rather than compiling to one of the two.
+Declining to convoke a pip is something the caster is always allowed to do, so the engine plays a
+legal game that is occasionally more conservative than a perfect pilot — it can never play *better*
+than the printed card, which is the direction that matters.
+
+📊 Throughput unchanged: 2,000-game single-worker match (Mono-Red vs UW Control, seed 7, heuristic)
+reads 169/170 games/sec on this branch against 158/159 on `main`. The two were measured in different
+worktrees, so the honest claim is **no regression**, not a speed-up.
+
 ### 3.69 Affinity — a spell that costs less for each permanent you control (CR 702.40) — ✅ done
 
 Picked from the backlog the moment §3.68 made the backlog honest: with ability-word labels folded

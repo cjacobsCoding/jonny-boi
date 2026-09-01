@@ -717,6 +717,22 @@ export interface CardDefinition {
    * reduction (CR 601.2f): Myr Enforcer with four artifacts costs {3}, and with
    * eight it costs nothing rather than owing the board four mana.
    */
+  /**
+   * COST ASSISTANCE — CONVOKE (CR 702.51), IMPROVISE (CR 702.126) or DELVE
+   * (CR 702.66): the caster may tap creatures, tap artifacts, or exile cards
+   * from their graveyard, each paying one mana toward this spell.
+   *
+   * A KIND rather than a description, because the three differ only in which
+   * resource they spend and whether one can pay a coloured pip — see the closed
+   * `COST_ASSISTS` table in `cost-assist.ts`, which is where a fourth mechanic
+   * of this shape becomes a row instead of a branch.
+   *
+   * Unlike a cost REDUCTION this does not change what the spell costs: the cost
+   * stays as printed and part of it is paid by something other than mana
+   * (CR 601.2g), which is why a convoked spell still has its printed mana value
+   * for anything that reads one.
+   */
+  readonly costAssist?: import('./cost-assist.js').CostAssistKind;
   readonly castCostReductionPerPermanent?: {
     readonly amount: number;
     readonly filter: import('./choices.js').CardFilter;

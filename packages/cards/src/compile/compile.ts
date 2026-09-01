@@ -91,6 +91,15 @@ const ATTACHMENT_KEYWORDS: ReadonlySet<string> = new Set(['enchant', 'equip']);
  */
 const SCALING_KEYWORDS: ReadonlySet<string> = new Set(['double', 'triple']);
 
+/**
+ * Scryfall names for the three COST-ASSISTANCE keywords, modelled as one
+ * costAssist kind by the rule table rather than as a keyword flag — so the
+ * sweep must not report them a second time. Keyed on the compiled outcome for
+ * the same reason every other guard here is.
+ */
+const COST_ASSIST_KEYWORDS: ReadonlySet<string> = new Set(['convoke', 'improvise', 'delve']);
+
+
 const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freeze({
   scry: 'scry',
   surveil: 'surveil',
@@ -317,6 +326,7 @@ interface Assembly {
   additionalLandPlays?: number;
   castCostReduction?: CardDefinition['castCostReduction'];
   castCostReductionPerPermanent?: CardDefinition['castCostReductionPerPermanent'];
+  costAssist?: CardDefinition['costAssist'];
   entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
   copyAsEnters?: import('@jonny-boi/core').CopyAsEntersSpec;
   /** The printed "As ~ enters, choose a…" naming, once some line prints it. */
@@ -405,6 +415,7 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.castCostReduction !== undefined) assembly.castCostReduction = contribution.castCostReduction;
   if (contribution.castCostReductionPerPermanent !== undefined)
     assembly.castCostReductionPerPermanent = contribution.castCostReductionPerPermanent;
+  if (contribution.costAssist !== undefined) assembly.costAssist = contribution.costAssist;
   if (contribution.copyAsEnters !== undefined) assembly.copyAsEnters = contribution.copyAsEnters;
   if (contribution.entersTappedUnlessRevealed !== undefined) {
     assembly.entersTappedUnlessRevealed = contribution.entersTappedUnlessRevealed;
@@ -1294,6 +1305,12 @@ export function compileCard(card: CompilableCard): CompileResult {
     // an affinity whose noun is outside the closed table compiles none and still
     // reports through its own missing entry.
     if (word === 'affinity' && assembly.castCostReductionPerPermanent !== undefined) continue;
+
+    // CONVOKE / IMPROVISE / DELVE: the printed line carries the mechanic in
+    // reminder text, which is stripped, so the compiled evidence is the assist
+    // kind the line built. A card printing TWO of them compiles none and still
+    // reports through its own missing entry.
+    if (COST_ASSIST_KEYWORDS.has(word) && assembly.costAssist !== undefined) continue;
     if (word === 'buyback' && assembly.buyback !== undefined) continue;
     if (word === 'madness' && assembly.madness !== undefined) continue;
     // An ABILITY WORD (Revolt, Morbid, …) is a label, not an ability — CR
@@ -1439,6 +1456,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(assembly.castCostReductionPerPermanent !== undefined
       ? { castCostReductionPerPermanent: assembly.castCostReductionPerPermanent }
       : {}),
+    ...(assembly.costAssist !== undefined ? { costAssist: assembly.costAssist } : {}),
     ...(assembly.asEntersChoice !== undefined ? { asEntersChoice: assembly.asEntersChoice } : {}),
     ...(assembly.isChosenSubtype ? { isChosenSubtype: true } : {}),
     ...(xCount > 0 ? { xCost: xCount } : {}),

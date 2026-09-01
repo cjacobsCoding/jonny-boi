@@ -4810,6 +4810,28 @@ const CAST_REDUCTION_SCOPES: Readonly<Record<string, CardFilter>> = Object.freez
 
 export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
   {
+    // COST ASSISTANCE — Convoke (CR 702.51), Improvise (CR 702.126), Delve
+    // (CR 702.66). Three names for one shape: a resource other than mana pays
+    // part of this spell, and the closed `COST_ASSISTS` table in core says which
+    // resource and whether it can cover a coloured pip.
+    //
+    // Each prints as a bare keyword line with the mechanic in reminder text,
+    // which is stripped before we see it — so the line IS the whole ability, and
+    // one rule reads all three rather than three rules that could drift.
+    //
+    // ⚠️ "Convoke, delve" (one card prints both) does NOT match, and reports.
+    // The field names ONE kind, and the honest failure is a card that says so
+    // rather than one that silently convokes and forgets to delve.
+    id: 'cost-assist-keyword',
+    description: '"Convoke" / "Improvise" / "Delve" (Chord of Calling, Reverse Engineer, Treasure Cruise)',
+    pattern: /^(convoke|improvise|delve)$/,
+    build(match) {
+      const kind = match[1];
+      if (kind !== 'convoke' && kind !== 'improvise' && kind !== 'delve') return null;
+      return { costAssist: kind };
+    },
+  },
+  {
     // AFFINITY (CR 702.40). Scryfall prints the keyword line and puts the whole
     // rule in reminder text, which is stripped before we get here — so the two
     // printings of one mechanic are matched by ONE rule with two spellings of

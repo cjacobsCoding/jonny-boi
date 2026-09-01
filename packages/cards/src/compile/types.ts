@@ -163,6 +163,7 @@ export interface ClauseContribution {
   /** Set by "TYPE/COLOUR spells you cast cost {N} less to cast". */
   readonly castCostReduction?: import('@jonny-boi/core').CardDefinition['castCostReduction'];
   readonly castCostReductionPerPermanent?: import('@jonny-boi/core').CardDefinition['castCostReductionPerPermanent'];
+  readonly costAssist?: import('@jonny-boi/core').CardDefinition['costAssist'];
   /** Set when the text asks for a REVEAL to enter untapped (a reveal-land). */
   readonly entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
   /**

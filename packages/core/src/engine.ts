@@ -146,6 +146,8 @@ import {
 } from './internal/continuous.js';
 import { effectiveActivated, effectiveKeywords } from './internal/stats.js';
 import { findOnBattlefield, moveToZone, resetInstanceForNewZone } from './internal/zones.js';
+import { findInstance } from './internal/zones.js';
+import { COST_ASSISTS, planCostAssist, type CostAssistPlan } from './cost-assist.js';
 import {
   applyLegendRuleChoice,
   checkStateBasedActions,
@@ -2787,6 +2789,37 @@ export function canAffordManaCost(state: GameState, player: PlayerId, cost: Mana
  * assumption that is true until a card makes it false. Passing the list down
  * is the same saving with nothing to invalidate.
  */
+/**
+ * Spend what a {@link CostAssistPlan} promised: tap the convoked creatures and
+ * the improvising artifacts, exile the delved cards.
+ *
+ * Separate from the planner so the plan stays a pure description of an intent —
+ * the offer path computes one on every candidate spell and must not touch the
+ * board doing it. Only the apply path calls this, and only after the mana half
+ * has been checked, so a spell can never half-pay: nothing is tapped for a cast
+ * that is about to be rejected.
+ */
+function consumeCostAssist(state: GameState, plan: CostAssistPlan, emit: (e: GameEvent) => void): void {
+  const spec = COST_ASSISTS[plan.kind];
+  for (const instanceId of plan.consumed) {
+    if (spec.consumption === 'tapped') {
+      const permanent = findOnBattlefield(state, instanceId);
+      // A resource that left the battlefield between the plan and the pay is not
+      // an error: the plan is remade from the live board on the pay path, so
+      // this can only be a permanent that was there a moment ago. Skipping it
+      // keeps the cast legal — the mana half is checked against `remaining`,
+      // which the same plan produced.
+      if (permanent === undefined || permanent.tapped) continue;
+      permanent.tapped = true;
+      emit({ type: 'tapped', instanceId });
+      continue;
+    }
+    const card = findInstance(state, instanceId);
+    if (card === undefined) continue;
+    moveToZone(state, card, 'exile', emit);
+  }
+}
+
 export function castCostReducersFor(
   state: GameState,
   caster: PlayerId,
@@ -3355,10 +3388,18 @@ function applyCastSpell(
     // is its own spell with its own types), which is why `castDef` is passed
     // rather than the card's printed front.
     const purpose = spendPurposeIfRestricted(player.manaPool, castDef, 'cast');
-    if (!canPay(player.manaPool, cost, purpose)) {
+    // CONVOKE / IMPROVISE / DELVE (§3.70). The assist is planned BEFORE the mana
+    // is charged and from the SAME planner the offer used, so the two can never
+    // disagree about whether this spell was castable. It returns undefined both
+    // when the card has no assist and when the pool already pays — the second is
+    // the common case, and acting on it would tap creatures for nothing.
+    const assist = planCostAssist(state, action.player, castDef, cost, player.manaPool);
+    const owed = assist?.remaining ?? cost;
+    if (!canPay(player.manaPool, owed, purpose)) {
       return rejectWith(prevState, 'insufficient mana to cast this spell');
     }
-    const result = payCost(player.manaPool, cost, purpose);
+    if (assist !== undefined) consumeCostAssist(state, assist, emit);
+    const result = payCost(player.manaPool, owed, purpose);
     if (!result.ok) return rejectWith(prevState, result.reason);
     player.manaPool = result.pool;
   }
@@ -5063,7 +5104,12 @@ function pushCastOffers(
     // offers.
     const offered = castManaCostFor(state, me, def, def.cost, options?.reducers);
     if (offered && !canPay(pool, offered, spendPurposeIfRestricted(pool, def, 'cast'))) {
-      return;
+      // CONVOKE / IMPROVISE / DELVE (§3.70): the pool alone does not cover this,
+      // but something other than mana may. Asked ONLY on the branch that was
+      // about to refuse, so a board with no assist card pays nothing for the
+      // question — and answered by the same planner the pay path uses, because
+      // an offer the pay path then rejects is the bug this gate exists to stop.
+      if (planCostAssist(state, me, def, offered, pool) === undefined) return;
     }
   }
   // A modal spell with nothing it could legally announce cannot be cast — the
