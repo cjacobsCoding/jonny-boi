@@ -10,13 +10,13 @@
  * games where base and variant *disagreed* and ask whether that disagreement is
  * lopsided enough to be real. We answer with **McNemar's paired test**.
  *
- * Honesty about fidelity (DESIGN §3.9, done): the engine NOW models triggered
- * abilities, until-end-of-turn continuous effects, planeswalkers with loyalty,
- * transforming DFCs, and printed flashback. Only a few advanced mechanics remain
- * unimplemented (flashback granted by another card, cast-time modes — see
- * `FIDELITY_CAVEAT`), so cards using them play as a
- * simplified subset. The swap machinery and statistics are exact; the CLI prints
- * this caveat.
+ * Honesty about fidelity (DESIGN §3.9, done): a card reaches the pool only if
+ * the Oracle-text compiler reported it COMPLETE, so nothing being swapped plays
+ * as a simplified subset — see `FIDELITY_CAVEAT`, the one wording every surface
+ * prints. (This comment used to list flashback-granted-by-another-card and
+ * cast-time modes as missing, years after both landed; the caveat's own
+ * authority, `STUBBED_MECHANICS`, has been empty for as long.) The swap
+ * machinery and statistics are exact.
  */
 
 import type { EffectRegistry, PlayerId, CardDefinition } from '@jonny-boi/core';
