@@ -42,7 +42,7 @@
      app shipped with, so a tall window is visually unchanged by this file. */
   --play-card-w-min: 96px;
   --play-card-w-max: 148px;
-  --play-card-w: clamp(var(--play-card-w-min), 15dvh, var(--play-card-w-max));
+  --play-card-w: clamp(var(--play-card-w-min), 14dvh, var(--play-card-w-max));
 
   /* Battlefield tiles are smaller than hand faces and scale with the same knob. */
   --play-tile-w-min: 72px;
@@ -57,6 +57,13 @@
   /* The same floor for a battlefield tile: how narrow it may get before the row
      gives up and scrolls sideways instead. */
   --play-tile-slice-min: 3rem;
+
+  /* How tall a seat's creature+land rows may get before they scroll instead of
+     pushing the hand off the screen. Two seats' worth of this plus the hand plus
+     the chrome is the whole vertical budget, which is why it is a fraction of
+     the window rather than a fixed height. */
+  --play-seat-rows-max: 11dvh;
+
 
   /* The opponent's fan overlaps by a fixed amount — its cards carry no
      information to read, so nothing has to stay visible except the count. */
@@ -187,35 +194,41 @@
  * Pure CSS on the existing three children (head / zones / board) — no markup
  * change, so the reading order a screen reader gets is untouched.
  */
-.play-board .seat {
-  display: grid;
-  grid-template-columns: minmax(7rem, max-content) 1fr;
-  grid-template-rows: auto auto;
-  column-gap: var(--space-3);
-  align-items: start;
-  padding: var(--space-2);
-}
+/* ⚠️ WIDTH-GATED ON PURPOSE. A side rail trades horizontal space for vertical,
+   which is the right trade only while horizontal space is the plentiful axis.
+   On a phone it is the scarce one: the counters wrapped inside a 7rem column and
+   the rail grew TALLER than the stacked version it replaced. Below this width
+   the seat keeps its original stacked layout, which is what a narrow window
+   wants anyway. */
+@media (min-width: 40rem) {
+  .play-board .seat {
+    display: grid;
+    grid-template-columns: minmax(7rem, max-content) 1fr;
+    grid-template-rows: auto auto;
+    column-gap: var(--space-3);
+    align-items: start;
+    padding: var(--space-2);
+  }
 
-.play-board .seat__head {
-  grid-column: 1;
-  grid-row: 1;
-  flex-wrap: wrap;
-}
+  .play-board .seat__head {
+    grid-column: 1;
+    grid-row: 1;
+    flex-wrap: wrap;
+  }
 
-.play-board .seat__zones {
-  grid-column: 1;
-  grid-row: 2;
-  /* The stacked layout needed vertical breathing room; the rail does not. */
-  margin: 0;
-  gap: var(--space-2);
-}
+  .play-board .seat__zones {
+    grid-column: 1;
+    grid-row: 2;
+    /* The stacked layout needed vertical breathing room; the rail does not. */
+    margin: 0;
+    gap: var(--space-2);
+  }
 
-.play-board .seat__board {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  /* The rail is two short lines; the board next to it is at least as tall, so
-     the row height is set by the permanents rather than by the chrome. */
-  min-height: 100%;
+  .play-board .seat__board {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    min-height: 100%;
+  }
 }
 
 /* An empty row should cost the height of the words in it, not of a card. */
@@ -256,18 +269,26 @@
  * own hand off-screen — technically "the page doesn't scroll", practically
  * worse than what it replaced.
  */
+/* ⚠️ NOTHING HERE SHRINKS. Three attempts at this rule made the seats flexible
+   and each one failed the same way: a box free to shrink shrinks THROUGH its own
+   contents, and the first squeeze cut "Computer ♥ 20" off mid-line — a seat
+   hiding the life total it exists to show, to win a fight about pixels. So the
+   seats are sized by their content (`flex: 0 0 auto`), the ONE region with
+   unbounded content is capped instead, and the log is the only thing that
+   stretches or yields. Deterministic beats clever: with nothing shrinking, there
+   is no squeeze to get wrong. */
 .play-board .play-board__opponent,
 .play-board .play-board__self {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
 }
 
-.play-board .play-board__opponent > .seat,
-.play-board .play-board__self > .drop-zone {
-  flex: 1 1 auto;
-  min-height: 0;
+/* The battlefield is the only part of a seat that grows without limit, so it is
+   the only part that is capped — and it scrolls inside that cap rather than
+   pushing the hand and the action bar off the screen. */
+.play-board .seat__board {
+  max-height: var(--play-seat-rows-max);
   overflow-y: auto;
 }
 
@@ -280,4 +301,65 @@
    16px gutter between four stacked regions is a card's worth of nothing. */
 .app:has(.play-board) .play-board {
   gap: var(--space-2);
+}
+
+
+/* --- Rule 6: a phone gets a phone's budget ----------------------------------
+ *
+ * Below the rail's width the seat is stacked again (see rule 4), which costs
+ * back the height the rail saved — so the narrow window has to find it
+ * elsewhere. It spends what a phone can most afford to lose:
+ *
+ *  - the opponent's fanned card backs, whose ONLY content is a number that the
+ *    ✋ counter in their seat already states exactly;
+ *  - a shorter battlefield strip, since a phone shows fewer tiles per row
+ *    anyway and the row scrolls sideways;
+ *  - slightly smaller hand faces, still zoomable like every other card here.
+ */
+@media (max-width: 39.999rem) {
+  .play-board {
+    --play-seat-rows-max: 10dvh;
+    --play-card-w: clamp(84px, 11dvh, var(--play-card-w-max));
+  }
+
+  /* The stacked seat keeps the padding and margins it was given for a full-size
+     desktop card; at this width they are a third of a seat's height. */
+  .play-board .seat {
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .play-board .seat__zones {
+    margin: var(--space-1) 0;
+    gap: var(--space-2);
+  }
+
+  .play-board .play-hand--hidden {
+    display: none;
+  }
+
+  /* On a phone the CHROME is the expensive part, not the cards: the status line
+     and the action bar were 91px and 113px of a 600px board, because both wrap
+     onto three lines at this width. Tightening their type and padding buys back
+     more than shrinking any card would, and costs nothing anyone reads. */
+  .play-board .play-board__status {
+    padding: var(--space-1) var(--space-2);
+    gap: var(--space-1);
+    font-size: var(--text-sm);
+  }
+
+  .play-board .play-board__priority {
+    font-size: var(--text-xs);
+  }
+
+  .play-board ~ .action-bar,
+  .play-board .action-bar {
+    padding: var(--space-2);
+    gap: var(--space-1);
+  }
+
+  .play-board .action-bar__hint {
+    font-size: var(--text-xs);
+    /* The hint is guidance, not state — it may be two tight lines, never five. */
+    line-height: 1.25;
+  }
 }

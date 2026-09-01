@@ -773,9 +773,19 @@ reverted — in one place:
    life and zone counters move into a narrow rail to the left of the creature and land rows. Stacked,
    those two strips cost ~59px of height per seat for information that occupies almost no width.
    Pure CSS over the existing three children, so the reading order a screen reader gets is untouched.
-5. **The hand and the action bar are never what gives.** Only the seats may run out of room, and each
-   scrolls inside its own band; the hand sits OUTSIDE that scroller, which is the specific mistake the
-   reverted attempt made.
+5. **Nothing shrinks.** Three attempts made the seats flexible and each failed identically: a box free
+   to shrink shrinks THROUGH its own contents, and the first squeeze cut "Computer ♥ 20" off mid-line
+   — a seat hiding the life total it exists to show, on a board with no permanents. So the seats are
+   sized by their content, the one region with unbounded content (the battlefield strip) is CAPPED and
+   scrolls inside that cap, and the log is the only thing that stretches or yields. Deterministic beat
+   clever: with nothing shrinking there is no squeeze to get wrong.
+6. **A phone gets a phone's budget.** Below the rail's width the seat stacks again — a side rail trades
+   horizontal space for vertical, which is only the right trade while horizontal is the plentiful axis;
+   at 375px the counters wrapped inside the rail and it grew TALLER than the stacked version. The
+   narrow window finds its height elsewhere: the opponent's fanned card backs (whose only content is a
+   number their ✋ counter already states), a shorter battlefield strip, tighter chrome. That last one
+   is where a phone's space actually goes — the status line and action bar wrap to three lines each at
+   that width, 204px of a 600px board, more than any card costs.
 
 ⚠️ Two cascade traps this hit, both invisible to the test suite and worth knowing before editing:
 the rules must be scoped under `.play-board` to **win** against `styles.css` (equal specificity means
@@ -785,11 +795,13 @@ tokens resolved perfectly.
 
 📊 Proven by measurement in a real browser, because jsdom has no viewport, no flexbox and no `dvh`:
 `node apps/web/scripts/verify-board-fits.mjs` (build first) drives the SHIPPING bundle and asserts
-**23 checks** — page and board both non-scrolling, and the status line, your hand and the action bar
-all FULLY on screen, at 1280x800 on turn one, at 1280x800 with a crowded battlefield played out
+**31 checks** — page and board both non-scrolling, the status line, your hand and the action bar all
+FULLY on screen, and NO SEAT CLIPPED (added after the first version fitted the window by cutting a
+seat's own life line), at 1280x800 on turn one, at 1280x800 with a crowded battlefield played out
 through the real UI, at 1440x1100 (where cards must still measure 148px), and at 375x812. Commenting
 out the stylesheet import fails 9 of them, including the page scrolling and the hand off-screen at
-every size. Drag-to-play was re-verified by hand through real pointer events after the change, since
+every size. Every tuning value below — the row cap, the card clamps, the phone budget — was set by
+running this harness, not by eye. Drag-to-play was re-verified by hand through real pointer events after the change, since
 the seats became scroll containers.
 
 ### 3.61 Four reports off the non-Play surfaces: a filter that half-worked, two identical play buttons, art per deck slot, and a deck that could not name its own broken card — ✅ done
