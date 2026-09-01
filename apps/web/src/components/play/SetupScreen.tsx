@@ -4,6 +4,11 @@ import type { DecksApi } from '../../lib/useDecks.js';
 import { deckSize } from '../../lib/deck.js';
 import { HOTSEAT_CONFIG } from '../../lib/play/play-config.js';
 import {
+  RANDOM_STARTER,
+  resolveStartingPlayer,
+  type StarterPreference,
+} from '../../lib/play/first-player.js';
+import {
   validateChoice,
   type DeckChoice,
 } from '../../lib/play/setup.js';
@@ -47,7 +52,10 @@ export function SetupScreen({
     choiceA: DeckChoice;
     choiceB: DeckChoice;
     seed: number;
+    /** The seat that actually starts — already resolved, never 'random'. */
     startingPlayer: 'A' | 'B';
+    /** What the player picked, so a rematch can flip again (§3.63). */
+    starterPreference: StarterPreference;
   }) => void;
 }): ReactElement {
   const menu = useMemo(() => buildMenu(decks), [decks]);
@@ -57,7 +65,7 @@ export function SetupScreen({
   const [keyA, setKeyA] = useState(menu[0]?.key ?? '');
   const [keyB, setKeyB] = useState(menu[1]?.key ?? menu[0]?.key ?? '');
   const [seedText, setSeedText] = useState(String(HOTSEAT_CONFIG.defaultSeed));
-  const [starter, setStarter] = useState<'A' | 'B'>('A');
+  const [starter, setStarter] = useState<StarterPreference>('A');
 
   const choiceA = menu.find((m) => m.key === keyA)?.choice;
   const choiceB = menu.find((m) => m.key === keyB)?.choice;
@@ -149,9 +157,18 @@ export function SetupScreen({
         </label>
         <label className="play-setup__field">
           <span>On the play</span>
-          <select className="select" value={starter} onChange={(e) => setStarter(e.target.value as 'A' | 'B')} aria-label="Who goes first">
+          <select
+            className="select"
+            value={starter}
+            onChange={(e) => setStarter(e.target.value as StarterPreference)}
+            aria-label="Who goes first"
+          >
             <option value="A">{nameA || 'Player 1'}</option>
             <option value="B">{nameB || 'Player 2'}</option>
+            {/* How the first turn is actually decided at a table (§3.63). The
+                flip resolves HERE, to a concrete seat, so the saved game and its
+                replay can never disagree about who started. */}
+            <option value={RANDOM_STARTER}>Random (flip a coin)</option>
           </select>
         </label>
       </div>
@@ -171,7 +188,12 @@ export function SetupScreen({
             choiceA,
             choiceB,
             seed,
-            startingPlayer: starter,
+            // Resolved HERE, so everything downstream — the created game, the
+            // saved record, the replay — only ever sees a concrete seat.
+            startingPlayer: resolveStartingPlayer(starter),
+            // Kept alongside it so a rematch flips again instead of silently
+            // repeating this game's winner of the toss.
+            starterPreference: starter,
           })
         }
       >

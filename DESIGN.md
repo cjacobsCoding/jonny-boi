@@ -740,6 +740,42 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.63 Flip for who goes first — ✅ done
+
+Reported alongside the mulligan question (triage found mulligan present in all three playable modes,
+so only this half was real): the setup screen let you PICK a seat but never let you flip for it,
+which is how the first turn is actually decided at a table.
+
+**Where the flip happens is the whole design.** The engine is deterministic — seed + decklists +
+actions replay a game exactly, which is what §3.58's saved games and the Lab both stand on. A
+"random" starting player left unresolved inside the game would break that: the saved record would
+say `random` and every resume would re-flip into a different game wearing the same clothes. So the
+flip resolves ONCE, at the setup screen (`lib/play/first-player.ts`), and everything downstream —
+the created game, the persisted record, the replay — only ever sees a concrete `PlayerId`. The unit
+test asserts exactly that property, not just the 50/50 split.
+
+⚠️ **Not derived from the game seed**, which would be the natural trick in a codebase this
+deterministic. The seed field defaults to a FIXED value, so a seed-derived flip would hand the first
+turn to the same seat every game until the player thought to change a number they have no reason to
+touch. A coin that always lands heads is not a coin. Entropy is real (`crypto.getRandomValues`, with
+a `Math.random` fallback because some embedded webviews have no `crypto` and a missing global must
+not be able to break starting a game); its RESULT is what gets recorded.
+
+**A rematch flips again.** `GameConfig` carries both this game's resolved `startingPlayer` and the
+`starterPreference` behind it, so "Random" does not mean "random once, then fixed forever". Honest
+limit: a game RESUMED from a saved record inherits its starter as an explicit seat, because the
+record stores who actually started (it must, for the replay to be exact) rather than what was picked
+to get there — so rematch-after-resume keeps that seat. Versioning §3.58's record for that nicety
+would be the wrong trade.
+
+📊 Verified live as well as in unit tests: ten Solo games started with "Random" on the same fixed
+seed produced A,B,A,A,B,B,A,A,B,A — both seats reached, and the persisted record held a concrete
+seat every time, never the word `random`.
+
+⚠️ **Online is NOT covered.** The online surface has no first-player control at all — `startingPlayer`
+does not cross the wire — and adding one is a protocol + server change, not a web one. Left open
+deliberately rather than half-built.
+
 ### 3.62 The board fits the window — a canvas that scales, not a document that grows — ✅ done
 
 Reported plainly: *"the game board should fit without scrolling"*. It did not, and the gap was not a
