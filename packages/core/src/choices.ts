@@ -1461,4 +1461,6 @@ export interface ResolutionFrame {
    * spells and for triggers whose event names no player.
    */
   triggeringPlayer?: PlayerId;
+  /** "That much" — the amount the triggering event carried. See the trigger. */
+  triggeringAmount?: number;
 }

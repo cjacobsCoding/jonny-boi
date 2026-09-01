@@ -462,6 +462,7 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
         // `PendingTrigger.triggeringPlayer`. Conditional so every trigger that
         // names no player is pushed byte-for-byte as it always was.
         ...(pending.triggeringPlayer !== undefined ? { triggeringPlayer: pending.triggeringPlayer } : {}),
+        ...(pending.triggeringAmount !== undefined ? { triggeringAmount: pending.triggeringAmount } : {}),
         // Carried for CR 603.4's second check, made as the ability resolves.
         ...(pending.ability.condition.intervening !== undefined
           ? { intervening: pending.ability.condition.intervening }

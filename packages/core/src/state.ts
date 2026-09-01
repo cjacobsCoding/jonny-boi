@@ -618,6 +618,12 @@ export interface TriggeredStackObject {
    */
   readonly triggeringPlayer?: PlayerId;
   /**
+   * HOW MUCH the triggering event was for — the printed "that much" (Vito,
+   * Exquisite Blood). Carried beside {@link triggeringPlayer} and for the same
+   * reason: the body reads it as the ability RESOLVES, after the event is gone.
+   */
+  readonly triggeringAmount?: number;
+  /**
    * The trigger's printed intervening "if", carried so it can be re-checked as
    * the ability RESOLVES (CR 603.4's second check). Absent for every trigger
    * that prints no such clause, which is almost all of them.

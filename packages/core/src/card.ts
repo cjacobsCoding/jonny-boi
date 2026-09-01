@@ -1101,7 +1101,14 @@ export type DerivedCountName =
    * `intParam` — so damage, draw, life, counters and token counts all learn it
    * at once, and no primitive changes. See `effect-helpers.ts` for the reader.
    */
-  | 'timesThisWasKicked';
+  | 'timesThisWasKicked'
+  /**
+   * "**That much**" — how big the event that set this TRIGGER off was (life
+   * gained, life lost). Like `timesThisWasKicked` it is a fact about the
+   * resolution rather than about the board, so `evaluateDerivedCount` cannot
+   * answer it; `intParam` reads it off the context instead.
+   */
+  | 'triggeringAmount';
 
 /**
  * One half of a characteristic-defining P/T: a derived count plus an optional

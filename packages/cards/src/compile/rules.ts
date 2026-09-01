@@ -1301,6 +1301,52 @@ export const COST_NOUN_PHRASE = Object.keys(COST_NOUNS)
   .sort((a, b) => b.length - a.length)
   .join('|');
 
+/**
+ * The printed bodies that read "**that much**" / "**that many**" — the SIZE of
+ * the event that set the trigger off (Exquisite Blood, Vito, Sanguine Bond,
+ * Mindcrank).
+ *
+ * A table rather than a chain of ifs, for the reason every other cost/noun
+ * table here is one: the next printed body is a ROW. Each entry names the
+ * primitive, which param carries the amount, and the player scope — the amount
+ * itself is always the same derived descriptor, so "that much" cannot come to
+ * mean two different quantities.
+ */
+const TRIGGERING_AMOUNT_BODIES: Readonly<
+  Record<string, { primitive: string; amountKey: string; params: Readonly<Record<string, unknown>> }>
+> = Object.freeze({
+  'you gain that much life': { primitive: 'gainLife', amountKey: 'amount', params: {} },
+  'you lose that much life': { primitive: 'loseLife', amountKey: 'amount', params: {} },
+  'target opponent loses that much life': {
+    primitive: 'loseLife',
+    amountKey: 'amount',
+    params: { targetPlayer: true, targets: OPPONENT_TARGET },
+  },
+  'each opponent loses that much life': {
+    primitive: 'loseLife',
+    amountKey: 'amount',
+    params: { whichPlayer: 'opponent' },
+  },
+  'that player loses that much life': {
+    primitive: 'loseLife',
+    amountKey: 'amount',
+    params: { whichPlayer: 'triggering' },
+  },
+  // "That many" is the same quantity with the printed word a count demands.
+  'that player mills that many cards': {
+    primitive: 'mill',
+    amountKey: 'count',
+    params: { whichPlayer: 'triggering' },
+  },
+  'you mill that many cards': { primitive: 'mill', amountKey: 'count', params: {} },
+  'you draw that many cards': { primitive: 'drawCards', amountKey: 'count', params: {} },
+});
+
+/** The bodies as an alternation, longest first so none is truncated. */
+const TRIGGERING_AMOUNT_PHRASE = Object.keys(TRIGGERING_AMOUNT_BODIES)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     /**
@@ -2898,6 +2944,24 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'life-swing-that-much',
+    description:
+      '"You gain that much life" / "Target opponent loses that much life" / "Each opponent loses that much life" — the printed "that much" of a life trigger (Exquisite Blood, Vito, Sanguine Bond)',
+    // "That much" is the SIZE of the event that set the trigger off, which the
+    // ability carries on its resolution (`triggeringAmount`). Emitted as the
+    // ordinary derived-value descriptor every numeric param already understands,
+    // so no primitive changes and the same word cannot mean two things.
+    pattern: new RegExp(`^(${TRIGGERING_AMOUNT_PHRASE})$`),
+    build(match) {
+      const body = TRIGGERING_AMOUNT_BODIES[match[1] ?? ''];
+      if (body === undefined) return null;
+      return effects({
+        primitive: body.primitive,
+        params: { [body.amountKey]: { countOf: 'triggeringAmount' }, ...body.params },
+      });
+    },
+  },
+  {
     id: 'add-mana-spell',
     description: '"Add {B}{B}{B}" (a ritual\'s resolution)',
     pattern: /^add ((?:\{[wubrgc]\})+)$/,
@@ -4477,6 +4541,25 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
         { on: 'beginCombat', who: 'you' },
         match[1] ?? '',
         `Begin combat: ${match[1] ?? ''}`,
+      );
+    },
+  },
+  {
+    id: 'trigger-life-loss',
+    description:
+      '"Whenever an opponent loses life, BODY" / "Whenever you lose life, BODY" (Exquisite Blood, Bloodthirsty Conqueror)',
+    // The mirror of `trigger-gain-life`, on core's `lifeLoss` event — which is
+    // keyed on a NEGATIVE `lifeChanged`, so damage counts as life loss exactly
+    // as CR 118.3 says it does.
+    pattern: /^whenever (an opponent|a player|you) loses? life, (.+)$/,
+    build(match, ctx) {
+      const printed = match[1] ?? '';
+      const who = printed === 'an opponent' ? 'opponent' : printed === 'a player' ? 'any' : 'you';
+      return triggerFrom(
+        ctx,
+        { on: 'lifeLoss', who },
+        match[2] ?? '',
+        `${printed} loses life: ${match[2] ?? ''}`,
       );
     },
   },

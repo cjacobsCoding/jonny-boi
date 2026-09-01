@@ -888,6 +888,7 @@ function resolveTriggeredAbility(
       // a cast's chosen X does: the resolution outlives the stack object, and
       // "that player draws an additional card" is read during it.
       ...(obj.triggeringPlayer !== undefined ? { triggeringPlayer: obj.triggeringPlayer } : {}),
+      ...(obj.triggeringAmount !== undefined ? { triggeringAmount: obj.triggeringAmount } : {}),
     },
     registry,
     emit,
@@ -957,6 +958,7 @@ function runResolution(
         kicked: frame.kicked,
         kickCount: frame.kickCount,
         triggeringPlayer: frame.triggeringPlayer,
+    triggeringAmount: frame.triggeringAmount,
       },
       emit,
       refTargets,

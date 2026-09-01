@@ -140,6 +140,13 @@ export function evaluateDerived(ctx: EffectContext, value: DerivedValue): number
     // (`timesKicked`, written as it entered).
     return ctx.kickCount ?? (ctx.kicked === true ? 1 : (ctx.source.timesKicked ?? 0));
   }
+  if (value.countOf === 'triggeringAmount') {
+    // "That much" — the size of the event that set this trigger off, carried on
+    // the resolution because the event itself is long gone by now. Absent means
+    // this ref is running somewhere without a triggering event, and the honest
+    // answer there is ZERO rather than a guess.
+    return ctx.triggeringAmount ?? 0;
+  }
   return evaluateDerivedCount(ctx.state, value.countOf, ctx.controller);
 }
 

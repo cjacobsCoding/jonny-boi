@@ -86,6 +86,13 @@ export type TriggerEvent =
   | 'endStep'
   | 'beginCombat'
   | 'gainLife'
+  /**
+   * A player LOST life — "whenever an opponent loses life" (Exquisite Blood,
+   * Bloodthirsty Conqueror). Its own event rather than a signed `gainLife`,
+   * for the same reason `gainLife` is not `lifeChanged`: a card that fired on
+   * both directions is a different card.
+   */
+  | 'lifeLoss'
   | 'combatDamageToPlayer'
   /**
    * "Whenever ONE OR MORE creatures you control deal combat damage to a
@@ -323,6 +330,18 @@ export interface PendingTrigger {
    * an attack, this permanent's own death), where a body has nothing to point at.
    */
   readonly triggeringPlayer?: PlayerId;
+  /**
+   * HOW MUCH the triggering event was for — the printed "**that much**" in
+   * "whenever you gain life, target opponent loses that much life" (Vito) and
+   * "whenever an opponent loses life, you gain that much life" (Exquisite
+   * Blood).
+   *
+   * Carried like {@link triggeringPlayer} and for the same reason: the body is
+   * read while the ability RESOLVES, long after the event that set it off, so
+   * the number has to travel with the ability. Absent for every trigger whose
+   * event has no amount, which is almost all of them.
+   */
+  readonly triggeringAmount?: number;
 }
 
 /** The card-name + source needed to describe a pending trigger for events. */
@@ -453,6 +472,14 @@ export function conditionMatches(
       if (event.step !== STEP_FOR_TRIGGER[condition.on]) return false;
       return whoMatches(condition.who, event.activePlayer, sourceController);
     }
+    case 'lifeLoss': {
+      // The engine emits no `loseLife` event — `lifeChanged` carries a SIGNED
+      // delta — so a loss is that event with a negative delta. Keyed this way
+      // on purpose: CR 118.3 counts damage as life loss, and damage emits
+      // `lifeChanged` too, which is exactly what Exquisite Blood means.
+      if (event.type !== 'lifeChanged' || event.delta >= 0) return false;
+      return whoMatches(condition.who, event.player, sourceController);
+    }
     case 'gainLife': {
       // "Whenever you gain life". Keyed on the `gainLife` event rather than on
       // `lifeChanged`, because the latter also fires for life LOST and for the
@@ -531,6 +558,8 @@ export function triggeringPlayerFor(
       return event.type === 'stepBegin' ? event.activePlayer : undefined;
     case 'gainLife':
       return event.type === 'gainLife' ? event.player : undefined;
+    case 'lifeLoss':
+      return event.type === 'lifeChanged' && event.delta < 0 ? event.player : undefined;
     case 'drawsCard':
       return event.type === 'drawCard' ? event.player : undefined;
     case 'castSpell':
@@ -670,6 +699,9 @@ export const TRIGGER_EVENT_SOURCES: Readonly<Record<TriggerEvent, readonly GameE
     endStep: ['stepBegin'],
     beginCombat: ['stepBegin'],
     gainLife: ['gainLife'],
+    // A LOSS is `lifeChanged` with a negative delta — there is no `loseLife`
+    // event — so this is the type the matcher must be woken for.
+    lifeLoss: ['lifeChanged'],
     combatDamageToPlayer: ['damageDealt'],
   // The §-per-creature and group variants observe the same damage events as
   // their parent condition — classified here because the prefilter map is
@@ -807,6 +839,7 @@ export function matchTriggers(
       }
       // Resolved only for the triggers that FIRED, and only when the event
       // names a player at all — so the per-event scan above pays nothing.
+      const triggeringAmount = triggeringAmountFor(event);
       const triggeringPlayer = triggeringPlayerFor(
         ability.condition,
         event,
@@ -818,6 +851,7 @@ export function matchTriggers(
         ability,
         abilityIndex,
         ...(triggeringPlayer !== undefined ? { triggeringPlayer } : {}),
+        ...(triggeringAmount !== undefined ? { triggeringAmount } : {}),
       });
     }
   }
@@ -850,4 +884,19 @@ export function orderPendingTriggers(
     return a.originalIndex - b.originalIndex;
   });
   return keyed.map((k) => k.p);
+}
+
+/**
+ * The AMOUNT an event was for, when it has one — the life gained or lost.
+ *
+ * Read from the event rather than from the state, because "that much" means the
+ * size of THIS event: a player who gained 3 and then lost 1 has a life total
+ * that answers neither question.
+ */
+export function triggeringAmountFor(event: GameEvent): number | undefined {
+  if (event.type === 'gainLife') return event.amount;
+  // A LOSS is `lifeChanged` with a negative delta; "that much" is its
+  // MAGNITUDE ("you gain that much life" gains 3, it does not gain −3).
+  if (event.type === 'lifeChanged' && event.delta < 0) return -event.delta;
+  return undefined;
 }

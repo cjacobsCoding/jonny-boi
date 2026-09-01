@@ -86,6 +86,12 @@ export interface EffectContext {
    * matching how every other player param degrades.
    */
   readonly triggeringPlayer?: PlayerId;
+  /**
+   * "THAT MUCH" — how big the event that set this trigger off was (life gained
+   * or lost). Read through `intParam`'s derived vocabulary, so every numeric
+   * param in the library understands it without a primitive changing.
+   */
+  readonly triggeringAmount?: number;
   /** Append an event to the log. */
   emit(event: GameEvent): void;
   /**
@@ -440,6 +446,7 @@ export function applyEffectRef(
     kicked: base.kicked,
     kickCount: base.kickCount,
     triggeringPlayer: base.triggeringPlayer,
+    triggeringAmount: base.triggeringAmount,
     emit,
     addContinuousEffect(mod) {
       return addContinuousEffectToState(base.state, base.source.instanceId, base.controller, mod, emit);
@@ -539,7 +546,14 @@ export function applyEffectRef(
 /** The parts of an `EffectContext` the caller supplies; the rest are wired here. */
 export type EffectContextBase = Pick<
   EffectContext,
-  'state' | 'source' | 'controller' | 'xValue' | 'kicked' | 'kickCount' | 'triggeringPlayer'
+  | 'state'
+  | 'source'
+  | 'controller'
+  | 'xValue'
+  | 'kicked'
+  | 'kickCount'
+  | 'triggeringPlayer'
+  | 'triggeringAmount'
 >;
 
 /**

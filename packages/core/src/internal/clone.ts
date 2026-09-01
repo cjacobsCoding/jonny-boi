@@ -189,6 +189,7 @@ function cloneStackObject(o: StackObject): StackObject {
       ...(o.awaitingTargetCount !== undefined ? { awaitingTargetCount: o.awaitingTargetCount } : {}),
       // Frozen compile-time data — shared by reference like an InterveningIf.
       ...(o.awaitingModes !== undefined ? { awaitingModes: o.awaitingModes } : {}),
+      ...(o.triggeringAmount !== undefined ? { triggeringAmount: o.triggeringAmount } : {}),
       // Same field-by-field stakes as `awaitingTargets`: dropping this would
       // lose the TRIGGERING PLAYER at the very next action boundary, and every
       // "that player draws a card" body would silently fall back to the source's
