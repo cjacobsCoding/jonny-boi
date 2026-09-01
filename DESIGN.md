@@ -740,6 +740,34 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.65 The gauntlet table says whose win rate it is — ✅ done
+
+Reported as *"figure out why the Selesnya Blink deck is so bad against the Gauntlet — even though when
+I play it manually, I beat those decks most of the time"*. **Measured first, and the premise does not
+hold for the sample deck**: Selesnya Blink is the STRONGEST list in the gauntlet — **615/800 = 76.9%**
+at seed 99, **226/320 = 70.6%** at the Lab's own default seed. Its engine is not broken either; a
+probe over 30 games against its worst opponent counted 225 enters-triggers, 205 Thragtusk life gains,
+182 Thragtusk leave-tokens and 143 Conjurer's Closet end-step triggers. And the frightening row —
+Mono-Green Ramp at 42.5% over 40 games — is noise: the same matchup over **200 games is 50.5%
+(CI 43.6–57.4)**.
+
+**What was actually broken is the table.** Every number in the gauntlet result is the HERO's, per
+opponent — but the header said a bare "Win rate (95% CI)" beside a column of OPPONENT names, and the
+win-rate bar was labelled with the opponent's name. So a row reading
+
+> `Selesnya Blink · 13/100 · 13.0%`
+
+is the hero winning 13% AGAINST Selesnya Blink, and reads exactly like Selesnya Blink scoring 13%.
+That is how the strongest deck in the meta comes to be reported as the worst. The columns now name
+the hero (`<deck> record`, `<deck> win rate (95% CI)`) and the bar is labelled `<hero> vs <opponent>`.
+
+⚠️ Worth keeping in mind whenever a run result grows a column: a measurement of A-against-B rendered
+next to B's name is ambiguous by default, and the reader has no way to tell which way round it is.
+
+Pinned by `components/lab/gauntlet-row-owner.test.ts` (static render, the `jail-tile.test.ts` idiom —
+this is about what the markup SAYS, which no engine test can see). Sabotage-checked: reverting the
+panel reddens 3 of its 4 cases.
+
 ### 3.64 A double-faced card is two type lines, not one — ✅ done
 
 Handed over by §3.61, which worked around this at the web seam rather than fixing it: `parseTypeLine`
