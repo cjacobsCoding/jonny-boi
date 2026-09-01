@@ -86,6 +86,7 @@ export default tseslint.config(
       '**/scripts/verify-bug-reporter.mjs',
       '**/scripts/verify-game-resume.mjs',
       '**/scripts/verify-mana-choice.mjs',
+      '**/scripts/verify-board-fits.mjs',
     ],
     languageOptions: {
       globals: {
@@ -93,6 +94,11 @@ export default tseslint.config(
         window: 'readonly',
         navigator: 'readonly',
         sessionStorage: 'readonly',
+        // §3.62's harness measures LAYOUT, so it reads resolved styles, and it
+        // clears the saved game so the setup screen opens instead of the resume
+        // banner.
+        getComputedStyle: 'readonly',
+        localStorage: 'readonly',
         // Dispatched inside `page.evaluate` to make React see a native <select>
         // change — a controlled input ignores a bare `.value =` assignment.
         Event: 'readonly',

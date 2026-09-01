@@ -106,10 +106,19 @@ export function PlayCard({
   );
 }
 
-/** A face-down card back (the opponent's hidden hand). */
+/**
+ * A face-down card back (the opponent's hidden hand), fanned so that a big hand
+ * costs no more height than a small one. The overlap is a token rather than a
+ * literal (§3.62) because the player's own hand now fans by the same rule, and
+ * two hands drifting apart on the same board reads as a bug.
+ */
 export function CardBack({ index }: { index: number }): ReactElement {
   return (
-    <div className="play-card play-card--back" aria-hidden="true" style={{ marginLeft: index === 0 ? 0 : '-2.2rem' }}>
+    <div
+      className="play-card play-card--back"
+      aria-hidden="true"
+      style={{ marginLeft: index === 0 ? 0 : 'calc(-1 * var(--play-back-overlap))' }}
+    >
       <span className="play-card__back-mark">⚙</span>
     </div>
   );

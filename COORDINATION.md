@@ -199,6 +199,16 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-31 integrator: `feat/board-fits` — DESIGN §3.62, the "board should fit without scrolling"
+  report. apps/web only: NEW `components/play/board-fit.css` (the whole idea in one file), one CSS
+  import + the fanned-card-back token in `components/play/PlayCard.tsx`, NEW
+  `scripts/verify-board-fits.mjs` (23 measured checks), `eslint.config.js` (two globals for the new
+  harness). No engine, no packages, no styles.css. ⚠️ Two traps for whoever edits this next: the
+  rules are scoped under `.play-board` to WIN the cascade against styles.css (equal specificity, so
+  import order decides and it decided wrong first), and the battlefield renders `.perm`, NOT
+  `.play-card` — scaling the wrong class moves nothing while the tokens resolve perfectly. Both
+  mistakes pass the entire unit suite, which is why the harness exists.
+
 - 2026-08-31 worker: `feat/mana-choice` 🚧 PUSHED, not merged — DESIGN §3.60, the two mana reports.
   (1) Auto-tap now spends the EXPENDABLE source: a new COLLATERAL rung in core’s tie-break ladder prices
   what tapping costs beyond the mana (a creature body, a spent `{T}` ability; a basic land = 0), read off

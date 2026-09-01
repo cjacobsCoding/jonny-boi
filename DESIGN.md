@@ -740,6 +740,58 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.62 The board fits the window — a canvas that scales, not a document that grows — ✅ done
+
+Reported plainly: *"the game board should fit without scrolling"*. It did not, and the gap was not a
+tuning gap — at 1280x800 the board asked for **871px of a 600px slot**. Measured before touching
+anything: status 55, opponent seat 205 + their card backs 88, your seat 207 + your hand 168, action
+bar 63, gutters 64. Even a 1440x1100 window scrolled.
+
+**Why the obvious fix is the wrong one.** A first attempt made the shell fixed-height and let the
+seats absorb the slack. The page stopped scrolling and the player's own HAND went below the fold —
+technically the reported bug, practically worse. It was reverted unshipped. What replaced it is the
+arrangement every digital MTG client converges on, asked for by the user in exactly those terms
+("how does MTGA manage it?"): the board is a **canvas that scales**, and readability is bought by
+**zoom**, not by size (every card here was already click/right-click zoomable — §3.54/§3.57 — which
+is what makes shrinking legitimate rather than merely smaller).
+
+Five rules, all in one file (`components/play/board-fit.css`) so the whole idea can be read — or
+reverted — in one place:
+
+1. **One scale knob.** `--play-card-w` / `--play-tile-w` are `clamp()`s on viewport height; hand
+   faces, battlefield tiles and card backs all derive from them. A tall window resolves to exactly
+   the 148px/96px the app shipped with, so this bought the small window without taxing the large one.
+2. **The hand fans instead of wrapping.** A slot may shrink below the card it holds, so cards spread
+   out when there is room and slide over each other when there is not — no card count, no JS, no
+   breakpoint. Hover raises one clear. The opponent's hidden hand had fanned this way since it was
+   written; this generalises that idiom (and lifts its `-2.2rem` literal into a token) instead of
+   inventing a second one.
+3. **The shell owns the height.** Scoped with `:has()` to frames that actually mount a board, so
+   every other view keeps ordinary document flow and a browser without `:has()` degrades to today's
+   scrolling page rather than a broken layout.
+4. **The seat's identity sits BESIDE its battlefield, not above it.** The single biggest win: name,
+   life and zone counters move into a narrow rail to the left of the creature and land rows. Stacked,
+   those two strips cost ~59px of height per seat for information that occupies almost no width.
+   Pure CSS over the existing three children, so the reading order a screen reader gets is untouched.
+5. **The hand and the action bar are never what gives.** Only the seats may run out of room, and each
+   scrolls inside its own band; the hand sits OUTSIDE that scroller, which is the specific mistake the
+   reverted attempt made.
+
+⚠️ Two cascade traps this hit, both invisible to the test suite and worth knowing before editing:
+the rules must be scoped under `.play-board` to **win** against `styles.css` (equal specificity means
+module import order decides, and it decided against this file first); and the battlefield renders
+`.perm`, **not** `.play-card` — the first version scaled the wrong class and moved nothing while the
+tokens resolved perfectly.
+
+📊 Proven by measurement in a real browser, because jsdom has no viewport, no flexbox and no `dvh`:
+`node apps/web/scripts/verify-board-fits.mjs` (build first) drives the SHIPPING bundle and asserts
+**23 checks** — page and board both non-scrolling, and the status line, your hand and the action bar
+all FULLY on screen, at 1280x800 on turn one, at 1280x800 with a crowded battlefield played out
+through the real UI, at 1440x1100 (where cards must still measure 148px), and at 375x812. Commenting
+out the stylesheet import fails 9 of them, including the page scrolling and the hand off-screen at
+every size. Drag-to-play was re-verified by hand through real pointer events after the change, since
+the seats became scroll containers.
+
 ### 3.61 Four reports off the non-Play surfaces: a filter that half-worked, two identical play buttons, art per deck slot, and a deck that could not name its own broken card — ✅ done
 
 Four in-app bug reports, triaged against `main` before anything was written, because a report filed

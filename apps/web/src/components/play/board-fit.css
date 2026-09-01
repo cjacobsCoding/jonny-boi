@@ -1,0 +1,283 @@
+/**
+ * §3.62 — THE BOARD FITS THE WINDOW.
+ *
+ * Reported plainly: the game board should not need scrolling. It did, badly —
+ * at a 1280x800 window the board asked for 871px of a 600px slot, so the life
+ * totals, the enemy battlefield and your own hand could not be read at once,
+ * and paging between them loses the game state you are supposed to be reading.
+ *
+ * The approach is the one every digital MTG client converges on: the board is a
+ * CANVAS THAT SCALES, not a document that grows. Three rules carry it, and each
+ * one is here rather than in styles.css so the whole idea can be read (and
+ * reverted) in one place:
+ *
+ *  1. ONE SCALE KNOB. `--play-card-w` is a clamp() on viewport height, and every
+ *     card — battlefield tile, hand face, opponent's card back — derives from
+ *     it. On a tall window it resolves to exactly the sizes the app used before
+ *     this file existed; it shrinks only on the windows that would otherwise
+ *     have to scroll. Bounds are tokens, so the floor and ceiling are tuned in
+ *     one place rather than hunted through rules.
+ *
+ *  2. THE HAND FANS INSTEAD OF WRAPPING. A wrapping hand costs a whole extra
+ *     card-height the moment you hold eight, which is exactly when the board is
+ *     most crowded. The slot is allowed to shrink below the card it holds, so
+ *     cards spread out when there is room and slide over each other when there
+ *     is not — no card count, no JS, no breakpoint. Hover raises one clear.
+ *     (The opponent's hidden hand has fanned this way since it was written; this
+ *     generalises the idiom instead of inventing a second one.)
+ *
+ *  3. THE SHELL OWNS THE HEIGHT. The play surface — and only the play surface —
+ *     becomes a fixed-height column, so any chrome above the board is subtracted
+ *     automatically instead of guessed at in a calc(). A browser without :has()
+ *     ignores the block and gets the old scrolling page: a graceful fallback,
+ *     not a broken layout.
+ *
+ * ⚠️ Readability is bought by ZOOM, not by size: every card here is
+ * click/right-click zoomable through `CardZoomOverlay`, which is what makes
+ * shrinking legitimate rather than merely smaller.
+ */
+
+:root {
+  /* Rule 1 — the scale knob and its bounds. `--play-card-w-max` is the size the
+     app shipped with, so a tall window is visually unchanged by this file. */
+  --play-card-w-min: 96px;
+  --play-card-w-max: 148px;
+  --play-card-w: clamp(var(--play-card-w-min), 15dvh, var(--play-card-w-max));
+
+  /* Battlefield tiles are smaller than hand faces and scale with the same knob. */
+  --play-tile-w-min: 72px;
+  --play-tile-w-max: 96px;
+  --play-tile-w: clamp(var(--play-tile-w-min), 10dvh, var(--play-tile-w-max));
+
+  /* Rule 2 — how far a fanned card may be covered by its neighbour. The
+     remaining sliver is what stays clickable, so this is a readability floor,
+     not a spacing preference. */
+  --play-hand-slice-min: 2.4rem;
+
+  /* The same floor for a battlefield tile: how narrow it may get before the row
+     gives up and scrolls sideways instead. */
+  --play-tile-slice-min: 3rem;
+
+  /* The opponent's fan overlaps by a fixed amount — its cards carry no
+     information to read, so nothing has to stay visible except the count. */
+  --play-back-overlap: 2.2rem;
+}
+
+/* --- Rule 3: the shell owns the height -------------------------------------- */
+
+.app:has(.play-board) {
+  height: 100dvh;
+}
+
+.app:has(.play-board) .app__main {
+  display: flex;
+  flex-direction: column;
+  /* Without this a flex item refuses to shrink below its content, which is
+     exactly how a "fixed height" column still ends up scrolling the page. */
+  min-height: 0;
+}
+
+/* The surface renders TWO sibling `.play-view` divs — the "← Play menu" bar and
+   the board — so this must name the one holding the board. Growing both split
+   the window down the middle and left the board in half a screen. */
+.play-view:has(.play-board) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.app:has(.play-board) .play-board {
+  flex: 1;
+  min-height: 0;
+  /* Last resort only: if even the seats cannot fit (a very short window), the
+     overflow scrolls INSIDE the board rather than growing the page, so the
+     header and the action bar stay where the player left them. */
+  overflow-y: auto;
+  /* The fan and the hover-raise both overflow their slots horizontally. */
+  overflow-x: hidden;
+}
+
+/* The log/stack column is the designated slack: the seats, the hand and the
+   action bar are sized by their content and stay whole, and this column takes
+   whatever is left over. Giving the slack to the seat rows instead scrolled the
+   player's own HAND out of view, which is worse than the page it replaces. */
+.app:has(.play-board) .play-board__center {
+  /* Yields FIRST — the log is the one region whose content is a history rather
+     than the position, and the only one that scrolls without losing anything. */
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* --- Rule 1: every card reads the knob -------------------------------------- */
+
+/* ⚠️ Every rule below is deliberately scoped under `.play-board` — not for
+   cascade tidiness but because it must WIN: styles.css declares the same
+   properties at equal specificity, and which file lands last is an accident of
+   module import order (it bit this file once already — the tokens resolved and
+   nothing moved). The extra class makes the override a fact rather than a
+   coincidence. The scope is also honest: the mulligan screen shows seven cards
+   on a page of its own and has no reason to shrink. */
+.play-board .play-card--full {
+  width: var(--play-card-w);
+}
+
+.play-board .play-card {
+  width: var(--play-tile-w);
+}
+
+/* The opponent's hand is a COUNT, not information — it earns the smallest
+   footprint of anything on the board. */
+.play-board .play-card--back {
+  width: calc(var(--play-tile-w) * 0.66);
+  height: calc(var(--play-tile-w) * 0.92);
+}
+
+/* --- Rule 2: the hand fans --------------------------------------------------- */
+
+.play-board .play-hand {
+  /* Fanning replaces wrapping: one card tall, whatever the hand size. */
+  flex-wrap: nowrap;
+  align-items: flex-end;
+}
+
+.play-board .play-hand .hand-card-slot {
+  /* The slot may shrink below the card it holds — that overlap IS the fan, and
+     it only happens once the row runs out of room. */
+  flex: 0 1 var(--play-card-w);
+  min-width: var(--play-hand-slice-min);
+  position: relative;
+  /* Later cards paint over earlier ones, so the sliver that stays visible is a
+     card's LEFT edge — where its name and cost are printed. */
+  overflow: visible;
+}
+
+.play-board .play-hand .hand-card-slot > .play-card--full {
+  /* The card keeps its true width while its slot compresses. */
+  min-width: var(--play-card-w);
+}
+
+.play-board .play-hand .hand-card-slot:hover,
+.play-board .play-hand .hand-card-slot:focus-within {
+  z-index: 5;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .play-board .play-hand .hand-card-slot {
+    transition: transform 120ms ease-out;
+  }
+
+  /* Raise the card being considered clear of its neighbours. A dragged slot
+     carries an inline transform, which wins over this one — the ghost must not
+     be nudged by a hover that happens to be true while dragging. */
+  .play-board .play-hand .hand-card-slot:hover,
+  .play-board .play-hand .hand-card-slot:focus-within {
+    transform: translateY(-0.6rem);
+  }
+}
+
+/* --- Rule 4: the seat's identity sits BESIDE its battlefield, not above it ---
+ *
+ * The single biggest win, and the arrangement every digital client uses: name,
+ * life and zone counters live in a narrow rail on the left, with the creature
+ * and land rows filling the space to their right. Stacked, those two strips cost
+ * ~59px of height PER SEAT for information that occupies almost no width.
+ *
+ * Pure CSS on the existing three children (head / zones / board) — no markup
+ * change, so the reading order a screen reader gets is untouched.
+ */
+.play-board .seat {
+  display: grid;
+  grid-template-columns: minmax(7rem, max-content) 1fr;
+  grid-template-rows: auto auto;
+  column-gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-2);
+}
+
+.play-board .seat__head {
+  grid-column: 1;
+  grid-row: 1;
+  flex-wrap: wrap;
+}
+
+.play-board .seat__zones {
+  grid-column: 1;
+  grid-row: 2;
+  /* The stacked layout needed vertical breathing room; the rail does not. */
+  margin: 0;
+  gap: var(--space-2);
+}
+
+.play-board .seat__board {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  /* The rail is two short lines; the board next to it is at least as tall, so
+     the row height is set by the permanents rather than by the chrome. */
+  min-height: 100%;
+}
+
+/* An empty row should cost the height of the words in it, not of a card. */
+.play-board .seat__row {
+  min-height: 0;
+}
+
+/* ⚠️ Battlefield tiles are `.perm`, NOT `.play-card` — two different components
+   with two different sizes, and aiming the scale knob at the wrong one costs
+   nothing visible until you count pixels and find the board unmoved. */
+.play-board .perm {
+  width: var(--play-tile-w);
+}
+
+.play-board .perm__art {
+  height: calc(var(--play-tile-w) * 0.62);
+}
+
+/* Rule 2 again, on the battlefield: a wide board narrows its tiles rather than
+   wrapping to a second row, and only scrolls sideways once even that floor is
+   reached. Vertical space is the scarce axis; horizontal is not. */
+.play-board .seat__row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.play-board .seat__row > .perm {
+  flex: 0 1 var(--play-tile-w);
+  min-width: var(--play-tile-slice-min);
+}
+
+/* --- Rule 5: the hand and the action bar are never what gives ---------------
+ *
+ * The seats are the only regions allowed to run out of room, and each scrolls
+ * inside its own band. The hand sits OUTSIDE that scroller on purpose: an
+ * earlier attempt let the whole seat region scroll, which pushed the player's
+ * own hand off-screen — technically "the page doesn't scroll", practically
+ * worse than what it replaced.
+ */
+.play-board .play-board__opponent,
+.play-board .play-board__self {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.play-board .play-board__opponent > .seat,
+.play-board .play-board__self > .drop-zone {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.play-board .play-board__opponent > .play-hand,
+.play-board .play-board__self > .play-hand {
+  flex: 0 0 auto;
+}
+
+/* The board's own rhythm tightens with everything else — at these sizes a
+   16px gutter between four stacked regions is a card's worth of nothing. */
+.app:has(.play-board) .play-board {
+  gap: var(--space-2);
+}
