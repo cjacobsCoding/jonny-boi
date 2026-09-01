@@ -3235,11 +3235,17 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'search-to-battlefield-by-filter',
     description:
-      '"Search your library for a land card, put it onto the battlefield tapped, then shuffle" (Urza’s Cave, Wood Elves)',
+      '"Search your library for a land card, put it onto the battlefield tapped, then shuffle" (Urza’s Cave)',
     // The battlefield sibling of `search-to-hand-by-filter`, sharing its noun
     // parser so "an Aura or Equipment card" cannot mean one thing when fetched to
     // hand and another when put onto the battlefield. The land-type list above
     // still runs FIRST, so a multi-type fetchland keeps its own rule.
+    //
+    // ⚠️ Which is why Wood Elves ("search your library for a FOREST card") is
+    // NOT this rule's card, though the description used to claim it:
+    // `fetch-land-by-subtype` matches the printed land type first. The
+    // rule-coverage guard fails on a description that cites a card another rule
+    // owns, because that is how a reader ends up debugging the wrong rule.
     pattern: new RegExp(
       `^search your library for an? ${SEARCH_COLOR_PHRASE}([a-z]+(?: or [a-z]+)?) card(?: with ${SEARCH_BOUND_PHRASE} (\\d+)(?: or (less|greater))?)?, (?:reveal (?:it|that card), )?put (?:it|that card) onto the battlefield( tapped)?, then shuffle$`,
     ),

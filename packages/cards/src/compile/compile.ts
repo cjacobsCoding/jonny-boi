@@ -975,6 +975,19 @@ export function compileCard(card: CompilableCard): CompileResult {
 
   // --- printed abilities -----------------------------------------------------
   const isSpell = types.includes('instant') || types.includes('sorcery');
+  /**
+   * Record an INNER rule match — one matched inside a trigger body, a modal
+   * bullet or a nested clause. Without this `matchedRules` lists only the
+   * outer line's rule, so a rule that exists to compile a BODY (every
+   * "…, draw a card" tail) reads as dead to anything inspecting coverage. The
+   * list is a set-like append: duplicates are dropped so a card printing the
+   * same body twice is not double-counted.
+   */
+  const noteInner = (ruleId: string | undefined): void => {
+    if (ruleId !== undefined && !assembly.matchedRules.includes(ruleId)) {
+      assembly.matchedRules.push(ruleId);
+    }
+  };
   const ctx: RuleContext = {
     card,
     compileEffectClause(
@@ -984,7 +997,10 @@ export function compileCard(card: CompilableCard): CompileResult {
       const targetFree = options?.targetFree === true;
       const clause = normalizeClause(text);
       const whole = applyRules(EFFECT_RULES, clause, ctx, targetFree);
-      if (whole) return whole.contribution.effects ?? [];
+      if (whole) {
+        noteInner(whole.ruleId);
+        return whole.contribution.effects ?? [];
+      }
       // A multi-sentence trigger body: every sentence must compile.
       const sentences = splitSentences(text).map(normalizeClause);
       if (sentences.length > 1) {
@@ -992,6 +1008,7 @@ export function compileCard(card: CompilableCard): CompileResult {
         for (const sentence of sentences) {
           const result = applyRules(EFFECT_RULES, sentence, ctx, targetFree);
           if (!result) return null;
+          noteInner(result.ruleId);
           refs.push(...(result.contribution.effects ?? []));
         }
         return refs;
@@ -1003,6 +1020,7 @@ export function compileCard(card: CompilableCard): CompileResult {
       // stack now), so what this has to work out is what may be aimed at.
       const clauses = [normalizeClause(text)];
       const whole = applyRules(EFFECT_RULES, clauses[0]!, ctx);
+      noteInner(whole?.ruleId);
       // A "Choose one —" body IS a ModalSpec, not an effect list: hand it up so
       // the trigger assembly can put it on the ability (CR 603.3c). TARGETED
       // modes are accepted only on a CHOOSE-ONE spec: with exactly one pick,
@@ -1026,6 +1044,7 @@ export function compileCard(card: CompilableCard): CompileResult {
           for (const sentence of sentences) {
             const result = applyRules(EFFECT_RULES, sentence, ctx);
             if (!result) return null;
+            noteInner(result.ruleId);
             out.push(result);
           }
           return out;
