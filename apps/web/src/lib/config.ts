@@ -71,6 +71,30 @@ export const SW_UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 export const PLAY_PERSIST_MAX_CHARS = 2_000_000;
 
 /**
+ * localStorage key for the GAME LIBRARY (§3.66): every game played, finished or
+ * not, so any of them can be reviewed, scrubbed, forked or resumed. Separate
+ * from {@link PLAY_RESUME_STORAGE_KEY}, which stays the pointer to the ONE game
+ * currently open — losing the library must never cost you the game in front of
+ * you, and a corrupt library must not be able to stop that game resuming.
+ */
+export const PLAY_HISTORY_STORAGE_KEY = 'jonny-boi.play.history.v1';
+
+/**
+ * How many games the library keeps. Pruning drops the oldest FINISHED games
+ * only — an unfinished game is one you could still return to, and the library
+ * must not decide to forget that for you.
+ */
+export const PLAY_HISTORY_LIMIT = 50;
+
+/**
+ * The library's own size cap, larger than one record's because it holds many.
+ * Same discipline as {@link PLAY_PERSIST_MAX_CHARS}: reads refuse a blob this
+ * big, and writes shed old finished games rather than storing what a read would
+ * then refuse.
+ */
+export const PLAY_HISTORY_MAX_CHARS = 4_000_000;
+
+/**
  * The mana-value (CMC) buckets shown on the mana-curve chart. The last bucket is
  * inclusive of everything at-or-above its value (e.g. "7+").
  */

@@ -273,8 +273,14 @@ export type RebuildResult =
  * no longer validates (an imported card since deleted), an action the rules no
  * longer accept — fails the WHOLE rebuild with a reason; a partially replayed
  * game is a different game, not a restored one.
+ *
+ * `throughAction` replays only the first N actions (§3.66's scrubber and fork).
+ * That is NOT the partial replay the paragraph above refuses: this one stops at
+ * a point the caller ASKED for, so the result is an exact earlier state of this
+ * same game rather than an accidental truncation of it. Omit it to replay the
+ * whole record, which is what resuming does.
  */
-export function rebuildFromRecord(record: PlayRecord): RebuildResult {
+export function rebuildFromRecord(record: PlayRecord, throughAction?: number): RebuildResult {
   const choiceA: DeckChoice = { source: 'sample', deck: record.setup.deckA };
   const choiceB: DeckChoice = { source: 'sample', deck: record.setup.deckB };
   const base = {
@@ -311,7 +317,11 @@ export function rebuildFromRecord(record: PlayRecord): RebuildResult {
     }
   }
 
-  for (let i = 0; i < record.actions.length; i++) {
+  const stopAt =
+    throughAction === undefined
+      ? record.actions.length
+      : Math.max(0, Math.min(Math.floor(throughAction), record.actions.length));
+  for (let i = 0; i < stopAt; i++) {
     const result = session.submit(record.actions[i] as GameAction);
     if (result.rejected) {
       return {
