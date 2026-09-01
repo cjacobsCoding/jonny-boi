@@ -1275,22 +1275,29 @@ const COUNTER_NOUN_PHRASE = Object.keys(COUNTER_NOUN_RESTRICTIONS)
  * "sacrifice a **Food**".
  *
  * Closed and shared for the same reason {@link TARGET_NOUN_RESTRICTIONS} is:
- * the next printed filter is a ROW here, understood by both the tap form and
- * the sacrifice form at once, and a noun that is not here reports rather than
- * being widened to "any permanent you control".
+ * the next printed filter is a ROW here, understood by EVERY cost parser at
+ * once — the mana ability's tap/sacrifice forms and the ACTIVATED ability's
+ * "Sacrifice a <noun>" (`parseActivationCost`) all read this one table, so
+ * "a Treasure" cannot mean one thing on Gilded Goose and another on
+ * Professional Face-Breaker. A noun that is not here reports rather than being
+ * widened to "any permanent you control".
  */
-const MANA_COST_NOUNS: Readonly<Record<string, CardFilter>> = Object.freeze({
+export const COST_NOUNS: Readonly<Record<string, CardFilter>> = Object.freeze({
   creature: { anyOfTypes: ['creature'] },
   artifact: { anyOfTypes: ['artifact'] },
+  land: { anyOfTypes: ['land'] },
+  permanent: {},
   'legendary creature': { anyOfTypes: ['creature'], legendary: true },
   food: { anyOfSubtypes: ['Food'] },
   treasure: { anyOfSubtypes: ['Treasure'] },
   clue: { anyOfSubtypes: ['Clue'] },
   goblin: { anyOfSubtypes: ['Goblin'] },
+  desert: { anyOfSubtypes: ['Desert'] },
+  token: { isToken: true },
 });
 
 /** The cost nouns as an alternation, longest first so none is truncated. */
-const MANA_COST_NOUN_PHRASE = Object.keys(MANA_COST_NOUNS)
+export const COST_NOUN_PHRASE = Object.keys(COST_NOUNS)
   .sort((a, b) => b.length - a.length)
   .join('|');
 
@@ -2800,6 +2807,34 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
         params.keywords = keywords;
       }
       return effects({ primitive: 'makeToken', params });
+    },
+  },
+  {
+    id: 'exile-graveyard',
+    description:
+      `"Exile target player's graveyard" (Bojuka Bog, Tormod's Crypt, Rakdos Charm's mode) / "Exile all graveyards" (Scavenger Grounds) / "Exile each opponent's graveyard"`,
+    // WHOSE graveyards is the only variable, and it reads the same
+    // `whichPlayer` vocabulary every other player-scoped primitive reads — so a
+    // printed scope this table does not carry reports, rather than being
+    // widened to "everyone's" (which would be a strictly wider card).
+    pattern: /^exile (target player's|all|each opponent's|all opponents') graveyards?$/,
+    // "target player's" is the only scope that aims; the others name no target.
+    needsChosenTarget: false,
+    build(match) {
+      const printed = match[1] ?? '';
+      const whichPlayer =
+        printed === "target player's"
+          ? 'targetPlayer'
+          : printed === 'all'
+            ? 'each'
+            : 'opponent';
+      return effects({
+        primitive: 'exileGraveyard',
+        params: {
+          whichPlayer,
+          ...(whichPlayer === 'targetPlayer' ? { targets: PLAYER_TARGET } : {}),
+        },
+      });
     },
   },
   {
@@ -6973,10 +7008,10 @@ export const MANA_RULES: readonly CompileRule[] = Object.freeze([
     description:
       '"{T}, Tap an untapped creature you control: Add …" (Springleaf Drum) / "{T}, Sacrifice a Food: Add …" (Gilded Goose)',
     pattern: new RegExp(
-      `^(?:([{]t[}]), )?(tap an untapped|sacrifice a) (${MANA_COST_NOUN_PHRASE})(?: you control)?: add (.+)$`,
+      `^(?:([{]t[}]), )?(tap an untapped|sacrifice a) (${COST_NOUN_PHRASE})(?: you control)?: add (.+)$`,
     ),
     build(match) {
-      const filter = MANA_COST_NOUNS[match[3] ?? ''];
+      const filter = COST_NOUNS[match[3] ?? ''];
       const produces = parseManaPayload(match[4] ?? '');
       if (filter === undefined || !produces) return null;
       const taps = match[1] !== undefined;

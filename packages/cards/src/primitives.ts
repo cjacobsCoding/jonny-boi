@@ -1146,6 +1146,32 @@ const COUNTER_SCOPE_DEFAULT = 'you';
  * you control"), which counts every matching creature instead of one target.
  */
 /**
+ * `exileGraveyard` — the graveyard-hate family: "exile target player's
+ * graveyard" (Bojuka Bog, Tormod's Crypt, Boggart Trawler, Rakdos Charm's
+ * mode) and "exile all graveyards" (Scavenger Grounds, Rest in Peace's entry).
+ *
+ * WHOSE graveyards is the only thing that varies, so it is read from the shared
+ * {@link playersForParam} vocabulary rather than a second one: `'targetPlayer'`
+ * is the printed "target player's", `'each'` is "all graveyards", `'opponent'`
+ * is "each opponent's". A card that prints a new scope is a param value, not a
+ * new primitive.
+ *
+ * Every card leaves through `moveOwnedCard` — the one graveyard→exile funnel —
+ * so a card exiled this way emits its `zoneChange` and is seen by everything
+ * that watches zone changes, exactly like any other exile.
+ *
+ * Iterated over a SNAPSHOT of each graveyard: the funnel splices the list it is
+ * reading, and walking a list while removing from it is how half a graveyard
+ * silently survives.
+ */
+export const exileGraveyard: EffectPrimitive = (ctx) => {
+  for (const player of playersForParam(ctx, strParam(ctx, 'whichPlayer'))) {
+    const ids = ctx.state.players[player].graveyard.map((card) => card.instanceId);
+    for (const id of ids) moveOwnedCard(ctx, player, id, 'graveyard', 'exile');
+  }
+};
+
+/**
  * `proliferate` — CR 701.27: "choose any number of permanents and/or players
  * with a counter on them, then give each another counter of each kind already
  * there."
@@ -1774,6 +1800,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   dealDamageToEach,
   preventDamage,
   addCounters,
+  exileGraveyard,
   proliferate,
   attachToTarget,
   grantFlashback,

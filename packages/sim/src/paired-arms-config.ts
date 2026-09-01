@@ -355,6 +355,12 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
    */
   'payManaOrElse',
   'scheduleDelayedPayment',
+  /*
+   * `exileGraveyard` moves every card out of one or both graveyards. It reads
+   * and writes GRAVEYARDS only — never a library — and every card it moves
+   * emits its own zoneChange, so the runner keeps tracking them precisely.
+   */
+  'exileGraveyard',
   'sacrificeChosen',
   'pileSplitSacrifice',
   /*

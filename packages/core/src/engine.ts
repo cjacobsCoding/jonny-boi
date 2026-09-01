@@ -4195,6 +4195,25 @@ function applyActivateAbility(
     player.life -= cost.life;
     emit({ type: 'lifeChanged', player: action.player, delta: -cost.life, to: player.life });
   }
+  if (cost.sacrificeAnother !== undefined) {
+    const needed = cost.sacrificeCount ?? 1;
+    const named = action.costInstanceIds ?? [];
+    const legal = new Set(sacrificeCostCandidates(state, source, cost).map((c) => c.instanceId));
+    // Exactly as many as printed, all distinct, all legal — an action naming
+    // fewer (or the same permanent twice) would pay a cheaper cost than the
+    // card prints.
+    if (named.length !== needed || new Set(named).size !== needed || named.some((id) => !legal.has(id))) {
+      return rejectWith(prevState, `${source.def.name}'s ability needs ${needed} legal permanent(s) to sacrifice`);
+    }
+    for (const id of named) {
+      const victim = findOnBattlefield(state, id);
+      if (!victim) return rejectWith(prevState, 'a permanent named to pay the cost has left the battlefield');
+      // The same graveyard path a sacrificed permanent always takes, so
+      // dies-triggers see it (that is the entire point of Viscera Seer).
+      moveToZone(state, victim, 'graveyard', emit, victim.owner);
+      resetInstanceForNewZone(victim);
+    }
+  }
   if (cost.sacrificeSelf) {
     // Sacrificing is a zone change to the graveyard, using the same path death
     // does, so leaves-the-battlefield triggers and instance reset behave alike.
@@ -4263,6 +4282,34 @@ function applyActivateAbility(
  * "accepted" can never disagree — a pilot is never handed an action the engine
  * would then reject.
  */
+/**
+ * The permanents that may pay an activated ability's "**Sacrifice a <noun>**"
+ * cost right now — its controller's permanents matching the printed filter,
+ * minus the source itself when the card prints "another".
+ *
+ * ONE answer, read by the OFFER path (which enumerates a legal payer per
+ * action), by the payability gate (which asks only whether enough exist) and by
+ * the APPLY path (which re-checks what the action named). Three readers, one
+ * rule — a menu that offered a payer the apply path then refused is DESIGN
+ * §3.36's exact failure.
+ */
+function sacrificeCostCandidates(
+  state: GameState,
+  source: CardInstance,
+  cost: ActivatedAbility['cost'],
+): readonly CardInstance[] {
+  const filter = cost.sacrificeAnother;
+  if (filter === undefined) return [];
+  const out: CardInstance[] = [];
+  for (const perm of state.battlefield) {
+    if (perm.controller !== source.controller) continue;
+    if (cost.sacrificeExcludesSelf === true && perm.instanceId === source.instanceId) continue;
+    if (!matchesCardFilter(perm, filter)) continue;
+    out.push(perm);
+  }
+  return out;
+}
+
 function unpayableActivationReason(
   state: GameState,
   source: CardInstance,
@@ -4289,6 +4336,12 @@ function unpayableActivationReason(
     !canPay(player.manaPool, cost.mana, spendPurposeIfRestricted(player.manaPool, source.def, 'activate'))
   ) {
     return 'insufficient mana for that ability';
+  }
+  if (cost.sacrificeAnother !== undefined) {
+    const needed = cost.sacrificeCount ?? 1;
+    if (sacrificeCostCandidates(state, source, cost).length < needed) {
+      return 'you do not control enough permanents to pay that sacrifice cost';
+    }
   }
   if (cost.loyalty !== undefined) {
     // A loyalty cost only means anything on a planeswalker carrying loyalty
@@ -4814,18 +4867,38 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
       if (timing === 'sorcery' && !sorcerySpeedWindow) continue;
       if (unpayableActivationReason(state, perm, ability)) continue;
       const restriction = restrictionOfEffects(ability.effects);
-      if (restriction === undefined) {
-        actions.push({ kind: 'activateAbility', player: me, instanceId: perm.instanceId, abilityIndex: index });
-        continue;
-      }
-      for (const target of legalTargetsFor(state, restriction, me, perm.def)) {
-        actions.push({
-          kind: 'activateAbility',
-          player: me,
-          instanceId: perm.instanceId,
-          abilityIndex: index,
-          targets: [target],
-        });
+      // A "Sacrifice a <noun>" cost is enumerated like a target: one action per
+      // legal payer, because the cost is paid at ACTIVATION (CR 602.2b) and
+      // there is no resolution in which to ask. Only ONE payer is enumerated
+      // for a multi-permanent cost today — "Sacrifice two artifacts" is offered
+      // as its first legal pair, taken in battlefield order, which is a real
+      // narrowing of the choice and is why the cost is still refused at compile
+      // time for counts above one (see the compiler's cost table).
+      const payers = ability.cost.sacrificeAnother === undefined
+        ? [undefined]
+        : sacrificeCostCandidates(state, perm, ability.cost).map((c) => [c.instanceId] as const);
+      for (const payer of payers) {
+        const costPart = payer === undefined ? {} : { costInstanceIds: [...payer] };
+        if (restriction === undefined) {
+          actions.push({
+            kind: 'activateAbility',
+            player: me,
+            instanceId: perm.instanceId,
+            abilityIndex: index,
+            ...costPart,
+          });
+          continue;
+        }
+        for (const target of legalTargetsFor(state, restriction, me, perm.def)) {
+          actions.push({
+            kind: 'activateAbility',
+            player: me,
+            instanceId: perm.instanceId,
+            abilityIndex: index,
+            targets: [target],
+            ...costPart,
+          });
+        }
       }
     }
   }

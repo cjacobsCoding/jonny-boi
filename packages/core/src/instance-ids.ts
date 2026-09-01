@@ -281,6 +281,12 @@ const NON_EVENT_INSTANCE_ID_FIELDS = [
    * (CR 605.3a), so it is an id the scanner must know about.
    */
   'costInstanceId',
+  /**
+   * `ActivateAbilityAction.costInstanceIds` — the permanents paying a
+   * "Sacrifice a <noun>" activation cost. Named by the action because the cost
+   * is paid at activation (CR 602.2b), before the ability is on the stack.
+   */
+  'costInstanceIds',
   /** `GameState.nextInstanceId` — the id source. Not a card, but it IS an id. */
   'nextInstanceId',
 ] as const;

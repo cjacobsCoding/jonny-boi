@@ -171,6 +171,14 @@ export interface ActivateAbilityAction {
   readonly instanceId: InstanceId;
   readonly abilityIndex: number;
   readonly targets?: ReadonlyArray<InstanceId | PlayerId>;
+  /**
+   * The permanents paying a "**Sacrifice a <noun>**" additional cost. Named by
+   * the action because the cost is paid as the ability is ACTIVATED (CR
+   * 602.2b) — before it reaches the stack, so there is no resolution in which
+   * to ask. The generator offers one action per legal payer, exactly as
+   * `TapForManaAction.costInstanceId` does for a mana ability.
+   */
+  readonly costInstanceIds?: readonly InstanceId[];
 }
 
 /**

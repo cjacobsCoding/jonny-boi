@@ -1236,6 +1236,24 @@ export interface ActivationCost {
   /** "Pay N life". Payable only while the controller's life exceeds it. */
   readonly life?: number;
   /**
+   * "**Sacrifice a creature**" (Viscera Seer, Goblin Bombardment), "**Sacrifice
+   * a Treasure**" (Professional Face-Breaker), "**Sacrifice another creature**"
+   * (Yahenni) — an additional cost paid by sacrificing some OTHER permanent
+   * matching a printed filter.
+   *
+   * The SAME shape as {@link ManaAbilityCost.sacrificeAnother}, and read from
+   * the same compiler noun table, so "a Treasure" cannot mean one thing on a
+   * mana ability and another on an activated one. The permanent is named by the
+   * ACTION (`ActivateAbilityAction.costInstanceId`) rather than chosen
+   * mid-resolution: the cost is paid as the ability is activated (CR 602.2b),
+   * before it is on the stack, so there is no resolution in which to ask.
+   */
+  readonly sacrificeAnother?: CardFilter;
+  /** The printed word "another": the source itself may not pay (Yahenni). */
+  readonly sacrificeExcludesSelf?: boolean;
+  /** How many to sacrifice ("Sacrifice TWO artifacts" — Sai). Default 1. */
+  readonly sacrificeCount?: number;
+  /**
    * A LOYALTY cost — the `[+N]` / `[−N]` / `[0]` printed on a planeswalker's
    * abilities, SIGNED: `+1` adds a loyalty counter as the cost is paid, `-2`
    * removes two, `0` changes nothing (CR 606.5, 602.5b). Paying a negative cost

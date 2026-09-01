@@ -22,6 +22,7 @@ import type {
   AdditionalCastCost,
   AttachmentSpec,
   CardDefinition,
+  CardFilter,
   CardType,
   EffectRef,
   ManaColor,
@@ -52,6 +53,8 @@ import {
   explainUnsupported,
   isVacuousClause,
   parseProtectionOrWard,
+  COST_NOUNS,
+  COST_NOUN_PHRASE,
 } from './rules.js';
 import { mergeKeywordGrant } from '@jonny-boi/core';
 import type { CastZone, KeywordFlags } from '@jonny-boi/core';
@@ -622,6 +625,13 @@ const TAP_SYMBOL = '{t}';
 const PAY_LIFE = /^pay (\d+) life$/;
 /** "Sacrifice ~" — only sacrificing the ability's own source is supported. */
 const SACRIFICE_SELF = /^sacrifice ~$/;
+
+/**
+ * "Sacrifice a creature" / "Sacrifice ANOTHER creature" / "Sacrifice a
+ * Treasure" — an additional activation cost naming some OTHER permanent. The
+ * noun itself is looked up in the shared {@link COST_NOUNS} table.
+ */
+const SACRIFICE_ANOTHER = new RegExp(`^sacrifice (a|an|another) (${COST_NOUN_PHRASE})$`);
 /** A mana symbol run, e.g. `{1}{g}` or `{u}`. */
 const MANA_SYMBOLS = /^(?:\{[^}]+\})+$/;
 
@@ -634,6 +644,8 @@ function parseActivationCost(text: string, ctx: RuleContext): ActivationCost | n
     mana?: ManaCost;
     tap?: boolean;
     sacrificeSelf?: boolean;
+    sacrificeAnother?: CardFilter;
+    sacrificeExcludesSelf?: boolean;
     life?: number;
   } = {};
 
@@ -652,6 +664,23 @@ function parseActivationCost(text: string, ctx: RuleContext): ActivationCost | n
     }
     if (SACRIFICE_SELF.test(part) || part === `sacrifice ${ctx.card.name.toLowerCase()}`) {
       cost.sacrificeSelf = true;
+      continue;
+    }
+    // "Sacrifice a creature" / "Sacrifice another creature" / "Sacrifice a
+    // Treasure" — the SAME closed noun table the mana-ability costs read, so a
+    // noun means one thing across every cost parser in the compiler.
+    //
+    // ⚠️ Only a count of ONE is accepted. The action carries a list, and the
+    // engine could charge two, but the OFFER path enumerates a single payer —
+    // so "Sacrifice two artifacts" would silently narrow the player's choice to
+    // the first legal pair. Refusing keeps that card reported until the menu
+    // can express it.
+    const sacrificeOther = SACRIFICE_ANOTHER.exec(part);
+    if (sacrificeOther) {
+      const filter = COST_NOUNS[(sacrificeOther[2] ?? '').trim()];
+      if (!filter) return null;
+      cost.sacrificeAnother = filter;
+      if (sacrificeOther[1] === 'another') cost.sacrificeExcludesSelf = true;
       continue;
     }
     if (MANA_SYMBOLS.test(part)) {

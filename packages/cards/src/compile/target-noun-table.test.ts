@@ -16,7 +16,7 @@
 import { describe, expect, it } from 'vitest';
 import { compileCard } from './compile.js';
 import type { CompilableCard } from './types.js';
-import { COUNTER_NOUN_RESTRICTIONS, TARGET_NOUN_RESTRICTIONS } from './rules.js';
+import { COST_NOUNS, COUNTER_NOUN_RESTRICTIONS, TARGET_NOUN_RESTRICTIONS } from './rules.js';
 
 function instant(oracleText: string): CompilableCard {
   return {
@@ -62,5 +62,51 @@ describe('the shared spell-noun table', () => {
 
   it('a spell noun outside the table is refused — a counterspell is never widened', () => {
     expect(compileCard(instant('Counter target artifact spell.')).status).toBe('incomplete');
+  });
+});
+
+describe('the shared COST-noun table', () => {
+  it('every noun compiles under a MANA ability and an ACTIVATED ability alike', () => {
+    for (const noun of Object.keys(COST_NOUNS)) {
+      // The mana form: "{T}, Sacrifice a <noun>: Add {C}."
+      const mana = compileCard({
+        ...instant(`{T}, Sacrifice a ${noun}: Add {C}.`),
+        typeLine: { supertypes: [], types: ['Artifact'], subtypes: [] },
+      });
+      expect(mana.status, `mana: sacrifice a ${noun}: ${JSON.stringify(mana.missing)}`).toBe('complete');
+      expect(mana.definition.manaAbilities?.[0]?.cost?.sacrificeAnother).toEqual(COST_NOUNS[noun]);
+
+      // The activated form: "Sacrifice a <noun>: Draw a card."
+      const activated = compileCard({
+        ...instant(`Sacrifice a ${noun}: Draw a card.`),
+        typeLine: { supertypes: [], types: ['Artifact'], subtypes: [] },
+      });
+      expect(activated.status, `activated: sacrifice a ${noun}: ${JSON.stringify(activated.missing)}`).toBe('complete');
+      expect(activated.definition.activated?.[0]?.cost.sacrificeAnother).toEqual(COST_NOUNS[noun]);
+    }
+  });
+
+  it('the printed word "another" excludes the source, and a noun outside the table reports', () => {
+    const another = compileCard({
+      ...instant('Sacrifice another creature: Draw a card.'),
+      typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+      power: '2',
+      toughness: '2',
+    });
+    expect(another.status, JSON.stringify(another.missing)).toBe('complete');
+    expect(another.definition.activated?.[0]?.cost.sacrificeExcludesSelf).toBe(true);
+
+    // Not a noun this engine carries — reported, never widened to "a permanent".
+    expect(compileCard({
+      ...instant('Sacrifice a Elephant: Draw a card.'),
+      typeLine: { supertypes: [], types: ['Artifact'], subtypes: [] },
+    }).status).toBe('incomplete');
+  });
+
+  it('a COUNT above one is refused — the offer menu can only express one payer', () => {
+    expect(compileCard({
+      ...instant('Sacrifice two artifacts: Draw a card.'),
+      typeLine: { supertypes: [], types: ['Artifact'], subtypes: [] },
+    }).status).toBe('incomplete');
   });
 });

@@ -70,18 +70,31 @@ describe('activated abilities — the fetchland', () => {
     expect(shock.definition.subtypes).toEqual(['mountain', 'plains']);
   });
 
-  it('refuses an ability whose cost it cannot pay faithfully', () => {
-    // "Sacrifice a creature" is a cost over OTHER permanents, which the engine
-    // has no way to pay — reported rather than silently dropped.
-    const result = compileCard(
+  it('COMPILES a sacrifice-another cost, and still refuses a COUNT above one (§3.61)', () => {
+    // This probe used to pin "sacrifice a creature" as unpayable. It is a real
+    // cost now (`ActivationCost.sacrificeAnother`, paid at activation per CR
+    // 602.2b, with the payer named by the action). What is STILL refused is a
+    // count above one: the offer menu enumerates a single payer, so "sacrifice
+    // two artifacts" would silently narrow the player's choice.
+    const one = compileCard(
       card({
         name: 'Test Outlet',
         typeLine: { supertypes: [], types: ['Artifact'], subtypes: [] },
         oracleText: 'Sacrifice a creature: Draw a card.',
       }),
     );
-    expect(result.status).toBe('incomplete');
-    expect(result.definition.activated ?? []).toHaveLength(0);
+    expect(one.status, JSON.stringify(one.missing)).toBe('complete');
+    expect(one.definition.activated?.[0]?.cost.sacrificeAnother).toEqual({ anyOfTypes: ['creature'] });
+
+    const two = compileCard(
+      card({
+        name: 'Test Outlet Two',
+        typeLine: { supertypes: [], types: ['Artifact'], subtypes: [] },
+        oracleText: 'Sacrifice two creatures: Draw a card.',
+      }),
+    );
+    expect(two.status).toBe('incomplete');
+    expect(two.definition.activated ?? []).toHaveLength(0);
   });
 
   it('compiles a planeswalker loyalty line to a LOYALTY-cost ability, not a mana one', () => {

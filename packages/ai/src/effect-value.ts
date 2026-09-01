@@ -755,6 +755,32 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     return worth * ctx.weights.bankedEffectValueShare;
   },
 
+  /**
+   * GRAVEYARD HATE — worth what it takes AWAY, so it is priced off the cards
+   * actually sitting in the graveyards it empties: the opponent's yard is
+   * value denied (positive), and your own is value you are giving up
+   * (negative), which is exactly what stops a pilot pointing Bojuka Bog at
+   * itself. An empty graveyard prices zero, which is what the card does there.
+   */
+  exileGraveyard: (params, ctx) => {
+    const scope = params['whichPlayer'];
+    const opponent = opponentOf(ctx.player);
+    const victims =
+      scope === 'each'
+        ? PLAYER_IDS
+        : scope === 'opponent'
+          ? [opponent]
+          : // 'targetPlayer' — priced at the aim the pilot is considering.
+            ctx.targets.filter((t): t is PlayerId => t === 'A' || t === 'B');
+    let worth = 0;
+    for (const player of victims) {
+      const yard = ctx.state.players[player].graveyard;
+      const value = yard.reduce((sum, card) => sum + cardValue(card, ctx.weights, ctx.cards), 0);
+      worth += player === ctx.player ? -value : value;
+    }
+    return worth * ctx.weights.bankedEffectValueShare;
+  },
+
   // "You win the game" IS the lethal outcome, priced at lethal's own weight —
   // and its mirror is the one price that must always be refused.
   winTheGame: (_params, ctx) => ctx.weights.lethalBurnScore,
