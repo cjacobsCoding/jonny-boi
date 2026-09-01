@@ -740,6 +740,59 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
+
+Not every measured idea survives, and this is the write-up of one that did not. It is recorded
+because the evidence that motivated it was good, the reasoning was plausible, and the next person to
+have the same idea deserves the numbers rather than the argument.
+
+**Where the idea came from.** NEW `bench/oracle-diff.mjs` drives a real game with the cheap pilot and
+asks the SEARCHING pilot for a second opinion at every window — so both judge the same reachable
+positions, on-policy. Over 2,457 windows with a genuine choice:
+
+> The two agree on **99.0%** of decisions. **Every single disagreement is about attacking** — none
+> about casting, blocking, land drops or abilities — and `lookahead` PASSES where the heuristic
+> swings in **15 of 24** cases.
+
+That is a sharp result: the whole remaining gap between a one-ply policy and real engine rollouts
+sits in the attack step, and search is the more cautious of the two.
+
+**The hypothesis.** A one-ply policy scores each attacker against the blockers in front of it and
+cannot see the turn after, so it sends creatures it needed at home. `trimForDefence` dropped
+attackers — biggest first, since the biggest blocks the biggest — until whatever stayed home could
+survive a pessimistic counter-swing.
+
+📊 **The verdict: WEAKER.** Same harness as §3.74 (9 decks × 36 pairs × 60 games × both
+orientations = 4,320 games), the feature against the pilot without it:
+
+| | |
+|---|---|
+| matched slots | 2,160 |
+| ahead (hold back) | 18 |
+| **ahead (attack freely)** | **39** |
+| level | 2,103 |
+| McNemar p | 8.1 × 10⁻³ |
+| verdict | **weaker** |
+
+So the code is gone. ⚠️ **The lesson is not "lookahead was wrong" — it is that COPYING A SEARCHING
+PILOT'S CONCLUSION IS NOT THE SAME AS HAVING ITS REASONS.** `lookahead` declines those attacks
+because it evaluated *those* positions; a rule that declines attacks *shaped like* them throws away
+races that the pilot was winning. Caution is a judgement, not a policy, and the evidence pointed at
+the right STEP while saying nothing about the right RULE.
+
+⚠️ **This is also why the A/B seam is worth its weight.** The hypothesis was plausible enough to ship
+on argument alone, and it would have made the pilot quietly worse in a way no test would have caught
+— every unit test still passed, and the win rate would have drifted where nobody was looking. The
+flag cost one parameter and one bench run to refute.
+
+**What survives**: `bench/oracle-diff.mjs`, which found the signal, and `bench/feature-ab.mjs`
+(generalised from §3.74's harness — it now takes `--feature <name>`, so the next hypothesis is one
+flag and one command away).
+
+**Still open, and now known to be where the value is**: the attack step, and specifically WHICH
+attacks search declines. The shortlist is 24 windows; reading them one by one is the next honest
+step, rather than another rule guessed from their shape.
+
 ### 3.74 The pilot takes a win it can prove — lethal before profit — ✅ done
 
 **The first MEASURED strength gain**, and the method matters as much as the change.
