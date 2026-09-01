@@ -21,6 +21,8 @@ export function GauntletPanel({
   gamesConfig,
 }: PanelProps & { gamesConfig: GamesConfig }): ReactElement {
   const [games, setGames] = useState(gamesConfig.default);
+  /** Whose numbers the table shows. Named once so no column can drift from it. */
+  const heroName = heroPayload?.name ?? 'Your deck';
   const running = sim.status === 'running';
   const canRun = heroLegal && heroPayload !== null && chosenOpponents.length > 0 && !running;
 
@@ -79,11 +81,17 @@ export function GauntletPanel({
           <PilotStamp pilotId={result.pilotId} />
           <table className="lab-table">
             <thead>
+              {/* ⚠️ Every number in this table is the HERO's, per opponent — the
+                  opponent only names the matchup. Saying just "Win rate" beside
+                  a column of opponent names invites the exact misreading that
+                  sent a healthy deck to be investigated as a broken one: a row
+                  reading "Selesnya Blink · 13/100 · 13.0%" is the hero winning
+                  13% AGAINST that deck, not that deck winning 13%. §3.65. */}
               <tr>
                 <th>Opponent</th>
-                <th>Record</th>
-                <th>Win rate (95% CI)</th>
-                <th className="lab-table__bar-col">Win rate</th>
+                <th>{heroName} record</th>
+                <th>{heroName} win rate (95% CI)</th>
+                <th className="lab-table__bar-col">{heroName} win rate</th>
               </tr>
             </thead>
             <tbody>
@@ -95,7 +103,9 @@ export function GauntletPanel({
                   </td>
                   <td>{ciStr(m.winRateA)}</td>
                   <td>
-                    <WinRateBar ci={m.winRateA} label={m.deckB} />
+                    {/* The bar is the hero's, so it must not be labelled with
+                        the opponent's name — that read as the opponent's bar. */}
+                    <WinRateBar ci={m.winRateA} label={`${heroName} vs ${m.deckB}`} />
                   </td>
                 </tr>
               ))}
@@ -112,7 +122,7 @@ export function GauntletPanel({
                   <strong>{ciStr(result.result.overallWinRate)}</strong>
                 </td>
                 <td>
-                  <WinRateBar ci={result.result.overallWinRate} label="Overall" />
+                  <WinRateBar ci={result.result.overallWinRate} label={`${heroName} overall`} />
                 </td>
               </tr>
             </tfoot>
