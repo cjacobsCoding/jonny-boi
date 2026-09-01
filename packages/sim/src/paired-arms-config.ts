@@ -348,6 +348,13 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   // Sacrifices read and write the BATTLEFIELD only: the victim's (or the pile
   // split's) choice is over permanents in play, and every card moved emits its
   // zoneChange. No library is ever consulted, so paired arms stay comparable.
+  /*
+   * The Pact bill and its scheduler read a MANA POOL and a life total and write
+   * a delayed ability whose body is already classified — no library, no hand.
+   * The consequence refs are classified on their own terms wherever they land.
+   */
+  'payManaOrElse',
+  'scheduleDelayedPayment',
   'sacrificeChosen',
   'pileSplitSacrifice',
   /*

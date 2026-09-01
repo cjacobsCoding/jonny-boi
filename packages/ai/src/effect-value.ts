@@ -724,6 +724,37 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     return worth;
   },
 
+  /**
+   * "PAY {COST}. IF YOU DON'T, <consequence>" — the Pact bill, priced as the
+   * trade the payer is about to face: the consequence's own value (negative
+   * for a loss) discounted by whether the mana is actually there right now.
+   * A payer who CAN pay will pay, so the bill is worth roughly nothing; a
+   * payer who cannot is looking at the consequence in full.
+   */
+  payManaOrElse: (params, ctx) => {
+    const consequence = params['effects'];
+    const cost = params['cost'];
+    const worth = Array.isArray(consequence) ? valueOfEffects(consequence as readonly EffectRef[], ctx) : 0;
+    const affordable =
+      cost !== null &&
+      typeof cost === 'object' &&
+      canAffordManaCost(ctx.state, ctx.player, cost as ManaCost);
+    return affordable ? 0 : worth;
+  },
+
+  /**
+   * SCHEDULING that bill — a Pact's whole drawback, and it is priced as the
+   * bill itself so a pilot casting the free spell is looking at what it will
+   * owe. Discounted by {@link HeuristicWeights.bankedEffectValueShare} in the
+   * same sense a banked Clue is: the bill is a turn away, and a turn of mana
+   * is exactly what usually pays it.
+   */
+  scheduleDelayedPayment: (params, ctx) => {
+    const consequence = params['effects'];
+    const worth = Array.isArray(consequence) ? valueOfEffects(consequence as readonly EffectRef[], ctx) : 0;
+    return worth * ctx.weights.bankedEffectValueShare;
+  },
+
   // "You win the game" IS the lethal outcome, priced at lethal's own weight —
   // and its mirror is the one price that must always be refused.
   winTheGame: (_params, ctx) => ctx.weights.lethalBurnScore,

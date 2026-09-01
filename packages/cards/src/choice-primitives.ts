@@ -33,6 +33,7 @@ import type {
   CardOption,
   EffectContext,
   EffectPrimitive,
+  EffectRef,
   InstanceId,
   ManaCost,
   PlayerId,
@@ -738,6 +739,88 @@ export const counterUnlessPaid: EffectPrimitive = (ctx) => {
   counterSpellOnStack(ctx, spell);
 };
 
+/**
+ * `payManaOrElse` — the printed **"Pay {COST}. If you don't, <consequence>"**
+ * (Pact of Negation and the whole Pact cycle, whose upkeep bill is a DELAYED
+ * ability the free spell scheduled — CR 603.7).
+ *
+ * A wrapper rather than a Pact-specific primitive: the consequence is ordinary
+ * effect refs (`loseTheGame` for the Pacts, and whatever a future card prints),
+ * so this stays one composable "pay or else" and the cards package needs no
+ * second copy of the payment question.
+ *
+ * ⚠️ **Not optional in the "you may" sense.** The payment is a real choice, but
+ * DECLINING is not free — that is the entire card. So the else-branch runs on a
+ * decline AND on an empty pool: a player who cannot pay has not paid.
+ *
+ * Ask-then-mutate: the payment question is the first thing here, so a parked
+ * question re-runs this from the top with nothing to undo.
+ *
+ * Params:
+ *   - `cost`     — the {@link ManaCost} to pay.
+ *   - `effects`  — what happens when it is NOT paid.
+ *   - `who`      — who pays (defaults to the ability's controller).
+ */
+export const payManaOrElse: EffectPrimitive = (ctx) => {
+  const cost = manaCostParam(ctx, 'cost');
+  const consequence = nestedRefs(ctx, 'effects');
+  if (!cost) {
+    // A malformed cost cannot be "not paid" — running the consequence off a
+    // missing bill would kill a player for a data typo. Do nothing instead.
+    return;
+  }
+  const payer = playerParam(ctx, 'who', 'controller') ?? ctx.controller;
+  const paid = ctx.payOrDecline({
+    chooser: payer,
+    cost,
+    prompt: `Pay ${formatManaCost(cost)} — if you don't, ${ctx.source.def.name}'s consequence happens`,
+    // Paying is the favourable branch for the payer: the consequence is a cost
+    // they are avoiding, which is what tells a pilot holding the mana to pay.
+    valence: 'gain',
+  });
+  if (paid === undefined) return; // parked — nothing mutated
+  if (paid) return; // paid in full: the consequence never happens
+  if (consequence.length > 0) ctx.enqueueEffects(consequence);
+};
+
+/**
+ * `scheduleDelayedPayment` — the Pact cycle's whole drawback: as the free
+ * spell RESOLVES, schedule "at the beginning of your next upkeep, pay {COST};
+ * if you don't, <consequence>" (CR 603.7).
+ *
+ * Scheduling is the entire job — the bill itself is {@link payManaOrElse},
+ * created as the delayed ability's body — because a Pact is an INSTANT that is
+ * already in the graveyard when the upkeep arrives, so nothing on the
+ * battlefield could carry the trigger. `{ on: 'upkeep', who: 'you' }` on a
+ * delayed ability IS "your NEXT upkeep": the engine fires a delayed ability
+ * once and removes it, so "next" needs no extra vocabulary.
+ *
+ * Params: `cost` (the bill), `effects` (the consequence refs), `label`.
+ */
+export const scheduleDelayedPayment: EffectPrimitive = (ctx) => {
+  const cost = manaCostParam(ctx, 'cost');
+  const consequence = nestedRefs(ctx, 'effects');
+  // No bill, or no consequence, means the printed drawback cannot be created —
+  // and a free spell with no drawback is the one outcome worse than reporting.
+  // The compiler refuses both cases, so this guards hand-authored data.
+  if (!cost || consequence.length === 0) return;
+  ctx.createDelayedTrigger({
+    condition: { on: 'upkeep', who: 'you' },
+    effects: [{ primitive: 'payManaOrElse', params: { cost, effects: [...consequence] } }],
+    label: strParam(ctx, 'label') ?? `Pay ${formatManaCost(cost)} at the beginning of your next upkeep`,
+  });
+};
+
+/** Well-formed effect refs from a wrapper param (the shared shallow guard). */
+function nestedRefs(ctx: EffectContext, key: string): readonly EffectRef[] {
+  const raw = ctx.params[key];
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (entry): entry is EffectRef =>
+      typeof entry === 'object' && entry !== null && typeof (entry as { primitive?: unknown }).primitive === 'string',
+  );
+}
+
 /** Where the optional payment's cost lives in a card's params. */
 const UNLESS_PAID_PARAM = 'unlessPaid';
 
@@ -1237,6 +1320,8 @@ export const CHOICE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Obje
   returnToHand,
   tapPermanents,
   counterUnlessPaid,
+  payManaOrElse,
+  scheduleDelayedPayment,
   sacrificeChosen,
   pileSplitSacrifice,
   wardCounterUnlessPaid,

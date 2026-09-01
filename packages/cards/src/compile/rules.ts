@@ -4082,6 +4082,47 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'pact-upkeep-bill',
+    description:
+      `"At the beginning of your next upkeep, pay {COST}. If you don't, you lose the game." (the Pact cycle: Pact of Negation, Slaughter Pact, Summoner's Pact)`,
+    /*
+     * A DELAYED triggered ability (CR 603.7) created as the free spell
+     * RESOLVES, not a static on a permanent — the Pact is an instant that is
+     * already in the graveyard when the bill comes due, so nothing on the
+     * battlefield could carry this trigger. That is exactly what
+     * `createDelayedTrigger` is for, and why this rule is possible at all now.
+     *
+     * "YOUR NEXT upkeep" is `{ on: 'upkeep', who: 'you' }` on a delayed ability,
+     * which fires ONCE and is then removed — the engine's delayed matcher does
+     * that for every delayed ability, so "next" needs no extra machinery.
+     *
+     * The consequence is compiled through the ordinary table rather than
+     * hard-coded to losing: `payManaOrElse` takes effect refs, so a printed
+     * "if you don't, sacrifice it" costs a rule-table entry and no engine work.
+     */
+    // A plain regex literal, not a template: the cost run needs no
+    // interpolation, and the template form forced double-escaping that lint
+    // (rightly) flagged as useless.
+    pattern: /^at the beginning of your next upkeep, pay ((?:\{[^}]+\})+)\. if you don't, (.+)$/,
+    build(match, ctx) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      // A cost with a symbol the engine cannot pay from a pool (hybrid, {X},
+      // Phyrexian) reports the whole line: a Pact whose bill is unpayable-by-
+      // parsing would be a free spell with no drawback at all.
+      if (!cost) return null;
+      const consequence = ctx.compileEffectClause(match[2] ?? '', { targetFree: true });
+      if (!consequence || consequence.length === 0) return null;
+      return effects({
+        primitive: 'scheduleDelayedPayment',
+        params: {
+          cost,
+          effects: [...consequence],
+          label: match[0],
+        },
+      });
+    },
+  },
+  {
     id: 'trigger-step-begins',
     description:
       '"At the beginning of [your | each player’s | each opponent’s | each] upkeep / draw step / first main phase / end step / combat, [if CONDITION,] [you may] BODY"',
