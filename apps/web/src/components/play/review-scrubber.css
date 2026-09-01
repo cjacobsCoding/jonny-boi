@@ -1,0 +1,36 @@
+/** §3.66 — the review scrubber above a board being replayed. */
+.review-scrubber {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  /* The board below owns the window's height (§3.62); the scrubber is chrome
+     and must never be what gives. */
+  flex: 0 0 auto;
+}
+
+.review-scrubber__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.review-scrubber__range {
+  flex: 1;
+  min-width: 0;
+}
+
+.review-scrubber__status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.review-scrubber__where {
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+}

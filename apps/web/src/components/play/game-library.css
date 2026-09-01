@@ -1,0 +1,69 @@
+/**
+ * §3.66 — the game library list. Its own file, like the other play-surface
+ * features, so the whole idea can be read and reverted in one place.
+ */
+.game-library {
+  margin: var(--space-4) 0;
+}
+
+.game-library__title {
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-fg-faint);
+  margin: 0 0 var(--space-2);
+}
+
+.game-library__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.game-library__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+/* A game you can still return to is the one worth spotting in a long list. */
+.game-library__row--live {
+  border-color: var(--color-accent);
+}
+
+.game-library__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.game-library__decks {
+  font-weight: 600;
+}
+
+.game-library__meta,
+.game-library__lineage {
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+}
+
+/* The fork line is the connection made explicit — a list of near-identical
+   games with no stated relationship is just confusing. */
+.game-library__lineage {
+  color: var(--color-accent-soft);
+}
+
+.game-library__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+}
