@@ -585,7 +585,8 @@ export {
 // Mana payment planning — shared by the AI pilots and the hotseat/online auto-tap
 // so "which lands do I tap" has exactly one implementation.
 export type { ManaTapPlan, ManaPlanView } from './mana-plan.js';
-export { planManaPayment, manaPaymentChoiceExists, distanceToPayable } from './mana-plan.js';
+export { planManaPayment, manaPaymentChoiceExists, distanceToPayable, tapActionFor } from './mana-plan.js';
+export { maxLandPlaysFor } from './engine.js';
 
 /**
  * WHICH source pays when several could (§3.60). A named, defaulted policy rather

@@ -64,6 +64,7 @@ import {
   PLAYER_IDS,
   PLUS_ONE_COUNTER,
   poolTotal,
+  maxLandPlaysFor,
 } from '@jonny-boi/core';
 import type { CardPool } from '@jonny-boi/cards';
 import type { EffectRegistry } from '@jonny-boi/core';
@@ -517,7 +518,11 @@ function checkStateInvariants(state: GameState): { invariant: SoakInvariantName;
     if (poolTotal(player.manaPool) < 0) {
       record(SOAK_INVARIANTS.manaPoolNonNegative, `${pid}'s mana pool totals ${poolTotal(player.manaPool)}`);
     }
-    if (player.landsPlayedThisTurn > DEFAULT_RULES.maxLandsPerTurn) {
+    // ⚠️ ASKED OF THE ENGINE, not of the config. `maxLandsPerTurn` is the BASE;
+    // Exploration and friends raise it, so a flat comparison called a legal
+    // second land drop a rules violation the moment the pool grew enough to
+    // deal one (§3.71). One answer to one question — see `maxLandPlaysFor`.
+    if (player.landsPlayedThisTurn > maxLandPlaysFor(state, pid, DEFAULT_RULES)) {
       record(SOAK_INVARIANTS.landDropCap, `${pid} played ${player.landsPlayedThisTurn} lands this turn`);
     }
   }
@@ -945,6 +950,38 @@ export function compareApplyPaths(
   const opts = { startingPlayer, recordTrace: true } as const;
   const cloned = runMatch(seats, seed, { ...opts, sim: { ...sim, applyActionsInPlace: false } });
   const inPlace = runMatch(seats, seed, { ...opts, sim: { ...sim, applyActionsInPlace: true } });
+  // ⚠️ THE LOGS ARE COMPARED FIRST, and the order is the whole usefulness of
+  // this function. Reporting "actions differs: 321 vs 311" names a SYMPTOM
+  // hundreds of steps after the cause and leaves whoever reads it with nothing
+  // to go on; the first differing EVENT names the moment the two paths parted,
+  // which is where the retained reference or the missed copy actually is. The
+  // summary fields are checked afterwards, for a divergence the logs somehow
+  // agreed through.
+  const a = cloned.events ?? [];
+  const b = inPlace.events ?? [];
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    const left = JSON.stringify(a[i]);
+    const right = JSON.stringify(b[i]);
+    if (left !== right) return `event ${i} differs: ${left} vs ${right}`;
+  }
+  if (a.length !== b.length) {
+    // The logs agree as far as the shorter one goes, so the divergence is what
+    // came NEXT: name it rather than only the lengths.
+    const longer = a.length > b.length ? a : b;
+    const which = a.length > b.length ? 'cloning' : 'in-place';
+    return (
+      `event log lengths differ: ${a.length} vs ${b.length}; ` +
+      `first extra event (${which}) is ${JSON.stringify(longer[Math.min(a.length, b.length)])}`
+    );
+  }
+  const da = cloned.decisions ?? [];
+  const db = inPlace.decisions ?? [];
+  for (let i = 0; i < Math.min(da.length, db.length); i++) {
+    const left = JSON.stringify(da[i]);
+    const right = JSON.stringify(db[i]);
+    if (left !== right) return `decision ${i} differs: ${left} vs ${right}`;
+  }
+  if (da.length !== db.length) return `decision trace lengths differ: ${da.length} vs ${db.length}`;
   if (JSON.stringify(cloned.outcome) !== JSON.stringify(inPlace.outcome)) {
     return `outcome differs: cloning ${JSON.stringify(cloned.outcome)} vs in-place ${JSON.stringify(inPlace.outcome)}`;
   }
@@ -953,22 +990,6 @@ export function compareApplyPaths(
   }
   if (JSON.stringify(cloned.finalLife) !== JSON.stringify(inPlace.finalLife)) {
     return `final life differs: ${JSON.stringify(cloned.finalLife)} vs ${JSON.stringify(inPlace.finalLife)}`;
-  }
-  const a = cloned.events ?? [];
-  const b = inPlace.events ?? [];
-  if (a.length !== b.length) return `event log lengths differ: ${a.length} vs ${b.length}`;
-  for (let i = 0; i < a.length; i++) {
-    const left = JSON.stringify(a[i]);
-    const right = JSON.stringify(b[i]);
-    if (left !== right) return `event ${i} differs: ${left} vs ${right}`;
-  }
-  const da = cloned.decisions ?? [];
-  const db = inPlace.decisions ?? [];
-  if (da.length !== db.length) return `decision trace lengths differ: ${da.length} vs ${db.length}`;
-  for (let i = 0; i < da.length; i++) {
-    const left = JSON.stringify(da[i]);
-    const right = JSON.stringify(db[i]);
-    if (left !== right) return `decision ${i} differs: ${left} vs ${right}`;
   }
   return undefined;
 }
@@ -1228,6 +1249,18 @@ function accountGame(
  * leak/equivalence checks land on it) depends on how many attempts every
  * earlier mechanic took, so this half is one indivisible part.
  */
+/**
+ * The mechanic whose ENABLERS belong in the opponent's deck for this anchor,
+ * or undefined when the anchor keeps its own. One reader for both anchoring
+ * loops, so the grid and the overtime lane cannot disagree about who brings the
+ * other half of an interaction.
+ */
+function opponentEnablersFor(mechanic: SoakMechanicId): SoakMechanicId | undefined {
+  return SOAK_MECHANICS.find((entry) => entry.id === mechanic)?.enablerBelongsToOpponent
+    ? mechanic
+    : undefined;
+}
+
 export function runSoakAnchored(
   options: SoakOptions,
   tick?: (gamesInPart: number) => void,
@@ -1250,7 +1283,12 @@ export function runSoakAnchored(
       // anchored game is still a collision test: the point is that walkers meet
       // Equipment meets protection meets flashback in one game.
       const other = required[(m + 1 + attempt) % required.length]!;
-      const deckB = buildAnchoredDeck(index, other, seed ^ 0x5bf03635) ?? buildMixedDeck(index, seed ^ 0x5bf03635);
+      // A mechanic whose witness needs the OTHER seat to bring something puts it
+      // there deliberately, rather than hoping the rotation lands on a deck that
+      // happens to carry it (see `SoakMechanic.enablerBelongsToOpponent`).
+      const deckB =
+        buildAnchoredDeck(index, other, seed ^ 0x5bf03635, opponentEnablersFor(mechanic)) ??
+        buildMixedDeck(index, seed ^ 0x5bf03635);
       if (!deckA) break; // the pool cannot anchor it — reported by the inert list
       const played = playOne(withSampling, deckA, deckB, seed, gameIndex, sim, nameOf);
       accountGame(part, played, played.result, sim, tick);
@@ -1276,7 +1314,12 @@ export function runSoakAnchored(
       const deckA = buildAnchoredDeck(index, mechanic, seed);
       if (!deckA) break;
       const other = required[(m + 1 + attempt) % required.length]!;
-      const deckB = buildAnchoredDeck(index, other, seed ^ 0x5bf03635) ?? buildMixedDeck(index, seed ^ 0x5bf03635);
+      // A mechanic whose witness needs the OTHER seat to bring something puts it
+      // there deliberately, rather than hoping the rotation lands on a deck that
+      // happens to carry it (see `SoakMechanic.enablerBelongsToOpponent`).
+      const deckB =
+        buildAnchoredDeck(index, other, seed ^ 0x5bf03635, opponentEnablersFor(mechanic)) ??
+        buildMixedDeck(index, seed ^ 0x5bf03635);
       const played = playOne(withSampling, deckA, deckB, seed, gameIndex, sim, nameOf);
       accountGame(part, played, played.result, sim, tick);
       if (played.mechanics.has(mechanic)) break;

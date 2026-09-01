@@ -86,6 +86,15 @@ function replayPlayerAssets(): Plugin {
  * install and can purge the running page's old chunks. Clients stay current:
  * the app applies a waiting update itself the moment no game is live.
  */
+/**
+ * The largest file the service worker will precache, in bytes.
+ *
+ * Workbox defaults to 2 MiB. The card pool alone is bigger (§3.71), and this
+ * app's whole promise is playing real Magic offline — so the ceiling is raised
+ * to cover it and named here rather than buried as a literal in the plugin.
+ */
+const MAX_PRECACHED_FILE_BYTES = 12 * 1024 * 1024;
+
 export default defineConfig({
   base: DEPLOY_BASE,
 
@@ -93,11 +102,46 @@ export default defineConfig({
     __BUILD_COMMIT__: JSON.stringify(BUILD_COMMIT),
     __BUILD_TIME__: JSON.stringify(BUILD_TIME),
   },
+  build: {
+    rollupOptions: {
+      output: {
+        /**
+         * Keep the CARD DATA out of the app shell's chunk.
+         *
+         * The compiled pool and the display index are, between them, most of the
+         * download — and neither changes when a component does. In their own
+         * chunks they are cached once and skipped by every later build that only
+         * touched the UI, and the shell stays small enough to paint before the
+         * 4,832 card definitions have finished parsing.
+         */
+        manualChunks(id: string): string | undefined {
+          if (id.includes('expanded-pool')) return 'card-pool';
+          if (id.includes('card-index.json')) return 'card-index';
+          return undefined;
+        },
+      },
+    },
+  },
   plugins: [
     replayPlayerAssets(),
     react(),
     VitePWA({
       registerType: 'prompt',
+      /**
+       * ⚠️ RAISED FOR THE CARD POOL, deliberately and with the trade stated.
+       *
+       * Workbox refuses to precache a file over 2 MiB by default, and the whole
+       * printed card pool (§3.71 — 4,832 compiled definitions) is larger than
+       * that on its own. The default is a sensible guard against precaching a
+       * video; here the oversized file IS the application. An offline-first deck
+       * lab that cannot open a card offline has precached the wrong things, so
+       * the pool is precached and the install is correspondingly bigger.
+       *
+       * It is split into its own chunk (see `manualChunks`) so the app SHELL
+       * still loads without it — the limit is raised for the one asset that
+       * needs it, not to hide a bundle nobody is watching.
+       */
+      workbox: { maximumFileSizeToCacheInBytes: MAX_PRECACHED_FILE_BYTES },
       includeAssets: [
         'icons/favicon-32.png',
         'icons/favicon-16.png',

@@ -76,6 +76,7 @@ import {
   loyaltyOf,
   MANA_COLORS,
   planManaPayment,
+  tapActionFor,
   restrictionOfEffects,
   modalSpecOf,
   modeCountsFor,
@@ -356,7 +357,7 @@ function decideMadness(ctx: DecisionContext, weights: HeuristicWeights): GameAct
     );
     const next = plan?.[0];
     if (next) {
-      const tap: GameAction = { kind: 'tapForMana', player: me, instanceId: next.instanceId, mode: next.mode };
+      const tap: GameAction = tapActionFor(me, next);
       return emit(ctx, tap, ctx.trace ? `tapping toward ${exiled!.def.name}'s madness cost` : NO_REASON);
     }
   }
@@ -691,6 +692,53 @@ function bestOfferedActivation(
  * honestly"; this is that ruler, not a guess, and an ability that cannot beat
  * `passScore` still goes unused.
  */
+/**
+ * The engine's OWN offer for this activation, or undefined when it is not on the
+ * menu.
+ *
+ * ⚠️ THE PILOT MUST NOT BUILD AN ACTIVATION ITSELF, and this helper exists
+ * because it used to. An `activateAbility` was assembled from the permanent, the
+ * ability index and the chosen targets — which is every part of the action the
+ * pilot knows about, and not every part the ENGINE requires. An ability whose
+ * cost sacrifices a permanent (CR 602.2b: paid at activation, so the payer rides
+ * on the action) needs `costInstanceIds`, and the hand-built action carried
+ * none. The engine answered "…needs 1 legal permanent(s) to sacrifice" and the
+ * pilot had spent its decision on an action that could never be taken.
+ *
+ * `generateLegalActions` already enumerates one offer per legal payer. Taking
+ * the offer instead of rebuilding it means every cost component the engine
+ * carries — the ones that exist today and the ones added later — arrives for
+ * free, and an action the engine would refuse is never chosen.
+ *
+ * The soak's cloning-vs-in-place comparison is what surfaced it: one path
+ * happened to choose the doomed activation and the other passed, so two runs of
+ * the same game diverged (§3.71).
+ */
+function offeredActivation(
+  legalActions: readonly GameAction[],
+  instanceId: InstanceId,
+  abilityIndex: number,
+  targets: readonly (InstanceId | PlayerId)[],
+): GameAction | undefined {
+  let fallback: GameAction | undefined;
+  for (const action of legalActions) {
+    if (action.kind !== 'activateAbility') continue;
+    if (action.instanceId !== instanceId || action.abilityIndex !== abilityIndex) continue;
+    const offeredTargets = action.targets ?? [];
+    if (
+      offeredTargets.length === targets.length &&
+      offeredTargets.every((target, i) => target === targets[i])
+    ) {
+      return action;
+    }
+    // A targetless ability is offered once per sacrifice payer, all equivalent
+    // to the pilot; the first is as good as any, and taking it keeps the choice
+    // deterministic.
+    if (targets.length === 0) fallback ??= action;
+  }
+  return fallback;
+}
+
 function bestFundedActivation(
   ctx: DecisionContext,
   weights: HeuristicWeights,
@@ -771,16 +819,15 @@ function bestFundedActivation(
       const plan = planManaPayment(view as GameState, me, mana, legalActions, perm.def, 'activate', manaPreferenceOf(weights));
       if (!plan) continue; // cannot fund it right now
 
+      // The activation itself is taken from the ENGINE's menu, never rebuilt —
+      // see `offeredActivation`. When mana still has to be tapped there is no
+      // offer yet, and the tap is the ply.
+      const offer = plan.length > 0 ? undefined : offeredActivation(legalActions, perm.instanceId, a, targets);
+      if (plan.length === 0 && offer === undefined) continue;
       const action: GameAction =
         plan.length > 0
-          ? { kind: 'tapForMana', player: me, instanceId: plan[0]!.instanceId, mode: plan[0]!.mode }
-          : {
-              kind: 'activateAbility',
-              player: me,
-              instanceId: perm.instanceId,
-              abilityIndex: a,
-              ...(targets.length > 0 ? { targets: [...targets] } : {}),
-            };
+          ? tapActionFor(me, plan[0]!)
+          : offer!;
       best = { action, score, label: ctx.trace ? `activate ${ability.label}` : NO_REASON };
     }
   }
@@ -864,16 +911,13 @@ function bestEquipPlay(
         manaPreferenceOf(weights),
       );
       if (!plan) continue; // cannot fund it this turn
+      const offer =
+        plan.length > 0 ? undefined : offeredActivation(legalActions, perm.instanceId, a, [host.instanceId]);
+      if (plan.length === 0 && offer === undefined) continue;
       const action: GameAction =
         plan.length > 0
-          ? { kind: 'tapForMana', player: me, instanceId: plan[0]!.instanceId, mode: plan[0]!.mode }
-          : {
-              kind: 'activateAbility',
-              player: me,
-              instanceId: perm.instanceId,
-              abilityIndex: a,
-              targets: [host.instanceId],
-            };
+          ? tapActionFor(me, plan[0]!)
+          : offer!;
       best = {
         action,
         score,
@@ -2023,12 +2067,7 @@ function bestCycle(ctx: DecisionContext, weights: HeuristicWeights): CycleGoal |
 function pursueCycle(ctx: DecisionContext, goal: CycleGoal): GameAction {
   const next = goal.plan[0];
   if (!next) return emit(ctx, goal.action, goal.reason, goal.score);
-  const tap: GameAction = {
-    kind: 'tapForMana',
-    player: ctx.view.priorityPlayer,
-    instanceId: next.instanceId,
-    mode: next.mode,
-  };
+  const tap: GameAction = tapActionFor(ctx.view.priorityPlayer, next);
   return emit(ctx, tap, goal.reason, goal.score);
 }
 
@@ -2053,7 +2092,7 @@ function pursueSpell(ctx: DecisionContext, funded: FundedGoal): GameAction {
     return emit(ctx, cast, goal.reason, goal.score);
   }
 
-  const tap: GameAction = { kind: 'tapForMana', player: me, instanceId: next.instanceId, mode: next.mode };
+  const tap: GameAction = tapActionFor(me, next);
   if (!ctx.trace) return emit(ctx, tap, NO_REASON, goal.score);
   const source = findInstance(view, next.instanceId);
   const label = source ? `tap ${source.def.name} for ${describeProduction(next.production)}` : 'tap for mana';
@@ -3257,7 +3296,7 @@ function collectPriorityCandidates(
     );
     if (!plan) continue; // cannot be funded from this board — not an option at all
     const plies: GameAction[] = [];
-    for (const tap of plan) plies.push({ kind: 'tapForMana', player: me, instanceId: tap.instanceId, mode: tap.mode });
+    for (const tap of plan) plies.push(tapActionFor(me, tap));
     plies.push({
       kind: 'castSpell',
       player: me,
@@ -3330,7 +3369,11 @@ function bestEquipMacro(
       );
       if (!plan) continue;
       const plies: GameAction[] = [];
-      for (const tap of plan) plies.push({ kind: 'tapForMana', player: me, instanceId: tap.instanceId, mode: tap.mode });
+      for (const tap of plan) plies.push(tapActionFor(me, tap));
+      // A PLY LIST taps first, so the activation is not on the menu yet and
+      // cannot be looked up. It is built here with every component the engine
+      // needs for THIS shape: equip prints a target and no other cost, which is
+      // why an equip ply is safe to assemble where a general activation is not.
       plies.push({
         kind: 'activateAbility',
         player: me,

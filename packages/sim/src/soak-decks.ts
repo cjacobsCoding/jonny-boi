@@ -521,6 +521,12 @@ export function buildAnchoredDeck(
   index: SoakCardIndex,
   mechanic: SoakMechanicId,
   seed: number,
+  /**
+   * Also pack the ENABLERS of another mechanic — the opponent's side of an
+   * interaction witness (see `SoakMechanic.enablerBelongsToOpponent`). The deck
+   * is still anchored on `mechanic`; this only adds the other half.
+   */
+  enablersFor?: SoakMechanicId,
 ): SoakDeck | undefined {
   const printed = index.byMechanic.get(mechanic) ?? [];
   const castable = printed.filter((card) => costManaValue(card.cost) <= SOAK_MAX_SPELL_MANA_VALUE || card.types.includes('land'));
@@ -556,7 +562,14 @@ export function buildAnchoredDeck(
   // anchor cannot do anything. They come second so the anchor's colours win any
   // contest for the colour budget: an enabled deck that cannot cast its anchor
   // is worse than an unenabled one.
-  for (const card of sampleDistinct(rng, index.enablersByMechanic.get(mechanic) ?? [], SOAK_ENABLER_CARDS)) {
+  // An anchor whose enablers belong to the OPPONENT does not pack them here —
+  // counterspells beside the uncounterable spells prove nothing, because a pilot
+  // does not counter its own spell.
+  const ownEnablers = SOAK_MECHANICS.find((entry) => entry.id === mechanic)?.enablerBelongsToOpponent
+    ? []
+    : (index.enablersByMechanic.get(mechanic) ?? []);
+  const packed = [...ownEnablers, ...(enablersFor === undefined ? [] : (index.enablersByMechanic.get(enablersFor) ?? []))];
+  for (const card of sampleDistinct(rng, packed, SOAK_ENABLER_CARDS)) {
     packAtAnchorStrength(card, SOAK_ENABLER_COPIES);
   }
   // A mono-colourless anchor (an artifact) still needs a colour to build around,

@@ -101,6 +101,17 @@ async function fetchCandidates(): Promise<void> {
 
 // --- phase 2: compile + emit ----------------------------------------------------
 
+/**
+ * How many card definitions go in ONE emitted array literal.
+ *
+ * Small enough that TypeScript never builds an unrepresentable union out of the
+ * element types (TS2590 — see the note in the generated header), large enough
+ * that the module stays readable. The 573-card pool this generator started with
+ * fit in a single literal, which is why nothing forced the question until the
+ * whole printed card pool arrived.
+ */
+const CHUNK_SIZE = 500;
+
 /** Longest line the emitted data module aims for (matches `.prettierrc.json`). */
 const MAX_EMITTED_LINE_WIDTH = 100;
 
@@ -195,28 +206,86 @@ function renderModule(entries: ReadonlyArray<{ card: NormalizedCard; definition:
 
 import type { CardDefinition } from '@jonny-boi/core';
 
-export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
+/**
+ * ⚠️ THE POOL IS EMITTED IN CHUNKS, and that is not cosmetic. One array literal
+ * holding every card makes TypeScript infer an element type that is the union of
+ * all of them, and past a few thousand entries it gives up outright:
+ * "TS2590: Expression produces a union type that is too complex to represent."
+ * A type ANNOTATION alone does not save it — the union is formed while checking
+ * the literal, before the annotation is applied. Splitting into arrays of
+ * ${CHUNK_SIZE} keeps every union small, checks each card against
+ * \`CardDefinition\` exactly as before, and costs one concatenation at load.
+ */
 `;
-  const body = entries
-    .map((entry) => serializeDefinition(entry.definition, entry.card.oracleText))
-    .join('\n');
-  return `${header}${body}\n]);\n`;
+  const chunks: string[] = [];
+  const names: string[] = [];
+  for (let start = 0; start < entries.length; start += CHUNK_SIZE) {
+    const slice = entries.slice(start, start + CHUNK_SIZE);
+    const name = `POOL_${chunks.length}`;
+    names.push(name);
+    const body = slice
+      .map((entry) => serializeDefinition(entry.definition, entry.card.oracleText))
+      .join('\n');
+    chunks.push(`const ${name}: readonly CardDefinition[] = [\n${body}\n];\n`);
+  }
+  // An empty pool still has to produce a valid module, and `[].concat()` of
+  // nothing is the honest way to say so.
+  const joined = names.length === 0 ? '[]' : `[${names.map((name) => `...${name}`).join(', ')}]`;
+  return (
+    `${header}${chunks.join('\n')}\n` +
+    `export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze(${joined});\n`
+  );
+}
+
+/**
+ * Scryfall ids the committed card index already holds, by card name.
+ *
+ * A missing index is an EMPTY map rather than an error — the first run of a
+ * fresh checkout has nothing to preserve, and it should still build a pool.
+ */
+async function committedIndexIds(): Promise<Map<string, string>> {
+  try {
+    const index = await readJson<{ cards: { id: string; name: string }[] }>(
+      path('packages/data-tools/data/card-index.json'),
+    );
+    return new Map(index.cards.map((card) => [card.name, card.id]));
+  } catch {
+    return new Map();
+  }
 }
 
 async function buildExpansion(): Promise<void> {
   const scratch = await readJson<{ cards: NormalizedCard[] }>(SCRATCH_INDEX_PATH);
   const curatedIds = new Set(CURATED_CARD_POOL.map((card) => card.id));
-  const curatedNames = new Set(CURATED_CARD_POOL.map((card) => card.name));
+  // ⚠️ MATCHED ON THE FRONT-FACE NAME. A double-faced card is stored under its
+  // combined name in one place and its front half in the other, so a plain name
+  // comparison let Delver of Secrets in TWICE — once hand-authored, once
+  // compiled — and the pool then had two definitions claiming the same card.
+  const curatedNames = new Set(CURATED_CARD_POOL.map((card) => frontFaceName(card.name)));
+
+  const indexIdsByName = await committedIndexIds();
 
   const accepted: Array<{ card: NormalizedCard; definition: CardDefinition }> = [];
   const rejected: RejectedCard[] = [];
 
   for (const card of scratch.cards) {
     // A hand-authored card keeps its reviewed definition — never two entries.
-    if (curatedIds.has(card.id) || curatedNames.has(card.name)) continue;
+    if (curatedIds.has(card.id) || curatedNames.has(frontFaceName(card.name))) continue;
     const result = compileCard(card as CompilableCard);
-    if (result.status === 'complete') accepted.push({ card, definition: result.definition });
-    else rejected.push({ name: card.name, missing: result.missing });
+    if (result.status === 'complete') {
+      // ⚠️ THE COMMITTED INDEX OWNS THE ID. `pool.ts` says it plainly — every id
+      // is the Scryfall id from `card-index.json`, and the two join on it. A
+      // corpus carries ONE printing per Oracle name and Scryfall chooses which,
+      // so regenerating from a corpus would hand this card a different printing's
+      // id while the index kept the old one, and the join would break for every
+      // card the pool already had. Known name ⇒ known id; a genuinely new card
+      // brings its own, which the index build then adopts.
+      const knownId = indexIdsByName.get(card.name);
+      accepted.push({
+        card,
+        definition: knownId === undefined ? result.definition : { ...result.definition, id: knownId },
+      });
+    } else rejected.push({ name: card.name, missing: result.missing });
   }
 
   accepted.sort((a, b) => a.card.name.localeCompare(b.card.name));
@@ -275,7 +344,63 @@ async function buildExpansion(): Promise<void> {
   console.info(`[expansion] updated ${STARTER_LIST_PATH} (${poolNames.length} pool names)`);
 }
 
-const main = process.argv.includes('--fetch') ? fetchCandidates : buildExpansion;
+// --- phase 1b: the WHOLE printed card pool, offline ------------------------------
+
+/**
+ * Fill the scratch index from a full Scryfall corpus file instead of from a
+ * curated list of names.
+ *
+ *   node packages/cards/scripts/fetch-full-corpus.mjs <out.json>     (network, once)
+ *   npx tsx packages/cards/scripts/build-expansion.ts --corpus <out.json>
+ *   npx tsx packages/cards/scripts/build-expansion.ts
+ *
+ * WHY IT IS A SEPARATE PHASE and not a flag on the build: the corpus is ~14 MB
+ * of raw Scryfall records and is deliberately NOT committed, so the step that
+ * reads it must be one somebody runs on purpose. Everything downstream still
+ * works from the same scratch index the name-based phase writes, which is what
+ * keeps ONE compile-and-emit path — a second one would be free to accept a card
+ * the first would have rejected.
+ *
+ * The candidate LIST is not obsoleted by this: it is still the smallest input
+ * that reproduces the curated pool, and it is what runs when no corpus is at
+ * hand.
+ */
+async function ingestCorpus(): Promise<void> {
+  const at = process.argv.indexOf('--corpus');
+  const corpusPath = process.argv[at + 1];
+  if (corpusPath === undefined) {
+    console.error('[expansion] --corpus needs a path to a corpus JSON file');
+    process.exitCode = 2;
+    return;
+  }
+  const raw = await readJson<unknown[]>(corpusPath);
+  console.info(`[expansion] normalizing ${raw.length} corpus cards…`);
+  const normalized: NormalizedCard[] = [];
+  const skipped: string[] = [];
+  for (const card of raw) {
+    try {
+      normalized.push(normalizeCard(card as Parameters<typeof normalizeCard>[0]));
+    } catch (error) {
+      // A record the NORMALIZER refuses is not a compiler gap and must not be
+      // counted as one — it is a shape this pipeline has never seen. Named in
+      // the log so it can be looked at, and left out rather than guessed at.
+      skipped.push(`${(card as { name?: string }).name ?? '?'}: ${(error as Error).message}`);
+    }
+  }
+  normalized.sort((a, b) => a.name.localeCompare(b.name));
+  await writeJson(SCRATCH_INDEX_PATH, { cards: normalized, unresolved: [] });
+  console.info(
+    `[expansion] normalized ${normalized.length}; skipped ${skipped.length}` +
+      (skipped.length > 0 ? `\n  ${skipped.slice(0, 10).join('\n  ')}` : ''),
+  );
+  console.info(`[expansion] wrote ${SCRATCH_INDEX_PATH}`);
+}
+
+const main = process.argv.includes('--fetch')
+  ? fetchCandidates
+  : process.argv.includes('--corpus')
+    ? ingestCorpus
+    : buildExpansion;
 main().catch((error: unknown) => {
   console.error('[expansion] failed:', error);
   process.exitCode = 1;

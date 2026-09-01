@@ -190,8 +190,26 @@ export function copiableDefOf(inst: {
   readonly def: CardDefinition;
   readonly printedDef?: CardDefinition | null;
 }): CardDefinition {
-  if (inst.def.isBackFace === true && inst.printedDef != null) return inst.printedDef;
-  return inst.def;
+  const base = inst.def.isBackFace === true && inst.printedDef != null ? inst.printedDef : inst.def;
+  // ⚠️ TOKEN-NESS IS NOT A COPIABLE VALUE (CR 707.2). A copy takes the copied
+  // object's CHARACTERISTICS; whether the object is a token is a fact about how
+  // it was created (CR 111.1), and a card that becomes a copy of a token is
+  // still a card.
+  //
+  // Getting this wrong DELETES A REAL CARD FROM THE GAME. `ceaseToExistIfToken`
+  // removes any object leaving the battlefield whose definition says token —
+  // correct for tokens, and for a Glasspool Mimic that entered as a copy of a
+  // Thopter token it means the actual card is removed from every zone when it
+  // dies, never reaching its owner's graveyard. A soak over the whole printed
+  // pool caught it as "original instance #61 is in no zone on turn 37" (§3.71);
+  // the old pool simply never dealt a copy effect and a token maker together.
+  //
+  // Stripped HERE because this is the one funnel that answers "what is the
+  // copiable definition" — the token-making path stamps `isToken` back on after
+  // calling it (`createTokenInState`), which is exactly the right order.
+  if (base.isToken !== true) return base;
+  const { isToken: _notCopiable, ...copiable } = base;
+  return copiable;
 }
 
 /** Whether this permanent is currently a copy of something else (CR 707). */

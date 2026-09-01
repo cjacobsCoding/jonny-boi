@@ -233,22 +233,44 @@ describe('wrapper primitives recurse (§3.42 class)', () => {
     // Discover the wrappers from DATA: any pool ref with a param carrying
     // nested refs. Today that finds `mayEffects` (priced, recursing) and
     // `ifKicked` (on the ledger); tomorrow it finds whatever is authored next.
-    const wrappers = new Map<string, { paramKey: string; example: string }>();
+    const wrappers = new Map<string, { paramKeys: Set<string>; example: string }>();
     for (const card of CARD_POOL) {
       walkCardRefs(card, (ref, path) => {
-        for (const key of nestedRefParams(ref)) {
-          if (!wrappers.has(ref.primitive)) wrappers.set(ref.primitive, { paramKey: key, example: path });
-        }
+        const keys = nestedRefParams(ref);
+        if (keys.length === 0) return;
+        const found = wrappers.get(ref.primitive) ?? { paramKeys: new Set<string>(), example: path };
+        for (const key of keys) found.paramKeys.add(key);
+        wrappers.set(ref.primitive, found);
       });
     }
     expect(wrappers.size, 'the pool carries wrapper primitives; discovery finding none is itself a failure').toBeGreaterThan(0);
 
     const flat: string[] = [];
-    for (const [primitive, { paramKey, example }] of wrappers) {
+    for (const [primitive, { paramKeys, example }] of wrappers) {
       if (KNOWN_UNPRICED[primitive] !== undefined) continue; // carried openly, checked above
-      const rich = priceOnBoard({ primitive, params: { [paramKey]: RICH_BODY } });
-      const empty = priceOnBoard({ primitive, params: { [paramKey]: [] } });
-      if (rich === empty) flat.push(`${primitive} (e.g. ${example}): rich body and empty body both price ${rich}`);
+      // ⚠️ EVERY BODY PARAM IS VARIED, and at least one must move the price.
+      //
+      // Varying only the FIRST one was a false alarm on a two-BRANCH wrapper.
+      // `substituteIf` ("<base>; if <condition>, <other> INSTEAD") prices the
+      // branch the current board would actually run, which is correct and is
+      // the whole reason it recurses — but the probe passes no condition, so the
+      // board runs the OTHER branch, and swapping the first branch's body
+      // changed nothing. The wrapper was reading its bodies; the probe was only
+      // looking at one of them.
+      //
+      // "At least one" rather than "all": a branch that this board would not run
+      // is legitimately worth nothing, and demanding every branch move the price
+      // would forbid the very precision that makes the recursion useful.
+      const moved = [...paramKeys].some((paramKey) => {
+        const rich = priceOnBoard({ primitive, params: { [paramKey]: RICH_BODY } });
+        const empty = priceOnBoard({ primitive, params: { [paramKey]: [] } });
+        return rich !== empty;
+      });
+      if (!moved) {
+        flat.push(
+          `${primitive} (e.g. ${example}): no body param [${[...paramKeys].join(', ')}] changes the price`,
+        );
+      }
     }
     expect(
       flat,

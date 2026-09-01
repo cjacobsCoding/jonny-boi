@@ -740,6 +740,65 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.71 The whole printed card pool — 573 → 5,065 shippable cards — ✅ done
+
+Compiling a card and SHIPPING it are different things. The compiler could read 4,863 of the pool;
+the app shipped **573**, because the pool was generated from a 1,009-name candidate list. It is now
+generated from the corpus itself: **5,065 compiled cards + 32 hand-authored = 5,097 playable**, each
+still admitted only on the compiler's own `complete` verdict. Nothing is approximated in.
+
+⚠️ **THE CORPUS FILTER WAS LYING, and that matters more than the count.** `fetch-full-corpus.mjs`
+decided "is this a paper card?" from the ONE printing `oracle-cards` happens to carry — and Scryfall
+picks that printing. For **Black Knight, Capsize and Weakness** it picks an MTGO-only reprint, so the
+record reads `digital: true`, `games: ['mtgo']` for cards that have been in paper since Alpha. The
+search-API version of the same mistake (`is:digital -is:paper` — a PRINTING predicate) matched an
+MTGO printing of **Plains** and removed the basic land from the corpus. `in:` is the card-level
+prefix: `-in:paper` gives **874** cards never printed on cardboard, not 7,369. Corpus 31,091 →
+**32,276**, so every coverage number reported before this was computed against a corpus missing
+~1,185 real cards.
+
+**One bulk download now builds both artefacts, offline.** `build-expansion.ts --corpus` and
+`npm run fetch -w @jonny-boi/data-tools -- --corpus` replace thousands of paged requests, and the
+corpus carries `set`/`rarity`/`image_uris` for exactly that reason. The invariant that keeps them
+consistent: **the index owns ids, the corpus owns everything else.** A bulk corpus carries one
+arbitrary printing, so re-picking would rewrite Plains' id out from under `pool.ts`; and preserving
+whole ROWS — the first attempt — made the index and the pool compile from different Oracle text,
+which the ground-truth test caught immediately.
+
+📊 **Seven latent bugs the bigger pool exposed, every one fixed here.** This is the real value of the
+change; the card count is the side effect.
+
+| bug | why it survived |
+|---|---|
+| `tap: true` written into `ManaAbilityCost`, a field that does not exist | the generated array literal had no contextual type, so TS never excess-property-checked the data. TS2590 forced chunking, chunking gave the literal a type, the type found the phantom key |
+| `Number.parseInt('-0')` is **negative zero**, and `JSON.stringify(-0)` is `"0"` | Befuddle's "-4/-0" could never round-trip through the generated pool. One `parseSignedInt` now serves all twenty parse sites |
+| the heuristic **built** `activateAbility` itself, without `costInstanceIds` | every sacrifice-cost ability the pilot chose was rejected unpayable. It now takes the engine's own offer |
+| `planManaPayment` dropped the additional-cost payer | five call sites rebuilt `tapForMana` from `{instanceId, mode}`, so Springleaf Drum and Phyrexian Tower were refused mid-game. One `tapActionFor` builder now owns the shape |
+| **token-ness treated as a copiable value** (CR 707.2) | a Glasspool Mimic copying a Thopter token inherited `isToken`, and `ceaseToExistIfToken` then deleted **a real card from every zone** when it died. Surfaced as "original instance #61 is in no zone on turn 37" |
+| the land-drop audit compared against `maxLandsPerTurn` | Exploration makes a second land drop legal; the audit now asks `maxLandPlaysFor`, the engine's own answer |
+| two compile rules superseded by the §3.60 conjunction helper | they matched no card at all, while naming cards they claimed to compile |
+
+**Guards were re-tiered, never dropped.** Three of them assumed a hand-picked pool and would have
+become permanently red — which is no guard at all:
+
+- **attachments** kept their human transcription for named cards; every other attachment must match a
+  reading taken independently from its Oracle text. 200 attachments, 3 disagreements, all three the
+  second reader misreading a granted ability.
+- **mana sources** were capped at "2 per tap, except two cards by name". The ceiling is now read off
+  each card's own printed "Add …" line — a stricter check on 5,065 cards than on two exceptions.
+- **`uncounterable`** went inert because the opponent deck ROTATES and the rotation moved off
+  counterspells. `enablerBelongsToOpponent` declares the pairing instead of leaving it to the length
+  of a list.
+
+⚠️ **PWA weight, stated rather than hidden.** The pool and the index are their own rollup chunks so
+the shell still paints before 5,065 definitions parse, and workbox's 2 MiB precache cap is raised to
+cover the pool: an offline-first deck lab that cannot open a card offline has precached the wrong
+things. Precache total 5.7 MB.
+
+📊 Throughput unchanged: 2,000-game single-worker match (Mono-Red vs UW Control, seed 7, heuristic)
+reads **179/180 games/sec**, against 169/170 measured on this same branch before the engine fixes.
+Verify: 19,362 passed, 5 skipped, 0 failed.
+
 ### 3.70 Cost assistance — Convoke, Improvise and Delve are one mechanic (CR 702.51/126/66) — ✅ done
 
 Convoke was the #1 item on the honest backlog by BOTH independent measures — 46 cards by mechanic and

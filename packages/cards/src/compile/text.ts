@@ -47,6 +47,26 @@ const NUMBER_WORDS: Readonly<Record<string, number>> = Object.freeze({
 export const COUNT_TOKEN = `(${Object.keys(NUMBER_WORDS).join('|')}|\\d+)`;
 
 /**
+ * Read a signed integer out of printed text — "+2", "-4", "-0".
+ *
+ * ⚠️ THE `+ 0` IS THE WHOLE POINT, and it fixes a bug that only a bigger card
+ * pool could expose. `Number.parseInt('-0', 10)` is NEGATIVE ZERO, and Befuddle
+ * prints "gets -4/-0". Negative zero is the same NUMBER as zero and behaves
+ * identically in every arithmetic the engine does — but `JSON.stringify(-0)` is
+ * `"0"`, so a definition holding it can never survive being written to the
+ * generated pool and read back. The card's stored data said `0`, a fresh compile
+ * said `-0`, and the ground-truth test that compares them failed on two values
+ * that are equal by `===` and unequal by `Object.is`.
+ *
+ * Adding zero normalises `-0` to `0` and leaves every other value untouched, so
+ * the fix lives at the ONE place printed text becomes a signed number rather
+ * than at the twenty rules that read one.
+ */
+export function parseSignedInt(text: string | undefined): number {
+  return Number.parseInt(text ?? '', 10) + 0;
+}
+
+/**
  * Resolve a captured count token ("a", "three", "2") to a number. Returns `null`
  * for anything without a fixed value (notably "X"), so a rule can decline to
  * compile rather than guess a magnitude.
