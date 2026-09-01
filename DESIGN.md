@@ -740,6 +740,60 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.74 The pilot takes a win it can prove — lethal before profit — ✅ done
+
+**The first MEASURED strength gain**, and the method matters as much as the change.
+
+Where to look came from data, not taste. `bench/missed-plays.mjs` asks the ENGINE what a seat could
+still legally have done at the end of each turn, so a "missed play" is one the menu really offered:
+
+- land drop left unused: **0.0%** — mana development is already clean;
+- main-phase passes with a castable spell on offer: **0** — it never sits on a spell it can cast;
+- **attack windows declined: 15.0%** — combat was the only open surface.
+
+**The bug: `chooseAttack` judged every attacker independently and never asked about lethal.** Three
+2/2s facing one 4/4 each individually lose the trade, so all three were declined — while the 4/4 can
+only block ONE, two connect, and at 4 life that is the game. A pilot that can win this turn and does
+not is not being careful, it is misplaying.
+
+`lethalAlphaStrike` assumes the defender's best case throughout, so a `true` is a guarantee: each
+untapped enemy creature blocks one attacker (CR 509.1), they block the BIGGEST ones, and only the
+remainder connects. ⚠️ It deliberately under-claims — an untapped creature that could not legally
+block is still counted as a blocker, and tricks, prevention and lifegain are ignored. Every one of
+those makes it refuse an attack that was in fact lethal: a missed win, never a thrown game.
+
+📊 **THE VERDICT, head-to-head against the pilot exactly as it was before**
+(`bench/alpha-strike-ab.mjs` — 9 decks × 36 pairs × 60 games × both orientations = **4,320 games**):
+
+| | |
+|---|---|
+| matched slots | 2,160 |
+| **ahead (new)** | **64** |
+| **ahead (old)** | **0** |
+| level | 2,096 |
+| McNemar p | **3.6 × 10⁻¹⁵** |
+| verdict | **stronger** |
+
+Read it correctly: the two arms play the *same game* in 2,096 of 2,160 slots, because the case is
+rare — and in every single one of the 64 slots where it arose, the new behaviour converted it. The
+raw win share (51.4%) is the *wrong* number to quote for exactly that reason: it is diluted by
+thousands of identical games.
+
+⚠️ **THIS IS WHY THE FEATURE IS BEHIND A FLAG.** Two BUILDS of one pilot cannot be compared across
+branches — both hold the same id, only one can load, and the same-id control is 50% on both branches
+by construction. `HeuristicFeatures.alphaStrike` lets both behaviours sit in one process and play
+matched seeds against each other. The flag stays so the claim stays re-checkable when the pilot
+changes; it is an A/B seam, not a configuration knob.
+
+⚠️ **AND THE CONTROL HAS TO BE REAL.** The first version of `alpha-strike.test.ts` built its board
+without initialising `state.combat`, so the engine offered no `declareAttackers` at all: every arm
+"declined to attack", and the control passed while proving nothing. The fixture now asserts the menu
+really offers the attack before asking what the pilot does with it.
+
+📊 Context for how much room is left: `lookahead`, which searches real engine rollouts, beats the
+heuristic — but on matched slots by 42 to 10, with **88% of slots level**. The heuristic is already
+close to what this engine's search finds, so strength gains come one proven case at a time.
+
 ### 3.73 The fast pass — not building a menu nobody reads — ✅ done
 
 Measured first, and the measurement is the design. `bench/window-stats.mjs` over 60 games:

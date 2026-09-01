@@ -237,14 +237,36 @@ type SpellIntent =
   | { readonly kind: 'fog'; readonly combatOnly: boolean; readonly protectsMeOnly: boolean }
   | { readonly kind: 'other' };
 
+/**
+ * Behaviour switches for the heuristic — the A/B seam.
+ *
+ * ⚠️ THESE EXIST TO BE MEASURED, NOT TO BE CONFIGURED. Comparing two BUILDS of
+ * one pilot is impossible in a single process (both cannot hold the same id), and
+ * the only exact method is to run two ids head-to-head — so a behaviour under
+ * evaluation gets a flag, is measured with `bench/alpha-strike-ab.mjs`, and the
+ * flag is deleted once the verdict is recorded. A flag that outlives its
+ * measurement is a fork of the pilot nobody is testing.
+ */
+export interface HeuristicFeatures {
+  /**
+   * Swing with everything when no blocking assignment can survive it — see
+   * `lethalAlphaStrike`. Default ON; measured stronger, DESIGN §3.74.
+   */
+  readonly alphaStrike?: boolean;
+}
+
 /** Build the heuristic pilot with the given (tunable) weights. */
-export function createHeuristicPilot(weights: HeuristicWeights = DEFAULT_HEURISTIC_WEIGHTS): Pilot {
+export function createHeuristicPilot(
+  weights: HeuristicWeights = DEFAULT_HEURISTIC_WEIGHTS,
+  features: HeuristicFeatures = {},
+): Pilot {
+  const alphaStrike = features.alphaStrike ?? true;
   return {
     id: HEURISTIC_PILOT_ID,
     description: 'Plays sensibly: develops mana, removes threats, develops the board, attacks/blocks for value.',
     chooseAction(ctx: DecisionContext): GameAction {
       try {
-        return decide(ctx, weights);
+        return decide(ctx, weights, alphaStrike);
       } catch {
         // Robustness: never throw on a weird state. Fall back to the one move the
         // engine is guaranteed to accept — which is NOT always passing: while a
@@ -354,7 +376,7 @@ function heuristicWillPass(view: GameState): boolean {
  */
 const NO_REASON = '';
 
-function decide(ctx: DecisionContext, weights: HeuristicWeights): GameAction {
+function decide(ctx: DecisionContext, weights: HeuristicWeights, alphaStrike = true): GameAction {
   const { view, legalActions } = ctx;
   const me = view.priorityPlayer;
   const explain = ctx.trace !== undefined;
@@ -397,7 +419,7 @@ function decide(ctx: DecisionContext, weights: HeuristicWeights): GameAction {
 
   // Combat declarations are their own decision shape.
   if (view.step === 'declareAttackers' && me === view.activePlayer) {
-    const attack = chooseAttack(ctx, weights, index);
+    const attack = chooseAttack(ctx, weights, index, alphaStrike);
     if (attack) return attack;
   }
   if (view.step === 'declareBlockers' && me === defendingPlayer(view)) {
@@ -2199,6 +2221,54 @@ function describeProduction(production: ManaProduction): string {
 // --- attacking -----------------------------------------------------------------
 
 /**
+ * THE ALPHA STRIKE — every eligible attacker, when swinging with all of them
+ * cannot fail to end the game. `undefined` when it can fail.
+ *
+ * The defender's best case is assumed throughout, so a `true` here is a
+ * GUARANTEE and never a hope:
+ *
+ *  - each untapped enemy creature blocks ONE attacker (CR 509.1 — one blocker
+ *    may block one attacker unless something says otherwise), so N untapped
+ *    creatures stop at most N attackers;
+ *  - they stop the BIGGEST ones, which is the worst arrangement for us;
+ *  - every remaining attacker connects for its effective power.
+ *
+ * If that pessimistic remainder still meets the opponent's life total, no
+ * blocking assignment they can choose saves them, and the attack is correct
+ * whatever it costs in creatures.
+ *
+ * ⚠️ WHAT IT DELIBERATELY DOES NOT MODEL, all in the direction of caution: an
+ * untapped creature that CANNOT legally block (a flyer facing ground attackers,
+ * a menace attacker needing two) is still counted as a blocker, and instant-speed
+ * tricks, damage prevention and lifegain are ignored. Every one of those makes
+ * this refuse an attack that was in fact lethal — a missed win, not a thrown
+ * game. The reverse mistake is the one that must not happen.
+ */
+function lethalAlphaStrike(
+  view: PilotView,
+  opp: PlayerId,
+  eligible: readonly InstanceId[],
+  index: ContinuousIndex,
+): readonly InstanceId[] | undefined {
+  const life = view.players[opp]?.life ?? 0;
+  if (life <= 0) return undefined; // already won; nothing to plan
+  const powers: number[] = [];
+  for (const id of eligible) {
+    const attacker = findInstance(view, id);
+    if (!attacker) continue;
+    powers.push(power(attacker, index));
+  }
+  if (powers.length === 0) return undefined;
+  const blockers = creaturesControlledBy(view, opp).filter((c) => !c.tapped).length;
+  if (blockers >= powers.length) return undefined; // they can block everything
+  // Sort descending and drop the ones the defender would most want to stop.
+  powers.sort((a, b) => b - a);
+  let connecting = 0;
+  for (let i = blockers; i < powers.length; i++) connecting += powers[i] as number;
+  return connecting >= life ? eligible : undefined;
+}
+
+/**
  * Choose attackers: send each eligible creature that profits — it either gets in
  * for face damage (opponent has no blocker that survives + kills it for free) or
  * wins/breaks even on the likely trade. Returns a (possibly empty) narrowed
@@ -2208,6 +2278,7 @@ function chooseAttack(
   ctx: DecisionContext,
   weights: HeuristicWeights,
   index: ContinuousIndex,
+  alphaStrike: boolean,
 ): GameAction | undefined {
   const { view, legalActions } = ctx;
   const me = view.activePlayer;
@@ -2221,11 +2292,22 @@ function chooseAttack(
   const eligible = offered.attackers;
   const enemyBlockers = creaturesControlledBy(view, opp).filter((c) => !c.tapped);
 
+  // ⚠️ LETHAL IS CHECKED BEFORE PROFIT, because profit is the wrong question when
+  // the game can be ended. Every attacker below is judged INDEPENDENTLY — "does
+  // this creature come out ahead against their blockers?" — and three 2/2s each
+  // individually lose to one 4/4, so a swing that wins on the spot was being
+  // declined one creature at a time. A pilot that can win this turn and does not
+  // is not being careful, it is misplaying.
+  const alpha = alphaStrike ? lethalAlphaStrike(view, opp, eligible, index) : undefined;
   const chosen: InstanceId[] = [];
-  for (const id of eligible) {
-    const attacker = findInstance(view, id);
-    if (!attacker) continue;
-    if (attackIsProfitable(attacker, enemyBlockers, weights, index, view)) chosen.push(id);
+  if (alpha) {
+    chosen.push(...alpha);
+  } else {
+    for (const id of eligible) {
+      const attacker = findInstance(view, id);
+      if (!attacker) continue;
+      if (attackIsProfitable(attacker, enemyBlockers, weights, index, view)) chosen.push(id);
+    }
   }
 
   if (chosen.length === 0) {

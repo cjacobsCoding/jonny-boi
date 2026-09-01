@@ -25,7 +25,8 @@
  * code under test (`plan` → `execute` → `merge`) is exactly the code the browser
  * runs, minus the transport.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
 import {
   DEFAULT_SUGGEST_CONFIG,
   DEFAULT_SWAP_SCOPE,
@@ -53,6 +54,18 @@ import type {
   SuggestRequest,
   SwapRequest,
 } from '../sim-protocol.js';
+
+/**
+ * ⚠️ ONE TIMEOUT FOR THE WHOLE FILE, because the fixture outgrew the default.
+ *
+ * Every test here runs real suggestion searches over the shipped card pool, and
+ * that pool went from 573 cards to 5,065 (§3.71). The siblings now measure 4.6s,
+ * 3.8s and 2.7s against vitest 5s default — close enough that which one trips is
+ * a matter of machine load, and bumping them one at a time as they fail is how a
+ * suite becomes flaky in a way nobody can reproduce. None of these tests asserts
+ * a DURATION; they assert that a ranking is identical however the work was split.
+ */
+vi.setConfig({ testTimeout: 60_000 });
 
 /**
  * A `ShardRunner` that executes shards in-process. It defers execution to a
@@ -502,7 +515,7 @@ describe('a parallel suggestions search', () => {
     // and the pool it searches went from 573 cards to 5,065 (§3.71). It asserts
     // a RANKING and a rejection reason, never a duration — vitest's default 5s
     // was simply the wrong ceiling for the fixture, and the run measures ~5.2s.
-  }, 60000);
+  });
 });
 
 /** The key of the first candidate the search will scout (for failure injection). */
