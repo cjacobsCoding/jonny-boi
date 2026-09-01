@@ -27,6 +27,8 @@ function arg(name, fallback) {
 }
 
 const gamesPerOrientation = arg('games', 40);
+const at = process.argv.indexOf('--feature');
+const FEATURE = at >= 0 ? process.argv[at + 1] : 'alphaStrike';
 const baseSeed = arg('seed', 4242);
 
 const pool = loadCardPool({ onWarn: () => {} });
@@ -37,8 +39,8 @@ const result = runPilotAb({
   decks,
   pilots: {
     // A: the behaviour under test. B: the pilot exactly as it was before it.
-    pilotA: createHeuristicPilot(undefined, { alphaStrike: true }),
-    pilotB: createHeuristicPilot(undefined, { alphaStrike: false }),
+    pilotA: createHeuristicPilot(undefined, { [FEATURE]: true }),
+    pilotB: createHeuristicPilot(undefined, { [FEATURE]: false }),
   },
   registry,
   gamesPerOrientation,
@@ -46,7 +48,7 @@ const result = runPilotAb({
 });
 
 console.log(
-  `alpha strike ON vs OFF — ${decks.length} decks, ${gamesPerOrientation} games/pair/orientation, ` +
+  `${FEATURE} ON vs OFF — ${decks.length} decks, ${gamesPerOrientation} games/pair/orientation, ` +
     `${result.totalGames} games`,
 );
 // The VERDICT and the paired slot counts are the answer. The raw win totals are

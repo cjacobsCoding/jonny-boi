@@ -8,7 +8,7 @@
  * careful, it is misplaying.
  *
  * Measured head-to-head against the pilot exactly as it was before
- * (`packages/sim/bench/alpha-strike-ab.mjs`, 9 decks × 36 pairs × 60 games ×
+ * (`packages/sim/bench/feature-ab.mjs --feature alphaStrike`, 9 decks × 36 pairs × 60 games ×
  * both orientations = 4,320 games): **64 matched slots ahead, 0 behind**,
  * McNemar p = 3.6e-15. In 2,096 of 2,160 slots the two arms play the same game —
  * the case is rare — and when it does arise the new behaviour converted it every
