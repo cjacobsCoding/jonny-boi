@@ -53,6 +53,7 @@ import {
 } from '../lib/play/history.js';
 import { libraryRows } from '../lib/play/library-view.js';
 import { GameLibrary } from '../components/play/GameLibrary.js';
+import { ReviewScrubber } from '../components/play/ReviewScrubber.js';
 import './play-resume.css';
 
 /**
@@ -176,6 +177,8 @@ export function PlayView({ decks }: { decks: DecksApi }): ReactElement {
   const [resumeRecord, setResumeRecord] = useState<PlayRecord | null>(boot.auto ? boot.saved : null);
   /** Which library row the pending resume belongs to, so play CONTINUES it. */
   const [resumeEntryId, setResumeEntryId] = useState<string | null>(null);
+  /** True when the pending open is a REVIEW rather than a continuation. */
+  const [openForReview, setOpenForReview] = useState(false);
   const [mode, setMode] = useState<PlayMode>(boot.auto && boot.saved ? modeOfRecord(boot.saved) : 'choose');
   /**
    * The library as the menu shows it, DERIVED rather than mirrored in state.
@@ -238,17 +241,18 @@ export function PlayView({ decks }: { decks: DecksApi }): ReactElement {
    * finished". It is the same path the single-slot banner takes; the only extra
    * is carrying the entry's id so play continues that row.
    */
-  const resumeFromLibrary = useCallback(
-    (id: string): void => {
-      const entry = readHistory().find((e) => e.id === id);
-      if (!entry) return;
-      setResumeEntryId(entry.id);
-      setResumeRecord(entry.record);
-      if (entry.record.setup.ai) setPilotId(entry.record.setup.ai.pilotId);
-      setMode(modeOfRecord(entry.record));
-    },
-    [],
-  );
+  const openFromLibrary = useCallback((id: string, forReview: boolean): void => {
+    const entry = readHistory().find((e) => e.id === id);
+    if (!entry) return;
+    setResumeEntryId(entry.id);
+    setOpenForReview(forReview);
+    setResumeRecord(entry.record);
+    if (entry.record.setup.ai) setPilotId(entry.record.setup.ai.pilotId);
+    setMode(modeOfRecord(entry.record));
+  }, []);
+
+  const resumeFromLibrary = useCallback((id: string): void => openFromLibrary(id, false), [openFromLibrary]);
+  const reviewFromLibrary = useCallback((id: string): void => openFromLibrary(id, true), [openFromLibrary]);
 
   const discardSaved = useCallback((): void => {
     clearSavedGame();
@@ -269,6 +273,8 @@ export function PlayView({ decks }: { decks: DecksApi }): ReactElement {
           ai={{ seat: soloResume?.setup.ai?.seat ?? AI_SEAT, pilotId: soloResume?.setup.ai?.pilotId ?? pilotId }}
           {...(soloResume ? { resume: soloResume } : {})}
           {...(resumeEntryId ? { resumeEntryId } : {})}
+          {...(openForReview ? { review: true } : {})}
+          {...(openForReview ? { review: true } : {})}
         />
       </>
     );
@@ -330,6 +336,7 @@ export function PlayView({ decks }: { decks: DecksApi }): ReactElement {
         <GameLibrary
           rows={libraryRows(library)}
           onResume={resumeFromLibrary}
+          onReview={reviewFromLibrary}
           onDelete={forgetGame}
         />
         <div className="play-mode__choices">
@@ -403,6 +410,7 @@ function LocalPlay({
   ai,
   resume,
   resumeEntryId,
+  review,
 }: {
   decks: DecksApi;
   ai?: AiSeatConfig;
@@ -413,6 +421,11 @@ function LocalPlay({
    * would grow a second row for a game you never stopped playing.
    */
   resumeEntryId?: string;
+  /**
+   * Open the record for REVIEW: the same board, plus a scrubber over the game's
+   * own action log. Playing while scrubbed back forks (§3.66).
+   */
+  review?: boolean;
 }): ReactElement {
   // Rebuild once per mount, in the initializer so the first paint is already
   // the restored game (no flash of the setup screen). Pure, so StrictMode's
@@ -445,6 +458,19 @@ function LocalPlay({
   );
   const [seed, setSeed] = useState<number>(() => resume?.setup.seed ?? HOTSEAT_CONFIG.defaultSeed);
   const [session, setSession] = useState<GameSession | null>(() => resumed?.session ?? null);
+
+  /**
+   * This game's identity in the library. Minted when a game begins and carried
+   * for its whole life, so every save UPDATES one entry instead of littering
+   * the library with a row per autosave. A resumed or forked game arrives with
+   * its id already set, which is what makes "keep playing the same game" and
+   * "this is a different playthrough" distinguishable at all.
+   */
+  const gameIdRef = useRef<string>(resumeEntryId ?? newGameId());
+  /** Lineage for the game currently open, if it was forked from another. */
+  const forkOfRef = useRef<{ readonly parentId: string; readonly forkedAt: number } | null>(null);
+
+
   const [transport, setTransport] = useState<SeatTransport | null>(() => {
     if (!resumed || !resume) return null;
     const seats: Record<PlayerId, SeatInfo> = {
@@ -458,6 +484,47 @@ function LocalPlay({
   const [revealed, setRevealed] = useState<PlayerId | null>(() =>
     resumed && resume ? (resume.ui.revealed ?? (ai ? humanSeatOf(ai) : null)) : null,
   );
+  /**
+   * REVIEW (§3.66). `scrub` is how many of the record's actions are replayed;
+   * null means "not reviewing — this is a live game". The reviewed record stays
+   * put while `scrub` moves, so stepping is a pure re-derivation of a state this
+   * game genuinely passed through, never an edit of it.
+   */
+  const [scrub, setScrub] = useState<number | null>(() =>
+    review && resume ? resume.actions.length : null,
+  );
+  const reviewing = scrub !== null && resume !== undefined;
+  const scrubMax = resume?.actions.length ?? 0;
+
+  const scrubTo = useCallback(
+    (next: number) => {
+      if (!resume) return;
+      const clamped = Math.max(0, Math.min(Math.round(next), resume.actions.length));
+      const rebuilt = rebuildFromRecord(resume, clamped);
+      if (!rebuilt.ok) return; // a record that will not replay is not scrubbable
+      setScrub(clamped);
+      setSession(rebuilt.game.session);
+      setRevealed(rebuilt.game.session.state.priorityPlayer);
+    },
+    [resume],
+  );
+
+  /**
+   * Leave review and keep playing from where the scrubber sits. At the end of
+   * the log that is simply resuming; anywhere earlier it FORKS — a new library
+   * entry sharing this game's seed, with the parent's actions up to this point,
+   * so the two playthroughs differ only in what happens next.
+   */
+  const playFromHere = useCallback(() => {
+    if (!resume || scrub === null) return;
+    if (scrub < resume.actions.length) {
+      const parentId = gameIdRef.current;
+      gameIdRef.current = newGameId();
+      forkOfRef.current = { parentId, forkedAt: scrub };
+    }
+    setScrub(null);
+  }, [resume, scrub]);
+
   // The mulligan TRANSCRIPT — every re-shuffle and keep, in order. Not derivable
   // from `mulligan` (counts lose the order and the bottomed ids), and not engine
   // actions (see persist.ts) — this is the record's third replay ingredient.
@@ -474,16 +541,6 @@ function LocalPlay({
   // --- persistence -----------------------------------------------------------------
   const saver = useMemo(() => createGameSaver(), []);
 
-  /**
-   * This game's identity in the library. Minted when a game begins and carried
-   * for its whole life, so every save UPDATES one entry instead of littering
-   * the library with a row per autosave. A resumed or forked game arrives with
-   * its id already set, which is what makes "keep playing the same game" and
-   * "this is a different playthrough" distinguishable at all.
-   */
-  const gameIdRef = useRef<string>(resumeEntryId ?? newGameId());
-  /** Lineage for the game currently open, if it was forked from another. */
-  const forkOfRef = useRef<{ readonly parentId: string; readonly forkedAt: number } | null>(null);
   /**
    * File this game in the library. The surface WRITES; the menu that lists and
    * deletes reads its own copy — keeping one shared list in React state across
@@ -529,6 +586,12 @@ function LocalPlay({
   useEffect(() => {
     if (!config || !session) return;
     if (phase.kind === 'setup' || phase.kind === 'error') return;
+    // ⚠️ A REVIEWED game is read-only. While the scrubber is engaged the session
+    // is an EARLIER state of a real game, and saving it would file that game
+    // with its own future deleted — scrubbing back through a game would destroy
+    // the very thing being reviewed. Writing resumes only once the player takes
+    // it over, at which point a fork id is already in place if they rewound.
+    if (reviewing) return;
     const record = buildPlayRecord({
       names: config.names,
       choiceA: config.choiceA,
@@ -558,7 +621,7 @@ function LocalPlay({
       return;
     }
     saver.save(record);
-  }, [config, session, phase, seed, ai, transcript, revealed, saver, fileInLibrary]);
+  }, [config, session, phase, seed, ai, transcript, revealed, saver, fileInLibrary, reviewing]);
 
   // Scroll rides the record too ("where your view was on the screen"), and the
   // pending write is flushed on hide/unmount so a tab kill or a navigation away
@@ -936,6 +999,15 @@ function LocalPlay({
 
   return (
     <div className="play-view">
+      {reviewing && (
+        <ReviewScrubber
+          at={scrub}
+          total={scrubMax}
+          turn={session.state.turnNumber}
+          onScrub={scrubTo}
+          onPlayFromHere={playFromHere}
+        />
+      )}
       <PlayBoard session={session} viewer={viewer} onSubmit={applySubmit} onConcede={concede} />
     </div>
   );

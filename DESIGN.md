@@ -740,6 +740,54 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.66 The game library — every game kept, scrubbable, and forkable — ✅ done
+
+Asked for as: *"any games we start that aren't ended can be resumed easily later — regardless of why
+they weren't finished... all games played should be held on record so they could be reviewed whenever
+but should come with a delete button... I want to be able to scrub forward and backward through any
+of the saved games and take the game at any point, and fork it by playing it right from where I
+scrubbed to. Any forked games should obviously share the same seed. And should have some kind of UI
+connection to each other."*
+
+**An entry wraps §3.58's `PlayRecord` rather than replacing it.** That record is already the exact,
+complete input to a game — resolved decklists, base seed, starting player, mulligan transcript,
+accepted-action script — and `rebuildFromRecord` already replays one back into a live session. A
+library entry therefore adds only what a LIBRARY needs and a single save slot did not: identity,
+outcome, and lineage. One record shape, one replay path, no second codec to drift from the first.
+
+**A fork is that record with its action log cut short.** The engine is deterministic in (seed,
+decklists, actions), so "play on from turn 6" is literally `setup + actions.slice(0, k)` — which is
+why a fork **shares its parent's seed by construction** rather than as a feature that had to be
+built. Two forks of one game are the same shuffle explored two ways, which is the only thing that
+makes "what if I had played differently here" a fair question in a tuning lab.
+
+**Scrubbing is the ordinary board, not a bespoke replay view** — same tiles, same log, same hand,
+with only the source of the state differing. `rebuildFromRecord` gained an optional stop-at-action;
+that is not the partial replay it refuses elsewhere, because it stops where the caller ASKED, so the
+result is an exact earlier state of the same game.
+
+⚠️ **A reviewed game is read-only, and this is load-bearing.** While the scrubber is engaged the
+session is an earlier state of a real game, so the autosave is suppressed: saving it would file that
+game with its own future deleted, and scrubbing back through a game would destroy the very thing
+being reviewed. Writing resumes only when the player takes it over — by which point a fork id is
+already in place if they rewound.
+
+**One entry per GAME, not per autosave.** The surface carries a library id for the game's whole life,
+and a resumed or forked game arrives with its id already set. Rows are ordered BY LINEAGE rather than
+recency, so a fork sits directly under the game it came from and says where it split; sorting purely
+by time scattered a playthrough and its forks among unrelated games. Pruning drops the oldest
+FINISHED games only — a game you could still return to is not the library's to forget.
+
+📊 Verified live end to end, not just in unit tests: a Solo game filed ONE row that grew 149 → 202
+actions across a resume (no duplicate row); Review opened the real board with the scrubber at
+37 of 37; scrubbing to 20/5/0/12 walked the board back through the states that game actually passed
+through; "Fork and play from here" at action 12 produced a second entry with `forkedAt: 12` and
+**the same seed 12345**, leaving the parent untouched at 37 actions; the menu then showed "1 fork
+from this game" on the parent and an indented "⑂ forked from … at action 12" on the child; Delete
+removed a row from both the list and storage. 38 unit tests cover the record, list, lineage and the
+scrub/fork equivalence — the last of those replays a real engine game and asserts every scrub point
+reproduces the exact fingerprint that game had at the time.
+
 ### 3.65 The gauntlet table says whose win rate it is — ✅ done
 
 Reported as *"figure out why the Selesnya Blink deck is so bad against the Gauntlet — even though when

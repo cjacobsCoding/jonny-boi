@@ -24,10 +24,12 @@ function ago(when: number, now: number = Date.now()): string {
 export function GameLibrary({
   rows,
   onResume,
+  onReview,
   onDelete,
 }: {
   readonly rows: readonly LibraryRow[];
   readonly onResume: (id: string) => void;
+  readonly onReview: (id: string) => void;
   readonly onDelete: (id: string) => void;
 }): ReactElement | null {
   if (rows.length === 0) return null;
@@ -68,6 +70,11 @@ export function GameLibrary({
                   Resume
                 </button>
               )}
+              {/* Every game can be reviewed, finished or not — replaying one you
+                  are mid-way through is how you check a line you already played. */}
+              <button type="button" className="btn btn--ghost" onClick={() => onReview(row.id)}>
+                Review
+              </button>
               <button
                 type="button"
                 className="btn btn--ghost"
