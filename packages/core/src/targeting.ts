@@ -151,6 +151,22 @@ export type TargetRestriction =
    */
   | 'artifactOrEnchantment'
   /**
+   * The unscoped PERMANENT nouns the removal family prints, each its own
+   * member for the reason the whole union is closed: a card that may destroy
+   * "an artifact or creature" may not destroy a land, and widening it to
+   * 'permanent' is a card playing wider than printed.
+   */
+  | 'artifactOrCreature'
+  | 'creatureOrEnchantment'
+  /** "destroy target NONARTIFACT creature" (Go for the Throat). */
+  | 'nonartifactCreature'
+  /** "destroy/exile target NONLAND permanent" (Void Rend, Utter End). */
+  | 'nonlandPermanent'
+  /** "counter target NONCREATURE spell" (Negate, Dovin's Veto). */
+  | 'noncreatureSpell'
+  /** "counter target INSTANT spell" (Dispel). */
+  | 'instantSpell'
+  /**
    * "target player or planeswalker" — a face or a walker, never a creature.
    * Lava Spike's printed line. Its own restriction (not `'player'`) because
    * flattening it would make the card NARROWER than printed now that
@@ -317,6 +333,12 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'creatureAnOpponentControls' ||
     value === 'artifactEnchantmentOrLand' ||
     value === 'artifactOrEnchantment' ||
+    value === 'artifactOrCreature' ||
+    value === 'creatureOrEnchantment' ||
+    value === 'nonartifactCreature' ||
+    value === 'nonlandPermanent' ||
+    value === 'noncreatureSpell' ||
+    value === 'instantSpell' ||
     value === 'playerOrPlaneswalker' ||
     value === 'creatureOrPlaneswalker' ||
     value === 'permanent' ||
@@ -368,6 +390,12 @@ const TARGET_RESTRICTION_MEMBERS = {
   creatureAnOpponentControls: true,
   artifactEnchantmentOrLand: true,
   artifactOrEnchantment: true,
+  artifactOrCreature: true,
+  creatureOrEnchantment: true,
+  nonartifactCreature: true,
+  nonlandPermanent: true,
+  noncreatureSpell: true,
+  instantSpell: true,
   playerOrPlaneswalker: true,
   creatureOrPlaneswalker: true,
   permanent: true,
@@ -521,7 +549,9 @@ export function isLegalTarget(
     restriction === 'spell' ||
     restriction === 'instantOrSorcerySpell' ||
     restriction === 'instantOrSorcerySpellYouControl' ||
-    restriction === 'permanentSpellYouControl'
+    restriction === 'permanentSpellYouControl' ||
+    restriction === 'noncreatureSpell' ||
+    restriction === 'instantSpell'
   ) {
     // A *spell* on the stack — never a triggered ability, which is also a stack
     // object but is not a spell and cannot be countered by "counter target spell".
@@ -529,6 +559,11 @@ export function isLegalTarget(
       const object = state.stack[i] as StackObject;
       if (object.kind !== 'spell' || object.instanceId !== target) continue;
       if (restriction === 'spell') return true;
+      // The printed spell-TYPE narrowings, read off the card on the stack: a
+      // creature spell is not a legal Negate target, and only an instant is a
+      // legal Dispel target.
+      if (restriction === 'noncreatureSpell') return !isCreature(object.card.def);
+      if (restriction === 'instantSpell') return hasType(object.card.def, 'instant');
       // The "you control" scopes: unknown actor ⇒ illegal, never "probably
       // mine" — the same rule every other controller-scoped restriction follows.
       if (restriction === 'instantOrSorcerySpellYouControl') {
@@ -584,6 +619,18 @@ export function isLegalTarget(
   }
   if (restriction === 'artifactOrEnchantment') {
     return hasType(permanent.def, 'artifact') || hasType(permanent.def, 'enchantment');
+  }
+  if (restriction === 'artifactOrCreature') {
+    return hasType(permanent.def, 'artifact') || isCreature(permanent.def);
+  }
+  if (restriction === 'creatureOrEnchantment') {
+    return isCreature(permanent.def) || hasType(permanent.def, 'enchantment');
+  }
+  if (restriction === 'nonartifactCreature') {
+    return isCreature(permanent.def) && !hasType(permanent.def, 'artifact');
+  }
+  if (restriction === 'nonlandPermanent') {
+    return !isLand(permanent.def);
   }
   if (restriction === 'creatureAnOpponentControls') {
     // Unknown actor ⇒ illegal, never "probably theirs" (see the type's note).
@@ -748,7 +795,9 @@ function enumerateTargets(
     restriction === 'spell' ||
     restriction === 'instantOrSorcerySpell' ||
     restriction === 'instantOrSorcerySpellYouControl' ||
-    restriction === 'permanentSpellYouControl'
+    restriction === 'permanentSpellYouControl' ||
+    restriction === 'noncreatureSpell' ||
+    restriction === 'instantSpell'
   ) {
     const yoursOnly =
       restriction === 'instantOrSorcerySpellYouControl' || restriction === 'permanentSpellYouControl';
@@ -764,6 +813,11 @@ function enumerateTargets(
       if (yoursOnly && object.controller !== controller) continue;
       if (wantInstantOrSorcery && !isInstantOrSorcerySpell(object)) continue;
       if (wantPermanentSpell && isInstantOrSorcerySpell(object)) continue;
+      // The printed spell-TYPE narrowings, asked exactly as `isLegalTarget`
+      // asks them — the offer list and the apply path must name the same set
+      // (DESIGN §3.36), which the zoo-board agreement test enforces.
+      if (restriction === 'noncreatureSpell' && isCreature(object.card.def)) continue;
+      if (restriction === 'instantSpell' && !hasType(object.card.def, 'instant')) continue;
       out.push(object.instanceId);
     }
     return out;
@@ -866,6 +920,29 @@ function enumerateTargets(
         (hasType(permanent.def, 'artifact') || hasType(permanent.def, 'enchantment')) &&
         isTargetableBy(state, permanent, controller, source, keywordIndex)
       ) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
+  // The unscoped permanent nouns, offered through the same targetability gate
+  // every other menu uses — one predicate each, matching `isLegalTarget` above
+  // so the offer list and the apply path can never disagree (DESIGN §3.36).
+  if (
+    restriction === 'artifactOrCreature' ||
+    restriction === 'creatureOrEnchantment' ||
+    restriction === 'nonartifactCreature' ||
+    restriction === 'nonlandPermanent'
+  ) {
+    for (const permanent of state.battlefield) {
+      const matches =
+        restriction === 'artifactOrCreature'
+          ? hasType(permanent.def, 'artifact') || isCreature(permanent.def)
+          : restriction === 'creatureOrEnchantment'
+            ? isCreature(permanent.def) || hasType(permanent.def, 'enchantment')
+            : restriction === 'nonartifactCreature'
+              ? isCreature(permanent.def) && !hasType(permanent.def, 'artifact')
+              : !isLand(permanent.def);
+      if (matches && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
         targets.push(permanent.instanceId);
       }
     }
@@ -1056,6 +1133,18 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'a creature an opponent controls';
     case 'artifactEnchantmentOrLand':
       return 'an artifact, enchantment, or land';
+    case 'artifactOrCreature':
+      return 'an artifact or creature';
+    case 'creatureOrEnchantment':
+      return 'a creature or enchantment';
+    case 'nonartifactCreature':
+      return 'a nonartifact creature';
+    case 'nonlandPermanent':
+      return 'a nonland permanent';
+    case 'noncreatureSpell':
+      return 'a noncreature spell';
+    case 'instantSpell':
+      return 'an instant spell';
     case 'artifactOrEnchantment':
       return 'an artifact or enchantment';
     case 'playerOrPlaneswalker':

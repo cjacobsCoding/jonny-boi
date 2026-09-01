@@ -1215,6 +1215,60 @@ function modeLabel(body: string, cardName: string): string {
   return text.length === 0 ? text : text[0]!.toUpperCase() + text.slice(1);
 }
 
+/**
+ * The printed PERMANENT nouns a targeted removal line may name, mapped to the
+ * core restriction each one means.
+ *
+ * DATA, not an alternation baked into each rule (DESIGN §1.2): "destroy target
+ * X", "exile target X" and "return target X to its owner's hand" all print the
+ * same noun vocabulary, so a noun lives here ONCE and every verb that reads
+ * this table gains it at the same moment. Adding the next printed noun is a row
+ * here plus its core restriction — never a new rule per verb.
+ *
+ * The table stays CLOSED for the reason the restriction union is closed: a noun
+ * that is not here reports, rather than being widened to the nearest thing the
+ * engine happens to have.
+ */
+export const TARGET_NOUN_RESTRICTIONS: Readonly<Record<string, TargetRestriction>> = Object.freeze({
+  creature: 'creature',
+  artifact: 'artifact',
+  enchantment: 'enchantment',
+  land: 'land',
+  planeswalker: 'planeswalker',
+  permanent: 'permanent',
+  'artifact or enchantment': 'artifactOrEnchantment',
+  'artifact or creature': 'artifactOrCreature',
+  'creature or enchantment': 'creatureOrEnchantment',
+  'creature or planeswalker': 'creatureOrPlaneswalker',
+  'nonartifact creature': 'nonartifactCreature',
+  'nonland permanent': 'nonlandPermanent',
+  // ⚠️ "artifact, enchantment, or land" is deliberately NOT here: Oracle prints
+  // it with and without the serial comma, and `destroy-target-artifact-
+  // enchantment-or-land` owns both spellings. A row here would take one
+  // spelling and leave the other to a rule that then looks dead.
+});
+
+/** The table's nouns as a regex alternation, longest first so none is truncated. */
+const TARGET_NOUN_PHRASE = Object.keys(TARGET_NOUN_RESTRICTIONS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+
+/**
+ * The printed SPELL nouns a counter line may name. Separate from the permanent
+ * table because the objects live in different zones and no printed line mixes
+ * them; same closed-table discipline.
+ */
+export const COUNTER_NOUN_RESTRICTIONS: Readonly<Record<string, TargetRestriction>> = Object.freeze({
+  spell: 'spell',
+  'noncreature spell': 'noncreatureSpell',
+  'instant spell': 'instantSpell',
+  'instant or sorcery spell': 'instantOrSorcerySpell',
+});
+
+const COUNTER_NOUN_PHRASE = Object.keys(COUNTER_NOUN_RESTRICTIONS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     /**
@@ -1754,18 +1808,15 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'destroy-target-simple-permanent',
     description:
-      `"Destroy target enchantment / land / planeswalker" (Casualties of War's modes; Stone Rain)`,
-    // One rule for the three single-type destroys the artifact rule above does
-    // not cover, each mapping to its own restriction so the printed word is the
-    // whole of what may be aimed at.
-    pattern: /^destroy target (enchantment|land|planeswalker|artifact or enchantment)$/,
+      `"Destroy target <NOUN>" for every noun in TARGET_NOUN_RESTRICTIONS (Stone Rain, Naturalize, Hero's Downfall, Go for the Throat, Putrefy, Mortify, Void Rend)`,
+    // ONE rule over the shared noun table: the printed word is the whole of what
+    // may be aimed at, and adding the next noun is a row in that table rather
+    // than a new alternation here.
+    pattern: new RegExp(`^destroy target (${TARGET_NOUN_PHRASE})$`),
     needsChosenTarget: true,
     build(match) {
-      // "artifact or enchantment" (Reclamation Sage, Naturalize) is one target
-      // with two acceptable types — its own restriction, spelled here.
-      const kind: TargetRestriction =
-        match[1] === 'artifact or enchantment' ? 'artifactOrEnchantment' : (match[1] as TargetRestriction);
-      return effects({ primitive: 'destroyTarget', params: { targets: kind } });
+      const kind = TARGET_NOUN_RESTRICTIONS[match[1] ?? ''];
+      return kind === undefined ? null : effects({ primitive: 'destroyTarget', params: { targets: kind } });
     },
   },
   {
@@ -2154,11 +2205,17 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'exile-target-creature',
-    description: '"Exile target creature"',
-    pattern: /^exile target creature$/,
+    description:
+      '"Exile target <NOUN>" for every noun in TARGET_NOUN_RESTRICTIONS (Utter End)',
+    // Reads the SAME shared noun table the destroy family does, which is the
+    // whole reason that table exists: a noun added for one verb is understood
+    // by the other in the same edit, and the two verbs can never drift into
+    // meaning different things by "artifact or creature".
+    pattern: new RegExp(`^exile target (${TARGET_NOUN_PHRASE})$`),
     needsChosenTarget: true,
-    build() {
-      return effects({ primitive: 'exileTarget', params: { targets: CREATURE_TARGET } });
+    build(match) {
+      const kind = TARGET_NOUN_RESTRICTIONS[match[1] ?? ''];
+      return kind === undefined ? null : effects({ primitive: 'exileTarget', params: { targets: kind } });
     },
   },
   {
@@ -2451,11 +2508,15 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'counter-target-spell',
-    description: '"Counter target spell"',
-    pattern: /^counter target spell$/,
+    description: '"Counter target spell / noncreature spell / instant spell / instant or sorcery spell" (Cancel, Negate, Dispel, Muddle the Mixture)',
+    // Same shared-table discipline as the destroy family one table up: the
+    // printed spell noun decides what may be countered, and a noun outside the
+    // table reports rather than being widened to "any spell".
+    pattern: new RegExp(`^counter target (${COUNTER_NOUN_PHRASE})$`),
     needsChosenTarget: true,
-    build() {
-      return effects({ primitive: 'counterSpell', params: { targets: SPELL_TARGET } });
+    build(match) {
+      const kind = COUNTER_NOUN_RESTRICTIONS[match[1] ?? ''];
+      return kind === undefined ? null : effects({ primitive: 'counterSpell', params: { targets: kind } });
     },
   },
   {
