@@ -740,6 +740,36 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.64 A double-faced card is two type lines, not one — ✅ done
+
+Handed over by §3.61, which worked around this at the web seam rather than fixing it: `parseTypeLine`
+parsed a COMBINED Scryfall line — "Creature — Minotaur Warrior // Land" — as a single type line. The
+result was in the committed data for **all 50 double-faced cards in the pool**: a literal `"//"` sat
+in `types` or `subtypes`, and the back face's words were filed under the front's. Akoum Warrior
+claimed **Land as a subtype of a creature**, which any rule matching on subtypes would believe;
+"Assault // Battery" claimed two Sorcery types; `//` was a card type you could count.
+
+**The fix is the reading that makes the card level self-consistent.** A combined line now describes
+the FRONT face only — which is what every other card-level field already means (`power`, `toughness`,
+`oracleText` all read `raw.X ?? frontFace.X`), and each back face carries its own clean `type_line`
+in `faces[]`, so nothing is lost, only correctly filed.
+
+⚠️ The fix had to go in the PARSER, not the caller: `invariants.ts` re-parses each card's stored
+`rawTypeLine` and demands it equal the stored `typeLine`, so a normalizer-side fix would have made
+the committed data fail its own round-trip invariant. It duly did fail on the old data, which is how
+the migration below announced itself.
+
+**The committed data was re-derived, not re-fetched.** `typeLine` is a pure function of the
+`rawTypeLine` each card already stores, so the 50 rows were recomputed offline and
+`apps/web/src/data/card-index.json` regenerated from them by its script — no Scryfall round trip, and
+the newline convention preserved so the CRLF guard stays quiet.
+
+📊 **Nothing else moved.** Seed-99 gauntlet rows re-measured after the migration: Mono-Red
+**257/800**, Selesnya Blink **615/800** — byte-identical, so the correction is a data fix and not a
+behaviour change. §3.61's `filterableTypes` (which unions every face for the Cards page chips) stays
+correct and complementary: the card level is deliberately the front face, and the chips deliberately
+want both.
+
 ### 3.63 Flip for who goes first — ✅ done
 
 Reported alongside the mulligan question (triage found mulligan present in all three playable modes,
