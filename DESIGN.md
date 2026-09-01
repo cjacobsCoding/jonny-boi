@@ -740,6 +740,38 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.69 Affinity — a spell that costs less for each permanent you control (CR 702.40) — ✅ done
+
+Picked from the backlog the moment §3.68 made the backlog honest: with ability-word labels folded
+away, both independent reports agreed Affinity was the largest unimplemented mechanic that needs no
+new payment machinery. Predicted 28 cards; **delivered 22** (4,771 → 4,793 of 31,091). The smaller
+number is the real one — the rest carry a second gap as well.
+
+**A separate field from the reduction that already existed, on purpose.** `castCostReduction` is a
+grant a PERMANENT makes to its controller's matching spells, and the engine finds it by walking the
+battlefield. Affinity is printed on the SPELL and scales with a board count. Folding the two
+together would mean either walking the battlefield for a reducer that is never there, or reading a
+spell in hand as though it were on the battlefield — and the second is how a card ends up reducing
+its own cost from inside the graveyard. So `castCostReductionPerPermanent` is its own field, applied
+in `castManaCostFor`, which is the ONE place a cast cost is computed and therefore the one place
+both reductions can ever disagree.
+
+⚠️ **The early return was the trap.** `castManaCostFor` bailed out when the caster controlled no
+reducing permanent — correct for a grant, fatal for affinity, which applies on a board with no
+reducer at all. A version that kept that bail-out would have made every affinity card cost full
+price on exactly the empty-ish boards where affinity is the reason you are casting it.
+
+**One rule, two printings.** Scryfall prints the keyword line and puts the whole mechanic in reminder
+text, which is stripped before the rule table sees it — so `affinity-cost-reduction` matches both
+"Affinity for artifacts" and the longhand "This spell costs {1} less to cast for each artifact you
+control", and a test asserts the two compile to identical data. `amount` is named rather than
+assumed 1, so the longhand "costs {2} less for each…" wording has somewhere honest to go.
+
+⚠️ **"Affinity for Slivers" REPORTS.** The noun goes through `permanentNounFilter`, the same closed
+table every other selector reads. A creature-type affinity this engine cannot express is refused
+rather than widened to "for each creature" — which would make the spell dramatically cheaper than
+printed. That is the closed-table discipline (CLAUDE.md §2) doing exactly what it is for.
+
 ### 3.68 An ability word is a label, not an ability (CR 207.2c) — ✅ done
 
 **Found by fixing the measurement, not by reading code.** The keyword gap report claimed 412 cards

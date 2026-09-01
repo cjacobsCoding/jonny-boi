@@ -316,6 +316,7 @@ interface Assembly {
   entersTappedUnlessLifePaid?: number;
   additionalLandPlays?: number;
   castCostReduction?: CardDefinition['castCostReduction'];
+  castCostReductionPerPermanent?: CardDefinition['castCostReductionPerPermanent'];
   entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
   copyAsEnters?: import('@jonny-boi/core').CopyAsEntersSpec;
   /** The printed "As ~ enters, choose a…" naming, once some line prints it. */
@@ -402,6 +403,8 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
     assembly.additionalLandPlays = (assembly.additionalLandPlays ?? 0) + contribution.additionalLandPlays;
   }
   if (contribution.castCostReduction !== undefined) assembly.castCostReduction = contribution.castCostReduction;
+  if (contribution.castCostReductionPerPermanent !== undefined)
+    assembly.castCostReductionPerPermanent = contribution.castCostReductionPerPermanent;
   if (contribution.copyAsEnters !== undefined) assembly.copyAsEnters = contribution.copyAsEnters;
   if (contribution.entersTappedUnlessRevealed !== undefined) {
     assembly.entersTappedUnlessRevealed = contribution.entersTappedUnlessRevealed;
@@ -1285,6 +1288,12 @@ export function compileCard(card: CompilableCard): CompileResult {
     if (SCALING_KEYWORDS.has(word) && assembly.replacements.some((r) => r.outcome.times !== undefined)) {
       continue;
     }
+    // AFFINITY: Scryfall lists the keyword and the printed line carries the
+    // whole rule in reminder text, which is stripped before the rule table sees
+    // it. The compiled evidence is the per-permanent reduction the line built —
+    // an affinity whose noun is outside the closed table compiles none and still
+    // reports through its own missing entry.
+    if (word === 'affinity' && assembly.castCostReductionPerPermanent !== undefined) continue;
     if (word === 'buyback' && assembly.buyback !== undefined) continue;
     if (word === 'madness' && assembly.madness !== undefined) continue;
     // An ABILITY WORD (Revolt, Morbid, …) is a label, not an ability — CR
@@ -1427,6 +1436,9 @@ export function compileCard(card: CompilableCard): CompileResult {
       ? { additionalLandPlays: assembly.additionalLandPlays }
       : {}),
     ...(assembly.castCostReduction !== undefined ? { castCostReduction: assembly.castCostReduction } : {}),
+    ...(assembly.castCostReductionPerPermanent !== undefined
+      ? { castCostReductionPerPermanent: assembly.castCostReductionPerPermanent }
+      : {}),
     ...(assembly.asEntersChoice !== undefined ? { asEntersChoice: assembly.asEntersChoice } : {}),
     ...(assembly.isChosenSubtype ? { isChosenSubtype: true } : {}),
     ...(xCount > 0 ? { xCost: xCount } : {}),

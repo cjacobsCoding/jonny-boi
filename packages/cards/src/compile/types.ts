@@ -162,6 +162,7 @@ export interface ClauseContribution {
   readonly additionalLandPlays?: number;
   /** Set by "TYPE/COLOUR spells you cast cost {N} less to cast". */
   readonly castCostReduction?: import('@jonny-boi/core').CardDefinition['castCostReduction'];
+  readonly castCostReductionPerPermanent?: import('@jonny-boi/core').CardDefinition['castCostReductionPerPermanent'];
   /** Set when the text asks for a REVEAL to enter untapped (a reveal-land). */
   readonly entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
   /**
