@@ -2821,12 +2821,25 @@ export function castManaCostFor(
   // keyed on the battlefield ARRAY, which a fresh draft replaces on every
   // action — so it is per-action by construction and can never go stale.
   const reducers = knownReducers ?? castCostReducersFor(state, caster);
-  if (reducers.length === 0) return base;
+  // AFFINITY (CR 702.40) is printed on the SPELL, so it applies on a board with
+  // no reducing permanent at all — the early return above must not swallow it.
+  const affinity = castDef.castCostReductionPerPermanent;
+  if (reducers.length === 0 && affinity === undefined) return base;
   let reduction = 0;
   for (let i = 0; i < reducers.length; i++) {
     const grant = reducers[i] as NonNullable<CardDefinition['castCostReduction']>;
     if (grant.filter !== undefined && !matchesCardFilter(SPELL_FILTER_PROBE(castDef), grant.filter)) continue;
     reduction += grant.amount;
+  }
+  if (affinity !== undefined) {
+    const battlefield = state.battlefield;
+    let matching = 0;
+    for (let i = 0; i < battlefield.length; i++) {
+      const permanent = battlefield[i] as CardInstance;
+      if (permanent.controller !== caster) continue;
+      if (matchesCardFilter(permanent, affinity.filter)) matching += 1;
+    }
+    reduction += matching * affinity.amount;
   }
   if (reduction <= 0) return base;
   const generic = Math.max(0, (base.generic ?? 0) - reduction);

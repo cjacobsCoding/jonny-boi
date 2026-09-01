@@ -4810,6 +4810,30 @@ const CAST_REDUCTION_SCOPES: Readonly<Record<string, CardFilter>> = Object.freez
 
 export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
   {
+    // AFFINITY (CR 702.40). Scryfall prints the keyword line and puts the whole
+    // rule in reminder text, which is stripped before we get here — so the two
+    // printings of one mechanic are matched by ONE rule with two spellings of
+    // the same idea, rather than by two rules that could drift apart.
+    //
+    // The noun goes through `permanentNounFilter`, the same closed table every
+    // other selector reads, so "affinity for Dwarves" (a creature-type affinity
+    // this engine cannot express) REPORTS rather than quietly compiling into
+    // "for each creature", which would make the spell far cheaper than printed.
+    id: 'affinity-cost-reduction',
+    description:
+      '"Affinity for artifacts" / "This spell costs {1} less to cast for each artifact you control" (Myr Enforcer, Frogmite)',
+    pattern:
+      /^(?:affinity for ([a-z]+)|(?:this spell|~) costs \{(\d+)\} less to cast for each ([a-z]+) you control)$/,
+    build(match) {
+      const noun = match[1] ?? match[3] ?? '';
+      const filter = permanentNounFilter(noun);
+      if (filter === undefined) return null;
+      const amount = match[2] === undefined ? 1 : Number.parseInt(match[2], 10);
+      if (!Number.isFinite(amount) || amount <= 0) return null;
+      return { castCostReductionPerPermanent: { amount, filter } };
+    },
+  },
+  {
     id: 'cast-cost-reduction',
     description:
       '"Instant and sorcery spells you cast cost {1} less to cast." (Goblin Electromancer; the Medallion cycle prints the colour form)',

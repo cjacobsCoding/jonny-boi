@@ -695,6 +695,33 @@ export interface CardDefinition {
     readonly filter?: import('./choices.js').CardFilter;
   };
   /**
+   * **AFFINITY** (CR 702.40) and every card that prints its wording longhand:
+   * "This spell costs {1} less to cast for each artifact you control."
+   *
+   * The counterpart to {@link castCostReduction} and deliberately a SEPARATE
+   * field, because the two answer different questions. That one is a grant a
+   * PERMANENT makes to its controller's matching spells, and the engine finds it
+   * by walking the battlefield; this one is printed on the SPELL itself and
+   * scales with a board count. Folding affinity into the other field would mean
+   * either walking the battlefield for a reducer that is never there, or reading
+   * a spell in hand as though it were on the battlefield — and the second is how
+   * a card ends up reducing its own cost while it sits in the graveyard.
+   *
+   * `amount` is the reduction PER matching permanent (always 1 on a printed
+   * affinity card, named rather than assumed so the longhand "costs {2} less for
+   * each…" wording has somewhere honest to go). `filter` is the same
+   * `CardFilter` every other selector reads, and the count is of permanents the
+   * CASTER controls — "you control", as printed.
+   *
+   * Reduces GENERIC mana only, floored at zero, exactly like every other
+   * reduction (CR 601.2f): Myr Enforcer with four artifacts costs {3}, and with
+   * eight it costs nothing rather than owing the board four mana.
+   */
+  readonly castCostReductionPerPermanent?: {
+    readonly amount: number;
+    readonly filter: import('./choices.js').CardFilter;
+  };
+  /**
    * A "reveal-land" (the Shadows over Innistrad / Strixhaven cycles): "As ~
    * enters, you may **reveal** an Island or Swamp card from your hand. If you
    * don't, this land enters tapped." The value is the printed land types the
