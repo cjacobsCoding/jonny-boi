@@ -243,9 +243,12 @@ type SpellIntent =
  * ⚠️ THESE EXIST TO BE MEASURED, NOT TO BE CONFIGURED. Comparing two BUILDS of
  * one pilot is impossible in a single process (both cannot hold the same id), and
  * the only exact method is to run two ids head-to-head — so a behaviour under
- * evaluation gets a flag, is measured with `bench/alpha-strike-ab.mjs`, and the
- * flag is deleted once the verdict is recorded. A flag that outlives its
- * measurement is a fork of the pilot nobody is testing.
+ * evaluation gets a flag and is measured with `bench/feature-ab.mjs --feature
+ * <name>`. A flag that WINS keeps its seam so the claim stays re-checkable when
+ * the pilot changes; a flag that LOSES is deleted with the behaviour behind it
+ * (see §3.75, where holding attackers back measured 18 slots ahead against 39
+ * behind and went). What must never happen is a flag that outlives its
+ * measurement: that is a fork of the pilot nobody is testing.
  */
 export interface HeuristicFeatures {
   /**
