@@ -42,6 +42,7 @@ import { AnimationLayer, useZoneAnimations } from './AnimationLayer.js';
 import { CombatLines } from './CombatLines.js';
 import './action-bar.css';
 import './mana-picker.css';
+import './board-fit.css';
 
 /**
  * A cast option's identity — instance, zone AND face, because one instance can
