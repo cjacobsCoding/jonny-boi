@@ -166,6 +166,14 @@ async function measure(page) {
     };
     const hand = [...document.querySelectorAll('.play-hand')].find((h) => !h.className.includes('hidden'));
     const card = document.querySelector('.play-board .play-card--full');
+    // A seat squeezed past its own rail hides the life total it exists to show.
+    const seats = [...document.querySelectorAll('.play-board .seat')];
+    const seatClipped = seats.some((seat) => seat.scrollHeight > seat.clientHeight + 1);
+    const railClipped = [...document.querySelectorAll('.play-board .seat__zones')].some((zones) => {
+      const rail = zones.getBoundingClientRect();
+      const seat = zones.closest('.seat').getBoundingClientRect();
+      return rail.bottom > seat.bottom + 1 || rail.top < seat.top - 1;
+    });
     return {
       viewport: { width: window.innerWidth, height: window.innerHeight },
       pageScrolls: de.scrollHeight > window.innerHeight + 1,
@@ -177,6 +185,8 @@ async function measure(page) {
       handVisible: whole(hand),
       actionBarVisible: whole(document.querySelector('.action-bar')),
       cardWidth: card ? Math.round(parseFloat(getComputedStyle(card).width)) : null,
+      seatClipped,
+      railClipped,
     };
   });
 }
@@ -192,6 +202,10 @@ function assertFits(label, m) {
   check(`${label}: the turn/priority line is fully visible`, m.statusVisible === true);
   check(`${label}: YOUR HAND is fully visible`, m.handVisible === true);
   check(`${label}: the action bar is fully visible`, m.actionBarVisible === true);
+  // Fitting the window is not worth much if a seat fits by hiding its own life
+  // total — which is exactly what the first version of rule 5 did.
+  check(`${label}: no seat is clipped`, m.seatClipped === false);
+  check(`${label}: every seat's life/zone rail is intact`, m.railClipped === false);
 }
 
 /** Start a Solo game on a fixed deck and keep the opening hand. */
