@@ -21,9 +21,12 @@ the seams; do not edit the core engine loop or shared scaffolding to bolt a feat
 1. **Clean, self-documenting code — no magic numbers.** Names explain intent; comments explain
    *why*, not *what*. Any constant that affects behavior or feel is named/derived from config,
    never an inline literal. (Card costs, life totals, sim counts → data, not literals.)
-2. **Data-driven & designer-tunable.** Cards, decks, AI weights, and sim parameters live in data
-   (JSON/TS data modules) with safe defaults — not hard-coded. Adding a card or a meta deck is a
-   **data edit, not an engine change**.
+2. **Data-driven & designer-tunable — never hard-coded.** Cards, decks, AI weights, and sim
+   parameters live in data (JSON/TS data modules) with safe defaults. Adding a card or a meta deck
+   is a **data edit, not an engine change**. Behaviour that varies by case belongs in a TABLE, not
+   in a chain of branches or a regex alternation: adding the next case must be a ROW. Tables stay
+   CLOSED — a value outside the table REPORTS honestly rather than being widened to the nearest
+   thing that happens to exist, because silent approximation is worse than a clear refusal.
 3. **Ship debug tooling with every new system — in the debug/inspector panel.** A system isn't done
    until you can observe and drive it at runtime: a game-state inspector, a step-through-priority
    control, forced draws/mulligans, a sim-log viewer. Expose controls through the shared **debug
@@ -47,6 +50,26 @@ the seams; do not edit the core engine loop or shared scaffolding to bolt a feat
 9. **Always deliver a build to test.** Whenever a feature is added or a bug is fixed, produce a
    runnable build (the web app and/or a CLI sim command) for the user to try — "tests pass" is not
    "done."
+10. **Systemic, never one-off.** Fix the CLASS, not the instance: when a bug or a gap turns up, ask
+    what SHAPE it has and what else has that shape, then fix the shape. A patch that repairs one
+    symptom and leaves its siblings broken is unfinished — the siblings are never cheaper to fix
+    than while the context is loaded. Ship the GUARD with the fix: a test that fails if the class
+    comes back (`compile/rule-coverage.test.ts` and `scripts/dead-rule-sweep.mjs` are the model —
+    they exist because a rule written from a remembered wording matched no real card and no test
+    could see it).
+11. **Measure before building; report the honest number.** Pick work from DATA, not intuition —
+    `scripts/near-miss-report.mjs` ranks the cards that are ONE clause from playable by the shape of
+    the clause blocking them, and `scripts/coverage-audit.mjs` ranks systems by cards unblocked.
+    Measure a candidate family BEFORE writing it; if the measurement disagrees with the plan, follow
+    the measurement and say so. If a closer second measurement SHRINKS the estimate, report the
+    smaller number rather than the headline that motivated the work. Prefer a committed script over
+    a one-off count, so the next decision is made from data too.
+12. **DRY — one answer to one question.** Two places that answer the same question will eventually
+    answer it differently, and the bug will be attributed to neither. One funnel per operation (one
+    zone-change path, one replacement site, one legality check); one TABLE read by every consumer
+    that needs it, so a row added for one verb is understood by all of them in the same edit
+    (`TARGET_NOUN_RESTRICTIONS`, `MANA_COST_NOUNS`). Where a second copy is unavoidable, derive both
+    from one source and add a test that fails when they diverge.
 
 Plus two cross-cutting disciplines:
 - **Pure-core + mandatory tests.** All rules/AI/sim/stats logic lives in pure, dependency-free units
