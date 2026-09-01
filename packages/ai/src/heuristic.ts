@@ -75,6 +75,8 @@ import {
   defenseOf,
   loyaltyOf,
   MANA_COLORS,
+  manaModesOf,
+  poolTotal,
   planManaPayment,
   tapActionFor,
   restrictionOfEffects,
@@ -250,8 +252,96 @@ export function createHeuristicPilot(weights: HeuristicWeights = DEFAULT_HEURIST
         return safeFallbackAction(ctx.view as unknown as GameState);
       }
     },
+    willPassPriority(view: GameState): boolean {
+      return heuristicWillPass(view);
+    },
   };
 }
+
+/**
+ * Windows in which this pilot provably cannot do anything but pass — decided
+ * from the state alone, without building the legal menu.
+ *
+ * ⚠️ EVERY LINE IS A "RETURN FALSE WHEN UNSURE". The seam's contract (see
+ * `Pilot.willPassPriority`) is one-sided: a wrong `true` takes the pass without
+ * anybody checking, so this only ever answers `true` when the alternative is
+ * impossible, never when it merely looks unlikely.
+ *
+ * Worth having because of what a game actually looks like: 592 decision windows,
+ * of which this pilot passes 81.7% (`bench/window-stats.mjs`). Every one of
+ * those built a full menu — dominated by mana taps, 73% of all offers ever
+ * enumerated — scored it, and threw it away.
+ */
+function heuristicWillPass(view: GameState): boolean {
+  // A parked question is not a priority window at all: passing is REJECTED while
+  // one stands, and only an answer moves the game.
+  if (view.pendingChoice) return false;
+  // Combat declarations are decisions this pilot really makes.
+  if (view.step === 'declareAttackers' || view.step === 'declareBlockers') return false;
+  // Something on the stack is something this pilot might answer.
+  if (view.stack.length > 0) return false;
+  const me = view.priorityPlayer;
+  // A card grant can make a graveyard card castable in ways not visible on the
+  // card itself (Snapcaster's granted flashback). Rare, and not worth reasoning
+  // about cheaply — if any grant is live, ask properly.
+  if ((view.cardGrants?.length ?? 0) > 0) return false;
+
+  // Is this the seat's own SORCERY window? It decides which cards are playable
+  // at all, and whether a land drop is on offer.
+  const sorceryOpen =
+    me === view.activePlayer &&
+    (view.step === 'precombatMain' || view.step === 'postcombatMain');
+
+  // Everything below asks ONE question in two halves: what is the cheapest thing
+  // this seat could play in THIS window, and could it possibly pay for it?
+  //
+  // ⚠️ THE MANA BOUND IS AN UPPER BOUND ON PURPOSE. Counting untapped sources
+  // over-estimates what is really available (a source may be colour-wrong, or
+  // carry a restriction), and over-estimating is the SAFE direction: it can only
+  // ever make this function answer `false` and build the menu that would have
+  // been built anyway. Under-estimating would skip a window where the pilot could
+  // really have acted, which is the one thing this must never do.
+  let cheapestPlay = Infinity;
+  const hand = view.players[me]?.hand ?? [];
+  for (let i = 0; i < hand.length; i++) {
+    const card = hand[i] as CardInstance;
+    // CYCLING (and its typed variants) is an activated ability of a card in
+    // HAND, usable at instant speed. Cheap to spot and easy to forget.
+    if ((card.def.cycling?.length ?? 0) > 0) return false;
+    // A LAND is not cast — it is played, for no mana, and only in a sorcery
+    // window with a drop left. Nothing about the mana bound can rule it out.
+    if (isLand(card.def)) {
+      if (sorceryOpen && (view.players[me]?.landsPlayedThisTurn ?? 0) < 1) return false;
+      continue;
+    }
+    if (!sorceryOpen && castTiming(card.def) !== 'instant') continue;
+    cheapestPlay = Math.min(cheapestPlay, convertedManaCost(card.def.cost ?? {}));
+  }
+  // The graveyard is only castable-from via flashback, and flashback keeps the
+  // card's own timing — a sorcery with flashback is sorcery-speed, so off-turn it
+  // cannot be played whatever its cost.
+  const graveyard = view.players[me]?.graveyard ?? [];
+  for (let i = 0; i < graveyard.length; i++) {
+    const card = graveyard[i] as CardInstance;
+    if (card.def.flashback === undefined) continue;
+    if (!sorceryOpen && castTiming(card.def) !== 'instant') continue;
+    cheapestPlay = Math.min(cheapestPlay, convertedManaCost(card.def.flashback));
+  }
+
+  let available = poolTotal(view.players[me]?.manaPool);
+  const battlefield = view.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const permanent = battlefield[i] as CardInstance;
+    if (permanent.controller !== me) continue;
+    // A non-mana activated ability is a play in its own right, at any speed.
+    if ((permanent.def.activated?.length ?? 0) > 0) return false;
+    if (permanent.tapped) continue;
+    if (manaModesOf(permanent.def).length > 0) available += 1;
+    if (available >= cheapestPlay) return false; // it could pay; ask properly
+  }
+  return available < cheapestPlay;
+}
+
 
 // --- top-level decision --------------------------------------------------------
 

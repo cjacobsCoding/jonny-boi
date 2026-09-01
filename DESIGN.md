@@ -740,6 +740,57 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.73 The fast pass — not building a menu nobody reads — ✅ done
+
+Measured first, and the measurement is the design. `bench/window-stats.mjs` over 60 games:
+
+> **592 decision windows per game. The pilot passes 81.7% of them.** `tapForMana` is **73% of every
+> action ever offered** (128,349 of 174,963), and only 27.4% of windows offer nothing but a pass.
+
+So four windows in five, the engine enumerated a full legal menu — dominated by mana taps that exist
+only to fund a spell nobody is casting — the pilot scored it, and it was thrown away.
+
+**`Pilot.willPassPriority` is a PROMISE, not a hint.** A pilot may answer, from the state alone,
+*"whatever that menu holds, I am passing"* — and the harness then applies the pass **without calling
+`generateLegalActions` at all**. That is the entire saving and the entire danger: nothing checks the
+answer afterwards, so a wrong `true` would make the pilot play worse in every recorded win rate,
+silently. The contract is therefore one-sided — `false` is always safe and means "ask me properly",
+and every line of the gate is a *refuse when unsure*.
+
+**What the gate can prove**, cheaply, without a menu:
+- a parked question, a non-empty stack or a combat declaration → never (each is a real decision);
+- a live card grant → never (granted flashback is not visible on the card);
+- otherwise: the cheapest thing playable **in this window** — respecting timing, cycling, flashback's
+  own speed, and whether a land drop is still available — against an **upper bound** on mana
+  (floating pool + untapped sources). ⚠️ The bound over-estimates deliberately: over-estimating can
+  only ever make the gate answer `false` and build the menu that would have been built anyway, while
+  under-estimating would skip a window the pilot could really have acted in.
+
+⚠️ **THE GUARD IS THE POINT** (`packages/sim/src/fast-pass.test.ts`): whole games are played with the
+seam on and off across three archetypes × 12 seeds × both seats, and the **decision traces must be
+identical action for action** — not just the same winner, which two different games can share. A
+second test checks the promise window by window against the pilot's actual choice, and requires the
+gate to fire at least a hundred times, because "it never lied" is a claim about nothing if it never
+speaks.
+
+📊 **Honest numbers.** The gate fires on **49.8%** of windows (a first version managed 1.6% — it
+refused whenever the graveyard was non-empty, which is 85% of the time, so the useful condition was
+"is there an instant-speed flashback card there", not "is it empty").
+
+| | before | after |
+|---|---|---|
+| single-thread (`bench/pilot-bench.mjs`, 3,000 games) | 174/sec | **195–204/sec** |
+| auto path, 3,000-game match | 469/sec | **485/sec** |
+| auto path, 6,000-game match | 598/sec | **622/sec** |
+| auto path, 20,000-game match | 764/sec | **795/sec** |
+
+Cumulative with §3.72, on the run size the tool is actually used at: **327 → 485 games/sec, +48%.**
+
+⚠️ **STILL NOT 10×, and the profile says why.** Pilot `decide` 33.9%, `applyActionToDraft` 32.7%,
+`generateLegalActions` 19.9% — roughly 87% of the run in three blocks. This removes half of one of
+them. An order of magnitude needs the other two restructured as well: an apply cheaper than a draft
+clone, and legal actions generated incrementally rather than rebuilt per decision.
+
 ### 3.72 The sim was hiring workers that made it slower — ✅ done
 
 Measured before anything was touched, and the measurement is the whole story. On the reference box
