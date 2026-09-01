@@ -258,6 +258,13 @@ const NON_EVENT_INSTANCE_ID_FIELDS = [
   'blocker',
   /** `CombatState.removedFromCombat` — ids taken out of combat (CR 506.4). */
   'removedFromCombat',
+  /**
+   * `CostAssistPlan.consumed` — the creatures a convoked spell will tap, the
+   * artifacts an improvised one will tap, the graveyard cards a delved one will
+   * exile (§3.70). A PLAN, never game state: it is rebuilt from the live board
+   * on the pay path and never stored, so nothing here can outlive the cast.
+   */
+  'consumed',
   /** `ChoiceCandidate.ref` — the object an option refers to. */
   'ref',
   /** `SelectCardsAnswer.instanceIds` — the cards an answer picked. */
