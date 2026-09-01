@@ -1041,6 +1041,23 @@ function bestSpellGoal(
  * plans only until it finds one payable goal (cheapest possible), while the search
  * policy ({@link policyCandidates}) plans every goal so it can search them all.
  */
+/**
+ * Whether any card in `hand` could be cast at INSTANT speed — the cheap gate
+ * {@link scoredSpellGoals} asks before doing any per-card work outside a main
+ * phase. Reads the printed timing only: it is a filter, and the real castability
+ * test still runs per candidate below.
+ */
+function handHasInstantSpeedCard(hand: readonly CardInstance[]): boolean {
+  for (let i = 0; i < hand.length; i++) {
+    const def = (hand[i] as CardInstance).def;
+    if (castTiming(def) === 'instant') return true;
+    // A two-halved card can print a different timing on its other half, so it
+    // is never ruled out from the front face alone.
+    if (def.frontFace !== undefined || def.backFace !== undefined) return true;
+  }
+  return false;
+}
+
 function scoredSpellGoals(
   view: PilotView,
   weights: HeuristicWeights,
@@ -1066,6 +1083,12 @@ function scoredSpellGoals(
   let oppCreatures: readonly CardInstance[] | undefined;
 
   const scored: SpellGoal[] = [];
+  // NOTHING is castable at sorcery speed outside our own main phase, and a hand
+  // with no instant-speed card then has no goal at all — so the whole scoring
+  // pass (and the per-card half-splitting it allocates) is skipped. This runs on
+  // EVERY priority window of every game, and most windows are exactly this one:
+  // the profiler put spell scoring at 19% of a full run before this early-out.
+  if (!sorcerySpeedOpen && !handHasInstantSpeedCard(hand)) return scored;
   for (const handCard of hand) {
     // A two-halved card is scored HALF BY HALF: a pilot that only ever looked at
     // `card.def` would score a split card's combined object (which has no script
