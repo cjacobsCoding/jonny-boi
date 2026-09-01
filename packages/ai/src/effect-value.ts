@@ -58,7 +58,7 @@ import {
 import type { CardFilter } from '@jonny-boi/core';
 import { cardValue, findInstance, type CardValueContext } from './card-value.js';
 import type { ContinuousIndex } from './board-stats.js';
-import { boardIndex, keywordsOf, power as effPower, statTotal, toughnessLeft } from './board-stats.js';
+import { keywordsOf, power as effPower, statTotal, toughnessLeft } from './board-stats.js';
 import type { HeuristicWeights } from './weights.js';
 
 /**
@@ -661,7 +661,10 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     const combat = ctx.state.combat;
     if (!combat || !combat.attackersDeclared || combat.attackers.length === 0) return 0;
     if (ctx.state.activePlayer === ctx.player) return 0; // we are the attacker
-    const index = boardIndex(ctx.state);
+    // The context ALREADY carries the board index, precomputed once per
+    // decision — rebuilding it here walked the battlefield again for every
+    // fog the pilot priced.
+    const index = ctx.index;
     let incoming = 0;
     for (const id of combat.attackers) {
       const attacker = ctx.state.battlefield.find((c) => c.instanceId === id);
