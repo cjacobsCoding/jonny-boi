@@ -2905,7 +2905,7 @@ function SPELL_FILTER_PROBE(def: CardDefinition): CardInstance {
  * A permanent someone else controls grants nothing: the printed line says
  * "you", and the battlefield walk filters by controller.
  */
-function maxLandPlaysFor(state: GameState, player: PlayerId, config: RulesConfig): number {
+export function maxLandPlaysFor(state: GameState, player: PlayerId, config: RulesConfig): number {
   let max = config.maxLandsPerTurn;
   const battlefield = state.battlefield;
   for (let i = 0; i < battlefield.length; i++) {

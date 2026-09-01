@@ -30,6 +30,38 @@ const registry = buildRegistry();
 const pilot = createDefaultAiRegistry().getPilot(DEFAULT_PILOT_ID)!;
 const index = indexPoolForSoak(pool.cards);
 
+/**
+ * An anchored deck with one NAMED card guaranteed in it.
+ *
+ * The anchored generator picks its cards from the pool by seed, which is right
+ * for a soak sweep and wrong for a fixture that exists to reproduce ONE board.
+ * The named card displaces a spell line rather than being added to it, so the
+ * deck stays exactly the size the generator built.
+ */
+function deckWith(
+  poolIndex: typeof index,
+  mechanic: 'spell-copy' | 'token-copy',
+  seed: number,
+  cardName: string,
+) {
+  const built = buildAnchoredDeck(poolIndex, mechanic, seed);
+  if (!built) throw new Error(`anchored deck for ${mechanic} did not build`);
+  const wanted = pool.cards.find((card) => card.name === cardName);
+  if (!wanted) throw new Error(`pool is missing '${cardName}'`);
+  if (built.cards.some((entry) => entry.cardId === wanted.id)) return built;
+  // Displace the last NON-LAND line, so the mana base the generator computed is
+  // untouched and the deck still casts what is left in it.
+  const spellAt = [...built.cards]
+    .map((entry, at) => ({ entry, at }))
+    .reverse()
+    .find(({ entry }) => !(pool.get(entry.cardId)?.types.includes('land') ?? false));
+  if (!spellAt) throw new Error(`${mechanic} deck has no spell line to displace`);
+  const cards = built.cards.map((entry, at) =>
+    at === spellAt.at ? { cardId: wanted.id, count: entry.count } : entry,
+  );
+  return { ...built, cards };
+}
+
 function anchoredSeats(mechanicA: 'spell-copy' | 'lifegain', seedA: number, seedB: number) {
   const a = buildAnchoredDeck(index, mechanicA, seedA);
   const b = buildAnchoredDeck(index, 'token-copy', seedB);
@@ -68,16 +100,20 @@ describe('a turn that never ends is a draw, not a timeout', () => {
     // Dualcaster Mage and Rite of Replication. Asserting only that it ENDS is
     // deliberate — whether the pilot wins it or the rules draw it is a pilot
     // question and will change again; that it terminates is the invariant.
-    const a = buildAnchoredDeck(index, 'spell-copy', 951626966);
-    const b = buildAnchoredDeck(index, 'token-copy', 1665702627);
-    if (!a || !b) throw new Error('anchored decks did not build');
+    // ⚠️ THE TWO CARDS ARE PUT IN BY NAME, not hoped for from a seed.
+    //
+    // This used to build two anchored decks at recorded seeds and then assert
+    // that they happened to deal Dualcaster Mage and Rite of Replication. That
+    // held while the pool was 573 hand-picked cards and stopped holding the
+    // moment it became the whole printed pool (§3.71): the same seed now draws
+    // from 5,065 cards and deals a different board, so the regression test for
+    // an infinite copy loop quietly stopped testing the copy loop. A fixture
+    // that depends on the SIZE of the pool is not a fixture.
+    const a = deckWith(index, 'spell-copy', 951626966, 'Dualcaster Mage');
+    const b = deckWith(index, 'token-copy', 1665702627, 'Rite of Replication');
     const names = [...a.cards, ...b.cards].map((e) => pool.get(e.cardId)?.name ?? e.cardId);
-    expect(names, 'this seed no longer deals Dualcaster Mage — different game').toContain(
-      'Dualcaster Mage',
-    );
-    expect(names, 'this seed no longer deals Rite of Replication — different game').toContain(
-      'Rite of Replication',
-    );
+    expect(names).toContain('Dualcaster Mage');
+    expect(names).toContain('Rite of Replication');
     for (const onPlay of ['A', 'B'] as const) {
       const seats = makeSeats(loadDeck(a, pool), loadDeck(b, pool), { pilotA: pilot, pilotB: pilot }, registry);
       const r = runMatch(seats, 951626966, { sim: soakSimConfig(), startingPlayer: onPlay });

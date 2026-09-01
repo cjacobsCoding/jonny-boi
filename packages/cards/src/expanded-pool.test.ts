@@ -31,18 +31,16 @@ import {
   createGame,
   defaultAnswerFor,
   DEFAULT_RULES,
-  defaultAnswerFor,
   effectivePower,
   effectiveToughness,
   generateLegalActions,
   indexContinuous,
-  legalTargetsFor,
   manaModesOf,
   NO_MOD,
-  targetRestrictionOf,
 } from '@jonny-boi/core';
 import { buildRegistry } from './pool.js';
 import { CARD_POOL } from '../data/pool.js';
+import CARD_INDEX from '../../data-tools/data/card-index.json' with { type: 'json' };
 import { EXPANDED_CARD_POOL } from '../data/expanded-pool.js';
 
 type Registry = ReturnType<typeof buildRegistry>;
@@ -629,41 +627,51 @@ describe('every compiled card resolves in a real game', () => {
       // `applyCastSpell` use — so this test cannot drift from what the engine
       // considers legal. Only the unrestricted leftovers fall back to reading
       // primitive ids.
-      const refs = [...(card.effects ?? [])];
-      const restriction = targetRestrictionOf(card);
-      const wantsPlayer = refs.some(
-        (ref) => ref.primitive === 'dealDamage' || ref.primitive === 'loseLife',
+      // ⚠️ THE CAST IS TAKEN FROM THE ENGINE'S OWN OFFER, never hand-built.
+      //
+      // This used to assemble a `castSpell` from the card's primitive ids and a
+      // target picked here, and at 573 hand-chosen cards it held. Across the
+      // whole printed pool (§3.71) it produced four kinds of rejection that were
+      // all the DRIVER's fault and none the card's: a sorcery announced outside a
+      // main phase, a modal spell with no legally choosable mode (Artful
+      // Takedown, Azula Always Lies), and a seat acting without priority.
+      //
+      // Asking `generateLegalActions` is both simpler and a STRICTER guard: the
+      // menu and the apply path must agree, so a rejection now means the engine
+      // offered something it then refused — a real offer/apply split, which is
+      // the bug worth failing on.
+      const offers = generateLegalActions(s, DEFAULT_RULES).filter(
+        (action) => action.kind === 'castSpell' && action.instanceId === id,
       );
-      const wantsPermanent = refs.some((ref) =>
-        ['destroyTarget', 'exileTarget', 'tapTarget', 'pumpUntilEndOfTurn', 'grantKeywordUntilEndOfTurn'].includes(
-          ref.primitive,
-        ),
-      );
-      const legal = restriction === undefined ? [] : legalTargetsFor(s, restriction);
-      // A restricted spell with no legal target cannot be cast at all (a
-      // counterspell with an empty stack) — skip it rather than assert a
-      // rejection the engine is right to make.
-      if (restriction !== undefined && legal.length === 0) continue;
-      // The punching bag when it is legal, and otherwise whatever the ENGINE
-      // says is legal — "destroy target artifact" has to be pointed at an
-      // artifact, and falling back to the creature dummy would assert a
-      // rejection the engine is right to make.
-      const targets: Array<InstanceId | PlayerId> =
-        restriction !== undefined
-          ? [legal.find((t) => t === dummyId || t === 'B') ?? legal[0]!]
-          : wantsPermanent
-            ? [dummyId]
-            : wantsPlayer
-              ? ['B']
-              : [];
-      drive({ kind: 'castSpell', player: 'A', instanceId: id, targets });
+      if (offers.length === 0) {
+        // Nothing legal to do with it right now. Take it back out of hand so the
+        // next iteration's offer scan stays cheap — 5,000 uncastable cards left
+        // in hand would make this loop quadratic.
+        s.players.A.hand = s.players.A.hand.filter((c) => c.instanceId !== id);
+        continue;
+      }
+      // Prefer the offer aimed at the punching bag or at the opponent's face, so
+      // the spell does something observable; otherwise take the first.
+      const chosen =
+        offers.find((action) =>
+          ((action as { targets?: Array<InstanceId | PlayerId> }).targets ?? []).some(
+            (target) => target === dummyId || target === 'B',
+          ),
+        ) ?? offers[0]!;
+      drive(chosen);
       settle();
       cast += 1;
     }
 
     expect(cast).toBeGreaterThan(0);
     expect(events.map((e) => e.type)).not.toContain('effectUnsupported');
-    expect(events.some((e) => e.type === 'actionRejected')).toBe(false);
+    // The REASONS, not a boolean. `toBe(false)` reported only "expected true to
+    // be false" — useless on a run that drives 5,065 cards, where the whole
+    // question is WHICH card the engine refused and why.
+    const rejections = events
+      .filter((e) => e.type === 'actionRejected')
+      .map((e) => (e as unknown as { reason: string }).reason);
+    expect([...new Set(rejections)]).toEqual([]);
   });
 
   /**
@@ -761,32 +769,116 @@ describe('every compiled card resolves in a real game', () => {
 
   it('every compiled mana source is worth exactly one activation of its best mode', () => {
     // A mana source that "taps for five" is the classic silent pool bug (it used
-    // to be how an any-colour source had to be authored). Assert the shape data
-    // directly: no compiled source may add more than the printed maximum.
-    const PRINTED_MAX_PER_TAP = 2; // Sol Ring / Palladium Myr style {C}{C}
-    // The exceptions are BY NAME rather than a raised ceiling, because raising
-    // the number to fit the biggest rock would retire the guard: "taps for
-    // three" has to stay a failure for every card that does not print it.
-    const PRINTS_THREE = new Map<string, number>([
-      ['Gilded Lotus', 3], // "{T}: Add three mana of any one color."
-      ['Thran Dynamo', 3], // "{T}: Add {C}{C}{C}."
-    ]);
+    // to be how an any-colour source had to be authored).
+    //
+    // ⚠️ THE CEILING IS READ OFF THE CARD, not held in a table here. This used to
+    // be "at most 2, except Gilded Lotus and Thran Dynamo by name" — right for a
+    // 573-card pool of hand-picked rocks, and unworkable for the whole printed
+    // pool (§3.71), where the allowlist would grow without bound and every
+    // addition would be a judgement nobody re-checked. Raising the number
+    // instead would retire the guard entirely.
+    //
+    // So each card is measured against ITS OWN printed line, read here by a
+    // deliberately different and simpler parse than the rule table's — count the
+    // symbols in each "Add …" clause, or the number word in "Add three mana of
+    // any one color". A compiled mode that beats what the card prints is the bug
+    // this test exists to catch, and now it is caught for 5,065 cards instead
+    // of for two named exceptions.
+    const failures: string[] = [];
     for (const card of EXPANDED_CARD_POOL) {
       const modes = manaModesOf(card);
       if (modes.length === 0) continue;
-      const cap = PRINTS_THREE.get(card.name) ?? PRINTED_MAX_PER_TAP;
+      const printed = printedManaCeiling(oracleTextOf(card.name));
       for (const mode of modes) {
-        const total = Object.values(mode).reduce((sum, n) => sum + (n ?? 0), 0);
-        expect(total, `${card.name} mode adds ${total} mana`).toBeLessThanOrEqual(cap);
-        expect(total, `${card.name} has an empty mana mode`).toBeGreaterThan(0);
+        const total = Object.values(mode).reduce((sum: number, n) => sum + (n ?? 0), 0);
+        if (total <= 0) failures.push(`${card.name} has an empty mana mode`);
+        else if (printed === undefined) failures.push(`${card.name}: no printed "Add …" line to check against`);
+        else if (total > printed) {
+          failures.push(`${card.name} mode adds ${total} mana; the card prints at most ${printed}`);
+        }
       }
     }
-    // And the allowlist is not allowed to rot: a name that leaves the pool has
-    // to leave the list with it, or the next big rock inherits its exemption.
-    const poolNames = new Set(EXPANDED_CARD_POOL.map((card) => card.name));
-    expect([...PRINTS_THREE.keys()].filter((name) => !poolNames.has(name))).toEqual([]);
+    expect(failures).toEqual([]);
   });
 });
+
+/**
+ * The printed Oracle text for a pool card, from the committed Scryfall index.
+ *
+ * ⚠️ BOTH FACES, joined. A modal DFC keeps its mana ability on the BACK — every
+ * Pathway land prints "{T}: Add {G}" on a face the card-level `oracleText` does
+ * not include — so reading only the front says the card has no printed "Add"
+ * line at all, and a guard that reads the card face has to read the whole card.
+ */
+const ORACLE_BY_NAME = new Map<string, string>();
+for (const card of (
+  CARD_INDEX as {
+    cards: { name: string; oracleText?: string; faces?: { name?: string; oracleText?: string }[] }[];
+  }
+).cards) {
+  const whole = [card.oracleText, ...(card.faces ?? []).map((face) => face.oracleText)]
+    .filter((text): text is string => typeof text === 'string' && text.length > 0)
+    .join('\n');
+  if (whole.length === 0) continue;
+  // ⚠️ REACHABLE BY EVERY NAME THE CARD GOES BY. The index files a two-faced card
+  // under its COMBINED name ("Barkchannel Pathway // Tidechannel Pathway") while
+  // the pool stores the FRONT half — the same front-face/combined mismatch that
+  // let Delver of Secrets into the pool twice. A lookup that knows only one of
+  // the two reports "no printed line" for eleven perfectly good lands.
+  ORACLE_BY_NAME.set(card.name, whole);
+  for (const face of card.faces ?? []) {
+    if (face.name !== undefined && !ORACLE_BY_NAME.has(face.name)) ORACLE_BY_NAME.set(face.name, whole);
+  }
+}
+const oracleTextOf = (name: string): string | undefined => {
+  const text = ORACLE_BY_NAME.get(name);
+  return text === undefined || text.length === 0 ? undefined : text;
+};
+
+/** Number words a printed "Add N mana of …" line can use. */
+const PRINTED_NUMBER_WORDS: Readonly<Record<string, number>> = Object.freeze({
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+});
+
+/**
+ * The most mana any single printed "Add …" clause on this card produces —
+ * a SECOND, INDEPENDENT reading of the card face, used to bound what the
+ * compiler was allowed to build.
+ *
+ * Deliberately simple and deliberately not the rule table's parse: count the
+ * `{…}` symbols in each alternative of each Add clause, or read the number word
+ * in "Add three mana of any one color". Two readings that share code cannot
+ * disagree, and a guard that cannot disagree is not a guard.
+ *
+ * `undefined` when the card prints no Add clause at all, which the caller
+ * reports rather than passing — a compiled mana source whose text never says
+ * "Add" is exactly the kind of thing worth looking at by hand.
+ */
+function printedManaCeiling(text: string | undefined): number | undefined {
+  if (text === undefined) return undefined;
+  let ceiling: number | undefined;
+  // Each "Add" runs to the end of its sentence; alternatives are separated by
+  // "or" / commas, and only ONE alternative is produced per activation.
+  for (const match of text.matchAll(/\bAdd ([^.\n]+)/g)) {
+    const clause = match[1] ?? '';
+    for (const alternative of clause.split(/,| or /)) {
+      const symbols = (alternative.match(/\{[^}]+\}/g) ?? []).length;
+      const word = /\b([a-z]+) mana\b/.exec(alternative)?.[1] ?? '';
+      const counted = symbols > 0 ? symbols : (PRINTED_NUMBER_WORDS[word] ?? 0);
+      if (counted > 0 && (ceiling === undefined || counted > ceiling)) ceiling = counted;
+    }
+  }
+  return ceiling;
+}
 
 /**
  * Whether a cast aims at something the caster controls (their own creature, or

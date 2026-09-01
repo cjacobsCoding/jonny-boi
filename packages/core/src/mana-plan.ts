@@ -58,6 +58,40 @@ export interface ManaTapPlan {
   readonly mode: number;
   /** The mana this activation adds — handy for logs and UI hints. */
   readonly production: ManaProduction;
+  /**
+   * The permanent that pays this tap's ADDITIONAL cost, when the source prints
+   * one — Springleaf Drum taps a creature, Phyrexian Tower sacrifices one.
+   *
+   * ⚠️ EVERY CALLER MUST PASS IT ON. The engine offers one action per legal
+   * payer and refuses a tap that names none, so a caller that rebuilds the
+   * action out of `instanceId` and `mode` alone drops the payer and the engine
+   * rejects an action it had itself offered. That is how a soak run over the
+   * whole printed pool found Springleaf Drum and Phyrexian Tower being refused
+   * mid-game (§3.71) — the sources existed before, but no deck the old pool
+   * built had happened to play one.
+   */
+  readonly costInstanceId?: InstanceId;
+}
+
+/**
+ * The `tapForMana` action for one step of a funding plan.
+ *
+ * ONE builder, because the action has a part callers keep forgetting. A plan
+ * entry is `{instanceId, mode}` plus, for a source with an additional cost, the
+ * PAYER — and five separate call sites each rebuilt the action from the first
+ * two fields, so Springleaf Drum and Phyrexian Tower were tapped without naming
+ * the creature that pays for them and the engine refused an action it had
+ * offered. Building the action here means a component added to the plan reaches
+ * every caller in the same edit.
+ */
+export function tapActionFor(player: PlayerId, tap: ManaTapPlan): GameAction {
+  return {
+    kind: 'tapForMana',
+    player,
+    instanceId: tap.instanceId,
+    mode: tap.mode,
+    ...(tap.costInstanceId === undefined ? {} : { costInstanceId: tap.costInstanceId }),
+  };
 }
 
 /**
@@ -183,6 +217,12 @@ const scratch = {
   tapSourceDef: [] as (CardDefinition | undefined)[],
   /** Per offered tap, parallel to `production`'s rows. */
   tapSource: [] as InstanceId[],
+  /**
+   * The additional-cost payer the OFFERED action named, carried straight
+   * through — see {@link ManaTapPlan.costInstanceId} for why dropping it turns
+   * a legal plan into a rejected action.
+   */
+  tapCostPayer: [] as (InstanceId | undefined)[],
   tapMode: [] as number[],
   tapProduction: [] as ManaProduction[],
   tapGroup: [] as number[],
@@ -384,6 +424,7 @@ export function planManaPayment(
     s.tapRestriction[tapCount] = spendRestriction;
     s.tapSourceDef[tapCount] = lastDef;
     s.tapSource[tapCount] = action.instanceId;
+    s.tapCostPayer[tapCount] = action.costInstanceId;
     s.tapMode[tapCount] = mode;
     s.tapProduction[tapCount] = production;
     let group = -1;
@@ -601,10 +642,12 @@ export function planManaPayment(
       }
     }
     if (anyTapPain && lifeLeft !== undefined) lifeLeft -= s.tapPain[bestTap] as number;
+    const costPayer = s.tapCostPayer[bestTap];
     plan.push({
       instanceId: s.tapSource[bestTap] as InstanceId,
       mode: s.tapMode[bestTap] as number,
       production: s.tapProduction[bestTap] as ManaProduction,
+      ...(costPayer === undefined ? {} : { costInstanceId: costPayer }),
     });
   }
   return plan;

@@ -33,6 +33,28 @@ const WUBRG = ['W', 'U', 'B', 'R', 'G'] as const;
 /** The card type that may carry power/toughness. */
 const CREATURE_TYPE = 'Creature';
 
+/**
+ * Keywords Scryfall lists by their FAMILY name, which is never the word printed
+ * on the card, together with the shape that word actually takes.
+ *
+ * "Landcycling" is a family: Chartooth Cougar prints **Mountaincycling {2}**,
+ * Elvish Aberration prints **Forestcycling {2}**, and no card anywhere prints
+ * the word "landcycling". Same for "Typecycling" (Slice and Dice prints
+ * **Wizardcycling**) and "Landwalk" (Bull Hippo prints **Islandwalk**).
+ *
+ * ⚠️ THE TABLE IS CLOSED, and every row is a family whose members were checked.
+ * A keyword missing from the printed text is normally exactly the data error
+ * this invariant exists to catch — an index row that came from somewhere other
+ * than the card — so widening it to "close enough" would retire the check. Each
+ * pattern is anchored to the family's own suffix and matches nothing else.
+ */
+const FAMILY_KEYWORD_PRINTS: ReadonlyMap<string, RegExp> = new Map([
+  ['Landcycling', /\b[a-z]+cycling\b/],
+  ['Basic landcycling', /\b[a-z]+cycling\b/],
+  ['Typecycling', /\b[a-z]+cycling\b/],
+  ['Landwalk', /\b[a-z]+walk\b/],
+]);
+
 /** One broken invariant, named so a failure message is actionable on its own. */
 export interface IndexViolation {
   /** Card name (or `'<index>'` for whole-file invariants). */
@@ -148,7 +170,7 @@ export function checkCard(card: NormalizedCard): IndexViolation[] {
   // not appear in any face's text is data that came from somewhere else.
   const text = allOracleText(card);
   for (const keyword of card.keywords) {
-    if (!text.includes(keyword.toLowerCase())) {
+    if (!text.includes(keyword.toLowerCase()) && !FAMILY_KEYWORD_PRINTS.get(keyword)?.test(text)) {
       fail('every listed keyword appears in the printed text', `"${keyword}" is not in the oracle text`);
     }
   }

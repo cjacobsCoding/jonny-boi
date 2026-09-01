@@ -32,6 +32,7 @@ import {
   type GameAction,
   type GameState,
   type PlayerId,
+  maxLandPlaysFor,
 } from '@jonny-boi/core';
 import { SAMPLE_DECKS } from '../data/decks/index.js';
 import { loadDeck } from './deck.js';
@@ -147,7 +148,10 @@ function checkInvariants(state: GameState): { invariant: string; detail: string 
   // --- "I played four lands this turn" --------------------------------------
   for (const pid of PLAYER_IDS) {
     const played = state.players[pid].landsPlayedThisTurn;
-    if (played > DEFAULT_RULES.maxLandsPerTurn) {
+    // The cap is the BASE plus every "play an additional land" permanent the
+    // seat controls — the engine's own answer, so this audit cannot disagree
+    // with the rule it is auditing.
+    if (played > maxLandPlaysFor(state, pid, DEFAULT_RULES)) {
       record('land drops are capped', `${pid} played ${played} lands this turn`);
     }
   }

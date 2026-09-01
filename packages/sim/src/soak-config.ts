@@ -286,6 +286,26 @@ export interface SoakMechanic {
    * token that another card must first make".
    */
   readonly extraAnchorAttempts?: number;
+  /**
+   * Put this mechanic's {@link enabledBy} cards in the OPPONENT'S deck instead
+   * of its own.
+   *
+   * Most witnesses need only the card that prints them, and an enabler that
+   * belongs beside it. A few are INTERACTIONS between the two seats, and no
+   * number of seeds can produce the witness unless the other player brings the
+   * other half: "this spell can't be countered" is observable only when somebody
+   * actually tries to counter it, and a pilot does not counter its own spell —
+   * so the counterspells have to sit across the table, not next to the anchor.
+   *
+   * ⚠️ THIS EXISTS BECAUSE THE WITNESS USED TO ARRIVE BY LUCK. The opponent deck
+   * ROTATES through the other mechanics — deliberately, so walkers meet
+   * Equipment meets protection in one game — and `uncounterable` happened to be
+   * paired with a counterspell-carrying deck. Growing the pool (§3.71) moved the
+   * rotation, and a mechanic that had been green went inert with nothing about
+   * it having changed. A requirement that depends on the LENGTH of a list is not
+   * a requirement; declaring the pairing makes it one.
+   */
+  readonly enablerBelongsToOpponent?: boolean;
 }
 
 /**
@@ -411,6 +431,11 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     label: "can't be countered — a counter effect resolved and did nothing",
     witnessKind: 'event',
     printedBy: (_c, t) => /"cantBeCountered":\s*true|"spellsCantBeCountered":/.test(t),
+    // The other half of the interaction: somebody has to TRY to counter it. A
+    // pilot never counters its own spell, so the counterspells go across the
+    // table rather than into the anchored deck.
+    enabledBy: (_c, t) => t.includes('"counterSpell"'),
+    enablerBelongsToOpponent: true,
   },
   { id: 'x-cost', label: '{X} costs — an X announced and paid', witnessKind: 'event', printedBy: hasKey('xCost') },
   { id: 'kicker', label: 'kicker — the optional cost offered at cast', witnessKind: 'event', printedBy: hasKey('kicker') },

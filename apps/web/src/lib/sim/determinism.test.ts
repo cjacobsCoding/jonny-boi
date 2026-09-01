@@ -498,7 +498,11 @@ describe('a parallel suggestions search', () => {
     if (third.kind !== 'suggest') throw new Error('wrong payload kind');
     expect(third.result.notes.historyRejected).toBe('deck-changed');
     expect(third.result.notes.runIndex).toBe(0);
-  });
+    // An explicit budget, because this test runs THREE full suggestion searches
+    // and the pool it searches went from 573 cards to 5,065 (§3.71). It asserts
+    // a RANKING and a rejection reason, never a duration — vitest's default 5s
+    // was simply the wrong ceiling for the fixture, and the run measures ~5.2s.
+  }, 60000);
 });
 
 /** The key of the first candidate the search will scout (for failure injection). */

@@ -3293,23 +3293,6 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
-    id: 'each-opponent-loses-life-you-gain',
-    description:
-      '"Each opponent loses N life and you gain M life" (Bastion of Remembrance\'s death trigger)',
-    pattern: new RegExp(
-      `^each opponent loses ${COUNT_TOKEN} life and you gain ${COUNT_TOKEN} life$`,
-    ),
-    build(match) {
-      const lost = parseCount(match[1]);
-      const gained = parseCount(match[2]);
-      if (lost === null || gained === null) return null;
-      return effects(
-        { primitive: 'loseLife', params: { amount: lost, whichPlayer: 'opponent' } },
-        { primitive: 'gainLife', params: { amount: gained } },
-      );
-    },
-  },
-  {
     id: 'draw-then-discard',
     description: '"Draw N cards. If you do, discard a card" (Mask of Memory)',
     // "If you do" is the printed acknowledgement that the whole clause hangs off
@@ -3348,22 +3331,6 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       return amount === null
         ? null
         : effects({ primitive: 'loseLife', params: { amount, whichPlayer: 'opponent' } });
-    },
-  },
-  {
-    id: 'gain-life-and-draw',
-    description: '"You gain N life and draw a card" (Moldervine Reclamation\'s death trigger)',
-    // The compound the sentence splitter cannot split: one printed sentence
-    // joining two clauses the table already implements separately.
-    pattern: new RegExp(`^you gain ${COUNT_TOKEN} life and draw ${COUNT_TOKEN} cards?$`),
-    build(match) {
-      const life = parseCount(match[1]);
-      const cards = parseCount(match[2]);
-      if (life === null || cards === null) return null;
-      return effects(
-        { primitive: 'gainLife', params: { amount: life } },
-        { primitive: 'drawCards', params: { count: cards } },
-      );
     },
   },
   {
