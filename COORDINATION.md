@@ -199,6 +199,14 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-31 integrator: `feat/first-player` ✅ MERGED — DESIGN §3.63, the "choose/random who goes
+  first" half of report 210805 (the mulligan half does not reproduce — it is present in solo, local
+  and online). apps/web only: NEW `lib/play/first-player.ts` + test, `components/play/SetupScreen.tsx`
+  (the option + resolving at the call), `views/PlayView.tsx` (config carries the preference; rematch
+  re-flips). ⚠️ The rule that matters if you touch this: the flip resolves at SETUP to a concrete
+  seat. Nothing downstream may ever see 'random' — the saved record would replay a different game.
+  Online is untouched and still has no first-player control at all; that needs protocol + server.
+
 - 2026-08-31 integrator: `feat/board-fits` ✅ MERGED + DEPLOYED — DESIGN §3.62, the "board should fit without scrolling"
   report. apps/web only: NEW `components/play/board-fit.css` (the whole idea in one file), one CSS
   import + the fanned-card-back token in `components/play/PlayCard.tsx`, NEW

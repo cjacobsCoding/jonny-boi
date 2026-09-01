@@ -39,6 +39,10 @@ import { handoffIsToComputer, mulliganPresentationFor } from '../lib/play/solo-s
 import { PlayBoard } from '../components/play/PlayBoard.js';
 import { EndScreen } from '../components/play/EndScreen.js';
 import { OnlinePlay } from '../components/online/OnlinePlay.js';
+import {
+  resolveStartingPlayer,
+  type StarterPreference,
+} from '../lib/play/first-player.js';
 import './play-resume.css';
 
 /** The high-level phase the hotseat is in. */
@@ -54,7 +58,13 @@ interface GameConfig {
   readonly names: Readonly<Record<PlayerId, string>>;
   readonly choiceA: DeckChoice;
   readonly choiceB: DeckChoice;
+  /** THIS game's first player — always concrete, so the saved record is exact. */
   readonly startingPlayer: PlayerId;
+  /**
+   * What was PICKED at setup, which is not the same thing: 'random' means the
+   * next rematch flips again rather than repeating this game's toss (§3.63).
+   */
+  readonly starterPreference: StarterPreference;
 }
 
 /**
@@ -344,6 +354,13 @@ function LocalPlay({
           choiceA: resumed.choiceA,
           choiceB: resumed.choiceB,
           startingPlayer: resume.setup.startingPlayer,
+          // A resumed game inherits its starter as an EXPLICIT seat: the saved
+          // record stores who actually started (it must, for the replay to be
+          // exact) and not what was picked to get there. The cost is small and
+          // worth stating — rematch after a resume keeps that seat instead of
+          // flipping again. Persisting the preference too would mean versioning
+          // §3.58's record for a nicety, which is the wrong trade.
+          starterPreference: resume.setup.startingPlayer,
         }
       : null,
   );
@@ -484,12 +501,21 @@ function LocalPlay({
   }, [ai, saver]);
 
   const onStart = useCallback(
-    (args: { nameA: string; nameB: string; choiceA: DeckChoice; choiceB: DeckChoice; seed: number; startingPlayer: PlayerId }): void => {
+    (args: {
+      nameA: string;
+      nameB: string;
+      choiceA: DeckChoice;
+      choiceB: DeckChoice;
+      seed: number;
+      startingPlayer: PlayerId;
+      starterPreference: StarterPreference;
+    }): void => {
       const cfg: GameConfig = {
         names: { A: args.nameA, B: args.nameB },
         choiceA: args.choiceA,
         choiceB: args.choiceB,
         startingPlayer: args.startingPlayer,
+        starterPreference: args.starterPreference,
       };
       setConfig(cfg);
       setSeed(args.seed);
@@ -501,8 +527,13 @@ function LocalPlay({
   const rematch = useCallback((): void => {
     if (!config) return;
     const nextSeed = (seed + 1) >>> 0;
+    // A rematch is a new game, so a player who asked to flip for the first turn
+    // gets a new flip — repeating the old toss would make "Random" mean "random
+    // once, then fixed forever". An explicit seat passes through unchanged.
+    const next: GameConfig = { ...config, startingPlayer: resolveStartingPlayer(config.starterPreference) };
+    setConfig(next);
     setSeed(nextSeed);
-    beginGame(config, nextSeed);
+    beginGame(next, nextSeed);
   }, [config, seed, beginGame]);
 
   const newGame = useCallback((): void => {
