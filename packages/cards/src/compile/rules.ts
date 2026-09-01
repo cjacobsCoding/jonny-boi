@@ -3192,7 +3192,11 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
      * report the next one as an unknown template.
      */
     pattern:
-      /^search your library for a basic land card or an? ([a-z]+) card, reveal (?:it|that card), put (?:it|that card) into your hand, then shuffle$/,
+      // ⚠️ The article before the SUBTYPE is optional, because Oracle does not
+      // print one: Gatecreeper Vine reads "a basic land card **or Gate card**".
+      // Requiring "or a Gate card" made this rule match the wording nothing is
+      // printed with — the card reported for as long as the rule existed.
+      /^search your library for a basic land card or (?:an? )?([a-z]+) card, reveal (?:it|that card), put (?:it|that card) into your hand, then shuffle$/,
     build(match) {
       const subtype = match[1];
       if (subtype === undefined || subtype.length === 0) return null;
