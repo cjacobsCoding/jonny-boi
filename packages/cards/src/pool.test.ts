@@ -22,18 +22,25 @@ import { EXPANDED_CARD_POOL } from '../data/expanded-pool.js';
 const SEED = 1234;
 /** Hand-authored cards (`CURATED_CARD_POOL`) — the reviewed-against-engine set. */
 const EXPECTED_CURATED_SIZE = 32;
-/** Cards the Oracle compiler built faithfully (`EXPANDED_CARD_POOL`). */
-const EXPECTED_COMPILED_SIZE = 573; // +§3.56: the data refresh alongside the search-OR fix — 18 cards that now compile under current templates
-const EXPECTED_POOL_SIZE = EXPECTED_CURATED_SIZE + EXPECTED_COMPILED_SIZE;
+/**
+ * Cards the Oracle compiler built faithfully (`EXPANDED_CARD_POOL`).
+ *
+ * A FLOOR rather than an exact count since the pool became the whole printed
+ * card pool (§3.71): every mechanic that lands adds cards, and a test that has
+ * to be edited on every such commit is a test that gets edited without being
+ * read. Dropping back toward the curated handful still fails loudly.
+ */
+const MINIMUM_COMPILED_SIZE = 5000;
+const MINIMUM_POOL_SIZE = EXPECTED_CURATED_SIZE + MINIMUM_COMPILED_SIZE;
 
 // --- pool loading + validation -------------------------------------------------
 
 describe('card pool loading', () => {
-  it(`loads all ${EXPECTED_POOL_SIZE} pool cards (authored + compiled)`, () => {
+  it(`loads at least ${MINIMUM_POOL_SIZE} pool cards (authored + compiled)`, () => {
     const pool = loadCardPool({ onWarn: () => {} });
-    expect(pool.cards).toHaveLength(EXPECTED_POOL_SIZE);
+    expect(pool.cards.length).toBeGreaterThanOrEqual(MINIMUM_POOL_SIZE);
     expect(CURATED_CARD_POOL).toHaveLength(EXPECTED_CURATED_SIZE);
-    expect(EXPANDED_CARD_POOL).toHaveLength(EXPECTED_COMPILED_SIZE);
+    expect(EXPANDED_CARD_POOL.length).toBeGreaterThanOrEqual(MINIMUM_COMPILED_SIZE);
   });
 
   it('the two halves are disjoint — a compiled card never shadows an authored one', () => {
@@ -66,7 +73,7 @@ describe('card pool loading', () => {
   it('warns (does not throw) on a card with an unknown primitive ref', () => {
     const warn = vi.fn();
     const pool = loadCardPool({ onWarn: warn, knownPrimitiveIds: [] }); // pretend nothing is registered
-    expect(pool.cards).toHaveLength(EXPECTED_POOL_SIZE); // still loads
+    expect(pool.cards.length).toBeGreaterThanOrEqual(MINIMUM_POOL_SIZE); // still loads
     expect(pool.unsupportedRefs.length).toBeGreaterThan(0);
     expect(warn).toHaveBeenCalled();
   });

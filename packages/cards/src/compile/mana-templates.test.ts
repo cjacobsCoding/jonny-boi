@@ -315,8 +315,11 @@ describe('what the mana model still does NOT have is reported by name', () => {
       }),
     );
     expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    // TAPPING IS THE DEFAULT, so only its ABSENCE is recorded (`noTap`). This
+    // used to assert a `tap: true` that `ManaAbilityCost` has no field for — a
+    // key nothing read, which survived only because the generated pool's array
+    // literal had no contextual type to excess-property-check it against.
     expect(result.definition.manaAbilities?.[0]?.cost).toEqual({
-      tap: true,
       tapAnother: { anyOfTypes: ['creature'] },
     });
   });

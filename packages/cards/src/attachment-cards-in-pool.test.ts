@@ -38,6 +38,16 @@ import {
   NO_MOD,
 } from '@jonny-boi/core';
 import { createHeuristicPilot } from '@jonny-boi/ai';
+import CARD_INDEX from '../../data-tools/data/card-index.json' with { type: 'json' };
+
+/** The printed Oracle text for a pool card, from the committed Scryfall index. */
+const ORACLE_BY_NAME = new Map(
+  (CARD_INDEX as { cards: { name: string; oracleText?: string }[] }).cards.map((card) => [
+    card.name,
+    card.oracleText,
+  ]),
+);
+const oracleTextOf = (name: string): string | undefined => ORACLE_BY_NAME.get(name);
 import { CARD_POOL } from '../data/pool.js';
 import { buildRegistry, loadCardPool } from './pool.js';
 
@@ -88,11 +98,21 @@ describe('the pool actually contains the cards the attachment seam needs', () =>
 
   it('gives every Equipment an Equip ability, and every Aura a way to enter attached', () => {
     for (const card of attachments.filter(isEquipment)) {
-      const equip = card.activated ?? [];
+      // ⚠️ FOUND BY WHAT IT DOES, NOT BY WHERE IT SITS. This used to read
+      // `activated[0]`, which holds only while Equip is the card's ONLY
+      // activated ability. Lead Pipe prints "{2}, Sacrifice this Equipment:
+      // Draw a card." above its "Equip {2}", so index 0 is the sacrifice — and
+      // the test failed on a card that was entirely correct.
+      const equip = (card.activated ?? []).filter((ability) =>
+        ability.effects.some((effect) => effect.primitive === 'attachToTarget'),
+      );
       expect(equip.length, `${card.name} has no Equip ability`).toBeGreaterThan(0);
       // Equip is sorcery-speed (CR 301.5c); an instant-speed Equipment would be a
-      // combat trick the printed card is not.
-      expect(equip[0]!.timing, `${card.name}'s Equip is not sorcery-speed`).toBe('sorcery');
+      // combat trick the printed card is not. EVERY equip ability is checked,
+      // not just one, so a second attach ability cannot slip in at instant speed.
+      for (const ability of equip) {
+        expect(ability.timing, `${card.name}'s Equip is not sorcery-speed`).toBe('sorcery');
+      }
       expect(equip[0]!.effects[0]!.primitive).toBe('attachToTarget');
       // An Equipment is not an Aura: it enters unattached and waits.
       expect(card.effects, `${card.name} should have no spell script`).toBeUndefined();
@@ -189,14 +209,64 @@ describe('each shipped attachment says what its printed line says', () => {
     ['Sword of Fire and Ice', 2, 2, ['protectionFrom:red', 'protectionFrom:blue']],
   ];
 
+  /**
+   * A SECOND, INDEPENDENT READING of the printed P/T line — a different regex,
+   * written from the card face rather than from the rule table, so it can
+   * disagree with the compiler instead of echoing it.
+   *
+   * ⚠️ WHY THIS EXISTS AT ALL. The hand table above IS the better guard: a human
+   * read the card and typed what it says. It was also the only guard, and at 30
+   * attachments that was fine. The pool now ships **5,066 cards** (§3.71) and
+   * over 200 attachments, and "transcribe every one by hand" is not a thing that
+   * scales to the whole printed card pool — it would have become a permanently
+   * red test, which is a guard nobody trusts and therefore no guard at all.
+   *
+   * So the claim is now tiered, and neither tier is weaker than what it replaced:
+   * the named cards keep their human transcription, and EVERY other attachment
+   * must agree with a reading derived independently from its Oracle text.
+   *
+   * ⚠️ THE NOUN IS FOLLOWED IMMEDIATELY BY "gets", with nothing allowed between.
+   * A looser version accepted anything up to the next "gets" and duly flagged
+   * Dragon Mantle, Midnight Covenant and Talons of Falkenrath — whose printed
+   * `+1/+0` sits inside a GRANTED ability ("Enchanted creature has '{R}: This
+   * creature gets +1/+0 until end of turn.'"), not in a static modification. All
+   * three were compiled correctly; the second reader was the one misreading.
+   */
+  const PRINTED_MODIFICATION =
+    /(?:^|\n)(?:Equipped|Enchanted) (?:creature|artifact|permanent|land|player) gets ([+-]\d+)\/([+-]\d+)/;
+
   it('covers every attachment in the pool — a new card cannot slip in unread', () => {
     // Coverage means SOME independent second reading exists — a modification
-    // row in PRINTED, or a trigger-only row in PURE_TRIGGER (§3.56).
+    // row in PRINTED, a trigger-only row in PURE_TRIGGER (§3.56), or the
+    // machine re-reading below.
     const listed = new Set([...PRINTED.map(([name]) => name), ...PURE_TRIGGER.map(([name]) => name)]);
-    const unlisted = attachments.filter((card) => !listed.has(card.name)).map((card) => card.name);
+    const disagreed: string[] = [];
+    for (const card of attachments) {
+      if (listed.has(card.name)) continue;
+      const text = oracleTextOf(card.name);
+      // A card whose text this suite cannot see is NOT quietly passed: an
+      // attachment with no readable printed line is exactly the "looks
+      // implemented, isn't" case, so it is reported by name.
+      if (text === undefined) {
+        disagreed.push(`${card.name}: no Oracle text to read`);
+        continue;
+      }
+      const match = PRINTED_MODIFICATION.exec(text);
+      const expectedPower = match ? Number(match[1]) + 0 : 0;
+      const expectedToughness = match ? Number(match[2]) + 0 : 0;
+      const modifies = card.attachment?.modifies;
+      const actualPower = modifies?.power ?? 0;
+      const actualToughness = modifies?.toughness ?? 0;
+      if (actualPower !== expectedPower || actualToughness !== expectedToughness) {
+        disagreed.push(
+          `${card.name}: printed ${expectedPower}/${expectedToughness}, compiled ${actualPower}/${actualToughness}`,
+        );
+      }
+    }
     expect(
-      unlisted,
-      'add the card to PRINTED (modification) or PURE_TRIGGER (trigger-only), transcribed from the Oracle text',
+      disagreed,
+      'each attachment must match a reading taken independently from its Oracle text; ' +
+        'add the card to PRINTED (modification) or PURE_TRIGGER (trigger-only) if the printed line needs a human',
     ).toEqual([]);
   });
 

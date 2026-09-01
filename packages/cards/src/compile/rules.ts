@@ -49,6 +49,7 @@ import {
   normalizeClause,
   parseCount,
   parseManaSymbols,
+  parseSignedInt,
   splitCostSymbols,
 } from './text.js';
 import { BASIC_LAND_NAMES } from '../../data/pool.js';
@@ -711,7 +712,7 @@ function searchFilterFrom(
   if (characteristic === undefined) return filter;
   const fields = SEARCH_BOUND_FIELDS[characteristic];
   if (!fields) return null;
-  const value = Number.parseInt(amount ?? '', 10);
+  const value = parseSignedInt(amount ?? '');
   if (!Number.isFinite(value)) return null;
   if (direction === 'less') filter[fields.max] = value;
   else if (direction === 'greater') filter[fields.min] = value;
@@ -1013,7 +1014,7 @@ export function parseProtectionOrWard(word: string): KeywordFlags | null {
   const text = word.trim().toLowerCase();
   const ward = WARD_PATTERN.exec(text);
   if (ward) {
-    const cost = Number.parseInt(ward[1] ?? '', 10);
+    const cost = parseSignedInt(ward[1] ?? '');
     return Number.isFinite(cost) && cost > 0 ? { ward: cost } : null;
   }
   const protection = PROTECTION_PATTERN.exec(text);
@@ -2674,8 +2675,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^target creature gets ([+-]\d+)\/([+-]\d+) until end of turn$/,
     needsChosenTarget: true,
     build(match) {
-      const power = Number.parseInt(match[1] ?? '', 10);
-      const toughness = Number.parseInt(match[2] ?? '', 10);
+      const power = parseSignedInt(match[1] ?? '');
+      const toughness = parseSignedInt(match[2] ?? '');
       if (!Number.isFinite(power) || !Number.isFinite(toughness)) return null;
       return effects({
         primitive: 'pumpUntilEndOfTurn',
@@ -2692,8 +2693,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     description: '"~ gets +X/+Y until end of turn" (the source pumps itself)',
     pattern: /^~ gets ([+-]\d+)\/([+-]\d+) until end of turn$/,
     build(match) {
-      const power = Number.parseInt(match[1] ?? '', 10);
-      const toughness = Number.parseInt(match[2] ?? '', 10);
+      const power = parseSignedInt(match[1] ?? '');
+      const toughness = parseSignedInt(match[2] ?? '');
       if (!Number.isFinite(power) || !Number.isFinite(toughness)) return null;
       return effects({ primitive: 'pumpUntilEndOfTurn', params: { power, toughness } });
     },
@@ -2706,8 +2707,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     ),
     needsChosenTarget: true,
     build(match) {
-      const power = Number.parseInt(match[1] ?? '', 10);
-      const toughness = Number.parseInt(match[2] ?? '', 10);
+      const power = parseSignedInt(match[1] ?? '');
+      const toughness = parseSignedInt(match[2] ?? '');
       const keywords = keywordFlag(match[3] ?? '');
       if (!Number.isFinite(power) || !Number.isFinite(toughness) || !keywords) return null;
       return effects(
@@ -2858,8 +2859,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     build(match) {
       const count = parseCount(match[1]);
       const entry = tokenEntryWords(match[2]);
-      const power = Number.parseInt(match[3] ?? '', 10);
-      const toughness = Number.parseInt(match[4] ?? '', 10);
+      const power = parseSignedInt(match[3] ?? '');
+      const toughness = parseSignedInt(match[4] ?? '');
       if (count === null || entry === null || !Number.isFinite(power) || !Number.isFinite(toughness)) return null;
       const face = parseTokenFace(match[5] ?? '');
       if (face === null) return null;
@@ -4068,7 +4069,7 @@ const INTERVENING_IF_RULES: readonly {
         // mana-value bound has no such field, so it reports rather than being
         // silently answered from the printed box.
         if (characteristic !== 'power' || match[6] !== 'greater') return null;
-        const bound = Number.parseInt(match[5] ?? '', 10);
+        const bound = parseSignedInt(match[5] ?? '');
         if (!Number.isFinite(bound)) return null;
         condition.minPower = bound;
       }
@@ -4850,7 +4851,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const noun = match[1] ?? match[3] ?? '';
       const filter = permanentNounFilter(noun);
       if (filter === undefined) return null;
-      const amount = match[2] === undefined ? 1 : Number.parseInt(match[2], 10);
+      const amount = match[2] === undefined ? 1 : parseSignedInt(match[2]);
       if (!Number.isFinite(amount) || amount <= 0) return null;
       return { castCostReductionPerPermanent: { amount, filter } };
     },
@@ -4865,7 +4866,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     pattern:
       /^(instant and sorcery|creature|artifact|enchantment|noncreature|white|blue|black|red|green) spells you cast cost \{(\d+)\} less to cast$/,
     build(match) {
-      const amount = Number.parseInt(match[2] ?? '', 10);
+      const amount = parseSignedInt(match[2] ?? '');
       if (!Number.isFinite(amount) || amount <= 0) return null;
       const scope = match[1] ?? '';
       const filter = CAST_REDUCTION_SCOPES[scope];
@@ -5397,7 +5398,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       // case is handled here rather than by asking it.
       const cost = manaText.length > 0 ? parseManaSymbols(manaText) : {};
       if (!cost) return null;
-      const life = match[2] === undefined ? undefined : Number.parseInt(match[2], 10);
+      const life = match[2] === undefined ? undefined : parseSignedInt(match[2]);
       if (life !== undefined && !Number.isFinite(life)) return null;
       return {
         flashback: cost,
@@ -5525,7 +5526,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     pattern:
       /^as ~ enters(?: the battlefield)?, you may pay (\d+) life\. if you don't, (?:it|~) enters(?: the battlefield)? tapped$/,
     build(match) {
-      const life = Number.parseInt(match[1] ?? '', 10);
+      const life = parseSignedInt(match[1] ?? '');
       if (!Number.isFinite(life) || life <= 0) return null;
       return { entersTappedUnlessLifePaid: life };
     },
@@ -5902,8 +5903,8 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
         (type) => !/^(instant|sorcery)$/i.test(type),
       );
       if (!isPermanent) return null;
-      const power = match[8] === undefined ? 0 : Number.parseInt(match[8], 10);
-      const toughness = match[9] === undefined ? 0 : Number.parseInt(match[9], 10);
+      const power = match[8] === undefined ? 0 : parseSignedInt(match[8]);
+      const toughness = match[9] === undefined ? 0 : parseSignedInt(match[9]);
       if (!Number.isFinite(power) || !Number.isFinite(toughness)) return null;
       // WHOSE creatures, and NARROWED BY THE NAMED VALUE. The two tails are one
       // group because a printed anthem says exactly one of them first: "creatures
@@ -6147,8 +6148,8 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     pattern:
       /^(?:enchanted|equipped) creature (?:gets ([+-]\d+)\/([+-]\d+)(?: and (?:has|gains) (.+))?|(?:has|gains) (.+)|(.+))$/,
     build(match) {
-      const power = match[1] === undefined ? 0 : Number.parseInt(match[1], 10);
-      const toughness = match[2] === undefined ? 0 : Number.parseInt(match[2], 10);
+      const power = match[1] === undefined ? 0 : parseSignedInt(match[1]);
+      const toughness = match[2] === undefined ? 0 : parseSignedInt(match[2]);
       const keywordText = match[3] ?? match[4] ?? match[5];
       const keywords = keywordText === undefined ? {} : parseKeywordList(keywordText);
       // An unmodelled keyword must report the whole line rather than silently
@@ -7058,7 +7059,7 @@ function parseCostWithHybrids(text: string): ManaCost | null {
   if (symbols.length === 0) return null;
   for (const symbol of symbols) {
     if (/^\d+$/.test(symbol)) {
-      cost.generic = ((cost.generic as number | undefined) ?? 0) + Number.parseInt(symbol, 10);
+      cost.generic = ((cost.generic as number | undefined) ?? 0) + parseSignedInt(symbol);
       continue;
     }
     if ((MANA_COLORS as readonly string[]).includes(symbol)) {
@@ -7216,10 +7217,14 @@ export const MANA_RULES: readonly CompileRule[] = Object.freeze([
       const produces = parseManaPayload(match[4] ?? '');
       if (filter === undefined || !produces) return null;
       const taps = match[1] !== undefined;
-      // The printed {T} is optional in this family, and its ABSENCE is the
-      // whole difference between a once-a-turn source and Skirk Prospector —
-      // so it is recorded explicitly rather than left to a default.
-      const tapWords = taps ? { tap: true } : { noTap: true };
+      // The printed {T} is optional in this family, and its ABSENCE is the whole
+      // difference between a once-a-turn source and Skirk Prospector. Tapping is
+      // the DEFAULT, so only the absence is recorded — `ManaAbilityCost` has a
+      // `noTap` and no `tap`, and the `tap: true` this once emitted was a key
+      // nothing read. It survived because the generated pool's array literal had
+      // no contextual type, so TypeScript never excess-property-checked the data
+      // it was inferring from; giving that array a type (§3.71) is what found it.
+      const tapWords = taps ? {} : { noTap: true };
       const cost =
         match[2] === 'tap an untapped'
           ? { ...tapWords, tapAnother: filter }

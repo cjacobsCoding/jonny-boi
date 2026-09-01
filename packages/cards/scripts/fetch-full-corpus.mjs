@@ -13,11 +13,20 @@
  *  - `set_type: 'funny'` — Unglued/Unhinged/Unfinity. Their cards are not legal
  *    in any real format and several are not implementable in a rules engine at
  *    all (they ask players to balance dice on the card).
- *  - non-PAPER cards (`games` without 'paper') — Alchemy/Arena rebalances and
- *    digital-only mechanics (perpetually, seek, conjure) that do not exist in
- *    paper Magic, so "unsupported" would be a permanent, meaningless column.
+ *  - DIGITAL-ONLY cards — the Arena rebalances and the digital-only mechanics
+ *    (perpetually, seek, conjure) that do not exist in paper Magic, so
+ *    "unsupported" would be a permanent, meaningless column.
  *  - tokens and other non-castable layouts — an emblem/token/art card is not a
  *    card a deck can contain.
+ *
+ * ⚠️ THE DIGITAL TEST IS ASKED OF THE CARD, NOT OF ONE PRINTING, and the
+ * difference silently cost real cards. `oracle-cards` carries ONE printing per
+ * Oracle name and Scryfall picks which; for Black Knight, Capsize and Weakness
+ * it picks an MTGO-only reprint, so that record reads `digital: true` and
+ * `games: ['mtgo']` for cards that have been in paper since Alpha. Filtering on
+ * either field dropped all three — cards already in this repo's own pool — and
+ * did it without a word, which is how a corpus filter becomes a coverage number
+ * that quietly lies. See `digitalOnlyOracleIds` for what replaced it.
  *
  * NETWORK. Run by hand; never from a test or CI. The OUTPUT is what the offline
  * tools (`coverage-audit --input`, `near-miss-report`, `dead-rule-sweep`) read.
@@ -89,9 +98,52 @@ for (const line of body.split(String.fromCharCode(10))) {
 }
 console.log(`${all.length} oracle cards`);
 
+/**
+ * The oracle ids of cards that exist ONLY digitally — Scryfall's own
+ * `-in:paper`, asked rather than guessed.
+ *
+ * ⚠️ THIS QUESTION CANNOT BE ANSWERED FROM ONE PRINTING, which is the trap that
+ * cost three real cards. The `oracle-cards` bulk carries a single printing per
+ * Oracle name and Scryfall picks which — for Black Knight, Capsize and Weakness
+ * it picks an MTGO-only reprint, so that record reads `digital: true`,
+ * `games: ['mtgo']` even though the card has been in paper since Alpha. Both a
+ * `games.includes('paper')` filter and a `digital !== true` filter dropped all
+ * three, silently, from a corpus every coverage number is computed against.
+ *
+ * ⚠️ AND THE SEARCH HAS THE SAME TRAP IN IT: `is:paper` asks about a PRINTING,
+ * so `is:digital -is:paper` matched 7,369 rows — including an MTGO printing of
+ * Plains, whose `oracle_id` is Plains'. Excluding by that id removed the basic
+ * land from the corpus. The CARD-level prefix is `in:`, and `-in:paper` is the
+ * honest question: 874 cards that have never been printed on cardboard.
+ */
+async function digitalOnlyOracleIds() {
+  const ids = new Set();
+  let next = `https://api.scryfall.com/cards/search?q=${encodeURIComponent('-in:paper')}&unique=cards`;
+  let pages = 0;
+  while (next) {
+    const response = await fetch(next, { headers });
+    if (!response.ok) {
+      // A failure here must not silently WIDEN the corpus into Alchemy cards,
+      // and must not silently narrow it either — so it says so and stops.
+      throw new Error(`digital-only query failed: HTTP ${response.status}`);
+    }
+    const page = await response.json();
+    for (const card of page.data ?? []) if (card.oracle_id) ids.add(card.oracle_id);
+    next = page.has_more ? page.next_page : null;
+    pages += 1;
+    // Scryfall asks for ~100ms between requests; this is the only loop here
+    // that makes more than one.
+    await new Promise((resolve) => setTimeout(resolve, 120));
+  }
+  console.log(`digital-only cards: ${ids.size} (${pages} pages)`);
+  return ids;
+}
+
+const digitalOnly = await digitalOnlyOracleIds();
+
 const kept = all.filter((card) => {
   if (card.set_type === 'funny') return false;
-  if (!Array.isArray(card.games) || !card.games.includes('paper')) return false;
+  if (digitalOnly.has(card.oracle_id)) return false;
   if (NON_CARD_LAYOUTS.has(card.layout)) return false;
   return true;
 });
@@ -113,6 +165,16 @@ const slim = kept.map((card) => ({
   color_identity: card.color_identity,
   keywords: card.keywords,
   layout: card.layout,
+  // The DISPLAY fields, kept so the card index can be built from this file
+  // OFFLINE (`npm run fetch -w @jonny-boi/data-tools -- --corpus <file>`).
+  // Without them a pool built from the corpus has no art and no set, and the
+  // only way to get them back is thousands of paged requests for data this
+  // single download already contained.
+  set: card.set,
+  set_name: card.set_name,
+  collector_number: card.collector_number,
+  rarity: card.rarity,
+  ...(card.image_uris ? { image_uris: card.image_uris } : {}),
   ...(card.card_faces ? { card_faces: card.card_faces } : {}),
 }));
 
