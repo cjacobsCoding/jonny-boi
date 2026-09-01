@@ -790,6 +790,15 @@ function compileAbilityLine(
         return;
       }
     }
+    // ONE printed sentence joining two clauses the table already implements —
+    // "Draw two cards and create two Treasure tokens" (Big Score). The SAME
+    // helper a trigger body uses (`compileConjunction`), so "A and B" cannot
+    // mean one thing inside a trigger and another on a spell's own line.
+    const joined = compileConjunction(clause, ctx);
+    if (joined) {
+      for (const part of joined) absorb(assembly, part.contribution, part.ruleId);
+      return;
+    }
   }
 
   // Keyword-only lines ("Flying", "First strike, lifelink", "Prowess").
@@ -1010,6 +1019,17 @@ export function compileCard(card: CompilableCard): CompileResult {
           if (!result) return null;
           noteInner(result.ruleId);
           refs.push(...(result.contribution.effects ?? []));
+        }
+        return refs;
+      }
+      // Same conjunction helper again — a nested clause ("you may sacrifice a
+      // land. If you do, <A and B>") reads "and" exactly as the outer line does.
+      const joined = compileConjunction(clause, ctx);
+      if (joined) {
+        const refs: EffectRef[] = [];
+        for (const part of joined) {
+          noteInner(part.ruleId);
+          refs.push(...(part.contribution.effects ?? []));
         }
         return refs;
       }
