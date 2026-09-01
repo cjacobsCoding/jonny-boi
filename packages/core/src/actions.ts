@@ -85,6 +85,19 @@ export interface TapForManaAction {
    * only mode a single-mode source has.
    */
   readonly mode?: number;
+  /**
+   * The permanent paying an ADDITIONAL cost that names another object —
+   * "{T}, **Tap an untapped creature you control**: Add one mana of any
+   * color" (Springleaf Drum), "{T}, **Sacrifice a creature**: Add {B}{B}"
+   * (Phyrexian Tower).
+   *
+   * Part of the ACTION rather than a question asked while the ability
+   * resolves, because a mana ability resolves immediately and may not park one
+   * (CR 605.3a) — the same reason the colour MODE is part of the action. The
+   * generator offers one action per legal payer, so a pilot enumerates and
+   * scores "which creature do I tap" like any other choice.
+   */
+  readonly costInstanceId?: InstanceId;
 }
 
 /**

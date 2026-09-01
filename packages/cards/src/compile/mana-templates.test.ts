@@ -301,18 +301,24 @@ describe('what the mana model still does NOT have is reported by name', () => {
     expect(gap).toContain('restricted mana itself is implemented');
   });
 
-  it('Springleaf Drum names the cost component that is missing, not a vague template', () => {
-    // The cost model carries life and mana. "Tap an untapped creature you
-    // control" is a third component AND a choice of which creature, so the card
-    // reports rather than compiling a cheaper drum.
-    const gap = gapsOf(
+  it('Springleaf Drum COMPILES — the tap-another cost component landed (§3.59)', () => {
+    // This probe used to pin the gap ("the cost model carries life and mana; a
+    // cost that taps another permanent is a third component AND a choice of
+    // WHICH permanent"). Both halves exist now: `ManaAbilityCost.tapAnother`
+    // is the component, and the payer rides the ACTION rather than a parked
+    // question, because a mana ability may not park one (CR 605.3a).
+    const result = compileCard(
       makeCard({
         name: 'Springleaf Drum',
         typeLine: { supertypes: [], types: ['Artifact'], subtypes: [] },
         oracleText: '{T}, Tap an untapped creature you control: Add one mana of any color.',
       }),
     );
-    expect(gap).toContain('TAPS ANOTHER PERMANENT');
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.manaAbilities?.[0]?.cost).toEqual({
+      tap: true,
+      tapAnother: { anyOfTypes: ['creature'] },
+    });
   });
 
   it('a colour derivation the board cannot answer still reports', () => {

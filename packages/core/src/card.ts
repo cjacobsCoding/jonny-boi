@@ -1506,6 +1506,35 @@ export interface ManaAbilityCost {
    * both are one atomic action — and the production still needs the source).
    */
   readonly sacrificeSelf?: boolean;
+  /**
+   * "**Tap an untapped creature you control**" (Springleaf Drum, Survivors'
+   * Encampment) — an ADDITIONAL cost paid by tapping some OTHER permanent.
+   *
+   * The permanent is named by the ACTION (`TapForManaAction.costInstanceId`),
+   * not chosen mid-resolution: a mana ability may not park a question (CR
+   * 605.3a — it resolves immediately and nothing can respond), so the choice
+   * has to be part of the action the pilot submits, exactly as the mana MODE
+   * already is. The filter says which permanents qualify.
+   */
+  readonly tapAnother?: CardFilter;
+  /**
+   * "**Sacrifice a creature**" (Phyrexian Tower), "**Sacrifice a Food**"
+   * (Gilded Goose), "**Sacrifice a Goblin**" (Skirk Prospector) — the same
+   * shape as {@link tapAnother} and named by the action for the same reason.
+   */
+  readonly sacrificeAnother?: CardFilter;
+  /**
+   * The printed cost does NOT include {T} — "**Sacrifice a Goblin**: Add {R}"
+   * (Skirk Prospector), "**Tap an untapped legendary creature you control**:
+   * Add one mana of any color" (Relic of Legends).
+   *
+   * An explicit OPT-OUT rather than an inferred one: every mana source taps by
+   * default (that is what a land does), and rich abilities that DO print {T}
+   * carry no `tap` flag today — so reading an absent flag as "no tap" would
+   * untap the whole pool. The difference is real: a source that does not tap
+   * can be activated more than once a turn, which is what Skirk Prospector is.
+   */
+  readonly noTap?: boolean;
 }
 
 /**

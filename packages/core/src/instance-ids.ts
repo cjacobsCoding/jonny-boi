@@ -274,6 +274,13 @@ const NON_EVENT_INSTANCE_ID_FIELDS = [
    * the values happen to be today.
    */
   'removesFromBattlefield',
+  /**
+   * `TapForManaAction.costInstanceId` — the permanent paying a mana ability's
+   * additional cost ("tap an untapped creature you control", "sacrifice a
+   * Food"). Part of the ACTION because a mana ability may not park a question
+   * (CR 605.3a), so it is an id the scanner must know about.
+   */
+  'costInstanceId',
   /** `GameState.nextInstanceId` — the id source. Not a card, but it IS an id. */
   'nextInstanceId',
 ] as const;

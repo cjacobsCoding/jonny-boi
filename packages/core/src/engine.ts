@@ -2582,7 +2582,10 @@ function pushManaTapActions(state: GameState, player: PlayerId, out: GameAction[
   const battlefield = state.battlefield;
   for (let b = 0; b < battlefield.length; b++) {
     const perm = battlefield[b] as CardInstance;
-    if (perm.controller !== player || perm.tapped) continue;
+    // A source whose printed cost has no {T} is offered even while tapped —
+    // it never taps to pay, so being tapped cannot stop it (Skirk Prospector).
+    if (perm.controller !== player) continue;
+    if (perm.tapped && !manaAbilityNeverTaps(perm.def)) continue;
     const modes = manaModesOf(perm.def);
     if (modes.length === 0) continue;
     if (perm.summoningSick && isCreature(perm.def)) {
@@ -2599,7 +2602,27 @@ function pushManaTapActions(state: GameState, player: PlayerId, out: GameAction[
       if (extras !== undefined && manaModeBlockedReason(state, perm, extras[mode]) !== undefined) {
         continue;
       }
-      out.push({ kind: 'tapForMana', player, instanceId: perm.instanceId, mode });
+      // An additional cost that names ANOTHER permanent is enumerated: one
+      // action per legal payer, so the choice is in the action a pilot scores
+      // (a mana ability may not park a question — CR 605.3a). No such cost ⇒
+      // exactly the one action every source has always offered.
+      const payerFilter = extras?.[mode]?.ability.cost?.tapAnother ?? extras?.[mode]?.ability.cost?.sacrificeAnother;
+      if (payerFilter === undefined) {
+        out.push({ kind: 'tapForMana', player, instanceId: perm.instanceId, mode });
+        continue;
+      }
+      const needsUntapped = extras?.[mode]?.ability.cost?.tapAnother !== undefined;
+      for (let c = 0; c < battlefield.length; c++) {
+        const payer = battlefield[c] as CardInstance;
+        if (payer.controller !== player) continue;
+        if (payer.instanceId === perm.instanceId) continue; // "ANOTHER"
+        if (needsUntapped && payer.tapped) continue;
+        // A summoning-sick creature may not be tapped for a cost (CR 302.6),
+        // exactly as it may not tap for its own ability.
+        if (needsUntapped && payer.summoningSick && isCreature(payer.def)) continue;
+        if (!matchesCardFilter(payer, payerFilter)) continue;
+        out.push({ kind: 'tapForMana', player, instanceId: perm.instanceId, mode, costInstanceId: payer.instanceId });
+      }
     }
   }
 }
@@ -2881,6 +2904,13 @@ function payManaCostFromBoard(
  * to cast a creature spell"); `undefined` for every ordinary source, in which
  * case the pool stays the plain six-colour record the hot path short-circuits on.
  */
+/** Whether EVERY mana ability this definition prints pays without tapping. */
+function manaAbilityNeverTaps(def: CardDefinition): boolean {
+  const abilities = def.manaAbilities;
+  if (abilities === undefined || abilities.length === 0) return false;
+  return abilities.every((ability) => ability.cost?.noTap === true);
+}
+
 function tapPermanentForMana(
   state: GameState,
   source: CardInstance,
@@ -2888,9 +2918,15 @@ function tapPermanentForMana(
   production: ManaProduction,
   emit: (e: GameEvent) => void,
   restriction?: ManaSpendRestriction,
+  noTap = false,
 ): void {
-  source.tapped = true;
-  emit({ type: 'tapped', instanceId: source.instanceId });
+  // A printed cost with no {T} leaves the source untapped, so it may be
+  // activated again this turn (Skirk Prospector). Opt-in: every other source
+  // taps exactly as it always has.
+  if (!noTap) {
+    source.tapped = true;
+    emit({ type: 'tapped', instanceId: source.instanceId });
+  }
   const owner = state.players[player];
   owner.manaPool = addProduction(owner.manaPool, production, restriction);
   for (const color of MANA_COLORS) {
@@ -2967,6 +3003,34 @@ function applyTapForMana(
     }
   }
 
+  // The additional cost that names another permanent, charged BEFORE the
+  // production — an unpayable one refuses the whole activation, so the mana is
+  // never added for a cost that was not paid.
+  const extraCost = extra?.ability.cost;
+  if (extraCost?.tapAnother !== undefined || extraCost?.sacrificeAnother !== undefined) {
+    const filter = extraCost.tapAnother ?? extraCost.sacrificeAnother;
+    const payerId = action.costInstanceId;
+    const payer = payerId === undefined ? undefined : findOnBattlefield(state, payerId);
+    const needsUntapped = extraCost.tapAnother !== undefined;
+    if (
+      !payer ||
+      payer.controller !== action.player ||
+      payer.instanceId === source.instanceId ||
+      (needsUntapped && payer.tapped) ||
+      (needsUntapped && payer.summoningSick && isCreature(payer.def)) ||
+      !matchesCardFilter(payer, filter)
+    ) {
+      return rejectWith(prevState, `${source.def.name}'s additional cost needs a legal permanent to pay it`);
+    }
+    if (needsUntapped) {
+      payer.tapped = true;
+      emit({ type: 'tapped', instanceId: payer.instanceId });
+    } else {
+      moveToZone(state, payer, 'graveyard', emit, payer.owner);
+      resetInstanceForNewZone(payer);
+    }
+  }
+
   tapPermanentForMana(
     state,
     source,
@@ -2974,6 +3038,7 @@ function applyTapForMana(
     production,
     emit,
     spendRestrictionMadeBy(source, extra?.ability.spendRestriction),
+    extra?.ability.cost?.noTap === true,
   );
 
   // The RIDER runs as part of the ability's own resolution, AFTER the mana is
@@ -3011,7 +3076,8 @@ function applyTapForMana(
   if (
     damage > 0 ||
     (extra?.ability.cost?.life ?? 0) > 0 ||
-    extra?.ability.cost?.sacrificeSelf === true
+    extra?.ability.cost?.sacrificeSelf === true ||
+    extra?.ability.cost?.sacrificeAnother !== undefined
   ) {
     checkStateBasedActions(state, emit);
   }

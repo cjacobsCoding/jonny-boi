@@ -1269,6 +1269,31 @@ const COUNTER_NOUN_PHRASE = Object.keys(COUNTER_NOUN_RESTRICTIONS)
   .sort((a, b) => b.length - a.length)
   .join('|');
 
+/**
+ * The printed nouns an ADDITIONAL mana-ability cost may name, mapped to the
+ * {@link CardFilter} each means — "tap an untapped **creature** you control",
+ * "sacrifice a **Food**".
+ *
+ * Closed and shared for the same reason {@link TARGET_NOUN_RESTRICTIONS} is:
+ * the next printed filter is a ROW here, understood by both the tap form and
+ * the sacrifice form at once, and a noun that is not here reports rather than
+ * being widened to "any permanent you control".
+ */
+const MANA_COST_NOUNS: Readonly<Record<string, CardFilter>> = Object.freeze({
+  creature: { anyOfTypes: ['creature'] },
+  artifact: { anyOfTypes: ['artifact'] },
+  'legendary creature': { anyOfTypes: ['creature'], legendary: true },
+  food: { anyOfSubtypes: ['Food'] },
+  treasure: { anyOfSubtypes: ['Treasure'] },
+  clue: { anyOfSubtypes: ['Clue'] },
+  goblin: { anyOfSubtypes: ['Goblin'] },
+});
+
+/** The cost nouns as an alternation, longest first so none is truncated. */
+const MANA_COST_NOUN_PHRASE = Object.keys(MANA_COST_NOUNS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     /**
@@ -6927,6 +6952,43 @@ export const MANA_RULES: readonly CompileRule[] = Object.freeze([
       const produces = parseManaPayload(match[2] ?? '');
       if (!produces || life === null || life < 1) return null;
       return { manaAbilities: [{ produces, cost: { life } }] };
+    },
+  },
+  {
+    /**
+     * An ADDITIONAL COST that names ANOTHER permanent — "{T}, **Tap an
+     * untapped creature you control**: Add one mana of any color" (Springleaf
+     * Drum, Scene of the Crime, Survivors' Encampment, Relic of Legends) and
+     * "{T}, **Sacrifice a Food**: Add one mana of any color" (Gilded Goose,
+     * Phyrexian Tower, Skirk Prospector).
+     *
+     * The payer is named by the ACTION rather than chosen mid-resolution,
+     * because a mana ability resolves immediately and may not park a question
+     * (CR 605.3a) — see `ManaAbilityCost.tapAnother`.
+     *
+     * The NOUN comes from the shared cost-noun table below, so the next
+     * printed filter is a row rather than another rule.
+     */
+    id: 'mana-ability-cost-another-permanent',
+    description:
+      '"{T}, Tap an untapped creature you control: Add …" (Springleaf Drum) / "{T}, Sacrifice a Food: Add …" (Gilded Goose)',
+    pattern: new RegExp(
+      `^(?:([{]t[}]), )?(tap an untapped|sacrifice a) (${MANA_COST_NOUN_PHRASE})(?: you control)?: add (.+)$`,
+    ),
+    build(match) {
+      const filter = MANA_COST_NOUNS[match[3] ?? ''];
+      const produces = parseManaPayload(match[4] ?? '');
+      if (filter === undefined || !produces) return null;
+      const taps = match[1] !== undefined;
+      // The printed {T} is optional in this family, and its ABSENCE is the
+      // whole difference between a once-a-turn source and Skirk Prospector —
+      // so it is recorded explicitly rather than left to a default.
+      const tapWords = taps ? { tap: true } : { noTap: true };
+      const cost =
+        match[2] === 'tap an untapped'
+          ? { ...tapWords, tapAnother: filter }
+          : { ...tapWords, sacrificeAnother: filter };
+      return { manaAbilities: [{ produces, cost }] };
     },
   },
   {
