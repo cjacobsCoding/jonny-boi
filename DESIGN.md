@@ -740,6 +740,59 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.72 The sim was hiring workers that made it slower — ✅ done
+
+Measured before anything was touched, and the measurement is the whole story. On the reference box
+(12 hardware threads, **6 physical cores**), a 6,000-game match under the heuristic pilot:
+
+| workers | 2 | 3 | 4 | 5 | **6** | 8 | 11 |
+|---|---|---|---|---|---|---|---|
+| games/sec | 343 | 463 | 551 | 575 | **593** | 559 | 516 |
+
+Throughput **peaks at the physical core count and falls off after it** — and auto mode was hiring
+**11**, for 516 games/sec where 6 gives 593. At 3,000 games it was far worse: 327 against 451.
+
+**Two stale constants, both calibrated against a machine that no longer exists.**
+
+- `availableParallelism()` reports HARDWARE THREADS, and the policy spent them as if they were cores.
+  This workload is compute- and allocation-bound — every worker holds its own copy of a 5,000-card
+  pool and churns game states — so SMT siblings contend for the same execution ports instead of
+  overlapping stalls. `HARDWARE_THREADS_PER_CORE` folds the count down, with the measured curve
+  written next to it.
+- `AUTO_GAMES_PER_WORKER = 150` claimed 150 games "comfortably more" than a worker's startup, quoting
+  "double-digit games/sec" and "~1–2s" of startup. Both were true when written. Today startup is
+  **~0.35s** (292ms of it importing `@jonny-boi/cards`) against **~180 games/sec** single-threaded, so
+  150 games is 0.8s of work — auto mode was hiring workers that could not pay for themselves. Now 400.
+- `HOST_RESERVED_CORES` is **deleted**. Folding by SMT already leaves the dispatching host a thread,
+  and taking a whole core off on top measured strictly worse (5 workers 575 vs 6 workers 593 at 6,000
+  games; 723 vs 765 at 20,000) — the host spends the run waiting on messages, not working.
+
+📊 **The honest numbers, auto path, before → after:**
+
+| run | before | after | |
+|---|---|---|---|
+| 3,000 games | 327/sec | **469/sec** | +43% |
+| 6,000 games | 516/sec | **598/sec** | +16% |
+| 20,000 games | 758/sec | **764/sec** | +1% |
+
+A win at every size, and biggest exactly where the tool is used most — a gauntlet or a swap test is
+thousands of games, not tens of thousands.
+
+**NEW: `packages/sim/bench/pilot-bench.mjs`,** because the numbers above could not be got otherwise.
+⚠️ `npm run sim -- match` plays its games in a WORKER, so `node --cpu-prof` on it profiles a parent
+process that is **99% idle** — a profile whose top entries are the module loader. The bench runs the
+games on the main thread, so the profiler sees the engine and the pilot. **NEW
+`bench/window-stats.mjs`** answers the other question, and its answer is where the next work is:
+
+> **592 decision windows per game. The pilot passes 81.7% of them. `tapForMana` is 73% of every
+> action ever offered (128,349 of 174,963), and only 27.4% of windows offer nothing but a pass.**
+
+⚠️ **THIS IS NOT 10× AND IS NOT CLAIMED TO BE.** The in-process profile says pilot `decide` 33.9%,
+`applyActionToDraft` 32.7%, `generateLegalActions` 19.9% — about 87% of the run in three blocks, so
+an order of magnitude needs all three restructured, not tuned. The window statistics above name the
+shape of that work: the engine builds a full menu, dominated by mana taps, for a pilot that passes
+four times in five.
+
 ### 3.71 The whole printed card pool — 573 → 5,065 shippable cards — ✅ done
 
 Compiling a card and SHIPPING it are different things. The compiler could read 4,863 of the pool;
