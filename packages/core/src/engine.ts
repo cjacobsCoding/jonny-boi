@@ -136,8 +136,14 @@ import { createTriggerCollector } from './internal/triggers-runtime.js';
 import { clearTurnFacts, turnFactHolds } from './turn-facts.js';
 import { hasNoMaximumHandSize, landPlayZonesFor } from './player-statics.js';
 import { expireFloatingReplacements, indexReplacements, replaceDraw } from './internal/replacement.js';
-import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
-import { effectiveKeywords } from './internal/stats.js';
+import {
+  aggregateFor,
+  expireContinuousEffects,
+  indexContinuous,
+  NO_MOD,
+  pruneOrphanContinuousEffects,
+} from './internal/continuous.js';
+import { effectiveActivated, effectiveKeywords } from './internal/stats.js';
 import { findOnBattlefield, moveToZone, resetInstanceForNewZone } from './internal/zones.js';
 import {
   applyLegendRuleChoice,
@@ -4149,7 +4155,10 @@ function applyActivateAbility(
   if (!source) return rejectWith(prevState, 'that permanent is not on the battlefield');
   if (source.controller !== action.player) return rejectWith(prevState, 'you do not control that permanent');
 
-  const ability = source.def.activated?.[action.abilityIndex];
+  // Printed AND granted, through the one accessor the offer path uses — an
+  // index that means different abilities to the two paths activates the wrong
+  // one (DESIGN §3.36's failure, in its most literal form).
+  const ability = effectiveActivated(source, aggregateFor(state, source.instanceId))[action.abilityIndex];
   if (!ability) return rejectWith(prevState, 'that permanent has no such activated ability');
 
   // Timing: the rules default for an activated ability is instant speed; only
@@ -4861,8 +4870,8 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   for (let b = 0; b < battlefield.length; b++) {
     const perm = battlefield[b] as CardInstance;
     if (perm.controller !== me) continue;
-    const abilities = perm.def.activated;
-    if (!abilities || abilities.length === 0) continue;
+    const abilities = effectiveActivated(perm, aggregateFor(state, perm.instanceId));
+    if (abilities.length === 0) continue;
     for (let index = 0; index < abilities.length; index++) {
       const ability = abilities[index]!;
       const timing = ability.timing ?? 'instant';

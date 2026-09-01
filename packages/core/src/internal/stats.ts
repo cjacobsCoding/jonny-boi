@@ -31,6 +31,7 @@
  * is correct only where no modification can apply.
  */
 
+import type { ActivatedAbility } from '../card.js';
 import type { CardInstance } from '../state.js';
 import type { BlockRestriction, KeywordFlags } from '../card.js';
 import { unionProtection } from '../card.js';
@@ -199,6 +200,33 @@ export function remainingToughness(inst: CardInstance, mod: AggregatedMod = NO_M
  * this runs for every creature in every combat/legality pass and allocating a copy
  * there is pure waste. `KeywordFlags` is declared readonly for exactly that reason.
  */
+/**
+ * The activated abilities a permanent HAS right now — its printed ones plus any
+ * a continuous effect granted it (an Aura's quoted ability, "All Slivers have
+ * …", Cryptolith Rite).
+ *
+ * ONE accessor, read by the ability OFFER path and by the ability APPLY path,
+ * because `ActivateAbilityAction.abilityIndex` indexes exactly this list — two
+ * readers with different ideas of what index 1 means is the shape that
+ * activates the wrong ability. PRINTED FIRST, then granted, so an index a
+ * player is looking at does not shift when an unrelated grant appears.
+ *
+ * Returns the printed array itself when nothing was granted, which is every
+ * permanent on almost every board — no allocation on the hot path.
+ */
+export function effectiveActivated(
+  inst: CardInstance,
+  mod: AggregatedMod = NO_MOD,
+): readonly ActivatedAbility[] {
+  const printed = inst.def.activated ?? NO_ACTIVATED;
+  const granted = mod.activated;
+  if (granted === undefined || granted.length === 0) return printed;
+  return [...printed, ...granted];
+}
+
+/** Shared empty list so a definition with no activated abilities allocates nothing. */
+const NO_ACTIVATED: readonly ActivatedAbility[] = Object.freeze([]);
+
 export function effectiveKeywords(inst: CardInstance, mod: AggregatedMod = NO_MOD): KeywordFlags {
   const printed = inst.def.keywords;
   const granted = mod.keywords;

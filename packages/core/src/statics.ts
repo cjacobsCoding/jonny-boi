@@ -46,6 +46,7 @@
 import type { CardInstance } from './state.js';
 import type { KeywordFlags } from './card.js';
 import { colorsOfDefinition, permanentHasSubtype } from './card.js';
+import type { ActivatedAbility } from './card.js';
 import type { CardFilter } from './choices.js';
 import { matchesCardFilter } from './choices.js';
 import { chosenColorOf, chosenSubtypeOf } from './as-enters.js';
@@ -160,6 +161,24 @@ export interface PermanentModification {
   readonly toughness?: number;
   /** Keyword abilities granted to every affected permanent. Omit for none. */
   readonly keywords?: KeywordFlags;
+  /**
+   * ACTIVATED abilities granted to every affected permanent — the printed
+   * quoted form: "Enchanted creature **has \"{T}: Add one mana of any
+   * color.\"**" (Paradise Mantle), "All Slivers **have \"{T}: …\"**", "Lands
+   * you control **have \"{T}: Add one mana of any color.\"**" (Chromatic
+   * Lantern), "Creatures you control **have \"{T}: Add one mana of any
+   * color.\"**" (Cryptolith Rite).
+   *
+   * The SAME {@link ActivatedAbility} shape a card prints on itself, which is
+   * the whole point: the ability is compiled by the compiler's ordinary
+   * activated-ability parser, and the engine activates it through the ordinary
+   * activation path. Granting is a matter of WHERE the ability list comes
+   * from, not of a second kind of ability.
+   *
+   * Read through `effectiveActivated` — printed abilities first, then granted
+   * ones — so an ability INDEX stays stable while the grant lasts.
+   */
+  readonly activated?: readonly ActivatedAbility[];
 }
 
 /**

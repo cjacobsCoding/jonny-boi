@@ -33,6 +33,7 @@ import type {
   ReplacementApplies,
   SpellMode,
   StaticAbility,
+  StaticAffects,
   StaticControllerScope,
   TargetRestriction,
   InterveningIf,
@@ -1346,6 +1347,31 @@ const TRIGGERING_AMOUNT_BODIES: Readonly<
 const TRIGGERING_AMOUNT_PHRASE = Object.keys(TRIGGERING_AMOUNT_BODIES)
   .sort((a, b) => b.length - a.length)
   .join('|');
+
+/**
+ * Who a printed GROUP phrase reaches — "creatures you control", "lands you
+ * control", "all Slivers" — as the {@link StaticAffects} it means.
+ *
+ * Built on the closed tables this file already has: {@link STATIC_NOUN_TYPES}
+ * for a card-type noun, and the compiling card's OWN printed subtypes for a
+ * typal phrase — the same rule the typal anthem follows, which is what stops
+ * "all Slivers" compiling on a card that never says Sliver.
+ */
+function groupStaticAffects(
+  noun: string,
+  scopeWords: string | undefined,
+  ctx: RuleContext,
+): StaticAffects | null {
+  const scope = scopeWords === undefined ? 'any' : scopeWords.includes('you control') ? 'you' : 'opponent';
+  const singular = noun.endsWith('s') ? noun.slice(0, -1) : noun;
+  const type = STATIC_NOUN_TYPES[singular];
+  if (type !== undefined) {
+    return { ...(type === null ? {} : { anyOfTypes: [type] }), controller: scope };
+  }
+  const printed = ctx.card.typeLine.subtypes.find((sub) => sub.toLowerCase() === singular);
+  if (printed === undefined) return null;
+  return { anyOfSubtypes: [printed], controller: scope };
+}
 
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
@@ -5873,6 +5899,48 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
         label: match[0],
       };
       return { statics: [ability] };
+    },
+  },
+  {
+    /**
+     * A GRANTED ACTIVATED ABILITY on a GROUP — "Creatures you control **have**
+     * "{T}: Add one mana of any color."" (Cryptolith Rite), "Lands you control
+     * have "…"" (Chromatic Lantern), "All Slivers have "…"".
+     *
+     * The quoted ability is compiled by the compiler's OWN activated-ability
+     * parser (`compileQuotedAbility`), so a granted ability can only ever do
+     * what a printed one could and the two share one grammar. Core folds it
+     * through the same continuous layer an anthem uses and `effectiveActivated`
+     * reads it — activated by the ordinary path, with no second mechanism.
+     */
+    id: 'static-grant-activated-ability',
+    description:
+      `"Creatures/Lands you control have <ABILITY>" / "All SUBTYPEs have <ABILITY>" (Cryptolith Rite, Chromatic Lantern)`,
+    pattern: /^(?:all |each )?([a-z]+) ?(you control|your opponents control)? ?have "(.+)"$/,
+    build(match, ctx) {
+      const isPermanent = ctx.card.typeLine.types.every((type) => !/^(instant|sorcery)$/i.test(type));
+      if (!isPermanent) return null;
+      const ability = ctx.compileQuotedAbility(match[3] ?? '');
+      if (!ability) return null;
+      const affects = groupStaticAffects(match[1] ?? '', match[2], ctx);
+      if (affects === null) return null;
+      return { statics: [{ affects, activated: [ability], label: match[0] }] };
+    },
+  },
+  {
+    /**
+     * The ATTACHMENT form of the same grant — "Enchanted creature has "{T}: Add
+     * one mana of any color."" (Paradise Mantle), "Equipped creature has "…"".
+     *
+     * Same parser, same core field: an attachment's modification is the very
+     * shape a static's is, so the grant needs no second implementation.
+     */
+    id: 'attachment-grant-activated-ability',
+    description: `"Enchanted/Equipped creature has <ABILITY>" (Paradise Mantle)`,
+    pattern: /^(?:enchanted|equipped) creature has "(.+)"$/,
+    build(match, ctx) {
+      const ability = ctx.compileQuotedAbility(match[1] ?? '');
+      return ability === null ? null : { attachmentModifies: { activated: [ability] } };
     },
   },
   {

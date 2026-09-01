@@ -347,6 +347,17 @@ export interface RuleContext {
    * be a card playing differently from its text.
    */
   compileTriggerBody(text: string): TriggerBodyResult | null;
+  /**
+   * Compile a QUOTED activated ability — the text inside the quotes of
+   * "Enchanted creature has \"{T}: Add one mana of any color.\"" or "All
+   * Slivers have \"…\"".
+   *
+   * The very same parser a printed `COST: EFFECT` line goes through, so a
+   * granted ability can only ever do what a printed one could, and the two can
+   * never drift into different grammars. `null` when the quoted text is not a
+   * complete, faithful ability — which reports the whole card, as always.
+   */
+  compileQuotedAbility(text: string): import('@jonny-boi/core').ActivatedAbility | null;
 }
 
 /** What {@link RuleContext.compileTriggerBody} recovered from a trigger's body. */

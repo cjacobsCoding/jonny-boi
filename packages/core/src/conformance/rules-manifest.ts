@@ -1250,7 +1250,16 @@ export const ACTION_RULES: ActionRules = {
  * proof written in a test would never be evaluated by anything.
  */
 type ModificationFieldsAreAdditive =
-  Exclude<keyof PermanentModification, 'power' | 'toughness' | 'keywords'> extends never ? true : never;
+  Exclude<
+    keyof PermanentModification,
+    // Each of these ADDS to what the permanent already has and can never
+    // replace it: deltas sum, keyword flags union, and `activated` APPENDS to
+    // the printed ability list (`effectiveActivated` keeps the printed ones
+    // first, so a grant cannot renumber or remove an ability the card prints).
+    'power' | 'toughness' | 'keywords' | 'activated'
+  > extends never
+    ? true
+    : never;
 
 /** The witness. If a setting-shaped field appears, this line fails to compile. */
 export const MODIFICATION_IS_PURELY_ADDITIVE: ModificationFieldsAreAdditive = true;
