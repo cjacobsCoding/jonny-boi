@@ -128,6 +128,9 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   // choosing a modal trigger's mode and delayed-ability lifecycle events say
   // nothing about which PERMANENTS carry triggers.
   triggerModesChosen: false,
+  // Regeneration TAPS a permanent and clears its damage; it never moves one,
+  // so the trigger-source set is untouched.
+  regenerated: false,
   delayedTriggerCreated: false,
   delayedTriggerFired: false,
 });

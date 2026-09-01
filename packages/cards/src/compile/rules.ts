@@ -2910,6 +2910,17 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'regenerate-self',
+    description: '"Regenerate ~" — the effect half of the printed regeneration ability (CR 701.15)',
+    // The COST half is the ordinary activated-ability cost parser; this is only
+    // the effect, so "{B}: Regenerate ~", "{1}{G}: Regenerate ~" and a
+    // regeneration inside any other body all compile through one rule.
+    pattern: /^regenerate ~$/,
+    build() {
+      return effects({ primitive: 'regenerate' });
+    },
+  },
+  {
     id: 'proliferate',
     description:
       '"Proliferate" (CR 701.27) — permanents only, which is EXACT here: this engine gives players no counter record at all',

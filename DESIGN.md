@@ -740,6 +740,38 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.67 Regeneration — the shield that replaces destruction (CR 701.15) — ✅ done
+
+Picked from data, not intuition: `keyword-gap-report.mjs` ranked **Regenerate at 129 cards blocked
+by it alone** — the top unimplemented *named* mechanic once Enchant/Equip/Flying were discounted as
+already-modelled statics. Delivered **4,702 → 4,757 playable of 31,091** (+55 whole cards; the other
+74 need a second missing system as well, and the report says which).
+
+**A regeneration shield is a REPLACEMENT effect, not a heal.** CR 701.15: the next time this
+permanent would be destroyed this turn, instead remove all damage from it, tap it, and remove it
+from combat. Every clause of that is load-bearing and each is pinned by a test — a "shield" that
+merely cleared damage would let a regenerating blocker keep blocking, which is the exact thing the
+tap-and-remove-from-combat clause exists to prevent.
+
+**One funnel, two death routes.** A creature reaches destruction two ways — the lethal-damage state
+based action and the `destroy` primitive — and if only one consumed shields, half of Magic would
+regenerate and the other half would not. Both now call the SAME exported helper,
+`consumeRegenerationShield` in `internal/sba.ts`; the primitive calls it immediately after the
+indestructible check, because indestructible is a *different* replacement that wins outright and
+must not burn a shield it never needed.
+
+**Shields are a COUNT, not a flag.** "Regenerate ~" twice before blockers means two shields, and
+using one must leave the other. Storing a boolean would silently discard the second activation — the
+kind of approximation this codebase reports rather than makes. The count is cleared in the CLEANUP
+step, not on use, because the shield lasts "this turn" and no longer.
+
+⚠️ **The compile rule earns its keep only because the primitive is real.** `regenerate-self`
+(`/^regenerate ~$/`) is one row; the keyword is listed in `PRIMITIVE_BACKED_KEYWORDS` so the
+compiler stops calling it unsupported. Cards whose regeneration is a *cost-bearing activated
+ability* already compiled through the existing activated-ability parser once this primitive existed
+— which is why 55 cards flipped for one primitive and one rule. Verified live: Darkling Stalker,
+Troll Ascetic, Wall of Pine Needles and Thrun, the Last Troll all compile COMPLETE.
+
 ### 3.66 The game library — every game kept, scrubbable, and forkable — ✅ done
 
 Asked for as: *"any games we start that aren't ended can be resumed easily later — regardless of why

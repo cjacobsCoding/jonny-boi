@@ -370,6 +370,8 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
    * option count above.
    */
   chosenAsEnters: 'public',
+  // Everyone watched the creature not die.
+  regenerated: 'public',
   triggerPutOnStack: 'public',
   // Chosen modes are announced on the stack — everyone responds knowing them.
   triggerModesChosen: 'public',

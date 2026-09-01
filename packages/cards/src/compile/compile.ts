@@ -103,6 +103,9 @@ const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freez
   food: 'createPredefinedToken',
   investigate: 'createPredefinedToken',
   proliferate: 'proliferate',
+  // Scryfall tags the card "Regenerate"; the compiled evidence is the shield
+  // primitive the printed ability built (CR 701.15).
+  regenerate: 'regenerate',
 });
 
 /**

@@ -784,6 +784,28 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     return worth * ctx.weights.bankedEffectValueShare;
   },
 
+  /**
+   * REGENERATION — a shield that will replace the NEXT destruction this turn
+   * (CR 701.15), priced as a share of what losing the creature would cost.
+   * Below the creature's full value because the shield only pays off if
+   * something actually tries to kill it, and above zero because a regenerator
+   * holding up mana is exactly how that card wins a race.
+   */
+  regenerate: (_params, ctx) => {
+    // The ruler knows no source instance, so it prices the shield against the
+    // creature the pilot would most regret losing — its best body on board.
+    // That is the same creature the ability is printed on in every real case.
+    let guarded: CardInstance | undefined;
+    let best = -Infinity;
+    for (const perm of ctx.state.battlefield) {
+      if (perm.controller !== ctx.player || !isCreature(perm.def)) continue;
+      const worth = cardValue(perm, ctx.weights, ctx.cards);
+      if (worth > best) { best = worth; guarded = perm; }
+    }
+    if (!guarded) return 0;
+    return cardValue(guarded, ctx.weights, ctx.cards) * ctx.weights.bankedEffectValueShare;
+  },
+
   // "You win the game" IS the lethal outcome, priced at lethal's own weight —
   // and its mirror is the one price that must always be refused.
   winTheGame: (_params, ctx) => ctx.weights.lethalBurnScore,

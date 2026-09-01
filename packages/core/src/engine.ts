@@ -534,6 +534,11 @@ function performStepTurnBasedActions(
       for (const inst of state.battlefield) {
         inst.damageMarked = 0;
         inst.markedByDeathtouch = false;
+        // A REGENERATION shield lasts "this turn" and no longer (CR 701.15),
+        // so it wears off on the same clock as marked damage — an unspent
+        // shield that survived the turn would save the creature from next
+        // turn's removal, which is a card nobody printed.
+        if (inst.regenerationShields !== undefined) delete inst.regenerationShields;
       }
       emptyManaPools(state, emit);
       checkStateBasedActions(state, emit);
