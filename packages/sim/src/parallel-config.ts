@@ -13,12 +13,6 @@
  * Node-only module) asks the OS for the real number.
  */
 
-/**
- * Cores left to the host thread (it merges results, prints progress, and the
- * OS wants one too). Subtracted from the machine's parallelism when sizing the
- * default pool, so a 12-thread box runs 11 workers, not 12 fighting the host.
- */
-export const HOST_RESERVED_CORES = 1;
 
 /**
  * Target slices per worker when cutting a run. Over-partitioning on purpose:
@@ -40,18 +34,52 @@ export const MIN_GAMES_PER_SLICE = 4;
  * How many games one worker must have waiting before AUTO mode hires it.
  *
  * A worker costs real wall time before its first game: a fresh Node thread
- * loads the card pool and compiles the engine (~1–2s on this project's
- * reference box). At the gauntlet's measured double-digit games/sec under the
- * default pilot, this many games is comfortably more than that startup, so
- * auto-parallelism can only ever pay for itself. Runs with fewer than 2× this
- * stay sequential unless the user forces `--workers`.
+ * loads the card pool and links the engine. MEASURED on the reference box,
+ * 2026-09-01: **~0.35s** of startup (292ms of it importing `@jonny-boi/cards`),
+ * against **~180 games/sec** single-threaded — so one worker needs roughly 60
+ * games just to break even, and comfortably more than that to be worth hiring.
+ *
+ * ⚠️ THE OLD VALUE WAS CALIBRATED AGAINST A SIM AN ORDER OF MAGNITUDE SLOWER.
+ * Its comment said "double-digit games/sec" and "~1–2s" of startup, both true
+ * when it was written and neither true now; 150 games is only ~0.8s of work at
+ * today's speed, so auto mode hired workers that could not pay for themselves.
+ * A constant whose comment describes a machine that no longer exists is a
+ * constant nobody re-derived.
  */
-export const AUTO_GAMES_PER_WORKER = 150;
+export const AUTO_GAMES_PER_WORKER = 400;
+
+/**
+ * Hardware threads per physical core, for turning `availableParallelism()` into
+ * a worker count worth hiring.
+ *
+ * ⚠️ SMT SIBLINGS DO NOT ADD THROUGHPUT HERE, THEY SUBTRACT IT. This workload is
+ * compute- and allocation-bound — every worker holds its own copy of a
+ * 5,000-card pool and churns game states — so two threads on one core contend
+ * for the same execution ports and cache rather than overlapping stalls.
+ *
+ * MEASURED on the reference box (12 hardware threads, 6 physical cores),
+ * 6,000-game match, heuristic pilot:
+ *
+ *     workers   2     3     4     5     6     8     11
+ *     games/s  343   463   551   575  *593*  559   516
+ *
+ * The peak is exactly the PHYSICAL core count, and `availableParallelism()`
+ * reports 12 — so auto mode was hiring 11 workers for 516 games/sec where 6
+ * gives 593. At 3,000 games the gap is far worse (327 vs 451), because every
+ * hired worker also pays its startup.
+ *
+ * ⚠️ CALIBRATED ON ONE MACHINE, and stated as such. It is the conservative
+ * direction: a box with no SMT gets half its cores rather than all of them,
+ * which costs some throughput but never oversubscribes. `--workers N` overrides
+ * it outright, and `packages/sim/bench/pilot-bench.mjs` is how the curve above
+ * gets re-measured on a different box.
+ */
+export const HARDWARE_THREADS_PER_CORE = 2;
 
 /**
  * The pool size AUTO mode picks for a run of `totalGames` cut into (at most)
  * `shardableUnits` independent slices on a machine reporting `cores` hardware
- * threads: every core but the host's share, never more than there are units of
+ * threads: one worker per PHYSICAL core, never more than there are units of
  * work, and never more workers than the run has `AUTO_GAMES_PER_WORKER`-sized
  * helpings of games to feed them.
  *
@@ -59,7 +87,17 @@ export const AUTO_GAMES_PER_WORKER = 150;
  * caller then runs the plain sequential path, bit-for-bit as before.
  */
 export function autoWorkerCount(totalGames: number, shardableUnits: number, cores: number): number {
-  const usableCores = Math.max(1, Math.floor(cores) - HOST_RESERVED_CORES);
+  // `cores` is what `availableParallelism()` reports: HARDWARE THREADS. Folded
+  // down to physical cores, because SMT siblings cost throughput on this
+  // workload rather than adding it — see `HARDWARE_THREADS_PER_CORE`.
+  //
+  // ⚠️ NO SEPARATE RESERVATION FOR THE HOST. Folding by SMT already discarded
+  // one sibling per core, so the dispatching host runs on a thread no worker was
+  // going to get. A `HOST_RESERVED_CORES = 1` used to come off the total as
+  // well, and taking a whole core off measured strictly worse — 5 workers 575
+  // games/sec against 6 workers 593 at 6,000 games, and 723 against 765 at
+  // 20,000 — because the host spends the run waiting on messages, not working.
+  const usableCores = Math.max(1, Math.floor(Math.floor(cores) / HARDWARE_THREADS_PER_CORE));
   const fedByGames = Math.floor(totalGames / AUTO_GAMES_PER_WORKER);
   return Math.max(1, Math.min(usableCores, Math.max(1, shardableUnits), fedByGames));
 }

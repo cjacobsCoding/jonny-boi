@@ -43,7 +43,12 @@ import {
   type ParallelResult,
   type PilotAbSliceResult,
 } from './parallel-slices.js';
-import { AUTO_GAMES_PER_WORKER, HOST_RESERVED_CORES, autoWorkerCount, explicitWorkerCount } from './parallel-config.js';
+import {
+  AUTO_GAMES_PER_WORKER,
+  HARDWARE_THREADS_PER_CORE,
+  autoWorkerCount,
+  explicitWorkerCount,
+} from './parallel-config.js';
 
 /**
  * The heuristic pilot everywhere: the identity property is pilot-independent
@@ -262,8 +267,12 @@ describe('the planning arithmetic', () => {
     expect(explicitWorkerCount(0, 4)).toBe(1);
 
     const cores = 12;
-    // A big run: limited by cores minus the host's share.
-    expect(autoWorkerCount(100_000, 10_000, cores)).toBe(cores - HOST_RESERVED_CORES);
+    // A big run: limited by PHYSICAL cores. `cores` here is what
+    // `availableParallelism()` reports — hardware threads — and SMT siblings
+    // cost this workload throughput rather than adding it (the measured curve is
+    // in `HARDWARE_THREADS_PER_CORE`), so 12 threads hires 6, not 11. The host's
+    // share is not subtracted again: folding by SMT already left it a thread.
+    expect(autoWorkerCount(100_000, 10_000, cores)).toBe(cores / HARDWARE_THREADS_PER_CORE);
     // A run too small to pay one worker's startup stays sequential.
     expect(autoWorkerCount(AUTO_GAMES_PER_WORKER * 2 - 1, 10_000, cores)).toBe(1);
     // Exactly two workers' worth of games hires two.
