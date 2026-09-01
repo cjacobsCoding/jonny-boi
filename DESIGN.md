@@ -740,6 +740,49 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.68 An ability word is a label, not an ability (CR 207.2c) — ✅ done
+
+**Found by fixing the measurement, not by reading code.** The keyword gap report claimed 412 cards
+were blocked by a missing "Enchant" — a mechanic this engine has had for as long as it has had
+Auras. It was substring-matching Scryfall's keyword list against the blocking clause, so every Aura
+whose grant BODY was unsupported ("Enchanted creature can't attack or block") was filed under
+`Enchant`. Two more attributions were tried and were wrong in the opposite direction before the
+honest one landed; all three are written up in the script's own header, because each is the natural
+thing to reach for.
+
+With the attribution fixed, the top of the backlog was **ability words** — landfall 59, domain 44,
+heroic 37, raid 37, constellation 26 — and CR 207.2c says an ability word has *no rules meaning at
+all*. Probing one said why:
+
+> `Flying. Revolt — When ~ enters, if a permanent left the battlefield under your control this turn, you gain 5 life.`
+
+`joinRevoltRiders` glued **every** ability-word line onto the line above it. That is right for Fatal
+Push, whose Revolt line says "Destroy **that** creature … **instead**" and is meaningless alone —
+and wrong for the hundreds of cards whose labelled line is a complete triggered ability. The glued
+sentence can never match any rule, so those cards were unreachable through a gap that looked, in
+every report, like a missing mechanic.
+
+**A rider is now detected by being unable to stand alone**, not by wearing a label: a dangling
+demonstrative ("Destroy *that* creature"), or an "instead" **in the line's own first sentence** on a
+line that does not open an ability of its own. Akoum Hellkite is why that last qualifier exists —
+its "deals 2 damage instead" replaces its *own* first sentence, and reading the word alone glued a
+complete landfall trigger to the word `Flying`. Every other labelled line has the label folded away
+and meets the rule table as the ability it always was.
+
+The ability-word vocabulary is a **closed table derived from the corpus** (not from memory — every
+entry is a label seen at the head of a real printed line), and what it leaves out is the point: a
+Saga's `I`/`II`/`III`, `Channel`, `Exhaust`, `Boast`, `Bloodrush`, `Forecast`, `Companion`,
+`Max speed`, `To solve`/`Solved` and `Eminence` all print in the same italic-word-then-dash shape
+while carrying real rules. Folding those away would delete the ability instead of revealing it, so
+they stay out and keep reporting honestly.
+
+📊 **The honest number is small: 4,757 → 4,771 playable of 31,091 — +14 cards**, not the ~450 the old
+attribution implied. Stripping the label exposes the BODY, and most of those bodies are still
+unimplemented. The change is kept because the backlog now names the body instead of the label, so
+every future measurement is honest — the 14 cards are a side effect, not the case for it. Proof that
+it worked: the two independent tools now agree on what is next (Convoke, 46 cards, ranked #1 both by
+mechanic and by clause shape), where before they disagreed by a factor of thirty.
+
 ### 3.67 Regeneration — the shield that replaces destruction (CR 701.15) — ✅ done
 
 Picked from data, not intuition: `keyword-gap-report.mjs` ranked **Regenerate at 129 cards blocked

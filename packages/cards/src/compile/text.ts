@@ -196,7 +196,7 @@ export function splitAbilities(oracleText: string): string[] {
     .split(/\r?\n+/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
-  return joinRevoltRiders(joinModalBlocks(lines));
+  return resolveAbilityWords(joinModalBlocks(lines));
 }
 
 /**
@@ -263,31 +263,165 @@ function joinModalBlocks(lines: readonly string[]): string[] {
 }
 
 /**
- * An ability-word rider that MODIFIES the line above it rather than standing on
- * its own. Revolt is the shape: Fatal Push prints "Destroy target creature if
- * it has mana value 2 or less." and then, on its own line, "Revolt — Destroy
- * that creature if it has mana value 4 or less **instead** if a permanent left
- * the battlefield under your control this turn."
+ * ABILITY WORDS (CR 207.2c) — the italicised label printed in front of a line.
+ * It has **no rules meaning**: everything the ability does is spelled out in the
+ * line itself, and the word only ties a cycle together for flavour.
  *
- * The second line is meaningless alone — "that creature" has no referent, and
- * compiling the two independently would destroy twice. So it is joined onto the
+ * Derived from the printed corpus rather than from memory — every entry is a
+ * label this compiler has actually seen at the head of a real card's line.
+ *
+ * ⚠️ The table is CLOSED, and what it LEAVES OUT is the point. Plenty of labels
+ * print in the same italic-word-then-dash shape while carrying real rules:
+ * a Saga's `I` / `II` / `III` are chapter abilities; `Channel`, `Exhaust`,
+ * `Boast`, `Bloodrush`, `Forecast` and `Companion` are keyword abilities with
+ * their own costs and timing; `Max speed` is a condition on the speed counter;
+ * `To solve` / `Solved` are a Case's two halves; `Eminence` works from the
+ * command zone. Stripping any of those would delete rules the card depends on
+ * and leave a card that looks implemented and is not — so they stay out and
+ * keep reporting honestly (CLAUDE.md §2: a value outside the table reports
+ * rather than being widened to fit).
+ */
+export const ABILITY_WORD_LIST: readonly string[] = [
+  'addendum',
+  'adamant',
+  'alliance',
+  'battalion',
+  'celebration',
+  'chroma',
+  'cohort',
+  'constellation',
+  'converge',
+  "council's dilemma",
+  'corrupted',
+  'coven',
+  'delirium',
+  'domain',
+  'eerie',
+  'enrage',
+  'fateful hour',
+  'fathomless descent',
+  'ferocious',
+  'flurry',
+  'formidable',
+  'grandeur',
+  'hellbent',
+  'heroic',
+  'imprint',
+  'inspired',
+  'join forces',
+  'kinship',
+  'landfall',
+  'lieutenant',
+  'magecraft',
+  'metalcraft',
+  'morbid',
+  'pack tactics',
+  'parley',
+  'radiance',
+  'raid',
+  'rally',
+  'revolt',
+  'secret council',
+  'spell mastery',
+  'strive',
+  'survival',
+  'sweep',
+  'tempting offer',
+  'threshold',
+  'undergrowth',
+  'valiant',
+  'void',
+  'will of the council',
+];
+
+/**
+ * The label as printed, at the head of a line. Longest-first so "fathomless
+ * descent" is never matched as a bare word from a shorter entry, and both
+ * apostrophes are accepted because the corpus prints the typographic one while
+ * the table is written with the straight one.
+ */
+const ABILITY_WORD_LABEL = new RegExp(
+  `^(?:${[...ABILITY_WORD_LIST]
+    .sort((a, b) => b.length - a.length)
+    .map((word) => word.replace(/'/g, "['’]"))
+    .join('|')})\\s*[—–-]\\s*`,
+  'i',
+);
+
+/**
+ * A RIDER is an ability-word line that modifies the line above it instead of
+ * standing on its own. Fatal Push is the shape: it prints "Destroy target
+ * creature if it has mana value 2 or less." and then, on its own line, "Revolt —
+ * Destroy that creature if it has mana value 4 or less **instead** if a
+ * permanent left the battlefield under your control this turn."
+ *
+ * That second line is meaningless alone — "that creature" has no referent and
+ * compiling the two independently would destroy twice — so it is joined onto the
  * previous line, exactly as {@link joinModalBlocks} joins a modal header to its
  * bullets, and ONE rule then sees the whole idiom.
  *
- * A rider with no line above it is left exactly as found, so it reports as
- * unrecognized rather than silently attaching to nothing.
+ * ⚠️ A rider is the RARE case, and treating every ability-word line as one was a
+ * real bug worth remembering: the join used to fire on the WORD alone, so
+ * "Revolt — When this creature enters, … you gain 5 life" was glued to the
+ * keyword line above it as "Flying. Revolt — When ~ enters, …" — a sentence no
+ * rule can ever match, on a card whose body the compiler already understood.
+ * Hundreds of ability-word cards were unreachable for that reason alone.
+ *
+ * So the join is keyed on the line being UNABLE to stand alone. Two markers
+ * prove that: a dangling demonstrative with no antecedent ("Destroy THAT
+ * creature"), or an "…instead" that must be replacing something already said.
+ *
+ * ⚠️ "instead" alone is not enough, and reading it that way glued Akoum Hellkite
+ * ("Landfall — Whenever a land you control enters, ~ deals 1 damage to any
+ * target. If that land is a Mountain, ~ deals 2 damage instead.") to the keyword
+ * line above it. That "instead" replaces the line's OWN first sentence, not the
+ * line above — so it only counts in the FIRST sentence, and only on a line that
+ * does not open an ability of its own.
  */
-const RIDER_PREFIX = /^(?:revolt|morbid|delirium|threshold|metalcraft)\s*[—-]\s*/i;
+const DANGLING_DEMONSTRATIVE = /^(?:that|those)\b/i;
+const INSTEAD = /\binstead\b/i;
 
-function joinRevoltRiders(lines: readonly string[]): string[] {
+/**
+ * The openers that begin a self-contained ability: a triggered ability's
+ * "when/whenever/at", an activated ability's cost-then-colon, or a static one
+ * whose subject is the card itself. A line starting any of these says what it
+ * does without help from the line above, whatever else it goes on to say.
+ */
+const STANDALONE_OPENER = /^(?:when\b|whenever\b|at\b|~\b|[^.:]{1,80}:)/i;
+
+/**
+ * Fold ability-word labels away (CR 207.2c), joining the rare rider onto the
+ * line it modifies and stripping the label off every line that stands alone —
+ * so the rule table sees the ABILITY, which is all the label was ever hiding.
+ *
+ * A rider with no line above it is left exactly as found, label included, so it
+ * reports as unrecognized rather than silently attaching to nothing.
+ */
+function resolveAbilityWords(lines: readonly string[]): string[] {
   const out: string[] = [];
   for (const line of lines) {
-    if (RIDER_PREFIX.test(line) && out.length > 0) {
-      const previous = out[out.length - 1] as string;
-      out[out.length - 1] = `${previous.replace(/\.$/, '')}. ${line}`;
+    const label = ABILITY_WORD_LABEL.exec(line);
+    if (label === null) {
+      out.push(line);
       continue;
     }
-    out.push(line);
+    const body = line.slice(label[0].length);
+    const firstSentence = body.split(/(?<=\.)\s+/, 1)[0] ?? body;
+    const rider =
+      DANGLING_DEMONSTRATIVE.test(body) ||
+      (INSTEAD.test(firstSentence) && !STANDALONE_OPENER.test(body));
+    if (!rider) {
+      out.push(body);
+      continue;
+    }
+    // A rider with no line above it is left exactly as found, label included, so
+    // it reports as unrecognized rather than silently attaching to nothing.
+    if (out.length === 0) {
+      out.push(line);
+      continue;
+    }
+    const previous = out[out.length - 1] as string;
+    out[out.length - 1] = `${previous.replace(/\.$/, '')}. ${line}`;
   }
   return out;
 }
