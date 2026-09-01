@@ -229,27 +229,42 @@ export function runMatch(seats: MatchSeats, seed: number, opts: MatchOptions = {
   let consecutiveRejections = 0;
   // Bound the loop two independent ways so a pathological state can never hang.
   while (!state.gameOver && state.turnNumber <= sim.maxTurnsPerGame && actions < sim.maxActionsPerGame) {
-    const legal = generateLegalActions(state, config);
-    if (legal.length === 0) break; // no moves (shouldn't happen pre-gameOver) — bail safely
-
     const seat = state.priorityPlayer;
     const pilot = pilots[seat];
+
+    // THE FAST PASS (§3.73). A pilot may declare, from the state alone, that it
+    // is going to pass whatever the menu holds — and this pilot passes 81.7% of
+    // the 592 windows in a game. Building the menu for those is work enumerated,
+    // scored and discarded, so when the seam answers `true` the pass is applied
+    // directly and `generateLegalActions` is never called.
+    //
+    // ⚠️ SAFE ONLY BECAUSE THE ANSWER IS A PROMISE, not a hint — see
+    // `Pilot.willPassPriority`, and `fast-pass.test.ts`, which plays whole games
+    // with the seam on and off and requires identical transcripts.
+    let legal: readonly GameAction[] | undefined;
+    if (pilot.willPassPriority?.(state, config) !== true) {
+      legal = generateLegalActions(state, config);
+      if (legal.length === 0) break; // no moves (shouldn't happen pre-gameOver) — bail safely
+    }
     // Thread the pool's effect registry + the active rules config into the decision
     // context so look-ahead pilots (MCTS) roll out hypothetical lines through the
     // *same* forward model the real game uses — spell effects resolve at full
     // fidelity, not as no-ops. Non-simulating pilots simply ignore these fields.
-    const chosen = pilot.chooseAction({
-      view: state,
-      legalActions: legal,
-      rng: rngs[seat],
-      registry: seats.registry,
-      rulesConfig: config,
-      // This seat's per-game observer, or `undefined`. Always present as a field
-      // so the context keeps ONE object shape across every decision of every
-      // pilot — a shape that appeared and disappeared would make this literal
-      // polymorphic in the hottest loop in the harness.
-      observer: observerBySeat[seat],
-    });
+    const chosen: GameAction =
+      legal === undefined
+        ? { kind: 'passPriority', player: seat }
+        : pilot.chooseAction({
+            view: state,
+            legalActions: legal,
+            rng: rngs[seat],
+            registry: seats.registry,
+            rulesConfig: config,
+            // This seat's per-game observer, or `undefined`. Always present as a
+            // field so the context keeps ONE object shape across every decision of
+            // every pilot — a shape that appeared and disappeared would make this
+            // literal polymorphic in the hottest loop in the harness.
+            observer: observerBySeat[seat],
+          });
     // Stuck on rejections → take the one move that always advances the game.
     const action: GameAction =
       consecutiveRejections >= sim.maxConsecutiveRejectedActions

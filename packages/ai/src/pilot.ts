@@ -133,6 +133,30 @@ export interface Pilot<TObserver extends GameObserver = GameObserver> {
    * a paired A/B verdict depend on how the work was divided up.
    */
   createGameObserver?(info: GameStartInfo): TObserver | undefined;
+  /**
+   * **The fast-pass seam — optional, and a PROMISE when it returns true.**
+   *
+   * Answering `true` means: *whatever the legal menu turns out to contain, I am
+   * going to pass priority.* A harness may then skip building the menu at all
+   * and apply the pass directly, which is the point — `generateLegalActions` is
+   * ~20% of a sim run, and measurement says the heuristic passes **81.7% of the
+   * 592 decision windows in a game** (`packages/sim/bench/window-stats.mjs`).
+   * Most of that work is enumerated, scored and thrown away.
+   *
+   * ⚠️ A WRONG `true` SILENTLY MAKES THE PILOT PLAY WORSE, and every recorded
+   * win-rate with it. It is not an optimisation hint that can be a bit off: the
+   * action is taken without anybody checking. So the contract is one-sided —
+   * `false` (or omitting the method) is ALWAYS safe and simply means "ask me
+   * properly", while `true` must be provable from the state alone.
+   *
+   * The guard is `packages/ai/src/fast-pass.test.ts`: it plays whole games with
+   * the seam on and off and requires the transcripts to be identical, action for
+   * action. A gate that ever lies fails there rather than in a win rate nobody
+   * can explain six months later.
+   *
+   * `view` is the same read-only state `chooseAction` would receive.
+   */
+  willPassPriority?(view: GameState, rulesConfig?: RulesConfig): boolean;
 }
 
 /**

@@ -12,6 +12,7 @@ const A = deckOf('Mono-Red Aggro');
 const B = deckOf('UW Control');
 
 let windows = 0, passOnly = 0, chosePass = 0, totalOffers = 0, kinds = new Map();
+let gateTrue = 0, gvEmpty = 0, hadActivated = 0, hadInstant = 0;
 for (let g = 0; g < 60; g++) {
   const { state } = createGame({
     seed: 7 + g,
@@ -25,6 +26,12 @@ for (let g = 0; g < 60; g++) {
     const legal = generateLegalActions(s, DEFAULT_RULES);
     if (legal.length === 0) break;
     windows += 1;
+    const gate = pilot.willPassPriority ? pilot.willPassPriority(s) : false;
+    if (gate) gateTrue += 1;
+    { const me=s.priorityPlayer;
+      if ((s.players[me].graveyard.length ?? 0) === 0) gvEmpty += 1;
+      if (s.battlefield.some((c)=>c.controller===me && (c.def.activated?.length ?? 0)>0)) hadActivated += 1;
+      if (s.players[me].hand.some((c)=>(c.def.types||[]).includes("instant") || c.def.keywords?.flash)) hadInstant += 1; }
     totalOffers += legal.length;
     if (legal.length === 1) passOnly += 1;
     for (const a of legal) kinds.set(a.kind, (kinds.get(a.kind) ?? 0) + 1);
@@ -41,4 +48,6 @@ console.log(`windows ${windows} over 60 games (${(windows / 60).toFixed(0)}/game
 console.log(`  only-pass offered : ${passOnly} (${pct(passOnly)})`);
 console.log(`  pilot chose pass  : ${chosePass} (${pct(chosePass)})`);
 console.log(`  mean offers/window: ${(totalOffers / windows).toFixed(1)}`);
+console.log('  gate fires        : ' + gateTrue + ' (' + pct(gateTrue) + ')');
+console.log('  graveyard empty   : ' + pct(gvEmpty) + ' | has activated: ' + pct(hadActivated) + ' | has instant in hand: ' + pct(hadInstant));
 console.log('  offers by kind    :', [...kinds].sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k}=${v}`).join(' '));
