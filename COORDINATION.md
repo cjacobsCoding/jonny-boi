@@ -199,7 +199,7 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
-- 2026-08-31 integrator: `feat/board-fits` — DESIGN §3.62, the "board should fit without scrolling"
+- 2026-08-31 integrator: `feat/board-fits` ✅ MERGED + DEPLOYED — DESIGN §3.62, the "board should fit without scrolling"
   report. apps/web only: NEW `components/play/board-fit.css` (the whole idea in one file), one CSS
   import + the fanned-card-back token in `components/play/PlayCard.tsx`, NEW
   `scripts/verify-board-fits.mjs` (23 measured checks), `eslint.config.js` (two globals for the new
