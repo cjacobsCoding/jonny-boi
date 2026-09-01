@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactElement } from 'react';
 import { createRng, type InstanceId, type PlayerId } from '@jonny-boi/core';
 import { createDefaultAiRegistry, DEFAULT_PILOT_ID } from '@jonny-boi/ai';
 import type { DecksApi } from '../lib/useDecks.js';
@@ -43,7 +43,30 @@ import {
   resolveStartingPlayer,
   type StarterPreference,
 } from '../lib/play/first-player.js';
+import {
+  deleteEntry,
+  readHistory,
+  updateHistory,
+  upsertEntry,
+  type HistoryEntry,
+  type HistoryOutcome,
+} from '../lib/play/history.js';
+import { libraryRows } from '../lib/play/library-view.js';
+import { GameLibrary } from '../components/play/GameLibrary.js';
 import './play-resume.css';
+
+/**
+ * A fresh library id for a game. `randomUUID` where the platform has it, and a
+ * time+random fallback where it does not (older embedded webviews) — an id only
+ * has to be unique within one browser's library, so this is ample.
+ */
+function newGameId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `g${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
 
 /** The high-level phase the hotseat is in. */
 type Phase =
@@ -151,7 +174,29 @@ export function PlayView({ decks }: { decks: DecksApi }): ReactElement {
   // The record a mounted LocalPlay should restore, when the user chose (or the
   // update flow chose for them) to resume rather than start fresh.
   const [resumeRecord, setResumeRecord] = useState<PlayRecord | null>(boot.auto ? boot.saved : null);
+  /** Which library row the pending resume belongs to, so play CONTINUES it. */
+  const [resumeEntryId, setResumeEntryId] = useState<string | null>(null);
   const [mode, setMode] = useState<PlayMode>(boot.auto && boot.saved ? modeOfRecord(boot.saved) : 'choose');
+  /**
+   * The library as the menu shows it, DERIVED rather than mirrored in state.
+   * The play surface writes to storage while this menu is not on screen, so the
+   * list is re-read when the menu is shown (`mode`) and when this component
+   * itself changed it (`libraryEdits`). An effect that copied storage into
+   * state would be a second source of truth for something localStorage already
+   * holds — and would fire a render for every read.
+   */
+  const [libraryEdits, setLibraryEdits] = useState(0);
+  const library = useMemo<readonly HistoryEntry[]>(
+    () => (mode === 'choose' ? readHistory() : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- libraryEdits is the re-read trigger
+    [mode, libraryEdits],
+  );
+
+  const forgetGame = useCallback((id: string): void => {
+    updateHistory((entries) => deleteEntry(entries, id));
+    setLibraryEdits((n) => n + 1);
+  }, []);
+
   // Which pilot the computer plays. Held HERE rather than inside the game so it
   // survives "back to the menu" and a rematch — a player who picked Hybrid once
   // should not be silently demoted to the default on their next game. Seeded
@@ -188,6 +233,23 @@ export function PlayView({ decks }: { decks: DecksApi }): ReactElement {
     setMode(modeOfRecord(savedGame));
   }, [savedGame]);
 
+  /**
+   * Resume any game in the library — the user's "regardless of why they weren't
+   * finished". It is the same path the single-slot banner takes; the only extra
+   * is carrying the entry's id so play continues that row.
+   */
+  const resumeFromLibrary = useCallback(
+    (id: string): void => {
+      const entry = readHistory().find((e) => e.id === id);
+      if (!entry) return;
+      setResumeEntryId(entry.id);
+      setResumeRecord(entry.record);
+      if (entry.record.setup.ai) setPilotId(entry.record.setup.ai.pilotId);
+      setMode(modeOfRecord(entry.record));
+    },
+    [],
+  );
+
   const discardSaved = useCallback((): void => {
     clearSavedGame();
     setSavedGame(null);
@@ -206,6 +268,7 @@ export function PlayView({ decks }: { decks: DecksApi }): ReactElement {
           decks={decks}
           ai={{ seat: soloResume?.setup.ai?.seat ?? AI_SEAT, pilotId: soloResume?.setup.ai?.pilotId ?? pilotId }}
           {...(soloResume ? { resume: soloResume } : {})}
+          {...(resumeEntryId ? { resumeEntryId } : {})}
         />
       </>
     );
@@ -219,7 +282,11 @@ export function PlayView({ decks }: { decks: DecksApi }): ReactElement {
             ← Play menu
           </button>
         </div>
-        <LocalPlay decks={decks} {...(localResume ? { resume: localResume } : {})} />
+        <LocalPlay
+          decks={decks}
+          {...(localResume ? { resume: localResume } : {})}
+          {...(resumeEntryId ? { resumeEntryId } : {})}
+        />
       </>
     );
   }
@@ -260,6 +327,11 @@ export function PlayView({ decks }: { decks: DecksApi }): ReactElement {
             </div>
           </div>
         )}
+        <GameLibrary
+          rows={libraryRows(library)}
+          onResume={resumeFromLibrary}
+          onDelete={forgetGame}
+        />
         <div className="play-mode__choices">
           <button type="button" className="play-mode__card" onClick={() => setMode('solo')}>
             <span className="play-mode__icon" aria-hidden="true">🤖</span>
@@ -330,10 +402,17 @@ function LocalPlay({
   decks,
   ai,
   resume,
+  resumeEntryId,
 }: {
   decks: DecksApi;
   ai?: AiSeatConfig;
   resume?: PlayRecord;
+  /**
+   * The library id this mount is CONTINUING (§3.66). Without it a resumed game
+   * would be filed as a brand-new entry on its first autosave, so the library
+   * would grow a second row for a game you never stopped playing.
+   */
+  resumeEntryId?: string;
 }): ReactElement {
   // Rebuild once per mount, in the initializer so the first paint is already
   // the restored game (no flash of the setup screen). Pure, so StrictMode's
@@ -394,6 +473,39 @@ function LocalPlay({
 
   // --- persistence -----------------------------------------------------------------
   const saver = useMemo(() => createGameSaver(), []);
+
+  /**
+   * This game's identity in the library. Minted when a game begins and carried
+   * for its whole life, so every save UPDATES one entry instead of littering
+   * the library with a row per autosave. A resumed or forked game arrives with
+   * its id already set, which is what makes "keep playing the same game" and
+   * "this is a different playthrough" distinguishable at all.
+   */
+  const gameIdRef = useRef<string>(resumeEntryId ?? newGameId());
+  /** Lineage for the game currently open, if it was forked from another. */
+  const forkOfRef = useRef<{ readonly parentId: string; readonly forkedAt: number } | null>(null);
+  /**
+   * File this game in the library. The surface WRITES; the menu that lists and
+   * deletes reads its own copy — keeping one shared list in React state across
+   * that boundary would be a second source of truth for something localStorage
+   * already holds.
+   */
+  const fileInLibrary = useCallback((record: PlayRecord, outcome: HistoryOutcome): void => {
+    const id = gameIdRef.current;
+    const lineage = forkOfRef.current;
+    updateHistory((entries) => {
+      const existing = entries.find((e) => e.id === id);
+      const now = record.savedAt;
+      return upsertEntry(entries, {
+        id,
+        record,
+        outcome,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+        ...(lineage ? { parentId: lineage.parentId, forkedAt: lineage.forkedAt } : {}),
+      });
+    });
+  }, []);
   const liveId = useId();
 
   // The updater force-flushes pending writes before any update-triggered reload.
@@ -417,25 +529,36 @@ function LocalPlay({
   useEffect(() => {
     if (!config || !session) return;
     if (phase.kind === 'setup' || phase.kind === 'error') return;
+    const record = buildPlayRecord({
+      names: config.names,
+      choiceA: config.choiceA,
+      choiceB: config.choiceB,
+      startingPlayer: config.startingPlayer,
+      seed,
+      ...(ai ? { ai: { seat: ai.seat, pilotId: ai.pilotId } } : {}),
+      mulligans: transcript,
+      session,
+      ui: { revealed, scrollY: typeof window === 'undefined' ? 0 : window.scrollY },
+    });
+
+    // THE LIBRARY (§3.66) files EVERY game, decided or not, off the same record
+    // the resume slot uses — one snapshot, two readers, so a game can never be
+    // in one and not the other. A finished game is exactly what the library is
+    // for, which is why this runs before the game-over return below.
+    const outcome: HistoryOutcome = !session.gameOver
+      ? { kind: 'unfinished' }
+      : session.winner
+        ? { kind: 'win', winner: session.winner, reason: 'the game ended' }
+        : { kind: 'draw', reason: 'the game ended' };
+    fileInLibrary(record, outcome);
+
     if (session.gameOver) {
-      // Game decided (win, loss, draw, concede): nothing to resume any more.
+      // Game decided: nothing to RESUME any more — but the library keeps it.
       saver.clear();
       return;
     }
-    saver.save(
-      buildPlayRecord({
-        names: config.names,
-        choiceA: config.choiceA,
-        choiceB: config.choiceB,
-        startingPlayer: config.startingPlayer,
-        seed,
-        ...(ai ? { ai: { seat: ai.seat, pilotId: ai.pilotId } } : {}),
-        mulligans: transcript,
-        session,
-        ui: { revealed, scrollY: typeof window === 'undefined' ? 0 : window.scrollY },
-      }),
-    );
-  }, [config, session, phase, seed, ai, transcript, revealed, saver]);
+    saver.save(record);
+  }, [config, session, phase, seed, ai, transcript, revealed, saver, fileInLibrary]);
 
   // Scroll rides the record too ("where your view was on the screen"), and the
   // pending write is flushed on hide/unmount so a tab kill or a navigation away

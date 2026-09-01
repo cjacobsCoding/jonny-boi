@@ -76,7 +76,7 @@ function signature(session: GameSession): string {
       p.graveyard.map((c) => c.instanceId).join(','),
     ].join('|');
   });
-  return [s.turn, s.step, s.activePlayer, s.priorityPlayer, ...zones, s.battlefield.map((c) => c.instanceId).join(',')].join(
+  return [s.turnNumber, s.step, s.activePlayer, s.priorityPlayer, ...zones, s.battlefield.map((c) => c.instanceId).join(',')].join(
     '#',
   );
 }
