@@ -122,10 +122,11 @@ Notes:
     pilot-ab/soak). Results are BYTE-IDENTICAL to the sequential run — same rows,
     same CIs, same verdicts — because every game's seed comes from its absolute
     (opponent × game) index and slices merge as exact integer counts; only the
-    wall clock changes. Without the flag the CLI decides for itself: parallel
-    when the run is big enough to pay the workers' ~1–2s startup, sequential
-    otherwise (thresholds in parallel-config.ts). --workers 1 forces sequential.
-    Each worker holds its own card pool (~150 MB); on a memory-tight box prefer
+    wall clock changes. Without the flag the CLI decides for itself: one worker
+    per PHYSICAL core (SMT siblings measurably SLOW this workload down), and only
+    when the run is big enough to pay each worker's ~0.35s startup — thresholds
+    and the measured curve are in parallel-config.ts. --workers 1 forces
+    sequential. Each worker holds its own card pool; on a memory-tight box prefer
     2–4. suggest is not yet fanned out — see DESIGN §3.53.
   • swap --scope controls HOW MANY copies move (default "${DEFAULT_SWAP_SCOPE}"):
       playset — replace every copy: "does this card belong in the deck at all?"
@@ -177,9 +178,11 @@ Notes:
   • Fidelity (DESIGN §3.9, done): the engine models triggered abilities, "until
     end of turn" effects, planeswalkers with loyalty, transforming DFCs, printed
     flashback, the characteristic-defining star P/T box and turn-scoped memory
-    (revolt). A few advanced mechanics remain unimplemented (flashback granted by
-    another card, modes chosen at cast time) — cards using them play as a
-    simplified subset. The statistics are exact.`;
+    (revolt). Flashback GRANTED by another card (Snapcaster Mage) and modes
+    chosen at CAST time (Cryptic Command) are implemented too — the soak requires
+    its 'graveyard-grant' and 'modal-cast' witnesses to fire on every run.
+    A card is in the pool only if the compiler called it complete, so nothing
+    here plays as a simplified subset. The statistics are exact.`;
 
 /** A parsed flag bag. */
 interface Flags {

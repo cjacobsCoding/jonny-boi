@@ -175,20 +175,29 @@ export const DEFAULT_STATS_CONFIG: StatsConfig = Object.freeze({
 });
 
 /**
- * The single, shared fidelity caveat (DESIGN §3.9 — now DONE). Engine v2 models
- * triggered abilities and until-end-of-turn continuous effects, so prowess,
- * cast/ETB-trigger tokens, persist, and pumps that wear off all play correctly.
- * A small set of advanced mechanics is still genuinely unimplemented (the
- * authoritative list is `STUBBED_MECHANICS` in `@jonny-boi/cards`); cards that
- * use them play as a simplified subset. Every surface (CLI output, help text,
- * the suggestion report's `notes.fidelityCaveat`, and the web Lab) references
- * THIS constant so there is exactly one wording. The statistics are always exact.
+ * The single, shared fidelity note (DESIGN §3.9 — done). Every surface (CLI
+ * output, help text, the suggestion report's `notes.fidelityCaveat`, and the web
+ * Lab) references THIS constant so there is exactly one wording.
+ *
+ * ⚠️ IT USED TO BE A CAVEAT, AND THE CAVEAT WENT STALE. It named "flashback
+ * GRANTED by another card" and "modes chosen at cast time" as unimplemented, and
+ * said cards using them "play as a simplified subset" — long after both landed.
+ * Snapcaster Mage and Cryptic Command both compile complete, and the soak
+ * REQUIRES its `graveyard-grant` and `modal-cast` witnesses to fire on every
+ * run, so the engine would fail its own suite if either had regressed.
+ *
+ * Its own stated authority, `STUBBED_MECHANICS` in `@jonny-boi/cards`, is EMPTY
+ * — the text simply had not been re-read against it. What is true now is
+ * stronger and simpler: a card reaches the pool only if the Oracle-text compiler
+ * reported it `complete`, so nothing in the pool plays as a simplified subset.
+ * A card the compiler cannot model faithfully is not in the pool at all.
  */
 export const FIDELITY_CAVEAT =
-  'Note: the engine models triggered abilities, until-end-of-turn effects, '
-  + 'planeswalkers with loyalty, transforming double-faced cards, printed '
-  + '"Flashback {cost}", characteristic-defining power/toughness (the star box) '
-  + 'and turn-scoped memory (revolt). A few advanced mechanics remain '
-  + 'unimplemented — flashback GRANTED by another card, and modes chosen at '
-  + 'cast time — so cards using them play as a simplified subset. The '
-  + 'statistics are exact.';
+  'Note: every card in the pool compiles COMPLETELY — the Oracle-text compiler '
+  + 'admits a card only when every printed ability is implemented by a real '
+  + 'effect primitive, so nothing here plays as a simplified subset. Triggered '
+  + 'abilities, until-end-of-turn effects, planeswalker loyalty, transforming '
+  + 'double-faced cards, flashback (printed and granted), cast-time modal '
+  + 'choices, characteristic-defining power/toughness and turn-scoped memory all '
+  + 'play for real. Cards the compiler cannot model faithfully are excluded '
+  + 'rather than approximated. The statistics are exact.';
