@@ -6,13 +6,37 @@
  * clause SHAPE; neither names a mechanic, because a keyword can be blocked in
  * several different-looking ways ("Convoke" as a bare line, "Regenerate ~" as an
  * ability, "Crew 2" as a cost). This asks the question the goal is phrased in:
- * of every keyword Scryfall tags cards with, which are unimplemented, and how
- * much of the pool is behind each?
+ * of every keyword printed on a real card, which are unimplemented, and how much
+ * of the pool is behind each?
  *
- * A keyword counts as BLOCKING a card when the card carries it and does not
- * compile. `soleBlocker` is the stricter, more useful number: the card is one
- * clause from playable AND that clause mentions the keyword — so implementing
- * this one mechanic alone makes the card playable.
+ * ⚠️ THE ATTRIBUTION IS THE WHOLE VALUE OF THIS TOOL, and three earlier versions
+ * got it wrong in three different directions. All three are worth keeping
+ * written down, because each is the natural thing to reach for:
+ *
+ *   1. SUBSTRING against Scryfall's keyword list — credited "Enchant" for every
+ *      Aura whose grant BODY was unsupported ("Enchanted creature can't attack
+ *      or block"), because that clause contains the word. It read 412 cards deep
+ *      and would have sent an agent to build Auras, which have existed for ages.
+ *   2. EXACT EQUALITY with the compiler's keyword-sweep reason — the opposite
+ *      error. The sweep only fires for keywords Scryfall tagged that the text
+ *      never explained; a printed keyword LINE no rule matches is reported by
+ *      the ordinary clause scan instead. Whole mechanics vanished and the tool
+ *      claimed the pool had just 12 keyword-blocked cards.
+ *   3. Ranking by the compiler's own wording — same blind spot as (2), plus it
+ *      split one mechanic across a row per parameter.
+ *
+ * What is true of every real case, and false for every false positive: THE
+ * BLOCKING CLAUSE IS THE KEYWORD'S OWN PRINTED LINE. So a card counts for
+ * keyword K when its single missing clause STARTS WITH K at a word boundary —
+ * "Soulshift 4", "Echo {1}{G}", "Affinity for artifacts", "Islandwalk". Scryfall
+ * says which words are keywords (`card.keywords`), so the vocabulary is data and
+ * not a list maintained here. "Enchanted creature …" starts with `enchanted`,
+ * which is not the word `enchant`, so case (1) can no longer creep back in. The
+ * keyword-sweep reason is still honoured as a second path, for keywords whose
+ * line was never printed at all.
+ *
+ * `mechanic` collapses the PARAMETER — "Soulshift 4" and "Soulshift 2" are one
+ * thing to implement, and ranking them apart is how a real backlog hides.
  *
  * Usage: node packages/cards/scripts/keyword-gap-report.mjs <corpus.json> [--top N]
  */
@@ -29,46 +53,86 @@ if (!corpusPath) {
 }
 const corpus = JSON.parse(readFileSync(corpusPath, 'utf8'));
 
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The compiler's keyword sweep writes exactly this when a TAGGED keyword was never explained. */
+const KEYWORD_ABILITY_REASON = /^the "(.+)" keyword ability$/;
+
+/**
+ * A keyword's PARAMETER is not part of the mechanic. Everything after the name —
+ * a number ("Soulshift 4"), a cost ("Echo {1}{G}", "Suspend 5—{G}"), or a chosen
+ * quality ("Affinity for artifacts", "Protection from red") — varies card to
+ * card while the thing to implement stays one thing.
+ */
+const KEYWORD_PARAMETER = /\s+(?:\d.*|\{.*|for\s+.*|from\s+.*|—.*)$/i;
+const mechanicOf = (printed) => printed.replace(KEYWORD_PARAMETER, '').trim().toLowerCase();
+
 const stats = new Map();
+let cards = 0;
+let complete = 0;
 for (const raw of corpus) {
-  const keywords = Array.isArray(raw.keywords) ? raw.keywords : [];
   let result;
   try {
     result = compileCard(normalizeCard(raw));
   } catch {
     continue;
   }
-  const ok = result.status === 'complete';
+  cards += 1;
+  if (result.status === 'complete') {
+    complete += 1;
+    continue;
+  }
   const missing = result.missing ?? [];
-  const soleClause = missing.length === 1 ? missing[0].text.toLowerCase() : null;
-  for (const keyword of keywords) {
-    const bucket = stats.get(keyword) ?? { printed: 0, playable: 0, blocked: 0, sole: 0, examples: [] };
-    bucket.printed += 1;
-    if (ok) {
-      bucket.playable += 1;
-    } else {
-      bucket.blocked += 1;
-      if (soleClause !== null && soleClause.includes(keyword.toLowerCase())) {
-        bucket.sole += 1;
-        if (bucket.examples.length < 4) bucket.examples.push(raw.name);
-      }
+  const tags = Array.isArray(raw.keywords) ? raw.keywords : [];
+  // Every keyword this card waits on, so a card blocked by two is counted
+  // honestly against both and lands in neither `sole` column.
+  const gaps = new Map();
+  for (const entry of missing) {
+    const swept = KEYWORD_ABILITY_REASON.exec(entry.missingEngineSystem ?? '');
+    if (swept) {
+      gaps.set(mechanicOf(swept[1]), swept[1]);
+      continue;
     }
-    stats.set(keyword, bucket);
+    const clause = (entry.text ?? '').toLowerCase();
+    for (const tag of tags) {
+      const word = tag.toLowerCase();
+      if (new RegExp(`^${escapeRegExp(word)}\\b`).test(clause)) gaps.set(mechanicOf(tag), tag);
+    }
+  }
+  for (const [mechanic, printed] of gaps) {
+    const bucket = stats.get(mechanic) ?? { blocked: 0, sole: 0, printed: new Set(), examples: [] };
+    bucket.blocked += 1;
+    bucket.printed.add(printed);
+    if (missing.length === 1) {
+      bucket.sole += 1;
+      if (bucket.examples.length < 4) bucket.examples.push(raw.name);
+    }
+    stats.set(mechanic, bucket);
   }
 }
 
-const ranked = [...stats.entries()]
-  .filter(([, b]) => b.blocked > 0)
-  .sort((a, b) => b[1].sole - a[1].sole || b[1].blocked - a[1].blocked);
+const ranked = [...stats.entries()].sort(
+  (a, b) => b[1].sole - a[1].sole || b[1].blocked - a[1].blocked,
+);
 
-console.log(`${corpus.length} cards · ${stats.size} distinct keywords printed on them`);
-console.log(`\nUNIMPLEMENTED KEYWORDS, ranked by cards this mechanic ALONE blocks:\n`);
-console.log('  sole  blocked  printed  keyword');
-for (const [keyword, b] of ranked.slice(0, TOP)) {
+console.log(`${cards} cards compiled · ${complete} complete · ${cards - complete} incomplete`);
+console.log(`
+KEYWORD ABILITIES THIS COMPILER DOES NOT IMPLEMENT, ranked by cards each ALONE blocks.
+
+  sole    = the card's ONE missing clause is this keyword's printed line.
+            Implement the keyword and the card becomes playable.
+            THIS IS THE WORK-PICKING COLUMN.
+  blocked = cards carrying the keyword that also need something else. They come
+            along for free once their other gap closes.
+`);
+console.log('  sole  blocked  keyword');
+for (const [mechanic, b] of ranked.slice(0, TOP)) {
   console.log(
-    `  ${String(b.sole).padStart(4)}  ${String(b.blocked).padStart(7)}  ${String(b.printed).padStart(7)}  ${keyword}` +
+    `  ${String(b.sole).padStart(4)}  ${String(b.blocked).padStart(7)}  ${mechanic}` +
       (b.examples.length ? `   (${b.examples.slice(0, 3).join(', ')})` : ''),
   );
 }
 const soleTotal = ranked.reduce((sum, [, b]) => sum + b.sole, 0);
-console.log(`\n${ranked.length} keywords still block at least one card; ${soleTotal} cards are blocked by a keyword ALONE.`);
+console.log(
+  `\n${ranked.length} keyword abilities are unimplemented; ${soleTotal} cards are blocked by one ALONE.`,
+);

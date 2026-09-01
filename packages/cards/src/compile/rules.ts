@@ -43,7 +43,14 @@ import type {
 } from '@jonny-boi/core';
 import { DEFAULT_TARGET_RESTRICTION, PLUS_ONE_COUNTER, formatManaCost, MANA_COLORS } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
-import { COUNT_TOKEN, normalizeClause, parseCount, parseManaSymbols, splitCostSymbols } from './text.js';
+import {
+  ABILITY_WORD_LIST,
+  COUNT_TOKEN,
+  normalizeClause,
+  parseCount,
+  parseManaSymbols,
+  splitCostSymbols,
+} from './text.js';
 import { BASIC_LAND_NAMES } from '../../data/pool.js';
 import { ITS_MANA_COST } from '../primitives.js';
 
@@ -6695,29 +6702,15 @@ const MANA_ALTERNATIVE_SEPARATOR = /,? or |, /;
 
 
 /**
- * ABILITY WORDS (CR 207.2c) as they are PRINTED — the italicized label in front
- * of a line, which has no rules meaning of its own. Listed once and read twice:
- * {@link ABILITY_WORDS} skips them in the keyword sweep, and
- * {@link ABILITY_WORD_PREFIX} lets a rule match the line the label sits on
- * (Mox Opal's "Metalcraft — {T}: Add one mana of any color").
+ * An optional printed ability-word label, for a pattern that must see past one.
+ *
+ * `splitAbilities` already folds the label away before the rule table ever sees
+ * a card's own line, so on that path this prefix never fires. It stays because
+ * the rule table is also handed text that never went through that funnel — a
+ * quoted ability granted by another card — and a pattern that silently stops
+ * matching in one of its two callers is the kind of quiet gap this compiler is
+ * built to refuse.
  */
-const ABILITY_WORD_LIST: readonly string[] = [
-  'revolt',
-  'morbid',
-  'delirium',
-  'threshold',
-  'metalcraft',
-  // Landfall and constellation label the permanent-enters trigger line that
-  // `trigger-permanent-enters-or-dies` compiles. Leaving them out would report a
-  // keyword one line after implementing the ability it labels — the sweep guard's
-  // own rule: a keyword is skipped only when the line it labels actually compiled.
-  // They live in this LIST rather than only in the exported set so the ability-word
-  // regex prefix below sees them too; one list, one definition.
-  'landfall',
-  'constellation',
-];
-
-/** An optional printed ability-word label, for patterns that must see past one. */
 const ABILITY_WORD_PREFIX = `(?:(?:${ABILITY_WORD_LIST.join('|')})\\s*[\\u2014\\u2013-]\\s*)?`;
 
 // --- the rich mana-ability shapes -------------------------------------------
