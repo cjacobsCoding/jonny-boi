@@ -371,6 +371,16 @@ export type GameEvent =
       readonly described: string;
     }
   | {
+      /**
+       * A REGENERATION shield replaced a destruction (CR 701.15) — the
+       * permanent was tapped, removed from combat and cleared of damage
+       * instead of dying. Public: everyone watched it not die.
+       */
+      readonly type: 'regenerated';
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
+  | {
       // A triggered ability matched an event and was placed on the stack.
       readonly type: 'triggerPutOnStack';
       readonly sourceInstanceId: InstanceId;

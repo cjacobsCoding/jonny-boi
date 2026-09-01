@@ -18,6 +18,7 @@
 import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
 import { NO_COUNTERS, PLAYER_IDS } from '../state.js';
 import type { GameEvent } from '../events.js';
+import { removeFromCombat } from '../combat-removal.js';
 import { hasCastableBackFace, isBattle, isCreature, isPlaneswalker } from '../card.js';
 import { addCardGrant } from '../card-grants.js';
 import { cardOption, choiceOptionCount, normalizeChoiceRequest } from '../choices.js';
@@ -160,6 +161,16 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
         effectiveToughness(inst, mod) <= 0 ||
         (destroyedByDamage && !effectiveKeywords(inst, mod).indestructible);
       if (!dead) {
+        cursor += 1;
+        continue;
+      }
+      // CR 701.15 — a REGENERATION shield replaces the destruction: the
+      // permanent is tapped, removed from combat and cleared of damage instead
+      // of dying, and the shield is spent. Asked through the one shared helper
+      // so the state-based death and the `destroy` primitive can never
+      // disagree about whether a shield applied.
+      if (consumeRegenerationShield(state, inst, emit)) {
+        changed = true;
         cursor += 1;
         continue;
       }
@@ -718,4 +729,32 @@ export function applyLegendRuleChoice(
   // Everything the departures set off - an orphaned Aura, a creature an anthem
   // was propping up, a SECOND duplicated name - settles now.
   checkStateBasedActions(state, emit);
+}
+
+/**
+ * Spend a REGENERATION shield if this permanent has one (CR 701.15), applying
+ * the replacement the printed word means: tap it, remove it from combat, remove
+ * all damage. Returns whether the destruction was replaced.
+ *
+ * ONE implementation, called by the state-based death check and by the
+ * `destroy` primitive alike — a shield that applied to a wrath but not to a
+ * targeted Murder would be two different rules wearing one name.
+ */
+export function consumeRegenerationShield(
+  state: GameState,
+  inst: CardInstance,
+  emit: (e: GameEvent) => void,
+): boolean {
+  const shields = inst.regenerationShields ?? 0;
+  if (shields <= 0) return false;
+  inst.regenerationShields = shields - 1;
+  inst.damageMarked = 0;
+  inst.markedByDeathtouch = false;
+  if (!inst.tapped) {
+    inst.tapped = true;
+    emit({ type: 'tapped', instanceId: inst.instanceId });
+  }
+  removeFromCombat(state.combat, inst.instanceId);
+  emit({ type: 'regenerated', instanceId: inst.instanceId, name: inst.def.name });
+  return true;
 }

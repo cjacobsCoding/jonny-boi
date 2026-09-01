@@ -361,6 +361,8 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
    * emits its own zoneChange, so the runner keeps tracking them precisely.
    */
   'exileGraveyard',
+  // Raises a shield ON a battlefield permanent. No zone is read at all.
+  'regenerate',
   'sacrificeChosen',
   'pileSplitSacrifice',
   /*

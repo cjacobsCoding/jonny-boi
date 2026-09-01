@@ -136,8 +136,15 @@ import { createTriggerCollector } from './internal/triggers-runtime.js';
 import { clearTurnFacts, turnFactHolds } from './turn-facts.js';
 import { hasNoMaximumHandSize, landPlayZonesFor } from './player-statics.js';
 import { expireFloatingReplacements, indexReplacements, replaceDraw } from './internal/replacement.js';
-import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
-import { effectiveKeywords } from './internal/stats.js';
+import {
+  aggregateFor,
+  anyContinuousModification,
+  expireContinuousEffects,
+  indexContinuous,
+  NO_MOD,
+  pruneOrphanContinuousEffects,
+} from './internal/continuous.js';
+import { effectiveActivated, effectiveKeywords } from './internal/stats.js';
 import { findOnBattlefield, moveToZone, resetInstanceForNewZone } from './internal/zones.js';
 import {
   applyLegendRuleChoice,
@@ -527,6 +534,11 @@ function performStepTurnBasedActions(
       for (const inst of state.battlefield) {
         inst.damageMarked = 0;
         inst.markedByDeathtouch = false;
+        // A REGENERATION shield lasts "this turn" and no longer (CR 701.15),
+        // so it wears off on the same clock as marked damage — an unspent
+        // shield that survived the turn would save the creature from next
+        // turn's removal, which is a card nobody printed.
+        if (inst.regenerationShields !== undefined) delete inst.regenerationShields;
       }
       emptyManaPools(state, emit);
       checkStateBasedActions(state, emit);
@@ -2760,20 +2772,59 @@ export function canAffordManaCost(state: GameState, player: PlayerId, cost: Mana
  * common board (no reducer anywhere) returns `base` untouched after a single
  * battlefield walk with no allocation.
  */
-export function castManaCostFor(
+/**
+ * Every cast-cost reduction `caster` controls right now.
+ *
+ * Split out so the OFFER path can walk the battlefield ONCE per decision and
+ * hand the result to every candidate card, instead of walking it per card:
+ * with a seven-card hand that was seven identical walks for a board that
+ * almost never has a reducer at all.
+ *
+ * Deliberately NOT cached across calls. The engine mutates the draft
+ * battlefield IN PLACE during an action, so any cache keyed on the array would
+ * have to prove nothing relevant changed since — and "the permanent that
+ * entered this action does not reduce anything" is exactly the kind of
+ * assumption that is true until a card makes it false. Passing the list down
+ * is the same saving with nothing to invalidate.
+ */
+export function castCostReducersFor(
   state: GameState,
   caster: PlayerId,
-  castDef: CardDefinition,
-  base: ManaCost | undefined,
-): ManaCost | undefined {
-  if (!base) return base;
-  let reduction = 0;
+): readonly NonNullable<CardDefinition['castCostReduction']>[] {
   const battlefield = state.battlefield;
+  let found: NonNullable<CardDefinition['castCostReduction']>[] | null = null;
   for (let i = 0; i < battlefield.length; i++) {
     const permanent = battlefield[i] as CardInstance;
     if (permanent.controller !== caster) continue;
     const grant = permanent.def.castCostReduction;
     if (grant === undefined) continue;
+    (found ??= []).push(grant);
+  }
+  return found ?? NO_REDUCERS;
+}
+
+const NO_REDUCERS: readonly NonNullable<CardDefinition['castCostReduction']>[] = Object.freeze([]);
+
+export function castManaCostFor(
+  state: GameState,
+  caster: PlayerId,
+  castDef: CardDefinition,
+  base: ManaCost | undefined,
+  /** The caster's reducers, when the caller already walked for them. */
+  knownReducers?: readonly NonNullable<CardDefinition['castCostReduction']>[],
+): ManaCost | undefined {
+  if (!base) return base;
+  // The REDUCERS are found once per board, not once per candidate card: the
+  // offer loop asks this for every card in hand (and every back face, and every
+  // graveyard cast), so the battlefield walk was repeated a handful of times per
+  // decision for a board that almost never has a reducer at all. The cache is
+  // keyed on the battlefield ARRAY, which a fresh draft replaces on every
+  // action — so it is per-action by construction and can never go stale.
+  const reducers = knownReducers ?? castCostReducersFor(state, caster);
+  if (reducers.length === 0) return base;
+  let reduction = 0;
+  for (let i = 0; i < reducers.length; i++) {
+    const grant = reducers[i] as NonNullable<CardDefinition['castCostReduction']>;
     if (grant.filter !== undefined && !matchesCardFilter(SPELL_FILTER_PROBE(castDef), grant.filter)) continue;
     reduction += grant.amount;
   }
@@ -4149,7 +4200,10 @@ function applyActivateAbility(
   if (!source) return rejectWith(prevState, 'that permanent is not on the battlefield');
   if (source.controller !== action.player) return rejectWith(prevState, 'you do not control that permanent');
 
-  const ability = source.def.activated?.[action.abilityIndex];
+  // Printed AND granted, through the one accessor the offer path uses — an
+  // index that means different abilities to the two paths activates the wrong
+  // one (DESIGN §3.36's failure, in its most literal form).
+  const ability = effectiveActivated(source, aggregateFor(state, source.instanceId))[action.abilityIndex];
   if (!ability) return rejectWith(prevState, 'that permanent has no such activated ability');
 
   // Timing: the rules default for an activated ability is instant speed; only
@@ -4704,6 +4758,9 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // legal target cannot be cast. Unrestricted spells keep their single bare offer:
   // their targets (a stack object, the source itself, none) are chosen by the
   // caller, and enumerating them here would change every consumer's action space.
+  // ONE battlefield walk for the whole offer pass: every candidate card reads
+  // the same reducer list instead of walking for itself (castCostReducersFor).
+  const reducers = castCostReducersFor(state, me);
   for (let h = 0; h < player.hand.length; h++) {
     const card = player.hand[h] as CardInstance;
     // A TRANSFORMING back face is never castable (CR 712.8b) — mirror
@@ -4723,6 +4780,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
       player.manaPool,
       sorcerySpeedWindow,
       actions,
+      { reducers },
     );
     // The second half - a modal DFC's other face, a split card's right half -
     // but only when the HAND is a zone it may be cast from. Aftermath prints a
@@ -4858,11 +4916,18 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // rules above: timing is checked, the whole cost must be payable, and an
   // ability with a target restriction is offered once per LEGAL target (and not
   // at all when there is none), so this menu can only contain playable actions.
+  // ONE continuous index for the whole ability loop, built only when the board
+  // carries any continuous effect at all — `anyContinuousModification` is the
+  // cheap gate that already exists for that question and short-circuits on the
+  // first modifying source. Reading a granted ability through `aggregateFor`
+  // per permanent instead made this loop O(board²) per action, which the
+  // profiler showed as 5% of a whole gauntlet.
+  const activatedIndex = anyContinuousModification(state) ? indexContinuous(state) : undefined;
   for (let b = 0; b < battlefield.length; b++) {
     const perm = battlefield[b] as CardInstance;
     if (perm.controller !== me) continue;
-    const abilities = perm.def.activated;
-    if (!abilities || abilities.length === 0) continue;
+    const abilities = effectiveActivated(perm, activatedIndex?.get(perm.instanceId) ?? NO_MOD);
+    if (abilities.length === 0) continue;
     for (let index = 0; index < abilities.length; index++) {
       const ability = abilities[index]!;
       const timing = ability.timing ?? 'instant';
@@ -4983,7 +5048,7 @@ function pushCastOffers(
     // The cost judged here is the cost the cast path will CHARGE — reductions
     // included — or a Medallion would make a spell payable that the menu never
     // offers.
-    const offered = castManaCostFor(state, me, def, def.cost);
+    const offered = castManaCostFor(state, me, def, def.cost, options?.reducers);
     if (offered && !canPay(pool, offered, spendPurposeIfRestricted(pool, def, 'cast'))) {
       return;
     }
@@ -5032,6 +5097,11 @@ function pushCastOffers(
  * overwhelming majority of offers pass nothing at all.
  */
 interface CastOfferOptions {
+  /**
+   * The caster's cast-cost reducers, walked ONCE by the offer loop and shared
+   * by every candidate card — see `castCostReducersFor`.
+   */
+  readonly reducers?: readonly NonNullable<CardDefinition['castCostReduction']>[];
   readonly fromZone?: CastZone;
   readonly free?: boolean;
 }

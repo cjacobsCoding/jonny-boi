@@ -263,6 +263,22 @@ export interface CardInstance {
   // of an instance stay assignable to this type.
   modesChosenThisTurn?: readonly string[];
   /**
+   * REGENERATION SHIELDS standing on this permanent (CR 701.15) — "The next
+   * time this permanent would be destroyed this turn, instead tap it, remove it
+   * from combat, and remove all damage from it."
+   *
+   * A COUNT, not a flag: two activations of "{B}: Regenerate this creature"
+   * survive two destructions, which is the whole reason a regenerator holds off
+   * a board wipe AND a blocker in the same turn. Each shield is consumed by the
+   * destruction it replaces.
+   *
+   * Cleared in the cleanup step with damage, because the printed word is "this
+   * turn". Written only on a permanent that has actually been shielded, for the
+   * same object-shape reason as {@link attachedTo}; anyone adding a field here
+   * must also edit `internal/clone.ts`.
+   */
+  regenerationShields?: number;
+  /**
    * The permanent that exiled this card "until it leaves the battlefield"
    * (the O-Ring link — Banisher Priest, Fiend Hunter, Angel of Serenity).
    *

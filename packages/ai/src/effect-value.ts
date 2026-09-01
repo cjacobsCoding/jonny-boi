@@ -58,7 +58,7 @@ import {
 import type { CardFilter } from '@jonny-boi/core';
 import { cardValue, findInstance, type CardValueContext } from './card-value.js';
 import type { ContinuousIndex } from './board-stats.js';
-import { boardIndex, keywordsOf, power as effPower, statTotal, toughnessLeft } from './board-stats.js';
+import { keywordsOf, power as effPower, statTotal, toughnessLeft } from './board-stats.js';
 import type { HeuristicWeights } from './weights.js';
 
 /**
@@ -661,7 +661,10 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     const combat = ctx.state.combat;
     if (!combat || !combat.attackersDeclared || combat.attackers.length === 0) return 0;
     if (ctx.state.activePlayer === ctx.player) return 0; // we are the attacker
-    const index = boardIndex(ctx.state);
+    // The context ALREADY carries the board index, precomputed once per
+    // decision — rebuilding it here walked the battlefield again for every
+    // fog the pilot priced.
+    const index = ctx.index;
     let incoming = 0;
     for (const id of combat.attackers) {
       const attacker = ctx.state.battlefield.find((c) => c.instanceId === id);
@@ -779,6 +782,28 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
       worth += player === ctx.player ? -value : value;
     }
     return worth * ctx.weights.bankedEffectValueShare;
+  },
+
+  /**
+   * REGENERATION — a shield that will replace the NEXT destruction this turn
+   * (CR 701.15), priced as a share of what losing the creature would cost.
+   * Below the creature's full value because the shield only pays off if
+   * something actually tries to kill it, and above zero because a regenerator
+   * holding up mana is exactly how that card wins a race.
+   */
+  regenerate: (_params, ctx) => {
+    // The ruler knows no source instance, so it prices the shield against the
+    // creature the pilot would most regret losing — its best body on board.
+    // That is the same creature the ability is printed on in every real case.
+    let guarded: CardInstance | undefined;
+    let best = -Infinity;
+    for (const perm of ctx.state.battlefield) {
+      if (perm.controller !== ctx.player || !isCreature(perm.def)) continue;
+      const worth = cardValue(perm, ctx.weights, ctx.cards);
+      if (worth > best) { best = worth; guarded = perm; }
+    }
+    if (!guarded) return 0;
+    return cardValue(guarded, ctx.weights, ctx.cards) * ctx.weights.bankedEffectValueShare;
   },
 
   // "You win the game" IS the lethal outcome, priced at lethal's own weight —

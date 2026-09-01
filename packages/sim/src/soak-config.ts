@@ -183,6 +183,7 @@ export type SoakMechanicId =
   | 'attachment'
   | 'token'
   | 'triggered-ability'
+  | 'regeneration'
   | 'modal-trigger'
   | 'trigger-targets'
   | 'control-change'
@@ -466,6 +467,7 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
   },
   { id: 'attachment', label: 'attachments — an Aura or Equipment attached', witnessKind: 'event', printedBy: (c) => (c as { attachment?: unknown }).attachment !== undefined },
   { id: 'token', label: 'tokens — a token created', witnessKind: 'event', printedBy: (_c, t) => t.includes('createToken') || t.includes('makeToken') },
+  { id: 'regeneration', label: 'regeneration — a shield spent to replace a destruction', witnessKind: 'event', printedBy: (c) => JSON.stringify((c )).includes('"regenerate"') },
   { id: 'triggered-ability', label: 'triggered abilities — one put on the stack', witnessKind: 'event', printedBy: (c) => ((c as { triggers?: readonly unknown[] }).triggers ?? []).length > 0 },
   { id: 'modal-trigger', label: 'modal triggers — a "Choose one —" body answered on the stack', witnessKind: 'event', printedBy: (c) => ((c as { triggers?: readonly { modal?: unknown }[] }).triggers ?? []).some((t) => t.modal !== undefined) },
   {
@@ -809,6 +811,8 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   // make a game where tokens are made AND traded off witness `token` twice,
   // which is the cheap end-to-end proof that the cease-to-exist rule ran.
   tokenCeasedToExist: 'token',
+  // A regeneration shield actually SPENT — proof the mechanic ran in anger.
+  regenerated: 'regeneration',
   triggerPutOnStack: 'triggered-ability',
   // A modal trigger's mode answer — its own mechanic, so soak proves a modal
   // TRIGGER actually got chosen in anger, not merely pushed.

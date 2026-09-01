@@ -64,6 +64,7 @@ import {
   protectionPreventsDamage,
   drawCardForPlayer,
   indexReplacements,
+  consumeRegenerationShield,
   interveningIfHolds,
   loseGame,
   winGame,
@@ -1172,6 +1173,30 @@ export const exileGraveyard: EffectPrimitive = (ctx) => {
 };
 
 /**
+ * `regenerate` — CR 701.15: "The next time this permanent would be destroyed
+ * this turn, instead tap it, remove it from combat, and remove all damage from
+ * it." ("{B}: Regenerate this creature", "{1}{G}: Regenerate ~".)
+ *
+ * The ability puts a SHIELD up; the shield is spent by whatever tries to
+ * destroy the permanent later, wherever that destruction comes from — which is
+ * why the replacement itself lives in core beside the death checks
+ * (`consumeRegenerationShield`) and this primitive only raises the shield.
+ *
+ * Shields STACK, because the printed ability can be activated more than once:
+ * two activations survive two destructions, which is exactly how a regenerator
+ * blocks and survives a wrath in the same turn.
+ *
+ * Targets the SOURCE unless the ref names a target (a few cards regenerate
+ * something else), and a permanent that has already left is a safe no-op.
+ */
+export const regenerate: EffectPrimitive = (ctx) => {
+  const target = firstPermanentTarget(ctx) ?? ctx.state.battlefield.find((c) => c.instanceId === ctx.source.instanceId);
+  if (!target) return;
+  target.regenerationShields = (target.regenerationShields ?? 0) + 1;
+  ctx.emit({ type: 'effectApplied', primitive: 'regenerate', sourceInstanceId: ctx.source.instanceId });
+};
+
+/**
  * `proliferate` — CR 701.27: "choose any number of permanents and/or players
  * with a counter on them, then give each another counter of each kind already
  * there."
@@ -1385,6 +1410,10 @@ function isIndestructible(ctx: EffectContext, permanent: CardInstance): boolean 
  */
 function destroyPermanent(ctx: EffectContext, permanent: CardInstance): void {
   if (isIndestructible(ctx, permanent)) return;
+  // CR 701.15 — a regeneration shield REPLACES this destruction (tap, remove
+  // from combat, clear damage) and is spent. Core's one helper, so a shield
+  // covers a targeted Murder exactly as it covers a state-based death.
+  if (consumeRegenerationShield(ctx.state, permanent, ctx.emit)) return;
   movePermanentTo(ctx, permanent, 'graveyard');
   if (isCreature(permanent.def)) {
     ctx.emit({ type: 'creatureDied', instanceId: permanent.instanceId, name: permanent.def.name });
@@ -1801,6 +1830,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   preventDamage,
   addCounters,
   exileGraveyard,
+  regenerate,
   proliferate,
   attachToTarget,
   grantFlashback,

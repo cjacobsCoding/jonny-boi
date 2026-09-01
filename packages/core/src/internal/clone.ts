@@ -70,6 +70,9 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // the array is COPIED (not shared) — a draft state that appended to the
   // previous state's list would rewrite history.
   if (inst.modesChosenThisTurn !== undefined) copy.modesChosenThisTurn = [...inst.modesChosenThisTurn];
+  // Same conditional-copy rule: only a permanent that has actually been
+  // regenerated this turn carries a shield count.
+  if (inst.regenerationShields !== undefined) copy.regenerationShields = inst.regenerationShields;
   // Same conditional-copy argument as `attachedTo`: only a planeswalker whose
   // loyalty ability has been activated ever carries this, and an unconditional
   // extra property on every clone measurably costs sim throughput.

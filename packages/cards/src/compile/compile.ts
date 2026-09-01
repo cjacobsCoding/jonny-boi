@@ -103,6 +103,9 @@ const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freez
   food: 'createPredefinedToken',
   investigate: 'createPredefinedToken',
   proliferate: 'proliferate',
+  // Scryfall tags the card "Regenerate"; the compiled evidence is the shield
+  // primitive the printed ability built (CR 701.15).
+  regenerate: 'regenerate',
 });
 
 /**
@@ -444,10 +447,16 @@ function mergeModifications(
   incoming: PermanentModification,
 ): PermanentModification {
   if (!existing) return incoming;
+  // Every field of a modification is ADDITIVE (the conformance witness in
+  // `rules-manifest.ts` proves it), so merging is field-wise addition: deltas
+  // sum, keyword flags union, and granted ABILITIES concatenate — a Sword that
+  // grants two of them grants both.
+  const activated = [...(existing.activated ?? []), ...(incoming.activated ?? [])];
   return {
     power: (existing.power ?? 0) + (incoming.power ?? 0),
     toughness: (existing.toughness ?? 0) + (incoming.toughness ?? 0),
     keywords: { ...existing.keywords, ...incoming.keywords },
+    ...(activated.length > 0 ? { activated } : {}),
   };
 }
 
@@ -845,6 +854,29 @@ function compileAbilityLine(
  *   {@link CompileResult}. Never throws: a malformed record yields an
  *   `'incomplete'` result explaining what was wrong.
  */
+/**
+ * An empty {@link Assembly}. One constructor, because the quoted-ability
+ * compiler (`RuleContext.compileQuotedAbility`) needs a scratch one and a
+ * second literal is a second thing to keep in step.
+ */
+function newAssembly(): Assembly {
+  return {
+    effects: [],
+    triggers: [],
+    produces: [],
+    producesOptions: [],
+    manaAbilities: [],
+    activated: [],
+    statics: [],
+    replacements: [],
+    keywords: {},
+    cycling: [],
+    entersTapped: false,
+    matchedRules: [],
+    missing: [],
+  };
+}
+
 export function compileCard(card: CompilableCard): CompileResult {
   // A TRANSFORMING double-faced card is compiled as two linked faces — see
   // `compileTransformDfc`. Detected by Scryfall's `layout` when the record
@@ -869,21 +901,7 @@ export function compileCard(card: CompilableCard): CompileResult {
   if (isSplitLayout(card)) return compileSplitCard(card);
   if (isAdventureLayout(card)) return compileAdventure(card);
 
-  const assembly: Assembly = {
-    effects: [],
-    triggers: [],
-    produces: [],
-    producesOptions: [],
-    manaAbilities: [],
-    activated: [],
-    statics: [],
-    replacements: [],
-    keywords: {},
-    cycling: [],
-    entersTapped: false,
-    matchedRules: [],
-    missing: [],
-  };
+  const assembly: Assembly = newAssembly();
 
   // --- type line -------------------------------------------------------------
   // SUPERTYPES were parsed but never read until the legend rule needed one.
@@ -1063,6 +1081,20 @@ export function compileCard(card: CompilableCard): CompileResult {
         return refs;
       }
       return null;
+    },
+    compileQuotedAbility(text: string): ActivatedAbility | null {
+      // A SCRATCH assembly: `compileActivatedAbility` pushes into whatever it
+      // is handed, so borrowing it here costs one throwaway object and keeps
+      // ONE parser for printed and granted abilities alike. Anything it also
+      // records (its `matchedRules` entry) is carried over deliberately, so
+      // coverage tooling still sees that the ability parser ran.
+      const scratch = newAssembly();
+      if (!compileActivatedAbility(normalizeClause(text), scratch, ctx)) return null;
+      if (scratch.activated.length !== 1) return null;
+      for (const id of scratch.matchedRules) {
+        if (!assembly.matchedRules.includes(id)) assembly.matchedRules.push(id);
+      }
+      return scratch.activated[0] ?? null;
     },
     compileTriggerBody(text: string): TriggerBodyResult | null {
       // Compiled WITH targeting allowed (core aims a trigger as it goes on the

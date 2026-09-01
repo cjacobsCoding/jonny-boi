@@ -682,6 +682,9 @@ export { attackedObjectOf } from './internal/combat.js';
  * engine already runs it at every mutation site and at the priority boundary.
  */
 export { checkStateBasedActions, stateBasedActionsPossible } from './internal/sba.js';
+// CR 701.15 — the ONE regeneration replacement, exported so the cards package's
+// `destroy` primitive spends a shield exactly as the state-based death does.
+export { consumeRegenerationShield } from './internal/sba.js';
 // The two game-deciding verbs, exported for the cards package's "you win/lose
 // the game" primitives — ONE implementation, so an alt-win card and the SBA
 // pass can never disagree about what winning means.

@@ -61,7 +61,7 @@
  */
 
 import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
-import type { BooleanKeywordName, KeywordFlags } from '../card.js';
+import type { ActivatedAbility, BooleanKeywordName, KeywordFlags } from '../card.js';
 import { unionProtection } from '../card.js';
 import { effectivePower, effectiveToughness, intersectBlockRestrictions } from './stats.js';
 import type { GameEvent } from '../events.js';
@@ -116,6 +116,12 @@ export interface AggregatedMod {
   readonly power: number;
   readonly toughness: number;
   readonly keywords: KeywordFlags;
+  /**
+   * ACTIVATED abilities granted by continuous effects (an Aura's quoted
+   * ability, "All Slivers have …"). Absent when nothing granted one, which is
+   * every permanent on almost every board — read through `effectiveActivated`.
+   */
+  readonly activated?: readonly ActivatedAbility[];
   /**
    * CR 613.3 LAYER 7a — a characteristic-defining P/T, computed from the live
    * state for a permanent whose definition carries `characteristicPT`
@@ -218,6 +224,7 @@ interface MutableMod {
   power: number;
   toughness: number;
   keywords: KeywordFlags;
+  activated?: ActivatedAbility[];
   basePower?: number;
   baseToughness?: number;
 }
@@ -229,6 +236,15 @@ interface MutableMod {
  * first time a keyword is actually granted (copy-on-write).
  */
 const NO_KEYWORDS: KeywordFlags = Object.freeze({});
+
+/**
+ * Fold granted ACTIVATED abilities into an accumulator. Allocated lazily, like
+ * the keyword object: almost no permanent is ever granted one.
+ */
+function grantActivatedInto(agg: MutableMod, granted: readonly ActivatedAbility[] | undefined): void {
+  if (!granted || granted.length === 0) return;
+  (agg.activated ??= []).push(...granted);
+}
 
 /** Fold one keyword grant into an accumulator, allocating only if something is set. */
 function grantInto(agg: MutableMod, grant: KeywordFlags | undefined): void {
@@ -300,6 +316,7 @@ function applyAttachment(map: Map<InstanceId, MutableMod>, attachment: CardInsta
   agg.power += mod.power ?? 0;
   agg.toughness += mod.toughness ?? 0;
   grantInto(agg, mod.keywords);
+  grantActivatedInto(agg, mod.activated);
 }
 
 /**
@@ -437,6 +454,7 @@ export function indexContinuous(state: GameState): ContinuousIndex {
           agg.power += power;
           agg.toughness += toughness;
           if (keywords !== undefined) grantInto(agg, keywords);
+          grantActivatedInto(agg, ability.activated);
         }
       }
     }
@@ -490,6 +508,29 @@ export function indexContinuous(state: GameState): ContinuousIndex {
  * is one or two property reads per permanent with NO allocation — the same shape,
  * and the same reason, as `internal/sba.ts`'s `collectAttachments`.
  */
+/**
+ * Whether ANY source on this board could grant an ACTIVATED ability — the cheap
+ * gate the ability-offer loop asks before building a continuous index at all.
+ *
+ * Almost no board has one, and the loop runs for every action of every game, so
+ * the ordinary case must cost a few property reads and allocate nothing. Same
+ * shape, and the same reason, as {@link anyContinuousModification}.
+ */
+export function anyGrantedAbilities(state: GameState): boolean {
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    const statics = perm.def.statics;
+    if (statics !== undefined) {
+      for (let s2 = 0; s2 < statics.length; s2++) {
+        if ((statics[s2] as { activated?: unknown }).activated !== undefined) return true;
+      }
+    }
+    if (perm.attachedTo != null && perm.def.attachment?.modifies?.activated !== undefined) return true;
+  }
+  return false;
+}
+
 export function anyContinuousModification(state: GameState): boolean {
   if (state.continuous.length > 0) return true;
   if (state.players.A.command.length > 0 || state.players.B.command.length > 0) return true;
