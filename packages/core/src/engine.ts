@@ -138,6 +138,7 @@ import { hasNoMaximumHandSize, landPlayZonesFor } from './player-statics.js';
 import { expireFloatingReplacements, indexReplacements, replaceDraw } from './internal/replacement.js';
 import {
   aggregateFor,
+  anyContinuousModification,
   expireContinuousEffects,
   indexContinuous,
   NO_MOD,
@@ -4867,10 +4868,17 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // rules above: timing is checked, the whole cost must be payable, and an
   // ability with a target restriction is offered once per LEGAL target (and not
   // at all when there is none), so this menu can only contain playable actions.
+  // ONE continuous index for the whole ability loop, built only when the board
+  // carries any continuous effect at all — `anyContinuousModification` is the
+  // cheap gate that already exists for that question and short-circuits on the
+  // first modifying source. Reading a granted ability through `aggregateFor`
+  // per permanent instead made this loop O(board²) per action, which the
+  // profiler showed as 5% of a whole gauntlet.
+  const activatedIndex = anyContinuousModification(state) ? indexContinuous(state) : undefined;
   for (let b = 0; b < battlefield.length; b++) {
     const perm = battlefield[b] as CardInstance;
     if (perm.controller !== me) continue;
-    const abilities = effectiveActivated(perm, aggregateFor(state, perm.instanceId));
+    const abilities = effectiveActivated(perm, activatedIndex?.get(perm.instanceId) ?? NO_MOD);
     if (abilities.length === 0) continue;
     for (let index = 0; index < abilities.length; index++) {
       const ability = abilities[index]!;

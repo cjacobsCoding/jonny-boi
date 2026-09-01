@@ -508,6 +508,29 @@ export function indexContinuous(state: GameState): ContinuousIndex {
  * is one or two property reads per permanent with NO allocation — the same shape,
  * and the same reason, as `internal/sba.ts`'s `collectAttachments`.
  */
+/**
+ * Whether ANY source on this board could grant an ACTIVATED ability — the cheap
+ * gate the ability-offer loop asks before building a continuous index at all.
+ *
+ * Almost no board has one, and the loop runs for every action of every game, so
+ * the ordinary case must cost a few property reads and allocate nothing. Same
+ * shape, and the same reason, as {@link anyContinuousModification}.
+ */
+export function anyGrantedAbilities(state: GameState): boolean {
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    const statics = perm.def.statics;
+    if (statics !== undefined) {
+      for (let s2 = 0; s2 < statics.length; s2++) {
+        if ((statics[s2] as { activated?: unknown }).activated !== undefined) return true;
+      }
+    }
+    if (perm.attachedTo != null && perm.def.attachment?.modifies?.activated !== undefined) return true;
+  }
+  return false;
+}
+
 export function anyContinuousModification(state: GameState): boolean {
   if (state.continuous.length > 0) return true;
   if (state.players.A.command.length > 0 || state.players.B.command.length > 0) return true;
