@@ -87,6 +87,46 @@ describe('parseTypeLine', () => {
     expect(parseTypeLine('')).toEqual({ supertypes: [], types: [], subtypes: [] });
     expect(parseTypeLine(undefined)).toEqual({ supertypes: [], types: [], subtypes: [] });
   });
+
+  // §3.64 — a combined double-faced line is TWO type lines. Every one of the
+  // pool's 50 DFCs used to carry a literal "//" here, and the back face's words
+  // landed under the front's.
+  describe('a combined double-faced line describes the FRONT face', () => {
+    it('never yields a literal "//" as a type or a subtype', () => {
+      for (const line of ['Sorcery // Land', 'Land // Land', 'Creature — Minotaur Warrior // Land']) {
+        const parsed = parseTypeLine(line);
+        expect(parsed.types, line).not.toContain('//');
+        expect(parsed.subtypes, line).not.toContain('//');
+        expect(parsed.supertypes, line).not.toContain('//');
+      }
+    });
+
+    it('does not file the back face type as a subtype of the front', () => {
+      // The one that would fool any rule matching on subtypes: this creature is
+      // not a Land, and its back face is not one of its creature types.
+      const parsed = parseTypeLine('Creature — Minotaur Warrior // Land');
+      expect(parsed.types).toEqual(['Creature']);
+      expect(parsed.subtypes).toEqual(['Minotaur', 'Warrior']);
+    });
+
+    it('does not give the front face the card type of the back', () => {
+      const parsed = parseTypeLine('Sorcery // Land');
+      expect(parsed.types).toEqual(['Sorcery']);
+    });
+
+    it('keeps the front face whole when both halves are identical', () => {
+      // "Assault // Battery" — the naive parse produced ['Sorcery','//','Sorcery'],
+      // which looks harmless until something counts a card's types.
+      expect(parseTypeLine('Sorcery // Sorcery').types).toEqual(['Sorcery']);
+    });
+
+    it('still parses a supertype on the front face of a DFC', () => {
+      const parsed = parseTypeLine('Legendary Creature — Human // Legendary Land');
+      expect(parsed.supertypes).toEqual(['Legendary']);
+      expect(parsed.types).toEqual(['Creature']);
+      expect(parsed.subtypes).toEqual(['Human']);
+    });
+  });
 });
 
 describe('parseStat', () => {

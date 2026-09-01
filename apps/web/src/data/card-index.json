@@ -606,9 +606,7 @@
         ],
         "subtypes": [
           "Minotaur",
-          "Warrior",
-          "//",
-          "Land"
+          "Warrior"
         ]
       },
       "rawTypeLine": "Creature — Minotaur Warrior // Land",
@@ -2023,8 +2021,6 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Sorcery",
-          "//",
           "Sorcery"
         ],
         "subtypes": []
@@ -2510,9 +2506,7 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Sorcery",
-          "//",
-          "Land"
+          "Sorcery"
         ],
         "subtypes": []
       },
@@ -2682,8 +2676,6 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Land",
-          "//",
           "Land"
         ],
         "subtypes": []
@@ -2952,9 +2944,7 @@
           "Creature"
         ],
         "subtypes": [
-          "Giant",
-          "//",
-          "Sorcery"
+          "Giant"
         ]
       },
       "rawTypeLine": "Creature — Giant // Sorcery — Adventure",
@@ -3175,9 +3165,7 @@
         ],
         "subtypes": [
           "Halfling",
-          "Rogue",
-          "//",
-          "Sorcery"
+          "Rogue"
         ]
       },
       "rawTypeLine": "Legendary Creature — Halfling Rogue // Sorcery — Adventure",
@@ -3616,8 +3604,6 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Land",
-          "//",
           "Land"
         ],
         "subtypes": []
@@ -4300,8 +4286,6 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Land",
-          "//",
           "Land"
         ],
         "subtypes": []
@@ -4415,8 +4399,6 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Land",
-          "//",
           "Land"
         ],
         "subtypes": []
@@ -5565,8 +5547,6 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Land",
-          "//",
           "Land"
         ],
         "subtypes": []
@@ -6462,8 +6442,6 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Land",
-          "//",
           "Land"
         ],
         "subtypes": []
@@ -6942,9 +6920,7 @@
         ],
         "subtypes": [
           "Human",
-          "Peasant",
-          "//",
-          "Sorcery"
+          "Peasant"
         ]
       },
       "rawTypeLine": "Creature — Human Peasant // Sorcery — Adventure",
@@ -7215,8 +7191,6 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Land",
-          "//",
           "Land"
         ],
         "subtypes": []
@@ -8232,9 +8206,7 @@
         ],
         "subtypes": [
           "Human",
-          "Wizard",
-          "//",
-          "Creature"
+          "Wizard"
         ]
       },
       "rawTypeLine": "Creature — Human Wizard // Creature — Human Insect",
@@ -10122,9 +10094,7 @@
         ],
         "subtypes": [
           "Human",
-          "Knight",
-          "//",
-          "Sorcery"
+          "Knight"
         ]
       },
       "rawTypeLine": "Creature — Human Knight // Sorcery — Adventure",
@@ -10747,9 +10717,7 @@
           "Creature"
         ],
         "subtypes": [
-          "Faerie",
-          "//",
-          "Sorcery"
+          "Faerie"
         ]
       },
       "rawTypeLine": "Creature — Faerie // Sorcery — Adventure",
@@ -12175,9 +12143,7 @@
         ],
         "subtypes": [
           "Zombie",
-          "Knight",
-          "//",
-          "Instant"
+          "Knight"
         ]
       },
       "rawTypeLine": "Creature — Zombie Knight // Instant — Adventure",
@@ -12291,9 +12257,7 @@
         ],
         "subtypes": [
           "Otter",
-          "Wizard",
-          "//",
-          "Instant"
+          "Wizard"
         ]
       },
       "rawTypeLine": "Creature — Otter Wizard // Instant — Adventure",
@@ -12513,9 +12477,7 @@
         ],
         "subtypes": [
           "Human",
-          "Warrior",
-          "//",
-          "Instant"
+          "Warrior"
         ]
       },
       "rawTypeLine": "Creature — Human Warrior // Instant — Adventure",
@@ -13121,9 +13083,7 @@
           "Enchantment"
         ],
         "subtypes": [
-          "Aura",
-          "//",
-          "Land"
+          "Aura"
         ]
       },
       "rawTypeLine": "Enchantment — Aura // Land",
@@ -14724,8 +14684,6 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Land",
-          "//",
           "Land"
         ],
         "subtypes": []
@@ -15480,8 +15438,6 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Instant",
-          "//",
           "Instant"
         ],
         "subtypes": []
@@ -15593,9 +15549,7 @@
           "Battle"
         ],
         "subtypes": [
-          "Siege",
-          "//",
-          "Enchantment"
+          "Siege"
         ]
       },
       "rawTypeLine": "Battle — Siege // Enchantment",
@@ -15719,9 +15673,7 @@
           "Battle"
         ],
         "subtypes": [
-          "Siege",
-          "//",
-          "Creature"
+          "Siege"
         ]
       },
       "rawTypeLine": "Battle — Siege // Creature — Angel",
@@ -15849,9 +15801,7 @@
           "Battle"
         ],
         "subtypes": [
-          "Siege",
-          "//",
-          "Creature"
+          "Siege"
         ]
       },
       "rawTypeLine": "Battle — Siege // Creature — Dryad",
@@ -16460,9 +16410,7 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Instant",
-          "//",
-          "Land"
+          "Instant"
         ],
         "subtypes": []
       },
@@ -16797,9 +16745,7 @@
           "Creature"
         ],
         "subtypes": [
-          "Elephant",
-          "//",
-          "Land"
+          "Elephant"
         ]
       },
       "rawTypeLine": "Creature — Elephant // Land",
@@ -18253,9 +18199,7 @@
           "Creature"
         ],
         "subtypes": [
-          "Unicorn",
-          "//",
-          "Sorcery"
+          "Unicorn"
         ]
       },
       "rawTypeLine": "Creature — Unicorn // Sorcery — Adventure",
@@ -19098,9 +19042,7 @@
         ],
         "subtypes": [
           "Merfolk",
-          "Wizard",
-          "//",
-          "Sorcery"
+          "Wizard"
         ]
       },
       "rawTypeLine": "Creature — Merfolk Wizard // Sorcery — Adventure",
@@ -19677,9 +19619,7 @@
         ],
         "subtypes": [
           "Dwarf",
-          "Knight",
-          "//",
-          "Instant"
+          "Knight"
         ]
       },
       "rawTypeLine": "Creature — Dwarf Knight // Instant — Adventure",
@@ -20624,8 +20564,6 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Land",
-          "//",
           "Land"
         ],
         "subtypes": []
@@ -21013,9 +20951,7 @@
         ],
         "subtypes": [
           "Faerie",
-          "Wizard",
-          "//",
-          "Instant"
+          "Wizard"
         ]
       },
       "rawTypeLine": "Creature — Faerie Wizard // Instant — Adventure",
@@ -21290,9 +21226,7 @@
         ],
         "subtypes": [
           "Human",
-          "Knight",
-          "//",
-          "Sorcery"
+          "Knight"
         ]
       },
       "rawTypeLine": "Creature — Human Knight // Sorcery — Adventure",
@@ -23251,9 +23185,7 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Instant",
-          "//",
-          "Land"
+          "Instant"
         ],
         "subtypes": []
       },
@@ -23491,9 +23423,7 @@
         ],
         "subtypes": [
           "Dwarf",
-          "Knight",
-          "//",
-          "Instant"
+          "Knight"
         ]
       },
       "rawTypeLine": "Creature — Dwarf Knight // Instant — Adventure",
@@ -23654,8 +23584,6 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Land",
-          "//",
           "Land"
         ],
         "subtypes": []
@@ -23769,9 +23697,7 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Instant",
-          "//",
-          "Sorcery"
+          "Instant"
         ],
         "subtypes": []
       },
@@ -26539,9 +26465,7 @@
         ],
         "subtypes": [
           "Kor",
-          "Cleric",
-          "//",
-          "Land"
+          "Cleric"
         ]
       },
       "rawTypeLine": "Creature — Kor Cleric // Land",
@@ -26833,9 +26757,7 @@
           "Creature"
         ],
         "subtypes": [
-          "Dragon",
-          "//",
-          "Sorcery"
+          "Dragon"
         ]
       },
       "rawTypeLine": "Legendary Creature — Dragon // Sorcery — Adventure",
@@ -27049,9 +26971,7 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Sorcery",
-          "//",
-          "Land"
+          "Sorcery"
         ],
         "subtypes": []
       },
@@ -27439,9 +27359,7 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Sorcery",
-          "//",
-          "Instant"
+          "Sorcery"
         ],
         "subtypes": []
       },
@@ -27608,9 +27526,7 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Instant",
-          "//",
-          "Sorcery"
+          "Instant"
         ],
         "subtypes": []
       },
@@ -29218,9 +29134,7 @@
           "Creature"
         ],
         "subtypes": [
-          "Elemental",
-          "//",
-          "Land"
+          "Elemental"
         ]
       },
       "rawTypeLine": "Creature — Elemental // Land",
@@ -31273,9 +31187,7 @@
           "Creature"
         ],
         "subtypes": [
-          "Dragon",
-          "//",
-          "Instant"
+          "Dragon"
         ]
       },
       "rawTypeLine": "Creature — Dragon // Instant — Adventure",
@@ -31698,9 +31610,7 @@
         ],
         "subtypes": [
           "Treefolk",
-          "Druid",
-          "//",
-          "Sorcery"
+          "Druid"
         ]
       },
       "rawTypeLine": "Creature — Treefolk Druid // Sorcery — Adventure",
@@ -31912,9 +31822,7 @@
           "Creature"
         ],
         "subtypes": [
-          "Giant",
-          "//",
-          "Instant"
+          "Giant"
         ]
       },
       "rawTypeLine": "Creature — Giant // Instant — Adventure",
@@ -32806,9 +32714,7 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Instant",
-          "//",
-          "Land"
+          "Instant"
         ],
         "subtypes": []
       },
@@ -33622,8 +33528,6 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Instant",
-          "//",
           "Instant"
         ],
         "subtypes": []
@@ -34620,9 +34524,7 @@
           "Creature"
         ],
         "subtypes": [
-          "Dragon",
-          "//",
-          "Sorcery"
+          "Dragon"
         ]
       },
       "rawTypeLine": "Creature — Dragon // Sorcery — Adventure",
@@ -35008,9 +34910,7 @@
       "typeLine": {
         "supertypes": [],
         "types": [
-          "Sorcery",
-          "//",
-          "Land"
+          "Sorcery"
         ],
         "subtypes": []
       },

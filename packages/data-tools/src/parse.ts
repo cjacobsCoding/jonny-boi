@@ -70,6 +70,12 @@ const SUPERTYPES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Scryfall joins a double-faced card's two type lines with " // ", e.g.
+ * "Creature — Minotaur Warrior // Land". That string is TWO type lines, not one.
+ */
+const FACE_SEPARATOR = ' // ';
+
+/**
  * Parse a `type_line` (e.g. "Legendary Creature — Goblin Wizard") into
  * supertypes / types / subtypes.
  *
@@ -78,13 +84,25 @@ const SUPERTYPES: ReadonlySet<string> = new Set([
  *   are `types`.
  * - Words on the right are `subtypes`.
  *
+ * ⚠️ A COMBINED double-faced line describes the FRONT face only (§3.64). Every
+ * other card-level field is already the front face's — `power`, `toughness`,
+ * `oracleText` all read `raw.X ?? frontFace.X` — and each back face carries its
+ * own clean `type_line` in `faces[]`, so this is the reading that makes the card
+ * level self-consistent rather than the one that loses data.
+ *
+ * Parsing the whole string put a literal "//" into the results and filed the
+ * back face's words under the front's: every one of the pool's 50 DFCs was
+ * affected, and "Creature — Minotaur Warrior // Land" claimed *Land* as a
+ * SUBTYPE of a creature — which any rule matching on subtypes would believe.
+ *
  * Tolerant of missing dash (no subtypes) and empty input (→ all empty).
  */
 export function parseTypeLine(typeLine: string | undefined | null): ParsedTypeLine {
   const parsed: ParsedTypeLine = { supertypes: [], types: [], subtypes: [] };
   if (!typeLine || !typeLine.trim()) return parsed;
 
-  const [leftPart, rightPart] = typeLine.split(TYPE_SUBTYPE_SEPARATOR);
+  const frontFace = typeLine.split(FACE_SEPARATOR)[0] as string;
+  const [leftPart, rightPart] = frontFace.split(TYPE_SUBTYPE_SEPARATOR);
 
   const leftWords = (leftPart ?? '').trim().split(/\s+/).filter(Boolean);
   for (const word of leftWords) {
