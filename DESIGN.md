@@ -1615,6 +1615,74 @@ basic to play" is a function of the hand, the curve and the colours still needed
 matter of finding the right constant; it needs the searcher's *method* — evaluating positions instead
 of scoring them — at a cost this project has already measured and rejected for the default pilot.
 
+### 3.91 A core is not worth a core — the machine's real parallel ceiling — ✅ done
+
+The last unexamined speed question, and the one that reframes §3.77: **`suggest` reaching 2.56× on six
+workers is not 43% efficiency. It is 71% of everything this machine can give.**
+
+**How the question came up.** The scaling curve for `suggest --workers N` (100 games/candidate, 6
+candidates, search time only):
+
+| workers | 1 | 2 | 4 | 6 | 8 | 12 |
+|---|---|---|---|---|---|---|
+| search | 26.9s | 15.6s | 11.0s | **10.5s** | 11.9s | 13.3s |
+| speed-up | 1.00× | 1.72× | 2.44× | **2.56×** | 2.26× | 2.02× |
+
+It plateaus at the physical core count and then degrades — expected, since SMT siblings slow this
+workload (§3.53). But 2.56× from six cores looked like a lot of waste, so the phases were traced
+(`JB_SUGGEST_TRACE=1`, kept — it is how this was found):
+
+```
+base  18 jobs, slots   0..200, 2061ms      arms  108 jobs over 6 arms, 4180ms
+base  18 jobs, slots 200..400,  508ms      arms   54 jobs over 3 arms, 2032ms
+base  18 jobs, slots 400..800,  852ms      arms   36 jobs over 2 arms, 1440ms
+```
+
+11,073ms traced against an 11.19s run: **every millisecond is inside a batch — the host contributes
+nothing.** A CPU profile of the host agrees: **98.6% idle.** And the obvious suspects are not there
+either — `loadCardPool` is 13ms, `buildRegistry` 1ms, and `openArm` (which builds and legality-checks a
+variant deck out of a 5,065-card pool) is **0.2ms**. The first base batch is slow purely because six
+worker threads are booting inside it.
+
+**So the workers themselves are slow, and the decisive test uses none of this code.** Run the plain
+single-threaded `pilot-bench` alone, then run six copies of it as separate processes — no shared
+state, no barriers, no coordination of any kind:
+
+```
+one process alone:      182 games/sec
+6 processes at once:    110, 109, 110, 108, 109, 110   →  656 aggregate
+per-process efficiency: 60% of solo speed
+CEILING: 3.60x from 6 processes
+```
+
+⚠️ **A core is worth ~60% of itself once its neighbours are busy.** The workload is memory-heavy and
+all-core clocks sit below single-core boost, so **embarrassingly parallel work does not scale
+linearly here** — 3.6×, not 6×. Committed as `bench/parallel-ceiling.mjs` so the number can be
+re-measured on any machine rather than assumed.
+
+**Re-judged against the real ceiling:** `suggest` 2.56 / 3.60 = **71% of achievable**. The missing 29%
+is worker boot (~1.5s, amortising on longer runs) and the round barriers the ladder requires. That is
+a decent result, not the poor one the core count implied — and §3.77's headline 2.89× was closer to
+optimal than it was reported as.
+
+**What this finally lets us say about "10× faster", with numbers rather than an opinion.** Every axis
+now has a measured ceiling, and they multiply:
+
+| axis | best available | source |
+|---|---|---|
+| single-thread engine | **1.48×** (achieved) | §3.62, §3.78–§3.81 — profile flat, no hotspot |
+| parallel hardware | **3.60×** (ceiling; 2.56× achieved) | here |
+| fewer games needed | **1.99×** (upper bound, mostly already taken) | §3.87 |
+
+Stacking all three at their *absolute* ceilings — perfect parallel efficiency, a perfectly calibrated
+sequential test — gives **1.48 × 3.60 × 1.99 ≈ 10.6×**, and every one of those factors is an
+optimistic bound that no real implementation reaches. Realistically achieved today: **1.48 × 2.89 ≈
+4.3×** on `suggest` versus where this work started.
+
+**10× is therefore not "hard" on this machine — it is at the edge of what the hardware, the profile
+and the statistics permit combined, and only if every ceiling were reached exactly.** That is the
+honest end of the speed question.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded

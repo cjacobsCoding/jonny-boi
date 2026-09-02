@@ -106,6 +106,13 @@ export function createShardedArmTransport(options: ShardedArmTransportOptions): 
   /** Base records by ABSOLUTE slot — the run's shared, play-once half. */
   const baseRecords: PairedBaseRecord[] = [];
   const arms = new Map<string, AccumulatedArm>();
+  /**
+   * Per-phase wall clock, printed when JB_SUGGEST_TRACE is set. The pool scales
+   * to only ~43% efficiency on six cores while the HOST sits 98.6% idle, so the
+   * lost time is workers waiting at a barrier — and there is no telling WHICH
+   * barrier without measuring the phases apart.
+   */
+  const trace = process.env.JB_SUGGEST_TRACE ? ([] as string[]) : undefined;
   let baseGamesPlayed = 0;
   let variantGamesPlayed = 0;
   let variantGamesSkipped = 0;
@@ -139,7 +146,9 @@ export function createShardedArmTransport(options: ShardedArmTransportOptions): 
       slotEnd: range.gameEnd,
       settings: requireSettings(),
     }));
+    const startedAt = Date.now();
     const results = (await options.runJobs(jobs, batchProgress())) as readonly SuggestBaseSliceResult[];
+    trace?.push(`base  ${jobs.length} jobs, slots ${from}..${throughSlot}, ${Date.now() - startedAt}ms`);
     // Job order is slot order (the plan is contiguous and ascending), and the pool
     // returns results in job order, so appending is the merge.
     for (const result of results) {
@@ -190,7 +199,9 @@ export function createShardedArmTransport(options: ShardedArmTransportOptions): 
         });
       }
     }
+    const startedAt = Date.now();
     const results = (await options.runJobs(jobs, batchProgress())) as readonly SuggestArmSliceResult[];
+    trace?.push(`arms  ${jobs.length} jobs over ${requests.length} arms, ${Date.now() - startedAt}ms`);
 
     for (const result of results) {
       const arm = arms.get(result.key);
@@ -234,6 +245,7 @@ export function createShardedArmTransport(options: ShardedArmTransportOptions): 
     // host plays nothing here, and a usage report sourced from it would say the
     // run played zero games. See COORDINATION.md on why that matters.
     usage: (identicalGameSkip) => {
+      if (trace) for (const line of trace) console.log(`[suggest-trace] ${line}`);
       const usage: PairedArmsUsage = {
         baseGamesPlayed,
         variantGamesPlayed,
