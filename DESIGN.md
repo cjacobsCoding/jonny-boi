@@ -1085,6 +1085,65 @@ not in the heuristics themselves.
 says a change must not regress the hot path, and a new *strength* feature costs **decision** time.
 This is the number to quote for one — games/sec hides it behind the engine.
 
+### 3.82 A single-seed A/B reports flukes — the two-seed protocol, and the map of what is left — ✅ done
+
+The most important thing found in this whole run of strength work, and it is not a pilot change: **the
+measurement method this repo uses to decide whether a pilot change is an improvement was wrong**, and
+it nearly shipped one.
+
+**How it surfaced.** `bench/disagreement.mjs` (new) asks both the heuristic and `lookahead` about
+every recorded decision and classifies where they differ. The result is sharp enough to be worth
+stating on its own:
+
+> **100% of the two pilots' disagreements are in `declareAttackers`.** Not one anywhere else — not
+> casting, not blocking, not activating, not land drops. Of those: 59.8% the heuristic attacks and
+> lookahead passes, 36.2% both attack with a **different set**, 4.1% the heuristic passes and
+> lookahead attacks.
+
+So the entire measurable gap to the strongest policy available here is attack selection. Two
+hypotheses followed, both tested with `bench/weight-ab.mjs` (new — the tuning-knob sibling of
+`feature-ab.mjs`):
+
+| change | result |
+|---|---|
+| `attackValueThreshold` 1 → 3 (attack less) | 22 / 65 — **clearly worse**, p = 6.7e-6 |
+| `outnumber` (send the surplus the defence has no body for) | 81 / 79 at 11,520 games — **neutral**, p = 0.94 |
+| `ownCreatureLossPerStat` 1 → 1.5 (value own creatures more) | 285 / 215 — **"stronger", p = 2.03e-3** |
+
+⚠️ **That third row is the trap.** It is 11,520 games, 500 decided slots, p = 0.002 — by the standard
+this repo had been using, a finding. Two nearby values agreed (1.25: p = 0.029; 2.0: p = 0.017), which
+felt like corroboration. It was not: they were **the same games**. Re-run on an independent seed set,
+the identical change measured **250 / 247, p = 0.93**. Nothing about it was real.
+
+**The contrast that makes the rule obvious.** The alpha strike (§3.74, shipped) on that same
+independent seed: **158 ahead, 0 behind.** A real improvement is *one-sided*. A 285/215 split with a
+good p-value is what a coin looks like when you test it enough ways.
+
+**The fix, as a guard rather than a note.** `bench/ab-protocol.mjs` (new) runs every A/B **twice on
+independent seeds** and judges replication; `feature-ab.mjs` and `weight-ab.mjs` both go through it,
+so there is one answer to "is this better?" and neither tool can drift from it. Every combination of
+outcomes is named — `CONFIRMED STRONGER`, `CONFIRMED WEAKER`, `CONTRADICTORY`, `NOT REPLICATED`,
+`INCONCLUSIVE`, `NO EFFECT` — because the first draft printed "only the second seed set showed an
+effect" for a pair where *neither* had. Only `CONFIRMED STRONGER` is grounds to ship.
+
+Verified in both directions before shipping: alphaStrike reports `CONFIRMED STRONGER` (37/0 then
+36/0); `ownCreatureLossPerStat` reports `INCONCLUSIVE`.
+
+**What was checked as a result.** The already-shipped features were re-run on the independent seed to
+make sure nothing in the tree rests on a fluke. The alpha strike replicates overwhelmingly (158/0).
+Nothing needed reverting.
+
+**What this costs and why it is worth it.** Every strength claim now takes two runs instead of one.
+That is the difference between a measurement and a story, and this section is the receipt: without it
+`ownCreatureLossPerStat: 1.5` would have shipped with "measured stronger, p = 2.03e-3" in its commit
+message, and every later result built on that pilot would have inherited the error.
+
+**Standing note for whoever continues the strength work.** The map is `disagreement.mjs`: the gap is
+entirely in attack selection, and specifically in *which bodies go*, since aggression itself is
+measured to be at a local optimum (attacking less is worse; attacking more is neutral or already
+done — §3.80). That is a set-level blocking-assignment problem, not another independent per-attacker
+rule, and it must clear the two-seed bar.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
