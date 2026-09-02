@@ -1956,6 +1956,10 @@ behaviour, and is verified against both transports.
 
 ### 3.98 `suggest` stops when the LEADER is settled — the 27%, taken correctly — ✅ done
 
+> ⚠️ **CORRECTED BY §3.100: as shipped, this rule downgraded the top pick from BETTER to**
+> **INCONCLUSIVE** — it preserved WHICH swap is recommended but not whether it was proven.
+> The leader must also be settled against the BASE. The saving is larger after the fix (62%).
+
 §3.96 found a 27% saving on `suggest` and refused it. §3.97 built the comparison that makes refusing
 unnecessary. This takes it.
 
@@ -2039,6 +2043,53 @@ the guard fails on the count. With it, they match exactly.
 and never changes the recommendation. It is config-dependent, not universal — `100 games × 8
 candidates` saves nothing while `100 × 6` saves 65%. Worth having in both surfaces; not worth
 describing as a flat speed-up.
+
+### 3.100 §3.98 was wrong — an early stop must keep the VERDICT, not just the pick — ✅ done
+
+⚠️ **This corrects §3.98, which shipped a defect.** The rule stopped the ladder once the leader beat
+the runner-up, reasoning that no further wave could change *which* swap is recommended. That is true.
+It is also incomplete, and the gap was measurable in the command's own output.
+
+**How it surfaced.** Adding `--full-ladder` — the control for the rule, added so a run can be *compared*
+against it rather than trusted — and running both at the default gauntlet:
+
+| | games | delta | verdict |
+|---|---|---|---|
+| `--full-ladder` | 800 | +3.1% | **BETTER** (p 6.2e-3) |
+| default (§3.98) | 400 | +3.5% | **INCONCLUSIVE** (adjusted p 0.11) |
+
+**Same recommendation. No longer proven.** A user asks two questions at once — *which of these is
+best?* and *is it actually better than doing nothing?* — and §3.98 preserved only the first.
+
+⚠️ **And the tests passed.** `leader-settled.test.ts` compared the top pick's IDENTITY
+(`outName -> inName`). It did not compare the verdict, so a run that downgraded BETTER to
+INCONCLUSIVE sailed through every case. That is the same shape of hole as §3.99's game-count gap,
+found the same way: by measuring the shipped thing rather than re-reading the reasoning.
+
+**The fix.** The leader's own verdict against the base must also be settled. It faces a Holm
+correction over the roster at report time, and Holm judges the smallest p against `alpha / m`, so
+that is the bar applied — **the one the printed verdict will actually have to clear**. Testing against
+a looser `alpha` would let the ladder stop on a verdict the report then declines to print.
+
+**Extracted, because a rule this subtle should not live inline in a loop.** `leaderIsSettled` is now a
+named, exported, documented predicate. Its five unit tests run in **10ms** and pin both halves —
+including the defect (leader separated but unproven ⇒ do NOT stop) and the family-corrected bar
+(p = 1.6e-2 stops at `familySize: 1`, does not at `8`). The end-to-end alternative costs ~50s, because
+the rule only fires on runs of ~1,600 slots.
+
+**Re-measured after the fix** (200 games × 8 candidates × 8 opponents):
+
+| | games | top pick | verdict |
+|---|---|---|---|
+| full ladder | 7,132 | Playful Shove | BETTER |
+| settled | **2,696** | Playful Shove | BETTER |
+
+**62% fewer games, identical answer** — a larger saving than §3.98 claimed, because the old rule was
+stopping in the wrong place. And it now correctly saves *nothing* where the answer is still
+inconclusive: measured 0% at 50 and 100 games/candidate, where more games are exactly what is needed.
+
+**The honest shape of this feature:** it fires on big runs with a decisive winner, saves ~62% there,
+and stands aside otherwise. `--full-ladder` remains as the control.
 
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
