@@ -11,7 +11,7 @@
  * Every shape is plain data that survives `postMessage` structured-clone — no
  * class instances, no functions, just the serializable fields the UI renders.
  */
-import type { SequentialOutcome } from '@jonny-boi/sim';
+import type { PrecisionDecision, SequentialOutcome } from '@jonny-boi/sim';
 import type {
   GauntletResult,
   SuggestionHistory,
@@ -64,6 +64,13 @@ export interface GauntletRequest extends PilotedRequest {
   readonly opponentNames: readonly string[];
   readonly gamesPerOpponent: number;
   readonly seed: number;
+  /**
+   * Stop once the win-rate interval reaches this half-width (§3.94). A gauntlet
+   * ESTIMATES rather than tests, so this is a two-stage fixed-width rule and NOT
+   * the group-sequential boundary the A/B panel uses — different question,
+   * different statistics.
+   */
+  readonly untilPrecise?: number;
 }
 
 /** Evaluate a single-card swap (out → in) on the hero against the gauntlet. */
@@ -161,6 +168,8 @@ export interface SimProgress {
 export type SimResultPayload =
   | {
       readonly kind: 'gauntlet';
+      /** Present only when the run sized itself to a precision target. */
+      readonly precision?: PrecisionDecision;
       readonly result: GauntletResult;
       readonly gamesPerSecond: number;
       readonly pilotId: string;

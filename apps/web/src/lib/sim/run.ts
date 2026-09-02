@@ -10,7 +10,13 @@
  * `merge.ts` aggregates. This module only decides *what to dispatch*, *how to
  * count progress honestly*, and *what a failure means*.
  */
-import { planSequentialLooks, type SequentialOutcome } from '@jonny-boi/sim';
+import {
+  decidePrecision,
+  planPrecision,
+  planSequentialLooks,
+  type PrecisionDecision,
+  type SequentialOutcome,
+} from '@jonny-boi/sim';
 import type {
   GauntletRequest,
   MatchRequest,
@@ -214,24 +220,54 @@ export async function runGauntlet(
 ): Promise<SimResultPayload> {
   const opponentNames = opponentsFor(request);
   const context = contextFor(request, opponentNames);
-  const jobs = planGauntletShards(context, request.gamesPerOpponent, runner.workerCount);
-  const total = totalGauntletGames(jobs);
 
+  /*
+   * ⚠️ THE PROGRESS BAR COUNTS THE WHOLE BUDGET, even when the run may size
+   * itself down. A bar scaled to what the run turned out to need would leap when
+   * the pilot decided — reporting the stopping rule as progress rather than work.
+   */
+  const total = totalGauntletGames(
+    planGauntletShards(context, request.gamesPerOpponent, runner.workerCount),
+  );
   const tally = new ProgressTally(total, sink, progressIntervalSeconds);
   const label = `${opponentNames.length === 1 ? `vs ${opponentNames[0]}` : `${opponentNames.length} opponents`} · ${workersLabel(runner.workerCount)}`;
   // Say we are alive BEFORE the first (potentially multi-second) game.
   tally.emit(label, true);
 
-  const results = await Promise.all(
-    jobs.map(async (job) => {
-      const result = (await runner.submit(job, (games) => {
-        tally.add(games);
+  /** Play one window's shards and return their results. */
+  const playWindow = async (window?: { gameStart: number; gameEnd: number }) => {
+    if (window && window.gameEnd <= window.gameStart) return [] as GauntletShardResult[];
+    const jobs = planGauntletShards(context, request.gamesPerOpponent, runner.workerCount, window);
+    return Promise.all(
+      jobs.map(async (job) => {
+        const result = (await runner.submit(job, (games) => {
+          tally.add(games);
+          tally.emit(label);
+        })) as GauntletShardResult;
         tally.emit(label);
-      })) as GauntletShardResult;
-      tally.emit(label);
-      return result;
-    }),
-  );
+        return result;
+      }),
+    );
+  };
+
+  const results: GauntletShardResult[] = [];
+  let precision: PrecisionDecision | undefined;
+
+  if (request.untilPrecise !== undefined) {
+    /*
+     * TWO STAGES, ONE DECISION (§3.94). A gauntlet ESTIMATES a win rate, so the
+     * group-sequential boundary the A/B panel uses would be answering the wrong
+     * question — there is no null here to reject. The pilot sizes the run, the
+     * run reports the interval it actually earned, and nothing peeks between.
+     */
+    const plan = planPrecision(request.gamesPerOpponent, request.untilPrecise);
+    results.push(...(await playWindow({ gameStart: 0, gameEnd: plan.pilotGames })));
+    const pilot = mergeGauntlet(results);
+    precision = decidePrecision(plan, pilot.totalWins, pilot.totalGames, opponentNames.length);
+    results.push(...(await playWindow({ gameStart: plan.pilotGames, gameEnd: precision.totalGames })));
+  } else {
+    results.push(...(await playWindow()));
+  }
 
   const elapsedSeconds = tally.elapsedSeconds;
   const merged = mergeGauntlet(results);
@@ -241,6 +277,7 @@ export async function runGauntlet(
     result: merged,
     gamesPerSecond: elapsedSeconds > 0 ? merged.totalGames / elapsedSeconds : 0,
     pilotId: request.pilotId,
+    ...(precision ? { precision } : {}),
   };
 }
 

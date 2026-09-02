@@ -100,11 +100,21 @@ export function planGauntletShards(
   context: ShardContext,
   gamesPerOpponent: number,
   workerCount: number,
+  /**
+   * Plan only games `[gameStart, gameEnd)` — the same prefix property the paired
+   * planners document, so a pilot stage and the stage after it compose into
+   * exactly the run they were cut from (§3.94).
+   */
+  window?: { readonly gameStart: number; readonly gameEnd: number },
 ): readonly GauntletShardJob[] {
-  const parts = shardsPerGroup(context.opponentNames.length, gamesPerOpponent, workerCount);
+  const from = window?.gameStart ?? 0;
+  const to = window?.gameEnd ?? gamesPerOpponent;
+  const span = Math.max(0, to - from);
+  const parts = shardsPerGroup(context.opponentNames.length, span, workerCount);
   const jobs: GauntletShardJob[] = [];
   for (let opponentIndex = 0; opponentIndex < context.opponentNames.length; opponentIndex++) {
-    for (const range of splitGameRange(gamesPerOpponent, parts)) {
+    for (const piece of splitGameRange(span, parts)) {
+      const range = { gameStart: from + piece.gameStart, gameEnd: from + piece.gameEnd };
       jobs.push({ kind: 'gauntlet-shard', context, opponentIndex, ...range });
     }
   }
