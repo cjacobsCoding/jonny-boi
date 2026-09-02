@@ -92,6 +92,12 @@ interface AccumulatedArm {
   gamesPlayed: number;
   variantGamesSkipped: number;
   paired: PairedTable;
+  /**
+   * Per-slot outcomes, spliced in at each slice's absolute slot offset. Slices
+   * arrive in job order but a sparse write by INDEX is order-independent anyway,
+   * which is what keeps a pooled arm identical to a locally-played one.
+   */
+  variantWonBySlot: boolean[];
 }
 
 export function createShardedArmTransport(options: ShardedArmTransportOptions): ArmTransport {
@@ -196,6 +202,7 @@ export function createShardedArmTransport(options: ShardedArmTransportOptions): 
           gamesPlayed: 0,
           variantGamesSkipped: 0,
           paired: EMPTY_TABLE,
+          variantWonBySlot: [],
         });
       }
     }
@@ -215,6 +222,9 @@ export function createShardedArmTransport(options: ShardedArmTransportOptions): 
         );
       }
       arm.paired = addTables(arm.paired, result.slice.paired);
+      for (let i = 0; i < result.slice.variantWonBySlot.length; i++) {
+        arm.variantWonBySlot[result.slotStart + i] = result.slice.variantWonBySlot[i] as boolean;
+      }
       arm.gamesPlayed += result.slice.gamesPlayed;
       arm.variantGamesSkipped += result.slice.variantGamesSkipped;
       variantGamesPlayed += result.slice.variantGamesPlayed;
@@ -231,6 +241,7 @@ export function createShardedArmTransport(options: ShardedArmTransportOptions): 
         gamesPlayed: arm.gamesPlayed,
         variantGamesSkipped: arm.variantGamesSkipped,
         paired: arm.paired,
+        variantWonBySlot: arm.variantWonBySlot,
       };
       return { key: request.key, arm: outcome };
     });

@@ -145,7 +145,7 @@ export type {
   SwapArm,
   ArmHandle,
 } from './paired-arms.js';
-export { createPairedArmRunner, pairedSlotAt, swappedInstanceIdsFor } from './paired-arms.js';
+export { createPairedArmRunner, pairedBetweenArms, pairedSlotAt, swappedInstanceIdsFor } from './paired-arms.js';
 export {
   HERO_SEAT,
   LIBRARY_READING_PRIMITIVES,
