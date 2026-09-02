@@ -515,7 +515,12 @@ function* driveSuggestionArms(
       // here is what lets one loop serve both transports.
       lastArm.set(key, arm);
       depth.set(key, arm.gamesPlayed);
-      answers.push({ key, gamesPlayed: arm.gamesPlayed, paired: arm.paired });
+      answers.push({
+        key,
+        gamesPlayed: arm.gamesPlayed,
+        paired: arm.paired,
+        variantWonBySlot: arm.variantWonBySlot,
+      });
       progress?.onCandidate?.({
         key,
         outName: candidate.outName,
