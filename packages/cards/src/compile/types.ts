@@ -151,6 +151,16 @@ export interface ClauseContribution {
   readonly manaAbilities?: readonly import('@jonny-boi/core').ManaAbility[];
   /** Keyword flags granted to the card itself. */
   readonly keywords?: CardDefinition['keywords'];
+  /**
+   * DEVOID (CR 702.114a) — "this card has no color", printed on cards that
+   * still cost coloured pips. It has to be stated because colour is DERIVED
+   * from the cost when `CardDefinition.colors` is absent, so an Eldrazi
+   * costing {3}{B} would otherwise play as a black creature: a legal target
+   * for "destroy target black creature", stopped by protection from black,
+   * and counted by every `anyOfColors` filter. The empty array is the
+   * documented way to say "printed colourless" as opposed to "read my pips".
+   */
+  readonly colorless?: boolean;
   /** Set when the printed text says this permanent enters the battlefield tapped. */
   readonly entersTapped?: boolean;
 

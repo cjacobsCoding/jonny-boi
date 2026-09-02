@@ -7404,6 +7404,13 @@ export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContr
     // skips any word with a builder, so "Changeling" is not reported a second
     // time after the printed line compiled it.
     changeling: () => ({ changeling: true }),
+    // DEVOID (CR 702.114a) — "this card has no color". A builder and not a
+    // `KeywordFlags` boolean for the same reason changeling is one: it is a
+    // characteristic-defining ability that changes what the object IS, not a
+    // combat or timing permission. Its whole payload is the empty colour
+    // list, which `CardDefinition.colors` already defines as "printed
+    // colourless" — so devoid needs no new concept, only the words for it.
+    devoid: () => ({ colorless: true }),
     // SKULK (CR 702.118a) — "can't be blocked by creatures with greater power".
     // A payload restriction rather than a `KeywordFlags` boolean, because the
     // bound is the ATTACKER'S OWN effective power and is read at declare-blockers

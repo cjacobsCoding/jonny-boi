@@ -383,6 +383,7 @@ interface Assembly {
   attachmentModifies?: PermanentModification;
   /** Set once a line prints the keyword **Changeling**. */
   changeling?: boolean;
+  colorless?: boolean;
   /** Set once a line prints "This spell can't be countered". */
   cantBeCountered?: boolean;
   /** Set once a line prints "Spells [you control] can't be countered". */
@@ -455,6 +456,7 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
     assembly.flashbackLifeCost = contribution.flashbackLifeCost;
   }
   if (contribution.changeling) assembly.changeling = true;
+  if (contribution.colorless) assembly.colorless = true;
   if (contribution.cantBeCountered) assembly.cantBeCountered = true;
   if (contribution.spellsCantBeCountered) assembly.spellsCantBeCountered = contribution.spellsCantBeCountered;
   if (contribution.noMaximumHandSize) assembly.noMaximumHandSize = true;
@@ -1455,6 +1457,10 @@ export function compileCard(card: CompilableCard): CompileResult {
     // Changeling is a characteristic-defining ability that applies in EVERY zone,
     // so it rides the definition rather than the keyword-flag bag.
     ...(assembly.changeling ? { changeling: true } : {}),
+    // `[]` is meaningful and distinct from the field being absent: it says
+    // "printed colourless" where absent says "read my pips" (see
+    // `CardDefinition.colors`). Devoid is the only thing that sets it today.
+    ...(assembly.colorless ? { colors: [] } : {}),
     ...(assembly.cantBeCountered ? { cantBeCountered: true } : {}),
     ...(assembly.spellsCantBeCountered ? { spellsCantBeCountered: assembly.spellsCantBeCountered } : {}),
     ...(assembly.noMaximumHandSize ? { noMaximumHandSize: true } : {}),

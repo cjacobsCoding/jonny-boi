@@ -2243,6 +2243,36 @@ piece of machinery that does not exist:
 So the honest number for this round is 18, not 53. The next of them is a row plus one payload, not a
 row plus an event, which is the part that was worth doing once.
 
+### 3.104 Devoid — printed colourlessness, and the tool that lists a keyword's cards — ✅ done
+
+Third pick off the §3.102 queue, and the smallest: **devoid** (CR 702.114a) is "this card has no
+color", printed on Eldrazi that still cost coloured pips. It matters because colour is DERIVED from
+the cost when `CardDefinition.colors` is absent, so a devoid card costing {3}{B} that merely compiled
+would play as a BLACK creature — a legal target for "destroy target black creature", stopped by
+protection from black, counted by every `anyOfColors` filter. `colors: []` already meant "printed
+colourless" (the explicitly colourless token, §3.71), so devoid needed no new concept, only a
+`KEYWORD_ABILITY_BUILDERS` row that sets it. A builder and not a `KeywordFlags` boolean for the reason
+changeling is one: a characteristic-defining ability changes what the object IS in every zone.
+
+The test asserts the DERIVED colour and carries a control — the same cost without devoid reads black
+— because asserting only `status === complete` would pass on exactly the broken card.
+
+**Measured: 5,151 → 5,163 complete cards. +12, precisely the sole-blocked count.** 121 more devoid
+cards wait on something else and come along when that closes.
+
+**A fourth measurement tool, committed.** `keyword-gap-report.mjs` says HOW MANY cards a keyword
+blocks; the next question is always WHICH cards, and what their whole text says, because the shape of
+a mechanic's implementation is decided by the printed lines around it (crew sits on cards with
+cycling, equip and mana abilities; a keyword that looks like one row may need three). NEW
+`packages/cards/scripts/keyword-cards.mjs <corpus> <keyword>… [--all]` prints every card SOLE-blocked
+by each named keyword with its full Oracle text (`--all` adds the multi-blocked ones with their other
+gaps). It is the ground-truth input for a worker brief, so a family is implemented against real cards
+rather than a remembered wording — the failure `rule-coverage.test.ts` exists to catch.
+
+⚠️ **The scripts read `dist`, not `src`.** The first run of the gap report this round said 5,097 —
+the figure from two commits ago — because `dist` was stale. `npm run build` between any source change
+and any measurement, reverts included (build-gate memory).
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded

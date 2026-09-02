@@ -17,6 +17,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { colorsOfDefinition } from '@jonny-boi/core';
 import type { CardDefinition } from '@jonny-boi/core';
 import { CARD_POOL } from '../../data/pool.js';
 import { STUBBED_MECHANICS } from '../index.js';
@@ -723,6 +724,46 @@ describe('compileCard — templated cards outside the curated pool', () => {
     expect(horse.status, `missing: ${JSON.stringify(horse.missing)}`).toBe('complete');
     expect(horse.definition.keywords).toMatchObject({ horsemanship: true });
     expect(horse.definition.keywords?.blockRestriction?.blockerMustHaveAnyOf).toEqual(['horsemanship']);
+  });
+  it('compiles devoid into printed colourlessness (§3.104)', () => {
+    // ⚠️ THE WHOLE POINT IS THE COLOURED PIPS. Colour is DERIVED from the cost
+    // when `CardDefinition.colors` is absent, so a devoid card costing {3}{B}
+    // that merely compiled would play as a BLACK creature — a legal target for
+    // "destroy target black creature", stopped by protection from black, and
+    // counted by every anyOfColors filter. Asserting only `status === complete`
+    // would pass on exactly that broken card.
+    const result = compileCard(
+      makeCard({
+        name: 'Eldrazi Drone',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Eldrazi', 'Drone'] },
+        manaCost: { generic: 3, W: 0, U: 0, B: 1, R: 0, G: 0, C: 0, other: [] },
+        power: 3,
+        toughness: 3,
+        colors: [] as never,
+        oracleText: 'Devoid',
+        keywords: ['Devoid'],
+      }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    // `[]` and not absent: absent means "read my pips", which is the bug.
+    expect(result.definition.colors).toEqual([]);
+    expect(colorsOfDefinition(result.definition)).toEqual([]);
+
+    // The control: the SAME cost without devoid is black, which is what makes
+    // the assertion above evidence of anything.
+    const coloured = compileCard(
+      makeCard({
+        name: 'Ordinary Horror',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Horror'] },
+        manaCost: { generic: 3, W: 0, U: 0, B: 1, R: 0, G: 0, C: 0, other: [] },
+        power: 3,
+        toughness: 3,
+        colors: ['B'] as never,
+        oracleText: '',
+        keywords: [],
+      }),
+    );
+    expect(colorsOfDefinition(coloured.definition)).toEqual(['B']);
   });
   it('compiles bushido into a blocks-or-becomes-blocked trigger (§3.103)', () => {
     // Scryfall prints the payload on the LINE ("Bushido 1") and the bare word in
