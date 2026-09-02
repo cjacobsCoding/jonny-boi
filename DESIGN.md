@@ -1087,6 +1087,11 @@ This is the number to quote for one — games/sec hides it behind the engine.
 
 ### 3.82 A single-seed A/B reports flukes — the two-seed protocol, and the map of what is left — ✅ done
 
+> ⚠️ **CORRECTED BY §3.88: "100% of the disagreements are in `declareAttackers`" is a TAUTOLOGY.**
+> `lookahead` delegates every decision to the heuristic except the attack step, so the two
+> can only ever disagree about attacks. That result describes the composition, not the
+> pilot. The seed-protocol half of this section stands unchanged.
+
 The most important thing found in this whole run of strength work, and it is not a pilot change: **the
 measurement method this repo uses to decide whether a pilot change is an improvement was wrong**, and
 it nearly shipped one.
@@ -1145,6 +1150,11 @@ done — §3.80). That is a set-level blocking-assignment problem, not another i
 rule, and it must clear the two-seed bar.
 
 ### 3.83 Blockers are a shared resource — attacking judged as a SET — ✅ done
+
+> ⚠️ **CORRECTED BY §3.88: this improves the `heuristic` pilot, which is NOT the default.**
+> `DEFAULT_PILOT_ID` is `lookahead`, and lookahead replaces the attack step this section
+> changes. The gain is real and confirmed, and it reaches `--pilot heuristic` runs and the
+> rollout policy inside `hybrid`/`mcts` — but not the attack decision the default pilot makes.
 
 The first confirmed strength gain since the alpha strike, and the one the map in §3.82 pointed at.
 
@@ -1333,6 +1343,10 @@ twelve had already cleared the bar in force at the time, which is the entire arg
 
 ### 3.86 Five ways to make the pilot more cautious, all measured worse — the aggression question is closed — ✅ done
 
+> ⚠️ **SCOPE, per §3.88: these five all concern the `heuristic` pilot.** The conclusion holds
+> for the default pilot too and from the other side — measured against `hybrid`, `lookahead`
+> is too PASSIVE (it passes where hybrid attacks 60 times to 6).
+
 The strength work has kept returning to one place: `lookahead` declines attacks this pilot makes, and
 that looks like a defect. It is not, and this section is the point at which the evidence becomes
 strong enough to stop re-testing it.
@@ -1439,6 +1453,69 @@ back, so it delivers materially less than 1.99×. On a first pass the honest exp
 None of them contains a 10×, and together they account for essentially all of the work the sim does.
 **The throughput that was won — +48% single-thread (§3.62) and 2.89× on `suggest` (§3.77) — came from
 the two things this table does not measure: doing fewer decisions, and doing them on more cores.**
+
+### 3.88 A correction: the pilot we ship is `lookahead`, and the strength map was measuring the wrong one — ✅ done
+
+⚠️ **This section corrects §3.82–§3.86.** The strength work in those sections is not wrong, but it was
+aimed at a pilot that is **not the default**, and one of its headline findings was a tautology. Both
+are worth more than another tuning round.
+
+**The facts.** `DEFAULT_PILOT_ID` is `LOOKAHEAD_PILOT_ID`, not the heuristic — in the CLI, and in the
+web Lab, where the pilot list names it "Lookahead (default)". `lookahead` (§3.47) delegates every
+decision to an unmodified heuristic **except the attack declaration**, which it decides with
+`combat-forecast.ts`.
+
+**What that means for what was measured:**
+
+1. **`setAttack` (§3.83) does not change the default pilot.** It improves `heuristic.chooseAttack` —
+   which lookahead replaces. The gain is real and confirmed (held-out 94/52) and it does reach the
+   `--pilot heuristic` runs and the rollout policy inside `hybrid`/`mcts`, but §3.83 said "the pilot"
+   without saying which, and a reader would reasonably assume the default.
+2. **"100% of the disagreements are in `declareAttackers`" (§3.82) was a TAUTOLOGY.** Comparing
+   heuristic to lookahead can only surface attack disagreements: the two share every other decision
+   by construction. That result described the shape of the composition, not a property of the pilot,
+   and it steered four sections of work into one step.
+
+**The measurement that should have been run — the DEFAULT pilot against a much stronger searcher**
+(`bench/disagreement.mjs --base lookahead --pilot hybrid`, 18 games, 9,366 decisions with a real
+choice):
+
+> **175 disagreements (1.87%)** — and spread across the whole game, not one step:
+
+| band | share |
+|---|---|
+| attacks (`pass→attack` 34.3%, different set 22.3%, `attack→pass` 3.4%) | **60%** |
+| blocking (`block→pass` 7.4%, `pass→block` 6.3%, different blocks 0.6%) | **14.3%** |
+| land choice (`playLand→playLand`) | **9.7%** |
+| spell choice (`castSpell→castSpell` and friends) | **7.5%** |
+| mana sequencing (`tapForMana→…`) | **5.7%** |
+
+⚠️ **And the direction reverses.** Against the heuristic, lookahead is the cautious one. Against
+`hybrid`, **lookahead is too passive**: hybrid attacks where lookahead passes in **60** cases and the
+reverse in **6**. That is the same conclusion §3.86 reached from the other side — this pilot family
+wants to attack *more*, not less — now confirmed for the pilot that actually ships.
+
+**New tool: `bench/forecast-ab.mjs`**, the A/B for the shipped pilot's own `ForecastWeights`
+(`weight-ab.mjs` tunes the heuristic, which is not the default). Same four-seed held-out battery.
+
+**First hypothesis from the new map, and it did not survive.** `crackBackPerPoint` (the penalty for
+exposing yourself to a counter-swing — the aggression dial) 0.5 → 0.25, matching hybrid's greater
+appetite:
+
+```
+  dev      4242:   31/24      dev      90210:  30/25
+  HELD-OUT 555001: 18/21      HELD-OUT 777003: 35/15
+  NOT REPLICATED — held-out 53/36 (pooled chi2 2.88, needs > 3.84)
+```
+
+Pooled over all four seeds it reaches 114/85 (chi² 3.94) — which is exactly the marginal, seed-dependent
+shape §3.85 was written to reject. Not shipped.
+
+**The standing direction, corrected.** The default pilot's headroom is **not** concentrated in attack
+selection: blocking (14%), land choice (10%) and spell choice (8%) together are a third of it, and
+none of them has ever been examined — every strength section before this one looked only at attacks,
+because the comparison chosen could not show anything else. `disagreement.mjs --base lookahead
+--pilot hybrid --show N --band …` is how to look at them.
 
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
