@@ -440,8 +440,11 @@ describe('flash / hexproof / shroud compile from the printed keyword list', () =
   it('still reports a protection quality outside the closed table', () => {
     const result = compileCard(
       card({
-        name: 'Tribal Warded Thing',
-        oracleText: 'Protection from Demons',
+        // "Protection from Demons" was the stand-in until subtype protection
+        // compiled (§3.109); Reaver Titan's line is a real printed quality the
+        // engine still cannot check.
+        name: 'Reaver Titan',
+        oracleText: 'Protection from mana value 3 or less',
         typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
         power: 2,
         toughness: 2,

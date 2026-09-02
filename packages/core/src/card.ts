@@ -293,8 +293,16 @@ export interface KeywordFlags {
 /**
  * The qualities a printed "protection from …" can name, each with an exact
  * engine meaning (see `sourceHasQuality` in `protection.ts`). A closed list on
- * purpose: a quality outside it ("protection from Demons", "from instants") has
- * no faithful check, so the compiler reports those cards instead of guessing.
+ * purpose: a quality outside it ("protection from mana value 3 or less", "from
+ * the chosen color") has no faithful check, so the compiler reports those cards
+ * instead of guessing.
+ *
+ * A quality is a STRING, never a record, so the lists can be unioned, compared
+ * and serialised with `includes`/`===` everywhere they already are. The one
+ * open-ended family — a printed SUBTYPE ("protection from Dragons", "from
+ * Arcane") — is therefore the prefixed form `subtype:<Name>`, read through
+ * `hasSubtype` so a changeling counts as every creature type here as it does
+ * for every other subtype question in the engine.
  */
 export type ProtectionQuality =
   | 'white'
@@ -304,14 +312,31 @@ export type ProtectionQuality =
   | 'green'
   /** A source with NO colors (true colorless — lands, most artifacts). */
   | 'colorless'
+  /** A source with exactly one color (Guardian of the Guildpact). */
+  | 'monocolored'
   /** A source with two or more colors. */
   | 'multicolored'
   /** Any source whose card is an artifact. */
   | 'artifacts'
   /** Any source whose card is a creature. */
   | 'creatures'
+  /** Any source whose card is an enchantment (Azorius First-Wing). */
+  | 'enchantments'
+  /** Any source whose card is a land (Horizon Drake). */
+  | 'lands'
+  /** Any source whose card is a planeswalker (Greensleeves, Maro-Sorcerer). */
+  | 'planeswalkers'
+  /** Any source whose card is an instant (Sword of Wealth and Power). */
+  | 'instants'
+  /** Any source whose card is a sorcery. */
+  | 'sorceries'
+  /** Any source with the named printed subtype — `subtype:Dragon`, `subtype:Arcane`. */
+  | `subtype:${string}`
   /** Every source, whatever its qualities. */
   | 'everything';
+
+/** The prefix of the subtype-shaped {@link ProtectionQuality}. */
+export const PROTECTION_SUBTYPE_PREFIX = 'subtype:';
 
 /**
  * Union two protection lists without duplicates — the one merge rule everywhere

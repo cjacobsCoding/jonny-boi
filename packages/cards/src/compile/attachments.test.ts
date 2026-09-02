@@ -299,7 +299,10 @@ describe('the compiler still refuses what it cannot do faithfully', () => {
         types: ['Enchantment'],
         subtypes: ['Aura'],
         keywords: ['Enchant'],
-        oracleText: 'Enchant creature\nEnchanted creature has protection from Demons.',
+        // A quality outside the closed table. "From Demons" used to be the
+        // stand-in until subtypes compiled (§3.109); Reaver Titan's mana-value
+        // protection is the real printed form that still has no engine check.
+        oracleText: 'Enchant creature\nEnchanted creature has protection from mana value 3 or less.',
       }),
     );
     expect(result.status).toBe('incomplete');

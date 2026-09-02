@@ -2273,6 +2273,44 @@ rather than a remembered wording — the failure `rule-coverage.test.ts` exists 
 the figure from two commits ago — because `dist` was stale. `npm run build` between any source change
 and any measurement, reverts included (build-gate memory).
 
+### 3.109 The keyword anomalies — a keyword the engine HAS was still blocking cards — ✅ done
+
+`keyword-gap-report.mjs` listed **flying** (10 sole-blocked), **protection** (10), **trample** (5) and
+**affinity** (6) among the unimplemented keywords. All four have been implemented for months, which
+made the rows the most informative in the table: the keyword was never the problem, the printed LINE
+around it was. `keyword-cards.mjs` (§3.104) showed three shapes:
+
+| shape | printed on | cards |
+|---|---|---|
+| a keyword line joined with **semicolons** ("Trample; haste; shroud") — Oracle switches separator when a keyword carries a comma of its own | Giant Solifuge, Teeka's Dragon, 28 more | 30 lines |
+| a protection quality outside the colour/artifact/creature table — a **card type** ("from enchantments", "from lands", "from instants and from sorceries"), **"monocolored"**, **"each color"**, or a **subtype** ("from Dragons", "from Demons and from Dragons", "from Vampires, from Werewolves, and from Zombies") | Azorius First-Wing, Horizon Drake, Sword of Wealth and Power, Guardian of the Guildpact, Iridescent Angel, Dragonstalker, Baneslayer Angel, Elite Inquisitor | ~25 |
+| **affinity for a subtype** ("Affinity for Slivers", "for outlaws", "for Equipment") | Thrumming Hivepool, Hellspur Brute, Oxidda Finisher | ~25 lines, 6 sole |
+
+**The protection table grew by the corpus, not by guesswork.** A tally of every "protection from …"
+quality printed on a real card (the script is in the commit message) gave the closed lists: seven
+card-type words, `monocolored`, and twenty-three subtype plurals. A subtype quality is the STRING
+`subtype:<Name>` — a string and not a record, so every list union, comparison and serialisation that
+already uses `includes`/`===` keeps working — and it is read through `hasSubtype`, the one funnel every
+subtype question goes through, so a changeling is a Dragon for Dragonstalker exactly as it is for a
+lord. "Each color" expands to the five colour qualities (CR 702.16j) rather than becoming a sixth
+colour word. A plural→singular RULE was rejected on purpose: "protection from haste", "from snow" and
+"from spells" are all printed and would all have passed it while meaning nothing to the engine.
+
+**Still honestly refused**, with real cards as the test stand-ins now that "from Demons" compiles:
+"protection from mana value 3 or less" (Reaver Titan), "from the chosen color" (Voice of All, 30
+printings of the until-end-of-turn form), "from each of your opponents", and "Affinity for Dwarves"
+(not printed anywhere).
+
+⚠️ **A second separator bug was hiding behind the first.** `PROTECTION_SEPARATOR` stripped the
+"from" after "and" but not after a comma, so every THREE-quality line (Elite Inquisitor, Oversoul of
+Dusk) was refused even once its words were in the table — and the keyword-line compiler had no
+`joinPayloadKeywords` at all, so the same line split into "from werewolves" fragments before the
+protection parser ever saw it. Both fixed; the joiner is now shared by the printed line and the
+granted form, so an Equipment and a creature cannot disagree about which lines are real.
+
+**Measured: 5,163 → 5,188 complete cards, +25.** The remaining flying/trample rows are banding and
+rampage cards, which are those keywords' own gaps (§3.107 takes rampage; banding stays open).
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded

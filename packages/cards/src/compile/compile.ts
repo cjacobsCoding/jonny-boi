@@ -45,6 +45,7 @@ import type {
 import {
   EFFECT_RULES,
   KEYWORD_ABILITY_BUILDERS,
+  joinPayloadKeywords,
   KEYWORD_FLAGS,
   MANA_RULES,
   STATIC_RULES,
@@ -750,10 +751,21 @@ function capitalizeFirst(text: string): string {
  * line is reported rather than silently dropping an ability.
  */
 function compileKeywordLine(line: string, assembly: Assembly, ctx: RuleContext): boolean {
-  const words = line
-    .split(',')
-    .map((word) => normalizeClause(word))
-    .filter((word) => word.length > 0);
+  // Oracle separates keywords with a comma, EXCEPT where one of them carries a
+  // comma of its own — then the whole line switches to semicolons ("Flying;
+  // trample; rampage 4", "Trample; haste; shroud"). Thirty printed cards use
+  // the semicolon form, and every one of them was reported as an unmodelled
+  // "Flying" until both separators were read.
+  // The comma split also breaks a multi-quality protection line apart
+  // ("protection from Vampires, from Werewolves, and from Zombies" — Elite
+  // Inquisitor); `joinPayloadKeywords` hands the fragments back to the
+  // protection phrase before them, as the grant parser already does.
+  const words = joinPayloadKeywords(
+    line
+      .split(/[,;]/)
+      .map((word) => normalizeClause(word))
+      .filter((word) => word.length > 0),
+  );
   if (words.length === 0) return false;
 
   let flags: KeywordFlags = {};

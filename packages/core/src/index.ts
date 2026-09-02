@@ -227,7 +227,7 @@ export {
 // Protection from [quality] + ward (protection.ts): the source-aware half of
 // targeting/damage/attachment/blocking legality, and the reserved ward seam.
 export type { ProtectionQuality } from './card.js';
-export { unionProtection } from './card.js';
+export { PROTECTION_SUBTYPE_PREFIX, unionProtection } from './card.js';
 export {
   PROTECTION_QUALITIES,
   WARD_COST_PARAM,

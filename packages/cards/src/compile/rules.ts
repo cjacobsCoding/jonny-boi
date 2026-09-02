@@ -41,7 +41,13 @@ import type {
   TriggeredAbility,
   TriggerWho,
 } from '@jonny-boi/core';
-import { DEFAULT_TARGET_RESTRICTION, PLUS_ONE_COUNTER, formatManaCost, MANA_COLORS } from '@jonny-boi/core';
+import {
+  DEFAULT_TARGET_RESTRICTION,
+  PLUS_ONE_COUNTER,
+  PROTECTION_SUBTYPE_PREFIX,
+  formatManaCost,
+  MANA_COLORS,
+} from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
 import {
   ABILITY_WORD_LIST,
@@ -456,6 +462,38 @@ const STATIC_NOUN_TYPES: Readonly<Record<string, CardType | null>> = Object.free
   artifact: 'artifact',
   enchantment: 'enchantment',
   land: 'land',
+});
+
+/**
+ * The SUBTYPE nouns a printed "Affinity for …" may name (CR 702.40a lets the
+ * keyword name any object quality), as the `CardFilter` each counts — a CLOSED
+ * table seeded from every affinity line in the corpus. "Outlaws" is the one
+ * printed word that is a defined GROUP (CR 205.3d: Assassins, Mercenaries,
+ * Pirates, Rogues and Warlocks), so its row is the five subtypes, and
+ * "planeswalkers" is a card type the static-noun table above does not carry.
+ * Kept apart from `permanentNounFilter` so the "unless you control …" template
+ * that table serves keeps exactly the scope it was measured with.
+ */
+const AFFINITY_SUBTYPE_NOUNS: Readonly<Record<string, CardFilter>> = Object.freeze({
+  allies: { anyOfSubtypes: ['Ally'] },
+  auras: { anyOfSubtypes: ['Aura'] },
+  birds: { anyOfSubtypes: ['Bird'] },
+  cats: { anyOfSubtypes: ['Cat'] },
+  citizens: { anyOfSubtypes: ['Citizen'] },
+  daleks: { anyOfSubtypes: ['Dalek'] },
+  elves: { anyOfSubtypes: ['Elf'] },
+  equipment: { anyOfSubtypes: ['Equipment'] },
+  foods: { anyOfSubtypes: ['Food'] },
+  frogs: { anyOfSubtypes: ['Frog'] },
+  gates: { anyOfSubtypes: ['Gate'] },
+  humans: { anyOfSubtypes: ['Human'] },
+  knights: { anyOfSubtypes: ['Knight'] },
+  lizards: { anyOfSubtypes: ['Lizard'] },
+  outlaws: { anyOfSubtypes: ['Assassin', 'Mercenary', 'Pirate', 'Rogue', 'Warlock'] },
+  planeswalkers: { anyOfTypes: ['planeswalker'] },
+  slivers: { anyOfSubtypes: ['Sliver'] },
+  spirits: { anyOfSubtypes: ['Spirit'] },
+  towns: { anyOfSubtypes: ['Town'] },
 });
 
 /**
@@ -956,9 +994,9 @@ function keywordFlag(word: string): Record<string, boolean> | null {
 /**
  * The quality words a printed "protection from ..." may name, mapped to the core
  * {@link ProtectionQuality} each means. A CLOSED table: a quality outside it
- * ("protection from Demons", "from instants and from sorceries") has no faithful
- * engine check, so those cards keep reporting rather than compiling a protection
- * that quietly protects from the wrong things.
+ * ("protection from mana value 3 or less", "from the chosen color") has no
+ * faithful engine check, so those cards keep reporting rather than compiling a
+ * protection that quietly protects from the wrong things.
  */
 const PROTECTION_QUALITY_WORDS: Readonly<Record<string, ProtectionQuality>> = Object.freeze({
   white: 'white',
@@ -967,14 +1005,68 @@ const PROTECTION_QUALITY_WORDS: Readonly<Record<string, ProtectionQuality>> = Ob
   red: 'red',
   green: 'green',
   colorless: 'colorless',
+  monocolored: 'monocolored',
   multicolored: 'multicolored',
   artifacts: 'artifacts',
   creatures: 'creatures',
+  enchantments: 'enchantments',
+  lands: 'lands',
+  planeswalkers: 'planeswalkers',
+  instants: 'instants',
+  sorceries: 'sorceries',
   everything: 'everything',
 });
 
-/** How a printed protection line separates its qualities ("... and from ..."). */
-const PROTECTION_SEPARATOR = /,? and (?:from )?|, /;
+/**
+ * "Protection from EACH COLOR" (Iridescent Angel, Spectra Ward, Akroma's Will)
+ * is the five colour qualities at once — CR 702.16j says exactly that — so it
+ * expands to them rather than becoming a sixth colour word the engine would
+ * then have to define.
+ */
+const PROTECTION_EACH_COLOR = 'each color';
+const EVERY_COLOR_QUALITY: readonly ProtectionQuality[] = Object.freeze(['white', 'blue', 'black', 'red', 'green']);
+
+/**
+ * The SUBTYPES a printed protection line may name, lower-cased as Oracle's
+ * plural and mapped to the subtype the engine compares (`hasSubtype` folds
+ * case, so the value is the printed singular). A CLOSED table seeded from the
+ * corpus — every plural printed on a real card — rather than a strip-the-s
+ * rule, because "protection from haste", "from snow" and "from spells" would
+ * all pass a generic rule and mean nothing to the engine.
+ */
+const PROTECTION_SUBTYPE_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  angels: 'Angel',
+  archons: 'Archon',
+  arcane: 'Arcane',
+  assassins: 'Assassin',
+  beasts: 'Beast',
+  clerics: 'Cleric',
+  coyotes: 'Coyote',
+  demons: 'Demon',
+  dogs: 'Dog',
+  dragons: 'Dragon',
+  elves: 'Elf',
+  goblins: 'Goblin',
+  gorgons: 'Gorgon',
+  humans: 'Human',
+  kavu: 'Kavu',
+  rats: 'Rat',
+  robots: 'Robot',
+  salamanders: 'Salamander',
+  spirits: 'Spirit',
+  vampires: 'Vampire',
+  werewolves: 'Werewolf',
+  wizards: 'Wizard',
+  zombies: 'Zombie',
+});
+
+/**
+ * How a printed protection line separates its qualities: "X and from Y",
+ * "X, from Y, and from Z" (Elite Inquisitor), or a plain comma list. The
+ * optional "from" is stripped on BOTH separator shapes; the comma form used to
+ * keep it and refused every three-quality line.
+ */
+const PROTECTION_SEPARATOR = /,? and (?:from )?|, (?:from )?/;
 
 /** `Ward {N}` - only the plain generic-cost form; anything else must report. */
 const WARD_PATTERN = /^ward \{(\d+)\}$/;
@@ -995,10 +1087,22 @@ function parseProtectionQualities(text: string): readonly ProtectionQuality[] | 
     .filter((word) => word.length > 0);
   if (words.length === 0) return null;
   const qualities: ProtectionQuality[] = [];
-  for (const word of words) {
-    const quality = PROTECTION_QUALITY_WORDS[word];
-    if (!quality) return null;
+  const add = (quality: ProtectionQuality): void => {
     if (!qualities.includes(quality)) qualities.push(quality);
+  };
+  for (const word of words) {
+    if (word === PROTECTION_EACH_COLOR) {
+      EVERY_COLOR_QUALITY.forEach(add);
+      continue;
+    }
+    const quality = PROTECTION_QUALITY_WORDS[word];
+    if (quality) {
+      add(quality);
+      continue;
+    }
+    const subtype = PROTECTION_SUBTYPE_WORDS[word];
+    if (subtype === undefined) return null;
+    add(`${PROTECTION_SUBTYPE_PREFIX}${subtype}`);
   }
   return qualities;
 }
@@ -4830,17 +4934,20 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     // the same idea, rather than by two rules that could drift apart.
     //
     // The noun goes through `permanentNounFilter`, the same closed table every
-    // other selector reads, so "affinity for Dwarves" (a creature-type affinity
-    // this engine cannot express) REPORTS rather than quietly compiling into
-    // "for each creature", which would make the spell far cheaper than printed.
+    // other selector reads, and then through `AFFINITY_SUBTYPE_NOUNS`, the
+    // closed list of SUBTYPES a printed affinity names — so "affinity for
+    // Dwarves" (not printed on any card) REPORTS rather than quietly compiling
+    // into "for each creature", which would make the spell far cheaper than
+    // printed, while "affinity for Slivers" counts Slivers through the same
+    // `anyOfSubtypes` filter every lord and typal search reads.
     id: 'affinity-cost-reduction',
     description:
-      '"Affinity for artifacts" / "This spell costs {1} less to cast for each artifact you control" (Myr Enforcer, Frogmite)',
+      '"Affinity for artifacts" / "This spell costs {1} less to cast for each artifact you control" (Myr Enforcer, Frogmite; Thrumming Hivepool for a subtype)',
     pattern:
       /^(?:affinity for ([a-z]+)|(?:this spell|~) costs \{(\d+)\} less to cast for each ([a-z]+) you control)$/,
     build(match) {
       const noun = match[1] ?? match[3] ?? '';
-      const filter = permanentNounFilter(noun);
+      const filter = permanentNounFilter(noun) ?? AFFINITY_SUBTYPE_NOUNS[noun];
       if (filter === undefined) return null;
       const amount = match[2] === undefined ? 1 : parseSignedInt(match[2]);
       if (!Number.isFinite(amount) || amount <= 0) return null;
@@ -6239,12 +6346,12 @@ function parseKeywordList(text: string): KeywordFlags | null {
  * putting them back is what lets {@link parseProtectionOrWard} see the whole
  * printed line, which is the only thing that knows how to read it.
  */
-function joinPayloadKeywords(words: readonly string[]): string[] {
+export function joinPayloadKeywords(words: readonly string[]): string[] {
   const joined: string[] = [];
   for (const word of words) {
     const previous = joined[joined.length - 1];
     if (previous !== undefined && PROTECTION_CONTINUATION.test(word) && previous.startsWith('protection from ')) {
-      joined[joined.length - 1] = `${previous} and ${word}`;
+      joined[joined.length - 1] = `${previous} and ${word.replace(/^and /, '')}`;
       continue;
     }
     joined.push(word);
@@ -6253,7 +6360,7 @@ function joinPayloadKeywords(words: readonly string[]): string[] {
 }
 
 /** A trailing "from …" fragment of a multi-quality protection line. */
-const PROTECTION_CONTINUATION = /^from /;
+const PROTECTION_CONTINUATION = /^(?:and )?from /;
 
 /**
  * A printed conjunction repeats the verb ("can't be blocked AND HAS shroud"), so
@@ -7936,10 +8043,11 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // which reads the same closed tables through `parseProtectionOrWard`.
     // What still lands here is a TEMPLATE outside those tables: a ward cost
     // that is not plain generic mana ("Ward—Pay 3 life", "Ward {X}"), a
-    // protection quality with no engine meaning ("protection from Demons",
-    // "from instants and from sorceries" — Sword of Wealth and Power), or
+    // protection quality with no engine meaning ("protection from mana value
+    // 3 or less" — Reaver Titan; "from the chosen color" — Voice of All), or
     // "hexproof from <quality>", which is protection's shape with only the
-    // targeting half.
+    // targeting half. Card types, subtypes, "monocolored" and "each color"
+    // all compile now (see `PROTECTION_QUALITY_WORDS` and its subtype table).
     pattern: /\bward\b|\bprotection from\b/,
     missingEngineSystem: 'a ward/protection template the compiler does not recognize yet',
   },
