@@ -45,9 +45,13 @@ import {
   runMatchup,
   type MatchupPilots,
   type MatchupResult,
+  type RunOptions,
 } from './matchup.js';
 import type { GauntletResult } from './gauntlet.js';
 import { evaluateSwap, summarizePairedSwap, type SwapEvaluation } from './swap.js';
+import type { PairedArmRunner, PairedBaseRecord, PairedSlice } from './paired-arms.js';
+import { createPairedArmRunner } from './paired-arms.js';
+import type { DeckRules } from './config.js';
 import {
   deckPairsOf,
   emptyPilotAbTotals,
@@ -232,6 +236,8 @@ export interface SoakMixedSliceJob {
 export type ParallelJob =
   | MatchupSliceJob
   | PairedSliceJob
+  | SuggestBaseSliceJob
+  | SuggestArmSliceJob
   | PilotAbSliceJob
   | SoakAnchoredJob
   | SoakMixedSliceJob;
@@ -290,6 +296,8 @@ export interface SoakPartResult {
 export type ParallelResult =
   | MatchupSliceResult
   | PairedSliceResult
+  | SuggestBaseSliceResult
+  | SuggestArmSliceResult
   | PilotAbSliceResult
   | SoakPartResult;
 
@@ -467,6 +475,10 @@ export function executeParallelJob(
       return runMatchupSlice(context, job, onGame);
     case 'paired-slice':
       return runPairedSlice(context, job, onGame);
+    case 'suggest-base-slice':
+      return runSuggestBaseSlice(context, job, onGame);
+    case 'suggest-arm-slice':
+      return runSuggestArmSlice(context, job, onGame);
     case 'pilot-ab-slice':
       return runPilotAbSlice(context, job, onGame);
     case 'soak-anchored': {
@@ -808,4 +820,199 @@ export function totalGamesOf(jobs: readonly ParallelJob[]): number {
     }
   }
   return games;
+}
+
+// --- suggestion-search slices (DESIGN §3.77) -----------------------------------
+
+/**
+ * THE SUGGESTION SEARCH'S UNIT OF PARALLEL WORK is not "a whole A/B run" — the
+ * adaptive ladder advances MANY arms to GROWING depths, so it is "slots
+ * [from,to) of ONE arm". Two job kinds, in the order the host must run them:
+ *
+ *   `suggest-base-slice` plays the SHARED base games for a slot range and returns
+ *     the records. Every arm needs the same base games, so a run plays them ONCE
+ *     and every variant slice is handed the answers. Without this the base arm
+ *     would be replayed once per candidate, and a pooled run would do roughly
+ *     1.8x the total work of a sequential one in order to go 3x faster.
+ *   `suggest-arm-slice` plays one candidate's variant games over a slot range
+ *     with those records supplied. This is ~78% of a search's games — the part
+ *     worth parallelising, as COORDINATION.md records the hard way.
+ *
+ * Both carry `settings` because a worker must build a runner CONFIGURED EXACTLY
+ * as the host's, or the two disagree about legality, mulligans or the identical-
+ * game skip and the merged tally is not the run anyone asked for.
+ */
+export interface SuggestSliceSettings {
+  /** The run seed — also the runner cache key, so one runner serves a whole run. */
+  readonly runSeed: number;
+  readonly deckRules: DeckRules;
+  /** The run options MINUS `range`: a slot range is the job's own business. */
+  readonly runOptions?: Omit<RunOptions, 'range'>;
+}
+
+export interface SuggestBaseSliceJob {
+  readonly kind: 'suggest-base-slice';
+  readonly jobId: number;
+  readonly slotStart: number;
+  readonly slotEnd: number;
+  readonly settings: SuggestSliceSettings;
+}
+
+export interface SuggestArmSliceJob {
+  readonly kind: 'suggest-arm-slice';
+  readonly jobId: number;
+  /** The candidate key, so the host can merge a slice back onto the right arm. */
+  readonly key: string;
+  readonly out: string;
+  readonly in: string;
+  readonly outName: string;
+  readonly inName: string;
+  readonly slotStart: number;
+  readonly slotEnd: number;
+  /** The base records for exactly `[slotStart, slotEnd)`, in slot order. */
+  readonly baseRecords: readonly PairedBaseRecord[];
+  readonly settings: SuggestSliceSettings;
+}
+
+export interface SuggestBaseSliceResult {
+  readonly kind: 'suggest-base';
+  readonly jobId: number;
+  readonly slotStart: number;
+  readonly records: readonly PairedBaseRecord[];
+}
+
+export interface SuggestArmSliceResult {
+  readonly kind: 'suggest-arm';
+  readonly jobId: number;
+  readonly key: string;
+  readonly slotStart: number;
+  readonly slotEnd: number;
+  readonly slice: PairedSlice;
+}
+
+/**
+ * Cut `[fromSlot, toSlot)` into contiguous pieces for a pool.
+ *
+ * Contiguous and slot-ordered because a paired SLOT is the indivisible unit: the
+ * base game and the variant game of one slot must come from the same seed, or
+ * they are not a pair. The cut is by count only — no slot is ever moved, dropped
+ * or duplicated — which is what keeps a pooled run's tally identical to a
+ * sequential one's rather than merely close to it.
+ */
+export function planSuggestSlices(fromSlot: number, toSlot: number, workerCount: number): readonly GameRange[] {
+  const total = Math.max(0, toSlot - fromSlot);
+  if (total === 0) return [];
+  const parts = slicesPerUnit(1, total, workerCount);
+  return splitGameRange(total, parts).map((range) => ({
+    gameStart: fromSlot + range.gameStart,
+    gameEnd: fromSlot + range.gameEnd,
+  }));
+}
+
+/**
+ * ONE RUNNER PER RUN PER WORKER, holding the base records the host supplies.
+ *
+ * Kept in a `WeakMap` on the context rather than a field so `ParallelSimContext`
+ * stays the plain, readonly description of a worker's fixed inputs. The runner is
+ * cached because it memoises variant decks and base records: a worker that
+ * rebuilt it per job would re-derive the same variant deck for every slice of the
+ * same arm, and building decks out of a 5,065-card pool is the expensive part.
+ */
+const suggestRunners = new WeakMap<ParallelSimContext, Map<number, SuggestRunnerEntry>>();
+
+interface SuggestRunnerEntry {
+  readonly runner: PairedArmRunner;
+  /** Base records the host has shipped, by ABSOLUTE slot. */
+  readonly supplied: Map<number, PairedBaseRecord>;
+  /**
+   * The current job's progress sink. Mutable, and deliberately so: the runner is
+   * built once per run but progress belongs to whichever job is using it, and the
+   * host counts ticks per job.
+   */
+  onGame?: (games: number) => void;
+}
+
+function suggestRunnerFor(context: ParallelSimContext, settings: SuggestSliceSettings): SuggestRunnerEntry {
+  const base = context.heroDeck;
+  const opponents = context.opponents;
+  const pilots = context.pilots;
+  if (!base || !opponents || !pilots) {
+    throw new Error('suggestion slice dispatched to a worker initialised without decks/pilots');
+  }
+  let byRun = suggestRunners.get(context);
+  if (!byRun) {
+    byRun = new Map();
+    suggestRunners.set(context, byRun);
+  }
+  const cached = byRun.get(settings.runSeed);
+  if (cached) return cached;
+
+  const supplied = new Map<number, PairedBaseRecord>();
+  const entry: SuggestRunnerEntry = {
+    supplied,
+    runner: createPairedArmRunner(base, {
+      gauntletDecks: opponents,
+      pilots,
+      pool: context.pool,
+      registry: context.registry,
+      seed: settings.runSeed,
+      deckRules: settings.deckRules,
+      ...(settings.runOptions ? { runOptions: settings.runOptions } : {}),
+      // A base game the host already played is READ, never replayed. A slot the
+      // host has not supplied is played here — which is exactly what a base slice
+      // does, and what makes the two job kinds one mechanism rather than two.
+      baseRecords: (slot) => supplied.get(slot),
+      onGame: (games) => entry.onGame?.(games),
+    }),
+  };
+  byRun.set(settings.runSeed, entry);
+  return entry;
+}
+
+/** Run one job with its own progress tally, and leave no sink behind. */
+function withJobProgress<T>(entry: SuggestRunnerEntry, onGame: OnGamesPlayed | undefined, body: () => T): T {
+  if (!onGame) return body();
+  let played = 0;
+  entry.onGame = (games) => onGame((played += games));
+  try {
+    return body();
+  } finally {
+    delete entry.onGame;
+  }
+}
+
+function runSuggestBaseSlice(
+  context: ParallelSimContext,
+  job: SuggestBaseSliceJob,
+  onGame?: OnGamesPlayed,
+): SuggestBaseSliceResult {
+  const entry = suggestRunnerFor(context, job.settings);
+  const records = withJobProgress(entry, onGame, () => {
+    const played: PairedBaseRecord[] = [];
+    for (let slot = job.slotStart; slot < job.slotEnd; slot++) played.push(entry.runner.baseRecordAt(slot));
+    return played;
+  });
+  return { kind: 'suggest-base', jobId: job.jobId, slotStart: job.slotStart, records };
+}
+
+function runSuggestArmSlice(
+  context: ParallelSimContext,
+  job: SuggestArmSliceJob,
+  onGame?: OnGamesPlayed,
+): SuggestArmSliceResult {
+  const entry = suggestRunnerFor(context, job.settings);
+  for (let i = 0; i < job.baseRecords.length; i++) {
+    entry.supplied.set(job.slotStart + i, job.baseRecords[i] as PairedBaseRecord);
+  }
+  const slice = withJobProgress(entry, onGame, () =>
+    entry.runner.playSlice({ out: job.out, in: job.in }, job.outName, job.inName, job.slotStart, job.slotEnd),
+  );
+  return {
+    kind: 'suggest-arm',
+    jobId: job.jobId,
+    key: job.key,
+    slotStart: job.slotStart,
+    slotEnd: job.slotEnd,
+    slice,
+  };
 }

@@ -92,9 +92,9 @@ import {
   type HeuristicWeights,
   type SuggestConfig,
 } from './suggest-config.js';
-import type { ArmHandle, SwapArm } from './paired-arms.js';
+import type { ArmHandle, PairedArmRunner, PairedArmsUsage, SwapArm } from './paired-arms.js';
 import { createPairedArmRunner } from './paired-arms.js';
-import type { SkippedCandidate } from './suggest-candidates.js';
+import type { SkippedCandidate, SwapCandidate } from './suggest-candidates.js';
 import { candidateSeedSalt } from './suggest-candidates.js';
 import type { SuggestionHistory } from './suggest-history.js';
 import type {
@@ -239,8 +239,56 @@ export interface SuggestOptions {
  *
  * Robust: a candidate that throws is recorded as skipped with its reason, not
  * crashed on; zero valid candidates ⇒ a well-formed empty report.
+ *
+ * This is the SYNCHRONOUS entry point, and it plays every game on the calling
+ * thread. `suggestSwapsWith` is the same search over a transport that can play
+ * an arm's games elsewhere — the two share `prepareSuggestion`, the round loop
+ * (`driveSuggestionArms`) and `finishSuggestion`, so they cannot drift apart.
  */
 export function suggestSwaps(base: Deck, options: SuggestOptions): SuggestionReport {
+  const setup = prepareSuggestion(base, options);
+  const start = nowSeconds();
+  const search =
+    options.adaptive === false
+      ? runFixedBudget(base, setup.plan, options, {
+          games: setup.games,
+          rules: setup.ctx.rules,
+          stats: setup.ctx.stats,
+        })
+      : runAdaptiveSearchLocally(base, setup.plan, options, setup.ctx);
+  return finishSuggestion(base, setup, search, nowSeconds() - start);
+}
+
+/**
+ * THE SAME SEARCH, over an injectable arm transport (DESIGN §3.77).
+ *
+ * The only thing a caller supplies is "play these arms to these depths" — the
+ * candidate generation, the wave ladder, the elimination rules, the report and
+ * every number in it are the shared code below. That is what makes a pooled run
+ * a TRANSPORT choice rather than a second search with its own answers.
+ */
+export async function suggestSwapsWith(
+  base: Deck,
+  options: SuggestOptions,
+  transport: ArmTransport,
+): Promise<SuggestionReport> {
+  const setup = prepareSuggestion(base, options);
+  const start = nowSeconds();
+  const search = await runAdaptiveSearchOverTransport(base, setup.plan, options, setup.ctx, transport);
+  return finishSuggestion(base, setup, search, nowSeconds() - start);
+}
+
+/** Everything both entry points settle before a single game is played. */
+interface SuggestionSetup {
+  readonly plan: SuggestionRunPlan;
+  readonly games: number;
+  readonly ctx: SearchContext & {
+    readonly adaptiveConfig: AdaptiveSearchConfig;
+    readonly exploration: ExplorationWeights;
+  };
+}
+
+function prepareSuggestion(base: Deck, options: SuggestOptions): SuggestionSetup {
   const config = options.suggestConfig ?? DEFAULT_SUGGEST_CONFIG;
   const adaptiveConfig = options.adaptiveConfig ?? DEFAULT_ADAPTIVE_CONFIG;
   const exploration = options.explorationWeights ?? DEFAULT_EXPLORATION_WEIGHTS;
@@ -266,13 +314,16 @@ export function suggestSwaps(base: Deck, options: SuggestOptions): SuggestionRep
     ...(options.inOnly ? { inOnly: options.inOnly } : {}),
   });
 
-  const start = nowSeconds();
-  const search =
-    options.adaptive === false
-      ? runFixedBudget(base, plan, options, { games, rules, stats })
-      : runAdaptiveSearchLocally(base, plan, options, { rules, stats, adaptiveConfig, exploration });
-  const elapsedSeconds = nowSeconds() - start;
+  return { plan, games, ctx: { rules, stats, adaptiveConfig, exploration } };
+}
 
+function finishSuggestion(
+  base: Deck,
+  setup: SuggestionSetup,
+  search: SuggestionSearchResult,
+  elapsedSeconds: number,
+): SuggestionReport {
+  const { plan, ctx } = setup;
   // Candidates the roster cap left out this run — honest, not silent.
   const evaluatedKeys = new Set(search.outcomes.map((o) => o.candidate.key));
   const capped: SkippedCandidate[] = plan.reserves
@@ -288,9 +339,9 @@ export function suggestSwaps(base: Deck, options: SuggestOptions): SuggestionRep
     elapsedSeconds,
     history: plan.history,
     ...(plan.historyRejected ? { historyRejected: plan.historyRejected } : {}),
-    method: adaptiveConfig.multipleComparisons,
-    exploration,
-    stats,
+    method: ctx.adaptiveConfig.multipleComparisons,
+    exploration: ctx.exploration,
+    stats: ctx.stats,
   });
 }
 
@@ -300,16 +351,68 @@ interface SearchContext {
   readonly stats: StatsConfig;
 }
 
+// --- the arm transport seam ----------------------------------------------------
+
 /**
- * THE SINGLE-THREADED DRIVER of the adaptive search.
- *
- * It plays each round the generator asks for inline, on one incremental
- * `PairedArmRunner` — which is what makes base-arm reuse and the identical-game
- * skip free here: the runner already remembers every base slot it played. The
- * scheduling decisions all happen inside `driveAdaptiveSearch`, so this function
- * contains no elimination logic at all.
+ * ONE ARM'S WORK FOR ONE ROUND: bring it from `fromGames` to `toGames` played
+ * slots. The slot range is explicit because a transport that plays the games
+ * somewhere else cannot ask a local runner how far the arm has got.
  */
-function runAdaptiveSearchLocally(
+export interface ArmAdvanceRequest {
+  readonly key: string;
+  readonly handle: ArmHandle;
+  readonly swap: CardSwap;
+  readonly outName: string;
+  readonly inName: string;
+  readonly fromGames: number;
+  readonly toGames: number;
+  /**
+   * The built variant deck. Carried because the REPORT needs its name and a
+   * transport that plays the games elsewhere has no runner to ask.
+   */
+  readonly variantDeck: Deck;
+}
+
+/** An arm's ACCUMULATED state after the advance — not just the new slice. */
+export interface ArmAdvanceOutcome {
+  readonly key: string;
+  readonly arm: SwapArm;
+}
+
+/**
+ * WHERE THE GAMES ARE PLAYED. The sequential implementation is a `PairedArmRunner`
+ * and nothing else; the pooled one ships slot ranges to workers and merges the
+ * tallies back. `usage` is asked of the TRANSPORT rather than read off the host's
+ * runner because in a pooled run the host plays nothing, and a usage report
+ * sourced from the host would claim a run of zero games.
+ */
+export interface ArmTransport {
+  /**
+   * Called ONCE before any advance, with the seed the run is played on.
+   *
+   * ⚠️ This exists because `runSeed` is NOT the caller's `baseSeed`: a run that
+   * continues a history plays on `gameSeedFor(baseSeed, runsCompleted)` so a
+   * re-run plays different games. A transport that derived the seed itself would
+   * agree with the host on run 1 and silently play a DIFFERENT set of games on
+   * every run after it — with a report that looked perfectly well-formed.
+   */
+  readonly begin?: (runSeed: number) => void;
+  readonly advance: (requests: readonly ArmAdvanceRequest[]) => Promise<readonly ArmAdvanceOutcome[]>;
+  readonly usage: (identicalGameSkip: { readonly enabled: boolean; readonly reason?: string }) => PairedArmsUsage;
+}
+
+/**
+ * THE ROUND LOOP, SHARED BY BOTH TRANSPORTS.
+ *
+ * A generator, so the caller supplies the transport: it yields a whole round's
+ * arm requests at once — which is exactly what lets a pooled caller shard the
+ * round across workers — and is resumed with the advanced arms. Everything that
+ * decides an ANSWER lives in here: opening arms, recording the ones that fail to
+ * build, the progress callbacks, and building each verdict from the arm's own
+ * tally. The scheduling decisions all happen inside `driveAdaptiveSearch`, so
+ * this contains no elimination logic at all.
+ */
+function* driveSuggestionArms(
   base: Deck,
   plan: SuggestionRunPlan,
   options: SuggestOptions,
@@ -317,8 +420,10 @@ function runAdaptiveSearchLocally(
     readonly adaptiveConfig: AdaptiveSearchConfig;
     readonly exploration: ExplorationWeights;
   },
-): SuggestionSearchResult {
+  runner: PairedArmRunner,
+): Generator<readonly ArmAdvanceRequest[], Omit<SuggestionSearchResult, 'usage'>, readonly ArmAdvanceOutcome[]> {
   const progress = options.onProgress;
+  const scope = options.runOptions?.swapScope ?? DEFAULT_SWAP_SCOPE;
   /**
    * One arm's verdict, from the arm alone.
    *
@@ -337,26 +442,13 @@ function runAdaptiveSearchLocally(
       inName: arm.inName,
       paired: arm.paired,
       ...(options.runOptions?.stats ? { stats: options.runOptions.stats } : {}),
-      scope: options.runOptions?.swapScope ?? DEFAULT_SWAP_SCOPE,
-      copiesSwapped: copiesSwappedBy(
-        base,
-        arm.swap,
-        options.pool,
-        options.runOptions?.swapScope ?? DEFAULT_SWAP_SCOPE,
-      ),
+      scope,
+      copiesSwapped: copiesSwappedBy(base, arm.swap, options.pool, scope),
     });
-  const runner = createPairedArmRunner(base, {
-    gauntletDecks: options.gauntletDecks,
-    pilots: options.pilots,
-    pool: options.pool,
-    registry: options.registry,
-    seed: plan.runSeed,
-    deckRules: ctx.rules,
-    ...(options.runOptions ? { runOptions: options.runOptions } : {}),
-    ...(progress?.onGame ? { onGame: progress.onGame } : {}),
-  });
 
   const handles = new Map<string, ArmHandle>();
+  /** How deep each arm already is — the transport's `fromGames`. */
+  const depth = new Map<string, number>();
   /** The latest arm read per candidate — the report's input. See below. */
   const lastArm = new Map<string, SwapArm>();
   const driver = driveAdaptiveSearch(plan, {
@@ -376,6 +468,8 @@ function runAdaptiveSearchLocally(
     });
 
     const answers: AdaptiveArmOutcome[] = [];
+    const requests: ArmAdvanceRequest[] = [];
+    const askedBy = new Map<string, SwapCandidate>();
     for (const request of round.arms) {
       const candidate = request.candidate;
       let handle = handles.get(candidate.key);
@@ -394,16 +488,36 @@ function runAdaptiveSearchLocally(
         }
         handles.set(candidate.key, handle);
       }
-      const arm = runner.advance(handle, request.toGames);
+      askedBy.set(candidate.key, candidate);
+      requests.push({
+        key: candidate.key,
+        handle,
+        swap: { out: candidate.outId, in: candidate.inId },
+        outName: candidate.outName,
+        inName: candidate.inName,
+        fromGames: depth.get(candidate.key) ?? 0,
+        toGames: request.toGames,
+        variantDeck: runner.read(handle).variantDeck,
+      });
+    }
+
+    // The whole round goes to the transport at once. A sequential transport walks
+    // it in order and is identical to the loop this replaced; a pooled one cuts it
+    // into slot ranges across every worker it has.
+    const advanced = requests.length > 0 ? yield requests : [];
+    for (const { key, arm } of advanced) {
+      const candidate = askedBy.get(key);
+      if (!candidate) continue;
       // ⚠️ THE ARM IS KEPT, not just its numbers, because the REPORT is built
       // from it below rather than from `runner.summarize`. A pooled run plays an
       // arm's slots on WORKERS, so the host's runner never sees those games and
       // `summarize` would report zeros — see COORDINATION.md. Reading the arm
       // here is what lets one loop serve both transports.
-      lastArm.set(candidate.key, arm);
-      answers.push({ key: candidate.key, gamesPlayed: arm.gamesPlayed, paired: arm.paired });
+      lastArm.set(key, arm);
+      depth.set(key, arm.gamesPlayed);
+      answers.push({ key, gamesPlayed: arm.gamesPlayed, paired: arm.paired });
       progress?.onCandidate?.({
-        key: candidate.key,
+        key,
         outName: candidate.outName,
         inName: candidate.inName,
         wave: round.wave,
@@ -429,10 +543,81 @@ function runAdaptiveSearchLocally(
   return {
     outcomes,
     waves: outcome.waves,
-    usage: runner.usage(),
     failures: outcome.failures,
     fixedSchemeGames: outcome.fixedSchemeGames,
   };
+}
+
+/** Build the runner both drivers use — for the pooled one, for metadata only. */
+function armRunnerFor(
+  base: Deck,
+  plan: SuggestionRunPlan,
+  options: SuggestOptions,
+  ctx: SearchContext,
+): PairedArmRunner {
+  return createPairedArmRunner(base, {
+    gauntletDecks: options.gauntletDecks,
+    pilots: options.pilots,
+    pool: options.pool,
+    registry: options.registry,
+    seed: plan.runSeed,
+    deckRules: ctx.rules,
+    ...(options.runOptions ? { runOptions: options.runOptions } : {}),
+    ...(options.onProgress?.onGame ? { onGame: options.onProgress.onGame } : {}),
+  });
+}
+
+/**
+ * THE SINGLE-THREADED DRIVER of the adaptive search.
+ *
+ * It plays each round the generator asks for inline, on one incremental
+ * `PairedArmRunner` — which is what makes base-arm reuse and the identical-game
+ * skip free here: the runner already remembers every base slot it played.
+ */
+function runAdaptiveSearchLocally(
+  base: Deck,
+  plan: SuggestionRunPlan,
+  options: SuggestOptions,
+  ctx: SearchContext & {
+    readonly adaptiveConfig: AdaptiveSearchConfig;
+    readonly exploration: ExplorationWeights;
+  },
+): SuggestionSearchResult {
+  const runner = armRunnerFor(base, plan, options, ctx);
+  const search = driveSuggestionArms(base, plan, options, ctx, runner);
+  let step = search.next();
+  while (!step.done) {
+    step = search.next(
+      step.value.map((request) => ({ key: request.key, arm: runner.advance(request.handle, request.toGames) })),
+    );
+  }
+  return { ...step.value, usage: runner.usage() };
+}
+
+/**
+ * THE POOLED DRIVER — the same generator, resumed with arms someone else played.
+ *
+ * The host still opens every arm (that is what vets legality and builds the
+ * variant deck), but `transport.advance` decides where the games happen.
+ */
+async function runAdaptiveSearchOverTransport(
+  base: Deck,
+  plan: SuggestionRunPlan,
+  options: SuggestOptions,
+  ctx: SearchContext & {
+    readonly adaptiveConfig: AdaptiveSearchConfig;
+    readonly exploration: ExplorationWeights;
+  },
+  transport: ArmTransport,
+): Promise<SuggestionSearchResult> {
+  const runner = armRunnerFor(base, plan, options, ctx);
+  transport.begin?.(plan.runSeed);
+  const search = driveSuggestionArms(base, plan, options, ctx, runner);
+  let step = search.next();
+  while (!step.done) {
+    step = search.next(await transport.advance(step.value));
+  }
+  return { ...step.value, usage: transport.usage(runner.identicalGameSkip) };
 }
 
 /**

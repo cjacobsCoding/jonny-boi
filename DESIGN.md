@@ -783,6 +783,77 @@ work), not the base arm, and there is no cheap version. The full unification —
 executor so one loop serves both a synchronous handle and sharded slices — is the only shape that
 pays, and this section removes its first obstacle.
 
+### 3.77 `suggest` fans out — one search, two transports — ✅ done
+
+The full unification §3.76 said was "the only shape that pays". It pays: **2.89× on search time**,
+**2.51× wall clock**, and a report that is **byte-identical** to the sequential one.
+
+**Why this command needed a design and the others did not.** `match`, `gauntlet`, `swap`, `pilot-ab`
+and `soak` are flat: cut the games, play the pieces, add up integers. The suggestion search is not.
+Its adaptive ladder advances a *shrinking* field of arms to *growing* depths, and every arm is paired
+against the *same* base games. That gives two failure modes the other commands cannot have, and both
+produce a report that still looks perfectly well-formed:
+
+- a slot played by the wrong shard — a silently different run;
+- the shared base arm replayed once per candidate — the right answer, at ~1.8× the work.
+
+**The shape.** One generator, `driveSuggestionArms`, holds everything that decides an *answer*:
+opening arms, recording the ones that fail to build, the progress callbacks, and building each
+verdict from the arm's own tally. It yields a whole round's requests and is resumed with the played
+arms. Two transports supply the games and nothing else:
+
+| | plays games on | usage counted from |
+|---|---|---|
+| `suggestSwaps` | the calling thread, via `PairedArmRunner.advance` | the host's runner |
+| `suggestSwapsWith` | wherever `ArmTransport` says | what the workers reported |
+
+The wave ladder, the elimination rules, the multiplicity correction, the ranking and the report are
+shared code, so a pooled run is a **transport** choice rather than a second search with its own
+answers. `--workers` on `suggest` is now the same flag it is everywhere else.
+
+**The base phase — the part that makes it worth doing.** Each round first plays whatever base slots
+the ladder newly reached, then hands those records to every variant slice through the `baseRecords`
+seam. Without it each of C candidates would replay the base games itself. The accounting proves it
+did not: the same run reports **6,691 games (1,600 base + 5,091 variant)** sequentially and pooled.
+
+**Measured** (`suggest "Mono-Red Aggro"`, 6 workers, 6 physical cores):
+
+| run | sequential | 6 workers | speedup |
+|---|---|---|---|
+| 40 games/candidate, 4 candidates (891 games) | 9.15s | 5.31s | 1.72× |
+| 200 games/candidate, 8 candidates (6,691 games) | **54.19s** | **18.73s** | **2.89×** |
+
+123 → 357 games/sec. Wall clock including startup: 58.1s → 23.11s (2.51×). The small run keeps less
+of the win because six workers each loading a 5,065-card pool is a fixed cost the short run cannot
+amortise — the same effect that killed §3.76's shortcut.
+
+**Why not more than 2.89× on six cores.** A round is a barrier: the ladder cannot schedule wave N+1
+until it has seen wave N. Late waves have few arms left, so the pool is not full at the end of a
+search — that is inherent to successive halving, not a scheduling defect.
+
+**Proof, not assertion** (`suggest-parallel.test.ts`): the pooled search is compared to the
+sequential one at shard widths 1, 2 and 5 with slices executed in deliberately **reversed** order,
+and the whole report must match — `toEqual` *and* `JSON.stringify` equality, so key order and float
+bit-patterns match too. Only the two wall-clock fields are normalised; nothing else is excluded.
+
+⚠️ **The trap this shipped with a test for.** `runSeed` equals the caller's `baseSeed` only on a
+deck's **first** run — a run continuing a history plays on `gameSeedFor(baseSeed, runsCompleted)` so
+it draws different games. A transport that derived the seed itself would agree with the host exactly
+once and then silently play a *different set of games* on every run after, reporting it as if
+nothing were wrong. Hence `ArmTransport.begin`: the search **tells** the transport its seed and no
+one recomputes it. The regression test runs a continued search and was confirmed to fail — alone,
+with the other four still passing — when `begin` is fed `baseSeed` instead.
+
+A second guard, in the transport: an arm slice that reports `baseGamesPlayed !== 0` throws. That
+value is zero exactly when the base phase supplied every record the slice needed, so a non-zero one
+means the schedule under-supplied and the run quietly did duplicate work.
+
+**What did not change.** `--no-adaptive` stays sequential: the fixed-budget sweep is the control the
+adaptive search is measured against, not something anyone runs for speed. The web Lab keeps its own
+round-by-round fan-out — it carries replay capture, cancellation and progress concerns the CLI does
+not — but both now go through the same `driveAdaptiveSearch` and the same `summarizePairedSwap`, so
+the two cannot disagree about a verdict however they schedule the games.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded

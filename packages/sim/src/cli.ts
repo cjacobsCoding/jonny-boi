@@ -61,7 +61,9 @@ import {
   type WorkerInitSpec,
 } from './parallel-slices.js';
 import { createWorkerPool, machineParallelism, runJobsOnWorkers } from './parallel-host.js';
-import { suggestSwaps, type SuggestionReport } from './suggest.js';
+import { suggestSwaps, suggestSwapsWith, type SuggestOptions, type SuggestionReport } from './suggest.js';
+import { createWorkerArmTransport } from './suggest-workers.js';
+import { DEFAULT_DECK_RULES } from './config.js';
 import type { HistoryRejection, SuggestionHistory } from './suggest-history.js';
 import { DEFAULT_SUGGEST_CONFIG } from './suggest-config.js';
 import {
@@ -102,7 +104,7 @@ Usage:
   npm run sim -- gauntlet <deck> [--games N] [--seed S] [--pilot ${SELECTABLE_PILOT_IDS.join('|')}] [--workers W]
   npm run sim -- swap <deck> --out "<card>" --in "<card>" [--games N] [--seed S] [--pilot id] [--scope one|playset] [--workers W]
   npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--max-candidates K] [--seed S]
-                               [--pilot id] [--history <file>] [--no-adaptive]
+                               [--pilot id] [--history <file>] [--no-adaptive] [--workers W]
   npm run sim -- pilot-ab [--pilot-a id] [--pilot-b id] [--games N] [--seed S] [--workers W]
   npm run sim -- soak [--games N] [--seed S] [--pilot id] [--workers W]
 
@@ -118,8 +120,8 @@ Notes:
                on the same protocol, i.e. WORSE than the heuristic it rolls out
                with, and ~5x the hybrid's decision cost. See DESIGN §3.4/§3.4a.
   • --games N is games per matchup (default ${DEFAULT_SIM_CONFIG.defaultGames}).
-  • --workers W fans the run out over W worker threads (match/gauntlet/swap/
-    pilot-ab/soak). Results are BYTE-IDENTICAL to the sequential run — same rows,
+  • --workers W fans the run out over W worker threads (every command).
+    Results are BYTE-IDENTICAL to the sequential run — same rows,
     same CIs, same verdicts — because every game's seed comes from its absolute
     (opponent × game) index and slices merge as exact integer counts; only the
     wall clock changes. Without the flag the CLI decides for itself: one worker
@@ -127,7 +129,9 @@ Notes:
     when the run is big enough to pay each worker's ~0.35s startup — thresholds
     and the measured curve are in parallel-config.ts. --workers 1 forces
     sequential. Each worker holds its own card pool; on a memory-tight box prefer
-    2–4. suggest is not yet fanned out — see DESIGN §3.53.
+    2–4. suggest fans out a WAVE at a time — the adaptive ladder cannot start
+    the next wave until it has seen this one — and plays the shared base arm
+    once per run rather than once per candidate; --no-adaptive stays sequential.
   • swap --scope controls HOW MANY copies move (default "${DEFAULT_SWAP_SCOPE}"):
       playset — replace every copy: "does this card belong in the deck at all?"
       one     — replace a single copy: "is the last copy earning its slot?"
@@ -804,16 +808,40 @@ async function cmdSwap(flags: Flags): Promise<number> {
   return 0;
 }
 
-function cmdSuggest(flags: Flags): number {
+/**
+ * THE POOLED SUGGESTION SEARCH — the same `suggestSwaps` over a worker pool.
+ *
+ * The pool is shut down in a `finally` because a leaked worker thread keeps the
+ * whole process alive after the report has printed. The settings handed to the
+ * workers are the two fields `armRunnerFor` builds the host's runner from, and
+ * nothing else: a worker whose runner disagrees with the host about legality or
+ * run options would return a tally for a different run.
+ */
+async function suggestOnWorkers(
+  base: Deck,
+  options: SuggestOptions,
+  workers: number,
+  init: WorkerInitSpec,
+): Promise<{ readonly report: SuggestionReport; readonly workers: number }> {
+  const transport = createWorkerArmTransport({
+    init,
+    workers,
+    settings: {
+      deckRules: options.deckRules ?? DEFAULT_DECK_RULES,
+      ...(options.runOptions ? { runOptions: options.runOptions } : {}),
+    },
+  });
+  try {
+    // `transport.size` is what the pool actually hired, not what was asked for.
+    return { report: await suggestSwapsWith(base, options, transport), workers: transport.size };
+  } finally {
+    await transport.close();
+  }
+}
+
+async function cmdSuggest(flags: Flags): Promise<number> {
   const [heroSel] = flags.positionals;
   if (!heroSel) throw new CliError('suggest needs a deck: suggest <deck> [--cut "<card>"] [--max-candidates K]');
-  if (flags.workers !== undefined && flags.workers !== 1) {
-    // Honest, not silent: the adaptive search is stateful across rounds and its
-    // parallel host (the web Lab's round-by-round fan-out) is not wired to the
-    // CLI yet — see DESIGN §3.53. Ignoring the flag quietly would let a user
-    // believe they measured a parallel run.
-    console.log('note: --workers is not wired to suggest yet (the adaptive search is round-stateful); running sequentially. See DESIGN §3.53.');
-  }
   const lab = makeLab();
   const baseDeck = resolveDeck(heroSel);
   const pilots = resolvePilots(flags);
@@ -828,24 +856,46 @@ function cmdSuggest(flags: Flags): number {
 
   const priorHistory = flags.history ? readHistoryFile(flags.history) : undefined;
 
+  // Sizing the pool needs an upper bound on the work, and the adaptive search
+  // does not know its own size in advance — it eliminates arms as it goes. The
+  // FULL ladder (every candidate to full depth) is that bound: honest for hiring
+  // decisions, and never an under-estimate that would leave workers idle.
+  const slotsPerArm = games * gauntletDecks.length;
+  const workers = plannedWorkers(flags, maxCandidates * slotsPerArm, maxCandidates, slotsPerArm);
+
+  const searchOptions = {
+    gauntletDecks,
+    pilots,
+    pool: lab.pool,
+    registry: lab.registry,
+    baseSeed: seed,
+    gamesPerCandidate: games,
+    suggestConfig: { ...DEFAULT_SUGGEST_CONFIG, maxCandidates },
+    cutOnly: flags.cut.length > 0 ? flags.cut : undefined,
+    adaptive: !flags.noAdaptive,
+    ...(priorHistory ? { history: priorHistory } : {}),
+    // Stamps the record and lets `acceptHistory` refuse one gathered at a
+    // different level of play. Without this the CLI would happily pool a
+    // `--pilot hybrid` run into a `--pilot heuristic` family.
+    pilotId: flags.pilot ?? DEFAULT_PILOT_ID,
+  };
+
   let report: SuggestionReport;
+  // The fixed-budget sweep keeps the sequential path: it is the control the
+  // adaptive search is compared against, and it is not what anyone runs for speed.
+  let usedWorkers = 1;
   try {
-    report = suggestSwaps(baseDeck, {
-      gauntletDecks,
-      pilots,
-      pool: lab.pool,
-      registry: lab.registry,
-      baseSeed: seed,
-      gamesPerCandidate: games,
-      suggestConfig: { ...DEFAULT_SUGGEST_CONFIG, maxCandidates },
-      cutOnly: flags.cut.length > 0 ? flags.cut : undefined,
-      adaptive: !flags.noAdaptive,
-      ...(priorHistory ? { history: priorHistory } : {}),
-      // Stamps the record and lets `acceptHistory` refuse one gathered at a
-      // different level of play. Without this the CLI would happily pool a
-      // `--pilot hybrid` run into a `--pilot heuristic` family.
-      pilotId: flags.pilot ?? DEFAULT_PILOT_ID,
-    });
+    if (workers > 1 && !flags.noAdaptive) {
+      const pooled = await suggestOnWorkers(baseDeck, searchOptions, workers, {
+        heroName: baseDeck.name,
+        opponentNames: gauntletDecks.map((d) => d.name),
+        pilotId: flags.pilot ?? DEFAULT_PILOT_ID,
+      });
+      report = pooled.report;
+      usedWorkers = pooled.workers;
+    } else {
+      report = suggestSwaps(baseDeck, searchOptions);
+    }
   } catch (err) {
     if (err instanceof DeckLoadError) throw new CliError(err.message);
     throw new CliError(err instanceof Error ? err.message : String(err));
@@ -942,7 +992,8 @@ function cmdSuggest(flags: Flags): number {
   const gps = n.gamesPerSecond;
   console.log(
     `${n.totalGamesRun} games (${n.baseGamesPlayed ?? 0} base + ${n.variantGamesPlayed ?? 0} variant)` +
-      (n.elapsedSeconds ? ` in ${n.elapsedSeconds.toFixed(2)}s → ${gps ? gps.toFixed(0) : '?'} games/sec` : ''),
+      (n.elapsedSeconds ? ` in ${n.elapsedSeconds.toFixed(2)}s → ${gps ? gps.toFixed(0) : '?'} games/sec` : '') +
+      workersNote(usedWorkers),
   );
   console.log(
     `Saved ${n.gamesAvoided ?? 0} games vs a fixed sweep of the same candidates at the same depths` +
@@ -1108,7 +1159,7 @@ async function run(argv: readonly string[]): Promise<number> {
     case 'swap':
       return cmdSwap(flags);
     case 'suggest':
-      return cmdSuggest(flags);
+      return await cmdSuggest(flags);
     case 'pilot-ab':
       return cmdPilotAb(flags);
     case 'soak':
