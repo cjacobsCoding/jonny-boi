@@ -2091,6 +2091,53 @@ inconclusive: measured 0% at 50 and 100 games/candidate, where more games are ex
 **The honest shape of this feature:** it fires on big runs with a decisive winner, saves ~62% there,
 and stands aside otherwise. `--full-ladder` remains as the control.
 
+### 3.101 The composed `suggest` number, and a start-up saving worth its honest size — ✅ done
+
+Two measurements and one small tool, all about reporting what a user actually experiences rather than
+multiplying components together.
+
+**THE COMPOSED NUMBER.** Every piece of this work is now in `suggest`, so it can finally be measured
+end to end instead of estimated. Same command, same seed, same machine, **same recommendation**:
+
+| | total wall clock | leader's games | verdict |
+|---|---|---|---|
+| sequential + `--full-ladder` | **57.7s** | 1,600 | Goblin Piker → Playful Shove, BETTER |
+| parallel + settled leader (default) | **18.7s** | 800 | Goblin Piker → Playful Shove, BETTER |
+
+**3.1× end to end**, from parallelism (§3.77) and the settled-leader stop (§3.98/§3.100) together, on
+an engine that is itself ~1.48× faster than at the start of this work (§3.62, §3.78–§3.81). Both runs
+include ~5s of `tsx` start-up, so the search itself improves by more than 3.1× — but 3.1× is the
+number a user's clock shows, and that is the one worth quoting.
+
+**THE START-UP SAVING, AND WHY THE HEADLINE FIGURE IS NOT THE ONE REPORTED.** `npm run sim` runs the
+CLI through `tsx`, which compiles TypeScript on every invocation:
+
+| | |
+|---|---|
+| `node packages/sim/dist/src/cli.js decks` | **0.61s** |
+| `npx tsx packages/sim/src/cli.ts decks` | **3.40s** |
+
+A 2.8s difference — and the tempting thing to write down. But through `npm run`, npm's own overhead
+(~1.7s) absorbs most of it, and what a user actually sees is:
+
+| | |
+|---|---|
+| `npm run sim:fast -- decks` | **2.4–2.6s** |
+| `npm run sim -- decks` | **3.2s** |
+
+**~0.7s, or 22% of a short command** — worth having, ~4% of a large `suggest`, and nothing like 2.8s.
+
+⚠️ **`npm run sim` is deliberately NOT switched to the built output.** `tsx` is correct by
+construction: it always runs current source. `dist` can be stale, and this repo has already paid for
+exactly that — a benchmark run against an out-of-date `dist` reported *"a confident, plausible number
+for a tree that no longer exists"*. A CLI that silently answered from last week's engine would be the
+same trap pointed at the user.
+
+So `sim:fast` earns the speed by **proving the build is current first**: it compares the newest `.ts`
+mtime across *every* package (a stale `core` is as wrong as a stale `sim`) against the **oldest** build
+output (a half-finished build is as stale as an absent one), and refuses — naming the newer file —
+rather than running. A refusal is cheap; a wrong answer delivered quickly is not.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded

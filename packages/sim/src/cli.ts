@@ -105,6 +105,10 @@ const USAGE = `${PROGRAM} — headless MTG gauntlet / A-B card-swap lab
 
 Usage:
   npm run sim -- decks
+
+  (npm run sim:fast -- ... runs the BUILT cli instead, saving ~0.7s of start-up per
+   invocation. It refuses to run when the build is behind the source, so it can
+   never answer from a stale engine — see packages/sim/scripts/sim-fast.mjs.)
   npm run sim -- match <deckA> <deckB> [--games N] [--seed S] [--pilot ${SELECTABLE_PILOT_IDS.join('|')}] [--workers W]
   npm run sim -- gauntlet <deck> [--games N] [--seed S] [--pilot ${SELECTABLE_PILOT_IDS.join('|')}] [--workers W]
                                 [--until-precise H]
