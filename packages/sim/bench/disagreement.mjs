@@ -31,11 +31,21 @@ const arg = (name, fallback) => {
 };
 const GAMES = Number(arg('games', 40));
 const RIVAL_ID = arg('pilot', 'lookahead');
+// ⚠️ THE BASE MUST BE THE PILOT YOU ACTUALLY SHIP. `DEFAULT_PILOT_ID` is
+// `lookahead`, not `heuristic` — lookahead delegates everything to the heuristic
+// EXCEPT the attack step, which it decides with its own forecast. Measuring
+// heuristic-vs-lookahead therefore measures a gap in a pilot nobody runs by
+// default, which is a mistake this file made until it was given this flag.
+const BASE_ID = arg('base', HEURISTIC_PILOT_ID);
 
 const pool = loadCardPool({ onWarn: () => {} });
 const registry = buildRegistry();
 const ai = createDefaultAiRegistry();
-const base = ai.getPilot(HEURISTIC_PILOT_ID);
+const base = ai.getPilot(BASE_ID);
+if (!base) {
+  console.error(`unknown base pilot "${BASE_ID}"`);
+  process.exit(2);
+}
 const rival = ai.getPilot(RIVAL_ID);
 if (!rival) {
   console.error(`unknown pilot "${RIVAL_ID}". Known: ${ai.list?.().map((p) => p.id).join(', ') ?? '(registry has no list())'}`);
@@ -182,7 +192,7 @@ for (const [aName, bName] of MATCHUPS) {
 }
 
 const pct = (n) => `${((n / decisions) * 100).toFixed(2)}%`;
-console.log(`heuristic vs ${RIVAL_ID} — ${GAMES * MATCHUPS.length} games`);
+console.log(`${BASE_ID} vs ${RIVAL_ID} — ${GAMES * MATCHUPS.length} games`);
 console.log(`decisions with a real choice : ${decisions}`);
 console.log(`disagreements                : ${disagreements} (${pct(disagreements)})\n`);
 
