@@ -1774,6 +1774,53 @@ conclusion — "the change did not work" — was wrong. A second wrong turn on t
 is uppercased by CSS, so `innerText` searches for the label text must be case-insensitive. Both cost
 real time; both are cheap to avoid once written down.
 
+### 3.94 `--until-precise` — a gauntlet that plays until the interval is tight enough — ✅ done
+
+The last fixed-budget command. `swap` and `pilot-ab` got group-sequential stopping (§3.92); the
+gauntlet needs something different, and getting that difference right is most of this section.
+
+⚠️ **A gauntlet ESTIMATES; it does not TEST.** "Is A better than B?" is a hypothesis test, where
+peeking inflates the false-positive rate and the fix is a stricter bar per look. "What IS this deck's
+win rate?" has no null to reject — what is being controlled is the WIDTH of the interval. Applying the
+Pocock boundary here would be answering the wrong question with the right-looking machinery, and the
+result would have looked perfectly reasonable.
+
+**So: Stein's two-stage rule.** Play a small pilot, estimate `p`, compute how many games that implies
+for the requested half-width, play up to that many (capped by the budget). One decision, no peeking —
+a rule that stopped the instant the interval looked narrow enough would stop preferentially on runs
+where the sample happened to be lucky, biasing the estimate toward whatever the early games said.
+
+**Measured** (`gauntlet Mono-Red Aggro`, 8 opponents, 6 workers):
+
+| | games | interval | search |
+|---|---|---|---|
+| `--games 100` | 800 | 35.3% (32.0–38.6) — **±3.3%** | 5.26s |
+| `--games 100 --until-precise 0.05` | **360** | 35.3% (30.5–40.3) — **±4.9%** | **3.78s** |
+
+**2.2× fewer games for the precision that was actually asked for.** The full run *over*-spent: it
+bought ±3.3% when the caller wanted ±5%. Same point estimate either way.
+
+⚠️ **Two things the tests caught before this shipped**, and the first was a real design flaw:
+
+- **The pilot was a quarter of the budget.** On a generous budget that pilot is enormous (2,500 games
+  of a 10,000 budget), so it dominates the decision and the run can never spend less than a quarter
+  however lopsided the deck turns out to be — capping the whole saving at 4× and usually at 1×. The
+  pilot is now a modest absolute size (8–40 games): it only has to estimate `p(1-p)` well enough to
+  size stage two.
+- **A freak pilot must not end the run.** `p(1-p)` is zero at the extremes, so an unfloored estimate
+  from a 20-for-20 pilot asks for ~0 further games. A variance floor stops a lucky pilot cutting the
+  run short, and a test pins it.
+
+⚠️ **The interval printed is always the one EARNED, never the target.** When the budget runs out first
+the report says so explicitly — "the budget, not the target, was the limit, so the interval above is
+wider than ±H". A precision run that quietly reported the requested width would be inventing
+confidence it had not paid for.
+
+**All four fixed-budget commands now stop when their answer is in**: `swap` and `pilot-ab` on a
+pre-registered boundary (§3.92), the Lab's A/B panel through the same one (§3.93), and the gauntlet on
+a two-stage width rule here. Each uses the statistics its own question calls for, which is the part
+that took the care.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded

@@ -355,12 +355,23 @@ export function planMatchupSlices(
   gamesPerMatchup: number,
   workerCount: number,
   matchupSeedFor: (opponentIndex: number) => number,
+  /**
+   * Plan only games `[gameStart, gameEnd)` — the same prefix property the paired
+   * planners document: `gamesPerMatchup` stays the FULL total because every game
+   * seeds off its ABSOLUTE index, so a pilot stage and the stage after it compose
+   * into exactly the run they were cut from (§3.94).
+   */
+  window?: { readonly gameStart: number; readonly gameEnd: number },
 ): readonly MatchupSliceJob[] {
-  const parts = slicesPerUnit(opponentCount, gamesPerMatchup, workerCount);
+  const from = window?.gameStart ?? 0;
+  const to = window?.gameEnd ?? gamesPerMatchup;
+  const span = Math.max(0, to - from);
+  const parts = slicesPerUnit(opponentCount, span, workerCount);
   const jobs: MatchupSliceJob[] = [];
   for (let opponentIndex = 0; opponentIndex < opponentCount; opponentIndex++) {
     const matchupSeed = matchupSeedFor(opponentIndex);
-    for (const range of splitGameRange(gamesPerMatchup, parts)) {
+    for (const piece of splitGameRange(span, parts)) {
+      const range = { gameStart: from + piece.gameStart, gameEnd: from + piece.gameEnd };
       jobs.push({
         kind: 'matchup-slice',
         jobId: jobs.length,
