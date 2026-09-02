@@ -905,6 +905,46 @@ govern: cutting the number of decisions (the fast-pass gate, §3.62 — 82% of w
 menu at all) and cutting wall clock across cores (§3.53, §3.77). That is +48% single-thread and
 2.89× on `suggest`, not 10×, and this section exists so nobody spends a week rediscovering why.
 
+### 3.79 The step census — only 18% of what the engine does is a play — ✅ done
+
+§3.78 showed there is no hotspot to attack, which leaves the other axis: not "make each action
+cheaper" but "perform fewer actions". `packages/sim/bench/step-census.mjs` measures that directly —
+over real games, how many applied actions are a pass in a window where **nothing could have
+happened**, broken down by step so the answer says *where* the dead windows are, not merely how many.
+
+**Measured** (200 games, Mono-Red Aggro vs UW Control, 109,159 actions — 546 per game):
+
+| band | share | what it is |
+|---|---|---|
+| dead passes | **23.8%** | the menu offered only the pass; empty stack, no parked choice |
+| live passes | **58.0%** | the pilot *could* have acted and chose not to |
+| real plays | **18.2%** | the pilot actually did something |
+
+Dead windows by step: `beginCombat` / `combatDamage` / `endCombat` / `postcombatMain` / `end` all
+38%, `declareAttackers` 29%, `draw` 20%, `upkeep` 19%, `precombatMain` 10%.
+
+**The two bands are different problems, and must never be reported as one "passes" number.**
+
+- **Dead passes are a SPEED question.** The pilot had no decision, so the round-trip bought nothing.
+  The fast-pass gate (§3.62) already skips menu-building for most of them — but it *refuses* to judge
+  `declareAttackers`/`declareBlockers` cheaply and returns `false` there by construction, so the
+  4,414 dead combat windows pay `generateLegalActions` in full. That is **4.0% of all actions**, and
+  it is the largest single piece of dead work still on the table. A cheap combat pre-check ("no
+  untapped creature I control, no attacker legal") would take most of it — worth ~2–3% of wall clock.
+- **Live passes are a STRENGTH question**, and this is the more useful finding. **58% of everything
+  the engine does is the pilot declining an option it had.** Every misplay of omission lives in that
+  band, and it is more than three times the size of the band where the pilot actually acts. Strength
+  work that samples "what did the pilot do?" is looking at 18% of the decisions; the interesting ones
+  are the 58% it *didn't*. `missed-plays.mjs` already mines exactly that band — this section is the
+  measurement that says why it is the right band to mine.
+
+**What this settles about the speed target.** Removing *every* dead pass — all 23.8%, an unreachable
+ceiling since most are already cheap — would not reach 1.35×. Together with §3.78's flat profile,
+both axes are now measured: per-action cost has no hotspot, and action count has no large removable
+share. **10× single-thread is not reachable in this architecture**, and the two measurements that say
+so are committed tooling rather than assertions, so the next person can re-run them in a minute
+rather than re-deriving them over a week.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
