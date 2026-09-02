@@ -35,6 +35,14 @@ export const PLAY_RESUME_STORAGE_KEY = 'jonny-boi.play.inProgress.v1';
 export const MANA_CHOICE_STORAGE_KEY = 'jonny-boi.play.chooseMana.v1';
 
 /**
+ * localStorage key for AI CO-PILOT mode (§3.67) — "show me what the AI would do
+ * on my turn". A player PREFERENCE like the mana one: it outlives a game and is
+ * not part of the game's state, so it is deliberately not in the resume record
+ * (a saved game must replay the same whether the hints were on or off).
+ */
+export const COPILOT_STORAGE_KEY = 'jonny-boi.play.copilot.v1';
+
+/**
  * sessionStorage key for the "this reload was triggered by an app UPDATE" flag
  * (see `lib/update/updater.ts`). Written immediately before an update-triggered
  * reload — never by user navigation — and consumed (removed) on the next boot,

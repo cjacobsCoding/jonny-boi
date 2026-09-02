@@ -124,3 +124,11 @@ export const ANIMATION_CONFIG: AnimationConfig = Object.freeze({
   maxPerBatch: 10,
   spriteWidthPx: 52,
 });
+
+/**
+ * The seed the co-pilot asks the pilot from (§3.67). FIXED on purpose: the
+ * advice for a given board must be the same every time it is drawn, or a hint
+ * would flicker between renders and be impossible to act on. It is advice, not
+ * a game input, so it takes no part in the game's own determinism.
+ */
+export const COPILOT_ADVICE_SEED = 0x5ee_d1;

@@ -2417,6 +2417,48 @@ ability* already compiled through the existing activated-ability parser once thi
 — which is why 55 cards flipped for one primitive and one rule. Verified live: Darkling Stalker,
 Troll Ascetic, Wall of Pine Needles and Thrun, the Last Troll all compile COMPLETE.
 
+### 3.67 The AI co-pilot — what the pilot would do in your seat, and why — ✅ done
+
+Asked for as: *"an 'AI co-pilot' mode that tells you what it would do if it were you playing the deck —
+by highlighting the input controls of what it would do. You can do what it says, or not. Once you
+make a move it should recalculate... Each time the AI suggests its next move, it should explain why."*
+
+**A thin module, not a new brain.** The pilot already answers exactly this question — `chooseAction`
+takes a view and returns the move it would make — and it already knows WHY: the heuristic emits a
+`DecisionTrace` (`{action, reason, score}`) whenever a caller supplies a `trace` sink, and skips
+building the string entirely when nobody is listening. So the co-pilot (`lib/play/copilot.ts`) is:
+ask the SAME pilot the Lab uses, as if it held the human's seat, keep the trace, and hand both to the
+board. ⚠️ **That is why the explanation can be trusted** — it is the pilot's own stated reason for the
+move it actually chose, not prose written about a move after the fact, which is what an explanation
+invented at the UI layer would be and which would eventually describe a decision made for another
+reason. A live hint reads, verbatim from the pilot: *"Play Forest — develop mana — play Forest
+(unlocks 18 vs Blossoming Sands 0, Plains 18)"*.
+
+**Highlighting is a table, not a chain of ifs.** `suggestionTarget` maps an action to what the board
+should outline — the card for `playLand` / `castSpell` / `activateAbility` / `tapForMana`, the action
+bar for everything whose control is a button (pass, declare attackers, confirm blocks). Adding the
+next highlightable action is a ROW. The mark is a dashed outline, never a disabled control or a forced
+path: the co-pilot advises, the player decides.
+
+**Recalculation is free because the suggestion is DERIVED, not stored.** It is a `useMemo` over the
+live session, so every committed change — yours, the opponent's, a trigger resolving — re-asks the
+question; a stored answer could only ever be aged. It is asked from a FIXED seed
+(`COPILOT_ADVICE_SEED`) so the advice for a given board is the same every time it is drawn — advice
+that flickered between renders would be impossible to act on — and that seed is advice-only: it
+takes no part in the game's own determinism, and the preference is deliberately NOT in the resume
+record (a saved game must replay identically whether hints were on or off).
+
+**It advises only on YOUR decision.** No suggestion on the opponent's turn, none once the game is
+over. The pilot sees the whole state, so advice at any other moment would be a hidden-information
+leak dressed as help. Off by default; the toggle sits in the action bar beside the mana one because it
+is the same kind of setting — a thing players switch on mid-game when a board gets hard.
+
+📊 Verified live: toggling on outlined the Guildgate the pilot named; following the advice moved the
+game on; the hint vanished during the computer's turn (correct — not our decision) and returned on
+turn 3 with a fresh recommendation; across the drive two distinct hints were seen ("Pass — no
+profitable play — passing", then the Forest line above). 11 unit tests, the load-bearing one being
+that a suggested action is SUBMITTED to the engine and accepted — "legal" is not taken on trust.
+
 ### 3.66 The game library — every game kept, scrubbable, and forkable — ✅ done
 
 Asked for as: *"any games we start that aren't ended can be resumed easily later — regardless of why
