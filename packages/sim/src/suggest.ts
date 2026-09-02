@@ -72,8 +72,8 @@
 import type { EffectRegistry } from '@jonny-boi/core';
 import type { CardPool } from '@jonny-boi/cards';
 import type { Deck, LoadedDeck } from './deck.js';
-import type { CardSwap } from './swap.js';
-import { evaluateSwap } from './swap.js';
+import type { CardSwap, SwapEvaluation } from './swap.js';
+import { copiesSwappedBy, evaluateSwap, summarizePairedSwap } from './swap.js';
 import type { MatchupPilots, RunOptions } from './matchup.js';
 import { gameSeedFor } from './matchup.js';
 import {
@@ -92,7 +92,7 @@ import {
   type HeuristicWeights,
   type SuggestConfig,
 } from './suggest-config.js';
-import type { ArmHandle } from './paired-arms.js';
+import type { ArmHandle, SwapArm } from './paired-arms.js';
 import { createPairedArmRunner } from './paired-arms.js';
 import type { SkippedCandidate } from './suggest-candidates.js';
 import { candidateSeedSalt } from './suggest-candidates.js';
@@ -319,6 +319,32 @@ function runAdaptiveSearchLocally(
   },
 ): SuggestionSearchResult {
   const progress = options.onProgress;
+  /**
+   * One arm's verdict, from the arm alone.
+   *
+   * `summarizePairedSwap` is a PURE function of the paired tally plus the swap's
+   * names and scope — everything a `SwapArm` already carries — so the report
+   * does not need the runner that played the games. That is the whole point:
+   * a pooled run plays an arm's slots on workers and the host has only the
+   * accumulated tally, and this is the one place both cases meet.
+   */
+  const evaluationOf = (arm: SwapArm): SwapEvaluation =>
+    summarizePairedSwap({
+      baseDeckName: base.name,
+      variantDeckName: arm.variantDeck.name,
+      swap: arm.swap,
+      outName: arm.outName,
+      inName: arm.inName,
+      paired: arm.paired,
+      ...(options.runOptions?.stats ? { stats: options.runOptions.stats } : {}),
+      scope: options.runOptions?.swapScope ?? DEFAULT_SWAP_SCOPE,
+      copiesSwapped: copiesSwappedBy(
+        base,
+        arm.swap,
+        options.pool,
+        options.runOptions?.swapScope ?? DEFAULT_SWAP_SCOPE,
+      ),
+    });
   const runner = createPairedArmRunner(base, {
     gauntletDecks: options.gauntletDecks,
     pilots: options.pilots,
@@ -331,6 +357,8 @@ function runAdaptiveSearchLocally(
   });
 
   const handles = new Map<string, ArmHandle>();
+  /** The latest arm read per candidate — the report's input. See below. */
+  const lastArm = new Map<string, SwapArm>();
   const driver = driveAdaptiveSearch(plan, {
     adaptiveConfig: ctx.adaptiveConfig,
     explorationWeights: ctx.exploration,
@@ -367,6 +395,12 @@ function runAdaptiveSearchLocally(
         handles.set(candidate.key, handle);
       }
       const arm = runner.advance(handle, request.toGames);
+      // ⚠️ THE ARM IS KEPT, not just its numbers, because the REPORT is built
+      // from it below rather than from `runner.summarize`. A pooled run plays an
+      // arm's slots on WORKERS, so the host's runner never sees those games and
+      // `summarize` would report zeros — see COORDINATION.md. Reading the arm
+      // here is what lets one loop serve both transports.
+      lastArm.set(candidate.key, arm);
       answers.push({ key: candidate.key, gamesPlayed: arm.gamesPlayed, paired: arm.paired });
       progress?.onCandidate?.({
         key: candidate.key,
@@ -383,7 +417,11 @@ function runAdaptiveSearchLocally(
   const outcome: AdaptiveSearchOutcome = step.value;
   const outcomes: CandidateOutcome[] = outcome.arms.map((arm) => ({
     candidate: arm.candidate,
-    evaluation: runner.summarize(handles.get(arm.candidate.key) as ArmHandle),
+    // Built from the arm's own accumulated tally through the SAME pure
+    // summariser `runner.summarize` calls. Identical output, and it no longer
+    // requires the host to have played the games — the prerequisite for running
+    // an arm's slots on workers.
+    evaluation: evaluationOf(lastArm.get(arm.candidate.key) as SwapArm),
     gamesPlayed: arm.gamesPlayed,
     ...(arm.elimination ? { elimination: arm.elimination } : {}),
   }));
