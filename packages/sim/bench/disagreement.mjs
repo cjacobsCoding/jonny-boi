@@ -98,6 +98,10 @@ function inBand(mine, theirs) {
   if (BAND === 'set') return mine.kind === theirs.kind && mine.kind === 'declareAttackers';
   if (BAND === 'pass') return mine.kind === 'declareAttackers' && theirs.kind === 'passPriority';
   if (BAND === 'attack') return mine.kind === 'passPriority' && theirs.kind === 'declareAttackers';
+  // Any window where the two differ about BLOCKING — declaring, declining, or which.
+  if (BAND === 'block') return mine.kind === 'declareBlockers' || theirs.kind === 'declareBlockers';
+  if (BAND === 'land') return mine.kind === 'playLand' || theirs.kind === 'playLand';
+  if (BAND === 'spell') return mine.kind === 'castSpell' || theirs.kind === 'castSpell';
   return true;
 }
 
@@ -130,8 +134,8 @@ function snapshot(view, mine, theirs) {
     `  life: me ${view.players[me].life}, them ${view.players[foe].life}   turn ${view.turn ?? '?'}`,
     `  mine  : ${creatures(me)}`,
     `  theirs: ${creatures(foe)}`,
-    `  heuristic: ${mine}`,
-    `  lookahead: ${theirs}`,
+    `  ${BASE_ID}: ${mine}`,
+    `  ${RIVAL_ID}: ${theirs}`,
   ].join('\n');
 }
 

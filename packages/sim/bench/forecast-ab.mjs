@@ -31,22 +31,31 @@ function arg(name, fallback) {
   return at >= 0 ? process.argv[at + 1] : fallback;
 }
 
+// `--weight` names a FORECAST weight (the attack step lookahead owns); `--heuristic`
+// names a HeuristicWeights field, which lookahead delegates — blocking, land
+// sequencing and spell choice all live there and all reach the shipped pilot.
 const WEIGHT = arg('weight', undefined);
+const HEURISTIC_WEIGHT = arg('heuristic', undefined);
 const VALUE = Number(arg('value', NaN));
 const gamesPerOrientation = Number(arg('games', 40));
 const seedShift = Number(arg('seed', 0));
 
-if (!WEIGHT || Number.isNaN(VALUE)) {
+if (HEURISTIC_WEIGHT && !(HEURISTIC_WEIGHT in DEFAULT_HEURISTIC_WEIGHTS)) {
+  console.error(`unknown heuristic weight "${HEURISTIC_WEIGHT}"`);
+  process.exit(2);
+}
+if (!WEIGHT && !HEURISTIC_WEIGHT) {
   console.error('usage: node packages/sim/bench/forecast-ab.mjs --weight <name> --value <number> [--games N] [--seed S]');
   process.exit(2);
 }
-if (!(WEIGHT in DEFAULT_FORECAST_WEIGHTS)) {
+if (WEIGHT && !(WEIGHT in DEFAULT_FORECAST_WEIGHTS)) {
   console.error(`unknown forecast weight "${WEIGHT}". Known:\n  ${Object.keys(DEFAULT_FORECAST_WEIGHTS).join('\n  ')}`);
   process.exit(2);
 }
-const wasValue = DEFAULT_FORECAST_WEIGHTS[WEIGHT];
+const NAME = WEIGHT ?? HEURISTIC_WEIGHT;
+const wasValue = WEIGHT ? DEFAULT_FORECAST_WEIGHTS[WEIGHT] : DEFAULT_HEURISTIC_WEIGHTS[HEURISTIC_WEIGHT];
 if (wasValue === VALUE) {
-  console.error(`${WEIGHT} is already ${VALUE} — that A/B compares a pilot with itself.`);
+  console.error(`${NAME} is already ${VALUE} — that A/B compares a pilot with itself.`);
   process.exit(2);
 }
 
@@ -60,7 +69,10 @@ const outcome = confirmedAb(
       decks,
       pilots: {
         // A: the proposed value. B: the pilot exactly as it ships today.
-        pilotA: createLookaheadPilot(DEFAULT_HEURISTIC_WEIGHTS, { ...DEFAULT_FORECAST_WEIGHTS, [WEIGHT]: VALUE }),
+        pilotA: createLookaheadPilot(
+          HEURISTIC_WEIGHT ? { ...DEFAULT_HEURISTIC_WEIGHTS, [HEURISTIC_WEIGHT]: VALUE } : DEFAULT_HEURISTIC_WEIGHTS,
+          WEIGHT ? { ...DEFAULT_FORECAST_WEIGHTS, [WEIGHT]: VALUE } : DEFAULT_FORECAST_WEIGHTS,
+        ),
         pilotB: createLookaheadPilot(DEFAULT_HEURISTIC_WEIGHTS, DEFAULT_FORECAST_WEIGHTS),
       },
       registry,
@@ -73,7 +85,7 @@ const outcome = confirmedAb(
 );
 
 report(
-  `lookahead ${WEIGHT}: ${VALUE} vs ${wasValue} (shipped) — ${decks.length} decks, ` +
+  `lookahead ${NAME}: ${VALUE} vs ${wasValue} (shipped) — ${decks.length} decks, ` +
     `${gamesPerOrientation} games/pair/orientation, ${outcome.dev[0].result.totalGames} games per run`,
   outcome,
 );

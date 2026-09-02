@@ -1517,6 +1517,58 @@ none of them has ever been examined — every strength section before this one l
 because the comparison chosen could not show anything else. `disagreement.mjs --base lookahead
 --pilot hybrid --show N --band …` is how to look at them.
 
+### 3.89 The blocking band, examined — and a diagnostic that was lying — ✅ done
+
+§3.88 opened three bands of the default pilot's headroom that had never been looked at. This works the
+largest of them, blocking (14.3% of the gap), and reports what it found — including a bug in the tool
+that found it.
+
+⚠️ **First, the tool was lying.** `disagreement.mjs` printed every position with the labels
+`heuristic:` and `lookahead:` **hardcoded**, so under the `--base` flag §3.88 added it attributed the
+base pilot's move to "heuristic" and the rival's to "lookahead" regardless of what was actually run.
+A mislabelled diagnostic is worse than no diagnostic: every conclusion drawn from it is backwards for
+half the runs. Fixed to print the pilot ids it was given.
+
+**What the blocking disagreements look like** (`--base lookahead --pilot hybrid --band block`): with
+one exception the shape is always the same — **`hybrid` blocks where the shipped pilot passes**,
+spending a small creature to stop a large hit at healthy life (16, 12, 14).
+
+**The mechanism is already in the pilot, and it is one number.** `chooseBlock` computes
+`desperate = facingLethal || myLife <= weights.desperateLifeThreshold` and chump-blocks only when
+desperate; otherwise blocks are value-judged. `desperateLifeThreshold` ships at **10**, so a defender
+at 16 taking 6 is not desperate and declines the chump — exactly the positions above.
+
+**New capability:** `bench/forecast-ab.mjs --heuristic <field>` now varies a **HeuristicWeights**
+field on the **lookahead** pilot. This matters because lookahead *delegates* blocking, land sequencing
+and spell choice to the heuristic — so those are testable on the shipped pilot, which `weight-ab.mjs`
+(heuristic-only) cannot do.
+
+**Measured, both directions of the dial:**
+
+| `desperateLifeThreshold` | held-out | verdict |
+|---|---|---|
+| 10 → **16** (block far more readily) | **32 / 92**, chi² 28.07 | **CONFIRMED WEAKER** |
+| 10 → **5** (block less readily), battery A | 45 / 29, chi² 3.04 | not replicated |
+| 10 → **5**, **fresh battery** at 3× games | 113 / 89, chi² 2.62 | not replicated |
+
+The 16 result is decisive and useful: **blocking more is clearly wrong**, which is the defensive twin
+of §3.86's five aggression findings. The 5 result leans positive in three of four seeds across two
+*independent* batteries and never crosses the bar — the signature of an effect too small to matter, or
+of nothing. Either way it is not shipped.
+
+⚠️ **Note the discipline that cost the second run.** Having tested 16 and then 5, choosing 5 and
+confirming it on the *same* held-out seeds would have repeated §3.85's error exactly: the seeds that
+select a variant cannot also validate it. `--seed S` shifts the whole battery, and the fresh four
+agreed with the first four — which is the only reason the "not replicated" verdict here can be
+trusted.
+
+**What this leaves.** The blocking gap is **not a threshold problem** — the one dial governing it is at
+or near its optimum in both directions. Whatever `hybrid` sees in those positions is in the *value*
+judgement of a specific block, not in when the pilot is willing to chump. Land choice (9.7%) and
+spell choice (7.5%) remain unexamined, and are now reachable with `forecast-ab.mjs --heuristic`.
+
+**Tally: two confirmed strength gains shipped, seventeen hypotheses killed by measurement.**
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
