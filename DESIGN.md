@@ -945,6 +945,29 @@ share. **10× single-thread is not reachable in this architecture**, and the two
 so are committed tooling rather than assertions, so the next person can re-run them in a minute
 rather than re-deriving them over a week.
 
+**Follow-up: the 4.0% was attempted, proved safe, measured, and NOT shipped.** The obvious fix for
+the dead combat windows — "this seat controls no untapped creature, so it has nothing to declare" —
+was written, along with `bench/gate-check.mjs` to prove it safe. It was not safe:
+
+| step | windows handed to normal reasoning | of which UNSAFE |
+|---|---|---|
+| `declareAttackers` | 10,860 | **0** |
+| `declareBlockers` | 10,226 | **3,179** |
+
+⚠️ **The trap: "declare NO blockers" is itself a declaration the engine offers**, so a defending seat
+with nothing untapped is still being asked something, and no creature count can rule that window out.
+Narrowing the rule to the attacking seat made it safe (17,907 windows, 0 unsafe) and left outcomes
+byte-identical (A won 806/2000 either way) — but the wall clock did not move: **196 games/sec against
+a 197–204 spread on IDENTICAL code**. Under 1% of actions were affected, below this machine's noise
+floor. Fifteen lines of special case in a correctness-critical function for nothing measurable is not
+an improvement, so it was reverted rather than shipped on the strength of a plausible story.
+
+`gate-check.mjs` stays, because the trap is permanent and a timing run cannot see it — skipping a
+live window makes the pilot silently **weaker**, not wrong.
+
+That is now three speed hypotheses these measurements have killed, and it is the point of having
+them: testing an idea here costs minutes, and every one of them looked good first.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
