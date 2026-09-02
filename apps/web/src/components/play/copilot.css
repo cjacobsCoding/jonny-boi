@@ -1,0 +1,57 @@
+/**
+ * §3.67 — AI co-pilot hints. Deliberately an OUTLINE and a line of text, never
+ * a disabled control or a forced path: the co-pilot advises, the player decides.
+ */
+.copilot-hint {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-left: 3px solid var(--color-accent);
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.copilot-hint__label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-accent-soft);
+  flex: 0 0 auto;
+}
+
+.copilot-hint__text {
+  color: var(--color-fg);
+  min-width: 0;
+}
+
+/* The suggested card. An outline rather than a fill, so the card's own art and
+   its selectable/selected states stay readable underneath. */
+.copilot-suggested {
+  outline: 2px dashed var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* The same mark on the action bar, for moves whose control is a button. */
+.action-bar--suggested {
+  outline: 2px dashed var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .copilot-suggested {
+    animation: copilot-pulse 1.6s ease-in-out infinite;
+  }
+
+  @keyframes copilot-pulse {
+    0%,
+    100% {
+      outline-color: var(--color-accent);
+    }
+    50% {
+      outline-color: var(--color-accent-soft);
+    }
+  }
+}

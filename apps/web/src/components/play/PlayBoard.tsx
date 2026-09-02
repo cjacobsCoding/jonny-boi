@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { createRng } from '@jonny-boi/core';
+import { createDefaultAiRegistry, DEFAULT_PILOT_ID } from '@jonny-boi/ai';
 import type { InstanceId, ManaCost, PlayerId } from '@jonny-boi/core';
 import type {
   AbilityOption,
@@ -9,7 +11,7 @@ import type {
 } from '../../lib/play/session.js';
 import { buildBoardView } from '../../lib/play/view-model.js';
 import { optionToTarget, type TargetOption } from '../../lib/play/targeting.js';
-import { stepLabel, TOAST_MS } from '../../lib/play/play-config.js';
+import { stepLabel, TOAST_MS, COPILOT_ADVICE_SEED } from '../../lib/play/play-config.js';
 import { SeatPanel, type PermInteraction } from './SeatPanel.js';
 import { StackPanel } from './StackPanel.js';
 import { GameLog } from './GameLog.js';
@@ -43,6 +45,14 @@ import { CombatLines } from './CombatLines.js';
 import './action-bar.css';
 import './mana-picker.css';
 import './board-fit.css';
+import {
+  loadCopilotPref,
+  saveCopilotPref,
+  suggestMove,
+  suggestionTarget,
+  suggestionText,
+} from '../../lib/play/copilot.js';
+import './copilot.css';
 
 /**
  * A cast option's identity — instance, zone AND face, because one instance can
@@ -164,6 +174,35 @@ export function PlayBoard({
   const [toast, setToast] = useState<string | null>(null);
   /** "Always let me choose my mana" — the persisted §3.60 preference. */
   const [alwaysChooseMana, setAlwaysChooseMana] = useState<boolean>(loadManaChoicePref);
+
+  /**
+   * §3.67 — AI CO-PILOT. Off by default; the preference outlives the game.
+   *
+   * The suggestion is DERIVED from the session rather than stored, so it can
+   * never be stale: every committed change re-runs it, which is exactly the
+   * "once you make a move it recalculates" the feature promises. The pilot is
+   * asked from a fresh seeded stream per call so the advice for a given board is
+   * the same every time it is shown — advice that flickered between renders
+   * would be impossible to act on.
+   */
+  const [copilotOn, setCopilotOn] = useState<boolean>(loadCopilotPref);
+  const copilotPilot = useMemo(() => createDefaultAiRegistry().getPilot(DEFAULT_PILOT_ID) ?? null, []);
+  const suggestion = useMemo(() => {
+    if (!copilotOn || !copilotPilot) return null;
+    try {
+      return suggestMove(session, viewer, copilotPilot, createRng(COPILOT_ADVICE_SEED));
+    } catch {
+      // Advice is a convenience: a pilot that throws must not take the game
+      // down with it, and the board simply shows no hint this frame.
+      return null;
+    }
+  }, [copilotOn, copilotPilot, session, viewer]);
+  const suggestionHint = suggestion ? suggestionText(suggestion, (id) => session.nameOf(id as never)) : null;
+  const suggestedCard =
+    suggestion && suggestionTarget(suggestion.action).kind === 'card'
+      ? (suggestionTarget(suggestion.action) as { instanceId: number }).instanceId
+      : null;
+  const suggestBar = suggestion !== null && suggestedCard === null;
 
   const resetTransient = (): void => {
     setPendingCast(null);
@@ -838,6 +877,12 @@ export function PlayBoard({
 
   return (
     <div className="play-board" ref={boardRootRef}>
+      {suggestionHint && (
+        <div className="copilot-hint" role="status">
+          <span className="copilot-hint__label">Co-pilot</span>
+          <span className="copilot-hint__text">{suggestionHint}</span>
+        </div>
+      )}
       <div className="play-board__status">
         <span className="play-board__turn">{statusText}</span>
         <span className="play-board__priority">{names[view.priorityPlayer]} has priority</span>
@@ -939,7 +984,10 @@ export function PlayBoard({
               // the gesture into a scroll.
               <div
                 key={c.instanceId}
-                className={`hand-card-slot${dragging ? ' hand-card-slot--dragging' : ''}`}
+                className={`hand-card-slot${dragging ? ' hand-card-slot--dragging' : ''}${
+                  /* §3.67 — the co-pilot's pick, outlined not forced. */
+                  suggestedCard === c.instanceId ? ' copilot-suggested' : ''
+                }`}
                 {...(actionable ? { [DRAG_ID_ATTR]: c.instanceId } : {})}
                 style={
                   dragging
@@ -1015,6 +1063,12 @@ export function PlayBoard({
         blockAssign={blockAssign}
         eligibleAttackers={eligibleAttackers}
         alwaysChooseMana={alwaysChooseMana}
+        suggested={suggestBar}
+        copilotOn={copilotOn}
+        onCopilot={(on) => {
+          setCopilotOn(on);
+          saveCopilotPref(on);
+        }}
         onAlwaysChooseMana={setAlwaysChoose}
         onPass={() => run(() => session.passPriority())}
         onDeclareAttackers={(ids) =>
@@ -1289,6 +1343,9 @@ function ActionBar({
   eligibleAttackers,
   waitingText,
   alwaysChooseMana,
+  suggested,
+  copilotOn,
+  onCopilot,
   onAlwaysChooseMana,
   onPass,
   onDeclareAttackers,
@@ -1308,6 +1365,10 @@ function ActionBar({
   eligibleAttackers: Set<InstanceId>;
   /** The persisted "always let me choose my mana" preference (§3.60). */
   alwaysChooseMana: boolean;
+  /** The co-pilot's move is a button in THIS bar (§3.67) — mark it. */
+  suggested: boolean;
+  copilotOn: boolean;
+  onCopilot: (on: boolean) => void;
   onAlwaysChooseMana: (always: boolean) => void;
   onPass: () => void;
   onDeclareAttackers: (ids: readonly InstanceId[]) => void;
@@ -1326,7 +1387,10 @@ function ActionBar({
   const inAttackStep = step === 'declareAttackers' && eligibleAttackers.size > 0;
 
   return (
-    <div className="action-bar">
+    /* §3.67 — outlined when the co-pilot's move is one of THESE buttons. Only
+       this bar can carry it: the waiting bar above renders precisely when it is
+       not the viewer's decision, and the co-pilot never advises then. */
+    <div className={`action-bar${suggested ? ' action-bar--suggested' : ''}`}>
       {inAttackStep && (
         <button
           type="button"
@@ -1362,6 +1426,18 @@ function ActionBar({
         onClick={() => onAlwaysChooseMana(!alwaysChooseMana)}
       >
         {alwaysChooseMana ? '⛁ Choosing mana' : '⛁ Auto mana'}
+      </button>
+      {/* §3.67 — ask the AI what it would do in YOUR seat. Beside the mana
+          toggle because it is the same kind of setting: a thing players switch
+          on mid-game when a board gets hard, not a preferences-screen decision. */}
+      <button
+        type="button"
+        className={`btn btn--toggle${copilotOn ? ' btn--toggle-on' : ''}`}
+        aria-pressed={copilotOn}
+        title="Show what the AI would do on your turn"
+        onClick={() => onCopilot(!copilotOn)}
+      >
+        {copilotOn ? '🧭 Co-pilot on' : '🧭 Co-pilot'}
       </button>
       <span className="action-bar__hint">{hint}</span>
     </div>

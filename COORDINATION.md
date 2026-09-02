@@ -234,6 +234,14 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-31 integrator: `feat/copilot` ✅ MERGED — DESIGN §3.67, the AI co-pilot. apps/web only:
+  NEW `lib/play/copilot.ts` + test, `components/play/PlayBoard.tsx` (toggle, hint line, outline on
+  the suggested card/bar), NEW `components/play/copilot.css`, `lib/config.ts` (preference key),
+  `lib/play/play-config.ts` (`COPILOT_ADVICE_SEED`). No packages touched: the pilot's existing
+  `DecisionContext.trace` sink already yields `{action, reason, score}`, so the explanation is the
+  pilot's own words. ⚠️ Do NOT invent explanation text at the UI layer for pilots that trace nothing
+  (`random`) — the hint then shows the move without a reason, which is the honest output.
+
 - 2026-08-31 integrator: `fix/type-line-faces` ✅ MERGED — DESIGN §3.64, the `parseTypeLine`
   handover from §3.61. A combined double-faced type line now parses as the FRONT face only; the
   literal `"//"` and the back face's misfiled words are gone from all 50 DFCs. ⚠️ The fix belongs in
