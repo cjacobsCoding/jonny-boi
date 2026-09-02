@@ -48,6 +48,10 @@ export type { ProportionCI, PairedTable, McNemarResult, MultipleComparisonsMetho
 // two answers to one question.
 export { planSequentialLooks, SUPPORTED_LOOK_COUNTS } from './sequential.js';
 export type { SequentialPlan, SequentialOutcome } from './sequential.js';
+// The two-stage fixed-width rule (§3.94) — the gauntlet ESTIMATES rather than
+// tests, so the Lab must reach for this and not the boundary above.
+export { planPrecision, decidePrecision } from './precision.js';
+export type { PrecisionPlan, PrecisionDecision } from './precision.js';
 export {
   wilsonInterval,
   wilsonUpperBound,
