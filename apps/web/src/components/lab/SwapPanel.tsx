@@ -36,6 +36,10 @@ export function SwapPanel({
   const [games, setGames] = useState(gamesConfig.default);
   // Defaults to the sim's own default so the UI and a CLI run agree.
   const [scope, setScope] = useState<SwapScope>(DEFAULT_SWAP_SCOPE);
+  // Default ON: a decided swap finishes in a fraction of the games and an
+  // undecided one costs nothing extra, so the only reason to turn it off is
+  // wanting the tightest possible delta estimate rather than just the verdict.
+  const [untilDecided, setUntilDecided] = useState(true);
   const [outId, setOutId] = useState<string>(outOptions[0]?.cardId ?? '');
   const [inId, setInId] = useState<string>('');
 
@@ -122,6 +126,25 @@ export function SwapPanel({
         </span>
       </label>
 
+      <label className="lab-field lab-scope">
+        <span className="section-label">Stop when decided</span>
+        <span className="lab-scope__row">
+          <input
+            type="checkbox"
+            checked={untilDecided}
+            disabled={running}
+            onChange={(ev) => setUntilDecided(ev.target.checked)}
+            aria-label="Stop as soon as the result is decided"
+          />
+          <span>Stop early once the verdict is certain</span>
+        </span>
+        <span className="lab-scope__hint">
+          {untilDecided
+            ? 'Checks four times as it goes and stops as soon as the answer is in — a clear result can finish in a quarter of the games. Each check uses a stricter bar so the verdict is just as reliable.'
+            : 'Plays every game you asked for. Slower, but gives the tightest estimate of the delta.'}
+        </span>
+      </label>
+
       <div className="lab-controls">
         <RunSlider
           label="Games per opponent"
@@ -148,6 +171,7 @@ export function SwapPanel({
               gamesPerOpponent: games,
               seed,
               swapScope: scope,
+              untilDecided,
               pilotId,
             })
           }
@@ -182,6 +206,20 @@ export function SwapPanel({
           </div>
 
           <PilotStamp pilotId={result.pilotId} />
+
+          {result.sequential?.stoppedEarly && (
+            /*
+             * Told, never implied. The reader is looking at a smaller n than they
+             * asked for, and the only honest way to present that is to say so and
+             * say why the verdict still holds at the alpha on the banner.
+             */
+            <p className="lab-hint">
+              Stopped after {result.sequential.looksTaken} of 4 checks —{' '}
+              {result.sequential.gamesPlayed} of {games} games per opponent. Each check used a
+              stricter bar (alpha {result.sequential.perLookAlpha}) so the verdict is as reliable as
+              the full run.
+            </p>
+          )}
 
           <div className="swap-compare">
             <div className="swap-compare__row">

@@ -11,6 +11,7 @@
  * Every shape is plain data that survives `postMessage` structured-clone — no
  * class instances, no functions, just the serializable fields the UI renders.
  */
+import type { SequentialOutcome } from '@jonny-boi/sim';
 import type {
   GauntletResult,
   SuggestionHistory,
@@ -80,6 +81,12 @@ export interface SwapRequest extends PilotedRequest {
    * sends this explicitly and shows which was tested.
    */
   readonly swapScope?: SwapScope;
+  /**
+   * Stop as soon as a pre-registered group-sequential boundary is crossed (§3.92).
+   * A decided swap finishes in a fraction of the budget; an undecided one runs the
+   * whole thing and costs nothing extra.
+   */
+  readonly untilDecided?: boolean;
 }
 
 /** Rank candidate single-card swaps that improve the hero (the suggestion loop). */
@@ -163,6 +170,12 @@ export type SimResultPayload =
       readonly result: SwapEvaluation;
       readonly gamesPerSecond: number;
       readonly pilotId: string;
+      /**
+       * Present only when the run used group-sequential stopping. The UI shows it
+       * because 'we played a quarter of the games you asked for' is something the
+       * reader must be told, not left to infer from a smaller n.
+       */
+      readonly sequential?: SequentialOutcome;
     }
   | { readonly kind: 'suggest'; readonly result: SuggestionReport; readonly pilotId: string }
   | { readonly kind: 'match'; readonly result: MatchTrace; readonly pilotId: string };

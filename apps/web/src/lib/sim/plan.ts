@@ -129,11 +129,22 @@ export function planPairedShards(
   workerCount: number,
   swapSeed: number,
   candidateIndex: number | null,
+  /**
+   * Plan only games `[gameStart, gameEnd)` of the run. `gamesPerOpponent` stays the
+   * FULL total because every game seeds off its ABSOLUTE index, so windows compose
+   * into exactly the run they were cut from — which is what lets the Lab stop a
+   * decided A/B early without changing a game it already played (§3.92).
+   */
+  window?: { readonly gameStart: number; readonly gameEnd: number },
 ): readonly PairedShardJob[] {
-  const parts = shardsPerGroup(context.opponentNames.length, gamesPerOpponent, workerCount);
+  const from = window?.gameStart ?? 0;
+  const to = window?.gameEnd ?? gamesPerOpponent;
+  const span = Math.max(0, to - from);
+  const parts = shardsPerGroup(context.opponentNames.length, span, workerCount);
   const jobs: PairedShardJob[] = [];
   for (let opponentIndex = 0; opponentIndex < context.opponentNames.length; opponentIndex++) {
-    for (const range of splitGameRange(gamesPerOpponent, parts)) {
+    for (const piece of splitGameRange(span, parts)) {
+      const range = { gameStart: from + piece.gameStart, gameEnd: from + piece.gameEnd };
       jobs.push({
         kind: 'paired-shard',
         context,
