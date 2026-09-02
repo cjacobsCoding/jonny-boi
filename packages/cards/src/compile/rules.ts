@@ -7385,6 +7385,37 @@ export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContr
     // bound is the ATTACKER'S OWN effective power and is read at declare-blockers
     // time: a skulking creature pumped this turn really is harder to block.
     skulk: () => ({ keywords: { blockRestriction: { blockerPowerAtMostMine: true } } }),
+    // THE EVASION KEYWORDS WHOSE EXCEPTION NAMES A QUALITY, not a keyword. All
+    // three are `blockRestriction` payloads for the same reason skulk is: the
+    // rule is a per-pair legality test, which is exactly what that structure is.
+    //
+    // FEAR (CR 702.36a) — "can't be blocked except by artifact creatures and/or
+    // black creatures". The printed "and/or" is a disjunction, so a blocker
+    // qualifies by matching EITHER entry.
+    fear: () => ({
+      keywords: {
+        blockRestriction: {
+          blockerMustMatchAnyOf: [{ kind: 'artifact' as const }, { kind: 'color' as const, color: 'B' as const }],
+        },
+      },
+    }),
+    // INTIMIDATE (CR 702.13a) — the same shape with "shares a color with it" in
+    // place of a named colour. A COLOURLESS intimidator shares a colour with
+    // nothing, so the line correctly degrades to "except by artifact creatures".
+    intimidate: () => ({
+      keywords: {
+        blockRestriction: {
+          blockerMustMatchAnyOf: [{ kind: 'artifact' as const }, { kind: 'sharesColorWithAttacker' as const }],
+        },
+      },
+    }),
+    // HORSEMANSHIP (CR 702.31a) — flying's Portal Three Kingdoms cousin, and
+    // modelled the same way: the FLAG is what a blocker is checked for, and the
+    // restriction is what names it. Carrying both is why a horseman blocks a
+    // horseman.
+    horsemanship: () => ({
+      keywords: { horsemanship: true, blockRestriction: { blockerMustHaveAnyOf: ['horsemanship' as const] } },
+    }),
     persist: () => ({
       triggers: [
         {

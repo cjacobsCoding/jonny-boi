@@ -33,7 +33,7 @@
 
 import type { ActivatedAbility } from '../card.js';
 import type { CardInstance } from '../state.js';
-import type { BlockRestriction, KeywordFlags } from '../card.js';
+import type { BlockerQuality, BlockRestriction, KeywordFlags } from '../card.js';
 import { unionProtection } from '../card.js';
 import type { AggregatedMod } from './continuous.js';
 import { NO_MOD } from './continuous.js';
@@ -294,6 +294,15 @@ export function intersectBlockRestrictions(
     ...(base.blockerMustHaveAnyOf ? [base.blockerMustHaveAnyOf] : []),
     ...(granted.blockerMustHaveAnyOf ? [granted.blockerMustHaveAnyOf] : []),
   ];
+  // The same reasoning for the QUALITY lists (fear/intimidate): intersecting the
+  // qualities is the strictest thing one list can say about two demands. Compared
+  // structurally, since these are objects rather than names.
+  const qualityLists = [
+    ...(base.blockerMustMatchAnyOf ? [base.blockerMustMatchAnyOf] : []),
+    ...(granted.blockerMustMatchAnyOf ? [granted.blockerMustMatchAnyOf] : []),
+  ];
+  const sameQuality = (a: BlockerQuality, b: BlockerQuality) =>
+    a.kind === b.kind && (a.kind !== 'color' || a.color === (b as { color: unknown }).color);
   return {
     // Two "except by" clauses are two independent demands. Only when exactly one
     // side prints one is the answer a single list; when both do, the stricter
@@ -302,6 +311,13 @@ export function intersectBlockRestrictions(
     // thing one list can say.
     ...(keywordLists.length > 0
       ? { blockerMustHaveAnyOf: keywordLists.reduce((a, b) => a.filter((k) => b.includes(k))) }
+      : {}),
+    ...(qualityLists.length > 0
+      ? {
+          blockerMustMatchAnyOf: qualityLists.reduce((a, b) =>
+            a.filter((quality) => b.some((other) => sameQuality(quality, other))),
+          ),
+        }
       : {}),
     ...(minDefined(base.maxBlockerPower, granted.maxBlockerPower) !== undefined
       ? { maxBlockerPower: minDefined(base.maxBlockerPower, granted.maxBlockerPower) as number }

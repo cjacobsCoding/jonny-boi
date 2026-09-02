@@ -94,6 +94,23 @@ export type BooleanKeywordName = {
  * An absent field is no restriction. Two restrictions merge by taking the
  * STRICTEST of each field (see {@link KeywordFlags.blockRestriction}).
  */
+/**
+ * A QUALITY a blocker may be required to have, for the evasion keywords whose
+ * exception names a colour or a card type rather than a keyword.
+ *
+ * A CLOSED union on purpose: `fear` and `intimidate` are the printed lines this
+ * serves, and a quality outside it ("except by Walls", "except by creatures with
+ * a +1/+1 counter") is a selector core cannot read, so its card keeps REPORTING
+ * rather than compiling into a restriction that silently lets everything block.
+ */
+export type BlockerQuality =
+  /** "artifact creatures" — the half `fear` and `intimidate` share. */
+  | { readonly kind: 'artifact' }
+  /** "black creatures" (fear). */
+  | { readonly kind: 'color'; readonly color: ManaColor }
+  /** "creatures that share a color with it" (intimidate) — read off the ATTACKER. */
+  | { readonly kind: 'sharesColorWithAttacker' };
+
 export interface BlockRestriction {
   /**
    * "…except by creatures with haste" (Gingerbrute). The blocker must have at
@@ -116,6 +133,17 @@ export interface BlockRestriction {
    * harder to block, exactly as printed.
    */
   readonly blockerPowerAtMostMine?: boolean;
+  /**
+   * **Fear** (CR 702.36a) and **intimidate** (CR 702.13a) — "can't be blocked
+   * except by artifact creatures and/or [black creatures | creatures that share a
+   * color with it]". The blocker qualifies by matching ANY entry, which is what
+   * the printed "and/or" means.
+   *
+   * Separate from {@link blockerMustHaveAnyOf} because that names KEYWORDS: these
+   * exceptions name a colour or a card type, and folding them into one list would
+   * mean inventing keyword flags for "artifact" and "black".
+   */
+  readonly blockerMustMatchAnyOf?: readonly BlockerQuality[];
 }
 
 export interface KeywordFlags {
@@ -232,6 +260,13 @@ export interface KeywordFlags {
    * whole death check when the flag is set gets that backwards.
    */
   readonly indestructible?: boolean;
+  /**
+   * **Horsemanship** (CR 702.31a) — "can't be blocked except by creatures with
+   * horsemanship". A flag with no effect of its own: it exists so a horseman's
+   * `blockRestriction` can NAME the quality its blockers need, exactly as
+   * `flying`/`reach` pair up.
+   */
+  readonly horsemanship?: boolean;
   /**
    * Protection from [quality] — the printed bundle of four rules, all enforced
    * against SOURCES having any listed quality (see `protection.ts`):

@@ -27,7 +27,7 @@
 
 import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
 import type { GameEvent } from '../events.js';
-import type { BlockRestriction, KeywordFlags } from '../card.js';
+import type { BlockerQuality, BlockRestriction, KeywordFlags } from '../card.js';
 import {
   defenseOf,
   effectivePower,
@@ -38,7 +38,7 @@ import {
   removeDefense,
   removeLoyalty,
 } from './stats.js';
-import { isBattle, isPlaneswalker } from '../card.js';
+import { hasType, isBattle, isPlaneswalker } from '../card.js';
 import { protectionBlocksSource } from '../protection.js';
 import { findOnBattlefield } from './zones.js';
 import { attackingCreatureIds, isRemovedFromCombat } from '../combat-removal.js';
@@ -106,6 +106,32 @@ export function canBlock(attacker: CardInstance, blocker: CardInstance, index: C
  * blocker for "except by creatures with power 2 or less", and reading the printed
  * box would let it through.
  */
+/**
+ * Does `blocker` have the quality an evasion keyword's exception names?
+ *
+ * ⚠️ READ OFF THE PRINTED DEFINITION, not the continuous index. Colour and card
+ * type CAN be changed by effects, and doing this properly would mean routing both
+ * through the layer system — which core does not model for either yet. Reading
+ * the printed values is the honest approximation ONLY because it is also what the
+ * rest of core does for colour and type today; the moment either becomes
+ * layer-aware, this must move with it or a Fear creature will start being
+ * blockable by a creature that only LOOKS black.
+ */
+function blockerHasQuality(quality: BlockerQuality, attacker: CardInstance, blocker: CardInstance): boolean {
+  switch (quality.kind) {
+    case 'artifact':
+      return hasType(blocker.def, 'artifact');
+    case 'color':
+      return (blocker.def.colors ?? []).includes(quality.color);
+    case 'sharesColorWithAttacker': {
+      const mine = attacker.def.colors ?? [];
+      // A COLOURLESS attacker shares a colour with nothing, so intimidate on one
+      // reads as "except by artifact creatures" — which is exactly CR 702.13a.
+      return (blocker.def.colors ?? []).some((color) => mine.includes(color));
+    }
+  }
+}
+
 function passesBlockRestriction(
   restriction: BlockRestriction,
   attacker: CardInstance,
@@ -123,6 +149,10 @@ function passesBlockRestriction(
       }
     }
     if (!has) return false;
+  }
+  const qualities = restriction.blockerMustMatchAnyOf;
+  if (qualities !== undefined && !qualities.some((quality) => blockerHasQuality(quality, attacker, blocker))) {
+    return false;
   }
   const needsPower =
     restriction.maxBlockerPower !== undefined ||
