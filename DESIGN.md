@@ -740,6 +740,49 @@ offer**, and the hypothetical board is not built until a spell survives the filt
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs land-sequencing <n>`, with
 `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland` for the per-term ablation.
 
+### 3.76 The suggestion report no longer needs the host to have played the games — ✅ done
+
+A prerequisite landed, and a shortcut measured and rejected. Both matter; the rejection more.
+
+**What changed.** `runAdaptiveSearch` built each candidate's verdict with `runner.summarize(handle)`,
+which reads the tally held *inside the host's runner*. It now builds the same verdict from the arm's
+own accumulated tally through `summarizePairedSwap` — the identical pure function `summarize` calls
+internally, given the identical inputs, so every number is unchanged (19,369 tests green).
+
+Why that is worth doing at all: **a pooled run plays an arm's slots on workers**, so the host's
+runner never sees those games and `summarize` would report zeros. This is precisely why the web
+Lab's parallel search is not a thin wrapper around the sequential one. Decoupling the report from
+host-side arm state is the first thing any unification needs.
+
+⚠️ **THE SHORTCUT THAT DID NOT SURVIVE MEASUREMENT.** COORDINATION.md proposed a cheap partial win:
+the shared BASE arm parallelises trivially (a base slot is a pure function of its index), so pre-play
+it on workers, hand it to the search through the `baseRecords` seam that already exists, and leave
+the round loop alone. It was built, and it worked — output **byte-identical** to the sequential run,
+accounting corrected so games played on workers were counted rather than reported as "saved".
+
+Then it was timed:
+
+| run | sequential | base arm on 6 workers |
+|---|---|---|
+| 40 games/candidate, 4 candidates (1,028 games) | **10.40s** | 13.46s |
+| 200 games/candidate, 8 candidates (7,326 games) | 62.85s | **59.15s** |
+
+**1.06× at a realistic size, and SLOWER at a small one.** The arithmetic says why, and the estimate
+on the board was wrong: the base arm is **1,600 of 7,326 games — 22%**, not the ~31% a smaller run
+suggested, so even perfect parallelism caps the whole command at 1.23×. Worker startup (six processes
+each loading a 5,065-card pool) eats most of what is left, and at small sizes it eats more than the
+whole prize.
+
+So it is not shipped. A job kind, a worker handler, a cached per-worker runner, host-side accounting
+corrections and a new failure surface, for 6% — that is complexity bought at a bad price. The
+`baseRecords` forward went with it: a seam with no consumer is speculative generality, and the real
+implementation will add exactly what it needs.
+
+⚠️ **What this corrects for whoever does the full job**: the value is in the VARIANT arms (78% of the
+work), not the base arm, and there is no cheap version. The full unification — an injectable arm
+executor so one loop serves both a synchronous handle and sharded slices — is the only shape that
+pays, and this section removes its first obstacle.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
