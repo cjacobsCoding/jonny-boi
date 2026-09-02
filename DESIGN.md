@@ -1569,6 +1569,52 @@ spell choice (7.5%) remain unexamined, and are now reachable with `forecast-ab.m
 
 **Tally: two confirmed strength gains shipped, seventeen hypotheses killed by measurement.**
 
+### 3.90 A disagreement must be about a CARD, not an instance id — and the land band, sized — ✅ done
+
+A tool correction that guards a whole class of misreading, and the measurement that closes the third
+of §3.88's unexamined bands.
+
+⚠️ **The bug: `disagreement.mjs` compared actions by bare instance id.** Two copies of one card hold
+different ids, so a pilot playing the *second* Island where another played the *first* was recorded as
+a disagreement about land choice. Every band whose action names a card — `playLand`, `castSpell`,
+`tapForMana`, `activateAbility` — was therefore inflated with choices that are not choices, and the
+land band is mostly land drops from a deck full of duplicates. The signature now resolves the id to a
+**card name** across every zone the pilot can see, and falls back to the id only when it cannot.
+
+**Measured after the fix, and the honest result: the totals did not move.** 175 disagreements (1.87%)
+before and after, and the land band is still 17 of them. Looking at the positions says why:
+
+```
+[1] mine: Wall of Omens   lookahead: playLand "Island"   hybrid: playLand "Plains"
+[2] mine: Wall of Omens ×2  lookahead: playLand "Plains"   hybrid: playLand "Island"
+```
+
+These are a UW deck choosing **which colour to commit** — a real decision, not two copies of one land.
+So the band survives its own audit. That is worth recording precisely *because* the fix changed
+nothing: the guard is now in place for every future band, and the number it was checking is confirmed
+rather than merely unchallenged.
+
+**Sizing it honestly.** The land band is 9.7% of a 1.87% disagreement rate — **0.18% of all decisions
+the pilot makes**. Spell choice is 7.5% of 1.87%, or 0.14%. For comparison, the two shipped strength
+gains came from bands an order of magnitude larger. There is no cheap tunable here either: "which
+basic to play" is a function of the hand, the curve and the colours still needed, which is what
+`land-sequencing.ts` already computes — not a threshold with a wrong value in it.
+
+**So all three of §3.88's bands are now sized, and none is a threshold problem:**
+
+| band | share of the gap | share of ALL decisions | finding |
+|---|---|---|---|
+| attacks | 60% | 1.12% | §3.86: five caution rules worse; the one gain makes it attack *more* |
+| blocking | 14.3% | 0.27% | §3.89: the one dial is at its optimum in both directions |
+| land choice | 9.7% | 0.18% | here: real, but a hand-dependent judgement, not a dial |
+| spell choice | 7.5% | 0.14% | unexamined; same shape as land choice |
+
+**What that means, stated plainly.** The shipped pilot disagrees with a searcher costing ~550× more on
+**1.87% of decisions**, and every part of that gap is either measured to be the searcher's error
+(attacks) or a judgement with no tunable behind it. Further strength work on this pilot is not a
+matter of finding the right constant; it needs the searcher's *method* — evaluating positions instead
+of scoring them — at a cost this project has already measured and rejected for the default pilot.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded

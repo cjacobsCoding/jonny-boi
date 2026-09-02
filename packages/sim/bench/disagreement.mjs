@@ -60,10 +60,30 @@ const MATCHUPS = [
 ];
 
 /** A comparable fingerprint of an action — kind plus whatever identifies its object. */
-function signature(action) {
+/** The card an instance id names, if it can be found anywhere the pilot can see. */
+function cardNameOf(view, instanceId) {
+  const zones = [view.battlefield, view.stack, ...Object.values(view.players).flatMap((p) => [p.hand, p.graveyard, p.exile])];
+  for (const zone of zones) {
+    if (!Array.isArray(zone)) continue;
+    const found = zone.find((c) => c && c.instanceId === instanceId);
+    if (found?.def?.name) return found.def.name;
+  }
+  return undefined;
+}
+
+/**
+ * ⚠️ NAMES, NOT BARE IDS. Two copies of one card hold different instance ids, so
+ * comparing ids alone reports "playLand #117 vs #111" as a disagreement when both
+ * pilots played an Island. That inflates any band whose actions name a card — the
+ * land band above all — with choices that are not choices.
+ */
+function signature(action, view) {
   if (!action) return 'none';
   const parts = [action.kind];
-  if (action.instanceId !== undefined) parts.push(`#${action.instanceId}`);
+  if (action.instanceId !== undefined) {
+    const name = view ? cardNameOf(view, action.instanceId) : undefined;
+    parts.push(name ? `"${name}"` : `#${action.instanceId}`);
+  }
   if (action.abilityIndex !== undefined) parts.push(`a${action.abilityIndex}`);
   if (Array.isArray(action.attackers)) parts.push(`atk[${[...action.attackers].sort().join(',')}]`);
   if (action.blocks) parts.push(`blk${JSON.stringify(action.blocks)}`);
@@ -174,12 +194,12 @@ for (const [aName, bName] of MATCHUPS) {
         const mine = base.chooseAction(ctx);
         const theirs = rival.chooseAction({ ...ctx, rng: createRng(4242) });
         decisions++;
-        if (signature(mine) !== signature(theirs)) {
+        if (signature(mine, s) !== signature(theirs, s)) {
           disagreements++;
           bump(byKind, `${mine.kind} -> ${theirs.kind}`);
           bump(byStep, s.step);
           bump(swaps, mine.kind === theirs.kind ? `same kind, different choice: ${mine.kind}` : 'different kind');
-          if (shown.length < SHOW && inBand(mine, theirs)) shown.push(snapshot(s, signature(mine), signature(theirs)));
+          if (shown.length < SHOW && inBand(mine, theirs)) shown.push(snapshot(s, signature(mine, s), signature(theirs, s)));
         }
       }
       const action = base.chooseAction({
