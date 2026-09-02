@@ -2187,6 +2187,62 @@ quietly letting a creature that only LOOKS black block a Fear attacker.
 illegal: the defender would lose every other block in the same declaration and take the entire attack.
 That is not a hypothetical — it is what §3.45's Black Knight bug did.
 
+
+### 3.103 The combat-declaration trigger, and bushido — ✅ done
+
+Second pick off the §3.102 queue, and the same discipline: measure, pick the SHAPE, implement, and
+check the count moved by exactly the predicted amount.
+
+`keyword-gap-report.mjs` ranks four keywords that are all *"a combat declaration pumps a creature"*:
+
+| keyword | CR | reads | sole | blocked |
+|---|---|---|---|---|
+| exalted | 702.90a | a creature you control **attacks alone** → that creature +1/+1 | 20 | 34 |
+| bushido N | 702.45a | this **blocks or becomes blocked** → it +N/+N | 18 | 36 |
+| rampage N | 702.23a | **blocked by 2+** → +N/+N per blocker beyond the first | 8 | 9 |
+| flanking | 702.24a | **blocked by a creature without flanking** → that blocker −1/−1 | 7 | 27 |
+
+**The class-level fix is the EVENT.** Core had `attacks` (from `attackersDeclared`) and nothing for
+the other side of combat, so all four were blocked on the same absence. `blocksOrBecomesBlocked` is
+now a `TriggerEvent` with a row in `TRIGGER_EVENT_SOURCES` — the closed table `tsc` forces complete —
+matching on `blockersDeclared`. Both halves are one event because no printed card separates them: an
+object either took part in a block or it did not.
+
+⚠️ **One declaration is ONE fire.** CR 509.1h makes "becomes blocked" a single event however many
+creatures were declared, so the matcher answers a BOOLEAN per (source, ability), never a count. A
+triple-blocked attacker firing three times would make bushido scale with the defender's board — a card
+playing *stronger* than printed, which biases an A/B verdict exactly as badly as one playing weaker.
+`blocks-trigger.test.ts` pins it.
+
+**Measured: 5,133 → 5,151 complete cards. +18, precisely the number predicted for bushido.**
+
+**Bushido rides the event as a compiler ROW, and nothing else was needed.** `triggerFrom` hands the
+body back to the compiler as the Oracle sentence it stands for, so the pump resolves to the existing
+`self-pump-until-eot` primitive rather than a second answer to the same question. It is a pattern rule
+and not a `KEYWORD_ABILITY_BUILDERS` entry because those builders take no argument and bushido's whole
+payload is its number.
+
+**The sweep guard became the TABLE it should always have been.** Scryfall lists the bare word
+("Bushido") while the printed line carries the payload ("Bushido 1"), so the keyword sweep reported it
+as unmodelled one line after implementing it — the same false report Kicker, Flashback, Affinity,
+Modal, Buyback and Madness each carry a hand-written `if (word === … && evidence) continue;` for. That
+branch chain is exactly what rule 2 says belongs in a table, so `TRIGGER_BACKED_KEYWORDS` is one:
+adding the next trigger-implemented keyword is a ROW. It is keyed on the compiled trigger's LABEL, not
+its condition — flanking and rampage watch the SAME event, and a condition key would let one that
+compiled absolve a sibling that did not. A `Bushido X` the rule table cannot match compiles no trigger
+and still reports honestly; the test asserts that directly.
+
+⚠️ **What this round did NOT do, and what each sibling actually costs.** The event unblocks all four
+keywords only in the sense that none of them needs a *new event* now. Each still needs one distinct
+piece of machinery that does not exist:
+
+- **rampage** — a pump that SCALES with a count. `pumpUntilEndOfTurn` takes fixed power/toughness.
+- **flanking** — the effect targets the BLOCKER, and trigger bodies have no subject-targeting seam.
+- **exalted** — both an "attacks alone" qualifier on the `attacks` condition and that same subject seam.
+
+So the honest number for this round is 18, not 53. The next of them is a row plus one payload, not a
+row plus an event, which is the part that was worth doing once.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded

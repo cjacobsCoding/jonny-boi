@@ -77,6 +77,18 @@ import type { InterveningIf } from './intervening.js';
 export type TriggerEvent =
   | 'etb'
   | 'attacks'
+  /**
+   * "Whenever this creature BLOCKS OR BECOMES BLOCKED" — the combat-declaration
+   * trigger that bushido, flanking and rampage are each printed as (CR 702.45a,
+   * 702.24a, 702.23a). ONE event covers both halves because no printed card
+   * separates them: an object either took part in a block or it did not.
+   *
+   * It fires ONCE per declaration however many creatures blocked, which falls
+   * out of the matcher answering a boolean per (source, ability) rather than a
+   * count — CR 509.1h makes "becomes blocked" a single event, not one per
+   * blocker. A card that wants the count reads `event.blocks` itself.
+   */
+  | 'blocksOrBecomesBlocked'
   | 'dies'
   | 'leaves'
   | 'castSpell'
@@ -413,6 +425,14 @@ export function conditionMatches(
       const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
       return watched !== null && event.type === 'attackersDeclared' && event.attackers.includes(watched);
     }
+    case 'blocksOrBecomesBlocked': {
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
+      if (watched === null || event.type !== 'blockersDeclared') return false;
+      // EITHER side of the pair: the creature that blocked, or the one that
+      // became blocked. A boolean and not a count, deliberately — see the
+      // event's doc comment for why one declaration is one fire.
+      return event.blocks.some((b) => b.blocker === watched || b.attacker === watched);
+    }
     case 'dies': {
       const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
       return watched !== null && event.type === 'creatureDied' && event.instanceId === watched;
@@ -690,6 +710,7 @@ export const TRIGGER_EVENT_SOURCES: Readonly<Record<TriggerEvent, readonly GameE
   Object.freeze({
     etb: ['zoneChange'],
     attacks: ['attackersDeclared'],
+    blocksOrBecomesBlocked: ['blockersDeclared'],
     dies: ['creatureDied'],
     leaves: ['zoneChange'],
     castSpell: ['spellCast'],
