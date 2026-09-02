@@ -120,6 +120,18 @@ export interface ForecastWeights {
 }
 
 /** The shipped blend. See each field for why it is the size it is. */
+/*
+ * ⚠️ AUDITED AGAINST HELD-OUT SEEDS (§3.95) — read before tuning any of these.
+ *
+ *   `crackBackLethalPenalty` is a GUARD RAIL and it is SATURATED. Dropping it from
+ *     100 to 25 changed NOTHING — 0 decided slots out of 5,760, on four seeds.
+ *     Dropping it to 0 is CONFIRMED WEAKER (1 ahead, 25 behind). It exists to make
+ *     "do not tap out into your own death" absolute, so any value large enough to
+ *     dominate is correct and a sweep over it will find a flat plateau.
+ *   `racePerTurn` sits at a BROAD optimum: 1.5 -> 1.0 is inert, 1.5 -> 6.0 is
+ *     CONFIRMED WEAKER. Flat nearby and punishing far away — not a fluke fit.
+ *   `crackBackPerPoint` 0.5 -> 0.25 did not replicate on held-out seeds (§3.88).
+ */
 export const DEFAULT_FORECAST_WEIGHTS: ForecastWeights = Object.freeze({
   crackBackPerPoint: 0.5,
   crackBackLethalPenalty: 100,

@@ -1835,6 +1835,46 @@ out first:
 A precision run that quietly reported the requested width would be inventing confidence it had not
 paid for, so the budget-limited path says so in as many words.
 
+### 3.95 Auditing the shipped pilot's own constants — not overfit, and one of them is a guard rail — ✅ done
+
+§3.82 and §3.85 both caught a "measured stronger" result that was really a seed fluke. That raises an
+obvious question nobody had asked: **the default pilot's own `ForecastWeights` were tuned at some
+point — were they tuned on one seed?** If so, the pilot everyone gets by default would be running on
+lucky constants, and no amount of careful A/B work on new features would fix it.
+
+Audited with `bench/forecast-ab.mjs` on the four-seed held-out battery (§3.85):
+
+| weight | change | held-out | verdict |
+|---|---|---|---|
+| `crackBackPerPoint` 0.5 | → 0.25 | 53/36, chi² 2.88 | not replicated (§3.88) |
+| `racePerTurn` 1.5 | → 1.0 | 19/17, chi² 0.03 | **no effect** |
+| `racePerTurn` 1.5 | → 6.0 | 19/46, chi² 10.40 | **CONFIRMED WEAKER** |
+| `crackBackLethalPenalty` 100 | → 25 | 0/0, all 5,760 slots level | **NO EFFECT AT ALL** |
+| `crackBackLethalPenalty` 100 | → 0 | 1/11, chi² 6.75 | **CONFIRMED WEAKER** |
+
+**Two findings, and both are reassuring rather than actionable — which is the point of an audit.**
+
+**1. `racePerTurn` sits at a BROAD optimum.** A 33% cut does nothing measurable; a 4× rise is clearly
+worse. That is the profile of a well-chosen weight, not a knife-edge fit to one seed — a value tuned
+into a fluke is fragile in *both* directions, and this one is flat nearby and punishing far away.
+
+**2. `crackBackLethalPenalty` is a GUARD RAIL, and it is saturated.** 100 → 25 changes literally
+nothing: **0 decided slots out of 5,760**, on all four seeds. But 100 → 0 is confirmed weaker (1 ahead,
+25 behind — it never wins a slot on three of the four seeds). So the term is genuinely load-bearing —
+removing it loses games — while its exact magnitude is irrelevant above ~25.
+
+⚠️ **That is the correct shape for what it expresses**, and worth stating so nobody "tunes" it: the
+penalty exists to make "do not tap out into your own death" absolute, not to be traded off against
+face damage at the margin. A number large enough to dominate is the whole requirement. A future
+tuning sweep that includes it will find a flat plateau and learn nothing; the same sweep would find a
+cliff at zero, which is the only thing about it worth knowing.
+
+**What this closes.** The default pilot is not running on overfit constants. Combined with §3.88's
+re-validation of `setAttack` (held-out 94/52) and §3.74's alpha strike (158/0 on a fresh seed),
+everything the shipped pilot's strength rests on has now been checked against seeds it was not built
+on. That was worth doing precisely because it found nothing: the alternative was carrying an unchecked
+assumption under every later measurement.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
