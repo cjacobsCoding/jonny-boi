@@ -1389,6 +1389,57 @@ only modestly stronger (42 slots to 10, 88% level, agreeing on 99% of decisions)
 **Tally: two confirmed strength gains shipped (§3.74, §3.83), fourteen hypotheses killed by
 measurement.** The two that survived both make the pilot act *more*, not less.
 
+### 3.87 The fourth speed axis: how many games the verdict actually needed — ✅ done
+
+Three axes of "why is it not faster" were already measured, and all three are about making the work
+cheaper. This is the fourth and last one available: **how much of the work was needed at all.**
+
+**The tool.** `bench/early-stop.mjs` replays a real paired A/B slot by slot and finds the earliest
+point at which the verdict was already the final one *and* already significant — the game count a
+sequential stopping rule could have used. An arm that never reaches significance is charged the full
+budget, which is the honest accounting: an inconclusive answer needs every game by definition.
+
+**Measured** (Mono-Red Aggro, 15 legal swaps, 8 opponents, 20 games/matchup = 160 paired slots each):
+
+| swap | final p | settled at |
+|---|---|---|
+| Beetleback Chief → Lightning Helix | 2.0e-7 | **27** / 160 |
+| Lightning Bolt → Swords to Plowshares | 3.6e-5 | 31 / 160 |
+| Goblin Guide → Savannah Lions | 6.0e-3 | 51 / 160 |
+| Searing Spear → Boros Guildgate | 1.2e-2 | 137 / 160 |
+| Goblin Guide → Krenko's Command | 3.3e-1 | **160** / 160 (never settles) |
+| Monastery Swiftspear → Goblin Instigator | 1.0e+0 | **160** / 160 (never settles) |
+
+**Slots played 2,400; slots a perfectly-calibrated test would need 1,204 — an upper bound of 1.99×.**
+
+⚠️ **And "upper bound" is doing real work in that sentence.** Stopping at the first `p < 0.05` while
+peeking after every game inflates the false-positive rate badly — it is the same error as §3.82's
+seed-shopping, in the time dimension. A sound group-sequential design spends games buying that error
+back, so it delivers materially less than 1.99×. On a first pass the honest expectation is ~1.4×.
+
+**Why it is measured and NOT built.**
+
+- `suggest` — the command where this would matter most — **already realises most of it**. Its adaptive
+  ladder eliminates candidates between waves, which is the same saving applied at the candidate level
+  rather than the slot level (§3.6). The remaining value is for `swap` and `pilot-ab`.
+- ~1.4× on two commands is real but modest, and it buys that by adding sequential-testing machinery
+  to a codebase that has just learned two expensive lessons about exactly this kind of statistics
+  (§3.82, §3.85). The rule here is measure first and follow the measurement; the measurement says the
+  prize is small and the failure mode is one this project has already paid for twice.
+
+**So the speed question is now closed on all four axes, with a number for each:**
+
+| axis | finding |
+|---|---|
+| per-action cost (§3.78) | flat — heaviest function 6.1% self time, top ten 38.4% |
+| action count (§3.79) | no large removable share — the unreachable ceiling is under 1.35× |
+| decision cost (§3.81) | flat — heaviest 8.4%, and that function is already tuned |
+| games needed (§3.87) | upper bound 1.99×, mostly already realised by the adaptive search |
+
+None of them contains a 10×, and together they account for essentially all of the work the sim does.
+**The throughput that was won — +48% single-thread (§3.62) and 2.89× on `suggest` (§3.77) — came from
+the two things this table does not measure: doing fewer decisions, and doing them on more cores.**
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
