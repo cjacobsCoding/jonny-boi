@@ -854,6 +854,57 @@ round-by-round fan-out — it carries replay capture, cancellation and progress 
 not — but both now go through the same `driveAdaptiveSearch` and the same `summarizePairedSwap`, so
 the two cannot disagree about a verdict however they schedule the games.
 
+### 3.78 The engine profile is FLAT — and that is the answer to "make it 10× faster" — ✅ done
+
+A measurement, committed as tooling, that closes a question this repo kept re-opening by hand.
+
+**The tool.** `packages/sim/bench/prof-report.mjs` turns a `.cpuprofile` into a **self-time** table.
+Self time, not total: a total-time table always makes the outermost frame look like the problem,
+which is how an afternoon gets spent optimising a loop that is only expensive because of everything
+it calls. It prints a verdict line — FLAT or PEAKED — so the reader gets the decision, not just
+numbers. Pair it with `pilot-bench.mjs`, still the only harness worth profiling (the CLI plays its
+games in a worker, so `--cpu-prof` on it profiles a parent that is 99% idle).
+
+```
+node --cpu-prof --cpu-prof-dir prof packages/sim/bench/pilot-bench.mjs --games 1500
+node packages/sim/bench/prof-report.mjs prof --top 12 --min 1
+```
+
+**The measurement** (1,500 games, heuristic pilot, 5,421 samples):
+
+| self time | function |
+|---|---|
+| 6.12% | `generateLegalActions` |
+| 6.07% | `runMatch` |
+| 4.89% | `rememberSources` |
+| 4.10% | `planManaPayment` |
+| 3.65% | `scoredSpellGoals` |
+| 3.50% | `heuristicWillPass` |
+| 2.79% | `willPassPriority` |
+| 2.40% | `emit` |
+
+**Heaviest single function: 6.1%. Top ten together: 38.4%.**
+
+**What that means, stated plainly.** There is no hotspot. Deleting the single most expensive function
+in the engine outright — not optimising it, deleting it — would buy **6%**. A 10× speed-up requires
+removing 90% of all work, and this profile says that work is spread across the whole engine, not
+pooled anywhere a fix could reach it. **Single-thread 10× is not available by optimisation.** It
+would take a different state representation (flat typed arrays, no per-action event objects, no
+per-action collector), which would discard the byte-identical replays, the seeded determinism and
+the 19,000-test correctness net that make this project worth anything.
+
+**And the two biggest targets are load-bearing.** `rememberSources` + `createTriggerCollector` = 6.9%
+is the per-action trigger snapshot. It looks like pure waste on the ~82% of windows that are passes —
+but it is what makes **last-known-information** work: a permanent that dies during an action is gone
+from `state.battlefield` by the time the `zoneChanged` event is scanned, so the pre-action walk is the
+only reason its dies-trigger fires at all (CR 603.10). Deferring it to first use would trade a rules
+bug for 5%. Recorded here so the next reader does not re-derive the idea and ship it.
+
+**What IS available, and was taken.** Throughput came from the two places the profile does not
+govern: cutting the number of decisions (the fast-pass gate, §3.62 — 82% of windows never build a
+menu at all) and cutting wall clock across cores (§3.53, §3.77). That is +48% single-thread and
+2.89× on `suggest`, not 10×, and this section exists so nobody spends a week rediscovering why.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
