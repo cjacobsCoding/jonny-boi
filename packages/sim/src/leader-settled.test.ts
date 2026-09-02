@@ -43,9 +43,19 @@ function optionsFor(hero: (typeof SAMPLE_DECKS)[number], seed: number, stop: boo
   };
 }
 
-/** The line a user actually acts on. */
-const topPick = (report: ReturnType<typeof suggestSwaps>) =>
-  report.suggestions[0] ? `${report.suggestions[0].outName} -> ${report.suggestions[0].inName}` : '(none)';
+/**
+ * The line a user actually acts on — WHICH swap, and whether it is PROVEN.
+ *
+ * ⚠️ The verdict belongs in here, and its absence shipped a defect. The first
+ * version of this helper compared only the identity, so a run that stopped early
+ * and downgraded its top pick from BETTER to INCONCLUSIVE passed every test in
+ * this file. A user asks two things at once — "which of these is best?" and "is
+ * it actually better than doing nothing?" — and an early stop must preserve both.
+ */
+const topPick = (report: ReturnType<typeof suggestSwaps>) => {
+  const best = report.suggestions[0];
+  return best ? `${best.outName} -> ${best.inName} [${best.evaluation.verdict}]` : '(none)';
+};
 
 describe('the leader-settled rule keeps the recommendation', () => {
   const cases = [
@@ -60,8 +70,14 @@ describe('the leader-settled rule keeps the recommendation', () => {
       const stopped = suggestSwaps(hero, optionsFor(hero, seed, true));
       const full = suggestSwaps(hero, optionsFor(hero, seed, false));
       // ⚠️ THE WHOLE JUSTIFICATION. Stopping early is only defensible if the
-      // candidate a user is told to play is the same one.
+      // candidate a user is told to play is the same one AND still carries the
+      // same verdict — see `topPick` for the defect that taught us the second half.
       expect(topPick(stopped)).toBe(topPick(full));
+      // The whole ranked list, not only its head: a reordering below the top is
+      // still a different answer to "what should I try next?".
+      expect(stopped.suggestions.map((s) => `${s.inName} ${s.evaluation.verdict}`)).toEqual(
+        full.suggestions.map((s) => `${s.inName} ${s.evaluation.verdict}`),
+      );
     });
   }
 

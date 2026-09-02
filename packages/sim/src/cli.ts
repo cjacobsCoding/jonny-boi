@@ -68,6 +68,7 @@ import { createWorkerArmTransport } from './suggest-workers.js';
 import { planSequentialLooks, type SequentialOutcome } from './sequential.js';
 import { decidePrecision, planPrecision, type PrecisionDecision } from './precision.js';
 import { DEFAULT_DECK_RULES } from './config.js';
+import { DEFAULT_ADAPTIVE_CONFIG } from './suggest-config.js';
 import type { HistoryRejection, SuggestionHistory } from './suggest-history.js';
 import { DEFAULT_SUGGEST_CONFIG } from './suggest-config.js';
 import {
@@ -111,6 +112,7 @@ Usage:
                              [--until-decided [--looks K]]
   npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--max-candidates K] [--seed S]
                                [--pilot id] [--history <file>] [--no-adaptive] [--workers W]
+                               [--full-ladder]
   npm run sim -- pilot-ab [--pilot-a id] [--pilot-b id] [--games N] [--seed S] [--workers W]
                           [--until-decided [--looks K]]
   npm run sim -- soak [--games N] [--seed S] [--pilot id] [--workers W]
@@ -131,6 +133,10 @@ Notes:
     win-rate interval of +/-H — a lopsided deck needs far fewer games than a coin
     flip. It ESTIMATES rather than tests, so it uses a two-stage fixed-width rule
     and not the boundary below; the interval printed is always the one earned.
+  • --full-ladder (suggest) plays every planned wave even after the leader is
+    decided against the runner-up. The default stops there — it cannot change WHICH
+    swap is recommended (that IS the comparison it waits for), and on a full
+    gauntlet it saves 29-65% of the games. Use this to measure against it.
   • --until-decided (swap, pilot-ab) plays the budget in K equal windows and STOPS as soon as
     a pre-registered group-sequential boundary is crossed. A decisive swap finishes
     in a quarter of the games; a marginal one runs the full budget and costs nothing
@@ -228,6 +234,8 @@ interface Flags {
   readonly noAdaptive: boolean;
   /** Stop a swap as soon as a pre-registered group-sequential boundary is crossed. */
   readonly untilDecided: boolean;
+  /** Play every wave even once the leader is settled — the control for §3.98. */
+  readonly fullLadder: boolean;
   /** Play a gauntlet only until its win-rate interval reaches this half-width. */
   readonly untilPrecise?: number;
   /** How many looks that boundary is planned for. */
@@ -259,6 +267,7 @@ function parseFlags(args: readonly string[]): Flags {
   let history: string | undefined;
   let noAdaptive = false;
   let untilDecided = false;
+  let fullLadder = false;
   let untilPrecise: number | undefined;
   let looks: number | undefined;
   let workers: number | undefined;
@@ -315,6 +324,9 @@ function parseFlags(args: readonly string[]): Flags {
       case '--until-decided':
         untilDecided = true;
         break;
+      case '--full-ladder':
+        fullLadder = true;
+        break;
       case '--until-precise': {
         const raw = requireValue(arg, args[++i]);
         untilPrecise = Number(raw);
@@ -333,7 +345,7 @@ function parseFlags(args: readonly string[]): Flags {
     }
   }
 
-  return { positionals, games, seed, pilot, pilotA, pilotB, scope, out, in: inCard, cut, maxCandidates, history, noAdaptive, untilDecided, untilPrecise, looks, workers, help };
+  return { positionals, games, seed, pilot, pilotA, pilotB, scope, out, in: inCard, cut, maxCandidates, history, noAdaptive, untilDecided, untilPrecise, fullLadder, looks, workers, help };
 }
 
 function requireValue(flag: string, value: string | undefined): string {
@@ -1128,6 +1140,9 @@ async function cmdSuggest(flags: Flags): Promise<number> {
     baseSeed: seed,
     gamesPerCandidate: games,
     suggestConfig: { ...DEFAULT_SUGGEST_CONFIG, maxCandidates },
+    // The control for the settled-leader stop (§3.98): play every wave the ladder
+    // planned, so a run can be compared against the rule rather than only trusted.
+    adaptiveConfig: { ...DEFAULT_ADAPTIVE_CONFIG, stopWhenLeaderSettled: !flags.fullLadder },
     cutOnly: flags.cut.length > 0 ? flags.cut : undefined,
     adaptive: !flags.noAdaptive,
     ...(priorHistory ? { history: priorHistory } : {}),

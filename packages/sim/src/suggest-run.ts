@@ -50,17 +50,72 @@ import type { ArmStanding, WaveSpec } from './suggest-schedule.js';
 import { planWaves, prioritiseCandidates, selectOffspring, selectSurvivors } from './suggest-schedule.js';
 import type { HistoryRejection, SuggestionHistory } from './suggest-history.js';
 import { acceptHistory, deckFingerprint, priorEvidenceFrom } from './suggest-history.js';
-import type { EliminatedSwap, EliminationNote, WaveReport } from './suggest-report.js';
 import { pairedBetweenArms } from './paired-arms.js';
 import { mcNemarTest } from './stats.js';
 import { planSequentialLooks, SUPPORTED_LOOK_COUNTS } from './sequential.js';
+import type { EliminatedSwap, EliminationNote, WaveReport } from './suggest-report.js';
+
+export interface SettledArm {
+  /** The arm's own 2×2 against the BASE deck. */
+  readonly paired: PairedTable;
+  readonly gamesPlayed: number;
+  /** Which slots it won — see `pairedBetweenArms` (§3.97). */
+  readonly variantWonBySlot?: readonly boolean[];
+}
 
 /**
- * The Pocock table is CLOSED (§3.92) — it refuses a look count it has no constant
- * for rather than interpolating one. A wave count outside it is clamped to the
- * nearest tabulated value at or above it, which is the conservative direction:
- * more looks means a stricter per-look bar, so the run stops later, never sooner.
+ * MAY THE LADDER STOP? — the whole of the §3.98 rule, in one testable place.
+ *
+ * `suggest` answers TWO questions at once, and an early stop has to preserve both:
+ *
+ *   1. **Which of these is best?** Settled when the LEADER is decided against the
+ *      RUNNER-UP. Each arm is paired against the base, so this comparison does not
+ *      exist in their 2×2 tables — it comes from the per-slot records (§3.97),
+ *      which line up because every arm plays the same slots from the same seeds.
+ *   2. **Is it actually better than doing nothing?** Settled when the leader's own
+ *      verdict against the base is already in.
+ *
+ * ⚠️ THE SECOND CONDITION IS HERE BECAUSE ITS ABSENCE SHIPPED A DEFECT. The first
+ * version stopped on (1) alone, reasoning that no further wave could change WHICH
+ * swap is recommended. True, and incomplete: a measured run stopped at 400 games
+ * with its top pick at adjusted p 0.11 — INCONCLUSIVE — where the full ladder
+ * reached 800 games and p 6.2e-3 — BETTER. Same recommendation, no longer proven.
+ * Every test then in place compared only the pick's IDENTITY and passed.
+ *
+ * ⚠️ THE BAR FOR (2) IS `alpha / familySize`, NOT `alpha`. The printed verdict
+ * faces a Holm correction over the whole roster, and Holm judges the smallest
+ * p-value against `alpha / m`. Testing against a looser bar here would let the
+ * ladder stop on a verdict the report then declines to print.
+ *
+ * The waves are the LOOKS for (1), so its bar is the Pocock constant for the wave
+ * count — the same discipline `swap` uses, for the same reason (§3.92).
  */
+export function leaderIsSettled(
+  leader: SettledArm,
+  runnerUp: SettledArm,
+  context: {
+    /** Candidates the verdict will be corrected across. */
+    readonly familySize: number;
+    /** Per-look significance for the leader-vs-runner-up test. */
+    readonly perLookAlpha: number;
+    /** The run's overall significance level. */
+    readonly alpha: number;
+  },
+): boolean {
+  // Without per-slot records the two arms cannot be compared at all, so the
+  // ladder simply runs its full course — the safe direction.
+  if (!leader.variantWonBySlot || !runnerUp.variantWonBySlot) return false;
+
+  const leaderProven = mcNemarTest(leader.paired).pValue < context.alpha / Math.max(1, context.familySize);
+  if (!leaderProven) return false;
+
+  const between = pairedBetweenArms(
+    { variantWonBySlot: leader.variantWonBySlot, gamesPlayed: leader.gamesPlayed },
+    { variantWonBySlot: runnerUp.variantWonBySlot, gamesPlayed: runnerUp.gamesPlayed },
+  );
+  return mcNemarTest(between).pValue < context.perLookAlpha;
+}
+
 function boundedLooks(waveCount: number): number {
   const supported = [...SUPPORTED_LOOK_COUNTS].sort((a, b) => a - b);
   return supported.find((n) => n >= waveCount) ?? (supported[supported.length - 1] as number);
@@ -427,23 +482,22 @@ export function* driveAdaptiveSearch(
     if (adaptiveConfig.stopWhenLeaderSettled && cut.survivors.length >= 2) {
       const leader = cut.survivors[0] as ArmStanding;
       const runnerUp = cut.survivors[1] as ArmStanding;
-      if (leader.variantWonBySlot && runnerUp.variantWonBySlot) {
-        const between = pairedBetweenArms(
-          { variantWonBySlot: leader.variantWonBySlot, gamesPlayed: leader.gamesPlayed },
-          { variantWonBySlot: runnerUp.variantWonBySlot, gamesPlayed: runnerUp.gamesPlayed },
-        );
-        const looks = planSequentialLooks(plan.maxPairedGames, boundedLooks(plan.waves.length));
-        if (mcNemarTest(between).pValue < looks.perLookAlpha) {
-          waves.push({
-            wave: spec.wave,
-            cumulativeGames: spec.cumulativeGames,
-            candidatesPlayed: standings.length,
-            survivors: cut.survivors.length,
-            eliminated: [],
-            offspring: [],
-          });
-          break;
-        }
+      const looks = planSequentialLooks(plan.maxPairedGames, boundedLooks(plan.waves.length));
+      const settled = leaderIsSettled(
+        { paired: pairedByKey.get(leader.key) ?? emptyTable(), gamesPlayed: leader.gamesPlayed, ...(leader.variantWonBySlot ? { variantWonBySlot: leader.variantWonBySlot } : {}) },
+        { paired: pairedByKey.get(runnerUp.key) ?? emptyTable(), gamesPlayed: runnerUp.gamesPlayed, ...(runnerUp.variantWonBySlot ? { variantWonBySlot: runnerUp.variantWonBySlot } : {}) },
+        { familySize: plan.roster.length, perLookAlpha: looks.perLookAlpha, alpha: stats.alpha },
+      );
+      if (settled) {
+        waves.push({
+          wave: spec.wave,
+          cumulativeGames: spec.cumulativeGames,
+          candidatesPlayed: standings.length,
+          survivors: cut.survivors.length,
+          eliminated: [],
+          offspring: [],
+        });
+        break;
       }
     }
     const eliminated: EliminatedSwap[] = cut.eliminated.map((e) => {
