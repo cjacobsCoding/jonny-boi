@@ -455,11 +455,22 @@ export function planPilotAbSlices(
   gamesPerOrientation: number,
   workerCount: number,
   baseSeed: number,
+  /**
+   * Plan only games `[gameStart, gameEnd)` of the run — the same prefix property
+   * `planPairedSlices` documents: `gamesPerOrientation` stays the FULL total
+   * because every game seeds off its ABSOLUTE index, so windows compose into
+   * exactly the run they were cut from (§3.92).
+   */
+  window?: { readonly gameStart: number; readonly gameEnd: number },
 ): readonly PilotAbSliceJob[] {
-  const parts = slicesPerUnit(pairCount, gamesPerOrientation, workerCount);
+  const from = window?.gameStart ?? 0;
+  const to = window?.gameEnd ?? gamesPerOrientation;
+  const span = Math.max(0, to - from);
+  const parts = slicesPerUnit(pairCount, span, workerCount);
   const jobs: PilotAbSliceJob[] = [];
   for (let pairIndex = 0; pairIndex < pairCount; pairIndex++) {
-    for (const range of splitGameRange(gamesPerOrientation, parts)) {
+    for (const piece of splitGameRange(span, parts)) {
+      const range = { gameStart: from + piece.gameStart, gameEnd: from + piece.gameEnd };
       jobs.push({
         kind: 'pilot-ab-slice',
         jobId: jobs.length,
