@@ -1875,6 +1875,47 @@ everything the shipped pilot's strength rests on has now been checked against se
 on. That was worth doing precisely because it found nothing: the alternative was carrying an unchecked
 assumption under every later measurement.
 
+### 3.96 Why `suggest` does NOT get early stopping — the saving is the product — ✅ done
+
+`swap`, `pilot-ab` and the gauntlet all now stop when their answer is in (§3.92–§3.94). `suggest` is
+the obvious next candidate and the one command a user waits longest on, so this records why it is
+deliberately left alone — because the saving is real, visible, and taking it would quietly degrade the
+thing the command exists to produce.
+
+**Where the saving appears to be.** A real run (`--games 200 --max-candidates 8`) spends its budget:
+
+| wave | candidates | slots each | dropped |
+|---|---|---|---|
+| 1 | 8 | 400 | 5 futile |
+| 2 | 3 | 800 | 1 outranked |
+| 3 | 2 | 1,600 | — |
+
+The two finalists finish at **p = 0** and **p = 5.5e-13**. Both were decisively better than the base
+deck long before the final wave — almost certainly by wave 2. Stopping them there would save the
+1,600 extra slot-games the final wave costs: **~27% of the whole run.**
+
+⚠️ **And it would be the wrong 27%.** The question `swap` answers is "is this change better than the
+base?", and once that is decided, more games buy nothing. The question `suggest` answers is **"which
+of these is best?"** — its output is a RANKED list. The two finalists here are +10.1% and +6.8%; the
+final wave is what separates them. Stopping both once each is decided *against the base* leaves the
+comparison *against each other* exactly as uncertain as it was, and the top-line recommendation — the
+one thing a user acts on — gets less reliable while the run gets faster.
+
+**And the ladder already takes the part that IS free.** `selectSurvivors` eliminates on two rules:
+`futile` (the optimistic bound cannot reach break-even — it can never be worth playing) and
+`outranked` (it is not in contention for the top places). Between them, every candidate whose extra
+games could not change the ANSWER is already dropped — five at wave 1 and one at wave 2 in the run
+above. What survives to full depth is exactly the set whose precision decides the ranking.
+
+**So the correct stopping rule for `suggest` is not "is this decided against the base?" but "is the
+leader decided against the runner-up?"** — a comparison the paired design does not currently make,
+since each arm is paired against the base and not against the others. That is a real piece of work,
+not a flag, and it is the only version of this that would not cost the ranking.
+
+**Recorded because the naive version is tempting and looks like a 1.4× win.** A future contributor
+measuring "games spent on already-decided candidates" will find that 27% and reach for it. The number
+is right; the conclusion is not.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded

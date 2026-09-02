@@ -182,6 +182,16 @@ export function selectSurvivors(
     contenders.push(standing);
   }
 
+  /*
+   * ⚠️ DO NOT ADD "stop candidates already decided against the base" HERE (§3.96).
+   * It looks like a 27% saving — the two finalists of a real run reach p = 0 and
+   * p = 5.5e-13 long before the final wave — but `suggest` produces a RANKED list,
+   * and the final wave is what separates the leaders from each other (+10.1% vs
+   * +6.8% in that run). Stopping on "decided vs the base" leaves the comparison
+   * that actually matters exactly as uncertain, and makes the top recommendation
+   * less reliable while the run gets faster. The two rules below already drop
+   * every candidate whose extra games cannot change the ANSWER.
+   */
   const ranked = [...contenders].sort(compareStandings);
   const keep = Math.max(0, Math.min(survivorTarget, ranked.length));
   for (const standing of ranked.slice(keep)) {
