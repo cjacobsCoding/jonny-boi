@@ -51,6 +51,20 @@ import { planWaves, prioritiseCandidates, selectOffspring, selectSurvivors } fro
 import type { HistoryRejection, SuggestionHistory } from './suggest-history.js';
 import { acceptHistory, deckFingerprint, priorEvidenceFrom } from './suggest-history.js';
 import type { EliminatedSwap, EliminationNote, WaveReport } from './suggest-report.js';
+import { pairedBetweenArms } from './paired-arms.js';
+import { mcNemarTest } from './stats.js';
+import { planSequentialLooks, SUPPORTED_LOOK_COUNTS } from './sequential.js';
+
+/**
+ * The Pocock table is CLOSED (§3.92) — it refuses a look count it has no constant
+ * for rather than interpolating one. A wave count outside it is clamped to the
+ * nearest tabulated value at or above it, which is the conservative direction:
+ * more looks means a stricter per-look bar, so the run stops later, never sooner.
+ */
+function boundedLooks(waveCount: number): number {
+  const supported = [...SUPPORTED_LOOK_COUNTS].sort((a, b) => a - b);
+  return supported.find((n) => n >= waveCount) ?? (supported[supported.length - 1] as number);
+}
 
 // --- phase 1: prepare -----------------------------------------------------------
 
@@ -229,6 +243,12 @@ export interface AdaptiveArmOutcome {
   /** Its CUMULATIVE 2×2 table over those slots. */
   readonly paired: PairedTable;
   /**
+   * Which slots this arm won, so the ladder can compare candidates against EACH
+   * OTHER and not only against the base (§3.97). Optional: an arm that failed to
+   * play has none, and a caller that does not track them still schedules fine.
+   */
+  readonly variantWonBySlot?: readonly boolean[];
+  /**
    * Set when the arm could not be played at all (an illegal variant that survived
    * generation, a shard that failed permanently). It leaves the search and is
    * reported as skipped — one bad candidate never costs a whole run.
@@ -300,6 +320,8 @@ export function* driveAdaptiveSearch(
   const entered: string[] = [];
   const gamesByKey = new Map<string, number>();
   const pairedByKey = new Map<string, PairedTable>();
+  /** Per-arm slot outcomes, for the leader-vs-runner-up test (§3.98). */
+  const slotsByKey = new Map<string, readonly boolean[]>();
   const eliminations = new Map<string, EliminationNote>();
   const failures: SkippedCandidate[] = [];
   const failed = new Set<string>();
@@ -356,6 +378,7 @@ export function* driveAdaptiveSearch(
         }
         gamesByKey.set(outcome.key, outcome.gamesPlayed);
         pairedByKey.set(outcome.key, outcome.paired);
+        if (outcome.variantWonBySlot) slotsByKey.set(outcome.key, outcome.variantWonBySlot);
       }
     }
 
@@ -363,10 +386,12 @@ export function* driveAdaptiveSearch(
     for (const request of requests) {
       const key = request.candidate.key;
       if (failed.has(key)) continue;
+      const slots = slotsByKey.get(key);
       standings.push({
         key,
         gamesPlayed: gamesByKey.get(key) ?? 0,
         paired: pairedByKey.get(key) ?? emptyTable(),
+        ...(slots ? { variantWonBySlot: slots } : {}),
       });
     }
 
@@ -384,6 +409,43 @@ export function* driveAdaptiveSearch(
     }
 
     const cut = selectSurvivors(standings, spec.wave, spec.survivorTarget, adaptiveConfig, stats);
+
+    /*
+     * ⚠️ THE ONLY STOPPING RULE THAT DOES NOT COST THE RANKING (§3.98).
+     *
+     * §3.96 measured that the finalists are decided against the BASE long before
+     * the last wave, and declined to stop on it: `suggest` outputs an ORDER, and
+     * the last wave is what separates the leaders from EACH OTHER. §3.97 made
+     * that comparison available for free — every arm plays the same slots from
+     * the same seeds, so the leader and the runner-up can be cross-tabulated
+     * directly. When THAT is decided, no further wave can change which candidate
+     * is recommended, and the games it would have cost buy nothing.
+     *
+     * The waves are the looks, so the boundary is the Pocock one for the wave
+     * count — the same discipline `swap` uses, for the same reason (§3.92).
+     */
+    if (adaptiveConfig.stopWhenLeaderSettled && cut.survivors.length >= 2) {
+      const leader = cut.survivors[0] as ArmStanding;
+      const runnerUp = cut.survivors[1] as ArmStanding;
+      if (leader.variantWonBySlot && runnerUp.variantWonBySlot) {
+        const between = pairedBetweenArms(
+          { variantWonBySlot: leader.variantWonBySlot, gamesPlayed: leader.gamesPlayed },
+          { variantWonBySlot: runnerUp.variantWonBySlot, gamesPlayed: runnerUp.gamesPlayed },
+        );
+        const looks = planSequentialLooks(plan.maxPairedGames, boundedLooks(plan.waves.length));
+        if (mcNemarTest(between).pValue < looks.perLookAlpha) {
+          waves.push({
+            wave: spec.wave,
+            cumulativeGames: spec.cumulativeGames,
+            candidatesPlayed: standings.length,
+            survivors: cut.survivors.length,
+            eliminated: [],
+            offspring: [],
+          });
+          break;
+        }
+      }
+    }
     const eliminated: EliminatedSwap[] = cut.eliminated.map((e) => {
       const candidate = byKey.get(e.key) as SwapCandidate;
       const note: EliminationNote = { wave: e.wave, reason: e.reason, detail: e.detail };

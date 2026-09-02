@@ -104,6 +104,8 @@ export interface ArmStanding {
   readonly key: string;
   readonly gamesPlayed: number;
   readonly paired: PairedTable;
+  /** See `AdaptiveArmOutcome.variantWonBySlot` — the leader-vs-runner-up input. */
+  readonly variantWonBySlot?: readonly boolean[];
 }
 
 /** Why an arm stopped receiving games. */
@@ -191,6 +193,10 @@ export function selectSurvivors(
    * that actually matters exactly as uncertain, and makes the top recommendation
    * less reliable while the run gets faster. The two rules below already drop
    * every candidate whose extra games cannot change the ANSWER.
+   *
+   * ✅ RESOLVED IN §3.98: the correct rule — stop when the LEADER is decided
+   * against the RUNNER-UP — now lives in `suggest-run.ts`, built on the per-slot
+   * comparison §3.97 made free. 30.6% fewer games, same recommendation.
    */
   const ranked = [...contenders].sort(compareStandings);
   const keep = Math.max(0, Math.min(survivorTarget, ranked.length));

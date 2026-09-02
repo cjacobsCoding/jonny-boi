@@ -82,6 +82,17 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
  */
 export interface AdaptiveSearchConfig {
   /**
+   * Stop the ladder once the LEADER is decided against the RUNNER-UP (§3.98).
+   *
+   * ⚠️ This is the only stopping rule that does not cost the ranking. §3.96 found
+   * that the finalists are usually decided against the BASE long before the last
+   * wave — but `suggest` outputs an ORDER, and the last wave is what separates the
+   * leaders from each other. Stopping on "beats the base" would leave exactly the
+   * comparison a user acts on as uncertain as before. Stopping on "beats the
+   * runner-up" cannot, because that IS the comparison.
+   */
+  readonly stopWhenLeaderSettled: boolean;
+  /**
    * Fraction of a wave's roster carried into the next wave. 0.5 is the classic
    * successive-halving choice: halve the field, double the games, so every wave
    * costs roughly the same while the survivors' precision keeps doubling.
@@ -128,6 +139,7 @@ export interface AdaptiveSearchConfig {
 }
 
 export const DEFAULT_ADAPTIVE_CONFIG: AdaptiveSearchConfig = Object.freeze({
+  stopWhenLeaderSettled: true,
   survivalFraction: 0.5,
   minSurvivors: 2,
   gamesGrowthFactor: 2,

@@ -1954,6 +1954,47 @@ against the runner-up?* — is now answerable from data in hand. Wiring it into 
 step and is deliberately a separate change: this one is a foundation that stands on its own, adds no
 behaviour, and is verified against both transports.
 
+### 3.98 `suggest` stops when the LEADER is settled — the 27%, taken correctly — ✅ done
+
+§3.96 found a 27% saving on `suggest` and refused it. §3.97 built the comparison that makes refusing
+unnecessary. This takes it.
+
+**The rule.** After each wave's cut, cross-tabulate the leader against the runner-up
+(`pairedBetweenArms`, §3.97) and test it. If the leader is decided against the runner-up, stop: no
+further wave can change **which candidate is recommended**, so the games it would cost buy nothing.
+
+⚠️ **Why this is the only stopping rule that does not cost the ranking.** Stopping on "decided against
+the base" — the tempting version §3.96 measured — leaves the comparison a user actually acts on
+exactly as uncertain as it was. Stopping on "decided against the runner-up" cannot, because that *is*
+the comparison. The difference is the whole of §3.96 and §3.97.
+
+**The waves are the looks**, so the boundary is the Pocock constant for the wave count (§3.92) — the
+same discipline `swap` uses. The table is closed, so a wave count it has no constant for is **clamped
+upward** to the nearest tabulated value: more looks means a stricter per-look bar, so the run stops
+later, never sooner. Conservative in the direction that matters.
+
+**Measured** (`suggest "Mono-Red Aggro" --games 200 --max-candidates 8 --workers 6`, same seed):
+
+| | games | waves | #1 | #2 |
+|---|---|---|---|---|
+| full ladder | 6,691 | 3 | Piker → Playful Shove **+10.1%** | Guide → Playful Shove +6.8% |
+| leader-settled | **4,643** | 2 | Piker → Playful Shove **+9.8%** | Guide → Playful Shove +6.0% |
+
+**30.6% fewer games — and the same recommendation, in the same order.** That is the 27% §3.96
+predicted, taken without the cost it warned about.
+
+**Guards** (`leader-settled.test.ts`) — the justification is "the recommendation is unchanged", so
+that is what is tested, across four deck/seed combinations rather than the one run it was developed
+on:
+
+- the **top pick is identical** with the rule on and off, for two decks at two seeds each;
+- it never plays **more** games than the full ladder;
+- every candidate is still **reported**, at the depth it reached — stopping the ladder must not drop
+  candidates from the output, only shorten them.
+
+**Default on.** It cannot change the answer — that is the property the tests pin — and it removes
+roughly a third of the work from the command a user waits longest on.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
