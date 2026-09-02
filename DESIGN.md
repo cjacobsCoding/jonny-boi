@@ -1331,6 +1331,64 @@ it was nearly written down. **Rebuild between a revert and a measurement, every 
 **Tally: two confirmed strength gains shipped, twelve hypotheses killed by measurement.** Two of the
 twelve had already cleared the bar in force at the time, which is the entire argument for raising it.
 
+### 3.86 Five ways to make the pilot more cautious, all measured worse — the aggression question is closed — ✅ done
+
+The strength work has kept returning to one place: `lookahead` declines attacks this pilot makes, and
+that looks like a defect. It is not, and this section is the point at which the evidence becomes
+strong enough to stop re-testing it.
+
+**The last two attempts, both from reading positions rather than histograms.**
+`bench/disagreement.mjs --show N --band set` prints only the band where *both* pilots attack with a
+different roster — the largest remaining band (48.7%). Seven of them:
+
+```
+[3] me 20, them 16   mine: ... Llanowar Elves 1/1, Craw Wurm 6/4, Giant Spider 2/4 ...
+    heuristic: atk[21,31]   lookahead: atk[31]
+[7] me 20, them 22   mine: Birds 0/1, Giant Spider 2/4, Llanowar Elves 1/1, Craw Wurm 6/4 ...
+    heuristic: atk[23,29]   lookahead: atk[29]
+```
+
+In four of the seven, the extra body the heuristic sends is a **mana creature** — Llanowar Elves,
+Birds of Paradise, Eternal Witness — going in for one or two damage. Attacking taps it, so the mana
+it would have made in the second main phase is gone: a cost the combat maths never saw. That is a
+real and specific hypothesis, and it was wrong.
+
+| cost charged per mana creature | held-out result |
+|---|---|
+| 1 (equal to one damage) | 5/8 — `NOT REPLICATED`, and it barely fired: at parity the score is unchanged and ties keep the incumbent |
+| 2 (a recurring source is worth more than one hit) | **7/18, chi² 4.00 — `CONFIRMED WEAKER`** |
+
+**The pattern, across five independent attempts.** Every rule that makes this pilot attack *less* has
+now been measured, and every one of them is worse or nothing:
+
+| rule | verdict |
+|---|---|
+| `trimForDefence` — hold back until a counter-swing is survivable (§3.75) | weaker (18/39) |
+| `attackValueThreshold` 1 → 3 (§3.82) | weaker (22/65) |
+| `attackValueThreshold` 1 → 2 (§3.84) | **CONFIRMED WEAKER** (15/95, 6/93) |
+| `defensiveReserve` — keep a blocker when the crack-back can kill us (§3.85) | not replicated (held-out 145/146) |
+| `manaCreatureCost` — price the mana a tapped attacker would have made | **CONFIRMED WEAKER** (7/18) |
+
+And the one rule that *did* confirm — `setAttack` (§3.83) — makes the pilot attack **more precisely,
+usually with more bodies**, by noticing the defence cannot block them all.
+
+⚠️ **The conclusion, and it is now well earned: the disagreements with `lookahead` are not misplays.**
+§3.75 guessed this ("copying a searching pilot's conclusion is not the same as having its reasons")
+from one experiment. Five now say it. `lookahead` is more cautious than is correct in this engine,
+and a rule shaped like its caution throws away races this pilot is winning. **The attack step is at a
+local optimum for this architecture, and further caution rules should not be attempted** — the next
+person's idea in this direction has almost certainly already been measured above.
+
+**What that means for "make the pilot smarter".** The remaining disagreement is 0.54% of decisions
+(§3.84), it is entirely in attack selection, the *search* over attack sets is already exact (§3.84),
+and every *valuation* change that makes it more cautious is worse. What is left is not a rule this
+pilot is missing; it is a different class of pilot — one that evaluates positions rather than
+scoring them, which is what `lookahead` and `mcts` already are, and which this engine measures as
+only modestly stronger (42 slots to 10, 88% level, agreeing on 99% of decisions).
+
+**Tally: two confirmed strength gains shipped (§3.74, §3.83), fourteen hypotheses killed by
+measurement.** The two that survived both make the pilot act *more*, not less.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
