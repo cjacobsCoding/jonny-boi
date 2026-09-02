@@ -61,6 +61,52 @@ function signature(action) {
   return parts.join(' ');
 }
 
+
+// --- show the actual positions --------------------------------------------------
+//
+// Counting disagreements tells you WHERE to look; it does not tell you what is
+// wrong. `--show N` prints N of them as readable boards, because a hypothesis
+// guessed from a histogram has been wrong eight times out of ten in this repo,
+// and reading the positions is what a player would do.
+const SHOW = (() => {
+  const at = process.argv.indexOf('--show');
+  return at >= 0 ? Number(process.argv[at + 1]) : 0;
+})();
+
+const shown = [];
+
+function describeCreature(c, index) {
+  const pow = c.def.power ?? 0;
+  const tou = c.def.toughness ?? 0;
+  const plus = c.counters?.['+1/+1'] ?? 0;
+  const marks = [];
+  if (c.tapped) marks.push('tapped');
+  if (c.summoningSick) marks.push('sick');
+  const kw = Object.entries(c.def.keywords ?? {})
+    .filter(([, on]) => on)
+    .map(([k]) => k);
+  if (kw.length) marks.push(kw.join('/'));
+  void index;
+  return `${c.def.name} ${pow + plus}/${tou + plus}${marks.length ? ` (${marks.join(', ')})` : ''}`;
+}
+
+function snapshot(view, mine, theirs) {
+  const creatures = (seat) =>
+    view.battlefield
+      .filter((c) => c.controller === seat && (c.def.types ?? []).some((t) => String(t).toLowerCase() === 'creature'))
+      .map((c) => describeCreature(c))
+      .join(', ') || '(none)';
+  const me = view.priorityPlayer;
+  const foe = me === 'A' ? 'B' : 'A';
+  return [
+    `  life: me ${view.players[me].life}, them ${view.players[foe].life}   turn ${view.turn ?? '?'}`,
+    `  mine  : ${creatures(me)}`,
+    `  theirs: ${creatures(foe)}`,
+    `  heuristic: ${mine}`,
+    `  lookahead: ${theirs}`,
+  ].join('\n');
+}
+
 let decisions = 0;
 let disagreements = 0;
 const byKind = new Map();
@@ -101,6 +147,7 @@ for (const [aName, bName] of MATCHUPS) {
           bump(byKind, `${mine.kind} -> ${theirs.kind}`);
           bump(byStep, s.step);
           bump(swaps, mine.kind === theirs.kind ? `same kind, different choice: ${mine.kind}` : 'different kind');
+          if (shown.length < SHOW) shown.push(snapshot(s, signature(mine), signature(theirs)));
         }
       }
       const action = base.chooseAction({
@@ -132,5 +179,12 @@ const top = (m, label, limit) => {
 top(byKind, 'by transition (what the heuristic did -> what the rival did):', 12);
 top(byStep, 'by step:', 12);
 top(swaps, 'shape:', 4);
+if (shown.length > 0) {
+  console.log(`${shown.length} disagreement positions:
+`);
+  shown.forEach((text, i) => console.log(`[${i + 1}]
+${text}
+`));
+}
 console.log('⚠️ A disagreement is not a misplay. This ranks where to LOOK; only an A/B on');
 console.log('   matched slots can say whether a change is an improvement.');

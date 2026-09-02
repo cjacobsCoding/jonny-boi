@@ -28,7 +28,7 @@ import { buildRegistry, loadCardPool } from '@jonny-boi/cards';
 import { SAMPLE_DECKS } from '../dist/data/decks/index.js';
 import { loadDeck } from '../dist/src/deck.js';
 import { runPilotAb } from '../dist/src/pilot-ab.js';
-import { confirmedAb, report } from './ab-protocol.mjs';
+import { confirmedAb, report, DEV_SEEDS, HELD_OUT_SEEDS } from './ab-protocol.mjs';
 
 function arg(name, fallback) {
   const at = process.argv.indexOf(`--${name}`);
@@ -38,8 +38,9 @@ function arg(name, fallback) {
 const WEIGHT = arg('weight', undefined);
 const VALUE = Number(arg('value', NaN));
 const gamesPerOrientation = Number(arg('games', 40));
-const seed = Number(arg('seed', 4242));
-const confirmSeed = Number(arg('confirm-seed', 90210));
+// `--seed S` shifts the WHOLE battery, so an entirely fresh set of four is one
+// flag away — which is what you want after tuning against the defaults.
+const seedShift = Number(arg('seed', 0));
 
 if (!WEIGHT || Number.isNaN(VALUE)) {
   console.error('usage: node packages/sim/bench/weight-ab.mjs --weight <name> --value <number> [--games N] [--seed S] [--confirm-seed S2]');
@@ -72,12 +73,10 @@ const outcome = confirmedAb(
       gamesPerOrientation,
       baseSeed,
     }),
-  { seed, confirmSeed },
+  seedShift === 0 ? {} : { seeds: DEV_SEEDS.map((x) => x + seedShift), heldOut: HELD_OUT_SEEDS.map((x) => x + seedShift) },
 );
 
-report(
-  `${WEIGHT}: ${VALUE} vs ${wasValue} (shipped) — ${decks.length} decks, ` +
-    `${gamesPerOrientation} games/pair/orientation, ${outcome.primary.totalGames} games per run`,
+report(`${WEIGHT}: ${VALUE} vs ${wasValue} (shipped) — ${decks.length} decks, ` +
+    `${gamesPerOrientation} games/pair/orientation, ${outcome.dev[0].result.totalGames} games per run`,
   outcome,
-  { seed, confirmSeed },
 );
