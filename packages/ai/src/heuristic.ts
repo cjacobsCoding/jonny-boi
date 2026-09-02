@@ -63,6 +63,7 @@ import {
   indexReplacements,
   playableFaceOf,
   projectDamage,
+  hasType,
   isCreature,
   isLand,
   flashbackCostOf,
@@ -3363,6 +3364,25 @@ export function canBlockByEvasion(
   if (restriction !== undefined) {
     const required = restriction.blockerMustHaveAnyOf;
     if (required !== undefined && !required.some((keyword) => bk[keyword] === true)) return false;
+    /*
+     * FEAR and INTIMIDATE, mirrored for the same reason as everything else here:
+     * a pilot that proposes one illegal pair has its WHOLE `declareBlockers`
+     * rejected, and after three rejections the harness passes priority and the
+     * defender takes the ENTIRE attack unblocked. Reading printed colour/type
+     * matches what core does in `blockerHasQuality`; the two must move together.
+     */
+    const qualities = restriction.blockerMustMatchAnyOf;
+    if (
+      qualities !== undefined &&
+      !qualities.some((quality) => {
+        if (quality.kind === 'artifact') return hasType(blocker.def, 'artifact');
+        if (quality.kind === 'color') return (blocker.def.colors ?? []).includes(quality.color);
+        const mine = attacker.def.colors ?? [];
+        return (blocker.def.colors ?? []).some((color) => mine.includes(color));
+      })
+    ) {
+      return false;
+    }
     const blockerPower = power(blocker, index);
     if (restriction.maxBlockerPower !== undefined && blockerPower > restriction.maxBlockerPower) return false;
     if (restriction.minBlockerPower !== undefined && blockerPower < restriction.minBlockerPower) return false;

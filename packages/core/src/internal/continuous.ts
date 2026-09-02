@@ -164,6 +164,7 @@ export type ContinuousIndex = ReadonlyMap<InstanceId, AggregatedMod>;
  */
 const KEYWORD_KEYS = [
   'flying',
+  'horsemanship',
   'vigilance',
   'haste',
   'firstStrike',

@@ -1152,6 +1152,7 @@ export const RULES_MANIFEST: RulesManifest = {
  */
 export const KEYWORD_RULES: KeywordRules = {
   flying: '702.9',
+  horsemanship: '702.31',
   vigilance: '702.20',
   haste: '702.10',
   firstStrike: '702.7',

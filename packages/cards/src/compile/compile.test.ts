@@ -625,26 +625,27 @@ describe('compileCard — templated cards outside the curated pool', () => {
   it('reports an unmodelled keyword rather than dropping the ability', () => {
     // Menace was the example here, then ward, then indestructible, then SKULK —
     // every one of them is implemented now, and the stand-in has had to move each
-    // time. (Skulk went last: `KeywordFlags.blockRestriction` carries "can't be
-    // blocked by creatures with greater power" as a payload, compared against
-    // EFFECTIVE power in `canBlock`.) HORSEMANSHIP is the current stand-in — an
-    // evasion keyword with its own separate blocking rule that nothing here
-    // models. The point of the test has never changed: an ability we cannot model
+    // time. (Skulk went, then HORSEMANSHIP — §3.102 gave it a `KeywordFlags` flag
+    // and a `blockRestriction` naming that flag, alongside fear and intimidate
+    // whose exceptions name a colour or a card type instead.) CUMULATIVE UPKEEP is
+    // the current stand-in: an upkeep cost that grows by an age counter each turn
+    // and sacrifices the permanent when unpaid, which is a turn-structure system
+    // rather than a flag. The point of the test has never changed: an ability we cannot model
     // must be REPORTED, never silently dropped.
     const result = compileCard(
       makeCard({
-        name: 'Sneaky Beast',
+        name: 'Ageing Beast',
         typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Beast'] },
         manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0, other: [] },
         power: 3,
         toughness: 3,
-        oracleText: 'Horsemanship',
-        keywords: ['Horsemanship'],
+        oracleText: 'Cumulative upkeep {1}',
+        keywords: ['Cumulative upkeep'],
       }),
     );
 
     expect(result.status).toBe('incomplete');
-    expect(result.missing.some((gap) => /horsemanship/i.test(gap.text))).toBe(true);
+    expect(result.missing.some((gap) => /cumulative upkeep/i.test(gap.text))).toBe(true);
   });
 
   it('compiles SKULK, which IS modelled now', () => {
@@ -681,6 +682,48 @@ describe('compileCard — templated cards outside the curated pool', () => {
     expect(result.definition.keywords).toMatchObject({ menace: true });
   });
 
+
+  it('compiles fear, intimidate and horsemanship into block restrictions (§3.102)', () => {
+    // Three keywords, one shape: "can't be blocked except by creatures that ARE
+    // something". Compiled as `blockRestriction` payloads rather than bare flags,
+    // because the rule is a per-pair legality test — which is what that structure
+    // is for, and what `canBlock` already enforces.
+    const compile = (name: string, keyword: string, colors: readonly string[]) =>
+      compileCard(
+        makeCard({
+          name,
+          typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Horror'] },
+          manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: [] },
+          power: 2,
+          toughness: 2,
+          colors: colors as never,
+          oracleText: keyword,
+          keywords: [keyword],
+        }),
+      );
+
+    const fear = compile('Feared Thing', 'Fear', ['B']);
+    expect(fear.status, `missing: ${JSON.stringify(fear.missing)}`).toBe('complete');
+    expect(fear.definition.keywords?.blockRestriction?.blockerMustMatchAnyOf).toEqual([
+      { kind: 'artifact' },
+      { kind: 'color', color: 'B' },
+    ]);
+
+    const intimidate = compile('Intimidating Thing', 'Intimidate', ['R']);
+    expect(intimidate.status, `missing: ${JSON.stringify(intimidate.missing)}`).toBe('complete');
+    expect(intimidate.definition.keywords?.blockRestriction?.blockerMustMatchAnyOf).toEqual([
+      { kind: 'artifact' },
+      { kind: 'sharesColorWithAttacker' },
+    ]);
+
+    // Horsemanship carries BOTH halves: the flag is what a blocker is checked
+    // for, the restriction is what names it. One without the other is a horseman
+    // no horseman can block, or a keyword nothing reads.
+    const horse = compile('Wei Rider', 'Horsemanship', ['R']);
+    expect(horse.status, `missing: ${JSON.stringify(horse.missing)}`).toBe('complete');
+    expect(horse.definition.keywords).toMatchObject({ horsemanship: true });
+    expect(horse.definition.keywords?.blockRestriction?.blockerMustHaveAnyOf).toEqual(['horsemanship']);
+  });
   it('compiles "enters tapped" onto the definition', () => {
     const result = compileCard(
       makeCard({

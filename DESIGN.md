@@ -2138,6 +2138,55 @@ mtime across *every* package (a stale `core` is as wrong as a stale `sim`) again
 output (a half-finished build is as stale as an absent one), and refuses — naming the newer file —
 rather than running. A refusal is cheap; a wrong answer delivered quickly is not.
 
+### 3.102 Three evasion keywords — fear, intimidate, horsemanship — ✅ done
+
+⚠️ **And a correction to what this project has been assuming.** The speed and strength work of §3.62–
+§3.101 proceeded on the belief that the card side was finished. It is not, and the repo's own tooling
+says so plainly. `packages/cards/scripts/coverage-audit.mjs`, over the 2,100 most-played Modern-legal
+non-joke cards:
+
+> **Fully playable today: 676 (32.2%). Blocked by a missing system: 1,424 (67.8%).**
+
+The "5,097 cards" figure is the CURATED POOL — the cards that *do* compile. The corpus is 32,277 paper
+non-joke cards, of which **17,916 are blocked by exactly ONE clause**. That is a work queue, and
+`keyword-gap-report.mjs` orders it by cards-per-keyword.
+
+**Picked as a FAMILY, not a keyword.** Three of the top entries share one shape — *"can't be blocked
+except by creatures that ARE something"*:
+
+| keyword | CR | exception names | sole-blocked |
+|---|---|---|---|
+| fear | 702.36a | artifact creatures and/or **black** creatures | 14 |
+| intimidate | 702.13a | artifact creatures and/or creatures **sharing a colour** | 8 |
+| horsemanship | 702.31a | creatures **with horsemanship** | 14 |
+
+`BlockRestriction.blockerMustHaveAnyOf` already covered exceptions naming a KEYWORD. These name a
+**colour or a card type**, so folding them into that list would have meant inventing keyword flags for
+"artifact" and "black". Instead `blockerMustMatchAnyOf` takes a closed `BlockerQuality` union —
+`artifact`, `color`, `sharesColorWithAttacker` — and horsemanship gets a real flag so its restriction
+can NAME it, exactly as `flying`/`reach` pair up.
+
+**Measured: 5,097 → 5,133 complete cards. +36, precisely the 14 + 8 + 14 predicted.**
+
+⚠️ **The repo's guards did their job, twice.** Adding one `KeywordFlags` field stopped `tsc` in two
+places until it was classified — `KEYWORD_RULES` (its CR reference) and `KEYWORD_KEYS` (the
+exhaustiveness witness). Neither is something a person would have remembered.
+
+And a third guard fired as a TEST failure: *"reports an unmodelled keyword rather than dropping the
+ability"* has used menace, then ward, then indestructible, then skulk, then horsemanship as its
+stand-in — each moved on the day it was implemented. Horsemanship is now implemented, so the stand-in
+moved again, to **cumulative upkeep**. That test is a small monument to the rule it protects.
+
+⚠️ **A limit written where it will be read.** `blockerHasQuality` reads PRINTED colour and card type,
+not the continuous index, because core does not model colour- or type-changing effects in its layer
+system yet. That is the honest approximation only because it is also what the rest of core does today
+— and the comment says so, so that when either becomes layer-aware this moves with it rather than
+quietly letting a creature that only LOOKS black block a Fear attacker.
+
+**Mirrored in the pilot**, because a single illegal pair makes the whole `declareBlockers` action
+illegal: the defender would lose every other block in the same declaration and take the entire attack.
+That is not a hypothetical — it is what §3.45's Black Knight bug did.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
