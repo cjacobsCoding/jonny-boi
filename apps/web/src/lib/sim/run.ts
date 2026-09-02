@@ -10,6 +10,7 @@
  * `merge.ts` aggregates. This module only decides *what to dispatch*, *how to
  * count progress honestly*, and *what a failure means*.
  */
+import { planSequentialLooks, type SequentialOutcome } from '@jonny-boi/sim';
 import type {
   GauntletRequest,
   MatchRequest,
@@ -245,6 +246,13 @@ export async function runGauntlet(
 
 // --- A/B swap ------------------------------------------------------------------
 
+/**
+ * Looks the Lab plans an early-stopping A/B for. Four matches the CLI default:
+ * enough to stop early on a decided swap, few enough that the Pocock penalty per
+ * look stays mild. Named so the Lab and the CLI cannot drift to different bars.
+ */
+const LAB_SEQUENTIAL_LOOKS = 4;
+
 export async function runSwap(
   request: SwapRequest,
   runner: ShardRunner,
@@ -253,36 +261,76 @@ export async function runSwap(
 ): Promise<SimResultPayload> {
   const opponentNames = opponentsFor(request);
   const context = contextFor(request, opponentNames);
-  const jobs = planPairedShards(
-    context,
-    {
-      outCardId: request.outCardId,
-      inCardId: request.inCardId,
-      // Carried from the user's choice in the A/B panel. Dropping it here would
-      // not fail — it would quietly answer the OTHER question.
-      swapScope: request.swapScope,
-    },
-    request.gamesPerOpponent,
-    runner.workerCount,
-    request.seed,
-    null,
-  );
-  const total = totalPairedGames(jobs);
+  const swap = {
+    outCardId: request.outCardId,
+    inCardId: request.inCardId,
+    // Carried from the user's choice in the A/B panel. Dropping it here would
+    // not fail — it would quietly answer the OTHER question.
+    swapScope: request.swapScope,
+  };
 
+  /*
+   * ⚠️ THE WHOLE BUDGET IS STILL PLANNED, even when stopping early is on: the
+   * progress bar must show what the user asked for, not what the run turned out
+   * to need. A bar that reached 100% and then kept going — or one that jumped to
+   * the end when a window closed — would be reporting the stopping rule as
+   * progress.
+   */
+  const total = totalPairedGames(
+    planPairedShards(context, swap, request.gamesPerOpponent, runner.workerCount, request.seed, null),
+  );
   const tally = new ProgressTally(total, sink, progressIntervalSeconds);
   const label = `paired A/B games · ${workersLabel(runner.workerCount)}`;
   tally.emit(label, true);
 
-  const results = await Promise.all(
-    jobs.map(async (job) => {
-      const result = (await runner.submit(job, (games) => {
-        tally.add(games);
+  /** Play one window's shards and return their results. */
+  const playWindow = async (window?: { gameStart: number; gameEnd: number }) => {
+    const jobs = planPairedShards(
+      context,
+      swap,
+      request.gamesPerOpponent,
+      runner.workerCount,
+      request.seed,
+      null,
+      window,
+    );
+    return Promise.all(
+      jobs.map(async (job) => {
+        const result = (await runner.submit(job, (games) => {
+          tally.add(games);
+          tally.emit(label);
+        })) as PairedShardResult;
         tally.emit(label);
-      })) as PairedShardResult;
-      tally.emit(label);
-      return result;
-    }),
-  );
+        return result;
+      }),
+    );
+  };
+
+  const results: PairedShardResult[] = [];
+  let sequential: SequentialOutcome | undefined;
+
+  if (request.untilDecided) {
+    // The SAME boundary the CLI uses (`@jonny-boi/sim`), not a second rule: the
+    // looks are fixed in advance and each is judged at a tighter threshold, so
+    // the run-wide false-positive rate is still the alpha the verdict quotes.
+    const plan = planSequentialLooks(request.gamesPerOpponent, LAB_SEQUENTIAL_LOOKS);
+    let from = 0;
+    let looksTaken = 0;
+    for (const checkpoint of plan.checkpoints) {
+      results.push(...(await playWindow({ gameStart: from, gameEnd: checkpoint })));
+      from = checkpoint;
+      looksTaken += 1;
+      if (mergePairedEvaluation(results).pValue < plan.perLookAlpha) break;
+    }
+    sequential = {
+      gamesPlayed: from,
+      looksTaken,
+      stoppedEarly: from < request.gamesPerOpponent,
+      perLookAlpha: plan.perLookAlpha,
+    };
+  } else {
+    results.push(...(await playWindow()));
+  }
 
   const elapsedSeconds = tally.elapsedSeconds;
   const evaluation = mergePairedEvaluation(results);
@@ -293,6 +341,7 @@ export async function runSwap(
     gamesPerSecond:
       elapsedSeconds > 0 ? (evaluation.nGames * GAMES_PER_PAIRED_GAME) / elapsedSeconds : 0,
     pilotId: request.pilotId,
+    ...(sequential ? { sequential } : {}),
   };
 }
 

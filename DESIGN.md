@@ -1738,6 +1738,42 @@ than repeating the pool-per-window mistake above.
 That is the boundary doing its job rather than stopping at the first encouraging number — the exact
 failure this design exists to prevent.
 
+### 3.93 The Lab stops when the answer is in — early stopping reaches the UI — ✅ done
+
+§3.92 shipped group-sequential stopping for the CLI's `swap` and `pilot-ab`. This puts it where the
+user actually waits: the Lab's **A/B Swap Test** panel.
+
+**One boundary, not two.** `planSequentialLooks` is now exported from `@jonny-boi/sim` and the web
+imports it. The Lab and the CLI therefore stop on the *same* rule at the *same* thresholds — two
+stopping rules would be two answers to one question, and the second one would be the one nobody
+re-derived when the first changed. `LAB_SEQUENTIAL_LOOKS` is named next to the CLI's default so the
+two cannot silently drift apart.
+
+**The same window property.** `planPairedShards` gained the optional `window` its CLI counterpart has,
+and for the same reason: every game seeds off its absolute index, so `[0,G)` then `[G,2G)` is exactly
+`[0,2G)`. Stopping early plays **fewer** games, never **different** ones.
+
+⚠️ **The progress bar still counts the WHOLE budget.** It is planned from the full run even when
+stopping early is on. A bar sized to what the run turned out to need would either reach 100% and keep
+going, or leap to the end when a window closed — reporting the stopping rule as progress. The user
+asked for N games; the bar shows N, and the result says how many were actually needed.
+
+⚠️ **And the result SAYS SO.** When a run stops early the panel prints how many of the four checks it
+took, how many games of the budget it played, and the tighter alpha each check used. A smaller `n`
+with no explanation would leave the reader to infer that something went wrong — "told, never implied"
+is the whole reason the field exists on the payload rather than living only in the worker.
+
+**Default on.** A decided swap finishes in a fraction of the games; an undecided one runs the whole
+budget and costs nothing (§3.92 measured both). The only reason to turn it off is wanting the tightest
+possible *estimate of the delta* rather than the verdict, and the checkbox says exactly that.
+
+⚠️ **A verification note worth keeping.** The first attempt to check this in the browser looked at the
+wrong tree: the Browser pane's dev server runs from the session's **primary working directory**, not
+from the worktree the edit was made in. The panel rendered without the new control and the obvious
+conclusion — "the change did not work" — was wrong. A second wrong turn on the way: `section-label`
+is uppercased by CSS, so `innerText` searches for the label text must be case-insensitive. Both cost
+real time; both are cheap to avoid once written down.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded

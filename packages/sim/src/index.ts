@@ -43,6 +43,11 @@ export { SAMPLE_DECKS } from '../data/decks/index.js';
 
 // Statistics (pure).
 export type { ProportionCI, PairedTable, McNemarResult, MultipleComparisonsMethod } from './stats.js';
+// The group-sequential boundary (§3.92). Exported because the web Lab runs the
+// same paired A/B and must stop on the same rule — two stopping rules would be
+// two answers to one question.
+export { planSequentialLooks, SUPPORTED_LOOK_COUNTS } from './sequential.js';
+export type { SequentialPlan, SequentialOutcome } from './sequential.js';
 export {
   wilsonInterval,
   wilsonUpperBound,
