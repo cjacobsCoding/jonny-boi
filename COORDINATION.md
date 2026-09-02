@@ -246,7 +246,7 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
-- 2026-08-31 integrator: `feat/copilot` ✅ MERGED — DESIGN §3.67, the AI co-pilot. apps/web only:
+- 2026-08-31 integrator: `feat/copilot` ✅ MERGED + DEPLOYED — DESIGN §3.67, the AI co-pilot. apps/web only:
   NEW `lib/play/copilot.ts` + test, `components/play/PlayBoard.tsx` (toggle, hint line, outline on
   the suggested card/bar), NEW `components/play/copilot.css`, `lib/config.ts` (preference key),
   `lib/play/play-config.ts` (`COPILOT_ADVICE_SEED`). No packages touched: the pilot's existing
