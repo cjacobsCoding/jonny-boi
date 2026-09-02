@@ -968,6 +968,66 @@ live window makes the pilot silently **weaker**, not wrong.
 That is now three speed hypotheses these measurements have killed, and it is the point of having
 them: testing an idea here costs minutes, and every one of them looked good first.
 
+### 3.80 The pilot leaves nothing obvious on the table — the strength band, mined — ✅ done
+
+§3.79 found the promising lead: **58% of everything the engine does is the pilot declining an option
+it had**, three times the band where it acts. Every misplay of omission lives there. This is that
+band mined, and the honest result is that the obvious value is already being taken.
+
+**What the miner says** (`missed-plays.mjs`, 120 games × 3 matchups, 7,435 turns):
+
+| omission | count |
+|---|---|
+| land drop left unused | **0** (0.0%) |
+| main-phase pass with a castable spell on offer | **0** |
+| attack windows declined | 1,103 of 8,130 (13.6%) |
+
+The first two are the ones that would be flatly wrong, and they are zero. The pilot never skips a
+land drop and never passes a main phase holding a castable spell. That leaves the attack band, which
+is not a defect by itself — §3.74 already took the guaranteed-lethal swing and §3.75 already refuted
+holding attackers back for defence.
+
+**Splitting the declines** (`bench/declined-attacks.mjs`, new, 4,602 attack windows):
+
+| band | count | what it means |
+|---|---|---|
+| FREE — defender has no untapped creature | 17 | |
+| UNBLOCKED — an attacker survives every block | 154 | |
+| CONTESTED — a genuine judgement call | 927 | |
+
+⚠️ **Both "defect" bands are OVER-COUNTS, and the tool now says so in its own header.** FREE is almost
+entirely 0-power mana creatures ("5 attackers for 2 power") that the pilot correctly keeps untapped
+for mana — the script reads printed power and the pilot knows better. UNBLOCKED reads printed
+power/toughness and ignores evasion and continuous effects, so it is not the question
+`attackIsProfitable` actually asks.
+
+**The hypothesis this killed.** UNBLOCKED suggested a clean rule: *a creature the defender cannot kill
+should attack whatever its power, because `attackValueThreshold` is guarding against a loss that
+cannot happen*. It was implemented behind a `safeAttacker` flag and A/B'd on matched slots:
+
+```
+safeAttacker ON vs OFF — 9 decks, 2880 games
+  slots: ahead A 0 · ahead B 0 · level 1440
+```
+
+**Not one game in 2,880 differed** — the strongest possible refutation, and a more useful one than a
+p-value: the pilot **already does it**. `attackValueThreshold` is 1, `faceDamageValue` is 1, and a
+0-power attacker is rejected earlier, so any attacker with no profitable block against it clears the
+bar by construction. The rule was dead code and was reverted.
+
+**What this settles about the strength target.** The 58% band is large but it is not full of mistakes.
+The three omissions a rules-based pilot is normally guilty of — missed land drops, unspent mana,
+declined free damage — are at zero, zero, and "already handled". Combined with the earlier finding
+that `lookahead` (real engine rollouts, the strongest play available in this engine) beats this pilot
+only **42 slots to 10 with 88% of slots level**, and that the two agree on **99.0% of all decisions**:
+the headroom between this pilot and near-optimal play is single-digit percent. **10× smarter is not
+available**, because there is not 10× of anything left to take.
+
+That is now three speed hypotheses and three strength hypotheses killed by measurement (`trimForDefence`
+§3.75, the combat fast-pass §3.79, `safeAttacker` here). The two that survived — the alpha strike
+§3.74 and the fast-pass gate §3.62 — shipped. The ratio is the point: ideas are cheap to test here
+and most of them are wrong, which is exactly why they get tested instead of argued about.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
