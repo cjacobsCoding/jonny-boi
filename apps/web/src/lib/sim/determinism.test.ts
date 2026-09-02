@@ -141,6 +141,13 @@ const GAUNTLET_GAMES = 6;
 const SWAP_GAMES = 5;
 const SUGGEST_GAMES = 3;
 const SUGGEST_CANDIDATES = 2;
+/**
+ * The cheapest configuration measured to actually TRIGGER the leader-settled stop
+ * (1,167 games against 1,643 — a 29% saving). Smaller rosters never fire it, so a
+ * guard built on them passes whether the plumbing is connected or not.
+ */
+const SETTLE_GAMES = 50;
+const SETTLE_CANDIDATES = 6;
 /** Enough candidates to be sure a multi-copy cut is among them (no games run). */
 const MANY_CANDIDATES = 200;
 /** Progress ticks are irrelevant to equality; emit them freely and ignore them. */
@@ -157,6 +164,13 @@ function opponents(names: readonly string[]): LoadedDeck[] {
 /** Two opponents keeps the run cheap while still exercising per-opponent seeding. */
 const TWO_OPPONENTS = resolveOpponentNames([], HERO.name).slice(0, 2);
 const ONE_OPPONENT = TWO_OPPONENTS.slice(0, 1);
+/**
+ * The WHOLE gauntlet. The leader-settled stop (§3.98) needs the discordant pairs
+ * a full opponent list produces: measured, it saves 29-65% at eight opponents and
+ * fires not at all at four, so a guard for it cannot use the two-opponent lists
+ * the other tests share.
+ */
+const ALL_OPPONENTS = resolveOpponentNames([], HERO.name);
 
 /** Copies of a card in the hero decklist, resolving ids the way the sim does. */
 function copiesInHero(cardId: string): number {
@@ -434,6 +448,54 @@ describe('a parallel suggestions search', () => {
     expect(withoutRunEnvironment(parallel)).toEqual(withoutRunEnvironment(reference));
   });
 
+
+  it('⚠️ stops on the settled leader like the engine does — same GAMES, not just same rank', async () => {
+    /*
+     * §3.98 stops the ladder once the leader is decided against the runner-up.
+     * The Lab can only do that if its shards carry the per-slot outcomes §3.97
+     * added — and if they do not, this fails in a way NOTHING ELSE HERE WOULD
+     * CATCH: the rule is designed to preserve the ranking, so a Lab that never
+     * stops early still returns the same recommendation in the same order. It
+     * simply plays a third more games, for ever, and quietly.
+     *
+     * So this compares the GAME COUNT, and does it on a roster big enough for a
+     * second wave to exist — the tests above use 2 candidates over 3 games, which
+     * is a single wave, so the rule cannot fire there at all.
+     */
+    const settleRequest: SuggestRequest = {
+      kind: 'suggest',
+      hero: HERO,
+      opponentNames: [...ALL_OPPONENTS],
+      gamesPerCandidate: SETTLE_GAMES,
+      maxCandidates: SETTLE_CANDIDATES,
+      seed: SEED,
+      pilotId: PILOT,
+    };
+    const payload = await runSuggest(
+      settleRequest,
+      new LocalShardRunner(4, context, 'reverse'),
+      collect().sink,
+      NO_THROTTLE,
+    );
+    if (payload.kind !== 'suggest') throw new Error('wrong payload kind');
+
+    const reference = suggestSwaps(HERO, {
+      gauntletDecks: opponents(ALL_OPPONENTS),
+      pilots: PILOTS,
+      pool: context.pool,
+      registry: context.registry,
+      baseSeed: SEED,
+      gamesPerCandidate: SETTLE_GAMES,
+      suggestConfig: { ...DEFAULT_SUGGEST_CONFIG, maxCandidates: SETTLE_CANDIDATES },
+    });
+
+    expect(payload.result.notes.totalGamesRun).toBe(reference.notes.totalGamesRun);
+    // And per candidate, since a matching total could still hide two arms that
+    // stopped at different depths and happened to cancel out.
+    expect(payload.result.suggestions.map((s) => s.gamesPlayed)).toEqual(
+      reference.suggestions.map((s) => s.gamesPlayed),
+    );
+  });
   it('drops a candidate whose shards fail and says so, instead of losing the whole run', async () => {
     // A worker dying on one candidate must not throw away a search that may have
     // been running for twenty minutes — and the report must not quietly come back
