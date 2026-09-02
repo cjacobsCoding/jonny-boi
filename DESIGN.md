@@ -1821,6 +1821,20 @@ pre-registered boundary (§3.92), the Lab's A/B panel through the same one (§3.
 a two-stage width rule here. Each uses the statistics its own question calls for, which is the part
 that took the care.
 
+**And in the Lab.** `planPrecision`/`decidePrecision` are exported from `@jonny-boi/sim` and the
+Gauntlet panel uses them — the same rule, not a second one, exactly as §3.93 did for the A/B
+boundary. The Lab reaches for the RIGHT one of the two: the A/B panel takes the group-sequential
+boundary, the gauntlet takes this width rule. Same-looking machinery, different question.
+
+Verified end to end in the browser on the branch that matters most — the one where the budget runs
+out first:
+
+> Pilot measured 30% and sized the run to 10 of 10 games per opponent. **Your game budget ran out
+> before ±5% was reached — the interval below is wider than that.**
+
+A precision run that quietly reported the requested width would be inventing confidence it had not
+paid for, so the budget-limited path says so in as many words.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
