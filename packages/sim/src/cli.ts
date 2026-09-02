@@ -66,6 +66,7 @@ import { createWorkerPool, machineParallelism, runJobsOnWorkers, type WorkerPool
 import { suggestSwaps, suggestSwapsWith, type SuggestOptions, type SuggestionReport } from './suggest.js';
 import { createWorkerArmTransport } from './suggest-workers.js';
 import { planSequentialLooks, type SequentialOutcome } from './sequential.js';
+import { decidePrecision, planPrecision, type PrecisionDecision } from './precision.js';
 import { DEFAULT_DECK_RULES } from './config.js';
 import type { HistoryRejection, SuggestionHistory } from './suggest-history.js';
 import { DEFAULT_SUGGEST_CONFIG } from './suggest-config.js';
@@ -105,6 +106,7 @@ Usage:
   npm run sim -- decks
   npm run sim -- match <deckA> <deckB> [--games N] [--seed S] [--pilot ${SELECTABLE_PILOT_IDS.join('|')}] [--workers W]
   npm run sim -- gauntlet <deck> [--games N] [--seed S] [--pilot ${SELECTABLE_PILOT_IDS.join('|')}] [--workers W]
+                                [--until-precise H]
   npm run sim -- swap <deck> --out "<card>" --in "<card>" [--games N] [--seed S] [--pilot id] [--scope one|playset] [--workers W]
                              [--until-decided [--looks K]]
   npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--max-candidates K] [--seed S]
@@ -125,6 +127,10 @@ Notes:
                on the same protocol, i.e. WORSE than the heuristic it rolls out
                with, and ~5x the hybrid's decision cost. See DESIGN §3.4/§3.4a.
   • --games N is games per matchup (default ${DEFAULT_SIM_CONFIG.defaultGames}).
+  • --until-precise H (gauntlet) plays a small pilot, then sizes the run to reach a
+    win-rate interval of +/-H — a lopsided deck needs far fewer games than a coin
+    flip. It ESTIMATES rather than tests, so it uses a two-stage fixed-width rule
+    and not the boundary below; the interval printed is always the one earned.
   • --until-decided (swap, pilot-ab) plays the budget in K equal windows and STOPS as soon as
     a pre-registered group-sequential boundary is crossed. A decisive swap finishes
     in a quarter of the games; a marginal one runs the full budget and costs nothing
@@ -222,6 +228,8 @@ interface Flags {
   readonly noAdaptive: boolean;
   /** Stop a swap as soon as a pre-registered group-sequential boundary is crossed. */
   readonly untilDecided: boolean;
+  /** Play a gauntlet only until its win-rate interval reaches this half-width. */
+  readonly untilPrecise?: number;
   /** How many looks that boundary is planned for. */
   readonly looks?: number;
   /**
@@ -251,6 +259,7 @@ function parseFlags(args: readonly string[]): Flags {
   let history: string | undefined;
   let noAdaptive = false;
   let untilDecided = false;
+  let untilPrecise: number | undefined;
   let looks: number | undefined;
   let workers: number | undefined;
   let help = false;
@@ -306,6 +315,12 @@ function parseFlags(args: readonly string[]): Flags {
       case '--until-decided':
         untilDecided = true;
         break;
+      case '--until-precise': {
+        const raw = requireValue(arg, args[++i]);
+        untilPrecise = Number(raw);
+        if (!Number.isFinite(untilPrecise)) throw new CliError(`--until-precise needs a number, got "${raw}"`);
+        break;
+      }
       case '--looks':
         looks = parseIntFlag(arg, args[++i]);
         break;
@@ -318,7 +333,7 @@ function parseFlags(args: readonly string[]): Flags {
     }
   }
 
-  return { positionals, games, seed, pilot, pilotA, pilotB, scope, out, in: inCard, cut, maxCandidates, history, noAdaptive, untilDecided, looks, workers, help };
+  return { positionals, games, seed, pilot, pilotA, pilotB, scope, out, in: inCard, cut, maxCandidates, history, noAdaptive, untilDecided, untilPrecise, looks, workers, help };
 }
 
 function requireValue(flag: string, value: string | undefined): string {
@@ -582,16 +597,42 @@ async function cmdGauntlet(flags: Flags): Promise<number> {
 
   const start = performance.now();
   let result: GauntletResult;
-  if (workers > 1) {
+  /** Set only when --until-precise ran, so the report can say what it did. */
+  let precision: PrecisionDecision | undefined;
+  const matchupSeed = (i: number) => gameSeedFor(seed, i);
+  const gauntletInit: WorkerInitSpec = {
+    heroName: hero.name,
+    opponentNames: gauntletDecks.map((d) => d.name),
+    pilotId: flags.pilot ?? DEFAULT_PILOT_ID,
+  };
+  if (flags.untilPrecise !== undefined) {
+    /*
+     * TWO STAGES, ONE DECISION (§3.94). A gauntlet ESTIMATES a win rate, so the
+     * group-sequential boundary `swap` uses would be answering the wrong
+     * question: there is no null here to reject. The pilot sizes the run, the
+     * run reports the interval it actually earned, and nothing peeks in between.
+     */
+    const plan = planPrecision(games, flags.untilPrecise);
+    const local = workers > 1 ? undefined : createParallelContext(gauntletInit);
+    const pool = workers > 1 ? createWorkerPool(gauntletInit, workers) : undefined;
+    const play = async (from: number, to: number) => {
+      if (to <= from) return [] as MatchupSliceResult[];
+      const jobs = planMatchupSlices(gauntletDecks.length, games, workers, matchupSeed, { gameStart: from, gameEnd: to });
+      return local !== undefined
+        ? (jobs.map((job) => executeParallelJob(local, job)) as MatchupSliceResult[])
+        : ((await (pool as WorkerPool).run(jobs)) as readonly MatchupSliceResult[]);
+    };
+    const slices: MatchupSliceResult[] = [...(await play(0, plan.pilotGames))];
+    const pilot = mergeGauntletFromSlices(slices);
+    precision = decidePrecision(plan, pilot.totalWins, pilot.totalGames, gauntletDecks.length);
+    slices.push(...(await play(plan.pilotGames, precision.totalGames)));
+    await pool?.close();
+    result = mergeGauntletFromSlices(slices);
+  } else if (workers > 1) {
     // Matchup i's seed is `gameSeedFor(seed, i)` — exactly `runGauntlet`'s
     // derivation, stamped on the jobs so a worker never re-derives policy.
-    const jobs = planMatchupSlices(gauntletDecks.length, games, workers, (i) => gameSeedFor(seed, i));
-    const init: WorkerInitSpec = {
-      heroName: hero.name,
-      opponentNames: gauntletDecks.map((d) => d.name),
-      pilotId: flags.pilot ?? DEFAULT_PILOT_ID,
-    };
-    const slices = (await runJobsOnWorkers(jobs, init, workers)) as readonly MatchupSliceResult[];
+    const jobs = planMatchupSlices(gauntletDecks.length, games, workers, matchupSeed);
+    const slices = (await runJobsOnWorkers(jobs, gauntletInit, workers)) as readonly MatchupSliceResult[];
     result = mergeGauntletFromSlices(slices);
   } else {
     result = runGauntlet(hero, gauntletDecks, pilots, games, seed, lab.registry);
@@ -609,6 +650,18 @@ async function cmdGauntlet(flags: Flags): Promise<number> {
     `\nOverall: ${result.totalWins}/${result.totalGames} = ${ciStr(result.overallWinRate)}` +
       (result.totalDraws > 0 ? `  (${result.totalDraws} timeout draws)` : ''),
   );
+  if (precision) {
+    // Told, never implied: the reader asked for a budget and got a different
+    // number of games, and the interval above is the one actually earned — the
+    // target is what was aimed at, not what is being claimed.
+    console.log(
+      `Precision run: pilot estimated ${(precision.pilotWinRate * 100).toFixed(1)}% and sized the run at ` +
+        `${precision.totalGames}/${games} games per opponent` +
+        (precision.budgetLimited
+          ? ` — the budget, not the target, was the limit, so the interval above is wider than +/-${flags.untilPrecise}.`
+          : `, reaching the requested +/-${flags.untilPrecise}.`),
+    );
+  }
   console.log(
     `${result.totalGames} games in ${elapsed.toFixed(2)}s → ${rateStr(result.totalGames, elapsed)}${workersNote(workers)}`,
   );
