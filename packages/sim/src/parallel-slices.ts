@@ -382,11 +382,24 @@ export function planPairedSlices(
   workerCount: number,
   swapSeed: number,
   swap: { readonly out: string; readonly in: string; readonly scope: SwapScope },
+  /**
+   * Plan only games `[gameStart, gameEnd)` of the run, rather than all of it.
+   *
+   * `gamesPerMatchup` stays the FULL total because every game seeds off its
+   * ABSOLUTE index — so playing [0,G) and then [G,2G) yields exactly the games
+   * [0,2G) would have. That is what lets a group-sequential run (§3.92) stop
+   * early without changing a single game it already played.
+   */
+  window?: { readonly gameStart: number; readonly gameEnd: number },
 ): readonly PairedSliceJob[] {
-  const parts = slicesPerUnit(opponentCount, gamesPerMatchup, workerCount);
+  const from = window?.gameStart ?? 0;
+  const to = window?.gameEnd ?? gamesPerMatchup;
+  const span = Math.max(0, to - from);
+  const parts = slicesPerUnit(opponentCount, span, workerCount);
   const jobs: PairedSliceJob[] = [];
   for (let opponentIndex = 0; opponentIndex < opponentCount; opponentIndex++) {
-    for (const range of splitGameRange(gamesPerMatchup, parts)) {
+    for (const piece of splitGameRange(span, parts)) {
+      const range = { gameStart: from + piece.gameStart, gameEnd: from + piece.gameEnd };
       jobs.push({
         kind: 'paired-slice',
         jobId: jobs.length,

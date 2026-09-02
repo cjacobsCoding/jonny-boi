@@ -51,6 +51,8 @@ import {
   mergeSoakFromParts,
   mergeSwapFromSlices,
   planMatchupSlices,
+  createParallelContext,
+  executeParallelJob,
   planPairedSlices,
   planPilotAbSlices,
   planSoakMixedSlices,
@@ -60,9 +62,10 @@ import {
   type SoakPartResult,
   type WorkerInitSpec,
 } from './parallel-slices.js';
-import { createWorkerPool, machineParallelism, runJobsOnWorkers } from './parallel-host.js';
+import { createWorkerPool, machineParallelism, runJobsOnWorkers, type WorkerPool } from './parallel-host.js';
 import { suggestSwaps, suggestSwapsWith, type SuggestOptions, type SuggestionReport } from './suggest.js';
 import { createWorkerArmTransport } from './suggest-workers.js';
+import { planSequentialLooks, type SequentialOutcome } from './sequential.js';
 import { DEFAULT_DECK_RULES } from './config.js';
 import type { HistoryRejection, SuggestionHistory } from './suggest-history.js';
 import { DEFAULT_SUGGEST_CONFIG } from './suggest-config.js';
@@ -103,6 +106,7 @@ Usage:
   npm run sim -- match <deckA> <deckB> [--games N] [--seed S] [--pilot ${SELECTABLE_PILOT_IDS.join('|')}] [--workers W]
   npm run sim -- gauntlet <deck> [--games N] [--seed S] [--pilot ${SELECTABLE_PILOT_IDS.join('|')}] [--workers W]
   npm run sim -- swap <deck> --out "<card>" --in "<card>" [--games N] [--seed S] [--pilot id] [--scope one|playset] [--workers W]
+                             [--until-decided [--looks K]]
   npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--max-candidates K] [--seed S]
                                [--pilot id] [--history <file>] [--no-adaptive] [--workers W]
   npm run sim -- pilot-ab [--pilot-a id] [--pilot-b id] [--games N] [--seed S] [--workers W]
@@ -120,6 +124,12 @@ Notes:
                on the same protocol, i.e. WORSE than the heuristic it rolls out
                with, and ~5x the hybrid's decision cost. See DESIGN §3.4/§3.4a.
   • --games N is games per matchup (default ${DEFAULT_SIM_CONFIG.defaultGames}).
+  • --until-decided (swap) plays the budget in K equal windows and STOPS as soon as
+    a pre-registered group-sequential boundary is crossed. A decisive swap finishes
+    in a quarter of the games; a marginal one runs the full budget and costs nothing
+    extra. It is NOT "stop at the first p < 0.05" — that inflates the false-positive
+    rate badly. Every look is judged at a tighter Pocock threshold (0.0182 for the
+    default K=4) so the RUN-WIDE error rate is still 0.05. See sequential.ts.
   • --workers W fans the run out over W worker threads (every command).
     Results are BYTE-IDENTICAL to the sequential run — same rows,
     same CIs, same verdicts — because every game's seed comes from its absolute
@@ -209,6 +219,10 @@ interface Flags {
   readonly history?: string;
   /** suggest: use the legacy fixed-budget sweep instead of the adaptive search. */
   readonly noAdaptive: boolean;
+  /** Stop a swap as soon as a pre-registered group-sequential boundary is crossed. */
+  readonly untilDecided: boolean;
+  /** How many looks that boundary is planned for. */
+  readonly looks?: number;
   /**
    * Worker threads to fan the run out over. Absent = AUTO (parallel when the
    * run is big enough to pay the workers' startup — see `parallel-config.ts`);
@@ -235,6 +249,8 @@ function parseFlags(args: readonly string[]): Flags {
   let maxCandidates: number | undefined;
   let history: string | undefined;
   let noAdaptive = false;
+  let untilDecided = false;
+  let looks: number | undefined;
   let workers: number | undefined;
   let help = false;
 
@@ -286,6 +302,12 @@ function parseFlags(args: readonly string[]): Flags {
       case '--no-adaptive':
         noAdaptive = true;
         break;
+      case '--until-decided':
+        untilDecided = true;
+        break;
+      case '--looks':
+        looks = parseIntFlag(arg, args[++i]);
+        break;
       case '--workers':
         workers = parseIntFlag(arg, args[++i]);
         break;
@@ -295,7 +317,7 @@ function parseFlags(args: readonly string[]): Flags {
     }
   }
 
-  return { positionals, games, seed, pilot, pilotA, pilotB, scope, out, in: inCard, cut, maxCandidates, history, noAdaptive, workers, help };
+  return { positionals, games, seed, pilot, pilotA, pilotB, scope, out, in: inCard, cut, maxCandidates, history, noAdaptive, untilDecided, looks, workers, help };
 }
 
 function requireValue(flag: string, value: string | undefined): string {
@@ -402,6 +424,13 @@ function plannedWorkers(flags: Flags, totalGames: number, unitCount: number, gam
 
 /** The throughput suffix naming the pool, so a parallel reading is never
  * mistaken for a single-thread one when someone quotes it later. */
+/**
+ * Looks a `--until-decided` run takes by default. Four is the usual clinical
+ * choice: enough to stop early on a decisive swap, few enough that the Pocock
+ * penalty per look (0.0182 against 0.05) stays mild.
+ */
+const DEFAULT_SEQUENTIAL_LOOKS = 4;
+
 function workersNote(workers: number): string {
   return workers > 1 ? ` (${workers} workers)` : '';
 }
@@ -725,6 +754,83 @@ async function cmdPilotAb(flags: Flags): Promise<number> {
 /** How often `pilot-ab` prints a progress line, in deck pairs. */
 const PILOT_AB_PROGRESS_EVERY_PAIRS = 6;
 
+/**
+ * Play a swap in group-sequential WINDOWS, stopping when the boundary is crossed.
+ *
+ * The windows are prefixes of the same run — every game seeds off its absolute
+ * index, so stopping after window k plays exactly the games a full run's first k
+ * windows would have (`sequential.test.ts` pins this). Nothing about the
+ * experiment changes; the only difference is how much of it gets played.
+ *
+ * ⚠️ The boundary is PRE-REGISTERED, not chosen after looking. `planSequentialLooks`
+ * fixes the checkpoints and the per-look threshold before the first game, which is
+ * what keeps the overall false-positive rate at the alpha the report quotes —
+ * see `sequential.ts` for why the naive "stop at the first p < 0.05" does not.
+ */
+async function runSwapInWindows(
+  args: {
+    readonly baseDeck: Deck;
+    readonly swap: { readonly out: string; readonly in: string };
+    readonly scope: SwapScope;
+    readonly gauntletDecks: readonly LoadedDeck[];
+    readonly games: number;
+    readonly seed: number;
+    readonly workers: number;
+    readonly looks: number;
+    readonly init: WorkerInitSpec;
+  },
+): Promise<{ readonly evaluation: SwapEvaluation; readonly outcome: SequentialOutcome }> {
+  const plan = planSequentialLooks(args.games, args.looks);
+  // One in-process context for the whole run when there is no pool — the SAME
+  // executor the workers use, so the two transports cannot diverge.
+  const local = args.workers > 1 ? undefined : createParallelContext(args.init);
+  /*
+   * ⚠️ ONE POOL FOR EVERY WINDOW. `runJobsOnWorkers` is pool-run-close, so calling
+   * it per window hires six fresh worker threads each time — and worker boot is the
+   * dominant cost of a short run. Measured: four windows through the one-shot helper
+   * turned a 4x cut in GAMES into only a 1.95x cut in WALL CLOCK. Holding the pool is
+   * what makes the saved games actually show up as saved time.
+   */
+  const pool = args.workers > 1 ? createWorkerPool(args.init, args.workers) : undefined;
+
+  const slices: PairedSliceResult[] = [];
+  let from = 0;
+  let looksTaken = 0;
+  let evaluation: SwapEvaluation | undefined;
+
+  for (const checkpoint of plan.checkpoints) {
+    const jobs = planPairedSlices(
+      args.gauntletDecks.length,
+      args.games,
+      args.workers,
+      args.seed,
+      { out: args.swap.out, in: args.swap.in, scope: args.scope },
+      { gameStart: from, gameEnd: checkpoint },
+    );
+    const played =
+      local !== undefined
+        ? (jobs.map((job) => executeParallelJob(local, job)) as PairedSliceResult[])
+        : ((await (pool as WorkerPool).run(jobs)) as readonly PairedSliceResult[]);
+    slices.push(...played);
+    from = checkpoint;
+    looksTaken += 1;
+    evaluation = mergeSwapFromSlices(slices, args.swap);
+    if (evaluation.pValue < plan.perLookAlpha) break;
+  }
+
+  await pool?.close();
+  if (!evaluation) throw new CliError('the sequential plan produced no games to play');
+  return {
+    evaluation,
+    outcome: {
+      gamesPlayed: from,
+      looksTaken,
+      stoppedEarly: from < args.games,
+      perLookAlpha: plan.perLookAlpha,
+    },
+  };
+}
+
 async function cmdSwap(flags: Flags): Promise<number> {
   const [heroSel] = flags.positionals;
   if (!heroSel) throw new CliError('swap needs a deck: swap <deck> --out X --in Y');
@@ -741,9 +847,33 @@ async function cmdSwap(flags: Flags): Promise<number> {
   const workers = plannedWorkers(flags, games * gauntletDecks.length * 2, gauntletDecks.length, games);
 
   let evaluation: SwapEvaluation;
+  /** Set only when --until-decided ran, so the report can say what it did. */
+  let sequential: SequentialOutcome | undefined;
   const start = performance.now();
   try {
-    if (workers > 1) {
+    if (flags.untilDecided) {
+      const scope = flags.scope ?? DEFAULT_SWAP_SCOPE;
+      // Validate the swap HERE, cheaply, before hiring anyone — the same reason
+      // the pooled branch below does.
+      applySwap(baseDeck, { out: flags.out, in: flags.in }, lab.pool, scope);
+      const windowed = await runSwapInWindows({
+        baseDeck,
+        swap: { out: flags.out, in: flags.in },
+        scope,
+        gauntletDecks,
+        games,
+        seed,
+        workers,
+        looks: flags.looks ?? DEFAULT_SEQUENTIAL_LOOKS,
+        init: {
+          heroName: baseDeck.name,
+          opponentNames: gauntletDecks.map((d) => d.name),
+          pilotId: flags.pilot ?? DEFAULT_PILOT_ID,
+        },
+      });
+      evaluation = windowed.evaluation;
+      sequential = windowed.outcome;
+    } else if (workers > 1) {
       const scope = flags.scope ?? DEFAULT_SWAP_SCOPE;
       // Validate the swap HERE, cheaply, before hiring anyone: an unknown card
       // or an out-card not in the deck must print the same one-line error the
@@ -804,6 +934,19 @@ async function cmdSwap(flags: Flags): Promise<number> {
   console.log(
     `\n${matchesPlayed} matches in ${elapsed.toFixed(2)}s → ${(matchesPlayed / elapsed).toFixed(0)} games/sec${workersNote(workers)}`,
   );
+  if (sequential) {
+    // Honest, not implied: the games NOT played are the whole point, and the
+    // threshold each look was judged against is what makes the verdict readable.
+    const unspent = 100 - (sequential.gamesPlayed / games) * 100;
+    console.log(
+      `Group-sequential: stopped after ${sequential.looksTaken} of ${flags.looks ?? DEFAULT_SEQUENTIAL_LOOKS} looks, ` +
+        `${sequential.gamesPlayed}/${games} games per matchup` +
+        (sequential.stoppedEarly ? ` — ${unspent.toFixed(0)}% of the budget unspent.` : ` (ran the full budget).`),
+    );
+    console.log(
+      `Each look judged at alpha ${sequential.perLookAlpha} (Pocock), so the run-wide false-positive rate is still ${DEFAULT_STATS_CONFIG.alpha}.`,
+    );
+  }
   console.log(FIDELITY_NOTE);
   return 0;
 }

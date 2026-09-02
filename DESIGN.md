@@ -1683,6 +1683,47 @@ optimistic bound that no real implementation reaches. Realistically achieved tod
 and the statistics permit combined, and only if every ceiling were reached exactly.** That is the
 honest end of the speed question.
 
+### 3.92 `--until-decided` — a swap that stops when the answer is in — ✅ done
+
+§3.87 measured this axis (upper bound 1.99×) and deliberately did **not** build it, because the naive
+version — peek after every game, stop at the first `p < 0.05` — is the same error as §3.82's
+seed-shopping in the time dimension. This is the version that is sound, and it ships.
+
+**The mechanism: a pre-registered Pocock boundary.** Fix the number of looks *in advance*, and require
+every look to clear the same, tighter threshold. `sequential.ts` holds the constants as a **closed
+table** — a look count that is not tabulated is refused rather than interpolated, because an
+interpolated boundary is an unknown error rate wearing a number's clothes. At the default K = 4 each
+look is judged at **0.0182**, so the run-wide false-positive rate is still the 0.05 the report quotes.
+
+**The enabler: windows are prefixes.** `planPairedSlices` gained an optional `window`, and because
+every game seeds off its **absolute** (opponent × game) index, playing `[0,G)` then `[G,2G)` yields
+exactly the games `[0,2G)` would. Stopping early therefore plays *fewer* games, never *different*
+ones — `sequential.test.ts` pins that against `evaluateSwap` with `JSON.stringify` equality.
+
+**Measured** (`swap Mono-Red Aggro`, 200 games/matchup, 6 workers):
+
+| swap | mode | games | search | verdict |
+|---|---|---|---|---|
+| Bolt → Swords (decisive) | full | 3,200 | 10.77s | WORSE |
+| Bolt → Swords | `--until-decided` | **800** | **5.75s** | WORSE — *stopped after 1 of 4 looks, 75% of budget unspent* |
+| Goblin Guide → Krenko's (marginal) | full | 3,200 | 10.55s | BETTER |
+| Goblin Guide → Krenko's | `--until-decided` | 3,200 | 10.79s | BETTER — *ran the full budget* |
+
+**Both halves matter.** A decisive swap costs **a quarter of the games**; a marginal one runs the full
+budget at **the same wall clock** (14.1s either way) — the feature is free when it cannot help.
+
+⚠️ **And one bug found by measuring rather than assuming.** The first implementation called
+`runJobsOnWorkers` per window — which is pool-*run*-close, so every window hired six fresh worker
+threads. Worker boot dominates a short run, and a 4× cut in *games* came out as only a 1.95× cut in
+*wall clock*. Holding one `createWorkerPool` across the windows is what makes saved games show up as
+saved time, and it is also why the marginal case now costs nothing.
+
+**What this is worth against the goal.** §3.91 priced the speed ceilings as
+1.48 × 3.60 × 1.99 ≈ 10.6× stacked at their absolute bounds. This converts part of that third factor
+from a bound into a shipped feature: **4× fewer games on a decisive `swap`**, which is the command a
+user runs while waiting. It does not apply to `suggest` — the adaptive ladder already eliminates
+candidates between waves, which is the same saving one level up (§3.6).
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
