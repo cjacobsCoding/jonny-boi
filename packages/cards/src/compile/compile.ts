@@ -100,6 +100,25 @@ const SCALING_KEYWORDS: ReadonlySet<string> = new Set(['double', 'triple']);
 const COST_ASSIST_KEYWORDS: ReadonlySet<string> = new Set(['convoke', 'improvise', 'delve']);
 
 
+/**
+ * Keywords whose whole implementation is a TRIGGERED ABILITY compiled from the
+ * printed line — bushido and the combat-declaration family beside it.
+ *
+ * Scryfall lists the bare word ("Bushido") while the printed line carries the
+ * payload ("Bushido 1"), so without this the sweep reports the keyword as
+ * unmodelled one line after implementing it — the same false report Kicker,
+ * Flashback and Affinity each have a guard for. This is the TABLE those guards
+ * should have been: adding the next such keyword is a ROW, not a branch.
+ *
+ * Keyed on the compiled trigger LABEL rather than on its condition, for two
+ * reasons. It is per-keyword precise — flanking and rampage watch the SAME
+ * event as bushido, and a condition key would let one that compiled absolve a
+ * sibling that did not. And it keeps the evidence-based contract every guard
+ * here holds to: a line the rule table did not match compiles no trigger, so
+ * the card still reports honestly through that line’s own `missing` entry.
+ */
+const TRIGGER_BACKED_KEYWORDS: ReadonlySet<string> = new Set(['bushido']);
+
 const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freeze({
   scry: 'scry',
   surveil: 'surveil',
@@ -1280,6 +1299,14 @@ export function compileCard(card: CompilableCard): CompileResult {
     // entry (the scry/mill template hints).
     const backingPrimitive = PRIMITIVE_BACKED_KEYWORDS[word];
     if (backingPrimitive !== undefined && primitivesCompiled.has(backingPrimitive)) continue;
+    // A keyword whose implementation IS a triggered ability: the evidence is a
+    // compiled trigger labelled with the keyword (see TRIGGER_BACKED_KEYWORDS).
+    if (
+      TRIGGER_BACKED_KEYWORDS.has(word) &&
+      assembly.triggers.some((t) => t.label?.toLowerCase().startsWith(word))
+    ) {
+      continue;
+    }
     // Cycling and its typed variants: Scryfall lists "Cycling", "Typecycling"
     // and "Landcycling" as keywords, and the printed line has already compiled
     // into `assembly.cycling`. A cycling line that did NOT compile (an {X}

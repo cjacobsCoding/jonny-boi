@@ -724,6 +724,50 @@ describe('compileCard — templated cards outside the curated pool', () => {
     expect(horse.definition.keywords).toMatchObject({ horsemanship: true });
     expect(horse.definition.keywords?.blockRestriction?.blockerMustHaveAnyOf).toEqual(['horsemanship']);
   });
+  it('compiles bushido into a blocks-or-becomes-blocked trigger (§3.103)', () => {
+    // Scryfall prints the payload on the LINE ("Bushido 1") and the bare word in
+    // `keywords` ("Bushido"). Both have to be answered: the line by the rule, the
+    // word by the sweep's TRIGGER_BACKED_KEYWORDS table. Answering only the first
+    // is what this card did for one build — the ability compiled and the card
+    // still reported the keyword as unmodelled.
+    const compile = (name: string, line: string) =>
+      compileCard(
+        makeCard({
+          name,
+          typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Rat', 'Samurai'] },
+          manaCost: { generic: 3, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: [] },
+          power: 3,
+          toughness: 2,
+          colors: ['B'] as never,
+          oracleText: line,
+          keywords: ['Bushido'],
+        }),
+      );
+
+    const one = compile('Nezumi Ronin', 'Bushido 1');
+    expect(one.status, `missing: ${JSON.stringify(one.missing)}`).toBe('complete');
+    expect(one.definition.triggers).toHaveLength(1);
+    const trigger = one.definition.triggers?.[0];
+    expect(trigger?.condition.on).toBe('blocksOrBecomesBlocked');
+    expect(trigger?.effects).toEqual([
+      { primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } },
+    ]);
+
+    // The number is the whole payload, so it has to reach the pump — a bushido
+    // that always pumped +1/+1 would play every Samurai in the block weaker
+    // than printed.
+    const two = compile('Kentaro, the Smiling Cat', 'Bushido 2');
+    expect(two.status, `missing: ${JSON.stringify(two.missing)}`).toBe('complete');
+    expect(two.definition.triggers?.[0]?.effects).toEqual([
+      { primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } },
+    ]);
+
+    // ⚠️ The sweep guard is keyed on COMPILED EVIDENCE, not on the word. A
+    // bushido whose line the rule table cannot match must still report, or the
+    // table would absolve exactly the cards it failed to implement.
+    const unparsed = compile('Bushido Mystery', 'Bushido X');
+    expect(unparsed.status).not.toBe('complete');
+  });
   it('compiles "enters tapped" onto the definition', () => {
     const result = compileCard(
       makeCard({

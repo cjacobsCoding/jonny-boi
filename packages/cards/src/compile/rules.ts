@@ -4253,6 +4253,30 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // BUSHIDO N (CR 702.45a) — "Whenever this creature blocks or becomes
+    // blocked, it gets +N/+N until end of turn."
+    //
+    // A PATTERN rule and not a `KEYWORD_ABILITY_BUILDERS` entry, because those
+    // builders take no argument and bushido's entire payload is its number.
+    // The body is handed back to the compiler as the Oracle sentence it stands
+    // for, so the pump resolves to `self-pump-until-eot` — the same primitive
+    // every other "~ gets +N/+N" line uses, rather than a second answer to the
+    // same question.
+    id: 'keyword-bushido',
+    description: '"Bushido N" — the blocks-or-becomes-blocked self-pump',
+    pattern: /^bushido ([0-9]+)$/,
+    build(match, ctx) {
+      const amount = Number.parseInt(match[1] ?? '', 10);
+      if (!Number.isFinite(amount)) return null;
+      return triggerFrom(
+        ctx,
+        { on: 'blocksOrBecomesBlocked' },
+        `~ gets +${amount}/+${amount} until end of turn`,
+        `Bushido ${amount}`,
+      );
+    },
+  },
+  {
     id: 'trigger-attacks',
     description: '"Whenever ~ attacks, BODY"',
     pattern: /^whenever ~ attacks, (.+)$/,
