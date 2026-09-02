@@ -17,7 +17,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "sim": "tsx src/cli.ts"
+    "sim": "tsx src/cli.ts",
+    "sim:fast": "node scripts/sim-fast.mjs"
   },
   "dependencies": {
     "@jonny-boi/core": "*",
