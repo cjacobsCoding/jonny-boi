@@ -73,6 +73,24 @@ const SHOW = (() => {
   return at >= 0 ? Number(process.argv[at + 1]) : 0;
 })();
 
+/**
+ * Which band to print. The bands are different questions and mixing them hides
+ * both: "we attack, they pass" is about appetite, "both attack, different set" is
+ * about roster. `--band set|pass|attack|any`.
+ */
+const BAND = (() => {
+  const at = process.argv.indexOf('--band');
+  return at >= 0 ? process.argv[at + 1] : 'any';
+})();
+
+function inBand(mine, theirs) {
+  if (BAND === 'any') return true;
+  if (BAND === 'set') return mine.kind === theirs.kind && mine.kind === 'declareAttackers';
+  if (BAND === 'pass') return mine.kind === 'declareAttackers' && theirs.kind === 'passPriority';
+  if (BAND === 'attack') return mine.kind === 'passPriority' && theirs.kind === 'declareAttackers';
+  return true;
+}
+
 const shown = [];
 
 function describeCreature(c, index) {
@@ -147,7 +165,7 @@ for (const [aName, bName] of MATCHUPS) {
           bump(byKind, `${mine.kind} -> ${theirs.kind}`);
           bump(byStep, s.step);
           bump(swaps, mine.kind === theirs.kind ? `same kind, different choice: ${mine.kind}` : 'different kind');
-          if (shown.length < SHOW) shown.push(snapshot(s, signature(mine), signature(theirs)));
+          if (shown.length < SHOW && inBand(mine, theirs)) shown.push(snapshot(s, signature(mine), signature(theirs)));
         }
       }
       const action = base.chooseAction({
