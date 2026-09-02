@@ -256,7 +256,15 @@ export interface HeuristicFeatures {
    * `lethalAlphaStrike`. Default ON; measured stronger, DESIGN §3.74.
    */
   readonly alphaStrike?: boolean;
+  /**
+   * Score whole ATTACK SETS against the defence's best answer, instead of judging
+   * each attacker as if every blocker were free to meet it. DESIGN §3.83.
+   */
+  readonly setAttack?: boolean;
 }
+
+/** Is set-level attack scoring on by default? See DESIGN §3.83 for the A/B. */
+const SET_ATTACK_DEFAULT = true;
 
 /** Build the heuristic pilot with the given (tunable) weights. */
 export function createHeuristicPilot(
@@ -264,12 +272,13 @@ export function createHeuristicPilot(
   features: HeuristicFeatures = {},
 ): Pilot {
   const alphaStrike = features.alphaStrike ?? true;
+  const setAttack = features.setAttack ?? SET_ATTACK_DEFAULT;
   return {
     id: HEURISTIC_PILOT_ID,
     description: 'Plays sensibly: develops mana, removes threats, develops the board, attacks/blocks for value.',
     chooseAction(ctx: DecisionContext): GameAction {
       try {
-        return decide(ctx, weights, alphaStrike);
+        return decide(ctx, weights, alphaStrike, setAttack);
       } catch {
         // Robustness: never throw on a weird state. Fall back to the one move the
         // engine is guaranteed to accept — which is NOT always passing: while a
@@ -379,7 +388,12 @@ function heuristicWillPass(view: GameState): boolean {
  */
 const NO_REASON = '';
 
-function decide(ctx: DecisionContext, weights: HeuristicWeights, alphaStrike = true): GameAction {
+function decide(
+  ctx: DecisionContext,
+  weights: HeuristicWeights,
+  alphaStrike = true,
+  setAttack = SET_ATTACK_DEFAULT,
+): GameAction {
   const { view, legalActions } = ctx;
   const me = view.priorityPlayer;
   const explain = ctx.trace !== undefined;
@@ -422,7 +436,7 @@ function decide(ctx: DecisionContext, weights: HeuristicWeights, alphaStrike = t
 
   // Combat declarations are their own decision shape.
   if (view.step === 'declareAttackers' && me === view.activePlayer) {
-    const attack = chooseAttack(ctx, weights, index, alphaStrike);
+    const attack = chooseAttack(ctx, weights, index, alphaStrike, setAttack);
     if (attack) return attack;
   }
   if (view.step === 'declareBlockers' && me === defendingPlayer(view)) {
@@ -2277,11 +2291,277 @@ function lethalAlphaStrike(
  * wins/breaks even on the likely trade. Returns a (possibly empty) narrowed
  * `declareAttackers` the engine validates.
  */
+/*
+ * ATTACKING IS A SET DECISION, NOT N INDEPENDENT ONES (§3.83).
+ *
+ * `attackIsProfitable` judges each attacker as though every enemy blocker were
+ * free to meet it. That is true of the FIRST attacker and false of every one
+ * after: blockers are a finite, SHARED resource, and a defender with two bodies
+ * cannot punish four attackers however bad each looks alone. The measurement that
+ * pointed here (`bench/disagreement.mjs`): 100% of this pilot's disagreements with
+ * `lookahead` are in `declareAttackers`, and 36.2% of those are both pilots
+ * attacking with a DIFFERENT SET — not a different appetite, a different roster.
+ *
+ * So the set is scored as a whole: propose a few candidate attacks, model the
+ * defence's best answer to each, and send the one that comes out ahead.
+ *
+ * ⚠️ THE DEFENDER MODEL IS GREEDY, AND DELIBERATELY SO. Optimal block assignment
+ * is a matching problem, and this runs inside a decision that costs microseconds
+ * (`bench/pilot-decide-bench.mjs`). A greedy defender — best block first — is the
+ * same model the per-attacker code already uses, applied once to the whole attack
+ * instead of once per attacker. Sharing the model matters more than sharpening it:
+ * if this scored attacks with a better defender than the rest of the pilot
+ * assumes, the two halves would disagree about the same board.
+ *
+ * ⚠️ PERFORMANCE IS WHY THIS READS AS IT DOES. The first version recomputed
+ * `power`/`toughness`/`canBlockByEvasion` inside every candidate's scoring loop
+ * and cost 11% of sim throughput — a rule-7 regression that would have had to be
+ * paid back later. Everything that depends only on the BOARD is computed once
+ * into flat arrays below, and each candidate set is then scored by reading them.
+ */
+
+/** One decision's worth of pre-computed combat facts — built once, read per set. */
+interface AttackMatrix {
+  readonly ids: readonly InstanceId[];
+  readonly power: Float64Array;
+  readonly toughness: Float64Array;
+  /** Face value of connecting: damage plus whatever the hit sets off. */
+  readonly faceValue: Float64Array;
+  /** Our loss if this attacker dies (already weighted); 0 when it is doomed anyway. */
+  readonly ourLoss: Float64Array;
+  readonly blockerPower: Float64Array;
+  readonly blockerToughness: Float64Array;
+  /** Their loss if this blocker dies (already weighted). */
+  readonly theirLoss: Float64Array;
+  /** Value to the DEFENDER of blocker b meeting attacker a, or -1 when illegal. */
+  readonly blockValue: Float64Array;
+  readonly attackerCount: number;
+  readonly blockerCount: number;
+}
+
+const ILLEGAL_BLOCK = -1;
+
+function buildAttackMatrix(
+  eligible: readonly InstanceId[],
+  enemyBlockers: readonly CardInstance[],
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+  view: PilotView,
+): AttackMatrix | undefined {
+  const doomed = delayedRemovalTargets(view);
+  /*
+   * ⚠️ ONE PASS FOR ATTACHMENTS, NOT ONE PER ATTACKER. `saboteurTriggerCount`
+   * walks the whole battlefield looking for things attached to its argument, so
+   * calling it per eligible attacker is O(attackers x battlefield) inside a
+   * decision that runs hundreds of thousands of times a sim. The hosts are
+   * collected here in a single sweep and read back in O(1) below.
+   */
+  const attachedSaboteurs = new Map<InstanceId, number>();
+  const battlefield = view.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    const host = perm.attachedTo;
+    // `!= null` for the same reason the engine uses it: an instance built before
+    // this field existed must read as unattached.
+    if (host == null) continue;
+    const extra = countCombatDamageTriggers(perm.def.triggers, 'attachedHost');
+    if (extra > 0) attachedSaboteurs.set(host, (attachedSaboteurs.get(host) ?? 0) + extra);
+  }
+  const attackers: CardInstance[] = [];
+  const ids: InstanceId[] = [];
+  for (const id of eligible) {
+    const found = findInstance(view, id);
+    if (found) {
+      attackers.push(found);
+      ids.push(id);
+    }
+  }
+  if (attackers.length === 0) return undefined;
+
+  const n = attackers.length;
+  const m = enemyBlockers.length;
+  const matrix: AttackMatrix = {
+    ids,
+    power: new Float64Array(n),
+    toughness: new Float64Array(n),
+    faceValue: new Float64Array(n),
+    ourLoss: new Float64Array(n),
+    blockerPower: new Float64Array(m),
+    blockerToughness: new Float64Array(m),
+    theirLoss: new Float64Array(m),
+    blockValue: new Float64Array(n * m),
+    attackerCount: n,
+    blockerCount: m,
+  };
+
+  for (let a = 0; a < n; a++) {
+    const attacker = attackers[a] as CardInstance;
+    const pow = power(attacker, index);
+    const tou = toughness(attacker, index);
+    matrix.power[a] = pow;
+    matrix.toughness[a] = tou;
+    const saboteurs =
+      countCombatDamageTriggers(attacker.def.triggers, 'self') +
+      (attachedSaboteurs.get(attacker.instanceId) ?? 0);
+    matrix.faceValue[a] = weights.faceDamageValue * pow + weights.attackSaboteurTriggerValue * saboteurs;
+    // A creature the rules are about to take away costs its controller nothing —
+    // the same pricing `attackIsProfitable` applies (CR 603.7).
+    matrix.ourLoss[a] = doomed.has(attacker.instanceId) ? 0 : weights.ownCreatureLossPerStat * (pow + tou);
+  }
+  for (let b = 0; b < m; b++) {
+    const blocker = enemyBlockers[b] as CardInstance;
+    const pow = power(blocker, index);
+    const tou = toughness(blocker, index);
+    matrix.blockerPower[b] = pow;
+    matrix.blockerToughness[b] = tou;
+    matrix.theirLoss[b] = weights.killEnemyPerStat * (pow + tou);
+  }
+  for (let a = 0; a < n; a++) {
+    const attacker = attackers[a] as CardInstance;
+    // Menace and friends: a lone blocker cannot legally block at all, so no
+    // single-blocker assignment may spend one pretending it can.
+    const needsMany = needsMultipleBlockers(attacker, index);
+    for (let b = 0; b < m; b++) {
+      const blocker = enemyBlockers[b] as CardInstance;
+      if (needsMany || !canBlockByEvasion(attacker, blocker, index)) {
+        matrix.blockValue[a * m + b] = ILLEGAL_BLOCK;
+        continue;
+      }
+      const attackerDies = (matrix.blockerPower[b] as number) >= (matrix.toughness[a] as number);
+      const blockerDies = (matrix.power[a] as number) >= (matrix.blockerToughness[b] as number);
+      matrix.blockValue[a * m + b] =
+        (attackerDies ? weights.killEnemyPerStat * ((matrix.power[a] as number) + (matrix.toughness[a] as number)) : 0) -
+        (blockerDies ? (matrix.theirLoss[b] as number) : 0) +
+        // Blocking always stops the damage, which is worth something even when
+        // nothing dies — otherwise a wall reads as having no reason to block.
+        (matrix.faceValue[a] as number);
+    }
+  }
+  return matrix;
+}
+
+/**
+ * Score one candidate attack from OUR side, after the defence answers it.
+ *
+ * `inSet` is a bitmask over the matrix's attacker order, so a candidate costs no
+ * allocation at all — this is called once per candidate and the candidates are
+ * enumerated per attack.
+ */
+function scoreAttackSet(matrix: AttackMatrix, inSet: number): number {
+  const { attackerCount: n, blockerCount: m } = matrix;
+  let blockedMask = 0;
+  let usedBlockers = 0;
+  let ourLoss = 0;
+  let theirLoss = 0;
+
+  // Greedy: repeatedly take the single best remaining block for the defender,
+  // until no blocker gains by blocking (a defender never blocks for negative value).
+  for (;;) {
+    let bestValue = 0;
+    let bestA = -1;
+    let bestB = -1;
+    for (let a = 0; a < n; a++) {
+      if ((inSet & (1 << a)) === 0 || (blockedMask & (1 << a)) !== 0) continue;
+      for (let b = 0; b < m; b++) {
+        if ((usedBlockers & (1 << b)) !== 0) continue;
+        const value = matrix.blockValue[a * m + b] as number;
+        if (value === ILLEGAL_BLOCK) continue;
+        if (value > bestValue) {
+          bestValue = value;
+          bestA = a;
+          bestB = b;
+        }
+      }
+    }
+    if (bestA < 0 || bestB < 0) break;
+    blockedMask |= 1 << bestA;
+    usedBlockers |= 1 << bestB;
+    if ((matrix.blockerPower[bestB] as number) >= (matrix.toughness[bestA] as number)) {
+      ourLoss += matrix.ourLoss[bestA] as number;
+    }
+    if ((matrix.power[bestA] as number) >= (matrix.blockerToughness[bestB] as number)) {
+      theirLoss += matrix.theirLoss[bestB] as number;
+    }
+  }
+
+  let damage = 0;
+  for (let a = 0; a < n; a++) {
+    if ((inSet & (1 << a)) === 0 || (blockedMask & (1 << a)) !== 0) continue;
+    damage += matrix.faceValue[a] as number;
+  }
+  return damage + theirLoss - ourLoss;
+}
+
+/**
+ * Choose the attack by scoring whole SETS rather than creatures.
+ *
+ * The candidates are deliberately few: the greedy set the per-attacker rule
+ * produces, the all-in set, and each single add/remove from greedy. That is O(n)
+ * scored sets rather than the 2^n of a real search — and the local moves are
+ * exactly the ones the per-attacker rule cannot see, since its error is always
+ * "one more body than the defence can answer" or "one body that should have
+ * stayed home".
+ */
+function bestAttackSet(
+  eligible: readonly InstanceId[],
+  greedy: readonly InstanceId[],
+  enemyBlockers: readonly CardInstance[],
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+  view: PilotView,
+): InstanceId[] | undefined {
+  // ⚠️ THE BITMASK CAPS THE ROSTER. Above 30 eligible attackers the masks would
+  // overflow, and a wrong answer from a silent overflow is far worse than
+  // declining to refine — the per-attacker roster is still a legal, sane attack.
+  if (eligible.length === 0 || eligible.length > 30) return undefined;
+  // With no blockers at all there is nothing to assign: every attacker connects,
+  // so the best set is "everything that deals damage" and no search is needed.
+  // This is the common case in the games that matter, and skipping it here is
+  // most of why this rule is affordable.
+  if (enemyBlockers.length === 0 || enemyBlockers.length > 30) return undefined;
+
+  const matrix = buildAttackMatrix(eligible, enemyBlockers, weights, index, view);
+  if (!matrix) return undefined;
+
+  const indexOf = new Map<InstanceId, number>();
+  matrix.ids.forEach((id, at) => indexOf.set(id, at));
+  let greedyMask = 0;
+  for (const id of greedy) {
+    const at = indexOf.get(id);
+    if (at !== undefined) greedyMask |= 1 << at;
+  }
+  const allMask = (1 << matrix.attackerCount) - 1;
+
+  // The incumbent must be BEATEN, not merely matched: an equal score means the
+  // change bought nothing, and holding still is the option with no variance.
+  let bestMask = greedyMask;
+  let bestScore = scoreAttackSet(matrix, greedyMask);
+  const consider = (mask: number): void => {
+    if (mask === bestMask) return;
+    const value = scoreAttackSet(matrix, mask);
+    if (value > bestScore) {
+      bestScore = value;
+      bestMask = mask;
+    }
+  };
+  consider(allMask);
+  for (let a = 0; a < matrix.attackerCount; a++) consider(greedyMask ^ (1 << a));
+
+  // Never send a set that scores worse than staying home entirely.
+  if (bestScore <= 0) return [];
+  const chosen: InstanceId[] = [];
+  for (let a = 0; a < matrix.attackerCount; a++) {
+    if ((bestMask & (1 << a)) !== 0) chosen.push(matrix.ids[a] as InstanceId);
+  }
+  return chosen;
+}
+
 function chooseAttack(
   ctx: DecisionContext,
   weights: HeuristicWeights,
   index: ContinuousIndex,
   alphaStrike: boolean,
+  setAttack: boolean,
 ): GameAction | undefined {
   const { view, legalActions } = ctx;
   const me = view.activePlayer;
@@ -2310,6 +2590,17 @@ function chooseAttack(
       const attacker = findInstance(view, id);
       if (!attacker) continue;
       if (attackIsProfitable(attacker, enemyBlockers, weights, index, view)) chosen.push(id);
+    }
+    if (setAttack) {
+      // The per-attacker pass above is the STARTING POINT, not the answer: it
+      // cannot see that blockers are shared. Re-judge the roster as a set — and
+      // keep the per-attacker roster when the refiner declines (no blockers to
+      // assign, or a board too large for the bitmask).
+      const refined = bestAttackSet(eligible, chosen, enemyBlockers, weights, index, view);
+      if (refined !== undefined) {
+        chosen.length = 0;
+        chosen.push(...refined);
+      }
     }
   }
 
