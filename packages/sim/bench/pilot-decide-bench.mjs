@@ -33,7 +33,7 @@
  *
  * Usage: node packages/sim/bench/pilot-decide-bench.mjs [--games N] [--reps R]
  */
-import { createDefaultAiRegistry, HEURISTIC_PILOT_ID } from '@jonny-boi/ai';
+import { createDefaultAiRegistry, createHeuristicPilot, HEURISTIC_PILOT_ID } from '@jonny-boi/ai';
 import { buildRegistry, loadCardPool } from '@jonny-boi/cards';
 import { applyAction, createGame, createRng, DEFAULT_RULES, generateLegalActions } from '@jonny-boi/core';
 import { SAMPLE_DECKS } from '../dist/data/decks/index.js';
@@ -48,7 +48,13 @@ const REPS = arg('reps', 7);
 
 const pool = loadCardPool({ onWarn: () => {} });
 const registry = buildRegistry();
-const pilot = createDefaultAiRegistry().getPilot(HEURISTIC_PILOT_ID);
+const FEATURE_AT = process.argv.indexOf('--feature');
+// Recorded with the feature OFF — see the timing section for why the corpus must
+// not come from the pilot under test.
+const pilot =
+  FEATURE_AT >= 0
+    ? createHeuristicPilot(undefined, { [process.argv[FEATURE_AT + 1]]: false })
+    : createDefaultAiRegistry().getPilot(HEURISTIC_PILOT_ID);
 const deckOf = (n) => loadDeck(SAMPLE_DECKS.find((d) => d.name === n), pool);
 
 const MATCHUPS = [
@@ -88,28 +94,30 @@ for (const [aName, bName] of MATCHUPS) {
   }
 }
 
-// --- time ONLY the decision function -------------------------------------------
-// A fresh deterministic rng per rep so every rep is the identical workload; the
-// pilot must not be able to tell one rep from another.
-// ⚠️ WARM UP FIRST. The first pass over the corpus is JIT compilation, not the
-// pilot: measured cold it reported a 56% spread across identical reps, which is
-// wide enough to hide any real change. One discarded pass fixes it.
-for (let warm = 0; warm < 2; warm++) {
-  const rng = createRng(999);
-  for (let i = 0; i < corpus.length; i++) {
-    const entry = corpus[i];
-    pilot.chooseAction({ view: entry.view, legalActions: entry.legalActions, rng, registry, rulesConfig: DEFAULT_RULES, observer: undefined });
-  }
-}
+// --- time the decision function ------------------------------------------------
+//
+// ⚠️ WHEN COMPARING TWO PILOTS, BOTH MUST BE TIMED ON THE SAME CORPUS. The corpus
+// above is recorded by PLAYING, so a pilot that plays differently reaches
+// different states and gets a different workload — and then "decisions/sec" is
+// comparing two different questions, not two answers to one. The first attempt at
+// measuring `setAttack`'s cost this way reported it as FASTER than the pilot it
+// slowed down, because its corpus had drifted.
+//
+// So with `--feature`, the corpus is recorded with the feature OFF (the pilot as
+// it was) and BOTH arms are then timed over those same recorded decisions.
+const FEATURE = (() => {
+  const at = process.argv.indexOf('--feature');
+  return at >= 0 ? process.argv[at + 1] : undefined;
+})();
 
-const times = [];
-for (let rep = 0; rep < REPS; rep++) {
+/** One timed pass over the whole corpus. */
+function onePass(subject) {
   const rng = createRng(12345);
   const started = process.hrtime.bigint();
   let sink = 0;
   for (let i = 0; i < corpus.length; i++) {
     const entry = corpus[i];
-    const action = pilot.chooseAction({
+    const action = subject.chooseAction({
       view: entry.view,
       legalActions: entry.legalActions,
       rng,
@@ -119,21 +127,113 @@ for (let rep = 0; rep < REPS; rep++) {
     });
     sink += action.kind.length; // keep the call from being optimised away
   }
-  const seconds = Number(process.hrtime.bigint() - started) / 1e9;
-  times.push(seconds);
   if (sink < 0) console.log('unreachable');
+  return Number(process.hrtime.bigint() - started) / 1e9;
 }
 
-// The MEDIAN is the honest summary: the best of N reps drifts upward with N (it is
-// a minimum of samples), and the worst catches whatever else the machine did.
-const sorted = [...times].sort((a, b) => a - b);
-const best = sorted[Math.floor(sorted.length / 2)];
-const worst = sorted[sorted.length - 1];
-const fastest = sorted[0];
+function summarise(times) {
+  // The MEDIAN is the honest summary: the best of N reps drifts downward in time
+  // with N (it is a minimum of samples), and the worst catches whatever else the
+  // machine happened to be doing.
+  const sorted = [...times].sort((a, b) => a - b);
+  return {
+    median: sorted[Math.floor(sorted.length / 2)],
+    fastest: sorted[0],
+    slowest: sorted[sorted.length - 1],
+  };
+}
+
+/**
+ * Time two pilots against each other, INTERLEAVED.
+ *
+ * ⚠️ ORDER BIAS IS REAL AND IT IS LARGE. Timing one arm to completion and then
+ * the other hands the second arm a hotter process: shared code paths are already
+ * JIT-compiled and the heap is settled. Measured that way, the arm that does
+ * strictly MORE work came out 9.9% FASTER — a result that is obviously impossible
+ * and would have been reported as a free lunch. Alternating the reps, and
+ * alternating which arm goes first WITHIN each rep, cancels it.
+ */
+function timeBoth(a, b, reps) {
+  for (let warm = 0; warm < 2; warm++) {
+    onePass(a);
+    onePass(b);
+  }
+  const aTimes = [];
+  const bTimes = [];
+  for (let rep = 0; rep < reps; rep++) {
+    if (rep % 2 === 0) {
+      aTimes.push(onePass(a));
+      bTimes.push(onePass(b));
+    } else {
+      bTimes.push(onePass(b));
+      aTimes.push(onePass(a));
+    }
+  }
+  return { a: summarise(aTimes), b: summarise(bTimes) };
+}
+
+function timePilot(subject) {
+  // Warm up first: measured cold, identical reps spread >50%, which is wide
+  // enough to hide any real change.
+  for (let warm = 0; warm < 2; warm++) {
+    const rng = createRng(999);
+    for (let i = 0; i < corpus.length; i++) {
+      const entry = corpus[i];
+      subject.chooseAction({ view: entry.view, legalActions: entry.legalActions, rng, registry, rulesConfig: DEFAULT_RULES, observer: undefined });
+    }
+  }
+  const times = [];
+  for (let rep = 0; rep < REPS; rep++) {
+    const rng = createRng(12345);
+    const started = process.hrtime.bigint();
+    let sink = 0;
+    for (let i = 0; i < corpus.length; i++) {
+      const entry = corpus[i];
+      const action = subject.chooseAction({
+        view: entry.view,
+        legalActions: entry.legalActions,
+        rng,
+        registry,
+        rulesConfig: DEFAULT_RULES,
+        observer: undefined,
+      });
+      sink += action.kind.length; // keep the call from being optimised away
+    }
+    times.push(Number(process.hrtime.bigint() - started) / 1e9);
+    if (sink < 0) console.log('unreachable');
+  }
+  // The MEDIAN is the honest summary: the best of N reps drifts downward in time
+  // with N (it is a minimum of samples), and the worst catches whatever else the
+  // machine happened to be doing.
+  const sorted = [...times].sort((a, b) => a - b);
+  return {
+    median: sorted[Math.floor(sorted.length / 2)],
+    fastest: sorted[0],
+    slowest: sorted[sorted.length - 1],
+  };
+}
+
+const show = (label, t) =>
+  console.log(
+    `  ${label}: MEDIAN ${(corpus.length / t.median).toFixed(0)} decisions/sec ` +
+      `(${((t.median / corpus.length) * 1e6).toFixed(2)} us each; fastest ${(corpus.length / t.fastest).toFixed(0)}, ` +
+      `slowest ${(corpus.length / t.slowest).toFixed(0)})`,
+  );
+
 console.log(`corpus: ${corpus.length} recorded decisions from ${GAMES * MATCHUPS.length} games`);
-console.log(
-  `decisions/sec: MEDIAN ${(corpus.length / best).toFixed(0)} ` +
-    `(fastest ${(corpus.length / fastest).toFixed(0)}, slowest ${(corpus.length / worst).toFixed(0)}, ` +
-    `${REPS} reps, spread ${(((worst - fastest) / fastest) * 100).toFixed(1)}%)`,
-);
-console.log(`microseconds per decision (median): ${((best / corpus.length) * 1e6).toFixed(2)}`);
+if (FEATURE) {
+  const { a: off, b: on } = timeBoth(
+    createHeuristicPilot(undefined, { [FEATURE]: false }),
+    createHeuristicPilot(undefined, { [FEATURE]: true }),
+    REPS,
+  );
+  show(`${FEATURE} OFF`, off);
+  show(`${FEATURE} ON `, on);
+  const delta = ((off.median - on.median) / off.median) * 100;
+  console.log(
+    `  ${FEATURE} costs ${(-delta).toFixed(1)}% of decision time ` +
+      `(negative means it is cheaper; rule 7 wants this at or below zero).`,
+  );
+} else {
+  show('pilot', timePilot(pilot));
+}

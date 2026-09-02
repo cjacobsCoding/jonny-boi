@@ -1144,6 +1144,73 @@ measured to be at a local optimum (attacking less is worse; attacking more is ne
 done — §3.80). That is a set-level blocking-assignment problem, not another independent per-attacker
 rule, and it must clear the two-seed bar.
 
+### 3.83 Blockers are a shared resource — attacking judged as a SET — ✅ done
+
+The first confirmed strength gain since the alpha strike, and the one the map in §3.82 pointed at.
+
+**The defect.** `attackIsProfitable` judges every attacker **independently**, each against the *full*
+set of enemy blockers — as though each one could be met by all of them. That is true of the first
+attacker and false of every one after: a defender with one body cannot answer four attackers, however
+badly each fares alone. The pilot was declining attacks a defender had no way to punish.
+
+**Where the measurement pointed.** `bench/disagreement.mjs` (§3.82): 100% of this pilot's
+disagreements with `lookahead` are in `declareAttackers`, and **36.2% of those are both pilots
+attacking with a different SET** — not a different appetite, a different roster. Aggression tuning was
+already measured to be at a local optimum (attacking less is clearly worse, p = 6.7e-6; attacking more
+is neutral or already done, §3.80), so the roster was what was left.
+
+**The fix.** Score whole candidate attacks against the defence's best answer, and send the one that
+comes out ahead. Candidates are the greedy per-attacker roster, the all-in roster, and each single
+add/remove from greedy — O(n) scored sets rather than 2^n. The defender model is greedy (best block
+first) and is **deliberately the same model the per-attacker code already uses**: if this scored
+attacks against a sharper defender than the rest of the pilot assumes, the two halves would disagree
+about the same board.
+
+**Measured, on two independent seed sets as §3.82 requires:**
+
+```
+setAttack ON vs OFF — 9 decks, 2880 games per run
+  run 1 (seed 4242):  ahead A 58 · ahead B 21 · level 1361 · p 5.12e-5
+  run 2 (seed 90210): ahead A 60 · ahead B 23 · level 1357 · p 7.77e-5
+  VERDICT: CONFIRMED STRONGER — both seed sets agree.
+```
+
+Same direction, near-identical magnitude, both far past threshold. This is what a real improvement
+looks like next to the fluke §3.82 caught (285/215 then 250/247).
+
+**Rule 7, paid before moving on.** The first version cost **11% of sim throughput** — it recomputed
+`power`/`toughness`/`canBlockByEvasion` inside every candidate's scoring loop. Two fixes brought it
+down, both measured on a fixed corpus with `bench/pilot-decide-bench.mjs --feature setAttack`:
+
+| version | decision cost |
+|---|---|
+| naive | +6.9% |
+| board facts pre-computed once into flat arrays, candidates scored as bitmasks | +3–4% |
+| attachment sweep hoisted out of the per-attacker loop | **+2.7%** |
+
+The last one is the interesting fix and it was not in the new code: `saboteurTriggerCount` walks the
+whole battlefield looking for things attached to its argument, so calling it per eligible attacker is
+O(attackers × battlefield). One sweep now collects hosts up front. Behaviour is byte-identical across
+that optimisation (A won 851/2000 before and after; the A/B numbers are unchanged to the slot).
+
+**+2.7% of decision time is a cost, not parity, and it is stated rather than rounded away.** Decisions
+are roughly a quarter of sim runtime, so it is well under 1% of throughput — bought with a
+double-confirmed strength gain, which is the trade this project exists to make.
+
+⚠️ **Two traps this shipped with, both found by measuring rather than reasoning:**
+
+- **`games/sec` cannot compare two pilots of different strength.** A stronger pilot plays *different
+  games* (851 wins vs 806 on the same 2,000 seeds), so throughput moves for reasons that are not
+  cost. Only a fixed recorded corpus answers "what does this cost?".
+- **Timing two arms back-to-back is order-biased, and largely so.** Timed sequentially, the arm doing
+  strictly *more* work measured **9.9% faster** — the second arm inherits a JIT-warmed process. The
+  bench now interleaves reps and alternates which arm goes first within each rep.
+
+**Guard:** `packages/ai/src/set-attack.test.ts` pins both halves — it sends the bodies the defence
+cannot answer (four 2/2s into one 4/4, and the control asserts the old rule refused exactly that
+attack), and it still declines when every attacker has a blocker waiting, when a lone attacker would
+simply die, and it does not swallow the attack in the no-blockers case the refiner deliberately skips.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
