@@ -1724,6 +1724,20 @@ from a bound into a shipped feature: **4× fewer games on a decisive `swap`**, w
 user runs while waiting. It does not apply to `suggest` — the adaptive ladder already eliminates
 candidates between waves, which is the same saving one level up (§3.6).
 
+**Extended to `pilot-ab`.** It is structurally the same experiment — a paired comparison read with
+McNemar — so it takes the same boundary and the same window property, with no new statistics.
+`planPilotAbSlices` gained the same optional `window`, and it holds ONE pool across windows rather
+than repeating the pool-per-window mistake above.
+
+| | games | search | verdict |
+|---|---|---|---|
+| `pilot-ab` heuristic vs lookahead, full | 4,320 | 14.02s | WEAKER, p 3.99e-3 |
+| the same, `--until-decided` | **2,160** | **9.19s** | WEAKER, p 4.07e-3 — *2 of 4 looks, 50% unspent* |
+
+⚠️ It took **two** looks, not one: the first look-s p did not clear the tighter Pocock threshold.
+That is the boundary doing its job rather than stopping at the first encouraging number — the exact
+failure this design exists to prevent.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded

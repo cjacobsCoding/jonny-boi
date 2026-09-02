@@ -110,6 +110,7 @@ Usage:
   npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--max-candidates K] [--seed S]
                                [--pilot id] [--history <file>] [--no-adaptive] [--workers W]
   npm run sim -- pilot-ab [--pilot-a id] [--pilot-b id] [--games N] [--seed S] [--workers W]
+                          [--until-decided [--looks K]]
   npm run sim -- soak [--games N] [--seed S] [--pilot id] [--workers W]
 
 Notes:
@@ -124,7 +125,7 @@ Notes:
                on the same protocol, i.e. WORSE than the heuristic it rolls out
                with, and ~5x the hybrid's decision cost. See DESIGN §3.4/§3.4a.
   • --games N is games per matchup (default ${DEFAULT_SIM_CONFIG.defaultGames}).
-  • --until-decided (swap) plays the budget in K equal windows and STOPS as soon as
+  • --until-decided (swap, pilot-ab) plays the budget in K equal windows and STOPS as soon as
     a pre-registered group-sequential boundary is crossed. A decisive swap finishes
     in a quarter of the games; a marginal one runs the full budget and costs nothing
     extra. It is NOT "stop at the first p < 0.05" — that inflates the false-positive
@@ -654,8 +655,54 @@ async function cmdPilotAb(flags: Flags): Promise<number> {
     }
   };
   const start = performance.now();
-  let result: PilotAbResult;
-  if (workers > 1) {
+  // Undefined until a branch runs: the sequential branch can in principle plan
+  // no windows, and a silent empty result would print a verdict about no games.
+  let result: PilotAbResult | undefined;
+  /** Set only when --until-decided ran, so the report can say what it did. */
+  let sequential: SequentialOutcome | undefined;
+  if (flags.untilDecided) {
+    /*
+     * The same group-sequential machinery `swap` uses (§3.92), and for the same
+     * reason: this is a PAIRED test read with McNemar, so the boundary and the
+     * prefix property carry over unchanged. Reusing them rather than writing a
+     * second stopping rule is what keeps one answer to 'when may we stop'.
+     */
+    const plan = planSequentialLooks(games, flags.looks ?? DEFAULT_SEQUENTIAL_LOOKS);
+    const init: WorkerInitSpec = {
+      deckNames: decks.map((d) => d.name),
+      pilotAId: pilots.pilotA.id,
+      pilotBId: pilots.pilotB.id,
+    };
+    // One in-process context, or ONE pool for every window — never a pool per
+    // window, which is the mistake §3.92 measured (4x fewer games, 1.95x faster).
+    const local = workers > 1 ? undefined : createParallelContext(init);
+    const pool = workers > 1 ? createWorkerPool(init, workers) : undefined;
+    const slices: PilotAbSliceResult[] = [];
+    let from = 0;
+    let looksTaken = 0;
+    for (const checkpoint of plan.checkpoints) {
+      const jobs = planPilotAbSlices(pairCount, games, workers, seed, { gameStart: from, gameEnd: checkpoint });
+      const played =
+        local !== undefined
+          ? (jobs.map((job) => executeParallelJob(local, job)) as PilotAbSliceResult[])
+          : ((await (pool as WorkerPool).run(jobs)) as readonly PilotAbSliceResult[]);
+      slices.push(...played);
+      from = checkpoint;
+      looksTaken += 1;
+      result = mergePilotAbFromSlices(slices, {
+        decks,
+        pilotAId: pilots.pilotA.id,
+        pilotBId: pilots.pilotB.id,
+        // What was actually PLAYED, not what was budgeted — the report must not
+        // claim games the run stopped before reaching.
+        gamesPerOrientation: from,
+      });
+      onPairDone(pairCount, pairCount);
+      if (result.pValue < plan.perLookAlpha) break;
+    }
+    await pool?.close();
+    sequential = { gamesPlayed: from, looksTaken, stoppedEarly: from < games, perLookAlpha: plan.perLookAlpha };
+  } else if (workers > 1) {
     const jobs = planPilotAbSlices(pairCount, games, workers, seed);
     const init: WorkerInitSpec = {
       deckNames: decks.map((d) => d.name),
@@ -689,6 +736,7 @@ async function cmdPilotAb(flags: Flags): Promise<number> {
       onPair: onPairDone,
     });
   }
+  if (!result) throw new CliError('the run produced no result — the plan asked for no games');
   const elapsed = (performance.now() - start) / 1000;
 
   console.log(
@@ -748,6 +796,19 @@ async function cmdPilotAb(flags: Flags): Promise<number> {
   );
   console.log(`\n${PILOT_AB_BUILD_COMPARISON_NOTE}`);
   console.log(FIDELITY_NOTE);
+  if (sequential) {
+    // Honest, not implied: the games NOT played are the point, and the threshold
+    // each look was judged against is what makes the verdict readable.
+    const unspent = 100 - (sequential.gamesPlayed / games) * 100;
+    console.log(
+      `Group-sequential: stopped after ${sequential.looksTaken} of ${flags.looks ?? DEFAULT_SEQUENTIAL_LOOKS} looks, ` +
+        `${sequential.gamesPlayed}/${games} games per orientation` +
+        (sequential.stoppedEarly ? ` — ${unspent.toFixed(0)}% of the budget unspent.` : ` (ran the full budget).`),
+    );
+    console.log(
+      `Each look judged at alpha ${sequential.perLookAlpha} (Pocock), so the run-wide false-positive rate is still ${DEFAULT_STATS_CONFIG.alpha}.`,
+    );
+  }
   return isControl && !result.balanced ? 1 : 0;
 }
 
