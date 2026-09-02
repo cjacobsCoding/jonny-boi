@@ -453,6 +453,13 @@ export async function runSuggest(
   // order into the result.
   const baseRecords = new Map<number, PairedBaseRecord>();
   let armTables: ReadonlyMap<string, PairedTable> = new Map();
+  /**
+   * Per-arm slot outcomes, spliced in at each slice's absolute offset (§3.97).
+   * The ladder needs these to compare the LEADER with the RUNNER-UP; without
+   * them the leader-settled stop (§3.98) never fires here and the Lab would keep
+   * playing a third more games than the CLI for the same recommendation.
+   */
+  const armSlots = new Map<string, boolean[]>();
   const failures = new Map<string, string>();
   let variantGamesPlayed = 0;
   let variantGamesSkipped = 0;
@@ -540,7 +547,18 @@ export async function runSuggest(
     for (const slice of usable) {
       variantGamesPlayed += slice.variantGamesPlayed;
       variantGamesSkipped += slice.variantGamesSkipped;
+      // Sparse write BY INDEX, so slices arriving in any order compose into the
+      // same array a locally-played arm would have built.
+      let slots = armSlots.get(slice.candidateKey);
+      if (!slots) {
+        slots = [];
+        armSlots.set(slice.candidateKey, slots);
+      }
+      for (let i = 0; i < slice.variantWonBySlot.length; i++) {
+        slots[slice.slotStart + i] = slice.variantWonBySlot[i] as boolean;
+      }
     }
+    for (const key of failures.keys()) armSlots.delete(key);
     armTables = mergeVariantSlices(dropFailed(armTables, failures), usable);
 
     step = driver.next({
@@ -549,10 +567,12 @@ export async function runSuggest(
         if (failure !== undefined) {
           return { key: arm.candidate.key, gamesPlayed: 0, paired: EMPTY_TABLE, failure };
         }
+        const slots = armSlots.get(arm.candidate.key);
         return {
           key: arm.candidate.key,
           gamesPlayed: arm.toGames,
           paired: armTables.get(arm.candidate.key) ?? EMPTY_TABLE,
+          ...(slots ? { variantWonBySlot: slots } : {}),
         };
       }),
     });

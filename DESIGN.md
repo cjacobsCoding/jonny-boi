@@ -1995,6 +1995,51 @@ on:
 **Default on.** It cannot change the answer — that is the property the tests pin — and it removes
 roughly a third of the work from the command a user waits longest on.
 
+### 3.99 The Lab gets the settled-leader stop too — and the guard that proves it — ✅ done
+
+§3.98 shipped the leader-settled stop and made it the default. It fired in the CLI. It did **not** fire
+in the Lab, and nothing in the suite noticed.
+
+**The gap.** The web's suggest driver shares `driveAdaptiveSearch`, so it inherited the rule — but the
+rule is guarded on `leader.variantWonBySlot && runnerUp.variantWonBySlot`, and the web's shards never
+carried the per-slot record §3.97 added. The guard failed silently on every round, so the Lab kept
+playing the full ladder while the CLI stopped early.
+
+**The fix.** `VariantSliceShardResult` carries `variantWonBySlot`; `execute.ts` returns what `playSlice`
+already produces; `run.ts` splices each slice in at its absolute offset (a sparse write **by index**,
+so out-of-order shards compose into the array a locally-played arm would have built) and hands it to
+the driver.
+
+⚠️ **Why this was invisible — and the shape of guard it needed.** §3.98's rule is designed to
+**preserve the ranking**. So a Lab that never stops early still returns the same recommendation, in
+the same order, with the same verdicts. The existing "equals the sim's own `suggestSwaps`, rank for
+rank" test passed with the plumbing removed. The only observable difference is the **number of games**,
+and nothing was comparing that.
+
+The new guard compares game counts — total and per candidate — and it had to be pointed at a
+configuration where the rule actually fires. That took measuring:
+
+| games | candidates | opponents | settled | full | saved |
+|---|---|---|---|---|---|
+| 16–64 | 6–8 | 2 | — | — | **0%** (never fires) |
+| 50 | 6 | 4 | 794 | 794 | **0%** |
+| 50 | 6 | **8** | 1,167 | 1,643 | **29%** |
+| 100 | 6 | **8** | 1,094 | 3,132 | **65%** |
+| 100 | 8 | 8 | 3,568 | 3,568 | 0% |
+
+⚠️ **The rule needs the discordant pairs a FULL gauntlet produces.** At two opponents it never fires at
+any size — so a guard written against the two-opponent lists the other tests share would have passed
+whether the plumbing was connected or not. That is the trap this section is really about: the first
+version of the guard did exactly that, and only measuring where the rule fires exposed it.
+
+**Verified by removing the plumbing:** the Lab plays **1,494 games where the engine plays 1,001**, and
+the guard fails on the count. With it, they match exactly.
+
+**And an honest note on the rule's reach.** It saves 29–65% *when it fires*, nothing when it does not,
+and never changes the recommendation. It is config-dependent, not universal — `100 games × 8
+candidates` saves nothing while `100 × 6` saves 65%. Worth having in both surfaces; not worth
+describing as a flat speed-up.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded

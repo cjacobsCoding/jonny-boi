@@ -235,6 +235,13 @@ export interface VariantSliceShardResult {
   readonly paired: PairedTable;
   readonly variantGamesPlayed: number;
   readonly variantGamesSkipped: number;
+  /**
+   * Which slots this slice won, in slot order from `slotStart` (§3.97). The main
+   * thread splices these into the arm so the ladder can compare the leader with
+   * the runner-up — WITHOUT it the leader-settled stop (§3.98) silently never
+   * fires in the Lab, and only the CLI gets the 30% saving.
+   */
+  readonly variantWonBySlot: readonly boolean[];
 }
 
 /** Play ONE game and record its full trace (the match-replay viewer). */

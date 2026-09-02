@@ -476,6 +476,7 @@ export function runVariantSliceShard(
       slotStart: job.slotStart,
       slotEnd: job.slotEnd,
       paired: slice.paired,
+      variantWonBySlot: slice.variantWonBySlot,
       variantGamesPlayed: slice.variantGamesPlayed,
       variantGamesSkipped: slice.variantGamesSkipped,
     };
