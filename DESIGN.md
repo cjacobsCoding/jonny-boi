@@ -1265,6 +1265,72 @@ by measurement.** That hit rate is the argument for the harness, not against it:
 minutes to test and would have cost days to argue about, and two of them (`ownCreatureLossPerStat`,
 §3.82) would have shipped on a single-seed p-value.
 
+### 3.85 Two seeds are not enough if you tuned on them — the held-out battery — ✅ done
+
+§3.82 made every A/B run twice on independent seeds. This is the round that found the hole in that
+rule, by falling through it.
+
+**Where the idea came from — reading the positions, not the histogram.** `bench/disagreement.mjs`
+gained `--show N`, which prints disagreements as readable boards instead of counting them. Eight of
+them told a story a histogram could not:
+
+```
+[1] life: me 4, them 20   mine: Air Elemental 4/4 (flying)   theirs: Monastery Swiftspear 1/2 (haste)
+    heuristic: declareAttackers   lookahead: passPriority
+[8] life: me 3, them 11   mine: Kalonian Tusker 3/3, Kitchen Finks 3/2, Kitchen Finks 3/2
+    theirs: ... Deadly Recluse 1/2 (reach/deathtouch) ...
+    heuristic: declareAttackers atk[83,84,90]   lookahead: passPriority
+```
+
+At 3, 4 and 11 life the heuristic taps its board out and the search declines. Attacking removes our
+blockers, and at low life that is the whole game.
+
+**The hypothesis, and why it was not §3.75 again.** `trimForDefence` (§3.75, measured weaker and
+deleted) was **unconditional** — hold back until a pessimistic counter-swing is survivable, on every
+board — and it dropped the **biggest** attacker first, which is usually the best attacker as well as
+the best blocker. `defensiveReserve` fired only when the opponent's whole board could actually kill
+us, and held back the creature that **absorbs** most per point of offence given up.
+
+**What happened, in order, because the order is the lesson:**
+
+| step | result |
+|---|---|
+| one-swing horizon, 2,880 games/seed | 20/17 and 22/17 — inconclusive, but positive on both |
+| two-swing horizon (widened trigger) | 22/41 and 24/30 — worse; §3.75 re-confirmed |
+| back to one-swing, 11,520 games/seed | **94/67 (p=0.041) and 95/64 (p=0.017) — "CONFIRMED STRONGER"** |
+| two seeds it had never seen | **77/78 and 68/68 — dead level** |
+
+⚠️ **The one-swing variant was CHOSEN over the two-swing variant by those same two seeds.** The
+development set then validated the thing it had selected, which is overfitting with extra steps. On
+held-out seeds the effect is 145 / 146 — nothing. **Not shipped.**
+
+**The fix: the battery, and the held-out seeds decide.** `bench/ab-protocol.mjs` now runs four
+independent seeds — two to develop against, two that decide — and pools the held-out slots into one
+McNemar. `--seed S` shifts the whole battery, so a genuinely fresh set of four is one flag away,
+which is what you want after tuning against the defaults. The development seeds are printed but
+carry no weight in the verdict: their agreement is not evidence, it is the thing being tested.
+
+**The shipped features were re-validated against the stricter bar**, since a rule that would have
+rejected them would matter far more than one that rejects a candidate:
+
+```
+setAttack ON vs OFF
+  dev      (4242):   58/21   dev      (90210):  60/23
+  HELD-OUT (555001): 51/23   HELD-OUT (777003): 43/29
+  CONFIRMED STRONGER — held-out 94/52 (chi2 11.51); all seeds pooled 212/96.
+```
+
+All four seeds lean the same way. §3.83 is real. (§3.74's alpha strike is 158/0 on a fresh seed —
+never in doubt.)
+
+⚠️ **A second trap caught in the same round: the benches import from `dist`.** Reverting a source file
+and re-running an A/B without rebuilding measures the OLD code and says nothing about the tree. It
+produced a plausible-looking 46/21 for a feature whose real number is 58/21 — plausible enough that
+it was nearly written down. **Rebuild between a revert and a measurement, every time.**
+
+**Tally: two confirmed strength gains shipped, twelve hypotheses killed by measurement.** Two of the
+twelve had already cleared the bar in force at the time, which is the entire argument for raising it.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded

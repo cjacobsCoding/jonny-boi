@@ -24,7 +24,7 @@ import { buildRegistry, loadCardPool } from '@jonny-boi/cards';
 import { SAMPLE_DECKS } from '../dist/data/decks/index.js';
 import { loadDeck } from '../dist/src/deck.js';
 import { runPilotAb } from '../dist/src/pilot-ab.js';
-import { confirmedAb, report } from './ab-protocol.mjs';
+import { confirmedAb, report, DEV_SEEDS, HELD_OUT_SEEDS } from './ab-protocol.mjs';
 
 function arg(name, fallback) {
   const at = process.argv.indexOf(`--${name}`);
@@ -34,8 +34,9 @@ function arg(name, fallback) {
 const gamesPerOrientation = arg('games', 40);
 const at = process.argv.indexOf('--feature');
 const FEATURE = at >= 0 ? process.argv[at + 1] : 'alphaStrike';
-const seed = arg('seed', 4242);
-const confirmSeed = arg('confirm-seed', 90210);
+// `--seed S` shifts the WHOLE battery, so an entirely fresh set of four is one
+// flag away — which is what you want after tuning against the defaults.
+const seedShift = Number(arg('seed', 0));
 
 const pool = loadCardPool({ onWarn: () => {} });
 const registry = buildRegistry();
@@ -54,15 +55,13 @@ const outcome = confirmedAb(
       gamesPerOrientation,
       baseSeed,
     }),
-  { seed, confirmSeed },
+  seedShift === 0 ? {} : { seeds: DEV_SEEDS.map((x) => x + seedShift), heldOut: HELD_OUT_SEEDS.map((x) => x + seedShift) },
 );
 
 // The VERDICT and the paired slot counts are the answer. The raw win totals are
 // not: they include every game the two arms played identically, which is most of
 // them, and a share near 50% there means "the case is rare", not "no effect".
-report(
-  `${FEATURE} ON vs OFF — ${decks.length} decks, ${gamesPerOrientation} games/pair/orientation, ` +
-    `${outcome.primary.totalGames} games per run`,
+report(`${FEATURE} ON vs OFF — ${decks.length} decks, ${gamesPerOrientation} games/pair/orientation, ` +
+    `${outcome.dev[0].result.totalGames} games per run`,
   outcome,
-  { seed, confirmSeed },
 );
