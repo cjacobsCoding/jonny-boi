@@ -1028,6 +1028,63 @@ That is now three speed hypotheses and three strength hypotheses killed by measu
 §3.74 and the fast-pass gate §3.62 — shipped. The ratio is the point: ideas are cheap to test here
 and most of them are wrong, which is exactly why they get tested instead of argued about.
 
+### 3.81 The pilot, measured on its own — 177k decisions/sec, and that profile is flat too — ✅ done
+
+The goal this work serves says "make **the heuristics** 10× faster", and every measurement so far had
+been of games/sec — the engine *plus* the pilot. A change that made the decision function twice as
+fast would move that number a few percent and read as noise, which is exactly what happened twice.
+So: an instrument that measures only the decision function.
+
+**The tool.** `packages/sim/bench/pilot-decide-bench.mjs` plays real games once and **records** every
+`(state, legalActions)` the pilot was asked about, then replays only `chooseAction` over that corpus,
+timed. Recording first matters — timing decisions inside a live game measures the engine advancing
+between them. The corpus is the pilot's real workload in its real proportions, cheap fast-passed
+windows included, because making the rare expensive decision faster while the common cheap one
+dominates is how an optimisation wins a microbenchmark and loses the sim.
+
+Two traps it now documents, both of which cost time here:
+
+- **Warm up first.** Measured cold, seven identical reps spread **56%** — wide enough to hide any
+  real change. Two discarded passes bring it to ~17%, and the reported figure is the **median**
+  (the best-of-N drifts upward with N; the worst catches whatever else the machine was doing).
+- **Profile with a SMALL corpus and MANY reps** (`--games 8 --reps 40`). `--cpu-prof` covers the whole
+  process, and the recording phase calls `applyAction` once per decision. Profiled the other way
+  round, the table says "the pilot spends 14% of its time cloning state" — it does not; the heuristic
+  pilot never clones, only `hybrid` and `mcts` do. That misreading was one edit away from being acted
+  on.
+
+**The baseline: 177,459 decisions/sec — 5.64 µs per decision.**
+
+**The pilot's own profile** (small corpus, 40 reps, so the decision loop dominates):
+
+| self time | function |
+|---|---|
+| 8.41% | `indexContinuous` |
+| 6.36% | `scoredSpellGoals` |
+| 5.31% | `choosePriorityAction` |
+| 5.10% | `planManaPayment` |
+| 3.93% | `bestSpellGoal` |
+| 3.22% | `totalAvailableMana` |
+
+Heaviest single function **8.4%**; top ten together **48.4%**. **Flat, like the engine's.**
+
+And the heaviest item is already optimised: `indexContinuous` is a single battlefield pass with lazy
+allocation and a shared `EMPTY_INDEX` for the common case of a board that modifies nothing — the
+guard I went looking for was already there, in the one funnel, benefiting every caller.
+
+**What this settles.** The speed question is now measured three independent ways, and all three agree:
+
+1. **Engine per-action cost** — flat, heaviest 6.1% (§3.78).
+2. **Action count** — no large removable share; the unreachable ceiling is under 1.35× (§3.79).
+3. **Pilot decision cost** — flat, heaviest 8.4%, and that function is already tuned (here).
+
+There is no 10× in any of them. It is not hiding in the engine, not in the number of decisions, and
+not in the heuristics themselves.
+
+**The instrument outlives the question**, which is why it is committed rather than run once: rule 7
+says a change must not regress the hot path, and a new *strength* feature costs **decision** time.
+This is the number to quote for one — games/sec hides it behind the engine.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
