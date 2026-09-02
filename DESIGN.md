@@ -1211,6 +1211,60 @@ cannot answer (four 2/2s into one 4/4, and the control asserts the old rule refu
 attack), and it still declines when every attacker has a blocker waiting, when a lone attacker would
 simply die, and it does not swallow the attack in the no-blockers case the refiner deliberately skips.
 
+### 3.84 The search is not the bottleneck — the scoring is — ✅ done
+
+A round of four measurements, no code shipped, and one result that redirects every future attempt at
+the attack decision. Recorded because "we already tried that, here is the number" is the cheapest
+thing this file can give the next person.
+
+**1. The map moved, which is the first evidence §3.83 worked outside its own A/B.** Re-running
+`bench/disagreement.mjs` against `lookahead` after the set-attack rule shipped:
+
+| | before §3.83 | after |
+|---|---|---|
+| disagreements | 271 (**0.80%**) | 191 (**0.54%**) |
+| heuristic attacks, lookahead passes | 162 (59.8%) | 78 (40.8%) |
+| both attack, **different set** | 98 (36.2%) | 93 (48.7%) |
+| heuristic passes, lookahead attacks | 11 (4.1%) | 20 (10.5%) |
+
+A 29% drop in total disagreement, and the band §3.83 targeted is the one that shrank. What remains is
+dominated by *which set*.
+
+**2. Attacking less is definitively wrong — now replicated.** `attackValueThreshold` 1 → 2, on both
+seed sets: **15 / 95 (p = 5.0e-14)** and **6 / 93 (p ≈ 0)**. `CONFIRMED WEAKER`, about as
+one-sided as this repo has measured anything. The 40.8% of disagreements where lookahead declines an
+attack the heuristic makes are **not** misplays by the heuristic; that direction is closed.
+
+**3. THE RESULT THAT MATTERS: the local search is already effectively exact.** `bestAttackSet`
+considers the greedy roster, the all-in roster, and each single add/remove — a local move set, which
+invites the obvious objection that the best attack could be two moves away. So it was made exhaustive
+for boards small enough to afford it (≤ 6 attackers ⇒ every one of the 64 subsets scored):
+
+```
+exactAttack ON vs OFF — 2880 games per run
+  run 1: ahead A 2 · ahead B 1 · level 1437
+  run 2: ahead A 4 · ahead B 3 · level 1433
+  VERDICT: INCONCLUSIVE   (cost: +3.5% of decision time)
+```
+
+Out of 1,440 matched slots, **three** and **seven** differed at all. Enumerating every subset almost
+never finds a better attack than the local moves do — so the local search is not what stands between
+this pilot and a better one, and a smarter *search* is wasted effort.
+
+⚠️ **The corollary, and the standing direction for this work: the remaining gap is in the SCORING
+FUNCTION, not the search.** `scoreAttackSet` models the defence as a greedy single-blocker
+assignment; it has no gang blocks, no chump blocks, and no notion that attacking taps a creature out
+of the next turn's defence. If the attack decision is to improve further, that valuation is where it
+has to happen — and it must clear the two-seed bar (§3.82).
+
+**4. Valuing damage more does not help.** `faceDamageValue` 1 → 2: 24/39 then 25/20 — `INCONCLUSIVE`.
+Naming it here so it is not re-run.
+
+**Tally after this round: two confirmed strength gains shipped (§3.74, §3.83), ten hypotheses killed
+by measurement.** That hit rate is the argument for the harness, not against it: each of these cost
+minutes to test and would have cost days to argue about, and two of them (`ownCreatureLossPerStat`,
+§3.82) would have shipped on a single-seed p-value.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
