@@ -129,6 +129,13 @@ export interface SwapArm {
   readonly variantGamesSkipped: number;
   /** The running paired table (a valid table at every point). */
   readonly paired: PairedTable;
+  /**
+   * Whether the hero won this arm's variant game at each slot, indexed by slot.
+   * Every arm plays identical slots, so two arms' arrays line up element for
+   * element — see `pairedBetweenArms`, which is what makes ranking two candidates
+   * against EACH OTHER free rather than a second experiment.
+   */
+  readonly variantWonBySlot: readonly boolean[];
 }
 
 /** Internal, mutable arm state. */
@@ -148,6 +155,18 @@ interface ArmState {
   gamesPlayed: number;
   variantGamesSkipped: number;
   tally: PairedTally;
+  /**
+   * Did the hero win THIS arm's variant game, slot by slot?
+   *
+   * ⚠️ WHY THIS IS KEPT RATHER THAN FOLDED AWAY. Every arm of a run plays the
+   * SAME slots from the SAME seeds — slot i is the same opponent, the same game
+   * index and the same base game for all of them. So two arms' per-slot outcomes
+   * are directly comparable, and a paired ARM-VS-ARM table costs no extra games:
+   * it is a cross-tabulation of data already in hand. The 2x2 `tally` cannot give
+   * that, because it has already summed each arm against the BASE and thrown the
+   * slot away — which is exactly why §3.96 had to decline the saving it wanted.
+   */
+  readonly variantWonBySlot: boolean[];
 }
 
 /** Everything the runner needs to play games. */
@@ -185,6 +204,13 @@ export interface PairedArmsOptions {
 export interface PairedSlice {
   /** The 2×2 table for THIS slice alone; callers sum slices themselves. */
   readonly paired: PairedTable;
+  /**
+   * Whether the hero won the variant game at each slot of THIS SLICE, in slot
+   * order from `fromSlot`. The host splices these into the arm's own per-slot
+   * array so a pooled run can compare two arms exactly as a local one does —
+   * see `pairedBetweenArms`.
+   */
+  readonly variantWonBySlot: readonly boolean[];
   /** Paired games the slice covered (played or provably skipped). */
   readonly gamesPlayed: number;
   /** Variant games actually run. */
@@ -249,6 +275,50 @@ export interface PairedArmRunner {
     fromSlot: number,
     toSlot: number,
   ) => PairedSlice;
+}
+
+
+/**
+ * COMPARE TWO CANDIDATES AGAINST EACH OTHER, FROM GAMES ALREADY PLAYED (§3.97).
+ *
+ * ⚠️ WHY THIS IS FREE, AND WHY IT MATTERS. Every arm of a run plays the SAME
+ * slots from the SAME seeds: slot i is the same opponent, the same game index and
+ * the same shared base game for all of them. So "did A win slot i?" and "did B win
+ * slot i?" are two answers about ONE game, and cross-tabulating them is a proper
+ * paired comparison of A against B — with no extra games played.
+ *
+ * The 2x2 `paired` tally cannot give this. It has already summed each arm against
+ * the BASE and discarded the slot, so two arms that both beat the base by 10% are
+ * indistinguishable in it whether they win the same games or opposite ones. That
+ * loss is exactly why §3.96 had to decline the 27% saving it found: `suggest`
+ * ranks candidates, and "decided against the base" says nothing about "better than
+ * the runner-up".
+ *
+ * The returned table reads A as the "base" side and B as the "variant" side, so
+ * `mcNemarTest` on it answers "does B differ from A?" — `variantOnly` is B's
+ * advantage, `baseOnly` is A's.
+ *
+ * ⚠️ COMPARED OVER THE COMMON PREFIX ONLY. Arms can sit at different depths (a
+ * leader advances while an eliminated rival stopped), and slots past the shallower
+ * arm's depth have no outcome for it. Counting those as losses would invent games
+ * that were never played, so the comparison ends where the shorter arm ends.
+ */
+export function pairedBetweenArms(
+  a: Pick<SwapArm, 'variantWonBySlot' | 'gamesPlayed'>,
+  b: Pick<SwapArm, 'variantWonBySlot' | 'gamesPlayed'>,
+): PairedTable {
+  const depth = Math.min(a.gamesPlayed, b.gamesPlayed, a.variantWonBySlot.length, b.variantWonBySlot.length);
+  // Built through the mutable tally shape, returned as the readonly table.
+  const table: PairedTally = { bothWon: 0, baseOnly: 0, variantOnly: 0, neither: 0 };
+  for (let slot = 0; slot < depth; slot++) {
+    const aWon = a.variantWonBySlot[slot] === true;
+    const bWon = b.variantWonBySlot[slot] === true;
+    if (aWon && bWon) table.bothWon++;
+    else if (aWon) table.baseOnly++;
+    else if (bWon) table.variantOnly++;
+    else table.neither++;
+  }
+  return table;
 }
 
 /** An opaque handle to an arm (its mutable state stays inside the runner). */
@@ -466,6 +536,7 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
         : undefined,
       gamesPlayed: 0,
       variantGamesSkipped: 0,
+      variantWonBySlot: [],
       tally: { bothWon: 0, baseOnly: 0, variantOnly: 0, neither: 0 },
     };
   }
@@ -485,6 +556,8 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
       gamesPlayed: state.gamesPlayed,
       variantGamesSkipped: state.variantGamesSkipped,
       paired: { ...state.tally },
+      // A copy: the caller may hold the arm across further advances.
+      variantWonBySlot: [...state.variantWonBySlot],
     };
   }
 
@@ -541,9 +614,12 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
       for (let slotIndex = Math.max(0, fromSlot); slotIndex < toSlot; slotIndex++) {
         tallySlot(tally, state, slotIndex);
       }
+      const from = Math.max(0, fromSlot);
       return {
         paired: tally,
-        gamesPlayed: Math.max(0, toSlot - Math.max(0, fromSlot)),
+        // Slot order from `from`, so the host can splice it straight in.
+        variantWonBySlot: state.variantWonBySlot.slice(from, toSlot),
+        gamesPlayed: Math.max(0, toSlot - from),
         variantGamesPlayed: variantGamesPlayed - playedBefore,
         variantGamesSkipped: variantGamesSkipped - skippedBefore,
         baseGamesPlayed: baseGamesPlayed - basedBefore,
@@ -569,6 +645,7 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
     const slot = pairedSlotAt(slotIndex, opponentCount);
     const base = baseRecordFor(slotIndex);
     const variantWon = playVariantGame(state, slot, base);
+    state.variantWonBySlot[slotIndex] = variantWon;
     if (base.heroWon && variantWon) tally.bothWon++;
     else if (base.heroWon) tally.baseOnly++;
     else if (variantWon) tally.variantOnly++;

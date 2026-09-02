@@ -1916,6 +1916,44 @@ not a flag, and it is the only version of this that would not cost the ranking.
 measuring "games spent on already-decided candidates" will find that 27% and reach for it. The number
 is right; the conclusion is not.
 
+### 3.97 Candidates can be compared against EACH OTHER, for free — ✅ done
+
+§3.96 declined a visible 27% saving on `suggest` because the comparison it needed did not exist: each
+arm is paired against the BASE, so "decided against the base" says nothing about "better than the
+runner-up", and stopping on the former would have cost the ranking. This builds the missing
+comparison — and it turns out to cost no games at all.
+
+**The observation.** Every arm of a run plays the **same slots from the same seeds**: slot *i* is the
+same opponent, the same game index and the same shared base game for all of them. So "did A win slot
+*i*?" and "did B win slot *i*?" are two answers about ONE game. Cross-tabulating them is a proper
+**paired** comparison of A against B, built entirely from games already played.
+
+**Why the existing tally could not do it.** `paired` is a 2×2 of (base won, variant won) — it has
+already summed each arm against the base and thrown the slot away. Two arms that both beat the base by
+10% are indistinguishable in it whether they win the *same* games or *opposite* ones. The information
+was being computed and discarded, one slot at a time, in `tallySlot`.
+
+**What changed.** `tallySlot` now records `variantWonBySlot[slot]`, `SwapArm` and `PairedSlice` carry
+it, the pooled transport splices each slice in at its absolute offset, and `pairedBetweenArms(a, b)`
+cross-tabulates two arms over their **common prefix** — arms sit at different depths once one is
+eliminated, and counting the shallower arm's missing slots as losses would invent games nobody played.
+
+**Guards** (`arm-vs-arm.test.ts`):
+
+- an arm compared with **itself** puts every slot on the diagonal, and its recorded wins equal
+  `bothWon + variantOnly` from the runner's own 2×2 — the record cannot drift from the tally;
+- the comparison spans **6** slots, not 14, when a 6-slot arm meets a 14-slot one;
+- it is **symmetric**: swapping the arguments swaps the advantage and leaves McNemar's *p* identical;
+- ⚠️ **a SLICED arm compares identically to a locally-played one.** This is the one that matters: the
+  parallel `suggest` builds arms from slices, and a per-slot record that differed by a single slot
+  would make the pooled run **rank candidates differently** from the sequential run — a divergence no
+  existing byte-identity test would catch, because the 2×2 totals would still match exactly.
+
+**What this unlocks.** The stopping rule §3.96 said was the only correct one — *is the leader decided
+against the runner-up?* — is now answerable from data in hand. Wiring it into the ladder is the next
+step and is deliberately a separate change: this one is a foundation that stands on its own, adds no
+behaviour, and is verified against both transports.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
