@@ -448,11 +448,10 @@ describe('foretell (CR 702.143a, a special action — 116.2h)', () => {
   it('is refused on the opponent\'s turn', () => {
     const { reg, state } = fresh();
     const [card] = giveHand(state, 'A', [FORETOLD]);
-    let s = until(state, reg, (x) => x.turnNumber === 2 && x.priorityPlayer === 'A');
+    const s = until(state, reg, (x) => x.turnNumber === 2 && x.priorityPlayer === 'A');
     fund(s, 'A', { C: 2 });
     expect(rejection(s, { kind: 'foretellCard', player: 'A', instanceId: card!.instanceId }, reg)).toContain('your own turn');
     expect(generateLegalActions(s).some((a) => a.kind === 'foretellCard')).toBe(false);
-    s = s; // keep the linter honest about the reassignment above
   });
 });
 
