@@ -59,7 +59,7 @@ node packages/cards/scripts/coverage-audit.mjs --pages 12 --out UNSUPPORTED-BACK
 node packages/cards/scripts/coverage-audit.mjs --input corpus.json --top 0 --json audit.json
 ```
 
-It fetches the most-played cards from Scryfall (EDHREC order), runs every one
+It runs every card of the corpus it is given — since §3.118 the committed backlog is measured over the WHOLE printed corpus (32,277 paper non-joke cards, the same file every §3.10x family is measured against), not a most-played sample — 
 through the real compiler, and ranks each missing engine system by **how many
 cards it blocks**. So the top entry is, by construction, the highest-value engine
 work available — not the one someone happened to hit.

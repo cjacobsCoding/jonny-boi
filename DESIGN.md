@@ -2617,6 +2617,41 @@ drawn from the WHOLE pool, every invariant checked on every action — is the ga
 tree as one program. It runs in the suite, and it is the reason the regenerated pool is committed only
 after it: a pool that ships a card the engine cannot play against another is worse than a smaller one.
 
+### 3.120 The backlog's top row is an aggregation artifact — measure the SHAPE, not the hint — ✅ done
+
+With the pool at 5,623 the committed backlog was re-measured over the whole printed corpus rather than
+a most-played sample, and its top entry now reads **"a block restriction whose SELECTOR compares
+creatures or reads effective P/T — blocks 730 cards"**. Read as a work item that is the biggest lever on
+the list. It is not one, and the reason matters more than the number.
+
+`coverage-audit.mjs` groups by the compiler's HINT STRING — the sentence the compiler writes when it
+refuses a clause. A hint like "a template the compiler does not recognize yet" is one bucket holding
+every sentence that fell through the same rule table, so its count measures the BUCKET, not the work.
+NEW `packages/cards/scripts/gap-clauses.mjs <corpus> "<system substring>"` splits one entry into the
+printed shapes behind it (numbers → N, mana symbols → {}), each with the cards it alone blocks:
+
+| backlog entry | cards | distinct shapes | cards per shape | largest single shape |
+|---|---:|---:|---:|---:|
+| a block restriction whose SELECTOR … | 730 | 605 | 1.2 | 11 (`Creatures with power less than ~'s power can't block it.`) |
+| a "you may / choose" template … | 5,640 | 5,184 | 1.1 | 45 (`You may choose not to untap ~ during your untap step.`) |
+| an "at the beginning of…" trigger BODY … | 916 | 880 | 1.0 | small |
+
+**So the top three rows of the backlog are 6,669 one-off sentences, not three systems.** Implementing
+the single largest shape in the largest bucket moves the playable count by at most 45 cards, and most
+shapes move it by one. Compare the keyword families of the last two days, where ONE implementation
+closed a whole column: combat keywords +267, upkeep costs +104, poison +57, the keyword anomalies +25.
+
+⚠️ **The correction to rule 11's own tooling, stated so the next contributor does not re-learn it.**
+`keyword-gap-report.mjs` ranks by MECHANIC, and a mechanic is exactly one implementation, so its `sole`
+column predicts the delta — every family this week hit its prediction almost exactly. The coverage
+audit ranks by a REFUSAL MESSAGE, which conflates "one system nobody built" with "a thousand sentences
+nobody templated". Both tools are honest about what they count; only one of them counts a work item.
+Pick keyword work from the keyword report, and use `gap-clauses.mjs` before touching any audit row, so
+a 730-card headline is never mistaken for a 730-card lever again.
+
+What the audit is still the right tool for: finding a row whose shapes CONCENTRATE. That is what a real
+template system looks like, and the sweep briefs are ordered by it.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
