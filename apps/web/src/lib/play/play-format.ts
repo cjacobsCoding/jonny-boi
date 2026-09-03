@@ -121,6 +121,32 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
       return {
         text: `${r.playerName(event.player)} looks at the top ${event.amount} card${event.amount === 1 ? '' : 's'} of their library.`,
       };
+    case 'cardRevealed': {
+      // A REVEAL is public by definition, so the name is said out loud — and
+      // so is what came of it, because "Goblin Guide's trigger resolves" with no
+      // visible consequence was bug report 20260901_210413 verbatim.
+      const who = r.playerName(event.player);
+      const outcome = event.matched ? `it goes to ${who}'s hand` : 'it stays where it is';
+      return {
+        text: `${r.name(event.sourceInstanceId)} reveals ${event.name} from the top of ${who}'s ${event.fromZone} — ${outcome}.`,
+        tone: 'trigger',
+      };
+    }
+    case 'continuousEffectAdded': {
+      // Say the PUMP in the creature's terms ("Monastery Swiftspear gets
+      // +1/+1 until end of turn"), not only that its trigger resolved — bug
+      // report 20260901_204957 is a player who read "1/2" on the printed card
+      // while the log had announced the change in the ability's words alone.
+      // An effect with no P/T delta (a keyword grant, a control change) says
+      // nothing here; its own event line already does.
+      if (event.power === undefined && event.toughness === undefined) return null;
+      const p = event.power ?? 0;
+      const t = event.toughness ?? 0;
+      if (p === 0 && t === 0) return null;
+      const signed = (n: number): string => (n >= 0 ? `+${n}` : `${n}`);
+      const until = event.duration === 'endOfTurn' ? ' until end of turn' : '';
+      return { text: `${r.name(event.targetInstanceId)} gets ${signed(p)}/${signed(t)}${until}.`, tone: 'trigger' };
+    }
     case 'triggerRemovedFromStack':
       // A trigger with no legal target dies silently in the rules (CR 603.3d) —
       // but on screen "nothing happened" reads as a bug, and became one bug

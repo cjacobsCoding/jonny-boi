@@ -159,6 +159,27 @@ export type GameEvent =
       readonly amount: number;
     }
   | {
+      /**
+       * fix/reports-2026-09-01 — a card was REVEALED from a hidden zone, by name,
+       * to everyone (Goblin Guide's "defending player reveals the top card of
+       * their library"). The identity is PUBLIC as printed — a reveal is the one
+       * act whose whole point is that both players see the card — which is why
+       * this event, unlike `cardsLookedAt`, carries the name. Bug report
+       * 20260901_210413: the reveal happened and nobody could see it.
+       *
+       * `matched` says whether the reveal's own condition held (Goblin Guide: it
+       * was a land, so it goes to the revealing player's hand) — the consequence
+       * arrives as its own `zoneChange`; this only explains it.
+       */
+      readonly type: 'cardRevealed';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+      readonly fromZone: ZoneName;
+      readonly sourceInstanceId: InstanceId;
+      readonly matched: boolean;
+    }
+  | {
       /** A non-mana activated ability was activated and put on the stack. */
       readonly type: 'abilityActivated';
       readonly player: PlayerId;
@@ -496,6 +517,14 @@ export type GameEvent =
       readonly targetInstanceId: InstanceId;
       readonly sourceInstanceId: InstanceId;
       readonly duration: ContinuousDuration;
+      /**
+       * fix/reports-2026-09-01 — the P/T delta the effect applies, when it has
+       * one, so a log can say "gets +1/+1" rather than only that SOMETHING was
+       * registered. Bug report 20260901_204957: a prowess pump made a 1/2 kill a
+       * 0/2 and nothing on screen said the creature was a 2/3 at the time.
+       */
+      readonly power?: number;
+      readonly toughness?: number;
     }
   | {
       // A card in a NON-battlefield zone gained an ability (Snapcaster's "gains

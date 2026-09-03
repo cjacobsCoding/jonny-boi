@@ -64,8 +64,42 @@ const MAIN_PHASE_HINTS: Readonly<Record<HintContext['mainPhaseFlavor'], string>>
 
 const RESPONSE_HINT = 'Cast instants in response, or pass priority to continue.';
 
+/**
+ * What the hint needs to know about the STACK (§3.119). Bug reports
+ * 20260901_212245 and 20260901_213414: a spell or trigger of the player's own
+ * sat on the stack waiting for a pass while the bar read "Play a land or cast a
+ * spell from your hand" — copy for an empty stack, shown over a full one. A
+ * non-empty stack is its own situation and gets its own copy, whatever the
+ * step: the player has to know that the next click RESOLVES something.
+ */
+export interface StackHintContext {
+  /** The top object's display name ("Thragtusk", "Enters: you gain 5 life"). */
+  readonly topName: string;
+  /** Whether the top object is the viewer's own. */
+  readonly topIsMine: boolean;
+  /** Whether the viewer has an instant-speed play they could respond with. */
+  readonly canRespond: boolean;
+}
+
+/** The copy shown when the stack is non-empty and the viewer holds priority. */
+export function stackHint(ctx: StackHintContext): string {
+  const whose = ctx.topIsMine ? 'Your' : 'Their';
+  const respond = ctx.canRespond ? ' — or respond first with an instant or an ability' : '';
+  return `${whose} ${ctx.topName} is waiting to resolve. Resolve it${respond}.`;
+}
+
+/** The pass button's label — it RESOLVES when something is on the stack. */
+export function passButtonLabel(step: string, stackNonEmpty: boolean): string {
+  if (stackNonEmpty) return 'Resolve';
+  if (step === 'declareAttackers' || step === 'declareBlockers') return 'Pass priority';
+  return 'Pass / advance';
+}
+
 /** The per-step action-bar hint (see the module doc). */
-export function actionBarHint(step: string, ctx: HintContext): string {
+export function actionBarHint(step: string, ctx: HintContext, stack?: StackHintContext): string {
+  // The stack outranks the step: whatever step we are in, a full stack means
+  // the next pass resolves something, and that is what the copy must say.
+  if (stack) return stackHint(stack);
   switch (step) {
     case 'precombatMain':
     case 'postcombatMain':

@@ -28,6 +28,7 @@ import {
   MANA_COLORS,
   NO_MOD,
   type CardInstance,
+  type ContinuousIndex,
   type GameState,
   type InstanceId,
   type KeywordFlags,
@@ -98,12 +99,34 @@ export interface BoardPermanent {
   readonly protector: PlayerId | null;
   readonly tapped: boolean;
   readonly summoningSick: boolean;
+  /** EFFECTIVE power/toughness — printed, plus counters, plus continuous effects. */
   readonly power: number;
   readonly toughness: number;
+  /**
+   * The PRINTED power/toughness, so the board can show the difference. Bug
+   * report 20260901_204957: a 1/2 Monastery Swiftspear killed a 0/2 because a
+   * prowess pump had made it a 2/3 — correctly — and nothing on screen said
+   * so. `ptDelta` is the visible answer: non-null whenever the effective stats
+   * differ from the printed ones (a pump, an anthem, a +1/+1 counter), with the
+   * signed differences a badge can print as "+1/+1". Zero for non-creatures.
+   */
+  readonly printedPower: number;
+  readonly printedToughness: number;
+  readonly ptDelta: { readonly power: number; readonly toughness: number } | null;
   readonly damageMarked: number;
   readonly keywords: KeywordFlags;
   /** Mana this source can still produce this turn (empty when not a mana source or tapped). */
   readonly producesIfTapped: readonly string[];
+  /**
+   * COMBAT ROLE this frame (bug report 20260901_204854, "it needs to be way
+   * more clear who is attacking"): `attacking` while the engine's combat state
+   * lists it as an attacker, `blocking` naming the attacker it blocks once
+   * blocks are declared. Both read straight off `state.combat`, which the
+   * engine keeps from declaration through end of combat and clears with the
+   * turn — so a creature is never drawn as attacking after combat is over.
+   */
+  readonly attacking: boolean;
+  readonly blocking: InstanceId | null;
 }
 
 /** A stack object rendered for the board. */
@@ -180,9 +203,20 @@ function visibleHand(hand: readonly CardInstance[]): VisibleHandCard[] {
   }));
 }
 
-function boardPermanent(state: GameState, inst: CardInstance): BoardPermanent {
-  const mod = indexContinuous(state).get(inst.instanceId) ?? NO_MOD;
+function boardPermanent(state: GameState, inst: CardInstance, cont: ContinuousIndex): BoardPermanent {
+  const mod = cont.get(inst.instanceId) ?? NO_MOD;
   const creature = isCreature(inst.def);
+  const power = creature ? effectivePower(inst, mod) : 0;
+  const toughness = creature ? effectiveToughness(inst, mod) : 0;
+  const printedPower = creature ? (inst.def.power ?? 0) : 0;
+  const printedToughness = creature ? (inst.def.toughness ?? 0) : 0;
+  const ptDelta =
+    creature && (power !== printedPower || toughness !== printedToughness)
+      ? { power: power - printedPower, toughness: toughness - printedToughness }
+      : null;
+  const combat = state.combat;
+  const attacking = combat !== null && combat.attackers.includes(inst.instanceId);
+  const blocking = combat !== null ? (combat.blocks[inst.instanceId] ?? null) : null;
   return {
     instanceId: inst.instanceId,
     cardId: cardIdOf(inst),
@@ -201,23 +235,32 @@ function boardPermanent(state: GameState, inst: CardInstance): BoardPermanent {
     protector: isBattle(inst.def) ? protectorOf(inst) : null,
     tapped: inst.tapped,
     summoningSick: inst.summoningSick,
-    power: creature ? effectivePower(inst, mod) : 0,
-    toughness: creature ? effectiveToughness(inst, mod) : 0,
+    power,
+    toughness,
+    printedPower,
+    printedToughness,
+    ptDelta,
     damageMarked: inst.damageMarked,
     keywords: effectiveKeywords(inst, mod),
     // Which mana this source could still make. Reads normalised MODES, so a modal
     // source (any-colour creature, dual land) lists each colour it could choose —
     // and reading the legacy `produces` field alone would show nothing for them.
     producesIfTapped: inst.tapped ? [] : manaColorsOffered(inst.def),
+    attacking,
+    blocking,
   };
 }
 
 /** Build the masked seat view for `seat`, revealing the hand only if `reveal`. */
 function seatView(state: GameState, seat: PlayerId, name: string, reveal: boolean): SeatView {
   const p = state.players[seat];
+  // The continuous index is built ONCE per seat view rather than once per
+  // permanent: it walks the whole battlefield, and a crowded board of twenty
+  // permanents was rebuilding it twenty times per frame.
+  const cont = indexContinuous(state);
   const permanents = state.battlefield
     .filter((c) => c.controller === seat)
-    .map((c) => boardPermanent(state, c));
+    .map((c) => boardPermanent(state, c, cont));
   return {
     id: seat,
     name,

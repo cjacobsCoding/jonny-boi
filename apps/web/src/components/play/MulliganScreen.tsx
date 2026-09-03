@@ -3,6 +3,8 @@ import type { InstanceId, PlayerId } from '@jonny-boi/core';
 import type { VisibleHandCard } from '../../lib/play/view-model.js';
 import { PlayCard } from './PlayCard.js';
 import { CardZoomOverlay } from './CardZoomOverlay.js';
+import { CardHover } from '../CardHover.js';
+import { mulliganCopy } from '../../lib/play/mulligan-copy.js';
 
 /**
  * The London mulligan decision for one player. They see their drawn hand (face-up —
@@ -10,6 +12,11 @@ import { CardZoomOverlay } from './CardZoomOverlay.js';
  * and choose Keep or Mulligan. When they keep after M mulligans, they must bottom M
  * cards: the screen switches to a "pick cards to put on the bottom" selection. Kept
  * deliberately simple but complete, per the brief.
+ *
+ * The RULE is named on screen (§3.119, bug report 20260901_212439 — "I thought
+ * Mulligan was scry? … This just says put on bottom"): the copy comes from the
+ * pure `mulliganCopy` table and says, in every phase, that this is the London
+ * mulligan — draw a full hand, then put one card per mulligan on the bottom.
  */
 export function MulliganScreen({
   seat,
@@ -31,7 +38,7 @@ export function MulliganScreen({
   onMulligan: () => void;
 }): ReactElement {
   const mustBottom = mulligansTaken; // London: bottom one card per mulligan taken
-  const [deciding, setDeciding] = useState<'choose' | 'bottom'>(mustBottom > 0 ? 'choose' : 'choose');
+  const [deciding, setDeciding] = useState<'choose' | 'bottom'>('choose');
   const [selected, setSelected] = useState<Set<InstanceId>>(new Set());
   /** The card being inspected full-size, if any (report 20260825_210026). */
   const [zoomed, setZoomed] = useState<VisibleHandCard | null>(null);
@@ -56,23 +63,24 @@ export function MulliganScreen({
     setDeciding('bottom');
   };
 
+  const copy = mulliganCopy({
+    handSize: hand.length,
+    mulligansTaken,
+    phase: deciding,
+    selectedCount: selected.size,
+  });
+
   return (
     <div className="mulligan">
       <h2 className="mulligan__title">{name}, keep this hand?</h2>
-      <p className="mulligan__sub">
-        {mulligansTaken === 0
-          ? 'Your opening hand. Keep it, or mulligan for a fresh seven.'
-          : `Mulligan ${mulligansTaken}. ${
-              deciding === 'bottom'
-                ? `Choose ${mustBottom} card${mustBottom === 1 ? '' : 's'} to put on the bottom (${selected.size}/${mustBottom}).`
-                : `If you keep, you'll bottom ${mustBottom} card${mustBottom === 1 ? '' : 's'}.`
-            }`}
-      </p>
+      <p className="mulligan__rule">{copy.rule}</p>
+      <p className="mulligan__sub">{copy.status}</p>
 
       <div className="mulligan__hand" onDragStart={(e) => e.preventDefault()}>
         {hand.map((c) => (
           // Full faces: the opening hand is exactly where a player reads cards
-          // (report 20260825_205937), and each slot carries its own zoom.
+          // (report 20260825_205937), and each slot carries its own zoom — and,
+          // like every other card on a play surface, the hover preview.
           <div
             key={c.instanceId}
             className="hand-card-slot"
@@ -81,14 +89,16 @@ export function MulliganScreen({
               setZoomed(c);
             }}
           >
-            <PlayCard
-              cardId={c.cardId}
-              name={c.name}
-              face="full"
-              badge={c.isLand ? 'Land' : undefined}
-              selected={selected.has(c.instanceId)}
-              onClick={deciding === 'bottom' ? () => toggle(c.instanceId) : undefined}
-            />
+            <CardHover cardId={c.cardId}>
+              <PlayCard
+                cardId={c.cardId}
+                name={c.name}
+                face="full"
+                badge={c.isLand ? 'Land' : undefined}
+                selected={selected.has(c.instanceId)}
+                onClick={deciding === 'bottom' ? () => toggle(c.instanceId) : undefined}
+              />
+            </CardHover>
             <button
               type="button"
               className="hand-card-slot__zoom"
@@ -109,10 +119,10 @@ export function MulliganScreen({
         {deciding === 'choose' ? (
           <>
             <button type="button" className="btn btn--primary" onClick={beginKeep}>
-              Keep ({hand.length - mustBottom} card{hand.length - mustBottom === 1 ? '' : 's'})
+              {copy.keepButton}
             </button>
             <button type="button" className="btn" onClick={onMulligan} disabled={!canMulligan}>
-              {canMulligan ? 'Mulligan' : 'No mulligans left'}
+              {canMulligan ? copy.mulliganButton : 'No mulligans left'}
             </button>
           </>
         ) : (
@@ -123,7 +133,7 @@ export function MulliganScreen({
               disabled={selected.size !== mustBottom}
               onClick={() => onKeep([...selected])}
             >
-              Confirm bottom {mustBottom}
+              {copy.confirmButton}
             </button>
             <button type="button" className="btn btn--ghost" onClick={() => setDeciding('choose')}>
               Back

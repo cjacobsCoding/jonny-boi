@@ -77,6 +77,8 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   cardGrantAdded: false,
   cardGrantExpired: false,
   cardsLookedAt: false,
+  // fix/reports-2026-09-01 — a reveal shows a card; the move that may follow is its own row.
+  cardRevealed: false,
   cardsMilled: false,
   choiceAbandoned: false,
   choiceAnswered: false,

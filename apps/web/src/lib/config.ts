@@ -43,6 +43,16 @@ export const MANA_CHOICE_STORAGE_KEY = 'jonny-boi.play.chooseMana.v1';
 export const COPILOT_STORAGE_KEY = 'jonny-boi.play.copilot.v1';
 
 /**
+ * localStorage key for the PRIORITY STOPS (§3.119) — which steps the game
+ * pauses in when the player holds an instant-speed play, whether an opponent's
+ * spell on the stack stops for a response, and the "full control" override. A
+ * player PREFERENCE exactly like the two above: it outlives a game and is not
+ * part of the game's state, so a saved game replays the same whatever the
+ * stops were set to.
+ */
+export const PRIORITY_STOPS_STORAGE_KEY = 'jonny-boi.play.priorityStops.v1';
+
+/**
  * sessionStorage key for the "this reload was triggered by an app UPDATE" flag
  * (see `lib/update/updater.ts`). Written immediately before an update-triggered
  * reload — never by user navigation — and consumed (removed) on the next boot,

@@ -211,7 +211,14 @@ export function describeCastTarget(
 ): string {
   if (option.kind === 'player') return `${option.name} (player)`;
   const owner = ownerLabel(option.controller, viewer, names);
-  const where = option.kind === 'spell' ? ' · stack' : '';
+  // Where it sits when that is not the battlefield: a spell or an ability on
+  // the stack, a card in a graveyard/exile. Board permanents say nothing extra.
+  const where =
+    option.kind === 'spell' || option.kind === 'ability'
+      ? ' · stack'
+      : option.kind === 'card'
+        ? ` · ${zoneLabel(option.zone) ?? option.zone}`
+        : '';
   return `${option.name} (${owner}${where})`;
 }
 

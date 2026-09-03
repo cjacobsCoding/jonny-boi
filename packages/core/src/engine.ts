@@ -111,6 +111,7 @@ import {
   legalTargetsFor,
   restrictionOfEffects,
   targetRestrictionOf,
+  triggerTargetPrompt,
 } from './targeting.js';
 import { WARD_COST_PARAM, WARD_COUNTER_PRIMITIVE, effectiveWardOf } from './protection.js';
 import {
@@ -478,6 +479,17 @@ function advanceStep(state: GameState, config: RulesConfig, emit: (e: GameEvent)
   }
 
   const next = STEP_ORDER[idx + 1] as Step;
+  // fix/reports-2026-09-01 — CR 508.8: "If no creatures are declared as attackers
+  // or put onto the battlefield attacking, skip the declare blockers and combat
+  // damage steps." Bug report 20260901_205742: the defender was asked for blocks
+  // ("No blocks" was the only button) on a turn where nothing attacked, because
+  // the step machine walked into declare-blockers regardless. Whether the active
+  // player declared an empty attack or simply passed through the declare-attackers
+  // step, `combat.attackers` is empty and the two steps do not happen.
+  if (next === 'declareBlockers' && (state.combat === null || state.combat.attackers.length === 0)) {
+    performStepTurnBasedActions(state, 'endCombat', config, emit);
+    return;
+  }
   performStepTurnBasedActions(state, next, config, emit);
 }
 
@@ -2268,7 +2280,8 @@ function aimPendingTriggers(state: GameState, emit: (e: GameEvent) => void): voi
       {
         kind: 'selectTargets',
         chooser: trigger.controller,
-        prompt: `Choose ${describeRestriction(restriction)} for ${trigger.label}`,
+        // fix/reports-2026-09-01 — the shared wording (see `triggerTargetPrompt`).
+        prompt: triggerTargetPrompt(restriction, trigger.label),
         candidates: candidates.map((ref) => targetOptionFor(state, ref)),
         restriction,
         min: wanted.min,

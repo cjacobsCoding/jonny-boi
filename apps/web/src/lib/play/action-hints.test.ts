@@ -10,7 +10,13 @@
  * block branch must promise too.
  */
 import { describe, expect, it } from 'vitest';
-import { actionBarHint, NO_ATTACKERS_HINT, NO_BLOCKERS_HINT } from './action-hints.js';
+import {
+  actionBarHint,
+  NO_ATTACKERS_HINT,
+  NO_BLOCKERS_HINT,
+  passButtonLabel,
+  stackHint,
+} from './action-hints.js';
 
 const base = {
   isAttackWindow: true,
@@ -84,5 +90,43 @@ describe('actionBarHint — the shared table', () => {
   it('covers blockers and the default response window', () => {
     expect(actionBarHint('declareBlockers', base)).toMatch(/block/i);
     expect(actionBarHint('upkeep', base)).toMatch(/pass priority/i);
+  });
+});
+
+/**
+ * §3.119 — bug reports 20260901_212245 (Thragtusk) and 20260901_213414 (Angel
+ * of Serenity): a spell or trigger of the player's own was on the stack, and
+ * the bar still read the EMPTY-STACK main-phase copy. The stack outranks the
+ * step, and the pass button says what it does.
+ */
+describe('actionBarHint — a non-empty stack', () => {
+  it('names the player’s own waiting trigger and says the next click resolves it', () => {
+    const hint = actionBarHint('precombatMain', base, {
+      topName: 'Enters: you gain 5 life',
+      topIsMine: true,
+      canRespond: false,
+    });
+    expect(hint).toBe('Your Enters: you gain 5 life is waiting to resolve. Resolve it.');
+    expect(hint).not.toMatch(/play a land/i);
+  });
+
+  it('offers a response only when the viewer actually has one', () => {
+    const hint = actionBarHint('precombatMain', base, {
+      topName: 'Angel of Serenity',
+      topIsMine: true,
+      canRespond: true,
+    });
+    expect(hint).toMatch(/respond first with an instant or an ability/i);
+  });
+
+  it('an opponent’s spell reads as theirs', () => {
+    expect(stackHint({ topName: 'Lightning Strike', topIsMine: false, canRespond: true })).toMatch(/^Their Lightning Strike/);
+  });
+
+  it('the pass button becomes "Resolve" whenever the stack is non-empty', () => {
+    expect(passButtonLabel('precombatMain', true)).toBe('Resolve');
+    expect(passButtonLabel('declareBlockers', true)).toBe('Resolve');
+    expect(passButtonLabel('precombatMain', false)).toBe('Pass / advance');
+    expect(passButtonLabel('declareAttackers', false)).toBe('Pass priority');
   });
 });

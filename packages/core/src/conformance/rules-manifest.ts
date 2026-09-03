@@ -644,6 +644,11 @@ export const RULES_MANIFEST: RulesManifest = {
       { rule: '508.1a', title: 'a tapped creature cannot be declared as an attacker' },
       { rule: '508.1f', title: 'declaring an attacker taps it — unless it has vigilance' },
       { rule: '508.1', title: 'the same creature cannot be declared as an attacker twice' },
+      {
+        rule: '508.8',
+        title: 'with no attackers declared, the declare-blockers and combat-damage steps are skipped',
+      },
+      { rule: '508.8', title: 'passing through declare-attackers without declaring skips the same two steps' },
     ],
     shortfall:
       'CR 508.1d attack REQUIREMENTS ("attacks each combat if able") are not modelled; CR 508.1c ' +

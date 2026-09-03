@@ -297,6 +297,12 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
    * kept card moves library → library and is anonymised by the same rule.
    */
   cardsLookedAt: 'public',
+  /*
+   * fix/reports-2026-09-01 — a REVEAL is public by definition: the card is turned
+   * face up for both players, which is the printed effect. The name in the event
+   * is what a spectator reads off the table, not a leak from a hidden zone.
+   */
+  cardRevealed: 'public',
   abilityActivated: 'public',
   /*
    * CYCLING is public as printed, and the name it carries is not a leak: the

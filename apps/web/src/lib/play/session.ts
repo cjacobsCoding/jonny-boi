@@ -283,7 +283,15 @@ export class GameSession {
    */
   nameOf = (id: InstanceId): string => {
     const inst = this.findInstance(id);
-    return inst ? inst.def.name : `#${id}`;
+    if (inst) return inst.def.name;
+    // A TRIGGERED/ACTIVATED ABILITY on the stack is an object with an id but no
+    // card instance behind it. It has to resolve to its label: Strionic
+    // Resonator's target menu is a list of exactly these (bug report
+    // 20260901_210141), and "#412" is not a thing a player can choose between.
+    for (const obj of this.state.stack) {
+      if (obj.kind === 'trigger' && obj.instanceId === id) return obj.label;
+    }
+    return `#${id}`;
   };
 
   /** A player id → their chosen seat name (for the log). */
@@ -505,20 +513,57 @@ export class GameSession {
   }
 
   /**
+   * Can the priority-holder do something at INSTANT SPEED right now — cast an
+   * instant (from hand, or a flashback one from the graveyard), activate a
+   * non-mana ability, or cycle a card? This is the question the Arena-style
+   * priority stops ask (`priority-stops.ts`): a window in which the player
+   * could respond is a window worth stopping in; one in which they merely hold
+   * sorcery-speed cards they cannot cast yet is not.
+   *
+   * Sorcery-speed casts are excluded on purpose even in the main phase, because
+   * a main-phase stop is decided by the STEP rule, not by this one — and a
+   * creature in hand during the opponent's end step is exactly the card this
+   * must not count.
+   */
+  canRespond(): boolean {
+    if (this.pendingChoice) return false;
+    const instantSpeed = (option: CastOption): boolean => {
+      const def = this.definitionForCast(option);
+      return def !== undefined && (def.timing === 'instant' || def.types.includes('instant'));
+    };
+    if (this.castOptions().some(instantSpeed)) return true;
+    if (this.graveyardCastOptions().some(instantSpeed)) return true;
+    if (this.cycleOptions().length > 0) return true;
+    return this.abilityOptions().length > 0;
+  }
+
+  /**
    * Pass priority repeatedly while the holder has no meaningful choice, returning
    * the session at the next window that actually needs a human (or the end of the
    * game). Returns `this` unchanged when the current window is already meaningful,
    * so a caller can set state unconditionally without causing a re-render loop.
    *
+   * `shouldStop` is the STOP RULE — by default "the holder has a meaningful
+   * choice" (`hasMeaningfulChoice`), which is what pass-and-play has always
+   * used. The Solo board hands in the Arena-style rule from `priority-stops.ts`
+   * instead, so a window the player has chosen not to stop in (their own
+   * trigger on the stack, the opponent's upkeep) is passed for them even though
+   * they hold an instant. The rule is a parameter rather than a mode flag so the
+   * session itself stays policy-free: it never decides what counts as a stop,
+   * only how to walk to the next one.
+   *
    * Bounded by `maxAutoAdvanceSteps`: a state where nobody ever has a choice (two
    * empty boards passing turns at each other) must not spin the UI. Hitting the
    * bound simply stops early and hands control back — the game stays legal.
    */
-  autoAdvancePriority(maxPasses: number = HOTSEAT_CONFIG.maxAutoAdvanceSteps): GameSession {
+  autoAdvancePriority(
+    maxPasses: number = HOTSEAT_CONFIG.maxAutoAdvanceSteps,
+    shouldStop: (session: GameSession) => boolean = (session) => session.hasMeaningfulChoice(),
+  ): GameSession {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     let working: GameSession = this;
     for (let i = 0; i < maxPasses; i++) {
-      if (working.gameOver || working.hasMeaningfulChoice()) break;
+      if (working.gameOver || shouldStop(working)) break;
       const result = working.passPriority();
       if (result.rejected) break;
       working = result.session;
@@ -853,9 +898,30 @@ export class GameSession {
     return cycled;
   }
 
-  /** Legal target options for a card's requirement against the current state. */
+  /**
+   * Legal target options for a card's requirement against the current state,
+   * enumerated for the PRIORITY-HOLDER as caster. Prefer {@link castTargets}
+   * for a cast option, which also hands core the card being cast (protection
+   * from its colour/type is checked against the source).
+   */
   targetsFor(req: TargetRequirement): readonly TargetOption[] {
-    return legalTargets(req, this.state, this.names);
+    return legalTargets(req, this.state, this.names, this.priorityPlayer);
+  }
+
+  /**
+   * The legal targets of a cast option — the menu the board's target prompt
+   * shows and the set the board's tiles are lit for. Asked of core's own
+   * enumerator with the caster and the card, so it is the set the engine will
+   * accept and nothing wider (bug report 20260901_211035).
+   */
+  castTargets(option: CastOption): readonly TargetOption[] {
+    return legalTargets(
+      option.requirement,
+      this.state,
+      this.names,
+      this.priorityPlayer,
+      this.definitionForCast(option),
+    );
   }
 
   /**
