@@ -565,7 +565,26 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
   },
   { id: 'attachment', label: 'attachments — an Aura or Equipment attached', witnessKind: 'event', printedBy: (c) => (c as { attachment?: unknown }).attachment !== undefined },
   { id: 'token', label: 'tokens — a token created', witnessKind: 'event', printedBy: (_c, t) => t.includes('createToken') || t.includes('makeToken') },
-  { id: 'regeneration', label: 'regeneration — a shield spent to replace a destruction', witnessKind: 'event', printedBy: (c) => JSON.stringify((c )).includes('"regenerate"') },
+  {
+    id: 'regeneration',
+    label: 'regeneration — a shield spent to replace a destruction',
+    witnessKind: 'event',
+    printedBy: (c) => JSON.stringify(c).includes('"regenerate"'),
+    // §3.123 — A SEQUENCED WITNESS, and the third of its kind (after
+    // token-count-replacement and uncounterable). The event is not "a shield was
+    // raised" but "a shield was SPENT": the pilot must pay the regeneration cost
+    // on a creature, and that creature must then actually be destroyed before the
+    // turn ends. Two ordered events, so the grid's six attempts are a coin flip
+    // and WHICH base seed a caller uses decides the toss.
+    //
+    // MEASURED, not assumed: on the 6,257-card pool the mechanic fires in
+    // `soak.test.ts`'s lane and not in `observation.test.ts`'s scan, with both
+    // runs fully deterministic and the same engine and pool underneath — so it
+    // is the seeds that are short, not the engine that is broken. Same remedy as
+    // its two siblings: the overtime lane, which only runs when the grid left the
+    // mechanic unfired and cannot re-roll any other mechanic's witness.
+    extraAnchorAttempts: SOAK_SEQUENCED_EXTRA_ATTEMPTS,
+  },
   { id: 'triggered-ability', label: 'triggered abilities — one put on the stack', witnessKind: 'event', printedBy: (c) => ((c as { triggers?: readonly unknown[] }).triggers ?? []).length > 0 },
   { id: 'modal-trigger', label: 'modal triggers — a "Choose one —" body answered on the stack', witnessKind: 'event', printedBy: (c) => ((c as { triggers?: readonly { modal?: unknown }[] }).triggers ?? []).some((t) => t.modal !== undefined) },
   {

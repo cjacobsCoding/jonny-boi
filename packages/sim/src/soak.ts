@@ -203,8 +203,20 @@ function allInstances(state: GameState): { readonly inst: CardInstance; readonly
   return out;
 }
 
-/** A short, greppable rendering of an action for a failure message. */
-export function describeAction(a: GameAction): string {
+/**
+ * A short, greppable rendering of an action for a failure message.
+ *
+ * `defOf` is optional and adds the CARD NAME — the one fact a reader needs and
+ * an instance id cannot supply. Optional rather than required because the two
+ * call sites inside `checkActionLegality` render an action the failure text
+ * already identifies by zone, while the rejection report has nothing else.
+ */
+export function describeAction(a: GameAction, defOf?: (id: InstanceId) => CardDefinition | undefined): string {
+  const named = (id: InstanceId, text: string): string => {
+    const name = defOf?.(id)?.name;
+    return name === undefined ? text : `${text} (${name})`;
+  };
+  if (defOf !== undefined && 'instanceId' in a) return named(a.instanceId, describeAction(a));
   switch (a.kind) {
     case 'castSpell':
       return `castSpell#${a.instanceId}${a.fromZone ? `/${a.fromZone}` : ''}${a.face ? `/${a.face}` : ''}`;
@@ -366,7 +378,7 @@ function checkActionLegality(
 }
 
 /** Which mechanic (if any) this ACTION proves, given the definitions in play. */
-function mechanicOfAction(
+export function mechanicOfAction(
   state: GameState,
   action: GameAction,
   defOf: (id: InstanceId) => CardDefinition | undefined,
@@ -377,7 +389,15 @@ function mechanicOfAction(
       // cast, a madness cast and a split card's second half all emit the same
       // `spellCast` event, and only the action says which happened.
       if (action.face === 'back') return 'second-castable-face';
-      if (action.fromZone === 'graveyard') return 'flashback-cast';
+      // §3.111/§3.123 — WHICH graveyard keyword paid for this cast is carried by
+      // the action, and only by the action: a retrace, a jump-start and an
+      // escape emit the same `spellCast` from the same zone as a flashback.
+      // Reading the zone alone credited every one of them to `flashback-cast`,
+      // which made `graveyard-cast` unreachable — a mechanic row that no code
+      // path could ever tick, reported INERT for a family the engine had.
+      if (action.fromZone === 'graveyard') {
+        return action.graveyardCast === undefined ? 'flashback-cast' : 'graveyard-cast';
+      }
       // §3.106 — the free cast out of a SUSPEND window shares the exile zone and
       // the window record with madness; the window's kind says which happened.
       if (action.fromZone === 'exile') return state.madnessWindow?.kind === 'suspend' ? 'suspend' : 'madness';
@@ -605,6 +625,14 @@ function createGameWatcher(inner: Pilot): GameWatcher {
   let lastTurn = 0;
   let lastState: GameState | null = null;
   let turnChecks = 0;
+  /*
+   * The last action the wrapped pilot submitted, kept so a REJECTION can name
+   * it. `actionRejected` carries the engine's reason and nothing else, so
+   * without this the soak reported "the engine rejected an offered action:
+   * lands are played, not cast" with a bare `-` for the action — a true report
+   * that costs the reader a full replay to turn into a card. §3.123.
+   */
+  let lastChosen: GameAction | null = null;
 
   const record = (invariant: SoakInvariantName, detail: string, state: GameState, action: string) => {
     // Once per (invariant, game): one systemic break must not bury the others.
@@ -715,6 +743,7 @@ function createGameWatcher(inner: Pilot): GameWatcher {
       const state = ctx.view as unknown as GameState;
       observeState(state, '-');
       const chosen = inner.chooseAction(ctx);
+      lastChosen = chosen;
       const reason = checkActionLegality(state, ctx.legalActions, chosen);
       if (reason) record(SOAK_INVARIANTS.legalActionsOnly, reason, state, describeAction(chosen));
       const mechanic = mechanicOfAction(state, chosen, (id) => defs.get(id));
@@ -731,7 +760,14 @@ function createGameWatcher(inner: Pilot): GameWatcher {
         // The soak only ever submits actions that came off the menu, so a
         // rejection means the menu and the apply path disagree about legality —
         // an engine defect, not a pilot one.
-        if (lastState) record(SOAK_INVARIANTS.noRejectedActions, `the engine rejected an offered action: ${event.reason}`, lastState, '-');
+        if (lastState) {
+          record(
+            SOAK_INVARIANTS.noRejectedActions,
+            `the engine rejected an offered action: ${event.reason}`,
+            lastState,
+            lastChosen === null ? '-' : describeAction(lastChosen, (id) => defs.get(id)),
+          );
+        }
         break;
       case 'effectUnsupported':
         /*

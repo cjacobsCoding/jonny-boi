@@ -79,8 +79,8 @@ import {
   generateLegalActions,
   isCreature,
   isLand,
-  MAIN_STEPS,
   MANA_COLORS,
+  sorcerySpeedWindowFor,
 } from '@jonny-boi/core';
 import type { DecisionContext, Pilot } from './pilot.js';
 import type { ContinuousIndex } from './board-stats.js';
@@ -802,8 +802,7 @@ function isUnspendableManaWindow(state: GameState, legal: readonly GameAction[])
     if (perm.controller === me && !perm.tapped) available += bestManaYield(perm.def);
   }
 
-  const sorcerySpeedOpen =
-    me === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
+  const sorcerySpeedOpen = sorcerySpeedWindowFor(state, me);
 
   for (const card of player.hand) {
     if (isLand(card.def)) continue;

@@ -99,6 +99,7 @@ import {
   NO_COUNTERS,
   PLAYER_IDS,
   protectorOf,
+  sorcerySpeedWindowFor,
   spellLeaveDestination,
   STEP_ORDER,
 } from './state.js';
@@ -1599,6 +1600,13 @@ function dispatchAction(
       action.fromZone === 'exile' &&
       action.instanceId === window.instanceId &&
       action.player === window.controller;
+    // §3.123 — a madness LAND is played, not cast, so the window's one move is
+    // a `playLand` instead. Same three facts identify it as the cast above.
+    const isMadnessLandPlay =
+      action.kind === 'playLand' &&
+      action.fromZone === 'exile' &&
+      action.instanceId === window.instanceId &&
+      action.player === window.controller;
     const isDecline = action.kind === 'passPriority' && action.player === window.controller;
     // Mana abilities stay legal, because a cast needs paying for: the madness
     // cast happens while the window's controller holds priority, and CR 605.3a
@@ -1606,7 +1614,7 @@ function dispatchAction(
     // Without this the window is a trap — a pilot with untapped lands and an
     // empty pool could never fund the cast it is being offered.
     const isFunding = action.kind === 'tapForMana' && action.player === window.controller;
-    if (!isMadnessCast && !isDecline && !isFunding) {
+    if (!isMadnessCast && !isMadnessLandPlay && !isDecline && !isFunding) {
       return rejectWith(prevState, 'a madness window is awaiting its controller');
     }
   }
@@ -2084,6 +2092,50 @@ function applyAnswerChoice(
   return { state, events };
 }
 
+/**
+ * §3.123 — **WHY THIS PLAYER MAY NOT PLAY A LAND RIGHT NOW**, or `undefined`
+ * when they may. CR 305.1: a land play is a special action taken only during
+ * your own main phase, with an empty stack, priority in hand, and a land play
+ * still owed you.
+ *
+ * THE reader: `applyPlayLand` refuses by it and every offer site gates on it,
+ * so "may I play a land?" has one answer. It was one answer by coincidence
+ * until a madness window put a LAND in exile ("play it for its madness cost" —
+ * Madlands) and the window's menu, which had only ever held casts, had to ask
+ * the land question too.
+ */
+function landPlayRefusal(state: GameState, player: PlayerId, config: RulesConfig): string | undefined {
+  if (player !== state.activePlayer) return 'only the active player may play a land';
+  if (player !== state.priorityPlayer) return 'you do not have priority';
+  if (state.stack.length > 0) return 'cannot play a land while the stack is non-empty';
+  if (!MAIN_STEPS.includes(state.step)) return 'lands can only be played during a main phase';
+  if (state.players[player].landsPlayedThisTurn >= maxLandPlaysFor(state, player, config)) {
+    return 'no land plays remaining this turn';
+  }
+  return undefined;
+}
+
+/**
+ * §3.123 — is `card` a LAND sitting in an open madness window belonging to
+ * `player`? Such a card is PLAYED, not cast, so the window's menu offers a
+ * `playLand` and the cast path must never see it.
+ *
+ * A free-cast window (suspend, cascade, ripple) is excluded: those kinds put a
+ * NONLAND on offer by construction, and their card is cast for nothing rather
+ * than played for a cost.
+ */
+function isMadnessLandInWindow(state: GameState, card: CardInstance, player: PlayerId): boolean {
+  const window = state.madnessWindow;
+  return (
+    window !== null &&
+    window !== undefined &&
+    window.instanceId === card.instanceId &&
+    window.controller === player &&
+    !isFreeCastWindow(window) &&
+    isLand(card.def)
+  );
+}
+
 function applyPlayLand(
   state: GameState,
   prevState: GameState,
@@ -2092,14 +2144,9 @@ function applyPlayLand(
   emit: (e: GameEvent) => void,
   events: GameEvent[],
 ): EngineResult {
-  if (action.player !== state.activePlayer) return rejectWith(prevState, 'only the active player may play a land');
-  if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
-  if (state.stack.length > 0) return rejectWith(prevState, 'cannot play a land while the stack is non-empty');
-  if (!MAIN_STEPS.includes(state.step)) return rejectWith(prevState, 'lands can only be played during a main phase');
+  const timingRefusal = landPlayRefusal(state, action.player, config);
+  if (timingRefusal !== undefined) return rejectWith(prevState, timingRefusal);
   const player = state.players[action.player];
-  if (player.landsPlayedThisTurn >= maxLandPlaysFor(state, action.player, config)) {
-    return rejectWith(prevState, 'no land plays remaining this turn');
-  }
   // WHERE FROM. The hand needs no permission. Every other zone does, and there
   // are two different KINDS of permission, which is why they are read apart:
   //   - `'exile'` is a permission the CARD carries — an ADVENTURER whose primary
@@ -2135,8 +2182,13 @@ function applyPlayLand(
     }
     card = top;
   }
-  const permission = fromZone === 'exile' ? castPermissionFor(state, card) : undefined;
-  if (fromZone === 'exile') {
+  // §3.123 — THE SECOND permission to play a land out of exile: an open MADNESS
+  // window on this very card. A madness LAND prints "play it for its madness
+  // cost", so it is a land play with a price, and the cast path (which refuses
+  // every land with "lands are played, not cast") must never be handed one.
+  const madnessLand = fromZone === 'exile' && isMadnessLandInWindow(state, card, action.player);
+  const permission = fromZone === 'exile' && !madnessLand ? castPermissionFor(state, card) : undefined;
+  if (fromZone === 'exile' && !madnessLand) {
     if (permission === undefined) return rejectWith(prevState, 'that card has no permission to be played from exile');
     if ((action.face ?? 'front') !== permission.face) {
       return rejectWith(prevState, 'that face of this card may not be played from exile');
@@ -2154,6 +2206,21 @@ function applyPlayLand(
   const playDef = playableFaceOf(card.def, action.face);
   if (!playDef) return rejectWith(prevState, 'that card has no playable back face');
   if (!isLand(playDef)) return rejectWith(prevState, 'that card is not a land');
+  // §3.123 — PAY THE MADNESS COST, then consume the window. Validate-then-pay,
+  // the order every other cost site in this file uses, so a refusal leaves the
+  // pool untouched. No spend PURPOSE is passed: mana restricted to casting
+  // spells or activating abilities does not fund a land play, and there is no
+  // third purpose to name. The window is cleared only once the play is certain,
+  // because a cleared window with the card still in exile would strand it.
+  if (madnessLand) {
+    const madnessCost = card.def.madness;
+    if (madnessCost === undefined) return rejectWith(prevState, 'that card has no madness cost');
+    if (!canPay(player.manaPool, madnessCost)) return rejectWith(prevState, 'insufficient mana for the madness cost');
+    const paid = payCost(player.manaPool, madnessCost);
+    if (!paid.ok) return rejectWith(prevState, paid.reason);
+    player.manaPool = paid.pool;
+    state.madnessWindow = null;
+  }
   // The face swap, identical to the cast path: `def` IS the active face, and
   // `printedDef` is the way back to the front should the land ever leave.
   if (playDef !== card.def) {
@@ -3501,8 +3568,7 @@ function applyCastSpell(
 
   // Timing: sorcery-speed spells require your main phase, empty stack, your priority.
   const timing = castTiming(castDef);
-  const sorcerySpeedOk =
-    action.player === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
+  const sorcerySpeedOk = sorcerySpeedWindowFor(state, action.player);
   // A MADNESS cast happens inside its own window (CR 702.35a) — the card is cast
   // as the madness trigger resolves, so the spell's own timing restriction does
   // not apply and a sorcery really is cast on an opponent's turn. Every other
@@ -4494,8 +4560,7 @@ function applyCycleCard(
   // the same readers an `activateAbility` is judged by so the menu and the
   // wall cannot disagree about what a channel line may point at.
   if ((ability.timing ?? 'instant') === 'sorcery') {
-    const sorcerySpeedOk =
-      action.player === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
+    const sorcerySpeedOk = sorcerySpeedWindowFor(state, action.player);
     if (!sorcerySpeedOk) return rejectWith(prevState, `${ability.label} may be activated only as a sorcery`);
   }
   const cycleTargetProblem = illegalTargetReasonForEffects(
@@ -4615,8 +4680,7 @@ function applySuspendCard(
   const player = state.players[action.player];
   const card = instanceIn(player.hand, action.instanceId);
   if (!card) return rejectWith(prevState, 'that card is not in your hand');
-  const sorcerySpeedWindow =
-    action.player === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
+  const sorcerySpeedWindow = sorcerySpeedWindowFor(state, action.player);
   const refusal = unsuspendableReason(state, card, action.player, sorcerySpeedWindow);
   if (refusal !== undefined) return rejectWith(prevState, refusal);
   const suspend = card.def.suspend as NonNullable<CardDefinition['suspend']>;
@@ -4717,8 +4781,7 @@ function applyExileToCastLater(
   const player = state.players[action.player];
   const card = instanceIn(player.hand, action.instanceId);
   if (!card) return rejectWith(prevState, 'that card is not in your hand');
-  const sorcerySpeedWindow =
-    action.player === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
+  const sorcerySpeedWindow = sorcerySpeedWindowFor(state, action.player);
   const refusal = laterCastRefusal(state, card, action.player, method, sorcerySpeedWindow);
   if (refusal !== undefined) return rejectWith(prevState, refusal);
   const cost = (method === 'foretell' ? FORETELL_COST : card.def.plot) as ManaCost;
@@ -4830,8 +4893,7 @@ function applyActivateGraveyardAbility(
   if (!card) return rejectWith(prevState, 'that card is not in your graveyard');
   const ability = card.def.graveyardAbilities?.[action.abilityIndex];
   if (!ability) return rejectWith(prevState, 'that card has no such graveyard ability');
-  const sorcerySpeedOk =
-    action.player === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
+  const sorcerySpeedOk = sorcerySpeedWindowFor(state, action.player);
   if ((ability.timing ?? 'instant') === 'sorcery' && !sorcerySpeedOk) {
     return rejectWith(prevState, 'this ability can only be activated at sorcery speed');
   }
@@ -4936,8 +4998,7 @@ function applyActivateAbility(
   // Timing: the rules default for an activated ability is instant speed; only
   // one that says "activate only as a sorcery" is restricted.
   const timing = ability.timing ?? 'instant';
-  const sorcerySpeedOk =
-    action.player === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
+  const sorcerySpeedOk = sorcerySpeedWindowFor(state, action.player);
   if (timing === 'sorcery' && !sorcerySpeedOk) {
     return rejectWith(prevState, 'this ability can only be activated at sorcery speed');
   }
@@ -5368,7 +5429,7 @@ function applyDeclareBlockers(
  * Pass is listed FIRST and unconditionally — an unaffordable madness cost must
  * still leave a way out, or the window would deadlock the game.
  */
-function madnessActionsFor(state: GameState): GameAction[] {
+function madnessActionsFor(state: GameState, config: RulesConfig): GameAction[] {
   const window = state.madnessWindow;
   if (!window) return [];
   const me = window.controller;
@@ -5390,6 +5451,20 @@ function madnessActionsFor(state: GameState): GameAction[] {
       (cost === undefined ||
         !canPay(player.manaPool, cost, spendPurposeIfRestricted(player.manaPool, card.def, 'cast'))))
   ) {
+    return actions;
+  }
+  // §3.123 — A LAND IN THE WINDOW IS PLAYED, NOT CAST. Madlands prints
+  // "Madness {0} … play it for its madness cost … You can play a land only
+  // during your turn and only if you have an available land play remaining",
+  // and that last sentence is exactly `landPlayRefusal` — read here rather than
+  // re-derived, so this menu cannot offer a play the apply path then refuses.
+  // Before this the window offered a `castSpell` for it and the cast path
+  // answered "lands are played, not cast", costing the pilot its whole window
+  // (found by the soak on the 6,257-card pool, seed 2348957995).
+  if (isLand(card.def)) {
+    if (landPlayRefusal(state, me, config) === undefined) {
+      actions.push({ kind: 'playLand', player: me, instanceId: card.instanceId, fromZone: 'exile' });
+    }
     return actions;
   }
   const restriction = targetRestrictionOf(card.def);
@@ -5425,7 +5500,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // and drops it into the graveyard. Enumerated here rather than left to a
   // consumer's imagination, so every seat — a pilot, the hotseat UI, the online
   // client — plays madness by picking from the menu it already reads.
-  if (state.madnessWindow) return madnessActionsFor(state);
+  if (state.madnessWindow) return madnessActionsFor(state, config);
   const me = state.priorityPlayer;
   const player = state.players[me];
   const actions: GameAction[] = [];
@@ -5444,10 +5519,11 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   pushManaTapActions(state, me, actions);
   const battlefield = state.battlefield;
 
-  const sorcerySpeedWindow = me === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
+  const sorcerySpeedWindow = sorcerySpeedWindowFor(state, me);
 
-  // Play a land (sorcery-speed, land plays remaining).
-  if (sorcerySpeedWindow && player.landsPlayedThisTurn < maxLandPlaysFor(state, me, config)) {
+  // Play a land — judged by the one reader `applyPlayLand` refuses by (§3.123),
+  // so the menu and the wall cannot disagree about the land-play window.
+  if (landPlayRefusal(state, me, config) === undefined) {
     for (let h = 0; h < player.hand.length; h++) {
       const card = player.hand[h] as CardInstance;
       if (card.def.isBackFace === true) continue;

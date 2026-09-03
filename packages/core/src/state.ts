@@ -425,6 +425,33 @@ export const STEP_ORDER: readonly Step[] = [
 export const MAIN_STEPS: readonly Step[] = ['precombatMain', 'postcombatMain'];
 
 /**
+ * **THE sorcery-speed window (CR 307.1): is it open for `player` right now?**
+ *
+ * "Any time you could cast a sorcery" is asked by everything with sorcery
+ * timing — a sorcery, an Equip, a transmute, a plot, a suspend, a graveyard
+ * ability, an alternative cast — in three different layers: the engine OFFERS
+ * only what it is open for, the engine ACCEPTS only what it is open for, and
+ * the PILOT plans only what it is open for. Before §3.123 that was sixteen
+ * hand-written copies of the same conjunction (seven in `engine.ts`, nine in
+ * `packages/ai`, several of which had inlined the two step names rather than
+ * reading {@link MAIN_STEPS}), and the failure mode is exactly rule 12's: a
+ * consumer that forgets to ask AT ALL looks identical to one that asks and gets
+ * `true`. The soak found one — the pilot's cycling policy fires at the END STEP
+ * ("mana would go unused"), never asked about timing, and proposed a transmute
+ * the engine then refused, costing the pilot the turn.
+ *
+ * Typed structurally rather than as `GameState` so the AI's `PlayerView` — which
+ * carries these three fields and hides the rest — is a legal argument without a
+ * cast. Cheap tests first: the seat check and the stack check are both O(1).
+ */
+export function sorcerySpeedWindowFor(
+  state: { readonly activePlayer: PlayerId; readonly step: Step; readonly stack: readonly unknown[] },
+  player: PlayerId,
+): boolean {
+  return player === state.activePlayer && state.stack.length === 0 && MAIN_STEPS.includes(state.step);
+}
+
+/**
  * ONE announced mode of a modal spell — which mode was chosen, and what that
  * mode was aimed at.
  *

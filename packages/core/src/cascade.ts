@@ -103,6 +103,27 @@ export function spellOnStackById(state: GameState, instanceId: InstanceId): Spel
 }
 
 /**
+ * §3.123 — SAY OUT LOUD that this card came off the top of the library.
+ *
+ * Cascade exiles face up (CR 702.85a) and ripple literally says "reveal"
+ * (CR 702.60a), so every card either keyword takes off the library is PUBLIC
+ * from that instant. Nothing in the state records that: the card is in exile
+ * for the length of one resolution and is back in the library, hidden again,
+ * before any seat gets priority — so an audit that can only look at settled
+ * states sees a card that was never on display being named by the window's
+ * `zoneChange` and `pileBottomed` events, and reports a leak.
+ *
+ * That audit is right to. The fix is the same one §3.119 shipped for Goblin
+ * Guide, and for the same reason: a reveal is the one way a card becomes public
+ * WITHOUT changing zones at a boundary anyone can observe, so the engine has to
+ * emit it. `cardRevealed` fires no triggers (`triggers-runtime.ts`), so this
+ * adds a fact to the log and changes no game outcome.
+ */
+function revealFromLibrary(player: PlayerId, card: CardInstance, emit: (e: GameEvent) => void): void {
+  emit({ type: 'cardRevealed', player, instanceId: card.instanceId, name: card.def.name, fromZone: 'library' });
+}
+
+/**
  * **CR 702.85a — the exile half of cascade.** Exile cards from the top of
  * `player`'s library until a nonland card with mana value less than `manaValue`
  * is exiled, then open the window on it. Returns the pile (every card exiled,
@@ -128,6 +149,7 @@ export function performCascade(
   let hit: CardInstance | undefined;
   while (library.length > 0) {
     const top = library[0]!;
+    revealFromLibrary(player, top, emit);
     moveToZone(state, top, 'exile', emit);
     pile.push(top.instanceId);
     const def = top.def;
@@ -164,6 +186,7 @@ export function performRipple(
   const revealed = Math.min(Math.max(0, count), library.length);
   for (let i = 0; i < revealed; i++) {
     const top = library[0]!;
+    revealFromLibrary(player, top, emit);
     moveToZone(state, top, 'exile', emit);
     pile.push(top.instanceId);
   }

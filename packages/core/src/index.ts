@@ -547,6 +547,9 @@ export {
   playerZone,
   opponentOf,
   protectorOf,
+  // §3.123 — THE sorcery-speed window. One reader for the engine's offer path,
+  // its apply path and every pilot that plans a sorcery-timed play.
+  sorcerySpeedWindowFor,
   spellLeaveDestination,
 } from './state.js';
 

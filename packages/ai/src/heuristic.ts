@@ -68,6 +68,9 @@ import {
   hasType,
   isCreature,
   isLand,
+  // §3.123 — THE sorcery-speed window, read from core so the pilot's plan and
+  // the engine's menu cannot disagree about when a sorcery-timed play is legal.
+  sorcerySpeedWindowFor,
   // §3.112 — the cast-alternative family.
   ALTERNATIVE_COSTS,
   alternativeCostKindsOf,
@@ -429,10 +432,7 @@ function heuristicWillPass(view: GameState, rules: RulesConfig): boolean {
 
   // Is this the seat's own SORCERY window? It decides which cards are playable
   // at all, and whether a land drop is on offer.
-  const sorceryOpen =
-    me === view.activePlayer &&
-    (view.step === 'precombatMain' || view.step === 'postcombatMain') &&
-    view.stack.length === 0;
+  const sorceryOpen = sorcerySpeedWindowFor(view, me);
 
   // ⚠️ THE MANA BOUND IS AN UPPER BOUND ON PURPOSE. Counting untapped sources
   // over-estimates what is really available (a source may be colour-wrong, or
@@ -819,6 +819,17 @@ function decideMadness(ctx: DecisionContext, weights: HeuristicWeights): GameAct
         }
       }
     }
+  }
+  // §3.123 — a madness LAND is PLAYED, not cast (Madlands), so the window's one
+  // move is a `playLand`. Taken unconditionally: a free land is never worse than
+  // letting the card fall into the graveyard, and the engine only offers this
+  // when the land-play window is genuinely open.
+  const madnessLandPlay = legalActions.find(
+    (a): a is Extract<GameAction, { kind: 'playLand' }> => a.kind === 'playLand' && a.fromZone === 'exile',
+  );
+  if (madnessLandPlay) {
+    const name = findInstance(view, madnessLandPlay.instanceId)?.def.name ?? 'the discarded land';
+    return emit(ctx, madnessLandPlay, ctx.trace ? `play ${name} for its madness cost` : NO_REASON, weights.genericSpellScore);
   }
   const cast = legalActions.find(
     (a): a is Extract<GameAction, { kind: 'castSpell' }> => a.kind === 'castSpell' && a.fromZone === 'exile',
@@ -1363,10 +1374,7 @@ function bestFundedActivation(
 ): { readonly action: GameAction; readonly score: number; readonly label: string } | undefined {
   const { view, legalActions } = ctx;
   const me = view.priorityPlayer;
-  const sorcerySpeedOpen =
-    me === view.activePlayer &&
-    (view.step === 'precombatMain' || view.step === 'postcombatMain') &&
-    view.stack.length === 0;
+  const sorcerySpeedOpen = sorcerySpeedWindowFor(view, me);
 
   let best: { action: GameAction; score: number; label: string } | undefined;
   let cards: ReturnType<typeof cardValueContext> | undefined;
@@ -1478,10 +1486,7 @@ function bestEquipPlay(
   const me = view.priorityPlayer;
   // Every printed Equip is "activate only as a sorcery"; checking it here avoids
   // planning a play the engine would refuse.
-  const sorcerySpeedOpen =
-    me === view.activePlayer &&
-    (view.step === 'precombatMain' || view.step === 'postcombatMain') &&
-    view.stack.length === 0;
+  const sorcerySpeedOpen = sorcerySpeedWindowFor(view, me);
   if (!sorcerySpeedOpen) return undefined;
 
   let hosts: readonly (InstanceId | PlayerId)[] | undefined;
@@ -1744,8 +1749,7 @@ function scoredSpellGoals(
   // would construct a `castSpell` the engine rejects and spin forever. Sorcery-
   // speed spells need our main phase, empty stack, and our priority; instants are
   // always castable when we hold priority. (Mirrors core's timing gate.)
-  const sorcerySpeedOpen =
-    me === view.activePlayer && (view.step === 'precombatMain' || view.step === 'postcombatMain') && view.stack.length === 0;
+  const sorcerySpeedOpen = sorcerySpeedWindowFor(view, me);
 
   // The opponent's creatures are the same list for every card in hand, so they
   // are gathered ONCE here rather than rebuilt inside `scoreSpell` per candidate
@@ -2783,6 +2787,18 @@ function bestCycle(ctx: DecisionContext, weights: HeuristicWeights): CycleGoal |
   // "The turn is ending" is read off the step rather than guessed from the
   // absence of other plays: at the end step nothing else will use this mana.
   const turnEnding = view.step === 'end';
+  /*
+   * §3.123 — A CYCLING-SHAPED ABILITY MAY PRINT SORCERY TIMING. Cycling itself
+   * never does, so this policy asked no timing question at all for a year; then
+   * §3.112 modelled TRANSMUTE ("activate only as a sorcery", CR 702.53a) as a
+   * cycling ability, and the two clauses above became a trap. The only case
+   * that scores at all for a non-land is `turnEnding` — the END STEP, which is
+   * precisely when a sorcery-timed ability is ILLEGAL. So the pilot proposed a
+   * transmute off-menu at every end step it could pay for, the engine refused
+   * it, and the sim burned the rest of the turn on the retry (the soak's
+   * `noRejectedActions`, seed 2769623907).
+   */
+  const sorcerySpeedOpen = sorcerySpeedWindowFor(view, me);
 
   let best: CycleGoal | undefined;
   for (const card of hand) {
@@ -2790,6 +2806,7 @@ function bestCycle(ctx: DecisionContext, weights: HeuristicWeights): CycleGoal |
     if (!abilities || abilities.length === 0) continue;
     for (let index = 0; index < abilities.length; index++) {
       const ability = abilities[index]!;
+      if ((ability.timing ?? 'instant') !== 'instant' && !sorcerySpeedOpen) continue;
       const surplusLand = flooded && isLand(card.def);
       const score = surplusLand
         ? weights.cycleFloodedScore
@@ -2876,8 +2893,7 @@ function bestSuspend(ctx: DecisionContext, weights: HeuristicWeights): SuspendGo
     }
   }
   if (!anySuspend) return undefined;
-  const sorcerySpeedOpen =
-    me === view.activePlayer && (view.step === 'precombatMain' || view.step === 'postcombatMain') && view.stack.length === 0;
+  const sorcerySpeedOpen = sorcerySpeedWindowFor(view, me);
   const availableMana = totalAvailableMana(view, me);
 
   let best: SuspendGoal | undefined;
@@ -2958,8 +2974,7 @@ function bestSetAside(ctx: DecisionContext, weights: HeuristicWeights): SetAside
   }
   if (!any) return undefined;
   if (me !== view.activePlayer) return undefined;
-  const sorcerySpeedOpen =
-    (view.step === 'precombatMain' || view.step === 'postcombatMain') && view.stack.length === 0;
+  const sorcerySpeedOpen = sorcerySpeedWindowFor(view, me);
   const availableMana = totalAvailableMana(view, me);
 
   let best: SetAsideGoal | undefined;
@@ -3087,8 +3102,7 @@ function bestGraveyardAbility(
     }
   }
   if (!any) return undefined;
-  const sorcerySpeedOpen =
-    me === view.activePlayer && (view.step === 'precombatMain' || view.step === 'postcombatMain') && view.stack.length === 0;
+  const sorcerySpeedOpen = sorcerySpeedWindowFor(view, me);
   const attackAhead = me === view.activePlayer && view.step === 'precombatMain';
   let cards: ReturnType<typeof cardValueContext> | undefined;
   let best: GraveyardAbilityGoal | undefined;
@@ -5048,10 +5062,7 @@ function bestEquipMacro(
   index: ContinuousIndex,
 ): PolicyCandidate | undefined {
   const me = view.priorityPlayer;
-  const sorcerySpeedOpen =
-    me === view.activePlayer &&
-    (view.step === 'precombatMain' || view.step === 'postcombatMain') &&
-    view.stack.length === 0;
+  const sorcerySpeedOpen = sorcerySpeedWindowFor(view, me);
   if (!sorcerySpeedOpen) return undefined;
 
   let hosts: readonly (InstanceId | PlayerId)[] | undefined;
