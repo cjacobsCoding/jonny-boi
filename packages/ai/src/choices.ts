@@ -951,7 +951,21 @@ function unleashTakesCounter(state: GameState, choice: ConfirmChoice): boolean {
   return mine >= theirs;
 }
 
-/** Explore's answer: bin the revealed top card when it is not worth keeping on top. */
+/**
+ * Explore's answer: bin the revealed top card when it is not worth keeping on
+ * top — the SAME `cardValue` against the SAME `scryKeepValueThreshold` a scry
+ * or surveil look uses, because it is the same question one card wide (rule 12:
+ * one answer to one question).
+ *
+ * ⚠️ On the DEFAULT weights that means the pilot always KEEPS, and the reason
+ * is worth writing down rather than tuning around: explore only ever asks about
+ * a NONLAND (a land goes straight to hand, CR 701.42a), and every nonland
+ * prices at or above `choiceSpellBaseValue` — comfortably over the threshold. A
+ * graveyard the deck could USE is what would change that, and this value model
+ * does not price graveyard synergy at all. The threshold is left as the seam
+ * that starts binning the day a card prices below it, and
+ * `counter-keyword-pilot.test.ts` pins both sides of it.
+ */
 function exploreBinsTopCard(state: GameState, choice: ConfirmChoice, weights: HeuristicWeights): boolean {
   const top = state.players[choice.chooser].library[0];
   if (top === undefined) return false;
