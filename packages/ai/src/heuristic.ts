@@ -857,6 +857,10 @@ function alternativeCandidate(
   const alt = def.alternativeCosts?.[kind];
   if (alt === undefined) return undefined;
   if (convertedManaCost(alt.cost) > availableMana) return undefined;
+  // The card's own timing still applies to an alternative cast (CR 601.2b
+  // changes the price, not the window) — the same gate the printed cast's
+  // prefilter applies, asked here because this candidate is built before it.
+  if (castTiming(def) !== 'instant' && !sorcerySpeedOpen) return undefined;
   const me = view.priorityPlayer;
   const needsFact = ALTERNATIVE_COSTS[kind].requiresTurnFact;
   if (needsFact !== undefined && !turnFactHolds(view as GameState, needsFact, me)) return undefined;
@@ -1636,6 +1640,41 @@ function scoredSpellGoals(
       const card = half.card;
       const def = card.def;
       if (isLand(def)) continue;
+      /*
+       * §3.112 — THE ALTERNATIVE CASTS of this half, each ONE MORE CANDIDATE
+       * with its own price, so the pilot WEIGHS them against the printed cast
+       * rather than following a rule: an evoke is scored as the ETB spell it
+       * buys (Mulldrifter evoked IS "draw two cards" for {2}{U}); a prototype
+       * is scored as the body it arrives as; dash, blitz, surge and warp are
+       * the same body for less. `alternativeCandidate` decides which kinds are
+       * worth proposing on this board, and why.
+       *
+       * ⚠️ ABOVE the printed-cost prefilters below, and that is the whole
+       * point: the cheap cast exists precisely when the printed one is
+       * unaffordable, so a `continue` on the printed mana value would skip
+       * every evoke, dash and prototype the pilot is meant to be weighing.
+       * (It did — the pilot passed the turn with Mulldrifter and three
+       * Islands in front of it.)
+       */
+      for (const kind of alternativeCostKindsOf(def)) {
+        const candidate = alternativeCandidate(view, def, kind, availableMana, sorcerySpeedOpen);
+        if (candidate === undefined) continue;
+        const altCard = { ...card, def: candidate.def };
+        oppCreatures ??= creaturesControlledBy(view, opp);
+        const altGoal = scoreSpell(view, opp, oppCreatures, altCard, classifySpell(candidate.def), weights, explain, index);
+        const altLegal = altGoal ? withLegalTargets(view, opp, altGoal, index, weights) : undefined;
+        if (!altLegal) continue;
+        scored.push({
+          ...altLegal,
+          cost: candidate.cost,
+          alternative: kind,
+          // An evoke's aim belongs to the ETB TRIGGER, chosen as that ability
+          // goes on the stack; the creature spell itself targets nothing.
+          ...(kind === 'evoke' ? { targets: [] } : {}),
+          ...(half.face === undefined ? {} : { face: half.face }),
+          reason: explain ? `${kind} — ${altLegal.reason}` : NO_REASON,
+        });
+      }
       // §3.106 — CR 202.1b: a card with no mana cost cannot be cast from hand
       // (the engine refuses it); it reaches the stack through suspend instead.
       if (def.noManaCost === true) continue;
@@ -1665,33 +1704,6 @@ function scoredSpellGoals(
       // instead of being rejected by the engine and retried forever.
       const legal = goal ? withLegalTargets(view, opp, goal, index, weights) : undefined;
       if (legal) scored.push(half.face === undefined ? legal : { ...legal, face: half.face });
-
-      // §3.112 — THE ALTERNATIVE CASTS of this half, each ONE MORE CANDIDATE
-      // with its own price, so the pilot WEIGHS them against the printed cast
-      // rather than following a rule: an evoke is scored as the ETB spell it
-      // buys (Mulldrifter evoked IS "draw two cards" for {2}{U}); a prototype
-      // is scored as the body it arrives as; dash, blitz and surge are the
-      // same body for less. `alternativeCandidate` says which kinds are worth
-      // proposing on this board and why.
-      for (const kind of alternativeCostKindsOf(def)) {
-        const candidate = alternativeCandidate(view, def, kind, availableMana, sorcerySpeedOpen);
-        if (candidate === undefined) continue;
-        const altCard = { ...card, def: candidate.def };
-        oppCreatures ??= creaturesControlledBy(view, opp);
-        const altGoal = scoreSpell(view, opp, oppCreatures, altCard, classifySpell(candidate.def), weights, explain, index);
-        const altLegal = altGoal ? withLegalTargets(view, opp, altGoal, index, weights) : undefined;
-        if (!altLegal) continue;
-        scored.push({
-          ...altLegal,
-          cost: candidate.cost,
-          alternative: kind,
-          // An evoke's aim belongs to the ETB TRIGGER, chosen as it goes on
-          // the stack; the creature spell itself targets nothing.
-          ...(kind === 'evoke' ? { targets: [] } : {}),
-          ...(half.face === undefined ? {} : { face: half.face }),
-          reason: explain ? `${kind} — ${altLegal.reason}` : NO_REASON,
-        });
-      }
     }
 
     // §3.112 — CHANNEL and BLOODRUSH: the card's from-hand activation, scored
