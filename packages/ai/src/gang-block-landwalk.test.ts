@@ -159,6 +159,46 @@ describe('the gang-block search respects the SIZE of a block requirement', () =>
   });
 });
 
+describe('the gang-block search respects a CAP on blockers', () => {
+  it('proposes no gang block on "can\'t be blocked by more than one creature"', () => {
+    // THE INCIDENT (§3.123): the full-pool soak reported *the engine rejected an
+    // offered action: Tenacious Tosk can't be blocked by more than one creature*.
+    // §3.107 taught core the cap; nothing on the pilot's side had ever heard of
+    // `maxBlockers`, so the pair search double-blocked it and the engine threw
+    // out the WHOLE declaration. Third instance of one class — see §3.118 (the
+    // board) and §3.121 (the minimum).
+    const state = freshGame(1690196133);
+    const [tosk] = putOnBattlefield(state, 'A', [
+      creatureDef('Tenacious Tosk', 3, 3, { keywords: { maxBlockers: 1 } }),
+    ]);
+    putOnBattlefield(state, 'B', [creatureDef('Bear One', 2, 2), creatureDef('Bear Two', 2, 2)]);
+    intoDeclareBlockers(state, [tosk!.instanceId]);
+
+    const action = choose(state);
+    expect(rejectionOf(applyAction(state, action))).toBeUndefined();
+    if (action.kind === 'declareBlockers') {
+      // At most one blocker on it — never the pair.
+      expect(action.blocks.filter((b) => b.attacker === tosk!.instanceId).length).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('CONTROL: the same two bears DO gang up when no cap is printed', () => {
+    // Without this the fix could be "gang blocking is off", which passes the
+    // test above and loses games.
+    const state = freshGame(1690196133);
+    const [ogre] = putOnBattlefield(state, 'A', [creatureDef('Uncapped Ogre', 3, 3)]);
+    putOnBattlefield(state, 'B', [creatureDef('Bear One', 2, 2), creatureDef('Bear Two', 2, 2)]);
+    intoDeclareBlockers(state, [ogre!.instanceId]);
+
+    const action = choose(state);
+    expect(action.kind).toBe('declareBlockers');
+    if (action.kind === 'declareBlockers') {
+      expect(action.blocks.filter((b) => b.attacker === ogre!.instanceId).length).toBe(2);
+      expect(rejectionOf(applyAction(state, action))).toBeUndefined();
+    }
+  });
+});
+
 /** The engine's refusal, if any: a rejected action leaves exactly one `actionRejected` event. */
 function rejectionOf(result: ReturnType<typeof applyAction>): string | undefined {
   for (const event of result.events) {

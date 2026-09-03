@@ -169,3 +169,50 @@ describe('a sorcery-timed cycling ability at the end step (§3.123)', () => {
     expect(actions.some((a) => a.kind === 'cycleCard'), 'the cycling policy went dead').toBe(true);
   });
 });
+
+/**
+ * A BLOODRUSH-shaped ability: cycling-shaped, instant speed, and its body
+ * TARGETS. The second question `bestCycle` has to ask, after timing.
+ */
+const BLOODRUSHER: CardDefinition = {
+  id: 'Bloodrusher',
+  name: 'Bloodrusher',
+  types: ['creature'],
+  power: 3,
+  toughness: 1,
+  cost: { generic: 2, U: 1 },
+  cycling: [
+    {
+      cost: { U: 1 },
+      effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 1, targets: 'creature' } }],
+      label: 'Bloodrush — {U}',
+    },
+  ],
+};
+
+describe('the cycling policy never builds an action the engine refuses for its TARGETS (§3.123)', () => {
+  it('proposes no bare cycleCard for a body that targets — the bloodrush rejection', () => {
+    // THE INCIDENT: the full-pool soak reported *the engine rejected an offered
+    // action: Bloodrush — {R} targets exactly one attacking creature* (seed
+    // 930850277). `bestCycle` builds its action rather than taking one off the
+    // menu, so it asked the cost question and — since the timing fix above —
+    // the timing question, but not the TARGETS one. A targeted body is refused
+    // outright unless the action names exactly one legal target.
+    const state = boardAt('end');
+    giveHand(state, 'A', [BLOODRUSHER]);
+
+    const { rejections } = drive(state);
+    expect(rejections, rejections.join(' | ')).toEqual([]);
+  });
+
+  it('CONTROL: a plain cycler is still cycled at the end step', () => {
+    // Without this, "skip every cycling ability" would pass the test above and
+    // quietly delete the policy this file exists to keep alive.
+    const state = boardAt('end');
+    giveHand(state, 'A', [CYCLER]);
+
+    const { actions, rejections } = drive(state);
+    expect(rejections, rejections.join(' | ')).toEqual([]);
+    expect(actions.some((a) => a.kind === 'cycleCard' || a.kind === 'tapForMana')).toBe(true);
+  });
+});

@@ -2807,6 +2807,23 @@ function bestCycle(ctx: DecisionContext, weights: HeuristicWeights): CycleGoal |
     for (let index = 0; index < abilities.length; index++) {
       const ability = abilities[index]!;
       if ((ability.timing ?? 'instant') !== 'instant' && !sorcerySpeedOpen) continue;
+      /*
+       * §3.123 — AND IT MAY REQUIRE A TARGET. The same trap as the timing one
+       * above, one question further on: a cycling-shaped ability whose body
+       * targets (bloodrush's pump, a channel line) is refused outright unless
+       * the action names exactly one legal target, and this policy builds its
+       * action rather than taking one off the menu — so it proposed a bare
+       * `cycleCard` and the engine answered "Bloodrush — {R} targets exactly
+       * one attacking creature" (the full-pool soak, seed 930850277).
+       *
+       * Skipped rather than aimed, deliberately. This policy's two reasons —
+       * the hand is flooded, or the turn is ending with mana unspent — are
+       * arguments for DISCARDING a card, not for pointing a pump at a creature;
+       * choosing that target well is the combat scorer's job. The engine still
+       * offers these abilities per legal target, so the paths that do reason
+       * about targets can take them.
+       */
+      if (restrictionOfEffects(ability.effects) !== undefined) continue;
       const surplusLand = flooded && isLand(card.def);
       const score = surplusLand
         ? weights.cycleFloodedScore
@@ -4172,6 +4189,11 @@ function addGangBlocks(
     // whole declaration illegal and cost every other block in it (§3.121).
     const required = requiredBlockerCountFor(attacker, index);
     if (required > GANG_BLOCK_SIZE) continue;
+    // …and the CAP: this search assigns exactly two, so an attacker that may be
+    // blocked by fewer than that is one it must leave to the single-blocker
+    // path. Core judges the whole declaration, so one over-blocked attacker
+    // would cost every other block in it (§3.123).
+    if (maxBlockerCountFor(attacker, index) < GANG_BLOCK_SIZE) continue;
     const mustGang = required > 1;
     const kill = weights.killEnemyPerStat * (aPower + aTough);
 
@@ -4672,6 +4694,26 @@ const GANG_BLOCK_SIZE = 2;
 export function requiredBlockerCountFor(attacker: CardInstance, index: ContinuousIndex): number {
   const ak = keywordsOf(attacker, index);
   return Math.max(ak.menace === true ? MENACE_BLOCKERS_NEEDED : 0, ak.minBlockers ?? 0);
+}
+
+/**
+ * The MOST creatures that may legally block this attacker — "~ can't be blocked
+ * by more than one creature" (CR 509.1b, DESIGN §3.107) — or `Infinity` when it
+ * prints no cap. The dual of {@link requiredBlockerCountFor}, read off the same
+ * effective keyword set, and mirrored here for the same reason: core judges the
+ * whole DECLARATION, so a pilot that proposes one over-blocked attacker loses
+ * every other block in the same declaration.
+ *
+ * ⚠️ This is the third time this exact class has cost a game: §3.118 (the
+ * gang-block search read no battlefield, so landwalk was invisible), §3.121 (it
+ * asked "more than one blocker?" as a boolean and paired two onto an attacker
+ * needing three), and now the cap — a creature the search happily double-blocked
+ * because nothing on this side of the seam had ever heard of `maxBlockers`. The
+ * pattern is always the same: a declaration-level rule lands in core, and the
+ * pilot's mirror is completed one keyword at a time.
+ */
+export function maxBlockerCountFor(attacker: CardInstance, index: ContinuousIndex): number {
+  return keywordsOf(attacker, index).maxBlockers ?? Infinity;
 }
 
 /**
