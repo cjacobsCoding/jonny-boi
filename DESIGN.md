@@ -2275,13 +2275,24 @@ the Lab is a light page **until the A/B Swap tab mounts its card pickers**. The 
 this report is the one from the reported frame itself, which is why the harness now drives that tab
 rather than the landing one.
 
-**A second defect found while chasing it, deliberately NOT fixed here.** That machine's
-`localStorage` holds 64 keys totalling **1,579 KB**, of which 57 are `jonny-boi.suggest-history.v1…`
-keys totalling **1,451 KB** — because `suggestionHistoryKey` embeds the entire decklist *in the key*
-(longest: 662 characters), so every deck edit mints another permanent key. The reporter's own
-`state_dump.txt` was drowning in them, so the dump now elides long keys and prints the total; the
-store itself wants a short deck digest plus a cap, and that is `packages/sim`'s fingerprint in
-another branch's file. Logged rather than half-done.
+**A second defect found while chasing it — diagnosed, then fixed.** That machine's `localStorage`
+holds 64 keys totalling **1,579 KB**, of which 57 are `jonny-boi.suggest-history.v1…` keys totalling
+**1,451 KB** — because `suggestionHistoryKey` embedded the entire decklist *in the key* (one
+`cardId:count` pair per distinct card; longest 662 characters), so every deck edit minted another
+permanent key. The dump now elides long keys and prints the total, so a report about this can no
+longer drown in it.
+
+The key itself is now an eight-character FNV-1a digest of the fingerprint. That is safe **here and
+only here**, and the reason is the module's own existing discipline rather than a new argument: the
+stored record carries its own `deckFingerprint` and `readSuggestionHistory` already validates it
+against the live deck ("checking the record's own fields as well as the key costs nothing"), so a
+digest collision is rejected as `deck-changed` — a run without prior evidence, never a record read
+for the wrong deck. `history-store.test.ts` makes that argument executable rather than asserted.
+Nothing is thrown away for the format change: a record under the old long key is re-homed onto the
+digested one and the long key reclaimed, mirroring the pre-partition migration already in the file,
+including its order — the old key is only forgotten once the new one definitely holds the record.
+⚠️ `packages/sim`'s `deckFingerprint` is deliberately UNTOUCHED: it is the record's identity and
+another package's contract; only the web app's key derivation changed.
 
 **The priority-UX design — the three reports as one system.** The old rule was "stop wherever the
 player has any legal action", and one instant in hand makes that every window of every step: that is
@@ -2311,8 +2322,8 @@ identically whatever the stops were set to.
 **What is deferred, precisely.** (1) Dragging a targeted spell onto a *specific* tile: a drop routes
 through the same chokepoint a click does and then raises the aiming state, so the gesture is
 drag-to-board-then-click-target rather than drag-onto-target — `useDragToPlay` tracks one drop zone,
-and per-tile hit-testing is a change to that machine rather than to this feature. (2) The
-`suggest-history` key growth above. (3) The ONLINE board gets the combat bands, the P/T delta and the
+and per-tile hit-testing is a change to that machine rather than to this feature. (2) The ONLINE
+board gets the combat bands, the P/T delta and the
 core-backed targeting, but not the reveal banner or the stops: its frames carry pre-formatted log
 lines rather than `GameEvent`s (§3.57's same boundary), and its priority is the server's.
 

@@ -587,6 +587,26 @@ export function createObservationLeakScanner(report: (detail: string) => void): 
 
       for (const observation of pending) {
         scanned++;
+        /*
+         * A REVEAL MAKES ITS SUBJECT SEEN — the one way a card becomes public
+         * WITHOUT leaving the zone it is hidden in (§3.119).
+         *
+         * Until reveals existed, "seen" and "not in a hidden zone at some flush"
+         * were the same thing, so the shrink above was the whole rule. Goblin
+         * Guide breaks that equivalence exactly as printed: "the defending
+         * player reveals the top card of their library", and a revealed NON-land
+         * stays on top — displayed to both players and still in the library. The
+         * scanner would otherwise report the card's own printed effect as a
+         * leak, which is what the soak caught.
+         *
+         * Marked BEFORE the check below, so the revealing observation itself is
+         * legitimate: the reveal is the act that makes it public. This does not
+         * weaken the guarantee — the engine is the trusted side here (the PILOT
+         * is what this audits), and a `cardRevealed` is a deliberate, faithful
+         * emission of a card that says "reveal". Every later mention of the id is
+         * then honest for the same reason any post-cast mention is.
+         */
+        if (observation.type === 'cardRevealed') neverSeen.delete(observation.instanceId);
         const keys = collectKeys(observation, new Set<string>(), new Set<object>());
         for (const key of FORBIDDEN_OBSERVATION_KEYS) {
           if (keys.has(key)) report(`observation ${observation.type} carries a forbidden field "${key}"`);

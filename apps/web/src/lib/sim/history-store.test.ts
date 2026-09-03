@@ -27,8 +27,10 @@ import {
 import { SELECTABLE_PILOT_IDS } from '@jonny-boi/ai';
 import {
   clearSuggestionHistory,
+  fingerprintDigest,
   historyRejectionText,
   legacySuggestionHistoryKey,
+  longSuggestionHistoryKey,
   otherPilotHistories,
   readSuggestionHistory,
   suggestionHistoryKey,
@@ -230,6 +232,80 @@ describe('pre-partition records are adopted, not lost', () => {
 
     expect(readSuggestionHistory(DECK, DEFAULT_PILOT_ID, storage).history).toEqual(legacy);
     expect(map.has(legacySuggestionHistoryKey(deckFingerprint(DECK)))).toBe(true);
+  });
+});
+
+/**
+ * §3.119 — the key no longer carries the whole decklist.
+ *
+ * Found while chasing bug report 20260902_231525: that browser held 57
+ * `suggest-history` keys totalling 1,451 KB, the longest key 662 characters,
+ * because `deckFingerprint` (one `cardId:count` pair per distinct card) was the
+ * key. A new one is minted on every deck edit, for ever.
+ */
+describe('the storage key is a digest, not the decklist', () => {
+  it('is short, and the decklist is not in it', () => {
+    const fingerprint = deckFingerprint(DECK);
+    // The reported shape: a fingerprint hundreds of characters long.
+    expect(fingerprint.length).toBeGreaterThan(100);
+    const key = suggestionHistoryKey(fingerprint, PILOT);
+    expect(key.length).toBeLessThan(80);
+    expect(key).not.toContain(fingerprint);
+    expect(key).toContain(fingerprintDigest(fingerprint));
+  });
+
+  it('is stable, and different decks get different digests', () => {
+    const a = deckFingerprint(DECK);
+    const b = deckFingerprint(SAMPLE_DECKS[1] as Deck);
+    expect(fingerprintDigest(a)).toBe(fingerprintDigest(a));
+    expect(fingerprintDigest(a)).not.toBe(fingerprintDigest(b));
+    expect(fingerprintDigest(a)).toMatch(/^[0-9a-f]{8}$/);
+  });
+
+  it('a DIGEST COLLISION is caught by the record’s own fingerprint, not served', () => {
+    // The safety argument for hashing, made executable: a record filed under
+    // this deck's key but describing another deck is rejected as deck-changed.
+    const { storage } = fakeStorage();
+    const other = historyFor(SAMPLE_DECKS[1] as Deck);
+    storage.setItem(
+      suggestionHistoryKey(deckFingerprint(DECK), PILOT),
+      JSON.stringify({ pilotId: PILOT, history: other }),
+    );
+    const read = readSuggestionHistory(DECK, PILOT, storage);
+    expect(read.history).toBeUndefined();
+    expect(read.rejected).toBe('deck-changed');
+  });
+
+  it('re-homes a record written under the old LONG key, then reclaims the key', () => {
+    const { storage, map } = fakeStorage();
+    const record = historyFor(DECK);
+    const longKey = longSuggestionHistoryKey(deckFingerprint(DECK), PILOT);
+    storage.setItem(longKey, JSON.stringify({ pilotId: PILOT, history: record }));
+
+    expect(readSuggestionHistory(DECK, PILOT, storage).history).toEqual(record);
+    // The 1,451 KB is the point: the long key is gone and the digest holds it.
+    expect(map.has(longKey)).toBe(false);
+    expect(map.has(suggestionHistoryKey(deckFingerprint(DECK), PILOT))).toBe(true);
+    // Idempotent — a second read goes straight to the digested key.
+    expect(readSuggestionHistory(DECK, PILOT, storage).history).toEqual(record);
+  });
+
+  it('keeps the long key when the migration write fails', () => {
+    const { storage, map } = fakeStorage({ failWrites: true });
+    const record = historyFor(DECK);
+    const longKey = longSuggestionHistoryKey(deckFingerprint(DECK), PILOT);
+    map.set(longKey, JSON.stringify({ pilotId: PILOT, history: record }));
+
+    expect(readSuggestionHistory(DECK, PILOT, storage).history).toEqual(record);
+    expect(map.has(longKey)).toBe(true);
+  });
+
+  it('still adopts a PRE-PARTITION record when no long-key record exists', () => {
+    // The two migrations are tried in order and must not shadow each other.
+    const { storage } = fakeStorage();
+    const legacy = historyFor(DECK);
+    storage.setItem(legacySuggestionHistoryKey(deckFingerprint(DECK)), JSON.stringify(legacy));
+    expect(readSuggestionHistory(DECK, DEFAULT_PILOT_ID, storage).history).toEqual(legacy);
   });
 });
 
