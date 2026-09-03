@@ -462,8 +462,14 @@ export const createPredefinedToken: EffectPrimitive = (ctx) => {
   ctx.createTokens(def, count, undefined, ctx.params.tapped === true ? { tapped: true } : undefined);
 };
 
-export const makeToken: EffectPrimitive = (ctx) => {
-  const count = intParam(ctx, 'count', 1);
+/**
+ * The token DEFINITION a params bag describes — extracted from {@link makeToken}
+ * so every primitive that creates a printed token reads the descriptor the same
+ * way (rule 12). `makeToken` creates it; `livingWeaponGerm` creates it and then
+ * attaches its source to it. A second copy of this reader would eventually
+ * disagree about a colour or a subtype line and the bug would belong to neither.
+ */
+function tokenDefFromParams(ctx: EffectContext): CardDefinition {
   const power = intParam(ctx, 'power', 1);
   const toughness = intParam(ctx, 'toughness', 1);
   const name = strParam(ctx, 'name') ?? 'Token';
@@ -486,7 +492,7 @@ export const makeToken: EffectPrimitive = (ctx) => {
   // typal lord and a "sacrifice a Goblin" cost both select on.
   const declaredSubtypes = strArrayParam(ctx, 'subtypes');
   const subtypes = declaredSubtypes.length > 0 ? declaredSubtypes : [name];
-  const def: CardDefinition = {
+  return {
     id: `token:${[...types].join('-')}:${(colors ?? []).join('') || 'c'}:${subtypes.join('-')}:${power}/${toughness}`,
     name,
     types,
@@ -500,6 +506,35 @@ export const makeToken: EffectPrimitive = (ctx) => {
     ...(colors === undefined ? {} : { colors: colors as CardDefinition['colors'] }),
     ...(isEmptyKeywords(keywords) ? {} : { keywords }),
   };
+}
+
+/**
+ * LIVING WEAPON (CR 702.92a) — "When this Equipment enters, create a 0/0 black
+ * Phyrexian Germ creature token, then attach this to it."
+ *
+ * Composition, not a new system: the token comes from the same descriptor reader
+ * every printed token uses, and the attach is core's one attachment funnel
+ * (`ctx.attach` → `attachTo`), the same one an Equip ability and an Aura's
+ * resolution go through. So the Germ is a real object that dies to the 0/0
+ * state-based action the moment the Equipment stops buffing it, and the
+ * Equipment's own `whenIllegal: detach` rule applies to it unchanged.
+ *
+ * ⚠️ ORDER MATTERS, and the printed word is "then". The token must EXIST before
+ * the attach, because a 0/0 Germ with nothing attached is lethal to itself: if
+ * the attach ran first (or failed silently) the card would read as working while
+ * the Germ died immediately. `createTokens` returns the new ids for exactly this,
+ * and a run that made no token attaches nothing rather than attaching to a guess.
+ */
+export const livingWeaponGerm: EffectPrimitive = (ctx) => {
+  const made = ctx.createTokens(tokenDefFromParams(ctx), 1, undefined, tokenEntryParam(ctx));
+  const germ = made[0];
+  if (germ === undefined) return;
+  ctx.attach(germ);
+};
+
+export const makeToken: EffectPrimitive = (ctx) => {
+  const count = intParam(ctx, 'count', 1);
+  const def = tokenDefFromParams(ctx);
   // ONE call with the count, not a loop of ones: "create **two** 1/1 tokens" is
   // a single CR 614 event, so a doubler must see the 2 and replace it once (see
   // `EffectContext.createTokens`).
@@ -1772,6 +1807,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   grantKeywordToYoursUntilEndOfTurn,
   createPredefinedToken,
   makeToken,
+  livingWeaponGerm,
   createEmblem,
   persistReturn,
   destroyTarget,

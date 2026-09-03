@@ -3484,7 +3484,12 @@ function addGangBlocks(
     const aPower = power(attacker, index);
     const aTough = toughness(attacker, index);
     const aToughLeft = Math.max(1, toughnessLeft(attacker, index));
-    const mustGang = needsMultipleBlockers(attacker, index);
+    // This search forms PAIRS, so an attacker that needs three or more blockers
+    // is one it cannot legally block at all — pairing two onto it would make the
+    // whole declaration illegal and cost every other block in it (§3.121).
+    const required = requiredBlockerCountFor(attacker, index);
+    if (required > GANG_BLOCK_SIZE) continue;
+    const mustGang = required > 1;
     const kill = weights.killEnemyPerStat * (aPower + aTough);
 
     let bestValue = -Infinity;
@@ -3955,21 +3960,45 @@ function hasBlockRequirement(creature: CardInstance, index: ContinuousIndex): bo
 const MENACE_BLOCKERS_NEEDED = 2;
 
 /**
- * Whether this attacker has a blocking requirement of two or more creatures
- * (menace, or the general "except by N or more"). This pilot never assigns more
- * than one blocker to an attacker, so proposing ANY block on such a creature is
- * proposing an illegal declaration - the engine rejects the whole thing, and the
- * pilot loses every other block in it as well.
+ * How many blockers the gang-block search assigns to one attacker. It builds
+ * PAIRS, so this is also the largest block requirement it can legally satisfy —
+ * see `addGangBlocks`, which skips an attacker needing more.
+ */
+const GANG_BLOCK_SIZE = 2;
+
+/**
+ * How many creatures it takes before ANY of them is legally blocking this
+ * attacker — menace's two, or the general "except by N or more", whichever is
+ * larger. Mirrors core's `requiredBlockerCount` (CR 509.1b), which is the rule
+ * the engine judges the declaration by.
+ *
+ * ⚠️ A NUMBER, not a boolean, and that is the point. It used to answer only
+ * "two or more?", which was enough while the pilot assigned at most one blocker
+ * per attacker — and stopped being enough the moment §3.108's gang-block search
+ * started assigning exactly TWO. A boolean says Pathrazer of Ulamog (three) and
+ * a menacing 2/2 are the same case; the gang search then paired two blockers
+ * onto the Pathrazer and the engine rejected the WHOLE declaration, losing every
+ * other block in it. The soak caught it on the regenerated pool (Rampaging
+ * Ceratops, seed 3379471118), which is the §3.118 shape exactly: a mirror that
+ * answers a coarser question than the rule it mirrors.
  *
  * Keywords are read EFFECTIVE, for the same reason `canBlockByEvasion` reads
  * them effective: menace GRANTED by an Aura or an until-end-of-turn pump is
- * menace, and the rules path (`requiredBlockerCount` in core) reads the granted
- * set. Two answers to one question is exactly the shape `board-stats.ts` exists
- * to make unspellable.
+ * menace, and the rules path reads the granted set.
+ */
+export function requiredBlockerCountFor(attacker: CardInstance, index: ContinuousIndex): number {
+  const ak = keywordsOf(attacker, index);
+  return Math.max(ak.menace === true ? MENACE_BLOCKERS_NEEDED : 0, ak.minBlockers ?? 0);
+}
+
+/**
+ * Whether this attacker needs more than one blocker at all — the question the
+ * single-blocker path asks, kept as a named predicate because "proposing ANY
+ * lone block on this creature is proposing an illegal declaration" is what it
+ * means at that call site.
  */
 export function needsMultipleBlockers(attacker: CardInstance, index: ContinuousIndex): boolean {
-  const ak = keywordsOf(attacker, index);
-  return Boolean(ak.menace) || (ak.minBlockers ?? 0) > 1;
+  return requiredBlockerCountFor(attacker, index) > 1;
 }
 
 function findInstance(view: PilotView, id: InstanceId): CardInstance | undefined {

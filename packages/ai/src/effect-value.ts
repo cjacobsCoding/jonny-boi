@@ -716,6 +716,16 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
   makeToken: (params, ctx) => tokenValue(params, ctx),
 
   /**
+   * LIVING WEAPON (§3.121) — the Germ is priced by the SAME token formula, and
+   * deliberately at its printed 0/0 rather than at what the Equipment will make
+   * it: the buff is the Equipment attachment already on the card, so pricing the
+   * pumped body here would count the same stats twice. What living weapon is
+   * really worth over a bare Equipment is a body to carry it, which is exactly
+   * what a 0/0 token prices at.
+   */
+  livingWeaponGerm: (params, ctx) => tokenValue(params, ctx),
+
+  /**
    * PROLIFERATE — worth what the board offers it: one more counter on each of
    * my countered permanents (the pilot never has to pick the opponent's), plus
    * deepening any -1/-1s already on theirs. Priced per permanent at the same

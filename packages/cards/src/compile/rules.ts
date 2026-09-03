@@ -7935,6 +7935,42 @@ export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContr
     // skips any word with a builder, so "Changeling" is not reported a second
     // time after the printed line compiled it.
     changeling: () => ({ changeling: true }),
+    // LIVING WEAPON (CR 702.92a) — "When this Equipment enters, create a 0/0
+    // black Phyrexian Germ creature token, then attach this to it."
+    //
+    // A builder rather than a rule-table row because the printed line is the
+    // bare keyword: the whole rule lives in reminder text, which is stripped
+    // before the rule table sees the clause (the same reason affinity, convoke
+    // and devoid are builders). Being a builder also settles the Scryfall
+    // keyword sweep for free.
+    //
+    // The token's NAME is its subtype line, per CR 111.3 — "Phyrexian Germ",
+    // not "Germ" — so it reads correctly in a log line and is selected by a
+    // "sacrifice a Germ" cost. `colors: ['B']` is stated rather than derived:
+    // a token has no mana cost, so an absent colour list would read colourless
+    // and a black Germ would stop being a legal target for half the cards that
+    // care (see `tokenDefFromParams`).
+    'living weapon': () => ({
+      triggers: [
+        {
+          condition: { on: 'etb' as const },
+          effects: [
+            {
+              primitive: 'livingWeaponGerm',
+              params: {
+                name: 'Phyrexian Germ',
+                power: 0,
+                toughness: 0,
+                colors: ['B'],
+                types: ['creature'],
+                subtypes: ['Phyrexian', 'Germ'],
+              },
+            },
+          ],
+          label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+        },
+      ],
+    }),
     // DEVOID (CR 702.114a) — "this card has no color". A builder and not a
     // `KeywordFlags` boolean for the same reason changeling is one: it is a
     // characteristic-defining ability that changes what the object IS, not a

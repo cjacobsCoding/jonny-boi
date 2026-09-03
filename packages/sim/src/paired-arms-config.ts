@@ -323,6 +323,10 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   // arms stay comparable for exactly the reason the single-target form does.
   'grantKeywordToYoursUntilEndOfTurn',
   'makeToken',
+  // §3.121 — living weapon creates its Germ and attaches the source to it. Both
+  // halves read the BATTLEFIELD only; no library is consulted, so paired arms
+  // stay comparable for the same reason `makeToken` does.
+  'livingWeaponGerm',
   'persistReturn',
   'destroyTarget',
   'exileTarget',

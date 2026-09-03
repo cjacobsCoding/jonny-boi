@@ -2652,6 +2652,52 @@ a 730-card headline is never mistaken for a 730-card lever again.
 What the audit is still the right tool for: finding a row whose shapes CONCENTRATE. That is what a real
 template system looks like, and the sweep briefs are ordered by it.
 
+### 3.121 Living weapon — a keyword that is pure composition — ✅ done
+
+Picked off the §3.120 queue while the four wave-2 family branches were stalled, and picked because
+it needs no new engine concept at all. **Living weapon** (CR 702.92a) is "when this Equipment enters,
+create a 0/0 black Phyrexian Germ creature token, then attach this to it" — a token creation and an
+attach, both of which core already funnels.
+
+**Measured: 5,623 → 5,633 complete cards. +10, exactly the sole-blocked count.** Flayer Husk,
+Batterbone, Sickleslicer, Skinwing, Strandwalker, Necropouncer, Colossal Dreadmask, Mandibular Kite,
+Drossclaw and Bitterthorn. Nine more living-weapon cards wait on something else and come along when
+it closes.
+
+**It is a `KEYWORD_ABILITY_BUILDERS` row, because the printed line is the bare word** — the whole
+rule lives in reminder text, which is stripped before the rule table sees the clause. That is the
+same reason affinity, convoke and devoid are builders, and being one settles the Scryfall keyword
+sweep for free.
+
+⚠️ **THE ORDER IS THE WHOLE FEATURE, and the printed word is "then".** A 0/0 Germ is lethal to
+itself: it dies to CR 704.5f the instant state-based actions run. So an implementation that created
+the token and failed to attach — or attached before the token existed — would put a creature into
+play and kill it immediately, while `status === 'complete'` stayed green and the card looked
+implemented. `createTokens` already returns the new ids for exactly this reason, and a run that made
+no token attaches nothing rather than attaching to a guess. Every assertion in
+`living-weapon.test.ts` is therefore about the resulting BOARD: the Germ exists, it is a black
+Phyrexian Germ named by its subtype line (CR 111.3), the Equipment's `attachedTo` points at it, and
+it is 1/1 rather than dead. Sabotage-checked — deleting the attach call reddens all five tests,
+including the "exactly one Germ" one, because the unattached Germ leaves the battlefield.
+
+**One duplication removed on the way in.** `makeToken` read the printed token descriptor inline, so a
+second primitive that creates a token would have grown a second reader that eventually disagreed
+about a colour or a subtype line — with the bug belonging to neither (rule 12). `tokenDefFromParams`
+is now the one reader; `makeToken` creates what it returns, `livingWeaponGerm` creates it and then
+attaches its source to it.
+
+**No conformance entry, deliberately, and §3.106 set the precedent.** The manifest indexes rules CORE
+implements; this keyword adds no core rule, it composes two existing funnels. §3.106 made the same
+call for the upkeep BILLS ("cards-package primitives, pinned on the real printed cards"), so living
+weapon is pinned in `packages/cards` beside them rather than claiming a CR section core does not own.
+
+**Left undone, and named:** the pilot is not taught to value an Equipment higher for bringing its own
+body. It needs no decision — the trigger is mandatory — so nothing is illegal or blind, but the
+valuation is a behaviour change and this repo does not ship those without the two-seed A/B (§3.85).
+The three siblings in the same brief still report honestly: umbra armor needs a `destroy` replacement
+event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
+closed cost union.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded

@@ -106,6 +106,59 @@ describe('the gang-block search reads the defender\'s lands for landwalk', () =>
   });
 });
 
+describe('the gang-block search respects the SIZE of a block requirement', () => {
+  it('proposes no block on an attacker needing three blockers, though it has three', () => {
+    // THE INCIDENT (§3.121): the pilot's mirror answered "two or more?" as a
+    // BOOLEAN, which made a menacing 2/2 and a Pathrazer-style "except by three
+    // or more" the same case. The gang search then paired TWO blockers onto the
+    // three-requirement attacker and the engine rejected the whole declaration,
+    // costing every other block in it. The soak found it on the regenerated pool
+    // (Rampaging Ceratops, seed 3379471118).
+    const state = freshGame(3379471118);
+    const [ceratops] = putOnBattlefield(state, 'A', [
+      creatureDef('Rampaging Ceratops', 5, 5, { keywords: { minBlockers: 3 } }),
+    ]);
+    // Three untapped blockers: enough to satisfy the requirement in principle,
+    // which is what makes a PAIR the tempting and illegal move.
+    putOnBattlefield(state, 'B', [
+      creatureDef('Bear One', 2, 2),
+      creatureDef('Bear Two', 2, 2),
+      creatureDef('Bear Three', 2, 2),
+    ]);
+    intoDeclareBlockers(state, [ceratops!.instanceId]);
+
+    const action = choose(state);
+    expect(rejectionOf(applyAction(state, action))).toBeUndefined();
+    if (action.kind === 'declareBlockers') {
+      // Never a partial gang. Either it satisfies the requirement or it blocks
+      // nothing; this pilot's search only forms pairs, so it must block nothing.
+      const onCeratops = action.blocks.filter((b) => b.attacker === ceratops!.instanceId);
+      expect(onCeratops).toHaveLength(0);
+    }
+  });
+
+  it('CONTROL: a MENACE attacker needing exactly two still gets its pair', () => {
+    // The requirement the search can satisfy, so the fix must not have turned
+    // gang blocking off wholesale.
+    const state = freshGame(3379471118);
+    const [menacer] = putOnBattlefield(state, 'A', [
+      creatureDef('Menacing Bull', 3, 3, { keywords: { menace: true } }),
+    ]);
+    putOnBattlefield(state, 'B', [creatureDef('Bear One', 2, 2), creatureDef('Bear Two', 2, 2)]);
+    intoDeclareBlockers(state, [menacer!.instanceId]);
+
+    const action = choose(state);
+    expect(action.kind).toBe('declareBlockers');
+    if (action.kind === 'declareBlockers') {
+      expect(action.blocks.map((b) => b.attacker)).toEqual([
+        menacer!.instanceId,
+        menacer!.instanceId,
+      ]);
+      expect(rejectionOf(applyAction(state, action))).toBeUndefined();
+    }
+  });
+});
+
 /** The engine's refusal, if any: a rejected action leaves exactly one `actionRejected` event. */
 function rejectionOf(result: ReturnType<typeof applyAction>): string | undefined {
   for (const event of result.events) {
