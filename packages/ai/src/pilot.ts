@@ -157,6 +157,38 @@ export interface Pilot<TObserver extends GameObserver = GameObserver> {
    * `view` is the same read-only state `chooseAction` would receive.
    */
   willPassPriority?(view: GameState, rulesConfig?: RulesConfig): boolean;
+  /**
+   * **The plan seam — optional, and a PROMISE about the actions after the first.**
+   *
+   * The first element is this decision, exactly what {@link chooseAction} would
+   * have returned. Every element after it is an action the pilot promises it
+   * WOULD choose at the next window, and the next, given each one is accepted
+   * and nothing else moves — the remaining taps that fund the spell it is
+   * pursuing, as one committed line instead of N decisions. A harness may then
+   * apply the continuation directly, without building a menu or asking again.
+   * (The cast at the end is NOT promised: the pilot re-decides it against the
+   * floating pool, and does not always cast what it tapped for — see
+   * `pursueSpell` for the case that taught this.)
+   *
+   * Why it pays: a tap toward a spell costs a full priority decision (score the
+   * hand, plan the mana), and the pilot is asked again after every single tap,
+   * re-deriving the same goal and the same plan. Measured (`bench/pilot-decide-
+   * bench.mjs`), 18% of the windows the fast pass cannot take are exactly these
+   * continuations.
+   *
+   * ⚠️ THE SAME ONE-SIDED CONTRACT AS THE FAST PASS. A continuation that differs
+   * from what the pilot would really have chosen changes the game silently. So a
+   * pilot promises a continuation only when it is derived from the same plan
+   * the next decision would re-derive, the harness drops it the moment the
+   * state stops being the one it was planned against (priority moved, a choice
+   * was parked, the stack changed, an action was rejected), and the guard is a
+   * transcript comparison: whole games with the seam on and off must be
+   * identical action for action (`packages/sim/src/action-plan.test.ts`).
+   *
+   * Omit it (as the searching pilots do) and the harness asks one action at a
+   * time, exactly as before.
+   */
+  chooseActions?(ctx: DecisionContext<TObserver>): readonly GameAction[];
 }
 
 /**

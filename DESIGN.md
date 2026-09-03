@@ -2243,6 +2243,79 @@ piece of machinery that does not exist:
 So the honest number for this round is 18, not 53. The next of them is a row plus one payload, not a
 row plus an event, which is the part that was worth doing once.
 
+### 3.108 The pilot, made stronger and faster by measurement — ✅ done
+
+The target was "100× smarter and 100× faster". Neither exists (§3.78–§3.90 measured why, three ways
+each); this is what the instruments could find, judged by the repo's own protocol, and the honest
+multiple at the end. Every number below is from `bench/` tooling committed with this section.
+
+**Speed — two seams and a cheaper gate, all transcript-identical.** Guard: `packages/sim/src/
+action-plan.test.ts` plays 72 games per pilot with the seams on and off and requires the decision
+trace to match action for action (the §3.73 discipline), for the heuristic AND for `lookahead`.
+
+| change | what it does |
+|---|---|
+| the fast pass, widened | The old gate refused every combat step, every non-empty stack, and any instant in hand. Now it refuses only a declaration this seat has not yet made, reasons about the stack the way the pilot does (a counter needs a target, a sorcery cannot be cast into it), and rules an instant out by INTENT where `scoreSpell` provably holds it (counter/copy on an empty stack, trick or fog outside combat, removal with no creature to aim at). Gate fires on **75% of windows, up from 50%**. It also now reads the engine's own land-drop count and extra land zones, and refuses a madness window and a two-faced card — three holes the old gate had that no sample deck reached. |
+| `Pilot.chooseActions` — the plan seam | The pilot hands back its decision AND the remaining taps of the funding plan it is pursuing; `runMatch` applies them without a menu or a re-decision, and drops the queue the moment the state is not the one planned against. Takes **4.8% of windows** — the cast is deliberately NOT promised, because core's planner cannot fund a hybrid pip from an empty pool and the pilot then re-scores and casts something else (see `pursueSpell`; filed as a core task). |
+| `lookahead` delegates both seams | The DEFAULT pilot never fast-passed at all: it built a menu for every one of its ~550 windows a game. Safe by construction — the only window it decides itself is the one the gate refuses. |
+| the gate, memoised | With 75% of windows gated the gate became the heaviest function in the match-loop profile (14% self time). Every per-card fact it reads is now one `WeakMap` lookup per card (`gateFactsOf`). |
+
+Measured **interleaved in one process** against a copy of the old build (`--old`, new on both
+benches — on this box two runs of identical code differ by a third, so back-to-back is not a
+comparison), CPU-time medians:
+
+| instrument | old | new | ratio |
+|---|---|---|---|
+| `pilot-decide-bench` (chooseAction on every recorded window) | 193k/s | 201k/s | 1.04× — the decision function itself is unchanged |
+| `pilot-decide-bench --harness` heuristic (windows/s as the loop drives it) | 188k | 223k | **1.18×** |
+| `pilot-decide-bench --harness --pilot lookahead` | 68k | 77k | 1.13× |
+| `pilot-bench --off gangBlock` heuristic, games/CPU-sec, identical games (A won 851 both arms) | 133 | 191 | **1.43×** (1.39× wall) |
+| `pilot-bench --off gangBlock --pilot lookahead`, identical games (867 both) | 132 | 175 | **1.33×** (1.33× wall) |
+
+Two runs of the games/sec pair an hour apart read 1.20×/1.25× and 1.43×/1.33× — the box's noise
+floor even interleaved, so the honest figure is **1.2–1.4× games/sec**, not one number. It is larger
+than the decision gain because a gated window skips `generateLegalActions` too, which the decision
+bench cannot see. The remaining hotspot is the forecast: on the recorded corpus `lookahead` costs
+13.7 µs a window against the heuristic's 4.3, and 73% of that is `chooseAttackPlan` (~0.75 ms per
+attack decision on a wide board) — the next speed lever, not taken here.
+
+**Strength — every hypothesis, both pilots, four-seed battery (§3.85), held-out seeds decide.**
+`forecast-ab.mjs --feature` (new) judges a `HeuristicFeatures` flag on the shipped pilot, which
+`feature-ab.mjs` cannot; `pilot-vs-pilot-ab.mjs` (new) compares two registered pilots.
+
+| hypothesis | pilot | dev seeds | HELD-OUT | verdict |
+|---|---|---|---|---|
+| `gangBlock` — two blockers kill what one cannot; a menace attacker is blockable | heuristic | 49/20, 29/26 | **85/50**, chi² 8.56 | **CONFIRMED STRONGER**; at 80 games held-out **172/104** (chi² 16.26) |
+| `gangBlock` | lookahead | 54/21, 58/22 | **110/45**, chi² 26.43 | **CONFIRMED STRONGER** — the largest confirmed gain on record; at 80 games/orientation held-out **223/87** (chi² 58.79), pooled 448/174 |
+| `attackFaceLifeReference` 0 → 24 — face damage priced by `reference/life`, the burn curve applied to combat | heuristic | 30/30, 25/20 | 76/28, chi² 21.24 | "confirmed" — then **NOT REPLICATED on a fresh battery at 80 games: 108/89** (chi² 1.64). The §3.85 shape exactly: level dev seeds, a held-out pair that happened to agree, nothing on seeds it had never seen |
+| `attackFaceLifeReference` 24 | lookahead | 28/21, 27/14 | 55/25, chi² 10.51 | confirmed on the default battery; fresh battery at 80 games **100/76, chi² 3.01 — NOT REPLICATED**. Ahead on all eight seeds, over the bar on none it was not tuned against: the §3.89 "too small to matter, or nothing" signature. Deleted |
+| `persistPricing` — a persisting body's death priced as its returning counter | heuristic | 8/9, 11/2 | 22/6, chi² 8.04 | confirmed on the default battery (58 decided slots in 11,520 games — the case is rare); fresh battery at 80 games **25/16 — NOT REPLICATED**. Same signature; deleted |
+| `persistPricing` | lookahead | 5/13, 9/4 | 10/10 | NOT REPLICATED — nothing for the default pilot |
+| `clockChump` — chump by the opponent's proven crack-back instead of a fixed life total | heuristic | 9/15, 7/10 | 24/43, chi² 4.84 | **CONFIRMED WEAKER** — deleted |
+| `attackValueThreshold` 1 → 0 as the forecast's margin over holding | lookahead | 9/7, 7/3 | 14/9, chi² 0.70 | NOT REPLICATED |
+| `lookahead` vs `heuristic` head to head (`pilot-vs-pilot-ab.mjs`, both with `gangBlock`) — is the forecast still ahead of §3.83's set attack? | — | 90/57, 87/48 | **178/98**, chi² 22.61 | lookahead CONFIRMED STRONGER: the forecast's attack step is worth keeping as the default, and the heuristic's attack scoring is not where its remaining gap closes |
+
+Where the ideas came from: `disagreement.mjs --base lookahead --pilot hybrid --band block` showed
+`hybrid` blocking Craw Wurms with Kitchen Finks and the shipped pilot never gang-blocking a single
+attacker (a defender with two 3/3s took a 5/5 every turn); `--band attack` showed the shipped pilot
+holding a 2/2 back against an opponent at four life because a point of damage was worth one, at four
+life as at twenty. The gang-block boards are pinned in `packages/ai/src/blocking-features.test.ts`, the
+gate's new rules in `fast-pass-gate.test.ts`.
+
+**What ships ON:** the widened gate, the plan seam, lookahead's seams, and `gangBlock` (default
+`true` in `resolveFeatures`; the flag stays as the A/B seam). **Deleted with their code:**
+`clockChump`, `persistPricing`, `attackFaceLifeReference`. Two of those three "confirmed" on the
+default battery and died on a fresh one — the third time §3.85's rule has earned its keep, and the
+reason every winner here was confirmed at 80 games before its default flipped.
+
+**The honest multiple.** Speed: **1.2–1.4× games/sec** (1.18× per window), on top of §3.73's +48%.
+Strength: ONE confirmed rule, one-sided on every seed at every size — held-out 223/87 at 80 games on
+the pilot that ships. Neither is 100×, and §3.78–§3.90 say why nothing in this architecture is. What
+this section adds to those is that the strength band was NOT empty: the blocking band §3.89 called
+"not a threshold problem" was a missing capability, found in an afternoon once the right pilot was
+measured — and the default pilot still beats the heuristic 178/98, so the forecast's attack step, at
+0.75 ms a decision, is both the next strength ceiling and the next speed lever.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded

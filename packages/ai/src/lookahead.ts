@@ -47,6 +47,7 @@ import type { DecisionContext, Pilot } from './pilot.js';
 import { boardIndex } from './board-stats.js';
 import type { ForecastWeights } from './combat-forecast.js';
 import { chooseAttackPlan, DEFAULT_FORECAST_WEIGHTS } from './combat-forecast.js';
+import type { HeuristicFeatures } from './heuristic.js';
 import { createHeuristicPilot, planWalkerAttack } from './heuristic.js';
 import { DEFAULT_TACTICAL_CONFIG, lethalAttackers } from './tactical.js';
 import type { HeuristicWeights } from './weights.js';
@@ -63,8 +64,14 @@ export const LOOKAHEAD_PILOT_ID = 'lookahead';
 export function createLookaheadPilot(
   weights: HeuristicWeights = DEFAULT_HEURISTIC_WEIGHTS,
   forecastWeights: ForecastWeights = DEFAULT_FORECAST_WEIGHTS,
+  /**
+   * The heuristic's A/B switches, passed straight through to the delegate —
+   * a blocking or pricing feature reaches this pilot only this way, and
+   * `bench/forecast-ab.mjs --feature` is how it is judged here (§3.108).
+   */
+  features: HeuristicFeatures = {},
 ): Pilot {
-  const inner = createHeuristicPilot(weights);
+  const inner = createHeuristicPilot(weights, features);
   return {
     id: LOOKAHEAD_PILOT_ID,
     description:
@@ -81,6 +88,27 @@ export function createLookaheadPilot(
         // heuristic below answers everything.
       }
       return inner.chooseAction(ctx);
+    },
+    /*
+     * BOTH HARNESS SEAMS ARE DELEGATED, and it is safe by construction (§3.108):
+     * the only window this pilot decides itself is the active seat's UNDECLARED
+     * attack, and the heuristic's gate refuses exactly that window, so a `true`
+     * from it is always about a window the heuristic would have answered anyway.
+     * Until this delegation existed the DEFAULT pilot never fast-passed at all —
+     * every one of its 550 windows a game built a full menu — which is why it ran
+     * 15% slower than the pilot it is composed from.
+     */
+    willPassPriority(view: GameState): boolean {
+      return inner.willPassPriority!(view);
+    },
+    chooseActions(ctx: DecisionContext): readonly GameAction[] {
+      try {
+        const attack = decideAttack(ctx, weights, forecastWeights);
+        if (attack) return [attack];
+      } catch {
+        // As above: one delegated decision, never a crash.
+      }
+      return inner.chooseActions!(ctx);
     },
   };
 }
