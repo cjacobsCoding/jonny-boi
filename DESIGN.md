@@ -2674,7 +2674,10 @@ life): buyback may be DECLINED, and the engine's only non-mana cast cost is the 
 they wait on an optional non-mana cost seam. The "costs {2} less if it targets a tapped creature"
 template (9) needs the chosen TARGET threaded into `castManaCostFor`, which takes no targets today.
 
-**Gate:** full suite green (see the commit); lint 0 errors; pilot-bench 103–105 games/CPU-sec with
+**Gate:** 370 files / 19,740 tests / 5 skipped / 0 failed, summed PACKAGE BY PACKAGE — a whole-suite
+run was killed outright by the box (four agents, 6 cores, 7 GB: esbuild's own service died mid-collect
+and vitest reported 79 files "failed" with 0 failing tests, which is what an out-of-memory run looks
+like). Lint 0 errors; pilot-bench 103–105 games/CPU-sec with
 **byte-identical outcomes** (A won 851/2000, the same figure §3.106 and §3.108 recorded on these lock
 decks — the family changes no decision on decks that print none of it). A single throughput number
 on this box is not a comparison (§3.107): three sibling agents were building at the time.
