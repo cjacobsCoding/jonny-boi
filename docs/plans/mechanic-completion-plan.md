@@ -492,11 +492,21 @@ list is a pipeline invariant — **the index owns ids, the corpus owns everythin
 (§3.71) — and a test that re-derives the web display index and fails if the committed
 bytes disagree.
 
-⚠️ **The next constraint on this axis is DELIVERY, not coverage.** At 5,623 cards the
-display-index chunk is ~5.4 MB and the engine-pool chunk ~1.5 MB, both bundled and both
-precached. The same design at 32,276 cards would be a ~34 MB index — an install nobody
-finishes on a phone. Sharding the index and loading the engine pool per deck is the open
-piece of work, and it has to land before the pool can grow much further.
+⚠️ **The next constraint on this axis is DELIVERY, not coverage.** Measured off the LIVE
+deploy at 5,651 cards with `npm run verify:deploy` — which fetches the deployed `index.html`,
+reads the content-hashed chunk names out of it and sizes each one:
+
+| live chunk | KB |
+|---|---:|
+| the display index | 5,821 |
+| the engine pool | 1,603 |
+| the app shell | 1,038 |
+| **total JavaScript** | **8,462** |
+
+The display index alone is ~1 KB per card, so the same design at 32,276 cards is a ~33 MB
+download — an install nobody finishes on a phone, and it is all precached. Sharding the index
+and loading the engine pool per deck is the open piece of work, and it has to land before the
+pool can grow much further.
 
 ---
 ## 7. Reproducing every number here
