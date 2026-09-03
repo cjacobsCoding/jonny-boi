@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 5601 cards.
+ * 5619 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -8877,6 +8877,30 @@ const POOL_1: readonly CardDefinition[] = [
     subtypes: ['shapeshifter'],
     copyAsEnters: { filter: { anyOfTypes: ['creature'] }, from: 'graveyard' },
   },
+  // Trample
+  // Soulshift 8 (When this creature dies, you may return target Spirit card with mana value 8 or less from your graveyard to your hand.)
+  {
+    id: 'f43fe8e0-23ab-4fe7-8a48-1902be142c6a',
+    name: 'Body of Jukai',
+    types: ['creature'],
+    cost: { generic: 7, G: 2 },
+    power: 8,
+    toughness: 5,
+    keywords: { trample: true },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 8 } },
+          },
+        ],
+        label: 'Soulshift 8',
+      },
+    ],
+  },
   // Kicker {B} (You may pay an additional {B} as you cast this spell.)
   // When this creature enters, if it was kicked, creatures you control gain menace until end of turn. (A creature with menace can't be blocked except by two or more creatures.)
   {
@@ -10883,6 +10907,41 @@ const POOL_1: readonly CardDefinition[] = [
           },
         ],
         label: '{3}, sacrifice ~: search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle',
+      },
+    ],
+  },
+  // Sacrifice this creature: Target creature gets +2/+2 until end of turn.
+  // Soulshift 3 (When this creature dies, you may return target Spirit card with mana value 3 or less from your graveyard to your hand.)
+  {
+    id: '935e52a1-a651-4d88-99a8-7de074a01576',
+    name: 'Burr Grafter',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 3 } },
+          },
+        ],
+        label: 'Soulshift 3',
+      },
+    ],
+    activated: [
+      {
+        cost: { sacrificeSelf: true },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 2, toughness: 2, targets: 'creature' },
+          },
+        ],
+        label: 'Sacrifice ~: target creature gets +2/+2 until end of turn',
       },
     ],
   },
@@ -16317,6 +16376,32 @@ const POOL_1: readonly CardDefinition[] = [
     toughness: 4,
     subtypes: ['wurm'],
   },
+  // Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  // Soulshift 5 (When this creature dies, you may return target Spirit card with mana value 5 or less from your graveyard to your hand.)
+  {
+    id: '9c735bda-5454-4177-a23a-f9f00b7480d2',
+    name: 'Crawling Filth',
+    types: ['creature'],
+    cost: { generic: 5, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+    },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 5 } },
+          },
+        ],
+        label: 'Soulshift 5',
+      },
+    ],
+  },
   // This creature attacks each combat if able.
   {
     id: '15fdb57b-7547-4588-9780-15e3bea0bc4c',
@@ -17040,6 +17125,9 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_2: readonly CardDefinition[] = [
   // Equipped creature gets +2/+2.
   // Equip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)
   {
@@ -17101,9 +17189,6 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_2: readonly CardDefinition[] = [
   // At the beginning of your upkeep, each player discards a card.
   {
     id: '972891e6-6a23-40df-af22-adf8cd7ea582',
@@ -25487,6 +25572,9 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_3: readonly CardDefinition[] = [
   // At the beginning of your upkeep, create a token that's a copy of another target nonland permanent you control.
   {
     id: '3a646245-b8b7-4f91-a312-d5eea9a9e49a',
@@ -25555,9 +25643,6 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_3: readonly CardDefinition[] = [
   // Flying
   {
     id: 'fffe7b2b-22c3-4e6a-9b1b-c6d7b29b9f86',
@@ -28943,6 +29028,38 @@ const POOL_3: readonly CardDefinition[] = [
     subtypes: ['golem'],
     entersTapped: true,
   },
+  // Soulshift 4, soulshift 4 (When this creature dies, you may return up to two target Spirit cards with mana value 4 or less from your graveyard to your hand.)
+  {
+    id: '0ff39ae5-a241-4607-903e-201f56c675f9',
+    name: 'Forked-Branch Garami',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    power: 4,
+    toughness: 4,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 4 } },
+          },
+        ],
+        label: 'Soulshift 4',
+      },
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 4 } },
+          },
+        ],
+        label: 'Soulshift 4',
+      },
+    ],
+  },
   // Exile target artifact or enchantment.
   // Cycling {2} ({2}, Discard this card: Draw a card.)
   {
@@ -31519,6 +31636,30 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying
+  // Soulshift 3 (When this creature dies, you may return target Spirit card with mana value 3 or less from your graveyard to your hand.)
+  {
+    id: '9a3e988f-314c-4e83-b279-c2a736933e64',
+    name: 'Gibbering Kami',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 3 } },
+          },
+        ],
+        label: 'Soulshift 3',
+      },
+    ],
+  },
   // {W}, {T}: Tap target creature.
   {
     id: '757d58fc-cf26-4095-9616-a47e9501cc0d',
@@ -33883,6 +34024,9 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_4: readonly CardDefinition[] = [
   // {1}{B}, {T}: Target creature gets -1/-1 until end of turn.
   {
     id: 'b43b2370-fe1b-491b-9dd0-b49a30bb2b93',
@@ -33966,9 +34110,6 @@ const POOL_3: readonly CardDefinition[] = [
     keywords: { reach: true },
     subtypes: ['spider'],
   },
-];
-
-const POOL_4: readonly CardDefinition[] = [
   // Target creature gets -4/-4 until end of turn.
   {
     id: '494c819d-7d73-432b-8c96-4cb9dcd31094',
@@ -38379,6 +38520,30 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying
+  // Soulshift 4 (When this creature dies, you may return target Spirit card with mana value 4 or less from your graveyard to your hand.)
+  {
+    id: 'a7b2892a-5c16-4624-9a47-6a47f10e2466',
+    name: 'Hundred-Talon Kami',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 4 } },
+          },
+        ],
+        label: 'Soulshift 4',
+      },
+    ],
+  },
   // Cycling {3} ({3}, Discard this card: Draw a card.)
   {
     id: 'f525c356-88ca-4e2e-8f06-663be101e34f',
@@ -42177,6 +42342,9 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_5: readonly CardDefinition[] = [
   // Shroud (This creature can't be the target of spells or abilities.)
   {
     id: '77064471-d0c1-4988-8c47-f767bf9635f3',
@@ -42255,6 +42423,28 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Soulshift 3 (When this creature dies, you may return target Spirit card with mana value 3 or less from your graveyard to your hand.)
+  {
+    id: '30502f07-760c-46d1-8b4a-d4bd4a23201f',
+    name: 'Kami of Empty Graves',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 4,
+    toughness: 1,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 3 } },
+          },
+        ],
+        label: 'Soulshift 3',
+      },
+    ],
+  },
   // Sacrifice this creature: Prevent all combat damage that would be dealt this turn.
   {
     id: '44e4f5e6-935e-429f-89b4-4571376f442e',
@@ -42277,9 +42467,30 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_5: readonly CardDefinition[] = [
+  // Flying
+  // Soulshift 5 (When this creature dies, you may return target Spirit card with mana value 5 or less from your graveyard to your hand.)
+  {
+    id: '4baef070-d265-4c6d-9b4b-3cafbd3b34c3',
+    name: 'Kami of Lunacy',
+    types: ['creature'],
+    cost: { generic: 4, B: 2 },
+    power: 4,
+    toughness: 1,
+    keywords: { flying: true },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 5 } },
+          },
+        ],
+        label: 'Soulshift 5',
+      },
+    ],
+  },
   {
     id: '422fe3bd-d92e-4c91-8c30-3b5aec00201a',
     name: 'Kami of Old Stone',
@@ -42304,6 +42515,63 @@ const POOL_5: readonly CardDefinition[] = [
         condition: { on: 'drawStep', who: 'any' },
         effects: [{ primitive: 'drawCards', params: { count: 1, whichPlayer: 'triggering' } }],
         label: 'each player\'s draw step: that player draws an additional card',
+      },
+    ],
+  },
+  // Flying, first strike
+  // Soulshift 5 (When this creature dies, you may return target Spirit card with mana value 5 or less from your graveyard to your hand.)
+  {
+    id: '690980ce-bbdc-4d52-b34e-2bad11e436a1',
+    name: 'Kami of the Palace Fields',
+    types: ['creature'],
+    cost: { generic: 5, W: 1 },
+    power: 3,
+    toughness: 2,
+    keywords: { flying: true, firstStrike: true },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 5 } },
+          },
+        ],
+        label: 'Soulshift 5',
+      },
+    ],
+  },
+  // At the beginning of your upkeep, sacrifice this creature unless you pay {G}.
+  // Soulshift 3 (When this creature dies, you may return target Spirit card with mana value 3 or less from your graveyard to your hand.)
+  {
+    id: 'bdedd830-9200-4e8b-84b4-00dc58cace35',
+    name: 'Kami of the Tended Garden',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 4,
+    toughness: 4,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { G: 1 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {g}',
+      },
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 3 } },
+          },
+        ],
+        label: 'Soulshift 3',
       },
     ],
   },
@@ -50808,6 +51076,9 @@ const POOL_5: readonly CardDefinition[] = [
     keywords: { defender: true },
     subtypes: ['fish'],
   },
+];
+
+const POOL_6: readonly CardDefinition[] = [
   // Convoke (Your creatures can help cast this spell. Each creature you tap while casting this spell pays for {1} or one mana of that creature's color.)
   // Destroy target creature.
   {
@@ -50963,9 +51234,6 @@ const POOL_5: readonly CardDefinition[] = [
     keywords: { trample: true },
     subtypes: ['elemental', 'sorcerer'],
   },
-];
-
-const POOL_6: readonly CardDefinition[] = [
   // Choose one —
   // • Molten Blast deals 2 damage to target creature or planeswalker.
   // • Destroy target artifact.
@@ -53725,6 +53993,28 @@ const POOL_6: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { flying: true, cantBlock: true },
     subtypes: ['faerie', 'rogue'],
+  },
+  // Soulshift 5 (When this creature dies, you may return target Spirit card with mana value 5 or less from your graveyard to your hand.)
+  {
+    id: '5902f863-171e-4bb2-9d48-2c679d41f1a9',
+    name: 'Nightsoil Kami',
+    types: ['creature'],
+    cost: { generic: 4, G: 2 },
+    power: 6,
+    toughness: 4,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 5 } },
+          },
+        ],
+        label: 'Soulshift 5',
+      },
+    ],
   },
   // Flying, deathtouch
   // Hexproof (This creature can't be the target of spells or abilities your opponents control.)
@@ -59298,6 +59588,9 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_7: readonly CardDefinition[] = [
   // Vigilance
   // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
   {
@@ -59460,9 +59753,6 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_7: readonly CardDefinition[] = [
   // {T}: Add {C}.
   // {1}, {T}: Add one mana of any color.
   {
@@ -59741,6 +60031,28 @@ const POOL_7: readonly CardDefinition[] = [
         },
       ],
     },
+  },
+  // Soulshift 7 (When this creature dies, you may return target Spirit card with mana value 7 or less from your graveyard to your hand.)
+  {
+    id: '7aac4236-9573-4cff-88d9-711a56da4346',
+    name: 'Promised Kannushi',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'druid'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 7 } },
+          },
+        ],
+        label: 'Soulshift 7',
+      },
+    ],
   },
   // {T}: Add {C}.
   // {1}, {T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
@@ -60189,6 +60501,36 @@ const POOL_7: readonly CardDefinition[] = [
         condition: { on: 'dies' },
         effects: [{ primitive: 'drawCards', params: { count: 1 } }],
         label: 'Dies: draw a card',
+      },
+    ],
+  },
+  // {B}, Sacrifice this creature: Destroy target nonblack creature.
+  // Soulshift 6 (When this creature dies, you may return target Spirit card with mana value 6 or less from your graveyard to your hand.)
+  {
+    id: '4f142dea-4751-453f-93a5-c8fdaba8a1b3',
+    name: 'Pus Kami',
+    types: ['creature'],
+    cost: { generic: 5, B: 2 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 6 } },
+          },
+        ],
+        label: 'Soulshift 6',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { B: 1 }, sacrificeSelf: true },
+        effects: [{ primitive: 'destroyTarget', params: { targets: 'creature', notColor: 'B' } }],
+        label: '{b}, sacrifice ~: destroy target nonblack creature',
       },
     ],
   },
@@ -67773,6 +68115,9 @@ const POOL_7: readonly CardDefinition[] = [
     cost: { R: 1 },
     effects: [{ primitive: 'dealDamage', params: { amount: 1 } }],
   },
+];
+
+const POOL_8: readonly CardDefinition[] = [
   {
     id: 'ca4d9198-52a7-4dfe-8f7f-4fa6e19a2479',
     name: 'Scoria Elemental',
@@ -68002,9 +68347,6 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_8: readonly CardDefinition[] = [
   // At the beginning of your upkeep, each player draws a card.
   // Whenever an opponent draws a card, that player loses 1 life.
   {
@@ -68285,6 +68627,41 @@ const POOL_8: readonly CardDefinition[] = [
           },
         ],
         label: 'land (you) enters: create a 1/1 green insect creature token. if you control six or more lands, create a token that\'s a copy of ~ instead',
+      },
+    ],
+  },
+  // Sacrifice this creature: Target creature gets -1/-1 until end of turn.
+  // Soulshift 4 (When this creature dies, you may return target Spirit card with mana value 4 or less from your graveyard to your hand.)
+  {
+    id: '7f68a90c-1afb-43d3-aed2-4704f4599e75',
+    name: 'Scuttling Death',
+    types: ['creature'],
+    cost: { generic: 4, B: 1 },
+    power: 4,
+    toughness: 2,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 4 } },
+          },
+        ],
+        label: 'Soulshift 4',
+      },
+    ],
+    activated: [
+      {
+        cost: { sacrificeSelf: true },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: -1, toughness: -1, targets: 'creature' },
+          },
+        ],
+        label: 'Sacrifice ~: target creature gets -1/-1 until end of turn',
       },
     ],
   },
@@ -76245,6 +76622,9 @@ const POOL_8: readonly CardDefinition[] = [
     },
     subtypes: ['horror'],
   },
+];
+
+const POOL_9: readonly CardDefinition[] = [
   // Other Squirrels you control get +1/+1.
   {
     id: '8f739d55-30d6-4879-872a-82c6778113de',
@@ -76445,9 +76825,6 @@ const POOL_8: readonly CardDefinition[] = [
     toughness: 3,
     subtypes: ['officer'],
   },
-];
-
-const POOL_9: readonly CardDefinition[] = [
   // This land enters tapped.
   // When this land enters, you gain 1 life.
   // {T}: Add {U} or {R}.
@@ -82280,6 +82657,28 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // Soulshift 7 (When this creature dies, you may return target Spirit card with mana value 7 or less from your graveyard to your hand.)
+  {
+    id: '5c88355e-dff0-4d51-a33c-08e14d6217d4',
+    name: 'Thousand-legged Kami',
+    types: ['creature'],
+    cost: { generic: 6, G: 2 },
+    power: 6,
+    toughness: 6,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 7 } },
+          },
+        ],
+        label: 'Soulshift 7',
+      },
+    ],
+  },
   // When this creature enters, investigate. (Create a Clue token. It's an artifact with "{2}, Sacrifice this token: Draw a card.")
   {
     id: 'caa02547-66e3-4e27-a2d3-5e94f3e7a069',
@@ -83420,6 +83819,30 @@ const POOL_9: readonly CardDefinition[] = [
       modifies: { power: 2, toughness: 0, keywords: {} },
     },
   },
+  // Vigilance (Attacking doesn't cause this creature to tap.)
+  // Soulshift 4 (When this creature dies, you may return target Spirit card with mana value 4 or less from your graveyard to your hand.)
+  {
+    id: 'b8ec0916-f320-4fad-9ec5-99aeecfda0e3',
+    name: 'Torii Watchward',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { vigilance: true },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 4 } },
+          },
+        ],
+        label: 'Soulshift 4',
+      },
+    ],
+  },
   // Enchant creature
   // Enchanted creature gets -3/-0.
   {
@@ -84225,6 +84648,9 @@ const POOL_9: readonly CardDefinition[] = [
     castCostReductionPerPermanent: { amount: 1, filter: { anyOfSubtypes: ['Town'] } },
     effects: [{ primitive: 'drawCards', params: { count: 4 } }],
   },
+];
+
+const POOL_10: readonly CardDefinition[] = [
   // {T}: Target creature gets +1/+0 until end of turn. You gain 1 life. Activate only as a sorcery.
   {
     id: 'e672a05c-5f1a-4aa6-9398-e33df01c7c96',
@@ -84486,9 +84912,6 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_10: readonly CardDefinition[] = [
   // Vigilance (Attacking doesn't cause this creature to tap.)
   // Ward {2} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.)
   // Trelane can't be blocked.
@@ -87487,6 +87910,30 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
+  // Reach (This creature can block creatures with flying.)
+  // Soulshift 4 (When this creature dies, you may return target Spirit card with mana value 4 or less from your graveyard to your hand.)
+  {
+    id: '308566ed-18cc-4e3b-b5ab-d5b17795f2f1',
+    name: 'Venerable Kumo',
+    types: ['creature'],
+    cost: { generic: 4, G: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { reach: true },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 4 } },
+          },
+        ],
+        label: 'Soulshift 4',
+      },
+    ],
+  },
   // Flying
   {
     id: '229919ef-e39f-4bdc-bcc5-46224a3eb7b4',
@@ -88406,6 +88853,30 @@ const POOL_10: readonly CardDefinition[] = [
           { primitive: 'gainLife', params: { amount: 1 } },
         ],
         label: 'another creature (you) dies: ~ deals 1 damage to each opponent and you gain 1 life',
+      },
+    ],
+  },
+  // Menace (This creature can't be blocked except by two or more creatures.)
+  // Soulshift 6 (When this creature dies, you may return target Spirit card with mana value 6 or less from your graveyard to your hand.)
+  {
+    id: 'fa5241c8-7f50-413e-9ac0-9ab0ad5c884c',
+    name: 'Vine Kami',
+    types: ['creature'],
+    cost: { generic: 6, G: 1 },
+    power: 4,
+    toughness: 4,
+    keywords: { menace: true },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 6 } },
+          },
+        ],
+        label: 'Soulshift 6',
       },
     ],
   },
@@ -92318,6 +92789,9 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_11: readonly CardDefinition[] = [
   {
     id: '8c9f3b3b-de16-4ae5-844e-1373e0f84469',
     name: 'Witch\'s Familiar',
@@ -92649,9 +93123,6 @@ const POOL_10: readonly CardDefinition[] = [
     entersTapped: true,
     producesOptions: [{ R: 1 }, { G: 1 }],
   },
-];
-
-const POOL_11: readonly CardDefinition[] = [
   // This land enters tapped unless you control a Swamp or a Forest.
   // {T}: Add {B} or {G}.
   {

@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-09-03T14:24:55.460Z",
+  "generatedAt": "2026-09-03T15:04:09.778Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 5633,
+  "requested": 5651,
   "unresolved": [],
   "cards": [
     {
@@ -26935,6 +26935,59 @@
       "faces": []
     },
     {
+      "id": "f43fe8e0-23ab-4fe7-8a48-1902be142c6a",
+      "name": "Body of Jukai",
+      "manaCost": {
+        "generic": 7,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 9,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "Trample\nSoulshift 8 (When this creature dies, you may return target Spirit card with mana value 8 or less from your graveyard to your hand.)",
+      "power": 8,
+      "toughness": 5,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Trample",
+        "Soulshift"
+      ],
+      "set": "bok",
+      "collectorNumber": "121",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/4/f43fe8e0-23ab-4fe7-8a48-1902be142c6a.jpg?1783944186",
+        "normal": "https://cards.scryfall.io/normal/front/f/4/f43fe8e0-23ab-4fe7-8a48-1902be142c6a.jpg?1783944186",
+        "large": "https://cards.scryfall.io/large/front/f/4/f43fe8e0-23ab-4fe7-8a48-1902be142c6a.jpg?1783944186",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/4/f43fe8e0-23ab-4fe7-8a48-1902be142c6a.jpg?1783944186"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "3d31d878-9114-4205-b7a9-bb13ce6aedd2",
       "name": "Bog Badger",
       "manaCost": {
@@ -33376,6 +33429,58 @@
         "normal": "burnished-hart-normal.jpg",
         "art_crop": "burnished-hart-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "935e52a1-a651-4d88-99a8-7de074a01576",
+      "name": "Burr Grafter",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "Sacrifice this creature: Target creature gets +2/+2 until end of turn.\nSoulshift 3 (When this creature dies, you may return target Spirit card with mana value 3 or less from your graveyard to your hand.)",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Soulshift"
+      ],
+      "set": "chk",
+      "collectorNumber": "203",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/3/935e52a1-a651-4d88-99a8-7de074a01576.jpg?1783944291",
+        "normal": "https://cards.scryfall.io/normal/front/9/3/935e52a1-a651-4d88-99a8-7de074a01576.jpg?1783944291",
+        "large": "https://cards.scryfall.io/large/front/9/3/935e52a1-a651-4d88-99a8-7de074a01576.jpg?1783944291",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/3/935e52a1-a651-4d88-99a8-7de074a01576.jpg?1783944291"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -49926,6 +50031,59 @@
         "normal": "craw-wurm-normal.jpg",
         "art_crop": "craw-wurm-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "9c735bda-5454-4177-a23a-f9f00b7480d2",
+      "name": "Crawling Filth",
+      "manaCost": {
+        "generic": 5,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)\nSoulshift 5 (When this creature dies, you may return target Spirit card with mana value 5 or less from your graveyard to your hand.)",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Fear",
+        "Soulshift"
+      ],
+      "set": "bok",
+      "collectorNumber": "64",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/c/9c735bda-5454-4177-a23a-f9f00b7480d2.jpg?1783944200",
+        "normal": "https://cards.scryfall.io/normal/front/9/c/9c735bda-5454-4177-a23a-f9f00b7480d2.jpg?1783944200",
+        "large": "https://cards.scryfall.io/large/front/9/c/9c735bda-5454-4177-a23a-f9f00b7480d2.jpg?1783944200",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/c/9c735bda-5454-4177-a23a-f9f00b7480d2.jpg?1783944200"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -89159,6 +89317,58 @@
       "faces": []
     },
     {
+      "id": "0ff39ae5-a241-4607-903e-201f56c675f9",
+      "name": "Forked-Branch Garami",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "Soulshift 4, soulshift 4 (When this creature dies, you may return up to two target Spirit cards with mana value 4 or less from your graveyard to your hand.)",
+      "power": 4,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Soulshift"
+      ],
+      "set": "bok",
+      "collectorNumber": "125",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/f/0ff39ae5-a241-4607-903e-201f56c675f9.jpg?1783944184",
+        "normal": "https://cards.scryfall.io/normal/front/0/f/0ff39ae5-a241-4607-903e-201f56c675f9.jpg?1783944184",
+        "large": "https://cards.scryfall.io/large/front/0/f/0ff39ae5-a241-4607-903e-201f56c675f9.jpg?1783944184",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/f/0ff39ae5-a241-4607-903e-201f56c675f9.jpg?1783944184"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "cca4e95e-f14e-4cfa-918a-cfb15f912293",
       "name": "Forsake the Worldly",
       "manaCost": {
@@ -96679,6 +96889,59 @@
         "normal": "https://cards.scryfall.io/normal/front/0/6/0674b340-420d-4864-92fe-7b268fe0874c.jpg?1783921331",
         "large": "https://cards.scryfall.io/large/front/0/6/0674b340-420d-4864-92fe-7b268fe0874c.jpg?1783921331",
         "art_crop": "https://cards.scryfall.io/art_crop/front/0/6/0674b340-420d-4864-92fe-7b268fe0874c.jpg?1783921331"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "9a3e988f-314c-4e83-b279-c2a736933e64",
+      "name": "Gibbering Kami",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "Flying\nSoulshift 3 (When this creature dies, you may return target Spirit card with mana value 3 or less from your graveyard to your hand.)",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Flying",
+        "Soulshift"
+      ],
+      "set": "chk",
+      "collectorNumber": "112",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/a/9a3e988f-314c-4e83-b279-c2a736933e64.jpg?1783944315",
+        "normal": "https://cards.scryfall.io/normal/front/9/a/9a3e988f-314c-4e83-b279-c2a736933e64.jpg?1783944315",
+        "large": "https://cards.scryfall.io/large/front/9/a/9a3e988f-314c-4e83-b279-c2a736933e64.jpg?1783944315",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/a/9a3e988f-314c-4e83-b279-c2a736933e64.jpg?1783944315"
       },
       "localImages": {},
       "layout": "normal",
@@ -118575,6 +118838,59 @@
       "faces": []
     },
     {
+      "id": "a7b2892a-5c16-4624-9a47-6a47f10e2466",
+      "name": "Hundred-Talon Kami",
+      "manaCost": {
+        "generic": 4,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "Flying\nSoulshift 4 (When this creature dies, you may return target Spirit card with mana value 4 or less from your graveyard to your hand.)",
+      "power": 2,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "Soulshift"
+      ],
+      "set": "chk",
+      "collectorNumber": "16",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/7/a7b2892a-5c16-4624-9a47-6a47f10e2466.jpg?1783944339",
+        "normal": "https://cards.scryfall.io/normal/front/a/7/a7b2892a-5c16-4624-9a47-6a47f10e2466.jpg?1783944339",
+        "large": "https://cards.scryfall.io/large/front/a/7/a7b2892a-5c16-4624-9a47-6a47f10e2466.jpg?1783944339",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/7/a7b2892a-5c16-4624-9a47-6a47f10e2466.jpg?1783944339"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "f525c356-88ca-4e2e-8f06-663be101e34f",
       "name": "Hundroog",
       "manaCost": {
@@ -130677,6 +130993,58 @@
       "faces": []
     },
     {
+      "id": "30502f07-760c-46d1-8b4a-d4bd4a23201f",
+      "name": "Kami of Empty Graves",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "Soulshift 3 (When this creature dies, you may return target Spirit card with mana value 3 or less from your graveyard to your hand.)",
+      "power": 4,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Soulshift"
+      ],
+      "set": "sok",
+      "collectorNumber": "75",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/0/30502f07-760c-46d1-8b4a-d4bd4a23201f.jpg?1783944155",
+        "normal": "https://cards.scryfall.io/normal/front/3/0/30502f07-760c-46d1-8b4a-d4bd4a23201f.jpg?1783944155",
+        "large": "https://cards.scryfall.io/large/front/3/0/30502f07-760c-46d1-8b4a-d4bd4a23201f.jpg?1783944155",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/0/30502f07-760c-46d1-8b4a-d4bd4a23201f.jpg?1783944155"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "44e4f5e6-935e-429f-89b4-4571376f442e",
       "name": "Kami of False Hope",
       "manaCost": {
@@ -130720,6 +131088,59 @@
         "normal": "https://cards.scryfall.io/normal/front/4/4/44e4f5e6-935e-429f-89b4-4571376f442e.jpg?1783944214",
         "large": "https://cards.scryfall.io/large/front/4/4/44e4f5e6-935e-429f-89b4-4571376f442e.jpg?1783944214",
         "art_crop": "https://cards.scryfall.io/art_crop/front/4/4/44e4f5e6-935e-429f-89b4-4571376f442e.jpg?1783944214"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "4baef070-d265-4c6d-9b4b-3cafbd3b34c3",
+      "name": "Kami of Lunacy",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 2,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "Flying\nSoulshift 5 (When this creature dies, you may return target Spirit card with mana value 5 or less from your graveyard to your hand.)",
+      "power": 4,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Flying",
+        "Soulshift"
+      ],
+      "set": "chk",
+      "collectorNumber": "119",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/b/4baef070-d265-4c6d-9b4b-3cafbd3b34c3.jpg?1783944313",
+        "normal": "https://cards.scryfall.io/normal/front/4/b/4baef070-d265-4c6d-9b4b-3cafbd3b34c3.jpg?1783944313",
+        "large": "https://cards.scryfall.io/large/front/4/b/4baef070-d265-4c6d-9b4b-3cafbd3b34c3.jpg?1783944313",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/b/4baef070-d265-4c6d-9b4b-3cafbd3b34c3.jpg?1783944313"
       },
       "localImages": {},
       "layout": "normal",
@@ -130827,6 +131248,112 @@
         "normal": "kami-of-the-crescent-moon-normal.jpg",
         "art_crop": "kami-of-the-crescent-moon-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "690980ce-bbdc-4d52-b34e-2bad11e436a1",
+      "name": "Kami of the Palace Fields",
+      "manaCost": {
+        "generic": 5,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "Flying, first strike\nSoulshift 5 (When this creature dies, you may return target Spirit card with mana value 5 or less from your graveyard to your hand.)",
+      "power": 3,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "First strike",
+        "Soulshift"
+      ],
+      "set": "chk",
+      "collectorNumber": "24",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/9/690980ce-bbdc-4d52-b34e-2bad11e436a1.jpg?1783944337",
+        "normal": "https://cards.scryfall.io/normal/front/6/9/690980ce-bbdc-4d52-b34e-2bad11e436a1.jpg?1783944337",
+        "large": "https://cards.scryfall.io/large/front/6/9/690980ce-bbdc-4d52-b34e-2bad11e436a1.jpg?1783944337",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/9/690980ce-bbdc-4d52-b34e-2bad11e436a1.jpg?1783944337"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "bdedd830-9200-4e8b-84b4-00dc58cace35",
+      "name": "Kami of the Tended Garden",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "At the beginning of your upkeep, sacrifice this creature unless you pay {G}.\nSoulshift 3 (When this creature dies, you may return target Spirit card with mana value 3 or less from your graveyard to your hand.)",
+      "power": 4,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Soulshift"
+      ],
+      "set": "sok",
+      "collectorNumber": "134",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/d/bdedd830-9200-4e8b-84b4-00dc58cace35.jpg?1783944138",
+        "normal": "https://cards.scryfall.io/normal/front/b/d/bdedd830-9200-4e8b-84b4-00dc58cace35.jpg?1783944138",
+        "large": "https://cards.scryfall.io/large/front/b/d/bdedd830-9200-4e8b-84b4-00dc58cace35.jpg?1783944138",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/d/bdedd830-9200-4e8b-84b4-00dc58cace35.jpg?1783944138"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -165449,6 +165976,58 @@
       "faces": []
     },
     {
+      "id": "5902f863-171e-4bb2-9d48-2c679d41f1a9",
+      "name": "Nightsoil Kami",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "Soulshift 5 (When this creature dies, you may return target Spirit card with mana value 5 or less from your graveyard to your hand.)",
+      "power": 6,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Soulshift"
+      ],
+      "set": "sok",
+      "collectorNumber": "139",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/9/5902f863-171e-4bb2-9d48-2c679d41f1a9.jpg?1783944136",
+        "normal": "https://cards.scryfall.io/normal/front/5/9/5902f863-171e-4bb2-9d48-2c679d41f1a9.jpg?1783944136",
+        "large": "https://cards.scryfall.io/large/front/5/9/5902f863-171e-4bb2-9d48-2c679d41f1a9.jpg?1783944136",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/9/5902f863-171e-4bb2-9d48-2c679d41f1a9.jpg?1783944136"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "72efc1ee-3583-4814-beaa-bbee709275e6",
       "name": "Nightveil Predator",
       "manaCost": {
@@ -183714,6 +184293,59 @@
       "faces": []
     },
     {
+      "id": "7aac4236-9573-4cff-88d9-711a56da4346",
+      "name": "Promised Kannushi",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Druid"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Druid",
+      "oracleText": "Soulshift 7 (When this creature dies, you may return target Spirit card with mana value 7 or less from your graveyard to your hand.)",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Soulshift"
+      ],
+      "set": "sok",
+      "collectorNumber": "141",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/a/7aac4236-9573-4cff-88d9-711a56da4346.jpg?1783944136",
+        "normal": "https://cards.scryfall.io/normal/front/7/a/7aac4236-9573-4cff-88d9-711a56da4346.jpg?1783944136",
+        "large": "https://cards.scryfall.io/large/front/7/a/7aac4236-9573-4cff-88d9-711a56da4346.jpg?1783944136",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/a/7aac4236-9573-4cff-88d9-711a56da4346.jpg?1783944136"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "e9681a54-6413-4ff4-b6b1-ee4decb25bfa",
       "name": "Promising Vein",
       "manaCost": {
@@ -184938,6 +185570,58 @@
         "normal": "https://cards.scryfall.io/normal/front/e/2/e26c576d-94c8-4f63-9f54-732fb1eade12.jpg?1783934637",
         "large": "https://cards.scryfall.io/large/front/e/2/e26c576d-94c8-4f63-9f54-732fb1eade12.jpg?1783934637",
         "art_crop": "https://cards.scryfall.io/art_crop/front/e/2/e26c576d-94c8-4f63-9f54-732fb1eade12.jpg?1783934637"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "4f142dea-4751-453f-93a5-c8fdaba8a1b3",
+      "name": "Pus Kami",
+      "manaCost": {
+        "generic": 5,
+        "W": 0,
+        "U": 0,
+        "B": 2,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 7,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "{B}, Sacrifice this creature: Destroy target nonblack creature.\nSoulshift 6 (When this creature dies, you may return target Spirit card with mana value 6 or less from your graveyard to your hand.)",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Soulshift"
+      ],
+      "set": "bok",
+      "collectorNumber": "79",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/f/4f142dea-4751-453f-93a5-c8fdaba8a1b3.jpg?1783944196",
+        "normal": "https://cards.scryfall.io/normal/front/4/f/4f142dea-4751-453f-93a5-c8fdaba8a1b3.jpg?1783944196",
+        "large": "https://cards.scryfall.io/large/front/4/f/4f142dea-4751-453f-93a5-c8fdaba8a1b3.jpg?1783944196",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/f/4f142dea-4751-453f-93a5-c8fdaba8a1b3.jpg?1783944196"
       },
       "localImages": {},
       "layout": "normal",
@@ -209725,6 +210409,58 @@
         "normal": "https://cards.scryfall.io/normal/front/e/a/ea630ba1-22f9-4a10-bdc6-0d03128214f4.jpg?1783909601",
         "large": "https://cards.scryfall.io/large/front/e/a/ea630ba1-22f9-4a10-bdc6-0d03128214f4.jpg?1783909601",
         "art_crop": "https://cards.scryfall.io/art_crop/front/e/a/ea630ba1-22f9-4a10-bdc6-0d03128214f4.jpg?1783909601"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "7f68a90c-1afb-43d3-aed2-4704f4599e75",
+      "name": "Scuttling Death",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "Sacrifice this creature: Target creature gets -1/-1 until end of turn.\nSoulshift 4 (When this creature dies, you may return target Spirit card with mana value 4 or less from your graveyard to your hand.)",
+      "power": 4,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Soulshift"
+      ],
+      "set": "mm2",
+      "collectorNumber": "94",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/f/7f68a90c-1afb-43d3-aed2-4704f4599e75.jpg?1783938409",
+        "normal": "https://cards.scryfall.io/normal/front/7/f/7f68a90c-1afb-43d3-aed2-4704f4599e75.jpg?1783938409",
+        "large": "https://cards.scryfall.io/large/front/7/f/7f68a90c-1afb-43d3-aed2-4704f4599e75.jpg?1783938409",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/f/7f68a90c-1afb-43d3-aed2-4704f4599e75.jpg?1783938409"
       },
       "localImages": {},
       "layout": "normal",
@@ -254108,6 +254844,58 @@
       "faces": []
     },
     {
+      "id": "5c88355e-dff0-4d51-a33c-08e14d6217d4",
+      "name": "Thousand-legged Kami",
+      "manaCost": {
+        "generic": 6,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 8,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "Soulshift 7 (When this creature dies, you may return target Spirit card with mana value 7 or less from your graveyard to your hand.)",
+      "power": 6,
+      "toughness": 6,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Soulshift"
+      ],
+      "set": "chk",
+      "collectorNumber": "246",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/c/5c88355e-dff0-4d51-a33c-08e14d6217d4.jpg?1783944281",
+        "normal": "https://cards.scryfall.io/normal/front/5/c/5c88355e-dff0-4d51-a33c-08e14d6217d4.jpg?1783944281",
+        "large": "https://cards.scryfall.io/large/front/5/c/5c88355e-dff0-4d51-a33c-08e14d6217d4.jpg?1783944281",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/c/5c88355e-dff0-4d51-a33c-08e14d6217d4.jpg?1783944281"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "caa02547-66e3-4e27-a2d3-5e94f3e7a069",
       "name": "Thraben Inspector",
       "manaCost": {
@@ -257861,6 +258649,59 @@
         "normal": "https://cards.scryfall.io/normal/front/d/f/dfcf9a88-c5f8-4c26-a2ee-d2827e9a31d8.jpg?1783937148",
         "large": "https://cards.scryfall.io/large/front/d/f/dfcf9a88-c5f8-4c26-a2ee-d2827e9a31d8.jpg?1783937148",
         "art_crop": "https://cards.scryfall.io/art_crop/front/d/f/dfcf9a88-c5f8-4c26-a2ee-d2827e9a31d8.jpg?1783937148"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "b8ec0916-f320-4fad-9ec5-99aeecfda0e3",
+      "name": "Torii Watchward",
+      "manaCost": {
+        "generic": 4,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "Vigilance (Attacking doesn't cause this creature to tap.)\nSoulshift 4 (When this creature dies, you may return target Spirit card with mana value 4 or less from your graveyard to your hand.)",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Vigilance",
+        "Soulshift"
+      ],
+      "set": "sok",
+      "collectorNumber": "30",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/8/b8ec0916-f320-4fad-9ec5-99aeecfda0e3.jpg?1783944166",
+        "normal": "https://cards.scryfall.io/normal/front/b/8/b8ec0916-f320-4fad-9ec5-99aeecfda0e3.jpg?1783944166",
+        "large": "https://cards.scryfall.io/large/front/b/8/b8ec0916-f320-4fad-9ec5-99aeecfda0e3.jpg?1783944166",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/8/b8ec0916-f320-4fad-9ec5-99aeecfda0e3.jpg?1783944166"
       },
       "localImages": {},
       "layout": "normal",
@@ -270258,6 +271099,59 @@
       "faces": []
     },
     {
+      "id": "308566ed-18cc-4e3b-b5ab-d5b17795f2f1",
+      "name": "Venerable Kumo",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "Reach (This creature can block creatures with flying.)\nSoulshift 4 (When this creature dies, you may return target Spirit card with mana value 4 or less from your graveyard to your hand.)",
+      "power": 2,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Reach",
+        "Soulshift"
+      ],
+      "set": "chk",
+      "collectorNumber": "248",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/0/308566ed-18cc-4e3b-b5ab-d5b17795f2f1.jpg?1783944280",
+        "normal": "https://cards.scryfall.io/normal/front/3/0/308566ed-18cc-4e3b-b5ab-d5b17795f2f1.jpg?1783944280",
+        "large": "https://cards.scryfall.io/large/front/3/0/308566ed-18cc-4e3b-b5ab-d5b17795f2f1.jpg?1783944280",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/0/308566ed-18cc-4e3b-b5ab-d5b17795f2f1.jpg?1783944280"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "229919ef-e39f-4bdc-bcc5-46224a3eb7b4",
       "name": "Venerable Lammasu",
       "manaCost": {
@@ -272994,6 +273888,59 @@
         "normal": "https://cards.scryfall.io/normal/front/3/3/335cf2ae-90c3-407e-9e4a-5e18aab74744.jpg?1783912543",
         "large": "https://cards.scryfall.io/large/front/3/3/335cf2ae-90c3-407e-9e4a-5e18aab74744.jpg?1783912543",
         "art_crop": "https://cards.scryfall.io/art_crop/front/3/3/335cf2ae-90c3-407e-9e4a-5e18aab74744.jpg?1783912543"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "fa5241c8-7f50-413e-9ac0-9ab0ad5c884c",
+      "name": "Vine Kami",
+      "manaCost": {
+        "generic": 6,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 7,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit",
+      "oracleText": "Menace (This creature can't be blocked except by two or more creatures.)\nSoulshift 6 (When this creature dies, you may return target Spirit card with mana value 6 or less from your graveyard to your hand.)",
+      "power": 4,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Menace",
+        "Soulshift"
+      ],
+      "set": "chk",
+      "collectorNumber": "249",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/a/fa5241c8-7f50-413e-9ac0-9ab0ad5c884c.jpg?1783944280",
+        "normal": "https://cards.scryfall.io/normal/front/f/a/fa5241c8-7f50-413e-9ac0-9ab0ad5c884c.jpg?1783944280",
+        "large": "https://cards.scryfall.io/large/front/f/a/fa5241c8-7f50-413e-9ac0-9ab0ad5c884c.jpg?1783944280",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/a/fa5241c8-7f50-413e-9ac0-9ab0ad5c884c.jpg?1783944280"
       },
       "localImages": {},
       "layout": "normal",
