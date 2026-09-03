@@ -1449,6 +1449,8 @@ export interface ResolutionFrame {
   kickCount?: number;
   /** §3.106 — a suspend-cast creature enters unsick; see `SpellStackObject.hasteOnEntry`. */
   hasteOnEntry?: boolean;
+  /** §3.112 — the alternative cost this cast paid; see `SpellStackObject.alternative`. */
+  alternative?: import('./cast-alternatives.js').AlternativeCostKind;
   /**
    * PER-EFFECT targets, parallel to {@link effects} — entry `i` is what
    * `effects[i]` points at, or `undefined` to fall back to the frame-wide

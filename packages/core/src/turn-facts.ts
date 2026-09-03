@@ -70,7 +70,13 @@ export type TurnFact =
   | 'permanentLeftBattlefield'
   | 'creatureDied'
   | 'youGainedLife'
-  | 'drewInOwnDrawStep';
+  | 'drewInOwnDrawStep'
+  /**
+   * §3.112 — "you … have cast another spell this turn" (SURGE, CR 702.117a).
+   * True for the player who cast any spell so far this turn. Read BEFORE the
+   * surge spell itself is announced, so "another" is exactly the prior casts.
+   */
+  | 'castASpell';
 
 /** Every tracked fact, in canonical order — the closed vocabulary itself. */
 export const TURN_FACTS: readonly TurnFact[] = Object.freeze([
@@ -78,6 +84,7 @@ export const TURN_FACTS: readonly TurnFact[] = Object.freeze([
   'creatureDied',
   'youGainedLife',
   'drewInOwnDrawStep',
+  'castASpell',
 ]);
 
 /** The bit each fact occupies in a player's mask. */
@@ -86,6 +93,7 @@ const FACT_BIT: Readonly<Record<TurnFact, number>> = Object.freeze({
   creatureDied: 1 << 1,
   youGainedLife: 1 << 2,
   drewInOwnDrawStep: 1 << 3,
+  castASpell: 1 << 4,
 });
 
 /** Clear every player's facts. Called as a turn begins. */
@@ -158,6 +166,13 @@ export function recordTurnFacts(state: GameState, event: GameEvent): void {
       if (state.step === 'draw' && event.player === state.activePlayer) {
         setTurnFact(state, 'drewInOwnDrawStep', event.player);
       }
+      return;
+    }
+    case 'spellCast': {
+      // §3.112 — surge's "another spell this turn": any cast, from any zone,
+      // for any cost. A copy of a spell is not cast (CR 707.10) and emits no
+      // `spellCast`, so it correctly does not count.
+      setTurnFact(state, 'castASpell', event.player);
       return;
     }
     default:

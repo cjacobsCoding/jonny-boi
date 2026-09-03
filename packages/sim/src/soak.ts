@@ -214,6 +214,11 @@ export function describeAction(a: GameAction): string {
       return `cycleCard#${a.instanceId}`;
     case 'suspendCard':
       return `suspendCard#${a.instanceId}`;
+    // §3.112
+    case 'foretellCard':
+      return `foretellCard#${a.instanceId}`;
+    case 'plotCard':
+      return `plotCard#${a.instanceId}`;
     case 'playLand':
       return `playLand#${a.instanceId}`;
     case 'tapForMana':
@@ -246,13 +251,19 @@ export function describeAction(a: GameAction): string {
 function actionIdentity(a: GameAction): string {
   switch (a.kind) {
     case 'castSpell':
-      return `castSpell|${a.player}|${a.instanceId}|${a.fromZone ?? 'hand'}|${a.face ?? 'front'}`;
+      // §3.112 — which alternative cost is paid is part of WHICH cast this is.
+      return `castSpell|${a.player}|${a.instanceId}|${a.fromZone ?? 'hand'}|${a.face ?? 'front'}|${a.alternative ?? 'printed'}`;
     case 'activateAbility':
       return `activateAbility|${a.player}|${a.instanceId}|${a.abilityIndex}`;
     case 'cycleCard':
       return `cycleCard|${a.player}|${a.instanceId}|${a.abilityIndex ?? 0}`;
     case 'suspendCard':
       return `suspendCard|${a.player}|${a.instanceId}`;
+    // §3.112
+    case 'foretellCard':
+      return `foretellCard|${a.player}|${a.instanceId}`;
+    case 'plotCard':
+      return `plotCard|${a.player}|${a.instanceId}`;
     case 'playLand':
       return `playLand|${a.player}|${a.instanceId}|${(a as { face?: string }).face ?? 'front'}`;
     case 'tapForMana':
@@ -375,6 +386,12 @@ function mechanicOfAction(
       return 'cycling';
     case 'suspendCard':
       return 'suspend';
+    // §3.112 — foretell and plot are one mechanic to the soak: "set aside now,
+    // cast on a later turn". The cast that follows is an exile-permission cast
+    // (`castPermissionFor`), witnessed by the same id through its event.
+    case 'foretellCard':
+    case 'plotCard':
+      return 'cast-later';
     case 'activateAbility': {
       const def = defOf(action.instanceId);
       if (def && isPlaneswalker(def)) return 'planeswalker-loyalty';

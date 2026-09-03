@@ -39,6 +39,8 @@ import type { ContinuousIndex } from './internal/continuous.js';
 import { anyContinuousModification, indexContinuous, NO_MOD } from './internal/continuous.js';
 import { effectiveKeywords } from './internal/stats.js';
 import { protectionBlocksSource } from './protection.js';
+// §3.112 — "target attacking creature" reads the live combat record.
+import { attackingCreatureIds } from './combat-removal.js';
 
 /**
  * The creature type Restoration Angel's printed line excludes. Named because a
@@ -103,6 +105,16 @@ export type TargetRestriction =
    * printed word is exactly what stops it copying itself.)
    */
   | 'nonlegendaryCreatureYouControl'
+  /**
+   * "target ATTACKING creature" — the aim of every BLOODRUSH line (§3.112,
+   * "Bloodrush — {R}, Discard this card: Target attacking creature gets
+   * +3/+3 until end of turn"). Read off the live combat record through
+   * `attackingCreatureIds`, so a creature removed from combat is not a legal
+   * target; outside a declared attack nothing is. Never widened to
+   * `'creature'`: a bloodrush that could pump a blocker is a strictly better
+   * card than the printed one.
+   */
+  | 'attackingCreature'
   /**
    * "target artifact or creature you control" — Molten Duplication's aim.
    * Neither 'creatureYouControl' widened nor 'permanent' narrowed: the first
@@ -328,6 +340,7 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'opponent' ||
     value === 'creatureYouControl' ||
     value === 'nonlegendaryCreatureYouControl' ||
+    value === 'attackingCreature' ||
     value === 'artifactOrCreatureYouControl' ||
     value === 'nonAngelCreatureYouControl' ||
     value === 'creatureAnOpponentControls' ||
@@ -386,6 +399,7 @@ const TARGET_RESTRICTION_MEMBERS = {
   creatureYouControl: true,
   nonAngelCreatureYouControl: true,
   nonlegendaryCreatureYouControl: true,
+  attackingCreature: true,
   artifactOrCreatureYouControl: true,
   creatureAnOpponentControls: true,
   artifactEnchantmentOrLand: true,
@@ -631,6 +645,13 @@ export function isLegalTarget(
   }
   if (restriction === 'nonlandPermanent') {
     return !isLand(permanent.def);
+  }
+  // §3.112 — "target attacking creature": a creature declared as an attacker
+  // this combat and still in it. No combat, no legal target.
+  if (restriction === 'attackingCreature') {
+    const combat = state.combat;
+    if (combat === null || combat === undefined) return false;
+    return isCreature(permanent.def) && attackingCreatureIds(combat).includes(permanent.instanceId);
   }
   if (restriction === 'creatureAnOpponentControls') {
     // Unknown actor ⇒ illegal, never "probably theirs" (see the type's note).
@@ -1008,6 +1029,16 @@ function enumerateTargets(
       }
     }
   }
+  // §3.112 — the attackers still in combat, in declaration order (the offer
+  // list and `isLegalTarget` read the same combat record).
+  if (restriction === 'attackingCreature' && state.combat) {
+    for (const id of attackingCreatureIds(state.combat)) {
+      const permanent = state.battlefield.find((c) => c.instanceId === id);
+      if (permanent && isCreature(permanent.def) && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
   if (restriction === 'enchantment' || restriction === 'land' || restriction === 'planeswalker') {
     for (const permanent of state.battlefield) {
       const kindOk =
@@ -1125,6 +1156,8 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'a creature you control';
     case 'nonlegendaryCreatureYouControl':
       return 'a nonlegendary creature you control';
+    case 'attackingCreature':
+      return 'an attacking creature';
     case 'artifactOrCreatureYouControl':
       return 'an artifact or creature you control';
     case 'nonAngelCreatureYouControl':

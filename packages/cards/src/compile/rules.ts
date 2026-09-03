@@ -1395,6 +1395,8 @@ export const TARGET_NOUN_RESTRICTIONS: Readonly<Record<string, TargetRestriction
   'creature or planeswalker': 'creatureOrPlaneswalker',
   'nonartifact creature': 'nonartifactCreature',
   'nonland permanent': 'nonlandPermanent',
+  // §3.112 — bloodrush's aim (read off the live combat record by core).
+  'attacking creature': 'attackingCreature',
   // ⚠️ "artifact, enchantment, or land" is deliberately NOT here: Oracle prints
   // it with and without the serial comma, and `destroy-target-artifact-
   // enchantment-or-land` owns both spellings. A row here would take one
@@ -5972,6 +5974,251 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const cost = parseManaSymbols(match[2] ?? '');
       if (!cost) return null;
       return { suspend: { count, cost, upkeep: [{ primitive: 'suspendTick' }] } };
+    },
+  },
+  // --- §3.112 the cast-alternative family --------------------------------------------
+  //
+  // Every rule below is a whole printed ability line whose payload is a MANA
+  // cost, read through `parseManaSymbols` so a cost the engine cannot charge
+  // ({X}, Phyrexian, a printed "—Exile a black card from your hand" / "—{B},
+  // Pay 2 life" / "—Sacrifice three lands" form) leaves the line reported
+  // rather than compiling a cost the cast path would then not collect.
+  {
+    id: 'channel-ability',
+    description:
+      '"Channel — {3}{R}, Discard this card: EFFECT" / "Bloodrush — {R}, Discard this card: Target attacking creature gets +3/+3 until end of turn" — the ability-word (CR 207.2c) siblings of cycling: a from-hand discard activation with a spell-shaped body',
+    // The body goes through the ordinary effect table, so a channel line can
+    // only do what the engine already runs; "activate only as a sorcery" is
+    // the one trailing sentence read as timing, exactly as `compileActivatedAbility`
+    // reads it. A body opening "It deals …" is the card naming itself.
+    pattern: /^(channel|bloodrush) [—-] ((?:\{[^}]+\})+), discard (?:this card|~): (.+?)(\.? ?activate only as a sorcery\.?)?$/,
+    build(match, ctx) {
+      const kind = match[1] as 'channel' | 'bloodrush';
+      const cost = parseManaSymbols(match[2] ?? '');
+      if (!cost) return null;
+      const body = (match[3] ?? '').replace(/^it /, '~ ');
+      const effects = ctx.compileEffectClause(body);
+      if (!effects || effects.length === 0) return null;
+      const printedKind = kind.charAt(0).toUpperCase() + kind.slice(1);
+      return {
+        cycling: [
+          {
+            cost,
+            effects,
+            label: `${printedKind} — ${formatManaCost(cost)}`,
+            kind,
+            ...(match[4] !== undefined ? { timing: 'sorcery' as const } : {}),
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'transmute-cost',
+    description:
+      '"Transmute {1}{U}{U}" (CR 702.53a) — discard this card as a sorcery: search for a card with the same mana value as it',
+    pattern: /^transmute ((?:\{[^}]+\})+)$/,
+    build(match, ctx) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      // The discarded card's mana value in hand: generic plus one per pip; an
+      // {X} counts zero anywhere but the stack (CR 107.3), a hybrid or
+      // Phyrexian symbol one. A card with no mana cost (Tolaria West) is 0.
+      const printed = ctx.card.manaCost;
+      const manaValue =
+        printed.generic +
+        printed.W +
+        printed.U +
+        printed.B +
+        printed.R +
+        printed.G +
+        printed.C +
+        printed.other.filter((symbol) => symbol.toUpperCase() !== 'X').length;
+      return {
+        cycling: [
+          {
+            cost,
+            effects: [
+              {
+                primitive: 'searchLibrary',
+                params: {
+                  who: 'controller',
+                  count: 1,
+                  destination: 'hand',
+                  filter: { minManaValue: manaValue, maxManaValue: manaValue },
+                },
+              },
+            ],
+            label: `Transmute ${formatManaCost(cost)}`,
+            kind: 'transmute',
+            timing: 'sorcery',
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'evoke-cost',
+    description:
+      '"Evoke {2}{U}" (CR 702.74a) — cast for this cost and it is sacrificed as it enters; its enters-the-battlefield trigger still fires (Mulldrifter)',
+    pattern: /^evoke ((?:\{[^}]+\})+)$/,
+    build(match) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return {
+        alternativeCosts: {
+          evoke: {
+            cost,
+            riders: [
+              {
+                condition: { on: 'etb' },
+                effects: [{ primitive: 'sacrificeSelfIfCastWith', params: { castWith: 'evoke' } }],
+                label: 'Evoke: sacrifice it when it enters',
+                removesFromBattlefield: true,
+              },
+            ],
+          },
+        },
+      };
+    },
+  },
+  {
+    id: 'dash-cost',
+    description:
+      '"Dash {1}{R}" (CR 702.109a) — cast for this cost: haste, and returned to hand at the beginning of the next end step',
+    pattern: /^dash ((?:\{[^}]+\})+)$/,
+    build(match) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return {
+        alternativeCosts: {
+          dash: {
+            cost,
+            riders: [
+              {
+                condition: { on: 'endStep', who: 'any' },
+                effects: [{ primitive: 'returnSelfToHand' }],
+                label: 'Dash: return it to hand at the beginning of the next end step',
+                removesFromBattlefield: true,
+              },
+            ],
+          },
+        },
+      };
+    },
+  },
+  {
+    id: 'blitz-cost',
+    description:
+      '"Blitz {2}{R}" (CR 702.152a) — cast for this cost: haste, "when it dies, draw a card", sacrificed at the beginning of the next end step',
+    pattern: /^blitz ((?:\{[^}]+\})+)$/,
+    build(match) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return {
+        alternativeCosts: {
+          blitz: {
+            cost,
+            riders: [
+              {
+                condition: { on: 'endStep', who: 'any' },
+                effects: [{ primitive: 'sacrificeSelfIfCastWith', params: { castWith: 'blitz' } }],
+                label: 'Blitz: sacrifice it at the beginning of the next end step',
+                removesFromBattlefield: true,
+              },
+              {
+                condition: { on: 'dies' },
+                effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+                label: 'Blitz: when it dies, draw a card',
+              },
+            ],
+          },
+        },
+      };
+    },
+  },
+  {
+    id: 'surge-cost',
+    description: '"Surge {1}{R}" (CR 702.117a) — cast for this cost if you have cast another spell this turn',
+    pattern: /^surge ((?:\{[^}]+\})+)$/,
+    build(match) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return { alternativeCosts: { surge: { cost } } };
+    },
+  },
+  {
+    id: 'prototype-cost',
+    description:
+      '"Prototype {1}{B} — 1/1" (CR 702.160a) — cast as a smaller body with a different cost and colour; it keeps its abilities and types',
+    pattern: /^prototype ((?:\{[^}]+\})+) [—-] (\d+)\/(\d+)$/,
+    build(match, ctx) {
+      // Prototype is printed only on creatures; anything else could not be
+      // cast "as a 1/1" and stays reported.
+      if (!ctx.card.typeLine.types.some((type) => type.toLowerCase() === 'creature')) return null;
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      const power = parseSignedInt(match[2]);
+      const toughness = parseSignedInt(match[3]);
+      if (!Number.isFinite(power) || !Number.isFinite(toughness)) return null;
+      return { alternativeCosts: { prototype: { cost, face: { power, toughness } } } };
+    },
+  },
+  {
+    id: 'warp-cost',
+    description:
+      '"Warp {1}{U}" (CR 702.185a) — cast from hand for this cost; exiled at the beginning of the next end step, then castable from exile on a later turn',
+    pattern: /^warp ((?:\{[^}]+\})+)$/,
+    build(match) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return {
+        alternativeCosts: {
+          warp: {
+            cost,
+            riders: [
+              {
+                condition: { on: 'endStep', who: 'any' },
+                effects: [{ primitive: 'warpExile' }],
+                label: 'Warp: exile it at the beginning of the next end step',
+                removesFromBattlefield: true,
+              },
+            ],
+          },
+        },
+      };
+    },
+  },
+  {
+    id: 'foretell-cost',
+    description:
+      '"Foretell {1}{W}" (CR 702.143a) — pay {2} on your turn to exile it face down; cast it on a later turn for this cost',
+    pattern: /^foretell ((?:\{[^}]+\})+)$/,
+    build(match) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return { foretell: cost };
+    },
+  },
+  {
+    id: 'plot-cost',
+    description:
+      '"Plot {1}{G}" (CR 702.170a) — pay this cost as a sorcery to exile it; cast it free, as a sorcery, on a later turn',
+    pattern: /^plot ((?:\{[^}]+\})+)$/,
+    build(match) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return { plot: cost };
+    },
+  },
+  {
+    id: 'entwine-cost',
+    description: '"Entwine {3}{R}" (CR 702.42a) — pay the additional cost to choose ALL of a modal spell\'s modes',
+    pattern: /^entwine ((?:\{[^}]+\})+)$/,
+    build(match) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return { entwine: cost };
     },
   },
   {

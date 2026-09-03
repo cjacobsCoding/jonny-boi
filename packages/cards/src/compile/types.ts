@@ -257,6 +257,27 @@ export interface ClauseContribution {
   // --- §3.106 upkeep costs and time counters ---------------------------------
   /** The printed "Suspend N—{cost}" line (`CardDefinition.suspend`). */
   readonly suspend?: import('@jonny-boi/core').SuspendAbility;
+  // --- §3.112 the cast-alternative family -----------------------------------
+  /**
+   * One printed alternative cost — "Evoke {2}{U}", "Dash {1}{R}", "Blitz
+   * {2}{R}", "Surge {1}{R}", "Prototype {1}{B} — 1/1", "Warp {1}{U}" —
+   * keyed by its kind (`CardDefinition.alternativeCosts`). Accumulated: a card
+   * may print two.
+   */
+  readonly alternativeCosts?: Readonly<
+    Partial<
+      Record<
+        import('@jonny-boi/core').AlternativeCostKind,
+        import('@jonny-boi/core').AlternativeCastCost
+      >
+    >
+  >;
+  /** The printed "Entwine {cost}" line (`CardDefinition.entwine`). */
+  readonly entwine?: import('@jonny-boi/core').ManaCost;
+  /** The printed "Foretell {cost}" line (`CardDefinition.foretell`). */
+  readonly foretell?: import('@jonny-boi/core').ManaCost;
+  /** The printed "Plot {cost}" line (`CardDefinition.plot`). */
+  readonly plot?: import('@jonny-boi/core').ManaCost;
   /**
    * Counters the permanent enters with — vanishing's and fading's first half
    * (`CardDefinition.entersWithCounters`). Accumulated, so a card printing

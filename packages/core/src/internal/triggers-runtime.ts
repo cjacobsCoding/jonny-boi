@@ -110,6 +110,8 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   cardSuspended: false,
   suspendWindowOpened: false,
   suspendDeclined: false,
+  // §3.112 — foretell/plot move a card hand → exile; nothing on the battlefield changes.
+  cardExiledToCastLater: false,
   manaAdded: false,
   manaCostPaid: false,
   manaPoolEmptied: false,

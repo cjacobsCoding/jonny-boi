@@ -111,6 +111,10 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // Same conditional-copy rule (only echo permanents carry it) and the same
   // stakes: drop it and every echo bill reads "not owed" one action later.
   if (inst.controlledSinceTurn !== undefined) copy.controlledSinceTurn = inst.controlledSinceTurn;
+  // §3.112 — which alternative cost this permanent's spell paid (the rider
+  // bodies read it), and the foretold card's face-down marker. Same rule.
+  if (inst.castWith !== undefined) copy.castWith = inst.castWith;
+  if (inst.faceDown !== undefined) copy.faceDown = inst.faceDown;
   // NOTE FOR THE NEXT FIELD, because this copy has now dropped one four times:
   // a fact that belongs to the CARD rather than to this object's runtime state
   // needs no line here at all. `def` is shared by reference above, so a
@@ -257,6 +261,9 @@ function cloneStackObject(o: StackObject): StackObject {
     // two action boundaries, and the marker rode neither. Found by the first
     // test that cast a suspended creature.
     ...(o.hasteOnEntry !== undefined ? { hasteOnEntry: o.hasteOnEntry } : {}),
+    // §3.112 — the alternative cost paid and the entwine answer ride the cast.
+    ...(o.alternative !== undefined ? { alternative: o.alternative } : {}),
+    ...(o.entwined !== undefined ? { entwined: o.entwined } : {}),
     // Dropping this one would re-ask the as-enters COPY question every time the
     // resolution is re-entered — and a DECLINE leaves nothing on the instance to
     // notice, so the spell would never finish resolving. Same shape, same rule.

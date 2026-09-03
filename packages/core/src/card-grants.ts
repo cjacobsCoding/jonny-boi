@@ -89,6 +89,33 @@ export interface CardGrant {
   readonly castFace?: import('./actions.js').CastFace;
   /** The granted cast pays no mana cost (a Siege reward — CR 310.4). */
   readonly castFree?: boolean;
+  // --- the cast-alternative family (§3.112) -----------------------------------------
+  /**
+   * The granted cast pays THIS cost instead of the printed one — a foretold
+   * card's foretell cost (CR 702.143a). Ignored when {@link castFree} is set.
+   */
+  readonly castCost?: ManaCost;
+  /**
+   * The permission opens only AFTER this turn number — "after the current turn
+   * has ended" (foretell, CR 702.143a; warp, CR 702.185a) and "on a later
+   * turn" (plot, CR 702.170a). Absent means the permission is open at once.
+   */
+  readonly castAfterTurn?: number;
+  /**
+   * The granted cast is sorcery-speed whatever the card's own timing — a
+   * plotted card is "cast as a sorcery" (CR 702.170a).
+   */
+  readonly castAsSorcery?: boolean;
+}
+
+/** What `castPermissionFor` answers — see the grant fields it reads. */
+export interface CastPermission {
+  readonly face: import('./actions.js').CastFace;
+  readonly free: boolean;
+  /** §3.112 — the cost the permission charges in place of the printed one. */
+  readonly cost?: ManaCost;
+  /** §3.112 — the cast is sorcery-speed regardless of the card's timing. */
+  readonly asSorcery: boolean;
 }
 
 /**
@@ -98,10 +125,7 @@ export interface CardGrant {
  * by it, so a hostile client cannot cast an exiled card the offer loop would
  * never have shown.
  */
-export function castPermissionFor(
-  state: GameState,
-  card: CardInstance,
-): { readonly face: import('./actions.js').CastFace; readonly free: boolean } | undefined {
+export function castPermissionFor(state: GameState, card: CardInstance): CastPermission | undefined {
   const grants = state.cardGrants;
   if (grants === undefined || grants.length === 0) return undefined;
   for (let i = 0; i < grants.length; i++) {
@@ -109,7 +133,16 @@ export function castPermissionFor(
     if (grant.castFace === undefined) continue;
     if (grant.targetInstanceId !== card.instanceId) continue;
     if (grant.zone !== card.zone) continue;
-    return { face: grant.castFace, free: grant.castFree === true };
+    // §3.112 — "after the current turn has ended": a foretold, plotted or
+    // warped card is not castable on the turn it was set aside. Judged here,
+    // in THE accessor, so the offer loop, the cast path and the pilot agree.
+    if (grant.castAfterTurn !== undefined && state.turnNumber <= grant.castAfterTurn) continue;
+    return {
+      face: grant.castFace,
+      free: grant.castFree === true,
+      ...(grant.castCost !== undefined ? { cost: grant.castCost } : {}),
+      asSorcery: grant.castAsSorcery === true,
+    };
   }
   return undefined;
 }
@@ -157,6 +190,10 @@ export interface CardGrantRequest {
   readonly flashback?: ManaCost;
   readonly castFace?: import('./actions.js').CastFace;
   readonly castFree?: boolean;
+  /** §3.112 — see `CardGrant.castCost` / `castAfterTurn` / `castAsSorcery`. */
+  readonly castCost?: ManaCost;
+  readonly castAfterTurn?: number;
+  readonly castAsSorcery?: boolean;
 }
 
 /**
@@ -179,6 +216,10 @@ export function addCardGrant(
     ...(request.flashback !== undefined ? { flashback: { ...request.flashback } } : {}),
     ...(request.castFace !== undefined ? { castFace: request.castFace } : {}),
     ...(request.castFree === true ? { castFree: true } : {}),
+    // §3.112
+    ...(request.castCost !== undefined ? { castCost: { ...request.castCost } } : {}),
+    ...(request.castAfterTurn !== undefined ? { castAfterTurn: request.castAfterTurn } : {}),
+    ...(request.castAsSorcery === true ? { castAsSorcery: true } : {}),
   };
   (state.cardGrants ??= []).push(grant);
   emit({

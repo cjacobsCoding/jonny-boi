@@ -235,7 +235,13 @@ export type SoakMechanicId =
   // fading, "sacrifice ~ unless you pay") have no id of their own: what they do
   // is already witnessed as `optional-payment` (the bill asked) and `counters`
   // (the tick), and a mechanic is only as honest as the event that proves it.
-  | 'suspend';
+  | 'suspend'
+  // §3.112 — FORETELL (CR 702.143a) and PLOT (CR 702.170a): the special
+  // action that exiles a card from hand to be cast on a later turn. One id
+  // for both because they are one shape to the soak — the difference (face
+  // down for a foretell cost / face up for free as a sorcery) lives in the
+  // card grant the action records and in the cast that follows.
+  | 'cast-later';
 
 /**
  * How a mechanic is proved to have HAPPENED.
@@ -455,6 +461,13 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
   { id: 'cycling', label: 'cycling — a card cycled from hand', witnessKind: 'action', printedBy: hasKey('cycling') },
   // §3.106
   { id: 'suspend', label: 'suspend — a card suspended from hand (CR 702.62)', witnessKind: 'action', printedBy: hasKey('suspend') },
+  // §3.112
+  {
+    id: 'cast-later',
+    label: 'foretell / plot — a card exiled from hand to be cast on a later turn (CR 702.143, 702.170)',
+    witnessKind: 'action',
+    printedBy: (card) => hasKey('foretell')(card) || hasKey('plot')(card),
+  },
   {
     id: 'buyback',
     label: 'buyback — the optional cost offered at cast',
@@ -858,6 +871,8 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   cardSuspended: 'suspend',
   suspendWindowOpened: 'suspend',
   suspendDeclined: 'suspend',
+  // §3.112 — the foretell/plot special action itself.
+  cardExiledToCastLater: 'cast-later',
   madnessDeclined: 'madness',
   cardsMilled: 'mill',
   tokenCreated: 'token',

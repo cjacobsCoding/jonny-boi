@@ -467,6 +467,23 @@ export {
 } from './upkeep-costs.js';
 export { isSuspended, openSuspendWindow, suspendWindowOpenFor } from './suspend.js';
 
+// §3.112 — the cast-alternative family: evoke, dash, blitz, surge, prototype
+// and warp as ONE row on the cast action, judged by a closed table; foretell
+// and plot as special actions whose later cast is a card grant.
+export type {
+  AlternativeCostKind,
+  AlternativeCastCost,
+  AlternativeCostRider,
+  AlternativeCostSpec,
+} from './cast-alternatives.js';
+export {
+  ALTERNATIVE_COSTS,
+  ALTERNATIVE_COST_KINDS,
+  alternativeCostKindsOf,
+  definitionCastAs,
+} from './cast-alternatives.js';
+export type { CastPermission } from './card-grants.js';
+
 // State
 export type {
   GameState,
@@ -553,6 +570,8 @@ export type {
   LandPlayZone,
   CycleCardAction,
   SuspendCardAction,
+  ForetellCardAction,
+  PlotCardAction,
   DeclareAttackersAction,
   DeclareBlockersAction,
   AnswerChoiceAction,
@@ -633,6 +652,8 @@ export {
 export type { ManaTapPlan, ManaPlanView } from './mana-plan.js';
 export { planManaPayment, manaPaymentChoiceExists, distanceToPayable, tapActionFor } from './mana-plan.js';
 export { maxLandPlaysFor } from './engine.js';
+// §3.112 — foretell's fixed {2} (CR 702.143a), the one spelling every consumer reads.
+export { FORETELL_COST } from './engine.js';
 
 /**
  * WHICH source pays when several could (§3.60). A named, defaulted policy rather

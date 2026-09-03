@@ -111,6 +111,8 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
   cardSuspended: { player: 'none', instanceId: 'id', name: 'none', timeCounters: 'none' },
   suspendWindowOpened: { player: 'none', instanceId: 'id', name: 'none' },
   suspendDeclined: { player: 'none', instanceId: 'id', name: 'none' },
+  // §3.112 foretell / plot
+  cardExiledToCastLater: { player: 'none', instanceId: 'id', method: 'none' },
   madnessDeclined: { player: 'none', instanceId: 'id', name: 'none' },
   stackResolved: { instanceId: 'id', name: 'none' },
   manaAdded: { player: 'none', color: 'none', amount: 'none', spendRestriction: 'none' },

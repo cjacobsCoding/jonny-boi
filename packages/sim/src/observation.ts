@@ -321,6 +321,10 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   cardSuspended: 'public',
   suspendWindowOpened: 'public',
   suspendDeclined: 'public',
+  // §3.112 — foretell/plot: the special action is taken in front of the table
+  // and names no card (a foretold card is face down); the `zoneChange` that
+  // carries the id is judged by its own row above.
+  cardExiledToCastLater: 'public',
   effectApplied: 'public',
   effectUnsupported: 'public',
   attackersDeclared: 'public',

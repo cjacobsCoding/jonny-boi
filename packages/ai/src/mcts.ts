@@ -908,6 +908,11 @@ function describeAction(action: GameAction): string {
       return `cycle #${action.instanceId}.${action.abilityIndex ?? 0}`;
     case 'suspendCard':
       return `suspend #${action.instanceId}`;
+    // §3.112
+    case 'foretellCard':
+      return `foretell #${action.instanceId}`;
+    case 'plotCard':
+      return `plot #${action.instanceId}`;
     case 'tapForMana':
       return `tap #${action.instanceId}`;
     case 'declareAttackers':

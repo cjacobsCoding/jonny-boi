@@ -216,6 +216,10 @@ export function resetInstanceForNewZone(inst: CardInstance): void {
   // stay on the battlefield (CR 400.7); a bounced-and-recast echo creature is
   // stamped afresh by its new entry. Same shape-guard as `attachedTo`.
   if (inst.controlledSinceTurn !== undefined) delete inst.controlledSinceTurn;
+  // §3.112 — which alternative cost the spell paid is a fact about THAT cast
+  // (CR 400.7): the dash rider that would return "the permanent this spell
+  // becomes" finds no stamp on a bounced-and-recast one, and leaves it.
+  if (inst.castWith !== undefined) delete inst.castWith;
   // CR 712.8a: a double-faced card is front-face-up everywhere except the
   // battlefield, so a TRANSFORMED permanent that leaves (dies, bounces, exiles)
   // reverts to its printed front face here — the same single chokepoint that
