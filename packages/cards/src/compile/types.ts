@@ -211,6 +211,21 @@ export interface ClauseContribution {
   readonly flashbackXCost?: number;
   /** A "Pay N life" rider on the flashback cost ("Flashback—{1}{U}, Pay 3 life"). */
   readonly flashbackLifeCost?: number;
+  // --- §3.111 the graveyard-casting family --------------------------------------
+  /**
+   * A NON-MANA flashback cost ("Flashback—Sacrifice three creatures",
+   * "Flashback—Tap three untapped white creatures you control") in the shape
+   * the additional-cost machinery pays (`CardDefinition.flashbackAdditionalCost`).
+   */
+  readonly flashbackAdditionalCost?: import('@jonny-boi/core').AdditionalCastCost;
+  /** Retrace / jump-start / escape (`CardDefinition.graveyardCasts`), accumulated. */
+  readonly graveyardCasts?: readonly import('@jonny-boi/core').GraveyardCastAbility[];
+  /**
+   * Unearth / scavenge / embalm / eternalize / encore and the "{cost}: Return ~
+   * from your graveyard to your hand" template (`CardDefinition.graveyardAbilities`),
+   * accumulated.
+   */
+  readonly graveyardAbilities?: readonly import('@jonny-boi/core').GraveyardAbility[];
   /** Activated abilities this clause prints ("Equip {2}"). */
   readonly activated?: readonly import('@jonny-boi/core').ActivatedAbility[];
   /**

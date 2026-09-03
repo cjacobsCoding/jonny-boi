@@ -23,6 +23,8 @@ import type { DelayedTriggeredAbility } from './delayed.js';
 import type { CardGrant } from './card-grants.js';
 import type { PendingChoice, ResolutionFrame } from './choices.js';
 import type { TargetRestriction } from './targeting.js';
+// §3.111 — the closed exit table every graveyard cast leaves the stack by.
+import { GRAVEYARD_CAST_EXIT } from './graveyard-casting.js';
 
 /** Opaque, stable identity for a player. */
 export type PlayerId = 'A' | 'B';
@@ -290,6 +292,16 @@ export interface CardInstance {
    */
   exiledUntilLeavesBy?: InstanceId;
   /**
+   * §3.111 — UNEARTH's replacement (CR 702.84c): "If it would leave the
+   * battlefield, exile it instead of putting it anywhere else." Written as the
+   * unearthed card enters, read by both leave-the-battlefield funnels through
+   * `leaveBattlefieldDestination`, cleared by `resetInstanceForNewZone` once
+   * the object has left. Written ONLY on an unearthed permanent, for the same
+   * object-shape reason as {@link exiledUntilLeavesBy}; anyone adding a field
+   * here must also edit `internal/clone.ts`.
+   */
+  exileIfLeaves?: boolean;
+  /**
    * §3.106 — the turn on which this permanent CAME UNDER ITS CURRENT
    * CONTROLLER'S CONTROL: written as it enters the battlefield and again on
    * every control change, read by echo's intervening "if this permanent came
@@ -434,6 +446,18 @@ export interface SpellStackObject {
    */
   readonly kickCount?: number;
   /**
+   * §3.111 — HOW a spell cast from the graveyard was cast, when it was not a
+   * flashback: retrace, jump-start or escape. Absent on a flashback cast (and
+   * on every stack object written before this existed), so `castFrom:
+   * 'graveyard'` alone still means flashback. Read by `spellLeaveDestination`
+   * through the closed `GRAVEYARD_CAST_EXIT` table — a retraced or escaped
+   * spell goes back to the graveyard, the other two are exiled — and by the
+   * cast-time question for WHICH additional cost this cast owes. Rides the
+   * stack object because that is the one place the exit from the stack can
+   * read it; see `graveyard-casting.ts`.
+   */
+  readonly graveyardCast?: import('./graveyard-casting.js').GraveyardCastKind;
+  /**
    * §3.106 — set when this creature spell was cast through a SUSPEND window
    * (CR 702.62a: "if you cast a creature spell this way, it gains haste until
    * you lose control of the spell or the permanent it becomes"). Rides the
@@ -564,7 +588,9 @@ export function spellLeaveDestination(
   // leaves the stack, so it outranks everything else here. It is also what
   // AFTERMATH (CR 702.127a) rides — its second half is cast only from the
   // graveyard and is exiled after it resolves, which is the same sentence.
-  if (spell.castFrom === 'graveyard') return 'exile';
+  // §3.111 — keyed on HOW it was cast: flashback and jump-start exile, retrace
+  // and escape put the card back (their whole design). One closed table.
+  if (spell.castFrom === 'graveyard') return GRAVEYARD_CAST_EXIT[spell.graveyardCast ?? 'flashback'];
   // An ADVENTURE exiles its own card, but ONLY as it resolves (CR 715.3d): an
   // adventure spell that is countered goes to the graveyard like anything else,
   // and the creature half is then gone for good. Reading the face that is on

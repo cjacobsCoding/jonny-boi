@@ -57,6 +57,7 @@
 
 import type { CardDefinition, CardType, KeywordFlags } from './card.js';
 import { unionProtection } from './card.js';
+import type { ManaColor } from './mana.js';
 import type { CardFilter, CardOption } from './choices.js';
 import { cardOption, choiceOptionCount, matchesCardFilter, normalizeChoiceRequest } from './choices.js';
 import type { CardInstance, GameState, InstanceId } from './state.js';
@@ -133,6 +134,25 @@ export interface CopyExceptions {
    * with (CR 306.5b), not added afterwards, and only a planeswalker has any.
    */
   readonly extraLoyalty?: number;
+  // --- §3.111 the graveyard-casting family's "except" clauses --------------------
+  /**
+   * "except it's **white**" (embalm, CR 702.128a) / "**black**" (eternalize,
+   * 702.129a) — the copy's colour, replacing the copied one. The same field
+   * `CardDefinition.colors` already defines as "printed colour" (an empty list
+   * is colourless), so a white Zombie token is white for protection, filters
+   * and fear exactly as a printed white card is.
+   */
+  readonly colors?: readonly ManaColor[];
+  /**
+   * "except … it has **no mana cost**" (embalm, eternalize). The copy drops the
+   * copied cost and is marked as CR 202.1b's no-cost object: its mana value is
+   * zero and it can never be cast by paying a cost.
+   */
+  readonly noManaCost?: boolean;
+  /** "except it's a **4/4** …" (eternalize) — the copy's base power. */
+  readonly power?: number;
+  /** "except it's a **4/4** …" (eternalize) — the copy's base toughness. */
+  readonly toughness?: number;
 }
 
 /**
@@ -297,13 +317,44 @@ export function applyCopyExceptions(
     ...(keywords !== undefined ? { keywords } : {}),
     ...(exceptions.entersTapped === true ? { entersTapped: true } : {}),
   };
+  // §3.111 — the colour / cost / base-P/T exceptions embalm and eternalize print.
+  const shaped = applyGraveyardCopyExceptions(next, exceptions);
   // Assigned rather than spread so `legendary: false` genuinely CLEARS the
   // copied card's legendary supertype (Spark Double's "and it isn't legendary")
   // instead of spreading an undefined that leaves it set.
-  if (legendary === true) return { ...next, legendary: true };
-  const cleared = { ...next } as { legendary?: boolean };
+  if (legendary === true) return { ...shaped, legendary: true };
+  const cleared = { ...shaped } as { legendary?: boolean };
   delete cleared.legendary;
   return cleared as CardDefinition;
+}
+
+/**
+ * §3.111 — the "except" clauses the graveyard-casting family prints, applied
+ * on top of the type/subtype/keyword ones above: "it's white" / "it's black"
+ * (the colour REPLACES the copied one — CR 702.128a's token is white whatever
+ * the card was), "it has no mana cost" (the cost is REMOVED and the CR 202.1b
+ * marker set, so its mana value reads zero), and "it's a 4/4" (the base P/T
+ * replaces the copied one, in layer 7a; counters still apply on top).
+ * A no-op — the same object back — when none of the four is printed.
+ */
+function applyGraveyardCopyExceptions(copied: CardDefinition, exceptions: CopyExceptions): CardDefinition {
+  if (
+    exceptions.colors === undefined &&
+    exceptions.noManaCost !== true &&
+    exceptions.power === undefined &&
+    exceptions.toughness === undefined
+  ) {
+    return copied;
+  }
+  const shaped: { -readonly [K in keyof CardDefinition]: CardDefinition[K] } = { ...copied };
+  if (exceptions.colors !== undefined) shaped.colors = [...exceptions.colors];
+  if (exceptions.noManaCost === true) {
+    delete shaped.cost;
+    shaped.noManaCost = true;
+  }
+  if (exceptions.power !== undefined) shaped.power = exceptions.power;
+  if (exceptions.toughness !== undefined) shaped.toughness = exceptions.toughness;
+  return shaped;
 }
 
 /**

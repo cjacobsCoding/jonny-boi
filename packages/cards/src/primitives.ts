@@ -103,6 +103,7 @@ import { CHOICE_PRIMITIVES } from './choice-primitives.js';
 import { PREDEFINED_TOKEN_DEFS } from './predefined-tokens.js';
 import { COPY_PRIMITIVES } from './copy-primitives.js';
 import { UPKEEP_COST_PRIMITIVES } from './upkeep-cost-primitives.js';
+import { GRAVEYARD_CAST_PRIMITIVES } from './graveyard-cast-primitives.js';
 import { EXILE_UNTIL_LEAVES_PRIMITIVES } from './exile-until-leaves.js';
 import { TRIGGER_COPY_PRIMITIVES } from './trigger-copy-primitives.js';
 import { BLINK_PRIMITIVES } from './blink-primitives.js';
@@ -1841,6 +1842,8 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   // bodies of echo, cumulative upkeep, vanishing, fading, suspend's tick and
   // the "sacrifice ~ unless you pay" template.
   ...UPKEEP_COST_PRIMITIVES,
+  // §3.111 — the graveyard-casting family's bodies.
+  ...GRAVEYARD_CAST_PRIMITIVES,
   // "Exile until this leaves the battlefield" (`./exile-until-leaves`) — the
   // O-Ring pair. Its own module because the LINK between exiler and exiled is
   // the whole mechanic: two of these on the battlefield must each return their

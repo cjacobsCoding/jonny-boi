@@ -168,6 +168,18 @@ export interface HeuristicWeights {
    *  affordable. Below it the permanent is let go rather than the turn stranded. */
   readonly upkeepBillWorthPerMana: number;
 
+  // --- §3.111 the graveyard-casting family ------------------------------------
+  /** What ONE card of graveyard fuel costs when a keyword's rider spends it —
+   *  escape's "exile N other cards from your graveyard", and a flashback's
+   *  "tap N untapped creatures": a small per-card tempo/option price, so a
+   *  Glimpse of Freedom is escaped when the draw is worth more than five
+   *  points of yard, and not when the yard is what the deck runs on. */
+  readonly graveyardFuelCardValue: number;
+  /** What a "{cost}: Return ~ from your graveyard to your hand" activation is
+   *  worth, as a share of the card's own value: the card still has to be cast
+   *  again, so it is priced like a granted flashback rather than a free draw. */
+  readonly graveyardReturnShare: number;
+
   // --- attacking -----------------------------------------------------------
   /** Minimum net "value" (see attack evaluation) for an attack to be worth making.
    *  An attacker is sent if it can deal unblocked damage or the expected trade is at
@@ -606,6 +618,10 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // Four points per mana: a 3/3 (cardValue 22) pays an echo of {1}{G} (8) and a
   // Deranged Hermit (1/1, 14) declines its {3}{G}{G} (20) and keeps the squirrels.
   upkeepBillWorthPerMana: 4,
+
+  // §3.111 the graveyard-casting family
+  graveyardFuelCardValue: 1,
+  graveyardReturnShare: 0.5,
 
   // attacking
   attackValueThreshold: 1,

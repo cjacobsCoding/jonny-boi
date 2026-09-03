@@ -163,6 +163,9 @@ export type SoakMechanicId =
   | 'modal-cast'
   | 'flashback-cast'
   | 'graveyard-grant'
+  // §3.111
+  | 'graveyard-ability'
+  | 'graveyard-cast'
   | 'protection'
   | 'ward'
   | 'indestructible'
@@ -462,6 +465,23 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
   { id: 'cycling', label: 'cycling — a card cycled from hand', witnessKind: 'action', printedBy: hasKey('cycling') },
   // §3.106
   { id: 'suspend', label: 'suspend — a card suspended from hand (CR 702.62)', witnessKind: 'action', printedBy: hasKey('suspend') },
+  // §3.111 — the graveyard-casting family. Two witnesses because the two
+  // shapes are two different actions: an ability ACTIVATED from a graveyard
+  // (unearth/scavenge/embalm/eternalize/encore/return-to-hand) and a CAST from
+  // the graveyard by a non-flashback keyword (retrace/jump-start/escape); a
+  // flashback with a non-mana cost is still a flashback cast and rides that row.
+  {
+    id: 'graveyard-ability',
+    label: 'graveyard abilities — unearth / scavenge / embalm / eternalize / encore activated from a graveyard (CR 702.84a et al.)',
+    witnessKind: 'action',
+    printedBy: hasKey('graveyardAbilities'),
+  },
+  {
+    id: 'graveyard-cast',
+    label: 'graveyard casts — retrace / jump-start / escape cast from a graveyard (CR 702.81a, 702.133a, 702.138a)',
+    witnessKind: 'action',
+    printedBy: hasKey('graveyardCasts'),
+  },
   {
     id: 'buyback',
     label: 'buyback — the optional cost offered at cast',

@@ -130,6 +130,14 @@ export type TriggerEvent =
   | 'becomesBlockedByCreature'
   | 'dies'
   | 'leaves'
+  /**
+   * §3.111 — "When ~ is put into a graveyard from the battlefield" (Rancor,
+   * the Aura that comes back). NOT `dies`, which is `creatureDied` and never
+   * fires for an Aura or an artifact; NOT `leaves`, which also fires on an
+   * exile or a bounce and would return a Rancor that had been exiled. Exactly
+   * the battlefield → graveyard move, for any permanent.
+   */
+  | 'putIntoGraveyardFromBattlefield'
   | 'castSpell'
   | 'upkeep'
   | 'drawStep'
@@ -544,6 +552,17 @@ export function conditionMatches(
         event.instanceId === watched
       );
     }
+    case 'putIntoGraveyardFromBattlefield': {
+      // §3.111 — the one move, for any permanent type (see the event's doc).
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
+      return (
+        watched !== null &&
+        event.type === 'zoneChange' &&
+        event.from === 'battlefield' &&
+        event.to === 'graveyard' &&
+        event.instanceId === watched
+      );
+    }
     case 'castSpell': {
       if (event.type !== 'spellCast') return false;
       if (!whoMatches(condition.who, event.player, sourceController)) return false;
@@ -816,6 +835,7 @@ export const TRIGGER_EVENT_SOURCES: Readonly<Record<TriggerEvent, readonly GameE
     becomesBlockedByCreature: ['blockersDeclared'],
     dies: ['creatureDied'],
     leaves: ['zoneChange'],
+    putIntoGraveyardFromBattlefield: ['zoneChange'],
     castSpell: ['spellCast'],
     upkeep: ['stepBegin'],
     drawStep: ['stepBegin'],

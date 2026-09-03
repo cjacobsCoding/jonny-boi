@@ -68,7 +68,6 @@ import {
   hasType,
   isCreature,
   isLand,
-  flashbackCostOf,
   isLegalTarget,
   isBattle,
   isPlaneswalker,
@@ -90,6 +89,18 @@ import {
   DEFAULT_TRIGGER_WATCHES,
 } from '@jonny-boi/core';
 import type { TargetRestriction, TriggeredAbility } from '@jonny-boi/core';
+// §3.111 — the graveyard-casting family: every way a card in the graveyard can
+// be cast (flashback and its siblings, through ONE accessor) and the abilities
+// that activate from there.
+import {
+  additionalCostPool,
+  canPayAdditionalCost,
+  graveyardCastOptionsOf,
+  matchesCardFilter,
+  type AdditionalCastCost,
+  type GraveyardAbility,
+  type GraveyardCastKind,
+} from '@jonny-boi/core';
 // The combat keyword family (DESIGN §3.107): core's own land reader for the
 // landwalk mirror, and the attack-requirement roster fix-up.
 import { controlsLandMatchingAny } from '@jonny-boi/core';
@@ -502,6 +513,13 @@ function heuristicWillPass(view: GameState, rules: RulesConfig): boolean {
     if (facts.graveHalfCmc >= 0 && (sorceryOpen || facts.graveHalfInstant) && facts.graveHalfCmc < cheapestPlay) {
       cheapestPlay = facts.graveHalfCmc;
     }
+    // §3.111 — a graveyard ABILITY (unearth, scavenge, …) is a play at its own
+    // timing whatever the scorer thinks of the card as a spell, so it bounds
+    // the window on its own; a retrace/jump-start/escape cast is a spell goal
+    // like flashback and shares its gate below.
+    if (facts.graveyardAbilityCmc >= 0 && (sorceryOpen || facts.graveyardAbilityInstant)) {
+      if (facts.graveyardAbilityCmc < cheapestPlay) cheapestPlay = facts.graveyardAbilityCmc;
+    }
     if (facts.flashbackCmc < 0) continue;
     if (!sorceryOpen && !facts.instant) continue;
     if (!couldBeAGoal(facts)) continue;
@@ -533,6 +551,14 @@ interface GateFacts {
   /** An aftermath half castable from the graveyard: its mana value, or -1. */
   readonly graveHalfCmc: number;
   readonly graveHalfInstant: boolean;
+  /**
+   * §3.111 — the cheapest graveyard ABILITY the card prints (unearth, scavenge,
+   * embalm, eternalize, encore, a self-return): its mana value, or -1. A play
+   * in its own right, at the ability's own timing.
+   */
+  readonly graveyardAbilityCmc: number;
+  /** Whether any of those abilities is activatable at instant speed. */
+  readonly graveyardAbilityInstant: boolean;
   readonly goalAlways: boolean;
   readonly goalOnStack: boolean;
   readonly goalInCombat: boolean;
@@ -541,6 +567,37 @@ interface GateFacts {
 }
 
 const GATE_FACTS_MEMO = new WeakMap<CardDefinition, GateFacts>();
+
+/**
+ * §3.111 — the cheapest mana value at which this card could be cast from the
+ * graveyard by any printed keyword (flashback, retrace, jump-start, escape),
+ * or -1 when it prints none. An UPPER bound on what the window could need, as
+ * every gate fact is: a granted flashback (Snapcaster) is not a printed fact
+ * and is handled by the grant check above the gate.
+ */
+function cheapestGraveyardCastCmc(def: CardDefinition): number {
+  let cheapest = def.flashback === undefined ? -1 : convertedManaCost(def.flashback);
+  const casts = def.graveyardCasts;
+  if (casts !== undefined) {
+    for (const cast of casts) {
+      const cmc = convertedManaCost(cast.cost ?? def.cost ?? {});
+      if (cheapest < 0 || cmc < cheapest) cheapest = cmc;
+    }
+  }
+  return cheapest;
+}
+
+/** §3.111 — the cheapest graveyard ability's mana value, or -1 when the card prints none. */
+function cheapestGraveyardAbilityCmc(def: CardDefinition): number {
+  const abilities = def.graveyardAbilities;
+  if (abilities === undefined || abilities.length === 0) return -1;
+  let cheapest = -1;
+  for (const ability of abilities) {
+    const cmc = convertedManaCost(ability.cost.mana ?? {});
+    if (cheapest < 0 || cmc < cheapest) cheapest = cmc;
+  }
+  return cheapest;
+}
 
 function gateFactsOf(def: CardDefinition): GateFacts {
   const memo = GATE_FACTS_MEMO.get(def);
@@ -559,9 +616,14 @@ function gateFactsOf(def: CardDefinition): GateFacts {
     manaSource: manaModesOf(def).length > 0,
     instant: castTiming(def) === 'instant',
     cmc: convertedManaCost(def.cost ?? {}),
-    flashbackCmc: def.flashback === undefined ? -1 : convertedManaCost(def.flashback),
+    // §3.111 — the cheapest of the card's graveyard casts is the flashback-shaped
+    // bound (retrace and jump-start pay the printed cost; escape its own), and
+    // the graveyard abilities bound the window on their own.
+    flashbackCmc: cheapestGraveyardCastCmc(def),
     graveHalfCmc: graveHalf === undefined ? -1 : convertedManaCost(graveHalf.cost ?? {}),
     graveHalfInstant: graveHalf !== undefined && castTiming(graveHalf) === 'instant',
+    graveyardAbilityCmc: cheapestGraveyardAbilityCmc(def),
+    graveyardAbilityInstant: (def.graveyardAbilities ?? []).some((ability) => (ability.timing ?? 'instant') === 'instant'),
     ...goalFlagsOf(def),
   };
   GATE_FACTS_MEMO.set(def, facts);
@@ -751,6 +813,12 @@ interface SpellGoal {
    */
   readonly fromZone?: 'graveyard' | 'exile';
   /**
+   * §3.111 — WHICH graveyard-cast keyword a `fromZone: 'graveyard'` goal uses
+   * (retrace, jump-start, escape); absent means flashback. The cast action
+   * must carry the same kind, or the engine charges the flashback cost.
+   */
+  readonly graveyardCast?: GraveyardCastKind;
+  /**
    * Set when this goal casts the SECOND HALF of a two-halved card — a split
    * card's right half, an aftermath half, an adventure. The cast action must
    * name the face or the engine casts the other one.
@@ -820,8 +888,15 @@ function choosePriorityAction(
   const activation = bestFundedActivation(ctx, weights, index);
   // Offered-but-unowned activations (Kiki's tap) compete on the same scale.
   const offered = bestOfferedActivation(ctx, weights, index);
-  const bestActivation =
+  // §3.111 — an ability activated from the GRAVEYARD (unearth, scavenge,
+  // embalm, eternalize, encore, a self-return) competes on the same scale.
+  const graveyardPlay = bestGraveyardAbility(ctx, weights, index);
+  const bestBattlefieldActivation =
     offered && (!activation || offered.score > activation.score) ? offered : activation;
+  const bestActivation =
+    graveyardPlay && (!bestBattlefieldActivation || graveyardPlay.score > bestBattlefieldActivation.score)
+      ? graveyardPlay
+      : bestBattlefieldActivation;
 
   // Lands outrank most spells: developing mana is almost always correct. We play
   // a land unless a spell scores higher than the land (e.g. lethal burn now).
@@ -1578,43 +1653,67 @@ function scoredSpellGoals(
       }
     }
     const def = card.def;
-    // Printed OR granted (Snapcaster). Read through core's one accessor, the
-    // same one `generateLegalActions` and `applyCastSpell` use — a pilot that
-    // read only the printed field would never take the recast its own ETB just
-    // bought, and the ability would be inert in exactly the games it was cast in.
-    const flashbackCost = flashbackCostOf(view as GameState, card);
-    if (flashbackCost === undefined || isLand(def)) continue;
+    // Printed OR granted (Snapcaster), and — §3.111 — flashback OR one of its
+    // siblings (retrace, jump-start, escape). Read through core's one accessor,
+    // the same one `generateLegalActions` and `applyCastSpell` use — a pilot
+    // that read only the printed field would never take the recast its own ETB
+    // just bought, and the ability would be inert in exactly the games it was
+    // cast in.
+    if (isLand(def)) continue;
+    const graveyardCasts = graveyardCastOptionsOf(view as GameState, card, def);
+    if (graveyardCasts.length === 0) continue;
     const timingOk = castTiming(def) === 'instant' ? true : sorcerySpeedOpen;
     if (!timingOk) continue;
-    if (convertedManaCost(flashbackCost) > availableMana) continue;
-    /*
-     * A FLASHBACK COST CAN PRINT A LIFE RIDER — "Flashback—{1}{B}, Pay 3 life"
-     * (Crippling Fatigue). It is part of the cost, so core's
-     * `generateLegalActions` does not offer the cast and `applyCastSpell`
-     * rejects it.
-     *
-     * Without this gate the pilot still WANTED the spell, and what that cost it
-     * was worse than a rejection: it committed the taps first, so it **tapped
-     * every land toward a cast it could never make and then passed**, floating
-     * the whole pool and throwing the turn away EXACTLY when it was at low life
-     * (measured: 5 taps, 0 casts, at 1 and 2 life against a 3-life rider). When
-     * the macro path did reach the cast, the engine refused it and the sim harness
-     * passed priority after `maxConsecutiveRejectedActions` — same lost turn,
-     * louder. Found by the full-pool soak, seed 3329123684.
-     */
-    const lifeCost = def.flashbackLifeCost ?? 0;
-    if (lifeCost > 0 && view.players[me].life < lifeCost) continue;
-
-    const intent = classifySpell(def);
-    oppCreatures ??= creaturesControlledBy(view, opp);
-    const goal = scoreSpell(view, opp, oppCreatures, card, intent, weights, explain, index);
-    const legal = goal ? withLegalTargets(view, opp, goal, index, weights) : undefined;
-    if (legal) {
+    let goal: SpellGoal | undefined;
+    let goalScored = false;
+    for (const option of graveyardCasts) {
+      if (convertedManaCost(option.cost) > availableMana) continue;
+      /*
+       * A FLASHBACK COST CAN PRINT A LIFE RIDER — "Flashback—{1}{B}, Pay 3 life"
+       * (Crippling Fatigue). It is part of the cost, so core's
+       * `generateLegalActions` does not offer the cast and `applyCastSpell`
+       * rejects it.
+       *
+       * Without this gate the pilot still WANTED the spell, and what that cost it
+       * was worse than a rejection: it committed the taps first, so it **tapped
+       * every land toward a cast it could never make and then passed**, floating
+       * the whole pool and throwing the turn away EXACTLY when it was at low life
+       * (measured: 5 taps, 0 casts, at 1 and 2 life against a 3-life rider). When
+       * the macro path did reach the cast, the engine refused it and the sim harness
+       * passed priority after `maxConsecutiveRejectedActions` — same lost turn,
+       * louder. Found by the full-pool soak, seed 3329123684.
+       */
+      if (option.lifeCost > 0 && view.players[me].life < option.lifeCost) continue;
+      // §3.111 — the same rule for a keyword's NON-MANA rider: a retrace with
+      // no land in hand, an escape with a thin graveyard, a Dread Return with
+      // two creatures are casts the engine never offers (CR 601.2h).
+      if (option.additional !== undefined && !canPayAdditionalCost(view as GameState, option.additional, me, card.instanceId)) {
+        continue;
+      }
+      if (!goalScored) {
+        goalScored = true;
+        const intent = classifySpell(def);
+        oppCreatures ??= creaturesControlledBy(view, opp);
+        const base = scoreSpell(view, opp, oppCreatures, card, intent, weights, explain, index);
+        goal = base ? withLegalTargets(view, opp, base, index, weights) : undefined;
+      }
+      if (!goal) break;
+      // §3.111 — "when the graveyard has fuel and the spell is worth it": the
+      // rider is PRICED against the spell — the worst land in hand for a
+      // retrace, the worst card for a jump-start, a point of yard per exiled
+      // card for an escape, the creatures a Dread Return eats — so a
+      // Glimpse of Freedom is escaped for a draw only when five cards of yard
+      // are worth less than the card, and a Flame Jab is retraced when the
+      // land it pitches is chaff.
+      const riderCost = option.additional === undefined ? 0 : additionalCostPrice(view as GameState, me, option.additional, card.instanceId, weights, index);
+      const label = option.kind === 'flashback' ? 'flashback' : option.kind;
       scored.push({
-        ...legal,
-        cost: flashbackCost,
+        ...goal,
+        score: goal.score - riderCost,
+        cost: option.cost,
         fromZone: 'graveyard',
-        reason: explain ? `flashback — ${legal.reason}` : NO_REASON,
+        ...(option.kind === 'flashback' ? {} : { graveyardCast: option.kind }),
+        reason: explain ? `${label} — ${goal.reason}` : NO_REASON,
       });
     }
   }
@@ -2551,6 +2650,205 @@ function pursueSuspend(ctx: DecisionContext, goal: SuspendGoal): GameAction {
   return emit(ctx, tap, goal.reason, goal.score);
 }
 
+// --- §3.111 the graveyard-casting family --------------------------------------------
+
+/**
+ * What paying a keyword's NON-MANA rider costs the pilot, in the same points a
+ * spell is scored in — read off the SAME candidate pool the engine will offer
+ * the cast-time question from, so the pilot prices what it will actually pay.
+ *
+ *  - a DISCARD (retrace's land, jump-start's card) and a SACRIFICE (Dread
+ *    Return's three creatures) are the `count` cheapest qualifying cards by
+ *    `cardValue` — exactly the cards the pilot's own loss policy will hand over
+ *    when the question is asked (`answerSelectCards`), so the price and the
+ *    payment agree;
+ *  - an EXILE from the graveyard (escape) and a TAP (Battle Screech) are a
+ *    flat `graveyardFuelCardValue` per card: exiling yard is an option cost,
+ *    not a card, and a tapped creature is a lost attack this turn, not a
+ *    lost creature.
+ */
+function additionalCostPrice(
+  state: GameState,
+  me: PlayerId,
+  cost: AdditionalCastCost,
+  excludeInstanceId: InstanceId,
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+): number {
+  const count = cost.count ?? 1;
+  if (cost.kind === 'exileFromGraveyard' || cost.kind === 'tap') return count * weights.graveyardFuelCardValue;
+  const cards = cardValueContext(state, index);
+  const values: number[] = [];
+  for (const card of additionalCostPool(state, cost, me)) {
+    if (card.instanceId === excludeInstanceId) continue;
+    if (!matchesCardFilter(card, cost.filter)) continue;
+    values.push(cardValue(card, weights, cards));
+  }
+  values.sort((a, b) => a - b);
+  let total = 0;
+  for (let i = 0; i < count && i < values.length; i++) total += values[i] as number;
+  return total;
+}
+
+/** A graveyard-ability play the pilot wants to make: the offer (or the tap toward it), how good it is, why. */
+interface GraveyardAbilityGoal {
+  readonly action: GameAction;
+  readonly score: number;
+  readonly label: string;
+}
+
+/**
+ * The best ability to activate FROM THE GRAVEYARD right now, or `undefined` —
+ * unearth (CR 702.84a), scavenge (702.96a), embalm (702.128a), eternalize
+ * (702.129a), encore (702.141a) and the "{cost}: Return ~ from your graveyard
+ * to your hand" template. Priced by KIND, the closed vocabulary core defines,
+ * because every one of these bodies reads its SOURCE and the effect-value
+ * table has no source to read:
+ *
+ *  - **unearth / encore** buy ONE ATTACK — a hasty body that is exiled or
+ *    sacrificed at the next end step — so they are worth the face damage it
+ *    can deliver (the Kiki-Jiki pricing in `createTokenCopy`), plus whatever
+ *    the creature's own enters-the-battlefield trigger does (Scrapwork Cohort's
+ *    Soldier, Rotting Rats' discard), and NOTHING outside the precombat main
+ *    phase, where the attack has already happened;
+ *  - **scavenge** is +1/+1 counters equal to the card's printed power, put on
+ *    the pilot's BEST attacker — the creature with the most stats it controls,
+ *    which is what a permanent pump is worth the most on;
+ *  - **embalm / eternalize** are a real body: the token's own P/T (eternalize's
+ *    4/4 is printed in the exception), priced as a creature cast is;
+ *  - **return to hand** is the card back, discounted by `graveyardReturnShare`
+ *    because it still has to be cast.
+ *
+ * Funded through the SAME `planManaPayment` every spell goal uses, for the
+ * reason `bestCycle` gives: the engine only OFFERS the activation once the pool
+ * covers it. Cheapest question first — almost no deck holds one of these.
+ */
+function bestGraveyardAbility(
+  ctx: DecisionContext,
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+): GraveyardAbilityGoal | undefined {
+  const { view, legalActions } = ctx;
+  const me = view.priorityPlayer;
+  const graveyard = view.players[me].graveyard;
+  let any = false;
+  for (const card of graveyard) {
+    if (card.def.graveyardAbilities !== undefined && card.def.graveyardAbilities.length > 0) {
+      any = true;
+      break;
+    }
+  }
+  if (!any) return undefined;
+  const sorcerySpeedOpen =
+    me === view.activePlayer && (view.step === 'precombatMain' || view.step === 'postcombatMain') && view.stack.length === 0;
+  const attackAhead = me === view.activePlayer && view.step === 'precombatMain';
+  let cards: ReturnType<typeof cardValueContext> | undefined;
+  let best: GraveyardAbilityGoal | undefined;
+
+  for (const card of graveyard) {
+    const abilities = card.def.graveyardAbilities;
+    if (abilities === undefined) continue;
+    for (let a = 0; a < abilities.length; a++) {
+      const ability = abilities[a] as GraveyardAbility;
+      if ((ability.timing ?? 'instant') === 'sorcery' && !sorcerySpeedOpen) continue;
+      // A sacrifice or life rider on one of these is not priced — no printed
+      // card of the family carries one today — so it is left alone, never
+      // guessed at (the `bestFundedActivation` discipline).
+      if (ability.cost.sacrificeAnother !== undefined || (ability.cost.life ?? 0) > 0) continue;
+      const mana = ability.cost.mana ?? {};
+
+      let targets: readonly (InstanceId | PlayerId)[] = [];
+      let score: number;
+      switch (ability.kind) {
+        case 'unearth':
+        case 'encore': {
+          if (!attackAhead) continue;
+          const printedPower = Math.max(card.def.power ?? 0, 0);
+          score = weights.faceDamageValue * printedPower;
+          if (ability.kind === 'unearth' && card.def.triggers !== undefined) {
+            cards ??= cardValueContext(view as GameState, index);
+            for (const trigger of card.def.triggers) {
+              if (trigger.condition.on !== 'etb') continue;
+              score += valueOfEffects(trigger.effects, { state: view as GameState, player: me, targets: [], weights, cards, index });
+            }
+          }
+          break;
+        }
+        case 'scavenge': {
+          const counters = Math.max(card.def.power ?? 0, 0);
+          if (counters === 0) continue;
+          const restriction = restrictionOfEffects(ability.effects);
+          if (restriction === undefined) continue;
+          let bestAim: { ref: InstanceId; stats: number } | undefined;
+          for (const ref of legalTargetsFor(view as GameState, restriction, me, card.def)) {
+            if (typeof ref !== 'number') continue;
+            const perm = view.battlefield.find((p) => p.instanceId === ref);
+            if (!perm || perm.controller !== me) continue;
+            const stats = statTotal(perm, index);
+            if (!bestAim || stats > bestAim.stats) bestAim = { ref, stats };
+          }
+          if (!bestAim) continue;
+          targets = [bestAim.ref];
+          score = counters * 2 * weights.choiceCreaturePerStatValue;
+          break;
+        }
+        case 'embalm':
+        case 'eternalize': {
+          const except = tokenExceptOf(ability);
+          const tokenPower = except?.power ?? card.def.power ?? 0;
+          const tokenToughness = except?.toughness ?? card.def.toughness ?? 0;
+          score = weights.castCreatureBaseScore + weights.castCreaturePerStat * (tokenPower + tokenToughness);
+          break;
+        }
+        case 'returnToHand': {
+          cards ??= cardValueContext(view as GameState, index);
+          score = cardValue(card, weights, cards) * weights.graveyardReturnShare;
+          break;
+        }
+      }
+      if (score <= weights.passScore) continue;
+      if (best !== undefined && score <= best.score) continue;
+      const plan = planManaPayment(view as GameState, me, mana, legalActions, card.def, 'activate', manaPreferenceOf(weights));
+      if (!plan) continue;
+      const offer = plan.length > 0 ? undefined : offeredGraveyardActivation(legalActions, card.instanceId, a, targets);
+      if (plan.length === 0 && offer === undefined) continue;
+      const action: GameAction = plan.length > 0 ? tapActionFor(me, plan[0] as ManaTapPlan) : (offer as GameAction);
+      best = { action, score, label: ctx.trace ? `${ability.label} (${card.def.name})` : NO_REASON };
+    }
+  }
+  return best;
+}
+
+/** The `except` tail an embalm/eternalize body carries, for the token's printed size. */
+function tokenExceptOf(ability: GraveyardAbility): { readonly power?: number; readonly toughness?: number } | undefined {
+  const raw = ability.effects[0]?.params?.except;
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  return raw as { readonly power?: number; readonly toughness?: number };
+}
+
+/**
+ * The engine's own offer for this graveyard activation, never a rebuilt action
+ * (the `offeredActivation` discipline): an action the menu did not contain is
+ * an action the engine would refuse.
+ */
+function offeredGraveyardActivation(
+  legalActions: readonly GameAction[],
+  instanceId: InstanceId,
+  abilityIndex: number,
+  targets: readonly (InstanceId | PlayerId)[],
+): GameAction | undefined {
+  for (const action of legalActions) {
+    if (action.kind !== 'activateGraveyardAbility') continue;
+    if (action.instanceId !== instanceId || action.abilityIndex !== abilityIndex) continue;
+    const offered = action.targets ?? [];
+    if (offered.length !== targets.length) continue;
+    let same = true;
+    for (let i = 0; i < targets.length; i++) if (offered[i] !== targets[i]) same = false;
+    if (same) return action;
+  }
+  return undefined;
+}
+
 /** The cast that carries out a scored goal, once its cost is in the pool. */
 function castActionFor(me: PlayerId, goal: SpellGoal): GameAction {
   return {
@@ -2563,6 +2861,8 @@ function castActionFor(me: PlayerId, goal: SpellGoal): GameAction {
     // the engine casts the other one.
     fromZone: goal.fromZone,
     face: goal.face,
+    // §3.111 — a retrace / jump-start / escape goal names its kind.
+    ...(goal.graveyardCast !== undefined ? { graveyardCast: goal.graveyardCast } : {}),
   };
 }
 

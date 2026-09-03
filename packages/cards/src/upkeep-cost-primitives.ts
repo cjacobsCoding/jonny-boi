@@ -230,7 +230,7 @@ export const scheduleDelayedEffects: EffectPrimitive = (ctx) => {
  * makes, repeated here rather than imported because that module already
  * imports this one's table (an import back would be a load-order cycle).
  */
-function putCountersOfKind(ctx: EffectContext, target: import('@jonny-boi/core').CardInstance, kind: string, amount: number): void {
+export function putCountersOfKind(ctx: EffectContext, target: import('@jonny-boi/core').CardInstance, kind: string, amount: number): void {
   const magnitude = replaceCounters(ctx.state, indexReplacements(ctx.state), ctx.source, target, kind, amount, ctx.emit);
   if (magnitude <= 0) return;
   target.counters = { ...target.counters, [kind]: (target.counters[kind] ?? 0) + magnitude };
