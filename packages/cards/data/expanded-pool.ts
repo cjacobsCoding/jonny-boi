@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 5591 cards.
+ * 5601 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -6137,6 +6137,49 @@ const POOL_0: readonly CardDefinition[] = [
     cost: { generic: 2, R: 1 },
     effects: [{ primitive: 'dealDamage', params: { amount: 4, targets: 'creature' } }],
   },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +1/+1 and has vigilance and lifelink.
+  // Equip {5}
+  {
+    id: '94266c32-774f-42fa-84d7-7b646c950587',
+    name: 'Batterbone',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 5 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {5}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {5}',
+      modifies: { power: 1, toughness: 1, keywords: { vigilance: true, lifelink: true } },
+    },
+  },
   // When this creature enters, you may destroy target artifact.
   {
     id: 'a7b40f74-893f-4bfc-87b2-7f8df4c912d8',
@@ -7355,6 +7398,77 @@ const POOL_0: readonly CardDefinition[] = [
     keywords: { reach: true, vigilance: true },
     subtypes: ['jackal', 'archer'],
   },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +1/+1.
+  // Whenever equipped creature attacks, you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
+  // Equip {3}
+  {
+    id: '926cbd68-3b66-4ccc-a7c9-fb20e38a3126',
+    name: 'Bitterthorn, Nissa\'s Animus',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    legendary: true,
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+      {
+        condition: { on: 'attacks', watches: 'attachedHost' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may search your library for a basic land card, put it onto the battlefield tapped, then shuffle',
+              valence: 'gain',
+              effects: [
+                {
+                  primitive: 'searchLibrary',
+                  params: {
+                    who: 'controller',
+                    count: 1,
+                    filter: { anyOfTypes: ['land'] },
+                    nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+                    destination: 'battlefield',
+                    tapped: true,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        label: 'Equipped creature attacks: you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 3 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {3}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {3}',
+      modifies: { power: 1, toughness: 1, keywords: {} },
+    },
+  },
   // First strike (This creature deals combat damage before creatures without first strike.)
   // Protection from white (This creature can't be blocked, targeted, dealt damage, or enchanted by anything white.)
   {
@@ -8566,6 +8680,9 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_1: readonly CardDefinition[] = [
   // Sacrifice a creature: This creature gets +2/+2 until end of turn.
   {
     id: 'ee7354fe-fb76-4196-a69b-0916af73bf45',
@@ -8600,9 +8717,6 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_1: readonly CardDefinition[] = [
   // This land enters tapped unless you control two or fewer other lands.
   // {T}: Add {B} or {G}.
   {
@@ -14775,6 +14889,49 @@ const POOL_1: readonly CardDefinition[] = [
     keywords: { reach: true, trample: true },
     subtypes: ['dinosaur'],
   },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +6/+6 and has trample.
+  // Equip {3}{G}{G}
+  {
+    id: '98164430-64c1-465f-b786-45753c965f44',
+    name: 'Colossal Dreadmask',
+    types: ['artifact'],
+    cost: { generic: 4, G: 2 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 3, G: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {3}{g}{g}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {3}{g}{g}',
+      modifies: { power: 6, toughness: 6, keywords: { trample: true } },
+    },
+  },
   // Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)
   {
     id: '8059c52b-5d25-4052-b48a-e9e219a7a546',
@@ -16944,6 +17101,9 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_2: readonly CardDefinition[] = [
   // At the beginning of your upkeep, each player discards a card.
   {
     id: '972891e6-6a23-40df-af22-adf8cd7ea582',
@@ -16992,9 +17152,6 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_2: readonly CardDefinition[] = [
   // Surveil 2. (Look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)
   // Draw a card.
   {
@@ -22142,6 +22299,55 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +1/+1.
+  // Whenever equipped creature attacks, each opponent loses 1 life.
+  // Equip {2}
+  {
+    id: '70e68656-3204-4bb5-9f31-8036083fcba6',
+    name: 'Drossclaw',
+    types: ['artifact'],
+    cost: { generic: 1, B: 1 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+      {
+        condition: { on: 'attacks', watches: 'attachedHost' },
+        effects: [{ primitive: 'loseLife', params: { amount: 1, whichPlayer: 'opponent' } }],
+        label: 'Equipped creature attacks: each opponent loses 1 life',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 1, toughness: 1, keywords: {} },
+    },
+  },
   // This land enters tapped.
   // Indestructible
   // {T}: Add {B} or {R}.
@@ -25349,6 +25555,9 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_3: readonly CardDefinition[] = [
   // Flying
   {
     id: 'fffe7b2b-22c3-4e6a-9b1b-c6d7b29b9f86',
@@ -25398,9 +25607,6 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_3: readonly CardDefinition[] = [
   // Reach (This creature can block creatures with flying.)
   // Whenever this creature blocks a creature with flying, this creature gets +3/+0 until end of turn.
   {
@@ -27763,6 +27969,49 @@ const POOL_3: readonly CardDefinition[] = [
     types: ['instant'],
     cost: { generic: 3, B: 1 },
     effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -4, toughness: -4, targets: 'creature' } }],
+  },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +1/+1.
+  // Equip {2}
+  {
+    id: '20b394f9-644d-426e-801b-110774092018',
+    name: 'Flayer Husk',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 1, toughness: 1, keywords: {} },
+    },
   },
   // This creature can't be blocked by creatures with power 2 or greater.
   {
@@ -33717,6 +33966,9 @@ const POOL_3: readonly CardDefinition[] = [
     keywords: { reach: true },
     subtypes: ['spider'],
   },
+];
+
+const POOL_4: readonly CardDefinition[] = [
   // Target creature gets -4/-4 until end of turn.
   {
     id: '494c819d-7d73-432b-8c96-4cb9dcd31094',
@@ -33801,9 +34053,6 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_4: readonly CardDefinition[] = [
   // Defender, protection from Zombies
   {
     id: '084446ca-fec5-446f-b6f8-edf32ecb57e3',
@@ -42028,6 +42277,9 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_5: readonly CardDefinition[] = [
   {
     id: '422fe3bd-d92e-4c91-8c30-3b5aec00201a',
     name: 'Kami of Old Stone',
@@ -42128,9 +42380,6 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_5: readonly CardDefinition[] = [
   // Protection from blue
   {
     id: '16396594-4f59-4600-8e39-d99544062265',
@@ -47602,6 +47851,49 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +1/+1 and has flying.
+  // Equip {3}{W}
+  {
+    id: '6b922f71-18e6-4a74-b792-d477d4a1deca',
+    name: 'Mandibular Kite',
+    types: ['artifact'],
+    cost: { W: 1 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 3, W: 1 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {3}{w}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {3}{w}',
+      modifies: { power: 1, toughness: 1, keywords: { flying: true } },
+    },
+  },
   // When this creature enters, you gain 2 life.
   {
     id: 'e8f79cb4-81f1-465a-a71b-d69a0185a304',
@@ -50671,6 +50963,9 @@ const POOL_5: readonly CardDefinition[] = [
     keywords: { trample: true },
     subtypes: ['elemental', 'sorcerer'],
   },
+];
+
+const POOL_6: readonly CardDefinition[] = [
   // Choose one —
   // • Molten Blast deals 2 damage to target creature or planeswalker.
   // • Destroy target artifact.
@@ -50780,9 +51075,6 @@ const POOL_5: readonly CardDefinition[] = [
       { primitive: 'gainLife', params: { amount: 2 } },
     ],
   },
-];
-
-const POOL_6: readonly CardDefinition[] = [
   // Target creature gets +2/+1 and gains lifelink until end of turn.
   // Draw a card.
   {
@@ -52775,6 +53067,49 @@ const POOL_6: readonly CardDefinition[] = [
       attachesTo: { anyOfTypes: ['creature'] },
       whenIllegal: 'toGraveyard',
       label: 'Enchant creature',
+    },
+  },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +3/+1 and has haste.
+  // Equip {2}
+  {
+    id: '4ed51dbc-bbec-4c78-a71e-26322a8d2439',
+    name: 'Necropouncer',
+    types: ['artifact'],
+    cost: { generic: 6 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 3, toughness: 1, keywords: { haste: true } },
     },
   },
   // All Slivers have "{3}, Sacrifice this permanent: Destroy target permanent."
@@ -59125,6 +59460,9 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_7: readonly CardDefinition[] = [
   // {T}: Add {C}.
   // {1}, {T}: Add one mana of any color.
   {
@@ -59227,9 +59565,6 @@ const POOL_6: readonly CardDefinition[] = [
     toughness: 2,
     subtypes: ['construct'],
   },
-];
-
-const POOL_7: readonly CardDefinition[] = [
   // {T}: This creature deals 1 damage to any target.
   {
     id: 'cf16600a-c2a5-49e4-89e2-260cfaf58b52',
@@ -67667,6 +68002,9 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_8: readonly CardDefinition[] = [
   // At the beginning of your upkeep, each player draws a card.
   // Whenever an opponent draws a card, that player loses 1 life.
   {
@@ -67801,9 +68139,6 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_8: readonly CardDefinition[] = [
   // When this creature enters, you may return target instant card from your graveyard to your hand.
   {
     id: 'ac6ccaeb-353a-4e40-8fe3-a88f7b20650f',
@@ -70946,6 +71281,49 @@ const POOL_8: readonly CardDefinition[] = [
     keywords: { wither: true },
     subtypes: ['elemental', 'warrior'],
   },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +2/+2.
+  // Equip {4}
+  {
+    id: '62f449cc-461e-4e89-8cd2-83e539bb40f4',
+    name: 'Sickleslicer',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 4 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {4}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {4}',
+      modifies: { power: 2, toughness: 2, keywords: {} },
+    },
+  },
   {
     id: '71fd27a8-2de6-454f-8174-a60918bfe60e',
     name: 'Siege Mastodon',
@@ -72052,6 +72430,49 @@ const POOL_8: readonly CardDefinition[] = [
         targets: 'creature',
       },
     ],
+  },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +2/+2 and has flying.
+  // Equip {6}
+  {
+    id: '3c65e0ff-7dab-4090-8a99-f42d486728c9',
+    name: 'Skinwing',
+    types: ['artifact'],
+    cost: { generic: 4 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 6 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {6}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {6}',
+      modifies: { power: 2, toughness: 2, keywords: { flying: true } },
+    },
   },
   // Sacrifice a Goblin: Add {R}.
   {
@@ -76024,6 +76445,9 @@ const POOL_8: readonly CardDefinition[] = [
     toughness: 3,
     subtypes: ['officer'],
   },
+];
+
+const POOL_9: readonly CardDefinition[] = [
   // This land enters tapped.
   // When this land enters, you gain 1 life.
   // {T}: Add {U} or {R}.
@@ -76222,9 +76646,6 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_9: readonly CardDefinition[] = [
   // When this creature enters, you gain 4 life.
   {
     id: 'ba41211a-30b0-4064-a197-5d17472b278f',
@@ -77207,6 +77628,49 @@ const POOL_9: readonly CardDefinition[] = [
     toughness: 2,
     keywords: { lifelink: true },
     subtypes: ['dwarf', 'cleric'],
+  },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +2/+4 and has reach.
+  // Equip {4}
+  {
+    id: 'd0d7ff8f-7733-4323-8575-c50b3e730dbc',
+    name: 'Strandwalker',
+    types: ['artifact'],
+    cost: { generic: 5 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 4 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {4}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {4}',
+      modifies: { power: 2, toughness: 4, keywords: { reach: true } },
+    },
   },
   // Strangle deals 3 damage to target creature or planeswalker.
   {
@@ -84022,6 +84486,9 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_10: readonly CardDefinition[] = [
   // Vigilance (Attacking doesn't cause this creature to tap.)
   // Ward {2} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.)
   // Trelane can't be blocked.
@@ -84213,9 +84680,6 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_10: readonly CardDefinition[] = [
   // Convoke (Your creatures can help cast this spell. Each creature you tap while casting this spell pays for {1} or one mana of that creature's color.)
   // Create three 1/1 white Spirit creature tokens with flying.
   {
@@ -92185,6 +92649,9 @@ const POOL_10: readonly CardDefinition[] = [
     entersTapped: true,
     producesOptions: [{ R: 1 }, { G: 1 }],
   },
+];
+
+const POOL_11: readonly CardDefinition[] = [
   // This land enters tapped unless you control a Swamp or a Forest.
   // {T}: Add {B} or {G}.
   {
@@ -92303,9 +92770,6 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_11: readonly CardDefinition[] = [
   {
     id: 'cf7188d8-d37f-49ec-ab52-8ea080725ca7',
     name: 'Woolly Thoctar',

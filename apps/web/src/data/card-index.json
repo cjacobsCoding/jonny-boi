@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-09-03T02:41:44.123Z",
+  "generatedAt": "2026-09-03T14:24:55.460Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 5623,
+  "requested": 5633,
   "unresolved": [],
   "cards": [
     {
@@ -18692,6 +18692,55 @@
       "faces": []
     },
     {
+      "id": "94266c32-774f-42fa-84d7-7b646c950587",
+      "name": "Batterbone",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)\nEquipped creature gets +1/+1 and has vigilance and lifelink.\nEquip {5}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip",
+        "Living weapon"
+      ],
+      "set": "mh2",
+      "collectorNumber": "221",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/4/94266c32-774f-42fa-84d7-7b646c950587.jpg?1783926807",
+        "normal": "https://cards.scryfall.io/normal/front/9/4/94266c32-774f-42fa-84d7-7b646c950587.jpg?1783926807",
+        "large": "https://cards.scryfall.io/large/front/9/4/94266c32-774f-42fa-84d7-7b646c950587.jpg?1783926807",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/4/94266c32-774f-42fa-84d7-7b646c950587.jpg?1783926807"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "a7b40f74-893f-4bfc-87b2-7f8df4c912d8",
       "name": "Batterhorn",
       "manaCost": {
@@ -22370,6 +22419,57 @@
         "normal": "https://cards.scryfall.io/normal/front/8/e/8ecfcf99-be2b-4e5f-adef-1977ee5c6a0f.jpg?1783936022",
         "large": "https://cards.scryfall.io/large/front/8/e/8ecfcf99-be2b-4e5f-adef-1977ee5c6a0f.jpg?1783936022",
         "art_crop": "https://cards.scryfall.io/art_crop/front/8/e/8ecfcf99-be2b-4e5f-adef-1977ee5c6a0f.jpg?1783936022"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "926cbd68-3b66-4ccc-a7c9-fb20e38a3126",
+      "name": "Bitterthorn, Nissa's Animus",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Legendary Artifact — Equipment",
+      "oracleText": "Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)\nEquipped creature gets +1/+1.\nWhenever equipped creature attacks, you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.\nEquip {3}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip",
+        "Living weapon"
+      ],
+      "set": "soc",
+      "collectorNumber": "343",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/2/926cbd68-3b66-4ccc-a7c9-fb20e38a3126.jpg?1783903741",
+        "normal": "https://cards.scryfall.io/normal/front/9/2/926cbd68-3b66-4ccc-a7c9-fb20e38a3126.jpg?1783903741",
+        "large": "https://cards.scryfall.io/large/front/9/2/926cbd68-3b66-4ccc-a7c9-fb20e38a3126.jpg?1783903741",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/2/926cbd68-3b66-4ccc-a7c9-fb20e38a3126.jpg?1783903741"
       },
       "localImages": {},
       "layout": "normal",
@@ -45070,6 +45170,59 @@
         "normal": "https://cards.scryfall.io/normal/front/8/7/8702e776-be2c-48a9-9bc5-bb8ea514333b.jpg?1783913750",
         "large": "https://cards.scryfall.io/large/front/8/7/8702e776-be2c-48a9-9bc5-bb8ea514333b.jpg?1783913750",
         "art_crop": "https://cards.scryfall.io/art_crop/front/8/7/8702e776-be2c-48a9-9bc5-bb8ea514333b.jpg?1783913750"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "98164430-64c1-465f-b786-45753c965f44",
+      "name": "Colossal Dreadmask",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)\nEquipped creature gets +6/+6 and has trample.\nEquip {3}{G}{G}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Equip",
+        "Living weapon"
+      ],
+      "set": "mh3",
+      "collectorNumber": "148",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/8/98164430-64c1-465f-b786-45753c965f44.jpg?1783911264",
+        "normal": "https://cards.scryfall.io/normal/front/9/8/98164430-64c1-465f-b786-45753c965f44.jpg?1783911264",
+        "large": "https://cards.scryfall.io/large/front/9/8/98164430-64c1-465f-b786-45753c965f44.jpg?1783911264",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/8/98164430-64c1-465f-b786-45753c965f44.jpg?1783911264"
       },
       "localImages": {},
       "layout": "normal",
@@ -68166,6 +68319,59 @@
       "faces": []
     },
     {
+      "id": "70e68656-3204-4bb5-9f31-8036083fcba6",
+      "name": "Drossclaw",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)\nEquipped creature gets +1/+1.\nWhenever equipped creature attacks, each opponent loses 1 life.\nEquip {2}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Equip",
+        "Living weapon"
+      ],
+      "set": "mh3",
+      "collectorNumber": "89",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/0/70e68656-3204-4bb5-9f31-8036083fcba6.jpg?1783911281",
+        "normal": "https://cards.scryfall.io/normal/front/7/0/70e68656-3204-4bb5-9f31-8036083fcba6.jpg?1783911281",
+        "large": "https://cards.scryfall.io/large/front/7/0/70e68656-3204-4bb5-9f31-8036083fcba6.jpg?1783911281",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/0/70e68656-3204-4bb5-9f31-8036083fcba6.jpg?1783911281"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "44b83535-fdbf-4307-bf53-ca20470a768d",
       "name": "Drossforge Bridge",
       "manaCost": {
@@ -85881,6 +86087,55 @@
         "normal": "https://cards.scryfall.io/normal/front/a/2/a2acae67-5238-40bb-a173-6fc858264a6c.jpg?1783938598",
         "large": "https://cards.scryfall.io/large/front/a/2/a2acae67-5238-40bb-a173-6fc858264a6c.jpg?1783938598",
         "art_crop": "https://cards.scryfall.io/art_crop/front/a/2/a2acae67-5238-40bb-a173-6fc858264a6c.jpg?1783938598"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "20b394f9-644d-426e-801b-110774092018",
+      "name": "Flayer Husk",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)\nEquipped creature gets +1/+1.\nEquip {2}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip",
+        "Living weapon"
+      ],
+      "set": "2xm",
+      "collectorNumber": "256",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/0/20b394f9-644d-426e-801b-110774092018.jpg?1783930109",
+        "normal": "https://cards.scryfall.io/normal/front/2/0/20b394f9-644d-426e-801b-110774092018.jpg?1783930109",
+        "large": "https://cards.scryfall.io/large/front/2/0/20b394f9-644d-426e-801b-110774092018.jpg?1783930109",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/0/20b394f9-644d-426e-801b-110774092018.jpg?1783930109"
       },
       "localImages": {},
       "layout": "normal",
@@ -147392,6 +147647,59 @@
       "faces": []
     },
     {
+      "id": "6b922f71-18e6-4a74-b792-d477d4a1deca",
+      "name": "Mandibular Kite",
+      "manaCost": {
+        "generic": 0,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)\nEquipped creature gets +1/+1 and has flying.\nEquip {3}{W}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Equip",
+        "Living weapon"
+      ],
+      "set": "mh3",
+      "collectorNumber": "34",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/b/6b922f71-18e6-4a74-b792-d477d4a1deca.jpg?1783911299",
+        "normal": "https://cards.scryfall.io/normal/front/6/b/6b922f71-18e6-4a74-b792-d477d4a1deca.jpg?1783911299",
+        "large": "https://cards.scryfall.io/large/front/6/b/6b922f71-18e6-4a74-b792-d477d4a1deca.jpg?1783911299",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/b/6b922f71-18e6-4a74-b792-d477d4a1deca.jpg?1783911299"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "e8f79cb4-81f1-465a-a71b-d69a0185a304",
       "name": "Mandroid Squadron",
       "manaCost": {
@@ -163115,6 +163423,55 @@
         "normal": "https://cards.scryfall.io/normal/front/8/c/8c934b09-726a-49c7-88fa-8b2e7ebf87b7.jpg?1783939355",
         "large": "https://cards.scryfall.io/large/front/8/c/8c934b09-726a-49c7-88fa-8b2e7ebf87b7.jpg?1783939355",
         "art_crop": "https://cards.scryfall.io/art_crop/front/8/c/8c934b09-726a-49c7-88fa-8b2e7ebf87b7.jpg?1783939355"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "4ed51dbc-bbec-4c78-a71e-26322a8d2439",
+      "name": "Necropouncer",
+      "manaCost": {
+        "generic": 6,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)\nEquipped creature gets +3/+1 and has haste.\nEquip {2}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip",
+        "Living weapon"
+      ],
+      "set": "nph",
+      "collectorNumber": "147",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/e/4ed51dbc-bbec-4c78-a71e-26322a8d2439.jpg?1783941293",
+        "normal": "https://cards.scryfall.io/normal/front/4/e/4ed51dbc-bbec-4c78-a71e-26322a8d2439.jpg?1783941293",
+        "large": "https://cards.scryfall.io/large/front/4/e/4ed51dbc-bbec-4c78-a71e-26322a8d2439.jpg?1783941293",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/e/4ed51dbc-bbec-4c78-a71e-26322a8d2439.jpg?1783941293"
       },
       "localImages": {},
       "layout": "normal",
@@ -218779,6 +219136,55 @@
       "faces": []
     },
     {
+      "id": "62f449cc-461e-4e89-8cd2-83e539bb40f4",
+      "name": "Sickleslicer",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)\nEquipped creature gets +2/+2.\nEquip {4}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip",
+        "Living weapon"
+      ],
+      "set": "2xm",
+      "collectorNumber": "287",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/2/62f449cc-461e-4e89-8cd2-83e539bb40f4.jpg?1783930097",
+        "normal": "https://cards.scryfall.io/normal/front/6/2/62f449cc-461e-4e89-8cd2-83e539bb40f4.jpg?1783930097",
+        "large": "https://cards.scryfall.io/large/front/6/2/62f449cc-461e-4e89-8cd2-83e539bb40f4.jpg?1783930097",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/2/62f449cc-461e-4e89-8cd2-83e539bb40f4.jpg?1783930097"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "71fd27a8-2de6-454f-8174-a60918bfe60e",
       "name": "Siege Mastodon",
       "manaCost": {
@@ -222062,6 +222468,55 @@
         "normal": "https://cards.scryfall.io/normal/front/1/7/178bca8c-8686-414f-8c71-a582eecd273d.jpg?1783904553",
         "large": "https://cards.scryfall.io/large/front/1/7/178bca8c-8686-414f-8c71-a582eecd273d.jpg?1783904553",
         "art_crop": "https://cards.scryfall.io/art_crop/front/1/7/178bca8c-8686-414f-8c71-a582eecd273d.jpg?1783904553"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "3c65e0ff-7dab-4090-8a99-f42d486728c9",
+      "name": "Skinwing",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)\nEquipped creature gets +2/+2 and has flying.\nEquip {6}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip",
+        "Living weapon"
+      ],
+      "set": "2xm",
+      "collectorNumber": "288",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/c/3c65e0ff-7dab-4090-8a99-f42d486728c9.jpg?1783930096",
+        "normal": "https://cards.scryfall.io/normal/front/3/c/3c65e0ff-7dab-4090-8a99-f42d486728c9.jpg?1783930096",
+        "large": "https://cards.scryfall.io/large/front/3/c/3c65e0ff-7dab-4090-8a99-f42d486728c9.jpg?1783930096",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/c/3c65e0ff-7dab-4090-8a99-f42d486728c9.jpg?1783930096"
       },
       "localImages": {},
       "layout": "normal",
@@ -238362,6 +238817,55 @@
         "normal": "https://cards.scryfall.io/normal/front/e/3/e3dae817-3db1-4edf-86ba-c2c2b238fcf5.jpg?1783928275",
         "large": "https://cards.scryfall.io/large/front/e/3/e3dae817-3db1-4edf-86ba-c2c2b238fcf5.jpg?1783928275",
         "art_crop": "https://cards.scryfall.io/art_crop/front/e/3/e3dae817-3db1-4edf-86ba-c2c2b238fcf5.jpg?1783928275"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "d0d7ff8f-7733-4323-8575-c50b3e730dbc",
+      "name": "Strandwalker",
+      "manaCost": {
+        "generic": 5,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)\nEquipped creature gets +2/+4 and has reach.\nEquip {4}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip",
+        "Living weapon"
+      ],
+      "set": "mbs",
+      "collectorNumber": "137",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/0/d0d7ff8f-7733-4323-8575-c50b3e730dbc.jpg?1783941362",
+        "normal": "https://cards.scryfall.io/normal/front/d/0/d0d7ff8f-7733-4323-8575-c50b3e730dbc.jpg?1783941362",
+        "large": "https://cards.scryfall.io/large/front/d/0/d0d7ff8f-7733-4323-8575-c50b3e730dbc.jpg?1783941362",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/0/d0d7ff8f-7733-4323-8575-c50b3e730dbc.jpg?1783941362"
       },
       "localImages": {},
       "layout": "normal",
