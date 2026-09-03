@@ -1,0 +1,274 @@
+/* ===========================================================================
+ * §3.119 — WHAT THE BOARD SAYS OUT LOUD (the 2026-09-01 play session)
+ *
+ * Every rule here exists because a player looked at the board and could not
+ * read something the engine already knew. The classes are set by
+ * `BoardPermanentTile`/`SeatPanel` from the view-model's own fields, so nothing
+ * in this file decides anything — it only paints what the model states.
+ *
+ * A file of its own rather than more lines in `board-fit.css`: that file is
+ * one idea (the board is a canvas that scales) and this is another (the board
+ * says what it knows). Keeping them apart is what let §3.62 be read and
+ * reverted in one place, and this should be no harder.
+ * ========================================================================= */
+
+/* --- who is attacking / blocking (report 20260901_204854) ------------------
+ * "It needs to be way more clear who is attacking." The only signal was a
+ * dashed outline shared with every other selectable tile. An attacker now
+ * carries a red band and a red frame; a blocker a blue one. Neither depends on
+ * colour alone — the band carries the word, and the tooltip says it too.
+ */
+.play-board .perm--attacking {
+  outline: 3px solid var(--color-error);
+  outline-offset: 1px;
+  box-shadow: 0 0 14px rgb(220 60 60 / 45%);
+}
+
+.play-board .perm--blocking {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 1px;
+  box-shadow: 0 0 14px rgb(90 150 255 / 40%);
+}
+
+.perm__combat {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  right: 2px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: center;
+  border-radius: var(--radius-sm);
+  padding: 1px 2px;
+  color: #fff;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 70%);
+}
+
+.perm__combat--attacking {
+  background: rgb(190 40 40 / 90%);
+}
+
+.perm__combat--blocking {
+  background: rgb(50 100 210 / 90%);
+}
+
+/* --- the effective P/T delta (report 20260901_204957) ----------------------
+ * A prowess-pumped 1/2 Monastery Swiftspear killed a 0/2 and the player read
+ * the printed card. The delta is the loudest thing in the footer, because it
+ * is the number that decided the combat.
+ */
+.perm__pt-delta {
+  color: #6ec177;
+  font-weight: 700;
+}
+
+.perm__pt-delta--down {
+  color: var(--color-error);
+}
+
+/* --- a legal target pulses (report 20260901_211035) -----------------------
+ * "No conceivable way to actually target a creature with my Cloudshift spell."
+ * Once a targeted spell is picked up, every tile the engine would accept says
+ * so, and the cursor says the click will aim rather than select.
+ */
+.play-board .perm--targetable {
+  outline: 3px dashed var(--color-accent-soft);
+  outline-offset: 2px;
+  cursor: crosshair;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .play-board .perm--targetable {
+    animation: perm-targetable-pulse 1100ms ease-in-out infinite;
+  }
+}
+
+@keyframes perm-targetable-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(120 180 255 / 55%);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgb(120 180 255 / 0%);
+  }
+}
+
+/* --- the zone rail is READABLE (report 20260901_210413) -------------------
+ * "In fact I dont even see a library." The counters were bare glyphs with no
+ * words — 📚 36 reads as decoration next to a life total. Each zone is now a
+ * labelled chip, and the library is one of them.
+ */
+.play-board .seat__zone {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25em;
+  padding: 1px var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  white-space: nowrap;
+}
+
+.play-board .seat__zone-label {
+  color: var(--color-fg-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.6rem;
+}
+
+.play-board .seat__zone-count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-fg);
+}
+
+/* A revealed card is announced ON the board as well as in the log: a line in a
+   scrolling history is not what "so I can see it" means (report 210413). */
+.reveal-banner {
+  position: fixed;
+  left: 50%;
+  top: 12%;
+  transform: translateX(-50%);
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 55%);
+  max-width: min(92vw, 34rem);
+}
+
+.reveal-banner__text {
+  font-size: var(--text-sm);
+}
+
+.reveal-banner__img {
+  width: 84px;
+  border-radius: 4.75% / 3.5%;
+  display: block;
+}
+
+/* --- the mulligan rule line (report 20260901_212439) ---------------------- */
+.mulligan__rule {
+  color: var(--color-fg-faint);
+  font-size: var(--text-sm);
+  max-width: 46rem;
+  margin: 0 0 var(--space-1);
+}
+
+/* --- the priority stops menu (reports 210141 / 211035 / 211359) ----------- */
+.stops-menu {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 60%);
+  z-index: 58;
+  padding: var(--space-4);
+}
+
+.stops-menu__card {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  max-width: 40rem;
+  width: 100%;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.stops-menu__intro {
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  margin: 0 0 var(--space-3);
+}
+
+.stops-menu__cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--space-3);
+}
+
+.stops-menu__group-title {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-fg-faint);
+  margin-bottom: var(--space-1);
+}
+
+.stops-menu__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  padding: 1px 0;
+}
+
+.stops-menu__switches {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.stops-menu__actions {
+  margin-top: var(--space-3);
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+/* The RESPONSE bar: what is on the stack, and what you may do about it,
+   WITHOUT a full-screen modal (report 20260901_210141 asked for exactly
+   this — "so that I can actually cast instant spells… ahead of whatever is on
+   the stack"). It sits above the action bar and never covers the board. */
+.respond-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.respond-bar__label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-accent-soft);
+}
+
+.respond-bar__what {
+  font-size: var(--text-sm);
+}
+
+.respond-bar__spacer {
+  flex: 1;
+}
+
+/* The aiming banner: which spell is looking for a target, and how to cancel. */
+.aiming-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--color-accent-soft);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.aiming-bar__what {
+  font-size: var(--text-sm);
+}

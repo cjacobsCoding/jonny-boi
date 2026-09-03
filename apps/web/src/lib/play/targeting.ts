@@ -138,7 +138,16 @@ export function needsTarget(def: CardDefinition): boolean {
 export interface TargetableView {
   readonly battlefield: readonly CardInstance[];
   readonly stack: readonly GameState['stack'][number][];
-  readonly players?: GameState['players'];
+  /**
+   * The players' PUBLIC card zones, when the caller has them. Typed
+   * structurally rather than as `GameState['players']` so the ONLINE board's
+   * `MaskedGameView` (whose seats carry no library or hand) satisfies it: what
+   * this is used for is naming an id core offered, and the only non-battlefield
+   * zones core can offer from are public ones.
+   */
+  readonly players?: Readonly<
+    Record<PlayerId, { readonly graveyard: readonly CardInstance[]; readonly exile: readonly CardInstance[] }>
+  >;
 }
 
 /**
@@ -207,7 +216,11 @@ export function legalTargets(
 ): readonly TargetOption[] {
   const canAskCore = req.kind !== 'any' && state.players !== undefined;
   if (canAskCore) {
-    const refs = legalTargetsFor(state as GameState, req.kind, controller, source);
+    // `legalTargetsFor` reads the battlefield, the stack and the public zones —
+    // exactly what a `TargetableView` carrying `players` holds. The cast is the
+    // seam between the two shapes and is safe for that reason; a view WITHOUT
+    // `players` never reaches here (see `canAskCore`).
+    const refs = legalTargetsFor(state as unknown as GameState, req.kind, controller, source);
     return refs
       .map((ref) => describeRef(ref, state, playerNames))
       .filter((option): option is TargetOption => option !== undefined);

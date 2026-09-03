@@ -55,9 +55,21 @@ function visibleHand(hand: readonly CardInstance[]): VisibleHandCard[] {
   }));
 }
 
-/** Build a board permanent from a battlefield instance (no continuous index online). */
-function boardPermanent(inst: CardInstance): BoardPermanent {
+/**
+ * Build a board permanent from a battlefield instance (no continuous index
+ * online — the server sends the instances, not the effect list).
+ *
+ * `combat` is the masked view's own combat state, so §3.119's attacker/blocker
+ * bands and the P/T delta appear on the online board too: they are derived from
+ * data the wire already carries, and a clarity fix that only reached one of the
+ * two boards is the drift §3.57 warned about.
+ */
+function boardPermanent(inst: CardInstance, combat: MaskedGameView['combat']): BoardPermanent {
   const creature = isCreature(inst.def);
+  const power = creature ? effectivePower(inst, NO_MOD) : 0;
+  const toughness = creature ? effectiveToughness(inst, NO_MOD) : 0;
+  const printedPower = creature ? (inst.def.power ?? 0) : 0;
+  const printedToughness = creature ? (inst.def.toughness ?? 0) : 0;
   return {
     instanceId: inst.instanceId,
     cardId: inst.def.id,
@@ -76,13 +88,21 @@ function boardPermanent(inst: CardInstance): BoardPermanent {
     protector: isBattle(inst.def) ? protectorOf(inst) : null,
     tapped: inst.tapped,
     summoningSick: inst.summoningSick,
-    power: creature ? effectivePower(inst, NO_MOD) : 0,
-    toughness: creature ? effectiveToughness(inst, NO_MOD) : 0,
+    power,
+    toughness,
+    printedPower,
+    printedToughness,
+    ptDelta:
+      creature && (power !== printedPower || toughness !== printedToughness)
+        ? { power: power - printedPower, toughness: toughness - printedToughness }
+        : null,
     damageMarked: inst.damageMarked,
     keywords: effectiveKeywords(inst, NO_MOD),
     // Normalised modes, not the legacy `produces` list — see the hotseat
     // view-model for why (modal sources would otherwise render as non-sources).
     producesIfTapped: inst.tapped ? [] : manaColorsOffered(inst.def),
+    attacking: combat !== null && combat.attackers.includes(inst.instanceId),
+    blocking: combat !== null ? (combat.blocks[inst.instanceId] ?? null) : null,
   };
 }
 
@@ -91,10 +111,12 @@ function seatView(
   player: PublicPlayerView,
   name: string,
   battlefield: readonly CardInstance[],
+  /** The masked view's combat state, so tiles can wear their combat role (§3.119). */
+  combat: MaskedGameView['combat'],
 ): SeatView {
   const permanents = battlefield
     .filter((c) => c.controller === player.id)
-    .map(boardPermanent);
+    .map((inst) => boardPermanent(inst, combat));
   return {
     id: player.id,
     name,
@@ -165,8 +187,8 @@ export function maskedViewToBoardView(
     step: view.step,
     stack: stackView(view.stack),
     combat,
-    self: seatView(view.players[viewer], names[viewer], view.battlefield),
-    opponent: seatView(view.players[oppId], names[oppId], view.battlefield),
+    self: seatView(view.players[viewer], names[viewer], view.battlefield, view.combat),
+    opponent: seatView(view.players[oppId], names[oppId], view.battlefield, view.combat),
     gameOver: view.gameOver,
     winner: view.winner,
   };

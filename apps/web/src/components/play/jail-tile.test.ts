@@ -32,9 +32,14 @@ const JAILER: BoardPermanent = {
   summoningSick: false,
   power: 2,
   toughness: 2,
+  printedPower: 2,
+  printedToughness: 2,
+  ptDelta: null,
   damageMarked: 0,
   keywords: {},
   producesIfTapped: [],
+  attacking: false,
+  blocking: null,
 };
 
 const PRISONER: JailedCardView = { instanceId: 11, cardId: PRISONER_CARD.id, name: PRISONER_CARD.name };

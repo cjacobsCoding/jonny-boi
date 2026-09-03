@@ -10,7 +10,7 @@ import type {
   SubmitResult,
 } from '../../lib/play/session.js';
 import { buildBoardView } from '../../lib/play/view-model.js';
-import { optionToTarget, type TargetOption } from '../../lib/play/targeting.js';
+import { isBoardTargetOption, optionToTarget, type TargetOption } from '../../lib/play/targeting.js';
 import { stepLabel, TOAST_MS, COPILOT_ADVICE_SEED } from '../../lib/play/play-config.js';
 import { SeatPanel, type PermInteraction } from './SeatPanel.js';
 import { StackPanel } from './StackPanel.js';
@@ -35,7 +35,13 @@ import {
   saveManaChoicePref,
   shouldAskForMana,
 } from '../../lib/play/mana-choice-pref.js';
-import { actionBarHint } from '../../lib/play/action-hints.js';
+import { actionBarHint, passButtonLabel, type StackHintContext } from '../../lib/play/action-hints.js';
+import { withStepStop, type PriorityStops } from '../../lib/play/priority-stops.js';
+import { CardHover } from '../CardHover.js';
+import { RevealBanner } from './RevealBanner.js';
+import { latestReveal } from '../../lib/play/reveals.js';
+import { StopsMenu } from './StopsMenu.js';
+import './board-clarity.css';
 import { blockerLinePairs } from '../../lib/play/combat-lines.js';
 import { groupJailedByJailer, jailSourcesOf } from '../../lib/play/jail-view.js';
 import { describeCastTarget, makeRefIndex, type KnownRef } from '../../lib/play/option-labels.js';
@@ -119,12 +125,22 @@ export function PlayBoard({
   viewer,
   onSubmit,
   onConcede,
+  stops,
+  onStops,
 }: {
   session: GameSession;
   viewer: PlayerId;
   /** Apply a session-producing action; PlayView stores the new session. */
   onSubmit: (run: () => SubmitResult) => void;
   onConcede: () => void;
+  /**
+   * §3.119 — the priority stops, OWNED BY PlayView because it is the auto-pass
+   * effect that has to obey them. The board renders their controls and reports
+   * changes; it never keeps its own copy, or the bar and the walker could
+   * disagree about where the game stops.
+   */
+  stops: PriorityStops;
+  onStops: (next: PriorityStops) => void;
 }): ReactElement {
   /**
    * A cast whose mana the player is placing by hand (§3.60). While it stands, it
@@ -174,6 +190,16 @@ export function PlayBoard({
   const [toast, setToast] = useState<string | null>(null);
   /** "Always let me choose my mana" — the persisted §3.60 preference. */
   const [alwaysChooseMana, setAlwaysChooseMana] = useState<boolean>(loadManaChoicePref);
+  /**
+   * §3.119 — WHERE THE GAME STOPS. The persisted per-step stops, read once and
+   * written on every change. The board does not auto-advance itself (PlayView
+   * owns that effect), so these are handed UP through `onStops` — the rule and
+   * the walker must read one value, or the bar would promise a stop the walker
+   * passes through.
+   */
+  const [stopsMenuOpen, setStopsMenuOpen] = useState(false);
+  /** A reveal the player has dismissed, by its index in the event log. */
+  const [dismissedReveal, setDismissedReveal] = useState<number | null>(null);
 
   /**
    * §3.67 — AI CO-PILOT. Off by default; the preference outlives the game.
@@ -410,9 +436,12 @@ export function PlayBoard({
   };
 
   // --- targeting -----------------------------------------------------------------
-  const targetOptions: readonly TargetOption[] = pendingCast
-    ? session.targetsFor(pendingCast.requirement)
-    : [];
+  // Asked of the SESSION with the cast option itself (§3.119), so core's own
+  // enumerator answers with the caster and the card in hand: the set the engine
+  // will accept, and nothing wider. Bug report 20260901_211035 was the opposite
+  // — the board's private table did not know `blinkTarget` targeted anything,
+  // so Cloudshift was cast with no target and refused.
+  const targetOptions: readonly TargetOption[] = pendingCast ? session.castTargets(pendingCast) : [];
 
   /**
    * Finish a cast whose targets are settled: either hand the payment to the
@@ -829,19 +858,22 @@ export function PlayBoard({
 
   function targetInteraction(ownedIds: readonly InstanceId[]): PermInteraction | undefined {
     if (!pendingCast) return undefined;
-    // Board-clickable targets: creatures AND planeswalkers (both are permanents
-    // the player naturally clicks; players stay buttons in the prompt).
+    // Board-clickable targets: anything of the engine's offers that is ON THE
+    // BATTLEFIELD (creature, planeswalker or any other permanent — Naturalize
+    // aims at an artifact, and a tile is a tile). Players and stack objects
+    // stay buttons in the prompt, because there is no tile to click.
     const permanentTargets = new Set(
       targetOptions
-        .filter(
-          (o) => (o.kind === 'creature' || o.kind === 'planeswalker') && ownedIds.includes(o.instanceId),
-        )
+        .filter((o) => isBoardTargetOption(o) && ownedIds.includes(o.instanceId))
         .map((o) => (o as { instanceId: InstanceId }).instanceId),
     );
     if (permanentTargets.size === 0) return undefined;
     return {
       selectableIds: permanentTargets,
       selectedIds: new Set(),
+      // The same set, marked so it PULSES: "which creature can this go on?" is
+      // answered by looking (§3.119, report 20260901_211035).
+      targetableIds: permanentTargets,
       onClick: (id) => commitCast([id]),
     };
   }
@@ -864,16 +896,59 @@ export function PlayBoard({
     session.state.activePlayer === viewer &&
     session.state.combat !== null &&
     !session.state.combat.attackersDeclared;
-  const barHint = actionBarHint(step, {
-    isAttackWindow,
-    hasAttackers: eligibleAttackers.size > 0,
-    // `inBlockStep` already means "the defender, holding priority, in the
-    // declare-blockers step" — precisely the window the hint asks about.
-    isBlockWindow: inBlockStep,
-    hasBlockers: eligibleBlockers.size > 0,
-    hasEnemyWalkers: enemyWalkers.length > 0,
-    mainPhaseFlavor: 'hotseat',
-  });
+  /**
+   * §3.119 — THE STACK OUTRANKS THE STEP. Bug reports 20260901_212245
+   * (Thragtusk's life-gain trigger) and 20260901_213414 (Angel of Serenity
+   * "swallowed") were both a spell or trigger sitting on the stack while the
+   * bar read empty-stack main-phase copy. When something is waiting, the hint
+   * names it and the pass button says "Resolve".
+   */
+  const stackTop = view.stack[0];
+  const stackHintCtx: StackHintContext | undefined =
+    stackTop && isViewersPriority
+      ? {
+          topName: stackTop.name,
+          topIsMine: stackTop.controller === viewer,
+          canRespond: session.canRespond(),
+        }
+      : undefined;
+  const barHint = actionBarHint(
+    step,
+    {
+      isAttackWindow,
+      hasAttackers: eligibleAttackers.size > 0,
+      // `inBlockStep` already means "the defender, holding priority, in the
+      // declare-blockers step" — precisely the window the hint asks about.
+      isBlockWindow: inBlockStep,
+      hasBlockers: eligibleBlockers.size > 0,
+      hasEnemyWalkers: enemyWalkers.length > 0,
+      mainPhaseFlavor: 'hotseat',
+    },
+    stackHintCtx,
+  );
+
+  /** The reveal to announce on the board, if any and not yet dismissed (§3.119). */
+  const reveal = useMemo(
+    () =>
+      latestReveal(
+        session.events,
+        viewer,
+        names,
+        (id) => {
+          for (const pid of ['A', 'B'] as const) {
+            const player = session.state.players[pid];
+            for (const zone of [player.hand, player.library, player.graveyard, player.exile]) {
+              const hit = zone.find((c) => c.instanceId === id);
+              if (hit) return { cardId: hit.def.id, name: hit.def.name };
+            }
+          }
+          return undefined;
+        },
+        session.nameOf,
+      ),
+    [session, viewer, names],
+  );
+  const showReveal = reveal !== null && reveal.at !== dismissedReveal;
 
   return (
     <div className="play-board" ref={boardRootRef}>
@@ -1001,14 +1076,26 @@ export function PlayBoard({
                   setZoomed({ cardId: c.cardId, name: c.name });
                 }}
               >
-                <PlayCard
-                  cardId={c.cardId}
-                  name={c.name}
-                  face="full"
-                  badge={badge}
-                  disabled={!actionable}
-                  onClick={actionable ? () => onHandCardClick(c.instanceId, land, casts) : undefined}
-                />
+                {/*
+                  HOVER YOUR OWN HAND (§3.119, report 20260901_205149 — "I cant
+                  hover over my own in hand cards to see what they are"). Every
+                  battlefield tile has had the full-card preview since §3.53 and
+                  the hand never did: at the fanned sizes the printed text on a
+                  148px face is unreadable, and the card's name lived only in
+                  the image's `alt`. Same wrapper, same component — the one the
+                  board already trusts — so hand, battlefield and mulligan now
+                  answer "what is this card?" identically.
+                */}
+                <CardHover cardId={c.cardId}>
+                  <PlayCard
+                    cardId={c.cardId}
+                    name={c.name}
+                    face="full"
+                    badge={badge}
+                    disabled={!actionable}
+                    onClick={actionable ? () => onHandCardClick(c.instanceId, land, casts) : undefined}
+                  />
+                </CardHover>
                 <button
                   type="button"
                   className="hand-card-slot__zoom"
@@ -1063,6 +1150,10 @@ export function PlayBoard({
         blockAssign={blockAssign}
         eligibleAttackers={eligibleAttackers}
         alwaysChooseMana={alwaysChooseMana}
+        stackNonEmpty={view.stack.length > 0}
+        fullControl={stops.fullControl}
+        onFullControl={(on) => onStops({ ...stops, fullControl: on })}
+        onOpenStops={() => setStopsMenuOpen(true)}
         suggested={suggestBar}
         copilotOn={copilotOn}
         onCopilot={(on) => {
@@ -1317,6 +1408,21 @@ export function PlayBoard({
         </div>
       )}
 
+      {/* §3.119 — a card revealed to both players, ON the board (report 210413). */}
+      {showReveal && reveal && (
+        <RevealBanner reveal={reveal} onDismiss={() => setDismissedReveal(reveal.at)} />
+      )}
+
+      {/* §3.119 — where the game stops (reports 210141 / 211035 / 211359). */}
+      {stopsMenuOpen && (
+        <StopsMenu
+          stops={stops}
+          onToggleStep={(key, on) => onStops(withStepStop(stops, key, on))}
+          onSwitch={(which, on) => onStops({ ...stops, [which]: on })}
+          onClose={() => setStopsMenuOpen(false)}
+        />
+      )}
+
       {/* Blocker→attacker lines (§3.57) — decorative overlay, tested pairing rule. */}
       <CombatLines lines={combatLines} containerRef={boardRootRef} measureKey={session} />
 
@@ -1343,6 +1449,10 @@ function ActionBar({
   eligibleAttackers,
   waitingText,
   alwaysChooseMana,
+  stackNonEmpty,
+  fullControl,
+  onFullControl,
+  onOpenStops,
   suggested,
   copilotOn,
   onCopilot,
@@ -1365,6 +1475,13 @@ function ActionBar({
   eligibleAttackers: Set<InstanceId>;
   /** The persisted "always let me choose my mana" preference (§3.60). */
   alwaysChooseMana: boolean;
+  /** Something is waiting to resolve — the pass button RESOLVES it (§3.119). */
+  stackNonEmpty: boolean;
+  /** "Full control": stop in every window where anything could be done (§3.119). */
+  fullControl: boolean;
+  onFullControl: (on: boolean) => void;
+  /** Open the per-step stops menu (§3.119). */
+  onOpenStops: () => void;
   /** The co-pilot's move is a button in THIS bar (§3.67) — mark it. */
   suggested: boolean;
   copilotOn: boolean;
@@ -1411,8 +1528,26 @@ function ActionBar({
           {blockAssign.size > 0 ? `Confirm ${blockAssign.size} block${blockAssign.size === 1 ? '' : 's'}` : 'No blocks'}
         </button>
       )}
-      <button type="button" className="btn" onClick={onPass}>
-        {passLabel(step)}
+      {/* §3.119 — ONE CLICK, and it says what it does. With something on the
+          stack this is the button that resolves it, which is the whole answer
+          to "the game swallowed my card" (report 20260901_213414). */}
+      <button type="button" className={`btn${stackNonEmpty ? ' btn--primary' : ''}`} onClick={onPass}>
+        {passButtonLabel(step, stackNonEmpty)}
+      </button>
+      {/* §3.119 — the two priority controls players change mid-game. The other
+          twenty live in the menu; putting them all in the bar is the bar
+          nobody reads. */}
+      <button
+        type="button"
+        className={`btn btn--toggle${fullControl ? ' btn--toggle-on' : ''}`}
+        aria-pressed={fullControl}
+        title="Hold priority in every window where you could act"
+        onClick={() => onFullControl(!fullControl)}
+      >
+        {fullControl ? '⏸ Full control' : '⏸ Auto-pass'}
+      </button>
+      <button type="button" className="btn btn--ghost" title="Choose which steps stop" onClick={onOpenStops}>
+        ⚙ Stops
       </button>
       {/* §3.60 — the persisted "let me place my own mana" setting, always in
           reach rather than buried in a settings screen: it is a decision players
@@ -1442,11 +1577,6 @@ function ActionBar({
       <span className="action-bar__hint">{hint}</span>
     </div>
   );
-}
-
-function passLabel(step: string): string {
-  if (step === 'declareAttackers' || step === 'declareBlockers') return 'Pass priority';
-  return 'Pass / advance';
 }
 
 function otherOf(p: PlayerId): PlayerId {

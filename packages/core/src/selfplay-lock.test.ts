@@ -48,32 +48,42 @@ import type { GameState } from './state.js';
  * That the event COUNTS did not move is the second measurement in here: the new
  * CR 704.3 state-based-action check at the priority boundary fires nothing at
  * all across 24 full games, which is exactly what a backstop should do.
+ *
+ * ⚠️ REGENERATED AGAIN on `fix/reports-2026-09-01` for CR 508.8 (§3.119): a turn
+ * in which no attackers were declared now SKIPS the declare-blockers and
+ * combat-damage steps, so every game has fewer priority windows — fewer passes,
+ * fewer `stepBegin` events — and each pilot’s seeded decisions land on a
+ * different stream from that turn onward. This time EVERY column moves, winners
+ * included, and that is the honest shape of a RULES change rather than a
+ * refactor: the engine now plays a different, correct game. Bug report
+ * 20260901_205742 is the case it fixes — a defender asked to declare blocks
+ * against nothing at all.
  */
 const GOLDEN: readonly string[] = [
-  '1|A|over|33|902|1863|b4dffd10|339507b6',
-  '2|A|over|27|756|1617|7738464c|f495342b',
-  '3|B|over|38|1140|2418|dac8c29b|db7cc0fc',
-  '4|B|over|26|719|1537|62540ed1|0c8192ff',
-  '5|A|over|21|561|1147|0c878a59|901c6e23',
-  '6|B|over|24|642|1342|bd451eb9|c5a35b05',
-  '7|A|over|27|778|1644|245db919|e24a6688',
-  '8|A|over|23|650|1367|c196981b|c0deaba8',
-  '9|A|over|19|512|1075|8870571b|84b06ae3',
-  '10|A|over|43|1243|2643|8d68c95b|2a0ff2fa',
-  '11|B|over|32|892|1894|56fd13f9|32049998',
-  '12|B|over|30|849|1797|013fa061|40a3b377',
-  '13|B|over|26|696|1405|89b3dbad|b13f0c8e',
-  '14|B|over|32|874|1843|af67c4bd|0b625e1b',
-  '15|B|over|24|654|1379|1225492c|8c7fae94',
-  '16|B|over|20|541|1122|7d458e36|9e5bcab3',
-  '17|B|over|34|907|1887|2717487a|b84fbe72',
-  '18|A|over|23|620|1273|6d0c1957|2c427f5b',
-  '19|A|over|23|631|1352|5c46d713|95a7910a',
-  '20|B|over|26|714|1469|2e601e8c|38d75fea',
-  '21|B|over|30|826|1738|504d87b2|04950240',
-  '22|A|over|37|1065|2254|8e9e941a|581c1745',
-  '23|B|over|24|678|1413|5e3ca4f4|eb8fb2fd',
-  '24|A|over|27|753|1598|23944d00|d8f48334',
+  '1|B|over|32|740|1594|cbe23a40|4ed4228a',
+  '2|A|over|25|606|1302|57b5e41a|3d0d7df0',
+  '3|A|over|23|559|1244|3fb6dd6c|ce5d9822',
+  '4|B|over|24|612|1333|15aed8c4|d1ad51df',
+  '5|A|over|31|760|1635|d4967d4f|a03232e9',
+  '6|B|over|26|618|1330|4047dfb0|a03aae7c',
+  '7|B|over|24|628|1379|57a5c740|a4052d1d',
+  '8|A|over|27|680|1505|e3e830d9|746eb034',
+  '9|A|over|21|510|1093|fed604bb|0a185605',
+  '10|A|over|29|704|1533|5d589c02|d07b73d5',
+  '11|B|over|36|881|1947|163a89a5|11cee777',
+  '12|B|over|26|643|1431|a3738974|b0945532',
+  '13|B|over|26|629|1347|ff30e308|680a9b75',
+  '14|B|over|28|679|1463|32b64c22|335edffe',
+  '15|B|over|34|864|1910|ed29ad3f|5ef6b887',
+  '16|A|over|29|711|1579|076a2743|1b144d0b',
+  '17|B|over|32|764|1662|7be3b582|319dce48',
+  '18|A|over|31|773|1684|4a6d9f90|7709a894',
+  '19|B|over|36|922|2040|4cc289ea|45c545ae',
+  '20|A|over|29|709|1531|7d704651|cd4fe67a',
+  '21|A|over|27|679|1447|b243176f|b6c0d04a',
+  '22|B|over|24|589|1303|ac9b0171|beee33fd',
+  '23|B|over|34|848|1898|8512e144|7a0cf66c',
+  '24|B|over|34|850|1873|bc046a83|68e94f6d',
 ];
 
 describe('self-play behaviour lock', () => {
