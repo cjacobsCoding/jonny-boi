@@ -129,6 +129,68 @@ export function lastAnchoringChild(
   return last;
 }
 
+/**
+ * WHICH `<option>` ELEMENTS CANNOT DRAW A PIXEL — the Lab's 12-second timeout
+ * (bug report 20260902_231525, "bug reporter not working, says screen could not
+ * be captured": `page rasterisation timed out after 12000 ms`).
+ *
+ * Measured from the report's OWN clip rather than guessed: the frozen frame's
+ * DOM is 10,540 nodes, of which **5,140 are `<option>`** — the A/B Swap tab
+ * mounts two card pickers over the whole 5,097-card pool. Nothing else on the
+ * page is heavy (no image, no SVG, no canvas), which is why the Lab looks light
+ * when you measure it on another tab and is pathological on that one.
+ *
+ * The below-fold pruning above cannot help, and says so in its own header: an
+ * `<option>` has no bounding box, and dropping boxless children once emptied a
+ * dropdown's label. But "no box" is not "draws nothing": a CLOSED select paints
+ * exactly its selected option, so every OTHER option is provably invisible and
+ * safe to drop — which keeps the label the earlier regression lost while
+ * removing 5,138 nodes from the serialised clone.
+ *
+ * A select that is `multiple` or has `size > 1` renders its options as a list
+ * box, so none of them is dropped: that one really does draw.
+ */
+export function optionIsPrunable(option: {
+  readonly selected: boolean;
+  readonly multiple: boolean;
+  readonly size: number;
+}): boolean {
+  if (option.multiple || option.size > 1) return false;
+  return !option.selected;
+}
+
+/**
+ * How the capture is attempted, in order. The first attempt is the honest
+ * picture; each later one gives something up to finish at all, and the report
+ * says which one produced the image. A report with a degraded screenshot is
+ * worth far more than a report with none (rule 6), and "could not be captured"
+ * was the reporter's own complaint.
+ */
+export interface CaptureAttempt {
+  /** Named for the note the report carries. */
+  readonly id: 'full' | 'reduced';
+  /** This attempt's own budget, in ms. */
+  readonly timeoutMs: number;
+  /** Skip embedding web fonts (they are re-fetched and inlined per capture). */
+  readonly skipFonts: boolean;
+  /** Drop every image, not only the off-screen ones. */
+  readonly dropImages: boolean;
+}
+
+/** The attempt ladder (see {@link CaptureAttempt}). */
+export const CAPTURE_ATTEMPTS: readonly CaptureAttempt[] = Object.freeze([
+  { id: 'full', timeoutMs: CAPTURE_TIMEOUT_MS, skipFonts: false, dropImages: false },
+  // Half the budget, because this one exists to finish: no fonts to fetch and
+  // no images to inline leaves the DOM serialisation and nothing else.
+  { id: 'reduced', timeoutMs: CAPTURE_TIMEOUT_MS / 2, skipFonts: true, dropImages: true },
+]);
+
+/** The note a degraded-but-real capture carries, or '' for the clean one. */
+export function attemptNote(attempt: CaptureAttempt): string {
+  if (attempt.id === 'full') return '';
+  return 'the first capture timed out; this frame was taken without card art or web fonts';
+}
+
 export interface CaptureOptions {
   readonly width: number;
   readonly height: number;

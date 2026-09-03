@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { createRng } from '@jonny-boi/core';
+import { createRng, defaultAnswerFor } from '@jonny-boi/core';
 import { createDefaultAiRegistry, DEFAULT_PILOT_ID } from '@jonny-boi/ai';
 import type { InstanceId, ManaCost, PlayerId } from '@jonny-boi/core';
 import type {
@@ -40,6 +40,7 @@ import { withStepStop, type PriorityStops } from '../../lib/play/priority-stops.
 import { CardHover } from '../CardHover.js';
 import { RevealBanner } from './RevealBanner.js';
 import { latestReveal } from '../../lib/play/reveals.js';
+import { isDeclinedMayQuestion, optionalTargetDecline } from '../../lib/play/optional-trigger.js';
 import { StopsMenu } from './StopsMenu.js';
 import './board-clarity.css';
 import { blockerLinePairs } from '../../lib/play/combat-lines.js';
@@ -200,6 +201,16 @@ export function PlayBoard({
   const [stopsMenuOpen, setStopsMenuOpen] = useState(false);
   /** A reveal the player has dismissed, by its index in the event log. */
   const [dismissedReveal, setDismissedReveal] = useState<number | null>(null);
+  /**
+   * The permanent whose "you may …" the player declined on its TARGET prompt
+   * (§3.119). Spent when that permanent's confirm arrives — see below.
+   *
+   * A REF, not state, on purpose: it only ever changes alongside a submit that
+   * re-renders anyway (set on the decline, cleared as the follow-up is
+   * answered), so making it state would add a render and put a `setState` in an
+   * effect for no gain.
+   */
+  const declinedSourceRef = useRef<InstanceId | null>(null);
 
   /**
    * §3.67 — AI CO-PILOT. Off by default; the preference outlives the game.
@@ -927,6 +938,40 @@ export function PlayBoard({
     stackHintCtx,
   );
 
+  /**
+   * §3.119 — THE FOLDED "YOU MAY … TARGET …" (report 20260901_205339). The
+   * engine asks a mandatory target question on the way to the stack and the
+   * "may" at resolution, in that order, correctly. The board offers the decline
+   * on the FIRST prompt: taking it answers the target with the engine's own
+   * default and remembers the asking permanent, so the "may" that follows is
+   * answered NO without a second modal. Both questions are still asked and
+   * answered; the player is asked once.
+   */
+  const choiceSourceDef = pendingChoice
+    ? session.state.battlefield.find((p) => p.instanceId === pendingChoice.sourceInstanceId)?.def
+    : undefined;
+  const declineLabel = pendingChoice ? optionalTargetDecline(pendingChoice, choiceSourceDef) : null;
+  const autoDeclining =
+    pendingChoice !== null && isDeclinedMayQuestion(pendingChoice, declinedSourceRef.current);
+
+  const declineOptionalTrigger = (): void => {
+    const choice = pendingChoice;
+    if (!choice) return;
+    declinedSourceRef.current = choice.sourceInstanceId;
+    run(() => session.answerChoice(defaultAnswerFor(choice)));
+  };
+
+  // The remembered decline, spent the moment its "may" question arrives. An
+  // effect rather than a render-time submit: answering during a render is how a
+  // React tree ends up submitting the same action twice.
+  useEffect(() => {
+    if (!autoDeclining) return;
+    declinedSourceRef.current = null;
+    onSubmit(() => session.answerChoice({ kind: 'confirm', yes: false }));
+    // `session` is the dependency that matters: one submit per parked question.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoDeclining, session]);
+
   /** The reveal to announce on the board, if any and not yet dismissed (§3.119). */
   const reveal = useMemo(
     () =>
@@ -1175,12 +1220,14 @@ export function PlayBoard({
         hotseat handoff already gates the device on the engine moving priority to
         the chooser, so in practice the viewer IS the chooser here.
       */}
-      {pendingChoice && isChoiceForViewer(pendingChoice, viewer) && (
+      {pendingChoice && isChoiceForViewer(pendingChoice, viewer) && !autoDeclining && (
         <ChoicePrompt
           choice={pendingChoice}
           names={names}
           onAnswer={(answer) => run(() => session.answerChoice(answer))}
           zoneOf={refIndex.zoneOf}
+          declineLabel={declineLabel}
+          onDecline={declineOptionalTrigger}
         />
       )}
 

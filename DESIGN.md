@@ -2243,6 +2243,79 @@ piece of machinery that does not exist:
 So the honest number for this round is 18, not 53. The next of them is a row plus one payload, not a
 row plus an event, which is the part that was worth doing once.
 
+### 3.119 The 2026-09-01 play session — sixteen reports, every one pinned — ✅ done
+
+One evening of Solo play filed **sixteen** bundles (`20260901_202314` → `20260902_231525`; the brief
+said seventeen, sixteen folders exist). Each is fixed at the seam where the defect actually lived, and
+each fix ships a test pinning the LITERAL reported case — the board, the card, the sequence out of
+that report's own clip.
+
+| Report | What he wrote | Root cause | Fix | Pinned by |
+|---|---|---|---|---|
+| 205742 | "The game asks me for blocks when nothing is attacking!" | **CR 508.8 was not implemented** — `advanceStep` entered declare-blockers whether or not anything attacked | Skip declare-blockers AND combat-damage when `combat.attackers` is empty, for both ways of not attacking (an explicit empty declaration, and never declaring) | `cr5xx-turn-and-combat.test.ts` ×2 + manifest rows; `selfplay-lock` regenerated |
+| 204957 | "Monastery Swiftspear killed my Gatecreeper Vine even though it is a 1/2 and mine was a 0/2" | **The engine was RIGHT**: a Lightning Strike that turn triggered prowess, so it was a 2/3. The defect was silence — the tile gave no hint its P/T differed from the printed card, its tooltip printed the BASE stats, and the log announced the ability's label rather than its effect | `BoardPermanent` carries printed P/T + `ptDelta`; the tile prints "2/3 **+1/+1**" and names the printed stats in its tooltip; `continuousEffectAdded` carries the delta so the log says "Monastery Swiftspear gets +1/+1 until end of turn" | `view-model.test.ts`, `play-surface-images.test.ts`, `play-format.test.ts` |
+| 212245 | "I played a Thragtusk with life of 20 and my life didnt go up to 25!" | The ETB trigger sat **on the stack waiting for a pass**, while the bar read empty-stack main-phase copy | The stops rule below resolves it; the stack outranks the step in the hint; the pass button becomes **Resolve** | `priority-stops.test.ts` (life 20 → 25), `action-hints.test.ts` |
+| 213414 | "I just tried to play angel if serenity and the game swallowed my card somehow" | The same shape: cast, on the stack, no visible way forward | The same fix — the card resolves and enters | `priority-stops.test.ts` |
+| 211359 | "How do we make playing with an Instant card in hand less obnoxious? Its awful having tok continually click on pass/advance" | `hasMeaningfulChoice()` counts an instant in hand as a decision, so **every** window of **every** step of both turns stopped | Arena-style stops, as DATA (see the design note) | `priority-stops.test.ts` — one instant now yields ONE stop in the opponent's turn, not eight |
+| 211035 | "No conceivable way to actually target a creature with my Cloiudshift spell" | `apps/web`'s `targeting.ts` answered "does this card target?" from its **own table of seven primitives** while core's vocabulary had grown to thirty-odd restrictions over twenty-two primitives. `blinkTarget` was in neither, so the board cast Cloudshift with no target and the engine refused it | The requirement is read off core (`targetRestrictionOf`) and the targets enumerated BY core (`legalTargetsFor`) with the caster and the card; legal tiles pulse | `targeting.test.ts`, `perm--targetable` in `play-surface-images.test.ts` |
+| 210141 | "There is no way for me to use the Strionic Resonator to respond to my activated abilities" | Nothing ever stopped over your own stack objects, and an ability on the stack had no display name (`nameOf` returned `#412`) | `stopOnOwnStack` as a stop toggle, the response hint, and `nameOf` resolving a stack trigger to its label | `priority-stops.test.ts`, `session.test.ts` |
+| 205339 | "Conjurers closet asks me to choose a create to exile then asks me if I want to exile a creature - thats backwards, fix it" | **The engine is correct** (CR 603.3d chooses a trigger's targets on the way to the stack; the "may" is decided at resolution). Two modals, in an order that reads backwards | Folded in the UI: the target prompt carries "Don't use Conjurer's Closet", which answers the target with the engine's own default and answers the coming "may" NO. Both questions are still asked, in the rules' order; the player is asked once. Keyed on the `mayEffects` primitive in the asking card's DATA, never on prompt wording | `optional-trigger.test.ts` — the real pool card, plus the live three-creature board |
+| 210413 | "The goblin guide of the enemy is not revealing the top card of my library so I can see it… In fact I dont even see a library" | The reveal was **correct and invisible** — no event existed for it — and the zone rail was bare glyphs | A new `cardRevealed` event (public by definition, carries the NAME), a log line, an on-board reveal banner, and a rail that names Hand/Library/Graveyard/Exile in words. Also `GameLog` now sets its own `scrollTop`: `scrollIntoView` could satisfy itself by scrolling an ancestor, which is why the report's screenshot shows turn 24 with the log reading "Game begins" | `primitives.test.ts`, `reveals.test.ts`, `play-format.test.ts` |
+| 202314 | "Some cards were blamnk. They showed up when I hovered over them" | `loading="lazy"` on every play-surface image. Nothing on a play surface is ever off-screen, and inside the `:has()`-sized, transformed, scrolling board Chrome deferred them until a hover repainted the slot | `loading="eager"` on the hand, the board and the jail peeks; a face that fails to load falls back to the named chip | `play-surface-images.test.ts` — structural, like §3.54's draggable rule |
+| 205149 | "I cant hover over my own in hand cards to see what they are" | The battlefield has had `CardHover` since §3.53 and the hand never did — and a hand card's name lives only in its image's `alt` | `CardHover` on the hand slots and the mulligan slots | `play-surface-images.test.ts`, `mulligan-copy.test.ts` |
+| 204854 | "It needs to be way more clear who is attacking" | The only attack signal was a dashed outline **shared with every other selectable tile** | `attacking`/`blocking` on the view-model, read off the engine's own combat state; a red "⚔ ATTACKING" band and frame, a blue blocking one, on BOTH boards | `view-model.test.ts`, `play-surface-images.test.ts` |
+| 204618 | "Battleground is super crunched" | `--play-seat-rows-max: 11dvh` is **87px** at the reported 1536×790, and a seat holds TWO rows of ~75px tiles: one fit, the other was clipped | 17dvh (two rows plus the gap), with the slack taken from the log — which now has a floor AND a ceiling; and the centre column stops reserving half its width for an empty stack | `styles-regressions.test.ts`, and the `verify-board-fits.mjs` harness |
+| 205453 | "A forest got stuck on my screen - its even over the debug overlay" | `CardHover` closed only on the anchor's own `mouseleave`, which never fires when the pointer leaves via a captured drag, a modal opening over the tile, or a re-render under a still cursor | A document-wide dismissal net while a preview is open, driven by the pure `hoverShouldClose` table | `card-hover-dismiss.test.ts` |
+| 212439 | "I thought Mulligan was scry? Which means choose to leave on top or put on bottom? This just says put on bottom" | The rule (London) was right and never NAMED, so the player could not tell which rule they were playing | One `mulligan-copy` table read by the human's screen and the computer's, naming the London mulligan in every phase | `mulligan-copy.test.ts` |
+| 20260902_231525 | "bug reporter not working, says screen could not be captured" (`page rasterisation timed out after 12000 ms`, Lab) | Measured from the report's OWN clip: 10,540 DOM nodes, **5,140 of them `<option>`** — the A/B Swap tab mounts two card pickers over the whole pool. §3.18's below-fold pruning explicitly cannot touch them: an `<option>` has no box, and dropping boxless children once emptied a dropdown's label | The narrower rule that holds both ways: a CLOSED select paints only its **selected** option, so the other 5,138 are dropped. Plus an attempt LADDER — a second, reduced capture (no art, no fonts, half the budget) so a timeout DEGRADES the picture instead of losing it | `capture-policy.test.ts` ×8; `verify-bug-reporter.mjs --view Lab` now opens the A/B Swap tab and asserts the pickers are mounted |
+
+**⚠️ An honest disagreement about the Lab, on the record.** Measured on the *deployed* build the Lab
+page is ~106 elements with no image, SVG or canvas — which is true, and is exactly why this shipped:
+the Lab is a light page **until the A/B Swap tab mounts its card pickers**. The number that decides
+this report is the one from the reported frame itself, which is why the harness now drives that tab
+rather than the landing one.
+
+**A second defect found while chasing it, deliberately NOT fixed here.** That machine's
+`localStorage` holds 64 keys totalling **1,579 KB**, of which 57 are `jonny-boi.suggest-history.v1…`
+keys totalling **1,451 KB** — because `suggestionHistoryKey` embeds the entire decklist *in the key*
+(longest: 662 characters), so every deck edit mints another permanent key. The reporter's own
+`state_dump.txt` was drowning in them, so the dump now elides long keys and prints the total; the
+store itself wants a short deck digest plus a cap, and that is `packages/sim`'s fingerprint in
+another branch's file. Logged rather than half-done.
+
+**The priority-UX design — the three reports as one system.** The old rule was "stop wherever the
+player has any legal action", and one instant in hand makes that every window of every step: that is
+211359 (endless passing) and, from the other side, 212245/213414 (your own spell sits on the stack
+and the game looks stuck). The replacement is the one every digital client converges on, and it is a
+TABLE rather than a chain of branches:
+
+- **`STEP_STOPS`** — one row per (step, whose turn), each with a label and a default. On by default:
+  your main phases, your attack step, their declare-blockers, their end step. Adding a step is a row.
+- **Two stack switches** — stop for the OPPONENT's spell or ability (on by default: the classic
+  "respond?" window), and for your OWN (off by default — Strionic Resonator is precisely the card
+  that wants it on, which is report 210141).
+- **Full control** — stop everywhere you could act, for the turn you need it. A button in the bar
+  beside the stops menu; the other twenty toggles live in the menu, because twenty chips in the
+  action bar is the bar nobody reads.
+- **Precedence, and it is the whole design:** a parked question and an offered attack/block
+  declaration ALWAYS stop; a window with nothing to do NEVER stops (even under full control); then
+  the stack; then the step table. Only your own main phase stops for a sorcery-speed play — every
+  other step needs a genuine instant-speed option, or the stop offers nothing but the pass button.
+
+The rule is pure (`priority-stops.ts`), the session bridge is one function (`stopContextFor`), and
+`autoAdvancePriority` takes the stop predicate as a PARAMETER — so the session never decides policy,
+and the action bar cannot promise a stop the walker passes through. The stops persist like the mana
+and co-pilot preferences, and deliberately do NOT ride the resume record: a saved game must replay
+identically whatever the stops were set to.
+
+**What is deferred, precisely.** (1) Dragging a targeted spell onto a *specific* tile: a drop routes
+through the same chokepoint a click does and then raises the aiming state, so the gesture is
+drag-to-board-then-click-target rather than drag-onto-target — `useDragToPlay` tracks one drop zone,
+and per-tile hit-testing is a change to that machine rather than to this feature. (2) The
+`suggest-history` key growth above. (3) The ONLINE board gets the combat bands, the P/T delta and the
+core-backed targeting, but not the reveal banner or the stops: its frames carry pre-formatted log
+lines rather than `GameEvent`s (§3.57's same boundary), and its priority is the server's.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded

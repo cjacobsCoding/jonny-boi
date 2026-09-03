@@ -9,13 +9,17 @@
  * app — and each of those was a defect first and a test second.
  */
 import { describe, expect, it, vi } from 'vitest';
+import { shortenStorageKey } from './state-dump.js';
 import {
+  attemptNote,
+  CAPTURE_ATTEMPTS,
   CAPTURE_TIMEOUT_MS,
   captureFailureNote,
   captureOptionsFor,
   dataUrlToBytes,
   isOffScreen,
   lastAnchoringChild,
+  optionIsPrunable,
   prunableChildIndices,
   withTimeout,
 } from './capture-policy.js';
@@ -193,5 +197,76 @@ describe('pruning the below-fold tail', () => {
   it('handles an empty child list', () => {
     expect(prunableChildIndices([], FOLD)).toEqual([]);
     expect(lastAnchoringChild([], FOLD)).toBe(-1);
+  });
+});
+
+/**
+ * §3.119 — bug report 20260902_231525: "bug reporter not working, says screen
+ * could not be captured", with `page rasterisation timed out after 12000 ms`
+ * filed from the Lab.
+ *
+ * Measured from the report's OWN clip: 10,540 DOM nodes, of which 5,140 are
+ * `<option>` — the A/B Swap tab's two card pickers over the whole pool. The
+ * below-fold pruning cannot touch them (an `<option>` has no box, and dropping
+ * boxless children once emptied a dropdown's label), so the narrower rule is
+ * the one that holds: a CLOSED select paints only its selected option.
+ */
+describe('option pruning (the Lab timeout)', () => {
+  it('drops the unselected options of a closed select — 5,138 of the Lab’s 5,140', () => {
+    expect(optionIsPrunable({ selected: false, multiple: false, size: 0 })).toBe(true);
+    expect(optionIsPrunable({ selected: false, multiple: false, size: 1 })).toBe(true);
+  });
+
+  it('KEEPS the selected option — the sort-dropdown regression must not come back', () => {
+    expect(optionIsPrunable({ selected: true, multiple: false, size: 0 })).toBe(false);
+  });
+
+  it('keeps every option of a list box, which really does draw them', () => {
+    expect(optionIsPrunable({ selected: false, multiple: true, size: 0 })).toBe(false);
+    expect(optionIsPrunable({ selected: false, multiple: false, size: 6 })).toBe(false);
+  });
+});
+
+describe('the capture attempt ladder', () => {
+  it('tries the honest picture first, then one that gives up art and fonts', () => {
+    expect(CAPTURE_ATTEMPTS.map((a) => a.id)).toEqual(['full', 'reduced']);
+    const [full, reduced] = CAPTURE_ATTEMPTS;
+    expect(full?.timeoutMs).toBe(CAPTURE_TIMEOUT_MS);
+    expect(full?.skipFonts).toBe(false);
+    expect(full?.dropImages).toBe(false);
+    expect(reduced?.skipFonts).toBe(true);
+    expect(reduced?.dropImages).toBe(true);
+    // The fallback exists to FINISH, so it must not be given a longer rope.
+    expect(reduced?.timeoutMs).toBeLessThan(CAPTURE_TIMEOUT_MS);
+  });
+
+  it('the clean attempt carries no note; the degraded one says what it gave up', () => {
+    expect(attemptNote(CAPTURE_ATTEMPTS[0]!)).toBe('');
+    expect(attemptNote(CAPTURE_ATTEMPTS[1]!)).toMatch(/timed out/);
+    expect(attemptNote(CAPTURE_ATTEMPTS[1]!)).toMatch(/without card art/);
+  });
+
+  it('every attempt has a finite, positive budget', () => {
+    for (const attempt of CAPTURE_ATTEMPTS) {
+      expect(Number.isFinite(attempt.timeoutMs)).toBe(true);
+      expect(attempt.timeoutMs).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('the dump does not drown in one feature’s keys', () => {
+  it('elides a long key, keeping the prefix that names it and a distinguishing tail', () => {
+    // The reporter's longest real key: the whole decklist inside the key.
+    const long = `jonny-boi.suggest-history.v1.heuristic.${'a'.repeat(600)}:4|${'b'.repeat(60)}:4`;
+    const short = shortenStorageKey(long);
+    expect(short.length).toBeLessThanOrEqual(80);
+    expect(short.startsWith('jonny-boi.suggest-history.v1.heuristic.')).toBe(true);
+    expect(short).toContain('…');
+    // Two keys that differ only at the end are still told apart.
+    expect(shortenStorageKey(`${long}X`)).not.toBe(short);
+  });
+
+  it('leaves an ordinary key exactly as it is', () => {
+    expect(shortenStorageKey('jonny-boi.decks.v1')).toBe('jonny-boi.decks.v1');
   });
 });
