@@ -28,6 +28,12 @@ export default tseslint.config(
       'spikes/**/assembly/**',
       // Spike build output: the emitted .wasm/.wat and any generated mirror.
       'spikes/**/build/**',
+      // Worker-agent worktrees live INSIDE the checkout (`.claude/worktrees/
+      // agent-<id>/`), each a whole second copy of the repo. Linting them from
+      // the root reported 388 errors that were four worktrees' worth of the
+      // same five warnings plus their unignored spike sources — drowning the
+      // real result, exactly as `dist-bundle` once did.
+      '.claude/worktrees/**',
     ],
   },
   js.configs.recommended,
