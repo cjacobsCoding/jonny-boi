@@ -215,10 +215,17 @@ const GRAVEYARD_CAST_KEYWORDS: Readonly<Record<string, import('@jonny-boi/core')
   escape: 'escape',
 });
 
-const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freeze({
+
+const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string | readonly string[]>> = Object.freeze({
   scry: 'scry',
   surveil: 'surveil',
-  mill: 'mill',
+  // §3.113 — "from among the milled cards" mills through its own primitive
+  // (the same funnel), so either is the evidence the line compiled.
+  mill: ['mill', 'millThenReturn'],
+  // §3.113 — Scryfall tags "Learn" and "Double" (the power-doubling verb, CR
+  // 701.10b — the damage-doubling replacement is `SCALING_KEYWORDS`' guard).
+  learn: 'learn',
+  double: 'doublePower',
   // Scryfall tags a card "Treasure" / "Food" / "Investigate" when its text
   // creates the predefined token; the compiled evidence is the lookup
   // primitive. A wording the create rule did not match compiles none and
@@ -241,9 +248,24 @@ const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freez
   devour: 'devourChoice',
   fabricate: 'fabricateChoice',
   // Scryfall tags the card "Regenerate"; the compiled evidence is the shield
-  // primitive the printed ability built (CR 701.15).
+  // primitive the printed ability built (CR 701.19).
   regenerate: 'regenerate',
+  // §3.113 — Scryfall ALSO tags every regenerate card "Heal", after the word in
+  // its reminder text ("…and heal all damage on it"). Measured over the whole
+  // corpus: 33 cards carry the tag, 32 print regenerate, and NONE prints a
+  // "Heal" line of its own — so the compiled regenerate is the evidence, and a
+  // real Heal keyword line, should one ever be printed, compiles none and
+  // still reports through its own missing entry.
+  heal: 'regenerate',
 });
+
+/**
+ * §3.113 — the keywords whose printed line compiles to a CAST TRIGGER
+ * (`CardDefinition.castTriggers`): storm, cascade, ripple. The sweep's
+ * evidence is a trigger tagged with the keyword, the same evidence-based
+ * contract as every guard above.
+ */
+const CAST_TRIGGER_KEYWORDS: ReadonlySet<string> = new Set(['storm', 'cascade', 'ripple']);
 
 /**
  * Every effect-primitive name reachable in a compiled assembly.
@@ -273,6 +295,13 @@ function compiledPrimitives(assembly: Assembly): ReadonlySet<string> {
   visit(assembly.triggers);
   visit(assembly.activated);
   visit(assembly.statics);
+  // §3.113 — two more homes a primitive can have, found by the sweep reporting
+  // "Scry" on Oracle's Insight ("Enchanted creature has '{T}: Scry 1, then draw
+  // a card.'") and "Surveil" on Spellgyre (a MODE prints it): the granted
+  // ability lives on the attachment's modification, and a mode's effects live
+  // on the modal spec. Both compiled; neither was walked.
+  visit(assembly.attachmentModifies);
+  visit(assembly.modal);
   return found;
 }
 
@@ -493,6 +522,8 @@ interface Assembly {
   madness?: ManaCost;
   /** §3.106 — the printed suspend, once a "Suspend N—{…}" line compiles. */
   suspend?: import('@jonny-boi/core').SuspendAbility;
+  /** §3.113 — the printed cast triggers (storm / cascade / ripple), accumulated. */
+  castTriggers?: import('@jonny-boi/core').CastTriggeredAbility[];
   /** §3.106 — counters the permanent enters with (vanishing / fading), accumulated. */
   readonly entersWithCounters: import('@jonny-boi/core').EnteringCounters[];
   /** The formula behind a `*` P/T box, once a line compiles one. */
@@ -573,6 +604,8 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.madness) assembly.madness = contribution.madness;
   // §3.106
   if (contribution.suspend) assembly.suspend = contribution.suspend;
+  // §3.113 — accumulated: "Cascade, cascade" is two triggers (CR 702.85a per instance).
+  if (contribution.castTriggers) (assembly.castTriggers ??= []).push(...contribution.castTriggers);
   if (contribution.entersWithCounters) assembly.entersWithCounters.push(...contribution.entersWithCounters);
   if (contribution.characteristicPT) assembly.characteristicPT = contribution.characteristicPT;
   if (contribution.flashback !== undefined) assembly.flashback = contribution.flashback;
@@ -1466,7 +1499,14 @@ export function compileCard(card: CompilableCard): CompileResult {
     // not match compiles no primitive and still reports through its own `missing`
     // entry (the scry/mill template hints).
     const backingPrimitive = PRIMITIVE_BACKED_KEYWORDS[word];
-    if (backingPrimitive !== undefined && primitivesCompiled.has(backingPrimitive)) continue;
+    if (
+      backingPrimitive !== undefined &&
+      (typeof backingPrimitive === 'string'
+        ? primitivesCompiled.has(backingPrimitive)
+        : backingPrimitive.some((primitive) => primitivesCompiled.has(primitive)))
+    ) {
+      continue;
+    }
     // A keyword whose implementation IS a triggered ability: the evidence is a
     // compiled trigger labelled with the keyword (see TRIGGER_BACKED_KEYWORDS).
     if (
@@ -1539,6 +1579,10 @@ export function compileCard(card: CompilableCard): CompileResult {
     // §3.106 — same shape as madness: the printed "Suspend N—{…}" line compiled
     // into `assembly.suspend`; a "Suspend X" line leaves it unset and reports.
     if (word === 'suspend' && assembly.suspend !== undefined) continue;
+    // §3.113 — storm / cascade / ripple: the evidence is a compiled CAST
+    // TRIGGER tagged with the keyword. Keyed on the tag, not the label, so a
+    // "Ripple 4" line that did not compile leaves no trigger and still reports.
+    if (CAST_TRIGGER_KEYWORDS.has(word) && assembly.castTriggers?.some((t) => t.keyword === word)) continue;
     // An ABILITY WORD (Revolt, Morbid, …) is a label, not an ability — CR
     // 207.2c. It is skipped only when the line it labels actually compiled;
     // a line that failed put its own text (word included) into `missing`, so
@@ -1700,6 +1744,10 @@ export function compileCard(card: CompilableCard): CompileResult {
     // §3.106
     ...(noManaCost ? { noManaCost: true } : {}),
     ...(assembly.suspend ? { suspend: assembly.suspend } : {}),
+    // §3.113
+    ...(assembly.castTriggers !== undefined && assembly.castTriggers.length > 0
+      ? { castTriggers: assembly.castTriggers }
+      : {}),
     ...(assembly.entersWithCounters.length > 0 ? { entersWithCounters: assembly.entersWithCounters } : {}),
     ...(assembly.flashback !== undefined ? { flashback: assembly.flashback } : {}),
     ...(assembly.flashbackXCost !== undefined ? { flashbackXCost: assembly.flashbackXCost } : {}),

@@ -87,6 +87,10 @@ import {
   targetRestrictionOf,
   unpayableAdditionalCostReason,
   DEFAULT_TRIGGER_WATCHES,
+  // §3.113 — the spell-count family: pricing storm/cascade, and the free windows.
+  castTriggerCount,
+  isFreeCastWindow,
+  spellsCastThisTurn,
 } from '@jonny-boi/core';
 import type { TargetRestriction, TriggeredAbility } from '@jonny-boi/core';
 // §3.111 — the graveyard-casting family: every way a card in the graveyard can
@@ -760,6 +764,56 @@ function decide(ctx: DecisionContext, weights: HeuristicWeights, features: Resol
 function decideMadness(ctx: DecisionContext, weights: HeuristicWeights): GameAction | undefined {
   const { view, legalActions } = ctx;
   const me = view.priorityPlayer;
+  // §3.113 — a FREE window (suspend, cascade, ripple) lists one cast per legal
+  // target. Aim it the way a hand cast is aimed — the spell scorer's target,
+  // filtered by `withLegalTargets` — rather than taking the first the engine
+  // listed, which for a cascaded Bituminous Blast is as likely to be our own
+  // creature as theirs. Falls through to the plain "cast it" below when the
+  // scorer has no opinion, so a free spell is never declined for want of one.
+  const freeWindow = view.madnessWindow;
+  if (freeWindow && isFreeCastWindow(freeWindow)) {
+    const casts = legalActions.filter(
+      (a): a is Extract<GameAction, { kind: 'castSpell' }> => a.kind === 'castSpell' && a.fromZone === 'exile',
+    );
+    const exiled = view.players[me].exile.find((c) => c.instanceId === freeWindow.instanceId);
+    if (casts.length > 0 && exiled) {
+      const opp: PlayerId = me === 'A' ? 'B' : 'A';
+      const index = boardIndex(view);
+      const goal = scoreSpell(
+        view,
+        opp,
+        creaturesControlledBy(view, opp),
+        exiled,
+        classifySpell(exiled.def),
+        weights,
+        false,
+        index,
+      );
+      const legal = goal ? withLegalTargets(view, opp, goal, index, weights) : undefined;
+      if (legal && legal.targets.length > 0) {
+        // Two offer shapes, one answer. A spell with a NARROWER restriction is
+        // offered once per legal target, so the scored aim is picked out of the
+        // menu; a spell whose restriction is the unpoliced default ("any
+        // target" — Bituminous Blast, the commonest thing to cascade into) is
+        // offered ONCE with no targets, exactly as the hand path offers it, and
+        // the pilot supplies the aim itself there too (`withLegalTargets`).
+        const fromMenu = casts.find((a) => {
+          const targets = a.targets ?? [];
+          return targets.length === legal.targets.length && targets.every((t, i) => t === legal.targets[i]);
+        });
+        const untargetedOffer = casts.find((a) => (a.targets ?? []).length === 0);
+        const aimed = fromMenu ?? (untargetedOffer ? { ...untargetedOffer, targets: [...legal.targets] } : undefined);
+        if (aimed) {
+          return emit(
+            ctx,
+            aimed,
+            ctx.trace ? `cast ${exiled.def.name} for free at its best target` : NO_REASON,
+            weights.genericSpellScore,
+          );
+        }
+      }
+    }
+  }
   const cast = legalActions.find(
     (a): a is Extract<GameAction, { kind: 'castSpell' }> => a.kind === 'castSpell' && a.fromZone === 'exile',
   );
@@ -1789,6 +1843,20 @@ function scoredSpellGoals(
  * the same action on the next pass — a live-lock. It is also simply better play:
  * a burn spell that cannot hit players should never be scored as reach.
  */
+// --- the spell-count family (§3.113): what a cast trigger adds to a goal -------
+/**
+ * The score a spell's CAST TRIGGERS add: storm once per spell already cast
+ * this turn (each is a copy the cast will make — CR 702.40a), cascade once per
+ * printed instance (a free spell off the top). Zero for the ordinary spell,
+ * so the common path pays one property read.
+ */
+function castTriggerBonus(view: PilotView, def: CardDefinition, weights: HeuristicWeights): number {
+  if (def.castTriggers === undefined) return 0;
+  const storm = castTriggerCount(def, 'storm');
+  const cascade = castTriggerCount(def, 'cascade');
+  return storm * spellsCastThisTurn(view as GameState) * weights.stormPerSpellCast + cascade * weights.cascadePerInstance;
+}
+
 function withLegalTargets(
   view: PilotView,
   opp: PlayerId,
@@ -1796,6 +1864,11 @@ function withLegalTargets(
   index: ContinuousIndex,
   weights: HeuristicWeights,
 ): SpellGoal | undefined {
+  // §3.113 — every goal passes through here exactly once, whichever of the
+  // four scoring sites built it, so this is where a storm or cascade spell's
+  // extra worth is added rather than in each `scoreSpell` return.
+  const castBonus = castTriggerBonus(view, goal.card.def, weights);
+  if (castBonus > 0) goal = { ...goal, score: goal.score + castBonus };
   // A MODAL spell is aimed per mode at cast time, never as a whole card, and
   // the engine rejects a modal cast that carries a target — so the goal keeps
   // the empty target list `scoreSpell` gave it.

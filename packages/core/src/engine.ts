@@ -146,6 +146,9 @@ import {
 // §3.106 — upkeep costs and time counters; suspend.
 import { markBattlefieldEntry, TIME_COUNTER } from './upkeep-costs.js';
 import { suspendWindowOpenFor } from './suspend.js';
+// §3.113 — the spell-count family: cast triggers and the library-pile windows.
+import { pushCastTriggers } from './cast-triggers.js';
+import { isFreeCastWindow, settleCastWindowAfterCast, spellOnStackById } from './cascade.js';
 import { createDelayedTrigger } from './delayed.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
@@ -973,6 +976,10 @@ function frameSource(state: GameState, frame: ResolutionFrame): CardInstance {
   const id = frame.sourceInstanceId ?? 0;
   return (
     findOnBattlefield(state, id) ??
+    // §3.113 — a CAST TRIGGER's source is the spell still on the stack (storm
+    // copies it; cascade reads its mana value). The stack is no player zone,
+    // so `findInstanceAnywhere` would hand back the "unknown" stand-in below.
+    spellOnStackById(state, id)?.card ??
     findInstanceAnywhere(state, id) ?? {
       instanceId: id,
       def: { id: 'unknown-trigger-source', name: 'unknown', types: [] },
@@ -3313,12 +3320,16 @@ function applyCastSpell(
   // cast is "without paying its mana cost" (CR 702.62a), so it has no cost to
   // look up and nothing to refuse for lacking one.
   const suspendCast = madnessWindowOpen && suspendWindowOpenFor(state, card, action.player);
-  const madnessCost = madnessWindowOpen && !suspendCast ? card.def.madness : undefined;
+  // §3.113 — a CASCADE / RIPPLE window's cast is free too (CR 702.85a /
+  // 702.60a), read off the one closed table `isFreeCastWindow` keeps. Kept
+  // apart from `suspendCast` because only suspend's cast grants haste.
+  const pileWindowCast = madnessWindowOpen && !suspendCast && isFreeCastWindow(state.madnessWindow);
+  const madnessCost = madnessWindowOpen && !suspendCast && !pileWindowCast ? card.def.madness : undefined;
   if (fromZone === 'exile') {
     if (!madnessWindowOpen && permission === undefined) {
       return rejectWith(prevState, 'that card has no open madness window and no permission to be cast from exile');
     }
-    if (madnessWindowOpen && !suspendCast && madnessCost === undefined) {
+    if (madnessWindowOpen && !suspendCast && !pileWindowCast && madnessCost === undefined) {
       return rejectWith(prevState, 'that card has no madness cost');
     }
     // The permission names ONE face. Casting the other half of an exiled
@@ -3477,7 +3488,8 @@ function applyCastSpell(
     action.player,
     castDef,
     // §3.106 — a suspend-window cast pays nothing, exactly as a free permission does.
-    permission?.free || suspendCast
+    // §3.113 — and so does a cascade / ripple window's.
+    permission?.free || suspendCast || pileWindowCast
       ? undefined
       : fromZone === 'graveyard' && !aftermath
         ? flashbackCost
@@ -3535,6 +3547,13 @@ function applyCastSpell(
   // The madness window is CONSUMED by the cast: the card has left exile, so
   // nothing may decline it afterwards. A permission cast never had a window and
   // must not clear somebody else's.
+  // §3.113 — a consumed CASCADE / RIPPLE window still owns its pile: the cards
+  // not cast go to the library's bottom (before the cast spell resolves, which
+  // is when the trigger's own text puts them there), and a ripple with another
+  // same-name card left re-opens the window on it. Captured here, settled once
+  // the card is on the stack, because a ripple re-open reads the cast card's
+  // name off the stack object.
+  const consumedPileWindow = madnessWindowOpen && !suspendCast && pileWindowCast ? state.madnessWindow : null;
   if (madnessWindowOpen) state.madnessWindow = null;
   card.zone = 'stack';
   // The card just changed zones, so any grant on it stops applying (CR 400.7).
@@ -3588,6 +3607,11 @@ function applyCastSpell(
   // engine sees — no effect resolves and no event exists a data trigger could
   // watch.
   pushWardTriggers(state, action.player, stackObject.targets, card.instanceId, emit);
+  // §3.113 — storm / cascade / ripple: "when you cast this spell" is likewise a
+  // moment only the engine sees. Pushed AFTER the `spellCast` above so storm's
+  // count already includes this spell (`pushCastTriggers` subtracts it).
+  pushCastTriggers(state, stackObject, emit);
+  if (consumedPileWindow) settleCastWindowAfterCast(state, consumedPileWindow, emit);
   // Caster retains priority after putting something on the stack.
   state.priorityPlayer = action.player;
   state.consecutivePasses = 0;
@@ -5076,7 +5100,8 @@ function madnessActionsFor(state: GameState): GameAction[] {
   const card = instanceIn(player.exile, window.instanceId);
   // §3.106 — a SUSPEND window's cast is free (CR 702.62a), so the pool gate
   // that keeps an unaffordable madness cast off the menu does not apply.
-  const free = window.kind === 'suspend';
+  // §3.113 — and a cascade / ripple window's (one closed table, `isFreeCastWindow`).
+  const free = isFreeCastWindow(window);
   const cost = free ? undefined : card?.def.madness;
   if (
     !card ||

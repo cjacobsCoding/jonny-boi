@@ -1126,6 +1126,84 @@ const LEDGERED_EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.fre
     return who === ctx.player ? value : -value;
   },
 
+  // --- the spell-count family (DESIGN §3.113) ---------------------------------
+  /**
+   * LEARN (CR 701.48a) — "you may discard a card, and if you do, draw a card":
+   * a rummage, worth a draw minus what the discard costs. Priced through the
+   * two entries that already answer both halves rather than with a constant of
+   * its own, so a learn card and a printed "discard a card, then draw a card"
+   * cannot be valued differently.
+   *
+   * With an EMPTY HAND it is worth zero, which is the primitive's own rule:
+   * nothing to discard means no draw.
+   */
+  learn: (_params, ctx) => {
+    if (ctx.state.players[ctx.player].hand.length === 0) return 0;
+    return ctx.weights.modeDrawCardValue - ctx.weights.modeDiscardBaseScore / 2;
+  },
+
+  /**
+   * MILL-THEN-RETURN — the mill is priced by the `mill` entry's own self-mill
+   * rate (so an about-to-deck library still reads as the catastrophe it is),
+   * and the card taken back out of it is a draw's worth: the CHOICE is what
+   * the printed card is for, and it converts one of the milled cards into a
+   * card in hand.
+   */
+  millThenReturn: (params, ctx) => {
+    const amount = intParam(params, 'amount', 0);
+    if (amount <= 0) return 0;
+    const library = ctx.state.players[ctx.player].library.length;
+    if (library === 0) return 0;
+    if (amount >= library) return -ctx.weights.modeSelfDeckPenalty;
+    return ctx.weights.modeDrawCardValue - ctx.weights.modeMillPerCardValue * amount;
+  },
+
+  /**
+   * The ASK half of the above, enqueued by it with the milled ids in its
+   * params. Priced as the card it puts in hand — and at ZERO when its list is
+   * empty, because then there is nothing to take.
+   */
+  returnMilledCard: (params, ctx) => {
+    const ids = params['instanceIds'];
+    if (!Array.isArray(ids) || ids.length === 0) return 0;
+    return ctx.weights.modeDrawCardValue;
+  },
+
+  /**
+   * DOUBLE THE POWER (CR 701.10b) — a pump whose size is the creature's own
+   * power, so it is priced through the same per-stat weight and the same sign
+   * logic `pumpUntilEndOfTurn` uses: our creature positive, an opponent's
+   * negative (doubling theirs is the printed-first-target blunder). A 0-power
+   * creature doubles to nothing and prices zero, exactly as the primitive
+   * resolves it.
+   */
+  doublePower: (params, ctx) => {
+    if (strParam(params, 'each') === 'yours') {
+      let total = 0;
+      for (const permanent of ctx.state.battlefield) {
+        if (permanent.controller !== ctx.player || !isCreature(permanent.def)) continue;
+        total += effPower(permanent, ctx.index);
+      }
+      return total * ctx.weights.modePumpPerStatValue;
+    }
+    const target = firstTargetPermanent(ctx);
+    if (!target || !isCreature(target.def)) return 0;
+    const value = effPower(target, ctx.index) * ctx.weights.modePumpPerStatValue;
+    return target.controller === ctx.player ? value : -value;
+  },
+
+  /**
+   * REVEAL THE TOP CARD AND DRAW IF IT MATCHES — a conditional draw. Priced at
+   * a draw discounted by the bank's share, which is this vocabulary's standing
+   * answer for "a card, but not certainly and not yet"; the filter's real hit
+   * rate is a decklist fact the pilot has no model for, and guessing one would
+   * be the half-measure rule 2 forbids.
+   */
+  revealTopDrawIf: (_params, ctx) => {
+    if (ctx.state.players[ctx.player].library.length === 0) return 0;
+    return ctx.weights.modeDrawCardValue * ctx.weights.bankedEffectValueShare;
+  },
+
   /**
    * +1/+1 / -1/-1 COUNTERS — a PERMANENT stat change, priced per stat point at
    * `modeCounterPerStatValue` (between a pump that wears off and an Equipment

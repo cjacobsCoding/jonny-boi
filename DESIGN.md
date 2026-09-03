@@ -2915,6 +2915,98 @@ two others silently DROPPED FILES — a sim run reported "29 files, 0 failed" wh
 hazard TESTING.md warns about, met in the wild. Lint 0 errors; `build-card-index --check` clean.
 Pilot bench at parity — 162 → 163 games/sec (137 → 136 games/CPU-sec) with **identical outcomes**, A won 845/2000 in both
 runs, which is the honest reading for lock decks that print no counters.
+### 3.113 The spell-count family — storm, cascade, ripple, learn, investigate, and the scry/mill shapes that still reported — ✅ done
+
+Picked as a FAMILY off the measured keyword queue: every keyword whose rule is *"count the spells, or
+read off the top of the library"*, measured with `keyword-cards.mjs` BEFORE building.
+
+| keyword / shape | CR | sole | predicted | shipped |
+|---|---|---|---|---|
+| cascade (incl. "Cascade, cascade") | 702.85a | 19 | 19 | **19** |
+| mill — the printed SHAPES, not the verb | 701.17a | 18 | 18 | **9** |
+| storm | 702.40a | 15 | 15 | **15** |
+| scry — likewise the shapes | 701.22a | 10 | 10 | **4** |
+| heal (Scryfall's tag on regenerate's reminder text) | — | 9 | 9 | **9** |
+| learn | **701.48a** | 7 | 7 | **7** |
+| double (the POWER verb) | **701.10b** | 6 | 6 | **6** |
+| ripple 4 | 702.60a | 5 | 5 | **5** |
+| surveil — the shapes | 701.25a | 5 | 5 | **5** |
+| investigate N times | **701.16a** | 4 | 4 | **4** |
+| the loot template ("draw a card, then discard a card") | — | ~26 | ~26 | **~26** |
+
+**Measured: 5,623 → 5,768 complete cards. +145 against ~124 predicted.** The surplus is one
+class-level fix reaching outside the measured shapes (below); the shortfall on mill and scry is
+honest and itemised at the end.
+
+**Three keywords are ONE new seam: a trigger that functions on the STACK.** Storm, cascade and ripple
+are all "when you cast this spell, …", and `CardDefinition.triggers` could not carry them — the
+trigger collector walks the battlefield and the command zones on every emitted event, and adding the
+stack to that loop would tax the engine's hottest path for a mechanic most games never see. So
+`CardDefinition.castTriggers` is its own field and the CAST PATH pushes them itself, which is the road
+ward already takes (`pushWardTriggers`) and for the same reason: "you cast this" is a moment only the
+engine sees. One record per printed instance, so **"Cascade, cascade" is two triggers** (CR 702.85a);
+the body is a cards-package primitive handed over as data, exactly as a suspend tick is.
+
+**Storm's count is a turn fact with no bitmask.** `GameState.spellsCastThisTurn` sits beside
+`turnFactsA/B` — same feed point (`recordTurnFacts`, the one chokepoint every event passes), same
+lifetime (cleared as a turn begins), same optional shape so every state written before it reads zero.
+It is read ONCE, as the trigger is pushed, and rides the stack object as `triggeringAmount`, which is
+what makes CR 702.40a's "cast **before** it" exact: a spell cast in response to the trigger is not
+counted. A copy is not a cast (CR 707.10) and emits `spellCopied`, so copies never feed the count.
+
+**Cascade and ripple are the madness WINDOW with a pile.** The free cast is a window and not a
+standing permission for the reason §3.106 gave suspend: "you may cast it" is a decision made at that
+moment, and a permission would let a pilot hold the cascaded card for the perfect turn — a strictly
+better card than printed. `MadnessWindow.kind` gains two rows and `isFreeCastWindow` is the one closed
+table the cast path, the offer loop, the hotseat and the pilot all read, so "this window's cast pays
+nothing" has exactly one answer. The one genuinely new field is `MadnessWindow.pile`: the cards taken
+off the top, bottomed when the window closes **however it closes** — random order for cascade,
+revealed order for ripple — through two closers that are the only readers, so a cast and a decline
+cannot disagree. Ripple's chain re-opens the window on each same-name card in the pile.
+
+⚠️ **The revealed cards sit in EXILE while the window stands, and that is a stated cost, not a
+hidden one.** A ripple reveal leaves cards in the library in paper; this engine casts from hand,
+graveyard or exile and never from a library, and every seat plays a window through
+`castSpell fromZone: 'exile'`. Nothing can act while a window is open, so no card can read the
+library's size in between; the only trace is the replay's `zoneChange` pair.
+
+⚠️ **A CLASS of bug the family found, and the guard that pins it.** A parked question re-runs its
+effect ref FROM THE TOP with the answers replayed — so a primitive that MUTATES and then ASKS repeats
+its mutation on every re-entry. `millThenReturn` milled two, asked, and milled two more: three cards
+where Seed of Hope prints two. The ask now lives in a second ref (`enqueueEffects`, the seam modal
+spells use) with the milled ids baked into its params, and the graveyard count in
+`spell-count-family.test.ts` is the guard.
+
+**The surplus over prediction is the keyword sweep learning two more homes for a primitive.** It
+walked `effects`, `triggers`, `activated` and `statics` — not an attachment's granted abilities, nor a
+MODE's. So Oracle's Insight reported "Scry" one line after compiling a granted `{T}: Scry 1`, and
+Spellgyre reported "Surveil" with a compiled surveil mode. Two `visit` calls, and every keyword the
+sweep checks gained the same reach in one edit. `heal` is a row in the same evidence table: 33 corpus
+cards carry Scryfall's tag, 32 print regenerate and **none prints a Heal line of its own**, so the
+compiled regenerate IS the evidence.
+
+**The pilot plays what it decides.** Storm and cascade are automatic once cast, so the decision is
+WHICH spell and WHEN: `castTriggerBonus` adds `stormPerSpellCast` per spell already cast this turn and
+`cascadePerInstance` per printed cascade, at the one site every spell goal passes through. And a free
+window is AIMED — the engine offers an "any target" spell once with no targets (as the hand path
+does), so the pilot scores the exiled card and supplies the aim itself, rather than pointing a
+cascaded Bituminous Blast at its own creature.
+
+⚠️ **Left reporting, itemised.** MILL keeps 9 and SCRY 6, and both are nouns and tails outside the
+closed tables rather than the verb: "a land card **or Elf card**" (Roots of Wisdom), "an instant,
+sorcery, **or Faerie** card" (Free the Fae), a Squirrel rider (Cache Grab), "**Scry X**, where X is
+the amount of {S} spent" (Graven Lore) and "…the greatest mana value among permanents" (Ugin's
+Insight), and `{E}` energy (Glimmer of Genius). Each is a row or a system somebody else's measurement
+should pick. Also deliberately out: Beacon of Immortality's life-doubling (a different verb from CR
+701.10b's power doubling), Collective Inferno's "sources of the chosen type" (the replacement layer
+cannot read an as-enters naming), and a storm spell COUNTERED before its trigger resolves makes no
+copies — the rules still copy it, this plays weaker rather than stronger, and the primitive says so.
+
+**Gate:** the suite run package by package at one worker (the box was out of memory with five agents
+on it); lint 0 errors; `build-card-index.mjs --check` clean. Pilot bench INTERLEAVED, because a single
+number under this load is not a measurement (§3.107): branch point 93/98 games/CPU-sec against the
+family's 108/93/95/92, with **identical outcomes in every run** (A won 845/2000 in all six) — parity,
+which is what a family that adds one counter increment per cast should read.
 
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 

@@ -111,6 +111,10 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
   cardSuspended: { player: 'none', instanceId: 'id', name: 'none', timeCounters: 'none' },
   suspendWindowOpened: { player: 'none', instanceId: 'id', name: 'none' },
   suspendDeclined: { player: 'none', instanceId: 'id', name: 'none' },
+  // §3.113 — cascade / ripple windows and the pile they bottom.
+  cascadeWindowOpened: { player: 'none', instanceId: 'id', name: 'none' },
+  rippleWindowOpened: { player: 'none', instanceId: 'id', name: 'none' },
+  pileBottomed: { player: 'none', instanceIds: 'idList', random: 'none' },
   madnessDeclined: { player: 'none', instanceId: 'id', name: 'none' },
   stackResolved: { instanceId: 'id', name: 'none' },
   manaAdded: { player: 'none', color: 'none', amount: 'none', spendRestriction: 'none' },
@@ -327,6 +331,13 @@ const NON_EVENT_INSTANCE_ID_FIELDS = [
    * is paid at activation (CR 602.2b), before the ability is on the stack.
    */
   'costInstanceIds',
+  /**
+   * `MadnessWindow.pile` (§3.113) — the cards a cascade or ripple window took
+   * off the top of the library and will bottom when it closes. They sit
+   * face-up in exile while the window stands, so the ids are public; the
+   * scanner must still know the key holds them.
+   */
+  'pile',
   /** `GameState.nextInstanceId` — the id source. Not a card, but it IS an id. */
   'nextInstanceId',
 ] as const;

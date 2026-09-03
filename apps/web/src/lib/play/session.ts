@@ -24,6 +24,7 @@ import {
   generateLegalActions,
   hasCardGrants,
   hasCastableBackFace,
+  isFreeCastWindow,
   isLand,
   manaPaymentChoiceExists,
   planManaPayment,
@@ -706,7 +707,11 @@ export class GameSession {
     const card = this.state.players[window.controller].exile.find(
       (c) => c.instanceId === window.instanceId,
     );
-    const madness = card?.def.madness;
+    // §3.113 — a FREE window (suspend, cascade, ripple) costs nothing; before
+    // this the hotseat offered no cast at all for a suspend window (its card
+    // has no madness cost) and the only way out was the decline.
+    const free = isFreeCastWindow(window);
+    const madness = free ? {} : card?.def.madness;
     if (!card || madness === undefined) return permissions;
     const castableNow = this.legalActions().some(
       (a) => a.kind === 'castSpell' && a.fromZone === 'exile' && a.instanceId === card.instanceId,
@@ -720,7 +725,7 @@ export class GameSession {
         needsTarget: needsTarget(card.def),
         requirement: targetRequirement(card.def),
         affordableNow: castableNow,
-        affordableWithTap: this.canAffordWithTaps(window.controller, madness, card.def, 'cast'),
+        affordableWithTap: free || this.canAffordWithTaps(window.controller, madness, card.def, 'cast'),
         fromZone: 'exile',
       },
       ...permissions,

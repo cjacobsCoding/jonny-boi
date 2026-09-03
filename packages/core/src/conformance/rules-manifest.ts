@@ -974,7 +974,13 @@ export const RULES_MANIFEST: RulesManifest = {
     shortfall:
       'Regenerate (CR 701.19), fight (701.14) and proliferate (701.34 — permanents AND poisoned ' +
       'players, §3.105) live in the cards package (regeneration.test.ts, poison-family.test.ts, ' +
-      'proliferate.test.ts). Monstrosity, populate, explore, venture and connive do not exist.',
+      'proliferate.test.ts). So do three more since §3.113: investigate (701.16a), double (701.10b — ' +
+      'the POWER-doubling verb; the damage-doubling replacement is CR 614) and learn (701.48a), all ' +
+      'in spell-count-family.test.ts on their printed cards. ⚠️ LEARN IS DELIBERATELY HALF A RULE: ' +
+      '"you may discard a card, if you do draw a card" is implemented; the alternative — reveal a ' +
+      'Lesson you own from OUTSIDE THE GAME — names a zone this engine does not model, and since it ' +
+      'is a branch the player may always decline, its absence can never make a card play stronger ' +
+      'than printed. Monstrosity, populate, explore, venture and connive do not exist.',
   },
   '702': {
     status: 'covered',
@@ -1050,6 +1056,21 @@ export const RULES_MANIFEST: RulesManifest = {
         rule: '702.54a',
         title: 'bloodthirst’s question — "an opponent was dealt damage this turn" — is a turn fact recorded for the damager’s side',
       },
+      // The spell-count family (DESIGN §3.113). Ripple's own crTest is absent on
+      // purpose: it is the same window machinery cascade's two tests drive, and
+      // its one distinct rule (the chain re-opening on each same-name card) is
+      // pinned where the depth and the names are — packages/core/src/
+      // cast-triggers.test.ts, and on the real Surging Flame in the cards
+      // package. A second copy here would test the harness, not the rule.
+      {
+        rule: '702.40a',
+        title: 'storm copies the spell once for each OTHER spell cast before it this turn, and a copy is not itself a cast',
+      },
+      {
+        rule: '702.85a',
+        title: 'cascade exiles until a nonland card of lesser mana value, casts it for no mana, and bottoms the rest',
+      },
+      { rule: '702.85a', title: 'declining the cascade window bottoms the whole pile, the offered card included' },
     ],
     note:
       'Ward is here because it was the one shipped keyword whose TRIGGER nothing drove ' +
