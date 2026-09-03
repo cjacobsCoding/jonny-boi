@@ -1153,6 +1153,16 @@ export interface CardDefinition {
    * exile is on no trigger source. See `suspend.ts`.
    */
   readonly suspend?: SuspendAbility;
+  // --- the spell-count family (§3.113): storm, cascade, ripple ------------------
+  /**
+   * "When you cast this spell, …" abilities that function on the STACK — storm
+   * (CR 702.40a), cascade (CR 702.85a), ripple (CR 702.60a). Not `triggers`,
+   * because the trigger collector reads the battlefield and the command zone
+   * only; the cast path pushes these itself the moment the spell is cast (see
+   * `cast-triggers.ts`). One record per printed instance: "Cascade, cascade"
+   * is two.
+   */
+  readonly castTriggers?: readonly import('./cast-triggers.js').CastTriggeredAbility[];
   /**
    * Triggered abilities (DESIGN §3.9), as data: each is a condition (what event
    * sets it off) + an effect-ref list run when it resolves. Opaque to most of core

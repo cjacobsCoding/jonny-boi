@@ -92,6 +92,18 @@ const FACT_BIT: Readonly<Record<TurnFact, number>> = Object.freeze({
 export function clearTurnFacts(state: GameState): void {
   state.turnFactsA = 0;
   state.turnFactsB = 0;
+  // §3.113 — the spell count has the facts' lifetime: it is a turn's memory.
+  state.spellsCastThisTurn = 0;
+}
+
+// --- the spell-count family (§3.113) -------------------------------------------
+/**
+ * How many spells have been cast so far this turn, by either player — storm's
+ * count (CR 702.40a). A state with no record answers zero, for the reason
+ * `turnFactHolds` does.
+ */
+export function spellsCastThisTurn(state: GameState): number {
+  return state.spellsCastThisTurn ?? 0;
 }
 
 /**
@@ -158,6 +170,13 @@ export function recordTurnFacts(state: GameState, event: GameEvent): void {
       if (state.step === 'draw' && event.player === state.activePlayer) {
         setTurnFact(state, 'drewInOwnDrawStep', event.player);
       }
+      return;
+    }
+    // §3.113 — storm's count. Every cast by either player, counted at the one
+    // chokepoint every event passes; a COPY of a spell is never cast (CR
+    // 707.10) and emits `spellCopied`, not `spellCast`, so it is not counted.
+    case 'spellCast': {
+      state.spellsCastThisTurn = (state.spellsCastThisTurn ?? 0) + 1;
       return;
     }
     default:

@@ -126,6 +126,41 @@ export type GameEvent =
       readonly instanceId: InstanceId;
       readonly name: string;
     }
+  // --- §3.113 the spell-count family: cascade and ripple windows ----------------
+  | {
+      /**
+       * A cascade trigger exiled its way to a nonland card that costs less and
+       * its controller now has the window to cast it for nothing (CR 702.85a).
+       * The exiles themselves are the ordinary `zoneChange`s before this.
+       */
+      readonly type: 'cascadeWindowOpened';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
+  | {
+      /**
+       * A ripple reveal found a card sharing the spell's name, and its
+       * controller has the window to cast it for nothing (CR 702.60a). Emitted
+       * once per same-name card offered — a chain re-opens the window.
+       */
+      readonly type: 'rippleWindowOpened';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
+  | {
+      /**
+       * A cascade / ripple pile went to the bottom of its owner's library —
+       * the cards taken off the top that were not cast — `random` for cascade's
+       * "random order", false for ripple's revealed order. One event for the
+       * whole pile, in bottom order top-down.
+       */
+      readonly type: 'pileBottomed';
+      readonly player: PlayerId;
+      readonly instanceIds: readonly InstanceId[];
+      readonly random: boolean;
+    }
   | {
       readonly type: 'stackResolved';
       readonly instanceId: InstanceId;

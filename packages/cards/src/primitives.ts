@@ -90,6 +90,7 @@ import {
   isPlayerTarget,
   keywordsParam,
   manaValueOf,
+  millTopCards,
   movePermanentTo,
   otherPlayer,
   permanentById,
@@ -106,6 +107,7 @@ import { UPKEEP_COST_PRIMITIVES } from './upkeep-cost-primitives.js';
 import { EXILE_UNTIL_LEAVES_PRIMITIVES } from './exile-until-leaves.js';
 import { TRIGGER_COPY_PRIMITIVES } from './trigger-copy-primitives.js';
 import { BLINK_PRIMITIVES } from './blink-primitives.js';
+import { SPELL_COUNT_PRIMITIVES } from './spell-count-primitives.js';
 
 // --- the primitives ------------------------------------------------------------
 
@@ -922,16 +924,8 @@ export const mill: EffectPrimitive = (ctx) => {
   const who = boolParam(ctx, 'self', false)
     ? ctx.controller
     : (firstPlayerTarget(ctx) ?? otherPlayer(ctx.controller));
-  const player = ctx.state.players[who];
-  // A library with fewer cards than the mill amount empties; the loss is the
-  // engine's decking rule on the next draw, not something this primitive forces.
-  const count = Math.min(amount, player.library.length);
-  for (let i = 0; i < count; i++) {
-    const card = player.library[0];
-    if (!card) break;
-    moveOwnedCard(ctx, who, card.instanceId, 'library', 'graveyard');
-  }
-  if (count > 0) ctx.emit({ type: 'cardsMilled', player: who, amount: count });
+  // §3.113 — through the one mill funnel `millThenReturn` also uses.
+  millTopCards(ctx, who, amount);
 };
 
 /**
@@ -1820,6 +1814,11 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   // fires again, counters and Auras fall off, it comes back summoning-sick) is
   // that rule rather than anything the cards say.
   ...BLINK_PRIMITIVES,
+  // The spell-count family (`./spell-count-primitives`, DESIGN §3.113): the
+  // bodies of storm, cascade and ripple's cast triggers, learn, "mill, then put
+  // a card from among them into your hand", doubling power, and the
+  // reveal-the-top-card draw.
+  ...SPELL_COUNT_PRIMITIVES,
 });
 
 /** The set of primitive ids this package provides (for validation). */

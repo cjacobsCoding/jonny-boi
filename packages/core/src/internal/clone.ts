@@ -425,6 +425,10 @@ export function cloneState(state: GameState): GameState {
   }
   if (state.turnFactsA !== undefined) next.turnFactsA = state.turnFactsA;
   if (state.turnFactsB !== undefined) next.turnFactsB = state.turnFactsB;
+  // §3.113 — storm's count, the same `!== undefined` rule as the facts beside it.
+  // (A pile window's `pile` rides the `{ ...madnessWindow }` spread above; it
+  // is never mutated in place, so sharing the array is safe.)
+  if (state.spellsCastThisTurn !== undefined) next.spellsCastThisTurn = state.spellsCastThisTurn;
   return next;
 }
 

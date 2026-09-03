@@ -609,10 +609,24 @@ export interface MadnessWindow {
    * leaves the card (madness buries it; a declined suspend "remains exiled").
    */
   readonly kind?: CastWindowKind;
+  // --- the spell-count family (§3.113): cascade and ripple ---------------------
+  /**
+   * The LIBRARY PILE a cascade or ripple window owns — every card taken off the
+   * top of the library for this window, the offered card included. Whatever is
+   * still in exile when the window closes (by a cast or a decline) goes to the
+   * bottom of the library: random order for cascade (CR 702.85a), revealed
+   * order for ripple (CR 702.60a). Read only by `cascade.ts`'s two closers.
+   * Absent on a madness or suspend window, which owns no other cards.
+   */
+  readonly pile?: readonly InstanceId[];
 }
 
-/** See {@link MadnessWindow.kind}. */
-export type CastWindowKind = 'madness' | 'suspend';
+/**
+ * See {@link MadnessWindow.kind}. `cascade` / `ripple` (§3.113) are the
+ * library-pile windows: a free cast like suspend's, plus a {@link
+ * MadnessWindow.pile} to bottom when the window closes.
+ */
+export type CastWindowKind = 'madness' | 'suspend' | 'cascade' | 'ripple';
 
 /**
  * A triggered ability on the stack (DESIGN §3.9). Unlike a spell it carries no card
@@ -876,6 +890,16 @@ export interface GameState {
    */
   turnFactsA?: number;
   turnFactsB?: number;
+  // --- the spell-count family (§3.113) -----------------------------------------
+  /**
+   * How many spells have been CAST this turn, by either player — storm's
+   * count (CR 702.40a "each other spell that was cast before it this turn").
+   * A COUNT beside the boolean turn facts because no bitmask can hold it; same
+   * lifetime (cleared as a turn begins), same feed point (`recordTurnFacts`),
+   * same optional shape so every state written before it existed reads as
+   * zero. Read through `spellsCastThisTurn`, never indexed directly.
+   */
+  spellsCastThisTurn?: number;
 }
 
 /** Build a fresh, empty player. */

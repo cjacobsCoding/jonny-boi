@@ -235,7 +235,12 @@ export type SoakMechanicId =
   // fading, "sacrifice ~ unless you pay") have no id of their own: what they do
   // is already witnessed as `optional-payment` (the bill asked) and `counters`
   // (the tick), and a mechanic is only as honest as the event that proves it.
-  | 'suspend';
+  | 'suspend'
+  // §3.113 — CASCADE (CR 702.85) and RIPPLE (CR 702.60): a library pile and a
+  // free-cast window each. Storm has no id of its own: its whole observable
+  // behaviour is copies on the stack, which `spell-copy` already witnesses.
+  | 'cascade'
+  | 'ripple';
 
 /**
  * How a mechanic is proved to have HAPPENED.
@@ -455,6 +460,19 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
   { id: 'cycling', label: 'cycling — a card cycled from hand', witnessKind: 'action', printedBy: hasKey('cycling') },
   // §3.106
   { id: 'suspend', label: 'suspend — a card suspended from hand (CR 702.62)', witnessKind: 'action', printedBy: hasKey('suspend') },
+  // §3.113 — the library-pile windows, keyed on the cast trigger's keyword tag.
+  {
+    id: 'cascade',
+    label: 'cascade — a cast trigger exiled to a cheaper nonland card and opened its window (CR 702.85)',
+    witnessKind: 'event',
+    printedBy: (c) => c.castTriggers?.some((t) => t.keyword === 'cascade') === true,
+  },
+  {
+    id: 'ripple',
+    label: 'ripple — a reveal found a same-name card and opened its window (CR 702.60)',
+    witnessKind: 'event',
+    printedBy: (c) => c.castTriggers?.some((t) => t.keyword === 'ripple') === true,
+  },
   {
     id: 'buyback',
     label: 'buyback — the optional cost offered at cast',
@@ -858,6 +876,12 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   cardSuspended: 'suspend',
   suspendWindowOpened: 'suspend',
   suspendDeclined: 'suspend',
+  // §3.113 — a window opening is the strongest witness of each keyword; the
+  // bottoming happens for both (and for a cascade that found nothing), so it
+  // names neither.
+  cascadeWindowOpened: 'cascade',
+  rippleWindowOpened: 'ripple',
+  pileBottomed: null,
   madnessDeclined: 'madness',
   cardsMilled: 'mill',
   tokenCreated: 'token',

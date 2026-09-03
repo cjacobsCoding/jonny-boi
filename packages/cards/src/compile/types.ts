@@ -257,6 +257,13 @@ export interface ClauseContribution {
   // --- §3.106 upkeep costs and time counters ---------------------------------
   /** The printed "Suspend N—{cost}" line (`CardDefinition.suspend`). */
   readonly suspend?: import('@jonny-boi/core').SuspendAbility;
+  // --- §3.113 the spell-count family ------------------------------------------
+  /**
+   * "When you cast this spell" abilities — a printed "Storm", "Cascade" or
+   * "Ripple N" (`CardDefinition.castTriggers`). Accumulated, so "Cascade,
+   * cascade" contributes two.
+   */
+  readonly castTriggers?: readonly import('@jonny-boi/core').CastTriggeredAbility[];
   /**
    * Counters the permanent enters with — vanishing's and fading's first half
    * (`CardDefinition.entersWithCounters`). Accumulated, so a card printing

@@ -728,3 +728,28 @@ export function counterSpellOnStack(ctx: EffectContext, spell: SpellStackObject)
 export function manaValueOf(def: CardDefinition): number {
   return def.cost ? convertedManaCost(def.cost) : 0;
 }
+
+// --- the spell-count family (§3.113) -------------------------------------------
+/**
+ * MILL (CR 701.17a): put the top `amount` cards of `who`'s library into their
+ * graveyard, returning the ids in the order they were milled. The ONE mill
+ * funnel — the `mill` primitive and the "from among the milled cards" shapes
+ * (`millThenReturn`) both go through it, so a card milled by either lands in
+ * the same graveyard order and emits the same `cardsMilled`.
+ *
+ * A library shorter than `amount` empties (CR 701.17b — as many as possible);
+ * the loss is the engine's decking rule on the next draw, not this helper's.
+ */
+export function millTopCards(ctx: EffectContext, who: PlayerId, amount: number): InstanceId[] {
+  const player = ctx.state.players[who];
+  const count = Math.min(Math.max(0, amount), player.library.length);
+  const milled: InstanceId[] = [];
+  for (let i = 0; i < count; i++) {
+    const card = player.library[0];
+    if (!card) break;
+    moveOwnedCard(ctx, who, card.instanceId, 'library', 'graveyard');
+    milled.push(card.instanceId);
+  }
+  if (milled.length > 0) ctx.emit({ type: 'cardsMilled', player: who, amount: milled.length });
+  return milled;
+}

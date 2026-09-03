@@ -17,6 +17,7 @@
 
 import type { CardInstance, GameState, ZoneName } from './state.js';
 import type { GameEvent } from './events.js';
+import { declinePileWindow } from './cascade.js';
 
 /**
  * Where a card being discarded (hand → graveyard) actually goes, opening a
@@ -65,6 +66,9 @@ export function declineMadness(state: GameState, emit: (event: GameEvent) => voi
   const window = state.madnessWindow;
   if (!window) return false;
   state.madnessWindow = null;
+  // §3.113 — a declined CASCADE / RIPPLE window bottoms its whole pile, the
+  // offered card included (CR 702.85a / 702.60a "not cast this way").
+  if (declinePileWindow(state, window, emit)) return true;
   // §3.106 — a declined SUSPEND window leaves the card where it is: "If you
   // don't, it remains exiled" (CR 702.62a). Only the madness kind buries it.
   if (window.kind === 'suspend') {

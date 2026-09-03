@@ -117,7 +117,7 @@ export const copySpell: EffectPrimitive = (ctx) => {
  * about at all. Both are the same direction: the copy keeps the original's aim,
  * which can never play better than the printed card.
  */
-function retargetCopy(ctx: EffectContext, copy: SpellStackObject): SpellStackObject | undefined {
+export function retargetCopy(ctx: EffectContext, copy: SpellStackObject): SpellStackObject | undefined {
   let aimed = copy;
   for (const slot of spellCopyAimSlots(copy)) {
     const restriction = spellCopyAimRestriction(aimed, slot);

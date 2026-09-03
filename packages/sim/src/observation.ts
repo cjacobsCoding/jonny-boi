@@ -321,6 +321,12 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   cardSuspended: 'public',
   suspendWindowOpened: 'public',
   suspendDeclined: 'public',
+  // §3.113 — cascade exiles face-up and ripple reveals: every card in a pile is
+  // shown to the table before the window opens (its `zoneChange` into exile is
+  // public), and the bottoming names only cards the table has just seen.
+  cascadeWindowOpened: 'public',
+  rippleWindowOpened: 'public',
+  pileBottomed: 'public',
   effectApplied: 'public',
   effectUnsupported: 'public',
   attackersDeclared: 'public',

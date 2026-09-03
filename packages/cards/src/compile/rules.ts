@@ -1525,6 +1525,53 @@ function groupStaticAffects(
   return { anyOfSubtypes: [printed], controller: scope };
 }
 
+// --- the spell-count family (DESIGN §3.113): the closed noun tables -------------
+/**
+ * "Investigate TWICE / THREE TIMES" — the printed repeat words. Its own table
+ * and not `REPLACEMENT_MULTIPLIERS` (which also lists "double"): a repeat count
+ * and a damage multiplier are different arithmetic that happen to share two words.
+ */
+const REPEAT_COUNT_WORDS: Readonly<Record<string, number>> = Object.freeze({
+  twice: 2,
+  'three times': 3,
+  'four times': 4,
+});
+
+/**
+ * The card nouns a mill-then-return line may name, mapped to the filter that
+ * selects them. CLOSED: "a land card or Elf card" (Roots of Wisdom) and
+ * "an instant, sorcery, or Faerie card" (Free the Fae) are outside it and the
+ * lines report. "Permanent card" is a card with a permanent type — every card
+ * that is not an instant or a sorcery (CR 110.4).
+ */
+const MILL_RETURN_NOUNS: Readonly<Record<string, CardFilter>> = Object.freeze({
+  creature: { anyOfTypes: ['creature'] },
+  land: { anyOfTypes: ['land'] },
+  permanent: { noneOfTypes: ['instant', 'sorcery'] },
+  'instant or sorcery': { anyOfTypes: ['instant', 'sorcery'] },
+  'creature or land': { anyOfTypes: ['creature', 'land'] },
+});
+
+/** The alternation of every mill-return noun, longest first so none is truncated. */
+const MILL_RETURN_NOUN_TOKEN = Object.keys(MILL_RETURN_NOUNS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+
+/**
+ * "Double all damage that SOURCES would deal" — the printed source phrases of
+ * the whole-sentence form of the damage-scaling replacement, mapped to the
+ * same `applies` the "if a source you control would deal damage" form builds.
+ * CLOSED: "sources you control of the chosen type" (Collective Inferno) names
+ * an as-enters choice the replacement layer cannot read, and reports.
+ */
+const DOUBLE_ALL_DAMAGE_SOURCES: Readonly<
+  Record<string, { readonly sourceController: StaticControllerScope; readonly sourceFilter?: CardFilter }>
+> = Object.freeze({
+  'sources you control': { sourceController: 'you' },
+  'creature sources you control': { sourceController: 'you', sourceFilter: { anyOfTypes: ['creature'] } },
+  'creatures you control': { sourceController: 'you', sourceFilter: { anyOfTypes: ['creature'] } },
+});
+
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     /**
@@ -3976,6 +4023,126 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       });
     },
   },
+  // --- the spell-count family (DESIGN §3.113): learn, investigate N times, the
+  // loot template, the mill shapes, doubling power, reveal-the-top draws ------
+  {
+    id: 'learn',
+    description: '"Learn" (CR 701.48a) — the discard-to-draw half; the outside-the-game Lesson half has no zone here (Pop Quiz, Field Trip)',
+    pattern: /^learn$/,
+    build() {
+      return effects({ primitive: 'learn' });
+    },
+  },
+  {
+    id: 'investigate-n-times',
+    description: '"Investigate twice / three times" (CR 701.16a, Confirm Suspicions) — that many Clue tokens in one create',
+    pattern: new RegExp(`^investigate (${Object.keys(REPEAT_COUNT_WORDS).join('|')})$`),
+    build(match) {
+      const count = REPEAT_COUNT_WORDS[match[1] ?? ''];
+      if (count === undefined) return null;
+      return effects({ primitive: 'createPredefinedToken', params: { token: 'clue', count } });
+    },
+  },
+  {
+    id: 'draw-then-discard-loot',
+    description: '"Draw N cards, then discard N cards" — the loot template (Owl Familiar, Merfolk Looter)',
+    pattern: new RegExp(`^draw ${COUNT_TOKEN} cards?, then discard ${COUNT_TOKEN} cards?$`),
+    build(match) {
+      const drawn = parseCount(match[1]);
+      const discarded = parseCount(match[2]);
+      if (drawn === null || discarded === null) return null;
+      return effects(
+        { primitive: 'drawCards', params: { count: drawn } },
+        // The CONTROLLER's own discard, chosen by them — `discardCard`'s default
+        // victim is a targeted player, which this clause never has.
+        { primitive: 'discardCard', params: { who: 'controller', ...(discarded === 1 ? {} : { count: discarded }) } },
+      );
+    },
+  },
+  {
+    id: 'mill-then-return-from-graveyard',
+    description:
+      '"Mill N cards, then [you may] return a NOUN card [and a NOUN card] from your graveyard to your hand" (Corpse Churn, Grapple with the Past, Sudden Reclamation)',
+    pattern: new RegExp(
+      `^mill ${COUNT_TOKEN} cards?, then (you may )?return an? (${MILL_RETURN_NOUN_TOKEN}) card(?: and an? (${MILL_RETURN_NOUN_TOKEN}) card)? from your graveyard to your hand$`,
+    ),
+    build(match) {
+      const amount = parseCount(match[1]);
+      if (amount === null) return null;
+      const optional = match[2] !== undefined;
+      const returns: EffectRef[] = [];
+      for (const noun of [match[3], match[4]]) {
+        if (noun === undefined) continue;
+        const filter = MILL_RETURN_NOUNS[noun];
+        if (filter === undefined) return null;
+        returns.push({
+          primitive: 'returnFromGraveyard',
+          params: { count: 1, filter, ...(optional ? { optional: true } : {}) },
+        });
+      }
+      if (returns.length === 0) return null;
+      return effects({ primitive: 'mill', params: { amount, self: true } }, ...returns);
+    },
+  },
+  {
+    id: 'mill-then-put-from-among',
+    description:
+      '"Mill N cards[, then / .] [you may] put/return a NOUN card from among them / the milled cards / the cards milled this way into your hand[. EFFECT]" (Seed of Hope, Wasteful Harvest, Midnight Tilling)',
+    pattern: new RegExp(
+      `^mill ${COUNT_TOKEN} cards?(?:\\. |, then )(you may )?(?:put|return) an? (${MILL_RETURN_NOUN_TOKEN}) card from among (?:them|the milled cards|the cards milled this way) (?:into|to) your hand(?:\\. (.+))?$`,
+    ),
+    build(match, ctx) {
+      const amount = parseCount(match[1]);
+      if (amount === null) return null;
+      const filter = MILL_RETURN_NOUNS[match[3] ?? ''];
+      if (filter === undefined) return null;
+      // A trailing sentence ("You gain 2 life") must itself compile, target-free,
+      // for the reason `scry-then-effect` gives; a tail outside the table
+      // (Cache Grab's Squirrel clause) refuses the whole line.
+      const tail = match[4] === undefined ? [] : ctx.compileEffectClause(match[4], { targetFree: true });
+      if (tail === null || tail === undefined) return null;
+      return effects(
+        {
+          primitive: 'millThenReturn',
+          params: { amount, filter, ...(match[2] !== undefined ? { optional: true } : {}) },
+        },
+        ...tail,
+      );
+    },
+  },
+  {
+    id: 'double-target-power',
+    description: '"Double the power of target creature / target creature\'s power until end of turn" (CR 701.10b — Unleash Fury, Bulk Up)',
+    pattern: /^double (?:the power of target creature|target creature's power) until end of turn$/,
+    needsChosenTarget: true,
+    build() {
+      return effects({ primitive: 'doublePower', params: { targets: CREATURE_TARGET } });
+    },
+  },
+  {
+    id: 'double-each-power',
+    description: '"Double the power of each creature you control until end of turn" (CR 701.10b — Double Trouble)',
+    pattern: /^double the power of each creature you control until end of turn$/,
+    build() {
+      return effects({ primitive: 'doublePower', params: { each: 'yours' } });
+    },
+  },
+  {
+    id: 'reveal-top-draw-if',
+    description:
+      '"[You may] reveal the top card of your library. If it\'s a NOUN card / If a NOUN card is revealed this way, draw a card" — the tail of Track Down and Elven Farsight',
+    pattern: new RegExp(
+      `^(you may )?reveal the top card of your library\\. if (?:it's an? (${MILL_RETURN_NOUN_TOKEN}) card|an? (${MILL_RETURN_NOUN_TOKEN}) card is revealed this way), draw a card$`,
+    ),
+    build(match) {
+      const filter = MILL_RETURN_NOUNS[match[2] ?? match[3] ?? ''];
+      if (filter === undefined) return null;
+      return effects({
+        primitive: 'revealTopDrawIf',
+        params: { filter, ...(match[1] !== undefined ? { optional: true } : {}) },
+      });
+    },
+  },
 ]);
 
 /**
@@ -5188,6 +5355,43 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
           effects: body,
           label: `${match[1] === 'an opponent' ? 'Opponent casts' : 'Any player casts'} ${describeSpellFilter(condition)}: ${match[3] ?? ''}`,
         })),
+      };
+    },
+  },
+  // --- the spell-count family (DESIGN §3.113): the cast-trigger keywords -------
+  // Each is a `keyword-` rule so the keyword-line compiler tries it on a word
+  // of a list ("Cascade, cascade" is two words, hence two triggers — CR
+  // 702.85a is one ability per instance; 702.40b / 702.60b say so for storm
+  // and ripple). The body is a cards-package primitive handed to core as data,
+  // exactly as a suspend tick is; core pushes the trigger as the spell is cast.
+  {
+    id: 'keyword-storm',
+    description: '"Storm" (CR 702.40a) — copy the spell once per spell cast before it this turn (Grapeshot, Empty the Warrens)',
+    pattern: /^storm$/,
+    build() {
+      return { castTriggers: [{ keyword: 'storm', label: 'Storm', effects: [{ primitive: 'stormCopies' }] }] };
+    },
+  },
+  {
+    id: 'keyword-cascade',
+    description:
+      '"Cascade" (CR 702.85a) — exile from the top until a cheaper nonland card, cast it free, bottom the rest at random (Bloodbraid Elf, Shardless Agent)',
+    pattern: /^cascade$/,
+    build() {
+      return { castTriggers: [{ keyword: 'cascade', label: 'Cascade', effects: [{ primitive: 'cascade' }] }] };
+    },
+  },
+  {
+    id: 'keyword-ripple',
+    description: '"Ripple N" (CR 702.60a) — reveal the top N, cast the same-name ones free, bottom the rest (Surging Flame)',
+    pattern: /^ripple ([0-9]+)$/,
+    build(match) {
+      const count = Number.parseInt(match[1] ?? '', 10);
+      if (!Number.isFinite(count) || count <= 0) return null;
+      return {
+        castTriggers: [
+          { keyword: 'ripple', label: `Ripple ${count}`, effects: [{ primitive: 'ripple', params: { count } }] },
+        ],
       };
     },
   },
@@ -6664,6 +6868,37 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
             // dropping it would make every Equipment an instant-speed combat trick.
             timing: 'sorcery',
             label: `Equip ${match[1]}`,
+          },
+        ],
+      };
+    },
+  },
+  // --- the spell-count family (DESIGN §3.113): "Double all damage …" ------------
+  {
+    /**
+     * The whole-sentence form of `replacement-damage-scaled`: "Double all
+     * damage that creature sources you control would deal" (Absorbing Man and
+     * Titania) is the same CR 614 replacement as "If a creature you control
+     * would deal damage …, it deals double that damage instead" — one outcome
+     * (`times: 2`), one `applies`, printed without a recipient. Same shape of
+     * data, so the layer that scales Torbran's damage scales this.
+     */
+    id: 'replacement-double-all-damage',
+    description: '"Double all damage that [creature] sources you control would deal" (Absorbing Man and Titania)',
+    pattern: new RegExp(`^double all damage that (${Object.keys(DOUBLE_ALL_DAMAGE_SOURCES).join('|')}) would deal$`),
+    build(match, ctx) {
+      if (!cardIsPermanent(ctx)) return null;
+      const source = DOUBLE_ALL_DAMAGE_SOURCES[match[1] ?? ''];
+      if (source === undefined) return null;
+      return {
+        replacements: [
+          {
+            event: 'damage',
+            applies: {
+              sourceController: source.sourceController,
+              ...(source.sourceFilter !== undefined ? { sourceFilter: source.sourceFilter } : {}),
+            },
+            outcome: { times: REPLACEMENT_MULTIPLIERS.double! },
           },
         ],
       };

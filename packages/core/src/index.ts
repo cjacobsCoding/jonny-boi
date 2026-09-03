@@ -466,6 +466,20 @@ export {
   markControlChange,
 } from './upkeep-costs.js';
 export { isSuspended, openSuspendWindow, suspendWindowOpenFor } from './suspend.js';
+// §3.113 — the spell-count family: cast triggers (storm / cascade / ripple),
+// the library-pile windows, and storm's per-turn spell count.
+export type { CastTriggeredAbility, CastTriggerKeyword } from './cast-triggers.js';
+export { castTriggerCount, pushCastTriggers } from './cast-triggers.js';
+export {
+  declinePileWindow,
+  isFreeCastWindow,
+  performCascade,
+  performRipple,
+  settleCastWindowAfterCast,
+  spellOnStackById,
+  stackManaValueOf,
+} from './cascade.js';
+export { spellsCastThisTurn } from './turn-facts.js';
 
 // State
 export type {
