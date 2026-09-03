@@ -4491,6 +4491,46 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       );
     },
   },
+  {
+    // SOULSHIFT N (CR 702.46a, DESIGN §3.122) — "When this creature dies, you
+    // may return target Spirit card with mana value N or less from your
+    // graveyard to your hand."
+    //
+    // A pattern rule like bushido: the number is the whole payload. And it needs
+    // nothing new — the return is the same `returnFromGraveyard` choice every
+    // regrowth effect uses, narrowed by the `CardFilter` the primitive already
+    // takes, so "Spirit card with mana value N or less" is two filter fields
+    // rather than a second graveyard path (rule 12).
+    //
+    // `optional: true` is the printed "you MAY", and it matters: forced, a lone
+    // Spirit in the graveyard would be returned even when the controller wants
+    // it left for a later Soulshift or a graveyard cost.
+    id: 'keyword-soulshift',
+    description: '"Soulshift 4" — the dies trigger returning a cheap Spirit from the graveyard (Hundred-Talon Kami)',
+    pattern: /^soulshift ([0-9]+)$/,
+    build(match) {
+      const limit = Number.parseInt(match[1] ?? '', 10);
+      if (!Number.isFinite(limit) || limit <= 0) return null;
+      return {
+        triggers: [
+          {
+            condition: { on: 'dies' as const },
+            effects: [
+              {
+                primitive: 'returnFromGraveyard',
+                params: {
+                  count: 1,
+                  optional: true,
+                  filter: { anyOfSubtypes: ['Spirit'], maxManaValue: limit },
+                },
+              },
+            ],
+            label: `Soulshift ${limit}`,
+          },
+        ],
+      };
+    },
+  },
   // --- the combat keyword family (DESIGN §3.107) --------------------------------
   {
     // RAMPAGE N (CR 702.23a) — "Whenever this creature becomes blocked, it gets

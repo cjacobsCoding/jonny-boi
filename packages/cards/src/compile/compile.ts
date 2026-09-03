@@ -121,6 +121,10 @@ const COST_ASSIST_KEYWORDS: ReadonlySet<string> = new Set(['convoke', 'improvise
  */
 const TRIGGER_BACKED_KEYWORDS: ReadonlySet<string> = new Set([
   'bushido',
+  // SOULSHIFT N (§3.122): a dies trigger labelled "Soulshift N", so a printed
+  // line the rule table matched is the evidence the sweep reads. A 'Soulshift X'
+  // form (none is printed) would compile no trigger and still report.
+  'soulshift',
   // RAMPAGE N (CR 702.23a, DESIGN §3.107): the same shape as bushido — the
   // number is the whole payload, so it is a pattern rule labelled "Rampage N".
   'rampage',

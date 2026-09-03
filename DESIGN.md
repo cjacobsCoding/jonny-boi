@@ -2698,6 +2698,33 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.122 Soulshift — one rule-table row, eighteen cards — ✅ done
+
+The cheapest entry left on the §3.120 queue, and worth recording because of how little it needed.
+**Soulshift N** (CR 702.46a) is "when this creature dies, you may return target Spirit card with mana
+value N or less from your graveyard to your hand" — a dies trigger whose body is the same
+`returnFromGraveyard` choice every regrowth effect already uses, narrowed by two fields of the
+`CardFilter` that primitive already takes. **No primitive, no core change, no new event.** One pattern
+rule (the number is the payload, exactly as bushido and rampage are) plus one `TRIGGER_BACKED_KEYWORDS
+row so the Scryfall sweep does not report a keyword whose printed line just compiled.
+
+**Measured: 5,633 → 5,651 complete cards. +18, exactly the sole-blocked count.**
+
+⚠️ **The test asserts the FILTER, field by field, because that is the only thing that can be wrong.**
+A soulshift that lost its mana-value cap is a universal Spirit regrowth; one that lost the Spirit
+clause is a universal regrowth on a five-mana body. Both play STRONGER than printed, which biases an
+A/B verdict exactly as badly as playing weaker — and both would leave `status === 'complete'` green.
+So `soulshift.test.ts` pins the compiled params exactly, then kills a real Hundred-Talon Kami over a
+graveyard holding a 2-mana Spirit, a 4-mana Spirit, a 6-mana Spirit and a 1-mana Goblin, and asserts
+the engine offers exactly the first two. Sabotage-checked: deleting `maxManaValue` reddens four of the
+five tests.
+
+⚠️ **And one weak assertion the sabotage exposed, worth writing down.** The empty case first read
+`expect(state.pendingChoice).toBeUndefined()` and its sibling read `.toBeDefined()`. The engine parks
+`null` when nothing is asked — and **`null` IS defined**, so `toBeDefined()` would have passed on a
+soulshift that never fired at all. Truthiness is the right test for "did the game ask something", and
+the comment now says so where the next person will copy it.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
