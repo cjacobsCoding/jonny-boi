@@ -2588,6 +2588,35 @@ this section adds to those is that the strength band was NOT empty: the blocking
 measured — and the default pilot still beats the heuristic 178/98, so the forecast's attack step, at
 0.75 ms a decision, is both the next strength ceiling and the next speed lever.
 
+### 3.118 The pool regenerated at 5,623 cards — and the soak's first catch of a parallel-merge defect — ✅ done
+
+Four families merged in one day (§3.105–§3.109 plus the §3.108 pilot), each gated green on its own
+branch, and the merged tree gated green too: **366 files / 19,683 tests / 0 failed**. The pool was
+then regenerated from the corpus the way §3.71 prescribes — one bulk file, one compile-and-emit path —
+and grew **5,097 → 5,623 shippable cards** (5,151 → 5,623 complete by the gap report, +472 this week).
+
+⚠️ **The soak found a bug none of the four gates could see.** Its very first run on the new pool
+reported *the engine rejected an offered action: Cryptic Annelid cannot block Glissa's Courier*. The
+pilot had proposed a block on an islandwalker whose defender controlled an Island. The cause was not in
+either branch but BETWEEN them: §3.107 gave the pilot's `canBlockByEvasion` mirror a `battlefield`
+parameter (landwalk reads the defender's lands) with a default of "no lands", and §3.108's gang-block
+search — written in a worktree that had never seen that parameter — called the mirror without it. Both
+branches were correct against the main they branched from; merged, a defaulted parameter silently
+turned a missing argument into a wrong answer. The engine then refused the whole declaration, which is
+exactly the §3.45 Black Knight shape: one illegal pair, every other block lost, the entire attack taken.
+
+**The class fix, not the instance:** the board is now a REQUIRED argument on `canBlockByEvasion`,
+`pickBlocker` and `addGangBlocks`, and the pilot's empty-board default is deleted, so the next caller
+that omits it stops `tsc` instead of losing games. `gang-block-landwalk.test.ts` pins the literal
+incident (an islandwalker into two 2/2s and an Island) with a CONTROL that shows the gang path ran;
+sabotaging the call back to an empty board reddens exactly that test.
+
+**What this says about the process.** Parallel families are the only way the keyword queue moves at
+this rate, and the merge is where they meet for the first time. The soak — randomised legal decks
+drawn from the WHOLE pool, every invariant checked on every action — is the gate that reads the merged
+tree as one program. It runs in the suite, and it is the reason the regenerated pool is committed only
+after it: a pool that ships a card the engine cannot play against another is worse than a smaller one.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
