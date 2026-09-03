@@ -199,7 +199,7 @@ export {
   sameLandCondition,
   unionLandConditions,
 } from './land-conditions.js';
-export { SPLIT_SECOND_REJECTION, splitSecondOnStack } from './split-second.js';
+export { SPLIT_SECOND_REJECTION, splitSecondOnStack, withoutSplitSecondLocked } from './split-second.js';
 export { triggeringInstancesFor } from './triggers.js';
 export type { UncounterableSpellsAbility } from './countering.js';
 export { spellCanBeCountered } from './countering.js';

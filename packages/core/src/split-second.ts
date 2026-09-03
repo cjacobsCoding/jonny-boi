@@ -33,6 +33,37 @@ export function splitSecondOnStack(state: GameState): boolean {
   return false;
 }
 
+/**
+ * §3.123 — THE MENU WITH EVERYTHING CR 702.61 LOCKS REMOVED.
+ *
+ * `generateLegalActions` has TWO exits — the ordinary one and the early return
+ * for an open madness / suspend / cascade / ripple window — and only the
+ * ordinary one applied the lock. A window's cast is a cast, so a split-second
+ * spell standing while a window is open produced a menu entry
+ * `applyCastSpell` then refused: the §3.36 offer/apply disagreement, in the
+ * engine itself. One filter, both exits, so a third exit cannot be added
+ * without meeting it.
+ *
+ * WHAT SURVIVES: mana abilities (`tapForMana`), passing, the combat
+ * declarations, and a land play — none of them is a spell or a non-mana
+ * ability, so 702.61 does not reach them. The land play is listed for
+ * completeness rather than because it is reachable: CR 305.1 lets you play a
+ * land only with an EMPTY stack, and this lock only holds with a non-empty one,
+ * so the two never actually coexist. Written down because the first draft of
+ * §3.123's pilot gate carved out an exception for exactly that case, and a test
+ * proved the exception could never fire.
+ *
+ * Returns the array unchanged when the lock does not hold, so the common case
+ * pays one length check and a walk of an almost-always-empty stack.
+ */
+export function withoutSplitSecondLocked<T extends { readonly kind: string }>(
+  state: GameState,
+  actions: readonly T[],
+): readonly T[] {
+  if (state.stack.length === 0 || !splitSecondOnStack(state)) return actions;
+  return actions.filter((a) => a.kind !== 'castSpell' && a.kind !== 'activateAbility' && a.kind !== 'cycleCard');
+}
+
 /** The rejection every locked action reports — one wording, three apply paths. */
 export const SPLIT_SECOND_REJECTION =
   'a spell with split second is on the stack: players can\'t cast spells or activate abilities that aren\'t mana abilities (CR 702.61)';

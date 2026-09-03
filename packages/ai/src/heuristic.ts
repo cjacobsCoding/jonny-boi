@@ -99,6 +99,9 @@ import {
   // §3.113 — the spell-count family: pricing storm/cascade, and the free windows.
   castTriggerCount,
   isFreeCastWindow,
+  // §3.123 — the global CR 702.61 lock, read from core so the pilot's gate and
+  // the engine's menu filter cannot disagree about when it holds.
+  splitSecondOnStack,
   spellsCastThisTurn,
 } from '@jonny-boi/core';
 import type { TargetRestriction, TriggeredAbility } from '@jonny-boi/core';
@@ -712,6 +715,40 @@ function decide(ctx: DecisionContext, weights: HeuristicWeights, features: Resol
   if (pending) {
     const answer = answerChoiceHeuristically(view as unknown as GameState, pending, weights);
     return emit(ctx, answer, explain ? `answering "${pending.prompt}"` : NO_REASON);
+  }
+
+  /*
+   * §3.123 — SPLIT SECOND (CR 702.61) LOCKS THE WHOLE PILOT, NOT ONE POLICY.
+   *
+   * "As long as this spell is on the stack, players can't cast spells or
+   * activate abilities that aren't mana abilities." The engine applies that to
+   * the MENU and refuses it again at the wall — but half a dozen policies below
+   * BUILD their action instead of picking one off the menu (`bestCycle`,
+   * `bestSuspend`, the spell goals, the graveyard activations), and not one of
+   * them consulted the lock. The soak caught it as a `castSpell` that "was never
+   * offered" and was then refused (seed 3287629870: Sulfur Elemental, a flash
+   * creature with split second, standing on the stack in the opponent's upkeep).
+   * A rejection is not a free retry — the harness passes priority after
+   * `maxConsecutiveRejectedActions`, so the pilot lost the window entirely.
+   *
+   * Asked ONCE, here, at the single funnel both `chooseAction` and
+   * `chooseActions` go through, rather than a sixth copy per policy: the lock is
+   * global, so the gate belongs where the decision starts.
+   *
+   * PASSING is the right answer and not a surrender: everything else this pilot
+   * could want is locked, and the lock lifts the moment the spell resolves —
+   * which happens before anybody else acts, so nothing is given up by waiting.
+   *
+   * ⚠️ Passing UNCONDITIONALLY, and the first draft did not. It carved out a
+   * madness window's LAND play, on the reasoning that a land play is a special
+   * action (CR 115.2a) which 702.61 does not lock, and that passing would
+   * decline the window and bury the card. True, and unreachable: CR 305.1 lets
+   * you play a land only with an EMPTY stack, and this lock only holds with a
+   * non-empty one. `madness-land-play.test.ts` proved the exception could never
+   * fire, so it is gone rather than left as a comforting branch nothing runs.
+   */
+  if (splitSecondOnStack(view as unknown as GameState)) {
+    return emit(ctx, passAction(view), explain ? 'split second is on the stack — nothing may be cast or activated' : NO_REASON);
   }
 
   // Nothing offered, or only passing is possible → pass.

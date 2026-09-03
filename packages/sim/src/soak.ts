@@ -485,8 +485,17 @@ function mechanicsOfState(
   }
 }
 
-/** Check every invariant that reads a settled state. Returns the breaks found. */
-function checkStateInvariants(state: GameState): { invariant: SoakInvariantName; detail: string }[] {
+/**
+ * Check every invariant that reads a settled state. Returns the breaks found.
+ *
+ * `landAllowance` is the HIGHEST land-play allowance each seat has been observed
+ * to have THIS TURN — see the land-drop check below for why a live read is the
+ * wrong question.
+ */
+function checkStateInvariants(
+  state: GameState,
+  landAllowance: Readonly<Record<PlayerId, number>>,
+): { invariant: SoakInvariantName; detail: string }[] {
   const found: { invariant: SoakInvariantName; detail: string }[] = [];
   const record = (invariant: SoakInvariantName, detail: string) => found.push({ invariant, detail });
   const instances = allInstances(state);
@@ -569,12 +578,30 @@ function checkStateInvariants(state: GameState): { invariant: SoakInvariantName;
     if (poolTotal(player.manaPool) < 0) {
       record(SOAK_INVARIANTS.manaPoolNonNegative, `${pid}'s mana pool totals ${poolTotal(player.manaPool)}`);
     }
-    // ⚠️ ASKED OF THE ENGINE, not of the config. `maxLandsPerTurn` is the BASE;
-    // Exploration and friends raise it, so a flat comparison called a legal
-    // second land drop a rules violation the moment the pool grew enough to
-    // deal one (§3.71). One answer to one question — see `maxLandPlaysFor`.
-    if (player.landsPlayedThisTurn > maxLandPlaysFor(state, pid, DEFAULT_RULES)) {
-      record(SOAK_INVARIANTS.landDropCap, `${pid} played ${player.landsPlayedThisTurn} lands this turn`);
+    /*
+     * ⚠️ ASKED OF THE ENGINE, not of the config. `maxLandsPerTurn` is the BASE;
+     * Exploration and friends raise it, so a flat comparison called a legal
+     * second land drop a rules violation the moment the pool grew enough to
+     * deal one (§3.71). One answer to one question — see `maxLandPlaysFor`.
+     *
+     * ⚠️ AND ASKED OF THE RIGHT MOMENT (§3.123). Reading the allowance from the
+     * CURRENT board was the same §3.71 mistake one step further on: the engine
+     * checks the cap when the land is PLAYED (CR 305.2) and the allowance is a
+     * live quantity, so an Azusa that dies after its controller's second land
+     * drop shrinks the limit back to one while the counter stays at two — a
+     * legal turn reported as a rules violation, at `combatDamage`, the step the
+     * creature died in (soak seed 1297421786). What the invariant actually means
+     * is "no seat played more lands than it was ever allowed this turn", so the
+     * bound is the HIGH-WATER MARK of the allowance across the turn's observed
+     * states. Playing a third land having never controlled such a permanent
+     * still breaks it, which is the case this exists to catch.
+     */
+    const allowed = landAllowance[pid as PlayerId];
+    if (player.landsPlayedThisTurn > allowed) {
+      record(
+        SOAK_INVARIANTS.landDropCap,
+        `${pid} played ${player.landsPlayedThisTurn} lands this turn, having been allowed at most ${allowed}`,
+      );
     }
   }
 
@@ -593,7 +620,7 @@ function checkStateInvariants(state: GameState): { invariant: SoakInvariantName;
 }
 
 /** The per-game watcher: wraps a pilot and accumulates everything the soak checks. */
-interface GameWatcher {
+export interface GameWatcher {
   readonly pilot: Pilot;
   readonly onEvent: (event: GameEvent) => void;
   readonly violations: readonly { invariant: SoakInvariantName; detail: string; turn: number; step: string; action: string }[];
@@ -604,7 +631,7 @@ interface GameWatcher {
   readonly lastState: GameState | null;
 }
 
-function createGameWatcher(inner: Pilot): GameWatcher {
+export function createGameWatcher(inner: Pilot): GameWatcher {
   const violations: { invariant: SoakInvariantName; detail: string; turn: number; step: string; action: string }[] = [];
   const mechanics = new Set<SoakMechanicId>();
   const reported = new Set<string>();
@@ -625,6 +652,15 @@ function createGameWatcher(inner: Pilot): GameWatcher {
   let lastTurn = 0;
   let lastState: GameState | null = null;
   let turnChecks = 0;
+  /*
+   * §3.123 — the highest land-play allowance each seat has been seen to have
+   * THIS TURN, reset when the turn number moves. The land-drop invariant needs
+   * the allowance AT THE MOMENT A LAND WAS PLAYED, and the only honest proxy a
+   * state-scanning watcher has is the largest one it observed while the turn ran
+   * (every land play is a decision, and every decision is observed). See the
+   * check itself for the Azusa case that made a legal turn read as a violation.
+   */
+  const landAllowance: Record<PlayerId, number> = { A: 0, B: 0 };
   /*
    * The last action the wrapped pilot submitted, kept so a REJECTION can name
    * it. `actionRejected` carries the engine's reason and nothing else, so
@@ -676,7 +712,19 @@ function createGameWatcher(inner: Pilot): GameWatcher {
   const observeState = (state: GameState, action: string): void => {
     learn(state);
     if (originalIds === null) originalIds = new Set(allInstances(state).map((e) => e.inst.instanceId));
-    for (const v of checkStateInvariants(state)) record(v.invariant, v.detail, state, action);
+    // §3.123 — refresh the land-play high-water mark BEFORE the invariants read
+    // it, and clear it as the turn turns over (a new turn resets the counter it
+    // bounds, so it must reset the bound too).
+    if (state.turnNumber !== lastTurn) {
+      landAllowance.A = 0;
+      landAllowance.B = 0;
+    }
+    for (const pid of PLAYER_IDS) {
+      const seat = pid as PlayerId;
+      const now = maxLandPlaysFor(state, seat, DEFAULT_RULES);
+      if (now > landAllowance[seat]) landAllowance[seat] = now;
+    }
+    for (const v of checkStateInvariants(state, landAllowance)) record(v.invariant, v.detail, state, action);
     mechanicsOfState(state, (id) => mechanics.add(id), defTextOf);
 
     if (state.turnNumber !== lastTurn) {

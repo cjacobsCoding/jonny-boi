@@ -162,6 +162,52 @@ describe('a madness window holding a land (§3.123)', () => {
     expect(after.battlefield.some((c) => c.instanceId === card.instanceId)).toBe(true);
   });
 
+  it('meets the split-second lock like any other menu', () => {
+    const r = reg();
+    // The window's menu was the ONE exit of `generateLegalActions` that the
+    // CR 702.61 filter never reached, so a split-second spell standing while a
+    // window was open offered a cast the wall then refused (§3.123).
+    //
+    // ⚠️ AND THE LAND PLAY GOES TOO — not because 702.61 locks it (it does not;
+    // a land play is a special action, CR 115.2a) but because CR 305.1 needs an
+    // EMPTY stack and this lock needs a non-empty one. The two can never
+    // coexist, which is why neither the engine filter nor the pilot's gate
+    // carves out an exception for it.
+    const madnessLand = windowOn(gameAtMain(r), MADLANDS);
+    const locker: CardDefinition = {
+      id: 'locker',
+      name: 'Split Second Elemental',
+      types: ['creature'],
+      power: 3,
+      toughness: 2,
+      cost: { R: 1 },
+      keywords: { flash: true, splitSecond: true },
+    };
+    const [spell] = giveHand(madnessLand.state, 'B', [locker]);
+    madnessLand.state.players.B.hand = [];
+    (spell as { zone: string }).zone = 'stack';
+    madnessLand.state.stack.push({ kind: 'spell', instanceId: spell!.instanceId, controller: 'B', card: spell!, targets: [] } as never);
+    const menu = generateLegalActions(madnessLand.state).filter((a) => a.kind !== 'tapForMana');
+    expect(menu.map((a) => a.kind).sort()).toEqual(['passPriority']);
+
+    // A NONLAND in the same window is a cast, and the lock takes it away.
+    const instant: CardDefinition = {
+      id: 'madinstant',
+      name: 'Mad Instant',
+      types: ['instant'],
+      timing: 'instant',
+      cost: { G: 1 },
+      madness: { generic: 0 },
+      effects: [],
+    };
+    const nonland = windowOn(gameAtMain(r), instant);
+    const [locker2] = giveHand(nonland.state, 'B', [locker]);
+    nonland.state.players.B.hand = [];
+    (locker2 as { zone: string }).zone = 'stack';
+    nonland.state.stack.push({ kind: 'spell', instanceId: locker2!.instanceId, controller: 'B', card: locker2!, targets: [] } as never);
+    expect(generateLegalActions(nonland.state).some((a) => a.kind === 'castSpell')).toBe(false);
+  });
+
   it('still freezes the game for everyone else while it stands', () => {
     const r = reg();
     const { state, card } = windowOn(gameAtMain(r), MADLANDS);

@@ -192,7 +192,7 @@ import { attackingCreatureIds } from './combat-removal.js';
 // The combat keyword family (DESIGN §3.107): attack restrictions/requirements
 // (CR 508.1c/d) and the split-second lock (CR 702.61), each read from one file.
 import { attackDeclarationProblem, attackRequirementProblem, requiredAttackerIds } from './attack-requirements.js';
-import { SPLIT_SECOND_REJECTION, splitSecondOnStack } from './split-second.js';
+import { SPLIT_SECOND_REJECTION, splitSecondOnStack, withoutSplitSecondLocked } from './split-second.js';
 import { entersTapped, isAttackable, isCreature, isPlaneswalker } from './card.js';
 import { applyCopyAsEntersAnswer, askCopyAsEnters, extraLoyaltyForCopy } from './copy.js';
 import { addLoyalty, applyEnteringDefense, applyEnteringLoyalty, loyaltyOf, removeLoyalty } from './internal/stats.js';
@@ -5500,7 +5500,9 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // and drops it into the graveyard. Enumerated here rather than left to a
   // consumer's imagination, so every seat — a pilot, the hotseat UI, the online
   // client — plays madness by picking from the menu it already reads.
-  if (state.madnessWindow) return madnessActionsFor(state, config);
+  // §3.123 — the window's menu meets the SAME split-second lock the ordinary
+  // menu does. Its cast is a cast; only its land play (a special action) is not.
+  if (state.madnessWindow) return withoutSplitSecondLocked(state, madnessActionsFor(state, config));
   const me = state.priorityPlayer;
   const player = state.players[me];
   const actions: GameAction[] = [];
@@ -5966,13 +5968,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // withdrawn here — one filter over the finished menu, paid only while the lock
   // holds (a stack walk otherwise). Mana abilities are `tapForMana` and stay;
   // so do passing and the combat declarations, which are not abilities at all.
-  if (state.stack.length > 0 && splitSecondOnStack(state)) {
-    return actions.filter(
-      (a) => a.kind !== 'castSpell' && a.kind !== 'activateAbility' && a.kind !== 'cycleCard',
-    );
-  }
-
-  return actions;
+  return withoutSplitSecondLocked(state, actions);
 }
 
 /**
