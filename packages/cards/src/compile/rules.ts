@@ -171,6 +171,8 @@ function damageParams(amount: number, restriction: TargetRestriction): Record<st
  * better than the printed card.
  */
 const CREATURE_TARGET: TargetRestriction = 'creature';
+/** §3.112 — "target ATTACKING creature", every bloodrush line's aim. */
+const ATTACKING_CREATURE_TARGET: TargetRestriction = 'attackingCreature';
 /** "target creature you control" — never widened to any creature on the table. */
 const CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'creatureYouControl';
 /** "target non-Angel creature you control" — Restoration Angel; see the type's note. */
@@ -1402,6 +1404,27 @@ export const TARGET_NOUN_RESTRICTIONS: Readonly<Record<string, TargetRestriction
   // enchantment-or-land` owns both spellings. A row here would take one
   // spelling and leave the other to a rule that then looks dead.
 });
+
+/**
+ * §3.112 — the nouns a PUMP may name, as a closed table.
+ *
+ * Separate from {@link TARGET_NOUN_RESTRICTIONS} on purpose: that table is
+ * every noun a removal or bounce verb may point at, and "target land gets
+ * +3/+3" is not a printed sentence. These two are, and the second is every
+ * bloodrush line in the game ("Target attacking creature gets +3/+3 until end
+ * of turn"). Adding the next pump noun is a ROW read by BOTH pump rules, so
+ * the plain and the keyword-granting forms cannot disagree about which nouns
+ * are real.
+ */
+const PUMP_TARGET_NOUNS: Readonly<Record<string, TargetRestriction>> = Object.freeze({
+  creature: CREATURE_TARGET,
+  'attacking creature': ATTACKING_CREATURE_TARGET,
+});
+
+/** The pump nouns as an alternation, longest first so "creature" cannot truncate the pair. */
+const PUMP_TARGET_PHRASE = Object.keys(PUMP_TARGET_NOUNS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
 
 /** The table's nouns as a regex alternation, longest first so none is truncated. */
 const TARGET_NOUN_PHRASE = Object.keys(TARGET_NOUN_RESTRICTIONS)
@@ -2817,16 +2840,21 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'pump-until-eot',
-    description: '"Target creature gets +X/+Y until end of turn"',
-    pattern: /^target creature gets ([+-]\d+)\/([+-]\d+) until end of turn$/,
+    description:
+      '"Target creature gets +X/+Y until end of turn" / "Target ATTACKING creature gets +X/+Y until end of turn" (§3.112 — every bloodrush line)',
+    // The NOUN is a row in `PUMP_TARGET_NOUNS`, not a second nearly identical
+    // rule: bloodrush prints exactly this sentence with one word more, and a
+    // copy of the rule for it is the thing that drifts.
+    pattern: new RegExp(`^target (${PUMP_TARGET_PHRASE}) gets ([+-]\\d+)\\/([+-]\\d+) until end of turn$`),
     needsChosenTarget: true,
     build(match) {
-      const power = parseSignedInt(match[1] ?? '');
-      const toughness = parseSignedInt(match[2] ?? '');
-      if (!Number.isFinite(power) || !Number.isFinite(toughness)) return null;
+      const restriction = PUMP_TARGET_NOUNS[(match[1] ?? '').trim()];
+      const power = parseSignedInt(match[2] ?? '');
+      const toughness = parseSignedInt(match[3] ?? '');
+      if (restriction === undefined || !Number.isFinite(power) || !Number.isFinite(toughness)) return null;
       return effects({
         primitive: 'pumpUntilEndOfTurn',
-        params: { power, toughness, targets: CREATURE_TARGET },
+        params: { power, toughness, targets: restriction },
       });
     },
   },
@@ -2847,19 +2875,21 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'pump-and-grant-until-eot',
-    description: '"Target creature gets +X/+Y and gains KEYWORD until end of turn"',
+    description:
+      '"Target creature gets +X/+Y and gains KEYWORD until end of turn" — and the ATTACKING form (§3.112: "Bloodrush — {R}{G}, Discard this card: Target attacking creature gets +4/+4 and gains trample")',
     pattern: new RegExp(
-      `^target creature gets ([+-]\\d+)\\/([+-]\\d+) and gains ${KEYWORD_TOKEN} until end of turn$`,
+      `^target (${PUMP_TARGET_PHRASE}) gets ([+-]\\d+)\\/([+-]\\d+) and gains ${KEYWORD_TOKEN} until end of turn$`,
     ),
     needsChosenTarget: true,
     build(match) {
-      const power = parseSignedInt(match[1] ?? '');
-      const toughness = parseSignedInt(match[2] ?? '');
-      const keywords = keywordFlag(match[3] ?? '');
-      if (!Number.isFinite(power) || !Number.isFinite(toughness) || !keywords) return null;
+      const restriction = PUMP_TARGET_NOUNS[(match[1] ?? '').trim()];
+      const power = parseSignedInt(match[2] ?? '');
+      const toughness = parseSignedInt(match[3] ?? '');
+      const keywords = keywordFlag(match[4] ?? '');
+      if (restriction === undefined || !Number.isFinite(power) || !Number.isFinite(toughness) || !keywords) return null;
       return effects(
-        { primitive: 'pumpUntilEndOfTurn', params: { power, toughness, targets: CREATURE_TARGET } },
-        { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords, targets: CREATURE_TARGET } },
+        { primitive: 'pumpUntilEndOfTurn', params: { power, toughness, targets: restriction } },
+        { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords, targets: restriction } },
       );
     },
   },

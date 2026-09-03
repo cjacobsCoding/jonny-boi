@@ -10,7 +10,16 @@
 
 import { describe, expect, it } from 'vitest';
 import type { CardDefinition, CardInstance, ChoiceAnswer, GameAction, GameState, PlayerId } from '@jonny-boi/core';
-import { applyAction, castPermissionFor, createGame, DEFAULT_RULES, dumpState, effectivePower, generateLegalActions } from '@jonny-boi/core';
+import {
+  aggregateFor,
+  applyAction,
+  castPermissionFor,
+  createGame,
+  DEFAULT_RULES,
+  dumpState,
+  effectivePower,
+  generateLegalActions,
+} from '@jonny-boi/core';
 import { compileCard } from './compile/compile.js';
 import type { CompilableCard } from './compile/types.js';
 import { buildRegistry } from './pool.js';
@@ -343,6 +352,18 @@ function answer(state: GameState, reg: Registry, value: ChoiceAnswer): GameState
 const settled = (s: GameState) => s.stack.length === 0 && !s.pendingChoice;
 const has = (zone: readonly CardInstance[], id: number) => zone.some((c) => c.instanceId === id);
 
+/**
+ * A permanent's power as COMBAT reads it — printed base plus counters plus
+ * every continuous effect on it. `effectivePower(perm)` alone answers the
+ * printed number, which is exactly the reading that made an until-end-of-turn
+ * pump look like it had not happened.
+ */
+function livePower(state: GameState, id: number): number {
+  const perm = state.battlefield.find((c) => c.instanceId === id);
+  if (!perm) throw new Error(`#${id} is not on the battlefield`);
+  return effectivePower(perm, aggregateFor(state, id));
+}
+
 describe('evoke (CR 702.74a) — Mulldrifter', () => {
   it('evoked for {2}{U}: draws two cards and is sacrificed as it enters', () => {
     const reg = buildRegistry();
@@ -418,7 +439,7 @@ describe('prototype (CR 702.160a) — Goring Warplow', () => {
     let s = act(state, { kind: 'castSpell', player: 'A', instanceId: warplow.instanceId, alternative: 'prototype' }, reg);
     s = until(s, reg, (x) => has(x.battlefield, warplow.instanceId));
     const perm = s.battlefield.find((c) => c.instanceId === warplow.instanceId)!;
-    expect(effectivePower(perm)).toBe(1);
+    expect(livePower(s, warplow.instanceId)).toBe(1);
     expect(perm.def.keywords?.deathtouch).toBe(true);
     expect(perm.def.types).toContain('artifact');
   });
@@ -465,7 +486,7 @@ describe("foretell (CR 702.143a) — Kaya's Onslaught", () => {
     fund(s, 'A', { W: 1 });
     s = act(s, { kind: 'castSpell', player: 'A', instanceId: onslaught.instanceId, fromZone: 'exile', targets: [bears.instanceId] }, reg);
     s = until(s, reg, settled);
-    expect(effectivePower(s.battlefield.find((c) => c.instanceId === bears.instanceId)!)).toBe(3);
+    expect(livePower(s, bears.instanceId)).toBe(3);
     expect(has(s.players.A.graveyard, onslaught.instanceId)).toBe(true);
   });
 });
@@ -547,6 +568,11 @@ describe('transmute (CR 702.53a) — Dizzy Spell', () => {
     state.players.A.library.unshift(inLibrary);
     fund(state, 'A', { U: 2, C: 1 });
     let s = act(state, { kind: 'cycleCard', player: 'A', instanceId: inHandCopy.instanceId, abilityIndex: 0 }, reg);
+    s = until(s, reg, (x) => x.pendingChoice !== null && x.pendingChoice !== undefined);
+    // The search asks WHICH matching card; the {U} Dizzy Spell in the library
+    // is the only mana-value-1 card there, which is the point of transmute.
+    expect(s.pendingChoice?.kind).toBe('selectCards');
+    s = answer(s, reg, { kind: 'selectCards', instanceIds: [inLibrary.instanceId] });
     s = until(s, reg, settled);
     expect(has(s.players.A.hand, inLibrary.instanceId)).toBe(true);
     expect(has(s.players.A.graveyard, inHandCopy.instanceId)).toBe(true);
