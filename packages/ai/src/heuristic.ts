@@ -714,7 +714,7 @@ function decideMadness(ctx: DecisionContext, weights: HeuristicWeights): GameAct
       (a): a is Extract<GameAction, { kind: 'castSpell' }> => a.kind === 'castSpell' && a.fromZone === 'exile',
     );
     const exiled = view.players[me].exile.find((c) => c.instanceId === freeWindow.instanceId);
-    if (casts.length > 1 && exiled) {
+    if (casts.length > 0 && exiled) {
       const opp: PlayerId = me === 'A' ? 'B' : 'A';
       const index = boardIndex(view);
       const goal = scoreSpell(
@@ -728,14 +728,27 @@ function decideMadness(ctx: DecisionContext, weights: HeuristicWeights): GameAct
         index,
       );
       const legal = goal ? withLegalTargets(view, opp, goal, index, weights) : undefined;
-      const aimed =
-        legal &&
-        casts.find((a) => {
+      if (legal && legal.targets.length > 0) {
+        // Two offer shapes, one answer. A spell with a NARROWER restriction is
+        // offered once per legal target, so the scored aim is picked out of the
+        // menu; a spell whose restriction is the unpoliced default ("any
+        // target" — Bituminous Blast, the commonest thing to cascade into) is
+        // offered ONCE with no targets, exactly as the hand path offers it, and
+        // the pilot supplies the aim itself there too (`withLegalTargets`).
+        const fromMenu = casts.find((a) => {
           const targets = a.targets ?? [];
           return targets.length === legal.targets.length && targets.every((t, i) => t === legal.targets[i]);
         });
-      if (aimed) {
-        return emit(ctx, aimed, ctx.trace ? `cast ${exiled.def.name} for free at its best target` : NO_REASON, weights.genericSpellScore);
+        const untargetedOffer = casts.find((a) => (a.targets ?? []).length === 0);
+        const aimed = fromMenu ?? (untargetedOffer ? { ...untargetedOffer, targets: [...legal.targets] } : undefined);
+        if (aimed) {
+          return emit(
+            ctx,
+            aimed,
+            ctx.trace ? `cast ${exiled.def.name} for free at its best target` : NO_REASON,
+            weights.genericSpellScore,
+          );
+        }
       }
     }
   }

@@ -34,15 +34,22 @@ import {
   poisonOf,
   generateLegalActions,
   openSuspendWindow,
+  // §3.113 — the spell-count family's core seams.
+  makeSpellCopy,
+  performCascade,
+  spellOnStackById,
+  spellsCastThisTurn,
+  stackManaValueOf,
   type CardDefinition,
   type CardInstance,
   type GameAction,
   type GameState,
   type PlayerId,
 } from '../index.js';
-import { creatureDef, deckOf, giveHand, landDef } from '../test-fixtures.js';
+import { creatureDef, deckOf, giveHand, giveLibrary, landDef } from '../test-fixtures.js';
 import {
   act,
+  FILLER_LAND,
   advanceTo,
   advanceToTurn,
   assertFileMatchesManifest,
@@ -763,6 +770,142 @@ describe('CR 702 — upkeep costs and time counters (§3.106)', () => {
     expect(entered).toBeDefined();
     // "It gains haste until you lose control of it": it entered unsick.
     expect(entered?.summoningSick).toBe(false);
+  });
+});
+
+// --- §3.113 the spell-count family: storm, cascade, ripple ---------------------------
+
+/** A blank one-mana sorcery — the "other spell cast before it this turn". */
+const BLANK_SPELL: CardDefinition = {
+  id: 'blank-spell',
+  name: 'Blank Spell',
+  types: ['sorcery'],
+  timing: 'sorcery',
+  cost: { generic: 1 },
+  effects: [],
+};
+/** Storm on a sorcery whose body records that it resolved. */
+const STORM_SORCERY: CardDefinition = {
+  id: 'storm-sorcery',
+  name: 'Storm Sorcery',
+  types: ['sorcery'],
+  timing: 'sorcery',
+  cost: { generic: 2 },
+  effects: [{ primitive: 'countResolution' }],
+  castTriggers: [{ keyword: 'storm', label: 'Storm', effects: [{ primitive: 'copyForEachEarlierSpell' }] }],
+};
+/** Cascade on a four-mana creature. */
+const CASCADE_CREATURE: CardDefinition = {
+  ...creatureDef('Cascade Bear', 3, 3, { cost: { generic: 4 } }),
+  castTriggers: [{ keyword: 'cascade', label: 'Cascade', effects: [{ primitive: 'runCascade' }] }],
+};
+const CHEAP_BEAR = creatureDef('Cheap Bear', 2, 2, { cost: { generic: 2 } });
+const COSTLY_BEAR = creatureDef('Costly Bear', 6, 6, { cost: { generic: 6 } });
+
+describe('CR 702 — the spell-count family (§3.113)', () => {
+  const resolutions: string[] = [];
+  const registry = registryWith({
+    countResolution: (ctx) => {
+      resolutions.push(ctx.source.def.name);
+    },
+    // The cards package's `stormCopies`, in miniature: the count rides the
+    // trigger, and the object copied is the spell still on the stack.
+    copyForEachEarlierSpell: (ctx) => {
+      const original = spellOnStackById(ctx.state, ctx.source.instanceId);
+      if (!original) return;
+      for (let i = 0; i < (ctx.triggeringAmount ?? 0); i++) {
+        ctx.state.stack.push(makeSpellCopy(ctx.state, original, ctx.controller));
+      }
+    },
+    runCascade: (ctx) => {
+      const spell = spellOnStackById(ctx.state, ctx.source.instanceId);
+      if (!spell) return;
+      performCascade(ctx.state, ctx.controller, stackManaValueOf(spell), ctx.emit);
+    },
+  });
+
+  /** A's precombat main with empty hands and a pool nothing here can exhaust. */
+  function atMain(): GameState {
+    const state = advanceTo(newGame({ registry }), 'precombatMain', registry);
+    state.players.A.hand = [];
+    state.players.B.hand = [];
+    state.players.A.manaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 20 };
+    return state;
+  }
+
+  /** Pass until the stack empties or a cast window opens. */
+  function settle(state: GameState): GameState {
+    let s = state;
+    for (let guard = 0; guard < 40 && s.stack.length > 0 && !s.madnessWindow; guard++) s = pass(s, registry);
+    return s;
+  }
+
+  crTest('702.40a', 'storm copies the spell once for each OTHER spell cast before it this turn, and a copy is not itself a cast', () => {
+    resolutions.length = 0;
+    const state = atMain();
+    const [first, second, storm] = giveHand(state, 'A', [BLANK_SPELL, BLANK_SPELL, STORM_SORCERY]);
+    let s = act(state, { kind: 'castSpell', player: 'A', instanceId: first!.instanceId }, registry);
+    s = settle(s);
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: second!.instanceId }, registry);
+    s = settle(s);
+    expect(spellsCastThisTurn(s)).toBe(2);
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: storm!.instanceId }, registry);
+    // The trigger is above its spell, with the count already fixed — a spell
+    // cast in RESPONSE cannot change it.
+    const top = s.stack[s.stack.length - 1]!;
+    expect(top.kind === 'trigger' && top.label).toBe('Storm');
+    expect(top.kind === 'trigger' && top.triggeringAmount).toBe(2);
+    s = settle(s);
+    // Two copies plus the original: three resolutions, and only ONE card in the
+    // graveyard, because a copy of a spell ceases to exist (CR 704.5e).
+    expect(resolutions).toEqual(['Storm Sorcery', 'Storm Sorcery', 'Storm Sorcery']);
+    expect(s.players.A.graveyard.filter((c) => c.def.name === 'Storm Sorcery').length).toBe(1);
+    // Casting is what the count counts: the two copies did not raise it.
+    expect(spellsCastThisTurn(s)).toBe(3);
+  });
+
+  crTest('702.85a', 'cascade exiles until a nonland card of lesser mana value, casts it for no mana, and bottoms the rest', () => {
+    const state = atMain();
+    const [cascader] = giveHand(state, 'A', [CASCADE_CREATURE]);
+    const [land, costly, cheap, ...rest] = giveLibrary(state, 'A', [
+      FILLER_LAND,
+      COSTLY_BEAR,
+      CHEAP_BEAR,
+      FILLER_LAND,
+      FILLER_LAND,
+    ]);
+    let s = act(state, { kind: 'castSpell', player: 'A', instanceId: cascader!.instanceId }, registry);
+    s = settle(s);
+    // It stopped on the first NONLAND card of LESSER mana value: past the land
+    // (a land is never the hit) and past the 6-drop (not lesser than 4).
+    expect(s.madnessWindow?.kind).toBe('cascade');
+    expect(s.madnessWindow?.instanceId).toBe(cheap!.instanceId);
+    expect(s.players.A.exile.map((c) => c.instanceId)).toEqual([land!.instanceId, costly!.instanceId, cheap!.instanceId]);
+    // "Without paying its mana cost": an empty pool casts it.
+    s.players.A.manaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: cheap!.instanceId, fromZone: 'exile' }, registry);
+    expect(s.madnessWindow).toBeNull();
+    // The two uncast cards are the bottom of the library, in SOME order.
+    const library = s.players.A.library;
+    expect(new Set(library.slice(-2).map((c) => c.instanceId))).toEqual(new Set([land!.instanceId, costly!.instanceId]));
+    expect(library.slice(0, rest.length).map((c) => c.instanceId)).toEqual(rest.map((c) => c.instanceId));
+    s = settle(s);
+    expect(s.battlefield.map((c) => c.def.name)).toEqual(['Cheap Bear', 'Cascade Bear']);
+  });
+
+  crTest('702.85a', 'declining the cascade window bottoms the whole pile, the offered card included', () => {
+    const state = atMain();
+    const [cascader] = giveHand(state, 'A', [CASCADE_CREATURE]);
+    const [cheap] = giveLibrary(state, 'A', [CHEAP_BEAR, FILLER_LAND, FILLER_LAND]);
+    let s = act(state, { kind: 'castSpell', player: 'A', instanceId: cascader!.instanceId }, registry);
+    s = settle(s);
+    expect(s.madnessWindow?.instanceId).toBe(cheap!.instanceId);
+    s = act(s, { kind: 'passPriority', player: 'A' }, registry);
+    expect(s.madnessWindow).toBeNull();
+    expect(s.players.A.exile).toEqual([]);
+    expect(s.players.A.library.some((c) => c.instanceId === cheap!.instanceId)).toBe(true);
+    s = settle(s);
+    expect(s.battlefield.map((c) => c.def.name)).toEqual(['Cascade Bear']);
   });
 });
 
