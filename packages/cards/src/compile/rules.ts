@@ -372,7 +372,7 @@ const UNDYING_RETURN_COUNTERS = 1;
 const EVOLVE_COUNTERS = 1;
 /** Dethrone puts this many +1/+1 counters on the attacker (CR 702.105a). */
 const DETHRONE_COUNTERS = 1;
-/** Outlast's activation puts this many +1/+1 counters on the source (CR 702.108a). */
+/** Outlast's activation puts this many +1/+1 counters on the source (CR 702.107a). */
 const OUTLAST_COUNTERS = 1;
 /**
  * The creature-type words a printed "Amass [type] N" names, mapped to the
@@ -398,9 +398,6 @@ const DEVOUR_NOUNS: Readonly<Record<string, CardFilter>> = Object.freeze({
 });
 /** Afterlife's Spirit (CR 702.135a), as the token rule reads it: "a 1/1 white and black Spirit creature token with flying". */
 const AFTERLIFE_TOKEN_FACE = '1/1 white and black spirit creature';
-/** Fabricate's counter mode and Servo mode ids (CR 702.122a), as a modal ETB trigger. */
-const FABRICATE_COUNTER_MODE = 'mode1';
-const FABRICATE_SERVO_MODE = 'mode2';
 
 /** A printed count as Oracle prints it inside a token line — "a", "two", "three" — for a generated body. */
 function countWord(count: number): string {
@@ -2172,7 +2169,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
-    // BOLSTER N (CR 701.37a) — "Choose a creature with the least toughness
+    // BOLSTER N (CR 701.39a) — "Choose a creature with the least toughness
     // among creatures you control and put N +1/+1 counters on it." "Bolster X,
     // where X is …" defines X by a clause this table does not read: reports.
     id: 'bolster',
@@ -2185,12 +2182,12 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
-    // EXPLORE (CR 701.42a) — "it explores" / "~ explores": reveal the top card;
+    // EXPLORE (CR 701.44a) — "it explores" / "~ explores": reveal the top card;
     // a land goes to hand, otherwise a +1/+1 counter and an optional bin. The
     // self form only — "target creature explores" would need the explorer as a
     // target, which no printed body in the measured set prints.
     id: 'explore-self',
-    description: '"~ explores" / "it explores" — the source explores (CR 701.42)',
+    description: '"~ explores" / "it explores" — the source explores (CR 701.44)',
     pattern: /^(?:~|it|this creature) explores$/,
     build() {
       return effects({ primitive: 'explore' });
@@ -4634,13 +4631,13 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
-    // FABRICATE N (CR 702.122a) — "When this creature enters, put N +1/+1
-    // counters on it or create N 1/1 colorless Servo artifact creature tokens."
-    // A MODAL ETB trigger (CR 603.3c): the two printed halves are its two
-    // modes, chosen as the ability goes on the stack, which is what lets the
-    // pilot price them exactly as it prices a charm's.
+    // FABRICATE N (CR 702.123a) — "When this creature enters, you may put N
+    // +1/+1 counters on it. If you don't, create N 1/1 colorless Servo
+    // artifact creature tokens." ONE enters trigger whose body asks the
+    // printed question AT RESOLUTION — see `fabricateChoice` for why this is
+    // not a `ModalSpec` (CR 603.3c would lock the answer a window early).
     id: 'keyword-fabricate',
-    description: '"Fabricate N" — an enters trigger choosing N +1/+1 counters or N Servos',
+    description: '"Fabricate N" — an enters trigger offering N +1/+1 counters or, if declined, N Servos',
     pattern: /^fabricate ([0-9]+)$/,
     build(match) {
       const amount = Number.parseInt(match[1] ?? '', 10);
@@ -4649,23 +4646,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
         triggers: [
           {
             condition: { on: 'etb' },
-            effects: [],
-            modal: {
-              min: 1,
-              max: 1,
-              modes: [
-                {
-                  id: FABRICATE_COUNTER_MODE,
-                  label: `Put ${countWord(amount)} +1/+1 counter${amount === 1 ? '' : 's'} on it`,
-                  effects: [{ primitive: 'addCounters', params: { amount, self: true } }],
-                },
-                {
-                  id: FABRICATE_SERVO_MODE,
-                  label: `Create ${countWord(amount)} 1/1 colorless Servo artifact creature token${amount === 1 ? '' : 's'}`,
-                  effects: [{ primitive: 'createServos', params: { amount } }],
-                },
-              ],
-            },
+            effects: [{ primitive: 'fabricateChoice', params: { amount } }],
             label: `Fabricate ${amount}`,
           },
         ],
@@ -4738,7 +4719,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
-    // OUTLAST {cost} (CR 702.108a) — "{cost}, {T}: Put a +1/+1 counter on this
+    // OUTLAST {cost} (CR 702.107a) — "{cost}, {T}: Put a +1/+1 counter on this
     // creature. Activate only as a sorcery." An ordinary activated ability with
     // sorcery timing; a hybrid or {X} cost the mana parser refuses reports.
     id: 'keyword-outlast',

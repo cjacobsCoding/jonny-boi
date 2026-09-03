@@ -2,9 +2,8 @@
  * THE COUNTER KEYWORD FAMILY (DESIGN §3.110) — the primitives behind the
  * keywords and templates that PLACE +1/+1 COUNTERS: undying (CR 702.93),
  * modular (702.43), renown (702.112), bloodthirst (702.54), riot (702.136),
- * unleash (702.98), devour (702.82), fabricate (702.122 — the Servo half;
- * the counter half is `addCounters`), amass (701.47), bolster (701.37),
- * backup (702.165) and explore (701.42).
+ * unleash (702.98), devour (702.82), fabricate (702.123), amass (701.47),
+ * bolster (701.39), backup (702.165) and explore (701.44).
  *
  * Every one of them is a BODY of a trigger, an entry script or a spell the
  * compiler builds from the existing vocabulary; what this file adds is the
@@ -62,11 +61,11 @@ import {
 export const UNDYING_PLUS_COUNTERS = 1;
 /** Riot's and unleash's counter (CR 702.136a, 702.98a): one. */
 export const ENTRY_CHOICE_COUNTERS = 1;
-/** Explore's counter when the revealed card is not a land (CR 701.42a). */
+/** Explore's counter when the revealed card is not a land (CR 701.44a). */
 export const EXPLORE_COUNTERS = 1;
 /** The Army token amass creates when you control none (CR 701.47a): a 0/0 black Army. */
 export const ARMY_TOKEN = Object.freeze({ power: 0, toughness: 0, colors: ['B'] as const, subtype: 'Army' });
-/** Fabricate's Servo (CR 702.122a): a 1/1 colourless Servo artifact creature. */
+/** Fabricate's Servo (CR 702.123a): a 1/1 colourless Servo artifact creature. */
 export const SERVO_TOKEN = Object.freeze({ power: 1, toughness: 1, subtype: 'Servo' });
 
 /** The prompts a UI shows for the two as-enters choices, spelled once for the tests. */
@@ -81,6 +80,9 @@ export const EXPLORE_GRAVEYARD_PROMPT = 'Explore: put the revealed nonland card 
 export const DEVOUR_CHOICE_CONTEXT = 'devour';
 /** The `context` of explore's "put it into your graveyard?" — the surveil judgement, one card wide. */
 export const EXPLORE_CHOICE_CONTEXT = 'explore';
+/** The `context` of fabricate's "counters, or Servos?" (yes = the counters). */
+export const FABRICATE_CHOICE_CONTEXT = 'fabricate';
+export const FABRICATE_PROMPT = "Fabricate: put the +1/+1 counters on it (yes), or create Servos instead (no)? —";
 /** The `context` of riot's "counter or haste?" (yes = the counter) and unleash's "counter?". */
 export const RIOT_CHOICE_CONTEXT = 'riot';
 export const UNLEASH_CHOICE_CONTEXT = 'unleash';
@@ -301,18 +303,46 @@ export const devourChoice: EffectPrimitive = (ctx) => {
   putCountersOfKind(ctx, self, PLUS_ONE_COUNTER, devoured * perCreature);
 };
 
-// --- fabricate (CR 702.122) ----------------------------------------------------------
+// --- fabricate (CR 702.123) ----------------------------------------------------------
 
 /**
- * `createServos` — fabricate's second mode: "create N 1/1 colorless Servo
- * artifact creature tokens" (CR 702.122a). The counter mode is the ordinary
- * `addCounters` self form; the choice between them is the trigger's MODAL spec
- * (CR 603.3c), which is why the pilot prices the two modes as it prices any
- * charm's. One `createTokens` call with the count, so a doubler sees N once.
+ * `fabricateChoice` — FABRICATE N (CR 702.123a), printed as **"When this
+ * permanent enters, you may put N +1/+1 counters on it. If you don't, create N
+ * 1/1 colorless Servo artifact creature tokens."**
+ *
+ * ⚠️ ONE question asked at RESOLUTION, and not a two-mode `ModalSpec`, which is
+ * what this was first written as. Modes are chosen as an ability goes on the
+ * STACK (CR 603.3c); fabricate's choice is made as the ability RESOLVES. Both
+ * shapes offer the same two outcomes, so the modal looked faithful — but it
+ * locked the answer a full response window early, and an opponent who can see
+ * which half is coming holds different cards. A card whose decision moves
+ * earlier than printed is a different card, which is the one thing this
+ * compiler exists not to do.
+ *
+ * Declining is a REAL, complete outcome (the Servos), not a no-op, so this is a
+ * plain `confirm` rather than a `mayEffects` wrapper — the wrapper's "no" does
+ * nothing at all.
  */
-export const createServos: EffectPrimitive = (ctx) => {
+export const fabricateChoice: EffectPrimitive = (ctx) => {
   const count = intParam(ctx, COUNTER_PARAM.amount, 0);
   if (count <= 0) return;
+  const self = enteringSelf(ctx);
+  const takeCounters = ctx.confirm({
+    chooser: ctx.controller,
+    prompt: `${FABRICATE_PROMPT} ${count}`,
+    valence: 'neutral',
+    context: FABRICATE_CHOICE_CONTEXT,
+  });
+  if (takeCounters === undefined) return; // parked — nothing mutated
+  // "You may put N counters ON IT": with the body gone (a fabricate whose
+  // permanent left before the trigger resolved) the counters cannot be put on,
+  // and the printed card does not fall back to Servos — it does nothing.
+  if (takeCounters) {
+    if (self) putCountersOfKind(ctx, self, PLUS_ONE_COUNTER, count);
+    return;
+  }
+  // ONE call with the count, not a loop of ones: "create N tokens" is a single
+  // CR 614 event, so a doubler must see the N and replace it once.
   ctx.createTokens(
     tokenDef(SERVO_TOKEN.subtype, SERVO_TOKEN.power, SERVO_TOKEN.toughness, [], [SERVO_TOKEN.subtype], ['artifact', 'creature']),
     count,
@@ -378,11 +408,11 @@ export const amass: EffectPrimitive = (ctx) => {
   putCountersOfKind(ctx, army, PLUS_ONE_COUNTER, amount);
 };
 
-// --- bolster (CR 701.37) -------------------------------------------------------------
+// --- bolster (CR 701.39) -------------------------------------------------------------
 
 /**
  * `bolster` — "choose a creature with the least toughness among creatures you
- * control and put N +1/+1 counters on it" (CR 701.37a). EFFECTIVE toughness
+ * control and put N +1/+1 counters on it" (CR 701.39a). EFFECTIVE toughness
  * (counters and anthems included — the board the player is looking at); a tie
  * is the controller's choice, asked only when there is one to make.
  */
@@ -440,15 +470,15 @@ export const backup: EffectPrimitive = (ctx) => {
   ctx.addContinuousEffect({ target: target.instanceId, keywords, duration: 'endOfTurn' });
 };
 
-// --- explore (CR 701.42) -------------------------------------------------------------
+// --- explore (CR 701.44) -------------------------------------------------------------
 
 /**
  * `explore` — "reveal the top card of your library. If it's a land card, put it
  * into your hand. Otherwise, put a +1/+1 counter on this creature, then you may
- * put the revealed card into your graveyard" (CR 701.42a). The graveyard
+ * put the revealed card into your graveyard" (CR 701.44a). The graveyard
  * question is the surveil question in miniature and is answered by the same
  * pilot judgement (keep what is worth drawing). An empty library explores
- * nothing (CR 701.42c: the creature still "explored", but nothing is revealed
+ * nothing (CR 701.44c: the creature still "explored", but nothing is revealed
  * and no counter is put on — there was no nonland card).
  */
 export const explore: EffectPrimitive = (ctx) => {
@@ -484,7 +514,7 @@ export const COUNTER_KEYWORD_PRIMITIVES: Readonly<Record<string, EffectPrimitive
   riotChoice,
   unleashChoice,
   devourChoice,
-  createServos,
+  fabricateChoice,
   amass,
   bolster,
   backup,

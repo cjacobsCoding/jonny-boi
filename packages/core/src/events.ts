@@ -400,7 +400,7 @@ export type GameEvent =
   /** A renown creature connected and gained its once-only designation (CR 702.112a). */
   | { readonly type: 'becameRenowned'; readonly instanceId: InstanceId; readonly name: string }
   /**
-   * A card was REVEALED — explore's top card (CR 701.42a). Public by
+   * A card was REVEALED — explore's top card (CR 701.44a). Public by
    * definition: revealing is showing the card to every player, so the
    * observation layer passes the name through unmasked.
    */

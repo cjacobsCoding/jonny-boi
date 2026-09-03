@@ -372,7 +372,7 @@ interface ChoiceRequestBase {
    * engine's own entry-path contexts are stamped after normalisation and never
    * come from a request.
    */
-  readonly context?: 'devour' | 'explore' | 'riot' | 'unleash';
+  readonly context?: 'devour' | 'explore' | 'riot' | 'unleash' | 'fabricate';
 }
 
 /**
@@ -581,7 +581,8 @@ interface PendingChoiceBase {
     | 'devour'
     | 'explore'
     | 'riot'
-    | 'unleash';
+    | 'unleash'
+    | 'fabricate';
   /**
    * The permanent an entry-path answer applies to: the one whose
    * `chosenAsEntered` an `'asEnters'` answer is written to, and the one a

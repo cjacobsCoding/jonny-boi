@@ -1442,9 +1442,19 @@ const LEDGERED_EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.fre
   unleashChoice: (_params, ctx) => counterStatValue(1, ctx.weights),
   /** Devour: one feed's worth — the question decides how many, on the board. */
   devourChoice: (params, ctx) => counterStatValue(intParam(params, 'amount', 0), ctx.weights),
-  /** Fabricate's Servo mode: N 1/1 artifact bodies, priced as the tokens they are. */
-  createServos: (params, ctx) =>
-    tokenValue({ count: intParam(params, 'amount', 0), power: 1, toughness: 1 }, ctx),
+  /**
+   * Fabricate: ONE ref carrying both printed halves, so it is worth whichever
+   * a rational chooser takes — the counters or the Servos. Pricing it as the
+   * MAX is what a mode-by-mode price would have come to, and it keeps the
+   * decision itself in `answerConfirm`, where the board is.
+   */
+  fabricateChoice: (params, ctx) => {
+    const count = intParam(params, 'amount', 0);
+    return Math.max(
+      counterStatValue(count, ctx.weights),
+      tokenValue({ count, power: 1, toughness: 1 }, ctx),
+    );
+  },
   /** Amass: N counters on our Army (a 0/0 one is made first if we have none). */
   amass: (params, ctx) => counterStatValue(intParam(params, 'amount', 0), ctx.weights),
   /** Bolster: N counters on our weakest creature — worth nothing with no creature. */

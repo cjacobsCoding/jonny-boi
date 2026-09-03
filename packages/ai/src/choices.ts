@@ -88,7 +88,7 @@ import {
   isCreature,
 } from '@jonny-boi/core';
 import { cardValue, cardValueContext, findInstance } from './card-value.js';
-import { modeEffectsFor, resolutionValueContext, valueOfEffects, valueOfMode } from './effect-value.js';
+import { modeEffectsFor, resolutionValueContext, valueOfEffect, valueOfEffects, valueOfMode } from './effect-value.js';
 import type { HeuristicWeights } from './weights.js';
 import { totalAvailableMana } from './land-sequencing.js';
 
@@ -959,7 +959,7 @@ function unleashTakesCounter(state: GameState, choice: ConfirmChoice): boolean {
  *
  * ⚠️ On the DEFAULT weights that means the pilot always KEEPS, and the reason
  * is worth writing down rather than tuning around: explore only ever asks about
- * a NONLAND (a land goes straight to hand, CR 701.42a), and every nonland
+ * a NONLAND (a land goes straight to hand, CR 701.44a), and every nonland
  * prices at or above `choiceSpellBaseValue` — comfortably over the threshold. A
  * graveyard the deck could USE is what would change that, and this value model
  * does not price graveyard synergy at all. The threshold is left as the seam
@@ -970,6 +970,38 @@ function exploreBinsTopCard(state: GameState, choice: ConfirmChoice, weights: He
   const top = state.players[choice.chooser].library[0];
   if (top === undefined) return false;
   return cardValue(top, weights, cardValueContext(state)) <= weights.scryKeepValueThreshold;
+}
+
+/**
+ * Fabricate's answer: the counters when they are worth at least the Servos,
+ * else the tokens (CR 702.123a - "you may put N counters on it; if you don't,
+ * create N Servos"). Priced through the SAME rulers `effect-value` uses for the
+ * ref, so the pilot's choice and the pilot's price cannot disagree: N counters
+ * are 2N stat points, N Servos are N 1/1 bodies through `makeToken`.
+ *
+ * ⚠️ On the DEFAULT weights that comes out SERVOS, and the number is worth
+ * writing down rather than arguing with: N 1/1 bodies price above 2N stat
+ * points, which is also how the mechanic actually plays — two bodies chump,
+ * go wide and feed a sacrifice outlet, where +2/+2 does one thing on one
+ * creature. Counters win an exact TIE (they ride a body already on the table,
+ * and a wide board is what a sweeper punishes). What this deliberately does
+ * NOT read is the board that would flip it either way — an anthem, a
+ * sacrifice outlet, a sweeper in the opponent's deck — because that would be
+ * a second opinion about what a token is worth (rule 12).
+ */
+function fabricateTakesCounters(state: GameState, choice: ConfirmChoice, weights: HeuristicWeights): boolean {
+  const entering = questionSubject(state, choice.sourceInstanceId);
+  const ref = entering?.def.triggers
+    ?.flatMap((trigger) => trigger.effects)
+    .find((effect) => effect.primitive === 'fabricateChoice');
+  const count = typeof ref?.params?.amount === 'number' ? ref.params.amount : 0;
+  if (count <= 0) return true;
+  const counters = 2 * count * weights.modeCounterPerStatValue;
+  const servos = valueOfEffect(
+    { primitive: 'makeToken', params: { count, power: 1, toughness: 1 } },
+    resolutionValueContext(state, choice.chooser, weights, cardValueContext(state)),
+  );
+  return counters >= servos;
 }
 
 function answerCounterKeywordConfirm(
@@ -984,6 +1016,8 @@ function answerCounterKeywordConfirm(
       return { kind: 'confirm', yes: unleashTakesCounter(state, choice) };
     case 'explore':
       return { kind: 'confirm', yes: exploreBinsTopCard(state, choice, weights) };
+    case 'fabricate':
+      return { kind: 'confirm', yes: fabricateTakesCounters(state, choice, weights) };
     default:
       return undefined;
   }

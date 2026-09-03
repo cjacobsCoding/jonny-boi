@@ -167,7 +167,7 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
    */
   'chooseAsEnters',
   /*
-   * §3.110 — EXPLORE (CR 701.42a) reads the TOP CARD of a library and branches
+   * §3.110 — EXPLORE (CR 701.44a) reads the TOP CARD of a library and branches
    * on it twice: a land goes to hand, a nonland puts a counter on and asks
    * whether to bin it. Both halves see a card the swap may have changed, so it
    * is classified with scry and surveil rather than argued away.
@@ -378,7 +378,7 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
    * bloodthirst's turn-fact read, riot's and unleash's entry choice, devour's
    * sacrifice, amass's Army, bolster's toughness comparison, backup's aimed
    * counters and grant) and tokens built from their own params (fabricate's
-   * Servos). `undyingReturn` moves ONE known card graveyard → battlefield and
+   * Servos, chosen at resolution). `undyingReturn` moves ONE known card graveyard → battlefield and
    * announces its zoneChange, exactly as `persistReturn` does. Explore is the
    * one member that reads a library, and it is classified above.
    */
@@ -389,7 +389,7 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   'riotChoice',
   'unleashChoice',
   'devourChoice',
-  'createServos',
+  'fabricateChoice',
   'amass',
   'bolster',
   'backup',

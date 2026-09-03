@@ -15,6 +15,10 @@
  *     tuning around it.
  *  4. **DEVOUR** — feed a body worth less than the counters it becomes, and
  *     never feed one worth more.
+ *  5. **FABRICATE** — the counters or the Servos, compared through the same
+ *     rulers `effect-value` prices the ref with. On the default weights that
+ *     comes out Servos: N 1/1 bodies price above 2N stat points, which is also
+ *     how the mechanic plays.
  *
  * Plus the pricing invariant that keeps every counter-placing body on ONE
  * ruler: each is worth the permanent stat change it makes
@@ -245,6 +249,47 @@ describe('devour — feed what is worth less than the counters it becomes', () =
   });
 });
 
+describe('fabricate — counters or Servos, whichever the board wants', () => {
+  /** The fabricating creature on the battlefield, with its own trigger ref on the def. */
+  function withFabricator(state: GameState, count: number): number {
+    const def: CardDefinition = {
+      ...creatureDef('Glint-Sleeve Artisan', 2, 2),
+      triggers: [
+        {
+          condition: { on: 'etb' },
+          effects: [{ primitive: 'fabricateChoice', params: { amount: count } }],
+          label: `Fabricate ${count}`,
+        },
+      ],
+    };
+    const [inst] = putOnBattlefield(state, 'A', [def]);
+    return inst!.instanceId;
+  }
+
+  const FABRICATE_REQUEST = { kind: 'confirm', chooser: 'A', prompt: 'Fabricate', valence: 'neutral', context: 'fabricate' } as const;
+
+  /** The pilot's yes/no under a named weight set, so the price seam is testable. */
+  function takesCountersUnder(state: GameState, id: number, weights: typeof W): boolean {
+    const action = answerChoiceHeuristically(state, park(FABRICATE_REQUEST, id), weights);
+    if (action.kind !== 'answerChoice' || action.answer.kind !== 'confirm') throw new Error('expected a confirm');
+    return action.answer.yes;
+  }
+
+  it('takes the SERVOS on the default weights — N 1/1 bodies price above 2N stat points, and that is how it plays', () => {
+    const state = newGame();
+    const id = withFabricator(state, 2);
+    expect(takesCountersUnder(state, id, W)).toBe(false);
+  });
+
+  it('the PRICE is the live seam — make a stat point dear enough and the same board takes the counters', () => {
+    // Not a knob turned to force a pass: it is what proves the answer is a
+    // comparison of the two printed halves rather than a constant.
+    const state = newGame();
+    const id = withFabricator(state, 2);
+    expect(takesCountersUnder(state, id, { ...W, modeCounterPerStatValue: 50 })).toBe(true);
+  });
+});
+
 describe('one ruler for every counter the family places', () => {
   const ctx = (state: GameState) => resolutionValueContext(state, 'A', W, cardValueContext(state));
 
@@ -257,6 +302,9 @@ describe('one ruler for every counter the family places', () => {
     expect(valueOfEffect({ primitive: 'amass', params: { subtype: 'Zombie', amount: 3 } }, ctx(state))).toBe(3 * perCounter);
     expect(valueOfEffect({ primitive: 'bolster', params: { amount: 2 } }, ctx(state))).toBe(2 * perCounter);
     expect(valueOfEffect({ primitive: 'becomeRenowned', params: { amount: 2 } }, ctx(state))).toBe(2 * perCounter);
+    // Fabricate carries BOTH printed halves in one ref, so it is worth
+    // whichever a rational chooser takes — never less than the counters.
+    expect(valueOfEffect({ primitive: 'fabricateChoice', params: { amount: 2 } }, ctx(state))).toBeGreaterThanOrEqual(2 * perCounter);
   });
 
   it('bloodthirst is worth NOTHING until an opponent has been dealt damage this turn', () => {

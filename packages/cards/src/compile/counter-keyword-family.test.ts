@@ -150,15 +150,18 @@ describe('the keywords compile to exactly their engine payloads', () => {
     ]);
   });
 
-  it('Fabricate N → a MODAL enters trigger: N counters or N Servos (Glint-Sleeve Artisan)', () => {
+  it('Fabricate N → an enters trigger asking the printed question at RESOLUTION, not a modal (Glint-Sleeve Artisan)', () => {
     const artisan = creature('Glint-Sleeve Artisan', 'Fabricate 1', ['Fabricate']);
-    const trigger = artisan.triggers?.[0];
-    expect(trigger?.condition).toEqual({ on: 'etb' });
-    expect(trigger?.effects).toEqual([]);
-    expect(trigger?.modal?.modes.map((mode) => mode.effects[0])).toEqual([
-      { primitive: 'addCounters', params: { amount: 1, self: true } },
-      { primitive: 'createServos', params: { amount: 1 } },
+    expect(artisan.triggers).toEqual([
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'fabricateChoice', params: { amount: 1 } }],
+        label: 'Fabricate 1',
+      },
     ]);
+    // ⚠️ NOT a ModalSpec: modes are chosen as an ability goes on the stack
+    // (CR 603.3c), and fabricate's choice is made as it resolves.
+    expect(artisan.triggers?.[0]?.modal).toBeUndefined();
   });
 
   it('Afterlife N → a dies trigger making N 1/1 white-and-black flying Spirits through the token rule (Ministrant of Obligation)', () => {
@@ -497,16 +500,21 @@ describe('the compiled cards, played through the real engine and registry', () =
     expect(after.players.A.graveyard.some((c) => c.instanceId === squirrelId)).toBe(true);
   });
 
-  it('a Glint-Sleeve Artisan choosing the Servo mode makes a 1/1 colourless artifact creature', () => {
+  it('a Glint-Sleeve Artisan declining the counters makes a 1/1 colourless Servo instead', () => {
     const artisan = creature('Glint-Sleeve Artisan', 'Fabricate 1', ['Fabricate']);
     const state = atMain();
     const artisanId = inHand(state, artisan, 'A');
-    const servos: Answerer = (choice) => (choice.kind === 'chooseModes' ? { kind: 'chooseModes', modeIds: ['mode2'] } : { kind: 'confirm', yes: true });
-    const after = castAndSettle(state, artisanId, servos);
-    const servo = after.battlefield.find((c) => c.def.name === 'Servo');
+    const servoState = castAndSettle(state, artisanId, confirm(false));
+    const servo = servoState.battlefield.find((c) => c.def.name === 'Servo');
     expect(servo?.def.types).toEqual(['artifact', 'creature']);
     expect(servo?.def.colors).toEqual([]);
-    expect(stats(after, artisanId)).toEqual({ power: 2, toughness: 2 });
+    expect(stats(servoState, artisanId)).toEqual({ power: 2, toughness: 2 });
+    // Taking the counters instead grows the body and makes no token.
+    const counterState = atMain();
+    const grownId = inHand(counterState, artisan, 'A');
+    const grown = castAndSettle(counterState, grownId, confirm(true));
+    expect(grown.battlefield.some((c) => c.def.name === 'Servo')).toBe(false);
+    expect(stats(grown, grownId)).toEqual({ power: 3, toughness: 3 });
   });
 
   it('Relentless Advance makes a 3/3 Zombie Army, and a second one grows it to 6/6', () => {

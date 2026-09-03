@@ -360,7 +360,7 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   actionRejected: 'public',
   counterAdded: 'public',
   // §3.110 — a renown designation is board state; a REVEAL is, by definition,
-  // the card shown to the table (explore's top card, CR 701.42a).
+  // the card shown to the table (explore's top card, CR 701.44a).
   becameRenowned: 'public',
   cardRevealed: 'public',
   /*
