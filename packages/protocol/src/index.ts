@@ -147,7 +147,14 @@ export interface PublicPlayerView {
   readonly hasLost: boolean;
   /** Public zones — visible to everyone. */
   readonly graveyard: readonly CardInstance[];
+  /**
+   * Exile, minus the opponent's FACE-DOWN cards (§3.112 — a foretold card, CR
+   * 702.143a: only its owner may look at it). The viewer's own face-down cards
+   * are present; everyone else's are counted in {@link faceDownExileCount}.
+   */
   readonly exile: readonly CardInstance[];
+  /** How many of this player's exiled cards are face down and withheld from the viewer. */
+  readonly faceDownExileCount: number;
   /** Hidden zones reduced to counts. */
   readonly handCount: number;
   readonly libraryCount: number;
@@ -264,7 +271,10 @@ export function maskStateForSeat(state: GameState, seat: PlayerId): MaskedGameVi
       landsPlayedThisTurn: p.landsPlayedThisTurn,
       hasLost: p.hasLost,
       graveyard: p.graveyard,
-      exile: p.exile,
+      // §3.112 — a face-down (foretold) card is hidden from everyone but its
+      // owner; it is never copied into another seat's view, only counted.
+      exile: isViewer ? p.exile : p.exile.filter((card) => card.faceDown !== true),
+      faceDownExileCount: isViewer ? 0 : p.exile.filter((card) => card.faceDown === true).length,
       handCount: p.hand.length,
       libraryCount: p.library.length,
       hand: isViewer ? p.hand : null,

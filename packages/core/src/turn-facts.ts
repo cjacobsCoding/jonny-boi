@@ -73,6 +73,12 @@ export type TurnFact =
   | 'youGainedLife'
   | 'drewInOwnDrawStep'
   /**
+   * §3.112 — "you … have cast another spell this turn" (SURGE, CR 702.117a).
+   * True for the player who cast any spell so far this turn. Read BEFORE the
+   * surge spell itself is announced, so "another" is exactly the prior casts.
+   */
+  | 'castASpell'
+  /**
    * §3.110 — "**an opponent was dealt damage this turn**" (BLOODTHIRST, CR
    * 702.54a; Skarrgan Firebird's activation restriction). True for a player
    * when a `damageDealt` event landed on THEIR OPPONENT — combat or not, by
@@ -87,6 +93,7 @@ export const TURN_FACTS: readonly TurnFact[] = Object.freeze([
   'creatureDied',
   'youGainedLife',
   'drewInOwnDrawStep',
+  'castASpell',
   'opponentWasDealtDamage',
 ]);
 
@@ -96,7 +103,13 @@ const FACT_BIT: Readonly<Record<TurnFact, number>> = Object.freeze({
   creatureDied: 1 << 1,
   youGainedLife: 1 << 2,
   drewInOwnDrawStep: 1 << 3,
-  opponentWasDealtDamage: 1 << 4,
+  // ⚠️ ONE BIT PER FACT. §3.112 and §3.110 both landed a fifth fact at
+  // `1 << 4` on their own branches; sharing a bit would make surge's "you cast
+  // another spell" true the moment an opponent took damage, and neither test
+  // would see it — each family passes on its own bit. The next fact is
+  // `1 << 6`.
+  castASpell: 1 << 4,
+  opponentWasDealtDamage: 1 << 5,
 });
 
 /** Clear every player's facts. Called as a turn begins. */
@@ -197,6 +210,13 @@ export function recordTurnFacts(state: GameState, event: GameEvent): void {
     // 707.10) and emits `spellCopied`, not `spellCast`, so it is not counted.
     case 'spellCast': {
       state.spellsCastThisTurn = (state.spellsCastThisTurn ?? 0) + 1;
+      // §3.112 — surge's "another spell this turn" (CR 702.117a) is the same
+      // event seen per PLAYER: any cast, from any zone, for any cost. Read
+      // before the surge spell itself is announced, so "another" is exactly
+      // the prior casts. One case, two readings — a second `case 'spellCast'`
+      // would be unreachable, which is how the merge of these two families
+      // could have silently lost surge.
+      setTurnFact(state, 'castASpell', event.player);
       return;
     }
     default:

@@ -1017,6 +1017,16 @@ export const RULES_MANIFEST: RulesManifest = {
         title:
           'suspend exiles the card with N time counters for its suspend cost, and the last counter leaving lets it be cast for nothing',
       },
+      // §3.112 — the cast-alternative family: one row on the cast action, a
+      // closed table of kinds, and two special actions. The rider bodies are
+      // cards-package primitives pinned on real printed cards in
+      // packages/cards/src/cast-alternatives.test.ts.
+      { rule: '702.74a', title: 'a creature cast for its evoke cost is sacrificed as it enters, and its enters-the-battlefield trigger still resolves' },
+      { rule: '702.109a', title: 'a creature cast for its dash cost has haste and is returned to its owner\'s hand at the beginning of the next end step' },
+      { rule: '702.117a', title: 'a surge cost may be paid only if its caster has cast another spell this turn' },
+      { rule: '702.42a', title: 'paying the entwine cost chooses all of a modal spell\'s modes' },
+      { rule: '702.143a', title: 'a foretold card is exiled face down for {2} on its owner\'s turn and cast on a later turn for its foretell cost' },
+      { rule: '702.170a', title: 'a plotted card is exiled for its plot cost as a sorcery and cast on a later turn without paying its mana cost' },
       // §3.111 — the graveyard-casting family's core halves. The printed bodies
       // (unearth's return, scavenge's counters, the embalm/eternalize/encore
       // token copies) are cards-package primitives, pinned on the real printed
@@ -1362,6 +1372,10 @@ export const ACTION_RULES: ActionRules = {
   castSpell: '601.2',
   cycleCard: '702.29',
   suspendCard: '702.62a',
+  // §3.112 — the two special actions of the cast-alternative family, each to
+  // the CR 116.2 entry that lists it (foretell 116.2h, plot 116.2k).
+  foretellCard: '116.2h',
+  plotCard: '116.2k',
   activateGraveyardAbility: '702.84a', // §3.111 — unearth defines the model; scavenge/embalm/eternalize/encore ride it
   activateAbility: '602.2a',
   declareAttackers: '508.1a',

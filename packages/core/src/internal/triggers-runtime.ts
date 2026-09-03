@@ -113,6 +113,8 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   cardSuspended: false,
   suspendWindowOpened: false,
   suspendDeclined: false,
+  // §3.112 — foretell/plot move a card hand → exile; nothing on the battlefield changes.
+  cardExiledToCastLater: false,
   // §3.113 — cascade / ripple: the library-to-exile-to-library shuffle of a
   // pile never touches the battlefield; the cast that follows is a `spellCast`.
   cascadeWindowOpened: false,

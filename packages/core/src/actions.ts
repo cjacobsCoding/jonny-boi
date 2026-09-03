@@ -136,6 +136,17 @@ export interface CastSpellAction {
    * face's cost, types, timing, targets and script. See {@link CastFace}.
    */
   readonly face?: CastFace;
+  // --- the cast-alternative family (§3.112) -----------------------------------------
+  /**
+   * WHICH printed alternative cost this cast pays — evoke, dash, blitz, surge,
+   * prototype or warp — in place of the mana cost (CR 601.2b). Omitted means
+   * the printed cost, which keeps every cast action ever built valid. Legal
+   * only from the HAND and only when `CardDefinition.alternativeCosts` names
+   * the kind; the engine charges that cost through the one cast funnel and
+   * records the kind on the stack object so the rider follows the permanent.
+   * See `cast-alternatives.ts`.
+   */
+  readonly alternative?: import('./cast-alternatives.js').AlternativeCostKind;
   /**
    * §3.111 — WHICH graveyard-cast keyword a `fromZone: 'graveyard'` cast uses:
    * retrace, jump-start or escape. Omitted means flashback, which keeps every
@@ -187,6 +198,40 @@ export interface CycleCardAction {
   readonly player: PlayerId;
   readonly instanceId: InstanceId;
   readonly abilityIndex?: number;
+  /**
+   * §3.112 — the targets of a CHANNEL or BLOODRUSH body ("Target attacking
+   * creature gets +3/+3"), chosen as the ability is activated exactly as an
+   * `activateAbility`'s are. Plain cycling and transmute target nothing and
+   * omit it, so every cycle action ever built keeps its shape.
+   */
+  readonly targets?: ReadonlyArray<InstanceId | PlayerId>;
+}
+
+// --- the cast-alternative family (§3.112) -----------------------------------------
+
+/**
+ * FORETELL a card from hand (CR 702.143a, a special action — CR 116.2h): pay
+ * {2} during your own turn, any time you have priority, and exile the card
+ * face down. It may be cast from exile after this turn for its foretell cost.
+ * Its own action kind for the reason `suspendCard` is: nothing is cast, no
+ * spell reaches the stack, and the legality question is answered by
+ * `def.foretell`, not by the card's mana cost.
+ */
+export interface ForetellCardAction {
+  readonly kind: 'foretellCard';
+  readonly player: PlayerId;
+  readonly instanceId: InstanceId;
+}
+
+/**
+ * PLOT a card from hand (CR 702.170a, a special action — CR 116.2k): pay its
+ * plot cost during your main phase with the stack empty and exile it. It may
+ * be cast from exile, free and as a sorcery, on a later turn.
+ */
+export interface PlotCardAction {
+  readonly kind: 'plotCard';
+  readonly player: PlayerId;
+  readonly instanceId: InstanceId;
 }
 
 /**
@@ -287,6 +332,8 @@ export type GameAction =
   | CastSpellAction
   | CycleCardAction
   | SuspendCardAction
+  | ForetellCardAction
+  | PlotCardAction
   | ActivateGraveyardAbilityAction
   | ActivateAbilityAction
   | DeclareAttackersAction

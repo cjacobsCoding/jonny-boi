@@ -28,7 +28,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { CardDefinition, ChoiceRequest, GameState, PendingChoice } from '@jonny-boi/core';
-import { createGame, normalizeChoiceRequest } from '@jonny-boi/core';
+import { createGame, normalizeChoiceRequest, setTurnFact } from '@jonny-boi/core';
 import { answerChoiceHeuristically } from './choices.js';
 import { resolutionValueContext, valueOfEffect } from './effect-value.js';
 import { cardValueContext } from './card-value.js';
@@ -312,7 +312,14 @@ describe('one ruler for every counter the family places', () => {
     const ref = { primitive: 'bloodthirstCounters', params: { amount: 2 } };
     expect(valueOfEffect(ref, ctx(state))).toBe(0);
     // The turn fact is what turns it on (core's `setTurnFact`, via any damage).
-    state.turnFactsA = 1 << 4;
+    //
+    // ⚠️ Written through the WRITER, never as the bit literal it happened to
+    // have. This line was `state.turnFactsA = 1 << 4;`, and the merge of
+    // §3.110 with §3.112 moved `opponentWasDealtDamage` to `1 << 5` — the
+    // literal then set `castASpell` instead and this test failed with the
+    // mechanic perfectly intact. The mask is `turn-facts.ts`'s private
+    // business; every other reader and writer already goes through the pair.
+    setTurnFact(state, 'opponentWasDealtDamage', 'A');
     expect(valueOfEffect(ref, ctx(state))).toBe(2 * 2 * W.modeCounterPerStatValue);
   });
 

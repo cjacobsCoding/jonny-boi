@@ -447,6 +447,15 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   'suspendTick',
   'scheduleDelayedEffects',
   /*
+   * §3.112 — the cast-alternative family's riders. Each reads ONE object's
+   * `castWith` stamp and moves that permanent battlefield → graveyard / hand /
+   * exile; `warpExile` also records a cast permission on the card it exiled.
+   * No library and no hand is read, and every move emits its own zoneChange.
+   */
+  'sacrificeSelfIfCastWith',
+  'returnSelfToHand',
+  'warpExile',
+  /*
    * §3.111 — THE GRAVEYARD-CASTING FAMILY's bodies. Every one of them reads and
    * writes the GRAVEYARD, exile and the battlefield and never a library:
    * `unearthReturn` moves its own card graveyard -> battlefield (and stamps CR

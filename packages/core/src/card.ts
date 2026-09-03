@@ -1184,6 +1184,44 @@ export interface CardDefinition {
    * exile is on no trigger source. See `suspend.ts`.
    */
   readonly suspend?: SuspendAbility;
+  // --- the cast-alternative family (§3.112) -----------------------------------------
+  /**
+   * The ALTERNATIVE COSTS this card prints — evoke (CR 702.74a), dash
+   * (702.109a), blitz (702.152a), surge (702.117a), prototype (702.160a), warp
+   * (702.185a): "you may cast this card by paying [cost] rather than its mana
+   * cost". Keyed by the closed `AlternativeCostKind` so a `castSpell` action
+   * names WHICH one it pays (`CastSpellAction.alternative`) and the one cast
+   * funnel charges it where the printed cost would go; the keyword's own rules
+   * (haste, a required turn fact, the prototype face) live in core's
+   * `ALTERNATIVE_COSTS` table and the card carries only its cost and the
+   * delayed riders the cards package compiled. See `cast-alternatives.ts`.
+   */
+  readonly alternativeCosts?: Readonly<
+    Partial<Record<import('./cast-alternatives.js').AlternativeCostKind, import('./cast-alternatives.js').AlternativeCastCost>>
+  >;
+  /**
+   * ENTWINE (CR 702.42a) — "You may choose all modes of this spell instead of
+   * just the number specified. If you do, you pay an additional [cost]." Asked
+   * as the FIRST cast-time question of a modal spell, before the mode menu
+   * (CR 601.2b: the mode choice is where entwine is announced), and only when
+   * every printed mode can legally be chosen — an entwined spell that could
+   * not seat a mode would be a spell choosing a mode it may not.
+   */
+  readonly entwine?: ManaCost;
+  /**
+   * FORETELL (CR 702.143a) — the cost this card is cast for from exile after
+   * the turn it was foretold on. Foretelling itself is the `foretellCard`
+   * SPECIAL ACTION (CR 116.2h): pay {2} on your own turn, exile the card face
+   * down. The later cast is a card GRANT (`CardGrant.castCost`), so the
+   * permission dies with the object exactly as an adventurer's does.
+   */
+  readonly foretell?: ManaCost;
+  /**
+   * PLOT (CR 702.170a) — the cost paid to exile this card as a sorcery
+   * (`plotCard`, CR 116.2k); the plotted card is then cast free, as a sorcery,
+   * on a later turn — a card grant with `castFree` and `castAsSorcery`.
+   */
+  readonly plot?: ManaCost;
   // --- the spell-count family (§3.113): storm, cascade, ripple ------------------
   /**
    * "When you cast this spell, …" abilities that function on the STACK — storm
@@ -1652,6 +1690,23 @@ export interface CyclingAbility {
   readonly effects: readonly EffectRef[];
   /** Human-readable text for the log, the inspector, and the replay viewer. */
   readonly label: string;
+  // --- the cast-alternative family (§3.112) -----------------------------------------
+  /**
+   * WHICH printed "[cost], Discard this card: …" ability this is. Absent means
+   * cycling (CR 702.29a). CHANNEL and BLOODRUSH are ability words (CR 207.2c)
+   * whose whole rule is the printed line — the same from-hand discard
+   * activation with a spell-shaped body — and TRANSMUTE (CR 702.53a) is the
+   * same shape with a mana-value search. One funnel (`cycleCard`) plays all
+   * four; the kind is here so the pilot can price a channel body as the spell
+   * it is rather than as a draw, and so the keyword sweep has its evidence.
+   */
+  readonly kind?: 'channel' | 'bloodrush' | 'transmute';
+  /**
+   * "Activate only as a sorcery" — transmute's printed timing, and Ghost-Lit
+   * Stalker's. Defaults to `'instant'`, the rules default for an activated
+   * ability (CR 602.5d), exactly as `ActivatedAbility.timing` does.
+   */
+  readonly timing?: CastTiming;
 }
 
 // --- upkeep costs and time counters (§3.106) --------------------------------------

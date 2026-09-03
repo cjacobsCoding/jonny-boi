@@ -2588,6 +2588,113 @@ this section adds to those is that the strength band was NOT empty: the blocking
 measured — and the default pilot still beats the heuristic 178/98, so the forecast's attack step, at
 0.75 ms a decision, is both the next strength ceiling and the next speed lever.
 
+### 3.112 The cast-alternative family — evoke, dash, blitz, surge, prototype, warp, foretell, plot, entwine, channel, bloodrush, transmute — ✅ done
+
+Picked as a FAMILY off the §3.102 queue: the keywords that change what a card COSTS or WHERE it is
+paid from, measured with `keyword-cards.mjs` BEFORE building and ordered by the sole-blocked column.
+
+| keyword | CR | sole before | shipped | sole after |
+|---|---|---|---|---|
+| channel / bloodrush (ability words, CR 207.2c) | — | 24 / 12 | the from-hand discard activation, with a body and a target | 12 / 1 |
+| foretell | 702.143a (special action 116.2h) | 12 | 12 | **0** |
+| dash | 702.109a | 12 | 12 | 1 |
+| evoke | 702.74a | 10 | 10 | **0** |
+| warp | **702.185a** | 8 | 8 | **0** |
+| transmute | 702.53a | 7 | 7 | **0** |
+| entwine | 702.42a | 6 | 6 | 1 |
+| prototype | 702.160a | 6 | 6 | **0** |
+| blitz | 702.152a | 6 | 6 | **0** |
+| plot | 702.170a (special action 116.2k) | 6 | 6 | **0** |
+| surge | 702.117a | 4 | 4 | **0** |
+
+**Measured: 5,623 → 5,740 complete cards. +117 against 113 predicted** on the branch point — and
+**6,136 → 6,257, +121, MERGED** with §3.110/§3.111/§3.113, which is the number that ships. The four
+extra are cards those families brought within one clause of playable that this one finished. Every
+keyword landed on its
+number; the surplus is the pump-noun row below reaching cards outside the measured shape. The
+residue is honest and named: channel's 12 are bodies the effect table cannot compile (an {X} channel,
+"all creatures able to block target creature do so", Eiganjo's per-legend discount), dash's 1 is
+Warbringer's "Dash costs you pay cost {2} less", bloodrush's 1 is Rubblehulk's `*/*` box, entwine's 1
+is "Entwine—Sacrifice three lands".
+
+**Six of them are ONE ROW on the cast action, not six cast paths.** `CastSpellAction.alternative`
+names which printed alternative cost is being paid, `CardDefinition.alternativeCosts` holds it by
+kind, and `applyCastSpell` charges it exactly where it would have charged the printed cost — CR
+601.2b's "alternative cost", the same announcement flashback and madness already make. What is the
+KEYWORD's rule rather than the card's lives in the closed `ALTERNATIVE_COSTS` table (haste, a
+required turn fact, the prototype face); a seventh keyword of this shape is a row there. Each card
+carries only its cost and its RIDERS — delayed abilities in the vocabulary `delayed.ts` already
+speaks, compiled by the cards package exactly as `SuspendAbility.upkeep` is, so core names no
+primitive. Prototype is the one kind that replaces the FACE (CR 702.160a): `definitionCastAs` hands
+back a memoised second face, and colour follows the cost by construction, so Goring Warplow cast
+prototyped is a **black 1/1** rather than a colourless one.
+
+⚠️ **The rider needs a stamp, because CR 400.7 makes the recast body a different card.**
+`CardInstance.castWith` is written at the entry that created the rider and cleared by the one
+zone-reset helper, and every rider body checks it — so a dashed Skirmisher that came home, was recast
+for its printed cost and then met the OLD end-step rider is left alone. Sabotaging the stamp turns 9
+tests red across all three suites.
+
+**Foretell and plot are special actions whose later cast is a card GRANT.** `foretellCard` (CR
+116.2h — any time during your own turn, for the keyword's fixed {2}) and `plotCard` (116.2k — a main
+phase, empty stack, for the printed cost) exile the card and record the permission on the list that
+already prunes itself when its card changes zones. `CardGrant.castAfterTurn` is what makes "after the
+current turn has ended" structural rather than remembered, `castCost` charges the foretell cost, and
+`castAsSorcery` makes a plotted instant-speed card the sorcery the keyword says it is. Warp's rider
+records the same grant from the battlefield. A foretold card is exiled FACE DOWN — a
+hidden-information flag only, NOT the morph system — and `maskStateForSeat` withholds it from the
+opponent's exile view, counting it instead.
+
+⚠️ **A pre-existing hole the family walked into.** `applyCastSpell` exempted EVERY exile cast from
+the card's own timing, because madness needed it — so a hand-built action could cast a permitted
+sorcery (an adventurer's half, and now a foretold one) on the opponent's turn, which the offer loop
+never offered. The exemption is now the WINDOW's, not the zone's; a regression test drives the
+rejection.
+
+**Channel, bloodrush and transmute ride the cycling funnel**, because all four are "[cost], Discard
+this card:" activated from HAND — one action kind, plus `CyclingAbility.kind`/`timing` and targets on
+the action. Bloodrush's aim made `attackingCreature` a real `TargetRestriction` read off the live
+combat record, and the two pump rules now read their noun from the closed `PUMP_TARGET_NOUNS` table
+instead of hard-coding "target creature" — one row, both rules, so the plain and the
+keyword-granting forms cannot disagree.
+
+**The pilot WEIGHS each alternative** (`alternativeCandidate`): every one is one more CANDIDATE with
+its own price in `scoredSpellGoals`, so Mulldrifter on three Islands is scored as "draw two cards for
+{2}{U}" and on five lands is cast for {4}{U} with the body attached; the prototype 1/1 wins on two
+lands and the 5/4 on six; dash and warp are proposed only in the precombat main, where the hasty body
+can attack. ⚠️ The candidates had to be built ABOVE the printed-cost prefilter — a `continue` on the
+printed mana value skipped every cheap cast, which is exactly the case they exist for, and the pilot
+passed the turn holding Mulldrifter. `bestSetAside` foretells or plots only a card it cannot cast.
+
+⚠️ **Left reporting, with the reason.** splice (16 — a cast-time question about a DIFFERENT card in
+hand, plus per-spliced-effect targets), ninjutsu (7 — a from-hand activation that puts a creature onto
+the battlefield ATTACKING, a state no entry path can express), replicate/conspire/casualty (15 — all
+three are "when you CAST this spell, copy it", and a trigger on the stack object is a source the
+collector does not read: it walks the battlefield and command zone), cipher (6 — an encoded card in
+exile granting a combat-damage trigger), assist (4 — an optional payment offered to the OPPONENT).
+**Buyback's remaining 7 are all non-mana cost forms** (3 sacrifice a land, 2 discard two cards, 2 pay
+life): buyback may be DECLINED, and the engine's only non-mana cast cost is the mandatory kind, so
+they wait on an optional non-mana cost seam. The "costs {2} less if it targets a tapped creature"
+template (9) needs the chosen TARGET threaded into `castManaCostFor`, which takes no targets today.
+
+**Gate (merged):** 381 files / 21,553 tests / 5 skipped / 0 failed, summed PACKAGE BY PACKAGE —
+main's own 377/21,501 plus this family's three test files and the six `crTest`s it adds to the CR 702
+file. A whole-suite run was killed outright twice (four agents, 6 cores, 7 GB: esbuild's own service
+died mid-collect and vitest reported 79 files "failed" with **0 failing tests**, which is what an
+out-of-memory run looks like and is worth recognising rather than debugging). Lint 0 errors;
+`build-card-index.mjs --check` clean; pilot-bench 188 games/CPU-sec (232 wall) on a quiet box with
+**byte-identical outcomes** — A won 851/2000, the figure §3.106 and §3.108 recorded on these lock
+decks, so the family changes no decision on decks that print none of it. Under load the same build
+read 103–105, which is why a single throughput number here is not a comparison (§3.107).
+
+⚠️ **Two defects the three-way merge created that neither branch could see, both recorded because
+the shape will recur.** §3.112's `castASpell` and §3.110's `opponentWasDealtDamage` each landed as
+the FIFTH `TurnFact` at `1 << 4`; merged, surge would have started reading "you cast another spell"
+the moment an opponent took damage, and every test on both sides still passed. And both families own
+`case 'spellCast'` in `recordTurnFacts` — a second `case` is unreachable, so one body now does both
+readings. The bit collision surfaced only because a test wrote the MASK (`state.turnFactsA = 1 << 4`)
+instead of calling `setTurnFact`; it now calls the writer, which is the rule everywhere else.
+
 ### 3.118 The pool regenerated at 5,623 cards — and the soak's first catch of a parallel-merge defect — ✅ done
 
 Four families merged in one day (§3.105–§3.109 plus the §3.108 pilot), each gated green on its own

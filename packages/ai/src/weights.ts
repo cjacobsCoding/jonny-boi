@@ -170,6 +170,15 @@ export interface HeuristicWeights {
   /** Extra suspend score per point of the suspended card's mana value — a
    *  seven-drop waiting four turns is a better use of {1}{R} than a three-drop. */
   readonly suspendPerManaValue: number;
+  // --- the cast-alternative family (§3.112) -----------------------------------------
+  /**
+   * Score for FORETELLING or PLOTTING a card the pilot cannot cast this turn
+   * (`bestSetAside`) — the same shape as `suspendScore`: above `passScore`, so
+   * spare mana on a quiet turn buys a cheaper spell later, below every real play.
+   */
+  readonly setAsideScore: number;
+  /** Extra set-aside score per point of mana value — the bigger spell is set aside first. */
+  readonly setAsidePerManaValue: number;
   /** Over how many upkeeps a permanent's worth is spread when it is TEMPORARY —
    *  a vanishing or fading permanent with N counters left is worth N/horizon of a
    *  permanent one (capped at 1). A Blastoderm on its last fade counter is a chump
@@ -633,6 +642,10 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // §3.106 upkeep costs and time counters
   suspendScore: 12,
   suspendPerManaValue: 2,
+  // §3.112 — the same scale as suspend: a quiet turn's spare mana sets a
+  // spell aside; a castable spell always outranks it.
+  setAsideScore: 12,
+  setAsidePerManaValue: 2,
   temporaryPermanentHorizon: 4,
   // Four points per mana: a 3/3 (cardValue 22) pays an echo of {1}{G} (8) and a
   // Deranged Hermit (1/1, 14) declines its {3}{G}{G} (20) and keeps the squirrels.

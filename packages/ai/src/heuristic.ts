@@ -68,6 +68,12 @@ import {
   hasType,
   isCreature,
   isLand,
+  // §3.112 — the cast-alternative family.
+  ALTERNATIVE_COSTS,
+  alternativeCostKindsOf,
+  definitionCastAs,
+  turnFactHolds,
+  FORETELL_COST,
   isLegalTarget,
   isBattle,
   isPlaneswalker,
@@ -878,6 +884,21 @@ interface SpellGoal {
    * name the face or the engine casts the other one.
    */
   readonly face?: 'back';
+  // --- the cast-alternative family (§3.112) -----------------------------------------
+  /**
+   * Set when this goal pays an ALTERNATIVE cost (evoke, dash, blitz, surge,
+   * prototype, warp): the cast action must carry the kind, and `cost` is that
+   * cost. The goal's `card.def` is the definition the spell is cast AS — the
+   * prototype face for a prototype goal — so every downstream reader prices
+   * the body that will actually arrive.
+   */
+  readonly alternative?: keyof typeof ALTERNATIVE_COSTS;
+  /**
+   * Set when this goal is a CHANNEL / BLOODRUSH activation from hand rather
+   * than a cast: the index into the card's `cycling` list. The action built is
+   * a `cycleCard`, funded as an activation, with the goal's targets.
+   */
+  readonly handAbilityIndex?: number;
 }
 
 /**
@@ -911,6 +932,96 @@ function castableHalvesInHand(card: CardInstance): readonly CastableHalf[] {
   const halves: CastableHalf[] = [{ card: { ...card, def: playableFaceOf(def, 'front') as CardDefinition } }];
   if (second) halves.push({ card: { ...card, def: def.backFace as CardDefinition }, face: 'back' });
   return halves;
+}
+
+// --- §3.112 the cast-alternative family: one more candidate per printed cost ---------
+
+/** What an alternative cast is scored AS, and what it costs. */
+interface AlternativeCandidate {
+  readonly def: CardDefinition;
+  readonly cost: ManaCost;
+}
+
+/**
+ * The candidate an alternative cost of `def` makes on this board, or
+ * `undefined` when proposing it would be a mistake the printed card does not
+ * invite. The POLICY, per kind:
+ *
+ *  - **evoke** — scored as the ETB trigger's body cast as a spell for the evoke
+ *    cost (the whole point of Mulldrifter), proposed only when the printed
+ *    cost is out of reach this turn: with the mana for the body, the body is
+ *    at least as good. A creature with no ETB has nothing to evoke for.
+ *  - **dash / blitz** — the same body for less, with haste, proposed only in
+ *    OUR PRECOMBAT MAIN (so the hasty body attacks) and only when the printed
+ *    cost is out of reach: the body is returned or sacrificed at end of turn,
+ *    so paying full price for a body that stays is the better buy when both
+ *    are open. Blitz's death draw makes the trade a card up, which is why it
+ *    shares the rule rather than a stricter one.
+ *  - **warp** — the same body for less, exiled at end of turn and castable
+ *    again later for full price: proposed under the dash rule, so an ETB or a
+ *    turn's worth of blocking is bought only with mana that had no better use.
+ *  - **surge** — strictly cheaper; proposed whenever its turn fact holds and
+ *    left to compete (the same score, the same body, a lower price).
+ *  - **prototype** — scored as the SMALLER body it arrives as, at its cost,
+ *    and left to compete with the full cast: the scorer prices the body, so
+ *    the 5/4 wins when its {6} is there and the 1/1 deathtoucher when it is not.
+ *
+ * Every candidate is a definition the scorer already understands — no second
+ * scoring vocabulary — and every one is a cast the engine offers.
+ */
+function alternativeCandidate(
+  view: PilotView,
+  def: CardDefinition,
+  kind: keyof typeof ALTERNATIVE_COSTS,
+  availableMana: number,
+  sorcerySpeedOpen: boolean,
+): AlternativeCandidate | undefined {
+  const alt = def.alternativeCosts?.[kind];
+  if (alt === undefined) return undefined;
+  if (convertedManaCost(alt.cost) > availableMana) return undefined;
+  // The card's own timing still applies to an alternative cast (CR 601.2b
+  // changes the price, not the window) — the same gate the printed cast's
+  // prefilter applies, asked here because this candidate is built before it.
+  if (castTiming(def) !== 'instant' && !sorcerySpeedOpen) return undefined;
+  const me = view.priorityPlayer;
+  const needsFact = ALTERNATIVE_COSTS[kind].requiresTurnFact;
+  if (needsFact !== undefined && !turnFactHolds(view as GameState, needsFact, me)) return undefined;
+  const printedAffordable = convertedManaCost(def.cost ?? {}) <= availableMana;
+  switch (kind) {
+    case 'evoke': {
+      if (printedAffordable) return undefined;
+      const etb = def.triggers?.find((trigger) => trigger.condition.on === 'etb');
+      if (etb === undefined || etb.effects.length === 0) return undefined;
+      const timing = castTiming(def);
+      return {
+        cost: alt.cost,
+        def: {
+          id: `${def.id}#evoke`,
+          name: def.name,
+          types: [timing === 'instant' ? 'instant' : 'sorcery'],
+          timing,
+          cost: alt.cost,
+          effects: etb.effects,
+        },
+      };
+    }
+    case 'dash':
+    case 'blitz':
+    case 'warp': {
+      if (printedAffordable) return undefined;
+      if (!sorcerySpeedOpen || view.step !== 'precombatMain') return undefined;
+      return { cost: alt.cost, def: { ...def, cost: alt.cost } };
+    }
+    case 'surge':
+      return { cost: alt.cost, def: { ...def, cost: alt.cost } };
+    case 'prototype':
+      return { cost: alt.cost, def: definitionCastAs(def, kind) };
+    default: {
+      const _exhaustive: never = kind;
+      void _exhaustive;
+      return undefined;
+    }
+  }
 }
 
 function choosePriorityAction(
@@ -1002,6 +1113,12 @@ function choosePriorityAction(
   const suspend = bestSuspend(ctx, weights);
   if (suspend && suspend.score > weights.passScore) {
     return pursueSuspend(ctx, suspend);
+  }
+  // §3.112 — FORETELL / PLOT a card that cannot be cast this turn, on the
+  // same footing as suspend (see `bestSetAside`).
+  const setAside = bestSetAside(ctx, weights);
+  if (setAside && setAside.score > weights.passScore) {
+    return pursueSetAside(ctx, setAside);
   }
 
   // Nothing worth doing with our mana → pass.
@@ -1570,12 +1687,22 @@ function bestSpellGoal(
       goal.cost,
       ctx.legalActions,
       goal.card.def,
-      'cast',
+      spendPurposeOfGoal(goal),
       manaPreferenceOf(weights),
     );
     if (plan) return { goal, plan };
   }
   return undefined;
+}
+
+/**
+ * §3.112 — what restricted mana is being spent ON for a goal: a channel /
+ * bloodrush activation is an ACTIVATED ability of a card in hand (CR 702.29a's
+ * shape), everything else a cast. Read by both funding planners, so the
+ * heuristic and the search cannot fund the same goal from different pools.
+ */
+function spendPurposeOfGoal(goal: SpellGoal): 'cast' | 'activate' {
+  return goal.handAbilityIndex !== undefined ? 'activate' : 'cast';
 }
 
 /**
@@ -1642,6 +1769,41 @@ function scoredSpellGoals(
       const card = half.card;
       const def = card.def;
       if (isLand(def)) continue;
+      /*
+       * §3.112 — THE ALTERNATIVE CASTS of this half, each ONE MORE CANDIDATE
+       * with its own price, so the pilot WEIGHS them against the printed cast
+       * rather than following a rule: an evoke is scored as the ETB spell it
+       * buys (Mulldrifter evoked IS "draw two cards" for {2}{U}); a prototype
+       * is scored as the body it arrives as; dash, blitz, surge and warp are
+       * the same body for less. `alternativeCandidate` decides which kinds are
+       * worth proposing on this board, and why.
+       *
+       * ⚠️ ABOVE the printed-cost prefilters below, and that is the whole
+       * point: the cheap cast exists precisely when the printed one is
+       * unaffordable, so a `continue` on the printed mana value would skip
+       * every evoke, dash and prototype the pilot is meant to be weighing.
+       * (It did — the pilot passed the turn with Mulldrifter and three
+       * Islands in front of it.)
+       */
+      for (const kind of alternativeCostKindsOf(def)) {
+        const candidate = alternativeCandidate(view, def, kind, availableMana, sorcerySpeedOpen);
+        if (candidate === undefined) continue;
+        const altCard = { ...card, def: candidate.def };
+        oppCreatures ??= creaturesControlledBy(view, opp);
+        const altGoal = scoreSpell(view, opp, oppCreatures, altCard, classifySpell(candidate.def), weights, explain, index);
+        const altLegal = altGoal ? withLegalTargets(view, opp, altGoal, index, weights) : undefined;
+        if (!altLegal) continue;
+        scored.push({
+          ...altLegal,
+          cost: candidate.cost,
+          alternative: kind,
+          // An evoke's aim belongs to the ETB TRIGGER, chosen as that ability
+          // goes on the stack; the creature spell itself targets nothing.
+          ...(kind === 'evoke' ? { targets: [] } : {}),
+          ...(half.face === undefined ? {} : { face: half.face }),
+          reason: explain ? `${kind} — ${altLegal.reason}` : NO_REASON,
+        });
+      }
       // §3.106 — CR 202.1b: a card with no mana cost cannot be cast from hand
       // (the engine refuses it); it reaches the stack through suspend instead.
       if (def.noManaCost === true) continue;
@@ -1671,7 +1833,42 @@ function scoredSpellGoals(
       // instead of being rejected by the engine and retried forever.
       const legal = goal ? withLegalTargets(view, opp, goal, index, weights) : undefined;
       if (legal) scored.push(half.face === undefined ? legal : { ...legal, face: half.face });
+    }
+
+    // §3.112 — CHANNEL and BLOODRUSH: the card's from-hand activation, scored
+    // as the spell its body is (a bloodrush is a combat trick; Ghost-Lit
+    // Raider's channel is four damage to a creature) and carried out as a
+    // `cycleCard` with the goal's targets. The engine offers the activation
+    // only once the pool pays, so the goal plans its own taps like a cast.
+    const handAbilities = handCard.def.cycling;
+    if (handAbilities !== undefined) {
+      for (let index_ = 0; index_ < handAbilities.length; index_++) {
+        const ability = handAbilities[index_]!;
+        if (ability.kind !== 'channel' && ability.kind !== 'bloodrush') continue;
+        const timing = ability.timing ?? 'instant';
+        if (timing !== 'instant' && !sorcerySpeedOpen) continue;
+        if (convertedManaCost(ability.cost) > availableMana) continue;
+        const abilityDef: CardDefinition = {
+          id: `${handCard.def.id}#${ability.kind}${index_}`,
+          name: handCard.def.name,
+          types: [timing === 'instant' ? 'instant' : 'sorcery'],
+          timing,
+          cost: ability.cost,
+          effects: ability.effects,
+        };
+        const synthetic = { ...handCard, def: abilityDef };
+        oppCreatures ??= creaturesControlledBy(view, opp);
+        const abilityGoal = scoreSpell(view, opp, oppCreatures, synthetic, classifySpell(abilityDef), weights, explain, index);
+        const abilityLegal = abilityGoal ? withLegalTargets(view, opp, abilityGoal, index, weights) : undefined;
+        if (!abilityLegal) continue;
+        scored.push({
+          ...abilityLegal,
+          cost: ability.cost,
+          handAbilityIndex: index_,
+          reason: explain ? `${ability.kind} — ${abilityLegal.reason}` : NO_REASON,
+        });
       }
+    }
   }
 
   // Flashback casts out of OUR graveyard — the same scoring, targeting and
@@ -1784,8 +1981,10 @@ function scoredSpellGoals(
       if (permission === undefined) continue;
       const castDef = playableFaceOf(card.def, permission.face);
       if (castDef === undefined || isLand(castDef)) continue;
-      if (castTiming(castDef) !== 'instant' && !sorcerySpeedOpen) continue;
-      const cost = permission.free ? {} : (castDef.cost ?? {});
+      // §3.112 — a plotted card is cast as a sorcery, a foretold card for its
+      // foretell cost: both read off the same permission core offers by.
+      if ((castTiming(castDef) !== 'instant' || permission.asSorcery) && !sorcerySpeedOpen) continue;
+      const cost = permission.free ? {} : (permission.cost ?? castDef.cost ?? {});
       if (convertedManaCost(cost) > availableMana) continue;
       const half = castDef === card.def ? card : { ...card, def: castDef };
       oppCreatures ??= creaturesControlledBy(view, opp);
@@ -2723,6 +2922,82 @@ function pursueSuspend(ctx: DecisionContext, goal: SuspendGoal): GameAction {
   return emit(ctx, tap, goal.reason, goal.score);
 }
 
+// --- §3.112 foretell (CR 702.143a) and plot (CR 702.170a) ------------------------------
+
+/** A set-aside play the pilot wants to make: which card, by which action, how funded, why. */
+interface SetAsideGoal {
+  readonly action: Extract<GameAction, { kind: 'foretellCard' | 'plotCard' }>;
+  readonly plan: readonly ManaTapPlan[];
+  readonly score: number;
+  readonly reason: string;
+}
+
+/**
+ * The best FORETELL or PLOT play right now, or `undefined` — the suspend
+ * policy, applied to the two keywords that share its shape: a card the pilot
+ * CANNOT CAST this turn is set aside on a turn with spare mana and arrives
+ * cheaper (foretell) or free (plot) later. A card the pilot could cast is left
+ * to the spell scorer, for the reason `bestSuspend` gives. Judged after every
+ * real play, so the mana it spends is mana nothing else wanted.
+ *
+ * Timing is core's: foretell any time during our own turn (`FORETELL_COST`
+ * is the fixed {2}), plot only in a main phase with the stack empty — the
+ * engine offers each action exactly then, and the plan funds it through the
+ * same planner every goal uses.
+ */
+function bestSetAside(ctx: DecisionContext, weights: HeuristicWeights): SetAsideGoal | undefined {
+  const { view, legalActions } = ctx;
+  const me = view.priorityPlayer;
+  const hand = view.players[me].hand;
+  let any = false;
+  for (const card of hand) {
+    if (card.def.foretell !== undefined || card.def.plot !== undefined) {
+      any = true;
+      break;
+    }
+  }
+  if (!any) return undefined;
+  if (me !== view.activePlayer) return undefined;
+  const sorcerySpeedOpen =
+    (view.step === 'precombatMain' || view.step === 'postcombatMain') && view.stack.length === 0;
+  const availableMana = totalAvailableMana(view, me);
+
+  let best: SetAsideGoal | undefined;
+  for (const card of hand) {
+    const def = card.def;
+    const method: 'foretell' | 'plot' | undefined =
+      def.foretell !== undefined ? 'foretell' : def.plot !== undefined ? 'plot' : undefined;
+    if (method === undefined) continue;
+    if (method === 'plot' && !sorcerySpeedOpen) continue;
+    const printed = def.cost;
+    const manaValue = printed === undefined ? 0 : convertedManaCost(printed);
+    // Castable this turn ⇒ not a set-aside candidate (see the policy above).
+    if (printed !== undefined && def.noManaCost !== true && manaValue <= availableMana) continue;
+    const score = weights.setAsideScore + manaValue * weights.setAsidePerManaValue;
+    if (score <= weights.passScore) continue;
+    if (best && score <= best.score) continue;
+    const cost = method === 'foretell' ? FORETELL_COST : (def.plot as ManaCost);
+    const plan = planManaPayment(view as GameState, me, cost, legalActions, def, 'activate', manaPreferenceOf(weights));
+    if (!plan) continue;
+    best = {
+      action: { kind: method === 'foretell' ? 'foretellCard' : 'plotCard', player: me, instanceId: card.instanceId },
+      plan,
+      score,
+      reason: ctx.trace ? `${method} ${def.name} (cannot cast it this turn)` : NO_REASON,
+    };
+  }
+  return best;
+}
+
+/** Take the next step toward a set-aside play: tap for it, or set it aside. */
+function pursueSetAside(ctx: DecisionContext, goal: SetAsideGoal): GameAction {
+  const next = goal.plan[0];
+  if (!next) return emit(ctx, goal.action, goal.reason, goal.score);
+  const tap: GameAction = tapActionFor(ctx.view.priorityPlayer, next);
+  return emit(ctx, tap, goal.reason, goal.score);
+}
+
+
 // --- §3.111 the graveyard-casting family --------------------------------------------
 
 /**
@@ -2934,9 +3209,30 @@ function castActionFor(me: PlayerId, goal: SpellGoal): GameAction {
     // the engine casts the other one.
     fromZone: goal.fromZone,
     face: goal.face,
+    // §3.112 — an alternative-cost goal names its cost, or the engine charges
+    // the printed one and the scored price was a lie.
+    alternative: goal.alternative,
     // §3.111 — a retrace / jump-start / escape goal names its kind.
     ...(goal.graveyardCast !== undefined ? { graveyardCast: goal.graveyardCast } : {}),
   };
+}
+
+/**
+ * §3.112 — the action that carries out a goal: a `cycleCard` for a channel /
+ * bloodrush activation from hand, the cast for everything else. One exit so
+ * the two consumers (`pursueSpell`, the search policy) cannot disagree.
+ */
+function actionForGoal(me: PlayerId, goal: SpellGoal): GameAction {
+  if (goal.handAbilityIndex !== undefined) {
+    return {
+      kind: 'cycleCard',
+      player: me,
+      instanceId: goal.card.instanceId,
+      abilityIndex: goal.handAbilityIndex,
+      ...(goal.targets.length > 0 ? { targets: goal.targets } : {}),
+    };
+  }
+  return castActionFor(me, goal);
 }
 
 function pursueSpell(ctx: DecisionContext, funded: FundedGoal): GameAction {
@@ -2945,7 +3241,7 @@ function pursueSpell(ctx: DecisionContext, funded: FundedGoal): GameAction {
   const { goal, plan } = funded;
 
   const next = plan[0];
-  if (!next) return emit(ctx, castActionFor(me, goal), goal.reason, goal.score);
+  if (!next) return emit(ctx, actionForGoal(me, goal), goal.reason, goal.score);
 
   const tap: GameAction = tapActionFor(me, next);
   /*
@@ -4718,19 +5014,17 @@ function collectPriorityCandidates(
       goal.cost,
       legalActions,
       goal.card.def,
-      'cast',
+      spendPurposeOfGoal(goal),
       manaPreferenceOf(weights),
     );
     if (!plan) continue; // cannot be funded from this board — not an option at all
     const plies: GameAction[] = [];
     for (const tap of plan) plies.push(tapActionFor(me, tap));
-    plies.push({
-      kind: 'castSpell',
-      player: me,
-      instanceId: goal.card.instanceId,
-      targets: goal.targets.length > 0 ? goal.targets : undefined,
-      fromZone: goal.fromZone,
-    });
+    // §3.112 — the SAME action builder the heuristic uses, so a second-half,
+    // alternative-cost or channel goal cannot be carried out differently by
+    // the search than by the pilot (this used to rebuild the cast here and
+    // dropped `face`).
+    plies.push(actionForGoal(me, goal));
     out.push({ plies, score: goal.score, label: goal.reason });
   }
 

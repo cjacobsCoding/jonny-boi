@@ -111,6 +111,8 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
   cardSuspended: { player: 'none', instanceId: 'id', name: 'none', timeCounters: 'none' },
   suspendWindowOpened: { player: 'none', instanceId: 'id', name: 'none' },
   suspendDeclined: { player: 'none', instanceId: 'id', name: 'none' },
+  // §3.112 foretell / plot
+  cardExiledToCastLater: { player: 'none', instanceId: 'id', method: 'none' },
   // §3.113 — cascade / ripple windows and the pile they bottom.
   cascadeWindowOpened: { player: 'none', instanceId: 'id', name: 'none' },
   rippleWindowOpened: { player: 'none', instanceId: 'id', name: 'none' },

@@ -104,6 +104,7 @@ import { CHOICE_PRIMITIVES } from './choice-primitives.js';
 import { PREDEFINED_TOKEN_DEFS } from './predefined-tokens.js';
 import { COPY_PRIMITIVES } from './copy-primitives.js';
 import { UPKEEP_COST_PRIMITIVES } from './upkeep-cost-primitives.js';
+import { CAST_ALTERNATIVE_PRIMITIVES } from './cast-alternative-primitives.js';
 import { GRAVEYARD_CAST_PRIMITIVES } from './graveyard-cast-primitives.js';
 import { EXILE_UNTIL_LEAVES_PRIMITIVES } from './exile-until-leaves.js';
 import { TRIGGER_COPY_PRIMITIVES } from './trigger-copy-primitives.js';
@@ -1844,6 +1845,11 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   // bodies of echo, cumulative upkeep, vanishing, fading, suspend's tick and
   // the "sacrifice ~ unless you pay" template.
   ...UPKEEP_COST_PRIMITIVES,
+  // §3.112 — the cast-alternative family (`./cast-alternative-primitives`):
+  // the delayed riders of dash ("return it to hand") and warp ("exile it, and
+  // let its owner cast it later"). Evoke and blitz reuse `sacrificeSelf` and
+  // `drawCards`.
+  ...CAST_ALTERNATIVE_PRIMITIVES,
   // §3.111 — the graveyard-casting family's bodies.
   ...GRAVEYARD_CAST_PRIMITIVES,
   // §3.110 — the counter keyword family (`./counter-keyword-primitives`): the

@@ -150,6 +150,9 @@ import { suspendWindowOpenFor } from './suspend.js';
 import { pushCastTriggers } from './cast-triggers.js';
 import { isFreeCastWindow, settleCastWindowAfterCast, spellOnStackById } from './cascade.js';
 import { createDelayedTrigger } from './delayed.js';
+// §3.112 — the cast-alternative family.
+import type { AlternativeCostKind } from './cast-alternatives.js';
+import { ALTERNATIVE_COSTS, alternativeCostKindsOf, definitionCastAs } from './cast-alternatives.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
 import { clearTurnFacts, turnFactHolds } from './turn-facts.js';
@@ -894,6 +897,8 @@ function resolveTopOfStack(
       ...(top.kickCount !== undefined ? { kickCount: top.kickCount } : {}),
       // §3.106 — a suspend-cast creature's haste rides the frame like the kick does.
       ...(top.hasteOnEntry === true ? { hasteOnEntry: true } : {}),
+      // §3.112 — the alternative cost paid rides the frame like the kick does.
+      ...(top.alternative !== undefined ? { alternative: top.alternative } : {}),
       ...(modal ? { effectTargets: modal.effectTargets } : {}),
     },
     registry,
@@ -1078,6 +1083,45 @@ interface KickRecord {
   readonly kickCount?: number;
   /** §3.106 — cast through a suspend window: a creature enters unsick (CR 702.62a). */
   readonly hasteOnEntry?: boolean;
+  /** §3.112 — the alternative cost the spell paid; see `SpellStackObject.alternative`. */
+  readonly alternative?: AlternativeCostKind;
+}
+
+// --- §3.112 the cast-alternative family: the entry-time riders --------------------
+
+/**
+ * What an alternative cost's RIDER does as the permanent enters — the
+ * keyword's static haste and its delayed triggered abilities (CR 702.74a
+ * evoke's sacrifice, 702.109a dash's return, 702.152a blitz's sacrifice and
+ * dies-draw, 702.185a warp's exile). Called BEFORE the entry's `zoneChange` is
+ * emitted, so a rider watching `etb` matches the very entry that made it; the
+ * stamp is what the bodies check, and `resetInstanceForNewZone` clears it
+ * (CR 400.7). Haste is "entered unsick" for the reason §3.106 gives.
+ */
+function applyAlternativeCostRiders(
+  state: GameState,
+  card: CardInstance,
+  kind: AlternativeCostKind,
+  emit: (e: GameEvent) => void,
+): void {
+  const spec = ALTERNATIVE_COSTS[kind];
+  const printed = card.def.alternativeCosts?.[kind];
+  card.castWith = kind;
+  if (spec.haste) card.summoningSick = false;
+  const riders = printed?.riders;
+  if (riders === undefined) return;
+  for (let i = 0; i < riders.length; i++) {
+    const rider = riders[i]!;
+    const id = createDelayedTrigger(state, {
+      condition: rider.condition,
+      effects: rider.effects,
+      label: rider.label,
+      controller: card.controller,
+      sourceInstanceId: card.instanceId,
+      ...(rider.removesFromBattlefield === true ? { removesFromBattlefield: [card.instanceId] } : {}),
+    });
+    emit({ type: 'delayedTriggerCreated', id, sourceInstanceId: card.instanceId, controller: card.controller, label: rider.label });
+  }
 }
 
 /** Move a finished spell/permanent off the stack into its destination zone. */
@@ -1121,6 +1165,9 @@ function finishSpellResolution(
     card.markedByDeathtouch = false;
     // Summoning sickness: a creature is sick unless it has haste.
     card.summoningSick = isCreature(card.def) ? !(card.def.keywords?.haste ?? false) : false;
+    // §3.112 — an evoke/dash/blitz/warp cast's riders, created BEFORE the
+    // entry is announced so an `etb` rider matches this very entry.
+    if (kick?.alternative !== undefined) applyAlternativeCostRiders(state, card, kick.alternative, emit);
     state.battlefield.push(card);
     emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: 'battlefield' });
     // A planeswalker enters with its printed loyalty (CR 306.5b) — said AFTER the
@@ -1577,6 +1624,10 @@ function dispatchAction(
       return applyCycleCard(state, prevState, action, emit, events);
     case 'suspendCard':
       return applySuspendCard(state, prevState, action, emit, events);
+    // §3.112
+    case 'foretellCard':
+    case 'plotCard':
+      return applyExileToCastLater(state, prevState, action, emit, events);
     case 'activateGraveyardAbility': // §3.111
       return applyActivateGraveyardAbility(state, prevState, action, emit, events);
     case 'activateAbility':
@@ -1705,6 +1756,17 @@ function applyAnswerChoice(
         value = 0;
       }
       patchSpellOnStack(state, casting.instanceId, { xValue: value, awaitingCastChoice: undefined });
+      return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
+    }
+    // §3.112 — ENTWINE (CR 702.42a). The mana was charged by the shared payMana
+    // block above; "yes" announces EVERY printed mode, and the target questions
+    // for those picks ask next exactly as an all-modes menu answer would.
+    if (casting.awaitingCastChoice === 'entwine' && choice.kind === 'payMana' && answer.kind === 'payMana') {
+      patchSpellOnStack(state, casting.instanceId, { entwined: answer.pay, awaitingCastChoice: undefined });
+      if (answer.pay) {
+        const spec = modalSpecOf(casting.card.def);
+        recordModePicks(state, casting.instanceId, spec ? spec.modes.map((mode) => mode.id) : [], emit);
+      }
       return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
     }
     if (casting.awaitingCastChoice === 'buyback' && choice.kind === 'payMana' && answer.kind === 'payMana') {
@@ -3350,8 +3412,25 @@ function applyCastSpell(
   // face being cast, not to the front. `playableFaceOf` refuses `'back'` for a
   // card with no CASTABLE back face, so a transforming DFC (whose back face is
   // only ever reached by a transform instruction) is rejected here, not cast.
-  const castDef = playableFaceOf(card.def, action.face);
-  if (!castDef) return rejectWith(prevState, 'that card has no castable back face');
+  const printedFaceDef = playableFaceOf(card.def, action.face);
+  if (!printedFaceDef) return rejectWith(prevState, 'that card has no castable back face');
+  // §3.112 — AN ALTERNATIVE COST (evoke, dash, blitz, surge, prototype, warp).
+  // One row on the action, judged against the closed table: it must be a cost
+  // the card prints, paid from the HAND for the printed timing (CR 601.2b — a
+  // player can't apply two alternative costs, so never over a flashback, a
+  // window or a permission), and surge needs its turn fact. Prototype is cast
+  // AS its second face, which is what `definitionCastAs` hands back.
+  const alternative = action.alternative;
+  const alternativeCost = alternative !== undefined ? printedFaceDef.alternativeCosts?.[alternative] : undefined;
+  if (alternative !== undefined) {
+    if (alternativeCost === undefined) return rejectWith(prevState, `${printedFaceDef.name} has no ${alternative} cost`);
+    if (fromZone !== 'hand') return rejectWith(prevState, `an ${alternative} cost is paid only from your hand`);
+    const needsFact = ALTERNATIVE_COSTS[alternative].requiresTurnFact;
+    if (needsFact !== undefined && !turnFactHolds(state, needsFact, action.player)) {
+      return rejectWith(prevState, `${printedFaceDef.name}'s ${alternative} cost may not be paid: you have not cast another spell this turn`);
+    }
+  }
+  const castDef = alternative !== undefined ? definitionCastAs(printedFaceDef, alternative) : printedFaceDef;
   if (isLand(castDef)) return rejectWith(prevState, 'lands are played, not cast');
   // A back half restricted to certain zones (AFTERMATH's graveyard, a Siege
   // reward's exile) is legal only from one of them — the same table the offer
@@ -3415,7 +3494,15 @@ function applyCastSpell(
   // as the madness trigger resolves, so the spell's own timing restriction does
   // not apply and a sorcery really is cast on an opponent's turn. Every other
   // cast is timed exactly as before.
-  if (timing === 'sorcery' && !sorcerySpeedOk && fromZone !== 'exile') {
+  //
+  // §3.112 — exempted only while a WINDOW stands, not for every exile cast:
+  // a PERMISSION cast (an adventurer's creature half, a foretold sorcery, a
+  // plotted card) keeps its timing, exactly as the offer loop has always
+  // judged it — the apply path used to wave every exile cast through, so a
+  // hand-built action could cast a permitted sorcery in the opponent's turn.
+  // And a plotted card is "cast as a sorcery" whatever it prints (CR 702.170a).
+  const sorceryOnly = timing === 'sorcery' || permission?.asSorcery === true;
+  if (sorceryOnly && !sorcerySpeedOk && !madnessWindowOpen) {
     return rejectWith(prevState, 'this spell can only be cast at sorcery speed (your main phase, empty stack)');
   }
 
@@ -3488,14 +3575,18 @@ function applyCastSpell(
     action.player,
     castDef,
     // §3.106 — a suspend-window cast pays nothing, exactly as a free permission does.
-    // §3.113 — and so does a cascade / ripple window's.
+    // §3.112 — an alternative cost replaces the printed one (CR 601.2b), and a
+    // permission may carry its own price (a foretold card's foretell cost).
+    // §3.113 — and a cascade / ripple window's cast pays nothing at all.
     permission?.free || suspendCast || pileWindowCast
       ? undefined
-      : fromZone === 'graveyard' && !aftermath
-        ? flashbackCost
-        : madnessWindowOpen
-          ? madnessCost
-          : castDef.cost,
+      : alternativeCost !== undefined
+        ? alternativeCost.cost
+        : fromZone === 'graveyard' && !aftermath
+          ? flashbackCost
+          : madnessWindowOpen
+            ? madnessCost
+            : (permission?.cost ?? castDef.cost),
   );
   if (cost) {
     // WHAT the mana is being spent on, for any restricted mana in the pool. The
@@ -3555,6 +3646,9 @@ function applyCastSpell(
   // name off the stack object.
   const consumedPileWindow = madnessWindowOpen && !suspendCast && pileWindowCast ? state.madnessWindow : null;
   if (madnessWindowOpen) state.madnessWindow = null;
+  // §3.112 — a foretold card is face down only while it sits in exile; the
+  // cast turns it face up (a spell on the stack is public).
+  if (card.faceDown !== undefined) delete card.faceDown;
   card.zone = 'stack';
   // The card just changed zones, so any grant on it stops applying (CR 400.7).
   // Nothing is lost by dropping it here: the granted cost has already been paid,
@@ -3591,6 +3685,8 @@ function applyCastSpell(
     ...(graveyardCast !== undefined && graveyardCast.kind !== 'flashback' ? { graveyardCast: graveyardCast.kind } : {}),
     // §3.106 — "if you cast a creature spell this way, it gains haste" (CR 702.62a).
     ...(suspendCast && isCreature(castDef) ? { hasteOnEntry: true } : {}),
+    // §3.112 — which alternative cost was paid, for the entry's riders.
+    ...(alternative !== undefined ? { alternative } : {}),
   };
   state.stack.push(stackObject);
   emit({
@@ -3678,6 +3774,8 @@ function patchSpellOnStack(
       | 'additionalCostPaid'
       | 'awaitingCastChoice'
       | 'copyAsEntersDecided'
+      // §3.112
+      | 'entwined'
     >
   >,
 ): void {
@@ -3763,9 +3861,59 @@ function xCountForCast(spell: SpellStackObject): number {
  * resolution.
  */
 function askNextCastChoice(state: GameState, spellInstanceId: InstanceId, emit: (e: GameEvent) => void): void {
+  if (askEntwineChoice(state, spellInstanceId, emit)) return;
   if (askModeChoice(state, spellInstanceId, emit)) return;
   if (askModeTargetChoice(state, spellInstanceId, emit)) return;
   askCostChoices(state, spellInstanceId, emit);
+}
+
+// --- §3.112 entwine (CR 702.42a) ----------------------------------------------------
+
+/**
+ * Step 0 — ENTWINE: "You may choose all modes of this spell instead of just
+ * the number specified. If you do, you pay an additional [cost]." Asked BEFORE
+ * the mode menu because the entwine decision IS the mode announcement (CR
+ * 601.2b — the mode choice comes first, and entwining is how all of them are
+ * chosen). Offered only when every printed mode can legally be announced
+ * (CR 601.2c: a mode with no legal target may not be chosen, and "choose all"
+ * cannot pick a mode the caster may not pick) and the pool can fund the cost;
+ * otherwise the answer is recorded as declined and the ordinary menu follows.
+ * A "yes" records every mode as a pick, so the target questions that follow
+ * are exactly the ones an ordinary all-modes answer would have raised.
+ * Returns true when a question was parked.
+ */
+function askEntwineChoice(state: GameState, spellInstanceId: InstanceId, emit: (e: GameEvent) => void): boolean {
+  const spell = spellOnStack(state, spellInstanceId);
+  if (!spell || spell.entwined !== undefined || spell.modePicks !== undefined) return false;
+  const def = spell.card.def;
+  const entwine = def.entwine;
+  const spec = modalSpecOf(def);
+  if (entwine === undefined || spec === undefined) return false;
+  const caster = spell.controller;
+  const counts = modeCountsFor(state, def, caster);
+  const allChoosable = counts !== undefined && counts.choosable.length === spec.modes.length;
+  if (!allChoosable || !canAffordManaCost(state, caster, entwine)) {
+    patchSpellOnStack(state, spellInstanceId, { entwined: false });
+    return false;
+  }
+  const choice = normalizeChoiceRequest(
+    {
+      kind: 'payMana',
+      chooser: caster,
+      prompt: `Pay the entwine ${formatManaCost(entwine)} to choose all modes? (${def.name})`,
+      cost: entwine,
+      affordable: true,
+      valence: 'gain',
+    },
+    { id: state.nextInstanceId++, sourceInstanceId: spell.instanceId, sourceName: def.name },
+  );
+  if (!choice) {
+    patchSpellOnStack(state, spellInstanceId, { entwined: false });
+    return false;
+  }
+  patchSpellOnStack(state, spellInstanceId, { awaitingCastChoice: 'entwine' });
+  parkCastChoice(state, choice, emit);
+  return true;
 }
 
 /**
@@ -4328,6 +4476,24 @@ function applyCycleCard(
   // SPLIT SECOND (CR 702.61, DESIGN §3.107): cycling is an activated ability
   // (CR 702.29a) and not a mana ability, so it is locked with the rest.
   if (state.stack.length > 0 && splitSecondOnStack(state)) return rejectWith(prevState, SPLIT_SECOND_REJECTION);
+  // §3.112 — the from-hand siblings of cycling: transmute's "activate only as
+  // a sorcery" (CR 702.53a) and a channel/bloodrush body's targets, judged by
+  // the same readers an `activateAbility` is judged by so the menu and the
+  // wall cannot disagree about what a channel line may point at.
+  if ((ability.timing ?? 'instant') === 'sorcery') {
+    const sorcerySpeedOk =
+      action.player === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
+    if (!sorcerySpeedOk) return rejectWith(prevState, `${ability.label} may be activated only as a sorcery`);
+  }
+  const cycleTargetProblem = illegalTargetReasonForEffects(
+    state,
+    ability.label,
+    ability.effects,
+    action.targets ?? [],
+    action.player,
+    card.def,
+  );
+  if (cycleTargetProblem) return rejectWith(prevState, cycleTargetProblem);
   // Cycling is an ACTIVATED ability of a card in your hand (CR 702.29a), so
   // restricted mana that may activate abilities of that kind of source may fund
   // it and mana that may only cast spells may not.
@@ -4352,9 +4518,9 @@ function applyCycleCard(
     sourceInstanceId: card.instanceId,
     controller: action.player,
     effects: ability.effects,
-    // Cycling abilities target nothing: every printed one draws a card or
-    // searches a library, both of which act on their controller alone.
-    targets: [],
+    // Plain cycling targets nothing (a draw, a search); a channel or bloodrush
+    // body (§3.112) carries the targets its activation chose.
+    targets: action.targets ?? [],
     label: ability.label,
     // Cycling is an ACTIVATED ability (CR 702.29a) — see `origin` on the type.
     origin: 'activated',
@@ -4365,6 +4531,9 @@ function applyCycleCard(
     instanceId: card.instanceId,
     label: ability.label,
   });
+  // §3.112 — a channel body that targets an opponent's warded permanent
+  // triggers its ward (CR 702.21), exactly as an activated ability's does.
+  pushWardTriggers(state, action.player, action.targets ?? [], abilityStackId, emit);
   // The cycling player retains priority, as with casting a spell.
   state.priorityPlayer = action.player;
   state.consecutivePasses = 0;
@@ -4464,6 +4633,105 @@ function applySuspendCard(
     sourceInstanceId: card.instanceId,
   });
   emit({ type: 'delayedTriggerCreated', id, sourceInstanceId: card.instanceId, controller: action.player, label });
+  // A special action does not use the stack (CR 116.1); the player keeps priority.
+  state.priorityPlayer = action.player;
+  state.consecutivePasses = 0;
+  return { state, events };
+}
+
+// --- §3.112 foretell (CR 702.143a) and plot (CR 702.170a) ------------------------------
+
+/**
+ * The fixed cost of FORETELLING a card: "pay {2} and exile it face down"
+ * (CR 702.143a) — the same for every card that prints the keyword, which is
+ * why it is the keyword's constant and not a definition field.
+ */
+export const FORETELL_COST: ManaCost = Object.freeze({ generic: 2 });
+
+/** The two "set it aside, cast it on a later turn" special actions, as a closed table. */
+type LaterCastMethod = 'foretell' | 'plot';
+
+/**
+ * Why `card` may NOT be foretold / plotted right now, or `undefined`. THE
+ * accessor for both special actions — the offer loop skips a card it names a
+ * reason for and the apply path rejects with it.
+ *
+ * FORETELL (CR 116.2h): any time its owner has priority DURING THEIR OWN TURN,
+ * for {2}. PLOT (CR 116.2k): only during the owner's main phase with an empty
+ * stack, for the printed plot cost. Neither reads the card's own cast timing —
+ * an instant is foretold under the same rule as a sorcery.
+ */
+function laterCastRefusal(
+  state: GameState,
+  card: CardInstance,
+  player: PlayerId,
+  method: LaterCastMethod,
+  sorcerySpeedWindow: boolean,
+): string | undefined {
+  const cost = method === 'foretell' ? (card.def.foretell !== undefined ? FORETELL_COST : undefined) : card.def.plot;
+  if (cost === undefined) return `that card has no ${method}`;
+  if (method === 'foretell' && player !== state.activePlayer) {
+    return 'a card can be foretold only during your own turn';
+  }
+  if (method === 'plot' && !sorcerySpeedWindow) {
+    return 'a card can be plotted only during your main phase while the stack is empty';
+  }
+  const pool = state.players[player].manaPool;
+  if (!canPay(pool, cost, spendPurposeIfRestricted(pool, card.def, 'activate'))) {
+    return `insufficient mana to ${method} this card`;
+  }
+  return undefined;
+}
+
+/**
+ * FORETELL or PLOT a card from hand: pay, exile it, and record the permission
+ * to cast it later as a card GRANT — the list that already prunes itself when
+ * its card changes zones (CR 400.7), with `castAfterTurn` closing the current
+ * turn. A foretold card is exiled FACE DOWN and is cast for its foretell cost;
+ * a plotted card is cast free and as a sorcery. Modelled on `applySuspendCard`:
+ * validate everything, pay in full, then move the card through the one zone
+ * funnel.
+ */
+function applyExileToCastLater(
+  state: GameState,
+  prevState: GameState,
+  action: Extract<GameAction, { kind: 'foretellCard' | 'plotCard' }>,
+  emit: (e: GameEvent) => void,
+  events: GameEvent[],
+): EngineResult {
+  const method: LaterCastMethod = action.kind === 'foretellCard' ? 'foretell' : 'plot';
+  if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
+  const player = state.players[action.player];
+  const card = instanceIn(player.hand, action.instanceId);
+  if (!card) return rejectWith(prevState, 'that card is not in your hand');
+  const sorcerySpeedWindow =
+    action.player === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
+  const refusal = laterCastRefusal(state, card, action.player, method, sorcerySpeedWindow);
+  if (refusal !== undefined) return rejectWith(prevState, refusal);
+  const cost = (method === 'foretell' ? FORETELL_COST : card.def.plot) as ManaCost;
+  const purpose = spendPurposeIfRestricted(player.manaPool, card.def, 'activate');
+  const paid = payCost(player.manaPool, cost, purpose);
+  if (!paid.ok) return rejectWith(prevState, paid.reason);
+  player.manaPool = paid.pool;
+
+  moveToZone(state, card, 'exile', emit, card.owner);
+  if (method === 'foretell') card.faceDown = true;
+  emit({ type: 'cardExiledToCastLater', player: action.player, instanceId: card.instanceId, method });
+  addCardGrant(
+    state,
+    {
+      targetInstanceId: card.instanceId,
+      sourceInstanceId: card.instanceId,
+      zone: 'exile',
+      duration: 'permanent',
+      castFace: 'front',
+      castAfterTurn: state.turnNumber,
+      ...(method === 'foretell'
+        ? { castCost: card.def.foretell as ManaCost }
+        : { castFree: true, castAsSorcery: true }),
+    },
+    emit,
+  );
   // A special action does not use the stack (CR 116.1); the player keeps priority.
   state.priorityPlayer = action.player;
   state.consecutivePasses = 0;
@@ -5383,6 +5651,9 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
       pushCastOffers(state, card, castDef, permission.face, me, player.manaPool, sorcerySpeedWindow, actions, {
         fromZone: 'exile',
         free: permission.free,
+        // §3.112 — a foretold card's foretell cost; a plotted card's sorcery timing.
+        ...(permission.cost !== undefined ? { cost: permission.cost } : {}),
+        ...(permission.asSorcery ? { asSorcery: true } : {}),
       });
     }
   }
@@ -5397,16 +5668,28 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     const cycling = card.def.cycling;
     if (!cycling || cycling.length === 0) continue;
     for (let index = 0; index < cycling.length; index++) {
+      const ability = cycling[index]!;
       if (
         !canPay(
           player.manaPool,
-          cycling[index]!.cost,
+          ability.cost,
           spendPurposeIfRestricted(player.manaPool, card.def, 'activate'),
         )
       ) {
         continue;
       }
-      actions.push({ kind: 'cycleCard', player: me, instanceId: card.instanceId, abilityIndex: index });
+      // §3.112 — transmute's sorcery timing and a channel/bloodrush body's
+      // targets: one offer per LEGAL target, as an activated ability is
+      // offered, and none at all when the board has nothing to aim at.
+      if ((ability.timing ?? 'instant') === 'sorcery' && !sorcerySpeedWindow) continue;
+      const cycleRestriction = restrictionOfEffects(ability.effects);
+      if (cycleRestriction === undefined) {
+        actions.push({ kind: 'cycleCard', player: me, instanceId: card.instanceId, abilityIndex: index });
+        continue;
+      }
+      for (const target of legalTargetsFor(state, cycleRestriction, me, card.def)) {
+        actions.push({ kind: 'cycleCard', player: me, instanceId: card.instanceId, abilityIndex: index, targets: [target] });
+      }
     }
   }
 
@@ -5420,6 +5703,37 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     if (card.def.suspend === undefined) continue;
     if (unsuspendableReason(state, card, me, sorcerySpeedWindow) !== undefined) continue;
     actions.push({ kind: 'suspendCard', player: me, instanceId: card.instanceId });
+  }
+
+  // §3.112 — THE CAST-ALTERNATIVE FAMILY, from hand. Each printed alternative
+  // cost (evoke, dash, blitz, surge, prototype, warp) is one more offer of the
+  // SAME cast through `pushCastOffers`, priced at that cost and cast as the
+  // face the kind names — so timing, targets, modes and the mandatory
+  // additional cost are judged by exactly the code the printed cast is judged
+  // by. Surge is offered only while its turn fact holds. Foretell and plot are
+  // special actions offered by the one accessor the apply path refuses with.
+  for (let h = 0; h < player.hand.length; h++) {
+    const card = player.hand[h] as CardInstance;
+    if (card.def.isBackFace === true) continue;
+    const kinds = alternativeCostKindsOf(card.def);
+    for (let k = 0; k < kinds.length; k++) {
+      const kind = kinds[k] as AlternativeCostKind;
+      const needsFact = ALTERNATIVE_COSTS[kind].requiresTurnFact;
+      if (needsFact !== undefined && !turnFactHolds(state, needsFact, me)) continue;
+      const alt = card.def.alternativeCosts?.[kind];
+      if (alt === undefined) continue;
+      pushCastOffers(state, card, definitionCastAs(card.def, kind), 'front', me, player.manaPool, sorcerySpeedWindow, actions, {
+        reducers,
+        alternative: kind,
+        cost: alt.cost,
+      });
+    }
+    if (card.def.foretell !== undefined && laterCastRefusal(state, card, me, 'foretell', sorcerySpeedWindow) === undefined) {
+      actions.push({ kind: 'foretellCard', player: me, instanceId: card.instanceId });
+    }
+    if (card.def.plot !== undefined && laterCastRefusal(state, card, me, 'plot', sorcerySpeedWindow) === undefined) {
+      actions.push({ kind: 'plotCard', player: me, instanceId: card.instanceId });
+    }
   }
 
   // §3.111 — ACTIVATE an ability of a card in your GRAVEYARD (unearth,
@@ -5601,7 +5915,7 @@ function pushCastOffers(
 ): void {
   if (isLand(def)) return; // lands are played, not cast (the MDFC land half)
   const timing = castTiming(def);
-  if (timing !== 'instant' && !sorcerySpeedWindow) return;
+  if ((timing !== 'instant' || options?.asSorcery === true) && !sorcerySpeedWindow) return;
   // §3.106 — CR 202.1b: an object with NO mana cost has an unpayable cost and
   // cannot be cast by paying it; only a permission that says "without paying
   // its mana cost" (a suspend window, a Siege reward) or an alternative cost
@@ -5610,7 +5924,10 @@ function pushCastOffers(
   // menu from hand for nothing. Same judgement `applyCastSpell` makes. Keyed on
   // `noManaCost`, not on an absent `cost`: a printed `{0}` compiles to the
   // same absent cost and is payable.
-  if (def.noManaCost === true && options?.free !== true && options?.fromZone === undefined) return;
+  // §3.112 — an ALTERNATIVE cost (evoke, a foretell cost) is a price of its
+  // own, so a card with no mana cost that prints one (Evermind has none, but
+  // the rule is general) is castable for it.
+  if (def.noManaCost === true && options?.free !== true && options?.fromZone === undefined && options?.cost === undefined) return;
   // `free` is a permission that says "without paying its mana cost" (a Siege
   // reward, CR 310.4). Otherwise the face's own printed cost - which is also
   // exactly what an AFTERMATH half cast from the graveyard pays, and which any
@@ -5618,8 +5935,9 @@ function pushCastOffers(
   if (options?.free !== true) {
     // The cost judged here is the cost the cast path will CHARGE — reductions
     // included — or a Medallion would make a spell payable that the menu never
-    // offers.
-    const offered = castManaCostFor(state, me, def, def.cost, options?.reducers);
+    // offers. An alternative or granted cost stands in for the printed one
+    // (§3.112), and CR 601.2f reduces it exactly as it reduces the printed cost.
+    const offered = castManaCostFor(state, me, def, options?.cost ?? def.cost, options?.reducers);
     if (offered && !canPay(pool, offered, spendPurposeIfRestricted(pool, def, 'cast'))) {
       // CONVOKE / IMPROVISE / DELVE (§3.70): the pool alone does not cover this,
       // but something other than mana may. Asked ONLY on the branch that was
@@ -5649,9 +5967,11 @@ function pushCastOffers(
       : undefined;
   // A modal spell has no whole-card target: its aims are per mode, collected by
   // the cast-time question pipeline. So it is offered bare, exactly once.
+  // §3.112 — written only for an alternative-cost offer, same rule as the two above.
+  const altField = options?.alternative !== undefined ? ({ alternative: options.alternative } as const) : undefined;
   const restriction = modalSpecOf(def) ? undefined : targetRestrictionOf(def);
   if (restriction === undefined) {
-    actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, ...faceField, ...zoneField });
+    actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, ...faceField, ...zoneField, ...altField });
     return;
   }
   for (const target of legalTargetsFor(state, restriction, me, def)) {
@@ -5662,6 +5982,7 @@ function pushCastOffers(
       targets: [target],
       ...faceField,
       ...zoneField,
+      ...altField,
     });
   }
 }
@@ -5680,6 +6001,13 @@ interface CastOfferOptions {
   readonly reducers?: readonly NonNullable<CardDefinition['castCostReduction']>[];
   readonly fromZone?: CastZone;
   readonly free?: boolean;
+  // --- the cast-alternative family (§3.112) -----------------------------------------
+  /** The alternative cost this offer pays (`CastSpellAction.alternative`). */
+  readonly alternative?: AlternativeCostKind;
+  /** The price judged and charged in place of the printed cost — the alternative's, or a permission's. */
+  readonly cost?: ManaCost;
+  /** The permission is sorcery-speed whatever the card prints (a plotted card). */
+  readonly asSorcery?: boolean;
 }
 
 /**

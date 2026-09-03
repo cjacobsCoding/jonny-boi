@@ -111,6 +111,10 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // Same conditional-copy rule (only echo permanents carry it) and the same
   // stakes: drop it and every echo bill reads "not owed" one action later.
   if (inst.controlledSinceTurn !== undefined) copy.controlledSinceTurn = inst.controlledSinceTurn;
+  // §3.112 — which alternative cost this permanent's spell paid (the rider
+  // bodies read it), and the foretold card's face-down marker. Same rule.
+  if (inst.castWith !== undefined) copy.castWith = inst.castWith;
+  if (inst.faceDown !== undefined) copy.faceDown = inst.faceDown;
   // §3.111 — unearth's "if it would leave the battlefield, exile it instead"
   // (CR 702.84c). Same conditional-copy rule (only an unearthed permanent
   // carries it) and the same stakes: drop it and the creature dies to the
@@ -266,6 +270,9 @@ function cloneStackObject(o: StackObject): StackObject {
     // two action boundaries, and the marker rode neither. Found by the first
     // test that cast a suspended creature.
     ...(o.hasteOnEntry !== undefined ? { hasteOnEntry: o.hasteOnEntry } : {}),
+    // §3.112 — the alternative cost paid and the entwine answer ride the cast.
+    ...(o.alternative !== undefined ? { alternative: o.alternative } : {}),
+    ...(o.entwined !== undefined ? { entwined: o.entwined } : {}),
     // §3.111 — which graveyard-cast keyword this spell was cast by. Dropping it
     // would turn a retraced spell into a flashback one at the first action
     // boundary and EXILE it as it resolved — a card playing weaker than

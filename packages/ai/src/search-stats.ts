@@ -71,7 +71,10 @@ export function actionEquivalenceKey(state: GameState, action: GameAction): stri
     }
     case 'castSpell': {
       const name = handCardName(state, action.player, action.instanceId);
-      return `cast:${name}:${targetsKey(action.targets)}`;
+      // §3.112 — the printed cast and an evoke/dash cast of the same card are
+      // two decisions, not one: the body that arrives is different.
+      const alt = action.alternative !== undefined ? `:${action.alternative}` : '';
+      return `cast:${name}:${targetsKey(action.targets)}${alt}`;
     }
     case 'playLand': {
       const name = handCardName(state, action.player, action.instanceId);
@@ -94,6 +97,11 @@ export function actionEquivalenceKey(state: GameState, action: GameAction): stri
       const name = handCardName(state, action.player, action.instanceId);
       return `suspend:${name}`;
     }
+    // §3.112 — same rule.
+    case 'foretellCard':
+      return `foretell:${handCardName(state, action.player, action.instanceId)}`;
+    case 'plotCard':
+      return `plot:${handCardName(state, action.player, action.instanceId)}`;
     case 'activateGraveyardAbility': {
       // §3.111 — keyed by NAME: two copies of the same unearth card in the
       // graveyard are one move, exactly as two cycling lands in hand are.

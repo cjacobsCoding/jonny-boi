@@ -239,6 +239,12 @@ export type SoakMechanicId =
   // is already witnessed as `optional-payment` (the bill asked) and `counters`
   // (the tick), and a mechanic is only as honest as the event that proves it.
   | 'suspend'
+  // §3.112 — FORETELL (CR 702.143a) and PLOT (CR 702.170a): the special
+  // action that exiles a card from hand to be cast on a later turn. One id
+  // for both because they are one shape to the soak — the difference (face
+  // down for a foretell cost / face up for free as a sorcery) lives in the
+  // card grant the action records and in the cast that follows.
+  | 'cast-later'
   // §3.113 — CASCADE (CR 702.85) and RIPPLE (CR 702.60): a library pile and a
   // free-cast window each. Storm has no id of its own: its whole observable
   // behaviour is copies on the stack, which `spell-copy` already witnesses.
@@ -470,6 +476,13 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
   { id: 'cycling', label: 'cycling — a card cycled from hand', witnessKind: 'action', printedBy: hasKey('cycling') },
   // §3.106
   { id: 'suspend', label: 'suspend — a card suspended from hand (CR 702.62)', witnessKind: 'action', printedBy: hasKey('suspend') },
+  // §3.112
+  {
+    id: 'cast-later',
+    label: 'foretell / plot — a card exiled from hand to be cast on a later turn (CR 702.143, 702.170)',
+    witnessKind: 'action',
+    printedBy: (card) => hasKey('foretell')(card) || hasKey('plot')(card),
+  },
   // §3.111 — the graveyard-casting family. Two witnesses because the two
   // shapes are two different actions: an ability ACTIVATED from a graveyard
   // (unearth/scavenge/embalm/eternalize/encore/return-to-hand) and a CAST from
@@ -907,6 +920,8 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   cardSuspended: 'suspend',
   suspendWindowOpened: 'suspend',
   suspendDeclined: 'suspend',
+  // §3.112 — the foretell/plot special action itself.
+  cardExiledToCastLater: 'cast-later',
   // §3.113 — a window opening is the strongest witness of each keyword; the
   // bottoming happens for both (and for a cascade that found nothing), so it
   // names neither.

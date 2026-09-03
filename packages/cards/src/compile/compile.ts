@@ -60,6 +60,9 @@ import {
 } from './rules.js';
 import { mergeKeywordGrant } from '@jonny-boi/core';
 import type { CastZone, KeywordFlags } from '@jonny-boi/core';
+// §3.112 — the cast-alternative family's closed kind list, for the keyword sweep.
+import { ALTERNATIVE_COST_KINDS } from '@jonny-boi/core';
+import type { AlternativeCostKind } from '@jonny-boi/core';
 import { frontFaceName, normalizeClause, parseManaSymbols, prepareOracle, splitSentences } from './text.js';
 import { AS_ENTERS_PRIMITIVE } from '../choice-primitives.js';
 
@@ -186,6 +189,22 @@ const PAYLOAD_KEYWORD_EVIDENCE: Readonly<Record<string, keyof KeywordFlags>> = O
   protection: 'protectionFrom',
   toxic: 'toxic',
 });
+
+/**
+ * §3.112 — the cast-alternative keywords whose evidence is the compiled
+ * `alternativeCosts` entry of the same name. Derived from core's closed kind
+ * list so a seventh kind is one row THERE and understood here in the same edit.
+ */
+const ALTERNATIVE_COST_KEYWORDS: ReadonlySet<string> = new Set(ALTERNATIVE_COST_KINDS);
+
+/**
+ * §3.112 — the from-hand discard activations that compile beside cycling,
+ * tagged with their kind: channel and bloodrush (ability words, CR 207.2c —
+ * Scryfall still lists them as keywords) and transmute (CR 702.53a). The
+ * evidence is a compiled `cycling` entry of that kind; a line whose body the
+ * effect table could not read compiles none and reports through its own line.
+ */
+const HAND_ABILITY_KEYWORDS: ReadonlySet<string> = new Set(['channel', 'bloodrush', 'transmute']);
 
 /**
  * §3.111 — Scryfall's names for the GRAVEYARD-ACTIVATED keywords, each mapped
@@ -522,6 +541,15 @@ interface Assembly {
   madness?: ManaCost;
   /** §3.106 — the printed suspend, once a "Suspend N—{…}" line compiles. */
   suspend?: import('@jonny-boi/core').SuspendAbility;
+  // --- §3.112 the cast-alternative family -----------------------------------
+  /** The printed alternative costs (evoke, dash, blitz, surge, prototype, warp), accumulated by kind. */
+  alternativeCosts?: CardDefinition['alternativeCosts'];
+  /** The printed "Entwine {cost}", once a line compiles it. */
+  entwine?: ManaCost;
+  /** The printed "Foretell {cost}", once a line compiles it. */
+  foretell?: ManaCost;
+  /** The printed "Plot {cost}", once a line compiles it. */
+  plot?: ManaCost;
   /** §3.113 — the printed cast triggers (storm / cascade / ripple), accumulated. */
   castTriggers?: import('@jonny-boi/core').CastTriggeredAbility[];
   /** §3.106 — counters the permanent enters with (vanishing / fading), accumulated. */
@@ -604,6 +632,14 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.madness) assembly.madness = contribution.madness;
   // §3.106
   if (contribution.suspend) assembly.suspend = contribution.suspend;
+  // §3.112 — alternative costs accumulate BY KIND, so a card printing two
+  // (none in the corpus today) keeps both rather than the last.
+  if (contribution.alternativeCosts) {
+    assembly.alternativeCosts = { ...(assembly.alternativeCosts ?? {}), ...contribution.alternativeCosts };
+  }
+  if (contribution.entwine) assembly.entwine = contribution.entwine;
+  if (contribution.foretell) assembly.foretell = contribution.foretell;
+  if (contribution.plot) assembly.plot = contribution.plot;
   // §3.113 — accumulated: "Cascade, cascade" is two triggers (CR 702.85a per instance).
   if (contribution.castTriggers) (assembly.castTriggers ??= []).push(...contribution.castTriggers);
   if (contribution.entersWithCounters) assembly.entersWithCounters.push(...contribution.entersWithCounters);
@@ -1579,6 +1615,18 @@ export function compileCard(card: CompilableCard): CompileResult {
     // §3.106 — same shape as madness: the printed "Suspend N—{…}" line compiled
     // into `assembly.suspend`; a "Suspend X" line leaves it unset and reports.
     if (word === 'suspend' && assembly.suspend !== undefined) continue;
+    // §3.112 — the cast-alternative family. Evidence-based like every guard
+    // here: a printed line the closed cost tables could not read ("Evoke—Exile
+    // a black card from your hand", "Warp—{B}, Pay 2 life", "Entwine—Sacrifice
+    // three lands") compiles no field and still reports through its own line.
+    if (ALTERNATIVE_COST_KEYWORDS.has(word) && assembly.alternativeCosts?.[word as AlternativeCostKind] !== undefined) continue;
+    if (word === 'entwine' && assembly.entwine !== undefined) continue;
+    if (word === 'foretell' && assembly.foretell !== undefined) continue;
+    if (word === 'plot' && assembly.plot !== undefined) continue;
+    // Channel and bloodrush are ability words (CR 207.2c) and transmute an
+    // activated ability (CR 702.53a) — all three compile into the from-hand
+    // discard-activation list beside cycling, tagged with their kind.
+    if (HAND_ABILITY_KEYWORDS.has(word) && assembly.cycling.some((ability) => ability.kind === word)) continue;
     // §3.113 — storm / cascade / ripple: the evidence is a compiled CAST
     // TRIGGER tagged with the keyword. Keyed on the tag, not the label, so a
     // "Ripple 4" line that did not compile leaves no trigger and still reports.
@@ -1744,6 +1792,11 @@ export function compileCard(card: CompilableCard): CompileResult {
     // §3.106
     ...(noManaCost ? { noManaCost: true } : {}),
     ...(assembly.suspend ? { suspend: assembly.suspend } : {}),
+    // §3.112
+    ...(assembly.alternativeCosts ? { alternativeCosts: assembly.alternativeCosts } : {}),
+    ...(assembly.entwine ? { entwine: assembly.entwine } : {}),
+    ...(assembly.foretell ? { foretell: assembly.foretell } : {}),
+    ...(assembly.plot ? { plot: assembly.plot } : {}),
     // §3.113
     ...(assembly.castTriggers !== undefined && assembly.castTriggers.length > 0
       ? { castTriggers: assembly.castTriggers }

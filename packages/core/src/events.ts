@@ -126,6 +126,21 @@ export type GameEvent =
       readonly instanceId: InstanceId;
       readonly name: string;
     }
+  // --- the cast-alternative family (§3.112) -----------------------------------------
+  | {
+      /**
+       * A card was FORETOLD (CR 702.143a, face down) or PLOTTED (CR 702.170a):
+       * the special action paid its cost and exiled the card to be cast on a
+       * later turn. The `zoneChange` into exile is emitted separately; this is
+       * the action itself. Carries NO name on purpose: a foretold card is face
+       * down, and a replay that printed it would show the table what only its
+       * owner may look at.
+       */
+      readonly type: 'cardExiledToCastLater';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly method: 'foretell' | 'plot';
+    }
   // --- §3.113 the spell-count family: cascade and ripple windows ----------------
   | {
       /**

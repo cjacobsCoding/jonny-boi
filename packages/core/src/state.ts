@@ -315,6 +315,29 @@ export interface CardInstance {
    * `internal/clone.ts`.
    */
   controlledSinceTurn?: number;
+  // --- the cast-alternative family (§3.112) -----------------------------------------
+  /**
+   * WHICH alternative cost the spell that became this permanent paid — evoke,
+   * dash, blitz, surge, prototype or warp (`CastSpellAction.alternative`).
+   * Written at the battlefield entry from the stack object, exactly as
+   * {@link timesKicked} is, and read by the rider bodies the entry created
+   * ("sacrifice it", "return it to hand", "exile it"): a body that finds the
+   * stamp gone acts on nothing, which is how a bounced-and-recast dash creature
+   * (a new object, CR 400.7) escapes the old rider. Cleared as the permanent
+   * leaves. OPTIONAL and written only on such an entry, for the object-shape
+   * reason {@link attachedTo} gives. Anyone adding a field here must also edit
+   * `internal/clone.ts`.
+   */
+  castWith?: import('./cast-alternatives.js').AlternativeCostKind;
+  /**
+   * The card is in exile FACE DOWN — a foretold card (CR 702.143a: "exile a
+   * card with foretell from their hand face down"). A hidden-information
+   * marker only, NOT the morph system: it changes nothing about the card's
+   * characteristics, and its one reader is the online masking seam, which
+   * withholds a face-down card from the opponent's exile view. Cleared as the
+   * card is cast from exile. Same optional-field discipline as {@link attachedTo}.
+   */
+  faceDown?: true;
   // --- the counter keyword family (DESIGN §3.110) ------------------------------
   /**
    * RENOWNED (CR 702.112a) — the once-only designation a renown creature gains
@@ -479,6 +502,21 @@ export interface SpellStackObject {
    * the entry can arrive unsick. Absent for every other cast.
    */
   readonly hasteOnEntry?: boolean;
+  // --- the cast-alternative family (§3.112) -----------------------------------------
+  /**
+   * WHICH alternative cost this cast paid (`CastSpellAction.alternative`),
+   * riding the stack object into the resolution exactly as {@link kicked}
+   * does, so the entry can stamp `CardInstance.castWith`, enter unsick for the
+   * kinds that give haste, and create the keyword's delayed riders. Absent for
+   * a cast that paid the printed cost.
+   */
+  readonly alternative?: import('./cast-alternatives.js').AlternativeCostKind;
+  /**
+   * Whether ENTWINE was paid (CR 702.42a) — recorded once the caster answers,
+   * with the mana charged; `true` means every printed mode was announced.
+   * Absent for spells with no entwine / unanswered.
+   */
+  readonly entwined?: boolean;
   /**
    * The MODES chosen for a modal spell, in PRINTED order, one entry per pick
    * (a repeated mode appears once per time it was chosen). Each pick's
@@ -519,7 +557,9 @@ export interface SpellStackObject {
     | 'multikicker'
     | 'modeTarget'
     | 'buyback'
-    | 'additionalCost';
+    | 'additionalCost'
+    // §3.112 — "pay the entwine cost to choose all modes?", asked before the mode menu.
+    | 'entwine';
   /**
    * The zone this spell was CAST FROM. Optional, and absent means `'hand'` —
    * which keeps every state serialized before non-hand casting existed (and

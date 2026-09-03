@@ -47,8 +47,17 @@ import {
   type GameState,
   type PlayerId,
 } from '../index.js';
-import { creatureDef, deckOf, giveGraveyard, giveHand, landDef, spellDef } from '../test-fixtures.js';
-import { creatureDef, deckOf, giveHand, giveLibrary, landDef } from '../test-fixtures.js';
+import {
+  creatureDef,
+  deckOf,
+  giveGraveyard,
+  giveHand,
+  giveLibrary,
+  landDef,
+  spellDef,
+} from '../test-fixtures.js';
+// §3.112 — the rider bodies of the cast-alternative tests, in miniature.
+import { moveToZone, resetInstanceForNewZone } from '../internal/zones.js';
 import {
   act,
   FILLER_LAND,
@@ -772,6 +781,200 @@ describe('CR 702 — upkeep costs and time counters (§3.106)', () => {
     expect(entered).toBeDefined();
     // "It gains haste until you lose control of it": it entered unsick.
     expect(entered?.summoningSick).toBe(false);
+  });
+});
+
+// --- §3.112 the cast-alternative family ---------------------------------------------------
+
+/** Mulldrifter, in miniature: {4}{U} 2/2, "when this enters, draw", Evoke {2}{U}. */
+const EVOKER: CardDefinition = {
+  ...creatureDef('Evoker', 2, 2, { cost: { generic: 4, U: 1 } }),
+  triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'noteEtb' }], label: 'ETB' }],
+  alternativeCosts: {
+    evoke: {
+      cost: { generic: 2, U: 1 },
+      riders: [
+        {
+          condition: { on: 'etb' },
+          effects: [{ primitive: 'sacrificeIfCastWith', params: { castWith: 'evoke' } }],
+          label: 'Evoke: sacrifice it',
+          removesFromBattlefield: true,
+        },
+      ],
+    },
+  },
+};
+
+/** Kolaghan Skirmisher, in miniature: {3}{R} 3/2 with Dash {1}{R}. */
+const DASHER: CardDefinition = {
+  ...creatureDef('Dasher', 3, 2, { cost: { generic: 3, R: 1 } }),
+  alternativeCosts: {
+    dash: {
+      cost: { generic: 1, R: 1 },
+      riders: [
+        { condition: { on: 'endStep', who: 'any' }, effects: [{ primitive: 'returnIfDashed' }], label: 'Dash: return it', removesFromBattlefield: true },
+      ],
+    },
+  },
+};
+
+/** Boulder Salvo, in miniature: a {4}{R} sorcery with Surge {1}{R}. */
+const SURGER: CardDefinition = {
+  id: 'surger-7xx',
+  name: 'Surger',
+  types: ['sorcery'],
+  cost: { generic: 4, R: 1 },
+  alternativeCosts: { surge: { cost: { generic: 1, R: 1 } } },
+  effects: [{ primitive: 'noteEtb' }],
+};
+
+/** Barbed Lightning, in miniature: choose one of two, Entwine {2}. */
+const ENTWINER: CardDefinition = {
+  id: 'entwiner-7xx',
+  name: 'Entwiner',
+  types: ['instant'],
+  timing: 'instant',
+  cost: { R: 1 },
+  entwine: { generic: 2 },
+  modal: {
+    min: 1,
+    max: 1,
+    modes: [
+      { id: 'a', label: 'A', effects: [{ primitive: 'noteEtb' }] },
+      { id: 'b', label: 'B', effects: [{ primitive: 'noteEtb' }] },
+    ],
+  },
+};
+
+/** Kaya's Onslaught, in miniature: a {2}{W} instant with Foretell {W}. */
+const FORETOLD: CardDefinition = {
+  id: 'foretold-7xx',
+  name: 'Foretold',
+  types: ['instant'],
+  timing: 'instant',
+  cost: { generic: 2, W: 1 },
+  foretell: { W: 1 },
+  effects: [{ primitive: 'noteEtb' }],
+};
+
+/** Djinn of Fool's Fall, in miniature: {4}{U} 4/3 with Plot {3}{U}. */
+const PLOTTED: CardDefinition = {
+  ...creatureDef('Plotted', 4, 3, { cost: { generic: 4, U: 1 } }),
+  plot: { generic: 3, U: 1 },
+};
+
+describe('CR 702 — the cast-alternative family (§3.112)', () => {
+  const notes: string[] = [];
+  const registry = registryWith({
+    noteEtb: (ctx) => {
+      notes.push(ctx.source.def.name);
+    },
+    // The rider bodies, in miniature — the cards package's `sacrificeSelfIfCastWith` / `returnSelfToHand`.
+    sacrificeIfCastWith: (ctx) => {
+      const perm = ctx.state.battlefield.find((c) => c.instanceId === ctx.source.instanceId);
+      if (!perm || perm.castWith !== ctx.params.castWith) return;
+      moveToZone(ctx.state, perm, 'graveyard', ctx.emit);
+      resetInstanceForNewZone(perm);
+    },
+    returnIfDashed: (ctx) => {
+      const perm = ctx.state.battlefield.find((c) => c.instanceId === ctx.source.instanceId);
+      if (!perm || perm.castWith !== 'dash') return;
+      moveToZone(ctx.state, perm, 'hand', ctx.emit);
+      resetInstanceForNewZone(perm);
+    },
+  });
+
+  function atMainWith(defs: readonly CardDefinition[], pool: Partial<GameState['players']['A']['manaPool']>): { state: GameState; cards: CardInstance[] } {
+    notes.length = 0;
+    const state = advanceTo(newGame({ registry }), 'precombatMain', registry);
+    state.players.A.hand = [];
+    state.players.B.hand = [];
+    const cards = giveHand(state, 'A', defs);
+    state.players.A.manaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, ...pool };
+    return { state, cards };
+  }
+
+  function settle(state: GameState): GameState {
+    let s = state;
+    for (let guard = 0; guard < 8 && (s.stack.length > 0 || s.pendingChoice); guard++) s = pass(s, registry);
+    return s;
+  }
+
+  crTest('702.74a', 'a creature cast for its evoke cost is sacrificed as it enters, and its enters-the-battlefield trigger still resolves', () => {
+    const { state, cards } = atMainWith([EVOKER], { U: 1, C: 2 });
+    const evoker = cards[0]!;
+    // {4}{U} is out of reach; the evoke cast is the one on the menu.
+    expect(generateLegalActions(state).some((a) => a.kind === 'castSpell' && a.alternative === 'evoke')).toBe(true);
+    let s = act(state, { kind: 'castSpell', player: 'A', instanceId: evoker.instanceId, alternative: 'evoke' }, registry);
+    s = settle(s);
+    expect(onBattlefield(s, evoker.instanceId)).toBeUndefined();
+    expect(s.players.A.graveyard.some((c) => c.instanceId === evoker.instanceId)).toBe(true);
+    expect(notes).toEqual(['Evoker']);
+  });
+
+  crTest('702.109a', 'a creature cast for its dash cost has haste and is returned to its owner\'s hand at the beginning of the next end step', () => {
+    const { state, cards } = atMainWith([DASHER], { R: 1, C: 1 });
+    const dasher = cards[0]!;
+    let s = act(state, { kind: 'castSpell', player: 'A', instanceId: dasher.instanceId, alternative: 'dash' }, registry);
+    s = settle(s);
+    expect(onBattlefield(s, dasher.instanceId)?.summoningSick).toBe(false);
+    s = advanceTo(s, 'end', registry);
+    s = settle(s);
+    expect(onBattlefield(s, dasher.instanceId)).toBeUndefined();
+    expect(s.players.A.hand.some((c) => c.instanceId === dasher.instanceId)).toBe(true);
+  });
+
+  crTest('702.117a', 'a surge cost may be paid only if its caster has cast another spell this turn', () => {
+    const { state, cards } = atMainWith([SURGER, BEAR], { R: 1, C: 2 });
+    const [surger, bear] = cards;
+    expect(rejectionOf(state, { kind: 'castSpell', player: 'A', instanceId: surger!.instanceId, alternative: 'surge' }, registry)).toContain(
+      'another spell',
+    );
+    let s = act(state, { kind: 'castSpell', player: 'A', instanceId: bear!.instanceId }, registry);
+    s = settle(s);
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: surger!.instanceId, alternative: 'surge' }, registry);
+    expect(s.players.A.manaPool.C).toBe(0);
+  });
+
+  crTest('702.42a', 'paying the entwine cost chooses all of a modal spell\'s modes', () => {
+    const { state, cards } = atMainWith([ENTWINER], { R: 1, C: 2 });
+    let s = act(state, { kind: 'castSpell', player: 'A', instanceId: cards[0]!.instanceId }, registry);
+    expect(s.pendingChoice?.kind).toBe('payMana');
+    s = act(s, { kind: 'answerChoice', player: 'A', choiceId: s.pendingChoice!.id, answer: { kind: 'payMana', pay: true } }, registry);
+    s = settle(s);
+    expect(notes).toEqual(['Entwiner', 'Entwiner']);
+  });
+
+  crTest('702.143a', 'a foretold card is exiled face down for {2} on its owner\'s turn and cast on a later turn for its foretell cost', () => {
+    const { state, cards } = atMainWith([FORETOLD], { C: 2 });
+    const card = cards[0]!;
+    expect(offers(state, 'foretellCard')).toBe(true);
+    let s = act(state, { kind: 'foretellCard', player: 'A', instanceId: card.instanceId }, registry);
+    expect(s.players.A.exile.find((c) => c.instanceId === card.instanceId)?.faceDown).toBe(true);
+    s.players.A.manaPool = { W: 1, U: 0, B: 0, R: 0, G: 0, C: 0 };
+    expect(generateLegalActions(s).some((a) => a.kind === 'castSpell' && a.instanceId === card.instanceId)).toBe(false);
+    s = advanceToTurn(s, 2, 'upkeep', registry);
+    // The opponent's upkeep: A holds priority after B passes.
+    let guard = 0;
+    while (s.priorityPlayer !== 'A' && guard++ < 4) s = pass(s, registry);
+    s.players.A.manaPool = { W: 1, U: 0, B: 0, R: 0, G: 0, C: 0 };
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: card.instanceId, fromZone: 'exile' }, registry);
+    expect(s.players.A.manaPool.W).toBe(0);
+    s = settle(s);
+    expect(notes).toEqual(['Foretold']);
+  });
+
+  crTest('702.170a', 'a plotted card is exiled for its plot cost as a sorcery and cast on a later turn without paying its mana cost', () => {
+    const { state, cards } = atMainWith([PLOTTED], { U: 1, C: 3 });
+    const card = cards[0]!;
+    let s = act(state, { kind: 'plotCard', player: 'A', instanceId: card.instanceId }, registry);
+    expect(s.players.A.manaPool.U).toBe(0);
+    s = advanceToTurn(s, 3, 'precombatMain', registry);
+    s.players.A.manaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
+    expect(generateLegalActions(s).some((a) => a.kind === 'castSpell' && a.instanceId === card.instanceId)).toBe(true);
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: card.instanceId, fromZone: 'exile' }, registry);
+    s = settle(s);
+    expect(onBattlefield(s, card.instanceId)).toBeDefined();
   });
 });
 

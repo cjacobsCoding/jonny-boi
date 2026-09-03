@@ -787,6 +787,19 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
    * stats to add. Negative from the controller's seat.
    */
   sacrificeSelf: (_params, ctx) => -ctx.weights.choiceCreatureBaseValue,
+  // --- §3.112 the cast-alternative family's riders -----------------------------
+  /**
+   * "Sacrifice it when it enters" (evoke) / "at the beginning of the next end
+   * step" (blitz), "return it to its owner's hand" (dash) and "exile it, cast
+   * it later" (warp) — all priced as `sacrificeSelf` is, from the same weight,
+   * because from the controller's seat each is the same event: the permanent
+   * this spell became is gone. They differ in what happens to the CARD, which
+   * `cardValue` prices where the card lands (a dashed body is back in hand, a
+   * warped one castable from exile) — so pricing that here would count it twice.
+   */
+  sacrificeSelfIfCastWith: (_params, ctx) => -ctx.weights.choiceCreatureBaseValue,
+  returnSelfToHand: (_params, ctx) => -ctx.weights.choiceCreatureBaseValue,
+  warpExile: (_params, ctx) => -ctx.weights.choiceCreatureBaseValue,
   /** The life-cost bill, priced exactly as the mana one: nothing when it can be paid. */
   payLifeOrElse: (params, ctx) => {
     const consequence = params['effects'];
