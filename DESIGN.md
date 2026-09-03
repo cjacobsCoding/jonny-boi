@@ -2607,7 +2607,10 @@ paid from, measured with `keyword-cards.mjs` BEFORE building and ordered by the 
 | plot | 702.170a (special action 116.2k) | 6 | 6 | **0** |
 | surge | 702.117a | 4 | 4 | **0** |
 
-**Measured: 5,623 → 5,740 complete cards. +117 against 113 predicted.** Every keyword landed on its
+**Measured: 5,623 → 5,740 complete cards. +117 against 113 predicted** on the branch point — and
+**6,136 → 6,257, +121, MERGED** with §3.110/§3.111/§3.113, which is the number that ships. The four
+extra are cards those families brought within one clause of playable that this one finished. Every
+keyword landed on its
 number; the surplus is the pump-noun row below reaching cards outside the measured shape. The
 residue is honest and named: channel's 12 are bodies the effect table cannot compile (an {X} channel,
 "all creatures able to block target creature do so", Eiganjo's per-legend discount), dash's 1 is
@@ -2674,13 +2677,23 @@ life): buyback may be DECLINED, and the engine's only non-mana cast cost is the 
 they wait on an optional non-mana cost seam. The "costs {2} less if it targets a tapped creature"
 template (9) needs the chosen TARGET threaded into `castManaCostFor`, which takes no targets today.
 
-**Gate:** 370 files / 19,740 tests / 5 skipped / 0 failed, summed PACKAGE BY PACKAGE — a whole-suite
-run was killed outright by the box (four agents, 6 cores, 7 GB: esbuild's own service died mid-collect
-and vitest reported 79 files "failed" with 0 failing tests, which is what an out-of-memory run looks
-like). Lint 0 errors; pilot-bench 103–105 games/CPU-sec with
-**byte-identical outcomes** (A won 851/2000, the same figure §3.106 and §3.108 recorded on these lock
-decks — the family changes no decision on decks that print none of it). A single throughput number
-on this box is not a comparison (§3.107): three sibling agents were building at the time.
+**Gate (merged):** 381 files / 21,553 tests / 5 skipped / 0 failed, summed PACKAGE BY PACKAGE —
+main's own 377/21,501 plus this family's three test files and the six `crTest`s it adds to the CR 702
+file. A whole-suite run was killed outright twice (four agents, 6 cores, 7 GB: esbuild's own service
+died mid-collect and vitest reported 79 files "failed" with **0 failing tests**, which is what an
+out-of-memory run looks like and is worth recognising rather than debugging). Lint 0 errors;
+`build-card-index.mjs --check` clean; pilot-bench 188 games/CPU-sec (232 wall) on a quiet box with
+**byte-identical outcomes** — A won 851/2000, the figure §3.106 and §3.108 recorded on these lock
+decks, so the family changes no decision on decks that print none of it. Under load the same build
+read 103–105, which is why a single throughput number here is not a comparison (§3.107).
+
+⚠️ **Two defects the three-way merge created that neither branch could see, both recorded because
+the shape will recur.** §3.112's `castASpell` and §3.110's `opponentWasDealtDamage` each landed as
+the FIFTH `TurnFact` at `1 << 4`; merged, surge would have started reading "you cast another spell"
+the moment an opponent took damage, and every test on both sides still passed. And both families own
+`case 'spellCast'` in `recordTurnFacts` — a second `case` is unreachable, so one body now does both
+readings. The bit collision surfaced only because a test wrote the MASK (`state.turnFactsA = 1 << 4`)
+instead of calling `setTurnFact`; it now calls the writer, which is the rule everywhere else.
 
 ### 3.118 The pool regenerated at 5,623 cards — and the soak's first catch of a parallel-merge defect — ✅ done
 
