@@ -27,6 +27,7 @@ import { matchesCardFilter } from './choices.js';
 import type { GameState, InstanceId, PlayerId } from './state.js';
 import { aggregateFor } from './internal/continuous.js';
 import { effectivePower } from './internal/stats.js';
+import { cameUnderControlSinceLastUpkeep } from './upkeep-costs.js';
 
 /**
  * A condition the engine can decide from the board alone.
@@ -53,6 +54,21 @@ export type InterveningIf =
    * fails the condition rather than defaulting to true.
    */
   | { readonly kind: 'sourceKicked' }
+  /**
+   * §3.106 — ECHO's "**if this permanent came under your control since the
+   * beginning of your last upkeep**" (CR 702.30a). Read off the source's
+   * `controlledSinceTurn` stamp (upkeep-costs.ts), which the entry and
+   * control-change funnels write for exactly this reader; a source that has
+   * left the battlefield, or that carries no stamp, fails the condition rather
+   * than defaulting to true.
+   */
+  | { readonly kind: 'sourceControlledSinceLastUpkeep' }
+  /**
+   * §3.106 — VANISHING's "**if this permanent has a time counter on it**"
+   * (CR 702.63a). Generic over the counter kind so fading and any future
+   * "if ~ has a [kind] counter on it" read the same case.
+   */
+  | { readonly kind: 'sourceHasCounter'; readonly counter: string }
   | {
       readonly kind: 'controlCount';
       /** Whose permanents are counted. `'triggering'` is the player the event was about. */
@@ -89,6 +105,25 @@ export function interveningIfHolds(
         const permanent = battlefield[i]!;
         if (permanent.instanceId !== sourceInstanceId) continue;
         return (permanent.timesKicked ?? 0) > 0;
+      }
+      return false;
+    }
+    // §3.106 — the two source-reading conditions of the upkeep-cost family.
+    case 'sourceControlledSinceLastUpkeep': {
+      const battlefield = state.battlefield;
+      for (let i = 0; i < battlefield.length; i++) {
+        const permanent = battlefield[i]!;
+        if (permanent.instanceId !== sourceInstanceId) continue;
+        return cameUnderControlSinceLastUpkeep(state, permanent);
+      }
+      return false;
+    }
+    case 'sourceHasCounter': {
+      const battlefield = state.battlefield;
+      for (let i = 0; i < battlefield.length; i++) {
+        const permanent = battlefield[i]!;
+        if (permanent.instanceId !== sourceInstanceId) continue;
+        return (permanent.counters[condition.counter] ?? 0) > 0;
       }
       return false;
     }

@@ -65,6 +65,8 @@ export type {
   ActivatedAbility,
   AdditionalCastCost,
   CyclingAbility,
+  EnteringCounters,
+  SuspendAbility,
   ActivationCost,
   EntersUntappedCondition,
   RevealFromHandCondition,
@@ -423,6 +425,23 @@ export {
   removeDelayedTrigger,
 } from './delayed.js';
 
+// §3.106 — upkeep costs and time counters (echo, cumulative upkeep, vanishing,
+// fading) and suspend. The counter-kind constants are the ONE spelling every
+// consumer reads; the entry/control stamps are exported for the tests that
+// pin them and for the cards package's suspend tick.
+export {
+  AGE_COUNTER,
+  FADE_COUNTER,
+  TIME_COUNTER,
+  TURNS_BETWEEN_OWN_UPKEEPS,
+  applyEnteringCounters,
+  cameUnderControlSinceLastUpkeep,
+  definitionTracksControlSince,
+  markBattlefieldEntry,
+  markControlChange,
+} from './upkeep-costs.js';
+export { isSuspended, openSuspendWindow, suspendWindowOpenFor } from './suspend.js';
+
 // State
 export type {
   GameState,
@@ -438,6 +457,7 @@ export type {
   ModePick,
   CombatState,
   MadnessWindow,
+  CastWindowKind,
   SpellLeaveReason,
 } from './state.js';
 export {
@@ -507,6 +527,7 @@ export type {
   CastZone,
   LandPlayZone,
   CycleCardAction,
+  SuspendCardAction,
   DeclareAttackersAction,
   DeclareBlockersAction,
   AnswerChoiceAction,

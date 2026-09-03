@@ -65,6 +65,18 @@ export function declineMadness(state: GameState, emit: (event: GameEvent) => voi
   const window = state.madnessWindow;
   if (!window) return false;
   state.madnessWindow = null;
+  // §3.106 — a declined SUSPEND window leaves the card where it is: "If you
+  // don't, it remains exiled" (CR 702.62a). Only the madness kind buries it.
+  if (window.kind === 'suspend') {
+    const card = state.players[window.controller].exile.find((c) => c.instanceId === window.instanceId);
+    emit({
+      type: 'suspendDeclined',
+      player: window.controller,
+      instanceId: window.instanceId,
+      name: card?.def.name ?? 'unknown',
+    });
+    return true;
+  }
   const owner = state.players[window.controller];
   const index = owner.exile.findIndex((c) => c.instanceId === window.instanceId);
   if (index < 0) return false;

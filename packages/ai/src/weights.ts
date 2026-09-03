@@ -146,6 +146,26 @@ export interface HeuristicWeights {
    *  play, and it stops mana from being wasted on a turn with nothing to do. */
   readonly cycleIdleScore: number;
 
+  // --- §3.106 upkeep costs and time counters ---------------------------------
+  /** Score for SUSPENDING a card from hand (CR 702.62a) that cannot be cast this
+   *  turn. Above `passScore` so a hand of uncastable suspend cards does something
+   *  with its mana; below `genericSpellScore` so a castable spell is cast first. */
+  readonly suspendScore: number;
+  /** Extra suspend score per point of the suspended card's mana value — a
+   *  seven-drop waiting four turns is a better use of {1}{R} than a three-drop. */
+  readonly suspendPerManaValue: number;
+  /** Over how many upkeeps a permanent's worth is spread when it is TEMPORARY —
+   *  a vanishing or fading permanent with N counters left is worth N/horizon of a
+   *  permanent one (capped at 1). A Blastoderm on its last fade counter is a chump
+   *  blocker, not a 5/5, to a pilot ranking what to sacrifice or discard. */
+  readonly temporaryPermanentHorizon: number;
+  /** What an upkeep BILL (echo, cumulative upkeep, "sacrifice ~ unless you pay")
+   *  has to buy per mana it costs: the bill is paid when the permanent's
+   *  `cardValue` is at least this many points per mana of the bill — or when the
+   *  mana is SPARE, i.e. paying still leaves this turn's best castable spell
+   *  affordable. Below it the permanent is let go rather than the turn stranded. */
+  readonly upkeepBillWorthPerMana: number;
+
   // --- attacking -----------------------------------------------------------
   /** Minimum net "value" (see attack evaluation) for an attack to be worth making.
    *  An attacker is sent if it can deal unblocked damage or the expected trade is at
@@ -567,6 +587,14 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   floodedLandCount: 5,
   cycleFloodedScore: 45,
   cycleIdleScore: 5,
+
+  // §3.106 upkeep costs and time counters
+  suspendScore: 12,
+  suspendPerManaValue: 2,
+  temporaryPermanentHorizon: 4,
+  // Four points per mana: a 3/3 (cardValue 22) pays an echo of {1}{G} (8) and a
+  // Deranged Hermit (1/1, 14) declines its {3}{G}{G} (20) and keeps the squirrels.
+  upkeepBillWorthPerMana: 4,
 
   // attacking
   attackValueThreshold: 1,

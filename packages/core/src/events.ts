@@ -94,6 +94,38 @@ export type GameEvent =
       readonly instanceId: InstanceId;
       readonly name: string;
     }
+  // --- §3.106 suspend (CR 702.62) ---------------------------------------------
+  | {
+      /**
+       * A card was SUSPENDED from hand: its suspend cost paid, and the card
+       * exiled with `timeCounters` time counters (CR 702.62a). The `zoneChange`
+       * into exile is emitted separately; this is the special action itself.
+       */
+      readonly type: 'cardSuspended';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+      readonly timeCounters: number;
+    }
+  | {
+      /**
+       * The last time counter left a suspended card and its owner now has the
+       * window to cast it without paying its mana cost (CR 702.62a). The same
+       * window record as madness (`MadnessWindow.kind`), its own event because
+       * a replay must not report a discard that never happened.
+       */
+      readonly type: 'suspendWindowOpened';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
+  | {
+      /** The suspend window closed without a cast: the card remains exiled. */
+      readonly type: 'suspendDeclined';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
   | {
       readonly type: 'stackResolved';
       readonly instanceId: InstanceId;

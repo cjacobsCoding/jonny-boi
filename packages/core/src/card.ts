@@ -408,6 +408,16 @@ export interface CardDefinition {
   /** Mana cost. Absent for lands and other free-to-play cards. */
   readonly cost?: ManaCost;
   /**
+   * §3.106 — this nonland card prints NO mana cost (CR 202.1b): Ancestral
+   * Vision, Living End, the suspend cycle. It cannot be cast by paying its
+   * mana cost — from the hand there is nothing else to pay, so the engine never
+   * offers or accepts the cast — and reaches the stack only through a
+   * permission that says "without paying its mana cost" (a suspend window, a
+   * Siege reward) or an alternative cost. Distinct from an absent {@link cost},
+   * which a printed `{0}` also produces and which IS payable.
+   */
+  readonly noManaCost?: boolean;
+  /**
    * How many `{X}` symbols the printed cost carries (1 for `{X}{R}`, 2 for
    * `{X}{X}{U}`). The X portion is deliberately NOT part of {@link cost}: X is 0
    * everywhere except on the stack (CR 107.3), so every existing consumer of
@@ -950,6 +960,27 @@ export interface CardDefinition {
    * ("Madness—Pay six {C}") or with a non-mana component stays reported.
    */
   readonly madness?: ManaCost;
+  // --- upkeep costs and time counters (§3.106) ------------------------------------
+  /**
+   * Counters this permanent ENTERS WITH — "This permanent enters with N time
+   * counters on it" (vanishing, CR 702.63a) / "N fade counters" (fading, CR
+   * 702.32a). A CR 614.1c replacement on the entry itself, applied by the ONE
+   * helper every battlefield-entry path calls (`applyEnteringCounters`, the
+   * sibling of `applyEnteringLoyalty`), so a land played, a creature cast, a
+   * token made and a permanent put onto the battlefield all arrive counted —
+   * the reason this is a definition field and not an entry in the ETB script,
+   * which only a resolving spell runs.
+   */
+  readonly entersWithCounters?: readonly EnteringCounters[];
+  /**
+   * **Suspend N—[cost]** (CR 702.62a). The static half — "if you could begin to
+   * cast this card, you may pay [cost] and exile it with N time counters" — is a
+   * SPECIAL ACTION (`suspendCard`) the engine offers from hand; the exile-side
+   * halves (the upkeep tick and the free cast when the last counter leaves)
+   * live in the delayed-ability record the action creates, because a card in
+   * exile is on no trigger source. See `suspend.ts`.
+   */
+  readonly suspend?: SuspendAbility;
   /**
    * Triggered abilities (DESIGN §3.9), as data: each is a condition (what event
    * sets it off) + an effect-ref list run when it resolves. Opaque to most of core
@@ -1391,6 +1422,37 @@ export interface CyclingAbility {
   readonly effects: readonly EffectRef[];
   /** Human-readable text for the log, the inspector, and the replay viewer. */
   readonly label: string;
+}
+
+// --- upkeep costs and time counters (§3.106) --------------------------------------
+
+/** Counters a permanent enters with (CR 614.1c) — see `CardDefinition.entersWithCounters`. */
+export interface EnteringCounters {
+  /** The counter kind, exactly as `CardInstance.counters` keys it (`'time'`, `'fade'`). */
+  readonly kind: string;
+  readonly count: number;
+}
+
+/**
+ * The printed **Suspend N—[cost]** (CR 702.62a).
+ *
+ * Only the plain form is modelled: a fixed count and a mana cost. "Suspend
+ * X—{X}{W}{W}" and the cards that add abilities to the exiled card ("whenever a
+ * time counter is removed from this card while it's exiled…") stay reported —
+ * the count and the exile-side triggers are things this record cannot say.
+ */
+export interface SuspendAbility {
+  /** How many time counters the card is exiled with. */
+  readonly count: number;
+  /** The suspend cost, paid as the special action is taken. */
+  readonly cost: ManaCost;
+  /**
+   * The body of the exile-side upkeep ability, compiled by the cards package
+   * exactly as `CyclingAbility.effects` is — core creates the delayed ability
+   * and never names a primitive itself. It removes a time counter and, when the
+   * last one leaves, opens the free-cast window.
+   */
+  readonly upkeep: readonly EffectRef[];
 }
 
 /**

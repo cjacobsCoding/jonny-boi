@@ -2957,6 +2957,77 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       return effects({ primitive: 'winTheGame' });
     },
   },
+  // --- §3.106 upkeep costs and time counters: the printed templates ------------
+  {
+    // "Sacrifice ~ unless you pay {COST}" — the body of "At the beginning of
+    // your upkeep, sacrifice this creature unless you pay {U}" (Phantasmal
+    // Forces, Sunken City, Justice); the step-trigger rule hands the body here.
+    // The same pay-or-else the Pact bill uses, with the source declared as
+    // the stake so a pilot prices the bill against the permanent.
+    id: 'sacrifice-self-unless-paid',
+    description: '"Sacrifice ~ unless you pay {COST}"',
+    pattern: /^sacrifice ~ unless you pay ((?:\{[^}]+\})+)$/,
+    build(match) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return effects({
+        primitive: 'payManaOrElse',
+        params: { cost, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+      });
+    },
+  },
+  {
+    // The LIFE form — "sacrifice this enchantment unless you pay 2 life"
+    // (Season of the Witch). "Unless you pay {1} for each card in your hand"
+    // and the non-mana "unless you discard a card / sacrifice a land / return
+    // an Island" forms do not match and stay reported.
+    id: 'sacrifice-self-unless-life-paid',
+    description: '"Sacrifice ~ unless you pay N life"',
+    pattern: new RegExp(`^sacrifice ~ unless you pay ${COUNT_TOKEN} life$`),
+    build(match) {
+      const amount = parseCount(match[1]);
+      if (amount === null || amount <= 0) return null;
+      return effects({
+        primitive: 'payLifeOrElse',
+        params: { amount, effects: [{ primitive: 'sacrificeSelf' }] },
+      });
+    },
+  },
+  {
+    // "Sacrifice ~" as a RESOLUTION effect — "when the token leaves the
+    // battlefield, sacrifice this enchantment" (Dance of Many), and the
+    // unconditional "at the beginning of your upkeep, sacrifice ~". Distinct
+    // from "Sacrifice ~:" the ACTIVATION COST, which the cost parser owns.
+    id: 'sacrifice-self',
+    description: '"Sacrifice ~" (as an effect)',
+    pattern: /^sacrifice ~$/,
+    build() {
+      return effects({ primitive: 'sacrificeSelf' });
+    },
+  },
+  {
+    // "Draw a card at the beginning of the next turn's upkeep." — the Ice Age
+    // cantrip rider (Heal, Jolt, Clairvoyance, and "when this Aura enters, draw
+    // a card at …" on Ritual of Steel). A DELAYED triggered ability (CR 603.7)
+    // on whoever's upkeep comes next (`who: 'any'`), resolving under the
+    // caster (CR 603.7d) so the CASTER draws on the opponent's upkeep.
+    id: 'draw-at-next-turns-upkeep',
+    description: `"Draw N cards at the beginning of the next turn's upkeep"`,
+    pattern: new RegExp(`^(?:you )?draw (a|${COUNT_TOKEN}) cards? at the beginning of the next turn'?s upkeep$`),
+    build(match) {
+      const count = match[1] === 'a' ? 1 : parseCount(match[1]);
+      if (count === null || count <= 0) return null;
+      return effects({
+        primitive: 'scheduleDelayedEffects',
+        params: {
+          on: 'upkeep',
+          who: 'any',
+          effects: [{ primitive: 'drawCards', params: { count } }],
+          label: `Draw ${count === 1 ? 'a card' : `${count} cards`} at the beginning of the next turn's upkeep`,
+        },
+      });
+    },
+  },
   {
     id: 'lose-the-game',
     description: '"You lose the game" (Pact of Negation\'s unpaid upkeep) — CR 104.3a',
@@ -4276,6 +4347,130 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       );
     },
   },
+  // --- §3.106 upkeep costs and time counters -----------------------------------
+  // Four keywords that are each "at the beginning of your upkeep, <bill or tick>"
+  // (CR 702.30a, 702.24a, 702.63a, 702.32a). Pattern rules like bushido, because
+  // each one's payload is its number or its cost; their labels start with the
+  // keyword, which is what `TRIGGER_BACKED_KEYWORDS` reads as the evidence
+  // that the printed line compiled.
+  {
+    // ECHO {cost} (CR 702.30a) — "At the beginning of your upkeep, if this
+    // permanent came under your control since the beginning of your last
+    // upkeep, sacrifice it unless you pay [cost]." The intervening "if" is a
+    // real condition (checked twice, CR 603.4) reading the control stamp the
+    // entry funnel writes; the body is the same pay-or-else the Pact bill uses,
+    // with the sacrifice as its consequence and the source declared as the
+    // stake for the pilot. "Echo—Discard a card" / "Echo—Sacrifice two lands"
+    // print a non-mana cost outside the closed table and stay reported.
+    id: 'keyword-echo',
+    description: '"Echo {2}{R}" — the came-under-your-control upkeep bill, sacrifice unless paid',
+    pattern: /^echo ((?:\{[^}]+\})+)$/,
+    build(match) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return {
+        triggers: [
+          {
+            condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+            effects: [
+              {
+                primitive: 'payManaOrElse',
+                params: { cost, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+              },
+            ],
+            label: `Echo ${formatManaCost(cost)}`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    // CUMULATIVE UPKEEP {cost} (CR 702.24a) — an age counter, then a bill of
+    // [cost] per age counter, else sacrifice. The mana form; `{S}` and "{W} or
+    // {U}" are refused by the symbol parser / the pattern and stay reported.
+    id: 'keyword-cumulative-upkeep-mana',
+    description: '"Cumulative upkeep {1}" — an age counter, then pay the cost once per counter or sacrifice',
+    pattern: /^cumulative upkeep[—-]? ?((?:\{[^}]+\})+)$/,
+    build(match) {
+      const mana = parseManaSymbols(match[1] ?? '');
+      if (!mana) return null;
+      return {
+        triggers: [
+          {
+            condition: { on: 'upkeep', who: 'you' },
+            effects: [{ primitive: 'cumulativeUpkeep', params: { mana } }],
+            label: `Cumulative upkeep ${formatManaCost(mana)}`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    // The LIFE form — "Cumulative upkeep—Pay 1 life." (Gallowbraid, Morinfen,
+    // Inner Sanctum). The other printed costs (a -1/-1 counter, a sacrifice,
+    // a card from a graveyard) are outside the closed cost table and report.
+    id: 'keyword-cumulative-upkeep-life',
+    description: '"Cumulative upkeep—Pay N life." — the life-cost form',
+    pattern: new RegExp(`^cumulative upkeep[—-] ?pay ${COUNT_TOKEN} life\\.?$`),
+    build(match) {
+      const life = parseCount(match[1]);
+      if (life === null || life <= 0) return null;
+      return {
+        triggers: [
+          {
+            condition: { on: 'upkeep', who: 'you' },
+            effects: [{ primitive: 'cumulativeUpkeep', params: { life } }],
+            label: `Cumulative upkeep—Pay ${life} life`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    // VANISHING N (CR 702.63a) — enters with N time counters; at the beginning
+    // of your upkeep, IF it has a time counter, remove one; when the last is
+    // removed, sacrifice it. The bare "Vanishing" (Tidewalker, whose count is
+    // a separate sentence) does not match and stays reported.
+    id: 'keyword-vanishing',
+    description: '"Vanishing 3" — enters with N time counters, one leaves each upkeep, sacrificed with the last',
+    pattern: new RegExp(`^vanishing ${COUNT_TOKEN}$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      if (count === null || count <= 0) return null;
+      return {
+        entersWithCounters: [{ kind: 'time', count }],
+        triggers: [
+          {
+            condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceHasCounter', counter: 'time' } },
+            effects: [{ primitive: 'tickDownCounter', params: { counter: 'time', sacrificeWhen: 'lastRemoved' } }],
+            label: `Vanishing ${count}`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    // FADING N (CR 702.32a) — enters with N fade counters; at the beginning of
+    // your upkeep remove one, and if you can't, sacrifice it. No intervening
+    // "if": the trigger fires with none left, which is exactly when it kills.
+    id: 'keyword-fading',
+    description: '"Fading 2" — enters with N fade counters, one leaves each upkeep, sacrificed when none can',
+    pattern: new RegExp(`^fading ${COUNT_TOKEN}$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      if (count === null || count <= 0) return null;
+      return {
+        entersWithCounters: [{ kind: 'fade', count }],
+        triggers: [
+          {
+            condition: { on: 'upkeep', who: 'you' },
+            effects: [{ primitive: 'tickDownCounter', params: { counter: 'fade', sacrificeWhen: 'noneToRemove' } }],
+            label: `Fading ${count}`,
+          },
+        ],
+      };
+    },
+  },
   {
     id: 'trigger-attacks',
     description: '"Whenever ~ attacks, BODY"',
@@ -5485,6 +5680,25 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const cost = parseManaSymbols(match[1] ?? '');
       if (!cost) return null;
       return { madness: cost };
+    },
+  },
+  {
+    // §3.106 — SUSPEND N—{cost} (CR 702.62a). The static half is the engine's
+    // `suspendCard` special action, read off `CardDefinition.suspend`; the
+    // exile-side upkeep tick is handed over as a body exactly as cycling's is,
+    // so core never names a primitive. "Suspend X—{X}{W}{W}. X can't be 0."
+    // does not match — the count is a cast-time choice this record cannot
+    // hold — and the cards that give the exiled card further abilities report
+    // through those lines.
+    id: 'suspend-cost',
+    description: '"Suspend 4—{1}{U}" — exile from hand with N time counters, tick each upkeep, cast free when the last leaves',
+    pattern: new RegExp(`^suspend ${COUNT_TOKEN}[—-] ?((?:\\{[^}]+\\})+)$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      if (count === null || count <= 0) return null;
+      const cost = parseManaSymbols(match[2] ?? '');
+      if (!cost) return null;
+      return { suspend: { count, cost, upkeep: [{ primitive: 'suspendTick' }] } };
     },
   },
   {
@@ -7837,8 +8051,9 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // creature" as a cost (nothing asks which OTHER permanent), an additional
     // cost that is a choice between two payments ("sacrifice an artifact or
     // discard a card") or an optional one ("you may sacrifice one or more"),
-    // "at the beginning of your upkeep, sacrifice ~", a sacrifice whose noun is
-    // outside the closed cost table, or a value derived from what was
+    // "sacrifice ~ unless you discard a card / return an Island" (§3.106 took
+    // the plain "sacrifice ~" and the mana/life "unless you pay" forms), a
+    // sacrifice whose noun is outside the closed cost table, or a value derived from what was
     // sacrificed (Fling's "damage equal to the sacrificed creature's power").
     pattern: /\bsacrifice\b/,
     missingEngineSystem: 'a sacrifice template the compiler does not recognize yet',
@@ -7855,8 +8070,9 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // their intervening "if". What lands here
     // is a counters TEMPLATE with no rule — and, named so nobody re-builds
     // finished work: phasing, DOUBLING counters, counter
-    // kinds the stat layer does not read (charge/quest/time/growth/keyword
-    // counters), "each ATTACKING creature", once-per-turn trigger limiters,
+    // kinds the stat layer does not read (charge/quest/growth/keyword counters —
+    // time, fade and age counters are §3.106's, read by vanishing, fading and
+    // cumulative upkeep), "each ATTACKING creature", once-per-turn trigger limiters,
     // granting a triggered ability until end of turn, and removing a counter as
     // an activation cost (`ActivationCost` has no counter component).
     //

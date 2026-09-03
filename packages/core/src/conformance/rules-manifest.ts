@@ -959,6 +959,18 @@ export const RULES_MANIFEST: RulesManifest = {
     tests: [
       { rule: '702.21', title: 'targeting an opponent’s warded permanent puts its ward trigger above the spell' },
       { rule: '702.21', title: 'a permanent’s own controller never triggers its ward' },
+      // §3.106 — the core halves of the upkeep-cost family. The bills themselves
+      // (echo's pay-or-sacrifice, cumulative upkeep's age-scaled cost, the
+      // vanishing/fading tick) are cards-package primitives, pinned on the real
+      // printed cards in packages/cards/src/upkeep-costs.test.ts.
+      { rule: '702.30a', title: 'echo bills on the first upkeep after the permanent came under your control, and not on the next' },
+      { rule: '702.63a', title: 'a permanent with vanishing enters with its printed time counters, cast or played' },
+      { rule: '702.32a', title: 'a permanent with fading enters with its printed fade counters, through the land-play path too' },
+      {
+        rule: '702.62a',
+        title:
+          'suspend exiles the card with N time counters for its suspend cost, and the last counter leaving lets it be cast for nothing',
+      },
     ],
     note:
       'Ward is here because it was the one shipped keyword whose TRIGGER nothing drove ' +
@@ -971,10 +983,12 @@ export const RULES_MANIFEST: RulesManifest = {
       'flash (protection-and-flash.test.ts), flashback (flashback.test.ts, seven tests).',
     shortfall:
       'Of ~160 keyword abilities in the CR, this engine has 20 plus cycling (702.29), kicker ' +
-      '(702.33), buyback (702.27), madness (702.35) and aftermath (702.127a — the half castable ' +
+      '(702.33), buyback (702.27), madness (702.35), aftermath (702.127a — the half castable ' +
       'only from the graveyard, for its OWN printed cost rather than a flashback cost; affirmed in ' +
-      'split-cards.test.ts). Everything else is refused by the compiler and listed in ' +
-      'UNSUPPORTED-BACKLOG.md.',
+      'split-cards.test.ts), and — §3.106 — echo (702.30), cumulative upkeep (702.24), fading ' +
+      '(702.32), suspend (702.62) and vanishing (702.63), the last four as upkeep triggers whose ' +
+      'bodies live in packages/cards/src/upkeep-cost-primitives.ts. Everything else is refused by ' +
+      'the compiler and listed in UNSUPPORTED-BACKLOG.md.',
   },
   '703': {
     status: 'cited',
@@ -1225,6 +1239,7 @@ export const ACTION_RULES: ActionRules = {
   tapForMana: '605.3b',
   castSpell: '601.2',
   cycleCard: '702.29',
+  suspendCard: '702.62a',
   activateAbility: '602.2a',
   declareAttackers: '508.1a',
   declareBlockers: '509.1a',

@@ -99,6 +99,11 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   loyaltyChanged: false,
   madnessDeclined: false,
   madnessWindowOpened: false,
+  // §3.106 — suspend moves a card hand → exile and back to the stack; the
+  // battlefield source set changes only when it later RESOLVES (`zoneChange`).
+  cardSuspended: false,
+  suspendWindowOpened: false,
+  suspendDeclined: false,
   manaAdded: false,
   manaCostPaid: false,
   manaPoolEmptied: false,

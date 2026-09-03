@@ -89,6 +89,11 @@ export function actionEquivalenceKey(state: GameState, action: GameAction): stri
       const name = handCardName(state, action.player, action.instanceId);
       return `cycle:${name}:${action.abilityIndex ?? 0}`;
     }
+    case 'suspendCard': {
+      // §3.106 — keyed by NAME for the same reason cycling is.
+      const name = handCardName(state, action.player, action.instanceId);
+      return `suspend:${name}`;
+    }
     case 'declareAttackers':
       return `atk:${[...action.attackers].sort(numeric).join(',')}`;
     case 'declareBlockers':

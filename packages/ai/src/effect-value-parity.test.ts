@@ -65,6 +65,12 @@ const KNOWN_UNPRICED: Readonly<Record<string, string>> = Object.freeze({
   // them.
   sacrificeNamed: 'delayed-trigger body only — never on a pilot menu; combat prices the doom instead',
   exileNamed: 'delayed-trigger body only — never on a pilot menu; combat prices the doom instead',
+  // §3.106 — the two upkeep TICKS. Trigger bodies the engine fires, never a
+  // pilot's pick; what they cost the pilot is read off the counters themselves
+  // (card-value.ts's `temporaryShare` prices a vanishing/fading permanent by
+  // its counters left; a suspended card is priced by the spell it becomes).
+  tickDownCounter: 'upkeep-trigger body only — the pilot prices the time/fade counters through cardValue',
+  suspendTick: 'delayed-trigger body only — the free cast it leads to is priced as the spell itself',
   createEmblem: 'unreachable from pool refs today; an emblem would score flat',
   fight: 'unreachable from pool refs today; a fight would score flat, blind to both bodies',
   returnChosenToHand: 'unreachable from pool refs today',
