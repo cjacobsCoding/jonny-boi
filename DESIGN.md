@@ -3199,6 +3199,59 @@ number under this load is not a measurement (§3.107): branch point 93/98 games/
 family's 108/93/95/92, with **identical outcomes in every run** (A won 845/2000 in all six) — parity,
 which is what a family that adds one counter increment per cast should read.
 
+### 3.123 The 6,257-card pool, and the two offers the engine refused — ✅ done
+
+Wave 2 merged five branches (§3.110–§3.113 plus §3.119) and gated green — **389 files / 21,624 tests**
+— on the pool that was already committed. Regenerating the pool from the corpus took it
+**5,651 → 6,257 complete cards**, and the soak went red immediately, on four separate defects that no
+branch gate could see because none of their cards were in the old pool. Every one is the §3.36 class:
+**the menu is a promise**, and a rejection is not a free retry — the harness passes priority after
+`maxConsecutiveRejectedActions`, so a refused offer costs the pilot the rest of its turn.
+
+**1. `Transmute {1}{U}{U} may be activated only as a sorcery` — a consumer that never asked.**
+`bestCycle` is one of the few places the pilot BUILDS an action rather than picking one off the menu
+(the engine offers a `cycleCard` only once the pool already covers its cost, so a pilot that did not
+plan its taps would never see cycling at all). Cycling prints no timing restriction, so that policy
+asked no timing question for a year — and then §3.112 modelled transmute as a cycling-shaped ability
+with `timing: 'sorcery'`. The policy's only live case for a non-land is "the turn is ending with mana
+unspent", read off `step === 'end'`: precisely when a sorcery-timed ability is illegal.
+⚠️ **The window was answered in SIXTEEN places** — seven in `engine.ts`, eight in `heuristic.ts`, one
+in `mcts.ts`, several with the two step names inlined instead of reading `MAIN_STEPS`. They never
+disagreed; a seventeenth consumer simply did not ask, and **a missing question is indistinguishable
+from one that returned `true`**. `sorcerySpeedWindowFor` is now the one reader, and
+`sorcery-speed-window.test.ts` sweeps `core` and `ai` for a second copy — which promptly found a
+NINTH in the pilot's fast-pass gate, named `sorceryOpen`, that every grep for the usual name had missed.
+
+**2. `lands are played, not cast` — a window that offered a cast for a card that cannot be cast.**
+Madlands is the pool's first LAND with madness. `madnessActionsFor` had only ever held nonlands, so it
+offered `castSpell fromZone: 'exile'` and `applyCastSpell` gave every land's flat refusal. The card
+prints the answer — "play it for its madness cost … only during your turn and only if you have an
+available land play remaining" — so the window now offers a `playLand`, gated by `landPlayRefusal`,
+the one reader `applyPlayLand` refuses by and every land offer site now asks.
+
+**3. `graveyard-cast` INERT — a witness that was unreachable by construction.** §3.111 added the row
+beside `flashback-cast`, but `mechanicOfAction` reads the cast's ZONE, and all four keywords cast from
+the graveyard: every retrace in every game was credited to flashback, and a fully implemented family
+reported as never firing. The discriminator was on the action all along. The CLASS guard is
+`soak-witness-reachability.test.ts` — every `SOAK_MECHANICS` id must be one that some witness site can
+actually tick, or the row is a requirement nothing can satisfy.
+
+**4. 688 observation leaks — a card that was public between two decision boundaries.** The leak
+scanner shrinks its never-seen set at decisions; cascade and ripple take cards off the library, exile
+them face up and bottom them inside ONE resolution, so the cards were never on display at a boundary
+and the window's own `zoneChange`/`pileBottomed` read as leaks. Same shape and same remedy as §3.119's
+Goblin Guide: a reveal is the one way a card becomes public without a visible zone change, so the
+engine says so with `cardRevealed` — emitted BEFORE the move it explains, because a scanner reads a
+flush in emission order. It fires no triggers, so no game outcome moved.
+
+**`regeneration` was the one honest non-defect,** and it is argued rather than assumed: it fires in
+`soak.test`'s lane and not in `observation.test`'s scan, same engine, same pool, both deterministic.
+Its witness is a SEQUENCE — pay a shield, then actually be destroyed — which is the shape
+`token-count-replacement` and `uncounterable` already hit, and it takes their remedy
+(`extraAnchorAttempts`), not an engine change. The soak's rejection report now names the ACTION and
+its card, because "the engine rejected an offered action: lands are played, not cast — at `-`" is a
+true report that costs the next reader a full replay.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
