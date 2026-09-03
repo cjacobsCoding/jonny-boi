@@ -1011,6 +1011,25 @@ export const RULES_MANIFEST: RulesManifest = {
         title:
           'suspend exiles the card with N time counters for its suspend cost, and the last counter leaving lets it be cast for nothing',
       },
+      // §3.110 — the counter keyword family's core halves: the last-known
+      // counter snapshot, four intervening-"if" kinds, the self-only static and
+      // the turn fact. The bodies are pinned on the printed cards in
+      // packages/cards/src/compile/counter-keyword-family.test.ts.
+      {
+        rule: '702.93a',
+        title: 'undying returns only a creature that had no +1/+1 counter as it died — the "if" reads last-known counters',
+      },
+      { rule: '702.100a', title: 'evolve triggers only when the entering creature has greater power or toughness than the source' },
+      { rule: '702.112a', title: 'renown grows the creature the first time it deals combat damage to a player, and never again' },
+      { rule: '702.105a', title: 'dethrone triggers when the defending player has the most life or is tied, and not otherwise' },
+      {
+        rule: '702.98a',
+        title: 'an unleashed creature with a +1/+1 counter can’t block, and the self-only static reaches no other creature',
+      },
+      {
+        rule: '702.54a',
+        title: 'bloodthirst’s question — "an opponent was dealt damage this turn" — is a turn fact recorded for the damager’s side',
+      },
     ],
     note:
       'Ward is here because it was the one shipped keyword whose TRIGGER nothing drove ' +

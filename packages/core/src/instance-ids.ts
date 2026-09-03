@@ -150,6 +150,9 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
   gameOver: { winner: 'none' },
   actionRejected: { reason: 'none' },
   counterAdded: { instanceId: 'id', kind: 'none', amount: 'none' },
+  // §3.110 — the counter keyword family's two events.
+  becameRenowned: { instanceId: 'id', name: 'none' },
+  cardRevealed: { player: 'none', instanceId: 'id', name: 'none' },
   chosenAsEnters: { instanceId: 'id', name: 'none', subject: 'none', value: 'none', described: 'none' },
   regenerated: { instanceId: 'id', name: 'none' },
   triggerPutOnStack: { sourceInstanceId: 'id', controller: 'none', label: 'none' },

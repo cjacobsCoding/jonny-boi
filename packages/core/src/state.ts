@@ -303,6 +303,20 @@ export interface CardInstance {
    * `internal/clone.ts`.
    */
   controlledSinceTurn?: number;
+  // --- the counter keyword family (DESIGN §3.110) ------------------------------
+  /**
+   * RENOWNED (CR 702.112a) — the once-only designation a renown creature gains
+   * the first time it deals combat damage to a player: "if it isn't renowned,
+   * put N +1/+1 counters on it and it becomes renowned". A DESIGNATION, not a
+   * counter: it is neither proliferated nor removed, and it is the thing the
+   * intervening "if" reads (`sourceNotRenowned`). Lost as the permanent leaves
+   * the battlefield (CR 400.7 — a new object is not renowned).
+   *
+   * Written ONLY by the renown body, for the same object-shape/throughput
+   * reason as {@link attachedTo}. Anyone adding a field here must also edit
+   * `internal/clone.ts`.
+   */
+  renowned?: boolean;
 }
 
 /**

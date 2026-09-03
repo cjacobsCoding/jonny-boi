@@ -111,6 +111,10 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // Same conditional-copy rule (only echo permanents carry it) and the same
   // stakes: drop it and every echo bill reads "not owed" one action later.
   if (inst.controlledSinceTurn !== undefined) copy.controlledSinceTurn = inst.controlledSinceTurn;
+  // §3.110 — the RENOWNED designation (CR 702.112a). Same conditional-copy
+  // rule (only a renown creature that has connected carries it) and the same
+  // stakes: drop it and a Rhox Maulers grows again on its next connection.
+  if (inst.renowned !== undefined) copy.renowned = inst.renowned;
   // NOTE FOR THE NEXT FIELD, because this copy has now dropped one four times:
   // a fact that belongs to the CARD rather than to this object's runtime state
   // needs no line here at all. `def` is shared by reference above, so a

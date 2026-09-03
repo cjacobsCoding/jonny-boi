@@ -822,6 +822,10 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
    * counter KIND instead.
    */
   counterAdded: null,
+  // §3.110 — a designation and a reveal are bookkeeping of mechanics the
+  // `counterAdded` / `zoneChange` events already attribute.
+  becameRenowned: null,
+  cardRevealed: null,
 
   // --- One event, one mechanic. ---------------------------------------------
   loyaltyChanged: 'planeswalker-loyalty',

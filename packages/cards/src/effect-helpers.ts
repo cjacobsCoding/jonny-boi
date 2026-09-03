@@ -35,6 +35,7 @@ import {
   isPlayerTarget,
   isTargetRestriction,
   MANA_COLORS,
+  markBattlefieldEntry,
   pruneCardGrantsFor,
   resetInstanceForNewZone,
   discardDestination,
@@ -600,6 +601,13 @@ export function putOntoBattlefield(
   card.markedByDeathtouch = false;
   card.counters = {};
   ctx.state.battlefield.push(card);
+  // §3.110 — the entry-time facts (echo's control stamp, "enters with N
+  // counters"), through the ONE helper every core entry path calls. This was
+  // the fourth entry funnel and the one §3.106 missed: a reanimated Arcbound
+  // Worker (modular — a 0/0 that enters with a counter) arrived with none and
+  // died to a state-based action on arrival, exactly the shape §3.106 fixed
+  // for Blastoderm on the other three paths.
+  markBattlefieldEntry(ctx.state, card, ctx.emit);
   ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from, to: 'battlefield' });
   if (card.tapped) ctx.emit({ type: 'tapped', instanceId: card.instanceId });
   return card;

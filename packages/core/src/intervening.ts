@@ -24,10 +24,24 @@
 
 import type { CardFilter } from './choices.js';
 import { matchesCardFilter } from './choices.js';
-import type { GameState, InstanceId, PlayerId } from './state.js';
+import type { CardInstance, GameState, InstanceId, PlayerId } from './state.js';
+import { opponentOf } from './state.js';
 import { aggregateFor } from './internal/continuous.js';
-import { effectivePower } from './internal/stats.js';
+import { effectivePower, effectiveToughness } from './internal/stats.js';
 import { cameUnderControlSinceLastUpkeep } from './upkeep-costs.js';
+
+/**
+ * What the triggering EVENT was about, for the intervening-"if" kinds that
+ * compare against it (DESIGN §3.110): the LKI counter count a `dies` trigger
+ * snapshotted (`amount`) and the objects the event named (`instances`). The
+ * same two values that ride the stack object as `triggeringAmount` /
+ * `triggeringInstances`, handed to the evaluator at BOTH of CR 603.4's moments
+ * so the trigger-time and resolution-time answers read the same facts.
+ */
+export interface TriggerAbout {
+  readonly amount?: number;
+  readonly instances?: readonly InstanceId[];
+}
 
 /**
  * A condition the engine can decide from the board alone.
@@ -69,6 +83,39 @@ export type InterveningIf =
    * "if ~ has a [kind] counter on it" read the same case.
    */
   | { readonly kind: 'sourceHasCounter'; readonly counter: string }
+  // --- the counter keyword family (DESIGN §3.110) ------------------------------
+  /**
+   * UNDYING's "**if it had no +1/+1 counters on it**" (CR 702.93a). "Had" is
+   * LAST-KNOWN information (CR 603.10a): by the time the ability is on the
+   * stack the creature is in a graveyard with its counters wiped, so the count
+   * is the one the trigger collector snapshotted as the death event was
+   * emitted (`TriggerCondition.snapshotsCounters` → `TriggerAbout.amount`).
+   * A trigger that carries no snapshot fails the condition rather than
+   * defaulting to "it had none" — the safe direction is the one that returns
+   * nothing.
+   */
+  | { readonly kind: 'sourceDiedWithoutCounter'; readonly counter: string }
+  /**
+   * RENOWN's "**if it isn't renowned**" (CR 702.112a). Read off the source's
+   * `renowned` stamp, written once by the renown body; a source that has left
+   * the battlefield fails the condition.
+   */
+  | { readonly kind: 'sourceNotRenowned' }
+  /**
+   * EVOLVE's "**if that creature has greater power or toughness than this
+   * creature**" (CR 702.100a) — "that creature" is the entering permanent the
+   * runtime carried as the trigger's subject (`TriggerCondition.carriesSubject`
+   * → `TriggerAbout.instances`). Both sides are EFFECTIVE values (CR 702.100c
+   * compares the creatures as they are, counters and anthems included). A
+   * missing subject, or one that has already left, fails the condition.
+   */
+  | { readonly kind: 'triggeringCreatureLargerThanSource' }
+  /**
+   * DETHRONE's "**attacks the player with the most life or tied for most
+   * life**" (CR 702.105a). This engine is two-player, so the defending player
+   * is the opponent, and "most or tied" is `opponent.life >= controller.life`.
+   */
+  | { readonly kind: 'opponentHasMostLife' }
   | {
       readonly kind: 'controlCount';
       /** Whose permanents are counted. `'triggering'` is the player the event was about. */
@@ -96,9 +143,47 @@ export function interveningIfHolds(
   sourceInstanceId: InstanceId,
   controller: PlayerId,
   triggeringPlayer?: PlayerId,
+  about?: TriggerAbout,
 ): boolean {
   if (condition === undefined) return true;
   switch (condition.kind) {
+    // --- the counter keyword family (DESIGN §3.110) ----------------------------
+    case 'sourceDiedWithoutCounter': {
+      // LKI, never the graveyard card: see the kind's doc comment.
+      const had = about?.amount;
+      return had !== undefined && had <= 0;
+    }
+    case 'sourceNotRenowned': {
+      const battlefield = state.battlefield;
+      for (let i = 0; i < battlefield.length; i++) {
+        const permanent = battlefield[i]!;
+        if (permanent.instanceId !== sourceInstanceId) continue;
+        return permanent.renowned !== true;
+      }
+      return false;
+    }
+    case 'triggeringCreatureLargerThanSource': {
+      const subjectId = about?.instances?.[0];
+      if (subjectId === undefined) return false;
+      const battlefield = state.battlefield;
+      let source: CardInstance | undefined;
+      let subject: CardInstance | undefined;
+      for (let i = 0; i < battlefield.length; i++) {
+        const permanent = battlefield[i]!;
+        if (permanent.instanceId === sourceInstanceId) source = permanent;
+        if (permanent.instanceId === subjectId) subject = permanent;
+      }
+      if (source === undefined || subject === undefined) return false;
+      const sourceMod = aggregateFor(state, source.instanceId);
+      const subjectMod = aggregateFor(state, subject.instanceId);
+      return (
+        effectivePower(subject, subjectMod) > effectivePower(source, sourceMod) ||
+        effectiveToughness(subject, subjectMod) > effectiveToughness(source, sourceMod)
+      );
+    }
+    case 'opponentHasMostLife': {
+      return state.players[opponentOf(controller)].life >= state.players[controller].life;
+    }
     case 'sourceKicked': {
       const battlefield = state.battlefield;
       for (let i = 0; i < battlefield.length; i++) {

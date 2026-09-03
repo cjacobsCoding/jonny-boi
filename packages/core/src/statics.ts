@@ -87,6 +87,15 @@ export interface StaticAffects extends CardFilter {
    */
   readonly excludeSource?: boolean;
   /**
+   * §3.110 — the static reaches ONLY its own source: a self-conditional ability
+   * printed on the permanent it modifies. Unleash's "**it can't block as long
+   * as it has a +1/+1 counter on it**" (CR 702.98a) is this flag beside
+   * {@link hasCounterKind}. The mirror of {@link excludeSource}, and a distinct
+   * named flag for the same reason: an unscoped self-static would hand the
+   * restriction to every creature on the source's side of the table.
+   */
+  readonly onlySource?: boolean;
+  /**
    * Set for the printed phrase "with a **+1/+1 counter** on it" — the static
    * reaches only permanents currently carrying at least one counter of this
    * kind ("Creatures you control with +1/+1 counters on them can't be
@@ -217,6 +226,8 @@ export function staticsOf(def: CardInstance['def']): readonly StaticAbility[] {
  */
 export function staticAppliesTo(ability: StaticAbility, source: CardInstance, candidate: CardInstance): boolean {
   const affects = ability.affects;
+  // §3.110 — a self-only static reaches nothing but its source (unleash).
+  if (affects.onlySource === true && candidate.instanceId !== source.instanceId) return false;
   // "Other" first: it is the cheapest check and the one most likely to exclude.
   if (affects.excludeSource === true && candidate.instanceId === source.instanceId) return false;
   const scope = affects.controller ?? DEFAULT_STATIC_SCOPE;

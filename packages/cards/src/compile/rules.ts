@@ -57,7 +57,9 @@ import {
   parseCount,
   parseManaSymbols,
   parseSignedInt,
+  selfReference,
   splitCostSymbols,
+  stripReminderText,
 } from './text.js';
 import { BASIC_LAND_NAMES } from '../../data/pool.js';
 import { ITS_MANA_COST } from '../primitives.js';
@@ -362,6 +364,49 @@ function derivedValue(phrase: string): { countOf: string } | null {
 
 /** Persist returns the creature with this many -1/-1 counters (the printed value). */
 const PERSIST_MINUS_COUNTERS = 1;
+
+// --- the counter keyword family (DESIGN §3.110) — the printed numbers, spelled once --
+/** Undying returns the creature with this many +1/+1 counters (CR 702.93a). */
+const UNDYING_RETURN_COUNTERS = 1;
+/** Evolve puts this many +1/+1 counters on the source (CR 702.100a). */
+const EVOLVE_COUNTERS = 1;
+/** Dethrone puts this many +1/+1 counters on the attacker (CR 702.105a). */
+const DETHRONE_COUNTERS = 1;
+/** Outlast's activation puts this many +1/+1 counters on the source (CR 702.108a). */
+const OUTLAST_COUNTERS = 1;
+/**
+ * The creature-type words a printed "Amass [type] N" names, mapped to the
+ * SINGULAR subtype the Army becomes (CR 701.47a: "It's also a Zombie"). A
+ * CLOSED table of the printed plurals: a word outside it reports rather than
+ * being singularised by a rule that "Elves" and "Dwarves" would both break.
+ */
+const AMASS_ARMY_TYPES: Readonly<Record<string, string>> = Object.freeze({
+  zombies: 'Zombie',
+  orcs: 'Orc',
+  goblins: 'Goblin',
+});
+/**
+ * What a printed "Devour [noun] N" may sacrifice (CR 702.82a), as the shared
+ * `CardFilter`. The bare keyword is creatures; the typed forms name a card
+ * type or the Food subtype. Closed for the reason every noun table here is.
+ */
+const DEVOUR_NOUNS: Readonly<Record<string, CardFilter>> = Object.freeze({
+  '': { anyOfTypes: ['creature'] },
+  artifact: { anyOfTypes: ['artifact'] },
+  land: { anyOfTypes: ['land'] },
+  food: { anyOfSubtypes: ['food'] },
+});
+/** Afterlife's Spirit (CR 702.135a), as the token rule reads it: "a 1/1 white and black Spirit creature token with flying". */
+const AFTERLIFE_TOKEN_FACE = '1/1 white and black spirit creature';
+/** Fabricate's counter mode and Servo mode ids (CR 702.122a), as a modal ETB trigger. */
+const FABRICATE_COUNTER_MODE = 'mode1';
+const FABRICATE_SERVO_MODE = 'mode2';
+
+/** A printed count as Oracle prints it inside a token line — "a", "two", "three" — for a generated body. */
+function countWord(count: number): string {
+  const words = ['zero', 'a', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+  return words[count] ?? String(count);
+}
 
 /** The scry/surveil primitives' default look depth — omitted from emitted params. */
 const SCRY_DEFAULT_COUNT = 1;
@@ -2102,6 +2147,53 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
         primitive: 'loseLife',
         params: { amount, targetPlayer: true, targets: OPPONENT_TARGET },
       });
+    },
+  },
+  // --- the counter keyword family (DESIGN §3.110) — the keyword ACTIONS ------------
+  {
+    // AMASS [type] N (CR 701.47a) — "Put N +1/+1 counters on an Army you
+    // control. It's also a [type]. If you don't control an Army, create a 0/0
+    // black [type] Army creature token first." The type word is a row of the
+    // closed `AMASS_ARMY_TYPES` table; "Amass Orcs X" reads the cast-time X
+    // only on a card that prints {X} in its cost, like every other X rule.
+    id: 'amass',
+    description: '"Amass Orcs N" / "Amass Zombies X" — grow an Army you control, making one first if you have none',
+    pattern: /^amass ([a-z]+) (?:([0-9]+)|x)$/,
+    build(match, ctx) {
+      const subtype = AMASS_ARMY_TYPES[match[1] ?? ''];
+      if (subtype === undefined) return null;
+      if (match[2] === undefined) {
+        if (!cardHasXCost(ctx)) return null;
+        return effects({ primitive: 'amass', params: { subtype, amount: CHOSEN_X_PARAM } });
+      }
+      const amount = Number.parseInt(match[2], 10);
+      if (!Number.isFinite(amount)) return null;
+      return effects({ primitive: 'amass', params: { subtype, amount } });
+    },
+  },
+  {
+    // BOLSTER N (CR 701.37a) — "Choose a creature with the least toughness
+    // among creatures you control and put N +1/+1 counters on it." "Bolster X,
+    // where X is …" defines X by a clause this table does not read: reports.
+    id: 'bolster',
+    description: '"Bolster N" — N +1/+1 counters on your least-toughness creature',
+    pattern: /^bolster ([0-9]+)$/,
+    build(match) {
+      const amount = Number.parseInt(match[1] ?? '', 10);
+      if (!Number.isFinite(amount)) return null;
+      return effects({ primitive: 'bolster', params: { amount } });
+    },
+  },
+  {
+    // EXPLORE (CR 701.42a) — "it explores" / "~ explores": reveal the top card;
+    // a land goes to hand, otherwise a +1/+1 counter and an optional bin. The
+    // self form only — "target creature explores" would need the explorer as a
+    // target, which no printed body in the measured set prints.
+    id: 'explore-self',
+    description: '"~ explores" / "it explores" — the source explores (CR 701.42)',
+    pattern: /^(?:~|it|this creature) explores$/,
+    build() {
+      return effects({ primitive: 'explore' });
     },
   },
   {
@@ -4467,6 +4559,206 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       };
     },
   },
+  // --- the counter keyword family (DESIGN §3.110) — the parametrised members ----
+  // Pattern rules and not `KEYWORD_ABILITY_BUILDERS` entries for bushido's
+  // reason: those builders take no argument and each of these carries a
+  // number, a cost or a noun. Every rule refuses a card whose printed form is
+  // outside its closed shape ("Modular—Sunburst", "Bloodthirst X", "Devour X")
+  // by matching nothing, so the line reports through the sweep.
+  {
+    // MODULAR N (CR 702.43a) — "This creature enters with N +1/+1 counters on
+    // it. When it dies, you may put its +1/+1 counters on target artifact
+    // creature." The entry half is the definition field (CR 614.1c — applied
+    // on EVERY entry path, so a reanimated 0/0 Arcbound Worker is a 1/1 and
+    // not a state-based death); the death half is a `dies` trigger that
+    // SNAPSHOTS the counters as it dies (last-known information) and aims at
+    // UP TO one artifact creature — choosing none is the printed "may".
+    // Creatures only: the current wording is "when this PERMANENT is put into
+    // a graveyard", and a land with modular (Power Depot) would need a
+    // death event this engine's `dies` does not emit for noncreatures — so it
+    // keeps reporting rather than compiling a trigger that never fires.
+    id: 'keyword-modular',
+    description: '"Modular N" — enters with N +1/+1 counters; on death, may move them to target artifact creature',
+    pattern: /^modular ([0-9]+)$/,
+    build(match, ctx) {
+      const amount = Number.parseInt(match[1] ?? '', 10);
+      if (!Number.isFinite(amount) || !ctx.card.typeLine.types.some((t) => /^creature$/i.test(t))) return null;
+      return {
+        entersWithCounters: [{ kind: PLUS_ONE_COUNTER, count: amount }],
+        triggers: [
+          {
+            condition: { on: 'dies', snapshotsCounters: PLUS_ONE_COUNTER },
+            effects: [{ primitive: 'modularMove' }],
+            targets: 'artifactCreature',
+            targetCount: { min: 0, max: 1 },
+            label: `Modular ${amount}`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    // RENOWN N (CR 702.112a) — "When this creature deals combat damage to a
+    // player, if it isn't renowned, put N +1/+1 counters on it and it becomes
+    // renowned." The once-only designation is the intervening "if" reading the
+    // `renowned` stamp the body writes.
+    id: 'keyword-renown',
+    description: '"Renown N" — the once-only combat-damage-to-a-player growth',
+    pattern: /^renown ([0-9]+)$/,
+    build(match) {
+      const amount = Number.parseInt(match[1] ?? '', 10);
+      if (!Number.isFinite(amount)) return null;
+      return {
+        triggers: [
+          {
+            condition: { on: 'combatDamageToPlayer', intervening: { kind: 'sourceNotRenowned' } },
+            effects: [{ primitive: 'becomeRenowned', params: { amount } }],
+            label: `Renown ${amount}`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    // BLOODTHIRST N (CR 702.54a) — "If an opponent was dealt damage this turn,
+    // this creature enters with N +1/+1 counters on it." An ENTRY-SCRIPT body
+    // reading the turn-fact memory as the spell resolves. "Bloodthirst X"
+    // (X = the damage dealt) is a count this memory does not keep: reports.
+    id: 'keyword-bloodthirst',
+    description: '"Bloodthirst N" — enters with N +1/+1 counters if an opponent was dealt damage this turn',
+    pattern: /^bloodthirst ([0-9]+)$/,
+    build(match, ctx) {
+      const amount = Number.parseInt(match[1] ?? '', 10);
+      if (!Number.isFinite(amount) || !cardIsPermanent(ctx)) return null;
+      return { effects: [{ primitive: 'bloodthirstCounters', params: { amount } }] };
+    },
+  },
+  {
+    // FABRICATE N (CR 702.122a) — "When this creature enters, put N +1/+1
+    // counters on it or create N 1/1 colorless Servo artifact creature tokens."
+    // A MODAL ETB trigger (CR 603.3c): the two printed halves are its two
+    // modes, chosen as the ability goes on the stack, which is what lets the
+    // pilot price them exactly as it prices a charm's.
+    id: 'keyword-fabricate',
+    description: '"Fabricate N" — an enters trigger choosing N +1/+1 counters or N Servos',
+    pattern: /^fabricate ([0-9]+)$/,
+    build(match) {
+      const amount = Number.parseInt(match[1] ?? '', 10);
+      if (!Number.isFinite(amount)) return null;
+      return {
+        triggers: [
+          {
+            condition: { on: 'etb' },
+            effects: [],
+            modal: {
+              min: 1,
+              max: 1,
+              modes: [
+                {
+                  id: FABRICATE_COUNTER_MODE,
+                  label: `Put ${countWord(amount)} +1/+1 counter${amount === 1 ? '' : 's'} on it`,
+                  effects: [{ primitive: 'addCounters', params: { amount, self: true } }],
+                },
+                {
+                  id: FABRICATE_SERVO_MODE,
+                  label: `Create ${countWord(amount)} 1/1 colorless Servo artifact creature token${amount === 1 ? '' : 's'}`,
+                  effects: [{ primitive: 'createServos', params: { amount } }],
+                },
+              ],
+            },
+            label: `Fabricate ${amount}`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    // BACKUP N (CR 702.165a/b) — "When this creature enters, put N +1/+1
+    // counters on target creature. If that's another creature, it gains the
+    // following abilities until end of turn." "The following abilities" are the
+    // lines printed BELOW the backup line, read off the card's own text; the
+    // rule compiles only when every one of them is a KEYWORD GRANT the
+    // continuous layer can hand to another creature (a keyword list, or a
+    // printed block restriction). A following activated or triggered ability
+    // (Scorn-Blade Berserker, Archpriest of Shadows) has no grant seam yet, so
+    // the whole line reports rather than granting half of what is printed.
+    id: 'keyword-backup',
+    description: '"Backup N" — N +1/+1 counters on target creature, and the abilities below it until end of turn',
+    pattern: /^backup ([0-9]+)$/,
+    build(match, ctx) {
+      const amount = Number.parseInt(match[1] ?? '', 10);
+      if (!Number.isFinite(amount)) return null;
+      const keywords = backupGrantedKeywords(ctx);
+      if (keywords === null) return null;
+      return {
+        triggers: [
+          {
+            condition: { on: 'etb' },
+            effects: [{ primitive: 'backup', params: { amount, keywords } }],
+            targets: 'creature',
+            label: `Backup ${amount}`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    // AFTERLIFE N (CR 702.135a) — "When this creature dies, create N 1/1 white
+    // and black Spirit creature tokens with flying." Handed to the compiler as
+    // the Oracle sentence it stands for, so the tokens come from the same
+    // `create-creature-token` rule every printed token line uses.
+    id: 'keyword-afterlife',
+    description: '"Afterlife N" — the dies trigger making N 1/1 white and black flying Spirits',
+    pattern: /^afterlife ([0-9]+)$/,
+    build(match, ctx) {
+      const amount = Number.parseInt(match[1] ?? '', 10);
+      if (!Number.isFinite(amount)) return null;
+      return triggerFrom(
+        ctx,
+        { on: 'dies' },
+        `create ${countWord(amount)} ${AFTERLIFE_TOKEN_FACE} token${amount === 1 ? '' : 's'} with flying`,
+        `Afterlife ${amount}`,
+      );
+    },
+  },
+  {
+    // DEVOUR [noun] N (CR 702.82a) — "As this creature enters, you may
+    // sacrifice any number of [creatures]. It enters with N times that many
+    // +1/+1 counters on it." An entry-script question; the noun is a row of
+    // the closed `DEVOUR_NOUNS` table. "Devour X" (Thromok — X per creature
+    // devoured, a square) is a count no row expresses: reports.
+    id: 'keyword-devour',
+    description: '"Devour N" / "Devour artifact N" / "Devour Food N" — the as-enters sacrifice-for-counters choice',
+    pattern: /^devour (?:([a-z]+) )?([0-9]+)$/,
+    build(match, ctx) {
+      const amount = Number.parseInt(match[2] ?? '', 10);
+      const filter = DEVOUR_NOUNS[match[1] ?? ''];
+      if (!Number.isFinite(amount) || filter === undefined || !cardIsPermanent(ctx)) return null;
+      return { effects: [{ primitive: 'devourChoice', params: { amount, filter } }] };
+    },
+  },
+  {
+    // OUTLAST {cost} (CR 702.108a) — "{cost}, {T}: Put a +1/+1 counter on this
+    // creature. Activate only as a sorcery." An ordinary activated ability with
+    // sorcery timing; a hybrid or {X} cost the mana parser refuses reports.
+    id: 'keyword-outlast',
+    description: '"Outlast {cost}" — the sorcery-speed tap-and-pay for a +1/+1 counter',
+    pattern: /^outlast ((?:\{[^}]+\})+)$/,
+    build(match) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return {
+        activated: [
+          {
+            cost: { mana: cost, tap: true },
+            effects: [{ primitive: 'addCounters', params: { amount: OUTLAST_COUNTERS, self: true } }],
+            timing: 'sorcery',
+            label: `Outlast ${formatManaCost(cost)}`,
+          },
+        ],
+      };
+    },
+  },
   {
     // BUSHIDO N (CR 702.45a) — "Whenever this creature blocks or becomes
     // blocked, it gets +N/+N until end of turn."
@@ -5713,6 +6005,31 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       // would be a cost we cannot ask for, so the line stays reported.
       const cost = parseManaSymbols(match[1]!);
       return cost === null ? null : { kicker: cost };
+    },
+  },
+  {
+    // §3.110 — "If ~ was kicked, it enters with N +1/+1 counters on it"
+    // (Aether Figment, Academy Drake, Viashino Branchrider). The kicked entry
+    // script's own counters, gated on the cast-time answer through the same
+    // `ifKicked` wrapper every "if this spell was kicked" body rides — read off
+    // the resolution frame, which is exactly when the printed replacement
+    // asks (CR 614.1c, 702.33d).
+    id: 'enters-with-counters-if-kicked',
+    description: '"If ~ was kicked, it enters with N +1/+1 counters on it"',
+    pattern: new RegExp(
+      `^if (?:~|it) was kicked, (?:~|it) enters(?: the battlefield)? with (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on it\\.?$`,
+    ),
+    build(match) {
+      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
+      if (amount === null) return null;
+      return {
+        effects: [
+          {
+            primitive: 'ifKicked',
+            params: { effects: [{ primitive: 'addCounters', params: { amount, self: true } }] },
+          },
+        ],
+      };
     },
   },
   {
@@ -7916,6 +8233,47 @@ function selfBody(body: string): string {
 }
 
 /**
+ * §3.110 — the abilities a BACKUP line grants (CR 702.165b): every printed
+ * line BELOW it, each read as a keyword grant, or `null` when any of them is
+ * something the continuous layer cannot hand to another creature.
+ *
+ * Read off the raw Oracle text (the assembly does not know line order), with
+ * reminder text stripped by the same normaliser every line goes through. Two
+ * shapes are grants: a keyword list ("Flying, first strike, lifelink" —
+ * `parseKeywordList`) and a printed line a STATIC rule compiles to NOTHING BUT
+ * `keywords` ("~ can't be blocked by creatures with power 2 or less" → a
+ * `blockRestriction`). Anything else — an activated ability, a trigger, a
+ * static with a filter — refuses the whole backup line.
+ */
+function backupGrantedKeywords(ctx: RuleContext): KeywordFlags | null {
+  const lines = stripReminderText(selfReference(ctx.card.oracleText, ctx.card.name))
+    .split('\n')
+    .map((line) => normalizeClause(line));
+  const at = lines.findIndex((line) => /^backup [0-9]+/.test(line));
+  if (at < 0) return null;
+  const following = lines.slice(at + 1).filter((line) => line.length > 0);
+  if (following.length === 0) return null;
+  const granted: Record<string, unknown> = {};
+  for (const line of following) {
+    const list = parseKeywordList(line);
+    if (list !== null) {
+      Object.assign(granted, list);
+      continue;
+    }
+    let asStatic: ClauseContribution | null = null;
+    for (const rule of STATIC_RULES) {
+      const found = rule.pattern.exec(line);
+      if (!found) continue;
+      asStatic = rule.build(found, ctx);
+      if (asStatic) break;
+    }
+    if (asStatic === null || asStatic.keywords === undefined || Object.keys(asStatic).length !== 1) return null;
+    Object.assign(granted, asStatic.keywords);
+  }
+  return granted as KeywordFlags;
+}
+
+/**
  * Keyword abilities with a real implementation built from primitives, expressed
  * as a direct contribution. Persist is modelled exactly as the hand-authored
  * pool models it: a dies-trigger running `persistReturn`, which brings the
@@ -8034,6 +8392,81 @@ export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContr
     forestwalk: () => landwalkOf({ kind: 'subtype', subtype: 'forest' }),
     'legendary landwalk': () => landwalkOf({ kind: 'legendary' }),
     'nonbasic landwalk': () => landwalkOf({ kind: 'nonbasic' }),
+    // --- the counter keyword family (DESIGN §3.110) ------------------------------
+    // UNDYING (CR 702.93a) — "When this creature dies, if it had no +1/+1
+    // counters on it, return it to the battlefield under its owner's control
+    // with a +1/+1 counter on it." Persist's +1/+1 mirror, modelled the way the
+    // printed card is and NOT the way persist is: the "if" is a real
+    // intervening "if" over the counters the creature HAD (last-known
+    // information, snapshotted by the runtime as the death is emitted), so a
+    // Young Wolf that grew from a Hardened Scales does not come back, and one
+    // whose counter was proliferated away does. Persist strips its own trigger
+    // instead; the two mechanisms are different on purpose (see `persistReturn`).
+    undying: () => ({
+      triggers: [
+        {
+          condition: {
+            on: 'dies' as const,
+            snapshotsCounters: PLUS_ONE_COUNTER,
+            intervening: { kind: 'sourceDiedWithoutCounter' as const, counter: PLUS_ONE_COUNTER },
+          },
+          effects: [{ primitive: 'undyingReturn', params: { amount: UNDYING_RETURN_COUNTERS } }],
+          label: 'Undying',
+        },
+      ],
+    }),
+    // EVOLVE (CR 702.100a) — "Whenever a creature you control enters, if that
+    // creature has greater power or toughness than this creature, put a +1/+1
+    // counter on this creature." A board-watching trigger that CARRIES its
+    // subject, so the intervening "if" can compare the entering creature to the
+    // source (both effective — CR 702.100c). The source's own entry fires the
+    // trigger and fails the comparison, exactly as the rules have it.
+    evolve: () => ({
+      triggers: [
+        {
+          condition: {
+            on: 'permanentEnters' as const,
+            who: 'you' as const,
+            permanentFilter: { anyOfTypes: ['creature' as const] },
+            carriesSubject: true,
+            intervening: { kind: 'triggeringCreatureLargerThanSource' as const },
+          },
+          effects: [{ primitive: 'addCounters', params: { amount: EVOLVE_COUNTERS, self: true } }],
+          label: 'Evolve',
+        },
+      ],
+    }),
+    // RIOT (CR 702.136a) — "enters with your choice of a +1/+1 counter or
+    // haste": an as-enters choice, so it sits in the ENTRY SCRIPT beside
+    // "~ enters with N +1/+1 counters", asked as the spell resolves.
+    riot: () => ({ effects: [{ primitive: 'riotChoice' }] }),
+    // UNLEASH (CR 702.98a) — "You may have this creature enter with a +1/+1
+    // counter on it. It can't block as long as it has a +1/+1 counter on it."
+    // The choice is an entry-script question; the restriction is a SELF-ONLY
+    // static keyed on the counter, read wherever blockers are declared.
+    unleash: () => ({
+      effects: [{ primitive: 'unleashChoice' }],
+      statics: [
+        {
+          affects: { onlySource: true, hasCounterKind: PLUS_ONE_COUNTER },
+          keywords: { cantBlock: true },
+          label: "Unleash: can't block while it has a +1/+1 counter",
+        },
+      ],
+    }),
+    // DETHRONE (CR 702.105a) — "Whenever this creature attacks the player with
+    // the most life or tied for most life, put a +1/+1 counter on it." In a
+    // two-player game the defending player is the opponent, and "most or tied"
+    // is the intervening "if" `opponentHasMostLife`.
+    dethrone: () => ({
+      triggers: [
+        {
+          condition: { on: 'attacks' as const, intervening: { kind: 'opponentHasMostLife' as const } },
+          effects: [{ primitive: 'addCounters', params: { amount: DETHRONE_COUNTERS, self: true } }],
+          label: 'Dethrone',
+        },
+      ],
+    }),
     persist: () => ({
       triggers: [
         {

@@ -53,6 +53,8 @@ import {
   matchesCardFilter,
   modalSpecOf,
   opponentOf,
+  // §3.110 — bloodthirst's turn fact.
+  turnFactHolds,
   PLAYER_IDS,
 } from '@jonny-boi/core';
 import type { CardFilter } from '@jonny-boi/core';
@@ -1407,6 +1409,59 @@ const LEDGERED_EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.fre
    * without its source (the value context carries targets, not the dying
    * card), and a base-plus-shrink floor is the honest number that remains.
    */
+  // --- §3.110 the counter keyword family ---------------------------------------
+  //
+  // Every body here is a +1/+1 COUNTER placed somewhere, so every price is the
+  // permanent stat value `addCounters` already uses (`modeCounterPerStatValue`
+  // per stat point, two points per counter), signed by whose creature grows —
+  // one ruler, so a fabricate's counter mode and a plain "put a counter" line
+  // cannot be priced two ways.
+
+  /** Undying's return — persist's mirror, and the counter is a GAIN, not a shrink. */
+  undyingReturn: (params, ctx) =>
+    ctx.weights.castCreatureBaseScore +
+    counterStatValue(Math.max(intParam(params, 'amount', 1), 0), ctx.weights),
+  /**
+   * Modular's death move — the counters are last-known information the value
+   * context does not carry, so this is priced as ONE counter's worth on the
+   * aimed artifact creature: enough to prefer our Ravager over their Myr.
+   */
+  modularMove: (_params, ctx) => {
+    const target = firstTargetPermanent(ctx);
+    if (!target) return 0;
+    return target.controller === ctx.player ? counterStatValue(1, ctx.weights) : -ctx.weights.modeSelfHarmPenalty;
+  },
+  becomeRenowned: (params, ctx) => counterStatValue(intParam(params, 'amount', 0), ctx.weights),
+  /** Bloodthirst pays out only when the turn's fact says an opponent was hit. */
+  bloodthirstCounters: (params, ctx) =>
+    turnFactHolds(ctx.state, 'opponentWasDealtDamage', ctx.player)
+      ? counterStatValue(intParam(params, 'amount', 0), ctx.weights)
+      : 0,
+  /** Riot and unleash: the question is answered on the board; the ref is worth its counter. */
+  riotChoice: (_params, ctx) => counterStatValue(1, ctx.weights),
+  unleashChoice: (_params, ctx) => counterStatValue(1, ctx.weights),
+  /** Devour: one feed's worth — the question decides how many, on the board. */
+  devourChoice: (params, ctx) => counterStatValue(intParam(params, 'amount', 0), ctx.weights),
+  /** Fabricate's Servo mode: N 1/1 artifact bodies, priced as the tokens they are. */
+  createServos: (params, ctx) =>
+    tokenValue({ count: intParam(params, 'amount', 0), power: 1, toughness: 1 }, ctx),
+  /** Amass: N counters on our Army (a 0/0 one is made first if we have none). */
+  amass: (params, ctx) => counterStatValue(intParam(params, 'amount', 0), ctx.weights),
+  /** Bolster: N counters on our weakest creature — worth nothing with no creature. */
+  bolster: (params, ctx) =>
+    ctx.state.battlefield.some((p) => p.controller === ctx.player && isCreature(p.def))
+      ? counterStatValue(intParam(params, 'amount', 0), ctx.weights)
+      : 0,
+  /** Backup: the counters, signed by whose creature they land on (the grant rides free). */
+  backup: (params, ctx) => {
+    const target = firstTargetPermanent(ctx);
+    const value = counterStatValue(intParam(params, 'amount', 0), ctx.weights);
+    if (!target) return value;
+    return target.controller === ctx.player ? value : -ctx.weights.modeSelfHarmPenalty;
+  },
+  /** Explore: a look at the top card plus, more often than not, a counter. */
+  explore: (_params, ctx) => ctx.weights.modeSelectionValue + counterStatValue(1, ctx.weights) / 2,
+
   persistReturn: (params, ctx) => {
     const minus = Math.max(intParam(params, 'minusCounters', 1), 0);
     return Math.max(
@@ -1483,6 +1538,16 @@ function lifeSwing(
 }
 
 /** A token's worth, priced exactly like casting a creature of the same size. */
+/**
+ * §3.110 — what `counters` +1/+1 counters are worth as a permanent stat change:
+ * two stat points each at `modeCounterPerStatValue`. The one ruler every
+ * counter-placing body in the family is priced by (see the block above
+ * `persistReturn`), and the same arithmetic `addCounters` uses.
+ */
+function counterStatValue(counters: number, weights: HeuristicWeights): number {
+  return Math.max(counters, 0) * 2 * weights.modeCounterPerStatValue;
+}
+
 function tokenValue(params: Readonly<Record<string, unknown>>, ctx: EffectValueContext): number {
   const weights = ctx.weights;
   const count = Math.max(intParam(params, 'count', 1), 0);
