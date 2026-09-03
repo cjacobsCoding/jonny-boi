@@ -371,6 +371,21 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   'suspendTick',
   'scheduleDelayedEffects',
   /*
+   * §3.111 — THE GRAVEYARD-CASTING FAMILY's bodies. Every one of them reads and
+   * writes the GRAVEYARD, exile and the battlefield and never a library:
+   * `unearthReturn` moves its own card graveyard -> battlefield (and stamps CR
+   * 702.84c's exile replacement on it), `scavengeCounters` puts counters on a
+   * battlefield creature, `graveyardTokenCopy` creates token copies of the card
+   * in exile, and `returnSourceFromGraveyard` moves its own card graveyard ->
+   * hand. A card moved INTO a hand is a card the table already watched leave a
+   * public zone, which is the same shape as a regrown creature and is why this
+   * is library-SAFE rather than library-reading.
+   */
+  'unearthReturn',
+  'scavengeCounters',
+  'graveyardTokenCopy',
+  'returnSourceFromGraveyard',
+  /*
    * `exileGraveyard` moves every card out of one or both graveyards. It reads
    * and writes GRAVEYARDS only — never a library — and every card it moves
    * emits its own zoneChange, so the runner keeps tracking them precisely.
