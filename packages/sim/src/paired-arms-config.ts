@@ -166,6 +166,13 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
    * and this primitive appears on a handful of cards.
    */
   'chooseAsEnters',
+  /*
+   * §3.110 — EXPLORE (CR 701.44a) reads the TOP CARD of a library and branches
+   * on it twice: a land goes to hand, a nonland puts a counter on and asks
+   * whether to bin it. Both halves see a card the swap may have changed, so it
+   * is classified with scry and surveil rather than argued away.
+   */
+  'explore',
 ]);
 
 /**
@@ -368,6 +375,28 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
    * scheduler generalised: its body ("draw a card at the next upkeep") is
    * classified on its own terms when the delayed ability fires.
    */
+  /*
+   * §3.110 — the counter keyword family. Every body here reads and writes the
+   * BATTLEFIELD and nothing else: counters placed through the one CR 614 site
+   * (undying's return, modular's last-known move, renown's designation,
+   * bloodthirst's turn-fact read, riot's and unleash's entry choice, devour's
+   * sacrifice, amass's Army, bolster's toughness comparison, backup's aimed
+   * counters and grant) and tokens built from their own params (fabricate's
+   * Servos, chosen at resolution). `undyingReturn` moves ONE known card graveyard → battlefield and
+   * announces its zoneChange, exactly as `persistReturn` does. Explore is the
+   * one member that reads a library, and it is classified above.
+   */
+  'undyingReturn',
+  'modularMove',
+  'becomeRenowned',
+  'bloodthirstCounters',
+  'riotChoice',
+  'unleashChoice',
+  'devourChoice',
+  'fabricateChoice',
+  'amass',
+  'bolster',
+  'backup',
   'sacrificeSelf',
   'payLifeOrElse',
   'cumulativeUpkeep',

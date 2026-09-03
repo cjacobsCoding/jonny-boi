@@ -137,7 +137,26 @@ const TRIGGER_BACKED_KEYWORDS: ReadonlySet<string> = new Set([
   'cumulative upkeep',
   'vanishing',
   'fading',
+  // §3.110 — the counter keyword family's PARAMETRISED members, each a pattern
+  // rule whose trigger label starts with the keyword ("Modular 2", "Renown 1",
+  // "Fabricate 2", "Backup 1", "Afterlife 2"). The argument-less members
+  // (undying, evolve, riot, unleash, dethrone) are `KEYWORD_ABILITY_BUILDERS`
+  // rows and need no evidence here; a form outside the table ("Modular—
+  // Sunburst") compiles no trigger and reports through its own line.
+  'modular',
+  'renown',
+  'backup',
+  'afterlife',
 ]);
+
+/**
+ * §3.110 — a keyword whose whole implementation is an ACTIVATED ability the
+ * printed line compiled (outlast: "{cost}, {T}: put a +1/+1 counter on this
+ * creature. Activate only as a sorcery"). The evidence is an activated ability
+ * whose label starts with the keyword — the activated-side twin of
+ * {@link TRIGGER_BACKED_KEYWORDS}, and a table for the same reason.
+ */
+const ACTIVATED_BACKED_KEYWORDS: ReadonlySet<string> = new Set(['outlast']);
 
 /**
  * Scryfall's tag for EVERY landwalk printing is the bare word "Landwalk" beside
@@ -208,6 +227,19 @@ const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freez
   food: 'createPredefinedToken',
   investigate: 'createPredefinedToken',
   proliferate: 'proliferate',
+  // §3.110 — the counter keyword family's ACTION and ENTRY-SCRIPT members:
+  // amass (CR 701.47) and bolster (701.39) are keyword actions printed as
+  // spell text, explore (701.44) is a trigger body, and bloodthirst (702.54),
+  // devour (702.82), riot (702.136) and unleash (702.98) compile to the
+  // permanent's own entry script. Same evidence contract: a form the rule table
+  // could not read ("Bloodthirst X", "Devour X") compiles no primitive and
+  // reports through its own line.
+  amass: 'amass',
+  bolster: 'bolster',
+  explore: 'explore',
+  bloodthirst: 'bloodthirstCounters',
+  devour: 'devourChoice',
+  fabricate: 'fabricateChoice',
   // Scryfall tags the card "Regenerate"; the compiled evidence is the shield
   // primitive the printed ability built (CR 701.15).
   regenerate: 'regenerate',
@@ -1440,6 +1472,14 @@ export function compileCard(card: CompilableCard): CompileResult {
     if (
       TRIGGER_BACKED_KEYWORDS.has(word) &&
       assembly.triggers.some((t) => t.label?.toLowerCase().startsWith(word))
+    ) {
+      continue;
+    }
+    // §3.110 — a keyword whose implementation IS an activated ability (outlast):
+    // the evidence is a compiled activation labelled with the keyword.
+    if (
+      ACTIVATED_BACKED_KEYWORDS.has(word) &&
+      assembly.activated.some((a) => a.label.toLowerCase().startsWith(word))
     ) {
       continue;
     }

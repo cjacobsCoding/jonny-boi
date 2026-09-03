@@ -227,6 +227,9 @@ export function resetInstanceForNewZone(inst: CardInstance): void {
   // stay on the battlefield (CR 400.7); a bounced-and-recast echo creature is
   // stamped afresh by its new entry. Same shape-guard as `attachedTo`.
   if (inst.controlledSinceTurn !== undefined) delete inst.controlledSinceTurn;
+  // §3.110 — RENOWNED is a designation of THIS object (CR 702.112a); the new
+  // object a zone change makes (CR 400.7) is not renowned. Same shape-guard.
+  if (inst.renowned !== undefined) delete inst.renowned;
   // CR 712.8a: a double-faced card is front-face-up everywhere except the
   // battlefield, so a TRANSFORMED permanent that leaves (dies, bounces, exiles)
   // reverts to its printed front face here — the same single chokepoint that

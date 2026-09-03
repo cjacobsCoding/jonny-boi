@@ -116,6 +116,10 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // carries it) and the same stakes: drop it and the creature dies to the
   // graveyard one action boundary later, to be unearthed again next turn.
   if (inst.exileIfLeaves !== undefined) copy.exileIfLeaves = inst.exileIfLeaves;
+  // §3.110 — the RENOWNED designation (CR 702.112a). Same conditional-copy
+  // rule (only a renown creature that has connected carries it) and the same
+  // stakes: drop it and a Rhox Maulers grows again on its next connection.
+  if (inst.renowned !== undefined) copy.renowned = inst.renowned;
   // NOTE FOR THE NEXT FIELD, because this copy has now dropped one four times:
   // a fact that belongs to the CARD rather than to this object's runtime state
   // needs no line here at all. `def` is shared by reference above, so a

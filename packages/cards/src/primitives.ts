@@ -107,6 +107,7 @@ import { GRAVEYARD_CAST_PRIMITIVES } from './graveyard-cast-primitives.js';
 import { EXILE_UNTIL_LEAVES_PRIMITIVES } from './exile-until-leaves.js';
 import { TRIGGER_COPY_PRIMITIVES } from './trigger-copy-primitives.js';
 import { BLINK_PRIMITIVES } from './blink-primitives.js';
+import { COUNTER_KEYWORD_PRIMITIVES } from './counter-keyword-primitives.js';
 
 // --- the primitives ------------------------------------------------------------
 
@@ -1411,10 +1412,17 @@ function destroyPermanent(ctx: EffectContext, permanent: CardInstance): void {
   // from combat, clear damage) and is spent. Core's one helper, so a shield
   // covers a targeted Murder exactly as it covers a state-based death.
   if (consumeRegenerationShield(ctx.state, permanent, ctx.emit)) return;
-  movePermanentTo(ctx, permanent, 'graveyard');
+  // §3.110 — the death event goes out BEFORE the zone move, as the other two
+  // death funnels (`internal/sba.ts`, `sacrificePermanent`) already do. The
+  // order is load-bearing: a `dies` trigger that reads how many counters the
+  // creature HAD (undying, modular — CR 603.10a last-known information) takes
+  // its snapshot as this event is emitted, and `movePermanentTo` wipes the
+  // counters. Three funnels, one ordering — a Murdered Young Wolf must read
+  // its counters exactly as a Young Wolf that died in combat does.
   if (isCreature(permanent.def)) {
     ctx.emit({ type: 'creatureDied', instanceId: permanent.instanceId, name: permanent.def.name });
   }
+  movePermanentTo(ctx, permanent, 'graveyard');
 }
 
 /**
@@ -1844,6 +1852,10 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   ...UPKEEP_COST_PRIMITIVES,
   // §3.111 — the graveyard-casting family's bodies.
   ...GRAVEYARD_CAST_PRIMITIVES,
+  // §3.110 — the counter keyword family (`./counter-keyword-primitives`): the
+  // bodies of undying, modular, renown, bloodthirst, riot, unleash, devour,
+  // fabricate's Servos, amass, bolster, backup and explore.
+  ...COUNTER_KEYWORD_PRIMITIVES,
   // "Exile until this leaves the battlefield" (`./exile-until-leaves`) — the
   // O-Ring pair. Its own module because the LINK between exiler and exiled is
   // the whole mechanic: two of these on the battlefield must each return their

@@ -2814,6 +2814,107 @@ LAND into "a 4/4 black Zombie creature that loses all other card types" — a ty
 {X}-scaled discard, are riders the additional-cost shape cannot count. "This creature escapes with a
 +1/+1 counter on it" is its own printed line and still reports on its own — the CAST compiles, so those
 cards wait on one clause rather than two.
+### 3.110 The counter keyword family — modular, undying, evolve, renown, bloodthirst, fabricate, unleash, backup, amass, riot, outlast, devour, bolster, afterlife, dethrone, explore — ✅ done
+
+Picked as a FAMILY off the §3.102 queue: every keyword and printed template whose whole payload is
+**+1/+1 counters placed by a keyword or a templated trigger**, measured with `keyword-cards.mjs`
+BEFORE building.
+
+| keyword | CR | sole | shipped | keyword | CR | sole | shipped |
+|---|---|---|---|---|---|---|---|
+| modular N | 702.43 | 14 | **12** | amass [type] N | **701.47** | 14 | **8** |
+| bloodthirst N | 702.54 | 14 | **13** | backup N | 702.165 | 12 | **11** |
+| undying | 702.93 | 13 | **13** | fabricate N | **702.123** | 12 | **12** |
+| renown N | 702.112 | 11 | **11** | unleash | 702.98 | 10 | **10** |
+| evolve | 702.100 | 8 | **8** | outlast {cost} | **702.107** | 8 | **8** |
+| devour [noun] N | 702.82 | 7 | **7** | riot | 702.136 | 6 | **6** |
+| afterlife N | 702.135 | 5 | **5** | dethrone | 702.105 | 5 | **5** |
+| bolster N | **701.39** | 4 | **2** | explore (template) | **701.44** | 15 | **15** |
+
+**Measured: 5,623 → 5,813 complete cards. +190** against 156 + ~52 predicted. Nine keywords landed
+exactly on their sole-blocked count; every shortfall is a printed form OUTSIDE a closed table, which
+reports rather than compiles — "Modular—Sunburst" and a LAND with modular (Power Depot: `dies` fires
+for creatures only), "Bloodthirst X", Thromok's squared devour, "Amass Elves", "Bolster X, where X
+is …", and a backup whose "following ability" is an activated one (Scorn-Blade Berserker).
+
+⚠️ **Four of the brief's rule numbers were wrong, and checking them found a fifth problem in the
+code.** `bolster` is 701.39 (not .37), `explore` 701.44 (not .42 — that is surveil, which this repo
+cites correctly elsewhere), `fabricate` 702.123 (702.122 is **crew**) and `outlast` 702.107 (702.108
+is **prowess**). Amass and bolster being 701.x at all is structural rather than a lookup — 701 is
+keyword ACTIONS, 702 keyword ABILITIES — and the brief's "bolster 702.111" collided with this repo's
+own long-standing `menace: '702.111'`, which is the contradiction that started the check.
+
+**Four new intervening-"if" kinds carry the family**, because in each case the printed condition is
+what makes the card fair, and CR 603.4 checks it twice:
+
+- `sourceDiedWithoutCounter` — undying's "if it had no +1/+1 counters on it". "Had" is LAST-KNOWN
+  information (CR 603.10a): the graveyard card's counters are already wiped, so the runtime
+  SNAPSHOTS the count as the death event is emitted and carries it as `triggeringAmount`. Opt-in per
+  condition (`TriggerCondition.snapshotsCounters`), so every other `dies` trigger is pushed
+  byte-for-byte as before. Modular's death half reads the same snapshot to know how many to move.
+- `triggeringCreatureLargerThanSource` — evolve's "greater power or toughness", both sides EFFECTIVE
+  (CR 702.100c). "That creature" rides as `triggeringInstances` through the opt-in `carriesSubject`.
+- `sourceNotRenowned` — renown's once-only designation, `CardInstance.renowned`. A DESIGNATION and
+  not a counter: nothing proliferates it, and it is lost with the object (CR 400.7).
+- `opponentHasMostLife` — dethrone, exact in a two-player game.
+
+⚠️ **A death-ordering bug the family exposed, fixed at the class.** Two of the three death funnels
+(`internal/sba.ts`, `sacrificePermanent`) emit `creatureDied` BEFORE the zone move; the cards
+package's `destroyPermanent` emitted it AFTER. Nothing had ever depended on the order — until a
+trigger needed the counters the move wipes, and a **Murdered** Young Wolf stopped coming back while
+one that died in combat did. Three funnels, one ordering, pinned by a test.
+
+⚠️ **A fourth entry funnel §3.106 missed.** `markBattlefieldEntry` was wired into core's three entry
+paths but not the cards package's `putOntoBattlefield`, so a **reanimated** Arcbound Worker (a 0/0
+that enters with a counter) arrived with none and died to a state-based action on arrival — exactly
+the shape §3.106 fixed for Blastoderm on the other three. Undying's own return travels that funnel,
+which is what made the fix load-bearing rather than tidy.
+
+⚠️ **Fabricate was a MODAL and should not have been.** The printed line is "you may put N +1/+1
+counters on it. **If you don't**, create N Servos" — a choice made as the ability RESOLVES, while a
+`ModalSpec` is chosen as it goes on the STACK (CR 603.3c). Both shapes offer the same two outcomes,
+which is why the modal looked faithful; what it did was lock the answer a full response window
+early. It is now one `fabricateChoice` primitive asking the printed question at resolution, and the
+test asserts `trigger.modal` is undefined so the shape cannot drift back.
+
+**Everything else is a row.** `KEYWORD_ABILITY_BUILDERS` gains the five argument-less members
+(undying, evolve, riot, unleash, dethrone); eight PATTERN rules carry the parametrised ones for
+bushido's reason (a builder takes no argument, and each of these carries a number, a cost or a noun);
+`TRIGGER_BACKED_KEYWORDS` gains four rows and a new `ACTIVATED_BACKED_KEYWORDS` twin carries outlast,
+whose evidence is a compiled activation rather than a trigger. Riot and unleash are ENTRY-SCRIPT
+questions beside "~ enters with N counters"; afterlife hands its body to the compiler as the Oracle
+sentence it stands for, so its Spirits come from the same token rule every printed token line uses.
+Unleash's "can't block as long as it has a +1/+1 counter" is `StaticAffects.onlySource` — the mirror
+of `excludeSource`, because an unscoped self-static hands the restriction to the whole team. Modular's
+death half needed one new `TargetRestriction`, `artifactCreature`: the printed line is a CONJUNCTION,
+and `artifactOrCreature` would let an Arcbound Ravager hand its counters to a Sol Ring.
+
+**The pilot plays it** (`ai/src/choices.ts`, `counter-keyword-pilot.test.ts`): riot takes haste only
+when the swing is PROFITABLE this turn (a tapped blocker deters nothing), unleash takes the counter
+while racing, devour feeds a body worth less than the counters it becomes, fabricate compares its two
+halves — and every counter-placing body is priced on ONE ruler (`counterStatValue`, the arithmetic
+`addCounters` already uses). ⚠️ Two of those answers come out as a CONSTANT on the default weights,
+and both say so rather than being tuned: **explore always keeps** (it only ever asks about a nonland,
+every nonland prices over the keep threshold, and this value model prices no graveyard synergy) and
+**fabricate always takes the Servos** (N 1/1 bodies price above 2N stat points — which is also how
+the mechanic plays). Each test proves the reader is a comparison by moving the one weight that
+separates the two answers, rather than asserting the constant.
+
+**Left out, and why:** **mentor** (8) needs a target restricted RELATIVE to the source — "attacking
+creature with lesser power" — and `TargetRestriction` is a flat string union read at 67 sites;
+**reinforce** (5) is a targeted activation from HAND, a zone only cycling reaches and cycling targets
+nothing; amass beyond the three printed Army types; the two "bolster X" forms; and modular on a land.
+All report.
+
+**Gate:** **369 files / 19,777 tests, 0 failed** (5 skipped), summed from PACKAGE-BY-PACKAGE runs
+with a single worker — core 86/1,183, cards 92/16,498, ai 47/512, sim 31/291, data-tools 7/83,
+protocol 2/27, apps/server 6/78, apps/web 98/1,105. A one-shot `vitest run` is not usable on this
+box right now: five agents exhausted the 7 GB, one attempt died with exit code 9 and no output, and
+two others silently DROPPED FILES — a sim run reported "29 files, 0 failed" where 31 exist, with
+`Worker exited unexpectedly` the only clue. Re-run alone, both were green (sim 31/291). That is the
+hazard TESTING.md warns about, met in the wild. Lint 0 errors; `build-card-index --check` clean.
+Pilot bench at parity — 162 → 163 games/sec (137 → 136 games/CPU-sec) with **identical outcomes**, A won 845/2000 in both
+runs, which is the honest reading for lock decks that print no counters.
 
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 

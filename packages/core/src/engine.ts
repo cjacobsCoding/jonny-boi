@@ -915,7 +915,15 @@ function resolveTriggeredAbility(
   // holding is removed from the stack and does nothing. Checked here, before any
   // effect runs, against the same evaluator the collector used when the ability
   // triggered — one condition, one reader, no way for the two to disagree.
-  if (!interveningIfHolds(state, obj.intervening, obj.sourceInstanceId, obj.controller, obj.triggeringPlayer)) {
+  if (
+    obj.intervening !== undefined &&
+    !interveningIfHolds(state, obj.intervening, obj.sourceInstanceId, obj.controller, obj.triggeringPlayer, {
+      // DESIGN §3.110 — the LKI counter snapshot and the event's subject, so
+      // undying's and evolve's "if" read the same facts at both CR 603.4 checks.
+      amount: obj.triggeringAmount,
+      instances: obj.triggeringInstances,
+    })
+  ) {
     emit({
       type: 'triggerFizzled',
       sourceInstanceId: obj.sourceInstanceId,

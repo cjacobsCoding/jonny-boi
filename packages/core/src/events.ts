@@ -396,6 +396,15 @@ export type GameEvent =
   | { readonly type: 'gameOver'; readonly winner: PlayerId | null }
   | { readonly type: 'actionRejected'; readonly reason: string }
   | { readonly type: 'counterAdded'; readonly instanceId: InstanceId; readonly kind: string; readonly amount: number }
+  // --- the counter keyword family (DESIGN §3.110) ------------------------------
+  /** A renown creature connected and gained its once-only designation (CR 702.112a). */
+  | { readonly type: 'becameRenowned'; readonly instanceId: InstanceId; readonly name: string }
+  /**
+   * A card was REVEALED — explore's top card (CR 701.44a). Public by
+   * definition: revealing is showing the card to every player, so the
+   * observation layer passes the name through unmasked.
+   */
+  | { readonly type: 'cardRevealed'; readonly player: PlayerId; readonly instanceId: InstanceId; readonly name: string }
   | {
       /**
        * A permanent NAMED a value as it entered — "As ~ enters, choose a creature

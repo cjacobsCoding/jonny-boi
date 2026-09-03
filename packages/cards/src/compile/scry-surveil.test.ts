@@ -652,11 +652,18 @@ describe('the keyword sweep — an unmatched wording still reports honestly', ()
   it('a card whose OTHER line fails still reports, with the scry keyword suppressed', () => {
     // The scry compiled; the second line did not. Exactly one honest entry, and it
     // names the line that actually failed rather than the keyword that worked.
+    //
+    // ⚠️ The unimplementable stand-in MOVED HERE, for the fourth time in this
+    // repo: it was "Bolster 3" until §3.110 shipped bolster (CR 701.39), exactly
+    // as §3.102's stand-in walked menace → ward → indestructible → skulk →
+    // horsemanship → cumulative upkeep as each of those landed. Morph is the
+    // current top of `keyword-gap-report.mjs` (49 cards sole-blocked), so it is
+    // the next one that will have to move.
     const result = compileCard(
       makeCard({
         name: 'Test Half Broken',
         typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
-        oracleText: 'Scry 2.\nBolster 3.',
+        oracleText: 'Scry 2.\nMorph {2}{U}',
         keywords: ['Scry'],
       }),
     );

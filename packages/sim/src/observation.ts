@@ -359,6 +359,10 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // game information. Kept so a belief model cannot silently mis-count plies.
   actionRejected: 'public',
   counterAdded: 'public',
+  // §3.110 — a renown designation is board state; a REVEAL is, by definition,
+  // the card shown to the table (explore's top card, CR 701.44a).
+  becameRenowned: 'public',
+  cardRevealed: 'public',
   /*
    * THE NAMED VALUE IS PUBLIC, and this one is worth being deliberate about
    * because it sits next to three redacted choice events.

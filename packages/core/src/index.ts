@@ -378,7 +378,7 @@ export {
 
 // The printed intervening "if" (CR 603.4) — declared as trigger-condition DATA
 // and evaluated by one shared reader at both of the moments the rules check it.
-export type { InterveningIf } from './intervening.js';
+export type { InterveningIf, TriggerAbout } from './intervening.js';
 export { interveningIfHolds } from './intervening.js';
 
 // Continuous-effects seam (DESIGN §3.9): the ONE layering path. `indexContinuous`

@@ -34,6 +34,7 @@ import {
   poisonOf,
   generateLegalActions,
   openSuspendWindow,
+  turnFactHolds,
   type CardDefinition,
   type CardInstance,
   type GameAction,
@@ -918,6 +919,220 @@ describe('CR 702 — the graveyard-casting family (§3.111)', () => {
     for (const bear of bears) expect(zoneOf(s, bear.instanceId)).toBe('graveyard');
     s = settle(s);
     expect(zoneOf(s, id)).toBe('exile');
+// --- §3.110 the counter keyword family — the core halves ---------------------------
+//
+// The bodies (undying's return, modular's move, riot's question) are cards-package
+// primitives pinned on the printed cards in packages/cards/src/compile/
+// counter-keyword-family.test.ts. What core owes the family, and what is proven
+// here, is the CONDITION side: the last-known counter snapshot a `dies` trigger
+// reads, the four intervening-"if" kinds, the self-only static, and the turn fact.
+
+describe('CR 702 — the counter keyword family (§3.110)', () => {
+  const noted: string[] = [];
+  const familyRegistry = registryWith({
+    note: (ctx) => {
+      noted.push(typeof ctx.params.what === 'string' ? ctx.params.what : '?');
+    },
+    stampRenowned: (ctx) => {
+      const self = ctx.state.battlefield.find((c) => c.instanceId === ctx.source.instanceId);
+      if (self) self.renowned = true;
+      noted.push('renown');
+    },
+  });
+
+  /** Undying's trigger, as the compiler emits its condition; the body only notes. */
+  const UNDYING_WOLF: CardDefinition = {
+    ...creatureDef('Young Wolf', 1, 1),
+    triggers: [
+      {
+        condition: {
+          on: 'dies',
+          snapshotsCounters: PLUS_ONE_COUNTER,
+          intervening: { kind: 'sourceDiedWithoutCounter', counter: PLUS_ONE_COUNTER },
+        },
+        effects: [{ primitive: 'note', params: { what: 'undying' } }],
+        label: 'Undying',
+      },
+    ],
+  };
+  const EVOLVER: CardDefinition = {
+    ...creatureDef('Cloudfin Raptor', 0, 1),
+    triggers: [
+      {
+        condition: {
+          on: 'permanentEnters',
+          who: 'you',
+          permanentFilter: { anyOfTypes: ['creature'] },
+          carriesSubject: true,
+          intervening: { kind: 'triggeringCreatureLargerThanSource' },
+        },
+        effects: [{ primitive: 'note', params: { what: 'evolve' } }],
+        label: 'Evolve',
+      },
+    ],
+  };
+  const RENOWNED: CardDefinition = {
+    ...creatureDef('Rhox Maulers', 4, 4),
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer', intervening: { kind: 'sourceNotRenowned' } },
+        effects: [{ primitive: 'stampRenowned' }],
+        label: 'Renown 2',
+      },
+    ],
+  };
+  const DETHRONER: CardDefinition = {
+    ...creatureDef('Marchesa’s Emissary', 2, 2),
+    triggers: [
+      {
+        condition: { on: 'attacks', intervening: { kind: 'opponentHasMostLife' } },
+        effects: [{ primitive: 'note', params: { what: 'dethrone' } }],
+        label: 'Dethrone',
+      },
+    ],
+  };
+  const UNLEASHED: CardDefinition = {
+    ...creatureDef('Rakdos Cackler', 1, 1),
+    statics: [{ affects: { onlySource: true, hasCounterKind: PLUS_ONE_COUNTER }, keywords: { cantBlock: true }, label: 'Unleash' }],
+  };
+  const TINY: CardDefinition = creatureDef('Squire', 1, 1);
+  const BIG: CardDefinition = creatureDef('Hill Giant', 3, 3);
+
+  function familyMain(): GameState {
+    const created = createGame({
+      seed: 3110,
+      startingPlayer: 'A',
+      registry: familyRegistry,
+      decks: { A: deckOf(MOUNTAIN, 40), B: deckOf(MOUNTAIN, 40) },
+    });
+    const state = advanceTo(created.state, 'precombatMain', familyRegistry);
+    state.players.A.hand = [];
+    state.players.B.hand = [];
+    // Enough floating mana to cast any fixture creature outright.
+    state.players.A.manaPool = { W: 9, U: 9, B: 9, R: 9, G: 9, C: 9 };
+    return state;
+  }
+
+  /** A's `attackerId` attacks; B is offered blockers. */
+  function attackInto(state: GameState, attackerId: number): GameState {
+    const declare = advanceTo(state, 'declareAttackers', familyRegistry);
+    let s = act(declare, { kind: 'declareAttackers', player: 'A', attackers: [attackerId] }, familyRegistry);
+    for (let guard = 0; guard < 20 && s.stack.length > 0; guard++) s = pass(pass(s, familyRegistry), familyRegistry);
+    s = advanceTo(s, 'declareBlockers', familyRegistry);
+    return s.priorityPlayer === nonActive(s) ? s : pass(s, familyRegistry);
+  }
+
+  /** B blocks `attacker` with `blocker`; combat plays out to the second main phase. */
+  function blockAndFinish(state: GameState, blocker: number, attacker: number): GameState {
+    const declared = act(state, { kind: 'declareBlockers', player: 'B', blocks: [{ blocker, attacker }] }, familyRegistry);
+    return advanceTo(declared, 'postcombatMain', familyRegistry);
+  }
+
+  crTest('702.93a', 'undying returns only a creature that had no +1/+1 counter as it died — the "if" reads last-known counters', () => {
+    noted.length = 0;
+    const state = familyMain();
+    const wolf = putOnBattlefield(state, 'A', UNDYING_WOLF);
+    const giant = putOnBattlefield(state, 'B', BIG);
+    blockAndFinish(attackInto(state, wolf.instanceId), giant.instanceId, wolf.instanceId);
+    expect(noted).toEqual(['undying']);
+    // The same wolf carrying a +1/+1 counter: it dies, and the ability never
+    // reaches the stack (CR 603.4's first check on the snapshotted count).
+    noted.length = 0;
+    const again = familyMain();
+    const grown = putOnBattlefield(again, 'A', UNDYING_WOLF, { counters: { [PLUS_ONE_COUNTER]: 1 } });
+    const giant2 = putOnBattlefield(again, 'B', BIG);
+    const after = blockAndFinish(attackInto(again, grown.instanceId), giant2.instanceId, grown.instanceId);
+    expect(onBattlefield(after, grown.instanceId)).toBeUndefined();
+    expect(noted).toEqual([]);
+  });
+
+  crTest('702.100a', 'evolve triggers only when the entering creature has greater power or toughness than the source', () => {
+    noted.length = 0;
+    const state = familyMain();
+    putOnBattlefield(state, 'A', EVOLVER);
+    const [squire, giant] = giveHand(state, 'A', [TINY, BIG]);
+    /** Cast from hand and pass until the spell AND anything it triggered have resolved. */
+    const castAndSettle = (from: GameState, instanceId: number): GameState => {
+      let s = act(from, { kind: 'castSpell', player: 'A', instanceId }, familyRegistry);
+      for (let guard = 0; guard < 12 && s.stack.length > 0; guard++) s = pass(s, familyRegistry);
+      return s;
+    };
+    const afterSquire = castAndSettle(state, squire!.instanceId);
+    // A 1/1 beside a 0/1: greater power, so it fires.
+    expect(noted).toEqual(['evolve']);
+    castAndSettle(afterSquire, giant!.instanceId);
+    expect(noted).toEqual(['evolve', 'evolve']);
+    // Its own entry compares the source to itself and fails: a control.
+    noted.length = 0;
+    const own = familyMain();
+    const [raptor] = giveHand(own, 'A', [EVOLVER]);
+    castAndSettle(own, raptor!.instanceId);
+    expect(noted).toEqual([]);
+  });
+
+  crTest('702.112a', 'renown grows the creature the first time it deals combat damage to a player, and never again', () => {
+    noted.length = 0;
+    const state = familyMain();
+    const maulers = putOnBattlefield(state, 'A', RENOWNED);
+    let s = attackInto(state, maulers.instanceId);
+    s = advanceTo(s, 'postcombatMain', familyRegistry);
+    expect(onBattlefield(s, maulers.instanceId)?.renowned).toBe(true);
+    expect(noted).toEqual(['renown']);
+    s = advanceToTurn(s, 3, 'precombatMain', familyRegistry);
+    s = attackInto(s, maulers.instanceId);
+    s = advanceTo(s, 'postcombatMain', familyRegistry);
+    // Connected twice; renowned once — the second trigger never reached the stack.
+    expect(noted).toEqual(['renown']);
+  });
+
+  crTest('702.105a', 'dethrone triggers when the defending player has the most life or is tied, and not otherwise', () => {
+    noted.length = 0;
+    const tied = familyMain();
+    const emissary = putOnBattlefield(tied, 'A', DETHRONER);
+    attackInto(tied, emissary.instanceId);
+    expect(noted).toEqual(['dethrone']);
+    noted.length = 0;
+    const behind = familyMain();
+    behind.players.B.life = behind.players.A.life - 1;
+    const emissary2 = putOnBattlefield(behind, 'A', DETHRONER);
+    attackInto(behind, emissary2.instanceId);
+    expect(noted).toEqual([]);
+  });
+
+  crTest('702.98a', 'an unleashed creature with a +1/+1 counter can’t block, and the self-only static reaches no other creature', () => {
+    const state = familyMain();
+    const attacker = putOnBattlefield(state, 'A', BIG);
+    const cackler = putOnBattlefield(state, 'B', UNLEASHED, { counters: { [PLUS_ONE_COUNTER]: 1 } });
+    const bystander = putOnBattlefield(state, 'B', TINY);
+    const blockers = attackInto(state, attacker.instanceId);
+    expect(
+      rejectionOf(blockers, { kind: 'declareBlockers', player: 'B', blocks: [{ blocker: cackler.instanceId, attacker: attacker.instanceId }] }, familyRegistry),
+    ).toMatch(/cannot block/);
+    expect(
+      rejectionOf(blockers, { kind: 'declareBlockers', player: 'B', blocks: [{ blocker: bystander.instanceId, attacker: attacker.instanceId }] }, familyRegistry),
+    ).toBeUndefined();
+    // Without the counter the same Cackler blocks.
+    const plain = familyMain();
+    const attacker2 = putOnBattlefield(plain, 'A', BIG);
+    const cackler2 = putOnBattlefield(plain, 'B', UNLEASHED);
+    const blockers2 = attackInto(plain, attacker2.instanceId);
+    expect(
+      rejectionOf(blockers2, { kind: 'declareBlockers', player: 'B', blocks: [{ blocker: cackler2.instanceId, attacker: attacker2.instanceId }] }, familyRegistry),
+    ).toBeUndefined();
+  });
+
+  crTest('702.54a', 'bloodthirst’s question — "an opponent was dealt damage this turn" — is a turn fact recorded for the damager’s side', () => {
+    const state = familyMain();
+    const bear = putOnBattlefield(state, 'A', BEAR);
+    expect(turnFactHolds(state, 'opponentWasDealtDamage', 'A')).toBe(false);
+    let s = attackInto(state, bear.instanceId);
+    s = advanceTo(s, 'postcombatMain', familyRegistry);
+    expect(s.players.B.life).toBe(18);
+    expect(turnFactHolds(s, 'opponentWasDealtDamage', 'A')).toBe(true);
+    expect(turnFactHolds(s, 'opponentWasDealtDamage', 'B')).toBe(false);
+    // Cleared as the next turn begins.
+    const next = advanceToTurn(s, 2, 'precombatMain', familyRegistry);
+    expect(turnFactHolds(next, 'opponentWasDealtDamage', 'A')).toBe(false);
   });
 });
 

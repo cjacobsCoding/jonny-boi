@@ -150,6 +150,9 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
   gameOver: { winner: 'none' },
   actionRejected: { reason: 'none' },
   counterAdded: { instanceId: 'id', kind: 'none', amount: 'none' },
+  // §3.110 — the counter keyword family's two events.
+  becameRenowned: { instanceId: 'id', name: 'none' },
+  cardRevealed: { player: 'none', instanceId: 'id', name: 'none' },
   chosenAsEnters: { instanceId: 'id', name: 'none', subject: 'none', value: 'none', described: 'none' },
   regenerated: { instanceId: 'id', name: 'none' },
   triggerPutOnStack: { sourceInstanceId: 'id', controller: 'none', label: 'none' },
@@ -291,6 +294,15 @@ const NON_EVENT_INSTANCE_ID_FIELDS = [
    * watched — never a card in a hand or a library.
    */
   'triggeringInstances',
+  /**
+   * `TriggerAbout.instances` (§3.110) — the SAME objects `triggeringInstances`
+   * carries, handed to `interveningIfHolds` so evolve's "if that creature has
+   * greater power or toughness" can compare them. A second name for one fact
+   * rather than a second fact: the record is built at the two CR 603.4 check
+   * sites from the pending trigger's own `triggeringInstances`, never from a
+   * hidden zone, and it is read-only.
+   */
+  'instances',
   /** `ModeChoice.appliesToInstanceId` — which object a chosen mode applies to. */
   'appliesToInstanceId',
   /** `ReplacementQuery.recipientIs` — the object a replacement is asked about. */
