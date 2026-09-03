@@ -41,7 +41,15 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 const WRITE = process.argv.includes('--write');
 
-/** Files whose conflicts are additions by construction — a table, or a log. */
+/**
+ * Files whose conflicts are additions by construction — a table, or a log.
+ *
+ * Grown from the five wave-2 merges (§3.110–§3.113, §3.119). `engine.ts` and
+ * `heuristic.ts` are deliberately ABSENT and should stay absent: both carried
+ * real disagreements in those merges (a shared free-cast condition that needed
+ * a three-term union; two whole functions that each needed a shared tail), and
+ * a file that has ever disagreed once must be read by a person.
+ */
 const ADDITIVE = new Set([
   'DESIGN.md',
   'COORDINATION.md',
@@ -49,16 +57,31 @@ const ADDITIVE = new Set([
   'packages/cards/src/compile/compile.ts',
   'packages/cards/src/compile/types.ts',
   'packages/cards/src/primitives.ts',
+  'packages/cards/src/effect-helpers.ts',
   'packages/core/src/card.ts',
   'packages/core/src/events.ts',
   'packages/core/src/index.ts',
+  'packages/core/src/actions.ts',
   'packages/core/src/instance-ids.ts',
+  'packages/core/src/statics.ts',
+  'packages/core/src/targeting.ts',
+  'packages/core/src/internal/clone.ts',
+  'packages/core/src/internal/zones.ts',
   'packages/core/src/internal/continuous.ts',
+  'packages/core/src/internal/triggers-runtime.ts',
   'packages/core/src/conformance/rules-manifest.ts',
   'packages/ai/src/effect-value.ts',
+  'packages/ai/src/weights.ts',
   'packages/sim/src/paired-arms-config.ts',
+  'packages/sim/src/observation.ts',
   'packages/sim/src/soak-config.ts',
 ]);
+
+/**
+ * A line that only CLOSES a construct — `}`, `],`, `});`, `return;` and the
+ * like. Used to spot the shape that silently loses a brace (see below).
+ */
+const CLOSER = /^[\s})\],;]*$/;
 
 const conflicted = execFileSync('git', ['diff', '--name-only', '--diff-filter=U'], { encoding: 'utf8' })
   .split('\n')
@@ -93,11 +116,30 @@ for (const file of conflicted) {
 
   if (!ADDITIVE.has(file)) why.push('not in the additive list — read it by hand');
   if (hunks.length === 0) why.push('conflict markers are not in the standard three-part shape');
-  for (const [, ours, theirs] of hunks) {
+  for (const match of hunks) {
+    const [whole, ours, theirs] = match;
     const theirLines = new Set(meaningful(theirs));
     const shared = meaningful(ours).find((line) => theirLines.has(line));
     if (shared !== undefined) {
       why.push(`both sides contain ${JSON.stringify(shared.slice(0, 60))} — a real disagreement`);
+      break;
+    }
+    // ⚠️ THE SHAPE THAT SILENTLY LOSES A BRACE, and the reason this script
+    // refuses rather than composing. When each side ENDS MID-CONSTRUCT and the
+    // shared context after the hunk supplies the closer, that closer belongs to
+    // ONE of them — so `ours + theirs` leaves ours unclosed. It cost two broken
+    // merges on 2026-09-03: `rules.ts` (both sides ended inside a builder entry,
+    // sharing `}),`) and the CR conformance test (three `describe` blocks left
+    // sharing one `});`, which `tsc` could not see because packages/core
+    // excludes *.test.ts). The composition is `ours + <closer> + theirs`, and
+    // getting it right needs eyes on the construct, not a regex.
+    const after = text.slice(match.index + whole.length).split(/\r?\n/)[0] ?? '';
+    const ourLast = ours.split(/\r?\n/).filter((line) => line.trim()).pop() ?? '';
+    if (after.trim() && CLOSER.test(after) && !CLOSER.test(ourLast)) {
+      why.push(
+        `each side ends mid-construct and the shared next line ${JSON.stringify(after.trim())} closes only one — ` +
+          'compose as ours + that closer + theirs, by hand',
+      );
       break;
     }
   }
