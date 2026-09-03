@@ -927,6 +927,9 @@ describe('CR 702 — the graveyard-casting family (§3.111)', () => {
     for (const bear of bears) expect(zoneOf(s, bear.instanceId)).toBe('graveyard');
     s = settle(s);
     expect(zoneOf(s, id)).toBe('exile');
+  });
+});
+
 // --- §3.110 the counter keyword family — the core halves ---------------------------
 //
 // The bodies (undying's return, modular's move, riot's question) are cards-package
@@ -1142,6 +1145,8 @@ describe('CR 702 — the counter keyword family (§3.110)', () => {
     const next = advanceToTurn(s, 2, 'precombatMain', familyRegistry);
     expect(turnFactHolds(next, 'opponentWasDealtDamage', 'A')).toBe(false);
   });
+});
+
 // --- §3.113 the spell-count family: storm, cascade, ripple ---------------------------
 
 /** A blank one-mana sorcery — the "other spell cast before it this turn". */
