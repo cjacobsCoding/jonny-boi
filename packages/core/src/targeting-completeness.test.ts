@@ -187,6 +187,16 @@ function buildZoo(withProtectedCreature = false): GameState {
   placePermanent(state, BEAR, 'B');
   placePermanent(state, ARTIFACT, 'B');
   placePermanent(state, LAND, 'B');
+  // §3.112 — the zoo has to FEED `attackingCreature` too, and the only thing
+  // that feeds it is a declared attack: bloodrush's aim is read off the live
+  // combat record, so a board with no combat is a board where the restriction
+  // has nothing to offer and this invariant's empty-menu test would be
+  // reporting a hole that is really a missing fixture. A's Bear (the first
+  // permanent placed) attacks.
+  const attacker = state.battlefield.find((c) => c.controller === 'A' && c.def === BEAR)?.instanceId;
+  if (attacker !== undefined) {
+    state.combat = { attackers: [attacker], blocks: {}, attackersDeclared: true, blockersDeclared: false };
+  }
   if (withProtectedCreature) placePermanent(state, HEXPROOF_BEAR, 'B');
   putInGraveyard(state, INSTANT, 'A');
   putInGraveyard(state, BEAR, 'A');

@@ -114,8 +114,14 @@ export interface CastPermission {
   readonly free: boolean;
   /** §3.112 — the cost the permission charges in place of the printed one. */
   readonly cost?: ManaCost;
-  /** §3.112 — the cast is sorcery-speed regardless of the card's timing. */
-  readonly asSorcery: boolean;
+  /**
+   * §3.112 — the cast is sorcery-speed regardless of the card's own timing (a
+   * plotted card, CR 702.170a). Present only when it HOLDS, for the reason
+   * {@link cost} is: an adventurer's and a Siege's permission then answer with
+   * exactly the object every consumer has always seen, which is what
+   * `split-cards.test.ts` compares whole.
+   */
+  readonly asSorcery?: true;
 }
 
 /**
@@ -141,7 +147,7 @@ export function castPermissionFor(state: GameState, card: CardInstance): CastPer
       face: grant.castFace,
       free: grant.castFree === true,
       ...(grant.castCost !== undefined ? { cost: grant.castCost } : {}),
-      asSorcery: grant.castAsSorcery === true,
+      ...(grant.castAsSorcery === true ? { asSorcery: true } : {}),
     };
   }
   return undefined;
