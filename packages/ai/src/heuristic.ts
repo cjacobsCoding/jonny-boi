@@ -3347,7 +3347,7 @@ function chooseBlock(
     }
   }
   if (features.gangBlock) {
-    addGangBlocks(attackers, availableBlockers, used, blocks, desperate, weights, index, doomed);
+    addGangBlocks(attackers, availableBlockers, used, blocks, desperate, weights, index, doomed, board);
   }
 
   // Declaring zero blocks via an empty `declareBlockers` would leave combat.blocks
@@ -3395,8 +3395,8 @@ export function pickBlocker(
   index: ContinuousIndex,
   /** Permanents a delayed ability will remove anyway — see {@link attackIsProfitable}. */
   doomed: ReadonlySet<InstanceId>,
-  /** The live board, for LANDWALK's read of the defender's lands (§3.107). */
-  battlefield: readonly CardInstance[] = NO_PERMANENTS,
+  /** The live board, for LANDWALK's read of the defender's lands (§3.107). Required — see `canBlockByEvasion`. */
+  battlefield: readonly CardInstance[],
 ): CardInstance | undefined {
   // A creature that can only be blocked by two or more is one this pilot cannot
   // block at all: it assigns a single blocker per attacker, and a lone blocker on
@@ -3470,6 +3470,8 @@ function addGangBlocks(
   weights: HeuristicWeights,
   index: ContinuousIndex,
   doomed: ReadonlySet<InstanceId>,
+  /** The live board — landwalk reads the defender's lands (§3.107). */
+  battlefield: readonly CardInstance[],
 ): void {
   if (blockers.length - used.size < 2) return;
   const blocked = new Set<InstanceId>();
@@ -3490,12 +3492,12 @@ function addGangBlocks(
     let bestSecond: CardInstance | undefined;
     for (let i = 0; i < blockers.length; i++) {
       const one = blockers[i] as CardInstance;
-      if (used.has(one.instanceId) || !canBlockByEvasion(attacker, one, index)) continue;
+      if (used.has(one.instanceId) || !canBlockByEvasion(attacker, one, index, battlefield)) continue;
       const oneK = keywordsOf(one, index);
       if (oneK.firstStrike === true || oneK.doubleStrike === true) continue;
       for (let j = i + 1; j < blockers.length; j++) {
         const two = blockers[j] as CardInstance;
-        if (used.has(two.instanceId) || !canBlockByEvasion(attacker, two, index)) continue;
+        if (used.has(two.instanceId) || !canBlockByEvasion(attacker, two, index, battlefield)) continue;
         const twoK = keywordsOf(two, index);
         if (twoK.firstStrike === true || twoK.doubleStrike === true) continue;
         // The engine's order: the lower id takes lethal first.
@@ -3843,7 +3845,12 @@ export function canBlockByEvasion(
   attacker: CardInstance,
   blocker: CardInstance,
   index: ContinuousIndex,
-  battlefield: readonly CardInstance[] = NO_PERMANENTS,
+  // REQUIRED, not defaulted (§3.110 integration): a default of "no lands" is
+  // what let the gang-block search (§3.108) call this without the board and
+  // propose a block on an islandwalker whose defender controlled an Island —
+  // the engine refused the whole declaration and the soak caught it. Every
+  // caller holds a view; make it say so.
+  battlefield: readonly CardInstance[],
 ): boolean {
   const ak = keywordsOf(attacker, index);
   const bk = keywordsOf(blocker, index);
@@ -3926,14 +3933,6 @@ export function canBlockByEvasion(
   }
   return true;
 }
-
-/**
- * The board `canBlockByEvasion` / `pickBlocker` read when a caller passes none
- * — "the defender controls no lands", read only by LANDWALK (§3.107). Every
- * live decision passes the view's battlefield; the default exists for the
- * test helpers that build two creatures and nothing else.
- */
-const NO_PERMANENTS: readonly CardInstance[] = Object.freeze([]);
 
 /**
  * Whether this creature carries a block REQUIREMENT — "must be blocked if able" /
