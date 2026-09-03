@@ -295,10 +295,19 @@ export const RULES_MANIFEST: RulesManifest = {
     file: 'cr1xx-2xx-objects',
     tests: [
       { rule: '120.3', title: 'non-lethal damage dealt to a creature is MARKED on it, not applied to toughness' },
+      // poison family (§3.105) — the rows of CR 120.3's result table keyed on the source.
+      { rule: '120.3b', title: 'damage dealt to a player by a source with infect is that many poison counters' },
+      {
+        rule: '120.3d',
+        title: 'damage dealt to a creature by a source with wither or infect is that many -1/-1 counters',
+      },
     ],
     note:
-      'CR 120.3c (damage to a planeswalker removes loyalty) and 120.3d (damage to a battle removes ' +
-      'defense) are affirmed by planeswalker.test.ts and battle.test.ts respectively.',
+      'CR 120.3c (damage to a planeswalker removes loyalty) and 120.3h (damage to a battle removes ' +
+      'defense; it was 120.3d before infect and wither took rows 120.3b/120.3d in the 2026 text) ' +
+      'are affirmed by planeswalker.test.ts and battle.test.ts respectively. The whole 120.3 ' +
+      'result table lives in ONE place — core/src/internal/damage-result.ts — which is also where ' +
+      '120.3f (lifelink) and 120.3g (toxic) are applied; poison.test.ts drives both.',
     shortfall:
       'CR 120.6 damage PREVENTION and CR 120.5 damage redirection do not exist — see section 615.',
   },
@@ -950,8 +959,9 @@ export const RULES_MANIFEST: RulesManifest = {
       'exile, mill (CR 701.17), scry (CR 701.22) and surveil (CR 701.25) — the last three ' +
       'affirmed in packages/cards/src/compile/scry-surveil.test.ts.',
     shortfall:
-      'CR 701.19 REGENERATE does not exist anywhere in core; nor do fight, monstrosity, ' +
-      'proliferate, populate, explore, venture or connive.',
+      'Regenerate (CR 701.19), fight (701.14) and proliferate (701.34 — permanents AND poisoned ' +
+      'players, §3.105) live in the cards package (regeneration.test.ts, poison-family.test.ts, ' +
+      'proliferate.test.ts). Monstrosity, populate, explore, venture and connive do not exist.',
   },
   '702': {
     status: 'covered',
@@ -959,6 +969,14 @@ export const RULES_MANIFEST: RulesManifest = {
     tests: [
       { rule: '702.21', title: 'targeting an opponent’s warded permanent puts its ward trigger above the spell' },
       { rule: '702.21', title: 'a permanent’s own controller never triggers its ward' },
+      // poison family (§3.105). Toxic is 702.164 in the 2026-08-19 text (702.181 is Mobilize).
+      { rule: '702.90c', title: 'infect damage to a creature is -1/-1 counters, and no damage is marked' },
+      { rule: '702.90b', title: 'infect damage to a player is poison counters, and no life is lost' },
+      {
+        rule: '702.80a',
+        title: 'wither damage to a creature is -1/-1 counters; to a player it is ordinary life loss',
+      },
+      { rule: '702.164c', title: 'a player dealt combat damage by a toxic creature also gets N poison counters' },
     ],
     note:
       'Ward is here because it was the one shipped keyword whose TRIGGER nothing drove ' +
@@ -996,6 +1014,8 @@ export const RULES_MANIFEST: RulesManifest = {
         title: 'a condition nobody announced is caught the moment a player would get priority',
       },
       { rule: '704.5a', title: 'a player reduced to 0 life loses as the spell that did it finishes resolving' },
+      // poison family (§3.105): the second way a game is lost.
+      { rule: '704.5c', title: 'a player with ten or more poison counters loses the game' },
       { rule: '704.5f', title: 'a creature at 0 or less toughness is put into the graveyard, not destroyed' },
       { rule: '704.5g', title: 'a creature with lethal damage marked is destroyed at the next check' },
       { rule: '704.5q', title: '+1/+1 and -1/-1 counters on one permanent are REMOVED in pairs' },
@@ -1169,6 +1189,11 @@ export const KEYWORD_RULES: KeywordRules = {
   indestructible: '702.12',
   protectionFrom: '702.16',
   ward: '702.21',
+  // poison family (§3.105). Toxic is 702.164 — NOT 702.181, which is Mobilize;
+  // checked against the 2026-08-19 Comprehensive Rules text.
+  infect: '702.90',
+  wither: '702.80',
+  toxic: '702.164',
   // "Can't be blocked" and "can't block" are not keyword abilities — they are
   // block RESTRICTIONS that a printed line states, checked where blockers are
   // declared. `minBlockers` is the general form of which menace is the N = 2

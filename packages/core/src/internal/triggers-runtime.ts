@@ -98,6 +98,8 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   lifeChanged: false,
   loyaltyChanged: false,
   madnessDeclined: false,
+  // poison family (§3.105): no printed trigger watches poison arriving yet.
+  poisonChanged: false,
   madnessWindowOpened: false,
   manaAdded: false,
   manaCostPaid: false,

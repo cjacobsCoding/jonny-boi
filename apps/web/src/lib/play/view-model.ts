@@ -34,6 +34,7 @@ import {
   type ManaPool,
   type PlayerId,
   type StackObject,
+  poisonOf,
 } from '@jonny-boi/core';
 
 /**
@@ -120,6 +121,8 @@ export interface SeatView {
   readonly id: PlayerId;
   readonly name: string;
   readonly life: number;
+  /** Poison counters (CR 122.1f, §3.105) — the second clock, beside life. */
+  readonly poison: number;
   readonly handCount: number;
   /** Present ONLY when this seat is visible to the viewer; null when masked. */
   readonly hand: readonly VisibleHandCard[] | null;
@@ -222,6 +225,7 @@ function seatView(state: GameState, seat: PlayerId, name: string, reveal: boolea
     id: seat,
     name,
     life: p.life,
+    poison: poisonOf(p),
     handCount: p.hand.length,
     hand: reveal ? visibleHand(p.hand) : null,
     libraryCount: p.library.length,

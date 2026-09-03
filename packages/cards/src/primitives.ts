@@ -43,17 +43,14 @@ import type {
   TriggeredAbility,
 } from '@jonny-boi/core';
 import {
-  DEFENSE_COUNTER,
   MANA_COLORS,
   addCardGrant,
-  LOYALTY_COUNTER,
   MINUS_ONE_COUNTER,
   PLUS_ONE_COUNTER,
   aggregateFor,
   colorsOfDefinition,
   effectiveKeywords,
   effectivePower,
-  isBattle,
   turnFactHolds,
   isCreature,
   isLegalTarget,
@@ -70,6 +67,14 @@ import {
   winGame,
   replaceCounters,
   replaceDamage,
+  // poison family (§3.105): the CR 120.3 result funnel every damage site here
+  // applies, the continuous index it reads keywords through, and the one
+  // poison reader/writer proliferate's player half uses.
+  applyDamageResult,
+  indexContinuous,
+  addPoisonCounters,
+  isPoisoned,
+  PLAYER_IDS,
 } from '@jonny-boi/core';
 import {
   boolParam,
@@ -162,28 +167,42 @@ function damageAfterReplacement(
  * anything, which is the printed card: the trigger already knows who it means.
  *
  * A creature target gets marked damage (SBAs destroy it if lethal); a player target
- * loses life. The restriction is already enforced when the cast is offered and when
+ * loses life — or, from an infect/wither source, -1/-1 counters and poison instead:
+ * the CR 120.3 result funnel (`applyDamageResult`, §3.105) decides, not this
+ * primitive. The restriction is already enforced when the cast is offered and when
  * it is applied (core's targeting.ts); it is re-checked HERE because a target can
  * stop being legal between cast and resolution — and because a primitive that
  * quietly ignores its own restriction would make the whole guarantee depend on
  * every caller remembering it. No valid target → safe no-op.
  */
 export const dealDamage: EffectPrimitive = (ctx) => {
-  let amount = intParam(ctx, 'amount', 0);
+  const amount = intParam(ctx, 'amount', 0);
   if (amount <= 0) return;
   const target = ctx.targets[0];
+  const replacements = indexReplacements(ctx.state);
+  // ONE continuous index per resolution, threaded into the CR 120.3 result
+  // funnel so the SOURCE's effective keywords (a granted infect, a lifelink
+  // Aura) are read exactly as combat reads them — `applyDamageResult` is the
+  // one place the results of damage are decided (§3.105).
+  const index = indexContinuous(ctx.state);
+  // `ctx.emit` is a plain function property on the context (see core's
+  // `createEffectContext`), never a `this`-bound method, so it is passed by
+  // reference rather than wrapped — a wrapper here would be one closure
+  // allocated per damage event on the engine's hottest path.
+  const emit = ctx.emit;
   if (target === undefined) {
     // The UNTARGETED player form — "~ deals 1 damage to that player" / "to
     // them", printed by a trigger that already knows who it means. No targeting
     // question is asked and no target restriction applies, because the printed
     // line names no target: it names the player the trigger was about. With no
     // `whichPlayer` either, there is genuinely nothing to damage — a safe no-op,
-    // exactly as before.
+    // exactly as before. It IS damage, so the replacement layer and the result
+    // funnel both apply — a fog stops it and an infect source poisons with it.
     const whichPlayer = strParam(ctx, 'whichPlayer');
     if (whichPlayer === undefined) return;
     for (const victim of playersForParam(ctx, whichPlayer)) {
-      changeLife(ctx, victim, -amount);
-      ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target: victim, amount, combat: false });
+      const dealt = damageAfterReplacement(ctx, replacements, emit, ctx.source, undefined, victim, amount);
+      applyDamageResult(ctx.state, ctx.source, victim, dealt, false, index, emit);
     }
     return;
   }
@@ -193,84 +212,18 @@ export const dealDamage: EffectPrimitive = (ctx) => {
   // re-fizzles a target that gained protection between cast and resolution.
   if (!isLegalTarget(ctx.state, restrictionParam(ctx), target, ctx.controller, ctx.source.def)) return; // illegal → fizzle
 
-  const replacements = indexReplacements(ctx.state);
-  // `ctx.emit` is a plain function property on the context (see core's
-  // `createEffectContext`), never a `this`-bound method, so it is passed by
-  // reference rather than wrapped — a wrapper here would be one closure
-  // allocated per damage event on the engine's hottest path.
-  const emit = ctx.emit;
-
   if (isPlayerTarget(target)) {
     const dealt = damageAfterReplacement(ctx, replacements, emit, ctx.source, undefined, target, amount);
-    if (dealt <= 0) return;
-    changeLife(ctx, target, -dealt);
-    ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target, amount: dealt, combat: false });
+    applyDamageResult(ctx.state, ctx.source, target, dealt, false, index, emit);
     return;
   }
   const perm = permanentById(ctx.state, target);
   if (!perm) return; // target fizzled (already gone) — safe no-op
   const dealt = damageAfterReplacement(ctx, replacements, emit, ctx.source, perm, perm.controller, amount);
-  if (dealt <= 0) return;
-  amount = dealt;
-  if (isPlaneswalker(perm.def)) {
-    // Damage to a planeswalker removes that many loyalty counters immediately
-    // (CR 120.3c) — the modern rules aim burn AT the walker ("any target"
-    // includes it); the old redirect-from-the-player rule no longer exists.
-    // The 0-loyalty death is the state-based check after this resolution.
-    const removed = removeLoyaltyCounters(perm, amount);
-    ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target: perm.instanceId, amount, combat: false });
-    if (removed > 0) {
-      ctx.emit({
-        type: 'loyaltyChanged',
-        instanceId: perm.instanceId,
-        delta: -removed,
-        to: perm.counters[LOYALTY_COUNTER] ?? 0,
-      });
-    }
-    return;
-  }
-  if (isBattle(perm.def)) {
-    // Damage to a battle removes that many DEFENSE counters (CR 120.3d) — the
-    // same shape as walker loyalty just above, and what makes burn a real answer
-    // to a Siege. The 0-defense defeat is the state-based check that follows.
-    const removed = removeCountersOfKind(perm, DEFENSE_COUNTER, amount);
-    ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target: perm.instanceId, amount, combat: false });
-    if (removed > 0) {
-      ctx.emit({
-        type: 'defenseChanged',
-        instanceId: perm.instanceId,
-        delta: -removed,
-        to: perm.counters[DEFENSE_COUNTER] ?? 0,
-      });
-    }
-    return;
-  }
-  perm.damageMarked += amount;
-  ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target: perm.instanceId, amount, combat: false });
+  // Walker loyalty (CR 120.3c), battle defense (120.3h), marked damage or
+  // -1/-1 counters (120.3d/e): all rows of the one result table.
+  applyDamageResult(ctx.state, ctx.source, perm, dealt, false, index, emit);
 };
-
-/**
- * Remove up to `amount` counters of one kind, never below zero (CR 118.5),
- * honoring the counters replace-don't-mutate contract. Returns how many left.
- *
- * ONE helper for loyalty and defense alike: they are the same arithmetic on the
- * same record, and two copies of it is how the two would eventually disagree.
- */
-function removeCountersOfKind(perm: CardInstance, kind: string, amount: number): number {
-  const current = perm.counters[kind] ?? 0;
-  const removed = Math.min(Math.max(amount, 0), current);
-  if (removed === 0) return 0;
-  perm.counters = { ...perm.counters, [kind]: current - removed };
-  return removed;
-}
-
-/**
- * Remove up to `amount` loyalty counters (never below zero — CR 118.5), honoring
- * the counters replace-don't-mutate contract. Returns how many actually left.
- */
-function removeLoyaltyCounters(perm: CardInstance, amount: number): number {
-  return removeCountersOfKind(perm, LOYALTY_COUNTER, amount);
-}
 
 /**
  * `drawCards` — `params.count` cards are drawn by whoever `params.whichPlayer`
@@ -1002,6 +955,10 @@ export const fight: EffectPrimitive = (ctx) => {
   // could do changes the outcome, and asking first means a prevention SHIELD is
   // not spent on damage that was never going to land.
   const replacements = indexReplacements(ctx.state);
+  // The CR 120.3 result funnel (§3.105) decides what each half's damage DOES —
+  // marked damage, or -1/-1 counters from an infect/wither fighter, plus
+  // deathtouch and lifelink, which CR 702.2b/702.15b apply to any damage.
+  const index = indexContinuous(ctx.state);
   const emit = ctx.emit;
   if (otherPower > 0) {
     if (protectionPreventsDamage(ctx.state, self, other.def)) {
@@ -1014,16 +971,7 @@ export const fight: EffectPrimitive = (ctx) => {
       });
     } else {
       const dealt = damageAfterReplacement(ctx, replacements, emit, other, self, self.controller, otherPower);
-      if (dealt > 0) {
-        self.damageMarked += dealt;
-        ctx.emit({
-          type: 'damageDealt',
-          source: other.instanceId,
-          target: self.instanceId,
-          amount: dealt,
-          combat: false,
-        });
-      }
+      applyDamageResult(ctx.state, other, self, dealt, false, index, emit);
     }
   }
   if (selfPower > 0) {
@@ -1037,16 +985,7 @@ export const fight: EffectPrimitive = (ctx) => {
       });
     } else {
       const dealt = damageAfterReplacement(ctx, replacements, emit, self, other, other.controller, selfPower);
-      if (dealt > 0) {
-        other.damageMarked += dealt;
-        ctx.emit({
-          type: 'damageDealt',
-          source: self.instanceId,
-          target: other.instanceId,
-          amount: dealt,
-          combat: false,
-        });
-      }
+      applyDamageResult(ctx.state, self, other, dealt, false, index, emit);
     }
   }
   // Death is the engine's state-based check, exactly as with combat damage.
@@ -1068,6 +1007,8 @@ export const dealDamageToEach: EffectPrimitive = (ctx) => {
   // the same argument `assignAndDealCombatDamage` makes for a damage step.
   const replacements = indexReplacements(ctx.state);
   const emit = ctx.emit;
+  // ONE continuous index for the sweep too, for the result funnel's keyword read.
+  const index = indexContinuous(ctx.state);
 
   if (boolParam(ctx, 'creatures', false)) {
     // Snapshot first: damage is dealt simultaneously, so a creature dying to it
@@ -1094,15 +1035,7 @@ export const dealDamageToEach: EffectPrimitive = (ctx) => {
         creature.controller,
         amount,
       );
-      if (dealt <= 0) continue;
-      creature.damageMarked += dealt;
-      ctx.emit({
-        type: 'damageDealt',
-        source: ctx.source.instanceId,
-        target: creature.instanceId,
-        amount: dealt,
-        combat: false,
-      });
+      applyDamageResult(ctx.state, ctx.source, creature, dealt, false, index, emit);
     }
   }
 
@@ -1114,11 +1047,10 @@ export const dealDamageToEach: EffectPrimitive = (ctx) => {
       : [otherPlayer(ctx.controller)];
     for (const victim of victims) {
       const dealt = damageAfterReplacement(ctx, replacements, emit, ctx.source, undefined, victim, amount);
-      // Deliberately only the life change, exactly as before this layer existed:
-      // this primitive has never emitted `damageDealt` for its player half, and
-      // adding one here would be a separate (real) log gap to close, not part of
-      // the replacement work.
-      if (dealt > 0) changeLife(ctx, victim, -dealt);
+      // Through the one result funnel (§3.105), which also closes the log gap
+      // this half used to carry: its player damage now emits `damageDealt` like
+      // every other damage site, so a "deals damage to a player" trigger sees it.
+      applyDamageResult(ctx.state, ctx.source, victim, dealt, false, index, emit);
     }
   }
 };
@@ -1197,55 +1129,78 @@ export const regenerate: EffectPrimitive = (ctx) => {
 };
 
 /**
- * `proliferate` — CR 701.27: "choose any number of permanents and/or players
- * with a counter on them, then give each another counter of each kind already
- * there."
+ * `proliferate` — CR 701.34a: "choose any number of permanents and/or players
+ * that have a counter, then give each one additional counter of each kind that
+ * permanent or player already has."
  *
- * PERMANENTS ONLY, and that is exact rather than approximate in THIS engine:
- * `GameState` gives players no counter record at all, and every card that
- * would put one on a player (poison, energy, experience) reports `incomplete`
- * — so "each player with a counter" is provably empty in every game the
- * engine can produce. If a player-counter system ever lands, this primitive
- * must grow the player half in the same change.
+ * Two questions, because the printed word covers two kinds of thing and the
+ * choice seam asks about one kind at a time: the permanents with counters, then
+ * the players with POISON — the one counter a player carries in this engine
+ * (§3.105; energy and experience still report). Both are asked BEFORE anything
+ * is written, which is the choice seam's contract ("ask everything first, then
+ * mutate"): a parked second question re-runs the primitive from the top, and
+ * a counter added before it would be added twice. A question with no candidate
+ * is not asked at all, so a board with no poisoned player asks exactly what it
+ * asked before players could carry counters.
  *
  * Each added counter goes through {@link addCountersOfKind} — the one CR 614
  * counter site — so a Hardened Scales scales a proliferated +1/+1 exactly as
- * it scales a placed one.
+ * it scales a placed one; each poison counter goes through core's one poison
+ * writer, so the `poisonChanged` log is complete.
  */
 export const proliferate: EffectPrimitive = (ctx) => {
   const candidates = ctx.state.battlefield.filter((permanent) =>
     Object.values(permanent.counters).some((count) => count > 0),
   );
-  if (candidates.length === 0) return;
-  const chosen = ctx.chooseCards({
-    chooser: ctx.controller,
-    prompt: 'Proliferate: choose any number of permanents with counters',
-    candidates: candidates.map((permanent) => ({
-      instanceId: permanent.instanceId,
-      cardId: permanent.def.id,
-      name: permanent.def.name,
-      zone: 'battlefield' as const,
-      controller: permanent.controller,
-    })),
-    min: 0,
-    max: candidates.length,
-    // "Any number" cuts both ways — your +1/+1s grow, their -1/-1s deepen —
-    // and the pilot's card scoring is what sorts good picks from bad; the
-    // valence only steers a pilot with no opinion.
-    valence: 'gain',
-    fromZone: 'battlefield',
-  });
+  const poisoned = PLAYER_IDS.filter((player) => isPoisoned(ctx.state.players[player]));
+  if (candidates.length === 0 && poisoned.length === 0) return;
+  const chosen =
+    candidates.length === 0
+      ? []
+      : ctx.chooseCards({
+          chooser: ctx.controller,
+          prompt: 'Proliferate: choose any number of permanents with counters',
+          candidates: candidates.map((permanent) => ({
+            instanceId: permanent.instanceId,
+            cardId: permanent.def.id,
+            name: permanent.def.name,
+            zone: 'battlefield' as const,
+            controller: permanent.controller,
+          })),
+          min: 0,
+          max: candidates.length,
+          // "Any number" cuts both ways — your +1/+1s grow, their -1/-1s deepen —
+          // and the pilot's card scoring is what sorts good picks from bad; the
+          // valence only steers a pilot with no opinion.
+          valence: 'gain',
+          fromZone: 'battlefield',
+        });
   if (!chosen) return; // parked
+  const chosenPlayers =
+    poisoned.length === 0
+      ? []
+      : ctx.choosePlayers({
+          chooser: ctx.controller,
+          prompt: 'Proliferate: choose any number of players with poison counters',
+          candidates: poisoned,
+          min: 0,
+          max: poisoned.length,
+          // Being chosen is BAD for the chosen player — one step closer to
+          // CR 704.5c — so the steer is the "point it at the opponent" one.
+          valence: 'loss',
+        });
+  if (!chosenPlayers) return; // parked
   for (const id of chosen) {
     const permanent = ctx.state.battlefield.find((c) => c.instanceId === id);
     if (!permanent) continue;
     // Snapshot the kinds BEFORE adding: the counter this step adds must not
-    // count itself (CR 701.27a reads the state as proliferate resolves).
+    // count itself (CR 701.34a reads the state as proliferate resolves).
     const kinds = Object.entries(permanent.counters)
       .filter(([, count]) => count > 0)
       .map(([kind]) => kind);
     for (const kind of kinds) addCountersOfKind(ctx, permanent, kind, 1);
   }
+  for (const player of chosenPlayers) addPoisonCounters(ctx.state, player, 1, ctx.emit);
 };
 
 export const addCounters: EffectPrimitive = (ctx) => {

@@ -260,6 +260,11 @@ export function mergeKeywordGrant(base: KeywordFlags, granted: KeywordFlags): Ke
     } else if (key === 'ward') {
       const grantedWard = typeof value === 'number' && value > 0 ? value : 0;
       if (grantedWard > 0) out[key] = (base.ward ?? 0) + grantedWard;
+    } else if (key === 'toxic') {
+      // poison family (§3.105): "total toxic value" is the SUM of every instance
+      // (CR 702.164b) — ward's fold, for the same reason.
+      const grantedToxic = typeof value === 'number' && value > 0 ? value : 0;
+      if (grantedToxic > 0) out[key] = (base.toxic ?? 0) + grantedToxic;
     } else if (key === 'minBlockers') {
       const grantedMin = typeof value === 'number' && value > 0 ? value : 0;
       if (grantedMin > 0) out[key] = Math.max(base.minBlockers ?? 0, grantedMin);

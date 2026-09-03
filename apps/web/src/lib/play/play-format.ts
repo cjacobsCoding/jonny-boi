@@ -81,6 +81,13 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
         text: `${r.playerName(event.player)} ${event.delta >= 0 ? 'gains' : 'loses'} ${Math.abs(event.delta)} life (now ${event.to}).`,
         tone: 'life',
       };
+    case 'poisonChanged':
+      // The poison clock (§3.105) reads like the life clock: the delta and the
+      // running total, so a player can see how close CR 704.5c is.
+      return {
+        text: `${r.playerName(event.player)} gets ${event.delta} poison counter${event.delta === 1 ? '' : 's'} (now ${event.to}).`,
+        tone: 'life',
+      };
     case 'gainLife':
       // Every `gainLife` is emitted immediately after the `lifeChanged` for the
       // same gain (see `changeLife` in packages/cards), so rendering both printed

@@ -273,6 +273,20 @@ export type GameEvent =
     }
   | { readonly type: 'lifeChanged'; readonly player: PlayerId; readonly delta: number; readonly to: number }
   | { readonly type: 'gainLife'; readonly player: PlayerId; readonly amount: number }
+  // --- poison family (§3.105) ---------------------------------------------------
+  | {
+      /**
+       * A player's POISON COUNTERS changed (CR 122.1f) — by infect damage
+       * (CR 702.90b), toxic (CR 702.164c), proliferate (CR 701.34) or a card
+       * that hands them out. `lifeChanged`'s shape exactly: the delta and the
+       * resulting total, so a replay can show the poison clock beside the life
+       * clock without folding the whole log.
+       */
+      readonly type: 'poisonChanged';
+      readonly player: PlayerId;
+      readonly delta: number;
+      readonly to: number;
+    }
   | { readonly type: 'creatureDied'; readonly instanceId: InstanceId; readonly name: string }
   | {
       /**

@@ -191,6 +191,10 @@ export type SoakMechanicId =
   | 'graveyard-recursion'
   | 'optional-payment'
   | 'lifegain'
+  // Poison counters as a player resource (§3.105): infect, toxic and
+  // proliferate's player half all witness through the one `poisonChanged`
+  // event, so one id covers the family.
+  | 'poison'
   // The four systems merged into main on 2026-08-20. Each is watched from the
   // day it lands, so nobody has to remember to come back and add it.
   | 'second-castable-face'
@@ -638,6 +642,15 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     printedBy: (_c, t) => t.includes('counterUnlessPaid') || t.includes('unlessPaid') || t.includes('mayEffects'),
   },
   { id: 'lifegain', label: 'life gain — a player gained life', witnessKind: 'event', printedBy: (_c, t) => t.includes('gainLife') },
+  {
+    id: 'poison',
+    label: 'poison — a player got poison counters (infect, toxic, proliferate)',
+    witnessKind: 'event',
+    // The KEYWORD FIELDS, named exactly as the definition serializes them: an
+    // infect flag or a toxic value is a card that WILL hand out poison the
+    // moment it connects, which is the evidence the anchored deck needs.
+    printedBy: (_c, t) => t.includes('"infect":true') || t.includes('"toxic":'),
+  },
 
   /*
    * --- the 2026-08-20 arrivals -------------------------------------------------
@@ -739,6 +752,8 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
    */
   effectUnsupported: null,
   lifeChanged: null,
+  // poison family (§3.105): the one event every poison counter passes through.
+  poisonChanged: 'poison',
   creatureDied: null,
   playerLost: null,
   gameOver: null,

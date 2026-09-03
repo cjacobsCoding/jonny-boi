@@ -183,6 +183,10 @@ const KEYWORD_KEYS = [
   'indestructible',
   'mustBeBlocked',
   'blockedByAllAble',
+  // poison family (§3.105): both are plain flags; `toxic` carries a number
+  // and is folded by its own additive rule in `grantInto`.
+  'infect',
+  'wither',
 ] as const;
 
 /**
@@ -265,6 +269,12 @@ function grantInto(agg: MutableMod, grant: KeywordFlags | undefined): void {
   if (typeof grant.ward === 'number' && grant.ward > 0) {
     if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
     (agg.keywords as { ward?: number }).ward = (agg.keywords.ward ?? 0) + grant.ward;
+  }
+  // poison family (§3.105): toxic values ADD — "total toxic value" is the sum of
+  // every instance (CR 702.164b), the same fold `mergeKeywordGrant` applies.
+  if (typeof grant.toxic === 'number' && grant.toxic > 0) {
+    if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
+    (agg.keywords as { toxic?: number }).toxic = (agg.keywords.toxic ?? 0) + grant.toxic;
   }
   // `minBlockers` takes the MAXIMUM, matching `mergeKeywordGrant`: two blocking
   // requirements are both in force, so the stricter one decides. Summing them

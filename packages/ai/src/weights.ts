@@ -12,6 +12,8 @@
  * tuning. Ties break on the seeded RNG, so behaviour stays reproducible.
  */
 
+import { DEFAULT_RULES, POISON_LOSS_THRESHOLD } from '@jonny-boi/core';
+
 /** The complete, tunable weight set the heuristic reads. Pure data. */
 export interface HeuristicWeights {
   // --- land / tempo --------------------------------------------------------
@@ -203,6 +205,15 @@ export interface HeuristicWeights {
   /** Below this life total the defender blocks much more readily (preserve life /
    *  avoid lethal takes priority over keeping creatures back). */
   readonly desperateLifeThreshold: number;
+  /**
+   * How much LIFE one poison counter is worth when the pilot has to price the
+   * two clocks on one scale (§3.105) — ranking an infect attacker against a
+   * vanilla one, or valuing a fog. Lethal itself is never priced through this:
+   * `pressureIsLethal` asks each clock its own question. Derived, not chosen:
+   * the starting life over CR 704.5c's ten counters, so a format that changes
+   * the starting life changes the exchange rate with it.
+   */
+  readonly poisonCounterLifeEquivalent: number;
   /** Net value threshold for making a block when not under lethal pressure: block
    *  if the trade is at least this good (kills the attacker without losing more
    *  than we gain). */
@@ -599,6 +610,9 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
 
   // blocking
   desperateLifeThreshold: 10,
+  // 20 life / 10 poison = 2 life per counter (§3.105), derived from the rules
+  // rather than typed, so the exchange rate follows the format's starting life.
+  poisonCounterLifeEquivalent: DEFAULT_RULES.startingLife / POISON_LOSS_THRESHOLD,
   blockValueThreshold: 0,
   // One point of life ≈ one stat point, the exchange rate the rest of combat
   // already uses (`faceDamageValue` is 1 on the same scale). At 1 an 0/4 wall

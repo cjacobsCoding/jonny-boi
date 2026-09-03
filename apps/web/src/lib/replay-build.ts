@@ -33,6 +33,7 @@ import {
   isCreature,
   isLand,
   MANA_COLORS,
+  poisonOf,
 } from '@jonny-boi/core';
 import type { EffectRegistry, ManaPool } from '@jonny-boi/core';
 import type { Pilot } from '@jonny-boi/ai';
@@ -90,6 +91,7 @@ function snapSide(state: GameState, player: PlayerId): ReplaySide {
     .map((inst) => snapPermanent(inst, mod));
   return {
     life: p.life,
+    poison: poisonOf(p),
     handCount: p.hand.length,
     libraryCount: p.library.length,
     graveyardCount: p.graveyard.length,

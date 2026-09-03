@@ -2310,6 +2310,66 @@ granted form, so an Equipment and a creature cannot disagree about which lines a
 
 **Measured: 5,163 → 5,188 complete cards, +25.** The remaining flying/trample rows are banding and
 rampage cards, which are those keywords' own gaps (§3.107 takes rampage; banding stays open).
+### 3.105 Poison — infect, wither, toxic — ✅ done
+
+Picked as a FAMILY off the §3.102 queue: three keywords that are one SHAPE — *damage whose RESULT
+changes* — plus the player resource none of them can exist without.
+
+| keyword | CR | reads | sole |
+|---|---|---|---|
+| infect | 702.90 | to a creature as −1/−1 counters; to a player as **poison counters** | 26 |
+| wither | 702.80 | infect's creature half only (and printed on a SPELL — Puncture Blast) | 13 |
+| toxic N | **702.164** | combat damage to a player ALSO gives N poison | 12 |
+
+⚠️ **Toxic is 702.164, not 702.181** (that is Mobilize). Checked against the 2026-08-19 text, which
+also moved the battle row of CR 120.3 from `d` to `h` — a stale manifest note said `d`, and is fixed.
+
+**The class-level fix is the RESULT FUNNEL, not a replacement effect.** CR 120.3 is a closed table —
+what damage DOES, keyed on the recipient and the source's keywords (life or poison, loyalty, defense,
+marks or −1/−1 counters, lifelink, toxic) — and it was answered in FIVE places: combat in core and
+`dealDamage`/`dealDamageToEach`/`fight` in the cards package, each with its own copy. Three copies had
+already drifted: noncombat damage from a lifelink or deathtouch source neither gained life nor
+destroyed (CR 702.15b / 702.2b both say *damage*). `applyDamageResult` in `core/src/internal/
+damage-result.ts` is now the one answer, and infect and wither are rows in it — which is what makes an
+infect creature that FIGHTS land counters exactly as one that attacks (CR 702.90e). Prevention and
+protection still run first at each call site; the funnel trusts what lands.
+
+**Poison is a player resource with life's discipline** (`core/src/poison.ts`): one reader, one
+writer, a `poisonChanged` event shaped like `lifeChanged`, CR 704.5c in the SBA pass beside 704.5a,
+and an OPTIONAL `PlayerState.poison` for the reason `turnFactsA` is — every serialized or hand-built
+state before this has no field, and absent must read as zero. The golden state digests never moved:
+`serializeState` omits it at zero, exactly as `manaRestricted`. `markedByDeathtouch` now stands alone
+in the SBA check, because deathtouch-infect damage lands with NO marked damage and CR 702.2b still
+destroys. Proliferate (CR 701.34 — the repo's `701.27` was stale) asks its player question second,
+under the choice seam's ask-everything-first contract, and only when somebody is poisoned.
+
+**Measured: 5,151 → 5,208 complete cards. +57 against 51 predicted.** The three keywords now
+sole-block 0. The six extras are grant forms that came free from the `KEYWORD_FLAGS` row feeding
+`KEYWORD_TOKEN`: Tainted Strike, Phyresis, Blight Sickle, Prosthetic Injector, Corrosive Mentor,
+Carrion Call. Toxic's payload parses beside ward's (`parsePayloadKeyword`) and merges by ward's SUM
+rule (CR 702.164b "total toxic value"); the keyword sweep's ward/protection branches became the
+`PAYLOAD_KEYWORD_EVIDENCE` table with toxic as its third row.
+
+**The pilot plays two clocks, kept apart** (`ai/src/poison-pressure.ts`). Incoming damage is a PAIR
+— life damage and poison — and lethal is asked of EACH clock; the blended life-equivalent (poison ×
+`startingLife / 10`, derived, a weight) is used only to RANK, because a false "lethal" throws a game
+where a false "not lethal" only delays one. `lethalAlphaStrike` judges each group alone with every
+blocker charged against it (conservative), blocks sort by face threat so an infect 3/3 is blocked
+before a vanilla one, desperation triggers at nine poison, and the forecast races on the shorter of
+the opponent's two clocks. `poison-pilot.test.ts` pins two infect 1/1s attacking into a 2/2 at nine
+poison and NOT at zero.
+
+**Gate:** pilot bench 116 → 147 games/sec with identical outcomes (A won 851/2000 both runs — the lock
+decks print no poison). Sabotage: the first toxic anchor stayed GREEN — it tested the creature row —
+and the fixed anchor (noncombat toxic at a player) went red, exactly TESTING.md's "suspect the
+sabotage first".
+
+⚠️ **Deliberately not done.** *Corrupted* (an opponent has three or more poison counters) is mostly a
+STATIC condition ("as long as"), which the layer system has no intervening-if for — not a cheap row.
+"Gets a poison counter" primitives (Ichor Rats, Phyrexian Vatmother) are one `playersForParam` verb
+away and were left for the measured next pick. The pilot does not price a spell's *own* infect
+(Tainted Strike as burn-to-lethal), and `effect-value` prices infect damage on creatures as the
+removal it already is through `toughnessLeft`, not as the permanent shrink it also is.
 
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
