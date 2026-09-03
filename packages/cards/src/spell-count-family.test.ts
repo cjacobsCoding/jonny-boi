@@ -190,8 +190,8 @@ function complete(card: CompilableCard): CardDefinition {
 }
 
 describe('the printed lines compile to the family’s data, and every body is a registered primitive', () => {
-  it('registers the seven primitives the rules emit', () => {
-    for (const id of ['stormCopies', 'cascade', 'ripple', 'learn', 'millThenReturn', 'doublePower', 'revealTopDrawIf']) {
+  it('registers the eight primitives the rules emit', () => {
+    for (const id of ['stormCopies', 'cascade', 'ripple', 'learn', 'millThenReturn', 'returnMilledCard', 'doublePower', 'revealTopDrawIf']) {
       expect(CORE_PRIMITIVE_IDS, id).toContain(id);
     }
   });
@@ -265,7 +265,10 @@ describe('the printed lines compile to the family’s data, and every body is a 
   it('the keyword sweep: a Heal tag is regenerate’s reminder text; a mode’s surveil and a granted scry are evidence', () => {
     expect(complete(DRUDGE_SKELETONS).activated?.length).toBe(1);
     expect(complete(SPELLGYRE).modal?.modes.length).toBe(2);
-    expect(complete(ORACLES_INSIGHT).attachesAs).toBeDefined();
+    expect(complete(ORACLES_INSIGHT).attachment?.modifies?.activated?.[0]?.effects).toEqual([
+      { primitive: 'scry' },
+      { primitive: 'drawCards', params: { count: 1 } },
+    ]);
   });
 
   it('REPORTS, never approximates, the forms outside the closed tables', () => {
@@ -518,7 +521,11 @@ describe('LEARN and the loot template, played (CR 701.48a)', () => {
 });
 
 describe('the mill shapes, played (CR 701.17a)', () => {
-  it('Seed of Hope mills two, offers only the milled permanents, and gains 2', () => {
+  // ⚠️ The graveyard assertion here is the guard for a CLASS of bug, not a
+  // detail: a primitive that mutates and THEN asks re-runs its mutation when the
+  // question parks, and the first version of `millThenReturn` milled twice — two
+  // extra Forests. The ask now lives in an enqueued second ref, and this counts.
+  it('Seed of Hope mills two — exactly once, across the parked question — offers only the milled permanents, and gains 2', () => {
     const reg = buildRegistry();
     let s = gameAtMain(reg);
     fund(s, 'A', { G: 9 });

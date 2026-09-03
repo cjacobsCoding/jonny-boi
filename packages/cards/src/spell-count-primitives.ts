@@ -177,12 +177,50 @@ export const learn: EffectPrimitive = (ctx) => {
 export const millThenReturn: EffectPrimitive = (ctx) => {
   const amount = intParam(ctx, 'amount', 0);
   if (amount <= 0) return;
-  const filter = filterParam(ctx);
+  const milled = millTopCards(ctx, ctx.controller, amount);
+  if (milled.length === 0) return;
+  /*
+   * ⚠️ THE ASK LIVES IN A SECOND REF, and that is not a style choice.
+   *
+   * A parked question re-runs its effect ref FROM THE TOP with the answers
+   * replayed — so a primitive that mutates and then asks performs its mutation
+   * again on every re-entry. Asking here would mill 2, ask, and mill 2 MORE as
+   * the answer came back: `spell-count-family.test.ts` caught exactly that
+   * (three Forests in the graveyard where the printed card mills two).
+   *
+   * `enqueueEffects` is the seam for a follow-up that depends on what just
+   * happened (the same one a modal spell's modes use): the ids are baked into
+   * the enqueued ref's params at the one moment anything knows them, the mill
+   * ref completes, and a park inside the ask re-runs only the ask.
+   */
+  ctx.enqueueEffects([
+    {
+      primitive: 'returnMilledCard',
+      params: {
+        instanceIds: [...milled],
+        ...(ctx.params.filter !== undefined ? { filter: ctx.params.filter } : {}),
+        ...(boolParam(ctx, 'optional', false) ? { optional: true } : {}),
+      },
+    },
+  ]);
+};
+
+/**
+ * `returnMilledCard` — the ASK half of {@link millThenReturn}: put one of the
+ * cards named by `instanceIds` (those just milled) from the graveyard into its
+ * owner's hand. Never authored by the compiler on its own; it exists because
+ * the ids are runtime knowledge, and its params carry them so a parked
+ * question replays against the same set.
+ */
+export const returnMilledCard: EffectPrimitive = (ctx) => {
+  const ids = ctx.params.instanceIds;
+  if (!Array.isArray(ids) || ids.length === 0) return;
+  const milled = new Set<InstanceId>(ids as readonly InstanceId[]);
   const optional = boolParam(ctx, 'optional', false);
-  const milled = new Set<InstanceId>(millTopCards(ctx, ctx.controller, amount));
-  const candidates = collectCardOptions(ctx.state, 'graveyard', { controller: ctx.controller, filter }).filter((o) =>
-    milled.has(o.instanceId),
-  );
+  const candidates = collectCardOptions(ctx.state, 'graveyard', {
+    controller: ctx.controller,
+    filter: filterParam(ctx),
+  }).filter((o) => milled.has(o.instanceId));
   if (candidates.length === 0) return;
   const chosen = ctx.chooseCards({
     chooser: ctx.controller,
@@ -193,7 +231,7 @@ export const millThenReturn: EffectPrimitive = (ctx) => {
     valence: 'gain',
     fromZone: 'graveyard',
   });
-  if (!chosen) return; // parked — the mill is already replayed by the frame, nothing else moved
+  if (!chosen) return; // parked — nothing has moved
   for (const id of chosen) moveOwnedCard(ctx, ctx.controller, id, 'graveyard', 'hand');
 };
 
@@ -251,6 +289,7 @@ export const SPELL_COUNT_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> =
   ripple,
   learn,
   millThenReturn,
+  returnMilledCard,
   doublePower,
   revealTopDrawIf,
 });
