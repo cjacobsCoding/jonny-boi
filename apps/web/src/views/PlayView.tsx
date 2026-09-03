@@ -52,6 +52,9 @@ import {
   type HistoryOutcome,
 } from '../lib/play/history.js';
 import { libraryRows } from '../lib/play/library-view.js';
+import { shouldStopForPriority, type PriorityStops } from '../lib/play/priority-stops.js';
+import { stopContextFor } from '../lib/play/priority-stops-session.js';
+import { loadPriorityStops, savePriorityStops } from '../lib/play/priority-stops-pref.js';
 import { GameLibrary } from '../components/play/GameLibrary.js';
 import { ReviewScrubber } from '../components/play/ReviewScrubber.js';
 import './play-resume.css';
@@ -801,22 +804,42 @@ function LocalPlay({
     [],
   );
 
-  // Auto-pass priority windows where the holder provably has no decision.
+  /**
+   * §3.119 — THE PRIORITY STOPS. Owned here, beside the auto-pass effect that
+   * obeys them, and handed DOWN to the board that renders their controls: one
+   * value, so the bar can never promise a stop the walker passes through.
+   */
+  const [stops, setStops] = useState<PriorityStops>(loadPriorityStops);
+  const changeStops = useCallback((next: PriorityStops): void => {
+    setStops(next);
+    savePriorityStops(next);
+  }, []);
+
+  // Auto-pass priority windows where the holder has nothing worth stopping for.
   //
   // MTG hands both players priority in every step. In pass-and-play each such
   // window costs a physical device handoff, so without this the players spend the
   // game confirming "I have nothing to do" — at upkeep, at draw, at every combat
-  // step, at end of turn. We pass for them ONLY when the session reports no
-  // meaningful choice (see `hasMeaningfulChoice`), so no real decision is ever
-  // skipped. Each pass re-renders and re-runs this, walking the game forward to
-  // the next window that actually needs a human.
+  // step, at end of turn.
+  //
+  // ⚠️ §3.119 REPLACED THE RULE. It used to pass only when the session reported
+  // no meaningful choice at all — and an INSTANT IN HAND makes every window
+  // meaningful, so a player holding one Cloudshift was asked to pass a dozen
+  // times a turn (report 20260901_211359), including through their own triggers,
+  // which then looked stuck (reports 212245, 213414). The stop rule is now the
+  // Arena-style `shouldStopForPriority`: real decisions always stop, empty
+  // windows never do, and in between a per-step table the player owns decides.
+  // Each pass re-renders and re-runs this, walking the game forward to the next
+  // window that actually wants a human.
   useEffect(() => {
     if (phase.kind !== 'play' || !session || session.gameOver) return;
-    const advanced = session.autoAdvancePriority();
+    const advanced = session.autoAdvancePriority(undefined, (candidate) =>
+      shouldStopForPriority(stopContextFor(candidate), stops),
+    );
     // Identity-equal when nothing was skipped, so React bails out and this cannot
     // become a render loop.
     if (advanced !== session) setSession(advanced);
-  }, [phase, session]);
+  }, [phase, session, stops]);
 
   // --- the computer's seat -------------------------------------------------------
   //
@@ -1008,7 +1031,14 @@ function LocalPlay({
           onPlayFromHere={playFromHere}
         />
       )}
-      <PlayBoard session={session} viewer={viewer} onSubmit={applySubmit} onConcede={concede} />
+      <PlayBoard
+        session={session}
+        viewer={viewer}
+        onSubmit={applySubmit}
+        onConcede={concede}
+        stops={stops}
+        onStops={changeStops}
+      />
     </div>
   );
 }

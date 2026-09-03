@@ -15,16 +15,23 @@ export function GameLog({
   resolvers: LogResolvers;
 }): ReactElement {
   const lines = describeEvents(events, resolvers);
-  const endRef = useRef<HTMLDivElement>(null);
+  const linesRef = useRef<HTMLDivElement>(null);
 
+  // Scroll the log's OWN scroller to its end, and nothing else. This used to
+  // `scrollIntoView` an end marker, which asks the browser to scroll EVERY
+  // scrollable ancestor — the board, the page — and in a squeezed layout it
+  // could leave the log itself sitting at "Game begins" (bug report
+  // 20260901_210413's screenshot shows exactly that, turn 24 with the first two
+  // lines of the game on screen). Setting scrollTop is deterministic.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'end' });
+    const el = linesRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [lines.length]);
 
   return (
     <div className="game-log" aria-label="Game log" aria-live="polite">
       <div className="game-log__title">Game Log</div>
-      <div className="game-log__lines">
+      <div className="game-log__lines" ref={linesRef}>
         {lines.length === 0 ? (
           <div className="game-log__empty">The game begins…</div>
         ) : (
@@ -34,7 +41,6 @@ export function GameLog({
             </div>
           ))
         )}
-        <div ref={endRef} />
       </div>
     </div>
   );

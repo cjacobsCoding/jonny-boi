@@ -232,6 +232,28 @@ async function main() {
         nav.click();
       }, viewArg);
       await new Promise((r) => setTimeout(r, 1500));
+      // THE LAB'S WORST TAB, not its landing one (§3.119, bug report
+      // 20260902_231525). The Lab is a light page — about a hundred elements —
+      // until the A/B Swap tab mounts its two card pickers, which put one
+      // <option> per pool card in the DOM: the reported frame carried 5,140 of
+      // them. Measuring the Gauntlet tab and declaring the Lab cheap is exactly
+      // how this shipped, so the harness opens the tab the report came from.
+      if (viewArg.toLowerCase() === 'lab') {
+        const opened = await page.evaluate(() => {
+          const tab = [...document.querySelectorAll('.lab-tab')].find((b) =>
+            b.textContent.toLowerCase().includes('swap'),
+          );
+          if (!tab) return false;
+          tab.click();
+          return true;
+        });
+        check('the Lab’s A/B Swap tab (its card pickers) opened', opened);
+        await new Promise((r) => setTimeout(r, 1500));
+        const options = await page.evaluate(() => document.querySelectorAll('option').length);
+        console.log('Lab A/B Swap tab: ' + options + ' <option> elements in the DOM.');
+        check('the pickers really are mounted, so this is the worst case', options > 1000,
+          options + ' options');
+      }
     }
     // Give the visible card art a moment to decode; without the network-idle
     // wait this is the thing that would otherwise be captured half-drawn.

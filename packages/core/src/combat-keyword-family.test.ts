@@ -409,7 +409,12 @@ describe('"~ attacks each combat if able" — an attack REQUIREMENT (CR 508.1d)'
     const declare = advanceTo(state, 'declareAttackers', registry);
     expect(requiredAttackerIds(declare, indexContinuous(declare), 'B')).toHaveLength(0);
     const after = pass(pass(declare, registry), registry);
-    expect(after.step).toBe('declareBlockers');
+    // ⚠️ The step is END OF COMBAT, not declare-blockers: nothing was declared,
+    // and CR 508.8 skips the declare-blockers and combat-damage steps when no
+    // creature attacks (§3.119, bug report 20260901_205742 — the defender was
+    // being asked to declare blocks against nothing). What this test is ABOUT
+    // is unchanged and still asserted: a tapped Brigand forces no declaration.
+    expect(after.step).toBe('endCombat');
     expect(after.combat?.attackers).toEqual([]);
   });
 
@@ -423,7 +428,9 @@ describe('"~ attacks each combat if able" — an attack REQUIREMENT (CR 508.1d)'
   it('an ordinary board pays nothing: no requirement, no forced declaration', () => {
     const { state } = atDeclareAttackers([BEAR]);
     const after = pass(pass(state, registry), registry);
-    expect(after.step).toBe('declareBlockers');
+    // End of combat, for the CR 508.8 reason above (§3.119). The point of this
+    // test — an unrequired Bear is never declared for the player — is unchanged.
+    expect(after.step).toBe('endCombat');
     expect(after.combat?.attackers).toEqual([]);
   });
 });

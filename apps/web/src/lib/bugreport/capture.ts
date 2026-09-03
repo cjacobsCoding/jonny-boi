@@ -13,13 +13,16 @@
  * a debug tool must not tax the app's first paint (rule 7).
  */
 import {
+  attemptNote,
+  CAPTURE_ATTEMPTS,
   CAPTURE_IGNORE_ATTR,
-  CAPTURE_TIMEOUT_MS,
   captureFailureNote,
   captureOptionsFor,
   isOffScreen,
+  optionIsPrunable,
   prunableChildIndices,
   withTimeout,
+  type CaptureAttempt,
 } from './capture-policy.js';
 
 export { CAPTURE_IGNORE_ATTR, dataUrlToBytes } from './capture-policy.js';
@@ -70,12 +73,26 @@ function belowFoldTail(prune: boolean): Set<Element> {
   return skip;
 }
 
-/** The overlay's own chrome, the below-fold tail, and scrolled-past images. */
-function shouldSkip(node: Node, tail: ReadonlySet<Element>): boolean {
+/**
+ * The overlay's own chrome, the below-fold tail, the options a closed `<select>`
+ * cannot paint, and scrolled-past images (all of them, on a reduced attempt).
+ */
+function shouldSkip(node: Node, tail: ReadonlySet<Element>, attempt: CaptureAttempt): boolean {
   if (!(node instanceof Element)) return false;
   if (node.hasAttribute(CAPTURE_IGNORE_ATTR)) return true;
   if (tail.has(node)) return true;
+  // The Lab's card pickers put ~5,000 invisible options in the clone (bug
+  // report 20260902_231525). A closed select paints its selected option only.
+  if (node instanceof HTMLOptionElement) {
+    const select = node.closest('select');
+    return optionIsPrunable({
+      selected: node.selected,
+      multiple: select?.multiple ?? false,
+      size: select?.size ?? 0,
+    });
+  }
   if (!(node instanceof HTMLImageElement)) return false;
+  if (attempt.dropImages) return true;
   return isOffScreen(node.getBoundingClientRect(), {
     width: window.innerWidth,
     height: window.innerHeight,
@@ -95,34 +112,44 @@ export async function captureViewport(prune = true): Promise<Capture> {
     { x: window.scrollX, y: window.scrollY },
   );
 
-  try {
-    const { toPng } = await import('html-to-image');
-    const body = document.body;
-    const dataUrl = await withTimeout(
-      toPng(body, {
-        width: options.width,
-        height: options.height,
-        style: options.style,
-        // 1:1 with CSS pixels: the strokes are stored in these units, and the
-        // file has to be small enough to sit in a bug report.
-        pixelRatio: 1,
-        backgroundColor: window.getComputedStyle(body).backgroundColor || '#0f1419',
-        // Cross-origin card art is fetched and inlined by the library; a miss
-        // leaves a gap in the image rather than failing the capture.
-        cacheBust: false,
-        filter: (node) => !shouldSkip(node, tail),
-      }),
-      CAPTURE_TIMEOUT_MS,
-      'page rasterisation',
-    );
+  let lastError: unknown = new Error('no capture attempt ran');
+  // THE ATTEMPT LADDER (§3.119). A timeout used to end the picture entirely —
+  // "says screen could not be captured", bug report 20260902_231525 — even
+  // though a plainer frame would have finished. Each attempt gives up something
+  // the next-best frame can live without, and the note says which one ran.
+  for (const attempt of CAPTURE_ATTEMPTS) {
+    try {
+      const { toPng } = await import('html-to-image');
+      const body = document.body;
+      const dataUrl = await withTimeout(
+        toPng(body, {
+          width: options.width,
+          height: options.height,
+          style: options.style,
+          // 1:1 with CSS pixels: the strokes are stored in these units, and the
+          // file has to be small enough to sit in a bug report.
+          pixelRatio: 1,
+          backgroundColor: window.getComputedStyle(body).backgroundColor || '#0f1419',
+          // Cross-origin card art is fetched and inlined by the library; a miss
+          // leaves a gap in the image rather than failing the capture.
+          cacheBust: false,
+          skipFonts: attempt.skipFonts,
+          filter: (node) => !shouldSkip(node, tail, attempt),
+        }),
+        attempt.timeoutMs,
+        'page rasterisation',
+      );
 
-    return { dataUrl, width: options.width, height: options.height, note: '' };
-  } catch (error) {
-    return {
-      dataUrl: '',
-      width: options.width,
-      height: options.height,
-      note: captureFailureNote(error),
-    };
+      return { dataUrl, width: options.width, height: options.height, note: attemptNote(attempt) };
+    } catch (error) {
+      lastError = error;
+    }
   }
+
+  return {
+    dataUrl: '',
+    width: options.width,
+    height: options.height,
+    note: captureFailureNote(lastError),
+  };
 }

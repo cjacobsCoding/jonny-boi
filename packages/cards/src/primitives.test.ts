@@ -727,7 +727,7 @@ describe('revealTopCard', () => {
     const s = emptyState();
     s.players.B.library.push(inst(plains, 'B', 'library'), inst(bear, 'B', 'library'));
     const src = inst({ id: 'gg', name: 'Goblin Guide', types: ['creature'] }, 'A', 'battlefield');
-    const { ctx } = ctxFor(s, src, { who: 'opponent', filter: { anyOfTypes: ['land'] } });
+    const { ctx, events } = ctxFor(s, src, { who: 'opponent', filter: { anyOfTypes: ['land'] } });
 
     revealTopCard(ctx); // top is the land → into their hand
     expect(s.players.B.hand.map((c) => c.def.name)).toEqual(['Plains']);
@@ -735,6 +735,15 @@ describe('revealTopCard', () => {
     revealTopCard(ctx); // top is now a creature → stays put
     expect(s.players.B.hand).toHaveLength(1);
     expect(s.players.B.library.map((c) => c.def.name)).toEqual(['Bear']);
+
+    // Bug report 20260901_210413 — the reveal itself must be SAID, by name, both
+    // when the condition holds (the land went to hand) and when it does not (the
+    // creature stayed put), so a log reader can see what Goblin Guide showed.
+    const revealed = events.filter((e) => e.type === 'cardRevealed');
+    expect(revealed).toEqual([
+      expect.objectContaining({ player: 'B', name: 'Plains', fromZone: 'library', matched: true, sourceInstanceId: src.instanceId }),
+      expect.objectContaining({ player: 'B', name: 'Bear', fromZone: 'library', matched: false }),
+    ]);
   });
 });
 

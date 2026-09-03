@@ -127,10 +127,15 @@ function throughCombatDamage(state: GameState): GameState {
 describe('CR 500–505 — phases and steps', () => {
   crTest('500.1', 'a turn proceeds through its steps in the printed order', () => {
     const state = atMain();
-    const seen = stepsSeen(state, (s) => s.turnNumber === 2 && s.step === 'precombatMain');
+    // A creature ATTACKS, so that every combat step genuinely happens — with no
+    // attackers CR 508.8 skips declare-blockers and combat-damage (pinned below).
+    const bear = putOnBattlefield(state, 'A', BEAR);
+    const before = stepsSeen(state, (s) => s.step === 'declareAttackers');
+    const declared = attackWith(state, [bear.instanceId]);
+    const after = stepsSeen(declared, (s) => s.turnNumber === 2 && s.step === 'precombatMain');
     // Everything from beginCombat to the end of A's turn, then B's turn opening.
     const expectedTail = STEP_ORDER.slice(STEP_ORDER.indexOf('beginCombat'));
-    expect(seen.slice(0, expectedTail.length)).toEqual([...expectedTail]);
+    expect([...before, ...after].slice(0, expectedTail.length)).toEqual([...expectedTail]);
   });
 
   crTest('502.4', 'no player receives priority during the untap step', () => {
@@ -232,6 +237,34 @@ describe('CR 508 — declare attackers', () => {
         registry,
       ),
     ).toMatch(/more than once/i);
+  });
+
+  // Bug report 20260901_205742 — "The game asks me for blocks when nothing is
+  // attacking!": the defender (holding creatures) was offered `declareBlockers`
+  // on a turn where the computer attacked with nothing. Both ways of not
+  // attacking are pinned: an explicit empty declaration, and never declaring.
+  crTest('508.8', 'with no attackers declared, the declare-blockers and combat-damage steps are skipped', () => {
+    const state = atMain();
+    putOnBattlefield(state, 'B', BEAR); // the defender HAS a potential blocker
+    const declare = advanceTo(state, 'declareAttackers', registry);
+    const none = act(declare, { kind: 'declareAttackers', player: 'A', attackers: [] }, registry);
+    const seen = stepsSeen(none, (s) => s.step === 'postcombatMain');
+    expect(seen).toEqual(['endCombat', 'postcombatMain']);
+    // Nobody was ever offered a block declaration along the way.
+    let s = none;
+    for (let guard = 0; guard < 20 && s.step !== 'postcombatMain'; guard++) {
+      expect(generateLegalActions(s).some((a) => a.kind === 'declareBlockers')).toBe(false);
+      s = pass(s, registry);
+    }
+  });
+
+  crTest('508.8', 'passing through declare-attackers without declaring skips the same two steps', () => {
+    const state = atMain();
+    putOnBattlefield(state, 'A', BEAR);
+    putOnBattlefield(state, 'B', BEAR);
+    const declare = advanceTo(state, 'declareAttackers', registry);
+    const seen = stepsSeen(declare, (s) => s.step === 'postcombatMain');
+    expect(seen).toEqual(['endCombat', 'postcombatMain']);
   });
 
   // --- the combat keyword family (DESIGN §3.107): restrictions and requirements ---

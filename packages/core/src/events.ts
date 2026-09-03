@@ -450,11 +450,35 @@ export type GameEvent =
   /** A renown creature connected and gained its once-only designation (CR 702.112a). */
   | { readonly type: 'becameRenowned'; readonly instanceId: InstanceId; readonly name: string }
   /**
-   * A card was REVEALED — explore's top card (CR 701.44a). Public by
-   * definition: revealing is showing the card to every player, so the
-   * observation layer passes the name through unmasked.
+   * A card was REVEALED — explore's top card (CR 701.44a), Goblin Guide's
+   * attack trigger, any "reveal the top card" clause. Public by definition:
+   * revealing is showing the card to every player, so the observation layer
+   * passes the name through unmasked.
+   *
+   * ⚠️ ONE event for every reveal, deliberately (CLAUDE.md rule 12). Two
+   * branches added this independently — §3.110's explore and §3.119's
+   * `revealTopCard` — with two different shapes, and two events meaning "a card
+   * was revealed" is exactly the pair that eventually disagree. The union is
+   * the merge: the three fields every reveal has are REQUIRED, and the three
+   * that only a FILTERED reveal can answer are optional.
+   *
+   * `fromZone` is where it was revealed from; `sourceInstanceId` is the
+   * permanent whose ability revealed it; `matched` says whether the reveal's own
+   * condition held (Goblin Guide: it was a land, so it goes to the revealing
+   * player's hand). The consequence always arrives as its own `zoneChange` —
+   * these only explain it. A reveal with no filter (explore) omits `matched`
+   * rather than claiming `false`, because "the condition did not hold" and
+   * "there was no condition" are different facts.
    */
-  | { readonly type: 'cardRevealed'; readonly player: PlayerId; readonly instanceId: InstanceId; readonly name: string }
+  | {
+      readonly type: 'cardRevealed';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+      readonly fromZone?: ZoneName;
+      readonly sourceInstanceId?: InstanceId;
+      readonly matched?: boolean;
+    }
   | {
       /**
        * A permanent NAMED a value as it entered — "As ~ enters, choose a creature
@@ -601,6 +625,14 @@ export type GameEvent =
       readonly targetInstanceId: InstanceId;
       readonly sourceInstanceId: InstanceId;
       readonly duration: ContinuousDuration;
+      /**
+       * fix/reports-2026-09-01 — the P/T delta the effect applies, when it has
+       * one, so a log can say "gets +1/+1" rather than only that SOMETHING was
+       * registered. Bug report 20260901_204957: a prowess pump made a 1/2 kill a
+       * 0/2 and nothing on screen said the creature was a 2/3 at the time.
+       */
+      readonly power?: number;
+      readonly toughness?: number;
     }
   | {
       // A card in a NON-battlefield zone gained an ability (Snapcaster's "gains

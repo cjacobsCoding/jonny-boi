@@ -125,6 +125,15 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
   controlChanged: { instanceId: 'id', from: 'none', to: 'none' },
   cardsMilled: { player: 'none', amount: 'none' },
   cardsLookedAt: { player: 'none', amount: 'none' },
+  // fix/reports-2026-09-01 — the revealed card and the permanent whose ability revealed it.
+  cardRevealed: {
+    player: 'none',
+    instanceId: 'id',
+    name: 'none',
+    fromZone: 'none',
+    sourceInstanceId: 'id',
+    matched: 'none',
+  },
   abilityActivated: { player: 'none', instanceId: 'id', label: 'none' },
   tapped: { instanceId: 'id' },
   effectApplied: { primitive: 'none', sourceInstanceId: 'id' },
@@ -158,7 +167,6 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
   counterAdded: { instanceId: 'id', kind: 'none', amount: 'none' },
   // §3.110 — the counter keyword family's two events.
   becameRenowned: { instanceId: 'id', name: 'none' },
-  cardRevealed: { player: 'none', instanceId: 'id', name: 'none' },
   chosenAsEnters: { instanceId: 'id', name: 'none', subject: 'none', value: 'none', described: 'none' },
   regenerated: { instanceId: 'id', name: 'none' },
   triggerPutOnStack: { sourceInstanceId: 'id', controller: 'none', label: 'none' },
@@ -170,7 +178,13 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
   triggerRemovedFromStack: { sourceInstanceId: 'id', controller: 'none', label: 'none', reason: 'none' },
   triggeredAbilityResolved: { sourceInstanceId: 'id', label: 'none' },
   continuousEffectExpired: { targetInstanceId: 'id', sourceInstanceId: 'id', duration: 'none' },
-  continuousEffectAdded: { targetInstanceId: 'id', sourceInstanceId: 'id', duration: 'none' },
+  continuousEffectAdded: {
+    targetInstanceId: 'id',
+    sourceInstanceId: 'id',
+    duration: 'none',
+    power: 'none',
+    toughness: 'none',
+  },
   cardGrantAdded: { targetInstanceId: 'id', sourceInstanceId: 'id', duration: 'none' },
   cardGrantExpired: { targetInstanceId: 'id', sourceInstanceId: 'id' },
   permanentAttached: { instanceId: 'id', hostInstanceId: 'id' },

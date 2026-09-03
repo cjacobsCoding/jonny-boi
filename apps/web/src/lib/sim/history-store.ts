@@ -65,8 +65,47 @@ import { DEFAULT_PILOT_ID } from './pilots.js';
 /** Namespace for every stored tuning record. The pilot + fingerprint follow it. */
 export const SUGGESTION_HISTORY_KEY_PREFIX = 'jonny-boi.suggest-history';
 
+/**
+ * A SHORT digest of a deck fingerprint, for use in a storage KEY (§3.119).
+ *
+ * Measured on a real machine while chasing bug report 20260902_231525: that
+ * browser held 57 `suggest-history` keys totalling **1,451 KB** — because the
+ * key embedded `deckFingerprint(deck)` whole, which is one `cardId:count` pair
+ * per distinct card, joined by `|`. The longest key was **662 characters**, and
+ * a new one is minted every time a deck is edited, for ever. The VALUE is the
+ * record; the key only has to identify it.
+ *
+ * FNV-1a, 32 bits, hex — eight characters instead of six hundred. A digest can
+ * collide where the full fingerprint could not, and that is safe HERE and only
+ * here: the stored record carries its own `deckFingerprint`, and
+ * `readSuggestionHistory` already validates it against the live deck (the
+ * module header's "checking the record's own fields as well as the key costs
+ * nothing"). So a collision is rejected as `deck-changed` — a run without prior
+ * evidence — never a record read for the wrong deck.
+ */
+export function fingerprintDigest(fingerprint: string): string {
+  const FNV_OFFSET_BASIS = 0x811c9dc5;
+  const FNV_PRIME = 0x01000193;
+  let hash = FNV_OFFSET_BASIS;
+  for (let i = 0; i < fingerprint.length; i += 1) {
+    hash ^= fingerprint.charCodeAt(i);
+    hash = Math.imul(hash, FNV_PRIME);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
 /** The storage key for one deck's record under one pilot. */
 export function suggestionHistoryKey(fingerprint: string, pilotId: string): string {
+  return `${SUGGESTION_HISTORY_KEY_PREFIX}.v${SUGGESTION_HISTORY_VERSION}.${pilotId}.${fingerprintDigest(fingerprint)}`;
+}
+
+/**
+ * The key used before the fingerprint was digested — the FULL decklist in the
+ * key. Read (and migrated) once, never written, exactly as
+ * {@link legacySuggestionHistoryKey} is: a record filed under it is still this
+ * deck's evidence and must not be thrown away for a key-format change.
+ */
+export function longSuggestionHistoryKey(fingerprint: string, pilotId: string): string {
   return `${SUGGESTION_HISTORY_KEY_PREFIX}.v${SUGGESTION_HISTORY_VERSION}.${pilotId}.${fingerprint}`;
 }
 
@@ -145,7 +184,14 @@ export function readSuggestionHistory(
 
   const raw = readRaw(storage, suggestionHistoryKey(fingerprint, pilotId));
   if (raw.failed) return { rejected: 'unreadable' };
-  if (raw.value === null) return adoptLegacy(storage, fingerprint, pilotId);
+  // Miss under the digested key: the record may predate §3.119's key shortening
+  // (the full decklist in the key), or the pilot partition before that. Each is
+  // re-homed onto the current key and the old one dropped — evidence survives a
+  // key-format change, which is the whole reason both migrations exist.
+  if (raw.value === null) {
+    const rehomed = adoptLongKey(storage, fingerprint, pilotId);
+    return rehomed ?? adoptLegacy(storage, fingerprint, pilotId);
+  }
 
   const stored = parseRecord(raw.value);
   if (!stored) return { rejected: 'unreadable' };
@@ -306,6 +352,42 @@ function validate(history: SuggestionHistory, fingerprint: string): StoredHistor
  * again next time, which is strictly better than dropping it because storage was
  * momentarily full.
  */
+/**
+ * Migrate a record filed under the pre-§3.119 LONG key (the whole decklist in
+ * the key) onto the digested one. Returns `null` when there is nothing there,
+ * so the caller can fall through to the older pre-partition migration.
+ *
+ * Mirrors {@link adoptLegacy} deliberately, including the order that matters:
+ * the old key is only forgotten once the new one definitely holds the record.
+ */
+function adoptLongKey(
+  storage: HistoryStorage,
+  fingerprint: string,
+  pilotId: string,
+): StoredHistory | null {
+  const longKey = longSuggestionHistoryKey(fingerprint, pilotId);
+  const raw = readRaw(storage, longKey);
+  if (raw.failed) return { rejected: 'unreadable' };
+  if (raw.value === null) return null;
+
+  const stored = parseRecord(raw.value);
+  if (!stored) return { rejected: 'unreadable' };
+  if (stored.pilotId !== pilotId) return { rejected: 'pilot-changed' };
+
+  const accepted = validate(stored.history, fingerprint);
+  const rehomed = accepted.history ? writeRecord(storage, { pilotId, history: accepted.history }) : true;
+  if (rehomed) {
+    try {
+      storage.removeItem(longKey);
+    } catch {
+      // Reclaiming the old key is the POINT of this migration (1,451 KB of
+      // them on the reporter's machine), but failing to reclaim it must never
+      // cost the record we just re-homed.
+    }
+  }
+  return accepted;
+}
+
 function adoptLegacy(
   storage: HistoryStorage,
   fingerprint: string,

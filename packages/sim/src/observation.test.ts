@@ -336,6 +336,42 @@ describe('the leak scanner reports what it is supposed to report', () => {
     ]);
   });
 
+  /**
+   * §3.119 — a REVEAL makes its subject seen without moving it.
+   *
+   * Caught by the soak, not by a unit test, the first time: Goblin Guide reveals
+   * the defending player's top card, and a revealed NON-land stays on top —
+   * displayed to both players and still in the library. The scanner reported the
+   * card's own printed effect as a leak.
+   */
+  it('ALLOWS a reveal of a card that stays in its hidden zone, and every later mention of it', () => {
+    const state = hiddenState([87]);
+    const revealed = {
+      type: 'cardRevealed',
+      player: 'B',
+      instanceId: 87,
+      name: 'Wall of Fire',
+      fromZone: 'library',
+      sourceInstanceId: 1,
+      matched: false,
+    } as unknown as Observation;
+    // The reveal itself is legitimate…
+    expect(run([[[], state], [[revealed], state]])).toEqual([]);
+    // …and so is naming the same card afterwards, while it is STILL in the
+    // library: the table has seen it, which is the scanner's actual rule.
+    const later = { type: 'stackResolved', instanceId: 87, name: 'Wall of Fire' } as unknown as Observation;
+    expect(run([[[], state], [[revealed], state], [[later], state]])).toEqual([]);
+  });
+
+  it('still CATCHES a card merely NAMED by a non-reveal while it sits in a library', () => {
+    // The other half: without a reveal, the same id in the same zone is a leak.
+    const state = hiddenState([87]);
+    const later = { type: 'stackResolved', instanceId: 87, name: 'Wall of Fire' } as unknown as Observation;
+    expect(run([[[], state], [[later], state]])).toEqual([
+      'observation stackResolved names #87, a card the table has never seen',
+    ]);
+  });
+
   it('CATCHES an id hidden inside a list, a map key, and a nested object', () => {
     const state = hiddenState([55]);
     const cases: ReadonlyArray<readonly [string, Observation]> = [

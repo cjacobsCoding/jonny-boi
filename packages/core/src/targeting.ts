@@ -1167,6 +1167,18 @@ export function restrictionOfEffects(
   return undefined;
 }
 
+/**
+ * fix/reports-2026-09-01 — the prompt a TRIGGER's target question is raised with,
+ * in one place so the engine (which asks it) and a UI (which may need to
+ * recognise WHICH trigger a parked `selectTargets` belongs to) cannot drift apart
+ * on the wording. Bug report 20260901_205339: Conjurer's Closet asked for a
+ * target and then whether to use it; the board folds the two into one prompt,
+ * and to do that it has to match this question to the trigger that asked it.
+ */
+export function triggerTargetPrompt(restriction: TargetRestriction, triggerLabel: string): string {
+  return `Choose ${describeRestriction(restriction)} for ${triggerLabel}`;
+}
+
 /** Plain-English name of a restriction, for rejection messages and UI. */
 export function describeRestriction(restriction: TargetRestriction): string {
   switch (restriction) {

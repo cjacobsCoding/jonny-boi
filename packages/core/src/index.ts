@@ -249,6 +249,7 @@ export {
   illegalTargetReason,
   restrictionOfEffects,
   describeRestriction,
+  triggerTargetPrompt,
 } from './targeting.js';
 
 // Protection from [quality] + ward (protection.ts): the source-aware half of

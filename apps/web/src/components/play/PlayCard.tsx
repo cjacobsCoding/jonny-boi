@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { getCard, cardImage } from '../../lib/cards.js';
 import { ManaCost } from '../ManaCost.js';
 
@@ -8,6 +8,16 @@ import { ManaCost } from '../ManaCost.js';
  * bundled card index (same source as `CardArt`/`PermanentTile`), degrading to a
  * labeled fallback when the instance has no pool card (e.g. a token) or art is
  * unavailable — never a broken image.
+ *
+ * ⚠️ PLAY-SURFACE IMAGES LOAD EAGERLY. Bug report 20260901_202314: "Some cards
+ * were blank. They showed up when I hovered over them." The hand and the board
+ * are never off-screen — there is nothing to defer — and `loading="lazy"` on
+ * an image inside a scrolling, transformed, `:has()`-sized play surface left
+ * Chrome waiting for an intersection it only re-evaluated once a hover
+ * repainted the slot. Lazy loading belongs to the long grids (the Cards
+ * browser, `CardArt`), not to the twenty images a player is looking at.
+ * `play-surface-images.test.ts` pins this structurally. A face that fails to
+ * load (offline, a Scryfall miss) shows the name rather than a broken image.
  */
 export function PlayCard({
   cardId,
@@ -44,13 +54,17 @@ export function PlayCard({
   const card = getCard(cardId);
   const fullFace = face === 'full' ? (card ? cardImage(card, 'normal') : undefined) : undefined;
   const art = card ? cardImage(card, 'art_crop') : undefined;
+  // A face whose image failed to load falls back to the chip's named layout —
+  // a blank rectangle is the one thing a card must never be.
+  const [faceBroken, setFaceBroken] = useState(false);
+  const showFull = Boolean(fullFace) && !faceBroken;
   // The name alone is useless on a card the player just tried and failed to use.
   const tooltip = reason ? `${name} — ${reason}` : name;
-  const className = `play-card${face === 'full' && fullFace ? ' play-card--full' : ''}${
+  const className = `play-card${showFull ? ' play-card--full' : ''}${
     selected ? ' play-card--selected' : ''
   }${disabled ? ' play-card--disabled' : ''}${onClick && !disabled ? ' play-card--actionable' : ''}`;
 
-  const inner = fullFace ? (
+  const inner = showFull ? (
     <>
       {/*
         draggable={false} IS the land-play fix (bug reports 20260827_205353 +
@@ -67,17 +81,25 @@ export function PlayCard({
         className="play-card__face"
         src={fullFace}
         alt={name}
-        loading="lazy"
+        loading="eager"
         decoding="async"
         draggable={false}
+        onError={() => setFaceBroken(true)}
       />
       {badge && <span className="play-card__badge">{badge}</span>}
     </>
   ) : (
     <>
       <div className="play-card__art">
-        {art ? (
-          <img src={art} alt={name} loading="lazy" decoding="async" draggable={false} />
+        {art && !faceBroken ? (
+          <img
+            src={art}
+            alt={name}
+            loading="eager"
+            decoding="async"
+            draggable={false}
+            onError={() => setFaceBroken(true)}
+          />
         ) : (
           <span className="play-card__fallback">{name}</span>
         )}

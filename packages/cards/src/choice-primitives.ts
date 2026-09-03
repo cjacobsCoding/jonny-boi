@@ -444,16 +444,29 @@ export const searchLibrary: EffectPrimitive = (ctx) => {
  * (Goblin Guide's attack trigger).
  *
  * No question is asked: nothing about it is optional. It lives here because it is
- * the *information* half of the same family — and because the engine has no
- * `cardsRevealed` event yet, the reveal itself is not in the log; every mechanical
- * consequence of it is exact.
+ * the *information* half of the same family. The reveal itself is announced by
+ * a `cardRevealed` event carrying the card's NAME — a reveal is public as
+ * printed (both players see the card) — so the log can say what was shown, and
+ * whether the condition held, before the mechanical consequence (the move to
+ * hand) arrives as its own `zoneChange`. (fix/reports-2026-09-01, bug report
+ * 20260901_210413: Goblin Guide's reveal happened and nobody could see it.)
  */
 export const revealTopCard: EffectPrimitive = (ctx) => {
   const who = playerParam(ctx, 'who', 'controller');
   if (!who) return;
   const top = ctx.state.players[who].library[0];
   if (!top) return;
-  if (!matchesCardFilter(top, filterParam(ctx))) return; // revealed, and put back
+  const matched = matchesCardFilter(top, filterParam(ctx));
+  ctx.emit({
+    type: 'cardRevealed',
+    player: who,
+    instanceId: top.instanceId,
+    name: top.def.name,
+    fromZone: 'library',
+    sourceInstanceId: ctx.source.instanceId,
+    matched,
+  });
+  if (!matched) return; // revealed, and put back
   moveOwnedCard(ctx, who, top.instanceId, 'library', 'hand');
 };
 

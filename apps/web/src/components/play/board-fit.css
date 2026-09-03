@@ -61,8 +61,25 @@
   /* How tall a seat's creature+land rows may get before they scroll instead of
      pushing the hand off the screen. Two seats' worth of this plus the hand plus
      the chrome is the whole vertical budget, which is why it is a fraction of
-     the window rather than a fixed height. */
-  --play-seat-rows-max: 11dvh;
+     the window rather than a fixed height.
+
+     ⚠️ RAISED from 11dvh in §3.119 (report 20260901_204618, "Battleground is
+     super crunched"). At the reported 1536x790 viewport 11dvh is 87px, and a
+     seat holds TWO rows of tiles (creatures, then lands) whose own height is
+     `--play-tile-w * 0.62` of art plus a footer and keyword chips — about 75px
+     each. So the cap fit one row and clipped the other: the annotated
+     screenshot shows the computer's creatures and its lands overlapping inside
+     one squeezed band. Two rows plus the gap is the honest minimum, and the
+     slack comes from the log (see `--play-log-max-h` below) rather than from
+     the hand or the action bar, which rule 5 forbids shrinking. */
+  --play-seat-rows-max: 17dvh;
+
+  /* The log is the designated slack (see rule 3) — but "yields first" was
+     unbounded in both directions: with a long history it grew to whatever the
+     content wanted and took the difference out of the seats. It now has a
+     floor (still a log) and a ceiling (never more than this). */
+  --play-log-min-h: 5rem;
+  --play-log-max-h: 22dvh;
 
 
   /* The opponent's fan overlaps by a fixed amount — its cards carry no
@@ -111,10 +128,43 @@
    player's own HAND out of view, which is worse than the page it replaces. */
 .app:has(.play-board) .play-board__center {
   /* Yields FIRST — the log is the one region whose content is a history rather
-     than the position, and the only one that scrolls without losing anything. */
+     than the position, and the only one that scrolls without losing anything.
+     Bounded at both ends in §3.119: without a ceiling it grew with the history
+     and crunched the battlefield (report 20260901_204618). */
   flex: 0 1 auto;
+  min-height: var(--play-log-min-h);
+  max-height: var(--play-log-max-h);
+  overflow-y: hidden;
+}
+
+/* The log scrolls INSIDE its own box rather than making the column scroll:
+   two nested scrollers meant `scrollIntoView` could satisfy itself by moving
+   the outer one, leaving the log's newest line still out of sight (which is
+   what report 20260901_210413's screenshot shows — turn 24, and the log
+   reading "Game begins"). `GameLog` now sets its own scrollTop. */
+.play-board .game-log {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.play-board .game-log__lines {
+  max-height: none;
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* An empty stack used to waste half the centre column's width (the grid was a
+   fixed `1fr 1fr`). The stack panel renders nothing when the stack is empty,
+   so the log takes the whole width until there is a stack to show. */
+.play-board .play-board__center {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.play-board .play-board__center:has(.stack-panel) {
+  grid-template-columns: minmax(12rem, 22rem) minmax(0, 1fr);
 }
 
 /* --- Rule 1: every card reads the knob -------------------------------------- */

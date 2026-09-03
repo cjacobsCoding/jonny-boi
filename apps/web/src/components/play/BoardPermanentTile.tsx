@@ -19,11 +19,36 @@ const KEYWORD_ABBR: Readonly<Record<string, string>> = {
   lifelink: 'LL',
 };
 
+/** A signed P/T delta as a badge string: "+1/+1", "-2/-2", "+0/+2". */
+export function formatPtDelta(delta: { readonly power: number; readonly toughness: number }): string {
+  const signed = (n: number): string => (n >= 0 ? `+${n}` : `${n}`);
+  return `${signed(delta.power)}/${signed(delta.toughness)}`;
+}
+
+/**
+ * The combat badge copy — one table, so the tile, its tooltip and any test read
+ * the same words. Bug report 20260901_204854: "It needs to be way more clear
+ * who is attacking" — the only attack signal was a dashed outline shared with
+ * every other selectable tile.
+ */
+export const COMBAT_BADGES = Object.freeze({
+  attacking: '⚔ ATTACKING',
+  blocking: '🛡 BLOCKING',
+});
+
 /**
  * A battlefield permanent for the hotseat board. Renders effective P/T (continuous
  * effects already folded by the view-model), tapped + summoning-sick indicators,
  * marked damage, and keyword chips. Optionally selectable (for declaring attackers/
  * blockers or as a spell target). Reuses the bundled Scryfall art.
+ *
+ * Two things it now SAYS that it used to only know (§3.119):
+ *  - a creature whose effective P/T differs from the printed card carries a
+ *    delta badge ("+1/+1") beside the number, and its tooltip spells out the
+ *    printed stats — bug report 20260901_204957, a prowess-pumped 1/2 that
+ *    killed a 0/2 while the player read the printed card;
+ *  - a creature in combat wears its role — a red "⚔ ATTACKING" band, a blue
+ *    "🛡 BLOCKING" one — for as long as the engine's combat state lists it.
  */
 export function BoardPermanentTile({
   perm,
@@ -33,6 +58,7 @@ export function BoardPermanentTile({
   onClick,
   jailed,
   onInspectJailed,
+  targetable,
 }: {
   perm: BoardPermanent;
   selected?: boolean;
@@ -49,6 +75,12 @@ export function BoardPermanentTile({
   jailed?: readonly JailedCardView[];
   /** Zoom a peeked prisoner (routes to the shared CardZoomOverlay). */
   onInspectJailed?: (card: JailedCardView) => void;
+  /**
+   * This tile is a LEGAL TARGET of the spell being cast (§3.119, bug report
+   * 20260901_211035): it pulses so the player can see where a Cloudshift may
+   * land, and a drop of the dragged card onto it is the cast.
+   */
+  targetable?: boolean;
 }): ReactElement {
   const card = getCard(perm.cardId);
   const art = card ? cardImage(card, 'art_crop') : undefined;
@@ -56,19 +88,28 @@ export function BoardPermanentTile({
   const keywords = Object.entries(perm.keywords)
     .filter(([, v]) => v)
     .map(([k]) => KEYWORD_ABBR[k] ?? k);
+  const delta = perm.ptDelta;
 
   const className =
     `perm${perm.tapped ? ' perm--tapped' : ''}` +
     `${selectable ? ' perm--selectable' : ''}` +
     `${selected ? ' perm--selected' : ''}` +
-    `${perm.summoningSick && perm.isCreature ? ' perm--sick' : ''}`;
+    `${targetable ? ' perm--targetable' : ''}` +
+    `${perm.summoningSick && perm.isCreature ? ' perm--sick' : ''}` +
+    `${perm.attacking ? ' perm--attacking' : ''}` +
+    `${perm.blocking !== null ? ' perm--blocking' : ''}`;
 
   const title =
     `${perm.name}` +
-    (perm.isCreature ? ` · ${perm.power}/${perm.toughness}` : '') +
+    (perm.isCreature
+      ? ` · ${perm.power}/${perm.toughness}` +
+        (delta ? ` (printed ${perm.printedPower}/${perm.printedToughness}, ${formatPtDelta(delta)})` : '')
+      : '') +
     (perm.isPlaneswalker ? ` · ${perm.loyalty} loyalty` : '') +
     (perm.isBattle ? ` · ${perm.defense} defense · protected by ${perm.protector}` : '') +
     (perm.tapped ? ' · tapped' : '') +
+    (perm.attacking ? ' · attacking' : '') +
+    (perm.blocking !== null ? ' · blocking' : '') +
     (perm.summoningSick && perm.isCreature ? ' · summoning sick' : '');
 
   const body = (
@@ -78,13 +119,25 @@ export function BoardPermanentTile({
           // draggable={false} — §3.54's standing rule: battlefield tiles are
           // click targets (attack/block/target selection), and a native image
           // drag would eat the pointer stream exactly as it did in the hand.
-          <img src={art} alt={perm.name} loading="lazy" decoding="async" draggable={false} />
+          // loading="eager" — §3.119 (report 20260901_202314): a board tile is
+          // never off-screen, so there is nothing for lazy loading to defer.
+          <img src={art} alt={perm.name} loading="eager" decoding="async" draggable={false} />
         ) : (
           <span className="perm__fallback">{perm.name}</span>
         )}
         {perm.tapped && (
           <span className="perm__tap-badge" aria-label="Tapped">
             ⤵
+          </span>
+        )}
+        {perm.attacking && (
+          <span className="perm__combat perm__combat--attacking" aria-label="Attacking">
+            {COMBAT_BADGES.attacking}
+          </span>
+        )}
+        {perm.blocking !== null && !perm.attacking && (
+          <span className="perm__combat perm__combat--blocking" aria-label="Blocking">
+            {COMBAT_BADGES.blocking}
           </span>
         )}
         {marker && <span className="perm__marker">{marker}</span>}
@@ -96,6 +149,15 @@ export function BoardPermanentTile({
         {perm.isCreature && (
           <span className={`perm__pt${wounded ? ' perm__pt--wounded' : ''}`}>
             {perm.power}/{perm.toughness}
+            {delta && (
+              <span
+                className={`perm__pt-delta${delta.power < 0 || delta.toughness < 0 ? ' perm__pt-delta--down' : ''}`}
+                aria-label={`${formatPtDelta(delta)} from the printed ${perm.printedPower}/${perm.printedToughness}`}
+              >
+                {' '}
+                {formatPtDelta(delta)}
+              </span>
+            )}
             {wounded && <span className="perm__dmg"> (−{perm.damageMarked})</span>}
           </span>
         )}
@@ -213,7 +275,7 @@ function JailedPeek({
       {/* draggable={false} — §3.54's rule: no image near a gesture surface may
           start a native drag. */}
       {art ? (
-        <img src={art} alt="" loading="lazy" decoding="async" draggable={false} />
+        <img src={art} alt="" loading="eager" decoding="async" draggable={false} />
       ) : (
         <span className="perm-stack__jailed-name">{prisoner.name}</span>
       )}

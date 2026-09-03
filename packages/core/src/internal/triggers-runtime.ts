@@ -81,6 +81,8 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   cardGrantAdded: false,
   cardGrantExpired: false,
   cardsLookedAt: false,
+  // fix/reports-2026-09-01 — a reveal shows a card; the move that may follow is its own row.
+  cardRevealed: false,
   cardsMilled: false,
   choiceAbandoned: false,
   choiceAnswered: false,
@@ -91,7 +93,6 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   counterAdded: false,
   // §3.110 — a designation and a reveal change no source set.
   becameRenowned: false,
-  cardRevealed: false,
   counterPrevented: false,
   damageDealt: false,
   damagePrevented: false,

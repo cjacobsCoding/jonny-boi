@@ -297,6 +297,12 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
    * kept card moves library → library and is anonymised by the same rule.
    */
   cardsLookedAt: 'public',
+  /*
+   * fix/reports-2026-09-01 — a REVEAL is public by definition: the card is turned
+   * face up for both players, which is the printed effect. The name in the event
+   * is what a spectator reads off the table, not a leak from a hidden zone.
+   */
+  cardRevealed: 'public',
   abilityActivated: 'public',
   /*
    * CYCLING is public as printed, and the name it carries is not a leak: the
@@ -372,7 +378,6 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // §3.110 — a renown designation is board state; a REVEAL is, by definition,
   // the card shown to the table (explore's top card, CR 701.44a).
   becameRenowned: 'public',
-  cardRevealed: 'public',
   /*
    * THE NAMED VALUE IS PUBLIC, and this one is worth being deliberate about
    * because it sits next to three redacted choice events.
@@ -586,6 +591,26 @@ export function createObservationLeakScanner(report: (detail: string) => void): 
 
       for (const observation of pending) {
         scanned++;
+        /*
+         * A REVEAL MAKES ITS SUBJECT SEEN — the one way a card becomes public
+         * WITHOUT leaving the zone it is hidden in (§3.119).
+         *
+         * Until reveals existed, "seen" and "not in a hidden zone at some flush"
+         * were the same thing, so the shrink above was the whole rule. Goblin
+         * Guide breaks that equivalence exactly as printed: "the defending
+         * player reveals the top card of their library", and a revealed NON-land
+         * stays on top — displayed to both players and still in the library. The
+         * scanner would otherwise report the card's own printed effect as a
+         * leak, which is what the soak caught.
+         *
+         * Marked BEFORE the check below, so the revealing observation itself is
+         * legitimate: the reveal is the act that makes it public. This does not
+         * weaken the guarantee — the engine is the trusted side here (the PILOT
+         * is what this audits), and a `cardRevealed` is a deliberate, faithful
+         * emission of a card that says "reveal". Every later mention of the id is
+         * then honest for the same reason any post-cast mention is.
+         */
+        if (observation.type === 'cardRevealed') neverSeen.delete(observation.instanceId);
         const keys = collectKeys(observation, new Set<string>(), new Set<object>());
         for (const key of FORBIDDEN_OBSERVATION_KEYS) {
           if (keys.has(key)) report(`observation ${observation.type} carries a forbidden field "${key}"`);

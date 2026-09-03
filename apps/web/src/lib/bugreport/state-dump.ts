@@ -36,6 +36,24 @@ export function registerStateSection(name: string, section: StateSection): () =>
 /** How many characters of one localStorage value the dump will carry. */
 const MAX_STORAGE_VALUE_CHARS = 400;
 
+/**
+ * How many characters of one localStorage KEY the dump will carry (§3.119).
+ *
+ * Measured on the reporter's own machine while chasing bug report
+ * 20260902_231525: localStorage held 64 keys totalling 1,579 KB, of which 57
+ * were `jonny-boi.suggest-history.v1…` keys totalling 1,451 KB — and each of
+ * those keys embeds the ENTIRE decklist, the longest running to 662
+ * characters. Printing them whole made 38 KB of the dump keys alone, and the
+ * dump is the part of a report a human is supposed to read. The prefix
+ * identifies the key; the tail is a deck fingerprint nobody reads by eye.
+ *
+ * ⚠️ The keys themselves are the real defect and are NOT fixed here — see the
+ * COORDINATION note and §3.119: `suggestionHistoryKey` should hash the deck
+ * into a short digest and the store should cap how many it keeps. This only
+ * stops one unbounded thing from swallowing the report about it.
+ */
+const MAX_STORAGE_KEY_CHARS = 80;
+
 function environmentSection(): string {
   const lines: string[] = [];
   lines.push(`user_agent ${navigator.userAgent}`);
@@ -53,20 +71,37 @@ function environmentSection(): string {
   return lines.join('\n');
 }
 
+/** One key, elided in the middle so both its prefix and its version survive. */
+export function shortenStorageKey(key: string, max: number = MAX_STORAGE_KEY_CHARS): string {
+  if (key.length <= max) return key;
+  // Keep the head (which names the feature) and a little of the tail, so two
+  // long keys of the same feature are still distinguishable in the dump.
+  const tail = 8;
+  const head = max - tail - 1;
+  return `${key.slice(0, head)}…${key.slice(-tail)}`;
+}
+
 function storageSection(): string {
   const lines: string[] = [];
   try {
+    let totalChars = 0;
     for (let i = 0; i < window.localStorage.length; i += 1) {
       const key = window.localStorage.key(i);
       if (key === null) continue;
       const value = window.localStorage.getItem(key) ?? '';
+      totalChars += key.length + value.length;
       // Size ALWAYS, value only when it is small enough to read. A saved deck
-      // list or the imported-card cache would otherwise bury the dump.
-      lines.push(`${key} (${value.length} chars)`);
+      // list or the imported-card cache would otherwise bury the dump — and so
+      // would a long KEY, which is why the key is elided too (§3.119).
+      lines.push(`${shortenStorageKey(key)} (${value.length} chars)`);
       if (value.length <= MAX_STORAGE_VALUE_CHARS) {
         lines.push(`  = ${value}`);
       }
     }
+    // The TOTAL, said out loud: 1.5 MB across 64 keys is a defect in its own
+    // right, and a dump that lists keys without ever adding them up is how it
+    // went unnoticed for as long as it did.
+    lines.push(`total ${window.localStorage.length} key(s), ${totalChars} chars`);
   } catch (error) {
     // Private-browsing modes can throw on localStorage access. Say so; do not
     // fail the report over it.

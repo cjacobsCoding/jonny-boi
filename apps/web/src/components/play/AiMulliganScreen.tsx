@@ -1,5 +1,6 @@
 import { useLayoutEffect, type ReactElement } from 'react';
 import { CardBack } from './PlayCard.js';
+import { aiMulliganCopy } from '../../lib/play/mulligan-copy.js';
 
 /**
  * The mulligan step AS SEEN WHILE THE COMPUTER DECIDES — card backs, nothing else.
@@ -9,6 +10,9 @@ import { CardBack } from './PlayCard.js';
  * opponents hand"). The guarantee is STRUCTURAL: these props carry a hand
  * COUNT, not a hand, so no future reordering of effects can leak card
  * identities through this screen — the data is simply not here to leak.
+ *
+ * It names the rule it is playing under, exactly as the human's screen does
+ * (§3.119, report 20260901_212439) — one copy table for both.
  */
 export function AiMulliganScreen({
   name,
@@ -18,9 +22,11 @@ export function AiMulliganScreen({
   /** How many backs to draw. Never the cards themselves — see the header. */
   handCount: number;
 }): ReactElement {
+  const copy = aiMulliganCopy(name);
   return (
     <div className="mulligan" aria-label={`${name} is deciding their opening hand`}>
-      <h2 className="mulligan__title">{name} is looking at their opening hand…</h2>
+      <h2 className="mulligan__title">{copy.title}</h2>
+      <p className="mulligan__rule">{copy.rule}</p>
       <div className="play-hand play-hand--hidden">
         {Array.from({ length: handCount }).map((_, i) => (
           <CardBack key={i} index={i} />

@@ -45,11 +45,21 @@ export function ChoicePrompt({
   names,
   onAnswer,
   zoneOf,
+  declineLabel,
+  onDecline,
 }: {
   choice: PendingChoice;
   names: Readonly<Record<PlayerId, string>>;
   /** Submit the finished answer through the session's `answerChoice` action. */
   onAnswer: (answer: ChoiceAnswer) => void;
+  /**
+   * §3.119 — the "don't do it at all" button for a MANDATORY target question
+   * that belongs to a "you may …" trigger (report 20260901_205339: Conjurer's
+   * Closet asked for a target and then whether to use it). Present only when
+   * `optionalTargetDecline` says so; the board handles what taking it means.
+   */
+  declineLabel?: string | null;
+  onDecline?: () => void;
   /**
    * Resolve where a TARGET candidate publicly sits (battlefield / graveyard /
    * stack), built by the board from PUBLIC zones only — see `makeRefIndex`.
@@ -166,6 +176,13 @@ export function ChoicePrompt({
             {view.optional && (
               <button type="button" className="btn btn--ghost" onClick={declineAll}>
                 Choose none
+              </button>
+            )}
+            {/* The folded "may" (§3.119). Taking it answers this question AND
+                the one that was coming, so the pair is asked once. */}
+            {declineLabel && onDecline && (
+              <button type="button" className="btn btn--ghost" onClick={onDecline}>
+                {declineLabel}
               </button>
             )}
             <button

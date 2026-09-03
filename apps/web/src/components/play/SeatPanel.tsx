@@ -23,6 +23,13 @@ export interface PermInteraction {
   readonly selectedIds: ReadonlySet<InstanceId>;
   /** Per-permanent overlay marker (e.g. "ATK"). */
   readonly markers?: ReadonlyMap<InstanceId, string>;
+  /**
+   * Permanents that are LEGAL TARGETS of the spell/ability being aimed right
+   * now (§3.119, report 20260901_211035). Drawn pulsing, so "where can this
+   * Cloudshift go?" is answered by looking rather than by guessing. A subset of
+   * `selectableIds` in practice — the aim is also the click.
+   */
+  readonly targetableIds?: ReadonlySet<InstanceId>;
   readonly onClick: (id: InstanceId) => void;
 }
 
@@ -74,6 +81,7 @@ export function SeatPanel({
         selectable={selectable}
         selected={interaction?.selectedIds.has(p.instanceId) ?? false}
         marker={interaction?.markers?.get(p.instanceId)}
+        targetable={interaction?.targetableIds?.has(p.instanceId) ?? false}
         onClick={selectable && interaction ? () => interaction.onClick(p.instanceId) : undefined}
         jailed={jails?.get(p.instanceId)}
         onInspectJailed={onInspectCard}
@@ -123,30 +131,47 @@ export function SeatPanel({
       {/* The zone counters double as ANIMATION ANCHORS (§3.57): the flying
           card-back/face sprites measure these `data-anim-anchor` elements for
           their start/end points. Data attributes only — no behavior. */}
+      {/*
+        THE ZONE RAIL, IN WORDS (§3.119, report 20260901_210413 — "In fact I
+        dont even see a library"). It was a row of bare glyphs — `📚 36` beside
+        `✋ 4` beside `⚰ 1` — which reads as decoration next to a life total,
+        and the library is the zone a Goblin Guide reveal is ABOUT. Every zone
+        is now a labelled chip that names itself. The `data-anim-anchor`
+        attributes are unchanged: they are what §3.57's sprites measure.
+      */}
       <div className="seat__zones">
-        <span title="Cards in hand" data-anim-anchor={`hand-count:${seat.id}`}>
-          ✋ {seat.handCount}
+        <span className="seat__zone" title="Cards in hand" data-anim-anchor={`hand-count:${seat.id}`}>
+          <span className="seat__zone-label">Hand</span>
+          <span className="seat__zone-count">{seat.handCount}</span>
         </span>
-        <span title="Library" data-anim-anchor={`library:${seat.id}`}>
-          📚 {seat.libraryCount}
+        <span className="seat__zone" title="Cards left in library" data-anim-anchor={`library:${seat.id}`}>
+          <span className="seat__zone-label">Library</span>
+          <span className="seat__zone-count">{seat.libraryCount}</span>
         </span>
         {onGraveyardClick ? (
           <button
             type="button"
-            className="seat__zone-btn"
+            className="seat__zone seat__zone-btn"
             title="Open graveyard"
             aria-label={`Open ${seat.name} graveyard (${seat.graveyardCount} cards)`}
             data-anim-anchor={`graveyard:${seat.id}`}
             onClick={onGraveyardClick}
           >
-            ⚰ {seat.graveyardCount}
+            <span className="seat__zone-label">Graveyard</span>
+            <span className="seat__zone-count">{seat.graveyardCount}</span>
           </button>
         ) : (
-          <span title="Graveyard" data-anim-anchor={`graveyard:${seat.id}`}>
-            ⚰ {seat.graveyardCount}
+          <span className="seat__zone" title="Graveyard" data-anim-anchor={`graveyard:${seat.id}`}>
+            <span className="seat__zone-label">Graveyard</span>
+            <span className="seat__zone-count">{seat.graveyardCount}</span>
           </span>
         )}
-        {seat.exileCount > 0 && <span title="Exile">✦ {seat.exileCount}</span>}
+        {seat.exileCount > 0 && (
+          <span className="seat__zone" title="Exile">
+            <span className="seat__zone-label">Exile</span>
+            <span className="seat__zone-count">{seat.exileCount}</span>
+          </span>
+        )}
         {manaEntries.length > 0 && (
           <span
             className="seat__mana"

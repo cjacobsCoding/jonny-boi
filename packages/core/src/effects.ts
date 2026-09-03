@@ -637,7 +637,15 @@ function addContinuousEffectToState(
     keywords: mod.keywords,
     ...(controlChange ? { controlChange } : {}),
   });
-  emit({ type: 'continuousEffectAdded', targetInstanceId: target, sourceInstanceId, duration });
+  emit({
+    type: 'continuousEffectAdded',
+    targetInstanceId: target,
+    sourceInstanceId,
+    duration,
+    // fix/reports-2026-09-01 — carry the delta so the log can name it (see events.ts).
+    ...(mod.power !== undefined ? { power: mod.power } : {}),
+    ...(mod.toughness !== undefined ? { toughness: mod.toughness } : {}),
+  });
   return id;
 }
 
