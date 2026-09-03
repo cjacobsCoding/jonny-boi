@@ -201,16 +201,6 @@ export function PlayBoard({
   const [stopsMenuOpen, setStopsMenuOpen] = useState(false);
   /** A reveal the player has dismissed, by its index in the event log. */
   const [dismissedReveal, setDismissedReveal] = useState<number | null>(null);
-  /**
-   * The permanent whose "you may …" the player declined on its TARGET prompt
-   * (§3.119). Spent when that permanent's confirm arrives — see below.
-   *
-   * A REF, not state, on purpose: it only ever changes alongside a submit that
-   * re-renders anyway (set on the decline, cleared as the follow-up is
-   * answered), so making it state would add a render and put a `setState` in an
-   * effect for no gain.
-   */
-  const declinedSourceRef = useRef<InstanceId | null>(null);
 
   /**
    * §3.67 — AI CO-PILOT. Off by default; the preference outlives the game.
@@ -951,26 +941,29 @@ export function PlayBoard({
     ? session.state.battlefield.find((p) => p.instanceId === pendingChoice.sourceInstanceId)?.def
     : undefined;
   const declineLabel = pendingChoice ? optionalTargetDecline(pendingChoice, choiceSourceDef) : null;
-  const autoDeclining =
-    pendingChoice !== null && isDeclinedMayQuestion(pendingChoice, declinedSourceRef.current);
 
+  /**
+   * Answer BOTH of the trigger's questions in one gesture.
+   *
+   * The session is immutable and `answerChoice` returns the next one
+   * SYNCHRONOUSLY, so the "may" question the engine parks after the target is
+   * already on that returned session — no remembered flag, no effect, and no
+   * frame in which the second modal could flash. The engine still asks both, in
+   * the order the rules require; the player answered once.
+   */
   const declineOptionalTrigger = (): void => {
     const choice = pendingChoice;
     if (!choice) return;
-    declinedSourceRef.current = choice.sourceInstanceId;
-    run(() => session.answerChoice(defaultAnswerFor(choice)));
+    run(() => {
+      const aimed = session.answerChoice(defaultAnswerFor(choice));
+      if (aimed.rejected) return aimed;
+      const followUp = aimed.session.pendingChoice;
+      if (followUp && isDeclinedMayQuestion(followUp, choice.sourceInstanceId)) {
+        return aimed.session.answerChoice({ kind: 'confirm', yes: false });
+      }
+      return aimed;
+    });
   };
-
-  // The remembered decline, spent the moment its "may" question arrives. An
-  // effect rather than a render-time submit: answering during a render is how a
-  // React tree ends up submitting the same action twice.
-  useEffect(() => {
-    if (!autoDeclining) return;
-    declinedSourceRef.current = null;
-    onSubmit(() => session.answerChoice({ kind: 'confirm', yes: false }));
-    // `session` is the dependency that matters: one submit per parked question.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoDeclining, session]);
 
   /** The reveal to announce on the board, if any and not yet dismissed (§3.119). */
   const reveal = useMemo(
@@ -1220,7 +1213,7 @@ export function PlayBoard({
         hotseat handoff already gates the device on the engine moving priority to
         the chooser, so in practice the viewer IS the chooser here.
       */}
-      {pendingChoice && isChoiceForViewer(pendingChoice, viewer) && !autoDeclining && (
+      {pendingChoice && isChoiceForViewer(pendingChoice, viewer) && (
         <ChoicePrompt
           choice={pendingChoice}
           names={names}

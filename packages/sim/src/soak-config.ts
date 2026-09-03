@@ -783,6 +783,16 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
    */
   cardsLookedAt: null,
   /*
+   * fix/reports-2026-09-01 — `cardRevealed` is the same shape of witness as
+   * `cardsLookedAt` above and gets the same answer: NOT a mechanic of its own.
+   * A reveal is a step inside somebody else's ability (Goblin Guide's attack
+   * trigger, a search that reveals what it found), so the mechanic that fired
+   * is the SOURCE card's, which the soak already credits from the trigger and
+   * the action. Tallying the reveal separately would double-count the ability
+   * that caused it.
+   */
+  cardRevealed: null,
+  /*
    * Every parked question emits this, so it names no single mechanic — but it
    * carries `sourceInstanceId`, which is what lets the soak credit X, kicker,
    * buyback, scry and surveil to the card that actually asked.
