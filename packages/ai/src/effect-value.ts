@@ -767,6 +767,46 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     return worth * ctx.weights.bankedEffectValueShare;
   },
 
+  // --- §3.106 upkeep costs and time counters ----------------------------------
+  /**
+   * "Sacrifice ~" — the consequence of every declined upkeep bill. The context
+   * carries no source, so the loss is priced as a permanent gone: the creature
+   * base value, which is what every sacrifice choice reads for a body with no
+   * stats to add. Negative from the controller's seat.
+   */
+  sacrificeSelf: (_params, ctx) => -ctx.weights.choiceCreatureBaseValue,
+  /** The life-cost bill, priced exactly as the mana one: nothing when it can be paid. */
+  payLifeOrElse: (params, ctx) => {
+    const consequence = params['effects'];
+    const amount = typeof params['amount'] === 'number' ? params['amount'] : 0;
+    const worth = Array.isArray(consequence) ? valueOfEffects(consequence as readonly EffectRef[], ctx) : 0;
+    return ctx.state.players[ctx.player].life > amount ? 0 : worth;
+  },
+  /**
+   * The first age counter's bill, banked: a cumulative upkeep is a tax that
+   * grows every turn, so the permanent is worth its printed self LESS one bill
+   * a turn away — the same discount a banked Clue gets, in the other direction.
+   */
+  cumulativeUpkeep: (params, ctx) => {
+    const mana = params['mana'];
+    const life = typeof params['life'] === 'number' ? params['life'] : 0;
+    const perTurn =
+      mana !== null && typeof mana === 'object'
+        ? convertedManaCost(mana as ManaCost)
+        : life;
+    return -perTurn * ctx.weights.bankedEffectValueShare;
+  },
+  /**
+   * The general delayed body ("draw a card at the beginning of the next turn's
+   * upkeep"): the effects it schedules, discounted exactly as the Pact's bill
+   * is — a turn away is a turn away whichever direction the value points.
+   */
+  scheduleDelayedEffects: (params, ctx) => {
+    const body = params['effects'];
+    const worth = Array.isArray(body) ? valueOfEffects(body as readonly EffectRef[], ctx) : 0;
+    return worth * ctx.weights.bankedEffectValueShare;
+  },
+
   /**
    * GRAVEYARD HATE — worth what it takes AWAY, so it is priced off the cards
    * actually sitting in the graveyards it empties: the opponent's yard is

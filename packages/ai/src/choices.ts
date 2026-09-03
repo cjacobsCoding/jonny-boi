@@ -85,6 +85,7 @@ import {
 import { cardValue, cardValueContext, findInstance } from './card-value.js';
 import { modeEffectsFor, resolutionValueContext, valueOfEffects, valueOfMode } from './effect-value.js';
 import type { HeuristicWeights } from './weights.js';
+import { totalAvailableMana } from './land-sequencing.js';
 
 /**
  * Re-exported from `./card-value.js`, where the ranking now lives so the effect
@@ -135,7 +136,7 @@ export function answerChoiceHeuristically(
     case 'confirm':
       return answerAction(choice, answerConfirm(choice, weights));
     case 'payMana':
-      return answerAction(choice, answerPayMana(choice, weights));
+      return answerAction(choice, answerPayMana(state, choice, weights));
     case 'payLife':
       return answerAction(choice, answerPayLife(state, choice, weights));
     case 'chooseNumber':
@@ -822,9 +823,55 @@ function answerChooseNumber(choice: ChooseNumberChoice): ChoiceAnswer {
   return { kind: 'chooseNumber', value: choice.valence === 'gain' ? choice.max : choice.min };
 }
 
-function answerPayMana(choice: PayManaChoice, weights: HeuristicWeights): ChoiceAnswer {
+function answerPayMana(state: GameState, choice: PayManaChoice, weights: HeuristicWeights): ChoiceAnswer {
   if (!choice.affordable) return { kind: 'payMana', pay: false };
+  // §3.106 — an UPKEEP BILL names its stake, and that is the one payment the
+  // valence rule gets wrong: "pay whenever you can" pays every echo and every
+  // cumulative-upkeep age counter for ever, stranding the turn's spell to keep
+  // a 1/1. The bill is priced against the permanent instead.
+  if (choice.stakeInstanceId !== undefined) {
+    return { kind: 'payMana', pay: shouldPayUpkeepBill(state, choice, choice.stakeInstanceId, weights) };
+  }
   if (choice.valence === 'gain') return { kind: 'payMana', pay: true };
   if (choice.valence === 'loss') return { kind: 'payMana', pay: false };
   return { kind: 'payMana', pay: weights.choicePayManaNeutralYes };
+}
+
+/**
+ * §3.106 — whether to pay an upkeep bill (echo, cumulative upkeep, "sacrifice
+ * ~ unless you pay") for the permanent at stake. Two ways to a yes:
+ *
+ *  1. **The mana is SPARE.** Paying still leaves this turn's best castable
+ *     spell affordable — the whole turn's mana is in front of the pilot at
+ *     upkeep, so this is "would I be giving anything up?", read off the hand.
+ *     Never strand the land drop's spell: a bill that would is judged by 2.
+ *  2. **The permanent is worth the tempo.** Its `cardValue` — the same ruler
+ *     every discard and sacrifice choice uses — is at least
+ *     `upkeepBillWorthPerMana` per mana of the bill. A 3/3 pays {1}{G}; a 1/1
+ *     Deranged Hermit lets its {3}{G}{G} go and keeps the squirrels.
+ *
+ * A stake that has already left the battlefield (the bill is for nothing) is
+ * declined, which is what the printed card does with the mana.
+ */
+function shouldPayUpkeepBill(
+  state: GameState,
+  choice: PayManaChoice,
+  stakeInstanceId: InstanceId,
+  weights: HeuristicWeights,
+): boolean {
+  const stake = findInstance(state, stakeInstanceId);
+  if (!stake || stake.zone !== 'battlefield') return false;
+  const bill = convertedManaCost(choice.cost);
+  const me = choice.chooser;
+  const available = totalAvailableMana(state, me);
+  let bestCastable = 0;
+  for (const card of state.players[me].hand) {
+    const def = card.def;
+    if (isLand(def) || def.cost === undefined) continue;
+    const value = convertedManaCost(def.cost);
+    if (value <= available && value > bestCastable) bestCastable = value;
+  }
+  if (available - bill >= bestCastable) return true;
+  const worth = cardValue(stake, weights, cardValueContext(state));
+  return worth >= bill * weights.upkeepBillWorthPerMana;
 }

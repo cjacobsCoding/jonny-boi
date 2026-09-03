@@ -69,6 +69,7 @@ import type { GameEvent } from '../events.js';
 import type { StaticAbility } from '../statics.js';
 import { modificationIsInert, staticAppliesTo, staticIsInert, staticsOf } from '../statics.js';
 import { characteristicValue } from '../derived.js';
+import { markControlChange } from '../upkeep-costs.js';
 
 /**
  * How long a continuous effect lasts before the engine removes it.
@@ -732,6 +733,8 @@ export function applyControlChange(
   const from = permanent.controller;
   permanent.controller = to;
   permanent.summoningSick = true;
+  // §3.106 — echo counts a control change as "came under your control" (CR 702.30a).
+  markControlChange(state, permanent);
   emit({ type: 'controlChanged', instanceId: permanent.instanceId, from, to });
   return { instanceId: permanent.instanceId, from, to };
 }
@@ -753,6 +756,8 @@ function revertControlChange(
   if (!permanent || permanent.controller !== change.to) return;
   permanent.controller = change.from;
   permanent.summoningSick = true;
+  // §3.106 — handed back is coming under the owner's control again, so echo is owed again.
+  markControlChange(state, permanent);
   emit({ type: 'controlChanged', instanceId: permanent.instanceId, from: change.to, to: change.from });
 }
 

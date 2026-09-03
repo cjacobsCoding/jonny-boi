@@ -777,6 +777,10 @@ export const payManaOrElse: EffectPrimitive = (ctx) => {
     // Paying is the favourable branch for the payer: the consequence is a cost
     // they are avoiding, which is what tells a pilot holding the mana to pay.
     valence: 'gain',
+    // §3.106 — `stake: 'source'` says the consequence is SACRIFICING THE SOURCE
+    // (echo, "sacrifice ~ unless you pay"), so a pilot can price the bill
+    // against the permanent instead of paying every tax it can afford.
+    ...(strParam(ctx, 'stake') === 'source' ? { stakeInstanceId: ctx.source.instanceId } : {}),
   });
   if (paid === undefined) return; // parked — nothing mutated
   if (paid) return; // paid in full: the consequence never happens
@@ -1105,7 +1109,7 @@ export const surveil: EffectPrimitive = (ctx) => {
  * reset behave identically. `creatureDied` / `planeswalkerDied` are emitted for
  * the kinds that have death events, because a sacrificed creature DIES.
  */
-function sacrificePermanent(ctx: EffectContext, perm: CardInstance): void {
+export function sacrificePermanent(ctx: EffectContext, perm: CardInstance): void {
   const wasCreature = isCreature(perm.def);
   const wasWalker = perm.def.types.includes('planeswalker');
   if (wasCreature) {

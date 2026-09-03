@@ -289,6 +289,20 @@ export interface CardInstance {
    * jailer left, the release trigger ran, and found nothing to free. §3.56.
    */
   exiledUntilLeavesBy?: InstanceId;
+  /**
+   * §3.106 — the turn on which this permanent CAME UNDER ITS CURRENT
+   * CONTROLLER'S CONTROL: written as it enters the battlefield and again on
+   * every control change, read by echo's intervening "if this permanent came
+   * under your control since the beginning of your last upkeep" (CR 702.30a).
+   *
+   * Written ONLY on permanents whose definition asks the question
+   * (`definitionTracksControlSince` in upkeep-costs.ts), so the ordinary
+   * permanent keeps the object shape `cloneInstance` was measured on — the
+   * same discipline as {@link attachedTo}. Cleared as the permanent leaves
+   * the battlefield (CR 400.7). Anyone adding a field here must also edit
+   * `internal/clone.ts`.
+   */
+  controlledSinceTurn?: number;
 }
 
 /**
@@ -419,6 +433,14 @@ export interface SpellStackObject {
    * spells without multikicker; any positive count also sets {@link kicked}.
    */
   readonly kickCount?: number;
+  /**
+   * §3.106 — set when this creature spell was cast through a SUSPEND window
+   * (CR 702.62a: "if you cast a creature spell this way, it gains haste until
+   * you lose control of the spell or the permanent it becomes"). Rides the
+   * stack object into the resolution frame exactly as {@link kicked} does, so
+   * the entry can arrive unsick. Absent for every other cast.
+   */
+  readonly hasteOnEntry?: boolean;
   /**
    * The MODES chosen for a modal spell, in PRINTED order, one entry per pick
    * (a repeated mode appears once per time it was chosen). Each pick's
@@ -574,7 +596,23 @@ export interface MadnessWindow {
   readonly instanceId: InstanceId;
   /** Whose window it is — the discarding player, who alone may act on it. */
   readonly controller: PlayerId;
+  /**
+   * §3.106 — WHICH printed window this is. Absent means madness, which keeps
+   * every state written before suspend existed meaning what it always meant.
+   *
+   * SUSPEND (CR 702.62a) reuses this record rather than growing a second one
+   * because the two are the same shape of moment: one player is handed priority
+   * with exactly two moves — cast this exiled card, or pass to decline — and
+   * `dispatchAction`, the offer loop and the pilots already know how to play
+   * that. The kind decides the two things that differ: what the cast COSTS
+   * (madness pays `def.madness`; suspend pays nothing) and where a DECLINE
+   * leaves the card (madness buries it; a declined suspend "remains exiled").
+   */
+  readonly kind?: CastWindowKind;
 }
+
+/** See {@link MadnessWindow.kind}. */
+export type CastWindowKind = 'madness' | 'suspend';
 
 /**
  * A triggered ability on the stack (DESIGN §3.9). Unlike a spell it carries no card

@@ -11,6 +11,7 @@ import { NO_COUNTERS, playerZone, PLAYER_IDS } from '../state.js';
 import type { GameEvent } from '../events.js';
 import { pruneCardGrantsFor } from '../card-grants.js';
 import { discardDestination } from '../madness.js';
+import { markBattlefieldEntry } from '../upkeep-costs.js';
 
 /**
  * Find a battlefield permanent by id, or undefined.
@@ -119,6 +120,9 @@ export function moveToZone(
   pruneCardGrantsFor(state, inst.instanceId);
   if (destination === 'battlefield') {
     state.battlefield.push(inst);
+    // §3.106 — the entry-time facts (echo's control stamp, "enters with N
+    // time/fade counters"), through the one helper every entry path calls.
+    markBattlefieldEntry(state, inst, emit);
   } else {
     // A madness-diverted card goes to its OWNER's exile, never to a `toPlayer`
     // the caller named for the graveyard it no longer reaches.
@@ -208,6 +212,10 @@ export function resetInstanceForNewZone(inst: CardInstance): void {
   // bounced-and-recast Adaptive Automaton names a type again rather than still
   // lording over the one it named last time. Same shape-guard as `attachedTo`.
   if (inst.chosenAsEntered !== undefined) delete inst.chosenAsEntered;
+  // §3.106 — WHEN it came under its controller's control is a fact about THIS
+  // stay on the battlefield (CR 400.7); a bounced-and-recast echo creature is
+  // stamped afresh by its new entry. Same shape-guard as `attachedTo`.
+  if (inst.controlledSinceTurn !== undefined) delete inst.controlledSinceTurn;
   // CR 712.8a: a double-faced card is front-face-up everywhere except the
   // battlefield, so a TRANSFORMED permanent that leaves (dies, bounces, exiles)
   // reverts to its printed front face here — the same single chokepoint that

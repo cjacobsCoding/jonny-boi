@@ -43,11 +43,17 @@ describe('parseManaCost', () => {
     expect(cost.other).toContain('W/P');
   });
 
-  it('returns an all-zero cost for empty / undefined input (lands)', () => {
+  it('returns an all-zero cost MARKED ABSENT for empty / undefined input (lands, Ancestral Vision)', () => {
     for (const input of ['', undefined, null]) {
       const cost = parseManaCost(input);
-      expect(cost).toEqual({ generic: 0, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: [] });
+      expect(cost).toEqual({ generic: 0, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: [], absent: true });
     }
+  });
+
+  it('a printed {0} is NOT absent — it is a cost that can be paid (CR 202.1b keeps the two apart)', () => {
+    // §3.106: the same zeros, and the one bit that stops Ornithopter and
+    // Profane Tutor being the same card to the engine.
+    expect(parseManaCost('{0}')).toEqual({ generic: 0, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: [] });
   });
 
   it('handles large generic costs like {12}', () => {

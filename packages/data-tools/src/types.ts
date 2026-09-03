@@ -80,6 +80,15 @@ export interface ManaCost {
    * degrade gracefully rather than silently dropping cost information.
    */
   other: string[];
+  /**
+   * §3.106 — the card prints NO mana cost at all (Scryfall's `mana_cost` is
+   * empty): Ancestral Vision, Living End, the suspend cycle. Distinct from a
+   * printed `{0}` (Ornithopter), which parses to the same zeros but IS a cost
+   * that can be paid — CR 202.1b makes a card with no mana cost uncastable by
+   * paying it, so the parse has to keep the difference the zeros erase.
+   * Absent (never `false`) when a cost is printed.
+   */
+  absent?: true;
 }
 
 /** Parsed `type_line`, e.g. "Legendary Creature — Goblin Wizard". */

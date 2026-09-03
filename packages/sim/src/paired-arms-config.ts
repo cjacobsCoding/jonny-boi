@@ -356,6 +356,21 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   'payManaOrElse',
   'scheduleDelayedPayment',
   /*
+   * §3.106 — the upkeep-cost family. A sacrifice of the source, a life bill,
+   * an age-scaled mana/life bill, a counter ticking down to a sacrifice, and
+   * suspend's exile-side tick all read a pool, a life total and the counters on
+   * one object, and move a card battlefield → graveyard or open a cast window;
+   * none touches a library or a hand. `scheduleDelayedEffects` is the Pact
+   * scheduler generalised: its body ("draw a card at the next upkeep") is
+   * classified on its own terms when the delayed ability fires.
+   */
+  'sacrificeSelf',
+  'payLifeOrElse',
+  'cumulativeUpkeep',
+  'tickDownCounter',
+  'suspendTick',
+  'scheduleDelayedEffects',
+  /*
    * `exileGraveyard` moves every card out of one or both graveyards. It reads
    * and writes GRAVEYARDS only — never a library — and every card it moves
    * emits its own zoneChange, so the runner keeps tracking them precisely.

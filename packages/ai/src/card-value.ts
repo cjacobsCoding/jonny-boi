@@ -15,10 +15,12 @@
 import type { CardInstance, GameState, InstanceId, PlayerId } from '@jonny-boi/core';
 import {
   convertedManaCost,
+  FADE_COUNTER,
   isCreature,
   isLand,
   PLAYER_IDS,
   playerZone,
+  TIME_COUNTER,
 } from '@jonny-boi/core';
 import type { ContinuousIndex } from './board-stats.js';
 import { boardIndex, OFF_BOARD_INDEX, statTotal } from './board-stats.js';
@@ -79,15 +81,37 @@ export function cardValue(
 ): number {
   if (!card) return 0;
   const def = card.def;
-  if (isLand(def)) return landValue(card.controller, weights, context);
+  if (isLand(def)) return landValue(card.controller, weights, context) * temporaryShare(card, weights);
   if (isCreature(def)) {
     // No context ⇒ the caller has no board (ranking cards in the abstract), so the
     // read is printed-plus-counters and says so through `OFF_BOARD_INDEX`.
     const stats = statTotal(card, context?.index ?? OFF_BOARD_INDEX);
-    return weights.choiceCreatureBaseValue + stats * weights.choiceCreaturePerStatValue;
+    return (weights.choiceCreatureBaseValue + stats * weights.choiceCreaturePerStatValue) * temporaryShare(card, weights);
   }
   const manaValue = def.cost ? convertedManaCost(def.cost) : 0;
-  return weights.choiceSpellBaseValue + manaValue * weights.choiceSpellPerManaValue;
+  return (weights.choiceSpellBaseValue + manaValue * weights.choiceSpellPerManaValue) * temporaryShare(card, weights);
+}
+
+/**
+ * §3.106 — how much of a permanent's worth is LEFT when it is temporary.
+ *
+ * A vanishing permanent (time counters) or a fading one (fade counters) on the
+ * battlefield is sacrificed after that many more of its controller's upkeeps
+ * (fading gets one extra: it dies when there is NO counter to remove). So its
+ * worth to a pilot ranking what to sacrifice, discard or keep is spread over
+ * `temporaryPermanentHorizon` upkeeps and capped at a permanent's — a
+ * Blastoderm on its last fade counter is a chump blocker, not a 5/5. A card
+ * with neither kind of counter, or one not on the battlefield (a suspended card
+ * in exile carries time counters and is worth its printed self), is untouched.
+ */
+function temporaryShare(card: CardInstance, weights: HeuristicWeights): number {
+  if (card.zone !== 'battlefield') return 1;
+  const time = card.counters[TIME_COUNTER];
+  const fade = card.counters[FADE_COUNTER];
+  if (time === undefined && fade === undefined) return 1;
+  const upkeepsLeft = time !== undefined ? time : (fade ?? 0) + 1;
+  const horizon = Math.max(weights.temporaryPermanentHorizon, 1);
+  return Math.min(1, upkeepsLeft / horizon);
 }
 
 /** A land is chaff on a built board and a lifeline on an unbuilt one. */

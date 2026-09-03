@@ -22,6 +22,7 @@ import { addFloatingReplacement, hasAnyReplacement, indexReplacements, replaceTo
 import type { TriggerCondition } from './triggers.js';
 import { createDelayedTrigger } from './delayed.js';
 import { applyEnteringDefense, applyEnteringLoyalty } from './internal/stats.js';
+import { markBattlefieldEntry } from './upkeep-costs.js';
 import type {
   ChooseModesRequest,
   ChooseValueRequest,
@@ -760,6 +761,8 @@ function createOneTokenInState(
   // battle token enters with its printed defense the same way.
   applyEnteringLoyalty(token, emit);
   applyEnteringDefense(token, emit);
+  // §3.106 — a token copy of a vanishing creature enters with its time counters too.
+  markBattlefieldEntry(state, token, emit);
   emit({ type: 'tokenCreated', instanceId, controller, name: tokenDef.name });
   // A token entering is a zoneChange into the battlefield — this is what ETB
   // triggers (its own and others') observe, keeping one mechanism for "enters".

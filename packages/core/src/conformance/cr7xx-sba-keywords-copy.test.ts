@@ -33,6 +33,7 @@ import {
   addPoisonCounters,
   poisonOf,
   generateLegalActions,
+  openSuspendWindow,
   type CardDefinition,
   type CardInstance,
   type GameAction,
@@ -43,10 +44,12 @@ import { creatureDef, deckOf, giveHand, landDef } from '../test-fixtures.js';
 import {
   act,
   advanceTo,
+  advanceToTurn,
   assertFileMatchesManifest,
   crTest,
   newGame,
   nonActive,
+  offers,
   onBattlefield,
   pass,
   putOnBattlefield,
@@ -653,6 +656,113 @@ describe('CR 613 — interaction of continuous effects', () => {
     expect(forwards).toEqual(backwards);
     expect(forwards.power).toBe(BEAR.power! + 3 - 1);
     expect(forwards.toughness).toBe(BEAR.toughness! + 4);
+  });
+});
+
+// --- §3.106 upkeep costs and time counters ------------------------------------------
+
+/** Echo, as the compiler emits it: the came-under-your-control "if" gating an upkeep body. */
+const ECHO_CREATURE: CardDefinition = {
+  ...creatureDef('Echo Bear', 2, 2, { cost: { generic: 1 } }),
+  triggers: [
+    {
+      condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+      effects: [{ primitive: 'noteBill' }],
+      label: 'Echo {1}',
+    },
+  ],
+};
+
+/** Vanishing 3 / Fading 2, as the compiler emits their entry halves. */
+const VANISHING_CREATURE: CardDefinition = {
+  ...creatureDef('Vanishing Beast', 5, 5, { cost: { generic: 1 } }),
+  entersWithCounters: [{ kind: 'time', count: 3 }],
+};
+const FADING_LAND: CardDefinition = { ...landDef('Fading Land', 'C'), entersWithCounters: [{ kind: 'fade', count: 2 }] };
+
+/** Suspend 1—{R} on a sorcery-speed creature with a mana cost nobody here can pay. */
+const SUSPENDED_GIANT: CardDefinition = {
+  ...creatureDef('Suspended Giant', 6, 6, { cost: { generic: 9 } }),
+  suspend: { count: 1, cost: { R: 1 }, upkeep: [{ primitive: 'tick' }] },
+};
+
+describe('CR 702 — upkeep costs and time counters (§3.106)', () => {
+  const billed: number[] = [];
+  const registry = registryWith({
+    noteBill: (ctx) => {
+      billed.push(ctx.state.turnNumber);
+    },
+    tick: (ctx) => {
+      // The exile-side upkeep ability, in miniature: the cards package's
+      // `suspendTick` does the same through core's exported window opener.
+      const card = ctx.source;
+      const left = (card.counters.time ?? 0) - 1;
+      card.counters = { ...card.counters, time: left };
+      if (left <= 0) openSuspendWindow(ctx.state, card, ctx.emit);
+    },
+  });
+
+  function atMainWith(defs: readonly CardDefinition[]): { state: GameState; cards: CardInstance[] } {
+    const state = advanceTo(newGame({ registry }), 'precombatMain', registry);
+    // Both hands emptied: a seven-land opening hand plus draws would park the
+    // cleanup discard question on turn 2 and stop the passes these tests make.
+    state.players.A.hand = [];
+    state.players.B.hand = [];
+    const cards = giveHand(state, 'A', defs);
+    state.players.A.manaPool = { W: 0, U: 0, B: 0, R: 1, G: 0, C: 9 };
+    return { state, cards };
+  }
+
+  crTest('702.30a', 'echo bills on the first upkeep after the permanent came under your control, and not on the next', () => {
+    billed.length = 0;
+    const { state, cards } = atMainWith([ECHO_CREATURE]);
+    let s = act(state, { kind: 'castSpell', player: 'A', instanceId: cards[0]!.instanceId }, registry);
+    s = pass(s, registry);
+    s = pass(s, registry);
+    expect(onBattlefield(s, cards[0]!.instanceId)?.controlledSinceTurn).toBe(1);
+    s = advanceToTurn(s, 5, 'draw', registry);
+    // Turn 3's upkeep asked; turn 5's did not — the intervening "if" (CR 603.4)
+    // kept the ability off the stack entirely.
+    expect(billed).toEqual([3]);
+  });
+
+  crTest('702.63a', 'a permanent with vanishing enters with its printed time counters, cast or played', () => {
+    const { state, cards } = atMainWith([VANISHING_CREATURE, FADING_LAND]);
+    let s = act(state, { kind: 'castSpell', player: 'A', instanceId: cards[0]!.instanceId }, registry);
+    s = pass(s, registry);
+    s = pass(s, registry);
+    expect(onBattlefield(s, cards[0]!.instanceId)?.counters.time).toBe(3);
+  });
+
+  crTest('702.32a', 'a permanent with fading enters with its printed fade counters, through the land-play path too', () => {
+    const { state, cards } = atMainWith([VANISHING_CREATURE, FADING_LAND]);
+    const s = act(state, { kind: 'playLand', player: 'A', instanceId: cards[1]!.instanceId }, registry);
+    expect(onBattlefield(s, cards[1]!.instanceId)?.counters.fade).toBe(2);
+  });
+
+  crTest('702.62a', 'suspend exiles the card with N time counters for its suspend cost, and the last counter leaving lets it be cast for nothing', () => {
+    const { state, cards } = atMainWith([SUSPENDED_GIANT]);
+    const giant = cards[0]!;
+    // {9} is out of reach; the special action is not.
+    expect(offers(state, 'suspendCard')).toBe(true);
+    let s = act(state, { kind: 'suspendCard', player: 'A', instanceId: giant.instanceId }, registry);
+    expect(s.players.A.exile[0]?.counters.time).toBe(1);
+    expect(s.players.A.manaPool.R).toBe(0);
+    s = advanceTo(s, 'upkeep', registry);
+    s = advanceToTurn(s, 3, 'upkeep', registry);
+    // The tick resolved and opened the window: cast it now, for nothing, in
+    // the upkeep — the printed sorcery timing does not apply (CR 702.62a).
+    let guard = 0;
+    while (s.madnessWindow?.kind !== 'suspend' && guard++ < 10) s = pass(s, registry);
+    expect(s.madnessWindow?.kind).toBe('suspend');
+    s.players.A.manaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: giant.instanceId, fromZone: 'exile' }, registry);
+    s = pass(s, registry);
+    s = pass(s, registry);
+    const entered = onBattlefield(s, giant.instanceId);
+    expect(entered).toBeDefined();
+    // "It gains haste until you lose control of it": it entered unsick.
+    expect(entered?.summoningSick).toBe(false);
   });
 });
 

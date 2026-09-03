@@ -315,6 +315,12 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
    */
   madnessWindowOpened: 'public',
   madnessDeclined: 'public',
+  // §3.106 — suspend is played face-up: the card is exiled in front of the
+  // table (its own public `zoneChange`), the counters are on it for everyone to
+  // count, and the free cast or the decline is a decision made out loud.
+  cardSuspended: 'public',
+  suspendWindowOpened: 'public',
+  suspendDeclined: 'public',
   effectApplied: 'public',
   effectUnsupported: 'public',
   attackersDeclared: 'public',

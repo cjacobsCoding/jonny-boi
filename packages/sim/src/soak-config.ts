@@ -226,7 +226,16 @@ export type SoakMechanicId =
   // "This spell can't be countered", whose whole observable behaviour is a counter
   // effect resolving and doing NOTHING — so the prevented-counter event is the
   // only witness there is.
-  | 'uncounterable';
+  | 'uncounterable'
+  // §3.106 — SUSPEND (CR 702.62): the special action from hand, the exile-side
+  // upkeep tick, and the free-cast window. Its own id and not a flavour of
+  // `madness` even though it reuses the madness WINDOW: a madness deck proves
+  // nothing about a card that was never discarded.
+  // The upkeep BILLS of the same section (echo, cumulative upkeep, vanishing,
+  // fading, "sacrifice ~ unless you pay") have no id of their own: what they do
+  // is already witnessed as `optional-payment` (the bill asked) and `counters`
+  // (the tick), and a mechanic is only as honest as the event that proves it.
+  | 'suspend';
 
 /**
  * How a mechanic is proved to have HAPPENED.
@@ -444,6 +453,8 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
   { id: 'x-cost', label: '{X} costs — an X announced and paid', witnessKind: 'event', printedBy: hasKey('xCost') },
   { id: 'kicker', label: 'kicker — the optional cost offered at cast', witnessKind: 'event', printedBy: hasKey('kicker') },
   { id: 'cycling', label: 'cycling — a card cycled from hand', witnessKind: 'action', printedBy: hasKey('cycling') },
+  // §3.106
+  { id: 'suspend', label: 'suspend — a card suspended from hand (CR 702.62)', witnessKind: 'action', printedBy: hasKey('suspend') },
   {
     id: 'buyback',
     label: 'buyback — the optional cost offered at cast',
@@ -842,6 +853,11 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   cardGrantExpired: 'graveyard-grant',
   cardCycled: 'cycling',
   madnessWindowOpened: 'madness',
+  // §3.106 — the suspend action is the strongest witness; the window and the
+  // decline are the same mechanic further along.
+  cardSuspended: 'suspend',
+  suspendWindowOpened: 'suspend',
+  suspendDeclined: 'suspend',
   madnessDeclined: 'madness',
   cardsMilled: 'mill',
   tokenCreated: 'token',

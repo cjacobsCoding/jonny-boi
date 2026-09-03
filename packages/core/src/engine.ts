@@ -131,6 +131,10 @@ import {
   pruneCardGrantsFor,
 } from './card-grants.js';
 import { declineMadness } from './madness.js';
+// §3.106 — upkeep costs and time counters; suspend.
+import { markBattlefieldEntry, TIME_COUNTER } from './upkeep-costs.js';
+import { suspendWindowOpenFor } from './suspend.js';
+import { createDelayedTrigger } from './delayed.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
 import { clearTurnFacts, turnFactHolds } from './turn-facts.js';
@@ -873,6 +877,8 @@ function resolveTopOfStack(
       ...(top.xValue !== undefined ? { xValue: top.xValue } : {}),
       ...(top.kicked !== undefined ? { kicked: top.kicked } : {}),
       ...(top.kickCount !== undefined ? { kickCount: top.kickCount } : {}),
+      // §3.106 — a suspend-cast creature's haste rides the frame like the kick does.
+      ...(top.hasteOnEntry === true ? { hasteOnEntry: true } : {}),
       ...(modal ? { effectTargets: modal.effectTargets } : {}),
     },
     registry,
@@ -1043,6 +1049,8 @@ function finishResolution(state: GameState, frame: ResolutionFrame, emit: (e: Ga
 interface KickRecord {
   readonly kicked?: boolean;
   readonly kickCount?: number;
+  /** §3.106 — cast through a suspend window: a creature enters unsick (CR 702.62a). */
+  readonly hasteOnEntry?: boolean;
 }
 
 /** Move a finished spell/permanent off the stack into its destination zone. */
@@ -1091,6 +1099,12 @@ function finishSpellResolution(
     // A planeswalker enters with its printed loyalty (CR 306.5b) — said AFTER the
     // zoneChange so a replay folds "entered, then at loyalty N" in order.
     applyEnteringLoyalty(card, emit);
+    // §3.106 — the entry-time facts (echo's control stamp, "enters with N
+    // time/fade counters"), and a suspend-cast creature's haste (CR 702.62a):
+    // haste in this engine IS "not summoning sick", and every control change
+    // re-sets sickness, which is exactly "until you lose control of it".
+    markBattlefieldEntry(state, card, emit);
+    if (kick?.hasteOnEntry === true) card.summoningSick = false;
     // "…except it enters with an ADDITIONAL loyalty counter on it if it's a
     // planeswalker" (Spark Double). Added after the printed number rather than
     // folded into it, because that is what the card says and because the
@@ -1534,6 +1548,8 @@ function dispatchAction(
       return applyCastSpell(state, prevState, action, config, emit, events);
     case 'cycleCard':
       return applyCycleCard(state, prevState, action, emit, events);
+    case 'suspendCard':
+      return applySuspendCard(state, prevState, action, emit, events);
     case 'activateAbility':
       return applyActivateAbility(state, prevState, action, config, emit, events);
     case 'declareAttackers':
@@ -3271,12 +3287,16 @@ function applyCastSpell(
     state.madnessWindow?.instanceId === card.instanceId &&
     state.madnessWindow?.controller === action.player;
   const permission = fromZone === 'exile' && !madnessWindowOpen ? castPermissionFor(state, card) : undefined;
-  const madnessCost = madnessWindowOpen ? card.def.madness : undefined;
+  // §3.106 — a SUSPEND window is the same window with a different price: the
+  // cast is "without paying its mana cost" (CR 702.62a), so it has no cost to
+  // look up and nothing to refuse for lacking one.
+  const suspendCast = madnessWindowOpen && suspendWindowOpenFor(state, card, action.player);
+  const madnessCost = madnessWindowOpen && !suspendCast ? card.def.madness : undefined;
   if (fromZone === 'exile') {
     if (!madnessWindowOpen && permission === undefined) {
       return rejectWith(prevState, 'that card has no open madness window and no permission to be cast from exile');
     }
-    if (madnessWindowOpen && madnessCost === undefined) {
+    if (madnessWindowOpen && !suspendCast && madnessCost === undefined) {
       return rejectWith(prevState, 'that card has no madness cost');
     }
     // The permission names ONE face. Casting the other half of an exiled
@@ -3336,6 +3356,13 @@ function applyCastSpell(
   // SPLIT SECOND (CR 702.61, DESIGN §3.107): the same wall the offer pass
   // enforces, here because the engine — not the menu — is the authority.
   if (state.stack.length > 0 && splitSecondOnStack(state)) return rejectWith(prevState, SPLIT_SECOND_REJECTION);
+  // §3.106 — CR 202.1b: a card with NO mana cost cannot be cast by paying it.
+  // From the hand there is nothing else to pay, so the cast is refused; from
+  // exile a free permission or a suspend window pays nothing and is fine, and
+  // a graveyard cast pays its flashback cost. See `pushCastOffers`.
+  if (castDef.noManaCost === true && fromZone === 'hand') {
+    return rejectWith(prevState, 'a card with no mana cost cannot be cast from your hand (CR 202.1b)');
+  }
 
   // Timing: sorcery-speed spells require your main phase, empty stack, your priority.
   const timing = castTiming(castDef);
@@ -3403,7 +3430,8 @@ function applyCastSpell(
     state,
     action.player,
     castDef,
-    permission?.free
+    // §3.106 — a suspend-window cast pays nothing, exactly as a free permission does.
+    permission?.free || suspendCast
       ? undefined
       : fromZone === 'graveyard' && !aftermath
         ? flashbackCost
@@ -3494,6 +3522,8 @@ function applyCastSpell(
     resolvesTo,
     targets: action.targets ?? [],
     ...(fromZone === 'hand' ? {} : { castFrom: fromZone }),
+    // §3.106 — "if you cast a creature spell this way, it gains haste" (CR 702.62a).
+    ...(suspendCast && isCreature(castDef) ? { hasteOnEntry: true } : {}),
   };
   state.stack.push(stackObject);
   emit({
@@ -4256,6 +4286,105 @@ function applyCycleCard(
   return { state, events };
 }
 
+// --- §3.106 suspend (CR 702.62) ----------------------------------------------------
+
+/**
+ * Why `card` may NOT be suspended right now, or `undefined` when it may. THE
+ * accessor for the special action: the offer loop skips a card it names a
+ * reason for, and `applySuspendCard` rejects with that reason, so a hostile
+ * client cannot suspend a card the menu would never show.
+ *
+ * "If you could begin to cast this card by putting it onto the stack" (CR
+ * 702.62a) is read as the card's own cast TIMING — a sorcery-speed card needs
+ * the sorcery-speed window, an instant or a flash card needs only priority —
+ * and NOT as "could pay its mana cost": a card with no mana cost (Ancestral
+ * Vision) is the printed point of the keyword. The suspend cost itself must be
+ * fundable from the pool, as every from-hand cost is.
+ */
+function unsuspendableReason(
+  state: GameState,
+  card: CardInstance,
+  player: PlayerId,
+  sorcerySpeedWindow: boolean,
+): string | undefined {
+  const suspend = card.def.suspend;
+  if (suspend === undefined) return 'that card has no suspend';
+  if (castTiming(card.def) !== 'instant' && !sorcerySpeedWindow) {
+    return 'this card can only be suspended when you could begin to cast it (your main phase, empty stack)';
+  }
+  const pool = state.players[player].manaPool;
+  if (!canPay(pool, suspend.cost, spendPurposeIfRestricted(pool, card.def, 'activate'))) {
+    return 'insufficient mana to pay the suspend cost';
+  }
+  return undefined;
+}
+
+/**
+ * SUSPEND a card from hand (CR 702.62a): pay the suspend cost, exile the card
+ * with N time counters, and create the exile-side upkeep ability.
+ *
+ * Modelled on `applyCycleCard`, the other from-hand cost the engine charges:
+ * validate everything, pay in full, then move the card. The card is exiled
+ * through the ONE zone funnel and then counted — `resetInstanceForNewZone`
+ * clears counters on the way out of the battlefield only, but the order is
+ * kept explicit so a future reset on every move cannot silently strip the time
+ * counters this action just put on.
+ *
+ * The exile-side abilities become a DELAYED triggered ability on the state (see
+ * suspend.ts for why they are not trigger sources): "at the beginning of your
+ * upkeep, remove a time counter" as the cards package compiled it into
+ * `SuspendAbility.upkeep`. Its source is the suspended card itself, so the
+ * resolution's `ctx.source` — resolved anywhere by `frameSource` — is the card
+ * in exile whose counter it removes.
+ */
+function applySuspendCard(
+  state: GameState,
+  prevState: GameState,
+  action: Extract<GameAction, { kind: 'suspendCard' }>,
+  emit: (e: GameEvent) => void,
+  events: GameEvent[],
+): EngineResult {
+  if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
+  const player = state.players[action.player];
+  const card = instanceIn(player.hand, action.instanceId);
+  if (!card) return rejectWith(prevState, 'that card is not in your hand');
+  const sorcerySpeedWindow =
+    action.player === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
+  const refusal = unsuspendableReason(state, card, action.player, sorcerySpeedWindow);
+  if (refusal !== undefined) return rejectWith(prevState, refusal);
+  const suspend = card.def.suspend as NonNullable<CardDefinition['suspend']>;
+  // Suspending is a special action, not a cast: restricted mana that may
+  // activate abilities of this card may fund it, cast-only mana may not.
+  const purpose = spendPurposeIfRestricted(player.manaPool, card.def, 'activate');
+  const paid = payCost(player.manaPool, suspend.cost, purpose);
+  if (!paid.ok) return rejectWith(prevState, paid.reason);
+  player.manaPool = paid.pool;
+
+  moveToZone(state, card, 'exile', emit, card.owner);
+  card.counters = { ...card.counters, [TIME_COUNTER]: suspend.count };
+  emit({ type: 'counterAdded', instanceId: card.instanceId, kind: TIME_COUNTER, amount: suspend.count });
+  emit({
+    type: 'cardSuspended',
+    player: action.player,
+    instanceId: card.instanceId,
+    name: card.def.name,
+    timeCounters: suspend.count,
+  });
+  const label = `Suspend: ${card.def.name}`;
+  const id = createDelayedTrigger(state, {
+    condition: { on: 'upkeep', who: 'you' },
+    effects: suspend.upkeep,
+    label,
+    controller: action.player,
+    sourceInstanceId: card.instanceId,
+  });
+  emit({ type: 'delayedTriggerCreated', id, sourceInstanceId: card.instanceId, controller: action.player, label });
+  // A special action does not use the stack (CR 116.1); the player keeps priority.
+  state.priorityPlayer = action.player;
+  state.consecutivePasses = 0;
+  return { state, events };
+}
+
 /**
  * Activate a permanent's non-mana ability: check timing and legality, PAY the
  * whole cost, then put the ability on the stack.
@@ -4738,11 +4867,15 @@ function madnessActionsFor(state: GameState): GameAction[] {
   // produce before the offer can appear at all.
   pushManaTapActions(state, me, actions);
   const card = instanceIn(player.exile, window.instanceId);
-  const cost = card?.def.madness;
+  // §3.106 — a SUSPEND window's cast is free (CR 702.62a), so the pool gate
+  // that keeps an unaffordable madness cast off the menu does not apply.
+  const free = window.kind === 'suspend';
+  const cost = free ? undefined : card?.def.madness;
   if (
     !card ||
-    cost === undefined ||
-    !canPay(player.manaPool, cost, spendPurposeIfRestricted(player.manaPool, card.def, 'cast'))
+    (!free &&
+      (cost === undefined ||
+        !canPay(player.manaPool, cost, spendPurposeIfRestricted(player.manaPool, card.def, 'cast'))))
   ) {
     return actions;
   }
@@ -5031,6 +5164,18 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     }
   }
 
+  // §3.106 — SUSPEND a card from hand (CR 702.62a), a special action offered
+  // "any time you could begin to cast this card": the card's own cast timing
+  // decides the window, and the pool must cover the suspend cost — the same
+  // pool-funds-it gate as cycling, so a pilot taps toward it first. Judged by
+  // the same helper the apply path refuses with, so offer and accept agree.
+  for (let h = 0; h < player.hand.length; h++) {
+    const card = player.hand[h] as CardInstance;
+    if (card.def.suspend === undefined) continue;
+    if (unsuspendableReason(state, card, me, sorcerySpeedWindow) !== undefined) continue;
+    actions.push({ kind: 'suspendCard', player: me, instanceId: card.instanceId });
+  }
+
   // Activate non-mana abilities of permanents you control. Mirrors the casting
   // rules above: timing is checked, the whole cost must be payable, and an
   // ability with a target restriction is offered once per LEGAL target (and not
@@ -5173,6 +5318,15 @@ function pushCastOffers(
   if (isLand(def)) return; // lands are played, not cast (the MDFC land half)
   const timing = castTiming(def);
   if (timing !== 'instant' && !sorcerySpeedWindow) return;
+  // §3.106 — CR 202.1b: an object with NO mana cost has an unpayable cost and
+  // cannot be cast by paying it; only a permission that says "without paying
+  // its mana cost" (a suspend window, a Siege reward) or an alternative cost
+  // (flashback, madness) casts it. Found the day the first costless suspend
+  // cards compiled: an empty cost read as "free", and Profane Tutor was on the
+  // menu from hand for nothing. Same judgement `applyCastSpell` makes. Keyed on
+  // `noManaCost`, not on an absent `cost`: a printed `{0}` compiles to the
+  // same absent cost and is payable.
+  if (def.noManaCost === true && options?.free !== true && options?.fromZone === undefined) return;
   // `free` is a permission that says "without paying its mana cost" (a Siege
   // reward, CR 310.4). Otherwise the face's own printed cost - which is also
   // exactly what an AFTERMATH half cast from the graveyard pays, and which any

@@ -226,6 +226,27 @@ export interface AnswerChoiceAction {
   readonly answer: ChoiceAnswer;
 }
 
+/**
+ * §3.106 — SUSPEND a card from hand (CR 702.62a): pay its suspend cost and
+ * exile it with N time counters. A SPECIAL ACTION (CR 116.2) — it uses no
+ * stack and can be taken any time its player "could begin to cast this card",
+ * which the engine reads as the card's own cast timing (a sorcery-speed card
+ * is suspended at sorcery speed, an instant or a flash card whenever its owner
+ * holds priority).
+ *
+ * Its own action kind rather than a `castSpell` with a flag, for the same
+ * reason cycling is: nothing is cast, no spell reaches the stack, and the
+ * legality question — can I pay the suspend cost, is the timing open — is
+ * answered by `def.suspend`, not by the card's mana cost. A card with NO mana
+ * cost (Ancestral Vision) may be suspended although it can never be cast from
+ * hand; that is what makes it a card at all.
+ */
+export interface SuspendCardAction {
+  readonly kind: 'suspendCard';
+  readonly player: PlayerId;
+  readonly instanceId: InstanceId;
+}
+
 /** The union of all player actions. */
 export type GameAction =
   | PassPriorityAction
@@ -233,6 +254,7 @@ export type GameAction =
   | TapForManaAction
   | CastSpellAction
   | CycleCardAction
+  | SuspendCardAction
   | ActivateAbilityAction
   | DeclareAttackersAction
   | DeclareBlockersAction

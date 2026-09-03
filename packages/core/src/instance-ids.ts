@@ -107,6 +107,10 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
   spellCast: { player: 'none', instanceId: 'id', name: 'none', castTypes: 'none', fromZone: 'none' },
   cardCycled: { player: 'none', instanceId: 'id', name: 'none' },
   madnessWindowOpened: { player: 'none', instanceId: 'id', name: 'none' },
+  // §3.106 suspend
+  cardSuspended: { player: 'none', instanceId: 'id', name: 'none', timeCounters: 'none' },
+  suspendWindowOpened: { player: 'none', instanceId: 'id', name: 'none' },
+  suspendDeclined: { player: 'none', instanceId: 'id', name: 'none' },
   madnessDeclined: { player: 'none', instanceId: 'id', name: 'none' },
   stackResolved: { instanceId: 'id', name: 'none' },
   manaAdded: { player: 'none', color: 'none', amount: 'none', spendRestriction: 'none' },
@@ -254,6 +258,12 @@ const NON_EVENT_INSTANCE_ID_FIELDS = [
   'exiledUntilLeavesBy',
   /** \`CardInstance.attachedTo\` — the host an Aura/Equipment is attached to. */
   'attachedTo',
+  /**
+   * `PayManaRequest.stakeInstanceId` (§3.106) — the permanent an upkeep bill
+   * sacrifices when declined. A choice field, never an event's: the chooser
+   * owns the permanent, so nothing here can leak across the table.
+   */
+  'stakeInstanceId',
   /** `CombatState.blocks` values + `BlockAssignment.attacker` (block-solver). */
   'attacker',
   /** `CombatState.blocks` keys + `BlockAssignment.blocker`. */

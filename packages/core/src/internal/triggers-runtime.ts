@@ -105,6 +105,11 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   // poison family (§3.105): no printed trigger watches poison arriving yet.
   poisonChanged: false,
   madnessWindowOpened: false,
+  // §3.106 — suspend moves a card hand → exile and back to the stack; the
+  // battlefield source set changes only when it later RESOLVES (`zoneChange`).
+  cardSuspended: false,
+  suspendWindowOpened: false,
+  suspendDeclined: false,
   manaAdded: false,
   manaCostPaid: false,
   manaPoolEmptied: false,

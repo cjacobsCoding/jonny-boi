@@ -124,6 +124,15 @@ const TRIGGER_BACKED_KEYWORDS: ReadonlySet<string> = new Set([
   // RAMPAGE N (CR 702.23a, DESIGN §3.107): the same shape as bushido — the
   // number is the whole payload, so it is a pattern rule labelled "Rampage N".
   'rampage',
+  // §3.106 — the upkeep-cost family: each compiles to an `upkeep` trigger whose
+  // label starts with the keyword ("Echo {2}{R}", "Cumulative upkeep {1}",
+  // "Vanishing 3", "Fading 2"). A cost form outside the closed table (an echo
+  // paid in cards, a cumulative upkeep paid in sacrifices) compiles no trigger
+  // and reports through its own line.
+  'echo',
+  'cumulative upkeep',
+  'vanishing',
+  'fading',
 ]);
 
 /**
@@ -411,6 +420,10 @@ interface Assembly {
   buyback?: ManaCost;
   /** The printed madness cost, once a "Madness {…}" line compiles. */
   madness?: ManaCost;
+  /** §3.106 — the printed suspend, once a "Suspend N—{…}" line compiles. */
+  suspend?: import('@jonny-boi/core').SuspendAbility;
+  /** §3.106 — counters the permanent enters with (vanishing / fading), accumulated. */
+  readonly entersWithCounters: import('@jonny-boi/core').EnteringCounters[];
   /** The formula behind a `*` P/T box, once a line compiles one. */
   characteristicPT?: import('@jonny-boi/core').CharacteristicPT;
   /** The "Enchant …" / "Equip {N}" half of an attachment, once some line prints it. */
@@ -487,6 +500,9 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.cycling) assembly.cycling.push(...contribution.cycling);
   if (contribution.buyback) assembly.buyback = contribution.buyback;
   if (contribution.madness) assembly.madness = contribution.madness;
+  // §3.106
+  if (contribution.suspend) assembly.suspend = contribution.suspend;
+  if (contribution.entersWithCounters) assembly.entersWithCounters.push(...contribution.entersWithCounters);
   if (contribution.characteristicPT) assembly.characteristicPT = contribution.characteristicPT;
   if (contribution.flashback !== undefined) assembly.flashback = contribution.flashback;
   if (contribution.flashbackXCost !== undefined) assembly.flashbackXCost = contribution.flashbackXCost;
@@ -968,6 +984,7 @@ function newAssembly(): Assembly {
     replacements: [],
     keywords: {},
     cycling: [],
+    entersWithCounters: [],
     entersTapped: false,
     matchedRules: [],
     missing: [],
@@ -1066,6 +1083,12 @@ export function compileCard(card: CompilableCard): CompileResult {
     });
   }
   const cost = toCoreCost(card, hybrid);
+  // §3.106 — a NONLAND card with no printed mana cost (CR 202.1b) is marked
+  // so the engine refuses to cast it by paying nothing. `toCoreCost` folds
+  // `{0}` and "no cost" into the same `undefined`, which is right for the
+  // pool's `{0}` cards and wrong for Ancestral Vision; the parse keeps the
+  // difference and this is where it lands on the definition.
+  const noManaCost = card.manaCost.absent === true && !types.includes('land');
 
   const isCreatureCard = types.includes('creature');
 
@@ -1408,6 +1431,9 @@ export function compileCard(card: CompilableCard): CompileResult {
     if (COST_ASSIST_KEYWORDS.has(word) && assembly.costAssist !== undefined) continue;
     if (word === 'buyback' && assembly.buyback !== undefined) continue;
     if (word === 'madness' && assembly.madness !== undefined) continue;
+    // §3.106 — same shape as madness: the printed "Suspend N—{…}" line compiled
+    // into `assembly.suspend`; a "Suspend X" line leaves it unset and reports.
+    if (word === 'suspend' && assembly.suspend !== undefined) continue;
     // An ABILITY WORD (Revolt, Morbid, …) is a label, not an ability — CR
     // 207.2c. It is skipped only when the line it labels actually compiled;
     // a line that failed put its own text (word included) into `missing`, so
@@ -1566,6 +1592,10 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(assembly.cycling.length > 0 ? { cycling: assembly.cycling } : {}),
     ...(assembly.buyback ? { buyback: assembly.buyback } : {}),
     ...(assembly.madness ? { madness: assembly.madness } : {}),
+    // §3.106
+    ...(noManaCost ? { noManaCost: true } : {}),
+    ...(assembly.suspend ? { suspend: assembly.suspend } : {}),
+    ...(assembly.entersWithCounters.length > 0 ? { entersWithCounters: assembly.entersWithCounters } : {}),
     ...(assembly.flashback !== undefined ? { flashback: assembly.flashback } : {}),
     ...(assembly.flashbackXCost !== undefined ? { flashbackXCost: assembly.flashbackXCost } : {}),
     ...(assembly.flashbackLifeCost !== undefined

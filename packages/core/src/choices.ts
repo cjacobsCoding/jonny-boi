@@ -446,6 +446,15 @@ export interface PayManaRequest extends ChoiceRequestBase {
    * unaffordable, which is the answer that spends nothing.
    */
   readonly affordable?: boolean;
+  /**
+   * §3.106 — the permanent that is SACRIFICED if the payment is declined: an
+   * echo or cumulative-upkeep bill, "sacrifice ~ unless you pay {U}{U}". A
+   * choice still knows no rules — this is an id, and the UI shows the prompt —
+   * but it is what lets a pilot price the bill against the thing at stake
+   * instead of paying every upkeep tax it can afford and stranding its turn.
+   * Absent for every payment that is not a bill on a permanent.
+   */
+  readonly stakeInstanceId?: InstanceId;
 }
 
 export interface PayLifeRequest extends ChoiceRequestBase {
@@ -613,6 +622,8 @@ export interface PayManaChoice extends PendingChoiceBase {
    * spends anything.
    */
   readonly affordable: boolean;
+  /** §3.106 — see {@link PayManaRequest.stakeInstanceId}. */
+  readonly stakeInstanceId?: InstanceId;
 }
 
 export interface PayLifeChoice extends PendingChoiceBase {
@@ -877,6 +888,8 @@ export function normalizeChoiceRequest(request: ChoiceRequest, source: ChoiceSou
         // frozen cost object, and a parked choice outlives the call that raised it.
         cost: { ...request.cost },
         affordable: request.affordable ?? false,
+        // §3.106 — the bill's stake rides the choice for the pilot.
+        ...(request.stakeInstanceId !== undefined ? { stakeInstanceId: request.stakeInstanceId } : {}),
         min: 1,
         max: 1,
       };
@@ -1434,6 +1447,8 @@ export interface ResolutionFrame {
    * kicked" is read during a resolution that outlives the stack object.
    */
   kickCount?: number;
+  /** §3.106 — a suspend-cast creature enters unsick; see `SpellStackObject.hasteOnEntry`. */
+  hasteOnEntry?: boolean;
   /**
    * PER-EFFECT targets, parallel to {@link effects} — entry `i` is what
    * `effects[i]` points at, or `undefined` to fall back to the frame-wide

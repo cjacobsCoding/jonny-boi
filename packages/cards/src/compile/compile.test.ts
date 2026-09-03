@@ -628,25 +628,28 @@ describe('compileCard — templated cards outside the curated pool', () => {
     // every one of them is implemented now, and the stand-in has had to move each
     // time. (Skulk went, then HORSEMANSHIP — §3.102 gave it a `KeywordFlags` flag
     // and a `blockRestriction` naming that flag, alongside fear and intimidate
-    // whose exceptions name a colour or a card type instead.) CUMULATIVE UPKEEP is
-    // the current stand-in: an upkeep cost that grows by an age counter each turn
-    // and sacrifices the permanent when unpaid, which is a turn-structure system
-    // rather than a flag. The point of the test has never changed: an ability we cannot model
+    // whose exceptions name a colour or a card type instead. Then CUMULATIVE
+    // UPKEEP, until §3.106 made it an upkeep trigger with an age-scaled bill.)
+    // The point of the test has never changed: an ability we cannot model
     // must be REPORTED, never silently dropped.
+    // BANDING is the current stand-in:
+    // the Alpha combat-grouping rule (CR 702.22) whose damage-assignment half
+    // needs the defending player to divide an attacker's damage among a band,
+    // which is a combat system rather than a flag.
     const result = compileCard(
       makeCard({
-        name: 'Ageing Beast',
+        name: 'Banded Beast',
         typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Beast'] },
         manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0, other: [] },
         power: 3,
         toughness: 3,
-        oracleText: 'Cumulative upkeep {1}',
-        keywords: ['Cumulative upkeep'],
+        oracleText: 'Banding',
+        keywords: ['Banding'],
       }),
     );
 
     expect(result.status).toBe('incomplete');
-    expect(result.missing.some((gap) => /cumulative upkeep/i.test(gap.text))).toBe(true);
+    expect(result.missing.some((gap) => /banding/i.test(gap.text))).toBe(true);
   });
 
   it('compiles SKULK, which IS modelled now', () => {

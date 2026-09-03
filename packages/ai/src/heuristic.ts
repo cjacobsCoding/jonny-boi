@@ -638,6 +638,14 @@ function choosePriorityAction(
     return pursueCycle(ctx, cycle);
   }
 
+  // §3.106 — SUSPEND a card that cannot be cast this turn (see `bestSuspend`).
+  // Judged after every real play: a land, a castable spell, an equip and a
+  // cycle all outrank it, so the mana it spends is mana nothing else wanted.
+  const suspend = bestSuspend(ctx, weights);
+  if (suspend && suspend.score > weights.passScore) {
+    return pursueSuspend(ctx, suspend);
+  }
+
   // Nothing worth doing with our mana → pass.
   return emit(ctx, passAction(view), 'no profitable play — passing', weights.passScore);
 }
@@ -1276,6 +1284,9 @@ function scoredSpellGoals(
       const card = half.card;
       const def = card.def;
       if (isLand(def)) continue;
+      // §3.106 — CR 202.1b: a card with no mana cost cannot be cast from hand
+      // (the engine refuses it); it reaches the stack through suspend instead.
+      if (def.noManaCost === true) continue;
       const timingOk = castTiming(def) === 'instant' ? true : sorcerySpeedOpen;
       if (!timingOk) continue;
       const cost = def.cost ?? {};
@@ -2212,6 +2223,93 @@ function bestCycle(ctx: DecisionContext, weights: HeuristicWeights): CycleGoal |
 
 /** Take the next step toward a cycling play: tap for it, or cycle. */
 function pursueCycle(ctx: DecisionContext, goal: CycleGoal): GameAction {
+  const next = goal.plan[0];
+  if (!next) return emit(ctx, goal.action, goal.reason, goal.score);
+  const tap: GameAction = tapActionFor(ctx.view.priorityPlayer, next);
+  return emit(ctx, tap, goal.reason, goal.score);
+}
+
+// --- §3.106 suspend (CR 702.62) ---------------------------------------------------
+
+/** A suspend play the pilot wants to make: which card, how it is funded, why. */
+interface SuspendGoal {
+  readonly action: Extract<GameAction, { kind: 'suspendCard' }>;
+  readonly plan: readonly ManaTapPlan[];
+  readonly score: number;
+  readonly reason: string;
+}
+
+/**
+ * The best SUSPEND play right now, or `undefined`.
+ *
+ * The policy is the keyword's own reason to exist: a card the pilot CANNOT CAST
+ * this turn — its mana cost is beyond this turn's mana, or it has no mana cost
+ * at all (Ancestral Vision, Lotus Bloom) — is suspended for its cheap suspend
+ * cost and arrives free some turns later. A card the pilot could cast is left
+ * to the spell scorer: casting now is at least as good as waiting, so the
+ * engine's suspend offer for it is simply never taken.
+ *
+ * Scored between passing and a generic spell (`suspendScore`, plus a little per
+ * mana value so the seven-drop is suspended before the three-drop), and funded
+ * through the SAME `planManaPayment` every spell goal uses — the engine only
+ * OFFERS `suspendCard` once the pool covers the suspend cost, so a pilot that
+ * did not plan its taps would never see the action at all.
+ *
+ * Cheapest question first, for the same reason `bestCycle` asks it: this runs
+ * on every priority decision, and almost no deck holds a suspend card.
+ */
+function bestSuspend(ctx: DecisionContext, weights: HeuristicWeights): SuspendGoal | undefined {
+  const { view, legalActions } = ctx;
+  const me = view.priorityPlayer;
+  const hand = view.players[me].hand;
+  let anySuspend = false;
+  for (const card of hand) {
+    if (card.def.suspend !== undefined) {
+      anySuspend = true;
+      break;
+    }
+  }
+  if (!anySuspend) return undefined;
+  const sorcerySpeedOpen =
+    me === view.activePlayer && (view.step === 'precombatMain' || view.step === 'postcombatMain') && view.stack.length === 0;
+  const availableMana = totalAvailableMana(view, me);
+
+  let best: SuspendGoal | undefined;
+  for (const card of hand) {
+    const suspend = card.def.suspend;
+    if (suspend === undefined) continue;
+    // Mirrors core's `unsuspendableReason`: "any time you could begin to cast
+    // this card" is the card's own timing.
+    if (castTiming(card.def) !== 'instant' && !sorcerySpeedOpen) continue;
+    const cost = card.def.cost;
+    const manaValue = cost === undefined ? 0 : convertedManaCost(cost);
+    // Castable this turn ⇒ not a suspend candidate (see the policy above).
+    if (cost !== undefined && manaValue <= availableMana) continue;
+    const score = weights.suspendScore + manaValue * weights.suspendPerManaValue;
+    if (score <= weights.passScore) continue;
+    if (best && score <= best.score) continue;
+    const plan = planManaPayment(
+      view as GameState,
+      me,
+      suspend.cost,
+      legalActions,
+      card.def,
+      'activate',
+      manaPreferenceOf(weights),
+    );
+    if (!plan) continue;
+    best = {
+      action: { kind: 'suspendCard', player: me, instanceId: card.instanceId },
+      plan,
+      score,
+      reason: ctx.trace ? `suspend ${card.def.name} for ${suspend.count} (cannot cast it this turn)` : NO_REASON,
+    };
+  }
+  return best;
+}
+
+/** Take the next step toward a suspend play: tap for it, or suspend. */
+function pursueSuspend(ctx: DecisionContext, goal: SuspendGoal): GameAction {
   const next = goal.plan[0];
   if (!next) return emit(ctx, goal.action, goal.reason, goal.score);
   const tap: GameAction = tapActionFor(ctx.view.priorityPlayer, next);

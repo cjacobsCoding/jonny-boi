@@ -2447,6 +2447,74 @@ agents. An INTERLEAVED A/B — stash the family, rebuild, bench; restore, rebuil
 read 113/93 (baseline) vs 149/150 (family) games/sec with identical game outcomes (A won 628/1500 in
 both). So: no measurable hot-path cost, and a reminder that a single bench number under shared load is
 not a measurement. Gate: full suite green; lint 0 errors.
+### 3.106 Upkeep costs and time counters — echo, cumulative upkeep, suspend, vanishing, fading — ✅ done
+
+Picked as a FAMILY off the §3.102 queue: five keywords and two printed templates that are all *"at the
+beginning of your upkeep, a bill or a tick"*, measured with `keyword-cards.mjs` BEFORE building:
+
+| keyword / template | CR | sole | predicted | shipped |
+|---|---|---|---|---|
+| echo {cost} | 702.30a | 28 | 25 (3 print a non-mana cost) | **25** |
+| cumulative upkeep {cost} / —Pay N life | 702.24a | 19 | 12 (7 print sacrifice/counter/card costs) | **12** |
+| suspend N—{cost} | 702.62a | 22 | 22 | **22** |
+| vanishing N | 702.63a | 5 | 5 | **5** |
+| fading N | 702.32a | 5 | 5 | **5** |
+| "sacrifice ~ unless you pay {COST} / N life", "sacrifice ~" | — | 8 (one shape) | 8 | **19** |
+| "draw a card at the beginning of the next turn's upkeep" | 603.7 | 12 | 12 | **16** |
+
+**Measured: 5,151 → 5,255 complete cards. +104 against 89 predicted**, and every keyword landed on its
+number — the surplus is the two templates, which the near-miss report counts per exact cost string
+({U}{U} was 8) and per exact sentence (the Aura form "when this Aura enters, draw a card at …" rides
+the same rule). The remaining sole-blocked echo (3) and cumulative upkeep (7) are the cost forms
+outside the CLOSED table — "Echo—Discard a card", "Cumulative upkeep—Sacrifice a land" — which report
+rather than compile, exactly as rule 2 requires.
+
+**Nothing here needed a new engine loop.** Every keyword is an `upkeep` trigger the compiler builds
+from the existing vocabulary, plus the two ENTRY-TIME facts no resolving effect is around to record:
+
+- **"came under your control since the beginning of your last upkeep"** — a `controlledSinceTurn`
+  stamp written by ONE helper (`markBattlefieldEntry`, the `applyEnteringLoyalty` pattern) at the three
+  entry funnels and by the one control-change site, read by a new intervening-"if" kind. Written ONLY
+  on definitions that ask (a memoised scan for the condition), so the ordinary permanent keeps the
+  object shape `cloneInstance` was measured on.
+- **"enters with N time/fade counters"** — `CardDefinition.entersWithCounters`, applied by the same
+  helper through the one counter-replacement site. A definition field and not an ETB-script entry
+  because the script only a CAST spell runs: a reanimated Blastoderm with no fade counters would never
+  be sacrificed — a card playing STRONGER than printed, which biases an A/B verdict as badly as one
+  playing weaker. Omenpath to Naya (a LAND with vanishing) compiles because of this.
+
+**Suspend is a special action plus the madness window.** `suspendCard` (CR 702.62a, `ACTION_RULES`
+forced the manifest row) pays, exiles with N time counters and creates a DELAYED ability whose body is
+the cards package's `suspendTick` — handed over as `SuspendAbility.upkeep` exactly as a cycling body
+is, so core names no primitive. The exile-side abilities ride `GameState.delayedTriggers` rather than
+the trigger collector because that collector reads the battlefield and command zone, and walking exile
+on every event would tax the hottest path for a mechanic most games never see. The free cast is the
+existing `MadnessWindow` with `kind: 'suspend'`: a WINDOW, not a card-grant permission, because "you
+may cast it … if you don't, it remains exiled" is a decision made at that moment, and a standing free
+permission would let a pilot hold Rift Bolt for the perfect turn. Haste "until you lose control" is the
+stack object's `hasteOnEntry` → an unsick entry, since haste in this engine IS `!summoningSick` and
+every control change re-sets it — no continuous effect to expire.
+
+⚠️ **The clone trap fired a fifth time.** `hasteOnEntry` rode the stack object and vanished at the
+first action boundary, because `cloneStackObject` copies a fixed field list; `suspend.test.ts` caught
+a Baloth entering sick. The row is in clone.ts with the others.
+
+⚠️ **A pre-existing gap the family exposed, fixed at the class.** `toCoreCost` folds a printed `{0}`
+and NO mana cost into one absent `cost`, and the engine read absent as free — so the day Profane Tutor
+compiled it was castable from hand for nothing. `parseManaCost` now keeps the difference
+(`ManaCost.absent`), the compiler marks `CardDefinition.noManaCost`, and the offer loop, the cast path
+and the pilot's goal builder all refuse it (CR 202.1b). Ornithopter is untouched.
+
+**The pilot plays it.** `payManaOrElse` marks a bill with its STAKE (`stakeInstanceId`), and the
+heuristic prices the bill against the permanent — pay when the mana is spare (this turn's best castable
+spell still affordable) or the `cardValue` is worth `upkeepBillWorthPerMana` per mana; a 3/3 pays
+{1}{G}, Deranged Hermit lets {3}{G}{G} go. `bestSuspend` suspends only a card the pilot cannot cast this
+turn, after every real play. `cardValue` discounts a vanishing/fading permanent by its upkeeps left.
+
+**Not done, and why:** the non-mana cost kinds (discard, sacrifice, counters) — no cost seam beyond
+mana and life; "Suspend X"; the cards that give the exiled card extra abilities; and vanishing's
+"when the last counter is removed" as a SEPARATE trigger (it resolves with the tick — the only thing the
+window could change ends with the permanent gone either way, and the comment says so).
 
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 

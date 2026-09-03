@@ -107,6 +107,10 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // The O-Ring link (§3.56): dropping this here is how "release the jailed
   // cards" became a no-op — the link only ever lived until the next clone.
   if (inst.exiledUntilLeavesBy !== undefined) copy.exiledUntilLeavesBy = inst.exiledUntilLeavesBy;
+  // §3.106 — the turn an echo permanent came under its controller's control.
+  // Same conditional-copy rule (only echo permanents carry it) and the same
+  // stakes: drop it and every echo bill reads "not owed" one action later.
+  if (inst.controlledSinceTurn !== undefined) copy.controlledSinceTurn = inst.controlledSinceTurn;
   // NOTE FOR THE NEXT FIELD, because this copy has now dropped one four times:
   // a fact that belongs to the CARD rather than to this object's runtime state
   // needs no line here at all. `def` is shared by reference above, so a
@@ -248,6 +252,11 @@ function cloneStackObject(o: StackObject): StackObject {
     ...(o.additionalCostPaid !== undefined ? { additionalCostPaid: o.additionalCostPaid } : {}),
     ...(o.awaitingCastChoice !== undefined ? { awaitingCastChoice: o.awaitingCastChoice } : {}),
     ...(o.castFrom !== undefined ? { castFrom: o.castFrom } : {}),
+    // §3.106 — dropping this one would land a suspend-cast creature summoning
+    // sick: the two priority passes between the cast and its resolution are
+    // two action boundaries, and the marker rode neither. Found by the first
+    // test that cast a suspended creature.
+    ...(o.hasteOnEntry !== undefined ? { hasteOnEntry: o.hasteOnEntry } : {}),
     // Dropping this one would re-ask the as-enters COPY question every time the
     // resolution is re-entered — and a DECLINE leaves nothing on the instance to
     // notice, so the spell would never finish resolving. Same shape, same rule.

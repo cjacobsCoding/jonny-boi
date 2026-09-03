@@ -35,6 +35,8 @@ export interface CompilableCard {
     readonly G: number;
     readonly C: number;
     readonly other: readonly string[];
+    /** §3.106 — the card prints NO mana cost (not `{0}`); see data-tools' `ManaCost.absent`. */
+    readonly absent?: boolean;
   };
   readonly typeLine: {
     readonly supertypes: readonly string[];
@@ -252,6 +254,15 @@ export interface ClauseContribution {
    * with a window to cast it for this cost (`CardDefinition.madness`).
    */
   readonly madness?: import('@jonny-boi/core').ManaCost;
+  // --- §3.106 upkeep costs and time counters ---------------------------------
+  /** The printed "Suspend N—{cost}" line (`CardDefinition.suspend`). */
+  readonly suspend?: import('@jonny-boi/core').SuspendAbility;
+  /**
+   * Counters the permanent enters with — vanishing's and fading's first half
+   * (`CardDefinition.entersWithCounters`). Accumulated, so a card printing
+   * both keywords enters with both kinds.
+   */
+  readonly entersWithCounters?: readonly import('@jonny-boi/core').EnteringCounters[];
   /**
    * A CHARACTERISTIC-DEFINING P/T this clause prints — the formula behind a `*`
    * box (Tarmogoyf). Present ⇒ the card's printed P/T is variable and the
