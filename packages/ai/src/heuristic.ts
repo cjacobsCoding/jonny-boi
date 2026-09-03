@@ -50,13 +50,17 @@ import type {
   PendingChoice,
   ManaTapPlan,
   PlayerId,
+  RulesConfig,
 } from '@jonny-boi/core';
 import {
   backFaceCastZonesOf,
   castPermissionFor,
   castTiming,
   convertedManaCost,
+  DEFAULT_RULES,
   delayedRemovalTargets,
+  landPlayZonesFor,
+  maxLandPlaysFor,
   forcedBlockAssignment,
   hasCardGrants,
   hasCastableBackFace,
@@ -266,24 +270,52 @@ export interface HeuristicFeatures {
    * each attacker as if every blocker were free to meet it. DESIGN §3.83.
    */
   readonly setAttack?: boolean;
+  /**
+   * Put TWO blockers in front of an attacker that neither could profitably
+   * block alone — when together they kill it and the trade comes out ahead —
+   * and block a MENACE attacker at all, which a one-blocker-per-attacker rule
+   * never can. DESIGN §3.108.
+   */
+  readonly gangBlock?: boolean;
+}
+
+/** Every switch resolved to a value — what `decide` and its callees read. */
+interface ResolvedFeatures {
+  readonly alphaStrike: boolean;
+  readonly setAttack: boolean;
+  readonly gangBlock: boolean;
 }
 
 /** Is set-level attack scoring on by default? See DESIGN §3.83 for the A/B. */
 const SET_ATTACK_DEFAULT = true;
+/**
+ * Defaults for the §3.108 features — each set by its A/B verdict, recorded there.
+ * Gang blocks ship ON: CONFIRMED STRONGER on both pilots, held-out 85/50 for
+ * this one and 110/45 for `lookahead`, which delegates its blocks here.
+ */
+const GANG_BLOCK_DEFAULT = true;
+
+/** The switches as `decide` reads them, defaults filled in. */
+export function resolveFeatures(features: HeuristicFeatures): ResolvedFeatures {
+  return {
+    alphaStrike: features.alphaStrike ?? true,
+    setAttack: features.setAttack ?? SET_ATTACK_DEFAULT,
+    gangBlock: features.gangBlock ?? GANG_BLOCK_DEFAULT,
+  };
+}
 
 /** Build the heuristic pilot with the given (tunable) weights. */
 export function createHeuristicPilot(
   weights: HeuristicWeights = DEFAULT_HEURISTIC_WEIGHTS,
   features: HeuristicFeatures = {},
 ): Pilot {
-  const alphaStrike = features.alphaStrike ?? true;
-  const setAttack = features.setAttack ?? SET_ATTACK_DEFAULT;
+  const resolved = resolveFeatures(features);
   return {
     id: HEURISTIC_PILOT_ID,
     description: 'Plays sensibly: develops mana, removes threats, develops the board, attacks/blocks for value.',
     chooseAction(ctx: DecisionContext): GameAction {
       try {
-        return decide(ctx, weights, alphaStrike, setAttack);
+        return decide(ctx, weights, resolved);
       } catch {
         // Robustness: never throw on a weird state. Fall back to the one move the
         // engine is guaranteed to accept — which is NOT always passing: while a
@@ -291,11 +323,36 @@ export function createHeuristicPilot(
         return safeFallbackAction(ctx.view as unknown as GameState);
       }
     },
-    willPassPriority(view: GameState): boolean {
-      return heuristicWillPass(view);
+    willPassPriority(view: GameState, rulesConfig?: RulesConfig): boolean {
+      return heuristicWillPass(view, rulesConfig ?? DEFAULT_RULES);
+    },
+    chooseActions(ctx: DecisionContext): readonly GameAction[] {
+      // The SAME decision as `chooseAction`, plus whatever continuation the
+      // pursuit of a funded goal wrote into the sink on the way — see
+      // `pursueSpell`. The sink is module-level scratch rather than a return
+      // value so `decide` and everything under it keep their shapes (and their
+      // allocation profile) for the callers that only want one action.
+      const plan: GameAction[] = [];
+      planSink = plan;
+      try {
+        plan.unshift(decide(ctx, weights, resolved));
+      } catch {
+        plan.length = 0;
+        plan.push(safeFallbackAction(ctx.view as unknown as GameState));
+      } finally {
+        planSink = null;
+      }
+      return plan;
     },
   };
 }
+
+/**
+ * Where the pursuit of a goal writes the actions it would take NEXT — the plan
+ * seam's continuation (`Pilot.chooseActions`). `null` for every caller that
+ * asked for one action, so the ordinary path allocates nothing for it.
+ */
+let planSink: GameAction[] | null = null;
 
 /**
  * Windows in which this pilot provably cannot do anything but pass — decided
@@ -311,15 +368,39 @@ export function createHeuristicPilot(
  * those built a full menu — dominated by mana taps, 73% of all offers ever
  * enumerated — scored it, and threw it away.
  */
-function heuristicWillPass(view: GameState): boolean {
+function heuristicWillPass(view: GameState, rules: RulesConfig): boolean {
   // A parked question is not a priority window at all: passing is REJECTED while
   // one stands, and only an answer moves the game.
   if (view.pendingChoice) return false;
-  // Combat declarations are decisions this pilot really makes.
-  if (view.step === 'declareAttackers' || view.step === 'declareBlockers') return false;
-  // Something on the stack is something this pilot might answer.
-  if (view.stack.length > 0) return false;
+  // A madness window is answered by its controller (`decideMadness`), and the
+  // answer is a cast whenever the cost can be paid — never a promised pass.
+  if (view.madnessWindow) return false;
   const me = view.priorityPlayer;
+  const combat = view.combat;
+  /*
+   * A COMBAT DECLARATION THIS SEAT HAS NOT YET MADE is a real decision — the
+   * attack or the block — and is never judged here. But the same step names
+   * TWO windows: the declaration, and the ordinary priority round that follows
+   * it (the engine flips `attackersDeclared` / `blockersDeclared` the moment the
+   * declaration is applied, and offers the composite action only while the
+   * flag is down). The old gate refused the whole step for both seats, which
+   * was 15% of all windows refused for a decision that had already been made
+   * — see DESIGN §3.108. Everything below the two checks is the priority
+   * reasoning the pilot itself runs in those windows (`choosePriorityAction`).
+   *
+   * The defender's undeclared window is handed over only when this seat has no
+   * untapped creature: `chooseBlock` then has nothing to assign, builds no
+   * declaration, and falls through to exactly the priority reasoning below.
+   * (§3.79's "no creature ⇒ nothing to declare" pre-check measured that window
+   * as UNSAFE because the engine still OFFERS the empty declaration — but the
+   * promise is about what THIS PILOT does with the menu, and it never picks
+   * that offer. What it can still do there is cast a fog, which the mana and
+   * intent reasoning below sees.)
+   */
+  const attackPending = view.step === 'declareAttackers' && me === view.activePlayer;
+  if (attackPending && combat?.attackersDeclared !== true) return false;
+  const blockPending =
+    view.step === 'declareBlockers' && me !== view.activePlayer && combat?.blockersDeclared !== true;
   // A card grant can make a graveyard card castable in ways not visible on the
   // card itself (Snapcaster's granted flashback). Rare, and not worth reasoning
   // about cheaply — if any grant is live, ask properly.
@@ -329,56 +410,209 @@ function heuristicWillPass(view: GameState): boolean {
   // at all, and whether a land drop is on offer.
   const sorceryOpen =
     me === view.activePlayer &&
-    (view.step === 'precombatMain' || view.step === 'postcombatMain');
+    (view.step === 'precombatMain' || view.step === 'postcombatMain') &&
+    view.stack.length === 0;
 
-  // Everything below asks ONE question in two halves: what is the cheapest thing
-  // this seat could play in THIS window, and could it possibly pay for it?
-  //
   // ⚠️ THE MANA BOUND IS AN UPPER BOUND ON PURPOSE. Counting untapped sources
   // over-estimates what is really available (a source may be colour-wrong, or
   // carry a restriction), and over-estimating is the SAFE direction: it can only
   // ever make this function answer `false` and build the menu that would have
   // been built anyway. Under-estimating would skip a window where the pilot could
   // really have acted, which is the one thing this must never do.
-  let cheapestPlay = Infinity;
-  const hand = view.players[me]?.hand ?? [];
-  for (let i = 0; i < hand.length; i++) {
-    const card = hand[i] as CardInstance;
-    // CYCLING (and its typed variants) is an activated ability of a card in
-    // HAND, usable at instant speed. Cheap to spot and easy to forget.
-    if ((card.def.cycling?.length ?? 0) > 0) return false;
-    // A LAND is not cast — it is played, for no mana, and only in a sorcery
-    // window with a drop left. Nothing about the mana bound can rule it out.
-    if (isLand(card.def)) {
-      if (sorceryOpen && (view.players[me]?.landsPlayedThisTurn ?? 0) < 1) return false;
-      continue;
-    }
-    if (!sorceryOpen && castTiming(card.def) !== 'instant') continue;
-    cheapestPlay = Math.min(cheapestPlay, convertedManaCost(card.def.cost ?? {}));
-  }
-  // The graveyard is only castable-from via flashback, and flashback keeps the
-  // card's own timing — a sorcery with flashback is sorcery-speed, so off-turn it
-  // cannot be played whatever its cost.
-  const graveyard = view.players[me]?.graveyard ?? [];
-  for (let i = 0; i < graveyard.length; i++) {
-    const card = graveyard[i] as CardInstance;
-    if (card.def.flashback === undefined) continue;
-    if (!sorceryOpen && castTiming(card.def) !== 'instant') continue;
-    cheapestPlay = Math.min(cheapestPlay, convertedManaCost(card.def.flashback));
-  }
-
+  //
+  // The battlefield is walked FIRST because the intent reasoning over the hand
+  // needs three facts from it: whether the opponent has a creature or a walker
+  // (removal with nothing to aim at is held, never cast), and whether this seat
+  // has an untapped creature (the block-window rule above).
+  //
+  // ⚠️ EVERY PER-CARD FACT IS READ THROUGH `gateFactsOf`, ONE MEMO LOOKUP PER
+  // CARD. This function runs on every window of every game — the match-loop
+  // profile put it at 14% of the whole run when each card cost five accessor
+  // calls (`hasType` walking a type list, `manaModesOf`, `castTiming`,
+  // `convertedManaCost`, the intent memo) — and a definition's answers never
+  // change, so they are computed once per printed card and read back as flags.
   let available = poolTotal(view.players[me]?.manaPool);
+  let myUntappedCreature = false;
+  let theirCreature = false;
+  let theirWalker = false;
   const battlefield = view.battlefield;
   for (let i = 0; i < battlefield.length; i++) {
     const permanent = battlefield[i] as CardInstance;
-    if (permanent.controller !== me) continue;
+    const facts = gateFactsOf(permanent.def);
+    if (permanent.controller !== me) {
+      if (facts.creature) theirCreature = true;
+      else if (facts.walker) theirWalker = true;
+      continue;
+    }
     // A non-mana activated ability is a play in its own right, at any speed.
-    if ((permanent.def.activated?.length ?? 0) > 0) return false;
+    if (facts.activated) return false;
     if (permanent.tapped) continue;
-    if (manaModesOf(permanent.def).length > 0) available += 1;
-    if (available >= cheapestPlay) return false; // it could pay; ask properly
+    if (facts.creature) myUntappedCreature = true;
+    if (facts.manaSource) available += 1;
+  }
+  if (blockPending && myUntappedCreature) return false;
+  // A land drop is played for no mana, so nothing about the mana bound can rule
+  // it out: it is refused outright whenever one is on offer. The engine's own
+  // count of drops (an Exploration widens it) and its own list of extra zones
+  // (a Crucible plays them from the graveyard) are read rather than assumed —
+  // "one drop, from the hand" is the common case, not the rule.
+  const landDropOpen =
+    sorceryOpen && (view.players[me]?.landsPlayedThisTurn ?? 0) < maxLandPlaysFor(view, me, rules);
+  if (landDropOpen && landPlayZonesFor(view, me).length > 0) return false;
+
+  // Everything below asks ONE question in two halves: what is the cheapest thing
+  // this seat could play in THIS window, and could it possibly pay for it?
+  const stackHasSpell = view.stack.length > 0;
+  const combatLive = combat !== null && combat !== undefined && combat.attackers.length > 0;
+  /** Could `scoreSpell` make a goal of a card with these facts, on this board? */
+  const couldBeAGoal = (facts: GateFacts): boolean =>
+    facts.goalAlways ||
+    (stackHasSpell && facts.goalOnStack) ||
+    (combatLive && facts.goalInCombat) ||
+    (theirCreature && facts.goalWithTheirCreature) ||
+    (theirWalker && facts.goalWithTheirWalker);
+  let cheapestPlay = Infinity;
+  const hand = view.players[me]?.hand ?? [];
+  for (let i = 0; i < hand.length; i++) {
+    const facts = gateFactsOf((hand[i] as CardInstance).def);
+    // CYCLING (and its typed variants) is an activated ability of a card in
+    // HAND, usable at instant speed. Cheap to spot and easy to forget.
+    if (facts.cycling) return false;
+    // A LAND is not cast — it is played, for no mana, and only in a sorcery
+    // window with a drop left. Nothing about the mana bound can rule it out.
+    if (facts.land) {
+      if (landDropOpen) return false;
+      continue;
+    }
+    // A two-halved card prints its own timing and cost per half; the scorer
+    // splits it (`castableHalvesInHand`) and this gate does not — so it is
+    // never ruled out from the combined face alone.
+    if (facts.twoFaced) return false;
+    if (!sorceryOpen && !facts.instant) continue;
+    if (!couldBeAGoal(facts)) continue;
+    if (facts.cmc < cheapestPlay) cheapestPlay = facts.cmc;
+  }
+  // The graveyard is castable-from via flashback (which keeps the card's own
+  // timing — a sorcery with flashback is sorcery-speed, so off-turn it cannot be
+  // played whatever its cost) and via an AFTERMATH half printed "cast only from
+  // your graveyard", which carries its own timing and cost.
+  const graveyard = view.players[me]?.graveyard ?? [];
+  for (let i = 0; i < graveyard.length; i++) {
+    const facts = gateFactsOf((graveyard[i] as CardInstance).def);
+    if (facts.graveHalfCmc >= 0 && (sorceryOpen || facts.graveHalfInstant) && facts.graveHalfCmc < cheapestPlay) {
+      cheapestPlay = facts.graveHalfCmc;
+    }
+    if (facts.flashbackCmc < 0) continue;
+    if (!sorceryOpen && !facts.instant) continue;
+    if (!couldBeAGoal(facts)) continue;
+    if (facts.flashbackCmc < cheapestPlay) cheapestPlay = facts.flashbackCmc;
   }
   return available < cheapestPlay;
+}
+
+/**
+ * Everything the fast-pass gate asks about a printed card, computed once per
+ * definition. The `goal*` flags are the conditions under which `scoreSpell`
+ * could make a goal of the card — see {@link goalFlagsOf}.
+ */
+interface GateFacts {
+  readonly land: boolean;
+  readonly creature: boolean;
+  readonly walker: boolean;
+  readonly cycling: boolean;
+  readonly twoFaced: boolean;
+  /** Prints an activated ability — a play in its own right, at any speed. */
+  readonly activated: boolean;
+  /** Taps for mana (an UPPER-bound read: any production at all counts). */
+  readonly manaSource: boolean;
+  /** Castable at instant speed (printed timing, or flash). */
+  readonly instant: boolean;
+  readonly cmc: number;
+  /** Flashback cost's mana value, or -1 when the card prints no flashback. */
+  readonly flashbackCmc: number;
+  /** An aftermath half castable from the graveyard: its mana value, or -1. */
+  readonly graveHalfCmc: number;
+  readonly graveHalfInstant: boolean;
+  readonly goalAlways: boolean;
+  readonly goalOnStack: boolean;
+  readonly goalInCombat: boolean;
+  readonly goalWithTheirCreature: boolean;
+  readonly goalWithTheirWalker: boolean;
+}
+
+const GATE_FACTS_MEMO = new WeakMap<CardDefinition, GateFacts>();
+
+function gateFactsOf(def: CardDefinition): GateFacts {
+  const memo = GATE_FACTS_MEMO.get(def);
+  if (memo !== undefined) return memo;
+  const graveHalf =
+    hasCastableBackFace(def) && backFaceCastZonesOf(def).includes('graveyard')
+      ? (def.backFace as CardDefinition)
+      : undefined;
+  const facts: GateFacts = {
+    land: isLand(def),
+    creature: isCreature(def),
+    walker: isPlaneswalker(def),
+    cycling: (def.cycling?.length ?? 0) > 0,
+    twoFaced: def.frontFace !== undefined || def.backFace !== undefined,
+    activated: (def.activated?.length ?? 0) > 0,
+    manaSource: manaModesOf(def).length > 0,
+    instant: castTiming(def) === 'instant',
+    cmc: convertedManaCost(def.cost ?? {}),
+    flashbackCmc: def.flashback === undefined ? -1 : convertedManaCost(def.flashback),
+    graveHalfCmc: graveHalf === undefined ? -1 : convertedManaCost(graveHalf.cost ?? {}),
+    graveHalfInstant: graveHalf !== undefined && castTiming(graveHalf) === 'instant',
+    ...goalFlagsOf(def),
+  };
+  GATE_FACTS_MEMO.set(def, facts);
+  return facts;
+}
+
+/**
+ * Under which board conditions could `scoreSpell` make a goal of this card?
+ *
+ * ⚠️ A SUPERSET OF THE SCORER'S "YES", NEVER A SUBSET. Each branch names the ONE
+ * condition under which the scorer returns `undefined` unconditionally — a
+ * counter with an empty stack (`counterTarget`), a trick with no combat
+ * (`bestPumpPlay`), a fog before attackers are declared (`fogValue`), removal
+ * with no creature to aim at — and `goalAlways` for everything else, including
+ * every intent whose "hold it" depends on values this gate does not compute.
+ * Ruling a card out where the scorer would have cast it is the one lie the
+ * fast-pass contract forbids, so when in doubt the answer is "always".
+ */
+function goalFlagsOf(
+  def: CardDefinition,
+): Pick<GateFacts, 'goalAlways' | 'goalOnStack' | 'goalInCombat' | 'goalWithTheirCreature' | 'goalWithTheirWalker'> {
+  const intent = classifySpell(def);
+  const flags = {
+    goalAlways: false,
+    goalOnStack: false,
+    goalInCombat: false,
+    goalWithTheirCreature: false,
+    goalWithTheirWalker: false,
+  };
+  switch (intent.kind) {
+    case 'counter':
+    case 'copySpell':
+      flags.goalOnStack = true;
+      break;
+    case 'pump':
+    case 'fog':
+      flags.goalInCombat = true;
+      break;
+    case 'destroyCreature':
+    case 'shrink':
+      flags.goalWithTheirCreature = true;
+      break;
+    case 'damage':
+      flags.goalAlways = intent.canTargetPlayer;
+      flags.goalWithTheirCreature = intent.canTargetCreature;
+      flags.goalWithTheirWalker = intent.canTargetWalker;
+      break;
+    default:
+      flags.goalAlways = true;
+  }
+  return flags;
 }
 
 
@@ -393,12 +627,7 @@ function heuristicWillPass(view: GameState): boolean {
  */
 const NO_REASON = '';
 
-function decide(
-  ctx: DecisionContext,
-  weights: HeuristicWeights,
-  alphaStrike = true,
-  setAttack = SET_ATTACK_DEFAULT,
-): GameAction {
+function decide(ctx: DecisionContext, weights: HeuristicWeights, features: ResolvedFeatures): GameAction {
   const { view, legalActions } = ctx;
   const me = view.priorityPlayer;
   const explain = ctx.trace !== undefined;
@@ -441,11 +670,11 @@ function decide(
 
   // Combat declarations are their own decision shape.
   if (view.step === 'declareAttackers' && me === view.activePlayer) {
-    const attack = chooseAttack(ctx, weights, index, alphaStrike, setAttack);
+    const attack = chooseAttack(ctx, weights, index, features);
     if (attack) return attack;
   }
   if (view.step === 'declareBlockers' && me === defendingPlayer(view)) {
-    const block = chooseBlock(ctx, weights, index);
+    const block = chooseBlock(ctx, weights, index, features);
     if (block) return block;
   }
 
@@ -2225,7 +2454,13 @@ function bestCycle(ctx: DecisionContext, weights: HeuristicWeights): CycleGoal |
 function pursueCycle(ctx: DecisionContext, goal: CycleGoal): GameAction {
   const next = goal.plan[0];
   if (!next) return emit(ctx, goal.action, goal.reason, goal.score);
-  const tap: GameAction = tapActionFor(ctx.view.priorityPlayer, next);
+  const me = ctx.view.priorityPlayer;
+  const tap: GameAction = tapActionFor(me, next);
+  // The remaining taps only — the same promise `pursueSpell` makes, for the
+  // same reason: the play at the end is re-decided against the floating pool.
+  if (planSink !== null) {
+    for (let i = 1; i < goal.plan.length; i++) planSink.push(tapActionFor(me, goal.plan[i] as ManaTapPlan));
+  }
   return emit(ctx, tap, goal.reason, goal.score);
 }
 
@@ -2316,28 +2551,52 @@ function pursueSuspend(ctx: DecisionContext, goal: SuspendGoal): GameAction {
   return emit(ctx, tap, goal.reason, goal.score);
 }
 
+/** The cast that carries out a scored goal, once its cost is in the pool. */
+function castActionFor(me: PlayerId, goal: SpellGoal): GameAction {
+  return {
+    kind: 'castSpell',
+    player: me,
+    instanceId: goal.card.instanceId,
+    targets: goal.targets.length > 0 ? goal.targets : undefined,
+    // A flashback / aftermath / from-exile goal must say so, or the engine
+    // looks for the card in hand; a second-half goal must name its face, or
+    // the engine casts the other one.
+    fromZone: goal.fromZone,
+    face: goal.face,
+  };
+}
+
 function pursueSpell(ctx: DecisionContext, funded: FundedGoal): GameAction {
   const { view } = ctx;
   const me = view.priorityPlayer;
   const { goal, plan } = funded;
 
   const next = plan[0];
-  if (!next) {
-    const cast: GameAction = {
-      kind: 'castSpell',
-      player: me,
-      instanceId: goal.card.instanceId,
-      targets: goal.targets.length > 0 ? goal.targets : undefined,
-      // A flashback / aftermath / from-exile goal must say so, or the engine
-      // looks for the card in hand; a second-half goal must name its face, or
-      // the engine casts the other one.
-      fromZone: goal.fromZone,
-      face: goal.face,
-    };
-    return emit(ctx, cast, goal.reason, goal.score);
-  }
+  if (!next) return emit(ctx, castActionFor(me, goal), goal.reason, goal.score);
 
   const tap: GameAction = tapActionFor(me, next);
+  /*
+   * THE PLAN SEAM'S CONTINUATION: the REST OF THE TAPS — and deliberately not
+   * the cast. This is a promise (`Pilot.chooseActions`), kept because the next
+   * decision re-derives exactly these taps: `totalAvailableMana` (pool plus
+   * untapped sources) is invariant under a tap, so every goal keeps its score
+   * and rank; the sort is stable over an unchanged hand; and `planManaPayment`
+   * is greedy from the CURRENT pool, so the plan it returns after tap k is this
+   * plan from k+1.
+   *
+   * ⚠️ THE CAST IS NOT PROMISED because the pilot does not always cast what it
+   * tapped for, and the seam must reproduce the pilot, not improve it. Core's
+   * planner cannot fund a HYBRID pip ({G/W}) from an empty pool, so a hand of
+   * Kitchen Finks and Eternal Witness ranks Finks first, finds it "unfundable",
+   * taps for Witness — and then, with G G B floating, re-scores the hand and
+   * casts the Finks the pool now covers. Promising the cast turned that into a
+   * different game (transcript diff, Mono-Green vs Golgari, seed 1). The taps
+   * are the same either way, and they are 57% of the windows the seam takes.
+   * Pinned by `packages/sim/src/action-plan.test.ts`.
+   */
+  if (planSink !== null) {
+    for (let i = 1; i < plan.length; i++) planSink.push(tapActionFor(me, plan[i] as ManaTapPlan));
+  }
   if (!ctx.trace) return emit(ctx, tap, NO_REASON, goal.score);
   const source = findInstance(view, next.instanceId);
   const label = source ? `tap ${source.def.name} for ${describeProduction(next.production)}` : 'tap for mana';
@@ -2692,12 +2951,12 @@ function chooseAttack(
   ctx: DecisionContext,
   weights: HeuristicWeights,
   index: ContinuousIndex,
-  alphaStrike: boolean,
-  setAttack: boolean,
+  features: ResolvedFeatures,
 ): GameAction | undefined {
   const { view, legalActions } = ctx;
   const me = view.activePlayer;
   const opp = otherPlayer(me);
+  const { alphaStrike, setAttack } = features;
 
   const offered = legalActions.find((a) => a.kind === 'declareAttackers') as
     | Extract<GameAction, { kind: 'declareAttackers' }>
@@ -2964,6 +3223,7 @@ function attackIsProfitable(
   return faceValue >= weights.attackValueThreshold;
 }
 
+
 /**
  * How many "whenever ~ deals combat damage to a player" abilities THIS creature
  * would set off by connecting — the ones printed on it, plus the ones its
@@ -3019,6 +3279,7 @@ function chooseBlock(
   ctx: DecisionContext,
   weights: HeuristicWeights,
   index: ContinuousIndex,
+  features: ResolvedFeatures,
 ): GameAction | undefined {
   const { view } = ctx;
   const me = defendingPlayer(view);
@@ -3036,6 +3297,10 @@ function chooseBlock(
   const pressure = attackPressure(view, combat.attackers, me, index);
   const incomingDamage = lifeEquivalent(pressure, weights);
   const facingLethal = pressureIsLethal(view, me, pressure);
+  // ⚠️ A FIXED LIFE TOTAL, ON PURPOSE. Replacing it with the clock — chump only
+  // when the opponent's PROVEN crack-back would finish what this attack starts
+  // — measured CONFIRMED WEAKER (held-out 24/43, §3.108), on top of §3.89's
+  // finding that the threshold is at its optimum in both directions.
   const desperate =
     facingLethal ||
     myLife <= weights.desperateLifeThreshold ||
@@ -3080,6 +3345,9 @@ function chooseBlock(
       blocks.push({ blocker: blocker.instanceId, attacker: attacker.instanceId });
       used.add(blocker.instanceId);
     }
+  }
+  if (features.gangBlock) {
+    addGangBlocks(attackers, availableBlockers, used, blocks, desperate, weights, index, doomed);
   }
 
   // Declaring zero blocks via an empty `declareBlockers` would leave combat.blocks
@@ -3170,6 +3438,115 @@ export function pickBlocker(
   if (!best) return undefined;
   if (desperate) return best; // survive at any cost — chump if needed
   return bestValue >= weights.blockValueThreshold ? best : undefined;
+}
+
+/**
+ * GANG BLOCKS — two blockers on one attacker that neither can profitably meet
+ * alone (§3.108). Added after the single-blocker pass, for the attackers it left
+ * unblocked, from the blockers it left unused; so nothing the shipped rule
+ * decided is revisited, only what it could not express.
+ *
+ * The fight is priced exactly as the engine resolves it: the attacker assigns
+ * lethal damage to its blockers in ASCENDING INSTANCE-ID order (`combat.blocks`
+ * is a map keyed by blocker id, and the engine walks its entries), tramples the
+ * remainder, and both blockers strike back at once. A first-striker on either
+ * side changes that sequence and is left to the single-block rule, which reads
+ * `resolveFight` — this pricing does not pretend to know what it does not model.
+ *
+ * Two shapes are taken:
+ *   - a pair that KILLS the attacker and comes out ahead on the same trade
+ *     ruler `pickBlocker` uses (`blockValueThreshold`);
+ *   - a MENACE attacker (or any "except by two or more") when this seat is
+ *     desperate — the one attacker a lone chump can never stop, so the best
+ *     pair stops it whatever it costs, exactly as `pickBlocker`'s desperate
+ *     rule spends one body.
+ */
+function addGangBlocks(
+  attackers: readonly CardInstance[],
+  blockers: readonly CardInstance[],
+  used: Set<InstanceId>,
+  blocks: { blocker: InstanceId; attacker: InstanceId }[],
+  desperate: boolean,
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+  doomed: ReadonlySet<InstanceId>,
+): void {
+  if (blockers.length - used.size < 2) return;
+  const blocked = new Set<InstanceId>();
+  for (let i = 0; i < blocks.length; i++) blocked.add((blocks[i] as { attacker: InstanceId }).attacker);
+
+  for (const attacker of attackers) {
+    if (blocked.has(attacker.instanceId)) continue;
+    const ak = keywordsOf(attacker, index);
+    if (ak.firstStrike === true || ak.doubleStrike === true || ak.indestructible === true) continue;
+    const aPower = power(attacker, index);
+    const aTough = toughness(attacker, index);
+    const aToughLeft = Math.max(1, toughnessLeft(attacker, index));
+    const mustGang = needsMultipleBlockers(attacker, index);
+    const kill = weights.killEnemyPerStat * (aPower + aTough);
+
+    let bestValue = -Infinity;
+    let bestFirst: CardInstance | undefined;
+    let bestSecond: CardInstance | undefined;
+    for (let i = 0; i < blockers.length; i++) {
+      const one = blockers[i] as CardInstance;
+      if (used.has(one.instanceId) || !canBlockByEvasion(attacker, one, index)) continue;
+      const oneK = keywordsOf(one, index);
+      if (oneK.firstStrike === true || oneK.doubleStrike === true) continue;
+      for (let j = i + 1; j < blockers.length; j++) {
+        const two = blockers[j] as CardInstance;
+        if (used.has(two.instanceId) || !canBlockByEvasion(attacker, two, index)) continue;
+        const twoK = keywordsOf(two, index);
+        if (twoK.firstStrike === true || twoK.doubleStrike === true) continue;
+        // The engine's order: the lower id takes lethal first.
+        const first = one.instanceId < two.instanceId ? one : two;
+        const second = first === one ? two : one;
+        const firstK = first === one ? oneK : twoK;
+        const secondK = first === one ? twoK : oneK;
+
+        const dealt = power(first, index) + power(second, index);
+        const attackerDies =
+          dealt >= aToughLeft ||
+          (power(first, index) > 0 && firstK.deathtouch === true) ||
+          (power(second, index) > 0 && secondK.deathtouch === true);
+        if (!attackerDies && !(desperate && mustGang)) continue;
+
+        let remaining = aPower;
+        const needFirst = ak.deathtouch === true ? 1 : Math.max(1, toughnessLeft(first, index));
+        const toFirst = Math.min(remaining, needFirst);
+        remaining -= toFirst;
+        const firstDies = toFirst > 0 && toFirst >= needFirst && firstK.indestructible !== true;
+        const needSecond = ak.deathtouch === true ? 1 : Math.max(1, toughnessLeft(second, index));
+        const toSecond = Math.min(remaining, needSecond);
+        remaining -= toSecond;
+        const secondDies = toSecond > 0 && toSecond >= needSecond && secondK.indestructible !== true;
+        const through = ak.trample === true ? remaining : 0;
+
+        const value =
+          (attackerDies ? kill : 0) -
+          (firstDies && !doomed.has(first.instanceId)
+            ? weights.ownCreatureLossPerStat * statTotal(first, index)
+            : 0) -
+          (secondDies && !doomed.has(second.instanceId)
+            ? weights.ownCreatureLossPerStat * statTotal(second, index)
+            : 0) -
+          weights.blockTrampleLeakPerPoint * through;
+        if (value > bestValue) {
+          bestValue = value;
+          bestFirst = first;
+          bestSecond = second;
+        }
+      }
+    }
+    if (bestFirst === undefined || bestSecond === undefined) continue;
+    if (!(desperate && mustGang) && bestValue < weights.blockValueThreshold) continue;
+    blocks.push({ blocker: bestFirst.instanceId, attacker: attacker.instanceId });
+    blocks.push({ blocker: bestSecond.instanceId, attacker: attacker.instanceId });
+    used.add(bestFirst.instanceId);
+    used.add(bestSecond.instanceId);
+    blocked.add(attacker.instanceId);
+    if (blockers.length - used.size < 2) return;
+  }
 }
 
 // --- spell classification ------------------------------------------------------
