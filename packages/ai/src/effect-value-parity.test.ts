@@ -65,12 +65,36 @@ const KNOWN_UNPRICED: Readonly<Record<string, string>> = Object.freeze({
   // them.
   sacrificeNamed: 'delayed-trigger body only — never on a pilot menu; combat prices the doom instead',
   exileNamed: 'delayed-trigger body only — never on a pilot menu; combat prices the doom instead',
+  // The three CAST-TRIGGER bodies (§3.113, `CardDefinition.castTriggers`). Same
+  // shape as `attachToTarget`'s row: a price here would be dead code wearing a
+  // green checkmark. They are never on a pilot menu — the engine pushes them
+  // itself as the spell is cast, and nothing offers a choice about whether they
+  // run — and storm's value is not computable from the params in any case: it is
+  // the COUNT of spells cast before it (which rides the trigger's
+  // `triggeringAmount`) times the payload of the spell on the stack, neither of
+  // which `EffectValueContext` carries. Where the pilot DOES decide — which
+  // spell to cast, and when — storm and cascade are priced by
+  // `castTriggerBonus` in `heuristic.ts`, off the live spell count.
+  stormCopies: 'cast-trigger body only; its value is triggeringAmount × the stack spell’s payload, neither in the context — priced at the cast by castTriggerBonus',
+  cascade: 'cast-trigger body only — never on a pilot menu; the cast decision is priced by castTriggerBonus',
+  ripple: 'cast-trigger body only — never on a pilot menu; a same-name hit in the top N is a decklist fact the pilot has no model for',
   // §3.106 — the two upkeep TICKS. Trigger bodies the engine fires, never a
   // pilot's pick; what they cost the pilot is read off the counters themselves
   // (card-value.ts's `temporaryShare` prices a vanishing/fading permanent by
   // its counters left; a suspended card is priced by the spell it becomes).
   tickDownCounter: 'upkeep-trigger body only — the pilot prices the time/fade counters through cardValue',
   suspendTick: 'delayed-trigger body only — the free cast it leads to is priced as the spell itself',
+  // §3.111 — the graveyard-casting family's bodies. Every one reads its SOURCE
+  // (the card in the graveyard or in exile) and the value context carries no
+  // source, so a price here could only be flat. The pilot prices them where the
+  // source IS known: `bestGraveyardAbility` in heuristic.ts, by the closed
+  // `GraveyardAbilityKind` table (an unearth is one attack, a scavenge is
+  // counters on the best attacker, an embalm is a body, a return is a card).
+  unearthReturn: 'graveyard-ability body — priced by kind in bestGraveyardAbility, which knows the source',
+  scavengeCounters: 'graveyard-ability body — priced by kind in bestGraveyardAbility, which knows the source',
+  graveyardTokenCopy: 'graveyard-ability body — priced by kind in bestGraveyardAbility, which knows the source',
+  returnSourceFromGraveyard:
+    'graveyard-ability body and Rancor’s trigger body — priced by kind in bestGraveyardAbility; as a trigger it is card advantage the pilot cannot steer',
   createEmblem: 'unreachable from pool refs today; an emblem would score flat',
   fight: 'unreachable from pool refs today; a fight would score flat, blind to both bodies',
   returnChosenToHand: 'unreachable from pool refs today',

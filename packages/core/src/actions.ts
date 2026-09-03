@@ -147,6 +147,38 @@ export interface CastSpellAction {
    * See `cast-alternatives.ts`.
    */
   readonly alternative?: import('./cast-alternatives.js').AlternativeCostKind;
+  /**
+   * §3.111 — WHICH graveyard-cast keyword a `fromZone: 'graveyard'` cast uses:
+   * retrace, jump-start or escape. Omitted means flashback, which keeps every
+   * action written before this existed meaning what it always meant. The
+   * engine reads the cost, the additional cost and the exit from the stack off
+   * this kind through `graveyardCastOptionFor` — the same accessor the offer
+   * loop enumerated it from.
+   */
+  readonly graveyardCast?: import('./graveyard-casting.js').GraveyardCastKind;
+}
+
+/**
+ * §3.111 — ACTIVATE an ability of a card in your GRAVEYARD: unearth (CR
+ * 702.84a), scavenge (702.96a), embalm (702.128a), eternalize (702.129a),
+ * encore (702.141a), and the printed "{cost}: Return ~ from your graveyard to
+ * your hand". Pays the cost — including the printed "Exile this card from your
+ * graveyard" where the keyword has one — and puts the ability on the stack.
+ *
+ * Its own action kind rather than an `activateAbility` with a zone, for the
+ * reason cycling is: that path starts by finding a permanent on the
+ * battlefield and judges {T} costs and summoning sickness, none of which a
+ * card in a graveyard has. `abilityIndex` indexes
+ * `CardDefinition.graveyardAbilities` exactly as `activateAbility` indexes
+ * `activated`; `targets` and `costInstanceIds` mean what they mean there.
+ */
+export interface ActivateGraveyardAbilityAction {
+  readonly kind: 'activateGraveyardAbility';
+  readonly player: PlayerId;
+  readonly instanceId: InstanceId;
+  readonly abilityIndex: number;
+  readonly targets?: ReadonlyArray<InstanceId | PlayerId>;
+  readonly costInstanceIds?: readonly InstanceId[];
 }
 
 /**
@@ -302,6 +334,7 @@ export type GameAction =
   | SuspendCardAction
   | ForetellCardAction
   | PlotCardAction
+  | ActivateGraveyardAbilityAction
   | ActivateAbilityAction
   | DeclareAttackersAction
   | DeclareBlockersAction

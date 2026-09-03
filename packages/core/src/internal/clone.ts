@@ -115,6 +115,15 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // bodies read it), and the foretold card's face-down marker. Same rule.
   if (inst.castWith !== undefined) copy.castWith = inst.castWith;
   if (inst.faceDown !== undefined) copy.faceDown = inst.faceDown;
+  // §3.111 — unearth's "if it would leave the battlefield, exile it instead"
+  // (CR 702.84c). Same conditional-copy rule (only an unearthed permanent
+  // carries it) and the same stakes: drop it and the creature dies to the
+  // graveyard one action boundary later, to be unearthed again next turn.
+  if (inst.exileIfLeaves !== undefined) copy.exileIfLeaves = inst.exileIfLeaves;
+  // §3.110 — the RENOWNED designation (CR 702.112a). Same conditional-copy
+  // rule (only a renown creature that has connected carries it) and the same
+  // stakes: drop it and a Rhox Maulers grows again on its next connection.
+  if (inst.renowned !== undefined) copy.renowned = inst.renowned;
   // NOTE FOR THE NEXT FIELD, because this copy has now dropped one four times:
   // a fact that belongs to the CARD rather than to this object's runtime state
   // needs no line here at all. `def` is shared by reference above, so a
@@ -264,6 +273,11 @@ function cloneStackObject(o: StackObject): StackObject {
     // §3.112 — the alternative cost paid and the entwine answer ride the cast.
     ...(o.alternative !== undefined ? { alternative: o.alternative } : {}),
     ...(o.entwined !== undefined ? { entwined: o.entwined } : {}),
+    // §3.111 — which graveyard-cast keyword this spell was cast by. Dropping it
+    // would turn a retraced spell into a flashback one at the first action
+    // boundary and EXILE it as it resolved — a card playing weaker than
+    // printed, silently.
+    ...(o.graveyardCast !== undefined ? { graveyardCast: o.graveyardCast } : {}),
     // Dropping this one would re-ask the as-enters COPY question every time the
     // resolution is re-entered — and a DECLINE leaves nothing on the instance to
     // notice, so the spell would never finish resolving. Same shape, same rule.
@@ -432,6 +446,10 @@ export function cloneState(state: GameState): GameState {
   }
   if (state.turnFactsA !== undefined) next.turnFactsA = state.turnFactsA;
   if (state.turnFactsB !== undefined) next.turnFactsB = state.turnFactsB;
+  // §3.113 — storm's count, the same `!== undefined` rule as the facts beside it.
+  // (A pile window's `pile` rides the `{ ...madnessWindow }` spread above; it
+  // is never mutated in place, so sharing the array is safe.)
+  if (state.spellsCastThisTurn !== undefined) next.spellsCastThisTurn = state.spellsCastThisTurn;
   return next;
 }
 

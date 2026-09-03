@@ -62,6 +62,14 @@ const WALKER: CardDefinition = { id: 'zoo-walker', name: 'zoo-walker', types: ['
 const BATTLE: CardDefinition = { id: 'zoo-battle', name: 'zoo-battle', types: ['battle'], defense: 3 };
 // A token BEAR — the CR 111.1 stamp is what `tokenYouControl` reads.
 const TOKEN_BEAR: CardDefinition = { ...creatureDef('zoo-token-bear', 1, 1), isToken: true } as CardDefinition;
+// An ARTIFACT CREATURE — both types at once, which is what modular's
+// `artifactCreature` restriction reads (§3.110). The zoo's plain artifact and
+// plain Bear each satisfy only half of it, so without this the coverage check
+// would report an empty menu for the new member.
+const ARTIFACT_CREATURE: CardDefinition = {
+  ...creatureDef('zoo-artifact-creature', 2, 2),
+  types: ['artifact', 'creature'],
+} as CardDefinition;
 const INSTANT = spellDef('zoo-instant', 'instant', []);
 const SORCERY = spellDef('zoo-sorcery', 'sorcery', []);
 
@@ -179,6 +187,7 @@ function buildZoo(withProtectedCreature = false): GameState {
   placePermanent(state, BEAR, 'A');
   placePermanent(state, ANGEL, 'A');
   placePermanent(state, ARTIFACT, 'A');
+  placePermanent(state, ARTIFACT_CREATURE, 'A');
   placePermanent(state, ENCHANTMENT, 'A');
   placePermanent(state, LAND, 'A');
   placePermanent(state, WALKER, 'A');

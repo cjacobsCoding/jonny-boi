@@ -163,6 +163,9 @@ export type SoakMechanicId =
   | 'modal-cast'
   | 'flashback-cast'
   | 'graveyard-grant'
+  // §3.111
+  | 'graveyard-ability'
+  | 'graveyard-cast'
   | 'protection'
   | 'ward'
   | 'indestructible'
@@ -241,7 +244,12 @@ export type SoakMechanicId =
   // for both because they are one shape to the soak — the difference (face
   // down for a foretell cost / face up for free as a sorcery) lives in the
   // card grant the action records and in the cast that follows.
-  | 'cast-later';
+  | 'cast-later'
+  // §3.113 — CASCADE (CR 702.85) and RIPPLE (CR 702.60): a library pile and a
+  // free-cast window each. Storm has no id of its own: its whole observable
+  // behaviour is copies on the stack, which `spell-copy` already witnesses.
+  | 'cascade'
+  | 'ripple';
 
 /**
  * How a mechanic is proved to have HAPPENED.
@@ -455,6 +463,13 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     // table rather than into the anchored deck.
     enabledBy: (_c, t) => t.includes('"counterSpell"'),
     enablerBelongsToOpponent: true,
+    // A SEQUENCED witness across two seats: the anchored seat must cast one of
+    // its uncounterable spells while the opponent both HOLDS a counterspell and
+    // judges that spell worth countering. The 5,623-card pool (§3.118) made the
+    // grid's six attempts miss it on the observation scan's seed lane — the same
+    // shape token-copy hit, and the same remedy: the overtime lane, which only
+    // runs when the grid left the mechanic unfired.
+    extraAnchorAttempts: SOAK_SEQUENCED_EXTRA_ATTEMPTS,
   },
   { id: 'x-cost', label: '{X} costs — an X announced and paid', witnessKind: 'event', printedBy: hasKey('xCost') },
   { id: 'kicker', label: 'kicker — the optional cost offered at cast', witnessKind: 'event', printedBy: hasKey('kicker') },
@@ -467,6 +482,36 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     label: 'foretell / plot — a card exiled from hand to be cast on a later turn (CR 702.143, 702.170)',
     witnessKind: 'action',
     printedBy: (card) => hasKey('foretell')(card) || hasKey('plot')(card),
+  },
+  // §3.111 — the graveyard-casting family. Two witnesses because the two
+  // shapes are two different actions: an ability ACTIVATED from a graveyard
+  // (unearth/scavenge/embalm/eternalize/encore/return-to-hand) and a CAST from
+  // the graveyard by a non-flashback keyword (retrace/jump-start/escape); a
+  // flashback with a non-mana cost is still a flashback cast and rides that row.
+  {
+    id: 'graveyard-ability',
+    label: 'graveyard abilities — unearth / scavenge / embalm / eternalize / encore activated from a graveyard (CR 702.84a et al.)',
+    witnessKind: 'action',
+    printedBy: hasKey('graveyardAbilities'),
+  },
+  {
+    id: 'graveyard-cast',
+    label: 'graveyard casts — retrace / jump-start / escape cast from a graveyard (CR 702.81a, 702.133a, 702.138a)',
+    witnessKind: 'action',
+    printedBy: hasKey('graveyardCasts'),
+  },
+  // §3.113 — the library-pile windows, keyed on the cast trigger's keyword tag.
+  {
+    id: 'cascade',
+    label: 'cascade — a cast trigger exiled to a cheaper nonland card and opened its window (CR 702.85)',
+    witnessKind: 'event',
+    printedBy: (c) => c.castTriggers?.some((t) => t.keyword === 'cascade') === true,
+  },
+  {
+    id: 'ripple',
+    label: 'ripple — a reveal found a same-name card and opened its window (CR 702.60)',
+    witnessKind: 'event',
+    printedBy: (c) => c.castTriggers?.some((t) => t.keyword === 'ripple') === true,
   },
   {
     id: 'buyback',
@@ -835,6 +880,10 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
    * counter KIND instead.
    */
   counterAdded: null,
+  // §3.110 — a designation and a reveal are bookkeeping of mechanics the
+  // `counterAdded` / `zoneChange` events already attribute.
+  becameRenowned: null,
+  cardRevealed: null,
 
   // --- One event, one mechanic. ---------------------------------------------
   loyaltyChanged: 'planeswalker-loyalty',
@@ -873,6 +922,12 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   suspendDeclined: 'suspend',
   // §3.112 — the foretell/plot special action itself.
   cardExiledToCastLater: 'cast-later',
+  // §3.113 — a window opening is the strongest witness of each keyword; the
+  // bottoming happens for both (and for a cascade that found nothing), so it
+  // names neither.
+  cascadeWindowOpened: 'cascade',
+  rippleWindowOpened: 'ripple',
+  pileBottomed: null,
   madnessDeclined: 'madness',
   cardsMilled: 'mill',
   tokenCreated: 'token',

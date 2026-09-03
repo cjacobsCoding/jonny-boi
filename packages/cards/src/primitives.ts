@@ -90,6 +90,7 @@ import {
   isPlayerTarget,
   keywordsParam,
   manaValueOf,
+  millTopCards,
   movePermanentTo,
   otherPlayer,
   permanentById,
@@ -104,9 +105,12 @@ import { PREDEFINED_TOKEN_DEFS } from './predefined-tokens.js';
 import { COPY_PRIMITIVES } from './copy-primitives.js';
 import { UPKEEP_COST_PRIMITIVES } from './upkeep-cost-primitives.js';
 import { CAST_ALTERNATIVE_PRIMITIVES } from './cast-alternative-primitives.js';
+import { GRAVEYARD_CAST_PRIMITIVES } from './graveyard-cast-primitives.js';
 import { EXILE_UNTIL_LEAVES_PRIMITIVES } from './exile-until-leaves.js';
 import { TRIGGER_COPY_PRIMITIVES } from './trigger-copy-primitives.js';
 import { BLINK_PRIMITIVES } from './blink-primitives.js';
+import { COUNTER_KEYWORD_PRIMITIVES } from './counter-keyword-primitives.js';
+import { SPELL_COUNT_PRIMITIVES } from './spell-count-primitives.js';
 
 // --- the primitives ------------------------------------------------------------
 
@@ -463,8 +467,14 @@ export const createPredefinedToken: EffectPrimitive = (ctx) => {
   ctx.createTokens(def, count, undefined, ctx.params.tapped === true ? { tapped: true } : undefined);
 };
 
-export const makeToken: EffectPrimitive = (ctx) => {
-  const count = intParam(ctx, 'count', 1);
+/**
+ * The token DEFINITION a params bag describes — extracted from {@link makeToken}
+ * so every primitive that creates a printed token reads the descriptor the same
+ * way (rule 12). `makeToken` creates it; `livingWeaponGerm` creates it and then
+ * attaches its source to it. A second copy of this reader would eventually
+ * disagree about a colour or a subtype line and the bug would belong to neither.
+ */
+function tokenDefFromParams(ctx: EffectContext): CardDefinition {
   const power = intParam(ctx, 'power', 1);
   const toughness = intParam(ctx, 'toughness', 1);
   const name = strParam(ctx, 'name') ?? 'Token';
@@ -487,7 +497,7 @@ export const makeToken: EffectPrimitive = (ctx) => {
   // typal lord and a "sacrifice a Goblin" cost both select on.
   const declaredSubtypes = strArrayParam(ctx, 'subtypes');
   const subtypes = declaredSubtypes.length > 0 ? declaredSubtypes : [name];
-  const def: CardDefinition = {
+  return {
     id: `token:${[...types].join('-')}:${(colors ?? []).join('') || 'c'}:${subtypes.join('-')}:${power}/${toughness}`,
     name,
     types,
@@ -501,6 +511,35 @@ export const makeToken: EffectPrimitive = (ctx) => {
     ...(colors === undefined ? {} : { colors: colors as CardDefinition['colors'] }),
     ...(isEmptyKeywords(keywords) ? {} : { keywords }),
   };
+}
+
+/**
+ * LIVING WEAPON (CR 702.92a) — "When this Equipment enters, create a 0/0 black
+ * Phyrexian Germ creature token, then attach this to it."
+ *
+ * Composition, not a new system: the token comes from the same descriptor reader
+ * every printed token uses, and the attach is core's one attachment funnel
+ * (`ctx.attach` → `attachTo`), the same one an Equip ability and an Aura's
+ * resolution go through. So the Germ is a real object that dies to the 0/0
+ * state-based action the moment the Equipment stops buffing it, and the
+ * Equipment's own `whenIllegal: detach` rule applies to it unchanged.
+ *
+ * ⚠️ ORDER MATTERS, and the printed word is "then". The token must EXIST before
+ * the attach, because a 0/0 Germ with nothing attached is lethal to itself: if
+ * the attach ran first (or failed silently) the card would read as working while
+ * the Germ died immediately. `createTokens` returns the new ids for exactly this,
+ * and a run that made no token attaches nothing rather than attaching to a guess.
+ */
+export const livingWeaponGerm: EffectPrimitive = (ctx) => {
+  const made = ctx.createTokens(tokenDefFromParams(ctx), 1, undefined, tokenEntryParam(ctx));
+  const germ = made[0];
+  if (germ === undefined) return;
+  ctx.attach(germ);
+};
+
+export const makeToken: EffectPrimitive = (ctx) => {
+  const count = intParam(ctx, 'count', 1);
+  const def = tokenDefFromParams(ctx);
   // ONE call with the count, not a loop of ones: "create **two** 1/1 tokens" is
   // a single CR 614 event, so a doubler must see the 2 and replace it once (see
   // `EffectContext.createTokens`).
@@ -923,16 +962,8 @@ export const mill: EffectPrimitive = (ctx) => {
   const who = boolParam(ctx, 'self', false)
     ? ctx.controller
     : (firstPlayerTarget(ctx) ?? otherPlayer(ctx.controller));
-  const player = ctx.state.players[who];
-  // A library with fewer cards than the mill amount empties; the loss is the
-  // engine's decking rule on the next draw, not something this primitive forces.
-  const count = Math.min(amount, player.library.length);
-  for (let i = 0; i < count; i++) {
-    const card = player.library[0];
-    if (!card) break;
-    moveOwnedCard(ctx, who, card.instanceId, 'library', 'graveyard');
-  }
-  if (count > 0) ctx.emit({ type: 'cardsMilled', player: who, amount: count });
+  // §3.113 — through the one mill funnel `millThenReturn` also uses.
+  millTopCards(ctx, who, amount);
 };
 
 /**
@@ -1376,10 +1407,17 @@ function destroyPermanent(ctx: EffectContext, permanent: CardInstance): void {
   // from combat, clear damage) and is spent. Core's one helper, so a shield
   // covers a targeted Murder exactly as it covers a state-based death.
   if (consumeRegenerationShield(ctx.state, permanent, ctx.emit)) return;
-  movePermanentTo(ctx, permanent, 'graveyard');
+  // §3.110 — the death event goes out BEFORE the zone move, as the other two
+  // death funnels (`internal/sba.ts`, `sacrificePermanent`) already do. The
+  // order is load-bearing: a `dies` trigger that reads how many counters the
+  // creature HAD (undying, modular — CR 603.10a last-known information) takes
+  // its snapshot as this event is emitted, and `movePermanentTo` wipes the
+  // counters. Three funnels, one ordering — a Murdered Young Wolf must read
+  // its counters exactly as a Young Wolf that died in combat does.
   if (isCreature(permanent.def)) {
     ctx.emit({ type: 'creatureDied', instanceId: permanent.instanceId, name: permanent.def.name });
   }
+  movePermanentTo(ctx, permanent, 'graveyard');
 }
 
 /**
@@ -1773,6 +1811,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   grantKeywordToYoursUntilEndOfTurn,
   createPredefinedToken,
   makeToken,
+  livingWeaponGerm,
   createEmblem,
   persistReturn,
   destroyTarget,
@@ -1811,6 +1850,12 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   // let its owner cast it later"). Evoke and blitz reuse `sacrificeSelf` and
   // `drawCards`.
   ...CAST_ALTERNATIVE_PRIMITIVES,
+  // §3.111 — the graveyard-casting family's bodies.
+  ...GRAVEYARD_CAST_PRIMITIVES,
+  // §3.110 — the counter keyword family (`./counter-keyword-primitives`): the
+  // bodies of undying, modular, renown, bloodthirst, riot, unleash, devour,
+  // fabricate's Servos, amass, bolster, backup and explore.
+  ...COUNTER_KEYWORD_PRIMITIVES,
   // "Exile until this leaves the battlefield" (`./exile-until-leaves`) — the
   // O-Ring pair. Its own module because the LINK between exiler and exiled is
   // the whole mechanic: two of these on the battlefield must each return their
@@ -1826,6 +1871,11 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   // fires again, counters and Auras fall off, it comes back summoning-sick) is
   // that rule rather than anything the cards say.
   ...BLINK_PRIMITIVES,
+  // The spell-count family (`./spell-count-primitives`, DESIGN §3.113): the
+  // bodies of storm, cascade and ripple's cast triggers, learn, "mill, then put
+  // a card from among them into your hand", doubling power, and the
+  // reveal-the-top-card draw.
+  ...SPELL_COUNT_PRIMITIVES,
 });
 
 /** The set of primitive ids this package provides (for validation). */

@@ -113,6 +113,10 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
   suspendDeclined: { player: 'none', instanceId: 'id', name: 'none' },
   // §3.112 foretell / plot
   cardExiledToCastLater: { player: 'none', instanceId: 'id', method: 'none' },
+  // §3.113 — cascade / ripple windows and the pile they bottom.
+  cascadeWindowOpened: { player: 'none', instanceId: 'id', name: 'none' },
+  rippleWindowOpened: { player: 'none', instanceId: 'id', name: 'none' },
+  pileBottomed: { player: 'none', instanceIds: 'idList', random: 'none' },
   madnessDeclined: { player: 'none', instanceId: 'id', name: 'none' },
   stackResolved: { instanceId: 'id', name: 'none' },
   manaAdded: { player: 'none', color: 'none', amount: 'none', spendRestriction: 'none' },
@@ -152,6 +156,9 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
   gameOver: { winner: 'none' },
   actionRejected: { reason: 'none' },
   counterAdded: { instanceId: 'id', kind: 'none', amount: 'none' },
+  // §3.110 — the counter keyword family's two events.
+  becameRenowned: { instanceId: 'id', name: 'none' },
+  cardRevealed: { player: 'none', instanceId: 'id', name: 'none' },
   chosenAsEnters: { instanceId: 'id', name: 'none', subject: 'none', value: 'none', described: 'none' },
   regenerated: { instanceId: 'id', name: 'none' },
   triggerPutOnStack: { sourceInstanceId: 'id', controller: 'none', label: 'none' },
@@ -293,6 +300,15 @@ const NON_EVENT_INSTANCE_ID_FIELDS = [
    * watched — never a card in a hand or a library.
    */
   'triggeringInstances',
+  /**
+   * `TriggerAbout.instances` (§3.110) — the SAME objects `triggeringInstances`
+   * carries, handed to `interveningIfHolds` so evolve's "if that creature has
+   * greater power or toughness" can compare them. A second name for one fact
+   * rather than a second fact: the record is built at the two CR 603.4 check
+   * sites from the pending trigger's own `triggeringInstances`, never from a
+   * hidden zone, and it is read-only.
+   */
+  'instances',
   /** `ModeChoice.appliesToInstanceId` — which object a chosen mode applies to. */
   'appliesToInstanceId',
   /** `ReplacementQuery.recipientIs` — the object a replacement is asked about. */
@@ -317,6 +333,13 @@ const NON_EVENT_INSTANCE_ID_FIELDS = [
    * is paid at activation (CR 602.2b), before the ability is on the stack.
    */
   'costInstanceIds',
+  /**
+   * `MadnessWindow.pile` (§3.113) — the cards a cascade or ripple window took
+   * off the top of the library and will bottom when it closes. They sit
+   * face-up in exile while the window stands, so the ids are public; the
+   * scanner must still know the key holds them.
+   */
+  'pile',
   /** `GameState.nextInstanceId` — the id source. Not a card, but it IS an id. */
   'nextInstanceId',
 ] as const;

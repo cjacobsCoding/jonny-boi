@@ -365,6 +365,14 @@ interface ChoiceRequestBase {
   readonly prompt: string;
   /** Hint for AI answering; see {@link ChoiceValence}. Defaults to `'neutral'`. */
   readonly valence?: ChoiceValence;
+  /**
+   * §3.110 — the question's SHAPE, when a primitive asks one the valence alone
+   * cannot describe (devour's "sacrifice any number of creatures: N counters
+   * each"). Carried through to `PendingChoiceBase.context` unchanged; the
+   * engine's own entry-path contexts are stamped after normalisation and never
+   * come from a request.
+   */
+  readonly context?: 'devour' | 'explore' | 'riot' | 'unleash' | 'fabricate';
 }
 
 /**
@@ -562,7 +570,19 @@ interface PendingChoiceBase {
    * resolution behind it, and the one question that parks with the TURN itself
    * waiting on the answer.
    */
-  readonly context?: 'legendRule' | 'cleanupDiscard' | 'asEnters' | 'copyAsEnters';
+  // §3.110 — `'devour'` marks the as-enters "sacrifice any number of …" question
+  // (CR 702.82a): NOT an edict, so a pilot weighs each candidate against the
+  // counters it becomes rather than giving up its worst body.
+  readonly context?:
+    | 'legendRule'
+    | 'cleanupDiscard'
+    | 'asEnters'
+    | 'copyAsEnters'
+    | 'devour'
+    | 'explore'
+    | 'riot'
+    | 'unleash'
+    | 'fabricate';
   /**
    * The permanent an entry-path answer applies to: the one whose
    * `chosenAsEntered` an `'asEnters'` answer is written to, and the one a
@@ -832,6 +852,8 @@ export function normalizeChoiceRequest(request: ChoiceRequest, source: ChoiceSou
     valence,
     sourceInstanceId: source.sourceInstanceId,
     sourceName: source.sourceName,
+    // §3.110 — a request-declared shape rides through; absent stays absent.
+    ...(request.context !== undefined ? { context: request.context } : {}),
   };
   switch (request.kind) {
     case 'selectCards': {

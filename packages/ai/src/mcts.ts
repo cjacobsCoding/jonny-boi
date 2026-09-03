@@ -913,6 +913,8 @@ function describeAction(action: GameAction): string {
       return `foretell #${action.instanceId}`;
     case 'plotCard':
       return `plot #${action.instanceId}`;
+    case 'activateGraveyardAbility': // §3.111
+      return `activate from graveyard #${action.instanceId}.${action.abilityIndex}`;
     case 'tapForMana':
       return `tap #${action.instanceId}`;
     case 'declareAttackers':

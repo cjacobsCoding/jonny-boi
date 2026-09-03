@@ -219,6 +219,8 @@ export function describeAction(a: GameAction): string {
       return `foretellCard#${a.instanceId}`;
     case 'plotCard':
       return `plotCard#${a.instanceId}`;
+    case 'activateGraveyardAbility': // §3.111
+      return `activateGraveyardAbility#${a.instanceId}[${a.abilityIndex}]`;
     case 'playLand':
       return `playLand#${a.instanceId}`;
     case 'tapForMana':
@@ -264,6 +266,8 @@ function actionIdentity(a: GameAction): string {
       return `foretellCard|${a.player}|${a.instanceId}`;
     case 'plotCard':
       return `plotCard|${a.player}|${a.instanceId}`;
+    case 'activateGraveyardAbility': // §3.111
+      return `activateGraveyardAbility|${a.player}|${a.instanceId}|${a.abilityIndex}|${(a.targets ?? []).join(',')}|${(a.costInstanceIds ?? []).join(',')}`;
     case 'playLand':
       return `playLand|${a.player}|${a.instanceId}|${(a as { face?: string }).face ?? 'front'}`;
     case 'tapForMana':
@@ -392,6 +396,8 @@ function mechanicOfAction(
     case 'foretellCard':
     case 'plotCard':
       return 'cast-later';
+    case 'activateGraveyardAbility': // §3.111
+      return 'graveyard-ability';
     case 'activateAbility': {
       const def = defOf(action.instanceId);
       if (def && isPlaneswalker(def)) return 'planeswalker-loyalty';

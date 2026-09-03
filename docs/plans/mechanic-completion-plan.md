@@ -1,22 +1,16 @@
 # The mechanic-completion plan — what "all MTG mechanics functional" actually means
 
-**Status:** census complete, measured 2026-08-18 against the live Scryfall corpus.
-**Scope of this document:** define the finish line with numbers, rank the remaining
-work by how many real cards each blocker costs, and state honestly which cards are
-*not* worth chasing.
+**Status:** re-measured **2026-09-03** against the WHOLE printed corpus (32,276 paper
+non-joke cards). The August census below was measured against a 2,100-card most-played
+sample; §1 and §7 are current, and §2–§4 are kept as the historical snapshot they are
+(see the banner over §2).
+**Scope of this document:** define the finish line with numbers, say what kind of work
+actually moves it, and state honestly which cards are *not* worth chasing.
 
-Everything below comes from one measurement. The command was:
-
-```bash
-node packages/cards/scripts/coverage-audit.mjs \
-  --pages 12 --out UNSUPPORTED-BACKLOG.md --top 25 \
-  --json <scratch>/audit.json --save-corpus <scratch>/corpus.json
-```
-
-It fetched 2100 cards (Scryfall `legal:modern -is:funny`, EDHREC order — most-played
-first), compiled every one through the real compiler, and tallied what failed. The
-corpus is cached, so every derived number in this document is reproducible offline
-from that file with `--input`.
+§1 comes from one offline measurement over the cached full corpus — every command that
+reproduces it is in §7. The compiler is the only judge: a card counts as playable when
+every printed line on it compiles to something the engine genuinely runs, never when it
+compiles to an approximation.
 
 ---
 
@@ -24,14 +18,40 @@ from that file with `--input`.
 
 | | cards | share |
 |---|---:|---:|
-| Fully playable today | **193** | **9.2%** |
-| Blocked by at least one gap | 1907 | 90.8% |
+| Fully playable today | **5,623** | **17.4%** |
+| Blocked by at least one gap | 26,653 | 82.6% |
 | Compiler threw (a bug) | 0 | 0% |
 
-The previously recorded figure was 191/2100 (9.1%). **Nine engine systems landed in
-the last day and the playable count moved by two cards.** That is not a failure of
-those systems — it is the single most important structural fact about this project,
-and it changes what the remaining work should look like.
+Measured over all 32,276 printed paper non-joke cards, and every one of the 5,623 is
+SHIPPED — the pool the app carries is generated from this same verdict, so the number
+here and the number in the card browser cannot drift (§3.71, §3.118).
+
+**Of the 26,653 blocked cards, 18,022 (67.6%) are blocked by exactly ONE clause.**
+That is the shape of the remaining work: not a wall, a very long queue.
+
+### What actually moves the number, measured
+
+The August census recorded that nine engine systems moved the playable count by two
+cards, and concluded the bottleneck was the rule table rather than the engine. That
+conclusion was right, and the last two days put a number on the corollary: work picked
+by MECHANIC moves the count, and each family hit its prediction almost exactly.
+
+| family (DESIGN §) | cards |
+|---|---:|
+| the combat keyword family — exalted, rampage, flanking, landwalk, shadow, split second, myriad, attack requirements (§3.107) | **+267** |
+| upkeep costs and time counters — echo, cumulative upkeep, suspend, vanishing, fading (§3.106) | **+104** |
+| poison — infect, wither, toxic (§3.105) | **+57** |
+| the keyword anomalies — protection from types/subtypes, semicolon keyword lines, affinity subtypes (§3.109) | **+25** |
+| devoid (§3.104) | **+12** |
+
+⚠️ **And the counter-lesson, which is why the ranked queues below are historical.** The
+coverage audit ranks by the compiler’s REFUSAL MESSAGE, so its top row ("a block
+restriction whose SELECTOR…, blocks 730 cards") is one bucket holding 605 distinct
+printed sentences, the largest of which is 11 cards. `gap-clauses.mjs` measures that
+split; `keyword-gap-report.mjs` ranks by mechanic, and a mechanic is exactly one
+implementation, so its `sole` column is the one that predicts a delta. The full
+argument, with the table, is DESIGN §3.120 — read it before picking work off an audit
+row.
 
 ### Why nine systems bought two cards
 
@@ -68,6 +88,16 @@ Only 21 named engine systems remain in the entire most-played corpus, and they a
 for 8% of the card-blocks. The other 92% is text the compiler has no rule for yet.
 
 ---
+
+---
+
+> ⚠️ **§2, §3 and §4 below are the 2026-08-18 snapshot, kept for the record.** Every
+> number in them is against the 2,100-card most-played sample, and the queues they rank
+> are ranked by refusal message (see the warning at the end of §1). Most of their
+> "build" verdicts have since shipped — indestructible, blocking restrictions,
+> alternative costs, modal DFC faces, the `//` type, Kindred, landwalk, battles,
+> multikicker, typecycling, aftermath, emblems. Read them for the REASONING, which
+> still holds; take the numbers from §1 and the live tools in §7.
 
 ## 2. The one thing to do first: a bookkeeping bug worth 34 cards
 
@@ -346,8 +376,9 @@ they nearly double the playable corpus.
 "All mechanics functional" should mean **every mechanic a deck a user could actually
 build needs**. Stating that boundary explicitly rather than leaving it implied:
 
-Measured against the 2100-card corpus, the genuinely-unrepresentable set is
-**7 cards, 0.3%**:
+Measured against the 2,100-card sample this document was first written for, the
+genuinely-unrepresentable set was **7 cards, 0.3%** — the categories below. The
+full-corpus recount is at the end of this section.
 
 | category | blocked cards | why not |
 |---|---:|---|
@@ -364,107 +395,150 @@ wall.
 Three further categories are **deferred, not refused** — they are buildable and would be
 built if a user's deck needed one:
 
-- **Emblems** (7 cards, 0 sole) — real, but every emblem card also needs loyalty
-  templates, so emblems alone unblock nobody. Build them *with* wave 6, never before.
-- **Battles** (1 card) — a whole card type and a combat sub-phase for one corpus card
-  (`Invasion of Ikoria`). Revisit only if a battle appears in a deck someone imports.
+- ~~**Emblems**~~ and ~~**Battles**~~ — both were deferred here and both have since
+  SHIPPED (see DESIGN "battles, legends and emblems"): the reasoning was that each
+  unblocked nobody alone, and what changed is that their companion systems landed, so
+  the pairing became cheap. The lesson to keep is the pairing test, not the verdict.
 - **Multiplayer-only mechanics** (monarch, initiative, dungeons) — **0 cards in the
   corpus**. There is nothing to build; noted only so nobody goes looking.
 
-### The success criterion
+### The success criterion, at full-corpus scale (2026-09-03)
 
-> **Done** = every card in the top-2100 most-played modern corpus is either fully
-> playable or named in the 7-card "will not build" list above, and the audit says so.
->
-> That is **2093 / 2100 = 99.7%**. It is a real number against a real corpus, not a
-> feeling, and `coverage-audit.mjs` settles it on demand.
+The categories above were counted against the 2,100-card sample and came to 7 cards.
+Re-counted against all 32,276 printed cards, the out-of-scope set is larger but still
+small:
 
-A useful intermediate milestone: **50% of the corpus playable** puts essentially every
-mainstream constructed archetype within reach, and per §4 lands at the end of wave 6.
+| category | cards | why not |
+|---|---:|---|
+| commander / colour identity / partner | 385 | reads a **commander**, an object a 60-card 1v1 engine has no concept of |
+| multiplayer-only (monarch, initiative, dungeons, teammates, "each other player") | 244 | there is no third seat to model |
+| dice | 69 | a second RNG stream, against an engine whose value is comparable A/B runs |
+| coin flips | 67 | same reasoning |
+| outside the game / sideboard / wishes | 57 | needs a sideboard model *and* a tournament rule for "outside the game" |
+| **total** | **822** | **2.5% of the corpus** |
 
----
+> **Done** = every printed paper non-joke card is either fully playable or falls in the
+> 822 above. That is **31,454 / 32,276 = 97.5%**, and `keyword-gap-report.mjs` settles
+> the numerator on demand. Today: **5,623 (17.4%)**.
 
-## 6. The other half of the problem: the shipped pool
+⚠️ **822 is an UPPER bound on "never", and deliberately reported as one.** It is a
+text-pattern count, so it over-counts in two known ways. Some of these cards are
+already handled: **myriad** falls in the multiplayer bucket and §3.107 implements it
+exactly — with one opponent the ability has no other opponent and does nothing, which is
+the printed rule rather than an approximation. And some are merely deferred rather than
+refused: a card whose only multiplayer clause is vacuous in 1v1 is playable the moment
+someone writes the row. The honest reading is "at most 822 cards are out of scope, and
+the real never-list is smaller" — the opposite direction from the one that flatters the
+project, which is why it is stated this way.
 
-Coverage of the *corpus* is what the compiler can do. What a user can actually **touch**
-is a separate and much smaller thing, and it is currently the binding constraint on
-whether any of this is visible.
-
-The shipped pool is **191 cards** — 32 hand-authored (`packages/cards/data/pool.ts`) plus
-159 compiler-generated (`packages/cards/data/expanded-pool.ts`), built from the
-240 candidates in `packages/cards/data/expansion-candidates.json` against the 191-row
-`packages/data-tools/data/card-index.json`.
-
-Probing every shipped definition for each landed mechanic gives this:
-
-| landed mechanic | cards in the shipped pool |
-|---|---|
-| printed flashback | **0** |
-| `{X}` costs | **0** |
-| kicker / multikicker | **0** |
-| scry | **0** |
-| surveil | **0** |
-| mill | **0** |
-| ward | **0** |
-| protection | **0** |
-| `counterUnlessPaid` / `unlessPaidX` | **0** |
-| shockland (pay 2 life or enter tapped) | **0** |
-| planeswalkers | 1 (Liliana of the Veil) |
-| transform / DFC | 1 (Delver of Secrets) |
-| characteristic-defining P/T | 1 (Tarmogoyf) |
-| revolt / turn facts | 1 (Fatal Push) |
-| granted flashback | 1 (Snapcaster Mage) |
-| modal ("choose one") | 1 (Cryptic Command) |
-
-**Ten landed systems are unreachable for a player using the built-in pool, and six more
-exist on exactly one card each** — so a user cannot even build a deck *around* them at
-four copies of a single card. Work is landing that nobody can see. This is the concrete
-form of the "no inert features" problem.
-
-Note the causal link back to §2: the pool has **no scry card** *because of the sweep bug*.
-Opt, Preordain, Serum Visions and the Temples compile cleanly except for the phantom
-keyword report, so `build-expansion.ts` rejects them. Fixing §2 and re-running the
-expansion is the cheapest pool improvement available.
-
-### Shopping list for the pool-expansion branch
-
-**Do not do this here** — `packages/cards/data/pool.ts` is contested by in-flight
-branches. This is the precise list for whoever owns it.
-
-The gating step is `packages/data-tools/data/card-index.json`, which has only 191 rows.
-A card cannot enter the pool if it is not in the index, so the expansion needs a
-data-tools fetch **first**, then a re-run of `build-expansion.ts`.
-
-| mechanic | cards to add to the index (all compile today, or after §2) |
-|---|---|
-| scry | Opt, Preordain, Serum Visions, Temple of Epiphany + the Theros temple cycle, Castle Vantress, Zhalfirin Void |
-| surveil | Consider, Undercity Sewers, Underground Mortuary, Hedge Maze, Raucous Theater, Shadowy Backstreet |
-| mill | (3 corpus cards blocked only by the sweep — pick from the audit JSON) |
-| printed flashback | Think Twice, Lingering Souls, Deep Analysis, Faithless Looting |
-| `{X}` costs | Fireball, Hydroid Krasis-class X-spells, Walking Ballista |
-| kicker | Burst Lightning, Into the Roil, Wrath of the Skies |
-| planeswalkers | any walker whose three loyalty abilities compile — the compiler accepts them; the index simply has one |
-| transform / DFC | Delver is hand-authored only; add index rows for other Innistrad-style DFCs |
-| ward / protection | any modern-legal ward or protection creature — both systems are live and the pool has zero |
-| shocklands | Steam Vents, Blood Crypt and the rest of the cycle (the shockland system landed with no shockland in the pool) |
-
-**Rule of thumb for the pool owner:** the pool should contain at least a playset's worth
-of cards for every landed system, or the system is not deliverable. A system with zero
-pool cards is not done, regardless of test coverage.
+The structural claim the sample-scale version made survives the rescaling, which is the
+point worth keeping: **there is no large class of MTG mechanics this engine is unable to
+represent.** What is left is 18,022 cards that are ONE clause from playable (§1) — a
+grind, not a wall.
 
 ---
 
+## 6. The other half of the problem: the shipped pool — ✅ SOLVED
+
+This section used to be the most important one in the document. It recorded that the
+compiler could read thousands of cards while the app SHIPPED 191, so ten landed systems
+were unreachable for a player and six more existed on exactly one card each — "work is
+landing that nobody can see".
+
+**That constraint is gone.** The pool is generated from the corpus by the compiler's own
+`complete` verdict (§3.71, re-run at §3.118), so every card the engine can genuinely
+play is a card the app ships:
+
+| | cards |
+|---|---:|
+| the pool this section was written against | 191 |
+| after the candidate-list expansion (§3.71) | 5,097 |
+| after the keyword families of 2026-09-02 (§3.118) | **5,623** |
+
+Re-running this section's own probe — every shipped definition, asked for each landed
+mechanic — gives the numbers it was written to shame:
+
+| landed mechanic | was | shipped now |
+|---|---:|---:|
+| scry | 0 | 139 |
+| protection | 0 | 105 |
+| landwalk (§3.107) | — | 79 |
+| surveil | 0 | 76 |
+| mill | 0 | 69 |
+| printed flashback | 0 | 61 |
+| transform / DFC | 1 | 58 |
+| modal ("choose one") | 1 | 54 |
+| infect / wither / toxic (§3.105) | — | 54 |
+| echo / cumulative upkeep / vanishing / fading (§3.106) | — | 51 |
+| exalted / rampage / flanking (§3.107) | — | 40 |
+| kicker / multikicker | 0 | 28 |
+| `{X}` costs | 0 | 26 |
+| suspend (§3.106) | — | 24 |
+| characteristic-defining P/T | 1 | 23 |
+| shadow / split second (§3.107) | — | 21 |
+| ward | 0 | 15 |
+| devoid (§3.104) | — | 12 |
+| planeswalkers | 1 | 3 |
+
+Every entry clears the rule of thumb this section set — *"the pool should contain at
+least a playset's worth of cards for every landed system, or the system is not
+deliverable"* — except planeswalkers, which stands at three and is the one row still
+worth watching (loyalty abilities compile; the corpus's walkers mostly print a second
+line the rule table has not matched yet).
+
+The shopping list that used to live here is obsolete by construction: there is nothing
+to shop for, because the pipeline admits every card that compiles. What replaced the
+list is a pipeline invariant — **the index owns ids, the corpus owns everything else**
+(§3.71) — and a test that re-derives the web display index and fails if the committed
+bytes disagree.
+
+⚠️ **The next constraint on this axis is DELIVERY, not coverage.** Measured off the LIVE
+deploy at 5,651 cards with `npm run verify:deploy` — which fetches the deployed `index.html`,
+reads the content-hashed chunk names out of it and sizes each one:
+
+| live chunk | KB |
+|---|---:|
+| the display index | 5,821 |
+| the engine pool | 1,603 |
+| the app shell | 1,038 |
+| **total JavaScript** | **8,462** |
+
+The display index alone is ~1 KB per card, so the same design at 32,276 cards is a ~33 MB
+download — an install nobody finishes on a phone, and it is all precached. Sharding the index
+and loading the engine pool per deck is the open piece of work, and it has to land before the
+pool can grow much further.
+
+---
 ## 7. Reproducing every number here
 
 ```bash
-# The measurement (network — never in CI). Caches the corpus so re-runs are offline.
-node packages/cards/scripts/coverage-audit.mjs \
-  --pages 12 --out UNSUPPORTED-BACKLOG.md --top 25 \
-  --json audit.json --save-corpus corpus.json
+# The corpus (network, once). The whole printed paper non-joke pool, ~14 MB, gitignored.
+node packages/cards/scripts/fetch-full-corpus.mjs --out full-corpus.json
 
-# Every later re-run, offline and reproducible from the cached corpus:
-node packages/cards/scripts/coverage-audit.mjs --input corpus.json --top 0 --json audit.json
+# Everything below is OFFLINE against that file, and is what §1 reports.
+
+# how many cards compile, and which KEYWORDS block the rest (the work-picking tool)
+node packages/cards/scripts/keyword-gap-report.mjs full-corpus.json --top 60
+
+# the cards one keyword blocks, with full Oracle text (the ground truth for a brief)
+node packages/cards/scripts/keyword-cards.mjs full-corpus.json morph crew --all
+
+# the ranked backlog by refusal message, and the printed SHAPES behind any one row
+node packages/cards/scripts/coverage-audit.mjs --input full-corpus.json --top 25 \
+  --out UNSUPPORTED-BACKLOG.md --json audit.json
+node packages/cards/scripts/gap-clauses.mjs full-corpus.json "you may / choose" --top 40
+
+# one-clause-away shapes across all systems, and rules that match no real card
+node packages/cards/scripts/near-miss-report.mjs full-corpus.json --top 200
+node packages/cards/scripts/dead-rule-sweep.mjs full-corpus.json
+
+# the finish line: how many cards are out of scope, and why (an UPPER bound)
+node packages/cards/scripts/out-of-scope-report.mjs full-corpus.json
 ```
+
+⚠️ **Every one of these reads `dist`, not `src`.** Run `npm run build` between any
+source change and any measurement, reverts included — a stale `dist` has produced a
+confident, plausible number for a tree that no longer existed.
 
 `audit.json` carries the **complete** ranked tally — all 1686 gaps, each with its full
 blocked-card list and a `kind` of `system` or `template`. The Markdown backlog is a

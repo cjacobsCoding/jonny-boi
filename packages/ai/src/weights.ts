@@ -128,6 +128,20 @@ export interface HeuristicWeights {
   /** Score for any other castable spell we don't specifically understand. Above
    *  passing (so we do *something* with mana) but below targeted plays. */
   readonly genericSpellScore: number;
+  // --- the spell-count family (§3.113): cast triggers -----------------------
+  /**
+   * STORM: added to a storm spell's score once per spell already cast this
+   * turn — each is a copy the cast will make (CR 702.40a). So a Grapeshot sits
+   * in hand while the cheap spells go first and is cast when the count is
+   * highest, without a plan seam: the term simply grows as the turn goes on.
+   */
+  readonly stormPerSpellCast: number;
+  /**
+   * CASCADE: added once per printed instance — the expected worth of a free
+   * spell off the top, priced as a generic cast (`genericSpellScore`-sized)
+   * rather than as a specific card, because the top of the library is unknown.
+   */
+  readonly cascadePerInstance: number;
   /** Score for passing priority — the floor. Any positive-scoring play beats it. */
   readonly passScore: number;
 
@@ -176,6 +190,18 @@ export interface HeuristicWeights {
    *  mana is SPARE, i.e. paying still leaves this turn's best castable spell
    *  affordable. Below it the permanent is let go rather than the turn stranded. */
   readonly upkeepBillWorthPerMana: number;
+
+  // --- §3.111 the graveyard-casting family ------------------------------------
+  /** What ONE card of graveyard fuel costs when a keyword's rider spends it —
+   *  escape's "exile N other cards from your graveyard", and a flashback's
+   *  "tap N untapped creatures": a small per-card tempo/option price, so a
+   *  Glimpse of Freedom is escaped when the draw is worth more than five
+   *  points of yard, and not when the yard is what the deck runs on. */
+  readonly graveyardFuelCardValue: number;
+  /** What a "{cost}: Return ~ from your graveyard to your hand" activation is
+   *  worth, as a share of the card's own value: the card still has to be cast
+   *  again, so it is priced like a granted flashback rather than a free draw. */
+  readonly graveyardReturnShare: number;
 
   // --- attacking -----------------------------------------------------------
   /** Minimum net "value" (see attack evaluation) for an attack to be worth making.
@@ -601,6 +627,11 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
 
   // generic / fallback
   genericSpellScore: 25,
+  // §3.113 — a storm copy is worth about a generic cast; a cascade's free
+  // spell about one too. Both sit below `removalBaseScore` so a real removal
+  // spell in hand is still cast before a speculative storm.
+  stormPerSpellCast: 20,
+  cascadePerInstance: 25,
   passScore: 0,
 
   // cycling
@@ -619,6 +650,10 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // Four points per mana: a 3/3 (cardValue 22) pays an echo of {1}{G} (8) and a
   // Deranged Hermit (1/1, 14) declines its {3}{G}{G} (20) and keeps the squirrels.
   upkeepBillWorthPerMana: 4,
+
+  // §3.111 the graveyard-casting family
+  graveyardFuelCardValue: 1,
+  graveyardReturnShare: 0.5,
 
   // attacking
   attackValueThreshold: 1,

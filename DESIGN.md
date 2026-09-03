@@ -2682,6 +2682,426 @@ like). Lint 0 errors; pilot-bench 103–105 games/CPU-sec with
 decks — the family changes no decision on decks that print none of it). A single throughput number
 on this box is not a comparison (§3.107): three sibling agents were building at the time.
 
+### 3.118 The pool regenerated at 5,623 cards — and the soak's first catch of a parallel-merge defect — ✅ done
+
+Four families merged in one day (§3.105–§3.109 plus the §3.108 pilot), each gated green on its own
+branch, and the merged tree gated green too: **366 files / 19,683 tests / 0 failed**. The pool was
+then regenerated from the corpus the way §3.71 prescribes — one bulk file, one compile-and-emit path —
+and grew **5,097 → 5,623 shippable cards** (5,151 → 5,623 complete by the gap report, +472 this week).
+
+⚠️ **The soak found a bug none of the four gates could see.** Its very first run on the new pool
+reported *the engine rejected an offered action: Cryptic Annelid cannot block Glissa's Courier*. The
+pilot had proposed a block on an islandwalker whose defender controlled an Island. The cause was not in
+either branch but BETWEEN them: §3.107 gave the pilot's `canBlockByEvasion` mirror a `battlefield`
+parameter (landwalk reads the defender's lands) with a default of "no lands", and §3.108's gang-block
+search — written in a worktree that had never seen that parameter — called the mirror without it. Both
+branches were correct against the main they branched from; merged, a defaulted parameter silently
+turned a missing argument into a wrong answer. The engine then refused the whole declaration, which is
+exactly the §3.45 Black Knight shape: one illegal pair, every other block lost, the entire attack taken.
+
+**The class fix, not the instance:** the board is now a REQUIRED argument on `canBlockByEvasion`,
+`pickBlocker` and `addGangBlocks`, and the pilot's empty-board default is deleted, so the next caller
+that omits it stops `tsc` instead of losing games. `gang-block-landwalk.test.ts` pins the literal
+incident (an islandwalker into two 2/2s and an Island) with a CONTROL that shows the gang path ran;
+sabotaging the call back to an empty board reddens exactly that test.
+
+**What this says about the process.** Parallel families are the only way the keyword queue moves at
+this rate, and the merge is where they meet for the first time. The soak — randomised legal decks
+drawn from the WHOLE pool, every invariant checked on every action — is the gate that reads the merged
+tree as one program. It runs in the suite, and it is the reason the regenerated pool is committed only
+after it: a pool that ships a card the engine cannot play against another is worse than a smaller one.
+
+### 3.120 The backlog's top row is an aggregation artifact — measure the SHAPE, not the hint — ✅ done
+
+With the pool at 5,623 the committed backlog was re-measured over the whole printed corpus rather than
+a most-played sample, and its top entry now reads **"a block restriction whose SELECTOR compares
+creatures or reads effective P/T — blocks 730 cards"**. Read as a work item that is the biggest lever on
+the list. It is not one, and the reason matters more than the number.
+
+`coverage-audit.mjs` groups by the compiler's HINT STRING — the sentence the compiler writes when it
+refuses a clause. A hint like "a template the compiler does not recognize yet" is one bucket holding
+every sentence that fell through the same rule table, so its count measures the BUCKET, not the work.
+NEW `packages/cards/scripts/gap-clauses.mjs <corpus> "<system substring>"` splits one entry into the
+printed shapes behind it (numbers → N, mana symbols → {}), each with the cards it alone blocks:
+
+| backlog entry | cards | distinct shapes | cards per shape | largest single shape |
+|---|---:|---:|---:|---:|
+| a block restriction whose SELECTOR … | 730 | 605 | 1.2 | 11 (`Creatures with power less than ~'s power can't block it.`) |
+| a "you may / choose" template … | 5,640 | 5,184 | 1.1 | 45 (`You may choose not to untap ~ during your untap step.`) |
+| an "at the beginning of…" trigger BODY … | 916 | 880 | 1.0 | small |
+
+**So the top three rows of the backlog are 6,669 one-off sentences, not three systems.** Implementing
+the single largest shape in the largest bucket moves the playable count by at most 45 cards, and most
+shapes move it by one. Compare the keyword families of the last two days, where ONE implementation
+closed a whole column: combat keywords +267, upkeep costs +104, poison +57, the keyword anomalies +25.
+
+⚠️ **The correction to rule 11's own tooling, stated so the next contributor does not re-learn it.**
+`keyword-gap-report.mjs` ranks by MECHANIC, and a mechanic is exactly one implementation, so its `sole`
+column predicts the delta — every family this week hit its prediction almost exactly. The coverage
+audit ranks by a REFUSAL MESSAGE, which conflates "one system nobody built" with "a thousand sentences
+nobody templated". Both tools are honest about what they count; only one of them counts a work item.
+Pick keyword work from the keyword report, and use `gap-clauses.mjs` before touching any audit row, so
+a 730-card headline is never mistaken for a 730-card lever again.
+
+What the audit is still the right tool for: finding a row whose shapes CONCENTRATE. That is what a real
+template system looks like, and the sweep briefs are ordered by it.
+
+### 3.121 Living weapon — a keyword that is pure composition — ✅ done
+
+Picked off the §3.120 queue while the four wave-2 family branches were stalled, and picked because
+it needs no new engine concept at all. **Living weapon** (CR 702.92a) is "when this Equipment enters,
+create a 0/0 black Phyrexian Germ creature token, then attach this to it" — a token creation and an
+attach, both of which core already funnels.
+
+**Measured: 5,623 → 5,633 complete cards. +10, exactly the sole-blocked count.** Flayer Husk,
+Batterbone, Sickleslicer, Skinwing, Strandwalker, Necropouncer, Colossal Dreadmask, Mandibular Kite,
+Drossclaw and Bitterthorn. Nine more living-weapon cards wait on something else and come along when
+it closes.
+
+**It is a `KEYWORD_ABILITY_BUILDERS` row, because the printed line is the bare word** — the whole
+rule lives in reminder text, which is stripped before the rule table sees the clause. That is the
+same reason affinity, convoke and devoid are builders, and being one settles the Scryfall keyword
+sweep for free.
+
+⚠️ **THE ORDER IS THE WHOLE FEATURE, and the printed word is "then".** A 0/0 Germ is lethal to
+itself: it dies to CR 704.5f the instant state-based actions run. So an implementation that created
+the token and failed to attach — or attached before the token existed — would put a creature into
+play and kill it immediately, while `status === 'complete'` stayed green and the card looked
+implemented. `createTokens` already returns the new ids for exactly this reason, and a run that made
+no token attaches nothing rather than attaching to a guess. Every assertion in
+`living-weapon.test.ts` is therefore about the resulting BOARD: the Germ exists, it is a black
+Phyrexian Germ named by its subtype line (CR 111.3), the Equipment's `attachedTo` points at it, and
+it is 1/1 rather than dead. Sabotage-checked — deleting the attach call reddens all five tests,
+including the "exactly one Germ" one, because the unattached Germ leaves the battlefield.
+
+**One duplication removed on the way in.** `makeToken` read the printed token descriptor inline, so a
+second primitive that creates a token would have grown a second reader that eventually disagreed
+about a colour or a subtype line — with the bug belonging to neither (rule 12). `tokenDefFromParams`
+is now the one reader; `makeToken` creates what it returns, `livingWeaponGerm` creates it and then
+attaches its source to it.
+
+**No conformance entry, deliberately, and §3.106 set the precedent.** The manifest indexes rules CORE
+implements; this keyword adds no core rule, it composes two existing funnels. §3.106 made the same
+call for the upkeep BILLS ("cards-package primitives, pinned on the real printed cards"), so living
+weapon is pinned in `packages/cards` beside them rather than claiming a CR section core does not own.
+
+**Left undone, and named:** the pilot is not taught to value an Equipment higher for bringing its own
+body. It needs no decision — the trigger is mandatory — so nothing is illegal or blind, but the
+valuation is a behaviour change and this repo does not ship those without the two-seed A/B (§3.85).
+The three siblings in the same brief still report honestly: umbra armor needs a `destroy` replacement
+event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
+closed cost union.
+
+### 3.122 Soulshift — one rule-table row, eighteen cards — ✅ done
+
+The cheapest entry left on the §3.120 queue, and worth recording because of how little it needed.
+**Soulshift N** (CR 702.46a) is "when this creature dies, you may return target Spirit card with mana
+value N or less from your graveyard to your hand" — a dies trigger whose body is the same
+`returnFromGraveyard` choice every regrowth effect already uses, narrowed by two fields of the
+`CardFilter` that primitive already takes. **No primitive, no core change, no new event.** One pattern
+rule (the number is the payload, exactly as bushido and rampage are) plus one `TRIGGER_BACKED_KEYWORDS
+row so the Scryfall sweep does not report a keyword whose printed line just compiled.
+
+**Measured: 5,633 → 5,651 complete cards. +18, exactly the sole-blocked count.**
+
+⚠️ **The test asserts the FILTER, field by field, because that is the only thing that can be wrong.**
+A soulshift that lost its mana-value cap is a universal Spirit regrowth; one that lost the Spirit
+clause is a universal regrowth on a five-mana body. Both play STRONGER than printed, which biases an
+A/B verdict exactly as badly as playing weaker — and both would leave `status === 'complete'` green.
+So `soulshift.test.ts` pins the compiled params exactly, then kills a real Hundred-Talon Kami over a
+graveyard holding a 2-mana Spirit, a 4-mana Spirit, a 6-mana Spirit and a 1-mana Goblin, and asserts
+the engine offers exactly the first two. Sabotage-checked: deleting `maxManaValue` reddens four of the
+five tests.
+
+⚠️ **And one weak assertion the sabotage exposed, worth writing down.** The empty case first read
+`expect(state.pendingChoice).toBeUndefined()` and its sibling read `.toBeDefined()`. The engine parks
+`null` when nothing is asked — and **`null` IS defined**, so `toBeDefined()` would have passed on a
+soulshift that never fired at all. Truthiness is the right test for "did the game ask something", and
+the comment now says so where the next person will copy it.
+### 3.111 The graveyard-casting family — unearth, scavenge, retrace, embalm, eternalize, encore, escape, jump-start, and flashback's non-mana costs — ✅ done
+
+Picked as a FAMILY off the §3.102 queue: every printed ability that FUNCTIONS WHILE THE CARD IS IN A
+GRAVEYARD, measured with `keyword-cards.mjs` BEFORE building.
+
+| keyword / template | CR | sole | predicted | shipped |
+|---|---|---|---|---|
+| unearth {cost} | 702.84a | 23 | 23 | **23** |
+| scavenge {cost} | 702.96a | 11 | 11 | **11** |
+| retrace | 702.81a | 8 | 8 | **8** |
+| embalm {cost} | 702.128a | 6 | 6 | **6** |
+| eternalize {cost} | 702.129a | 7 | 7 | **5** (a discard rider, and a LAND that eternalizes) |
+| encore {cost} | 702.141a | 7 | 7 | **7** |
+| escape—{cost}, exile N | 702.138a | 6 | 6 | **6** |
+| jump-start | 702.133a | 6 | 6 | **6** |
+| flashback—Sacrifice/Tap … | 702.34a | 4 | 4 | **4** |
+| "{2}{B}: Return ~ from your graveyard to your hand" | 602.2 | 8 | 8 | **11** |
+| "when ~ is put into a graveyard from the battlefield, return it to its owner's hand" | 603.2 | 7 | 7 | **12** |
+| "return [up to two] target [instant or sorcery] cards from your graveyard to your hand" | — | 16 | 16 | **38** |
+
+**Measured: 5,623 → 5,769 complete cards. +146 against 78 predicted for the keywords** (76 landed;
+eternalize is the one that fell short). The rule tally accounts for 137 and the surplus is the three
+TEMPLATES, which the near-miss report counts per exact sentence while the rules read a shape — the
+graveyard-return rule now reads "up to N target" and "instant **or** sorcery" as well as the single
+type it always did, and the return-to-hand trigger reads Rancor's event as well as "dies".
+
+**TWO SHAPES, and the whole family is one of them.** Flashback was already the funnel for "cast this
+from your graveyard for an altered cost, then exile it", so the work was to make the funnel say which
+KEYWORD is casting: `graveyardCastOptionsOf` is the ONE accessor the offer loop, the cast path and the
+pilot all enumerate by (printed flashback, a granted one through `flashbackCostOf`, and the card's own
+`graveyardCasts`), and `GRAVEYARD_CAST_EXIT` is the closed table `spellLeaveDestination` reads — so
+retrace and escape go BACK to the graveyard (their entire design) while flashback and jump-start
+exile, and a retraced spell cannot become an exiled one by a clone dropping a field. The other shape
+is an ACTIVATED ability of a card in a graveyard: `CardDefinition.graveyardAbilities` +
+the `activateGraveyardAbility` action (which `ACTION_RULES` forced a manifest row for), its own action
+for the reason cycling has one — `activateAbility` starts by finding a permanent on the battlefield
+and judges {T} costs and summoning sickness, none of which a card in a graveyard has.
+
+**The non-mana costs are the additional-cost machinery, not a second cost model.** "Flashback—Sacrifice
+three creatures" (Dread Return), "—Tap three untapped white creatures you control" (Battle Screech)
+and retrace's/jump-start's discard are all `AdditionalCastCost`, paid by the same cast-time question,
+with two new closed kinds: `tap` (CR 602.2b — only UNTAPPED permanents qualify, and paying taps them
+rather than moving anything) and `exileFromGraveyard` (escape's fuel). `ADDITIONAL_COST_ZONE` is the
+one table the candidate list and the question's `fromZone` both read, so a sacrifice cannot look in a
+hand. A rider outside the table — "Flashback—{R}{R}, Discard X cards" (Conflagrate), "Escape—…, Exile
+any number of other cards with four or more card types among them" (Nethergoyf) — reports.
+
+⚠️ **Unearth's exile clause is a replacement on the OBJECT, asked by both leave funnels.** "If it would
+leave the battlefield, exile it instead of putting it anywhere else" (CR 702.84c) is
+`CardInstance.exileIfLeaves`, read through `leaveBattlefieldDestination` by core's `moveToZone` AND the
+cards package's `movePermanentTo` — exactly as madness's `discardDestination` is asked by both discard
+funnels, and for the same reason: a rule in one funnel only is a rule that depends on which primitive
+killed the creature. The clone trap fired here too and the test caught it: the flag rides the instance,
+so `cloneInstance` needs its own line or an unearthed Zombie dies to the graveyard one action boundary
+later and is unearthed again next turn.
+
+**Embalm and eternalize are the COPY seam, not new tokens.** `CopyExceptions` gained the four clauses
+those two print — a replaced colour, "no mana cost" (CR 202.1b, so the token's mana value is zero), and
+eternalize's 4/4 base P/T — applied in `applyCopyExceptions`, the one pure function every copy goes
+through, so an embalmed Sacred Cat is a white Zombie Cat that still has lifelink and copies as printed
+(CR 707.2: a card that died wearing counters copies without them). Encore is the same primitive with
+`perOpponent`: in a two-player game that is exactly ONE token, which is the printed count and not an
+approximation of it, and "attacks that opponent this turn if able" is the `mustAttack` grant because
+with one opponent there is nobody else it could attack.
+
+**Rancor needed an EVENT, and neither existing one was it.** "When ~ is put into a graveyard from the
+battlefield" is not `dies` (which is `creatureDied` and never fires for an Aura) and not `leaves`
+(which also fires on an exile or a bounce, and would return a Rancor that had been exiled).
+`putIntoGraveyardFromBattlefield` is a `TriggerEvent` with its row in `TRIGGER_EVENT_SOURCES` and in
+the prefilter's canonical table; the body is the same `returnSourceFromGraveyard` the "{cost}: Return ~
+from your graveyard to your hand" template runs, so the two cannot disagree about which hand it is.
+
+**The pilot plays all of it.** `bestGraveyardAbility` prices each ability by its KIND — the closed
+vocabulary core defines — because every body reads its SOURCE and the effect-value context carries
+none: an unearth or an encore buys ONE ATTACK (the Kiki-Jiki pricing, plus the creature's own ETB
+value, and nothing outside the precombat main where the attack has already happened), a scavenge is
+counters on the pilot's BEST attacker, an embalm/eternalize is the token's real body, a self-return is
+the card discounted by `graveyardReturnShare`. The graveyard CASTS ride the same `scoredSpellGoals`
+seam flashback does, with the keyword's rider PRICED against the spell — the cards the pilot's own loss
+policy will actually hand over (`cardValue`, cheapest first) for a discard or a sacrifice, and
+`graveyardFuelCardValue` per card for escape's yard and a tapped attacker — so a Flame Jab is retraced
+when the land it pitches is chaff and an Escape Bolt is escaped for lethal, not for value.
+
+⚠️ **Left out, and why.** *Eternalize with a discard rider* (Sinuous Striker) and *unearth priced in
+energy* (Salvation Colossus) are cost forms outside the closed tables. *Lazotep Archway* eternalizes a
+LAND into "a 4/4 black Zombie creature that loses all other card types" — a type REPLACEMENT
+`CopyExceptions` cannot say. *Nethergoyf*'s and *Lunar Hatchling*'s escape costs, and *Conflagrate*'s
+{X}-scaled discard, are riders the additional-cost shape cannot count. "This creature escapes with a
++1/+1 counter on it" is its own printed line and still reports on its own — the CAST compiles, so those
+cards wait on one clause rather than two.
+### 3.110 The counter keyword family — modular, undying, evolve, renown, bloodthirst, fabricate, unleash, backup, amass, riot, outlast, devour, bolster, afterlife, dethrone, explore — ✅ done
+
+Picked as a FAMILY off the §3.102 queue: every keyword and printed template whose whole payload is
+**+1/+1 counters placed by a keyword or a templated trigger**, measured with `keyword-cards.mjs`
+BEFORE building.
+
+| keyword | CR | sole | shipped | keyword | CR | sole | shipped |
+|---|---|---|---|---|---|---|---|
+| modular N | 702.43 | 14 | **12** | amass [type] N | **701.47** | 14 | **8** |
+| bloodthirst N | 702.54 | 14 | **13** | backup N | 702.165 | 12 | **11** |
+| undying | 702.93 | 13 | **13** | fabricate N | **702.123** | 12 | **12** |
+| renown N | 702.112 | 11 | **11** | unleash | 702.98 | 10 | **10** |
+| evolve | 702.100 | 8 | **8** | outlast {cost} | **702.107** | 8 | **8** |
+| devour [noun] N | 702.82 | 7 | **7** | riot | 702.136 | 6 | **6** |
+| afterlife N | 702.135 | 5 | **5** | dethrone | 702.105 | 5 | **5** |
+| bolster N | **701.39** | 4 | **2** | explore (template) | **701.44** | 15 | **15** |
+
+**Measured: 5,623 → 5,813 complete cards. +190** against 156 + ~52 predicted. Nine keywords landed
+exactly on their sole-blocked count; every shortfall is a printed form OUTSIDE a closed table, which
+reports rather than compiles — "Modular—Sunburst" and a LAND with modular (Power Depot: `dies` fires
+for creatures only), "Bloodthirst X", Thromok's squared devour, "Amass Elves", "Bolster X, where X
+is …", and a backup whose "following ability" is an activated one (Scorn-Blade Berserker).
+
+⚠️ **Four of the brief's rule numbers were wrong, and checking them found a fifth problem in the
+code.** `bolster` is 701.39 (not .37), `explore` 701.44 (not .42 — that is surveil, which this repo
+cites correctly elsewhere), `fabricate` 702.123 (702.122 is **crew**) and `outlast` 702.107 (702.108
+is **prowess**). Amass and bolster being 701.x at all is structural rather than a lookup — 701 is
+keyword ACTIONS, 702 keyword ABILITIES — and the brief's "bolster 702.111" collided with this repo's
+own long-standing `menace: '702.111'`, which is the contradiction that started the check.
+
+**Four new intervening-"if" kinds carry the family**, because in each case the printed condition is
+what makes the card fair, and CR 603.4 checks it twice:
+
+- `sourceDiedWithoutCounter` — undying's "if it had no +1/+1 counters on it". "Had" is LAST-KNOWN
+  information (CR 603.10a): the graveyard card's counters are already wiped, so the runtime
+  SNAPSHOTS the count as the death event is emitted and carries it as `triggeringAmount`. Opt-in per
+  condition (`TriggerCondition.snapshotsCounters`), so every other `dies` trigger is pushed
+  byte-for-byte as before. Modular's death half reads the same snapshot to know how many to move.
+- `triggeringCreatureLargerThanSource` — evolve's "greater power or toughness", both sides EFFECTIVE
+  (CR 702.100c). "That creature" rides as `triggeringInstances` through the opt-in `carriesSubject`.
+- `sourceNotRenowned` — renown's once-only designation, `CardInstance.renowned`. A DESIGNATION and
+  not a counter: nothing proliferates it, and it is lost with the object (CR 400.7).
+- `opponentHasMostLife` — dethrone, exact in a two-player game.
+
+⚠️ **A death-ordering bug the family exposed, fixed at the class.** Two of the three death funnels
+(`internal/sba.ts`, `sacrificePermanent`) emit `creatureDied` BEFORE the zone move; the cards
+package's `destroyPermanent` emitted it AFTER. Nothing had ever depended on the order — until a
+trigger needed the counters the move wipes, and a **Murdered** Young Wolf stopped coming back while
+one that died in combat did. Three funnels, one ordering, pinned by a test.
+
+⚠️ **A fourth entry funnel §3.106 missed.** `markBattlefieldEntry` was wired into core's three entry
+paths but not the cards package's `putOntoBattlefield`, so a **reanimated** Arcbound Worker (a 0/0
+that enters with a counter) arrived with none and died to a state-based action on arrival — exactly
+the shape §3.106 fixed for Blastoderm on the other three. Undying's own return travels that funnel,
+which is what made the fix load-bearing rather than tidy.
+
+⚠️ **Fabricate was a MODAL and should not have been.** The printed line is "you may put N +1/+1
+counters on it. **If you don't**, create N Servos" — a choice made as the ability RESOLVES, while a
+`ModalSpec` is chosen as it goes on the STACK (CR 603.3c). Both shapes offer the same two outcomes,
+which is why the modal looked faithful; what it did was lock the answer a full response window
+early. It is now one `fabricateChoice` primitive asking the printed question at resolution, and the
+test asserts `trigger.modal` is undefined so the shape cannot drift back.
+
+**Everything else is a row.** `KEYWORD_ABILITY_BUILDERS` gains the five argument-less members
+(undying, evolve, riot, unleash, dethrone); eight PATTERN rules carry the parametrised ones for
+bushido's reason (a builder takes no argument, and each of these carries a number, a cost or a noun);
+`TRIGGER_BACKED_KEYWORDS` gains four rows and a new `ACTIVATED_BACKED_KEYWORDS` twin carries outlast,
+whose evidence is a compiled activation rather than a trigger. Riot and unleash are ENTRY-SCRIPT
+questions beside "~ enters with N counters"; afterlife hands its body to the compiler as the Oracle
+sentence it stands for, so its Spirits come from the same token rule every printed token line uses.
+Unleash's "can't block as long as it has a +1/+1 counter" is `StaticAffects.onlySource` — the mirror
+of `excludeSource`, because an unscoped self-static hands the restriction to the whole team. Modular's
+death half needed one new `TargetRestriction`, `artifactCreature`: the printed line is a CONJUNCTION,
+and `artifactOrCreature` would let an Arcbound Ravager hand its counters to a Sol Ring.
+
+**The pilot plays it** (`ai/src/choices.ts`, `counter-keyword-pilot.test.ts`): riot takes haste only
+when the swing is PROFITABLE this turn (a tapped blocker deters nothing), unleash takes the counter
+while racing, devour feeds a body worth less than the counters it becomes, fabricate compares its two
+halves — and every counter-placing body is priced on ONE ruler (`counterStatValue`, the arithmetic
+`addCounters` already uses). ⚠️ Two of those answers come out as a CONSTANT on the default weights,
+and both say so rather than being tuned: **explore always keeps** (it only ever asks about a nonland,
+every nonland prices over the keep threshold, and this value model prices no graveyard synergy) and
+**fabricate always takes the Servos** (N 1/1 bodies price above 2N stat points — which is also how
+the mechanic plays). Each test proves the reader is a comparison by moving the one weight that
+separates the two answers, rather than asserting the constant.
+
+**Left out, and why:** **mentor** (8) needs a target restricted RELATIVE to the source — "attacking
+creature with lesser power" — and `TargetRestriction` is a flat string union read at 67 sites;
+**reinforce** (5) is a targeted activation from HAND, a zone only cycling reaches and cycling targets
+nothing; amass beyond the three printed Army types; the two "bolster X" forms; and modular on a land.
+All report.
+
+**Gate:** **369 files / 19,777 tests, 0 failed** (5 skipped), summed from PACKAGE-BY-PACKAGE runs
+with a single worker — core 86/1,183, cards 92/16,498, ai 47/512, sim 31/291, data-tools 7/83,
+protocol 2/27, apps/server 6/78, apps/web 98/1,105. A one-shot `vitest run` is not usable on this
+box right now: five agents exhausted the 7 GB, one attempt died with exit code 9 and no output, and
+two others silently DROPPED FILES — a sim run reported "29 files, 0 failed" where 31 exist, with
+`Worker exited unexpectedly` the only clue. Re-run alone, both were green (sim 31/291). That is the
+hazard TESTING.md warns about, met in the wild. Lint 0 errors; `build-card-index --check` clean.
+Pilot bench at parity — 162 → 163 games/sec (137 → 136 games/CPU-sec) with **identical outcomes**, A won 845/2000 in both
+runs, which is the honest reading for lock decks that print no counters.
+### 3.113 The spell-count family — storm, cascade, ripple, learn, investigate, and the scry/mill shapes that still reported — ✅ done
+
+Picked as a FAMILY off the measured keyword queue: every keyword whose rule is *"count the spells, or
+read off the top of the library"*, measured with `keyword-cards.mjs` BEFORE building.
+
+| keyword / shape | CR | sole | predicted | shipped |
+|---|---|---|---|---|
+| cascade (incl. "Cascade, cascade") | 702.85a | 19 | 19 | **19** |
+| mill — the printed SHAPES, not the verb | 701.17a | 18 | 18 | **9** |
+| storm | 702.40a | 15 | 15 | **15** |
+| scry — likewise the shapes | 701.22a | 10 | 10 | **4** |
+| heal (Scryfall's tag on regenerate's reminder text) | — | 9 | 9 | **9** |
+| learn | **701.48a** | 7 | 7 | **7** |
+| double (the POWER verb) | **701.10b** | 6 | 6 | **6** |
+| ripple 4 | 702.60a | 5 | 5 | **5** |
+| surveil — the shapes | 701.25a | 5 | 5 | **5** |
+| investigate N times | **701.16a** | 4 | 4 | **4** |
+| the loot template ("draw a card, then discard a card") | — | ~26 | ~26 | **~26** |
+
+**Measured: 5,623 → 5,768 complete cards. +145 against ~124 predicted.** The surplus is one
+class-level fix reaching outside the measured shapes (below); the shortfall on mill and scry is
+honest and itemised at the end.
+
+**Three keywords are ONE new seam: a trigger that functions on the STACK.** Storm, cascade and ripple
+are all "when you cast this spell, …", and `CardDefinition.triggers` could not carry them — the
+trigger collector walks the battlefield and the command zones on every emitted event, and adding the
+stack to that loop would tax the engine's hottest path for a mechanic most games never see. So
+`CardDefinition.castTriggers` is its own field and the CAST PATH pushes them itself, which is the road
+ward already takes (`pushWardTriggers`) and for the same reason: "you cast this" is a moment only the
+engine sees. One record per printed instance, so **"Cascade, cascade" is two triggers** (CR 702.85a);
+the body is a cards-package primitive handed over as data, exactly as a suspend tick is.
+
+**Storm's count is a turn fact with no bitmask.** `GameState.spellsCastThisTurn` sits beside
+`turnFactsA/B` — same feed point (`recordTurnFacts`, the one chokepoint every event passes), same
+lifetime (cleared as a turn begins), same optional shape so every state written before it reads zero.
+It is read ONCE, as the trigger is pushed, and rides the stack object as `triggeringAmount`, which is
+what makes CR 702.40a's "cast **before** it" exact: a spell cast in response to the trigger is not
+counted. A copy is not a cast (CR 707.10) and emits `spellCopied`, so copies never feed the count.
+
+**Cascade and ripple are the madness WINDOW with a pile.** The free cast is a window and not a
+standing permission for the reason §3.106 gave suspend: "you may cast it" is a decision made at that
+moment, and a permission would let a pilot hold the cascaded card for the perfect turn — a strictly
+better card than printed. `MadnessWindow.kind` gains two rows and `isFreeCastWindow` is the one closed
+table the cast path, the offer loop, the hotseat and the pilot all read, so "this window's cast pays
+nothing" has exactly one answer. The one genuinely new field is `MadnessWindow.pile`: the cards taken
+off the top, bottomed when the window closes **however it closes** — random order for cascade,
+revealed order for ripple — through two closers that are the only readers, so a cast and a decline
+cannot disagree. Ripple's chain re-opens the window on each same-name card in the pile.
+
+⚠️ **The revealed cards sit in EXILE while the window stands, and that is a stated cost, not a
+hidden one.** A ripple reveal leaves cards in the library in paper; this engine casts from hand,
+graveyard or exile and never from a library, and every seat plays a window through
+`castSpell fromZone: 'exile'`. Nothing can act while a window is open, so no card can read the
+library's size in between; the only trace is the replay's `zoneChange` pair.
+
+⚠️ **A CLASS of bug the family found, and the guard that pins it.** A parked question re-runs its
+effect ref FROM THE TOP with the answers replayed — so a primitive that MUTATES and then ASKS repeats
+its mutation on every re-entry. `millThenReturn` milled two, asked, and milled two more: three cards
+where Seed of Hope prints two. The ask now lives in a second ref (`enqueueEffects`, the seam modal
+spells use) with the milled ids baked into its params, and the graveyard count in
+`spell-count-family.test.ts` is the guard.
+
+**The surplus over prediction is the keyword sweep learning two more homes for a primitive.** It
+walked `effects`, `triggers`, `activated` and `statics` — not an attachment's granted abilities, nor a
+MODE's. So Oracle's Insight reported "Scry" one line after compiling a granted `{T}: Scry 1`, and
+Spellgyre reported "Surveil" with a compiled surveil mode. Two `visit` calls, and every keyword the
+sweep checks gained the same reach in one edit. `heal` is a row in the same evidence table: 33 corpus
+cards carry Scryfall's tag, 32 print regenerate and **none prints a Heal line of its own**, so the
+compiled regenerate IS the evidence.
+
+**The pilot plays what it decides.** Storm and cascade are automatic once cast, so the decision is
+WHICH spell and WHEN: `castTriggerBonus` adds `stormPerSpellCast` per spell already cast this turn and
+`cascadePerInstance` per printed cascade, at the one site every spell goal passes through. And a free
+window is AIMED — the engine offers an "any target" spell once with no targets (as the hand path
+does), so the pilot scores the exiled card and supplies the aim itself, rather than pointing a
+cascaded Bituminous Blast at its own creature.
+
+⚠️ **Left reporting, itemised.** MILL keeps 9 and SCRY 6, and both are nouns and tails outside the
+closed tables rather than the verb: "a land card **or Elf card**" (Roots of Wisdom), "an instant,
+sorcery, **or Faerie** card" (Free the Fae), a Squirrel rider (Cache Grab), "**Scry X**, where X is
+the amount of {S} spent" (Graven Lore) and "…the greatest mana value among permanents" (Ugin's
+Insight), and `{E}` energy (Glimmer of Genius). Each is a row or a system somebody else's measurement
+should pick. Also deliberately out: Beacon of Immortality's life-doubling (a different verb from CR
+701.10b's power doubling), Collective Inferno's "sources of the chosen type" (the replacement layer
+cannot read an as-enters naming), and a storm spell COUNTERED before its trigger resolves makes no
+copies — the rules still copy it, this plays weaker rather than stronger, and the primitive says so.
+
+**Gate:** the suite run package by package at one worker (the box was out of memory with five agents
+on it); lint 0 errors; `build-card-index.mjs --check` clean. Pilot bench INTERLEAVED, because a single
+number under this load is not a measurement (§3.107): branch point 93/98 games/CPU-sec against the
+family's 108/93/95/92, with **identical outcomes in every run** (A won 845/2000 in all six) — parity,
+which is what a family that adds one counter increment per cast should read.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded

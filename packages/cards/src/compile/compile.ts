@@ -124,6 +124,10 @@ const COST_ASSIST_KEYWORDS: ReadonlySet<string> = new Set(['convoke', 'improvise
  */
 const TRIGGER_BACKED_KEYWORDS: ReadonlySet<string> = new Set([
   'bushido',
+  // SOULSHIFT N (§3.122): a dies trigger labelled "Soulshift N", so a printed
+  // line the rule table matched is the evidence the sweep reads. A 'Soulshift X'
+  // form (none is printed) would compile no trigger and still report.
+  'soulshift',
   // RAMPAGE N (CR 702.23a, DESIGN §3.107): the same shape as bushido — the
   // number is the whole payload, so it is a pattern rule labelled "Rampage N".
   'rampage',
@@ -136,7 +140,26 @@ const TRIGGER_BACKED_KEYWORDS: ReadonlySet<string> = new Set([
   'cumulative upkeep',
   'vanishing',
   'fading',
+  // §3.110 — the counter keyword family's PARAMETRISED members, each a pattern
+  // rule whose trigger label starts with the keyword ("Modular 2", "Renown 1",
+  // "Fabricate 2", "Backup 1", "Afterlife 2"). The argument-less members
+  // (undying, evolve, riot, unleash, dethrone) are `KEYWORD_ABILITY_BUILDERS`
+  // rows and need no evidence here; a form outside the table ("Modular—
+  // Sunburst") compiles no trigger and reports through its own line.
+  'modular',
+  'renown',
+  'backup',
+  'afterlife',
 ]);
+
+/**
+ * §3.110 — a keyword whose whole implementation is an ACTIVATED ability the
+ * printed line compiled (outlast: "{cost}, {T}: put a +1/+1 counter on this
+ * creature. Activate only as a sorcery"). The evidence is an activated ability
+ * whose label starts with the keyword — the activated-side twin of
+ * {@link TRIGGER_BACKED_KEYWORDS}, and a table for the same reason.
+ */
+const ACTIVATED_BACKED_KEYWORDS: ReadonlySet<string> = new Set(['outlast']);
 
 /**
  * Scryfall's tag for EVERY landwalk printing is the bare word "Landwalk" beside
@@ -183,10 +206,45 @@ const ALTERNATIVE_COST_KEYWORDS: ReadonlySet<string> = new Set(ALTERNATIVE_COST_
  */
 const HAND_ABILITY_KEYWORDS: ReadonlySet<string> = new Set(['channel', 'bloodrush', 'transmute']);
 
-const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freeze({
+/**
+ * §3.111 — Scryfall's names for the GRAVEYARD-ACTIVATED keywords, each mapped
+ * to the `GraveyardAbilityKind` its printed line compiles into. Evidence-based
+ * like every guard here: a line the closed cost table could not read
+ * ("Unearth—Pay eight {E}") compiles no ability of that kind and the keyword
+ * still reports through the line's own `missing` entry.
+ */
+const GRAVEYARD_ABILITY_KEYWORDS: Readonly<Record<string, import('@jonny-boi/core').GraveyardAbilityKind>> =
+  Object.freeze({
+    unearth: 'unearth',
+    scavenge: 'scavenge',
+    embalm: 'embalm',
+    eternalize: 'eternalize',
+    encore: 'encore',
+  });
+
+/** §3.111 — the same table for the GRAVEYARD-CAST keywords (`GraveyardCastKind`). */
+const GRAVEYARD_CAST_KEYWORDS: Readonly<Record<string, import('@jonny-boi/core').GraveyardCastKind>> = Object.freeze({
+  retrace: 'retrace',
+  'jump-start': 'jumpStart',
+  // Scryfall tags every jump-start card with BOTH "Jump-start" and a phantom
+  // "Jump" (Direct Current: `["Jump","Jump-start"]`). No such keyword exists;
+  // it is the same printed line, so the same compiled cast is its evidence —
+  // the §3.109 shape (a tag the engine HAS was still blocking cards), one row.
+  jump: 'jumpStart',
+  escape: 'escape',
+});
+
+
+const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string | readonly string[]>> = Object.freeze({
   scry: 'scry',
   surveil: 'surveil',
-  mill: 'mill',
+  // §3.113 — "from among the milled cards" mills through its own primitive
+  // (the same funnel), so either is the evidence the line compiled.
+  mill: ['mill', 'millThenReturn'],
+  // §3.113 — Scryfall tags "Learn" and "Double" (the power-doubling verb, CR
+  // 701.10b — the damage-doubling replacement is `SCALING_KEYWORDS`' guard).
+  learn: 'learn',
+  double: 'doublePower',
   // Scryfall tags a card "Treasure" / "Food" / "Investigate" when its text
   // creates the predefined token; the compiled evidence is the lookup
   // primitive. A wording the create rule did not match compiles none and
@@ -195,10 +253,38 @@ const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freez
   food: 'createPredefinedToken',
   investigate: 'createPredefinedToken',
   proliferate: 'proliferate',
+  // §3.110 — the counter keyword family's ACTION and ENTRY-SCRIPT members:
+  // amass (CR 701.47) and bolster (701.39) are keyword actions printed as
+  // spell text, explore (701.44) is a trigger body, and bloodthirst (702.54),
+  // devour (702.82), riot (702.136) and unleash (702.98) compile to the
+  // permanent's own entry script. Same evidence contract: a form the rule table
+  // could not read ("Bloodthirst X", "Devour X") compiles no primitive and
+  // reports through its own line.
+  amass: 'amass',
+  bolster: 'bolster',
+  explore: 'explore',
+  bloodthirst: 'bloodthirstCounters',
+  devour: 'devourChoice',
+  fabricate: 'fabricateChoice',
   // Scryfall tags the card "Regenerate"; the compiled evidence is the shield
-  // primitive the printed ability built (CR 701.15).
+  // primitive the printed ability built (CR 701.19).
   regenerate: 'regenerate',
+  // §3.113 — Scryfall ALSO tags every regenerate card "Heal", after the word in
+  // its reminder text ("…and heal all damage on it"). Measured over the whole
+  // corpus: 33 cards carry the tag, 32 print regenerate, and NONE prints a
+  // "Heal" line of its own — so the compiled regenerate is the evidence, and a
+  // real Heal keyword line, should one ever be printed, compiles none and
+  // still reports through its own missing entry.
+  heal: 'regenerate',
 });
+
+/**
+ * §3.113 — the keywords whose printed line compiles to a CAST TRIGGER
+ * (`CardDefinition.castTriggers`): storm, cascade, ripple. The sweep's
+ * evidence is a trigger tagged with the keyword, the same evidence-based
+ * contract as every guard above.
+ */
+const CAST_TRIGGER_KEYWORDS: ReadonlySet<string> = new Set(['storm', 'cascade', 'ripple']);
 
 /**
  * Every effect-primitive name reachable in a compiled assembly.
@@ -228,6 +314,13 @@ function compiledPrimitives(assembly: Assembly): ReadonlySet<string> {
   visit(assembly.triggers);
   visit(assembly.activated);
   visit(assembly.statics);
+  // §3.113 — two more homes a primitive can have, found by the sweep reporting
+  // "Scry" on Oracle's Insight ("Enchanted creature has '{T}: Scry 1, then draw
+  // a card.'") and "Surveil" on Spellgyre (a MODE prints it): the granted
+  // ability lives on the attachment's modification, and a mode's effects live
+  // on the modal spec. Both compiled; neither was walked.
+  visit(assembly.attachmentModifies);
+  visit(assembly.modal);
   return found;
 }
 
@@ -433,6 +526,13 @@ interface Assembly {
   flashbackXCost?: number;
   /** The "Pay N life" rider on a flashback cost. */
   flashbackLifeCost?: number;
+  // --- §3.111 the graveyard-casting family --------------------------------------
+  /** A non-mana flashback cost, once a "Flashback—Sacrifice …" / "—Tap …" line compiles. */
+  flashbackAdditionalCost?: import('@jonny-boi/core').AdditionalCastCost;
+  /** Retrace / jump-start / escape, accumulated (created on first use). */
+  graveyardCasts?: import('@jonny-boi/core').GraveyardCastAbility[];
+  /** Unearth / scavenge / embalm / eternalize / encore / the return template, accumulated. */
+  graveyardAbilities?: import('@jonny-boi/core').GraveyardAbility[];
   /** Cycling abilities, accumulated — a card may print cycling AND landcycling. */
   readonly cycling: import('@jonny-boi/core').CyclingAbility[];
   /** The printed buyback cost, once a "Buyback {…}" line compiles. */
@@ -450,6 +550,8 @@ interface Assembly {
   foretell?: ManaCost;
   /** The printed "Plot {cost}", once a line compiles it. */
   plot?: ManaCost;
+  /** §3.113 — the printed cast triggers (storm / cascade / ripple), accumulated. */
+  castTriggers?: import('@jonny-boi/core').CastTriggeredAbility[];
   /** §3.106 — counters the permanent enters with (vanishing / fading), accumulated. */
   readonly entersWithCounters: import('@jonny-boi/core').EnteringCounters[];
   /** The formula behind a `*` P/T box, once a line compiles one. */
@@ -538,12 +640,23 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.entwine) assembly.entwine = contribution.entwine;
   if (contribution.foretell) assembly.foretell = contribution.foretell;
   if (contribution.plot) assembly.plot = contribution.plot;
+  // §3.113 — accumulated: "Cascade, cascade" is two triggers (CR 702.85a per instance).
+  if (contribution.castTriggers) (assembly.castTriggers ??= []).push(...contribution.castTriggers);
   if (contribution.entersWithCounters) assembly.entersWithCounters.push(...contribution.entersWithCounters);
   if (contribution.characteristicPT) assembly.characteristicPT = contribution.characteristicPT;
   if (contribution.flashback !== undefined) assembly.flashback = contribution.flashback;
   if (contribution.flashbackXCost !== undefined) assembly.flashbackXCost = contribution.flashbackXCost;
   if (contribution.flashbackLifeCost !== undefined) {
     assembly.flashbackLifeCost = contribution.flashbackLifeCost;
+  }
+  // §3.111 — the graveyard-casting family. Lists are created on first use so
+  // the ordinary card's assembly keeps the shape it had.
+  if (contribution.flashbackAdditionalCost !== undefined) {
+    assembly.flashbackAdditionalCost = contribution.flashbackAdditionalCost;
+  }
+  if (contribution.graveyardCasts) (assembly.graveyardCasts ??= []).push(...contribution.graveyardCasts);
+  if (contribution.graveyardAbilities) {
+    (assembly.graveyardAbilities ??= []).push(...contribution.graveyardAbilities);
   }
   if (contribution.changeling) assembly.changeling = true;
   if (contribution.colorless) assembly.colorless = true;
@@ -1422,12 +1535,27 @@ export function compileCard(card: CompilableCard): CompileResult {
     // not match compiles no primitive and still reports through its own `missing`
     // entry (the scry/mill template hints).
     const backingPrimitive = PRIMITIVE_BACKED_KEYWORDS[word];
-    if (backingPrimitive !== undefined && primitivesCompiled.has(backingPrimitive)) continue;
+    if (
+      backingPrimitive !== undefined &&
+      (typeof backingPrimitive === 'string'
+        ? primitivesCompiled.has(backingPrimitive)
+        : backingPrimitive.some((primitive) => primitivesCompiled.has(primitive)))
+    ) {
+      continue;
+    }
     // A keyword whose implementation IS a triggered ability: the evidence is a
     // compiled trigger labelled with the keyword (see TRIGGER_BACKED_KEYWORDS).
     if (
       TRIGGER_BACKED_KEYWORDS.has(word) &&
       assembly.triggers.some((t) => t.label?.toLowerCase().startsWith(word))
+    ) {
+      continue;
+    }
+    // §3.110 — a keyword whose implementation IS an activated ability (outlast):
+    // the evidence is a compiled activation labelled with the keyword.
+    if (
+      ACTIVATED_BACKED_KEYWORDS.has(word) &&
+      assembly.activated.some((a) => a.label.toLowerCase().startsWith(word))
     ) {
       continue;
     }
@@ -1467,6 +1595,23 @@ export function compileCard(card: CompilableCard): CompileResult {
     if (COST_ASSIST_KEYWORDS.has(word) && assembly.costAssist !== undefined) continue;
     if (word === 'buyback' && assembly.buyback !== undefined) continue;
     if (word === 'madness' && assembly.madness !== undefined) continue;
+    // §3.111 — the graveyard-casting family: the evidence is a compiled
+    // ability/cast OF THAT KIND (see the two tables), never the keyword's
+    // presence. "Retrace" and "Jump-start" are builders and never reach here.
+    const graveyardAbilityKind = GRAVEYARD_ABILITY_KEYWORDS[word];
+    if (
+      graveyardAbilityKind !== undefined &&
+      assembly.graveyardAbilities?.some((ability) => ability.kind === graveyardAbilityKind) === true
+    ) {
+      continue;
+    }
+    const graveyardCastKind = GRAVEYARD_CAST_KEYWORDS[word];
+    if (
+      graveyardCastKind !== undefined &&
+      assembly.graveyardCasts?.some((cast) => cast.kind === graveyardCastKind) === true
+    ) {
+      continue;
+    }
     // §3.106 — same shape as madness: the printed "Suspend N—{…}" line compiled
     // into `assembly.suspend`; a "Suspend X" line leaves it unset and reports.
     if (word === 'suspend' && assembly.suspend !== undefined) continue;
@@ -1482,6 +1627,10 @@ export function compileCard(card: CompilableCard): CompileResult {
     // activated ability (CR 702.53a) — all three compile into the from-hand
     // discard-activation list beside cycling, tagged with their kind.
     if (HAND_ABILITY_KEYWORDS.has(word) && assembly.cycling.some((ability) => ability.kind === word)) continue;
+    // §3.113 — storm / cascade / ripple: the evidence is a compiled CAST
+    // TRIGGER tagged with the keyword. Keyed on the tag, not the label, so a
+    // "Ripple 4" line that did not compile leaves no trigger and still reports.
+    if (CAST_TRIGGER_KEYWORDS.has(word) && assembly.castTriggers?.some((t) => t.keyword === word)) continue;
     // An ABILITY WORD (Revolt, Morbid, …) is a label, not an ability — CR
     // 207.2c. It is skipped only when the line it labels actually compiled;
     // a line that failed put its own text (word included) into `missing`, so
@@ -1648,9 +1797,23 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(assembly.entwine ? { entwine: assembly.entwine } : {}),
     ...(assembly.foretell ? { foretell: assembly.foretell } : {}),
     ...(assembly.plot ? { plot: assembly.plot } : {}),
+    // §3.113
+    ...(assembly.castTriggers !== undefined && assembly.castTriggers.length > 0
+      ? { castTriggers: assembly.castTriggers }
+      : {}),
     ...(assembly.entersWithCounters.length > 0 ? { entersWithCounters: assembly.entersWithCounters } : {}),
     ...(assembly.flashback !== undefined ? { flashback: assembly.flashback } : {}),
     ...(assembly.flashbackXCost !== undefined ? { flashbackXCost: assembly.flashbackXCost } : {}),
+    // §3.111
+    ...(assembly.flashbackAdditionalCost !== undefined
+      ? { flashbackAdditionalCost: assembly.flashbackAdditionalCost }
+      : {}),
+    ...(assembly.graveyardCasts !== undefined && assembly.graveyardCasts.length > 0
+      ? { graveyardCasts: assembly.graveyardCasts }
+      : {}),
+    ...(assembly.graveyardAbilities !== undefined && assembly.graveyardAbilities.length > 0
+      ? { graveyardAbilities: assembly.graveyardAbilities }
+      : {}),
     ...(assembly.flashbackLifeCost !== undefined
       ? { flashbackLifeCost: assembly.flashbackLifeCost }
       : {}),

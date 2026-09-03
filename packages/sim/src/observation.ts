@@ -325,6 +325,12 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // and names no card (a foretold card is face down); the `zoneChange` that
   // carries the id is judged by its own row above.
   cardExiledToCastLater: 'public',
+  // §3.113 — cascade exiles face-up and ripple reveals: every card in a pile is
+  // shown to the table before the window opens (its `zoneChange` into exile is
+  // public), and the bottoming names only cards the table has just seen.
+  cascadeWindowOpened: 'public',
+  rippleWindowOpened: 'public',
+  pileBottomed: 'public',
   effectApplied: 'public',
   effectUnsupported: 'public',
   attackersDeclared: 'public',
@@ -363,6 +369,10 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // game information. Kept so a belief model cannot silently mis-count plies.
   actionRejected: 'public',
   counterAdded: 'public',
+  // §3.110 — a renown designation is board state; a REVEAL is, by definition,
+  // the card shown to the table (explore's top card, CR 701.44a).
+  becameRenowned: 'public',
+  cardRevealed: 'public',
   /*
    * THE NAMED VALUE IS PUBLIC, and this one is worth being deliberate about
    * because it sits next to three redacted choice events.

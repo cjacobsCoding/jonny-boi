@@ -81,9 +81,14 @@ import {
   modeById,
   nextUnaimedPick,
   opponentOf,
+  // §3.110 — the counter keyword family's board readings.
+  aggregateFor,
+  effectivePower,
+  effectiveToughness,
+  isCreature,
 } from '@jonny-boi/core';
 import { cardValue, cardValueContext, findInstance } from './card-value.js';
-import { modeEffectsFor, resolutionValueContext, valueOfEffects, valueOfMode } from './effect-value.js';
+import { modeEffectsFor, resolutionValueContext, valueOfEffect, valueOfEffects, valueOfMode } from './effect-value.js';
 import type { HeuristicWeights } from './weights.js';
 import { totalAvailableMana } from './land-sequencing.js';
 
@@ -134,7 +139,7 @@ export function answerChoiceHeuristically(
     case 'chooseModes':
       return answerAction(choice, answerChooseModes(state, choice, weights));
     case 'confirm':
-      return answerAction(choice, answerConfirm(choice, weights));
+      return answerAction(choice, answerConfirm(state, choice, weights));
     case 'payMana':
       return answerAction(choice, answerPayMana(state, choice, weights));
     case 'payLife':
@@ -311,6 +316,9 @@ function answerSelectCards(state: GameState, choice: SelectCardsChoice, weights:
   // "which permanent should I BE?", and the ruler is the copiable values, not
   // the board's. See `answerCopyAsEnters`.
   if (choice.context === 'copyAsEnters') return answerCopyAsEnters(state, choice, weights);
+  // §3.110 — DEVOUR's "sacrifice any number of …" is not an edict either: each
+  // candidate is weighed against the counters it becomes. See `devourPicks`.
+  if (choice.context === 'devour') return answerDevour(state, choice, weights);
 
   // Score every candidate, then sort BEST FIRST. `ordered` choices use exactly this
   // order (first = the position that comes up soonest — top of library, drawn
@@ -760,7 +768,11 @@ const NO_MODE_VALUE = 0;
  * because an optional clause printed on a card you chose to cast is normally the
  * upside you cast it for.
  */
-function answerConfirm(choice: ConfirmChoice, weights: HeuristicWeights): ChoiceAnswer {
+function answerConfirm(state: GameState, choice: ConfirmChoice, weights: HeuristicWeights): ChoiceAnswer {
+  // §3.110 — the counter keyword family's three yes/no questions each have a
+  // board reading of their own; see `answerCounterKeywordConfirm`.
+  const family = answerCounterKeywordConfirm(state, choice, weights);
+  if (family !== undefined) return family;
   if (choice.valence === 'gain') return { kind: 'confirm', yes: true };
   if (choice.valence === 'loss') return { kind: 'confirm', yes: false };
   return { kind: 'confirm', yes: weights.choiceConfirmNeutralYes };
@@ -874,4 +886,162 @@ function shouldPayUpkeepBill(
   if (available - bill >= bestCastable) return true;
   const worth = cardValue(stake, weights, cardValueContext(state));
   return worth >= bill * weights.upkeepBillWorthPerMana;
+}
+
+// --- §3.110 the counter keyword family -------------------------------------------------
+//
+// Four questions the family asks that a valence cannot answer, each read off the
+// board the way a player reads it:
+//   - RIOT: haste when the creature can attack PROFITABLY this turn (it is our
+//     precombat main and no untapped opposing creature both survives it and
+//     kills it), else the counter — a permanent stat beats a haste that may
+//     never be used;
+//   - UNLEASH: the counter when we are RACING (our side of the board is at
+//     least the opponent's, so the creature will attack rather than block);
+//   - EXPLORE: the surveil judgement one card wide — bin the revealed card
+//     when it is worth less than `scryKeepValueThreshold` says a card must be
+//     to stay on top;
+//   - DEVOUR: feed every creature worth less than the counters it becomes.
+
+/**
+ * The permanent a family question is about: the source is a SPELL resolving
+ * onto the battlefield (riot, unleash — `findInstance` does not look at the
+ * stack) or a creature already there (explore).
+ */
+function questionSubject(state: GameState, sourceInstanceId: InstanceId): CardInstance | undefined {
+  const onStack = state.stack.find((o) => o.kind === 'spell' && o.instanceId === sourceInstanceId);
+  if (onStack?.kind === 'spell') return onStack.card;
+  return findInstance(state, sourceInstanceId);
+}
+
+/** Whether `attacker` would connect or trade UP against every untapped blocker `defender` has. */
+function attacksProfitably(state: GameState, attacker: CardInstance, defender: PlayerId): boolean {
+  const power = attacker.def.power ?? 0;
+  const toughness = attacker.def.toughness ?? 0;
+  for (const permanent of state.battlefield) {
+    if (permanent.controller !== defender || permanent.tapped || !isCreature(permanent.def)) continue;
+    const mod = aggregateFor(state, permanent.instanceId);
+    const blockerPower = effectivePower(permanent, mod);
+    const blockerToughness = effectiveToughness(permanent, mod);
+    // A blocker that kills the attacker and is not killed by it makes the
+    // attack a losing one; anything else is a connection or a fair-or-better trade.
+    if (blockerPower >= toughness && power < blockerToughness) return false;
+  }
+  return true;
+}
+
+/** Riot's answer: `true` is the counter, `false` is haste (the prompt's contract). */
+function riotTakesCounter(state: GameState, choice: ConfirmChoice): boolean {
+  const entering = questionSubject(state, choice.sourceInstanceId);
+  if (!entering) return true;
+  const me = choice.chooser;
+  const canSwingNow = state.activePlayer === me && state.step === 'precombatMain';
+  return !(canSwingNow && attacksProfitably(state, entering, opponentOf(me)));
+}
+
+/** Unleash's answer: the counter when our creature count is at least the opponent's. */
+function unleashTakesCounter(state: GameState, choice: ConfirmChoice): boolean {
+  let mine = 0;
+  let theirs = 0;
+  for (const permanent of state.battlefield) {
+    if (!isCreature(permanent.def)) continue;
+    if (permanent.controller === choice.chooser) mine += 1;
+    else theirs += 1;
+  }
+  return mine >= theirs;
+}
+
+/**
+ * Explore's answer: bin the revealed top card when it is not worth keeping on
+ * top — the SAME `cardValue` against the SAME `scryKeepValueThreshold` a scry
+ * or surveil look uses, because it is the same question one card wide (rule 12:
+ * one answer to one question).
+ *
+ * ⚠️ On the DEFAULT weights that means the pilot always KEEPS, and the reason
+ * is worth writing down rather than tuning around: explore only ever asks about
+ * a NONLAND (a land goes straight to hand, CR 701.44a), and every nonland
+ * prices at or above `choiceSpellBaseValue` — comfortably over the threshold. A
+ * graveyard the deck could USE is what would change that, and this value model
+ * does not price graveyard synergy at all. The threshold is left as the seam
+ * that starts binning the day a card prices below it, and
+ * `counter-keyword-pilot.test.ts` pins both sides of it.
+ */
+function exploreBinsTopCard(state: GameState, choice: ConfirmChoice, weights: HeuristicWeights): boolean {
+  const top = state.players[choice.chooser].library[0];
+  if (top === undefined) return false;
+  return cardValue(top, weights, cardValueContext(state)) <= weights.scryKeepValueThreshold;
+}
+
+/**
+ * Fabricate's answer: the counters when they are worth at least the Servos,
+ * else the tokens (CR 702.123a - "you may put N counters on it; if you don't,
+ * create N Servos"). Priced through the SAME rulers `effect-value` uses for the
+ * ref, so the pilot's choice and the pilot's price cannot disagree: N counters
+ * are 2N stat points, N Servos are N 1/1 bodies through `makeToken`.
+ *
+ * ⚠️ On the DEFAULT weights that comes out SERVOS, and the number is worth
+ * writing down rather than arguing with: N 1/1 bodies price above 2N stat
+ * points, which is also how the mechanic actually plays — two bodies chump,
+ * go wide and feed a sacrifice outlet, where +2/+2 does one thing on one
+ * creature. Counters win an exact TIE (they ride a body already on the table,
+ * and a wide board is what a sweeper punishes). What this deliberately does
+ * NOT read is the board that would flip it either way — an anthem, a
+ * sacrifice outlet, a sweeper in the opponent's deck — because that would be
+ * a second opinion about what a token is worth (rule 12).
+ */
+function fabricateTakesCounters(state: GameState, choice: ConfirmChoice, weights: HeuristicWeights): boolean {
+  const entering = questionSubject(state, choice.sourceInstanceId);
+  const ref = entering?.def.triggers
+    ?.flatMap((trigger) => trigger.effects)
+    .find((effect) => effect.primitive === 'fabricateChoice');
+  const count = typeof ref?.params?.amount === 'number' ? ref.params.amount : 0;
+  if (count <= 0) return true;
+  const counters = 2 * count * weights.modeCounterPerStatValue;
+  const servos = valueOfEffect(
+    { primitive: 'makeToken', params: { count, power: 1, toughness: 1 } },
+    resolutionValueContext(state, choice.chooser, weights, cardValueContext(state)),
+  );
+  return counters >= servos;
+}
+
+function answerCounterKeywordConfirm(
+  state: GameState,
+  choice: ConfirmChoice,
+  weights: HeuristicWeights,
+): ChoiceAnswer | undefined {
+  switch (choice.context) {
+    case 'riot':
+      return { kind: 'confirm', yes: riotTakesCounter(state, choice) };
+    case 'unleash':
+      return { kind: 'confirm', yes: unleashTakesCounter(state, choice) };
+    case 'explore':
+      return { kind: 'confirm', yes: exploreBinsTopCard(state, choice, weights) };
+    case 'fabricate':
+      return { kind: 'confirm', yes: fabricateTakesCounters(state, choice, weights) };
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Devour's picks: every candidate whose `cardValue` is below the permanent
+ * stat value of the counters it turns into. The per-sacrifice count is the
+ * `amount` of the entering creature's own `devourChoice` ref — the compiled
+ * card, which is the one source a pilot may read (the request carries no
+ * params). A source with no such ref feeds nothing, the safe direction.
+ */
+function answerDevour(state: GameState, choice: SelectCardsChoice, weights: HeuristicWeights): ChoiceAnswer {
+  const entering = questionSubject(state, choice.sourceInstanceId);
+  const ref = entering?.def.effects?.find((effect) => effect.primitive === 'devourChoice');
+  const perSacrifice = typeof ref?.params?.amount === 'number' ? ref.params.amount : 0;
+  if (perSacrifice <= 0) return { kind: 'selectCards', instanceIds: [] };
+  const context = cardValueContext(state);
+  const gainPerSacrifice = 2 * perSacrifice * weights.modeCounterPerStatValue;
+  const fed: InstanceId[] = [];
+  for (const option of choice.candidates) {
+    const card = findInstance(state, option.instanceId);
+    if (!card) continue;
+    if (cardValue(card, weights, context) < gainPerSacrifice) fed.push(option.instanceId);
+  }
+  return { kind: 'selectCards', instanceIds: fed.slice(0, choice.max) };
 }

@@ -130,6 +130,14 @@ export type TriggerEvent =
   | 'becomesBlockedByCreature'
   | 'dies'
   | 'leaves'
+  /**
+   * §3.111 — "When ~ is put into a graveyard from the battlefield" (Rancor,
+   * the Aura that comes back). NOT `dies`, which is `creatureDied` and never
+   * fires for an Aura or an artifact; NOT `leaves`, which also fires on an
+   * exile or a bounce and would return a Rancor that had been exiled. Exactly
+   * the battlefield → graveyard move, for any permanent.
+   */
+  | 'putIntoGraveyardFromBattlefield'
   | 'castSpell'
   | 'upkeep'
   | 'drawStep'
@@ -300,6 +308,28 @@ export interface TriggerCondition {
    * same reasoning as {@link counterpartHasKeyword}.
    */
   readonly counterpartLacksKeyword?: BooleanKeywordName;
+  // --- the counter keyword family (DESIGN §3.110) ------------------------------
+  /**
+   * For `permanentEnters` / `permanentDies`: the body or the intervening "if"
+   * reads "**that creature**" — the permanent the event was about rides to the
+   * ability as `triggeringInstances` (evolve's "if that creature has greater
+   * power or toughness than this creature", CR 702.100a).
+   *
+   * OPT-IN rather than always on, so every board-watching trigger written
+   * before this existed is pushed byte-for-byte as it always was; a Soul
+   * Warden's stack object gains no field it never reads.
+   */
+  readonly carriesSubject?: boolean;
+  /**
+   * For `dies`: the body or the intervening "if" reads how many counters of
+   * this KIND the source had AS IT DIED — undying's "if it had no +1/+1
+   * counters on it" (CR 702.93a), modular's "put its +1/+1 counters on target
+   * artifact creature" (CR 702.43a). That is last-known information (CR
+   * 603.10a): the graveyard card's counters are already wiped, so the runtime
+   * snapshots the count as the death event is emitted and carries it as
+   * `triggeringAmount`. Opt-in for the reason {@link carriesSubject} is.
+   */
+  readonly snapshotsCounters?: string;
 }
 
 /** What a condition watches when it does not say: the permanent it is printed on. */
@@ -541,6 +571,17 @@ export function conditionMatches(
         watched !== null &&
         event.type === 'zoneChange' &&
         event.from === 'battlefield' &&
+        event.instanceId === watched
+      );
+    }
+    case 'putIntoGraveyardFromBattlefield': {
+      // §3.111 — the one move, for any permanent type (see the event's doc).
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
+      return (
+        watched !== null &&
+        event.type === 'zoneChange' &&
+        event.from === 'battlefield' &&
+        event.to === 'graveyard' &&
         event.instanceId === watched
       );
     }
@@ -816,6 +857,7 @@ export const TRIGGER_EVENT_SOURCES: Readonly<Record<TriggerEvent, readonly GameE
     becomesBlockedByCreature: ['blockersDeclared'],
     dies: ['creatureDied'],
     leaves: ['zoneChange'],
+    putIntoGraveyardFromBattlefield: ['zoneChange'],
     castSpell: ['spellCast'],
     upkeep: ['stepBegin'],
     drawStep: ['stepBegin'],
@@ -1049,6 +1091,13 @@ export function triggeringInstancesFor(
       for (const pair of event.blocks) if (pair.attacker === watched) blockers.push(pair.blocker);
       return blockers;
     }
+    // --- the counter keyword family (DESIGN §3.110) ----------------------------
+    case 'permanentEnters':
+    case 'permanentDies':
+      // "That creature" — only for a condition that ASKS (`carriesSubject`),
+      // so every board-watching trigger written before this is unchanged.
+      if (condition.carriesSubject !== true || event.type !== 'zoneChange') return undefined;
+      return [event.instanceId];
     default:
       return undefined;
   }

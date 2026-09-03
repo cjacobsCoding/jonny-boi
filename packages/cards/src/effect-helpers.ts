@@ -35,6 +35,7 @@ import {
   isPlayerTarget,
   isTargetRestriction,
   MANA_COLORS,
+  markBattlefieldEntry,
   pruneCardGrantsFor,
   resetInstanceForNewZone,
   discardDestination,
@@ -600,6 +601,13 @@ export function putOntoBattlefield(
   card.markedByDeathtouch = false;
   card.counters = {};
   ctx.state.battlefield.push(card);
+  // §3.110 — the entry-time facts (echo's control stamp, "enters with N
+  // counters"), through the ONE helper every core entry path calls. This was
+  // the fourth entry funnel and the one §3.106 missed: a reanimated Arcbound
+  // Worker (modular — a 0/0 that enters with a counter) arrived with none and
+  // died to a state-based action on arrival, exactly the shape §3.106 fixed
+  // for Blastoderm on the other three paths.
+  markBattlefieldEntry(ctx.state, card, ctx.emit);
   ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from, to: 'battlefield' });
   if (card.tapped) ctx.emit({ type: 'tapped', instanceId: card.instanceId });
   return card;
@@ -727,4 +735,29 @@ export function counterSpellOnStack(ctx: EffectContext, spell: SpellStackObject)
  */
 export function manaValueOf(def: CardDefinition): number {
   return def.cost ? convertedManaCost(def.cost) : 0;
+}
+
+// --- the spell-count family (§3.113) -------------------------------------------
+/**
+ * MILL (CR 701.17a): put the top `amount` cards of `who`'s library into their
+ * graveyard, returning the ids in the order they were milled. The ONE mill
+ * funnel — the `mill` primitive and the "from among the milled cards" shapes
+ * (`millThenReturn`) both go through it, so a card milled by either lands in
+ * the same graveyard order and emits the same `cardsMilled`.
+ *
+ * A library shorter than `amount` empties (CR 701.17b — as many as possible);
+ * the loss is the engine's decking rule on the next draw, not this helper's.
+ */
+export function millTopCards(ctx: EffectContext, who: PlayerId, amount: number): InstanceId[] {
+  const player = ctx.state.players[who];
+  const count = Math.min(Math.max(0, amount), player.library.length);
+  const milled: InstanceId[] = [];
+  for (let i = 0; i < count; i++) {
+    const card = player.library[0];
+    if (!card) break;
+    moveOwnedCard(ctx, who, card.instanceId, 'library', 'graveyard');
+    milled.push(card.instanceId);
+  }
+  if (milled.length > 0) ctx.emit({ type: 'cardsMilled', player: who, amount: milled.length });
+  return milled;
 }

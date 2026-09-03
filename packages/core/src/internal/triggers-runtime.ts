@@ -89,6 +89,9 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   continuousEffectAdded: false,
   continuousEffectExpired: false,
   counterAdded: false,
+  // §3.110 — a designation and a reveal change no source set.
+  becameRenowned: false,
+  cardRevealed: false,
   counterPrevented: false,
   damageDealt: false,
   damagePrevented: false,
@@ -112,6 +115,11 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   suspendDeclined: false,
   // §3.112 — foretell/plot move a card hand → exile; nothing on the battlefield changes.
   cardExiledToCastLater: false,
+  // §3.113 — cascade / ripple: the library-to-exile-to-library shuffle of a
+  // pile never touches the battlefield; the cast that follows is a `spellCast`.
+  cascadeWindowOpened: false,
+  rippleWindowOpened: false,
+  pileBottomed: false,
   manaAdded: false,
   manaCostPaid: false,
   manaPoolEmptied: false,
@@ -463,13 +471,36 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     if ((watchedMask & eventTypeWatchBit(event.type)) === 0) return;
     const matched = matchTriggers(snapshot, event, resolveSubject);
     if (matched.length === 0) return;
-    for (const m of matched) {
+    for (const matchedTrigger of matched) {
+      // --- the counter keyword family (DESIGN §3.110) --------------------------
+      // A `dies` trigger that reads how many counters the source HAD (undying's
+      // "if it had no +1/+1 counters", modular's "its +1/+1 counters") takes
+      // its snapshot HERE, as the death event is emitted: every death funnel
+      // emits `creatureDied` BEFORE the zone move wipes the counters, so the
+      // instance still carries them (CR 603.10a — last-known information).
+      // Opt-in per condition (`snapshotsCounters`), so every other dies trigger
+      // is pushed byte-for-byte as before.
+      const snapshotKind = matchedTrigger.ability.condition.snapshotsCounters;
+      const m: PendingTrigger =
+        snapshotKind !== undefined && matchedTrigger.ability.condition.on === 'dies'
+          ? {
+              ...matchedTrigger,
+              triggeringAmount: resolveSubject(matchedTrigger.sourceInstanceId)?.card.counters[snapshotKind] ?? 0,
+            }
+          : matchedTrigger;
       // CR 603.4's FIRST check: an ability whose intervening "if" is false does
       // not trigger at all — it never reaches the stack, so nobody may respond
       // to it. Done here rather than inside `matchTriggers` because the answer
       // needs the game state and `triggers.ts` is a pure matcher.
+      // (The `about` record is built only for a trigger that PRINTS an "if" —
+      // the common trigger allocates nothing here.)
+      const intervening = m.ability.condition.intervening;
       if (
-        !interveningIfHolds(state, m.ability.condition.intervening, m.sourceInstanceId, m.controller, m.triggeringPlayer)
+        intervening !== undefined &&
+        !interveningIfHolds(state, intervening, m.sourceInstanceId, m.controller, m.triggeringPlayer, {
+          amount: m.triggeringAmount,
+          instances: m.triggeringInstances,
+        })
       ) {
         continue;
       }

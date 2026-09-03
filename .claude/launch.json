@@ -12,15 +12,35 @@
       "autoPort": true
     },
     {
-      "name": "web-playreports",
+      "name": "web-clarity",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
         "dev",
         "--prefix",
-        "C:\\Users\\Caleb\\AppData\\Local\\Temp\\jbplayrep\\apps\\web"
+        "C:\\Users\\Caleb\\AppData\\Local\\Temp\\claude\\jb-clarity\\apps\\web",
+        "--",
+        "--port",
+        "5179",
+        "--strictPort"
       ],
-      "port": 5175,
+      "port": 5179,
+      "autoPort": true
+    },
+    {
+      "name": "web-boardfit",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "C:/Users/Caleb/AppData/Local/Temp/claude/jb-boardfit/apps/web",
+        "--",
+        "--port",
+        "5181",
+        "--strictPort"
+      ],
+      "port": 5181,
       "autoPort": true
     }
   ]

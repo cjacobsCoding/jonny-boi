@@ -378,7 +378,7 @@ export {
 
 // The printed intervening "if" (CR 603.4) — declared as trigger-condition DATA
 // and evaluated by one shared reader at both of the moments the rules check it.
-export type { InterveningIf } from './intervening.js';
+export type { InterveningIf, TriggerAbout } from './intervening.js';
 export { interveningIfHolds } from './intervening.js';
 
 // Continuous-effects seam (DESIGN §3.9): the ONE layering path. `indexContinuous`
@@ -466,6 +466,41 @@ export {
   markControlChange,
 } from './upkeep-costs.js';
 export { isSuspended, openSuspendWindow, suspendWindowOpenFor } from './suspend.js';
+// §3.111 — the graveyard-casting family (graveyard-casting.ts): activated
+// abilities of a card in a graveyard, the graveyard-cast kinds and their closed
+// exit table, and the two additional-cost kinds the family added.
+export type {
+  GraveyardAbility,
+  GraveyardAbilityKind,
+  GraveyardCastAbility,
+  GraveyardCastKind,
+  GraveyardCastOption,
+} from './graveyard-casting.js';
+export {
+  ADDITIONAL_COST_ZONE,
+  GRAVEYARD_ABILITY_RULES,
+  GRAVEYARD_CAST_EXIT,
+  additionalCostPool,
+  canPayAdditionalCost,
+  graveyardCastOptionFor,
+  graveyardCastOptionsOf,
+  leaveBattlefieldDestination,
+  spellAdditionalCostOf,
+} from './graveyard-casting.js';
+// §3.113 — the spell-count family: cast triggers (storm / cascade / ripple),
+// the library-pile windows, and storm's per-turn spell count.
+export type { CastTriggeredAbility, CastTriggerKeyword } from './cast-triggers.js';
+export { castTriggerCount, pushCastTriggers } from './cast-triggers.js';
+export {
+  declinePileWindow,
+  isFreeCastWindow,
+  performCascade,
+  performRipple,
+  settleCastWindowAfterCast,
+  spellOnStackById,
+  stackManaValueOf,
+} from './cascade.js';
+export { spellsCastThisTurn } from './turn-facts.js';
 
 // §3.112 — the cast-alternative family: evoke, dash, blitz, surge, prototype
 // and warp as ONE row on the cast action, judged by a closed table; foretell

@@ -166,6 +166,44 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
    * and this primitive appears on a handful of cards.
    */
   'chooseAsEnters',
+  /*
+   * §3.110 — EXPLORE (CR 701.44a) reads the TOP CARD of a library and branches
+   * on it twice: a land goes to hand, a nonland puts a counter on and asks
+   * whether to bin it. Both halves see a card the swap may have changed, so it
+   * is classified with scry and surveil rather than argued away.
+   */
+  'explore',
+  // --- the spell-count family (DESIGN §3.113) ----------------------------------
+  /*
+   * CASCADE reads cards off the top of the library one at a time and STOPS on
+   * what it finds (CR 702.85a) — the deepest library read in the pool: a
+   * swapped card can change how many cards come off, which one is offered, and
+   * the random order the rest go to the bottom in. Every half of that breaks
+   * the identical-game argument, so a game that resolves one withdraws the skip.
+   */
+  'cascade',
+  // RIPPLE (CR 702.60a) is the same shape with a fixed depth: it reveals the top
+  // N, branches on the NAMES it saw, and writes the rest to the bottom.
+  'ripple',
+  /*
+   * STORM copies its own spell for each spell cast before it this turn (CR
+   * 702.40a). It reads no library — but the count it copies by is a fact about
+   * what the arms have CAST, and each copy re-aims through a question a pilot
+   * answers. Classified conservatively for the reason `mayEffects` is: a spell
+   * the swap changed, cast earlier in the turn, changes how many copies the two
+   * arms make, and a wrong verdict costs far more than a few variant games.
+   */
+  'stormCopies',
+  /*
+   * `millThenReturn` reads the top N cards and offers a CHOICE among them (a
+   * pilot looking at cards the swap may have changed), and `returnMilledCard`
+   * is that choice — classified beside it because it is the half that looks.
+   */
+  'millThenReturn',
+  'returnMilledCard',
+  // Reads the top card and branches on what it is — the same shape as
+  // `revealTopCard`, with the same dangerous miss (it looked and moved nothing).
+  'revealTopDrawIf',
 ]);
 
 /**
@@ -296,6 +334,18 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
    * mill effect and buy no soundness whatsoever.
    */
   'mill',
+  // --- the spell-count family (DESIGN §3.113) ----------------------------------
+  /*
+   * `learn` (CR 701.48a) is SAFE on the same argument the file header makes for
+   * the cleanup discard: its question reads the HAND alone, the discard emits a
+   * `zoneChange` naming the card, and the draw announces its id. The printed
+   * sideboard half — the one thing that would read outside the game — does not
+   * exist in this engine, so there is nothing here that could look at a library.
+   */
+  'learn',
+  // Doubling power (CR 701.10b) reads the battlefield and writes a continuous
+  // modification; no zone with hidden cards is involved.
+  'doublePower',
   // Battlefield-only: reads and writes creatures, never a library.
   'fight',
   // Changing who controls a permanent touches the battlefield and the continuous
@@ -323,6 +373,10 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   // arms stay comparable for exactly the reason the single-target form does.
   'grantKeywordToYoursUntilEndOfTurn',
   'makeToken',
+  // §3.121 — living weapon creates its Germ and attaches the source to it. Both
+  // halves read the BATTLEFIELD only; no library is consulted, so paired arms
+  // stay comparable for the same reason `makeToken` does.
+  'livingWeaponGerm',
   'persistReturn',
   'destroyTarget',
   'exileTarget',
@@ -364,6 +418,28 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
    * scheduler generalised: its body ("draw a card at the next upkeep") is
    * classified on its own terms when the delayed ability fires.
    */
+  /*
+   * §3.110 — the counter keyword family. Every body here reads and writes the
+   * BATTLEFIELD and nothing else: counters placed through the one CR 614 site
+   * (undying's return, modular's last-known move, renown's designation,
+   * bloodthirst's turn-fact read, riot's and unleash's entry choice, devour's
+   * sacrifice, amass's Army, bolster's toughness comparison, backup's aimed
+   * counters and grant) and tokens built from their own params (fabricate's
+   * Servos, chosen at resolution). `undyingReturn` moves ONE known card graveyard → battlefield and
+   * announces its zoneChange, exactly as `persistReturn` does. Explore is the
+   * one member that reads a library, and it is classified above.
+   */
+  'undyingReturn',
+  'modularMove',
+  'becomeRenowned',
+  'bloodthirstCounters',
+  'riotChoice',
+  'unleashChoice',
+  'devourChoice',
+  'fabricateChoice',
+  'amass',
+  'bolster',
+  'backup',
   'sacrificeSelf',
   'payLifeOrElse',
   'cumulativeUpkeep',
@@ -379,6 +455,21 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   'sacrificeSelfIfCastWith',
   'returnSelfToHand',
   'warpExile',
+  /*
+   * §3.111 — THE GRAVEYARD-CASTING FAMILY's bodies. Every one of them reads and
+   * writes the GRAVEYARD, exile and the battlefield and never a library:
+   * `unearthReturn` moves its own card graveyard -> battlefield (and stamps CR
+   * 702.84c's exile replacement on it), `scavengeCounters` puts counters on a
+   * battlefield creature, `graveyardTokenCopy` creates token copies of the card
+   * in exile, and `returnSourceFromGraveyard` moves its own card graveyard ->
+   * hand. A card moved INTO a hand is a card the table already watched leave a
+   * public zone, which is the same shape as a regrown creature and is why this
+   * is library-SAFE rather than library-reading.
+   */
+  'unearthReturn',
+  'scavengeCounters',
+  'graveyardTokenCopy',
+  'returnSourceFromGraveyard',
   /*
    * `exileGraveyard` moves every card out of one or both graveyards. It reads
    * and writes GRAVEYARDS only — never a library — and every card it moves

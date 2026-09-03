@@ -974,7 +974,13 @@ export const RULES_MANIFEST: RulesManifest = {
     shortfall:
       'Regenerate (CR 701.19), fight (701.14) and proliferate (701.34 — permanents AND poisoned ' +
       'players, §3.105) live in the cards package (regeneration.test.ts, poison-family.test.ts, ' +
-      'proliferate.test.ts). Monstrosity, populate, explore, venture and connive do not exist.',
+      'proliferate.test.ts). So do three more since §3.113: investigate (701.16a), double (701.10b — ' +
+      'the POWER-doubling verb; the damage-doubling replacement is CR 614) and learn (701.48a), all ' +
+      'in spell-count-family.test.ts on their printed cards. ⚠️ LEARN IS DELIBERATELY HALF A RULE: ' +
+      '"you may discard a card, if you do draw a card" is implemented; the alternative — reveal a ' +
+      'Lesson you own from OUTSIDE THE GAME — names a zone this engine does not model, and since it ' +
+      'is a branch the player may always decline, its absence can never make a card play stronger ' +
+      'than printed. Monstrosity, populate, explore, venture and connive do not exist.',
   },
   '702': {
     status: 'covered',
@@ -1021,6 +1027,60 @@ export const RULES_MANIFEST: RulesManifest = {
       { rule: '702.42a', title: 'paying the entwine cost chooses all of a modal spell\'s modes' },
       { rule: '702.143a', title: 'a foretold card is exiled face down for {2} on its owner\'s turn and cast on a later turn for its foretell cost' },
       { rule: '702.170a', title: 'a plotted card is exiled for its plot cost as a sorcery and cast on a later turn without paying its mana cost' },
+      // §3.111 — the graveyard-casting family's core halves. The printed bodies
+      // (unearth's return, scavenge's counters, the embalm/eternalize/encore
+      // token copies) are cards-package primitives, pinned on the real printed
+      // cards in packages/cards/src/graveyard-cast-family.test.ts.
+      { rule: '702.84a', title: 'unearth is activated from the graveyard, at sorcery speed, for its cost, and returns the card to the battlefield' },
+      { rule: '702.84c', title: 'an unearthed permanent that would leave the battlefield is exiled instead of going anywhere else' },
+      { rule: '702.96a', title: 'scavenge exiles the card from the graveyard as a COST, before its ability resolves' },
+      {
+        rule: '702.81a',
+        title: 'retrace casts the card from the graveyard for its printed cost plus a discarded land card, and the card returns to the graveyard',
+      },
+      { rule: '702.133a', title: 'jump-start casts the card from the graveyard for its printed cost plus a discarded card, then exiles it' },
+      {
+        rule: '702.138a',
+        title: 'escape casts the card from the graveyard for its escape cost plus N other exiled graveyard cards, and does not exile it',
+      },
+      {
+        rule: '702.34a',
+        title: 'a flashback cost printed as a sacrifice is paid by sacrificing, with no mana, and the spell is still exiled as it leaves the stack',
+      },
+      // §3.110 — the counter keyword family's core halves: the last-known
+      // counter snapshot, four intervening-"if" kinds, the self-only static and
+      // the turn fact. The bodies are pinned on the printed cards in
+      // packages/cards/src/compile/counter-keyword-family.test.ts.
+      {
+        rule: '702.93a',
+        title: 'undying returns only a creature that had no +1/+1 counter as it died — the "if" reads last-known counters',
+      },
+      { rule: '702.100a', title: 'evolve triggers only when the entering creature has greater power or toughness than the source' },
+      { rule: '702.112a', title: 'renown grows the creature the first time it deals combat damage to a player, and never again' },
+      { rule: '702.105a', title: 'dethrone triggers when the defending player has the most life or is tied, and not otherwise' },
+      {
+        rule: '702.98a',
+        title: 'an unleashed creature with a +1/+1 counter can’t block, and the self-only static reaches no other creature',
+      },
+      {
+        rule: '702.54a',
+        title: 'bloodthirst’s question — "an opponent was dealt damage this turn" — is a turn fact recorded for the damager’s side',
+      },
+      // The spell-count family (DESIGN §3.113). Ripple's own crTest is absent on
+      // purpose: it is the same window machinery cascade's two tests drive, and
+      // its one distinct rule (the chain re-opening on each same-name card) is
+      // pinned where the depth and the names are — packages/core/src/
+      // cast-triggers.test.ts, and on the real Surging Flame in the cards
+      // package. A second copy here would test the harness, not the rule.
+      {
+        rule: '702.40a',
+        title: 'storm copies the spell once for each OTHER spell cast before it this turn, and a copy is not itself a cast',
+      },
+      {
+        rule: '702.85a',
+        title: 'cascade exiles until a nonland card of lesser mana value, casts it for no mana, and bottoms the rest',
+      },
+      { rule: '702.85a', title: 'declining the cascade window bottoms the whole pile, the offered card included' },
     ],
     note:
       'Ward is here because it was the one shipped keyword whose TRIGGER nothing drove ' +
@@ -1316,6 +1376,7 @@ export const ACTION_RULES: ActionRules = {
   // the CR 116.2 entry that lists it (foretell 116.2h, plot 116.2k).
   foretellCard: '116.2h',
   plotCard: '116.2k',
+  activateGraveyardAbility: '702.84a', // §3.111 — unearth defines the model; scavenge/embalm/eternalize/encore ride it
   activateAbility: '602.2a',
   declareAttackers: '508.1a',
   declareBlockers: '509.1a',
