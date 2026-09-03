@@ -212,6 +212,10 @@ export function describeAction(a: GameAction): string {
       return `activateAbility#${a.instanceId}[${a.abilityIndex}]`;
     case 'cycleCard':
       return `cycleCard#${a.instanceId}`;
+    case 'suspendCard':
+      return `suspendCard#${a.instanceId}`;
+    case 'activateGraveyardAbility': // §3.111
+      return `activateGraveyardAbility#${a.instanceId}[${a.abilityIndex}]`;
     case 'playLand':
       return `playLand#${a.instanceId}`;
     case 'tapForMana':
@@ -249,6 +253,10 @@ function actionIdentity(a: GameAction): string {
       return `activateAbility|${a.player}|${a.instanceId}|${a.abilityIndex}`;
     case 'cycleCard':
       return `cycleCard|${a.player}|${a.instanceId}|${a.abilityIndex ?? 0}`;
+    case 'suspendCard':
+      return `suspendCard|${a.player}|${a.instanceId}`;
+    case 'activateGraveyardAbility': // §3.111
+      return `activateGraveyardAbility|${a.player}|${a.instanceId}|${a.abilityIndex}|${(a.targets ?? []).join(',')}|${(a.costInstanceIds ?? []).join(',')}`;
     case 'playLand':
       return `playLand|${a.player}|${a.instanceId}|${(a as { face?: string }).face ?? 'front'}`;
     case 'tapForMana':
@@ -359,7 +367,9 @@ function mechanicOfAction(
       // `spellCast` event, and only the action says which happened.
       if (action.face === 'back') return 'second-castable-face';
       if (action.fromZone === 'graveyard') return 'flashback-cast';
-      if (action.fromZone === 'exile') return 'madness';
+      // §3.106 — the free cast out of a SUSPEND window shares the exile zone and
+      // the window record with madness; the window's kind says which happened.
+      if (action.fromZone === 'exile') return state.madnessWindow?.kind === 'suspend' ? 'suspend' : 'madness';
       return undefined;
     case 'playLand':
       // A modal DFC's LAND half is played, not cast — same second-face system,
@@ -367,6 +377,10 @@ function mechanicOfAction(
       return (action as { face?: string }).face === 'back' ? 'second-castable-face' : undefined;
     case 'cycleCard':
       return 'cycling';
+    case 'suspendCard':
+      return 'suspend';
+    case 'activateGraveyardAbility': // §3.111
+      return 'graveyard-ability';
     case 'activateAbility': {
       const def = defOf(action.instanceId);
       if (def && isPlaneswalker(def)) return 'planeswalker-loyalty';

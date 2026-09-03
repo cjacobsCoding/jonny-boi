@@ -40,6 +40,12 @@ rather than a speculative wishlist.
 
 **→ [UNSUPPORTED-BACKLOG.md](UNSUPPORTED-BACKLOG.md) is the ranked list. Work from the top.**
 
+**→ [docs/plans/keyword-family-waves.md](docs/plans/keyword-family-waves.md) is the WORK QUEUE**
+— the remaining keyword families with their measured sole-blocked counts, the engine shape each
+needs, and the protocol a wave is run by. Pick keyword work from there, not from the ranked list
+below: the list is ranked by refusal message, and its top row is a bucket of hundreds of unrelated
+sentences rather than one work item (DESIGN §3.120).
+
 **→ [docs/plans/mechanic-completion-plan.md](docs/plans/mechanic-completion-plan.md) is what
 the backlog *means*:** the finish line with a number on it (2093/2100 = 99.7%, because the
 genuinely-unrepresentable set turns out to be seven cards), the wave-by-wave path there, and
@@ -59,7 +65,7 @@ node packages/cards/scripts/coverage-audit.mjs --pages 12 --out UNSUPPORTED-BACK
 node packages/cards/scripts/coverage-audit.mjs --input corpus.json --top 0 --json audit.json
 ```
 
-It fetches the most-played cards from Scryfall (EDHREC order), runs every one
+It runs every card of the corpus it is given — since §3.118 the committed backlog is measured over the WHOLE printed corpus (32,277 paper non-joke cards, the same file every §3.10x family is measured against), not a most-played sample — 
 through the real compiler, and ranks each missing engine system by **how many
 cards it blocks**. So the top entry is, by construction, the highest-value engine
 work available — not the one someone happened to hit.

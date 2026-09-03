@@ -64,10 +64,12 @@ import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js'
 import type { ActivatedAbility, BooleanKeywordName, KeywordFlags } from '../card.js';
 import { unionProtection } from '../card.js';
 import { effectivePower, effectiveToughness, intersectBlockRestrictions } from './stats.js';
+import { COMBAT_FAMILY_PAYLOAD_KEYS, mergeCombatFamilyPayload } from './stats.js';
 import type { GameEvent } from '../events.js';
 import type { StaticAbility } from '../statics.js';
 import { modificationIsInert, staticAppliesTo, staticIsInert, staticsOf } from '../statics.js';
 import { characteristicValue } from '../derived.js';
+import { markControlChange } from '../upkeep-costs.js';
 
 /**
  * How long a continuous effect lasts before the engine removes it.
@@ -183,6 +185,17 @@ const KEYWORD_KEYS = [
   'indestructible',
   'mustBeBlocked',
   'blockedByAllAble',
+  // poison family (§3.105): both are plain flags; `toxic` carries a number
+  // and is folded by its own additive rule in `grantInto`.
+  'infect',
+  'wither',
+  // The combat keyword family's BOOLEAN flags (DESIGN §3.107). Its four
+  // payload fields are folded by `mergeCombatFamilyPayload` in `grantInto`.
+  'shadow',
+  'flanking',
+  'splitSecond',
+  'myriad',
+  'mustAttack',
 ] as const;
 
 /**
@@ -266,6 +279,12 @@ function grantInto(agg: MutableMod, grant: KeywordFlags | undefined): void {
     if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
     (agg.keywords as { ward?: number }).ward = (agg.keywords.ward ?? 0) + grant.ward;
   }
+  // poison family (§3.105): toxic values ADD — "total toxic value" is the sum of
+  // every instance (CR 702.164b), the same fold `mergeKeywordGrant` applies.
+  if (typeof grant.toxic === 'number' && grant.toxic > 0) {
+    if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
+    (agg.keywords as { toxic?: number }).toxic = (agg.keywords.toxic ?? 0) + grant.toxic;
+  }
   // `minBlockers` takes the MAXIMUM, matching `mergeKeywordGrant`: two blocking
   // requirements are both in force, so the stricter one decides. Summing them
   // would invent a restriction neither source printed.
@@ -286,6 +305,18 @@ function grantInto(agg: MutableMod, grant: KeywordFlags | undefined): void {
     if (merged !== undefined) {
       (agg.keywords as { blockRestriction?: KeywordFlags['blockRestriction'] }).blockRestriction = merged;
     }
+  }
+  // The combat keyword family's payloads (DESIGN §3.107) — landwalk lists,
+  // attack restrictions, a blocker cap, a "can block only" list — each by the
+  // ONE rule `mergeKeywordGrant` also applies, so a granted landwalk and a
+  // printed one fold the same way on both paths.
+  for (const key of COMBAT_FAMILY_PAYLOAD_KEYS) {
+    const value = grant[key];
+    if (value === undefined) continue;
+    const merged = mergeCombatFamilyPayload(key, agg.keywords, value);
+    if (merged === undefined) continue;
+    if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
+    (agg.keywords as Record<string, unknown>)[key] = merged;
   }
 }
 
@@ -702,6 +733,8 @@ export function applyControlChange(
   const from = permanent.controller;
   permanent.controller = to;
   permanent.summoningSick = true;
+  // §3.106 — echo counts a control change as "came under your control" (CR 702.30a).
+  markControlChange(state, permanent);
   emit({ type: 'controlChanged', instanceId: permanent.instanceId, from, to });
   return { instanceId: permanent.instanceId, from, to };
 }
@@ -723,6 +756,8 @@ function revertControlChange(
   if (!permanent || permanent.controller !== change.to) return;
   permanent.controller = change.from;
   permanent.summoningSick = true;
+  // §3.106 — handed back is coming under the owner's control again, so echo is owed again.
+  markControlChange(state, permanent);
   emit({ type: 'controlChanged', instanceId: permanent.instanceId, from: change.to, to: change.from });
 }
 

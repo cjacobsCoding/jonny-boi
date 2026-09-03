@@ -321,6 +321,18 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
    */
   madnessWindowOpened: 'public',
   madnessDeclined: 'public',
+  // §3.106 — suspend is played face-up: the card is exiled in front of the
+  // table (its own public `zoneChange`), the counters are on it for everyone to
+  // count, and the free cast or the decline is a decision made out loud.
+  cardSuspended: 'public',
+  suspendWindowOpened: 'public',
+  suspendDeclined: 'public',
+  // §3.113 — cascade exiles face-up and ripple reveals: every card in a pile is
+  // shown to the table before the window opens (its `zoneChange` into exile is
+  // public), and the bottoming names only cards the table has just seen.
+  cascadeWindowOpened: 'public',
+  rippleWindowOpened: 'public',
+  pileBottomed: 'public',
   effectApplied: 'public',
   effectUnsupported: 'public',
   attackersDeclared: 'public',
@@ -334,6 +346,8 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   counterPrevented: 'public',
   lifeChanged: 'public',
   gainLife: 'public',
+  // poison family (§3.105): a poison total is as face-up as a life total.
+  poisonChanged: 'public',
   creatureDied: 'public',
   // A walker's loyalty and its death are face-up battlefield facts, exactly
   // like a creature dying or a counter landing.
@@ -357,6 +371,9 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // game information. Kept so a belief model cannot silently mis-count plies.
   actionRejected: 'public',
   counterAdded: 'public',
+  // §3.110 — a renown designation is board state; a REVEAL is, by definition,
+  // the card shown to the table (explore's top card, CR 701.44a).
+  becameRenowned: 'public',
   /*
    * THE NAMED VALUE IS PUBLIC, and this one is worth being deliberate about
    * because it sits next to three redacted choice events.

@@ -1687,6 +1687,12 @@ button {
 .replay-life__crown {
   font-size: var(--text-base);
 }
+/* The poison clock beside the replay life total (§3.105): smaller than the
+   life number so the pair still reads life-first, never hidden. */
+.replay-life__poison {
+  font-size: var(--text-base);
+  color: var(--color-error);
+}
 .replay-side__zones {
   display: flex;
   flex-wrap: wrap;
@@ -2222,6 +2228,12 @@ button {
    NUMBER stays the thing the eye lands on. */
 .seat__life > span[aria-hidden] { font-size: 0.7em; color: var(--color-error); opacity: 0.85; }
 .seat__life--low { color: var(--color-error); }
+/* The poison clock (§3.105) sits beside life with the same weight, so the two
+   ways of losing read as one pair of numbers; it turns the danger colour at the
+   margin `SeatPanel` derives from CR 704.5c's threshold. */
+.seat__poison { font-size: var(--text-xl); font-weight: 700; display: inline-flex; align-items: baseline; gap: var(--space-1); }
+.seat__poison > span[aria-hidden] { font-size: 0.7em; opacity: 0.85; }
+.seat__poison--danger { color: var(--color-error); }
 .seat__zones { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: var(--space-2) 0; font-size: var(--text-sm); color: var(--color-fg-muted); }
 .seat__mana { display: inline-flex; gap: var(--space-1); }
 /* Some of the floating mana carries a printed spend restriction (Ancient

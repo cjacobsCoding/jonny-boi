@@ -10,7 +10,7 @@
  * server-side, before sending. `maskStateForSeat` is the single chokepoint.
  */
 
-import { INSTANCE_ID_FIELD_NAMES, PLAYER_IDS } from '@jonny-boi/core';
+import { INSTANCE_ID_FIELD_NAMES, PLAYER_IDS, poisonOf } from '@jonny-boi/core';
 import type {
   GameState,
   PlayerState,
@@ -125,6 +125,12 @@ export interface DeckList {
 export interface PublicPlayerView {
   readonly id: PlayerId;
   readonly life: number;
+  /**
+   * Poison counters (CR 122.1f, §3.105) — a public scalar exactly as life is,
+   * always present so a client never has to guess whether zero means "none" or
+   * "not sent".
+   */
+  readonly poison: number;
   /**
    * The floating pool, INCLUDING any spend restrictions on it ("only to cast a
    * creature spell").
@@ -253,6 +259,7 @@ export function maskStateForSeat(state: GameState, seat: PlayerId): MaskedGameVi
     players[id] = {
       id,
       life: p.life,
+      poison: poisonOf(p),
       manaPool: p.manaPool,
       landsPlayedThisTurn: p.landsPlayedThisTurn,
       hasLost: p.hasLost,

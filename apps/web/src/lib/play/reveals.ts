@@ -34,10 +34,15 @@ export function describeReveal(
   sourceName: string,
 ): string {
   const whose = event.player === viewer ? 'your' : `${names[event.player]}'s`;
-  const outcome = event.matched
-    ? `it goes to ${event.player === viewer ? 'your' : 'their'} hand`
-    : 'it stays on top';
-  return `${sourceName} reveals ${event.name} from the top of ${whose} ${event.fromZone} — ${outcome}.`;
+  // The explanatory fields are optional on the shared event (§3.119): only a
+  // FILTERED reveal can say where from and what came of it. An unfiltered one
+  // (explore, §3.110) still gets a banner, just a shorter sentence.
+  const where = event.fromZone === undefined ? '' : ` from the top of ${whose} ${event.fromZone}`;
+  const outcome =
+    event.matched === undefined
+      ? ''
+      : ` — ${event.matched ? `it goes to ${event.player === viewer ? 'your' : 'their'} hand` : 'it stays on top'}`;
+  return `${sourceName} reveals ${event.name}${where}${outcome}.`;
 }
 
 /**
@@ -65,7 +70,14 @@ export function latestReveal(
       cardId: found?.cardId ?? '',
       name: event.name,
       player: event.player,
-      text: describeReveal(event, viewer, names, nameOf(event.sourceInstanceId)),
+      // An unfiltered reveal names no source permanent, so the REVEALING PLAYER
+      // is the subject of the sentence instead of a card that did not say so.
+      text: describeReveal(
+        event,
+        viewer,
+        names,
+        event.sourceInstanceId === undefined ? names[event.player] : nameOf(event.sourceInstanceId),
+      ),
     };
   }
   return null;

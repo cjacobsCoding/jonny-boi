@@ -239,6 +239,12 @@ function SidePanel({
         </div>
         <div className={`replay-life${lowLife ? ' replay-life--low' : ''}`} aria-label={`${side.life} life`}>
           {side.life}
+          {/* The poison clock (§3.105), beside life once it has started. */}
+          {side.poison > 0 && (
+            <span className="replay-life__poison" aria-label={`${side.poison} poison`} title="Poison counters">
+              {' '}☠{side.poison}
+            </span>
+          )}
           {isWinner && <span className="replay-life__crown" aria-label="winner"> 👑</span>}
         </div>
       </div>

@@ -35,6 +35,8 @@ export interface CompilableCard {
     readonly G: number;
     readonly C: number;
     readonly other: readonly string[];
+    /** §3.106 — the card prints NO mana cost (not `{0}`); see data-tools' `ManaCost.absent`. */
+    readonly absent?: boolean;
   };
   readonly typeLine: {
     readonly supertypes: readonly string[];
@@ -120,6 +122,13 @@ export interface CompileResult {
   readonly matchedRules: readonly string[];
   /** Empty when `status` is `'complete'`. */
   readonly missing: readonly UnsupportedClause[];
+  /**
+   * Printed abilities that compiled by doing NOTHING because the rule is
+   * vacuously satisfied in this engine (myriad at two players — DESIGN §3.107).
+   * Present only when at least one clause is such; a card here is still
+   * `'complete'`, and the list is the record a future multiplayer engine reads.
+   */
+  readonly vacuous?: readonly VacuousClause[];
 }
 
 /**
@@ -151,6 +160,16 @@ export interface ClauseContribution {
   readonly manaAbilities?: readonly import('@jonny-boi/core').ManaAbility[];
   /** Keyword flags granted to the card itself. */
   readonly keywords?: CardDefinition['keywords'];
+  /**
+   * DEVOID (CR 702.114a) — "this card has no color", printed on cards that
+   * still cost coloured pips. It has to be stated because colour is DERIVED
+   * from the cost when `CardDefinition.colors` is absent, so an Eldrazi
+   * costing {3}{B} would otherwise play as a black creature: a legal target
+   * for "destroy target black creature", stopped by protection from black,
+   * and counted by every `anyOfColors` filter. The empty array is the
+   * documented way to say "printed colourless" as opposed to "read my pips".
+   */
+  readonly colorless?: boolean;
   /** Set when the printed text says this permanent enters the battlefield tapped. */
   readonly entersTapped?: boolean;
 
@@ -192,6 +211,21 @@ export interface ClauseContribution {
   readonly flashbackXCost?: number;
   /** A "Pay N life" rider on the flashback cost ("Flashback—{1}{U}, Pay 3 life"). */
   readonly flashbackLifeCost?: number;
+  // --- §3.111 the graveyard-casting family --------------------------------------
+  /**
+   * A NON-MANA flashback cost ("Flashback—Sacrifice three creatures",
+   * "Flashback—Tap three untapped white creatures you control") in the shape
+   * the additional-cost machinery pays (`CardDefinition.flashbackAdditionalCost`).
+   */
+  readonly flashbackAdditionalCost?: import('@jonny-boi/core').AdditionalCastCost;
+  /** Retrace / jump-start / escape (`CardDefinition.graveyardCasts`), accumulated. */
+  readonly graveyardCasts?: readonly import('@jonny-boi/core').GraveyardCastAbility[];
+  /**
+   * Unearth / scavenge / embalm / eternalize / encore and the "{cost}: Return ~
+   * from your graveyard to your hand" template (`CardDefinition.graveyardAbilities`),
+   * accumulated.
+   */
+  readonly graveyardAbilities?: readonly import('@jonny-boi/core').GraveyardAbility[];
   /** Activated abilities this clause prints ("Equip {2}"). */
   readonly activated?: readonly import('@jonny-boi/core').ActivatedAbility[];
   /**
@@ -235,6 +269,22 @@ export interface ClauseContribution {
    * with a window to cast it for this cost (`CardDefinition.madness`).
    */
   readonly madness?: import('@jonny-boi/core').ManaCost;
+  // --- §3.106 upkeep costs and time counters ---------------------------------
+  /** The printed "Suspend N—{cost}" line (`CardDefinition.suspend`). */
+  readonly suspend?: import('@jonny-boi/core').SuspendAbility;
+  // --- §3.113 the spell-count family ------------------------------------------
+  /**
+   * "When you cast this spell" abilities — a printed "Storm", "Cascade" or
+   * "Ripple N" (`CardDefinition.castTriggers`). Accumulated, so "Cascade,
+   * cascade" contributes two.
+   */
+  readonly castTriggers?: readonly import('@jonny-boi/core').CastTriggeredAbility[];
+  /**
+   * Counters the permanent enters with — vanishing's and fading's first half
+   * (`CardDefinition.entersWithCounters`). Accumulated, so a card printing
+   * both keywords enters with both kinds.
+   */
+  readonly entersWithCounters?: readonly import('@jonny-boi/core').EnteringCounters[];
   /**
    * A CHARACTERISTIC-DEFINING P/T this clause prints — the formula behind a `*`
    * box (Tarmogoyf). Present ⇒ the card's printed P/T is variable and the
@@ -293,6 +343,27 @@ export interface ClauseContribution {
    * one field rather than two flags.
    */
   readonly playLandsFrom?: readonly import('@jonny-boi/core').LandPlayZone[];
+  /**
+   * A clause that compiled COMPLETELY and does NOTHING in this engine because
+   * the rule it states is vacuously satisfied here — myriad's "for each
+   * opponent other than defending player" over a two-player table (DESIGN
+   * §3.107). Recorded on the result as {@link CompileResult.vacuous}, never
+   * dropped: the day a third seat exists this is the list of cards whose
+   * meaning changes, and a grep for the keyword field on the definition finds
+   * them too.
+   */
+  readonly vacuous?: VacuousClause;
+}
+
+/**
+ * A printed ability that is implemented by DOING NOTHING, with the reason that
+ * is exact rather than an approximation — see {@link ClauseContribution.vacuous}.
+ */
+export interface VacuousClause {
+  /** The printed keyword or clause. */
+  readonly text: string;
+  /** Why nothing is the faithful implementation HERE, and what would change it. */
+  readonly reason: string;
 }
 
 /** A compiler rule: a pattern over one normalized clause + what it builds. */

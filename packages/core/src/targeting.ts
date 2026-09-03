@@ -245,6 +245,14 @@ export type TargetRestriction =
    */
   | 'creatureOnBattlefieldOrInGraveyard'
   /**
+   * §3.110 — "target ARTIFACT CREATURE": modular's death half (CR 702.43a,
+   * "put its +1/+1 counters on target artifact creature"). Its own member
+   * rather than `artifactOrCreature` — the printed line is a conjunction, and
+   * the disjunction would let an Arcbound Ravager hand its counters to a Sol
+   * Ring or a Bear, a card playing wider than printed.
+   */
+  | 'artifactCreature'
+  /**
    * "target instant or sorcery spell YOU CONTROL" — Lithoform Engine's middle
    * mode, Kitsa. The controller scope is the whole point: the printed card can
    * only fork its OWN spells, and widening it to `instantOrSorcerySpell` would
@@ -354,7 +362,8 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'enchantment' ||
     value === 'land' ||
     value === 'planeswalker' ||
-    value === 'creatureOnBattlefieldOrInGraveyard'
+    value === 'creatureOnBattlefieldOrInGraveyard' ||
+    value === 'artifactCreature'
   );
 }
 
@@ -404,6 +413,8 @@ const TARGET_RESTRICTION_MEMBERS = {
   instantOrSorcerySpell: true,
   triggeredAbilityYouControl: true,
   creatureOnBattlefieldOrInGraveyard: true,
+  // §3.110 — modular's "target artifact creature".
+  artifactCreature: true,
   instantOrSorcerySpellYouControl: true,
   permanentSpellYouControl: true,
   activatedOrTriggeredAbilityYouControl: true,
@@ -628,6 +639,10 @@ export function isLegalTarget(
   }
   if (restriction === 'nonartifactCreature') {
     return isCreature(permanent.def) && !hasType(permanent.def, 'artifact');
+  }
+  // §3.110 — modular's "target artifact creature": BOTH types, the conjunction.
+  if (restriction === 'artifactCreature') {
+    return isCreature(permanent.def) && hasType(permanent.def, 'artifact');
   }
   if (restriction === 'nonlandPermanent') {
     return !isLand(permanent.def);
@@ -947,6 +962,19 @@ function enumerateTargets(
       }
     }
   }
+  // §3.110 — modular's "target artifact creature", through the same
+  // targetability gate, matching `isLegalTarget` above (DESIGN §3.36).
+  if (restriction === 'artifactCreature') {
+    for (const permanent of state.battlefield) {
+      if (
+        isCreature(permanent.def) &&
+        hasType(permanent.def, 'artifact') &&
+        isTargetableBy(state, permanent, controller, source, keywordIndex)
+      ) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
   if (restriction === 'nonlandPermanentYouControl' && controller !== undefined) {
     for (const permanent of state.battlefield) {
       if (
@@ -1171,6 +1199,8 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'an instant or sorcery card in your graveyard';
     case 'creatureOnBattlefieldOrInGraveyard':
       return 'a creature on the battlefield or a creature card in a graveyard';
+    case 'artifactCreature':
+      return 'an artifact creature';
     case 'triggeredAbilityYouControl':
       return 'a triggered ability you control';
     case 'instantOrSorcerySpell':

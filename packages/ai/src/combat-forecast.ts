@@ -63,7 +63,9 @@ import {
 import type { ContinuousIndex } from './board-stats.js';
 import { keywordsOf, power, statTotal, toughnessLeft } from './board-stats.js';
 import { resolveFight } from './combat-math.js';
-import { pickBlocker, saboteurTriggerCount, totalIncomingDamage } from './heuristic.js';
+import { pickBlocker, saboteurTriggerCount } from './heuristic.js';
+// poison family (§3.105): the two lethal clocks, kept apart.
+import { attackPressure, attackerPressure, lifeEquivalent, poisonRemaining, pressureIsLethal } from './poison-pressure.js';
 import type { PilotView } from './pilot.js';
 import type { HeuristicWeights } from './weights.js';
 import { DEFAULT_TACTICAL_CONFIG } from './tactical.js';
@@ -359,6 +361,10 @@ function forecastPlan(ctx: ForecastContext, plan: readonly CardInstance[]): Plan
   const myDead = new Set<InstanceId>();
   const theirDead = new Set<InstanceId>();
   let faceDamage = 0;
+  // The poison half of the face pressure (§3.105): infect attackers' damage
+  // through, plus toxic. Kept apart from `faceDamage` so lethal is asked of
+  // each clock; blended only where the race and the score need one number.
+  let facePoison = 0;
   let myDeadStats = 0;
   let theirDeadStats = 0;
   let saboteurs = 0;
@@ -367,9 +373,12 @@ function forecastPlan(ctx: ForecastContext, plan: readonly CardInstance[]): Plan
   if (plan.length > 0) {
     const planIds: InstanceId[] = new Array(plan.length);
     for (let i = 0; i < plan.length; i++) planIds[i] = (plan[i] as CardInstance).instanceId;
-    const incoming = totalIncomingDamage(ctx.view, planIds, index);
+    // The defender's two-clock read, exactly as `chooseBlock` makes it (§3.105).
+    const incoming = attackPressure(ctx.view, planIds, ctx.opp, index);
     const desperate =
-      incoming >= ctx.theirLife || ctx.theirLife <= weights.desperateLifeThreshold;
+      pressureIsLethal(ctx.view, ctx.opp, incoming) ||
+      ctx.theirLife <= weights.desperateLifeThreshold ||
+      poisonRemaining(ctx.view, ctx.opp) * weights.poisonCounterLifeEquivalent <= weights.desperateLifeThreshold;
 
     const sorted = [...plan].sort((a, b) => power(b, index) - power(a, index));
     const used = new Set<InstanceId>();
@@ -377,7 +386,8 @@ function forecastPlan(ctx: ForecastContext, plan: readonly CardInstance[]): Plan
     const blockersOf: CardInstance[][] = new Array(sorted.length);
     for (let i = 0; i < sorted.length; i++) blockersOf[i] = [];
 
-    const forced = forcedBlockAssignment(sorted, ctx.defenders, index);
+    // The live board for LANDWALK (§3.107) — the same read the live pilot makes.
+    const forced = forcedBlockAssignment(sorted, ctx.defenders, index, ctx.state.battlefield);
     if (forced) {
       for (const assignment of forced) {
         const at = sorted.findIndex((a) => a.instanceId === assignment.attacker);
@@ -393,7 +403,7 @@ function forecastPlan(ctx: ForecastContext, plan: readonly CardInstance[]): Plan
     const doomed = delayedRemovalTargets(ctx.view);
     for (let i = 0; i < sorted.length; i++) {
       const attacker = sorted[i] as CardInstance;
-      const blocker = pickBlocker(attacker, ctx.defenders, used, desperate, weights, index, doomed);
+      const blocker = pickBlocker(attacker, ctx.defenders, used, desperate, weights, index, doomed, ctx.state.battlefield);
       if (blocker) {
         (blockersOf[i] as CardInstance[]).push(blocker);
         used.add(blocker.instanceId);
@@ -406,7 +416,9 @@ function forecastPlan(ctx: ForecastContext, plan: readonly CardInstance[]): Plan
       const assigned = blockersOf[i] as CardInstance[];
       if (assigned.length === 0) {
         const damage = projectedPower(ctx, attacker, ctx.opp);
-        faceDamage += damage;
+        const p = attackerPressure(attacker, damage, index);
+        faceDamage += p.damage;
+        facePoison += p.poison;
         if (keywordsOf(attacker, index).lifelink === true) lifelinkGain += damage;
         saboteurs += saboteurTriggerCount(attacker, ctx.view);
         continue;
@@ -431,11 +443,16 @@ function forecastPlan(ctx: ForecastContext, plan: readonly CardInstance[]): Plan
         theirDead.add(primary.instanceId);
         theirDeadStats += statTotal(primary, index);
       }
-      faceDamage += outcome.damageThrough;
+      // Trample-through damage is the ATTACKER's damage, so it lands on the
+      // attacker's clock: poison for an infect trampler (Putrefax), life otherwise.
+      const through = attackerPressure(attacker, outcome.damageThrough, index);
+      faceDamage += through.damage;
+      facePoison += through.poison;
     }
   }
 
-  const lethalNow = faceDamage > 0 && faceDamage >= ctx.theirLife;
+  // Lethal is asked of each clock on its own (§3.105) — never of the blend.
+  const lethalNow = pressureIsLethal(ctx.view, ctx.opp, { damage: faceDamage, poison: facePoison });
 
   // -- 3. the crack-back ----------------------------------------------------------
   // Their whole surviving board attacks next turn ('next' horizon: tapped and
@@ -467,13 +484,19 @@ function forecastPlan(ctx: ForecastContext, plan: readonly CardInstance[]): Plan
     ctx.opp,
     (theirs) => !theirDead.has(theirs.instanceId),
   );
-  const theirLifeAfter = ctx.theirLife - faceDamage;
+  // The race runs on the life scale (§3.105): whichever of their two clocks is
+  // shorter after this attack is the one my rate is measured against, and
+  // `guaranteedDamage` prices an infect attacker's rate on that same scale.
+  const theirLifeAfter = Math.min(
+    ctx.theirLife - faceDamage,
+    (poisonRemaining(ctx.view, ctx.opp) - facePoison) * weights.poisonCounterLifeEquivalent,
+  );
   const myClock = lethalNow ? 0 : clockFor(theirLifeAfter, myRate);
   const theirClock = facingLethalAfter ? 1 : clockFor(myLifeAfter, crackBack);
 
   // -- 5. the blend -----------------------------------------------------------------
   let score =
-    weights.faceDamageValue * faceDamage +
+    weights.faceDamageValue * lifeEquivalent({ damage: faceDamage, poison: facePoison }, weights) +
     weights.attackSaboteurTriggerValue * saboteurs +
     weights.killEnemyPerStat * theirDeadStats -
     weights.ownCreatureLossPerStat * myDeadStats -
@@ -551,7 +574,13 @@ function guaranteedDamage(
     const raw = power(perm, index);
     if (raw <= 0) continue;
     const damage = projectedPower(ctx, perm, defendingSeat);
-    total += damage;
+    // The rate is measured on the LIFE scale (§3.105): an infect attacker's
+    // damage is poison, priced at the weights' exchange rate, and whatever a
+    // blocker prevents of it is prevented at that same rate. Blocking maths
+    // below stays in raw damage, because -1/-1 counters kill by toughness
+    // exactly as marked damage does.
+    const scale = lifeEquivalent(attackerPressure(perm, damage, index), ctx.weights) / damage;
+    total += damage * scale;
     if (kw.unblockable === true) continue; // nothing prevents it — no gain entry
     const evasive = kw.flying === true;
     const usable = evasive ? evasiveBlockers : blockers;
@@ -576,7 +605,7 @@ function guaranteedDamage(
       );
     }
     if (prevented <= 0) continue;
-    gains.push(prevented);
+    gains.push(prevented * scale);
     gainIsEvasive.push(evasive);
   }
 

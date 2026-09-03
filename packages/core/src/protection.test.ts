@@ -16,6 +16,7 @@ import {
   colorsOfDefinition,
   effectiveProtectionOf,
   effectiveWardOf,
+  isProtectionQuality,
   protectionBlocksSource,
   sourceHasQuality,
 } from './protection.js';
@@ -24,7 +25,7 @@ import { indexContinuous } from './internal/continuous.js';
 import { mergeKeywordGrant } from './internal/stats.js';
 import { isLegalHost, isLegallyAttached } from './attachments.js';
 import { checkStateBasedActions } from './internal/sba.js';
-import { deckOf, landDef } from './test-fixtures.js';
+import { deckOf, landDef, spellDef } from './test-fixtures.js';
 
 const SEED = 1717;
 
@@ -120,6 +121,73 @@ describe('source qualities', () => {
     expect(sourceHasQuality(equipment, 'creatures')).toBe(false);
     expect(sourceHasQuality(equipment, 'colorless')).toBe(true);
     expect(sourceHasQuality(equipment, 'everything')).toBe(true);
+  });
+
+  // §3.109 — the qualities the closed table gained: every card type, the
+  // colour-COUNT words, and printed subtypes.
+  it('answers every card-type quality (protection from instants, from lands, from planeswalkers …)', () => {
+    const bolt = spellDef('Lightning Bolt', 'instant', [], { R: 1 });
+    expect(sourceHasQuality(bolt, 'instants')).toBe(true);
+    expect(sourceHasQuality(bolt, 'sorceries')).toBe(false);
+    const sorcery: CardDefinition = { id: 'sorc', name: 'Sorc', types: ['sorcery'], cost: { generic: 1 } };
+    expect(sourceHasQuality(sorcery, 'sorceries')).toBe(true);
+    const walker: CardDefinition = { id: 'pw', name: 'Walker', types: ['planeswalker'], cost: { generic: 3 } };
+    expect(sourceHasQuality(walker, 'planeswalkers')).toBe(true);
+    const aura: CardDefinition = { id: 'aura', name: 'Aura', types: ['enchantment'], cost: { generic: 1 } };
+    expect(sourceHasQuality(aura, 'enchantments')).toBe(true);
+    expect(sourceHasQuality(landDef('Island', 'U'), 'lands')).toBe(true);
+    expect(sourceHasQuality(landDef('Island', 'U'), 'enchantments')).toBe(false);
+  });
+
+  it('"monocolored" is exactly one colour — neither colourless nor gold', () => {
+    const mono = creature('Mono', { cost: { R: 2 } });
+    const gold: CardDefinition = { id: 'gold', name: 'Gold', types: ['creature'], cost: { R: 1, G: 1 } };
+    const none = creature('None', { types: ['artifact'], cost: { generic: 2 } });
+    expect(sourceHasQuality(mono, 'monocolored')).toBe(true);
+    expect(sourceHasQuality(gold, 'monocolored')).toBe(false);
+    expect(sourceHasQuality(none, 'monocolored')).toBe(false);
+  });
+
+  it('a subtype quality reads the printed subtype through hasSubtype, changeling included', () => {
+    const dragon: CardDefinition = {
+      id: 'drg',
+      name: 'Shivan Dragon',
+      types: ['creature'],
+      subtypes: ['Dragon'],
+      cost: { generic: 4, R: 2 },
+    };
+    const goblin: CardDefinition = {
+      id: 'gob',
+      name: 'Raging Goblin',
+      types: ['creature'],
+      subtypes: ['Goblin'],
+      cost: { R: 1 },
+    };
+    const changeling: CardDefinition = {
+      id: 'chg',
+      name: 'Changeling Outcast',
+      types: ['creature'],
+      subtypes: ['Shapeshifter'],
+      cost: { B: 1 },
+      changeling: true,
+    };
+    // Dragonstalker: "protection from Dragons".
+    expect(sourceHasQuality(dragon, 'subtype:Dragon')).toBe(true);
+    expect(sourceHasQuality(goblin, 'subtype:Dragon')).toBe(false);
+    // A changeling is every creature type, so it IS a Dragon for this check —
+    // the same answer every lord and typal search gets from `hasSubtype`.
+    expect(sourceHasQuality(changeling, 'subtype:Dragon')).toBe(true);
+    // And the four halves read it: a Dragon cannot block a pro-Dragons creature.
+    const stalker = creature('Dragonstalker', { keywords: { protectionFrom: ['subtype:Dragon'] } });
+    expect(protectionBlocksSource(stalker.keywords?.protectionFrom, dragon)).toBe(true);
+    expect(protectionBlocksSource(stalker.keywords?.protectionFrom, goblin)).toBe(false);
+  });
+
+  it('validates the subtype form at the data boundary by its prefix, and refuses a bare prefix', () => {
+    expect(isProtectionQuality('subtype:Dragon')).toBe(true);
+    expect(isProtectionQuality('monocolored')).toBe(true);
+    expect(isProtectionQuality('subtype:')).toBe(false);
+    expect(isProtectionQuality('dragons')).toBe(false);
   });
 });
 

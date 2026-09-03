@@ -14,6 +14,7 @@ const EMPTY_SIDE = {
   handCount: 0,
   libraryCount: 0,
   graveyardCount: 0,
+  poison: 0,
   hand: [],
   library: [],
   graveyard: [],

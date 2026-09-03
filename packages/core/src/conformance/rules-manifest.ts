@@ -295,10 +295,19 @@ export const RULES_MANIFEST: RulesManifest = {
     file: 'cr1xx-2xx-objects',
     tests: [
       { rule: '120.3', title: 'non-lethal damage dealt to a creature is MARKED on it, not applied to toughness' },
+      // poison family (§3.105) — the rows of CR 120.3's result table keyed on the source.
+      { rule: '120.3b', title: 'damage dealt to a player by a source with infect is that many poison counters' },
+      {
+        rule: '120.3d',
+        title: 'damage dealt to a creature by a source with wither or infect is that many -1/-1 counters',
+      },
     ],
     note:
-      'CR 120.3c (damage to a planeswalker removes loyalty) and 120.3d (damage to a battle removes ' +
-      'defense) are affirmed by planeswalker.test.ts and battle.test.ts respectively.',
+      'CR 120.3c (damage to a planeswalker removes loyalty) and 120.3h (damage to a battle removes ' +
+      'defense; it was 120.3d before infect and wither took rows 120.3b/120.3d in the 2026 text) ' +
+      'are affirmed by planeswalker.test.ts and battle.test.ts respectively. The whole 120.3 ' +
+      'result table lives in ONE place — core/src/internal/damage-result.ts — which is also where ' +
+      '120.3f (lifelink) and 120.3g (toxic) are applied; poison.test.ts drives both.',
     shortfall:
       'CR 120.6 damage PREVENTION and CR 120.5 damage redirection do not exist — see section 615.',
   },
@@ -649,10 +658,23 @@ export const RULES_MANIFEST: RulesManifest = {
         title: 'with no attackers declared, the declare-blockers and combat-damage steps are skipped',
       },
       { rule: '508.8', title: 'passing through declare-attackers without declaring skips the same two steps' },
+      // The combat keyword family (DESIGN §3.107): the attacker-side mirror of
+      // the block solver — `attack-requirements.ts`.
+      {
+        rule: '508.1c',
+        title: 'a creature that can’t attack unless the defender controls an Island is not declared without one',
+      },
+      { rule: '508.1d', title: 'a creature that attacks each combat if able must be in the declaration' },
+      { rule: '508.1d', title: 'passing the declare-attackers step declares the required creatures rather than none' },
     ],
+    note:
+      'CR 508.1c/d are judged by `attack-requirements.ts` from ONE reader (`attackDeclarationProblem`) ' +
+      'shared by the offer path, the apply path and the requirement half. Every expressible requirement ' +
+      'is per-creature and unconditional, so "maximum requirements" needs no search yet — the module ' +
+      'comment says where a search would start.',
     shortfall:
-      'CR 508.1d attack REQUIREMENTS ("attacks each combat if able") are not modelled; CR 508.1c ' +
-      'restrictions exist only as defender/summoning sickness. CR 508.1e banding is absent.',
+      'CR 508.1e banding is absent. A requirement that depends on the rest of the declaration ' +
+      '("can’t attack alone", provoke’s untap-and-block) is not expressible and its cards keep reporting.',
   },
   '509': {
     status: 'covered',
@@ -955,8 +977,15 @@ export const RULES_MANIFEST: RulesManifest = {
       'exile, mill (CR 701.17), scry (CR 701.22) and surveil (CR 701.25) — the last three ' +
       'affirmed in packages/cards/src/compile/scry-surveil.test.ts.',
     shortfall:
-      'CR 701.19 REGENERATE does not exist anywhere in core; nor do fight, monstrosity, ' +
-      'proliferate, populate, explore, venture or connive.',
+      'Regenerate (CR 701.19), fight (701.14) and proliferate (701.34 — permanents AND poisoned ' +
+      'players, §3.105) live in the cards package (regeneration.test.ts, poison-family.test.ts, ' +
+      'proliferate.test.ts). So do three more since §3.113: investigate (701.16a), double (701.10b — ' +
+      'the POWER-doubling verb; the damage-doubling replacement is CR 614) and learn (701.48a), all ' +
+      'in spell-count-family.test.ts on their printed cards. ⚠️ LEARN IS DELIBERATELY HALF A RULE: ' +
+      '"you may discard a card, if you do draw a card" is implemented; the alternative — reveal a ' +
+      'Lesson you own from OUTSIDE THE GAME — names a zone this engine does not model, and since it ' +
+      'is a branch the player may always decline, its absence can never make a card play stronger ' +
+      'than printed. Monstrosity, populate, explore, venture and connive do not exist.',
   },
   '702': {
     status: 'covered',
@@ -964,6 +993,89 @@ export const RULES_MANIFEST: RulesManifest = {
     tests: [
       { rule: '702.21', title: 'targeting an opponent’s warded permanent puts its ward trigger above the spell' },
       { rule: '702.21', title: 'a permanent’s own controller never triggers its ward' },
+      // poison family (§3.105). Toxic is 702.164 in the 2026-08-19 text (702.181 is Mobilize).
+      { rule: '702.90c', title: 'infect damage to a creature is -1/-1 counters, and no damage is marked' },
+      { rule: '702.90b', title: 'infect damage to a player is poison counters, and no life is lost' },
+      {
+        rule: '702.80a',
+        title: 'wither damage to a creature is -1/-1 counters; to a player it is ordinary life loss',
+      },
+      { rule: '702.164c', title: 'a player dealt combat damage by a toxic creature also gets N poison counters' },
+      // The combat keyword family (DESIGN §3.107).
+      { rule: '702.28b', title: 'a creature with shadow can be blocked only by a creature with shadow, and vice versa' },
+      { rule: '702.18b', title: 'a creature with islandwalk can’t be blocked while the defending player controls an Island' },
+      {
+        rule: '702.61a',
+        title: 'while a spell with split second is on the stack, players can’t cast spells or activate non-mana abilities',
+      },
+      { rule: '702.90a', title: 'exalted pumps the creature that attacks alone, once per instance of exalted' },
+      { rule: '702.25a', title: 'flanking gives each blocking creature without flanking −1/−1' },
+      // §3.106 — the core halves of the upkeep-cost family. The bills themselves
+      // (echo's pay-or-sacrifice, cumulative upkeep's age-scaled cost, the
+      // vanishing/fading tick) are cards-package primitives, pinned on the real
+      // printed cards in packages/cards/src/upkeep-costs.test.ts.
+      { rule: '702.30a', title: 'echo bills on the first upkeep after the permanent came under your control, and not on the next' },
+      { rule: '702.63a', title: 'a permanent with vanishing enters with its printed time counters, cast or played' },
+      { rule: '702.32a', title: 'a permanent with fading enters with its printed fade counters, through the land-play path too' },
+      {
+        rule: '702.62a',
+        title:
+          'suspend exiles the card with N time counters for its suspend cost, and the last counter leaving lets it be cast for nothing',
+      },
+      // §3.111 — the graveyard-casting family's core halves. The printed bodies
+      // (unearth's return, scavenge's counters, the embalm/eternalize/encore
+      // token copies) are cards-package primitives, pinned on the real printed
+      // cards in packages/cards/src/graveyard-cast-family.test.ts.
+      { rule: '702.84a', title: 'unearth is activated from the graveyard, at sorcery speed, for its cost, and returns the card to the battlefield' },
+      { rule: '702.84c', title: 'an unearthed permanent that would leave the battlefield is exiled instead of going anywhere else' },
+      { rule: '702.96a', title: 'scavenge exiles the card from the graveyard as a COST, before its ability resolves' },
+      {
+        rule: '702.81a',
+        title: 'retrace casts the card from the graveyard for its printed cost plus a discarded land card, and the card returns to the graveyard',
+      },
+      { rule: '702.133a', title: 'jump-start casts the card from the graveyard for its printed cost plus a discarded card, then exiles it' },
+      {
+        rule: '702.138a',
+        title: 'escape casts the card from the graveyard for its escape cost plus N other exiled graveyard cards, and does not exile it',
+      },
+      {
+        rule: '702.34a',
+        title: 'a flashback cost printed as a sacrifice is paid by sacrificing, with no mana, and the spell is still exiled as it leaves the stack',
+      },
+      // §3.110 — the counter keyword family's core halves: the last-known
+      // counter snapshot, four intervening-"if" kinds, the self-only static and
+      // the turn fact. The bodies are pinned on the printed cards in
+      // packages/cards/src/compile/counter-keyword-family.test.ts.
+      {
+        rule: '702.93a',
+        title: 'undying returns only a creature that had no +1/+1 counter as it died — the "if" reads last-known counters',
+      },
+      { rule: '702.100a', title: 'evolve triggers only when the entering creature has greater power or toughness than the source' },
+      { rule: '702.112a', title: 'renown grows the creature the first time it deals combat damage to a player, and never again' },
+      { rule: '702.105a', title: 'dethrone triggers when the defending player has the most life or is tied, and not otherwise' },
+      {
+        rule: '702.98a',
+        title: 'an unleashed creature with a +1/+1 counter can’t block, and the self-only static reaches no other creature',
+      },
+      {
+        rule: '702.54a',
+        title: 'bloodthirst’s question — "an opponent was dealt damage this turn" — is a turn fact recorded for the damager’s side',
+      },
+      // The spell-count family (DESIGN §3.113). Ripple's own crTest is absent on
+      // purpose: it is the same window machinery cascade's two tests drive, and
+      // its one distinct rule (the chain re-opening on each same-name card) is
+      // pinned where the depth and the names are — packages/core/src/
+      // cast-triggers.test.ts, and on the real Surging Flame in the cards
+      // package. A second copy here would test the harness, not the rule.
+      {
+        rule: '702.40a',
+        title: 'storm copies the spell once for each OTHER spell cast before it this turn, and a copy is not itself a cast',
+      },
+      {
+        rule: '702.85a',
+        title: 'cascade exiles until a nonland card of lesser mana value, casts it for no mana, and bottoms the rest',
+      },
+      { rule: '702.85a', title: 'declining the cascade window bottoms the whole pile, the offered card included' },
     ],
     note:
       'Ward is here because it was the one shipped keyword whose TRIGGER nothing drove ' +
@@ -976,10 +1088,12 @@ export const RULES_MANIFEST: RulesManifest = {
       'flash (protection-and-flash.test.ts), flashback (flashback.test.ts, seven tests).',
     shortfall:
       'Of ~160 keyword abilities in the CR, this engine has 20 plus cycling (702.29), kicker ' +
-      '(702.33), buyback (702.27), madness (702.35) and aftermath (702.127a — the half castable ' +
+      '(702.33), buyback (702.27), madness (702.35), aftermath (702.127a — the half castable ' +
       'only from the graveyard, for its OWN printed cost rather than a flashback cost; affirmed in ' +
-      'split-cards.test.ts). Everything else is refused by the compiler and listed in ' +
-      'UNSUPPORTED-BACKLOG.md.',
+      'split-cards.test.ts), and — §3.106 — echo (702.30), cumulative upkeep (702.24), fading ' +
+      '(702.32), suspend (702.62) and vanishing (702.63), the last four as upkeep triggers whose ' +
+      'bodies live in packages/cards/src/upkeep-cost-primitives.ts. Everything else is refused by ' +
+      'the compiler and listed in UNSUPPORTED-BACKLOG.md.',
   },
   '703': {
     status: 'cited',
@@ -1001,6 +1115,8 @@ export const RULES_MANIFEST: RulesManifest = {
         title: 'a condition nobody announced is caught the moment a player would get priority',
       },
       { rule: '704.5a', title: 'a player reduced to 0 life loses as the spell that did it finishes resolving' },
+      // poison family (§3.105): the second way a game is lost.
+      { rule: '704.5c', title: 'a player with ten or more poison counters loses the game' },
       { rule: '704.5f', title: 'a creature at 0 or less toughness is put into the graveyard, not destroyed' },
       { rule: '704.5g', title: 'a creature with lethal damage marked is destroyed at the next check' },
       { rule: '704.5q', title: '+1/+1 and -1/-1 counters on one permanent are REMOVED in pairs' },
@@ -1174,6 +1290,11 @@ export const KEYWORD_RULES: KeywordRules = {
   indestructible: '702.12',
   protectionFrom: '702.16',
   ward: '702.21',
+  // poison family (§3.105). Toxic is 702.164 — NOT 702.181, which is Mobilize;
+  // checked against the 2026-08-19 Comprehensive Rules text.
+  infect: '702.90',
+  wither: '702.80',
+  toxic: '702.164',
   // "Can't be blocked" and "can't block" are not keyword abilities — they are
   // block RESTRICTIONS that a printed line states, checked where blockers are
   // declared. `minBlockers` is the general form of which menace is the N = 2
@@ -1191,6 +1312,21 @@ export const KEYWORD_RULES: KeywordRules = {
   // A comparing restriction ("except by creatures with haste", a power bound,
   // skulk) is still a restriction, so it indexes with the others.
   blockRestriction: '509.1b',
+  // --- the combat keyword family (DESIGN §3.107) ------------------------------
+  shadow: '702.28',
+  flanking: '702.25',
+  splitSecond: '702.61',
+  myriad: '702.116',
+  landwalk: '702.18',
+  // Attack REQUIREMENTS and RESTRICTIONS are the attacker-side half of the
+  // declaration rules, exactly as `mustBeBlocked` / `unblockable` are the
+  // blocker-side half — so they index to CR 508.1d / 508.1c, not to 702.
+  mustAttack: '508.1d',
+  cantAttackUnlessDefenderControls: '508.1c',
+  // The two blocker-declaration restrictions the family added: a CAP on blockers
+  // (the dual of `minBlockers`) and a blocker's own "can block only" list.
+  maxBlockers: '509.1b',
+  blockOnly: '509.1b',
 };
 
 /** Every step of a turn → the CR rule that defines it. Mapped over `Step`. */
@@ -1230,6 +1366,8 @@ export const ACTION_RULES: ActionRules = {
   tapForMana: '605.3b',
   castSpell: '601.2',
   cycleCard: '702.29',
+  suspendCard: '702.62a',
+  activateGraveyardAbility: '702.84a', // §3.111 — unearth defines the model; scavenge/embalm/eternalize/encore ride it
   activateAbility: '602.2a',
   declareAttackers: '508.1a',
   declareBlockers: '509.1a',

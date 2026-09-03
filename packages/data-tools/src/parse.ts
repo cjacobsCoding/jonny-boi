@@ -24,7 +24,8 @@ const SIMPLE_COLOR_SYMBOLS: ReadonlySet<string> = new Set(['W', 'U', 'B', 'R', '
  */
 export function parseManaCost(manaCost: string | undefined | null): ManaCost {
   const cost = emptyManaCost();
-  if (!manaCost) return cost;
+  // No printed cost at all is NOT `{0}` — see `ManaCost.absent`.
+  if (!manaCost) return { ...cost, absent: true };
 
   // Symbols are wrapped in braces: {2}{W}{W/U}{X}. Extract each brace group.
   const symbols = manaCost.match(/\{([^}]+)\}/g);

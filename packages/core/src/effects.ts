@@ -22,6 +22,7 @@ import { addFloatingReplacement, hasAnyReplacement, indexReplacements, replaceTo
 import type { TriggerCondition } from './triggers.js';
 import { createDelayedTrigger } from './delayed.js';
 import { applyEnteringDefense, applyEnteringLoyalty } from './internal/stats.js';
+import { markBattlefieldEntry } from './upkeep-costs.js';
 import type {
   ChooseModesRequest,
   ChooseValueRequest,
@@ -92,6 +93,15 @@ export interface EffectContext {
    * param in the library understands it without a primitive changing.
    */
   readonly triggeringAmount?: number;
+  /**
+   * "THAT CREATURE" / "THE BLOCKING CREATURE" — the objects the event that set
+   * this TRIGGER off was about (DESIGN §3.107): exalted's lone attacker,
+   * flanking's blocker. A primitive whose params say `subject: 'triggering'`
+   * acts on these instead of on its target or its source; see
+   * `subjectCreatures` in the cards package's `effect-helpers.ts`. Absent for
+   * spells and for every trigger whose event names no such object.
+   */
+  readonly triggeringInstances?: readonly InstanceId[];
   /** Append an event to the log. */
   emit(event: GameEvent): void;
   /**
@@ -447,6 +457,7 @@ export function applyEffectRef(
     kickCount: base.kickCount,
     triggeringPlayer: base.triggeringPlayer,
     triggeringAmount: base.triggeringAmount,
+    triggeringInstances: base.triggeringInstances,
     emit,
     addContinuousEffect(mod) {
       return addContinuousEffectToState(base.state, base.source.instanceId, base.controller, mod, emit);
@@ -554,6 +565,7 @@ export type EffectContextBase = Pick<
   | 'kickCount'
   | 'triggeringPlayer'
   | 'triggeringAmount'
+  | 'triggeringInstances'
 >;
 
 /**
@@ -757,6 +769,8 @@ function createOneTokenInState(
   // battle token enters with its printed defense the same way.
   applyEnteringLoyalty(token, emit);
   applyEnteringDefense(token, emit);
+  // §3.106 — a token copy of a vanishing creature enters with its time counters too.
+  markBattlefieldEntry(state, token, emit);
   emit({ type: 'tokenCreated', instanceId, controller, name: tokenDef.name });
   // A token entering is a zoneChange into the battlefield — this is what ETB
   // triggers (its own and others') observe, keeping one mechanism for "enters".

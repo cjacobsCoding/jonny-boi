@@ -65,6 +65,8 @@ export type {
   ActivatedAbility,
   AdditionalCastCost,
   CyclingAbility,
+  EnteringCounters,
+  SuspendAbility,
   ActivationCost,
   EntersUntappedCondition,
   RevealFromHandCondition,
@@ -174,6 +176,31 @@ export { hasNoMaximumHandSize, landPlayZonesFor } from './player-statics.js';
  */
 export type { BlockAssignment } from './internal/block-solver.js';
 export { forcedBlockAssignment } from './internal/block-solver.js';
+
+/**
+ * THE COMBAT KEYWORD FAMILY (DESIGN §3.107). Attack restrictions and
+ * requirements (CR 508.1c/d) are the attacker-side mirror of the block solver,
+ * and the pilot reads them through the same seam so it never proposes a
+ * declaration the engine refuses; `controlsLandMatching*` is the one reader
+ * of the closed `LandCondition` table (landwalk, "can't attack unless …");
+ * `splitSecondOnStack` is the timing lock the offer pass applies.
+ */
+export type { BasicLandSubtype, BlockOnlyRestriction, LandCondition } from './card.js';
+export {
+  attackDeclarationProblem,
+  attackRequirementProblem,
+  requiredAttackerIds,
+} from './attack-requirements.js';
+export {
+  controlsLandMatching,
+  controlsLandMatchingAll,
+  controlsLandMatchingAny,
+  describeLandCondition,
+  sameLandCondition,
+  unionLandConditions,
+} from './land-conditions.js';
+export { SPLIT_SECOND_REJECTION, splitSecondOnStack } from './split-second.js';
+export { triggeringInstancesFor } from './triggers.js';
 export type { UncounterableSpellsAbility } from './countering.js';
 export { spellCanBeCountered } from './countering.js';
 
@@ -228,7 +255,7 @@ export {
 // Protection from [quality] + ward (protection.ts): the source-aware half of
 // targeting/damage/attachment/blocking legality, and the reserved ward seam.
 export type { ProtectionQuality } from './card.js';
-export { unionProtection } from './card.js';
+export { PROTECTION_SUBTYPE_PREFIX, unionProtection } from './card.js';
 export {
   PROTECTION_QUALITIES,
   WARD_COST_PARAM,
@@ -352,7 +379,7 @@ export {
 
 // The printed intervening "if" (CR 603.4) — declared as trigger-condition DATA
 // and evaluated by one shared reader at both of the moments the rules check it.
-export type { InterveningIf } from './intervening.js';
+export type { InterveningIf, TriggerAbout } from './intervening.js';
 export { interveningIfHolds } from './intervening.js';
 
 // Continuous-effects seam (DESIGN §3.9): the ONE layering path. `indexContinuous`
@@ -424,6 +451,58 @@ export {
   removeDelayedTrigger,
 } from './delayed.js';
 
+// §3.106 — upkeep costs and time counters (echo, cumulative upkeep, vanishing,
+// fading) and suspend. The counter-kind constants are the ONE spelling every
+// consumer reads; the entry/control stamps are exported for the tests that
+// pin them and for the cards package's suspend tick.
+export {
+  AGE_COUNTER,
+  FADE_COUNTER,
+  TIME_COUNTER,
+  TURNS_BETWEEN_OWN_UPKEEPS,
+  applyEnteringCounters,
+  cameUnderControlSinceLastUpkeep,
+  definitionTracksControlSince,
+  markBattlefieldEntry,
+  markControlChange,
+} from './upkeep-costs.js';
+export { isSuspended, openSuspendWindow, suspendWindowOpenFor } from './suspend.js';
+// §3.111 — the graveyard-casting family (graveyard-casting.ts): activated
+// abilities of a card in a graveyard, the graveyard-cast kinds and their closed
+// exit table, and the two additional-cost kinds the family added.
+export type {
+  GraveyardAbility,
+  GraveyardAbilityKind,
+  GraveyardCastAbility,
+  GraveyardCastKind,
+  GraveyardCastOption,
+} from './graveyard-casting.js';
+export {
+  ADDITIONAL_COST_ZONE,
+  GRAVEYARD_ABILITY_RULES,
+  GRAVEYARD_CAST_EXIT,
+  additionalCostPool,
+  canPayAdditionalCost,
+  graveyardCastOptionFor,
+  graveyardCastOptionsOf,
+  leaveBattlefieldDestination,
+  spellAdditionalCostOf,
+} from './graveyard-casting.js';
+// §3.113 — the spell-count family: cast triggers (storm / cascade / ripple),
+// the library-pile windows, and storm's per-turn spell count.
+export type { CastTriggeredAbility, CastTriggerKeyword } from './cast-triggers.js';
+export { castTriggerCount, pushCastTriggers } from './cast-triggers.js';
+export {
+  declinePileWindow,
+  isFreeCastWindow,
+  performCascade,
+  performRipple,
+  settleCastWindowAfterCast,
+  spellOnStackById,
+  stackManaValueOf,
+} from './cascade.js';
+export { spellsCastThisTurn } from './turn-facts.js';
+
 // State
 export type {
   GameState,
@@ -439,6 +518,7 @@ export type {
   ModePick,
   CombatState,
   MadnessWindow,
+  CastWindowKind,
   SpellLeaveReason,
 } from './state.js';
 export {
@@ -508,6 +588,7 @@ export type {
   CastZone,
   LandPlayZone,
   CycleCardAction,
+  SuspendCardAction,
   DeclareAttackersAction,
   DeclareBlockersAction,
   AnswerChoiceAction,
@@ -695,4 +776,22 @@ export { loseGame, winGame } from './internal/sba.js';
 // Debug / inspector seam
 export type { SerializedState } from './serialize.js';
 export { serializeState, dumpState } from './serialize.js';
+
+// --- poison family (§3.105) -----------------------------------------------------
+// Poison counters as a player resource (CR 122.1f / 704.5c): the one reader and
+// the one writer of `PlayerState.poison`, exported so the cards package's
+// proliferate and "gets a poison counter" primitives, the pilot's lethal
+// arithmetic and the web seat panel all read the same number.
+export {
+  POISON_LOSS_THRESHOLD,
+  POISON_LOSS_REASON,
+  addPoisonCounters,
+  hasLethalPoison,
+  isPoisoned,
+  poisonOf,
+} from './poison.js';
+// The CR 120.3 damage-RESULT funnel — life loss or poison, loyalty, defense,
+// marked damage or -1/-1 counters, deathtouch, lifelink and toxic — exported so
+// every noncombat damage primitive applies the same table combat does.
+export { applyDamageResult } from './internal/damage-result.js';
 

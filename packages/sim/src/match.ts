@@ -227,44 +227,76 @@ export function runMatch(seats: MatchSeats, seed: number, opts: MatchOptions = {
   // and bank a fake timeout draw, so after `maxConsecutiveRejectedActions` we pass
   // priority for it and let the game move on (deterministic — state only).
   let consecutiveRejections = 0;
+  /*
+   * THE PLAN SEAM (§3.108). A pilot answering `chooseActions` hands back its
+   * decision AND the actions it promises to take next (the rest of a spell's
+   * funding taps, then the cast). Those are queued here and applied one per
+   * loop iteration — through every piece of bookkeeping below, exactly as a
+   * decided action is — without building a menu or asking the pilot again.
+   *
+   * ⚠️ The queue is only ever consumed against the state it was planned for:
+   * it is dropped the moment priority moves, a choice is parked, the stack
+   * changes depth, an action is rejected, or the game ends. Everything a
+   * queued action does is still the ENGINE's decision — a queued cast the
+   * rules refuse is rejected like any other. The guard is a transcript
+   * comparison (`action-plan.test.ts`): whole games with and without the seam
+   * must be identical action for action.
+   */
+  const queued: GameAction[] = [];
+  let queuedAt = 0;
   // Bound the loop two independent ways so a pathological state can never hang.
   while (!state.gameOver && state.turnNumber <= sim.maxTurnsPerGame && actions < sim.maxActionsPerGame) {
     const seat = state.priorityPlayer;
     const pilot = pilots[seat];
 
-    // THE FAST PASS (§3.73). A pilot may declare, from the state alone, that it
-    // is going to pass whatever the menu holds — and this pilot passes 81.7% of
-    // the 592 windows in a game. Building the menu for those is work enumerated,
-    // scored and discarded, so when the seam answers `true` the pass is applied
-    // directly and `generateLegalActions` is never called.
-    //
-    // ⚠️ SAFE ONLY BECAUSE THE ANSWER IS A PROMISE, not a hint — see
-    // `Pilot.willPassPriority`, and `fast-pass.test.ts`, which plays whole games
-    // with the seam on and off and requires identical transcripts.
-    let legal: readonly GameAction[] | undefined;
-    if (pilot.willPassPriority?.(state, config) !== true) {
-      legal = generateLegalActions(state, config);
-      if (legal.length === 0) break; // no moves (shouldn't happen pre-gameOver) — bail safely
+    let chosen: GameAction;
+    if (queuedAt < queued.length) {
+      chosen = queued[queuedAt++] as GameAction;
+    } else {
+      // THE FAST PASS (§3.73). A pilot may declare, from the state alone, that it
+      // is going to pass whatever the menu holds — and this pilot passes 81.7% of
+      // the 592 windows in a game. Building the menu for those is work enumerated,
+      // scored and discarded, so when the seam answers `true` the pass is applied
+      // directly and `generateLegalActions` is never called.
+      //
+      // ⚠️ SAFE ONLY BECAUSE THE ANSWER IS A PROMISE, not a hint — see
+      // `Pilot.willPassPriority`, and `fast-pass.test.ts`, which plays whole games
+      // with the seam on and off and requires identical transcripts.
+      let legal: readonly GameAction[] | undefined;
+      if (pilot.willPassPriority?.(state, config) !== true) {
+        legal = generateLegalActions(state, config);
+        if (legal.length === 0) break; // no moves (shouldn't happen pre-gameOver) — bail safely
+      }
+      if (legal === undefined) {
+        chosen = { kind: 'passPriority', player: seat };
+      } else {
+        // Thread the pool's effect registry + the active rules config into the decision
+        // context so look-ahead pilots (MCTS) roll out hypothetical lines through the
+        // *same* forward model the real game uses — spell effects resolve at full
+        // fidelity, not as no-ops. Non-simulating pilots simply ignore these fields.
+        const ctx = {
+          view: state,
+          legalActions: legal,
+          rng: rngs[seat],
+          registry: seats.registry,
+          rulesConfig: config,
+          // This seat's per-game observer, or `undefined`. Always present as a
+          // field so the context keeps ONE object shape across every decision of
+          // every pilot — a shape that appeared and disappeared would make this
+          // literal polymorphic in the hottest loop in the harness.
+          observer: observerBySeat[seat],
+        };
+        if (pilot.chooseActions) {
+          const plan = pilot.chooseActions(ctx);
+          chosen = plan[0] as GameAction;
+          queued.length = 0;
+          queuedAt = 0;
+          for (let i = 1; i < plan.length; i++) queued.push(plan[i] as GameAction);
+        } else {
+          chosen = pilot.chooseAction(ctx);
+        }
+      }
     }
-    // Thread the pool's effect registry + the active rules config into the decision
-    // context so look-ahead pilots (MCTS) roll out hypothetical lines through the
-    // *same* forward model the real game uses — spell effects resolve at full
-    // fidelity, not as no-ops. Non-simulating pilots simply ignore these fields.
-    const chosen: GameAction =
-      legal === undefined
-        ? { kind: 'passPriority', player: seat }
-        : pilot.chooseAction({
-            view: state,
-            legalActions: legal,
-            rng: rngs[seat],
-            registry: seats.registry,
-            rulesConfig: config,
-            // This seat's per-game observer, or `undefined`. Always present as a
-            // field so the context keeps ONE object shape across every decision of
-            // every pilot — a shape that appeared and disappeared would make this
-            // literal polymorphic in the hottest loop in the harness.
-            observer: observerBySeat[seat],
-          });
     // Stuck on rejections → take the one move that always advances the game.
     const action: GameAction =
       consecutiveRejections >= sim.maxConsecutiveRejectedActions
@@ -275,6 +307,7 @@ export function runMatch(seats: MatchSeats, seed: number, opts: MatchOptions = {
     // `applyActionInPlace` mutates and returns the SAME object; the pure path
     // returns a fresh one. Reassigning covers both (and a rejected in-place action
     // hands back a clone, so the contracts stay identical either way).
+    const stackDepthBefore = state.stack.length;
     const result = apply(state, action, config, seats.registry);
     state = result.state;
     let rejected = false;
@@ -289,6 +322,19 @@ export function runMatch(seats: MatchSeats, seed: number, opts: MatchOptions = {
       consecutiveRejections++;
     } else {
       consecutiveRejections = 0;
+    }
+    // A queued continuation survives only while the world is the one it was
+    // planned against — see the seam's note above.
+    if (
+      queuedAt < queued.length &&
+      (rejected ||
+        state.gameOver ||
+        state.priorityPlayer !== seat ||
+        state.pendingChoice != null ||
+        state.stack.length !== stackDepthBefore)
+    ) {
+      queued.length = 0;
+      queuedAt = 0;
     }
     actions++;
     if (state.turnNumber !== turnOfCount) {

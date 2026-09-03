@@ -15,7 +15,9 @@ import { describe, expect } from 'vitest';
 import {
   DEFAULT_RULES,
   LOYALTY_COUNTER,
+  MINUS_ONE_COUNTER,
   PLUS_ONE_COUNTER,
+  poisonOf,
   createGame,
   effectivePower,
   effectiveToughness,
@@ -407,6 +409,44 @@ describe('CR 120 / 122 — damage and counters', () => {
     const bear = putOnBattlefield(state, 'A', BEAR, { counters: { [PLUS_ONE_COUNTER]: 2 } });
     expect(effectivePower(bear)).toBe(BEAR.power! + 2);
     expect(effectiveToughness(bear)).toBe(BEAR.toughness! + 2);
+  });
+
+  // --- the poison family (§3.105): CR 120.3's result table, keyed on the source ---
+
+  /** A's `attacker` attacks; B blocks with `blocker` when given; combat resolves. */
+  function swing(state: GameState, attacker: CardDefinition, blocker?: CardDefinition): GameState {
+    const a = putOnBattlefield(state, 'A', attacker);
+    const b = blocker ? putOnBattlefield(state, 'B', blocker) : undefined;
+    let s = advanceTo(state, 'declareAttackers', registry);
+    s = act(s, { kind: 'declareAttackers', player: 'A', attackers: [a.instanceId] }, registry);
+    s = advanceTo(s, 'declareBlockers', registry);
+    s = act(
+      s,
+      { kind: 'declareBlockers', player: 'B', blocks: b ? [{ blocker: b.instanceId, attacker: a.instanceId }] : [] },
+      registry,
+    );
+    return advanceTo(s, 'postcombatMain', registry);
+  }
+
+  crTest('120.3b', 'damage dealt to a player by a source with infect is that many poison counters', () => {
+    const state = atMain();
+    const s = swing(state, creatureDef('Blighted Agent', 1, 1, { keywords: { infect: true } }));
+    expect(poisonOf(s.players.B)).toBe(1);
+    expect(s.players.B.life).toBe(state.players.B.life);
+  });
+
+  crTest('120.3d', 'damage dealt to a creature by a source with wither or infect is that many -1/-1 counters', () => {
+    const state = atMain();
+    const s = swing(
+      state,
+      creatureDef('Scuzzback Scrapper', 1, 1, { keywords: { wither: true } }),
+      creatureDef('Tough Bear', 2, 4),
+    );
+    const victim = s.battlefield.find((c) => c.def.name === 'Tough Bear');
+    expect(victim?.counters[MINUS_ONE_COUNTER]).toBe(1);
+    expect(victim?.damageMarked).toBe(0);
+    // And it really is a 1/3 now — counters shrink through the effective accessors.
+    expect(effectiveToughness(victim!)).toBe(3);
   });
 });
 

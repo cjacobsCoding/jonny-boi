@@ -1,11 +1,12 @@
 /**
- * PROLIFERATE (CR 701.27) — one more counter of EACH kind already there, on
- * any number of chosen permanents.
+ * PROLIFERATE (CR 701.34) — one more counter of EACH kind already there, on
+ * any number of chosen permanents and/or players.
  *
  * The fidelity edges:
- *  - permanents-ONLY is EXACT in this engine (players have no counter record,
- *    and every poison/energy card reports) — asserted by the primitive's own
- *    doc, pinned here by the menu offering only countered permanents;
+ *  - the permanent menu offers only countered permanents; the PLAYER half
+ *    (poison, §3.105) is asked only when somebody is poisoned, and is pinned in
+ *    `poison-family.test.ts` — on the unpoisoned boards here it asks nothing,
+ *    exactly as it did before players could carry a counter;
  *  - EACH KIND grows: a permanent wearing a +1/+1 and a charge counter gains
  *    one of both, and the kinds are snapshot first so nothing counts itself;
  *  - a counterless permanent is never offered, and a counterless board asks

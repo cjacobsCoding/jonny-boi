@@ -107,6 +107,19 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // The O-Ring link (§3.56): dropping this here is how "release the jailed
   // cards" became a no-op — the link only ever lived until the next clone.
   if (inst.exiledUntilLeavesBy !== undefined) copy.exiledUntilLeavesBy = inst.exiledUntilLeavesBy;
+  // §3.106 — the turn an echo permanent came under its controller's control.
+  // Same conditional-copy rule (only echo permanents carry it) and the same
+  // stakes: drop it and every echo bill reads "not owed" one action later.
+  if (inst.controlledSinceTurn !== undefined) copy.controlledSinceTurn = inst.controlledSinceTurn;
+  // §3.111 — unearth's "if it would leave the battlefield, exile it instead"
+  // (CR 702.84c). Same conditional-copy rule (only an unearthed permanent
+  // carries it) and the same stakes: drop it and the creature dies to the
+  // graveyard one action boundary later, to be unearthed again next turn.
+  if (inst.exileIfLeaves !== undefined) copy.exileIfLeaves = inst.exileIfLeaves;
+  // §3.110 — the RENOWNED designation (CR 702.112a). Same conditional-copy
+  // rule (only a renown creature that has connected carries it) and the same
+  // stakes: drop it and a Rhox Maulers grows again on its next connection.
+  if (inst.renowned !== undefined) copy.renowned = inst.renowned;
   // NOTE FOR THE NEXT FIELD, because this copy has now dropped one four times:
   // a fact that belongs to the CARD rather than to this object's runtime state
   // needs no line here at all. `def` is shared by reference above, so a
@@ -162,6 +175,9 @@ function clonePlayer(p: PlayerState): PlayerState {
     manaPool: clonePool(p.manaPool),
     landsPlayedThisTurn: p.landsPlayedThisTurn,
     hasLost: p.hasLost,
+    // poison family (§3.105): copied only when present, so a state that never had
+    // the field stays byte-identical to one cloned before poison existed.
+    ...(p.poison !== undefined ? { poison: p.poison } : {}),
     library: cloneInstances(p.library),
     hand: cloneInstances(p.hand),
     graveyard: cloneInstances(p.graveyard),
@@ -193,6 +209,9 @@ function cloneStackObject(o: StackObject): StackObject {
       // Frozen compile-time data — shared by reference like an InterveningIf.
       ...(o.awaitingModes !== undefined ? { awaitingModes: o.awaitingModes } : {}),
       ...(o.triggeringAmount !== undefined ? { triggeringAmount: o.triggeringAmount } : {}),
+      // "That creature" (DESIGN §3.107): a fresh array, because the frame that
+      // reads it outlives this stack object and nothing may alias across a clone.
+      ...(o.triggeringInstances !== undefined ? { triggeringInstances: [...o.triggeringInstances] } : {}),
       // Same field-by-field stakes as `awaitingTargets`: dropping this would
       // lose the TRIGGERING PLAYER at the very next action boundary, and every
       // "that player draws a card" body would silently fall back to the source's
@@ -242,6 +261,16 @@ function cloneStackObject(o: StackObject): StackObject {
     ...(o.additionalCostPaid !== undefined ? { additionalCostPaid: o.additionalCostPaid } : {}),
     ...(o.awaitingCastChoice !== undefined ? { awaitingCastChoice: o.awaitingCastChoice } : {}),
     ...(o.castFrom !== undefined ? { castFrom: o.castFrom } : {}),
+    // §3.106 — dropping this one would land a suspend-cast creature summoning
+    // sick: the two priority passes between the cast and its resolution are
+    // two action boundaries, and the marker rode neither. Found by the first
+    // test that cast a suspended creature.
+    ...(o.hasteOnEntry !== undefined ? { hasteOnEntry: o.hasteOnEntry } : {}),
+    // §3.111 — which graveyard-cast keyword this spell was cast by. Dropping it
+    // would turn a retraced spell into a flashback one at the first action
+    // boundary and EXILE it as it resolved — a card playing weaker than
+    // printed, silently.
+    ...(o.graveyardCast !== undefined ? { graveyardCast: o.graveyardCast } : {}),
     // Dropping this one would re-ask the as-enters COPY question every time the
     // resolution is re-entered — and a DECLINE leaves nothing on the instance to
     // notice, so the spell would never finish resolving. Same shape, same rule.
@@ -410,6 +439,10 @@ export function cloneState(state: GameState): GameState {
   }
   if (state.turnFactsA !== undefined) next.turnFactsA = state.turnFactsA;
   if (state.turnFactsB !== undefined) next.turnFactsB = state.turnFactsB;
+  // §3.113 — storm's count, the same `!== undefined` rule as the facts beside it.
+  // (A pile window's `pile` rides the `{ ...madnessWindow }` spread above; it
+  // is never mutated in place, so sharing the array is safe.)
+  if (state.spellsCastThisTurn !== undefined) next.spellsCastThisTurn = state.spellsCastThisTurn;
   return next;
 }
 

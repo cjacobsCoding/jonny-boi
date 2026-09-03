@@ -13,6 +13,7 @@ import { effectivePower, effectiveToughness } from './internal/stats.js';
 import { indexContinuous, NO_MOD } from './internal/continuous.js';
 import { isBattle, isCreature, isPlaneswalker } from './card.js';
 import { defenseOf, loyaltyOf } from './internal/stats.js';
+import { poisonOf } from './poison.js';
 
 /** A plain, JSON-safe snapshot of the game (no methods, no class instances). */
 export interface SerializedState {
@@ -44,6 +45,12 @@ export interface SerializedState {
       readonly graveyardSize: number;
       readonly landsPlayedThisTurn: number;
       readonly hasLost: boolean;
+      /**
+       * Poison counters (§3.105) — OMITTED when zero, for exactly the reason
+       * `manaRestricted` is: the golden state digests must not move for a board
+       * poison never touched.
+       */
+      readonly poison?: number;
     }
   >;
   readonly battlefield: ReadonlyArray<{
@@ -134,6 +141,7 @@ export function serializeState(state: GameState): SerializedState {
       graveyardSize: p.graveyard.length,
       landsPlayedThisTurn: p.landsPlayedThisTurn,
       hasLost: p.hasLost,
+      ...(poisonOf(p) > 0 ? { poison: poisonOf(p) } : {}),
     };
   }
   const index = indexContinuous(state);
@@ -201,7 +209,7 @@ export function dumpState(state: GameState): string {
   for (const pid of PLAYER_IDS) {
     const p = s.players[pid];
     lines.push(
-      `  ${pid}: life=${p.life} hand=${p.handSize} lib=${p.librarySize} gy=${p.graveyardSize} mana=${p.manaTotal}${p.manaRestricted ? ` (${p.manaRestricted} restricted)` : ''}` +
+      `  ${pid}: life=${p.life}${p.poison ? ` poison=${p.poison}` : ''} hand=${p.handSize} lib=${p.librarySize} gy=${p.graveyardSize} mana=${p.manaTotal}${p.manaRestricted ? ` (${p.manaRestricted} restricted)` : ''}` +
         (p.hasLost ? ' [LOST]' : ''),
     );
   }

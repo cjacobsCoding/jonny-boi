@@ -1,11 +1,19 @@
 import type { ReactElement } from 'react';
 import type { InstanceId, PlayerId } from '@jonny-boi/core';
+import { POISON_LOSS_THRESHOLD } from '@jonny-boi/core';
 import type { BoardPermanent, SeatView } from '../../lib/play/view-model.js';
 import type { JailedCardView } from '../../lib/play/jail-view.js';
 import { BoardPermanentTile } from './BoardPermanentTile.js';
 
 /** Order mana colors consistently (WUBRG + C) for the pool readout. */
 const MANA_ORDER = ['W', 'U', 'B', 'R', 'G', 'C'] as const;
+
+/**
+ * Poison counters within this many of CR 704.5c's threshold read as danger —
+ * the poison clock's version of the life readout's low-life colour (§3.105).
+ */
+const POISON_DANGER_MARGIN = 2;
+const POISON_DANGER_AT = POISON_LOSS_THRESHOLD - POISON_DANGER_MARGIN;
 
 /** How a board permanent may be interacted with this frame. */
 export interface PermInteraction {
@@ -101,6 +109,20 @@ export function SeatPanel({
           >
             <span aria-hidden="true">❤</span> {seat.life}
           </span>
+          {/*
+           * The POISON clock (CR 704.5c, §3.105), shown only once it has
+           * started: a "0" beside every life total would be noise on the
+           * boards where poison never happens, which is most of them.
+           */}
+          {seat.poison > 0 && (
+            <span
+              className={`seat__poison${seat.poison >= POISON_DANGER_AT ? ' seat__poison--danger' : ''}`}
+              title={`Poison counters (${POISON_LOSS_THRESHOLD} loses)`}
+              aria-label={`${seat.name} poison`}
+            >
+              <span aria-hidden="true">☠</span> {seat.poison}
+            </span>
+          )}
           {isActive && <span className="seat__tag">active turn</span>}
           {hasPriority && <span className="seat__tag seat__tag--priority">priority</span>}
         </div>

@@ -12,6 +12,8 @@
  * tuning. Ties break on the seeded RNG, so behaviour stays reproducible.
  */
 
+import { DEFAULT_RULES, POISON_LOSS_THRESHOLD } from '@jonny-boi/core';
+
 /** The complete, tunable weight set the heuristic reads. Pure data. */
 export interface HeuristicWeights {
   // --- land / tempo --------------------------------------------------------
@@ -126,6 +128,20 @@ export interface HeuristicWeights {
   /** Score for any other castable spell we don't specifically understand. Above
    *  passing (so we do *something* with mana) but below targeted plays. */
   readonly genericSpellScore: number;
+  // --- the spell-count family (§3.113): cast triggers -----------------------
+  /**
+   * STORM: added to a storm spell's score once per spell already cast this
+   * turn — each is a copy the cast will make (CR 702.40a). So a Grapeshot sits
+   * in hand while the cheap spells go first and is cast when the count is
+   * highest, without a plan seam: the term simply grows as the turn goes on.
+   */
+  readonly stormPerSpellCast: number;
+  /**
+   * CASCADE: added once per printed instance — the expected worth of a free
+   * spell off the top, priced as a generic cast (`genericSpellScore`-sized)
+   * rather than as a specific card, because the top of the library is unknown.
+   */
+  readonly cascadePerInstance: number;
   /** Score for passing priority — the floor. Any positive-scoring play beats it. */
   readonly passScore: number;
 
@@ -145,6 +161,38 @@ export interface HeuristicWeights {
    *  otherwise empty unused. Just above `passScore`: it never outbids a real
    *  play, and it stops mana from being wasted on a turn with nothing to do. */
   readonly cycleIdleScore: number;
+
+  // --- §3.106 upkeep costs and time counters ---------------------------------
+  /** Score for SUSPENDING a card from hand (CR 702.62a) that cannot be cast this
+   *  turn. Above `passScore` so a hand of uncastable suspend cards does something
+   *  with its mana; below `genericSpellScore` so a castable spell is cast first. */
+  readonly suspendScore: number;
+  /** Extra suspend score per point of the suspended card's mana value — a
+   *  seven-drop waiting four turns is a better use of {1}{R} than a three-drop. */
+  readonly suspendPerManaValue: number;
+  /** Over how many upkeeps a permanent's worth is spread when it is TEMPORARY —
+   *  a vanishing or fading permanent with N counters left is worth N/horizon of a
+   *  permanent one (capped at 1). A Blastoderm on its last fade counter is a chump
+   *  blocker, not a 5/5, to a pilot ranking what to sacrifice or discard. */
+  readonly temporaryPermanentHorizon: number;
+  /** What an upkeep BILL (echo, cumulative upkeep, "sacrifice ~ unless you pay")
+   *  has to buy per mana it costs: the bill is paid when the permanent's
+   *  `cardValue` is at least this many points per mana of the bill — or when the
+   *  mana is SPARE, i.e. paying still leaves this turn's best castable spell
+   *  affordable. Below it the permanent is let go rather than the turn stranded. */
+  readonly upkeepBillWorthPerMana: number;
+
+  // --- §3.111 the graveyard-casting family ------------------------------------
+  /** What ONE card of graveyard fuel costs when a keyword's rider spends it —
+   *  escape's "exile N other cards from your graveyard", and a flashback's
+   *  "tap N untapped creatures": a small per-card tempo/option price, so a
+   *  Glimpse of Freedom is escaped when the draw is worth more than five
+   *  points of yard, and not when the yard is what the deck runs on. */
+  readonly graveyardFuelCardValue: number;
+  /** What a "{cost}: Return ~ from your graveyard to your hand" activation is
+   *  worth, as a share of the card's own value: the card still has to be cast
+   *  again, so it is priced like a granted flashback rather than a free draw. */
+  readonly graveyardReturnShare: number;
 
   // --- attacking -----------------------------------------------------------
   /** Minimum net "value" (see attack evaluation) for an attack to be worth making.
@@ -203,6 +251,15 @@ export interface HeuristicWeights {
   /** Below this life total the defender blocks much more readily (preserve life /
    *  avoid lethal takes priority over keeping creatures back). */
   readonly desperateLifeThreshold: number;
+  /**
+   * How much LIFE one poison counter is worth when the pilot has to price the
+   * two clocks on one scale (§3.105) — ranking an infect attacker against a
+   * vanilla one, or valuing a fog. Lethal itself is never priced through this:
+   * `pressureIsLethal` asks each clock its own question. Derived, not chosen:
+   * the starting life over CR 704.5c's ten counters, so a format that changes
+   * the starting life changes the exchange rate with it.
+   */
+  readonly poisonCounterLifeEquivalent: number;
   /** Net value threshold for making a block when not under lethal pressure: block
    *  if the trade is at least this good (kills the attacker without losing more
    *  than we gain). */
@@ -561,12 +618,29 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
 
   // generic / fallback
   genericSpellScore: 25,
+  // §3.113 — a storm copy is worth about a generic cast; a cascade's free
+  // spell about one too. Both sit below `removalBaseScore` so a real removal
+  // spell in hand is still cast before a speculative storm.
+  stormPerSpellCast: 20,
+  cascadePerInstance: 25,
   passScore: 0,
 
   // cycling
   floodedLandCount: 5,
   cycleFloodedScore: 45,
   cycleIdleScore: 5,
+
+  // §3.106 upkeep costs and time counters
+  suspendScore: 12,
+  suspendPerManaValue: 2,
+  temporaryPermanentHorizon: 4,
+  // Four points per mana: a 3/3 (cardValue 22) pays an echo of {1}{G} (8) and a
+  // Deranged Hermit (1/1, 14) declines its {3}{G}{G} (20) and keeps the squirrels.
+  upkeepBillWorthPerMana: 4,
+
+  // §3.111 the graveyard-casting family
+  graveyardFuelCardValue: 1,
+  graveyardReturnShare: 0.5,
 
   // attacking
   attackValueThreshold: 1,
@@ -599,6 +673,9 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
 
   // blocking
   desperateLifeThreshold: 10,
+  // 20 life / 10 poison = 2 life per counter (§3.105), derived from the rules
+  // rather than typed, so the exchange rate follows the format's starting life.
+  poisonCounterLifeEquivalent: DEFAULT_RULES.startingLife / POISON_LOSS_THRESHOLD,
   blockValueThreshold: 0,
   // One point of life ≈ one stat point, the exchange rate the rest of combat
   // already uses (`faceDamageValue` is 1 on the same scale). At 1 an 0/4 wall

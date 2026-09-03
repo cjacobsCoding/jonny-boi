@@ -10,6 +10,10 @@
  *   - trample: excess damage beyond a blocker's lethal threshold tramples to the
  *     defending player.
  *   - lifelink: damage dealt also gains its controller that much life.
+ *   - infect / wither / toxic (§3.105): what damage DOES once it lands — marks or
+ *     -1/-1 counters, life or poison, lifelink and toxic on top — is CR 120.3's
+ *     table, applied in ONE place (`damage-result.ts`) for combat and noncombat
+ *     damage alike; this file only decides how much is assigned to whom.
  *
  * Keywords and P/T are read through the continuous-effects layer (internal/
  * continuous.ts): a `ContinuousIndex` is built once per combat pass and threaded so
@@ -35,18 +39,27 @@ import {
   effectiveKeywords,
   loyaltyOf,
   remainingToughness,
-  removeDefense,
-  removeLoyalty,
 } from './stats.js';
 import { hasType, isBattle, isPlaneswalker } from '../card.js';
 import { protectionBlocksSource } from '../protection.js';
 import { findOnBattlefield } from './zones.js';
 import { attackingCreatureIds, isRemovedFromCombat } from '../combat-removal.js';
+import { controlsLandMatchingAny } from '../land-conditions.js';
 import type { ContinuousIndex } from './continuous.js';
 import { indexContinuous, NO_MOD } from './continuous.js';
 import { blockRequirementProblem } from './block-solver.js';
 import type { ReplacementIndex } from './replacement.js';
 import { indexReplacements, replaceDamage } from './replacement.js';
+import { applyDamageResult } from './damage-result.js';
+
+/**
+ * The battlefield `canBlock` reads when its caller passes none. Shared and
+ * frozen: it says "the defender controls no lands", which is the right answer
+ * for every board test that builds two creatures and nothing else — and for
+ * every call site that carries a real board, the real one is passed. Only
+ * LANDWALK reads it (DESIGN §3.107).
+ */
+const NO_PERMANENTS: readonly CardInstance[] = Object.freeze([]);
 
 /** Effective keywords for an instance under the given continuous index. */
 function kw(inst: CardInstance, index: ContinuousIndex): KeywordFlags {
@@ -72,7 +85,12 @@ function toughness(inst: CardInstance, index: ContinuousIndex): number {
  * creature that a static has given flying. Build it once with `indexContinuous` and
  * thread it through (the engine already does, for exactly this reason).
  */
-export function canBlock(attacker: CardInstance, blocker: CardInstance, index: ContinuousIndex): boolean {
+export function canBlock(
+  attacker: CardInstance,
+  blocker: CardInstance,
+  index: ContinuousIndex,
+  battlefield: readonly CardInstance[] = NO_PERMANENTS,
+): boolean {
   if (blocker.tapped) return false;
   const idx = index;
   const ak = kw(attacker, idx);
@@ -83,6 +101,34 @@ export function canBlock(attacker: CardInstance, blocker: CardInstance, index: C
   // "Can't be blocked" is absolute — checked before evasion, which it subsumes.
   if (ak.unblockable) return false;
   if (ak.flying && !(bk.flying || bk.reach)) return false;
+  // --- the combat keyword family (DESIGN §3.107) ------------------------------
+  // SHADOW (CR 702.28b) is SYMMETRIC: a shadow creature can't be blocked by a
+  // creature without shadow, AND a creature without shadow can't be blocked by
+  // one with it. One inequality states both halves, so neither can be forgotten.
+  if ((ak.shadow === true) !== (bk.shadow === true)) return false;
+  // "~ can block ONLY creatures with flying" — the blocker's own restriction on
+  // what it may block (Welkin Tern). The attacker must carry one of the named
+  // keywords; an empty list (two printed lines that agree on nothing) blocks
+  // nothing, which is what both lines together say.
+  const blockOnly = bk.blockOnly;
+  if (blockOnly !== undefined) {
+    let allowed = false;
+    for (const keyword of blockOnly.attackerMustHaveAnyOf) {
+      if (ak[keyword] === true) {
+        allowed = true;
+        break;
+      }
+    }
+    if (!allowed) return false;
+  }
+  // LANDWALK (CR 702.18b): unblockable while the DEFENDING player — the
+  // blocker's controller — controls a land the walk names. The only evasion
+  // rule that reads something other than the two creatures, which is why
+  // `battlefield` is a parameter; a caller that omits it is asserting the
+  // defender controls no lands at all (see `NO_PERMANENTS`).
+  if (ak.landwalk !== undefined && controlsLandMatchingAny(battlefield, blocker.controller, ak.landwalk)) {
+    return false;
+  }
   // Protection's fourth half: an attacker with protection from [quality] can't
   // be blocked by creatures having that quality (protection from creatures
   // therefore makes it unblockable, since every blocker is a creature).
@@ -231,6 +277,7 @@ export function illegalBlockDeclaration(
   blocks: ReadonlyArray<{ readonly blocker: InstanceId; readonly attacker: InstanceId }>,
   index: ContinuousIndex,
   defenders: readonly CardInstance[] = [],
+  battlefield: readonly CardInstance[] = NO_PERMANENTS,
 ): string | undefined {
   // ONE keyword read per attacker, used by BOTH halves. `effectiveKeywords` merges
   // the printed set with whatever the continuous layer granted, so it is the most
@@ -243,13 +290,21 @@ export function illegalBlockDeclaration(
     const keywords = kw(attacker, index);
     if (keywords.mustBeBlocked === true || keywords.blockedByAllAble === true) anyRequirement = true;
     const required = minimumBlockersFor(keywords);
-    if (required === 0) continue;
+    // "~ can't be blocked by MORE THAN one creature" (DESIGN §3.107) — the dual
+    // of the minimum, read off the same keyword set in the same pass. A cap and a
+    // minimum together are both in force: menace plus a cap of one is a creature
+    // nobody can legally block, which is what the two printed lines say.
+    const cap = keywords.maxBlockers;
+    if (required === 0 && cap === undefined) continue;
     const assigned = blocks.filter((b) => b.attacker === attacker.instanceId).length;
     // Zero is fine — the rule forbids being blocked by TOO FEW, not being unblocked.
     if (assigned > 0 && assigned < required) {
       return required === MENACE_MINIMUM_BLOCKERS
         ? `${attacker.def.name} has menace and can't be blocked by exactly one creature`
         : `${attacker.def.name} can't be blocked except by ${required} or more creatures`;
+    }
+    if (cap !== undefined && assigned > cap) {
+      return `${attacker.def.name} can't be blocked by more than ${cap === 1 ? 'one creature' : `${cap} creatures`}`;
     }
   }
   // THE EMPTY CHECK, and the whole reason a rules-complete CR 509.1c/d solver can
@@ -259,7 +314,7 @@ export function illegalBlockDeclaration(
   if (!anyRequirement) return undefined;
   // Requirements LAST: every restriction above is now known to hold, which is
   // exactly the condition CR 509.1d maximises under.
-  return blockRequirementProblem(attackers, defenders, blocks, index);
+  return blockRequirementProblem(attackers, defenders, blocks, index, battlefield);
 }
 
 /** Does this creature deal damage in the first-strike step? */
@@ -361,43 +416,13 @@ function applyDamage(
     // already had).
     if (amount <= 0) return;
   }
-  if (typeof target === 'string') {
-    const player = state.players[target];
-    player.life -= amount;
-    emit({ type: 'damageDealt', source: source.instanceId, target, amount, combat: true });
-    emit({ type: 'lifeChanged', player: target, delta: -amount, to: player.life });
-  } else if (isPlaneswalker(target.def)) {
-    // Damage to a planeswalker removes that many loyalty counters immediately
-    // (CR 120.3c) — loyalty is its life total, not marked damage cleared at
-    // cleanup. The 0-loyalty death is the SBA pass that follows the damage step.
-    const removed = removeLoyalty(target, amount);
-    emit({ type: 'damageDealt', source: source.instanceId, target: target.instanceId, amount, combat: true });
-    if (removed > 0) {
-      emit({ type: 'loyaltyChanged', instanceId: target.instanceId, delta: -removed, to: loyaltyOf(target) });
-    }
-  } else if (isBattle(target.def)) {
-    // Damage to a battle removes that many DEFENSE counters immediately
-    // (CR 120.3d) — the exact shape of walker loyalty, and the 0-defense
-    // defeat is likewise the SBA pass that follows the damage step.
-    const removed = removeDefense(target, amount);
-    emit({ type: 'damageDealt', source: source.instanceId, target: target.instanceId, amount, combat: true });
-    if (removed > 0) {
-      emit({ type: 'defenseChanged', instanceId: target.instanceId, delta: -removed, to: defenseOf(target) });
-    }
-  } else {
-    // Protection's second half (CR 702.16e) was already applied at the top of
-    // this function, before the replacement layer — see the comment there for
-    // why the order matters.
-    target.damageMarked += amount;
-    if (kw(source, index).deathtouch) target.markedByDeathtouch = true;
-    emit({ type: 'damageDealt', source: source.instanceId, target: target.instanceId, amount, combat: true });
-  }
-  if (kw(source, index).lifelink) {
-    const controller = state.players[source.controller];
-    controller.life += amount;
-    emit({ type: 'gainLife', player: source.controller, amount });
-    emit({ type: 'lifeChanged', player: source.controller, delta: amount, to: controller.life });
-  }
+  // THE ONE DAMAGE-RESULT FUNNEL (CR 120.3, §3.105). Life loss or poison, loyalty,
+  // defense, marked damage or -1/-1 counters, deathtouch, lifelink and toxic are
+  // decided in `damage-result.ts` for combat and noncombat damage alike, so an
+  // infect creature that FIGHTS lands counters exactly as one that attacks.
+  // Protection's second half (CR 702.16e) was already applied at the top of this
+  // function, before the replacement layer — see the comment there for why.
+  applyDamageResult(state, source, target, amount, true, index, emit);
 }
 
 /**

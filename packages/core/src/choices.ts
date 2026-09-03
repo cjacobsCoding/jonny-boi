@@ -365,6 +365,14 @@ interface ChoiceRequestBase {
   readonly prompt: string;
   /** Hint for AI answering; see {@link ChoiceValence}. Defaults to `'neutral'`. */
   readonly valence?: ChoiceValence;
+  /**
+   * §3.110 — the question's SHAPE, when a primitive asks one the valence alone
+   * cannot describe (devour's "sacrifice any number of creatures: N counters
+   * each"). Carried through to `PendingChoiceBase.context` unchanged; the
+   * engine's own entry-path contexts are stamped after normalisation and never
+   * come from a request.
+   */
+  readonly context?: 'devour' | 'explore' | 'riot' | 'unleash' | 'fabricate';
 }
 
 /**
@@ -446,6 +454,15 @@ export interface PayManaRequest extends ChoiceRequestBase {
    * unaffordable, which is the answer that spends nothing.
    */
   readonly affordable?: boolean;
+  /**
+   * §3.106 — the permanent that is SACRIFICED if the payment is declined: an
+   * echo or cumulative-upkeep bill, "sacrifice ~ unless you pay {U}{U}". A
+   * choice still knows no rules — this is an id, and the UI shows the prompt —
+   * but it is what lets a pilot price the bill against the thing at stake
+   * instead of paying every upkeep tax it can afford and stranding its turn.
+   * Absent for every payment that is not a bill on a permanent.
+   */
+  readonly stakeInstanceId?: InstanceId;
 }
 
 export interface PayLifeRequest extends ChoiceRequestBase {
@@ -553,7 +570,19 @@ interface PendingChoiceBase {
    * resolution behind it, and the one question that parks with the TURN itself
    * waiting on the answer.
    */
-  readonly context?: 'legendRule' | 'cleanupDiscard' | 'asEnters' | 'copyAsEnters';
+  // §3.110 — `'devour'` marks the as-enters "sacrifice any number of …" question
+  // (CR 702.82a): NOT an edict, so a pilot weighs each candidate against the
+  // counters it becomes rather than giving up its worst body.
+  readonly context?:
+    | 'legendRule'
+    | 'cleanupDiscard'
+    | 'asEnters'
+    | 'copyAsEnters'
+    | 'devour'
+    | 'explore'
+    | 'riot'
+    | 'unleash'
+    | 'fabricate';
   /**
    * The permanent an entry-path answer applies to: the one whose
    * `chosenAsEntered` an `'asEnters'` answer is written to, and the one a
@@ -613,6 +642,8 @@ export interface PayManaChoice extends PendingChoiceBase {
    * spends anything.
    */
   readonly affordable: boolean;
+  /** §3.106 — see {@link PayManaRequest.stakeInstanceId}. */
+  readonly stakeInstanceId?: InstanceId;
 }
 
 export interface PayLifeChoice extends PendingChoiceBase {
@@ -821,6 +852,8 @@ export function normalizeChoiceRequest(request: ChoiceRequest, source: ChoiceSou
     valence,
     sourceInstanceId: source.sourceInstanceId,
     sourceName: source.sourceName,
+    // §3.110 — a request-declared shape rides through; absent stays absent.
+    ...(request.context !== undefined ? { context: request.context } : {}),
   };
   switch (request.kind) {
     case 'selectCards': {
@@ -877,6 +910,8 @@ export function normalizeChoiceRequest(request: ChoiceRequest, source: ChoiceSou
         // frozen cost object, and a parked choice outlives the call that raised it.
         cost: { ...request.cost },
         affordable: request.affordable ?? false,
+        // §3.106 — the bill's stake rides the choice for the pilot.
+        ...(request.stakeInstanceId !== undefined ? { stakeInstanceId: request.stakeInstanceId } : {}),
         min: 1,
         max: 1,
       };
@@ -1434,6 +1469,8 @@ export interface ResolutionFrame {
    * kicked" is read during a resolution that outlives the stack object.
    */
   kickCount?: number;
+  /** §3.106 — a suspend-cast creature enters unsick; see `SpellStackObject.hasteOnEntry`. */
+  hasteOnEntry?: boolean;
   /**
    * PER-EFFECT targets, parallel to {@link effects} — entry `i` is what
    * `effects[i]` points at, or `undefined` to fall back to the frame-wide
@@ -1463,4 +1500,10 @@ export interface ResolutionFrame {
   triggeringPlayer?: PlayerId;
   /** "That much" — the amount the triggering event carried. See the trigger. */
   triggeringAmount?: number;
+  /**
+   * "That creature" / "the blocking creature" — the objects the triggering
+   * event was about (DESIGN §3.107), carried off the stack object for the same
+   * reason as {@link triggeringPlayer}. See `PendingTrigger.triggeringInstances`.
+   */
+  triggeringInstances?: readonly InstanceId[];
 }

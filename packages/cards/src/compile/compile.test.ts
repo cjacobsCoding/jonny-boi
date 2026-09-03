@@ -17,6 +17,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { colorsOfDefinition } from '@jonny-boi/core';
 import type { CardDefinition } from '@jonny-boi/core';
 import { CARD_POOL } from '../../data/pool.js';
 import { STUBBED_MECHANICS } from '../index.js';
@@ -627,25 +628,28 @@ describe('compileCard — templated cards outside the curated pool', () => {
     // every one of them is implemented now, and the stand-in has had to move each
     // time. (Skulk went, then HORSEMANSHIP — §3.102 gave it a `KeywordFlags` flag
     // and a `blockRestriction` naming that flag, alongside fear and intimidate
-    // whose exceptions name a colour or a card type instead.) CUMULATIVE UPKEEP is
-    // the current stand-in: an upkeep cost that grows by an age counter each turn
-    // and sacrifices the permanent when unpaid, which is a turn-structure system
-    // rather than a flag. The point of the test has never changed: an ability we cannot model
+    // whose exceptions name a colour or a card type instead. Then CUMULATIVE
+    // UPKEEP, until §3.106 made it an upkeep trigger with an age-scaled bill.)
+    // The point of the test has never changed: an ability we cannot model
     // must be REPORTED, never silently dropped.
+    // BANDING is the current stand-in:
+    // the Alpha combat-grouping rule (CR 702.22) whose damage-assignment half
+    // needs the defending player to divide an attacker's damage among a band,
+    // which is a combat system rather than a flag.
     const result = compileCard(
       makeCard({
-        name: 'Ageing Beast',
+        name: 'Banded Beast',
         typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Beast'] },
         manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0, other: [] },
         power: 3,
         toughness: 3,
-        oracleText: 'Cumulative upkeep {1}',
-        keywords: ['Cumulative upkeep'],
+        oracleText: 'Banding',
+        keywords: ['Banding'],
       }),
     );
 
     expect(result.status).toBe('incomplete');
-    expect(result.missing.some((gap) => /cumulative upkeep/i.test(gap.text))).toBe(true);
+    expect(result.missing.some((gap) => /banding/i.test(gap.text))).toBe(true);
   });
 
   it('compiles SKULK, which IS modelled now', () => {
@@ -723,6 +727,46 @@ describe('compileCard — templated cards outside the curated pool', () => {
     expect(horse.status, `missing: ${JSON.stringify(horse.missing)}`).toBe('complete');
     expect(horse.definition.keywords).toMatchObject({ horsemanship: true });
     expect(horse.definition.keywords?.blockRestriction?.blockerMustHaveAnyOf).toEqual(['horsemanship']);
+  });
+  it('compiles devoid into printed colourlessness (§3.104)', () => {
+    // ⚠️ THE WHOLE POINT IS THE COLOURED PIPS. Colour is DERIVED from the cost
+    // when `CardDefinition.colors` is absent, so a devoid card costing {3}{B}
+    // that merely compiled would play as a BLACK creature — a legal target for
+    // "destroy target black creature", stopped by protection from black, and
+    // counted by every anyOfColors filter. Asserting only `status === complete`
+    // would pass on exactly that broken card.
+    const result = compileCard(
+      makeCard({
+        name: 'Eldrazi Drone',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Eldrazi', 'Drone'] },
+        manaCost: { generic: 3, W: 0, U: 0, B: 1, R: 0, G: 0, C: 0, other: [] },
+        power: 3,
+        toughness: 3,
+        colors: [] as never,
+        oracleText: 'Devoid',
+        keywords: ['Devoid'],
+      }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    // `[]` and not absent: absent means "read my pips", which is the bug.
+    expect(result.definition.colors).toEqual([]);
+    expect(colorsOfDefinition(result.definition)).toEqual([]);
+
+    // The control: the SAME cost without devoid is black, which is what makes
+    // the assertion above evidence of anything.
+    const coloured = compileCard(
+      makeCard({
+        name: 'Ordinary Horror',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Horror'] },
+        manaCost: { generic: 3, W: 0, U: 0, B: 1, R: 0, G: 0, C: 0, other: [] },
+        power: 3,
+        toughness: 3,
+        colors: ['B'] as never,
+        oracleText: '',
+        keywords: [],
+      }),
+    );
+    expect(colorsOfDefinition(coloured.definition)).toEqual(['B']);
   });
   it('compiles bushido into a blocks-or-becomes-blocked trigger (§3.103)', () => {
     // Scryfall prints the payload on the LINE ("Bushido 1") and the bare word in

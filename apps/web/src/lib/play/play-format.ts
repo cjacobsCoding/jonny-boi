@@ -81,6 +81,13 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
         text: `${r.playerName(event.player)} ${event.delta >= 0 ? 'gains' : 'loses'} ${Math.abs(event.delta)} life (now ${event.to}).`,
         tone: 'life',
       };
+    case 'poisonChanged':
+      // The poison clock (§3.105) reads like the life clock: the delta and the
+      // running total, so a player can see how close CR 704.5c is.
+      return {
+        text: `${r.playerName(event.player)} gets ${event.delta} poison counter${event.delta === 1 ? '' : 's'} (now ${event.to}).`,
+        tone: 'life',
+      };
     case 'gainLife':
       // Every `gainLife` is emitted immediately after the `lifeChanged` for the
       // same gain (see `changeLife` in packages/cards), so rendering both printed
@@ -125,12 +132,19 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
       // A REVEAL is public by definition, so the name is said out loud — and
       // so is what came of it, because "Goblin Guide's trigger resolves" with no
       // visible consequence was bug report 20260901_210413 verbatim.
+      //
+      // The three explanatory fields are OPTIONAL on the shared event (§3.119):
+      // a FILTERED reveal (Goblin Guide) can say where the card came from, what
+      // revealed it and whether the condition held; an unfiltered one (explore,
+      // §3.110) can only say that it was revealed. Each degrades to the shorter
+      // sentence rather than to a line with "undefined" in it.
       const who = r.playerName(event.player);
-      const outcome = event.matched ? `it goes to ${who}'s hand` : 'it stays where it is';
-      return {
-        text: `${r.name(event.sourceInstanceId)} reveals ${event.name} from the top of ${who}'s ${event.fromZone} — ${outcome}.`,
-        tone: 'trigger',
-      };
+      const source = event.sourceInstanceId === undefined ? null : r.name(event.sourceInstanceId);
+      const where = event.fromZone === undefined ? '' : ` from the top of ${who}'s ${event.fromZone}`;
+      const outcome =
+        event.matched === undefined ? '' : ` — ${event.matched ? `it goes to ${who}'s hand` : 'it stays where it is'}`;
+      const subject = source ?? who;
+      return { text: `${subject} reveals ${event.name}${where}${outcome}.`, tone: 'trigger' };
     }
     case 'continuousEffectAdded': {
       // Say the PUMP in the creature's terms ("Monastery Swiftspear gets

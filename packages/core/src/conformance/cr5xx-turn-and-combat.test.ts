@@ -266,6 +266,57 @@ describe('CR 508 — declare attackers', () => {
     const seen = stepsSeen(declare, (s) => s.step === 'postcombatMain');
     expect(seen).toEqual(['endCombat', 'postcombatMain']);
   });
+
+  // --- the combat keyword family (DESIGN §3.107): restrictions and requirements ---
+  crTest('508.1c', 'a creature that can’t attack unless the defender controls an Island is not declared without one', () => {
+    const sea: CardDefinition = creatureDef('Sea Monster', 6, 6, {
+      keywords: { cantAttackUnlessDefenderControls: [{ kind: 'subtype', subtype: 'island' }] },
+    });
+    const state = atMain();
+    const monster = putOnBattlefield(state, 'A', sea);
+    const declare = advanceTo(state, 'declareAttackers', registry);
+    expect(generateLegalActions(declare).some((a) => a.kind === 'declareAttackers')).toBe(false);
+    expect(
+      rejectionOf(declare, { kind: 'declareAttackers', player: 'A', attackers: [monster.instanceId] }, registry),
+    ).toMatch(/unless defending player controls an Island/);
+    // With the Island under the DEFENDER, the restriction lifts.
+    const withIsland = atMain();
+    const able = putOnBattlefield(withIsland, 'A', sea);
+    putOnBattlefield(withIsland, 'B', { ...landDef('Island', 'U'), subtypes: ['Island'] });
+    const declareAble = advanceTo(withIsland, 'declareAttackers', registry);
+    expect(
+      rejectionOf(declareAble, { kind: 'declareAttackers', player: 'A', attackers: [able.instanceId] }, registry),
+    ).toBeUndefined();
+  });
+
+  crTest('508.1d', 'a creature that attacks each combat if able must be in the declaration', () => {
+    const brigand = creatureDef('Goblin Brigand', 2, 2, { keywords: { mustAttack: true } });
+    const state = atMain();
+    const required = putOnBattlefield(state, 'A', brigand);
+    const bear = putOnBattlefield(state, 'A', BEAR);
+    const declare = advanceTo(state, 'declareAttackers', registry);
+    expect(
+      rejectionOf(declare, { kind: 'declareAttackers', player: 'A', attackers: [bear.instanceId] }, registry),
+    ).toMatch(/attacks each combat if able/);
+    expect(
+      rejectionOf(
+        declare,
+        { kind: 'declareAttackers', player: 'A', attackers: [bear.instanceId, required.instanceId] },
+        registry,
+      ),
+    ).toBeUndefined();
+  });
+
+  crTest('508.1d', 'passing the declare-attackers step declares the required creatures rather than none', () => {
+    const brigand = creatureDef('Goblin Brigand', 2, 2, { keywords: { mustAttack: true } });
+    const state = atMain();
+    const required = putOnBattlefield(state, 'A', brigand);
+    const declare = advanceTo(state, 'declareAttackers', registry);
+    const after = pass(pass(declare, registry), registry);
+    expect(after.combat?.attackersDeclared).toBe(true);
+    expect(after.combat?.attackers).toEqual([required.instanceId]);
+    expect(onBattlefield(after, required.instanceId)?.tapped).toBe(true);
+  });
 });
 
 // --- CR 509: declare blockers -------------------------------------------------------------

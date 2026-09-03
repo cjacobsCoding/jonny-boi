@@ -117,8 +117,11 @@ describe('affinity — the spell costs less for each permanent you control', () 
   });
 
   it('REPORTS a noun outside the closed table instead of widening it', () => {
-    const slivers = compileCard(card('Affinity for Slivers'));
-    expect(slivers.status).not.toBe('complete');
-    expect(slivers.definition.castCostReductionPerPermanent).toBeUndefined();
+    // "Slivers" compiles now (§3.109 added the printed subtype nouns), so the
+    // stand-in is "historic permanents" — a real printed affinity noun that no
+    // table carries, because "historic" is neither a type nor a subtype.
+    const historic = compileCard(card('Affinity for historic permanents'));
+    expect(historic.status).not.toBe('complete');
+    expect(historic.definition.castCostReductionPerPermanent).toBeUndefined();
   });
 });

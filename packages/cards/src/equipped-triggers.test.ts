@@ -311,16 +311,23 @@ describe('the printed cards this family was measured against', () => {
       expect(texts, probe.name).toContain(probe.clause);
     }
 
-    // The static half reports on its own terms: core knows colours, artifacts and
-    // creatures as protection qualities, and nothing else.
+    // The static half reports on its own terms: core knows colours, card types,
+    // subtypes and the colour-count words as protection qualities, and nothing
+    // else — so Sword of Wealth and Power's "from instants and from sorceries"
+    // compiles (§3.109), and a quality outside those tables still reports.
     const wealth = compileCard(
       equipment(
         'Sword of Wealth and Power',
         'Equipped creature gets +2/+2 and has protection from instants and from sorceries.',
       ),
     );
-    expect(wealth.status).toBe('incomplete');
-    expect(wealth.missing.map((m) => m.missingEngineSystem)).toContain(
+    expect(wealth.status, JSON.stringify(wealth.missing)).toBe('complete');
+    expect(wealth.definition.attachment?.modifies?.keywords?.protectionFrom).toEqual(['instants', 'sorceries']);
+    const titan = compileCard(
+      equipment('Void Shield Plating', 'Equipped creature has protection from mana value 3 or less.'),
+    );
+    expect(titan.status).toBe('incomplete');
+    expect(titan.missing.map((m) => m.missingEngineSystem)).toContain(
       'a ward/protection template the compiler does not recognize yet',
     );
   });

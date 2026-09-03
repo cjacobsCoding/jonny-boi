@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 5065 cards.
+ * 5619 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -314,6 +314,36 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+  // Intimidate (This creature can't be blocked except by artifact creatures and/or creatures that share a color with it.)
+  // Whenever this creature deals combat damage to a player, you may discard a card. If you do, draw a card.
+  {
+    id: '6652ed29-ee90-4abc-a6cf-6b18a6cbae86',
+    name: 'Academy Raider',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'sharesColorWithAttacker' }] },
+    },
+    subtypes: ['human', 'warrior'],
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer' },
+        effects: [
+          {
+            primitive: 'mayCostEffects',
+            params: {
+              cost: [{ primitive: 'discardCard', params: { who: 'controller' } }],
+              effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+              prompt: 'You may discard a card. If you do, draw a card',
+            },
+          },
+        ],
+        label: 'Combat damage to a player: you may discard a card. if you do, draw a card',
+      },
+    ],
+  },
   // Target creature gains haste until end of turn.
   // Draw a card.
   {
@@ -372,6 +402,19 @@ const POOL_0: readonly CardDefinition[] = [
         label: 'Enters: sacrifice a creature',
       },
     ],
+  },
+  // Intimidate (This creature can't be blocked except by artifact creatures and/or creatures that share a color with it.)
+  {
+    id: '2513fe72-4e20-49e6-9970-839f1c635792',
+    name: 'Accursed Spirit',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 3,
+    toughness: 2,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'sharesColorWithAttacker' }] },
+    },
+    subtypes: ['spirit'],
   },
   // Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)
   // When this creature enters, destroy target artifact, enchantment, or land.
@@ -453,6 +496,32 @@ const POOL_0: readonly CardDefinition[] = [
           subtypes: ['Squirrel'],
           count: 2,
         },
+      },
+    ],
+  },
+  // Echo {1}{G} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  {
+    id: '05d5a38f-5a60-46da-af1c-440e4bf7fe9e',
+    name: 'Acridian',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 4,
+    subtypes: ['insect'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 1, G: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {1}{G}',
       },
     ],
   },
@@ -755,6 +824,31 @@ const POOL_0: readonly CardDefinition[] = [
     power: 0,
     toughness: 5,
     subtypes: ['turtle'],
+  },
+  // Rampage 3 (Whenever this creature becomes blocked, it gets +3/+3 until end of turn for each creature blocking it beyond the first.)
+  {
+    id: '06673800-22a7-4ee3-92fa-7c7cd4865d30',
+    name: 'Aerathi Berserker',
+    types: ['creature'],
+    cost: { generic: 2, R: 3 },
+    power: 2,
+    toughness: 4,
+    subtypes: ['human', 'berserker'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: {
+              power: { countOf: 'creaturesBlockingThisBeyondFirst', times: 3 },
+              toughness: { countOf: 'creaturesBlockingThisBeyondFirst', times: 3 },
+            },
+          },
+        ],
+        label: 'Rampage 3',
+      },
+    ],
   },
   // Convoke (Your creatures can help cast this spell. Each creature you tap while casting this spell pays for {1} or one mana of that creature's color.)
   // Target creature gets +2/+2 and gains flying until end of turn.
@@ -1346,6 +1440,28 @@ const POOL_0: readonly CardDefinition[] = [
     },
     backFaceCastable: true,
   },
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  {
+    id: '59fdc045-b938-4321-aec3-51685cbbaa52',
+    name: 'Akrasan Squire',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+    ],
+  },
   // {2}{W}, {T}: Tap target creature.
   {
     id: '8d96bc2b-2e31-4654-b192-c3f023d9fde6',
@@ -1548,6 +1664,40 @@ const POOL_0: readonly CardDefinition[] = [
         cost: { mana: { generic: 8 }, tap: true },
         effects: [{ primitive: 'dealDamage', params: { amount: 4 } }],
         label: '{8}, {t}: ~ deals 4 damage to any target',
+      },
+    ],
+  },
+  // Echo {1}{G} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  // {1}{G}: Regenerate this creature.
+  {
+    id: '114fefca-8472-4c09-ae61-75d300d6e681',
+    name: 'Albino Troll',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['troll'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 1, G: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {1}{G}',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 1, G: 1 } },
+        effects: [{ primitive: 'regenerate' }],
+        label: '{1}{g}: regenerate ~',
       },
     ],
   },
@@ -2018,6 +2168,17 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: '9f57f8bf-228b-4da2-823c-67bce8b574cd',
+    name: 'Anaconda',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['snake'],
+  },
   // When this creature enters, you may return target sorcery card from your graveyard to your hand.
   {
     id: '966d56fd-4df8-4532-860c-371641630a70',
@@ -2449,6 +2610,19 @@ const POOL_0: readonly CardDefinition[] = [
       modifies: { power: 0, toughness: 0, keywords: { flying: true } },
     },
   },
+  // Affinity for Citizens (This spell costs {1} less to cast for each Citizen you control.)
+  // Flying
+  {
+    id: 'e6cce4d3-e6d8-4c6f-9d9c-c0a8a607a42f',
+    name: 'Angelic Observer',
+    types: ['creature'],
+    cost: { generic: 5, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['angel', 'advisor'],
+    castCostReductionPerPermanent: { amount: 1, filter: { anyOfSubtypes: ['Citizen'] } },
+  },
   // Creatures you control get +0/+1.
   // Sacrifice this enchantment: Return target creature to its owner's hand.
   {
@@ -2724,6 +2898,17 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: '9e43d62c-488a-4c8d-b193-bacbf8037761',
+    name: 'Anurid Murkdiver',
+    types: ['creature'],
+    cost: { generic: 4, B: 2 },
+    power: 4,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['zombie', 'frog', 'beast'],
+  },
   // Flying
   // First strike (This creature deals combat damage before creatures without first strike.)
   {
@@ -2910,6 +3095,25 @@ const POOL_0: readonly CardDefinition[] = [
           },
         ],
         label: '{2}{u}, {t}: target creature gets -2/-0 until end of turn',
+      },
+    ],
+  },
+  // Flying
+  // Bushido 1 (Whenever this creature blocks or becomes blocked, it gets +1/+1 until end of turn.)
+  {
+    id: 'f6e4a170-1075-47e4-abe6-996b161573c1',
+    name: 'Araba Mothrider',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true },
+    subtypes: ['human', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Bushido 1',
       },
     ],
   },
@@ -3298,6 +3502,29 @@ const POOL_0: readonly CardDefinition[] = [
     entersTapped: true,
     producesOptions: [{ G: 1 }, { W: 1 }],
   },
+  // Cumulative upkeep {2} (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)
+  // When this creature enters, draw a card.
+  {
+    id: 'b5fb56a2-5138-4c31-aa4b-0824a1a24573',
+    name: 'Arctic Wolves',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    power: 4,
+    toughness: 5,
+    subtypes: ['wolf'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [{ primitive: 'cumulativeUpkeep', params: { mana: { generic: 2 } } }],
+        label: 'Cumulative upkeep {2}',
+      },
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Enters: draw a card',
+      },
+    ],
+  },
   // Vigilance
   {
     id: '8c78d392-9f2f-4241-9a10-6ac9b1e86154',
@@ -3494,6 +3721,17 @@ const POOL_0: readonly CardDefinition[] = [
     toughness: 5,
     subtypes: ['crab'],
   },
+  // This creature can't attack unless defending player controls an Island.
+  {
+    id: '484b2978-2da5-41cf-85d4-128e9dae75c0',
+    name: 'Armored Galleon',
+    types: ['creature'],
+    cost: { generic: 4, U: 1 },
+    power: 5,
+    toughness: 4,
+    keywords: { cantAttackUnlessDefenderControls: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['human', 'pirate'],
+  },
   // Flying, vigilance
   {
     id: '1af85ada-7d0c-4b0c-bbff-d294318d3d9f',
@@ -3679,6 +3917,33 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+  // Cumulative upkeep {U} (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)
+  // {1}: Target creature gains flying until end of turn.
+  {
+    id: '2307fb16-8b77-45b5-8a02-51a13214791d',
+    name: 'Arnjlot\'s Ascent',
+    types: ['enchantment'],
+    cost: { generic: 1, U: 2 },
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [{ primitive: 'cumulativeUpkeep', params: { mana: { U: 1 } } }],
+        label: 'Cumulative upkeep {U}',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordUntilEndOfTurn',
+            params: { keywords: { flying: true }, targets: 'creature' },
+          },
+        ],
+        label: '{1}: target creature gains flying until end of turn',
+      },
+    ],
+  },
   // Menace (This creature can't be blocked except by two or more creatures.)
   // {W}{B}, {T}, Sacrifice another creature: Put a +1/+1 counter on each creature you control.
   {
@@ -3856,6 +4121,18 @@ const POOL_0: readonly CardDefinition[] = [
     toughness: 2,
     keywords: { flash: true },
     subtypes: ['bear'],
+  },
+  // Haste
+  // This creature attacks each combat if able.
+  {
+    id: 'de3218e3-4640-4f73-a52b-f11ea5ea23a9',
+    name: 'Ashen Monstrosity',
+    types: ['creature'],
+    cost: { generic: 5, R: 2 },
+    power: 7,
+    toughness: 4,
+    keywords: { haste: true, mustAttack: true },
+    subtypes: ['spirit'],
   },
   // This creature can't block.
   {
@@ -4378,6 +4655,41 @@ const POOL_0: readonly CardDefinition[] = [
     subtypes: ['human', 'monk'],
     produces: ['W'],
   },
+  // Haste
+  // Echo {3}{R} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  // When this creature enters, destroy target land.
+  {
+    id: 'abb19b6b-4142-4b93-85ca-3f2d8b23b4e1',
+    name: 'Avalanche Riders',
+    types: ['creature'],
+    cost: { generic: 3, R: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { haste: true },
+    subtypes: ['human', 'nomad'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 3, R: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {3}{R}',
+      },
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'destroyTarget', params: { targets: 'land' } }],
+        label: 'Enters: destroy target land',
+        targets: 'land',
+      },
+    ],
+  },
   // Flying (This creature can't be blocked except by creatures with flying or reach.)
   // When this creature enters, you gain 3 life.
   {
@@ -4588,6 +4900,30 @@ const POOL_0: readonly CardDefinition[] = [
     subtypes: ['bird', 'soldier'],
   },
   // Flying
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  {
+    id: 'e60a0c43-9f47-404a-8acf-508173e7062f',
+    name: 'Aven Squire',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true },
+    subtypes: ['bird', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+    ],
+  },
+  // Flying
   // When this creature enters, choose one —
   // • Put a +1/+1 counter on this creature.
   // • Return target creature to its owner's hand.
@@ -4785,6 +5121,18 @@ const POOL_0: readonly CardDefinition[] = [
       { produces: [{ G: 1 }, { U: 1 }], cost: { mana: { generic: 2 } } },
     ],
   },
+  // Legendary landwalk (This creature can't be blocked as long as defending player controls a legendary land.)
+  {
+    id: 'f037520e-2a44-4650-b7cb-c81d93d1418d',
+    name: 'Ayumi, the Last Visitor',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    power: 7,
+    toughness: 3,
+    legendary: true,
+    keywords: { landwalk: [{ kind: 'legendary' }] },
+    subtypes: ['spirit'],
+  },
   // This land enters tapped.
   // When this land enters, return a land you control to its owner's hand.
   // {T}: Add {W}{U}.
@@ -4822,6 +5170,17 @@ const POOL_0: readonly CardDefinition[] = [
         label: '{w}{u}, {t}, sacrifice ~: draw a card',
       },
     ],
+  },
+  // Flying, protection from enchantments
+  {
+    id: 'b675c1e6-add5-4959-a5be-f2571ccebcb4',
+    name: 'Azorius First-Wing',
+    types: ['creature'],
+    cost: { W: 1, U: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true, protectionFrom: ['enchantments'] },
+    subtypes: ['griffin'],
   },
   // This land enters tapped.
   // {T}: Add {W} or {U}.
@@ -5075,6 +5434,33 @@ const POOL_0: readonly CardDefinition[] = [
     toughness: 2,
     subtypes: ['bear'],
   },
+  // Haste
+  // Rampage 1 (Whenever this creature becomes blocked, it gets +1/+1 until end of turn for each creature blocking it beyond the first.)
+  {
+    id: '12fd561e-6a26-4140-a033-1204f5dda5f3',
+    name: 'Balduvian War-Makers',
+    types: ['creature'],
+    cost: { generic: 4, R: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { haste: true },
+    subtypes: ['human', 'barbarian'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: {
+              power: { countOf: 'creaturesBlockingThisBeyondFirst', times: 1 },
+              toughness: { countOf: 'creaturesBlockingThisBeyondFirst', times: 1 },
+            },
+          },
+        ],
+        label: 'Rampage 1',
+      },
+    ],
+  },
   // At the beginning of each upkeep, you draw a card and you lose 1 life.
   {
     id: 'a5e79f7b-0212-476b-9dea-bf1ada419e72',
@@ -5169,6 +5555,22 @@ const POOL_0: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { lifelink: true, haste: true },
     subtypes: ['nightmare', 'dog'],
+  },
+  // Flying, first strike, lifelink, protection from Demons and from Dragons
+  {
+    id: '4bd3014b-94bb-4a9f-92cf-239a2dcc7e97',
+    name: 'Baneslayer Angel',
+    types: ['creature'],
+    cost: { generic: 3, W: 2 },
+    power: 5,
+    toughness: 5,
+    keywords: {
+      flying: true,
+      firstStrike: true,
+      lifelink: true,
+      protectionFrom: ['subtype:Demon', 'subtype:Dragon'],
+    },
+    subtypes: ['angel'],
   },
   // When this creature enters, exile target creature an opponent controls until this creature leaves the battlefield.
   {
@@ -5272,6 +5674,17 @@ const POOL_0: readonly CardDefinition[] = [
         label: '{1}, {t}, sacrifice ~: search your library for a basic forest, plains, or island card, put it onto the battlefield tapped, then shuffle',
       },
     ],
+  },
+  // Horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  {
+    id: '060da652-03c7-45e3-ad83-f0a9fa9d1049',
+    name: 'Barbarian General',
+    types: ['creature'],
+    cost: { generic: 4, R: 1 },
+    power: 3,
+    toughness: 2,
+    keywords: { horsemanship: true, blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] } },
+    subtypes: ['human', 'barbarian', 'soldier'],
   },
   {
     id: 'd1f930c2-e828-4566-b2df-3b054f311be5',
@@ -5477,6 +5890,19 @@ const POOL_0: readonly CardDefinition[] = [
     ],
     produces: ['B'],
   },
+  // Improvise (Your artifacts can help cast this spell. Each artifact you tap after you're done activating mana abilities pays for {1}.)
+  // This creature attacks each combat if able.
+  {
+    id: '7cc81a94-955d-4734-b056-9b9a86cae60b',
+    name: 'Barricade Breaker',
+    types: ['artifact', 'creature'],
+    cost: { generic: 7 },
+    power: 7,
+    toughness: 5,
+    keywords: { mustAttack: true },
+    subtypes: ['juggernaut'],
+    costAssist: 'improvise',
+  },
   // Defender
   // When this creature enters, surveil 1. (Look at the top card of your library. You may put that card into your graveyard.)
   {
@@ -5556,6 +5982,42 @@ const POOL_0: readonly CardDefinition[] = [
         cost: { tap: true, sacrificeSelf: true },
         effects: [{ primitive: 'addMana', params: { mana: ['B', 'B'] } }],
         label: '{t}, sacrifice ~: add {b}{b}',
+      },
+    ],
+  },
+  // Flying
+  // Echo {2}{R} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  // {R}: This creature gets +0/+1 until end of turn.
+  {
+    id: '9d49201b-bd41-49b7-b00e-4ab8034a3a03',
+    name: 'Basalt Gargoyle',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 3,
+    toughness: 2,
+    keywords: { flying: true },
+    subtypes: ['gargoyle'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 2, R: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {2}{R}',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { R: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 0, toughness: 1 } }],
+        label: '{r}: ~ gets +0/+1 until end of turn',
       },
     ],
   },
@@ -5675,6 +6137,49 @@ const POOL_0: readonly CardDefinition[] = [
     cost: { generic: 2, R: 1 },
     effects: [{ primitive: 'dealDamage', params: { amount: 4, targets: 'creature' } }],
   },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +1/+1 and has vigilance and lifelink.
+  // Equip {5}
+  {
+    id: '94266c32-774f-42fa-84d7-7b646c950587',
+    name: 'Batterbone',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 5 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {5}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {5}',
+      modifies: { power: 1, toughness: 1, keywords: { vigilance: true, lifelink: true } },
+    },
+  },
   // When this creature enters, you may destroy target artifact.
   {
     id: 'a7b40f74-893f-4bfc-87b2-7f8df4c912d8',
@@ -5782,6 +6287,25 @@ const POOL_0: readonly CardDefinition[] = [
     keywords: { flying: true },
     subtypes: ['goblin'],
   },
+  // Bushido 2 (Whenever this creature blocks or becomes blocked, it gets +2/+2 until end of turn.)
+  // This creature attacks each combat if able.
+  {
+    id: 'a6e4394a-fa91-4cf9-99c1-dc0bc1011c5b',
+    name: 'Battle-Mad Ronin',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { mustAttack: true },
+    subtypes: ['human', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'Bushido 2',
+      },
+    ],
+  },
   // {T}: Add {C}.
   // {T}: Add {R} or {W}. This land deals 1 damage to you.
   {
@@ -5789,6 +6313,26 @@ const POOL_0: readonly CardDefinition[] = [
     name: 'Battlefield Forge',
     types: ['land'],
     manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ R: 1 }, { W: 1 }], rider: { damageToController: 1 } }],
+  },
+  // Flying
+  // This creature can block only creatures with flying.
+  // {1}{B}: This creature gets +1/+1 until end of turn.
+  {
+    id: 'f1ebf021-02a1-4a47-b581-c85a7a76cdec',
+    name: 'Battlefield Percher',
+    types: ['creature'],
+    cost: { generic: 3, B: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['bird'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, B: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: '{1}{b}: ~ gets +1/+1 until end of turn',
+      },
+    ],
   },
   // Flying, first strike
   {
@@ -5892,6 +6436,17 @@ const POOL_0: readonly CardDefinition[] = [
     types: ['land'],
     subtypes: ['swamp', 'forest'],
     producesOptions: [{ B: 1 }, { G: 1 }],
+  },
+  // Flying; swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: '93cfcca5-070b-4946-b17b-0c94b1e47fcd',
+    name: 'Bayou Dragonfly',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }], flying: true },
+    subtypes: ['insect'],
   },
   // Beanstalk Giant's power and toughness are each equal to the number of lands you control.
   {
@@ -6155,6 +6710,18 @@ const POOL_0: readonly CardDefinition[] = [
       modifies: { power: 2, toughness: 2, keywords: { trample: true, lifelink: true } },
     },
   },
+  // Flying
+  // This creature can block only creatures with flying.
+  {
+    id: 'd95dcb2e-8945-47dd-ad40-b5bdcc3ea742',
+    name: 'Belbe\'s Percher',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['bird'],
+  },
   // Sliver creatures you control have menace. (They can't be blocked except by two or more creatures.)
   {
     id: 'b78b8268-b090-4012-a3ba-5daab491f78d',
@@ -6211,6 +6778,29 @@ const POOL_0: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { lifelink: true, blockRestriction: { maxBlockerPower: 2 } },
     subtypes: ['human', 'noble'],
+  },
+  // Flanking (Whenever a creature without flanking blocks this creature, the blocking creature gets -1/-1 until end of turn.)
+  {
+    id: 'a0fd40fa-4144-41b4-b441-a71d09a11305',
+    name: 'Benalish Cavalry',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flanking: true },
+    subtypes: ['human', 'knight'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlockedByCreature', counterpartLacksKeyword: 'flanking' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: -1, toughness: -1, subject: 'triggering' },
+          },
+        ],
+        label: 'Flanking',
+      },
+    ],
   },
   // Kicker {1}{G} (You may pay an additional {1}{G} as you cast this spell.)
   // When this creature enters, if it was kicked, destroy target land.
@@ -6296,6 +6886,23 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+  // Whenever this creature attacks, it gets +1/+1 until end of turn.
+  {
+    id: '09a5603a-88c8-4b0c-b091-6d97e873859a',
+    name: 'Benalish Veteran',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Attacks: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
   // Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
   // Cycling {2} ({2}, Discard this card: Draw a card.)
   {
@@ -6321,6 +6928,36 @@ const POOL_0: readonly CardDefinition[] = [
           destination: 'battlefield',
           tapped: true,
         },
+      },
+    ],
+  },
+  // Islandwalk (This creature can't be blocked as long as defending player controls an Island.)
+  {
+    id: '19577bda-2728-40c8-a262-26051e6c226b',
+    name: 'Benthic Behemoth',
+    types: ['creature'],
+    cost: { generic: 5, U: 3 },
+    power: 7,
+    toughness: 6,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['serpent'],
+  },
+  // Islandwalk (This creature can't be blocked as long as defending player controls an Island.)
+  // At the beginning of your upkeep, you lose 2 life.
+  {
+    id: '95b03586-8d04-4114-a7ce-b8c8ab5ff857',
+    name: 'Benthic Djinn',
+    types: ['creature'],
+    cost: { generic: 2, U: 1, B: 1 },
+    power: 5,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['djinn'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [{ primitive: 'loseLife', params: { amount: 2 } }],
+        label: 'your upkeep: you lose 2 life',
       },
     ],
   },
@@ -6356,6 +6993,17 @@ const POOL_0: readonly CardDefinition[] = [
       whenIllegal: 'toGraveyard',
       label: 'Enchant creature',
     },
+  },
+  // This creature attacks each combat if able.
+  {
+    id: '033fce45-20d8-48cc-96d3-7f16c99da83d',
+    name: 'Berserkers of Blood Ridge',
+    types: ['creature'],
+    cost: { generic: 4, R: 1 },
+    power: 4,
+    toughness: 4,
+    keywords: { mustAttack: true },
+    subtypes: ['human', 'berserker'],
   },
   // When this creature dies, create a 1/1 white Human Warrior creature token.
   {
@@ -6492,6 +7140,18 @@ const POOL_0: readonly CardDefinition[] = [
         label: 'Sacrifice ~: target player loses 1 life',
       },
     ],
+  },
+  // Deathtouch
+  // Toxic 1 (Players dealt combat damage by this creature also get a poison counter.)
+  {
+    id: 'dfb81cb1-ac56-4803-a962-359854a447df',
+    name: 'Bilious Skulldweller',
+    types: ['creature'],
+    cost: { B: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { deathtouch: true, toxic: 1 },
+    subtypes: ['phyrexian', 'insect'],
   },
   // This land enters tapped.
   // {T}: Add {B} or {R}.
@@ -6738,6 +7398,77 @@ const POOL_0: readonly CardDefinition[] = [
     keywords: { reach: true, vigilance: true },
     subtypes: ['jackal', 'archer'],
   },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +1/+1.
+  // Whenever equipped creature attacks, you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
+  // Equip {3}
+  {
+    id: '926cbd68-3b66-4ccc-a7c9-fb20e38a3126',
+    name: 'Bitterthorn, Nissa\'s Animus',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    legendary: true,
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+      {
+        condition: { on: 'attacks', watches: 'attachedHost' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may search your library for a basic land card, put it onto the battlefield tapped, then shuffle',
+              valence: 'gain',
+              effects: [
+                {
+                  primitive: 'searchLibrary',
+                  params: {
+                    who: 'controller',
+                    count: 1,
+                    filter: { anyOfTypes: ['land'] },
+                    nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+                    destination: 'battlefield',
+                    tapped: true,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        label: 'Equipped creature attacks: you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 3 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {3}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {3}',
+      modifies: { power: 1, toughness: 1, keywords: {} },
+    },
+  },
   // First strike (This creature deals combat damage before creatures without first strike.)
   // Protection from white (This creature can't be blocked, targeted, dealt damage, or enchanted by anything white.)
   {
@@ -6788,6 +7519,18 @@ const POOL_0: readonly CardDefinition[] = [
     types: ['land'],
     entersTappedUnless: { maxOtherLands: 2 },
     producesOptions: [{ B: 1 }, { R: 1 }],
+  },
+  // Haste
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: '95986875-59f5-414f-867f-94f30cefa5d6',
+    name: 'Blackcleave Goblin',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { haste: true, infect: true },
+    subtypes: ['phyrexian', 'goblin', 'zombie'],
   },
   {
     id: 'd8b1b493-2dec-4816-a427-4813a00ca3e9',
@@ -6854,6 +7597,19 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+  // Intimidate (This creature can't be blocked except by artifact creatures and/or creatures that share a color with it.)
+  {
+    id: '5f157fb0-81ac-4108-aafc-7ee81df965a9',
+    name: 'Bladetusk Boar',
+    types: ['creature'],
+    cost: { generic: 3, R: 1 },
+    power: 3,
+    toughness: 2,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'sharesColorWithAttacker' }] },
+    },
+    subtypes: ['boar'],
+  },
   {
     id: 'f824502c-d712-41af-ba44-33e8294c3735',
     name: 'Blanchwood Treefolk',
@@ -6877,6 +7633,31 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
     produces: ['C'],
+  },
+  // Shroud (This creature can't be the target of spells or abilities.)
+  // Fading 3 (This creature enters with three fade counters on it. At the beginning of your upkeep, remove a fade counter from it. If you can't, sacrifice it.)
+  {
+    id: '1aeb6b3a-1e84-4181-9e7f-d5a88ebf08b1',
+    name: 'Blastoderm',
+    types: ['creature'],
+    cost: { generic: 2, G: 2 },
+    power: 5,
+    toughness: 5,
+    keywords: { shroud: true },
+    subtypes: ['beast'],
+    entersWithCounters: [{ kind: 'fade', count: 3 }],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'tickDownCounter',
+            params: { counter: 'fade', sacrificeWhen: 'noneToRemove' },
+          },
+        ],
+        label: 'Fading 3',
+      },
+    ],
   },
   // Blaze deals X damage to any target.
   {
@@ -6999,6 +7780,26 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+  // You gain 1 life.
+  // Draw a card at the beginning of the next turn's upkeep.
+  {
+    id: 'aee815d6-ce79-42ff-9d18-b2f92671d1c4',
+    name: 'Blessed Wine',
+    types: ['instant'],
+    cost: { generic: 1, W: 1 },
+    effects: [
+      { primitive: 'gainLife', params: { amount: 1 } },
+      {
+        primitive: 'scheduleDelayedEffects',
+        params: {
+          on: 'upkeep',
+          who: 'any',
+          effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+          label: 'Draw a card at the beginning of the next turn\'s upkeep',
+        },
+      },
+    ],
+  },
   // Flying
   // {7}{B}, {T}, Sacrifice this creature: Target opponent loses 4 life and you gain 4 life.
   {
@@ -7021,6 +7822,25 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  // {1}{G}: Regenerate this creature.
+  {
+    id: 'cf9b3335-565c-406d-bd94-f36974602552',
+    name: 'Blight Mamba',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { infect: true },
+    subtypes: ['phyrexian', 'snake'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, G: 1 } },
+        effects: [{ primitive: 'regenerate' }],
+        label: '{1}{g}: regenerate ~',
+      },
+    ],
+  },
   // Put four -1/-1 counters on target creature.
   {
     id: '5201bdeb-ba47-459b-ac0d-603367914578',
@@ -7028,6 +7848,60 @@ const POOL_0: readonly CardDefinition[] = [
     types: ['instant'],
     cost: { generic: 2, B: 1 },
     effects: [{ primitive: 'addCounters', params: { amount: -4, targets: 'creature' } }],
+  },
+  // Equipped creature gets +1/+0 and has wither. (It deals damage to creatures in the form of -1/-1 counters.)
+  // Equip {2}
+  {
+    id: 'c0f828c7-aedc-462b-8455-46e8a90feb85',
+    name: 'Blight Sickle',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 1, toughness: 0, keywords: { wither: true } },
+    },
+  },
+  // Toxic 1 (Players dealt combat damage by this creature also get a poison counter.)
+  // When this creature dies, proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.)
+  {
+    id: '9255cd01-a611-4fec-b9ec-b271687740ba',
+    name: 'Blightbelly Rat',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { toxic: 1 },
+    subtypes: ['phyrexian', 'rat'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [{ primitive: 'proliferate' }],
+        label: 'Dies: proliferate',
+      },
+    ],
+  },
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  // This creature can't be blocked.
+  {
+    id: 'cddaebde-a060-4510-8c97-68432d931987',
+    name: 'Blighted Agent',
+    types: ['creature'],
+    cost: { generic: 1, U: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { infect: true, unblockable: true },
+    subtypes: ['phyrexian', 'human', 'rogue'],
   },
   // {T}: Add {C}.
   // {5}{U}, {T}, Sacrifice this land: Draw two cards.
@@ -7097,6 +7971,18 @@ const POOL_0: readonly CardDefinition[] = [
     },
     backFaceCastable: true,
   },
+  // Reach (This creature can block creatures with flying.)
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: '26da4278-ba44-4555-8837-e24627b46533',
+    name: 'Blightwidow',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 2,
+    toughness: 4,
+    keywords: { reach: true, infect: true },
+    subtypes: ['phyrexian', 'spider'],
+  },
   // Whenever a player casts a spell, this creature gets -1/-1 until end of turn.
   {
     id: '86d5440a-7460-4b4f-a167-a6c4fb2d855e',
@@ -7122,6 +8008,25 @@ const POOL_0: readonly CardDefinition[] = [
     power: 2,
     toughness: 3,
     subtypes: ['illusion'],
+  },
+  // Devoid (This card has no color.)
+  // {C}, {T}: Tap target creature. ({C} represents colorless mana.)
+  {
+    id: '4eb60957-0811-40c3-a92b-cce3e6a94745',
+    name: 'Blinding Drone',
+    types: ['creature'],
+    cost: { generic: 1, U: 1 },
+    power: 1,
+    toughness: 3,
+    colors: [],
+    subtypes: ['eldrazi', 'drone'],
+    activated: [
+      {
+        cost: { mana: { C: 1 }, tap: true },
+        effects: [{ primitive: 'tapTarget', params: { targets: 'creature' } }],
+        label: '{c}, {t}: tap target creature',
+      },
+    ],
   },
   // {W}, {T}: Tap target creature.
   {
@@ -7163,6 +8068,25 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  // When this creature dies, each opponent loses 2 life.
+  {
+    id: '517ec1ba-00cd-4883-b298-521dc2d03f81',
+    name: 'Blistergrub',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['phyrexian', 'horror'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [{ primitive: 'loseLife', params: { amount: 2, whichPlayer: 'opponent' } }],
+        label: 'Dies: each opponent loses 2 life',
+      },
+    ],
+  },
   // Defender (This creature can't attack.)
   {
     id: '56d000d8-24e1-4cf3-bed9-e68a89c8f569',
@@ -7185,6 +8109,26 @@ const POOL_0: readonly CardDefinition[] = [
       {
         primitive: 'grantKeywordUntilEndOfTurn',
         params: { keywords: { trample: true }, targets: 'creature' },
+      },
+    ],
+  },
+  // Trample
+  // Toxic 1 (Players dealt combat damage by this creature also get a poison counter.)
+  // Whenever this creature deals combat damage to a player, proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.)
+  {
+    id: '411bda96-6c65-475d-9850-0a9b3eefa553',
+    name: 'Bloated Contaminator',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 4,
+    toughness: 4,
+    keywords: { trample: true, toxic: 1 },
+    subtypes: ['phyrexian', 'beast'],
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer' },
+        effects: [{ primitive: 'proliferate' }],
+        label: 'Combat damage to a player: proliferate',
       },
     ],
   },
@@ -7409,6 +8353,25 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+  // This creature attacks each combat if able.
+  // Whenever this creature deals combat damage to a player, put a +1/+1 counter on it.
+  {
+    id: '68d2452e-309d-44ae-9360-9d6e22a15e2b',
+    name: 'Bloodcrazed Neonate',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { mustAttack: true },
+    subtypes: ['vampire'],
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer' },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: 'Combat damage to a player: put a +1/+1 counter on it',
+      },
+    ],
+  },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
   // {T}: Add {B} or {R}.
@@ -7618,6 +8581,17 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+  // This creature attacks each combat if able.
+  {
+    id: '128f37ff-eb63-4417-87c2-96a3a026fcf4',
+    name: 'Bloodrock Cyclops',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { mustAttack: true },
+    subtypes: ['cyclops'],
+  },
   // {T}, Pay 1 life, Sacrifice this land: Search your library for a Swamp or Mountain card, put it onto the battlefield, then shuffle.
   {
     id: '579743fe-f71e-4cb2-8629-d6b02ed1591d',
@@ -7706,6 +8680,9 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_1: readonly CardDefinition[] = [
   // Sacrifice a creature: This creature gets +2/+2 until end of turn.
   {
     id: 'ee7354fe-fb76-4196-a69b-0916af73bf45',
@@ -7900,6 +8877,30 @@ const POOL_0: readonly CardDefinition[] = [
     subtypes: ['shapeshifter'],
     copyAsEnters: { filter: { anyOfTypes: ['creature'] }, from: 'graveyard' },
   },
+  // Trample
+  // Soulshift 8 (When this creature dies, you may return target Spirit card with mana value 8 or less from your graveyard to your hand.)
+  {
+    id: 'f43fe8e0-23ab-4fe7-8a48-1902be142c6a',
+    name: 'Body of Jukai',
+    types: ['creature'],
+    cost: { generic: 7, G: 2 },
+    power: 8,
+    toughness: 5,
+    keywords: { trample: true },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 8 } },
+          },
+        ],
+        label: 'Soulshift 8',
+      },
+    ],
+  },
   // Kicker {B} (You may pay an additional {B} as you cast this spell.)
   // When this creature enters, if it was kicked, creatures you control gain menace until end of turn. (A creature with menace can't be blocked except by two or more creatures.)
   {
@@ -7976,6 +8977,50 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: '2a493521-810e-4932-bb44-16c80c3066c9',
+    name: 'Bog Raiders',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['zombie'],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: 'c2103a44-87e5-40cd-a0de-cd19456a8366',
+    name: 'Bog Smugglers',
+    types: ['creature'],
+    cost: { generic: 1, B: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['human', 'mercenary'],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: 'a0830c00-02fa-4fc8-907c-19d4b7f9cd6e',
+    name: 'Bog Tatters',
+    types: ['creature'],
+    cost: { generic: 4, B: 1 },
+    power: 4,
+    toughness: 2,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['wraith'],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: '5d17210c-be39-4abc-9d4d-4f2eca9573bd',
+    name: 'Bog Wraith',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['wraith'],
+  },
   // Flash (You may cast this spell any time you could cast an instant.)
   // When this creature enters, target creature gets +4/+0 until end of turn.
   {
@@ -8035,6 +9080,18 @@ const POOL_0: readonly CardDefinition[] = [
         label: 'another goblin (you) dies: ~ deals 1 damage to each opponent',
       },
     ],
+  },
+  // Haste
+  // Wither (This deals damage to creatures in the form of -1/-1 counters.)
+  {
+    id: '63e25b70-fa21-4663-aabd-34b7e0b75c34',
+    name: 'Boggart Ram-Gang',
+    types: ['creature'],
+    cost: { hybrid: [['R', 'G'], ['R', 'G'], ['R', 'G']] },
+    power: 3,
+    toughness: 3,
+    keywords: { haste: true, wither: true },
+    subtypes: ['goblin', 'warrior'],
   },
   // When this creature enters, exile target player's graveyard.
   {
@@ -8528,9 +9585,23 @@ const POOL_0: readonly CardDefinition[] = [
     keywords: { vigilance: true },
     subtypes: ['human', 'nomad'],
   },
-];
-
-const POOL_1: readonly CardDefinition[] = [
+  // Whenever this creature attacks, it gets +2/+0 until end of turn.
+  {
+    id: 'e3132919-58a7-429f-8a0f-9210d3c2c734',
+    name: 'Borderland Marauder',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 1,
+    toughness: 2,
+    subtypes: ['human', 'warrior'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        label: 'Attacks: ~ gets +2/+0 until end of turn',
+      },
+    ],
+  },
   {
     id: '8b8c80ea-7b29-4335-ba7b-3e51a5a104a9',
     name: 'Borderland Minotaur',
@@ -8852,6 +9923,28 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+  // Intimidate (This creature can't be blocked except by artifact creatures and/or creatures that share a color with it.)
+  // Sacrifice this creature: Target player discards two cards. Activate only as a sorcery.
+  {
+    id: 'c24bd479-c8ac-4141-a40e-956c90ee29f8',
+    name: 'Brain Weevil',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'sharesColorWithAttacker' }] },
+    },
+    subtypes: ['insect'],
+    activated: [
+      {
+        cost: { sacrificeSelf: true },
+        effects: [{ primitive: 'discardCard', params: { count: 2, who: 'targetPlayer', targets: 'player' } }],
+        timing: 'sorcery',
+        label: 'Sacrifice ~: target player discards two cards. activate only as a sorcery',
+      },
+    ],
+  },
   // {2}, {T}, Sacrifice this artifact: Draw three cards, then put two cards from your hand on top of your library in any order.
   {
     id: '6e86ad39-2a90-466d-b188-056216429f4e',
@@ -8880,6 +9973,23 @@ const POOL_1: readonly CardDefinition[] = [
       { primitive: 'putFromHandOnTop', params: { count: 2 } },
     ],
   },
+  // Whenever this creature attacks, it gets +5/+0 until end of turn.
+  {
+    id: '74148e2e-ac21-414a-9b6c-410988d7fdd0',
+    name: 'Bramble Creeper',
+    types: ['creature'],
+    cost: { generic: 4, G: 1 },
+    power: 0,
+    toughness: 3,
+    subtypes: ['elemental'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 5, toughness: 0 } }],
+        label: 'Attacks: ~ gets +5/+0 until end of turn',
+      },
+    ],
+  },
   // Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)
   {
     id: '1c759e94-e437-4dda-af0f-6578c0a50619',
@@ -8890,6 +10000,17 @@ const POOL_1: readonly CardDefinition[] = [
     toughness: 6,
     keywords: { trample: true },
     subtypes: ['elemental'],
+  },
+  // Toxic 2 (Players dealt combat damage by this creature also get two poison counters.)
+  {
+    id: 'e5290a4c-1f98-4e97-a407-f951e386b8b0',
+    name: 'Branchblight Stalker',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 3,
+    toughness: 1,
+    keywords: { toxic: 2 },
+    subtypes: ['phyrexian', 'elf', 'scout'],
   },
   // If one or more +1/+1 counters would be put on a creature you control, twice that many +1/+1 counters are put on that creature instead.
   {
@@ -9016,6 +10137,23 @@ const POOL_1: readonly CardDefinition[] = [
     keywords: { haste: true },
     subtypes: ['gremlin'],
   },
+  // Whenever this creature attacks, it gets +2/+0 until end of turn.
+  {
+    id: 'ab8e2ece-3c66-4f34-9042-fc02639c6a79',
+    name: 'Brazen Wolves',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 2,
+    toughness: 3,
+    subtypes: ['wolf'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        label: 'Attacks: ~ gets +2/+0 until end of turn',
+      },
+    ],
+  },
   // Destroy target artifact or enchantment.
   // Cycling {2} ({2}, Discard this card: Draw a card.)
   {
@@ -9097,6 +10235,36 @@ const POOL_1: readonly CardDefinition[] = [
         cost: { mana: { B: 1 } },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: -1 } }],
         label: '{b}: ~ gets +1/-1 until end of turn',
+      },
+    ],
+  },
+  // At the beginning of your upkeep, sacrifice this enchantment unless you pay {B}{B}.
+  // At the beginning of your end step, create a 0/1 black Thrull creature token.
+  {
+    id: '39abb31a-15af-4182-a33b-ecdb63e09e3e',
+    name: 'Breeding Pit',
+    types: ['enchantment'],
+    cost: { generic: 3, B: 1 },
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { B: 2 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {b}{b}',
+      },
+      {
+        condition: { on: 'endStep', who: 'you' },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: { power: 0, toughness: 1, name: 'Thrull', colors: ['B'], subtypes: ['Thrull'] },
+          },
+        ],
+        label: 'your end step: create a 0/1 black thrull creature token',
       },
     ],
   },
@@ -9230,6 +10398,17 @@ const POOL_1: readonly CardDefinition[] = [
     subtypes: ['giant'],
     castCostReductionPerPermanent: { amount: 1, filter: { anyOfTypes: ['enchantment'] } },
   },
+  // This creature can't be blocked by more than one creature.
+  {
+    id: 'c3c3243c-e9af-4b7d-8296-f7714436e571',
+    name: 'Bristling Boar',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 4,
+    toughness: 3,
+    keywords: { maxBlockers: 1 },
+    subtypes: ['boar'],
+  },
   // Counter target spell.
   // Madness {3}{U} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
   {
@@ -9341,6 +10520,34 @@ const POOL_1: readonly CardDefinition[] = [
           },
         ],
         label: 'Dies: create a 1/2 green spider creature token with reach',
+      },
+    ],
+  },
+  // Myriad (Whenever this creature attacks, for each opponent other than defending player, you may create a token copy that's tapped and attacking that player or a planeswalker they control. Exile the tokens at end of combat.)
+  // Whenever this creature deals combat damage to a player, you may draw a card.
+  {
+    id: 'ebf51c44-aa06-476e-b081-b71c11b1e8ba',
+    name: 'Broodbirth Viper',
+    types: ['creature'],
+    cost: { generic: 4, U: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { myriad: true },
+    subtypes: ['snake'],
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may draw a card',
+              valence: 'gain',
+              effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+            },
+          },
+        ],
+        label: 'Combat damage to a player: you may draw a card',
       },
     ],
   },
@@ -9456,6 +10663,23 @@ const POOL_1: readonly CardDefinition[] = [
     keywords: { vigilance: true },
     subtypes: ['beast'],
   },
+  // Whenever this creature blocks or becomes blocked, it gets -2/+2 until end of turn.
+  {
+    id: '6c20edc3-5ad0-42c1-a5ec-3e680fb03297',
+    name: 'Brushwagg',
+    types: ['creature'],
+    cost: { generic: 1, G: 2 },
+    power: 3,
+    toughness: 2,
+    subtypes: ['brushwagg'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -2, toughness: 2 } }],
+        label: 'Blocks or becomes blocked: ~ gets -2/+2 until end of turn',
+      },
+    ],
+  },
   // Target creature gets +3/+3 until end of turn.
   {
     id: '89db7256-3bd0-4c1d-9c6f-de81f7d3c1a2',
@@ -9514,6 +10738,17 @@ const POOL_1: readonly CardDefinition[] = [
     toughness: 5,
     keywords: { vigilance: true, haste: true },
     subtypes: ['beast'],
+  },
+  // Islandwalk (This creature can't be blocked as long as defending player controls an Island.)
+  {
+    id: '044785ad-0f05-4944-aab3-49236727078d',
+    name: 'Bull Hippo',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['hippo'],
   },
   // Target creature gets +2/+0 until end of turn.
   {
@@ -9672,6 +10907,41 @@ const POOL_1: readonly CardDefinition[] = [
           },
         ],
         label: '{3}, sacrifice ~: search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle',
+      },
+    ],
+  },
+  // Sacrifice this creature: Target creature gets +2/+2 until end of turn.
+  // Soulshift 3 (When this creature dies, you may return target Spirit card with mana value 3 or less from your graveyard to your hand.)
+  {
+    id: '935e52a1-a651-4d88-99a8-7de074a01576',
+    name: 'Burr Grafter',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 3 } },
+          },
+        ],
+        label: 'Soulshift 3',
+      },
+    ],
+    activated: [
+      {
+        cost: { sacrificeSelf: true },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 2, toughness: 2, targets: 'creature' },
+          },
+        ],
+        label: 'Sacrifice ~: target creature gets +2/+2 until end of turn',
       },
     ],
   },
@@ -9895,6 +11165,37 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flanking (Whenever a creature without flanking blocks this creature, the blocking creature gets -1/-1 until end of turn.)
+  // {1}{B}{B}: Regenerate this creature.
+  {
+    id: '6c658ea3-6fb3-4ce4-a6c5-3ed504102f15',
+    name: 'Cadaverous Knight',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flanking: true },
+    subtypes: ['zombie', 'knight'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlockedByCreature', counterpartLacksKeyword: 'flanking' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: -1, toughness: -1, subject: 'triggering' },
+          },
+        ],
+        label: 'Flanking',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 1, B: 2 } },
+        effects: [{ primitive: 'regenerate' }],
+        label: '{1}{b}{b}: regenerate ~',
+      },
+    ],
+  },
   {
     id: 'e8654e38-4230-4094-b815-778bfb5d06f2',
     name: 'Caelorna, Coral Tyrant',
@@ -9904,6 +11205,31 @@ const POOL_1: readonly CardDefinition[] = [
     toughness: 8,
     legendary: true,
     subtypes: ['octopus'],
+  },
+  // Shroud (This creature can't be the target of spells or abilities.)
+  // Vanishing 4 (This creature enters with four time counters on it. At the beginning of your upkeep, remove a time counter from it. When the last is removed, sacrifice it.)
+  {
+    id: '5ae9641c-5792-4f72-b40c-f029af28dab9',
+    name: 'Calciderm',
+    types: ['creature'],
+    cost: { generic: 2, W: 2 },
+    power: 5,
+    toughness: 5,
+    keywords: { shroud: true },
+    subtypes: ['beast'],
+    entersWithCounters: [{ kind: 'time', count: 4 }],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceHasCounter', counter: 'time' } },
+        effects: [
+          {
+            primitive: 'tickDownCounter',
+            params: { counter: 'time', sacrificeWhen: 'lastRemoved' },
+          },
+        ],
+        label: 'Vanishing 4',
+      },
+    ],
   },
   // This land enters tapped.
   // {T}: Add {C}.
@@ -10024,6 +11350,18 @@ const POOL_1: readonly CardDefinition[] = [
         label: '{1}{u}, {t}: target creature gains flying until end of turn',
       },
     ],
+  },
+  // Trample
+  // Myriad (Whenever this creature attacks, for each opponent other than defending player, you may create a token copy that's tapped and attacking that player or a planeswalker they control. Exile the tokens at end of combat.)
+  {
+    id: '08620dc9-3a83-4d09-a6d4-b25a7d0ac644',
+    name: 'Caller of the Pack',
+    types: ['creature'],
+    cost: { generic: 5, G: 2 },
+    power: 8,
+    toughness: 6,
+    keywords: { trample: true, myriad: true },
+    subtypes: ['beast'],
   },
   {
     id: '78226edc-87dd-4c38-987c-52aefe0f9531',
@@ -10194,6 +11532,37 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
     producesOptions: [{ B: 1 }, { R: 1 }],
+  },
+  // Mountainwalk (This creature can't be blocked as long as defending player controls a Mountain.)
+  {
+    id: '4bd2baa7-1264-4139-881d-e8169391c48b',
+    name: 'Canyon Wildcat',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'mountain' }] },
+    subtypes: ['cat'],
+  },
+  // Horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  // When Cao Ren enters, you lose 3 life.
+  {
+    id: '4f7e8366-82ba-4df0-b9df-7d0aa9b972eb',
+    name: 'Cao Ren, Wei Commander',
+    types: ['creature'],
+    cost: { generic: 2, B: 2 },
+    power: 3,
+    toughness: 3,
+    legendary: true,
+    keywords: { horsemanship: true, blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] } },
+    subtypes: ['human', 'soldier', 'warrior'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'loseLife', params: { amount: 3 } }],
+        label: 'Enters: you lose 3 life',
+      },
+    ],
   },
   // First strike (This creature deals combat damage before creatures without first strike.)
   // {1}{W}: This creature gets +1/+0 until end of turn.
@@ -10518,6 +11887,35 @@ const POOL_1: readonly CardDefinition[] = [
     keywords: { defender: true },
     subtypes: ['plant', 'wall'],
   },
+  // Flying
+  // When this creature enters, draw a card at the beginning of the next turn's upkeep.
+  {
+    id: '5543b08d-d470-435e-83d9-a3a84c1cc2e6',
+    name: 'Carrier Pigeons',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true },
+    subtypes: ['bird'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'scheduleDelayedEffects',
+            params: {
+              on: 'upkeep',
+              who: 'any',
+              effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+              label: 'Draw a card at the beginning of the next turn\'s upkeep',
+            },
+          },
+        ],
+        label: 'Enters: draw a card at the beginning of the next turn\'s upkeep',
+      },
+    ],
+  },
   // {1}: This creature gets +1/+1 until end of turn.
   {
     id: '6d1b1f70-2f64-4ced-a183-53c6b564b193',
@@ -10532,6 +11930,27 @@ const POOL_1: readonly CardDefinition[] = [
         cost: { mana: { generic: 1 } },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
         label: '{1}: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
+  // Create two 1/1 green Phyrexian Insect creature tokens with infect. (They deal damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: 'bc3c1a8e-3bdb-42cf-9442-5de7e4670d66',
+    name: 'Carrion Call',
+    types: ['instant'],
+    cost: { generic: 3, G: 1 },
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: {
+          power: 1,
+          toughness: 1,
+          name: 'Phyrexian Insect',
+          colors: ['G'],
+          subtypes: ['Phyrexian', 'Insect'],
+          count: 2,
+          keywords: { infect: true },
+        },
       },
     ],
   },
@@ -10784,6 +12203,17 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  {
+    id: '90823485-83cd-4260-b860-7f05d8588905',
+    name: 'Cat Warriors',
+    types: ['creature'],
+    cost: { generic: 1, G: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['cat', 'warrior'],
+  },
   {
     id: '440c53f0-7922-4e14-802d-d7a22f8fed85',
     name: 'Catacomb Crocodile',
@@ -10900,6 +12330,28 @@ const POOL_1: readonly CardDefinition[] = [
     cost: { generic: 1, R: 1 },
     additionalCost: { kind: 'discard', count: 2, label: 'Discard two cards' },
     effects: [{ primitive: 'drawCards', params: { count: 3 } }],
+  },
+  // This land enters tapped.
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  // {T}: Add {C}.
+  {
+    id: 'dd222c07-0b28-41cb-9237-ad7991ab078f',
+    name: 'Cathedral of War',
+    types: ['land'],
+    entersTapped: true,
+    produces: ['C'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+    ],
   },
   // When this creature enters, you gain 3 life.
   {
@@ -11045,6 +12497,25 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+  // Mountainwalk (This creature can't be blocked as long as defending player controls a Mountain.)
+  // {R}: This creature gets +1/-1 until end of turn.
+  {
+    id: 'bd0a8af9-2e86-4639-a6c9-209f115e95f8',
+    name: 'Cavern Crawler',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 0,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'mountain' }] },
+    subtypes: ['insect'],
+    activated: [
+      {
+        cost: { mana: { R: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: -1 } }],
+        label: '{r}: ~ gets +1/-1 until end of turn',
+      },
+    ],
+  },
   // {1}{R}: This creature gets +1/+0 until end of turn.
   {
     id: '34748acb-7045-42b6-a93f-a3f11a1bc839',
@@ -11108,6 +12579,28 @@ const POOL_1: readonly CardDefinition[] = [
         condition: { on: 'castSpell', who: 'you', spellType: 'enchantment' },
         effects: [{ primitive: 'addCounters', params: { amount: 1, each: true, scope: 'you', filter: {} } }],
         label: 'Cast enchantment: put a +1/+1 counter on each creature you control',
+      },
+    ],
+  },
+  // Flash
+  // Split second (As long as this spell is on the stack, players can't cast spells or activate abilities that aren't mana abilities.)
+  // Flying
+  // Other white creatures get +1/+1.
+  {
+    id: '56f371f5-9c2a-4a00-a4d2-e4f97ac0f3e0',
+    name: 'Celestial Crusader',
+    types: ['creature'],
+    cost: { generic: 2, W: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { flash: true, splitSecond: true, flying: true },
+    subtypes: ['spirit'],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'any', anyOfColors: ['W'], excludeSource: true },
+        power: 1,
+        toughness: 1,
+        label: 'other white creatures get +1/+1',
       },
     ],
   },
@@ -11668,6 +13161,42 @@ const POOL_1: readonly CardDefinition[] = [
     keywords: { trample: true },
     subtypes: ['badger'],
   },
+  // Whenever this creature attacks, it gets +2/+0 until end of turn.
+  {
+    id: '1721ee11-c7ee-4878-b2ab-4f090e0c5def',
+    name: 'Charging Bandits',
+    types: ['creature'],
+    cost: { generic: 4, B: 1 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['human', 'rogue'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        label: 'Attacks: ~ gets +2/+0 until end of turn',
+      },
+    ],
+  },
+  // Flying (This creature can't be blocked except by creatures with flying or reach.)
+  // Whenever this creature attacks, it gets +1/+1 until end of turn.
+  {
+    id: 'd86bd259-bc2f-402c-9e7a-030f9a3781e2',
+    name: 'Charging Griffin',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true },
+    subtypes: ['griffin'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Attacks: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
   // Trample, haste
   {
     id: 'd5222448-95d1-4b63-ab76-d5060febcf38',
@@ -11678,6 +13207,34 @@ const POOL_1: readonly CardDefinition[] = [
     toughness: 5,
     keywords: { trample: true, haste: true },
     subtypes: ['dinosaur'],
+  },
+  // Whenever this creature attacks, it gets +0/+3 until end of turn.
+  {
+    id: 'a0166403-a801-4ee9-9e04-54455f69e658',
+    name: 'Charging Paladin',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'knight'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 0, toughness: 3 } }],
+        label: 'Attacks: ~ gets +0/+3 until end of turn',
+      },
+    ],
+  },
+  // This creature can't be blocked by more than one creature.
+  {
+    id: 'f12724b4-3c73-4b16-b5f8-482dc3f56a3c',
+    name: 'Charging Rhino',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { maxBlockers: 1 },
+    subtypes: ['rhino'],
   },
   // Vigilance
   // {G}: Regenerate this creature.
@@ -11845,6 +13402,38 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+  // Trample
+  // At the beginning of your upkeep, sacrifice this creature unless you pay {G}{G}.
+  // {1}{G}: Regenerate this creature.
+  {
+    id: 'a836d9bd-a4cb-4676-935c-5fb7b793a42f',
+    name: 'Child of Gaea',
+    types: ['creature'],
+    cost: { generic: 3, G: 3 },
+    power: 7,
+    toughness: 7,
+    keywords: { trample: true },
+    subtypes: ['elemental'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { G: 2 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {g}{g}',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 1, G: 1 } },
+        effects: [{ primitive: 'regenerate' }],
+        label: '{1}{g}: regenerate ~',
+      },
+    ],
+  },
   // Lifelink
   {
     id: 'c650a7bc-e350-44a0-a698-d4a233d66156',
@@ -11988,6 +13577,49 @@ const POOL_1: readonly CardDefinition[] = [
     subtypes: ['cat'],
     triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'scry' }], label: 'Enters: scry 1' }],
   },
+  // Flying
+  // Rampage 2 (Whenever this creature becomes blocked, it gets +2/+2 until end of turn for each creature blocking it beyond the first.)
+  // At the beginning of your upkeep, sacrifice Chromium unless you pay {W}{U}{B}.
+  {
+    id: '15ec5a20-4e8f-40b2-9abf-c0bf1cf816c3',
+    name: 'Chromium',
+    types: ['creature'],
+    cost: { generic: 2, W: 2, U: 2, B: 2 },
+    power: 7,
+    toughness: 7,
+    legendary: true,
+    keywords: { flying: true },
+    subtypes: ['elder', 'dragon'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: {
+              power: { countOf: 'creaturesBlockingThisBeyondFirst', times: 2 },
+              toughness: { countOf: 'creaturesBlockingThisBeyondFirst', times: 2 },
+            },
+          },
+        ],
+        label: 'Rampage 2',
+      },
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { W: 1, U: 1, B: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {w}{u}{b}',
+      },
+    ],
+  },
   // As Chronicle of Victory enters, choose a creature type.
   // Creatures you control of the chosen type get +2/+2 and have first strike and trample.
   // Whenever you cast a spell of the chosen type, draw a card.
@@ -12033,6 +13665,23 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+  // Whenever this creature blocks or becomes blocked, it gets +2/+2 until end of turn.
+  {
+    id: '4fb0c8a5-ea67-4c18-94b6-757e290ee34e',
+    name: 'Chub Toad',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['frog'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'Blocks or becomes blocked: ~ gets +2/+2 until end of turn',
+      },
+    ],
+  },
   // This land enters tapped.
   // {T}: Add {B} or {R}.
   {
@@ -12060,6 +13709,25 @@ const POOL_1: readonly CardDefinition[] = [
     cost: { generic: 6, R: 1 },
     effects: [{ primitive: 'dealDamage', params: { amount: 7 } }],
   },
+  // Wither (This deals damage to creatures in the form of -1/-1 counters.)
+  // {1}{B}: Regenerate this creature.
+  {
+    id: '22dcf40c-62fb-4205-807e-71655066a61b',
+    name: 'Cinderbones',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { wither: true },
+    subtypes: ['elemental', 'skeleton'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, B: 1 } },
+        effects: [{ primitive: 'regenerate' }],
+        label: '{1}{b}: regenerate ~',
+      },
+    ],
+  },
   // When this creature enters, you gain 2 life.
   // When this creature leaves the battlefield, draw a card.
   {
@@ -12080,6 +13748,34 @@ const POOL_1: readonly CardDefinition[] = [
         condition: { on: 'leaves' },
         effects: [{ primitive: 'drawCards', params: { count: 1 } }],
         label: 'Leaves: draw a card',
+      },
+    ],
+  },
+  // Shroud (This creature can't be the target of spells or abilities.)
+  // Echo {3}{G} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  {
+    id: '5a3ac987-7906-4159-a007-ed409baea9d7',
+    name: 'Citanul Centaurs',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 6,
+    toughness: 3,
+    keywords: { shroud: true },
+    subtypes: ['centaur'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 3, G: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {3}{G}',
       },
     ],
   },
@@ -12433,6 +14129,17 @@ const POOL_1: readonly CardDefinition[] = [
     subtypes: ['shapeshifter'],
     copyAsEnters: { filter: { noneOfTypes: ['land'] } },
   },
+  // Mountainwalk (This creature can't be blocked as long as defending player controls a Mountain.)
+  {
+    id: '1743b625-e937-4cac-8701-9e2dd709a9a4',
+    name: 'Cliff Threader',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'mountain' }] },
+    subtypes: ['kor', 'scout'],
+  },
   {
     id: '7f334767-4353-4379-a934-fa67075db439',
     name: 'Cliffhaven Sell-Sword',
@@ -12618,6 +14325,42 @@ const POOL_1: readonly CardDefinition[] = [
     subtypes: ['human', 'knight'],
   },
   // Flying
+  // This creature can block only creatures with flying.
+  {
+    id: 'ba6f25f7-9db6-4c55-bbe0-f373941fa0c3',
+    name: 'Cloud Djinn',
+    types: ['creature'],
+    cost: { generic: 5, U: 1 },
+    power: 5,
+    toughness: 4,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['djinn'],
+  },
+  // Flying
+  // This creature can block only creatures with flying.
+  {
+    id: '69aec764-7832-4d9c-b6c1-fdf5b27fedc0',
+    name: 'Cloud Dragon',
+    types: ['creature'],
+    cost: { generic: 5, U: 1 },
+    power: 5,
+    toughness: 4,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['illusion', 'dragon'],
+  },
+  // Flying
+  // This creature can block only creatures with flying.
+  {
+    id: '3639ad50-6e39-48bd-9055-c32369d2f676',
+    name: 'Cloud Elemental',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['elemental'],
+  },
+  // Flying
   {
     id: '1854f819-d08e-4a23-bedb-4618b79623e9',
     name: 'Cloud Manta',
@@ -12627,6 +14370,42 @@ const POOL_1: readonly CardDefinition[] = [
     toughness: 2,
     keywords: { flying: true },
     subtypes: ['fish'],
+  },
+  // Flying
+  // This creature can block only creatures with flying.
+  {
+    id: '9f7386c6-d17a-4c7d-884d-2471b87d8b8e',
+    name: 'Cloud Pirates',
+    types: ['creature'],
+    cost: { U: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['human', 'pirate'],
+  },
+  // Flying
+  // This creature can block only creatures with flying.
+  {
+    id: '1f043c62-a15e-472d-beb7-8fea47f8e1f4',
+    name: 'Cloud Spirit',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 3,
+    toughness: 1,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['spirit'],
+  },
+  // Flying (This creature can't be blocked except by creatures with flying or reach.)
+  // This creature can block only creatures with flying.
+  {
+    id: 'feacf831-a6e4-456b-b8f2-d7ec554281a1',
+    name: 'Cloud Sprite',
+    types: ['creature'],
+    cost: { U: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['faerie'],
   },
   // Flying
   // When this creature enters, you gain 2 life and draw two cards.
@@ -12779,6 +14558,31 @@ const POOL_1: readonly CardDefinition[] = [
         affects: { anyOfTypes: ['creature'], anyOfSubtypes: ['sliver'], controller: 'you' },
         keywords: { flying: true, haste: true },
         label: 'sliver creatures you control have flying and haste',
+      },
+    ],
+  },
+  // Flying
+  // Fading 3 (This creature enters with three fade counters on it. At the beginning of your upkeep, remove a fade counter from it. If you can't, sacrifice it.)
+  {
+    id: 'e7f97e50-3aeb-4c79-81b1-505a2f32d8ac',
+    name: 'Cloudskate',
+    types: ['creature'],
+    cost: { generic: 1, U: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true },
+    subtypes: ['illusion'],
+    entersWithCounters: [{ kind: 'fade', count: 3 }],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'tickDownCounter',
+            params: { counter: 'fade', sacrificeWhen: 'noneToRemove' },
+          },
+        ],
+        label: 'Fading 3',
       },
     ],
   },
@@ -13114,6 +14918,25 @@ const POOL_1: readonly CardDefinition[] = [
     keywords: { flying: true },
     subtypes: ['bird'],
   },
+  // Mountainwalk (This creature can't be blocked as long as defending player controls a Mountain.)
+  // {R}: This creature gets +1/+0 until end of turn.
+  {
+    id: '1d68eb62-9f86-4c85-8696-46a248c744ff',
+    name: 'Colos Yearling',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'mountain' }] },
+    subtypes: ['goat', 'beast'],
+    activated: [
+      {
+        cost: { mana: { R: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        label: '{r}: ~ gets +1/+0 until end of turn',
+      },
+    ],
+  },
   // Reach, trample
   {
     id: '8702e776-be2c-48a9-9bc5-bb8ea514333b',
@@ -13124,6 +14947,49 @@ const POOL_1: readonly CardDefinition[] = [
     toughness: 5,
     keywords: { reach: true, trample: true },
     subtypes: ['dinosaur'],
+  },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +6/+6 and has trample.
+  // Equip {3}{G}{G}
+  {
+    id: '98164430-64c1-465f-b786-45753c965f44',
+    name: 'Colossal Dreadmask',
+    types: ['artifact'],
+    cost: { generic: 4, G: 2 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 3, G: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {3}{g}{g}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {3}{g}{g}',
+      modifies: { power: 6, toughness: 6, keywords: { trample: true } },
+    },
   },
   // Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)
   {
@@ -13220,6 +15086,33 @@ const POOL_1: readonly CardDefinition[] = [
     legendary: true,
     keywords: { flying: true, protectionFrom: ['creatures'] },
     subtypes: ['bird', 'soldier'],
+  },
+  // Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  // When Commander Greven il-Vec enters, sacrifice a creature.
+  {
+    id: '8a8ddd65-c482-426c-b4cd-9ad0206942ae',
+    name: 'Commander Greven il-Vec',
+    types: ['creature'],
+    cost: { generic: 3, B: 3 },
+    power: 7,
+    toughness: 5,
+    legendary: true,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+    },
+    subtypes: ['phyrexian', 'human', 'warrior'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'sacrificeChosen',
+            params: { who: 'controller', filter: { anyOfTypes: ['creature'] } },
+          },
+        ],
+        label: 'Enters: sacrifice a creature',
+      },
+    ],
   },
   // ({T}: Add {R} or {G}.)
   // This land enters tapped.
@@ -13364,6 +15257,25 @@ const POOL_1: readonly CardDefinition[] = [
     keywords: { flying: true },
     subtypes: ['human', 'soldier'],
     costAssist: 'convoke',
+  },
+  // Myriad (Whenever this creature attacks, for each opponent other than defending player, you may create a token copy that's tapped and attacking that player or a planeswalker they control. Exile the tokens at end of combat.)
+  // Whenever this creature deals combat damage to a player, create a token that's a copy of this creature.
+  {
+    id: '0dcccbd8-2135-45e6-8802-8dcaa382a398',
+    name: 'Conclave Evangelist',
+    types: ['creature'],
+    cost: { generic: 3, hybrid: [['G', 'W'], ['G', 'W']] },
+    power: 4,
+    toughness: 4,
+    keywords: { myriad: true },
+    subtypes: ['elephant', 'cleric'],
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer' },
+        effects: [{ primitive: 'createTokenCopy', params: { self: true, count: 1 } }],
+        label: 'Combat damage to a player: create a token that\'s a copy of ~',
+      },
+    ],
   },
   // {G}, {T}: Creatures you control gain trample until end of turn.
   // {5}{W}, {T}: Create a 2/2 green and white Elf Knight creature token with vigilance.
@@ -13650,6 +15562,17 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: 'e83a9dea-2aa1-48cd-afe2-f98057b95f6e',
+    name: 'Contagious Nim',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { infect: true },
+    subtypes: ['phyrexian', 'zombie'],
+  },
   // ({T}: Add {U} or {B}.)
   // This land enters tapped.
   {
@@ -13922,6 +15845,25 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  // When this creature dies, proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.)
+  {
+    id: '05414ba7-0f59-4c73-931c-e599d149d3ba',
+    name: 'Core Prowler',
+    types: ['artifact', 'creature'],
+    cost: { generic: 4 },
+    power: 2,
+    toughness: 2,
+    keywords: { infect: true },
+    subtypes: ['phyrexian', 'horror'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [{ primitive: 'proliferate' }],
+        label: 'Dies: proliferate',
+      },
+    ],
+  },
   // Whenever another creature you control enters, each opponent loses 1 life.
   {
     id: '0c77b805-728d-4ae4-88a9-223f4b7b52e0',
@@ -13963,6 +15905,38 @@ const POOL_1: readonly CardDefinition[] = [
         },
         outcome: { times: 2 },
         label: 'if one or more +1/+1 counters would be put on a creature you control, twice that many +1/+1 counters are put on it instead',
+      },
+    ],
+  },
+  // Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  // Suspend 5—{B} (Rather than cast this card from your hand, you may pay {B} and exile it with five time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.)
+  {
+    id: 'c8680e7c-f180-45b9-9af6-a8e93037b851',
+    name: 'Corpulent Corpse',
+    types: ['creature'],
+    cost: { generic: 5, B: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+    },
+    subtypes: ['zombie'],
+    suspend: { count: 5, cost: { B: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+  },
+  // Black creatures you control have wither. (They deal damage to creatures in the form of -1/-1 counters.)
+  {
+    id: '140457ff-ee7d-48ec-8b91-ef5c2cc1ed74',
+    name: 'Corrosive Mentor',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 1,
+    toughness: 3,
+    subtypes: ['elemental', 'rogue'],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'you', anyOfColors: ['B'] },
+        keywords: { wither: true },
+        label: 'black creatures you control have wither',
       },
     ],
   },
@@ -14099,6 +16073,30 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+  // Reach (This creature can block creatures with flying.)
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  {
+    id: 'a3776b1c-4a3f-43b9-962e-64010f286ba5',
+    name: 'Court Archers',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 1,
+    toughness: 3,
+    keywords: { reach: true },
+    subtypes: ['human', 'archer'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+    ],
+  },
   // Convoke (Your creatures can help cast this spell. Each creature you tap while casting this spell pays for {1} or one mana of that creature's color.)
   // Covenant of Blood deals 4 damage to any target and you gain 4 life.
   {
@@ -14157,6 +16155,34 @@ const POOL_1: readonly CardDefinition[] = [
         condition: { on: 'castSpell', who: 'you', spellTypeNoneOf: ['creature'] },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 0 } }],
         label: 'Cast noncreature: ~ gets +3/+0 until end of turn',
+      },
+    ],
+  },
+  // Trample
+  // Echo {1}{G}{G} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  {
+    id: '8b659c1c-cc0b-40f0-87b4-aeddb44dfac5',
+    name: 'Cradle Guard',
+    types: ['creature'],
+    cost: { generic: 1, G: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { trample: true },
+    subtypes: ['treefolk'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 1, G: 2 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {1}{G}{G}',
       },
     ],
   },
@@ -14261,6 +16287,29 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+  // Suspend 4—{G} (Rather than cast this card from your hand, pay {G} and exile it with four time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)
+  // Create two 4/4 green Rhino creature tokens with trample.
+  {
+    id: 'a8cca2a2-69e3-4136-936c-7a2774c19351',
+    name: 'Crashing Footfalls',
+    types: ['sorcery'],
+    noManaCost: true,
+    suspend: { count: 4, cost: { G: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: {
+          power: 4,
+          toughness: 4,
+          name: 'Rhino',
+          colors: ['G'],
+          subtypes: ['Rhino'],
+          count: 2,
+          keywords: { trample: true },
+        },
+      },
+    ],
+  },
   // Destroy target land.
   {
     id: 'e5459409-5103-4a97-a6fb-3e3ab896eb66',
@@ -14291,6 +16340,33 @@ const POOL_1: readonly CardDefinition[] = [
     keywords: { cantBlock: true },
     subtypes: ['human', 'knight'],
   },
+  // Trample
+  // Rampage 2 (Whenever this creature becomes blocked, it gets +2/+2 until end of turn for each creature blocking it beyond the first.)
+  {
+    id: '81c5ee8f-a060-486c-a7f1-7bd600f6911a',
+    name: 'Craw Giant',
+    types: ['creature'],
+    cost: { generic: 3, G: 4 },
+    power: 6,
+    toughness: 4,
+    keywords: { trample: true },
+    subtypes: ['giant'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: {
+              power: { countOf: 'creaturesBlockingThisBeyondFirst', times: 2 },
+              toughness: { countOf: 'creaturesBlockingThisBeyondFirst', times: 2 },
+            },
+          },
+        ],
+        label: 'Rampage 2',
+      },
+    ],
+  },
   {
     id: '6a462a69-3e42-41de-a3aa-a488d9f38d69',
     name: 'Craw Wurm',
@@ -14299,6 +16375,43 @@ const POOL_1: readonly CardDefinition[] = [
     power: 6,
     toughness: 4,
     subtypes: ['wurm'],
+  },
+  // Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  // Soulshift 5 (When this creature dies, you may return target Spirit card with mana value 5 or less from your graveyard to your hand.)
+  {
+    id: '9c735bda-5454-4177-a23a-f9f00b7480d2',
+    name: 'Crawling Filth',
+    types: ['creature'],
+    cost: { generic: 5, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+    },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 5 } },
+          },
+        ],
+        label: 'Soulshift 5',
+      },
+    ],
+  },
+  // This creature attacks each combat if able.
+  {
+    id: '15fdb57b-7547-4588-9780-15e3bea0bc4c',
+    name: 'Crazed Goblin',
+    types: ['creature'],
+    cost: { R: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { mustAttack: true },
+    subtypes: ['goblin', 'warrior'],
   },
   // Flying, haste
   {
@@ -15012,6 +17125,9 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_2: readonly CardDefinition[] = [
   // Equipped creature gets +2/+2.
   // Equip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)
   {
@@ -15184,6 +17300,31 @@ const POOL_1: readonly CardDefinition[] = [
     keywords: { menace: true },
     subtypes: ['zombie', 'minotaur'],
   },
+  // Bushido 1 (Whenever this creature blocks or becomes blocked, it gets +1/+1 until end of turn.)
+  // {B}: This creature gets +1/+1 until end of turn.
+  {
+    id: 'b8f24fe9-22c4-4e53-9d7a-3cbf5533ac9b',
+    name: 'Cursed Ronin',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Bushido 1',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { B: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: '{b}: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
   // Defender
   // This creature enters tapped.
   {
@@ -15256,6 +17397,17 @@ const POOL_1: readonly CardDefinition[] = [
     power: 2,
     toughness: 2,
     subtypes: ['elf', 'scout'],
+  },
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: 'b6c10302-f0b3-4076-ae5c-a8c8c09a7d41',
+    name: 'Cystbearer',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { infect: true },
+    subtypes: ['phyrexian', 'beast'],
   },
   // Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)
   {
@@ -15426,6 +17578,18 @@ const POOL_1: readonly CardDefinition[] = [
     toughness: 1,
     subtypes: ['scorpion'],
   },
+  // Menace
+  // Myriad (Whenever this creature attacks, for each opponent other than defending player, you may create a token copy that's tapped and attacking that player or a planeswalker they control. Exile the tokens at end of combat.)
+  {
+    id: '76573f9d-f0f2-47b8-88e7-17d58d0d20d3',
+    name: 'Dalek Squadron',
+    types: ['artifact', 'creature'],
+    cost: { generic: 2, B: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { menace: true, myriad: true },
+    subtypes: ['dalek'],
+  },
   // Destroy all creatures. They can't be regenerated.
   {
     id: 'd3c0aac5-b9f1-4446-bfea-3e1dd1cf1f2f',
@@ -15444,6 +17608,28 @@ const POOL_1: readonly CardDefinition[] = [
     toughness: 5,
     keywords: { flying: true },
     subtypes: ['spirit'],
+  },
+  // At the beginning of your upkeep, sacrifice this creature unless you pay {G}{G}.
+  {
+    id: 'd82636dc-4b3e-44a8-bc72-dab1275dfb6d',
+    name: 'Darba',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 5,
+    toughness: 4,
+    subtypes: ['bird', 'beast'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { G: 2 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {g}{g}',
+      },
+    ],
   },
   // {1}, Sacrifice this creature: Add {B}{R}{G}.
   {
@@ -16032,6 +18218,89 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+  // {B}{B}: Target creature gains shadow until end of turn. (It can block or be blocked by only creatures with shadow.)
+  {
+    id: '7e84bb94-d654-4d69-89d9-0a398a940125',
+    name: 'Dauthi Embrace',
+    types: ['enchantment'],
+    cost: { generic: 2, B: 1 },
+    activated: [
+      {
+        cost: { mana: { B: 2 } },
+        effects: [
+          {
+            primitive: 'grantKeywordUntilEndOfTurn',
+            params: { keywords: { shadow: true }, targets: 'creature' },
+          },
+        ],
+        label: '{b}{b}: target creature gains shadow until end of turn',
+      },
+    ],
+  },
+  // Shadow (This creature can block or be blocked by only creatures with shadow.)
+  {
+    id: '01963759-c47e-408a-8de8-924224031c8a',
+    name: 'Dauthi Marauder',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 3,
+    toughness: 1,
+    keywords: { shadow: true },
+    subtypes: ['dauthi', 'minion'],
+  },
+  // Shadow (This creature can block or be blocked by only creatures with shadow.)
+  // {1}{B}: This creature gets +1/+0 until end of turn.
+  {
+    id: '1f4d6a3b-5880-447f-9095-84ea9e28e5a9',
+    name: 'Dauthi Mercenary',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { shadow: true },
+    subtypes: ['dauthi', 'knight', 'mercenary'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, B: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        label: '{1}{b}: ~ gets +1/+0 until end of turn',
+      },
+    ],
+  },
+  // Shadow (This creature can block or be blocked by only creatures with shadow.)
+  // This creature attacks each combat if able.
+  {
+    id: 'c289baab-04ee-4639-bc9b-9f032752fa69',
+    name: 'Dauthi Slayer',
+    types: ['creature'],
+    cost: { B: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { shadow: true, mustAttack: true },
+    subtypes: ['dauthi', 'soldier'],
+  },
+  // {T}: Target creature gains shadow until end of turn. (It can block or be blocked by only creatures with shadow.)
+  {
+    id: '6d83770e-16ff-49c6-b4e7-eb7fc566eef8',
+    name: 'Dauthi Trapper',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['dauthi', 'minion'],
+    activated: [
+      {
+        cost: { tap: true },
+        effects: [
+          {
+            primitive: 'grantKeywordUntilEndOfTurn',
+            params: { keywords: { shadow: true }, targets: 'creature' },
+          },
+        ],
+        label: '{t}: target creature gains shadow until end of turn',
+      },
+    ],
+  },
   // Whenever another creature you control enters, you lose 1 life and add {B}.
   {
     id: '9c8bf856-e7a6-4c58-b001-5ed27c7570ec',
@@ -16595,6 +18864,25 @@ const POOL_1: readonly CardDefinition[] = [
     keywords: { protectionFrom: ['black'] },
     subtypes: ['human', 'cleric'],
   },
+  // This creature attacks each combat if able.
+  // {2}{B}: Regenerate this creature.
+  {
+    id: 'b29fc64e-297e-4e10-8f4e-289dc1c3ebfd',
+    name: 'Deathbellow Raider',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { mustAttack: true },
+    subtypes: ['minotaur', 'berserker'],
+    activated: [
+      {
+        cost: { mana: { generic: 2, B: 1 } },
+        effects: [{ primitive: 'regenerate' }],
+        label: '{2}{b}: regenerate ~',
+      },
+    ],
+  },
   // Deathtouch
   // {T}: Add one mana of any color.
   {
@@ -16750,9 +19038,6 @@ const POOL_1: readonly CardDefinition[] = [
     noMaximumHandSize: true,
     producesOptions: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
   },
-];
-
-const POOL_2: readonly CardDefinition[] = [
   // Target opponent discards two cards.
   {
     id: 'bdb63768-2d8a-4a74-a312-b981dd462cdc',
@@ -16835,6 +19120,56 @@ const POOL_2: readonly CardDefinition[] = [
       { primitive: 'createPredefinedToken', params: { token: 'clue' } },
     ],
   },
+  // Vanishing 3 (This creature enters with three time counters on it. At the beginning of your upkeep, remove a time counter from it. When the last is removed, sacrifice it.)
+  // When this creature enters, create four 1/1 green Squirrel creature tokens.
+  // Squirrels you control get +1/+1.
+  {
+    id: '3287775f-7bec-4e8f-bb8d-daf5ce92e4a8',
+    name: 'Deep Forest Hermit',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['elf', 'druid'],
+    entersWithCounters: [{ kind: 'time', count: 3 }],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceHasCounter', counter: 'time' } },
+        effects: [
+          {
+            primitive: 'tickDownCounter',
+            params: { counter: 'time', sacrificeWhen: 'lastRemoved' },
+          },
+        ],
+        label: 'Vanishing 3',
+      },
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Squirrel',
+              colors: ['G'],
+              subtypes: ['Squirrel'],
+              count: 4,
+            },
+          },
+        ],
+        label: 'Enters: create four 1/1 green squirrel creature tokens',
+      },
+    ],
+    statics: [
+      {
+        affects: { anyOfSubtypes: ['squirrel'], controller: 'you' },
+        power: 1,
+        toughness: 1,
+        label: 'squirrels you control get +1/+1',
+      },
+    ],
+  },
   // Search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.
   // Flashback {4}{G} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
   {
@@ -16857,6 +19192,58 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+  // This creature can't attack unless defending player controls an Island.
+  {
+    id: 'f2d7f8d8-30fb-47c7-8927-646c41f0b9bc',
+    name: 'Deep-Sea Serpent',
+    types: ['creature'],
+    cost: { generic: 4, U: 2 },
+    power: 5,
+    toughness: 5,
+    keywords: { cantAttackUnlessDefenderControls: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['serpent'],
+  },
+  // Devoid (This card has no color.)
+  // Whenever a creature you control deals combat damage to a player, you may draw a card.
+  // {3}{C}: Target creature can't be blocked this turn. ({C} represents colorless mana.)
+  {
+    id: '496a22cc-36dd-4d4d-b887-8c4733a29870',
+    name: 'Deepfathom Skulker',
+    types: ['creature'],
+    cost: { generic: 5, U: 1 },
+    power: 4,
+    toughness: 4,
+    colors: [],
+    subtypes: ['eldrazi'],
+    triggers: [
+      {
+        condition: { on: 'creatureCombatDamageToPlayer' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may draw a card',
+              valence: 'gain',
+              effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+            },
+          },
+        ],
+        label: 'A creature you control deals combat damage to a player: you may draw a card',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 3, C: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordUntilEndOfTurn',
+            params: { keywords: { unblockable: true }, targets: 'creature' },
+          },
+        ],
+        label: '{3}{c}: target creature can\'t be blocked this turn',
+      },
+    ],
+  },
   // Whenever you cast a noncreature spell, put a +1/+1 counter on this creature.
   {
     id: 'ea1e7fed-e6f3-4445-8d01-dca3971f726f',
@@ -16874,6 +19261,23 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+  // Whenever this creature becomes blocked, it gets +1/+1 until end of turn.
+  {
+    id: '7c1a1963-ec46-4ed3-9be1-e4cc09687922',
+    name: 'Deeproot Warrior',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['merfolk', 'warrior'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Becomes blocked: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
   // Pay 2 life: Regenerate this creature.
   {
     id: 'cd4c5c2f-0c1e-44e8-a7f8-2dc2954eacd8',
@@ -16888,6 +19292,40 @@ const POOL_2: readonly CardDefinition[] = [
         cost: { life: 2 },
         effects: [{ primitive: 'regenerate' }],
         label: 'Pay 2 life: regenerate ~',
+      },
+    ],
+  },
+  // Whenever this creature becomes blocked, you gain 2 life.
+  {
+    id: 'bfa2028e-4e73-4ff2-a9e2-9ac347d67893',
+    name: 'Deepwood Tantiv',
+    types: ['creature'],
+    cost: { generic: 4, G: 1 },
+    power: 2,
+    toughness: 4,
+    subtypes: ['beast'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [{ primitive: 'gainLife', params: { amount: 2 } }],
+        label: 'Becomes blocked: you gain 2 life',
+      },
+    ],
+  },
+  // Whenever this creature becomes blocked, it gets +2/+0 until end of turn.
+  {
+    id: 'db9a9a76-741a-4ba3-bd4b-0eb87d678253',
+    name: 'Deepwood Wolverine',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['wolverine'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        label: 'Becomes blocked: ~ gets +2/+0 until end of turn',
       },
     ],
   },
@@ -17242,6 +19680,59 @@ const POOL_2: readonly CardDefinition[] = [
       { primitive: 'createPredefinedToken', params: { token: 'treasure' } },
     ],
   },
+  // Echo {3}{G}{G} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  // When this creature enters, create four 1/1 green Squirrel creature tokens.
+  // Squirrel creatures get +1/+1.
+  {
+    id: 'c25df202-0dd4-448d-8cb3-11fd7df0d505',
+    name: 'Deranged Hermit',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['elf'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 3, G: 2 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {3}{G}{G}',
+      },
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Squirrel',
+              colors: ['G'],
+              subtypes: ['Squirrel'],
+              count: 4,
+            },
+          },
+        ],
+        label: 'Enters: create four 1/1 green squirrel creature tokens',
+      },
+    ],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], anyOfSubtypes: ['squirrel'], controller: 'any' },
+        power: 1,
+        toughness: 1,
+        label: 'squirrel creatures get +1/+1',
+      },
+    ],
+  },
   // Menace (This creature can't be blocked except by two or more creatures.)
   {
     id: 'fd06f9eb-112e-458b-83c8-3761df6d60ff',
@@ -17252,6 +19743,32 @@ const POOL_2: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { menace: true },
     subtypes: ['wolf'],
+  },
+  // Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  // Whenever a player casts a spell, sacrifice a creature.
+  {
+    id: '829b4406-c066-4cd6-9520-8a7cb3cbfdb2',
+    name: 'Desecration Elemental',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 8,
+    toughness: 8,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+    },
+    subtypes: ['elemental'],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'any' },
+        effects: [
+          {
+            primitive: 'sacrificeChosen',
+            params: { who: 'controller', filter: { anyOfTypes: ['creature'] } },
+          },
+        ],
+        label: 'Any player casts spell: sacrifice a creature',
+      },
+    ],
   },
   // Cycling {R} ({R}, Discard this card: Draw a card.)
   {
@@ -17496,6 +20013,23 @@ const POOL_2: readonly CardDefinition[] = [
     toughness: 2,
     subtypes: ['elf', 'soldier'],
   },
+  // Bushido 1 (Whenever this creature blocks or becomes blocked, it gets +1/+1 until end of turn.)
+  {
+    id: 'fc41d6d6-d7e5-4874-b6e2-fa4c72454f15',
+    name: 'Devoted Retainer',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Bushido 1',
+      },
+    ],
+  },
   // {4}{G}: Target creature gets +2/+2 until end of turn.
   {
     id: '977698ab-3b64-41f2-a214-ac95e04c9956',
@@ -17517,6 +20051,17 @@ const POOL_2: readonly CardDefinition[] = [
         label: '{4}{g}: target creature gets +2/+2 until end of turn',
       },
     ],
+  },
+  // Islandwalk (This creature can't be blocked as long as defending player controls an Island.)
+  {
+    id: '0855a5a8-8c40-4396-9ad1-8fa0fc6a0c59',
+    name: 'Devouring Deep',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 1,
+    toughness: 2,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['fish'],
   },
   // Flying, trample
   // At the beginning of your upkeep, sacrifice a creature.
@@ -17915,6 +20460,25 @@ const POOL_2: readonly CardDefinition[] = [
       { primitive: 'surveil', params: { count: 2 } },
       { primitive: 'drawCards', params: { count: 2 } },
       { primitive: 'loseLife', params: { amount: 2 } },
+    ],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  // {B}: This creature gets +1/+0 until end of turn.
+  {
+    id: 'fcc3fa22-a4c4-423d-969b-98c65b23e782',
+    name: 'Dirtwater Wraith',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 1,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['wraith'],
+    activated: [
+      {
+        cost: { mana: { B: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        label: '{b}: ~ gets +1/+0 until end of turn',
+      },
     ],
   },
   // When this creature enters, you may discard a card. If you do, draw a card.
@@ -18975,6 +21539,39 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying, trample
+  // Double strike (This creature deals both first-strike and regular combat damage.)
+  // At the beginning of your upkeep, sacrifice this creature unless you pay {R}{R}{R}{R}.
+  // {R}: This creature gets +1/+0 until end of turn.
+  {
+    id: '04d1a29b-af80-4f9a-881b-ef7374ecbce1',
+    name: 'Dragon Tyrant',
+    types: ['creature'],
+    cost: { generic: 8, R: 2 },
+    power: 6,
+    toughness: 6,
+    keywords: { flying: true, trample: true, doubleStrike: true },
+    subtypes: ['dragon'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { R: 4 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {r}{r}{r}{r}',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { R: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        label: '{r}: ~ gets +1/+0 until end of turn',
+      },
+    ],
+  },
   // Double strike
   // Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)
   {
@@ -19070,6 +21667,17 @@ const POOL_2: readonly CardDefinition[] = [
     types: ['land'],
     entersTappedUnless: { controlsSubtype: ['swamp', 'mountain'] },
     producesOptions: [{ B: 1 }, { R: 1 }],
+  },
+  // Flying, protection from Dragons
+  {
+    id: '58017ff1-74d2-4be2-976a-8dff53e16150',
+    name: 'Dragonstalker',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true, protectionFrom: ['subtype:Dragon'] },
+    subtypes: ['bird', 'soldier'],
   },
   // Flying
   // When this creature enters, create a 1/1 colorless Hero creature token.
@@ -19402,6 +22010,66 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+  // Shadow (This creature can block or be blocked by only creatures with shadow.)
+  // At the beginning of your upkeep, sacrifice this creature unless you pay {U}.
+  {
+    id: 'd40c45e7-f157-4b3f-a627-09b5c27473ae',
+    name: 'Drifter il-Dal',
+    types: ['creature'],
+    cost: { U: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { shadow: true },
+    subtypes: ['human', 'wizard'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { U: 1 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {u}',
+      },
+    ],
+  },
+  // Flying
+  // At the beginning of your upkeep, sacrifice this creature unless you pay {1}{U}.
+  // Cycling {2} ({2}, Discard this card: Draw a card.)
+  {
+    id: '971d0eda-91b8-48f2-a988-016bcc7ab35e',
+    name: 'Drifting Djinn',
+    types: ['creature'],
+    cost: { generic: 4, U: 2 },
+    power: 5,
+    toughness: 5,
+    keywords: { flying: true },
+    subtypes: ['djinn'],
+    cycling: [
+      {
+        cost: { generic: 2 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {2}',
+      },
+    ],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 1, U: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {1}{u}',
+      },
+    ],
+  },
   // This land enters tapped.
   // {T}: Add {W}.
   // Cycling {2} ({2}, Discard this card: Draw a card.)
@@ -19593,6 +22261,23 @@ const POOL_2: readonly CardDefinition[] = [
     toughness: 1,
     subtypes: ['human', 'warrior'],
   },
+  // Whenever this creature blocks or becomes blocked, it gets +2/-2 until end of turn.
+  {
+    id: '65de0b43-64df-44dc-850c-25f48d6ab53b',
+    name: 'Dromosaur',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 2,
+    toughness: 3,
+    subtypes: ['dinosaur'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: -2 } }],
+        label: 'Blocks or becomes blocked: ~ gets +2/-2 until end of turn',
+      },
+    ],
+  },
   {
     id: 'efd5c07e-4ece-4c8b-93c8-6abd7dd3a39a',
     name: 'Dross Crocodile',
@@ -19601,6 +22286,21 @@ const POOL_2: readonly CardDefinition[] = [
     power: 5,
     toughness: 1,
     subtypes: ['zombie', 'crocodile'],
+  },
+  // Affinity for Swamps (This spell costs {1} less to cast for each Swamp you control.)
+  // Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  {
+    id: '1df2f4fd-b96a-4537-93a4-38141b0fa577',
+    name: 'Dross Golem',
+    types: ['artifact', 'creature'],
+    cost: { generic: 5 },
+    power: 3,
+    toughness: 2,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+    },
+    subtypes: ['golem'],
+    castCostReductionPerPermanent: { amount: 1, filter: { anyOfSubtypes: ['swamp'] } },
   },
   // Protection from white
   // At the beginning of your end step, you lose 4 life.
@@ -19626,6 +22326,19 @@ const POOL_2: readonly CardDefinition[] = [
         label: 'creature (any) dies: you gain 2 life',
       },
     ],
+  },
+  // Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  {
+    id: '1fff470a-3574-42be-8f0b-ac5e7a70f61a',
+    name: 'Dross Prowler',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+    },
+    subtypes: ['zombie'],
   },
   // {2}{B}: This creature gets +1/+1 until end of turn.
   {
@@ -19670,6 +22383,55 @@ const POOL_2: readonly CardDefinition[] = [
         label: '{2}{b}, sacrifice ~: return target creature card from your graveyard to your hand. draw a card. activate only as a sorcery',
       },
     ],
+  },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +1/+1.
+  // Whenever equipped creature attacks, each opponent loses 1 life.
+  // Equip {2}
+  {
+    id: '70e68656-3204-4bb5-9f31-8036083fcba6',
+    name: 'Drossclaw',
+    types: ['artifact'],
+    cost: { generic: 1, B: 1 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+      {
+        condition: { on: 'attacks', watches: 'attachedHost' },
+        effects: [{ primitive: 'loseLife', params: { amount: 1, whichPlayer: 'opponent' } }],
+        label: 'Equipped creature attacks: each opponent loses 1 life',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 1, toughness: 1, keywords: {} },
+    },
   },
   // This land enters tapped.
   // Indestructible
@@ -19852,6 +22614,17 @@ const POOL_2: readonly CardDefinition[] = [
     subtypes: ['forest', 'dryad'],
     produces: ['G'],
   },
+  // Nonbasic landwalk (This creature can't be blocked as long as defending player controls a nonbasic land.)
+  {
+    id: '0b5bf5ce-f7f8-47cb-abb8-f14ce5f1af67',
+    name: 'Dryad Sophisticate',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'nonbasic' }] },
+    subtypes: ['dryad'],
+  },
   // Return target card from your graveyard to your hand.
   // Flashback {4}{G} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
   {
@@ -19944,6 +22717,17 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+  // Suspend 5—{G} (Rather than cast this card from your hand, you may pay {G} and exile it with five time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.)
+  {
+    id: 'dce39dd1-ca51-420f-a627-1511192d34c2',
+    name: 'Durkwood Baloth',
+    types: ['creature'],
+    cost: { generic: 4, G: 2 },
+    power: 5,
+    toughness: 5,
+    subtypes: ['beast'],
+    suspend: { count: 5, cost: { G: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+  },
   {
     id: '3741510d-a210-432c-a95b-a147689df995',
     name: 'Durkwood Boars',
@@ -20006,6 +22790,30 @@ const POOL_2: readonly CardDefinition[] = [
     keywords: { blockRestriction: { maxBlockerPower: 3 } },
     subtypes: ['human', 'rogue'],
   },
+  // Haste (This creature can attack and {T} as soon as it comes under your control.)
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  {
+    id: 'bcb031da-d41a-496a-b78e-0773f6504303',
+    name: 'Duskmantle Prowler',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { haste: true },
+    subtypes: ['vampire', 'rogue'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+    ],
+  },
   // {T}: Add {C}.
   // {U}{B}, {T}: Target player mills a card.
   {
@@ -20031,6 +22839,19 @@ const POOL_2: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { flying: true, protectionFrom: ['black'] },
     subtypes: ['bird'],
+  },
+  // Flying, protection from black
+  // Suspend 3—{1}{W} (Rather than cast this card from your hand, you may pay {1}{W} and exile it with three time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.)
+  {
+    id: '321ff631-54f0-4501-852a-569790d05cf1',
+    name: 'Duskrider Peregrine',
+    types: ['creature'],
+    cost: { generic: 5, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true, protectionFrom: ['black'] },
+    subtypes: ['bird'],
+    suspend: { count: 3, cost: { generic: 1, W: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
   },
   // When this creature enters, put a +1/+1 counter on target creature.
   // Each creature you control with a +1/+1 counter on it has trample. (It can deal excess combat damage to the player or planeswalker it's attacking.)
@@ -20121,6 +22942,17 @@ const POOL_2: readonly CardDefinition[] = [
         label: 'Dies: create a 1/1 colorless hero creature token',
       },
     ],
+  },
+  // Mountainwalk (This creature can't be blocked as long as defending player controls a Mountain.)
+  {
+    id: '6f00d726-4289-48ff-8c14-6a5080a00fda',
+    name: 'Dwarven Grunt',
+    types: ['creature'],
+    cost: { R: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'mountain' }] },
+    subtypes: ['dwarf'],
   },
   // This land enters tapped.
   // {T}: Add {R}.
@@ -20942,6 +23774,17 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  {
+    id: '6fc7edbd-a819-4cee-8053-3e36a3ac9197',
+    name: 'Elite Cat Warrior',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['cat', 'warrior'],
+  },
   // Flying
   // When this creature enters, you gain 3 life and draw a card.
   {
@@ -20963,6 +23806,22 @@ const POOL_2: readonly CardDefinition[] = [
         label: 'Enters: you gain 3 life and draw a card',
       },
     ],
+  },
+  // First strike, vigilance
+  // Protection from Vampires, from Werewolves, and from Zombies
+  {
+    id: 'c9411c44-92a8-4f5d-b3de-d80046649c8c',
+    name: 'Elite Inquisitor',
+    types: ['creature'],
+    cost: { W: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: {
+      firstStrike: true,
+      vigilance: true,
+      protectionFrom: ['subtype:Vampire', 'subtype:Werewolf', 'subtype:Zombie'],
+    },
+    subtypes: ['human', 'soldier'],
   },
   {
     id: 'b3b9a87d-cb95-435c-90b6-037406cab32e',
@@ -21418,6 +24277,17 @@ const POOL_2: readonly CardDefinition[] = [
     types: ['artifact'],
     cost: { generic: 2 },
     castCostReduction: { amount: 1, filter: { anyOfColors: ['G'] } },
+  },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  {
+    id: '10bf14b5-31d0-42e3-a319-2622b489f7c4',
+    name: 'Emerald Oryx',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['antelope'],
   },
   // Return target creature card from your graveyard to the battlefield. You gain 3 life.
   {
@@ -21970,6 +24840,19 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying
+  // Suspend 4—{1}{U} (Rather than cast this card from your hand, you may pay {1}{U} and exile it with four time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.)
+  {
+    id: '3779a76a-0171-4714-9713-a65dc173a33f',
+    name: 'Errant Ephemeron',
+    types: ['creature'],
+    cost: { generic: 6, U: 1 },
+    power: 4,
+    toughness: 4,
+    keywords: { flying: true },
+    subtypes: ['illusion'],
+    suspend: { count: 4, cost: { generic: 1, U: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+  },
   // {2}{U}{U}, {T}: Counter target spell.
   {
     id: '91971e19-61ce-45ac-b700-9ffca5091a27',
@@ -21985,6 +24868,25 @@ const POOL_2: readonly CardDefinition[] = [
         cost: { mana: { generic: 2, U: 2 }, tap: true },
         effects: [{ primitive: 'counterSpell', params: { targets: 'spell' } }],
         label: '{2}{u}{u}, {t}: counter target spell',
+      },
+    ],
+  },
+  // Lifelink
+  // Whenever this creature blocks or becomes blocked, it gets +5/+0 until end of turn.
+  {
+    id: '7364dbe9-ee9a-4dcc-b058-4e669c75f060',
+    name: 'Escaped Null',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 1,
+    toughness: 2,
+    keywords: { lifelink: true },
+    subtypes: ['zombie', 'berserker'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 5, toughness: 0 } }],
+        label: 'Blocks or becomes blocked: ~ gets +5/+0 until end of turn',
       },
     ],
   },
@@ -22061,6 +24963,28 @@ const POOL_2: readonly CardDefinition[] = [
           },
         ],
         label: '{1}, {t}, sacrifice ~: search your library for a basic plains, island, or swamp card, put it onto the battlefield tapped, then shuffle',
+      },
+    ],
+  },
+  // Devoid (This card has no color.)
+  // {1}{C}: Target opponent loses 1 life and you gain 1 life. ({C} represents colorless mana.)
+  {
+    id: '996da623-1c34-4545-a800-648238ea91ae',
+    name: 'Essence Depleter',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 3,
+    colors: [],
+    subtypes: ['eldrazi', 'drone'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, C: 1 } },
+        effects: [
+          { primitive: 'loseLife', params: { amount: 1, targetPlayer: true, targets: 'opponent' } },
+          { primitive: 'gainLife', params: { amount: 1 } },
+        ],
+        label: '{1}{c}: target opponent loses 1 life and you gain 1 life',
       },
     ],
   },
@@ -22154,6 +25078,40 @@ const POOL_2: readonly CardDefinition[] = [
       label: 'Enchant creature',
       modifies: { power: 0, toughness: 0, keywords: { vigilance: true } },
     },
+  },
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  {
+    id: '125126e1-1e48-42ed-ac94-02f62ab13d05',
+    name: 'Ethercaste Knight',
+    types: ['artifact', 'creature'],
+    cost: { W: 1, U: 1 },
+    power: 1,
+    toughness: 3,
+    subtypes: ['human', 'knight'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+    ],
+  },
+  // Flying
+  // This creature can't attack unless defending player controls an Island.
+  {
+    id: '5b9fa774-fb6d-4a2f-96d5-a449a423312e',
+    name: 'Ethereal Whiskergill',
+    types: ['creature'],
+    cost: { generic: 3, U: 1 },
+    power: 4,
+    toughness: 3,
+    keywords: { flying: true, cantAttackUnlessDefenderControls: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['elemental'],
   },
   // Flash
   // {B}, {T}, Sacrifice an artifact: Draw a card.
@@ -22614,6 +25572,9 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_3: readonly CardDefinition[] = [
   // At the beginning of your upkeep, create a token that's a copy of another target nonland permanent you control.
   {
     id: '3a646245-b8b7-4f91-a312-d5eea9a9e49a',
@@ -22632,6 +25593,36 @@ const POOL_2: readonly CardDefinition[] = [
         label: 'your upkeep: create a token that\'s a copy of another target nonland permanent you control',
         targets: 'nonlandPermanentYouControl',
         targetsExcludeSelf: true,
+      },
+    ],
+  },
+  // Echo {4} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  // Sacrifice an artifact: Put a +1/+1 counter on target creature.
+  {
+    id: 'e94e53f0-cfca-4b40-9867-94ea771463cd',
+    name: 'Extruder',
+    types: ['artifact', 'creature'],
+    cost: { generic: 4 },
+    power: 4,
+    toughness: 3,
+    subtypes: ['juggernaut'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { generic: 4 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'Echo {4}',
+      },
+    ],
+    activated: [
+      {
+        cost: { sacrificeAnother: { anyOfTypes: ['artifact'] } },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, targets: 'creature' } }],
+        label: 'Sacrifice an artifact: put a +1/+1 counter on target creature',
       },
     ],
   },
@@ -22698,6 +25689,25 @@ const POOL_2: readonly CardDefinition[] = [
       {
         primitive: 'pumpUntilEndOfTurn',
         params: { power: -11, toughness: -11, targets: 'creature' },
+      },
+    ],
+  },
+  // Reach (This creature can block creatures with flying.)
+  // Whenever this creature blocks a creature with flying, this creature gets +3/+0 until end of turn.
+  {
+    id: 'f909f002-f419-4292-ad92-05c4fd71749d',
+    name: 'Ezuri\'s Archers',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 2,
+    keywords: { reach: true },
+    subtypes: ['elf', 'archer'],
+    triggers: [
+      {
+        condition: { on: 'blocks', counterpartHasKeyword: 'flying' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 0 } }],
+        label: 'Blocks a creature with flying: ~ gets +3/+0 until end of turn',
       },
     ],
   },
@@ -22989,6 +25999,49 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flanking (Whenever a creature without flanking blocks this creature, the blocking creature gets -1/-1 until end of turn.)
+  // This creature can't block.
+  {
+    id: 'a99c4859-038b-4dd0-80d0-28a881f4a564',
+    name: 'Fallen Askari',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flanking: true, cantBlock: true },
+    subtypes: ['human', 'knight'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlockedByCreature', counterpartLacksKeyword: 'flanking' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: -1, toughness: -1, subject: 'triggering' },
+          },
+        ],
+        label: 'Flanking',
+      },
+    ],
+  },
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  // {1}{R}, {T}: This creature deals 1 damage to any target.
+  {
+    id: '7b200986-f553-4156-8f5e-37678db09687',
+    name: 'Fallen Ferromancer',
+    types: ['creature'],
+    cost: { generic: 3, R: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { infect: true },
+    subtypes: ['phyrexian', 'human', 'shaman'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, R: 1 }, tap: true },
+        effects: [{ primitive: 'dealDamage', params: { amount: 1 } }],
+        label: '{1}{r}, {t}: ~ deals 1 damage to any target',
+      },
+    ],
+  },
   // Return target creature card from your graveyard to the battlefield.
   {
     id: 'e95d2fb2-66ca-4954-b9c5-074ae813e9ed',
@@ -23110,6 +26163,17 @@ const POOL_2: readonly CardDefinition[] = [
         targets: 'creature',
       },
     ],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: '489c6a2f-38b4-4ff9-95f7-431384480ed9',
+    name: 'Farbog Explorer',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['human', 'scout'],
   },
   // Skulk (This creature can't be blocked by creatures with greater power.)
   // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
@@ -23591,6 +26655,26 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+  // Target creature gets +1/+1 until end of turn.
+  // Draw a card at the beginning of the next turn's upkeep.
+  {
+    id: '20dec7cf-2865-4642-9022-d3006fd7ac30',
+    name: 'Feral Instinct',
+    types: ['instant'],
+    cost: { generic: 1, G: 1 },
+    effects: [
+      { primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1, targets: 'creature' } },
+      {
+        primitive: 'scheduleDelayedEffects',
+        params: {
+          on: 'upkeep',
+          who: 'any',
+          effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+          label: 'Draw a card at the beginning of the next turn\'s upkeep',
+        },
+      },
+    ],
+  },
   // Flash (You may cast this spell any time you could cast an instant.)
   // Enchant creature
   // Enchanted creature gets +2/+2.
@@ -23884,6 +26968,26 @@ const POOL_2: readonly CardDefinition[] = [
         cost: { mana: { generic: 2, B: 2 } },
         effects: [{ primitive: 'addCounters', params: { amount: -1, targets: 'creature' } }],
         label: '{2}{b}{b}: put a -1/-1 counter on target creature',
+      },
+    ],
+  },
+  // Target creature gets +2/+0 until end of turn.
+  // Draw a card at the beginning of the next turn's upkeep.
+  {
+    id: 'd5c531fc-4e4e-44c9-a2ee-4f7fe41bb3f0',
+    name: 'Fevered Strength',
+    types: ['instant'],
+    cost: { generic: 2, B: 1 },
+    effects: [
+      { primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0, targets: 'creature' } },
+      {
+        primitive: 'scheduleDelayedEffects',
+        params: {
+          on: 'upkeep',
+          who: 'any',
+          effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+          label: 'Draw a card at the beginning of the next turn\'s upkeep',
+        },
       },
     ],
   },
@@ -24598,6 +27702,25 @@ const POOL_2: readonly CardDefinition[] = [
       modifies: { power: 0, toughness: 0, keywords: { doubleStrike: true } },
     },
   },
+  // Flying, trample
+  // Cumulative upkeep {U}{R} (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)
+  {
+    id: 'def23574-4a41-4323-84d9-49f58b2ca322',
+    name: 'Firestorm Hellkite',
+    types: ['creature'],
+    cost: { generic: 4, U: 1, R: 1 },
+    power: 6,
+    toughness: 6,
+    keywords: { flying: true, trample: true },
+    subtypes: ['dragon'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [{ primitive: 'cumulativeUpkeep', params: { mana: { U: 1, R: 1 } } }],
+        label: 'Cumulative upkeep {U}{R}',
+      },
+    ],
+  },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
   // {T}: Add {W} or {B}.
@@ -24748,6 +27871,18 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+  // Haste
+  // This creature attacks each combat if able.
+  {
+    id: '84e0e5f5-b51a-4386-827b-c0eb8c877efb',
+    name: 'Flameborn Hellion',
+    types: ['creature'],
+    cost: { generic: 5, R: 1 },
+    power: 5,
+    toughness: 4,
+    keywords: { haste: true, mustAttack: true },
+    subtypes: ['hellion'],
+  },
   {
     id: '9601ea62-a609-4bc5-a2f0-f7615b4dd5fa',
     name: 'Flameborn Viron',
@@ -24756,6 +27891,32 @@ const POOL_2: readonly CardDefinition[] = [
     power: 6,
     toughness: 4,
     subtypes: ['phyrexian', 'insect'],
+  },
+  // Echo {2}{R}{R} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  {
+    id: '940bfe4f-bc18-4506-b6f4-13d339fd3e55',
+    name: 'Flamecore Elemental',
+    types: ['creature'],
+    cost: { generic: 2, R: 2 },
+    power: 5,
+    toughness: 4,
+    subtypes: ['elemental'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 2, R: 2 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {2}{R}{R}',
+      },
+    ],
   },
   // {R}: This creature gets +1/+0 until end of turn.
   {
@@ -24845,6 +28006,26 @@ const POOL_2: readonly CardDefinition[] = [
       modifies: { power: 1, toughness: 0, keywords: { firstStrike: true } },
     },
   },
+  // Flare deals 1 damage to any target.
+  // Draw a card at the beginning of the next turn's upkeep.
+  {
+    id: 'abc046c2-be9b-4f93-ac7d-e7dea6c4df9a',
+    name: 'Flare',
+    types: ['instant'],
+    cost: { generic: 2, R: 1 },
+    effects: [
+      { primitive: 'dealDamage', params: { amount: 1 } },
+      {
+        primitive: 'scheduleDelayedEffects',
+        params: {
+          on: 'upkeep',
+          who: 'any',
+          effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+          label: 'Draw a card at the beginning of the next turn\'s upkeep',
+        },
+      },
+    ],
+  },
   // Counter target instant spell.
   {
     id: 'dc14e61f-481a-4bfa-aca0-fb63dc952be6',
@@ -24873,6 +28054,49 @@ const POOL_2: readonly CardDefinition[] = [
     types: ['instant'],
     cost: { generic: 3, B: 1 },
     effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -4, toughness: -4, targets: 'creature' } }],
+  },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +1/+1.
+  // Equip {2}
+  {
+    id: '20b394f9-644d-426e-801b-110774092018',
+    name: 'Flayer Husk',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 1, toughness: 1, keywords: {} },
+    },
   },
   // This creature can't be blocked by creatures with power 2 or greater.
   {
@@ -24931,6 +28155,18 @@ const POOL_2: readonly CardDefinition[] = [
       { primitive: 'drawCards', params: { count: 1 } },
     ],
   },
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
+  {
+    id: '0017de60-ee1c-4675-b04e-cdfa2c2a596e',
+    name: 'Flensermite',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { infect: true, lifelink: true },
+    subtypes: ['phyrexian', 'gremlin'],
+  },
   // Destroy target creature. It can't be regenerated.
   {
     id: '4fd4b0f6-fc67-48aa-9f17-21a79bd0c3d3',
@@ -24938,6 +28174,26 @@ const POOL_2: readonly CardDefinition[] = [
     types: ['instant'],
     cost: { generic: 3, B: 2 },
     effects: [{ primitive: 'destroyTarget', params: { targets: 'creature' } }],
+  },
+  // Flying
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  // Sacrifice a creature: This creature gets +1/+1 until end of turn.
+  {
+    id: 'c9b1925a-d0d5-4ee6-bf80-734237a9dd31',
+    name: 'Flesh-Eater Imp',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true, infect: true },
+    subtypes: ['phyrexian', 'imp'],
+    activated: [
+      {
+        cost: { sacrificeAnother: { anyOfTypes: ['creature'] } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Sacrifice a creature: ~ gets +1/+1 until end of turn',
+      },
+    ],
   },
   // Enchant creature
   // Enchanted creature has flying.
@@ -24992,9 +28248,6 @@ const POOL_2: readonly CardDefinition[] = [
       modifies: { power: 0, toughness: 0, keywords: { flying: true } },
     },
   },
-];
-
-const POOL_3: readonly CardDefinition[] = [
   // This land enters tapped.
   // {T}, Sacrifice this land: Search your library for a Plains or Island card, put it onto the battlefield, then shuffle.
   {
@@ -25092,6 +28345,23 @@ const POOL_3: readonly CardDefinition[] = [
     characteristicPT: { power: { countOf: 'landsYouControl' }, toughness: { countOf: 'landsYouControl' } },
     keywords: { hexproof: true },
     subtypes: ['treefolk'],
+  },
+  // Whenever this creature attacks, it gets +3/-3 until end of turn.
+  {
+    id: 'c57abdab-d99c-418c-818d-b06a8722d733',
+    name: 'Flowstone Charger',
+    types: ['creature'],
+    cost: { generic: 2, W: 1, R: 1 },
+    power: 2,
+    toughness: 5,
+    subtypes: ['beast'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: -3 } }],
+        label: 'Attacks: ~ gets +3/-3 until end of turn',
+      },
+    ],
   },
   // {R}: This creature gets +1/-1 until end of turn.
   {
@@ -25440,6 +28710,23 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // Whenever this creature blocks, it gets +2/+0 until end of turn.
+  {
+    id: '9f4a595e-51f6-4e84-aa3a-5d9c18dc8b3f',
+    name: 'Folk of An-Havva',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human'],
+    triggers: [
+      {
+        condition: { on: 'blocks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        label: 'Blocks: ~ gets +2/+0 until end of turn',
+      },
+    ],
+  },
   // {1}{G}: This creature gets +1/+0 until end of turn.
   {
     id: 'ee55f1d0-5bb7-4c11-8534-76b3efd12169',
@@ -25601,6 +28888,26 @@ const POOL_3: readonly CardDefinition[] = [
     cost: { U: 1 },
     effects: [{ primitive: 'counterUnlessPaid', params: { targets: 'spell', unlessPaid: { generic: 1 } } }],
   },
+  // Counter target spell unless its controller pays {1}.
+  // Draw a card at the beginning of the next turn's upkeep.
+  {
+    id: '226555ba-22af-45f1-a3f4-d265f8685dd5',
+    name: 'Force Void',
+    types: ['instant'],
+    cost: { generic: 2, U: 1 },
+    effects: [
+      { primitive: 'counterUnlessPaid', params: { targets: 'spell', unlessPaid: { generic: 1 } } },
+      {
+        primitive: 'scheduleDelayedEffects',
+        params: {
+          on: 'upkeep',
+          who: 'any',
+          effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+          label: 'Draw a card at the beginning of the next turn\'s upkeep',
+        },
+      },
+    ],
+  },
   // Whenever an opponent casts a spell, that player draws seven cards.
   {
     id: '448b27a5-7c0c-4ab6-bddf-bd62b920aacc',
@@ -25721,6 +29028,38 @@ const POOL_3: readonly CardDefinition[] = [
     subtypes: ['golem'],
     entersTapped: true,
   },
+  // Soulshift 4, soulshift 4 (When this creature dies, you may return up to two target Spirit cards with mana value 4 or less from your graveyard to your hand.)
+  {
+    id: '0ff39ae5-a241-4607-903e-201f56c675f9',
+    name: 'Forked-Branch Garami',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    power: 4,
+    toughness: 4,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 4 } },
+          },
+        ],
+        label: 'Soulshift 4',
+      },
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 4 } },
+          },
+        ],
+        label: 'Soulshift 4',
+      },
+    ],
+  },
   // Exile target artifact or enchantment.
   // Cycling {2} ({2}, Discard this card: Draw a card.)
   {
@@ -25814,6 +29153,29 @@ const POOL_3: readonly CardDefinition[] = [
     power: 1,
     toughness: 6,
     subtypes: ['crab'],
+  },
+  // Whenever this creature attacks, it gets +3/+0 until end of turn.
+  // Whenever this creature blocks, it gets +0/+3 until end of turn.
+  {
+    id: '39f835f0-abba-402c-bdae-be03ad3fb658',
+    name: 'Fortress Cyclops',
+    types: ['creature'],
+    cost: { generic: 3, W: 1, R: 1 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['cyclops', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 0 } }],
+        label: 'Attacks: ~ gets +3/+0 until end of turn',
+      },
+      {
+        condition: { on: 'blocks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 0, toughness: 3 } }],
+        label: 'Blocks: ~ gets +0/+3 until end of turn',
+      },
+    ],
   },
   // Choose one or both —
   // • Return target artifact card from your graveyard to your hand.
@@ -26081,6 +29443,32 @@ const POOL_3: readonly CardDefinition[] = [
         cost: { mana: { generic: 4 }, tap: true },
         effects: [{ primitive: 'createPredefinedToken', params: { token: 'treasure' } }],
         label: '{4}, {t}: create a treasure token',
+      },
+    ],
+  },
+  // Vanishing 4 (This enchantment enters with four time counters on it. At the beginning of your upkeep, remove a time counter from it. When the last is removed, sacrifice it.)
+  // At the beginning of your first main phase, draw a card.
+  {
+    id: '02fe50fc-6c6c-43e7-ad0e-8f13a254da2a',
+    name: 'Four Knocks',
+    types: ['enchantment'],
+    cost: { generic: 2, W: 1 },
+    entersWithCounters: [{ kind: 'time', count: 4 }],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceHasCounter', counter: 'time' } },
+        effects: [
+          {
+            primitive: 'tickDownCounter',
+            params: { counter: 'time', sacrificeWhen: 'lastRemoved' },
+          },
+        ],
+        label: 'Vanishing 4',
+      },
+      {
+        condition: { on: 'precombatMain', who: 'you' },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'your first main phase: draw a card',
       },
     ],
   },
@@ -26427,6 +29815,42 @@ const POOL_3: readonly CardDefinition[] = [
           },
         ],
         label: '{3}{g}, {t}: search your library for a basic land card, put it onto the battlefield tapped, then shuffle',
+      },
+    ],
+  },
+  // This creature attacks each combat if able.
+  {
+    id: 'b742738a-2663-474d-b75a-28f1f67dc335',
+    name: 'Frontline Rebel',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { mustAttack: true },
+    subtypes: ['human', 'warrior'],
+  },
+  // Rampage 2 (Whenever this creature becomes blocked, it gets +2/+2 until end of turn for each creature blocking it beyond the first.)
+  {
+    id: 'a742bfa4-3730-4bfd-865c-92fb4b40f2f2',
+    name: 'Frost Giant',
+    types: ['creature'],
+    cost: { generic: 3, R: 3 },
+    power: 4,
+    toughness: 4,
+    subtypes: ['giant'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: {
+              power: { countOf: 'creaturesBlockingThisBeyondFirst', times: 2 },
+              toughness: { countOf: 'creaturesBlockingThisBeyondFirst', times: 2 },
+            },
+          },
+        ],
+        label: 'Rampage 2',
       },
     ],
   },
@@ -27222,6 +30646,26 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // Trample
+  // Cumulative upkeep—Pay 1 life. (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)
+  {
+    id: '8df86192-6374-42ac-94bc-95e2e8284bd6',
+    name: 'Gallowbraid',
+    types: ['creature'],
+    cost: { generic: 3, B: 2 },
+    power: 5,
+    toughness: 5,
+    legendary: true,
+    keywords: { trample: true },
+    subtypes: ['phyrexian', 'horror'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [{ primitive: 'cumulativeUpkeep', params: { life: 1 } }],
+        label: 'Cumulative upkeep—Pay 1 life',
+      },
+    ],
+  },
   // Flying
   // Other Spirit creatures you control get +0/+1.
   {
@@ -27301,6 +30745,19 @@ const POOL_3: readonly CardDefinition[] = [
       adventure: true,
     },
     backFaceCastable: true,
+  },
+  // Trample
+  // Suspend 4—{1}{R} (Rather than cast this card from your hand, you may pay {1}{R} and exile it with four time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.)
+  {
+    id: '079d5536-1b2e-4d5b-bae9-9fd14562087a',
+    name: 'Gargadon',
+    types: ['creature'],
+    cost: { generic: 5, R: 2 },
+    power: 7,
+    toughness: 5,
+    keywords: { trample: true },
+    subtypes: ['beast'],
+    suspend: { count: 4, cost: { generic: 1, R: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
   },
   // {T}: Add {C}.
   // {5}, {T}, Sacrifice this land: Create a 3/4 colorless Gargoyle artifact creature token with flying.
@@ -27992,6 +31449,23 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // Whenever this creature blocks, it gets +2/+2 until end of turn.
+  {
+    id: '10e9dd66-8580-4c96-9ab9-cc392dc6ee74',
+    name: 'Giant Badger',
+    types: ['creature'],
+    cost: { generic: 1, G: 2 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['badger'],
+    triggers: [
+      {
+        condition: { on: 'blocks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'Blocks: ~ gets +2/+2 until end of turn',
+      },
+    ],
+  },
   {
     id: '25ca0c01-2e9f-4f1c-9078-f7a68559296d',
     name: 'Giant Cockroach',
@@ -28000,6 +31474,19 @@ const POOL_3: readonly CardDefinition[] = [
     power: 4,
     toughness: 2,
     subtypes: ['insect'],
+  },
+  // Flying
+  // Suspend 4—{1}{G} (Rather than cast this card from your hand, you may pay {1}{G} and exile it with four time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.)
+  {
+    id: 'c8aec78a-9fd4-4cf9-a9ec-e234f6a552e4',
+    name: 'Giant Dustwasp',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['insect'],
+    suspend: { count: 4, cost: { generic: 1, G: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
   },
   // Reach (This creature can block creatures with flying.)
   {
@@ -28031,6 +31518,18 @@ const POOL_3: readonly CardDefinition[] = [
     toughness: 3,
     keywords: { deathtouch: true },
     subtypes: ['scorpion'],
+  },
+  // ({R/G} can be paid with either {R} or {G}.)
+  // Trample; haste; shroud (This creature can't be the target of spells or abilities.)
+  {
+    id: 'd4bb6038-e2e9-4de2-a94e-0798c80a94c6',
+    name: 'Giant Solifuge',
+    types: ['creature'],
+    cost: { generic: 2, hybrid: [['R', 'G'], ['R', 'G']] },
+    power: 4,
+    toughness: 1,
+    keywords: { trample: true, haste: true, shroud: true },
+    subtypes: ['insect'],
   },
   // Enchant creature
   // Enchanted creature gets +2/+1 and has menace.
@@ -28134,6 +31633,30 @@ const POOL_3: readonly CardDefinition[] = [
           { primitive: 'drawCards', params: { count: 1 } },
         ],
         label: '{2}{b}, sacrifice a creature: you gain 1 life and draw a card',
+      },
+    ],
+  },
+  // Flying
+  // Soulshift 3 (When this creature dies, you may return target Spirit card with mana value 3 or less from your graveyard to your hand.)
+  {
+    id: '9a3e988f-314c-4e83-b279-c2a736933e64',
+    name: 'Gibbering Kami',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 3 } },
+          },
+        ],
+        label: 'Soulshift 3',
       },
     ],
   },
@@ -28875,6 +32398,28 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // Mountainwalk (This creature can't be blocked as long as defending player controls a Mountain.)
+  {
+    id: '45da44df-a83a-4974-bc22-5243dcda7cbd',
+    name: 'Glissa\'s Courier',
+    types: ['creature'],
+    cost: { generic: 1, G: 2 },
+    power: 2,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'mountain' }] },
+    subtypes: ['phyrexian', 'horror'],
+  },
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: '8b94f4c6-b518-43b3-be52-e889d1f3ea38',
+    name: 'Glistener Elf',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { infect: true },
+    subtypes: ['phyrexian', 'elf', 'warrior'],
+  },
   // ({T}: Add {R} or {W}.)
   // This land enters tapped.
   // Cycling {2} ({2}, Discard this card: Draw a card.)
@@ -28941,6 +32486,18 @@ const POOL_3: readonly CardDefinition[] = [
       { produces: [{ B: 1 }], restriction: { controlsSubtype: ['island', 'swamp'] } },
     ],
   },
+  // Reach
+  // This creature can block only creatures with flying.
+  {
+    id: 'ee04dfd8-e704-46d7-bdf8-b0b2ee747a49',
+    name: 'Gloomwidow',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { reach: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['spider'],
+  },
   // Creatures you control get +1/+1.
   {
     id: '17d154d3-7ae5-43ff-9978-d974285e2c89',
@@ -28964,6 +32521,19 @@ const POOL_3: readonly CardDefinition[] = [
     power: 2,
     toughness: 2,
     subtypes: ['human', 'soldier'],
+  },
+  // Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  {
+    id: '7741c976-000d-476c-9b53-34ef1ee701e1',
+    name: 'Gluttonous Zombie',
+    types: ['creature'],
+    cost: { generic: 4, B: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+    },
+    subtypes: ['zombie'],
   },
   // {4}, {T}: Put a -1/-1 counter on target creature.
   {
@@ -29144,6 +32714,17 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // This creature attacks each combat if able.
+  {
+    id: '862a481a-f236-4e99-b4b9-086e6cb8f4de',
+    name: 'Goblin Brigand',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { mustAttack: true },
+    subtypes: ['goblin', 'warrior'],
+  },
   {
     id: '6f22a45e-7352-4f5b-b298-eca4375ea28c',
     name: 'Goblin Bully',
@@ -29153,6 +32734,20 @@ const POOL_3: readonly CardDefinition[] = [
     toughness: 1,
     subtypes: ['goblin'],
   },
+  // {2}: This artifact deals 1 damage to any target. Sacrifice this artifact.
+  {
+    id: 'b023c0cd-7046-418b-ad31-5c91c6930d45',
+    name: 'Goblin Cannon',
+    types: ['artifact'],
+    cost: { generic: 4 },
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'dealDamage', params: { amount: 1 } }, { primitive: 'sacrificeSelf' }],
+        label: '{2}: ~ deals 1 damage to any target. sacrifice ~',
+      },
+    ],
+  },
   {
     id: 'ca126c9e-1372-486f-afd0-4fd9da56e593',
     name: 'Goblin Cavaliers',
@@ -29161,6 +32756,30 @@ const POOL_3: readonly CardDefinition[] = [
     power: 3,
     toughness: 2,
     subtypes: ['goblin'],
+  },
+  // Haste
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  {
+    id: '9543660a-6797-4719-bbe7-ff6e40709599',
+    name: 'Goblin Champion',
+    types: ['creature'],
+    cost: { R: 1 },
+    power: 0,
+    toughness: 1,
+    keywords: { haste: true },
+    subtypes: ['goblin', 'warrior'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+    ],
   },
   // Haste (This creature can attack and {T} as soon as it comes under your control.)
   {
@@ -29220,6 +32839,23 @@ const POOL_3: readonly CardDefinition[] = [
     toughness: 2,
     subtypes: ['goblin', 'wizard'],
     castCostReduction: { amount: 1, filter: { anyOfTypes: ['instant', 'sorcery'] } },
+  },
+  // Whenever this creature blocks or becomes blocked, it gets -1/-1 until end of turn.
+  {
+    id: 'aa052041-14db-4a3f-86ad-683c1f162cd7',
+    name: 'Goblin Elite Infantry',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['goblin', 'warrior'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -1, toughness: -1 } }],
+        label: 'Blocks or becomes blocked: ~ gets -1/-1 until end of turn',
+      },
+    ],
   },
   // Haste
   // This creature must be blocked if able.
@@ -29444,6 +33080,17 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // Mountainwalk (This creature can't be blocked as long as defending player controls a Mountain.)
+  {
+    id: '1afa1475-797d-4cdc-93d6-e186c25e0bf5',
+    name: 'Goblin Mountaineer',
+    types: ['creature'],
+    cost: { R: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'mountain' }] },
+    subtypes: ['goblin', 'scout'],
+  },
   // Protection from white
   {
     id: '5e33683b-8bda-4bb9-beb4-fc0cd5ed79ae',
@@ -29454,6 +33101,28 @@ const POOL_3: readonly CardDefinition[] = [
     toughness: 2,
     keywords: { protectionFrom: ['white'] },
     subtypes: ['goblin', 'scout'],
+  },
+  // Echo {R} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  {
+    id: '9b9d0b79-a55b-4bec-b7c4-4374048ba3ec',
+    name: 'Goblin Patrol',
+    types: ['creature'],
+    cost: { R: 1 },
+    power: 2,
+    toughness: 1,
+    subtypes: ['goblin'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { R: 1 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'Echo {R}',
+      },
+    ],
   },
   {
     id: '50608184-90d3-43d2-a221-deb186c78323',
@@ -29565,6 +33234,17 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // Mountainwalk (This creature can't be blocked as long as defending player controls a Mountain.)
+  {
+    id: '6c3889c5-3321-486c-b03c-8607f2393a75',
+    name: 'Goblin Spelunkers',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'mountain' }] },
+    subtypes: ['goblin', 'warrior'],
+  },
   // First strike, haste
   {
     id: 'f7654d8a-7013-4311-b29e-b55aaa1bf502',
@@ -29653,6 +33333,34 @@ const POOL_3: readonly CardDefinition[] = [
         cost: { sacrificeAnother: { anyOfSubtypes: ['Goblin'] } },
         effects: [{ primitive: 'regenerate' }],
         label: 'Sacrifice a goblin: regenerate ~',
+      },
+    ],
+  },
+  // Haste
+  // Echo {1}{R} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  {
+    id: 'd2d0fc9e-fb6b-4a00-b422-32565f7ce454',
+    name: 'Goblin War Buggy',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { haste: true },
+    subtypes: ['goblin'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 1, R: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {1}{R}',
       },
     ],
   },
@@ -29848,6 +33556,26 @@ const POOL_3: readonly CardDefinition[] = [
     toughness: 3,
     keywords: { lifelink: true },
     subtypes: ['fox', 'monk'],
+  },
+  // Flying
+  // Myriad (Whenever this creature attacks, for each opponent other than defending player, you may create a token copy that's tapped and attacking that player or a planeswalker they control. Exile the tokens at end of combat.)
+  // Whenever this creature deals combat damage to a player, create a Treasure token.
+  {
+    id: '2876d57a-a17e-4892-9992-321a32562e13',
+    name: 'Goldlust Triad',
+    types: ['creature'],
+    cost: { generic: 4, R: 1 },
+    power: 4,
+    toughness: 3,
+    keywords: { flying: true, myriad: true },
+    subtypes: ['dragon'],
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer' },
+        effects: [{ primitive: 'createPredefinedToken', params: { token: 'treasure' } }],
+        label: 'Combat damage to a player: create a treasure token',
+      },
+    ],
   },
   // This creature can't be blocked by creatures with power 4 or greater.
   {
@@ -30188,6 +33916,33 @@ const POOL_3: readonly CardDefinition[] = [
       modifies: { power: 0, toughness: 0, keywords: { deathtouch: true } },
     },
   },
+  // Trample; rampage 2 (Whenever this creature becomes blocked, it gets +2/+2 until end of turn for each creature blocking it beyond the first.)
+  // This creature can't be blocked except by three or more creatures.
+  {
+    id: '344b4613-17f8-4c8b-b5bc-f773a8f8007a',
+    name: 'Gorilla Berserkers',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    power: 2,
+    toughness: 3,
+    keywords: { trample: true, minBlockers: 3 },
+    subtypes: ['ape', 'berserker'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: {
+              power: { countOf: 'creaturesBlockingThisBeyondFirst', times: 2 },
+              toughness: { countOf: 'creaturesBlockingThisBeyondFirst', times: 2 },
+            },
+          },
+        ],
+        label: 'Rampage 2',
+      },
+    ],
+  },
   // {1}{G}: Regenerate this creature.
   {
     id: '9e76185a-519f-4bec-b399-989ebddbab71',
@@ -30236,6 +33991,23 @@ const POOL_3: readonly CardDefinition[] = [
     noMaximumHandSize: true,
     subtypes: ['human', 'wizard'],
   },
+  // Whenever this creature attacks, it gets +1/+1 until end of turn.
+  {
+    id: 'b42ba8bf-9fc1-4d57-9c80-42491d18d929',
+    name: 'Graceful Cat',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['cat'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Attacks: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
   // This land enters tapped.
   // {T}: Add {C}.
   // {T}: Add one mana of any color. This land deals 1 damage to you.
@@ -30252,6 +34024,9 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_4: readonly CardDefinition[] = [
   // {1}{B}, {T}: Target creature gets -1/-1 until end of turn.
   {
     id: 'b43b2370-fe1b-491b-9dd0-b49a30bb2b93',
@@ -30418,6 +34193,17 @@ const POOL_3: readonly CardDefinition[] = [
         label: 'if a creature you control would deal damage to a permanent or player, it deals double that damage instead',
       },
     ],
+  },
+  // Defender, protection from Zombies
+  {
+    id: '084446ca-fec5-446f-b6f8-edf32ecb57e3',
+    name: 'Grave Bramble',
+    types: ['creature'],
+    cost: { generic: 1, G: 2 },
+    power: 3,
+    toughness: 4,
+    keywords: { defender: true, protectionFrom: ['subtype:Zombie'] },
+    subtypes: ['plant'],
   },
   // Whenever a creature you control dies, each other player sacrifices a creature of their choice.
   {
@@ -30586,6 +34372,17 @@ const POOL_3: readonly CardDefinition[] = [
         label: 'Enters: you gain 1 life',
       },
     ],
+  },
+  // Islandwalk (This creature can't be blocked as long as defending player controls an Island.)
+  {
+    id: '89c2c94a-31df-4789-a309-4cdfe7f6a719',
+    name: 'Grayscaled Gharial',
+    types: ['creature'],
+    cost: { U: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['crocodile'],
   },
   // Reach
   {
@@ -30791,6 +34588,31 @@ const POOL_3: readonly CardDefinition[] = [
       label: 'Enchant creature',
       modifies: { power: -3, toughness: 0, keywords: {} },
     },
+  },
+  // Protection from planeswalkers and from Wizards
+  // Greensleeves's power and toughness are each equal to the number of lands you control.
+  // Landfall — Whenever a land you control enters, create a 3/3 green Badger creature token.
+  {
+    id: '0969d7f3-cec5-4118-adb1-ff957eedf6ab',
+    name: 'Greensleeves, Maro-Sorcerer',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    characteristicPT: { power: { countOf: 'landsYouControl' }, toughness: { countOf: 'landsYouControl' } },
+    legendary: true,
+    keywords: { protectionFrom: ['planeswalkers', 'subtype:Wizard'] },
+    subtypes: ['elemental', 'sorcerer'],
+    triggers: [
+      {
+        condition: { on: 'permanentEnters', who: 'you', permanentFilter: { anyOfTypes: ['land'] } },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: { power: 3, toughness: 3, name: 'Badger', colors: ['G'], subtypes: ['Badger'] },
+          },
+        ],
+        label: 'land (you) enters: create a 3/3 green badger creature token',
+      },
+    ],
   },
   // {T}: Add {G}{G}.
   {
@@ -31477,6 +35299,17 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // Protection from monocolored
+  {
+    id: 'c8dd004b-01e4-4fe1-a164-9f2ea8d7d88e',
+    name: 'Guardian of the Guildpact',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { protectionFrom: ['monocolored'] },
+    subtypes: ['spirit'],
+  },
   // Trample
   // {5}{G}{G}: Put three +1/+1 counters on this creature.
   {
@@ -31508,6 +35341,30 @@ const POOL_3: readonly CardDefinition[] = [
     keywords: { vigilance: true },
     subtypes: ['elemental'],
     costAssist: 'convoke',
+  },
+  // Defender (This creature can't attack.)
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  {
+    id: '383c9aa5-30ad-4a2a-8b64-65d4b333c613',
+    name: 'Guardians of Akrasa',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 0,
+    toughness: 4,
+    keywords: { defender: true },
+    subtypes: ['human', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+    ],
   },
   // Defender (This creature can't attack.)
   {
@@ -31951,6 +35808,36 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // This creature can't attack unless defending player controls an Island.
+  {
+    id: '48c1a040-9045-4977-84e4-695de0f886a9',
+    name: 'Hammerhead Shark',
+    types: ['creature'],
+    cost: { generic: 1, U: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { cantAttackUnlessDefenderControls: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['shark'],
+  },
+  // Protection from white
+  // Bushido 1 (Whenever this creature blocks or becomes blocked, it gets +1/+1 until end of turn.)
+  {
+    id: 'ee194055-579a-4977-900e-e976259552ab',
+    name: 'Hand of Cruelty',
+    types: ['creature'],
+    cost: { B: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { protectionFrom: ['white'] },
+    subtypes: ['human', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Bushido 1',
+      },
+    ],
+  },
   // Destroy target nonblack creature.
   {
     id: 'd17d9a95-5586-4d16-9700-215b9af63f6f',
@@ -31958,6 +35845,25 @@ const POOL_3: readonly CardDefinition[] = [
     types: ['sorcery'],
     cost: { generic: 2, B: 1 },
     effects: [{ primitive: 'destroyTarget', params: { targets: 'creature', notColor: 'B' } }],
+  },
+  // Protection from black
+  // Bushido 1 (Whenever this creature blocks or becomes blocked, it gets +1/+1 until end of turn.)
+  {
+    id: 'ddef832c-b2be-4fa6-8d66-ac0d442f2d7d',
+    name: 'Hand of Honor',
+    types: ['creature'],
+    cost: { W: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { protectionFrom: ['black'] },
+    subtypes: ['human', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Bushido 1',
+      },
+    ],
   },
   // Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)
   {
@@ -32194,6 +36100,17 @@ const POOL_3: readonly CardDefinition[] = [
       { primitive: 'loseLife', params: { amount: 3, targetPlayer: true } },
     ],
   },
+  // Wither (This deals damage to creatures in the form of -1/-1 counters.)
+  {
+    id: '1a0491d1-343d-453e-aa52-a3d3daa1478e',
+    name: 'Harvest Gwyllion',
+    types: ['creature'],
+    cost: { generic: 2, hybrid: [['W', 'B'], ['W', 'B']] },
+    power: 2,
+    toughness: 4,
+    keywords: { wither: true },
+    subtypes: ['hag'],
+  },
   // {T}: Add one mana of any color that a land you control could produce.
   {
     id: '97337e6e-1b3f-43a2-91f2-ca8f6c5dea88',
@@ -32400,6 +36317,25 @@ const POOL_3: readonly CardDefinition[] = [
     toughness: 3,
     keywords: { trample: true },
     subtypes: ['devil'],
+  },
+  // Devoid (This card has no color.)
+  // {1}{C}: This creature gets +2/+1 until end of turn. ({C} represents colorless mana.)
+  {
+    id: 'f8585871-24a2-41d7-ae12-29aabfbc9ccc',
+    name: 'Havoc Sower',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 3,
+    toughness: 3,
+    colors: [],
+    subtypes: ['eldrazi', 'drone'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, C: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 1 } }],
+        label: '{1}{c}: ~ gets +2/+1 until end of turn',
+      },
+    ],
   },
   // Flying
   // Shroud (This creature can't be the target of spells or abilities.)
@@ -32670,6 +36606,17 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  {
+    id: 'de263f02-8e3e-4785-9c06-9adc168994f3',
+    name: 'Heartwood Treefolk',
+    types: ['creature'],
+    cost: { generic: 2, G: 2 },
+    power: 3,
+    toughness: 4,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['treefolk'],
+  },
   // Heat Ray deals X damage to target creature.
   {
     id: '76ec76b9-da0f-4b9d-ad0a-d734052a5f2b',
@@ -32777,6 +36724,27 @@ const POOL_3: readonly CardDefinition[] = [
         condition: { on: 'permanentEnters', who: 'you', permanentFilter: { anyOfTypes: ['land'] } },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
         label: 'land (you) enters: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
+  // Intimidate (This creature can't be blocked except by artifact creatures and/or creatures that share a color with it.)
+  // Whenever this creature deals combat damage to a player, put a +1/+1 counter on it.
+  {
+    id: 'ff89ad3b-b154-49e2-a0fd-135279512250',
+    name: 'Heirs of Stromkirk',
+    types: ['creature'],
+    cost: { generic: 2, R: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'sharesColorWithAttacker' }] },
+    },
+    subtypes: ['vampire'],
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer' },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: 'Combat damage to a player: put a +1/+1 counter on it',
       },
     ],
   },
@@ -32894,6 +36862,22 @@ const POOL_3: readonly CardDefinition[] = [
         label: '{r}: ~ gets +1/+0 until end of turn',
       },
     ],
+  },
+  // Affinity for outlaws (This spell costs {1} less to cast for each Assassin, Mercenary, Pirate, Rogue, and/or Warlock you control.)
+  // Trample
+  {
+    id: '3b99db5b-cd13-4e69-98b7-753e72c781f8',
+    name: 'Hellspur Brute',
+    types: ['creature'],
+    cost: { generic: 4, R: 1 },
+    power: 5,
+    toughness: 4,
+    keywords: { trample: true },
+    subtypes: ['minotaur', 'mercenary'],
+    castCostReductionPerPermanent: {
+      amount: 1,
+      filter: { anyOfSubtypes: ['Assassin', 'Mercenary', 'Pirate', 'Rogue', 'Warlock'] },
+    },
   },
   // At the beginning of combat on your turn, create a token that's a copy of equipped creature, except the token isn't legendary. That token gains haste.
   // Equip {5}
@@ -33058,6 +37042,46 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying, vigilance
+  // Echo {2}{W}{W} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  {
+    id: '22a2b882-d616-495e-99f6-196031235f93',
+    name: 'Herald of Serra',
+    types: ['creature'],
+    cost: { generic: 2, W: 2 },
+    power: 3,
+    toughness: 4,
+    keywords: { flying: true, vigilance: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 2, W: 2 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {2}{W}{W}',
+      },
+    ],
+  },
+  // Flying, vigilance
+  // Myriad (Whenever this creature attacks, for each opponent other than defending player, you may create a token copy that's tapped and attacking that player or a planeswalker they control. Exile the tokens at end of combat.)
+  {
+    id: 'e8d57d75-275d-45c8-85f4-aab230af35b2',
+    name: 'Herald of the Host',
+    types: ['creature'],
+    cost: { generic: 3, W: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { flying: true, vigilance: true, myriad: true },
+    subtypes: ['angel'],
+  },
   // Enchantment spells you cast cost {1} less to cast.
   // Whenever you cast an enchantment spell, you gain 1 life.
   {
@@ -33186,6 +37210,16 @@ const POOL_3: readonly CardDefinition[] = [
       modifies: { power: 1, toughness: 5, keywords: {} },
     },
   },
+  // You gain 20 life.
+  // Suspend 10—{W} (Rather than cast this card from your hand, you may pay {W} and exile it with ten time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)
+  {
+    id: '9902b260-82cf-4b10-a353-321231824a3b',
+    name: 'Heroes Remembered',
+    types: ['sorcery'],
+    cost: { generic: 6, W: 3 },
+    suspend: { count: 10, cost: { W: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+    effects: [{ primitive: 'gainLife', params: { amount: 20 } }],
+  },
   // Permanents you control gain hexproof and indestructible until end of turn.
   {
     id: 'e32c67d1-187f-40df-b3b3-6036f5c92834',
@@ -33274,6 +37308,38 @@ const POOL_3: readonly CardDefinition[] = [
         label: '{t}, sacrifice a creature: you gain 1 life',
       },
     ],
+  },
+  // Reach (This creature can block creatures with flying.)
+  // Whenever this creature blocks a creature with flying, this creature gets +2/+0 until end of turn.
+  {
+    id: '2399c6d7-57f9-4100-ad64-3c8897a438f7',
+    name: 'High-Rise Sawjack',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { reach: true },
+    subtypes: ['elf', 'citizen'],
+    triggers: [
+      {
+        condition: { on: 'blocks', counterpartHasKeyword: 'flying' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        label: 'Blocks a creature with flying: ~ gets +2/+0 until end of turn',
+      },
+    ],
+  },
+  // Intimidate (This creature can't be blocked except by artifact creatures and/or creatures that share a color with it.)
+  {
+    id: 'fbe999ed-b419-440c-9189-1046f43d7b87',
+    name: 'Highborn Ghoul',
+    types: ['creature'],
+    cost: { B: 2 },
+    power: 2,
+    toughness: 1,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'sharesColorWithAttacker' }] },
+    },
+    subtypes: ['zombie'],
   },
   {
     id: '24c40082-516e-4381-a4cc-e61c5a9a6cac',
@@ -33425,6 +37491,17 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // Mountainwalk (This creature can't be blocked as long as defending player controls a Mountain.)
+  {
+    id: 'e3d48857-2fb6-4163-8785-12436db1b37c',
+    name: 'Hillcomber Giant',
+    types: ['creature'],
+    cost: { generic: 2, W: 2 },
+    power: 3,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'mountain' }] },
+    subtypes: ['giant', 'scout'],
+  },
   // This land enters tapped unless you control a Forest or an Island.
   // {T}: Add {G} or {U}.
   {
@@ -33456,9 +37533,6 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_4: readonly CardDefinition[] = [
   // Trample (This creature can deal excess combat damage to the player it's attacking.)
   {
     id: '24ca6ca8-e239-4fe5-8711-24098b74e2fe',
@@ -33622,6 +37696,23 @@ const POOL_4: readonly CardDefinition[] = [
       {
         produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
         cost: { tapAnother: { anyOfTypes: ['creature'] } },
+      },
+    ],
+  },
+  // Whenever this creature attacks, it gets +2/+0 until end of turn.
+  {
+    id: '520fcafe-0c4a-49ca-8138-57a60506b0cd',
+    name: 'Hollow Dogs',
+    types: ['creature'],
+    cost: { generic: 4, B: 1 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['phyrexian', 'zombie', 'dog'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        label: 'Attacks: ~ gets +2/+0 until end of turn',
       },
     ],
   },
@@ -33939,6 +38030,17 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying, protection from lands
+  {
+    id: '022f07c5-c644-41cd-9434-a57068f73ab2',
+    name: 'Horizon Drake',
+    types: ['creature'],
+    cost: { generic: 1, U: 2 },
+    power: 3,
+    toughness: 1,
+    keywords: { flying: true, protectionFrom: ['lands'] },
+    subtypes: ['drake'],
+  },
   // Flying
   // When this creature enters, scry 2. (Look at the top two cards of your library, then put any number of them on the bottom and the rest on top in any order.)
   {
@@ -34074,6 +38176,31 @@ const POOL_4: readonly CardDefinition[] = [
     cost: { G: 1 },
     effects: [{ primitive: 'dealDamage', params: { amount: 1 } }],
   },
+  // Rampage 1 (Whenever this creature becomes blocked, it gets +1/+1 until end of turn for each creature blocking it beyond the first.)
+  {
+    id: 'cf04f2cd-d9f8-4e0c-adaf-6d38bc14dd7a',
+    name: 'Horrible Hordes',
+    types: ['artifact', 'creature'],
+    cost: { generic: 3 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: {
+              power: { countOf: 'creaturesBlockingThisBeyondFirst', times: 1 },
+              toughness: { countOf: 'creaturesBlockingThisBeyondFirst', times: 1 },
+            },
+          },
+        ],
+        label: 'Rampage 1',
+      },
+    ],
+  },
   // Haste (This creature can attack and {T} as soon as it comes under your control.)
   {
     id: '0e1263ea-adc9-442b-b13e-9afb69596372',
@@ -34119,6 +38246,18 @@ const POOL_4: readonly CardDefinition[] = [
     toughness: 6,
     keywords: { defender: true, flying: true },
     subtypes: ['illusion', 'wall'],
+  },
+  // Flying
+  // This creature can block only creatures with flying.
+  {
+    id: 'c7ab80bf-d115-4155-82e1-9a3a70b1b67d',
+    name: 'Hoverguard Observer',
+    types: ['creature'],
+    cost: { generic: 2, U: 2 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['drone'],
   },
   // Flying, vigilance
   {
@@ -34176,6 +38315,18 @@ const POOL_4: readonly CardDefinition[] = [
         label: 'each player\'s draw step: if ~ is untapped, that player draws an additional card',
       },
     ],
+  },
+  // Huang Zhong can't be blocked by more than one creature.
+  {
+    id: 'c079037c-f4cf-423f-ad15-ee57136d6148',
+    name: 'Huang Zhong, Shu General',
+    types: ['creature'],
+    cost: { generic: 2, W: 2 },
+    power: 2,
+    toughness: 3,
+    legendary: true,
+    keywords: { maxBlockers: 1 },
+    subtypes: ['human', 'soldier'],
   },
   // Vigilance
   // When this creature enters, proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.)
@@ -34343,6 +38494,56 @@ const POOL_4: readonly CardDefinition[] = [
     keywords: { hexproof: true },
     subtypes: ['homunculus'],
   },
+  // Rampage 1 (Whenever this creature becomes blocked, it gets +1/+1 until end of turn for each creature blocking it beyond the first.)
+  {
+    id: '4049abac-cb54-4af2-b2df-ffb8fdc22e84',
+    name: 'Hunding Gjornersen',
+    types: ['creature'],
+    cost: { generic: 3, W: 1, U: 2 },
+    power: 5,
+    toughness: 4,
+    legendary: true,
+    subtypes: ['human', 'warrior'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: {
+              power: { countOf: 'creaturesBlockingThisBeyondFirst', times: 1 },
+              toughness: { countOf: 'creaturesBlockingThisBeyondFirst', times: 1 },
+            },
+          },
+        ],
+        label: 'Rampage 1',
+      },
+    ],
+  },
+  // Flying
+  // Soulshift 4 (When this creature dies, you may return target Spirit card with mana value 4 or less from your graveyard to your hand.)
+  {
+    id: 'a7b2892a-5c16-4624-9a47-6a47f10e2466',
+    name: 'Hundred-Talon Kami',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 4 } },
+          },
+        ],
+        label: 'Soulshift 4',
+      },
+    ],
+  },
   // Cycling {3} ({3}, Discard this card: Draw a card.)
   {
     id: 'f525c356-88ca-4e2e-8f06-663be101e34f',
@@ -34397,6 +38598,47 @@ const POOL_4: readonly CardDefinition[] = [
         cost: { mana: { generic: 2 }, tap: true },
         effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
         label: '{2}, {t}: put a +1/+1 counter on ~',
+      },
+    ],
+  },
+  // At the beginning of your upkeep, sacrifice this creature unless you pay {G}{G}.
+  {
+    id: 'd0336557-3499-4227-81b1-c37d9fc0aacb',
+    name: 'Hungry Mist',
+    types: ['creature'],
+    cost: { generic: 2, G: 2 },
+    power: 6,
+    toughness: 2,
+    subtypes: ['elemental'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { G: 2 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {g}{g}',
+      },
+    ],
+  },
+  // Trample
+  // Whenever this creature attacks, it gets +3/+3 until end of turn.
+  {
+    id: 'c95da249-49db-4dae-9277-5d481ec480a9',
+    name: 'Hungry Spriggan',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { trample: true },
+    subtypes: ['goblin', 'warrior'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 3 } }],
+        label: 'Attacks: ~ gets +3/+3 until end of turn',
       },
     ],
   },
@@ -34648,6 +38890,37 @@ const POOL_4: readonly CardDefinition[] = [
     madness: { generic: 3, B: 1 },
     effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -3, toughness: -3, targets: 'creature' } }],
   },
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  // Whenever this creature becomes blocked, it gets +2/+2 until end of turn.
+  {
+    id: 'faef8b8b-2c45-4fed-b6ba-a8ac49c66330',
+    name: 'Ichorclaw Myr',
+    types: ['artifact', 'creature'],
+    cost: { generic: 2 },
+    power: 1,
+    toughness: 1,
+    keywords: { infect: true },
+    subtypes: ['phyrexian', 'myr'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'Becomes blocked: ~ gets +2/+2 until end of turn',
+      },
+    ],
+  },
+  // Deathtouch
+  // Toxic 1 (Players dealt combat damage by this creature also get a poison counter.)
+  {
+    id: '0955b64f-6721-4fa6-b161-cae404cb5b9f',
+    name: 'Ichorspit Basilisk',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 1,
+    toughness: 3,
+    keywords: { deathtouch: true, toxic: 1 },
+    subtypes: ['phyrexian', 'basilisk'],
+  },
   // ({T}: Add {W} or {U}.)
   // This land enters tapped.
   {
@@ -34690,6 +38963,30 @@ const POOL_4: readonly CardDefinition[] = [
         cost: { mana: { generic: 1, R: 1 } },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
         label: '{1}{r}: ~ gets +2/+0 until end of turn',
+      },
+    ],
+  },
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  // {T}: Add {B}, {R}, or {G}.
+  {
+    id: 'e802cfe1-45e0-47cd-8745-363ccc0f2af8',
+    name: 'Ignoble Hierarch',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 0,
+    toughness: 1,
+    subtypes: ['goblin', 'shaman'],
+    producesOptions: [{ B: 1 }, { R: 1 }, { G: 1 }],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
       },
     ],
   },
@@ -34783,6 +39080,70 @@ const POOL_4: readonly CardDefinition[] = [
       label: 'Enchant creature',
       modifies: { power: 0, toughness: 0, keywords: { flying: true } },
     },
+  },
+  // Flying
+  // Cumulative upkeep {U} (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)
+  {
+    id: '1f011ad5-0ff1-4538-942e-b72e93d87e3c',
+    name: 'Illusionary Forces',
+    types: ['creature'],
+    cost: { generic: 3, U: 1 },
+    power: 4,
+    toughness: 4,
+    keywords: { flying: true },
+    subtypes: ['illusion'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [{ primitive: 'cumulativeUpkeep', params: { mana: { U: 1 } } }],
+        label: 'Cumulative upkeep {U}',
+      },
+    ],
+  },
+  // Defender, flying, first strike
+  // Cumulative upkeep {U} (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)
+  {
+    id: 'd1800174-b6dd-49c3-865a-5292c8563441',
+    name: 'Illusionary Wall',
+    types: ['creature'],
+    cost: { generic: 4, U: 1 },
+    power: 7,
+    toughness: 4,
+    keywords: { defender: true, flying: true, firstStrike: true },
+    subtypes: ['illusion', 'wall'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [{ primitive: 'cumulativeUpkeep', params: { mana: { U: 1 } } }],
+        label: 'Cumulative upkeep {U}',
+      },
+    ],
+  },
+  // Cumulative upkeep {2} (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)
+  // When this enchantment enters, you gain 20 life.
+  // When this enchantment leaves the battlefield, you lose 20 life.
+  {
+    id: '44c20ed5-7064-436d-ad76-85a1d6bf0103',
+    name: 'Illusions of Grandeur',
+    types: ['enchantment'],
+    cost: { generic: 3, U: 1 },
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [{ primitive: 'cumulativeUpkeep', params: { mana: { generic: 2 } } }],
+        label: 'Cumulative upkeep {2}',
+      },
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'gainLife', params: { amount: 20 } }],
+        label: 'Enters: you gain 20 life',
+      },
+      {
+        condition: { on: 'leaves' },
+        effects: [{ primitive: 'loseLife', params: { amount: 20 } }],
+        label: 'Leaves: you lose 20 life',
+      },
+    ],
   },
   // Flash
   // Flying
@@ -34979,6 +39340,18 @@ const POOL_4: readonly CardDefinition[] = [
     keywords: { indestructible: true },
     subtypes: ['wurm'],
     costAssist: 'convoke',
+  },
+  // Flying, haste
+  // This creature attacks each combat if able.
+  {
+    id: 'e6d4c13b-95ef-49df-b349-26e0fec109ad',
+    name: 'Impetuous Sunchaser',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true, haste: true, mustAttack: true },
+    subtypes: ['human', 'soldier'],
   },
   // Destroy target land.
   // Draw a card.
@@ -35268,6 +39641,18 @@ const POOL_4: readonly CardDefinition[] = [
     cantBeCountered: true,
     effects: [{ primitive: 'dealDamage', params: { amount: 6 } }],
   },
+  // Wither (This deals damage to creatures in the form of -1/-1 counters.)
+  // This creature must be blocked if able.
+  {
+    id: 'ab4a1d42-eaf8-424a-9649-5f3b4602bf0d',
+    name: 'Inescapable Brute',
+    types: ['creature'],
+    cost: { generic: 5, R: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { wither: true, mustBeBlocked: true },
+    subtypes: ['giant', 'warrior'],
+  },
   // Whenever this creature attacks, each opponent loses 2 life.
   {
     id: 'd17aaa92-10ca-4f70-b45e-5a51e9192efb',
@@ -35393,6 +39778,19 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Shadow (This creature can block or be blocked by only creatures with shadow.)
+  // Suspend 2—{1}{U} (Rather than cast this card from your hand, you may pay {1}{U} and exile it with two time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.)
+  {
+    id: 'c3ab190b-c96f-4b00-8e97-33a11bb2ed08',
+    name: 'Infiltrator il-Kor',
+    types: ['creature'],
+    cost: { generic: 4, U: 1 },
+    power: 3,
+    toughness: 1,
+    keywords: { shadow: true },
+    subtypes: ['kor', 'rogue'],
+    suspend: { count: 2, cost: { generic: 1, U: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+  },
   // Target creature gets +3/+2 until end of turn.
   {
     id: '85a74392-4056-428c-a807-b062957e838e',
@@ -35423,6 +39821,25 @@ const POOL_4: readonly CardDefinition[] = [
         cost: { mana: { U: 1 } },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: -1 } }],
         label: '{u}: ~ gets +1/-1 until end of turn',
+      },
+    ],
+  },
+  // Islandwalk (This creature can't be blocked as long as defending player controls an Island.)
+  // When this creature enters, look at the top four cards of your library, then put them back in any order.
+  {
+    id: '758a8ca6-1fc1-454a-a2be-9745ac964eb7',
+    name: 'Inkfathom Divers',
+    types: ['creature'],
+    cost: { generic: 3, U: 2 },
+    power: 3,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['merfolk', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'reorderTopOfLibrary', params: { count: 4 } }],
+        label: 'Enters: look at the top four cards of your library, then put them back in any order',
       },
     ],
   },
@@ -35477,6 +39894,63 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Trample
+  // Islandwalk (This creature can't be blocked as long as defending player controls an Island.)
+  // Shroud (This creature can't be the target of spells or abilities.)
+  {
+    id: '9f7a6dfb-a8f8-4899-b2db-c48d542dfd55',
+    name: 'Inkwell Leviathan',
+    types: ['artifact', 'creature'],
+    cost: { generic: 7, U: 2 },
+    power: 7,
+    toughness: 11,
+    keywords: { trample: true, landwalk: [{ kind: 'subtype', subtype: 'island' }], shroud: true },
+    subtypes: ['leviathan'],
+  },
+  // Cumulative upkeep—Pay 2 life. (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)
+  // Prevent all damage that would be dealt to creatures you control.
+  {
+    id: '2298faae-370e-4b87-bf32-d20c2282a928',
+    name: 'Inner Sanctum',
+    types: ['enchantment'],
+    cost: { generic: 1, W: 2 },
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [{ primitive: 'cumulativeUpkeep', params: { life: 2 } }],
+        label: 'Cumulative upkeep—Pay 2 life',
+      },
+    ],
+    replacements: [
+      {
+        event: 'damage',
+        applies: {
+          recipientController: 'you',
+          recipientKind: 'permanent',
+          recipientFilter: { anyOfTypes: ['creature'] },
+        },
+        outcome: { preventAll: true },
+        label: 'prevent all damage that would be dealt to creatures you control',
+      },
+    ],
+  },
+  // Bushido 2 (Whenever this creature blocks or becomes blocked, it gets +2/+2 until end of turn.)
+  {
+    id: '4d34bfb9-abc7-4469-9546-aa8988da8259',
+    name: 'Inner-Chamber Guard',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 0,
+    toughness: 2,
+    subtypes: ['human', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'Bushido 2',
+      },
+    ],
+  },
   // Target creature gets +3/+2 until end of turn. Scry 1.
   {
     id: 'd0f62bdc-50a0-41a0-ac37-9b0eeb21b6aa',
@@ -35528,6 +40002,19 @@ const POOL_4: readonly CardDefinition[] = [
         },
       },
     ],
+  },
+  // This creature attacks each combat if able.
+  // Madness {3}{R} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: 'bb56491b-bad7-44da-8aa5-91ffd875e76a',
+    name: 'Insatiable Gorgers',
+    types: ['creature'],
+    cost: { generic: 2, R: 2 },
+    power: 5,
+    toughness: 3,
+    keywords: { mustAttack: true },
+    subtypes: ['vampire', 'berserker'],
+    madness: { generic: 3, R: 1 },
   },
   // Flying, lifelink
   {
@@ -35808,6 +40295,7 @@ const POOL_4: readonly CardDefinition[] = [
       id: '4fb0eb2d-9cb7-4e72-a970-5009b046df2a#back',
       name: 'Belenon War Anthem',
       types: ['enchantment'],
+      noManaCost: true,
       statics: [
         {
           affects: { anyOfTypes: ['creature'], controller: 'you' },
@@ -35849,6 +40337,7 @@ const POOL_4: readonly CardDefinition[] = [
       toughness: 4,
       keywords: { flying: true, vigilance: true },
       subtypes: ['angel'],
+      noManaCost: true,
       isBackFace: true,
     },
     backFaceCastable: true,
@@ -35879,6 +40368,7 @@ const POOL_4: readonly CardDefinition[] = [
       toughness: 3,
       keywords: { ward: 2 },
       subtypes: ['dryad'],
+      noManaCost: true,
       triggers: [
         {
           condition: { on: 'endStep', who: 'you' },
@@ -35991,6 +40481,17 @@ const POOL_4: readonly CardDefinition[] = [
         label: '{1}{u}, {t}, sacrifice a desert: target player mills four cards',
       },
     ],
+  },
+  // Flying, protection from each color
+  {
+    id: 'f3bce4f8-3a3f-4ec2-9b37-10bb12713afc',
+    name: 'Iridescent Angel',
+    types: ['creature'],
+    cost: { generic: 5, W: 1, U: 1 },
+    power: 4,
+    toughness: 4,
+    keywords: { flying: true, protectionFrom: ['white', 'blue', 'black', 'red', 'green'] },
+    subtypes: ['angel'],
   },
   // {3}{G}: This creature gets +2/+2 until end of turn.
   {
@@ -36176,6 +40677,17 @@ const POOL_4: readonly CardDefinition[] = [
         label: 'Enters: you may sacrifice an artifact. if you do, put two +1/+1 counters on ~ and each opponent loses 2 life',
       },
     ],
+  },
+  // This creature can't be blocked by more than one creature.
+  {
+    id: 'c8a2c5ce-ec87-46b9-b474-ecf133ccd092',
+    name: 'Ironhoof Ox',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { maxBlockers: 1 },
+    subtypes: ['ox'],
   },
   // When this creature enters, put a +1/+1 counter on target creature.
   {
@@ -36553,6 +41065,23 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Bushido 2 (Whenever this creature blocks or becomes blocked, it gets +2/+2 until end of turn.)
+  {
+    id: 'f81500be-c959-4f38-bcf2-d63519168f67',
+    name: 'Jade Avenger',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['frog', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'Bushido 2',
+      },
+    ],
+  },
   // {2}{G}: Create a 1/1 green Saproling creature token.
   {
     id: '995140fa-dc1f-4b75-9cea-079ea03c485f',
@@ -36666,6 +41195,18 @@ const POOL_4: readonly CardDefinition[] = [
         cost: { tapAnother: { anyOfTypes: ['creature'] } },
       },
     ],
+  },
+  // Double strike
+  // Toxic 1 (Players dealt combat damage by this creature also get a poison counter.)
+  {
+    id: 'b00ea7bb-705b-4669-bb2a-560bed04b14a',
+    name: 'Jawbone Duelist',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { doubleStrike: true, toxic: 1 },
+    subtypes: ['phyrexian', 'soldier'],
   },
   // Jaya's Firenado deals 5 damage to target creature or planeswalker. Scry 1. (Look at the top card of your library. You may put that card on the bottom.)
   {
@@ -37163,6 +41704,30 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Shroud (This creature can't be the target of spells or abilities.)
+  // Flanking (Whenever a creature without flanking blocks this creature, the blocking creature gets -1/-1 until end of turn.)
+  {
+    id: '31588ea3-31d2-4118-9b9f-4ce820c16a15',
+    name: 'Jolrael\'s Centaur',
+    types: ['creature'],
+    cost: { generic: 1, G: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { shroud: true, flanking: true },
+    subtypes: ['centaur', 'archer'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlockedByCreature', counterpartLacksKeyword: 'flanking' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: -1, toughness: -1, subject: 'triggering' },
+          },
+        ],
+        label: 'Flanking',
+      },
+    ],
+  },
   // When this creature enters, draw a card.
   {
     id: 'a1ea2c17-382a-45e4-ac34-88bf8ba47169',
@@ -37285,6 +41850,17 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  {
+    id: '56e1967e-5bc5-47e7-9998-7fcfdffc3bb1',
+    name: 'Jukai Messenger',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['human', 'monk'],
+  },
   // Lifelink
   // Enchantment spells you cast cost {1} less to cast.
   {
@@ -37297,6 +41873,23 @@ const POOL_4: readonly CardDefinition[] = [
     keywords: { lifelink: true },
     subtypes: ['human', 'monk'],
     castCostReduction: { amount: 1, filter: { anyOfTypes: ['enchantment'] } },
+  },
+  // Whenever this creature blocks or becomes blocked, it gets +1/+1 until end of turn.
+  {
+    id: '8be526cd-1480-4661-a05b-e004d7b4656c',
+    name: 'Jukai Trainee',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Blocks or becomes blocked: ~ gets +1/+1 until end of turn',
+      },
+    ],
   },
   // Target creature gains flying until end of turn.
   {
@@ -37568,6 +42161,30 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying
+  // At the beginning of your upkeep, sacrifice this creature unless you pay {B}{B}.
+  {
+    id: '5f6529eb-79ff-4ddc-9fae-38326324f7e6',
+    name: 'Junún Efreet',
+    types: ['creature'],
+    cost: { generic: 1, B: 2 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['efreet'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { B: 2 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {b}{b}',
+      },
+    ],
+  },
   // Return target creature to its owner's hand.
   // Madness {U} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
   {
@@ -37577,6 +42194,18 @@ const POOL_4: readonly CardDefinition[] = [
     cost: { generic: 1, U: 1 },
     madness: { U: 1 },
     effects: [{ primitive: 'returnToHand', params: { targets: 'creature' } }],
+  },
+  // Reach (This creature can block creatures with flying.)
+  // Wither (This deals damage to creatures in the form of -1/-1 counters.)
+  {
+    id: 'd7f323d5-f26c-46e9-9d6a-be5c254fe8b6',
+    name: 'Juvenile Gloomwidow',
+    types: ['creature'],
+    cost: { G: 2 },
+    power: 1,
+    toughness: 3,
+    keywords: { reach: true, wither: true },
+    subtypes: ['spider'],
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -37713,6 +42342,9 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_5: readonly CardDefinition[] = [
   // Shroud (This creature can't be the target of spells or abilities.)
   {
     id: '77064471-d0c1-4988-8c47-f767bf9635f3',
@@ -37791,6 +42423,28 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Soulshift 3 (When this creature dies, you may return target Spirit card with mana value 3 or less from your graveyard to your hand.)
+  {
+    id: '30502f07-760c-46d1-8b4a-d4bd4a23201f',
+    name: 'Kami of Empty Graves',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 4,
+    toughness: 1,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 3 } },
+          },
+        ],
+        label: 'Soulshift 3',
+      },
+    ],
+  },
   // Sacrifice this creature: Prevent all combat damage that would be dealt this turn.
   {
     id: '44e4f5e6-935e-429f-89b4-4571376f442e',
@@ -37810,6 +42464,30 @@ const POOL_4: readonly CardDefinition[] = [
           },
         ],
         label: 'Sacrifice ~: prevent all combat damage that would be dealt this turn',
+      },
+    ],
+  },
+  // Flying
+  // Soulshift 5 (When this creature dies, you may return target Spirit card with mana value 5 or less from your graveyard to your hand.)
+  {
+    id: '4baef070-d265-4c6d-9b4b-3cafbd3b34c3',
+    name: 'Kami of Lunacy',
+    types: ['creature'],
+    cost: { generic: 4, B: 2 },
+    power: 4,
+    toughness: 1,
+    keywords: { flying: true },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 5 } },
+          },
+        ],
+        label: 'Soulshift 5',
       },
     ],
   },
@@ -37840,6 +42518,63 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying, first strike
+  // Soulshift 5 (When this creature dies, you may return target Spirit card with mana value 5 or less from your graveyard to your hand.)
+  {
+    id: '690980ce-bbdc-4d52-b34e-2bad11e436a1',
+    name: 'Kami of the Palace Fields',
+    types: ['creature'],
+    cost: { generic: 5, W: 1 },
+    power: 3,
+    toughness: 2,
+    keywords: { flying: true, firstStrike: true },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 5 } },
+          },
+        ],
+        label: 'Soulshift 5',
+      },
+    ],
+  },
+  // At the beginning of your upkeep, sacrifice this creature unless you pay {G}.
+  // Soulshift 3 (When this creature dies, you may return target Spirit card with mana value 3 or less from your graveyard to your hand.)
+  {
+    id: 'bdedd830-9200-4e8b-84b4-00dc58cace35',
+    name: 'Kami of the Tended Garden',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 4,
+    toughness: 4,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { G: 1 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {g}',
+      },
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 3 } },
+          },
+        ],
+        label: 'Soulshift 3',
+      },
+    ],
+  },
   // Other Warriors you control get +1/+1.
   {
     id: '6f921dca-ce93-42d1-87b1-149973558467',
@@ -37855,6 +42590,46 @@ const POOL_4: readonly CardDefinition[] = [
         power: 1,
         toughness: 1,
         label: 'other warriors you control get +1/+1',
+      },
+    ],
+  },
+  // Flying, protection from black
+  // Echo {3}{W}{W} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  // When this creature enters, return target creature card from your graveyard to the battlefield.
+  {
+    id: 'b26d50dd-54a1-43ce-9884-3999f698d97b',
+    name: 'Karmic Guide',
+    types: ['creature'],
+    cost: { generic: 3, W: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true, protectionFrom: ['black'] },
+    subtypes: ['angel', 'spirit'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 3, W: 2 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {3}{W}{W}',
+      },
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'moveTargetFromGraveyard',
+            params: { targets: 'creatureCardInYourGraveyard', to: 'battlefield' },
+          },
+        ],
+        label: 'Enters: return target creature card from your graveyard to the battlefield',
+        targets: 'creatureCardInYourGraveyard',
       },
     ],
   },
@@ -38113,6 +42888,19 @@ const POOL_4: readonly CardDefinition[] = [
     toughness: 3,
     subtypes: ['human', 'cleric'],
   },
+  // First strike
+  // Suspend 4—{R} (Rather than cast this card from your hand, you may pay {R} and exile it with four time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.)
+  {
+    id: '55e0caef-215a-4433-8a85-322e62e3590d',
+    name: 'Keldon Halberdier',
+    types: ['creature'],
+    cost: { generic: 4, R: 1 },
+    power: 4,
+    toughness: 1,
+    keywords: { firstStrike: true },
+    subtypes: ['human', 'warrior'],
+    suspend: { count: 4, cost: { R: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+  },
   // {T}: Add {C}.
   // {4}{R}, {T}, Sacrifice a creature: Keldon Necropolis deals 2 damage to any target.
   {
@@ -38174,6 +42962,39 @@ const POOL_4: readonly CardDefinition[] = [
           },
         ],
         label: 'Enters: you may discard a card. if you do, draw a card',
+      },
+    ],
+  },
+  // Echo {2}{R} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  // When this creature enters, destroy target artifact.
+  {
+    id: 'f18cdf4d-42ce-4f2d-8b8f-8cf52a1b8db4',
+    name: 'Keldon Vandals',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 4,
+    toughness: 1,
+    subtypes: ['human', 'rogue'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 2, R: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {2}{R}',
+      },
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'destroyTarget', params: { targets: 'artifact' } }],
+        label: 'Enters: destroy target artifact',
+        targets: 'artifact',
       },
     ],
   },
@@ -38473,6 +43294,23 @@ const POOL_4: readonly CardDefinition[] = [
         condition: { on: 'castSpell', who: 'you', spellType: 'sorcery' },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 0 } }],
         label: 'Cast sorcery: ~ gets +3/+0 until end of turn',
+      },
+    ],
+  },
+  // Whenever this creature attacks, it gets +3/+0 until end of turn.
+  {
+    id: '91678632-ebe6-41b6-9250-cd3ffd63663b',
+    name: 'Kiln Walker',
+    types: ['artifact', 'creature'],
+    cost: { generic: 3 },
+    power: 0,
+    toughness: 3,
+    subtypes: ['phyrexian', 'construct'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 0 } }],
+        label: 'Attacks: ~ gets +3/+0 until end of turn',
       },
     ],
   },
@@ -38777,6 +43615,69 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // First strike
+  // Bushido 1 (Whenever this creature blocks or becomes blocked, it gets +1/+1 until end of turn.)
+  {
+    id: 'fb9d108d-ee19-4b1d-9d4b-b4c4d9b8ad0d',
+    name: 'Kitsune Blademaster',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { firstStrike: true },
+    subtypes: ['fox', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Bushido 1',
+      },
+    ],
+  },
+  // Bushido 1 (Whenever this creature blocks or becomes blocked, it gets +1/+1 until end of turn.)
+  // When this creature enters, you may tap target creature.
+  {
+    id: 'b09ab22e-aa22-4d6b-87c6-970563486f21',
+    name: 'Kitsune Dawnblade',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 2,
+    toughness: 3,
+    subtypes: ['fox', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Bushido 1',
+      },
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may tap target creature',
+              valence: 'gain',
+              effects: [{ primitive: 'tapTarget', params: { targets: 'creature' } }],
+            },
+          },
+        ],
+        label: 'Enters: you may tap target creature',
+        targets: 'creature',
+      },
+    ],
+  },
+  // Protection from Spirits and from Arcane
+  {
+    id: 'f545d9d0-52d8-4b90-a8bb-178f4ba3c4b7',
+    name: 'Kitsune Riftwalker',
+    types: ['creature'],
+    cost: { generic: 1, W: 2 },
+    power: 2,
+    toughness: 1,
+    keywords: { protectionFrom: ['subtype:Spirit', 'subtype:Arcane'] },
+    subtypes: ['fox', 'wizard'],
+  },
   // When this creature enters, sacrifice a creature.
   // {B}: Regenerate this creature.
   {
@@ -38924,6 +43825,54 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Protection from black (This creature can't be blocked, targeted, dealt damage, or enchanted by anything black.)
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  {
+    id: '1646cb67-e0ac-4f2d-af21-618ff3613d69',
+    name: 'Knight of Glory',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { protectionFrom: ['black'] },
+    subtypes: ['human', 'knight'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+    ],
+  },
+  // Protection from white (This creature can't be blocked, targeted, dealt damage, or enchanted by anything white.)
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  {
+    id: '9e339853-5b6b-47b7-8d88-e9d3befb803f',
+    name: 'Knight of Infamy',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { protectionFrom: ['white'] },
+    subtypes: ['human', 'knight'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+    ],
+  },
   // First strike
   // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
   {
@@ -38944,6 +43893,31 @@ const POOL_4: readonly CardDefinition[] = [
     power: 3,
     toughness: 1,
     subtypes: ['human', 'knight'],
+  },
+  // Flying; flanking (Whenever a creature without flanking blocks this creature, the blocking creature gets -1/-1 until end of turn.)
+  // Suspend 3—{W} (Rather than cast this card from your hand, you may pay {W} and exile it with three time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.)
+  {
+    id: '8693bec1-9bd9-4840-9d7f-954f92d968c9',
+    name: 'Knight of Sursi',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flanking: true, flying: true },
+    subtypes: ['human', 'knight'],
+    suspend: { count: 3, cost: { W: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+    triggers: [
+      {
+        condition: { on: 'becomesBlockedByCreature', counterpartLacksKeyword: 'flanking' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: -1, toughness: -1, subject: 'triggering' },
+          },
+        ],
+        label: 'Flanking',
+      },
+    ],
   },
   {
     id: '0d49653d-cd4e-40a7-99de-fc531b5d8594',
@@ -39222,6 +44196,26 @@ const POOL_4: readonly CardDefinition[] = [
     keywords: { trample: true },
     subtypes: ['lizard', 'rhino'],
   },
+  // Vigilance, indestructible
+  // Bushido 5 (Whenever this creature blocks or becomes blocked, it gets +5/+5 until end of turn.)
+  {
+    id: '5edab171-94b9-4e5e-ab61-bd8c6c8cfc38',
+    name: 'Konda, Lord of Eiganjo',
+    types: ['creature'],
+    cost: { generic: 5, W: 2 },
+    power: 3,
+    toughness: 3,
+    legendary: true,
+    keywords: { vigilance: true, indestructible: true },
+    subtypes: ['human', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 5, toughness: 5 } }],
+        label: 'Bushido 5',
+      },
+    ],
+  },
   // Other creatures you control get +1/+1.
   {
     id: '70c9e4fd-e987-4653-abb1-e32971745db2',
@@ -39379,6 +44373,17 @@ const POOL_4: readonly CardDefinition[] = [
       { produces: [{ R: 1 }], cost: { mana: { generic: 1 } } },
       { produces: [{ B: 1 }, { G: 1 }], cost: { mana: { generic: 2 } } },
     ],
+  },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  {
+    id: '978cc53c-c038-4442-bd46-e0b9e8cdd924',
+    name: 'Koth\'s Courier',
+    types: ['creature'],
+    cost: { generic: 1, R: 2 },
+    power: 2,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['human', 'rogue'],
   },
   // {T}: Add {C}{C}.
   {
@@ -39539,6 +44544,19 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Intimidate (This creature can't be blocked except by artifact creatures and/or creatures that share a color with it.)
+  {
+    id: 'ce2ceeb0-03b6-48bc-a084-069176ebccb2',
+    name: 'Krenko\'s Enforcer',
+    types: ['creature'],
+    cost: { generic: 1, R: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'sharesColorWithAttacker' }] },
+    },
+    subtypes: ['goblin', 'warrior'],
+  },
   // Trample
   // Whenever a creature you control with power 4 or greater enters, put a +1/+1 counter on this creature.
   {
@@ -39581,6 +44599,50 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Split second (As long as this spell is on the stack, players can't cast spells or activate abilities that aren't mana abilities.)
+  // Destroy target artifact or enchantment.
+  {
+    id: 'd3571dee-7b90-4c0c-abc7-59b515ffa129',
+    name: 'Krosan Grip',
+    types: ['instant'],
+    cost: { generic: 2, G: 1 },
+    keywords: { splitSecond: true },
+    effects: [{ primitive: 'destroyTarget', params: { targets: 'artifactOrEnchantment' } }],
+  },
+  // Enchant creature
+  // When this Aura enters, draw a card at the beginning of the next turn's upkeep.
+  // Enchanted creature gets +1/+1.
+  {
+    id: '73f75891-00fa-428b-a3cb-88867ff35cd2',
+    name: 'Krovikan Fetish',
+    types: ['enchantment'],
+    cost: { generic: 2, B: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'scheduleDelayedEffects',
+            params: {
+              on: 'upkeep',
+              who: 'any',
+              effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+              label: 'Draw a card at the beginning of the next turn\'s upkeep',
+            },
+          },
+        ],
+        label: 'Enters: draw a card at the beginning of the next turn\'s upkeep',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 1, toughness: 1, keywords: {} },
+    },
+  },
   {
     id: 'bd9f046c-b416-4d80-8998-047b98361352',
     name: 'Krovikan Scoundrel',
@@ -39620,6 +44682,67 @@ const POOL_4: readonly CardDefinition[] = [
       {
         primitive: 'makeToken',
         params: { power: 1, toughness: 1, name: 'Goblin', colors: ['R'], subtypes: ['Goblin'], count: 3 },
+      },
+    ],
+  },
+  // At the beginning of your upkeep, sacrifice Kuro unless you pay {B}{B}{B}{B}.
+  // Pay 1 life: Target creature gets -1/-1 until end of turn.
+  {
+    id: 'e1f9531a-7201-4dfc-beb1-4128ec41728c',
+    name: 'Kuro, Pitlord',
+    types: ['creature'],
+    cost: { generic: 6, B: 3 },
+    power: 9,
+    toughness: 9,
+    legendary: true,
+    subtypes: ['demon', 'spirit'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { B: 4 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {b}{b}{b}{b}',
+      },
+    ],
+    activated: [
+      {
+        cost: { life: 1 },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: -1, toughness: -1, targets: 'creature' },
+          },
+        ],
+        label: 'Pay 1 life: target creature gets -1/-1 until end of turn',
+      },
+    ],
+  },
+  // Bushido 1 (Whenever this creature blocks or becomes blocked, it gets +1/+1 until end of turn.)
+  // {1}{B}: Regenerate this creature.
+  {
+    id: '1e301a46-f321-4fa6-a8c4-08dd4079a458',
+    name: 'Kuro\'s Taken',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['rat', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Bushido 1',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 1, B: 1 } },
+        effects: [{ primitive: 'regenerate' }],
+        label: '{1}{b}: regenerate ~',
       },
     ],
   },
@@ -39779,6 +44902,18 @@ const POOL_4: readonly CardDefinition[] = [
     toughness: 4,
     legendary: true,
     subtypes: ['demon'],
+  },
+  // Horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  {
+    id: '009661e7-c704-43a1-82e3-7da0b609844e',
+    name: 'Lady Zhurong, Warrior Queen',
+    types: ['creature'],
+    cost: { generic: 4, G: 1 },
+    power: 4,
+    toughness: 3,
+    legendary: true,
+    keywords: { horsemanship: true, blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] } },
+    subtypes: ['human', 'soldier', 'warrior'],
   },
   {
     id: 'b47e9cfa-5547-4ef3-9e36-8d0f36dfa59a',
@@ -40194,6 +45329,17 @@ const POOL_4: readonly CardDefinition[] = [
     subtypes: ['myr'],
     produces: ['B'],
   },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  {
+    id: 'aebab65c-7d5f-4086-8eb1-7dc445e801e9',
+    name: 'Leaf Dancer',
+    types: ['creature'],
+    cost: { generic: 1, G: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['centaur'],
+  },
   // {T}: Add {G}.
   {
     id: '58b3bd44-3b01-4507-b9be-ab94601ea736',
@@ -40259,6 +45405,28 @@ const POOL_4: readonly CardDefinition[] = [
     toughness: 4,
     subtypes: ['human', 'knight'],
     costAssist: 'convoke',
+  },
+  // Whenever this creature becomes blocked, prevent all combat damage that would be dealt this turn.
+  {
+    id: '56125660-2307-4270-a947-f1f4ad63841c',
+    name: 'Leery Fogbeast',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 4,
+    toughness: 2,
+    subtypes: ['beast'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [
+          {
+            primitive: 'preventDamage',
+            params: { combat: true, label: 'prevent all combat damage that would be dealt this turn' },
+          },
+        ],
+        label: 'Becomes blocked: prevent all combat damage that would be dealt this turn',
+      },
+    ],
   },
   // Other Vampires you control get +1/+1.
   {
@@ -40644,6 +45812,65 @@ const POOL_4: readonly CardDefinition[] = [
     cost: { generic: 3, R: 1 },
     effects: [{ primitive: 'dealDamage', params: { amount: 4 } }],
   },
+  // Target creature gains first strike until end of turn.
+  // Draw a card at the beginning of the next turn's upkeep.
+  {
+    id: '2c4c1c3d-e1dc-48c1-b036-5917da1048a9',
+    name: 'Lightning Blow',
+    types: ['instant'],
+    cost: { generic: 1, W: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordUntilEndOfTurn',
+        params: { keywords: { firstStrike: true }, targets: 'creature' },
+      },
+      {
+        primitive: 'scheduleDelayedEffects',
+        params: {
+          on: 'upkeep',
+          who: 'any',
+          effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+          label: 'Draw a card at the beginning of the next turn\'s upkeep',
+        },
+      },
+    ],
+  },
+  // Flying
+  // Echo {2}{R}{R} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  // {R}: This creature gets +1/+0 until end of turn.
+  {
+    id: '37d67f0d-82ed-4e40-baa6-8e4985af2224',
+    name: 'Lightning Dragon',
+    types: ['creature'],
+    cost: { generic: 2, R: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { flying: true },
+    subtypes: ['dragon'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 2, R: 2 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {2}{R}{R}',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { R: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        label: '{r}: ~ gets +1/+0 until end of turn',
+      },
+    ],
+  },
   // Haste (This creature can attack and {T} as soon as it comes under your control.)
   {
     id: '58aee5cb-7b88-446e-ab10-9f83c10d7227',
@@ -40960,6 +46187,27 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  // Persist (When this creature dies, if it had no -1/-1 counters on it, return it to the battlefield under its owner's control with a -1/-1 counter on it.)
+  {
+    id: 'f5165880-9727-4f52-9633-fd5cecce7f01',
+    name: 'Lingering Tormentor',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+    },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [{ primitive: 'persistReturn', params: { minusCounters: 1 } }],
+        label: 'Persist: return with a -1/-1 counter',
+      },
+    ],
+  },
   // Vigilance
   // {4}{W}: This creature gets +1/+2 until end of turn.
   {
@@ -41136,6 +46384,18 @@ const POOL_4: readonly CardDefinition[] = [
         label: '{1}: regenerate ~',
       },
     ],
+  },
+  // First strike; legendary landwalk (This creature can't be blocked as long as defending player controls a legendary land.)
+  {
+    id: 'd4ef4c06-9dab-499c-a270-0ba7f0b5fd77',
+    name: 'Livonya Silone',
+    types: ['creature'],
+    cost: { generic: 2, R: 2, G: 2 },
+    power: 4,
+    toughness: 4,
+    legendary: true,
+    keywords: { landwalk: [{ kind: 'legendary' }], firstStrike: true },
+    subtypes: ['human', 'warrior'],
   },
   {
     id: '6da5a962-e00c-452f-b9ad-4cf6615c9dcd',
@@ -41438,6 +46698,18 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying
+  // This creature can block only creatures with flying.
+  {
+    id: '772e9472-c710-474e-b8e9-54662330a592',
+    name: 'Long-Finned Skywhale',
+    types: ['creature'],
+    cost: { generic: 2, U: 2 },
+    power: 4,
+    toughness: 3,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['whale'],
+  },
   // Reach (This creature can block creatures with flying.)
   // First strike
   {
@@ -41657,6 +46929,28 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: '8209fa5d-2c0e-4827-813b-fff123533f16',
+    name: 'Lost Leonin',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { infect: true },
+    subtypes: ['phyrexian', 'cat', 'soldier'],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: '401896ac-6234-468a-a9af-cf11c7a11cd0',
+    name: 'Lost Soul',
+    types: ['creature'],
+    cost: { generic: 1, B: 2 },
+    power: 2,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['spirit', 'minion'],
+  },
   // Whenever this creature attacks, scry 1.
   {
     id: 'acc6a5d4-9a04-4a52-b2dc-0b0ab616a110',
@@ -41859,6 +47153,34 @@ const POOL_4: readonly CardDefinition[] = [
     toughness: 5,
     subtypes: ['elephant', 'monk'],
   },
+  // Haste; horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  {
+    id: '91bf3a4f-f004-459e-a6fd-122d4cce7d17',
+    name: 'Lu Bu, Master-at-Arms',
+    types: ['creature'],
+    cost: { generic: 5, R: 1 },
+    power: 4,
+    toughness: 3,
+    legendary: true,
+    keywords: {
+      horsemanship: true,
+      blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] },
+      haste: true,
+    },
+    subtypes: ['human', 'soldier', 'warrior'],
+  },
+  // Horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  {
+    id: '25621ccf-fa2d-4990-a908-01373fbe587f',
+    name: 'Lu Meng, Wu General',
+    types: ['creature'],
+    cost: { generic: 3, U: 2 },
+    power: 4,
+    toughness: 4,
+    legendary: true,
+    keywords: { horsemanship: true, blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] } },
+    subtypes: ['human', 'soldier'],
+  },
   // Flying
   {
     id: 'cd700719-2f65-4fd5-b3aa-3e9402560c79',
@@ -41890,9 +47212,6 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_5: readonly CardDefinition[] = [
   // Prevent all combat damage that would be dealt this turn.
   // Cycling {2} ({2}, Discard this card: Draw a card.)
   {
@@ -42072,6 +47391,23 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // Whenever this creature attacks, it gets +2/+0 until end of turn.
+  {
+    id: '002715a3-b84f-40ba-8fa9-6b2854626f4d',
+    name: 'Lurking Nightstalker',
+    types: ['creature'],
+    cost: { B: 2 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['nightstalker'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        label: 'Attacks: ~ gets +2/+0 until end of turn',
+      },
+    ],
+  },
   // ({T}: Add {G} or {W}.)
   // This land enters tapped.
   // When this land enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)
@@ -42083,6 +47419,17 @@ const POOL_5: readonly CardDefinition[] = [
     entersTapped: true,
     producesOptions: [{ G: 1 }, { W: 1 }],
     triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'surveil' }], label: 'Enters: surveil 1' }],
+  },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  {
+    id: '1c962a7a-8c3b-4343-a6ef-6be1d40ac940',
+    name: 'Lynx',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['cat'],
   },
   // Flying
   // First strike (This creature deals combat damage before creatures without first strike.)
@@ -42256,6 +47603,25 @@ const POOL_5: readonly CardDefinition[] = [
           },
         ],
         label: '{4}, {t}, sacrifice ~: search your library for a dragon card, reveal it, put it into your hand, then shuffle',
+      },
+    ],
+  },
+  // Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)
+  // This creature attacks each combat if able.
+  {
+    id: '1a129f22-dd7e-4b2c-a514-a2ac55bb5661',
+    name: 'Mage-Ring Bully',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { mustAttack: true },
+    subtypes: ['human', 'warrior'],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellTypeNoneOf: ['creature'] },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Cast noncreature: ~ gets +1/+1 until end of turn',
       },
     ],
   },
@@ -42753,6 +48119,49 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +1/+1 and has flying.
+  // Equip {3}{W}
+  {
+    id: '6b922f71-18e6-4a74-b792-d477d4a1deca',
+    name: 'Mandibular Kite',
+    types: ['artifact'],
+    cost: { W: 1 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 3, W: 1 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {3}{w}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {3}{w}',
+      modifies: { power: 1, toughness: 1, keywords: { flying: true } },
+    },
+  },
   // When this creature enters, you gain 2 life.
   {
     id: 'e8f79cb4-81f1-465a-a71b-d69a0185a304',
@@ -42997,6 +48406,32 @@ const POOL_5: readonly CardDefinition[] = [
     subtypes: ['orc', 'warrior'],
     additionalCost: { kind: 'discard', label: 'Discard a card' },
   },
+  // Rampage 1 (Whenever this creature becomes blocked, it gets +1/+1 until end of turn for each creature blocking it beyond the first.)
+  {
+    id: '2e805883-081b-478a-aa58-172b659571c2',
+    name: 'Marhault Elsdragon',
+    types: ['creature'],
+    cost: { generic: 3, R: 2, G: 1 },
+    power: 4,
+    toughness: 6,
+    legendary: true,
+    subtypes: ['elf', 'warrior'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: {
+              power: { countOf: 'creaturesBlockingThisBeyondFirst', times: 1 },
+              toughness: { countOf: 'creaturesBlockingThisBeyondFirst', times: 1 },
+            },
+          },
+        ],
+        label: 'Rampage 1',
+      },
+    ],
+  },
   // Double strike
   {
     id: 'd406058e-4d51-42bd-b7c0-664216745ff8',
@@ -43182,6 +48617,17 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: '87c99bb6-a483-4beb-b98c-eb641fe3d50a',
+    name: 'Marsh Boa',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['snake'],
+  },
   // {T}, Pay 1 life, Sacrifice this land: Search your library for a Plains or Swamp card, put it onto the battlefield, then shuffle.
   {
     id: '9db3ba6d-eb7f-4f5b-9a3b-c6239c3baa42',
@@ -43204,6 +48650,28 @@ const POOL_5: readonly CardDefinition[] = [
         label: '{t}, pay 1 life, sacrifice ~: search your library for a plains or swamp card, put it onto the battlefield, then shuffle',
       },
     ],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: '8aabd80f-a18a-4bc1-9f05-4c3a63de77ce',
+    name: 'Marsh Goblins',
+    types: ['creature'],
+    cost: { B: 1, R: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['goblin'],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: '0b0c439a-25e4-4ff7-8080-b3be59d5dbe6',
+    name: 'Marsh Threader',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['kor', 'scout'],
   },
   // Target creature gets +3/+0 until end of turn.
   // Target creature gets +0/+3 until end of turn.
@@ -43523,6 +48991,25 @@ const POOL_5: readonly CardDefinition[] = [
           },
         ],
         label: 'Enters: create two 1/1 colorless thopter artifact creature tokens with flying',
+      },
+    ],
+  },
+  // Devoid (This card has no color.)
+  // {C}: This creature gets +2/-2 until end of turn. ({C} represents colorless mana.)
+  {
+    id: '48669993-ad68-499e-8f2e-bc5c651b4b28',
+    name: 'Maw of Kozilek',
+    types: ['creature'],
+    cost: { generic: 3, R: 1 },
+    power: 2,
+    toughness: 5,
+    colors: [],
+    subtypes: ['eldrazi', 'drone'],
+    activated: [
+      {
+        cost: { mana: { C: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: -2 } }],
+        label: '{c}: ~ gets +2/-2 until end of turn',
       },
     ],
   },
@@ -44555,6 +50042,17 @@ const POOL_5: readonly CardDefinition[] = [
       },
     },
   },
+  // Protection from Vampires
+  {
+    id: '2371bd0c-ca38-4a62-b525-bef4d1ca0646',
+    name: 'Midnight Duelist',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 1,
+    toughness: 2,
+    keywords: { protectionFrom: ['subtype:Vampire'] },
+    subtypes: ['human', 'soldier'],
+  },
   // Create two 1/1 white Spirit creature tokens with flying.
   {
     id: '4399dcc7-7684-4345-9f74-318c3ec9af82',
@@ -44765,6 +50263,26 @@ const POOL_5: readonly CardDefinition[] = [
     buyback: { generic: 2, B: 2 },
     effects: [{ primitive: 'discardCard', params: { count: 1, who: 'targetPlayer', targets: 'player' } }],
   },
+  // Target player discards a card.
+  // Draw a card at the beginning of the next turn's upkeep.
+  {
+    id: '1a9a0296-3690-45c7-98af-d546296ad9fe',
+    name: 'Mind Ravel',
+    types: ['sorcery'],
+    cost: { generic: 2, B: 1 },
+    effects: [
+      { primitive: 'discardCard', params: { count: 1, who: 'targetPlayer', targets: 'player' } },
+      {
+        primitive: 'scheduleDelayedEffects',
+        params: {
+          on: 'upkeep',
+          who: 'any',
+          effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+          label: 'Draw a card at the beginning of the next turn\'s upkeep',
+        },
+      },
+    ],
+  },
   // Target player discards two cards.
   {
     id: 'ad44cf74-b717-48fb-9fa2-77512024d76a',
@@ -44878,6 +50396,16 @@ const POOL_5: readonly CardDefinition[] = [
         label: 'all slivers have "{1}, sacrifice ~: each player discards a card."',
       },
     ],
+  },
+  // Target player discards three cards.
+  // Suspend 4—{B} (Rather than cast this card from your hand, you may pay {B} and exile it with four time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)
+  {
+    id: '542f97fa-6295-4c87-86a8-7ff2bc8b5e81',
+    name: 'Mindstab',
+    types: ['sorcery'],
+    cost: { generic: 5, B: 1 },
+    suspend: { count: 4, cost: { B: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+    effects: [{ primitive: 'discardCard', params: { count: 3, who: 'targetPlayer', targets: 'player' } }],
   },
   // Counter target spell unless its controller pays {6}.
   {
@@ -45114,6 +50642,18 @@ const POOL_5: readonly CardDefinition[] = [
     toughness: 2,
     keywords: { doubleStrike: true, protectionFrom: ['black', 'green'] },
     subtypes: ['human', 'knight'],
+  },
+  // First strike, forestwalk, vigilance (This creature deals combat damage before creatures without first strike, it can't be blocked as long as defending player controls a Forest, and attacking doesn't cause this creature to tap.)
+  {
+    id: '0a1d9876-4588-4591-af53-cb4e83c2b6c6',
+    name: 'Mirri, Cat Warrior',
+    types: ['creature'],
+    cost: { generic: 1, G: 2 },
+    power: 2,
+    toughness: 3,
+    legendary: true,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }], firstStrike: true, vigilance: true },
+    subtypes: ['cat', 'warrior'],
   },
   // At the beginning of your upkeep, you may look at the top three cards of your library, then put them back in any order.
   {
@@ -45536,6 +51076,9 @@ const POOL_5: readonly CardDefinition[] = [
     keywords: { defender: true },
     subtypes: ['fish'],
   },
+];
+
+const POOL_6: readonly CardDefinition[] = [
   // Convoke (Your creatures can help cast this spell. Each creature you tap while casting this spell pays for {1} or one mana of that creature's color.)
   // Destroy target creature.
   {
@@ -45764,6 +51307,30 @@ const POOL_5: readonly CardDefinition[] = [
     subtypes: ['island', 'mountain'],
     entersTapped: true,
     producesOptions: [{ U: 1 }, { R: 1 }],
+  },
+  // Flying
+  // At the beginning of your upkeep, sacrifice this creature unless you pay {2}.
+  {
+    id: 'ddfe33fb-71d5-4552-bcd3-f07e4e3847e1',
+    name: 'Molting Harpy',
+    types: ['creature'],
+    cost: { B: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { flying: true },
+    subtypes: ['harpy', 'mercenary'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { generic: 2 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {2}',
+      },
+    ],
   },
   // Target creature gets -2/-2 until end of turn. You gain 2 life.
   {
@@ -46111,6 +51678,17 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: '57089dd4-e30d-498d-9341-43c104c6f3f9',
+    name: 'Moor Fiend',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['horror'],
+  },
   // Trample
   {
     id: 'c6ae847c-9b88-4e34-930f-2f4fd28423f7',
@@ -46181,6 +51759,26 @@ const POOL_5: readonly CardDefinition[] = [
         cost: { sacrificeSelf: true },
         effects: [{ primitive: 'addMana', params: { mana: ['U', 'R'] } }],
         label: 'Sacrifice ~: add {u}{r}',
+      },
+    ],
+  },
+  // Flying
+  // Cumulative upkeep—Pay 1 life. (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)
+  {
+    id: 'b5006ad3-16ca-4be3-8d56-d4fe4e9e0a44',
+    name: 'Morinfen',
+    types: ['creature'],
+    cost: { generic: 3, B: 2 },
+    power: 5,
+    toughness: 4,
+    legendary: true,
+    keywords: { flying: true },
+    subtypes: ['phyrexian', 'horror'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [{ primitive: 'cumulativeUpkeep', params: { life: 1 } }],
+        label: 'Cumulative upkeep—Pay 1 life',
       },
     ],
   },
@@ -46448,6 +52046,25 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying
+  // Bushido 1 (Whenever this creature blocks or becomes blocked, it gets +1/+1 until end of turn.)
+  {
+    id: '35a236f7-f008-4eb8-91d9-31ea8589cf0c',
+    name: 'Mothrider Samurai',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true },
+    subtypes: ['human', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Bushido 1',
+      },
+    ],
+  },
   // Haste
   {
     id: '34fd541d-9956-4595-9527-a83db4c5f74f',
@@ -46458,6 +52075,17 @@ const POOL_5: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { haste: true },
     subtypes: ['human', 'soldier', 'rogue'],
+  },
+  // Mountainwalk (This creature can't be blocked as long as defending player controls a Mountain.)
+  {
+    id: '47754124-37e2-4878-a711-a3e00ae0bc70',
+    name: 'Mountain Goat',
+    types: ['creature'],
+    cost: { R: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'mountain' }] },
+    subtypes: ['goat'],
   },
   // This land enters tapped.
   // {T}, Sacrifice this land: Search your library for a Mountain or Forest card, put it onto the battlefield, then shuffle.
@@ -46483,6 +52111,18 @@ const POOL_5: readonly CardDefinition[] = [
         label: '{t}, sacrifice ~: search your library for a mountain or forest card, put it onto the battlefield, then shuffle',
       },
     ],
+  },
+  // Mountainwalk (This creature can't be blocked as long as defending player controls a Mountain.)
+  // Protection from white
+  {
+    id: 'bc6a062c-06ff-4295-83f2-48868c664d76',
+    name: 'Mountain Yeti',
+    types: ['creature'],
+    cost: { generic: 2, R: 2 },
+    power: 3,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'mountain' }], protectionFrom: ['white'] },
+    subtypes: ['yeti'],
   },
   // Choose one —
   // • Create a 1/1 colorless Robot artifact creature token.
@@ -46579,6 +52219,39 @@ const POOL_5: readonly CardDefinition[] = [
     types: ['artifact'],
     produces: ['U'],
   },
+  // Suspend 3—{0} (Rather than cast this card from your hand, pay {0} and exile it with three time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)
+  // {T}: Add one mana of any color.
+  {
+    id: 'dcd05b01-dc73-4dd2-970a-32ec6e153c86',
+    name: 'Mox Tantalite',
+    types: ['artifact'],
+    noManaCost: true,
+    suspend: { count: 3, cost: { generic: 0 }, upkeep: [{ primitive: 'suspendTick' }] },
+    producesOptions: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+  },
+  // Flanking (Whenever a creature without flanking blocks this creature, the blocking creature gets -1/-1 until end of turn.)
+  {
+    id: '51f30a3d-1421-4706-b17f-39a9ec7a0d8b',
+    name: 'Mtenda Herder',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flanking: true },
+    subtypes: ['human', 'scout'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlockedByCreature', counterpartLacksKeyword: 'flanking' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: -1, toughness: -1, subject: 'triggering' },
+          },
+        ],
+        label: 'Flanking',
+      },
+    ],
+  },
   {
     id: 'cf2018ec-94e4-4e29-8b4b-ce30fb0d4a99',
     name: 'Muck Rats',
@@ -46598,6 +52271,34 @@ const POOL_5: readonly CardDefinition[] = [
     toughness: 6,
     keywords: { reach: true, vigilance: true, deathtouch: true },
     subtypes: ['ape', 'beast'],
+  },
+  // Echo {G}{G} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  // When this creature enters, draw a card.
+  {
+    id: '4e5fdecb-bca0-48ea-b5bb-d0886c7d3316',
+    name: 'Multani\'s Acolyte',
+    types: ['creature'],
+    cost: { G: 2 },
+    power: 2,
+    toughness: 1,
+    subtypes: ['elf'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { G: 2 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'Echo {G}{G}',
+      },
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Enters: draw a card',
+      },
+    ],
   },
   // Create a token that's a copy of target creature you control, except it isn't legendary.
   // Flashback {5}{U}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
@@ -46858,6 +52559,19 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // Toxic 1 (Players dealt combat damage by this creature also get a poison counter.)
+  // {T}, Pay 2 life: Add one mana of any color.
+  {
+    id: '9df0adcf-7ad0-4d70-8dcd-28f69471495b',
+    name: 'Myr Convert',
+    types: ['artifact', 'creature'],
+    cost: { generic: 2 },
+    power: 2,
+    toughness: 1,
+    keywords: { toxic: 1 },
+    subtypes: ['phyrexian', 'myr'],
+    manaAbilities: [{ produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }], cost: { life: 2 } }],
+  },
   // Affinity for artifacts (This spell costs {1} less to cast for each artifact you control.)
   {
     id: 'dff51ae7-4b68-4770-915b-fb6bcf9ca1ed',
@@ -47106,6 +52820,26 @@ const POOL_5: readonly CardDefinition[] = [
     manaAbilities: [
       { produces: [{ C: 1 }] },
       { produces: [{ W: 2 }, { W: 1, U: 1 }, { U: 2 }], cost: { mana: { hybrid: [['W', 'U']] } } },
+    ],
+  },
+  // Destroy target artifact or enchantment.
+  // Draw a card at the beginning of the next turn's upkeep.
+  {
+    id: 'bf4ff91d-acc1-4be7-a327-58fcb036b452',
+    name: 'Mystic Melting',
+    types: ['instant'],
+    cost: { generic: 3, G: 1 },
+    effects: [
+      { primitive: 'destroyTarget', params: { targets: 'artifactOrEnchantment' } },
+      {
+        primitive: 'scheduleDelayedEffects',
+        params: {
+          on: 'upkeep',
+          who: 'any',
+          effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+          label: 'Draw a card at the beginning of the next turn\'s upkeep',
+        },
+      },
     ],
   },
   // This land enters tapped.
@@ -47363,6 +53097,17 @@ const POOL_5: readonly CardDefinition[] = [
     keywords: { firstStrike: true, protectionFrom: ['red'] },
     subtypes: ['whale'],
   },
+  // Protection from Elves
+  {
+    id: '66f077d2-34ab-45fa-84db-eb408c5a9996',
+    name: 'Nath\'s Buffoon',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { protectionFrom: ['subtype:Elf'] },
+    subtypes: ['goblin', 'rogue'],
+  },
   // Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
   {
     id: 'b8614b00-bf12-464e-8d13-61310e265ccb',
@@ -47592,6 +53337,49 @@ const POOL_5: readonly CardDefinition[] = [
       label: 'Enchant creature',
     },
   },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +3/+1 and has haste.
+  // Equip {2}
+  {
+    id: '4ed51dbc-bbec-4c78-a71e-26322a8d2439',
+    name: 'Necropouncer',
+    types: ['artifact'],
+    cost: { generic: 6 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 3, toughness: 1, keywords: { haste: true } },
+    },
+  },
   // All Slivers have "{3}, Sacrifice this permanent: Destroy target permanent."
   {
     id: 'd0f4e782-5503-4698-a1ba-0f30e443f14c',
@@ -47781,6 +53569,25 @@ const POOL_5: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { haste: true },
     subtypes: ['dinosaur'],
+  },
+  // Reach (This creature can block creatures with flying.)
+  // Whenever this creature blocks a creature with flying, this creature gets +2/+0 until end of turn.
+  {
+    id: '07c95074-32c8-426e-b615-8ad5427c6c1c',
+    name: 'Netcaster Spider',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { reach: true },
+    subtypes: ['spider'],
+    triggers: [
+      {
+        condition: { on: 'blocks', counterpartHasKeyword: 'flying' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        label: 'Blocks a creature with flying: ~ gets +2/+0 until end of turn',
+      },
+    ],
   },
   {
     id: 'c217b672-c724-4fc2-936c-b3f0feaf6ea0',
@@ -48016,6 +53823,38 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  // This creature can't block.
+  {
+    id: '8a9c29bf-a177-40d5-9ade-129221222900',
+    name: 'Nezumi Cutthroat',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+      cantBlock: true,
+    },
+    subtypes: ['rat', 'warrior'],
+  },
+  // Bushido 1 (Whenever this creature blocks or becomes blocked, it gets +1/+1 until end of turn.)
+  {
+    id: '0c3b8d6f-c60a-4107-b931-31b10f497237',
+    name: 'Nezumi Ronin',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 3,
+    toughness: 1,
+    subtypes: ['rat', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Bushido 1',
+      },
+    ],
+  },
   // Flying
   // Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)
   {
@@ -48154,6 +53993,28 @@ const POOL_5: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { flying: true, cantBlock: true },
     subtypes: ['faerie', 'rogue'],
+  },
+  // Soulshift 5 (When this creature dies, you may return target Spirit card with mana value 5 or less from your graveyard to your hand.)
+  {
+    id: '5902f863-171e-4bb2-9d48-2c679d41f1a9',
+    name: 'Nightsoil Kami',
+    types: ['creature'],
+    cost: { generic: 4, G: 2 },
+    power: 6,
+    toughness: 4,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 5 } },
+          },
+        ],
+        label: 'Soulshift 5',
+      },
+    ],
   },
   // Flying, deathtouch
   // Hexproof (This creature can't be the target of spells or abilities your opponents control.)
@@ -48530,6 +54391,30 @@ const POOL_5: readonly CardDefinition[] = [
       modifies: { power: 2, toughness: 0, keywords: { firstStrike: true } },
     },
   },
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  // {T}: Add {G}, {W}, or {U}.
+  {
+    id: '400382a4-aea2-4827-b06a-1b0b3745908b',
+    name: 'Noble Hierarch',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 0,
+    toughness: 1,
+    subtypes: ['human', 'druid'],
+    producesOptions: [{ G: 1 }, { W: 1 }, { U: 1 }],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+    ],
+  },
   // {1}{W}: Target creature gains first strike until end of turn.
   {
     id: '45a35751-a232-40ba-a73b-d3ca7a44867d',
@@ -48679,6 +54564,34 @@ const POOL_5: readonly CardDefinition[] = [
     toughness: 2,
     subtypes: ['elf', 'scout', 'ranger'],
   },
+  // This creature can't be blocked by more than one creature.
+  {
+    id: '904ba8db-853e-4f51-acfe-83e472524380',
+    name: 'Norwood Riders',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { maxBlockers: 1 },
+    subtypes: ['elf'],
+  },
+  // Whenever this creature becomes blocked, it gets +1/+1 until end of turn.
+  {
+    id: '6f7ddf0a-1081-4ae0-ab91-b052153bab4c',
+    name: 'Norwood Warrior',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['elf', 'warrior'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Becomes blocked: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
   // You gain 6 life.
   {
     id: '0597dd97-fe6f-4e74-88e5-35528ada0140',
@@ -48821,6 +54734,31 @@ const POOL_5: readonly CardDefinition[] = [
         ],
         label: 'Enters: if it was kicked, return target creature card from your graveyard to the battlefield',
         targets: 'creatureCardInYourGraveyard',
+      },
+    ],
+  },
+  // Bushido 2 (Whenever this creature blocks or becomes blocked, it gets +2/+2 until end of turn.)
+  // {B}, Pay 5 life: Regenerate this creature.
+  {
+    id: 'b878d1c2-34ce-4cb4-9ea3-8d7cd2028484',
+    name: 'Numai Outcast',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'Bushido 2',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { B: 1 }, life: 5 },
+        effects: [{ primitive: 'regenerate' }],
+        label: '{b}, pay 5 life: regenerate ~',
       },
     ],
   },
@@ -49137,6 +55075,16 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // Devoid (This card has no color.)
+  // Exile target creature.
+  {
+    id: '24e30acf-b30f-4bb3-b80e-dc7e9559da51',
+    name: 'Oblivion Strike',
+    types: ['sorcery'],
+    cost: { generic: 3, B: 1 },
+    colors: [],
+    effects: [{ primitive: 'exileTarget', params: { targets: 'creature' } }],
+  },
   // Draw a card.
   // Madness {U} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
   {
@@ -49343,6 +55291,25 @@ const POOL_5: readonly CardDefinition[] = [
     toughness: 2,
     keywords: { haste: true },
     subtypes: ['ogre', 'berserker'],
+  },
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  // {R}: This creature gets +1/+0 until end of turn.
+  {
+    id: '6271c5c1-5f39-4908-b838-0f34c74e912e',
+    name: 'Ogre Menial',
+    types: ['creature'],
+    cost: { generic: 3, R: 1 },
+    power: 0,
+    toughness: 4,
+    keywords: { infect: true },
+    subtypes: ['phyrexian', 'ogre'],
+    activated: [
+      {
+        cost: { mana: { R: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        label: '{r}: ~ gets +1/+0 until end of turn',
+      },
+    ],
   },
   {
     id: '60b7407d-f677-403b-893c-361df456009a',
@@ -49671,6 +55638,28 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // Vanishing 4 (This land enters the battlefield with four time counters on it. At the beginning of your upkeep, remove a time counter from it. When the last is removed, sacrifice it.)
+  // {T}: Add {R}, {G}, or {W}.
+  {
+    id: '41b7743d-7134-4d35-b128-7bed315656a7',
+    name: 'Omenpath to Naya',
+    types: ['land'],
+    subtypes: ['omenpath'],
+    entersWithCounters: [{ kind: 'time', count: 4 }],
+    producesOptions: [{ R: 1 }, { G: 1 }, { W: 1 }],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceHasCounter', counter: 'time' } },
+        effects: [
+          {
+            primitive: 'tickDownCounter',
+            params: { counter: 'time', sacrificeWhen: 'lastRemoved' },
+          },
+        ],
+        label: 'Vanishing 4',
+      },
+    ],
+  },
   // When this creature enters, scry 2. (Look at the top two cards of your library, then put any number of them on the bottom and the rest on top in any order.)
   {
     id: '1b635abe-ad7e-44b8-b3fe-6e365db87c29',
@@ -49860,6 +55849,18 @@ const POOL_5: readonly CardDefinition[] = [
         label: '{t}: target player loses 1 life',
       },
     ],
+  },
+  // Defender, flying
+  // Wither (This deals damage to creatures in the form of -1/-1 counters.)
+  {
+    id: '972bb6e4-300c-49f5-8305-459a3ba67baa',
+    name: 'Oona\'s Gatewarden',
+    types: ['creature'],
+    cost: { hybrid: [['U', 'B']] },
+    power: 2,
+    toughness: 1,
+    keywords: { defender: true, flying: true, wither: true },
+    subtypes: ['faerie', 'soldier'],
   },
   // {T}: Add one mana of any color.
   {
@@ -50380,6 +56381,28 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  {
+    id: 'd3b681c8-6d20-4e43-95f8-e83d34626145',
+    name: 'Outrider of Jhess',
+    types: ['creature'],
+    cost: { generic: 3, U: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'knight'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+    ],
+  },
   // Overbeing of Myth's power and toughness are each equal to the number of cards in your hand.
   // At the beginning of your draw step, draw an additional card.
   {
@@ -50404,9 +56427,6 @@ const POOL_5: readonly CardDefinition[] = [
     types: ['land'],
     manaAbilities: [{ produces: [{ G: 1, U: 1 }], cost: { mana: { generic: 1 } } }],
   },
-];
-
-const POOL_6: readonly CardDefinition[] = [
   // Sacrifice a land: You gain 3 life.
   {
     id: 'c1c48c58-3532-4022-9eec-1a870385cbf3',
@@ -50515,6 +56535,30 @@ const POOL_6: readonly CardDefinition[] = [
         label: 'nontoken creature (opponent) dies: create a tapped 2/2 black zombie creature token',
       },
     ],
+  },
+  // Protection from blue, from black, and from red
+  {
+    id: '8893842f-aa3f-45f6-8139-ca775d33792b',
+    name: 'Oversoul of Dusk',
+    types: ['creature'],
+    cost: { hybrid: [['G', 'W'], ['G', 'W'], ['G', 'W'], ['G', 'W'], ['G', 'W']] },
+    power: 5,
+    toughness: 5,
+    keywords: { protectionFrom: ['blue', 'black', 'red'] },
+    subtypes: ['spirit', 'avatar'],
+  },
+  // Affinity for Equipment (This spell costs {1} less to cast for each Equipment you control.)
+  // Trample
+  {
+    id: '7177431e-5cc4-4ecd-8848-f51903289072',
+    name: 'Oxidda Finisher',
+    types: ['creature'],
+    cost: { generic: 5, R: 2 },
+    power: 7,
+    toughness: 5,
+    keywords: { trample: true },
+    subtypes: ['ogre', 'rebel'],
+    castCostReductionPerPermanent: { amount: 1, filter: { anyOfSubtypes: ['Equipment'] } },
   },
   // Affinity for Mountains (This spell costs {1} less to cast for each Mountain you control.)
   // Haste
@@ -50686,6 +56730,18 @@ const POOL_6: readonly CardDefinition[] = [
     keywords: { firstStrike: true, protectionFrom: ['black', 'red'] },
     subtypes: ['human', 'knight'],
   },
+  // Toxic 6 (Players dealt combat damage by this creature also get six poison counters.)
+  // This creature can't be blocked by creatures with power 2 or less.
+  {
+    id: '758dbe61-6dc7-4b08-bdd6-7262257955fc',
+    name: 'Paladin of Predation',
+    types: ['creature'],
+    cost: { generic: 5, G: 2 },
+    power: 6,
+    toughness: 7,
+    keywords: { toxic: 6, blockRestriction: { minBlockerPower: 3 } },
+    subtypes: ['phyrexian', 'knight'],
+  },
   // When this creature enters, create a 1/1 white Vampire creature token with lifelink.
   {
     id: '5a0385d5-d0f4-40b8-af28-6557ffdfb625',
@@ -50714,6 +56770,17 @@ const POOL_6: readonly CardDefinition[] = [
         label: 'Enters: create a 1/1 white vampire creature token with lifelink',
       },
     ],
+  },
+  // Islandwalk (This creature can't be blocked as long as defending player controls an Island.)
+  {
+    id: '7f19c2a3-6403-4a78-bf45-6e339578d673',
+    name: 'Pale Bears',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['bear'],
   },
   // Whenever another creature you control with power 5 or greater enters, you may return target creature card from your graveyard to your hand.
   {
@@ -50748,6 +56815,35 @@ const POOL_6: readonly CardDefinition[] = [
           },
         ],
         label: 'another creature (you) enters: you may return target creature card from your graveyard to your hand',
+      },
+    ],
+  },
+  // Flying, trample
+  // At the beginning of your upkeep, sacrifice Palladia-Mors unless you pay {R}{G}{W}.
+  {
+    id: 'ede0ce7a-0799-40b9-b725-665dc9c1cede',
+    name: 'Palladia-Mors',
+    types: ['creature'],
+    cost: { generic: 2, W: 2, R: 2, G: 2 },
+    power: 7,
+    toughness: 7,
+    legendary: true,
+    keywords: { flying: true, trample: true },
+    subtypes: ['elder', 'dragon'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { R: 1, G: 1, W: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {r}{g}{w}',
       },
     ],
   },
@@ -51364,6 +57460,18 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying
+  // Toxic 1 (Players dealt combat damage by this creature also get a poison counter.)
+  {
+    id: '947a1e44-3485-4e24-a34d-6c318584743c',
+    name: 'Pestilent Syphoner',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true, toxic: 1 },
+    subtypes: ['phyrexian', 'insect'],
+  },
   // When this creature enters, exile target land.
   // When this creature leaves the battlefield, return the exiled card to the battlefield under its owner's control.
   {
@@ -51408,6 +57516,24 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // Enchant creature
+  // Enchanted creature gets +2/+2.
+  // Suspend 2—{G} (Rather than cast this card from your hand, you may pay {G} and exile it with two time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)
+  {
+    id: '1195c459-5e06-4f4e-aa6e-58fefa712684',
+    name: 'Petrified Plating',
+    types: ['enchantment'],
+    cost: { generic: 2, G: 1 },
+    subtypes: ['aura'],
+    suspend: { count: 2, cost: { G: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 2, toughness: 2, keywords: {} },
+    },
+  },
   // {1}{B}: Regenerate this creature.
   {
     id: '28aa6682-bf11-4959-9d07-423a55f35199',
@@ -51441,6 +57567,30 @@ const POOL_6: readonly CardDefinition[] = [
         condition: { on: 'permanentEnters', who: 'you', permanentFilter: { anyOfTypes: ['artifact'] } },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
         label: 'artifact (you) enters: ~ gets +1/+0 until end of turn',
+      },
+    ],
+  },
+  // Flying
+  // At the beginning of your upkeep, sacrifice this creature unless you pay {U}.
+  {
+    id: '996fa830-7c09-4077-818d-24201617cf19',
+    name: 'Phantasmal Forces',
+    types: ['creature'],
+    cost: { generic: 3, U: 1 },
+    power: 4,
+    toughness: 1,
+    keywords: { flying: true },
+    subtypes: ['illusion'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { U: 1 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {u}',
       },
     ],
   },
@@ -51508,6 +57658,28 @@ const POOL_6: readonly CardDefinition[] = [
     toughness: 7,
     subtypes: ['centaur', 'warrior'],
   },
+  // Flying; fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  // Cumulative upkeep {B} (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)
+  {
+    id: 'a14802be-f9d4-4984-86e0-537467f37fd7',
+    name: 'Phobian Phantasm',
+    types: ['creature'],
+    cost: { generic: 1, B: 2 },
+    power: 3,
+    toughness: 3,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+      flying: true,
+    },
+    subtypes: ['illusion'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [{ primitive: 'cumulativeUpkeep', params: { mana: { B: 1 } } }],
+        label: 'Cumulative upkeep {B}',
+      },
+    ],
+  },
   // Flying
   // Whenever Photon attacks, exile up to one other target creature you control, then return that card to the battlefield under its owner's control.
   {
@@ -51535,6 +57707,22 @@ const POOL_6: readonly CardDefinition[] = [
         targetCount: { min: 0, max: 1 },
       },
     ],
+  },
+  // Enchant creature
+  // Enchanted creature has infect. (It deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: '0059d21b-0725-4806-8691-2451db36787f',
+    name: 'Phyresis',
+    types: ['enchantment'],
+    cost: { generic: 1, B: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 0, toughness: 0, keywords: { infect: true } },
+    },
   },
   // {T}: Add {C}.
   // {1}, {T}, Sacrifice an artifact: You gain 1 life.
@@ -51597,6 +57785,18 @@ const POOL_6: readonly CardDefinition[] = [
         label: '{1}, sacrifice a creature: put a +1/+1 counter on ~',
       },
     ],
+  },
+  // First strike, protection from red and from white
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: '32aaa8b9-987b-4809-8a54-aa29bdc18805',
+    name: 'Phyrexian Crusader',
+    types: ['creature'],
+    cost: { generic: 1, B: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { firstStrike: true, protectionFrom: ['red', 'white'], infect: true },
+    subtypes: ['phyrexian', 'zombie', 'knight'],
   },
   // Flying
   // {T}, Sacrifice this creature: Target creature gets -2/-2 until end of turn.
@@ -51666,6 +57866,17 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: 'f9112062-1a1b-462b-85d3-821ea91778b8',
+    name: 'Phyrexian Digester',
+    types: ['artifact', 'creature'],
+    cost: { generic: 3 },
+    power: 2,
+    toughness: 1,
+    keywords: { infect: true },
+    subtypes: ['phyrexian', 'construct'],
+  },
   // When this creature enters, you draw two cards and you lose 2 life.
   {
     id: '08648c0a-e075-45ac-ad8c-80c425d3487e',
@@ -51711,6 +57922,18 @@ const POOL_6: readonly CardDefinition[] = [
     power: 5,
     toughness: 4,
     subtypes: ['phyrexian', 'golem'],
+  },
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  // This creature attacks each combat if able.
+  {
+    id: '8f59b36f-d549-4a1e-940c-d0f20fc95576',
+    name: 'Phyrexian Juggernaut',
+    types: ['artifact', 'creature'],
+    cost: { generic: 6 },
+    power: 5,
+    toughness: 5,
+    keywords: { infect: true, mustAttack: true },
+    subtypes: ['phyrexian', 'juggernaut'],
   },
   // {T}, Pay 1 life: Add one mana of any color.
   {
@@ -52213,6 +58436,34 @@ const POOL_6: readonly CardDefinition[] = [
       { primitive: 'createPredefinedToken', params: { token: 'treasure' } },
     ],
   },
+  // Flying, first strike
+  // At the beginning of your upkeep, sacrifice this creature unless you pay {2}{B}{B}.
+  {
+    id: 'e37cd150-1064-43b7-919b-8922d8a18f21',
+    name: 'Pit Raptor',
+    types: ['creature'],
+    cost: { generic: 2, B: 2 },
+    power: 4,
+    toughness: 3,
+    keywords: { flying: true, firstStrike: true },
+    subtypes: ['bird', 'mercenary'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 2, B: 2 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {2}{b}{b}',
+      },
+    ],
+  },
   // Deathtouch
   {
     id: 'e77e14e1-326a-45a2-9522-96c61ddb970b',
@@ -52269,6 +58520,42 @@ const POOL_6: readonly CardDefinition[] = [
         label: '{g}{g}{g}, {t}: target creature gains flying until end of turn',
       },
     ],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: '8f5d3dac-98df-433f-a417-bcb9c91722fb',
+    name: 'Plague Beetle',
+    types: ['creature'],
+    cost: { B: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['insect'],
+  },
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  // {T}: Add {C}.
+  {
+    id: '5cc8b864-c6db-4e4d-b9bc-ec84a4c3aa79',
+    name: 'Plague Myr',
+    types: ['artifact', 'creature'],
+    cost: { generic: 2 },
+    power: 1,
+    toughness: 1,
+    keywords: { infect: true },
+    subtypes: ['phyrexian', 'myr'],
+    produces: ['C'],
+  },
+  // Flying
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: 'aae856bc-f65f-42ba-9344-1a30b356c041',
+    name: 'Plague Stinger',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true, infect: true },
+    subtypes: ['phyrexian', 'insect', 'horror'],
   },
   // {B}, Sacrifice a creature: Target creature gets -1/-1 until end of turn.
   {
@@ -52681,6 +58968,20 @@ const POOL_6: readonly CardDefinition[] = [
     ],
     produces: ['B'],
   },
+  // Trample, myriad (Whenever this creature attacks, for each opponent other than defending player, you may create a token copy that's tapped and attacking that player or a planeswalker they control. Exile the tokens at end of combat.)
+  // Polygoyf's power is equal to the number of card types among cards in all graveyards and its toughness is equal to that number plus 1.
+  {
+    id: '00b4625c-ce91-4b86-8db7-a6c2d4fb9c92',
+    name: 'Polygoyf',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    characteristicPT: {
+      power: { countOf: 'cardTypesInAllGraveyards' },
+      toughness: { countOf: 'cardTypesInAllGraveyards', plus: 1 },
+    },
+    keywords: { myriad: true, trample: true },
+    subtypes: ['lhurgoyf'],
+  },
   // When this creature enters, draw a card.
   {
     id: 'fb959e74-61ea-453d-bb9f-ad0183c0e1b1',
@@ -52760,6 +59061,28 @@ const POOL_6: readonly CardDefinition[] = [
     toughness: 2,
     keywords: { flash: true },
     subtypes: ['cat'],
+  },
+  // Echo {G} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  {
+    id: 'd35ac6e5-3e46-4290-9683-51d6f54e4edf',
+    name: 'Pouncing Jaguar',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['cat'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { G: 1 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'Echo {G}',
+      },
+    ],
   },
   // Creatures you control get +1/+0.
   {
@@ -53064,6 +59387,38 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  {
+    id: '55121b63-22a6-4923-82e9-c55f66742980',
+    name: 'Prickly Boggart',
+    types: ['creature'],
+    cost: { B: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+    },
+    subtypes: ['goblin', 'rogue'],
+  },
+  // Defender
+  // Whenever this creature blocks, you gain 3 life.
+  {
+    id: '578a583e-0bf3-4c50-be6f-ba447d21b8d1',
+    name: 'Pride Guardian',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 0,
+    toughness: 3,
+    keywords: { defender: true },
+    subtypes: ['cat', 'monk'],
+    triggers: [
+      {
+        condition: { on: 'blocks' },
+        effects: [{ primitive: 'gainLife', params: { amount: 3 } }],
+        label: 'Blocks: you gain 3 life',
+      },
+    ],
+  },
   // Changeling (This card is every creature type.)
   // Lifelink
   {
@@ -53232,6 +59587,21 @@ const POOL_6: readonly CardDefinition[] = [
         label: 'Enters: add {r}{r}{r}',
       },
     ],
+  },
+];
+
+const POOL_7: readonly CardDefinition[] = [
+  // Vigilance
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: 'a978c49d-483a-42fe-971c-858288d07e40',
+    name: 'Priests of Norn',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 1,
+    toughness: 4,
+    keywords: { vigilance: true, infect: true },
+    subtypes: ['phyrexian', 'cleric'],
   },
   // Enchant creature
   // Enchanted creature has trample.
@@ -53535,6 +59905,35 @@ const POOL_6: readonly CardDefinition[] = [
       modifies: { power: 7, toughness: 7, keywords: { trample: true } },
     },
   },
+  // Suspend 2—{1}{B} (Rather than cast this card from your hand, pay {1}{B} and exile it with two time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)
+  // Search your library for a card, put that card into your hand, then shuffle.
+  {
+    id: '2afc6f7d-ab59-4d64-bd11-6bd0fd4bfcd2',
+    name: 'Profane Tutor',
+    types: ['sorcery'],
+    noManaCost: true,
+    suspend: { count: 2, cost: { generic: 1, B: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+    effects: [{ primitive: 'searchLibrary', params: { who: 'controller', count: 1, destination: 'hand' } }],
+  },
+  // When this creature enters, create a Treasure token. (It's an artifact with "{T}, Sacrifice this token: Add one mana of any color.")
+  // This creature can't be blocked by more than one creature.
+  {
+    id: '8a5381e7-ddda-47e7-886d-812250ffb745',
+    name: 'Professional Wrestler',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 4,
+    toughness: 4,
+    keywords: { maxBlockers: 1 },
+    subtypes: ['human', 'warrior', 'performer'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'createPredefinedToken', params: { token: 'treasure' } }],
+        label: 'Enters: create a treasure token',
+      },
+    ],
+  },
   // +2: You gain 3 life.
   // 0: You draw a card and lose 1 life.
   // −3: Destroy target creature.
@@ -53633,6 +60032,28 @@ const POOL_6: readonly CardDefinition[] = [
       ],
     },
   },
+  // Soulshift 7 (When this creature dies, you may return target Spirit card with mana value 7 or less from your graveyard to your hand.)
+  {
+    id: '7aac4236-9573-4cff-88d9-711a56da4346',
+    name: 'Promised Kannushi',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'druid'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 7 } },
+          },
+        ],
+        label: 'Soulshift 7',
+      },
+    ],
+  },
   // {T}: Add {C}.
   // {1}, {T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
   {
@@ -53658,6 +60079,25 @@ const POOL_6: readonly CardDefinition[] = [
           },
         ],
         label: '{1}, {t}, sacrifice ~: search your library for a basic land card, put it onto the battlefield tapped, then shuffle',
+      },
+    ],
+  },
+  // Devoid (This card has no color.)
+  // {3}{C}: Draw a card. ({C} represents colorless mana.)
+  {
+    id: '03ee2d7e-50ee-4f5a-b787-cf9669a892f3',
+    name: 'Prophet of Distortion',
+    types: ['creature'],
+    cost: { U: 1 },
+    power: 1,
+    toughness: 2,
+    colors: [],
+    subtypes: ['eldrazi', 'drone'],
+    activated: [
+      {
+        cost: { mana: { generic: 3, C: 1 } },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{3}{c}: draw a card',
       },
     ],
   },
@@ -53743,6 +60183,29 @@ const POOL_6: readonly CardDefinition[] = [
         label: 'Enters: create two treasure tokens',
       },
     ],
+  },
+  // Equipped creature gets +0/+2 and has toxic 1. (Players dealt combat damage by equipped creature also get a poison counter.)
+  // Equip {1}
+  {
+    id: '75a1beec-bafe-4243-b91e-040a88fb0e95',
+    name: 'Prosthetic Injector',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 1 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {1}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {1}',
+      modifies: { power: 0, toughness: 2, keywords: { toxic: 1 } },
+    },
   },
   // Enchant creature
   // Enchanted creature can't be blocked and has shroud. (It can't be the target of spells or abilities.)
@@ -53992,6 +60455,16 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // Wither (This deals damage to creatures in the form of -1/-1 counters.)
+  // Puncture Blast deals 3 damage to any target.
+  {
+    id: '3bf90b4d-98cf-4953-b6ae-c41d21ab559b',
+    name: 'Puncture Blast',
+    types: ['instant'],
+    cost: { generic: 2, R: 1 },
+    keywords: { wither: true },
+    effects: [{ primitive: 'dealDamage', params: { amount: 3 } }],
+  },
   // Ward {3} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {3}.)
   {
     id: 'dfb13eca-55fd-4ac6-aee3-2bdbfe9e1c4e',
@@ -54031,6 +60504,36 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // {B}, Sacrifice this creature: Destroy target nonblack creature.
+  // Soulshift 6 (When this creature dies, you may return target Spirit card with mana value 6 or less from your graveyard to your hand.)
+  {
+    id: '4f142dea-4751-453f-93a5-c8fdaba8a1b3',
+    name: 'Pus Kami',
+    types: ['creature'],
+    cost: { generic: 5, B: 2 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 6 } },
+          },
+        ],
+        label: 'Soulshift 6',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { B: 1 }, sacrificeSelf: true },
+        effects: [{ primitive: 'destroyTarget', params: { targets: 'creature', notColor: 'B' } }],
+        label: '{b}, sacrifice ~: destroy target nonblack creature',
+      },
+    ],
+  },
   // Destroy target artifact or creature. It can't be regenerated.
   {
     id: 'ad6ed9f1-2014-49e2-91c6-2b55c8d60cdc',
@@ -54055,6 +60558,17 @@ const POOL_6: readonly CardDefinition[] = [
         label: 'Persist: return with a -1/-1 counter',
       },
     ],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: '88a68767-9822-4f15-895e-32164e2159be',
+    name: 'Pygmy Allosaurus',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['dinosaur'],
   },
   // This creature can't block.
   // {R}: This creature gets +1/+0 until end of turn.
@@ -54085,6 +60599,33 @@ const POOL_6: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { trample: true },
     subtypes: ['boar'],
+  },
+  // When this creature enters, draw a card at the beginning of the next turn's upkeep.
+  {
+    id: '6ffc64e4-ae3c-49f9-8ed6-518dd497bfe6',
+    name: 'Pyknite',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['ouphe'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'scheduleDelayedEffects',
+            params: {
+              on: 'upkeep',
+              who: 'any',
+              effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+              label: 'Draw a card at the beginning of the next turn\'s upkeep',
+            },
+          },
+        ],
+        label: 'Enters: draw a card at the beginning of the next turn\'s upkeep',
+      },
+    ],
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -54217,6 +60758,36 @@ const POOL_6: readonly CardDefinition[] = [
     power: 3,
     toughness: 2,
     subtypes: ['snake'],
+  },
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  // {1}, Sacrifice this creature: Destroy target artifact or enchantment.
+  {
+    id: 'a103646d-b363-4896-a48f-0527d746587e',
+    name: 'Qasali Pridemage',
+    types: ['creature'],
+    cost: { W: 1, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['cat', 'wizard'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 1 }, sacrificeSelf: true },
+        effects: [{ primitive: 'destroyTarget', params: { targets: 'artifactOrEnchantment' } }],
+        label: '{1}, sacrifice ~: destroy target artifact or enchantment',
+      },
+    ],
   },
   // Target creature gets +2/+2 until end of turn.
   {
@@ -54598,6 +61169,38 @@ const POOL_6: readonly CardDefinition[] = [
     entersTappedUnless: { minBasicLands: 2 },
     producesOptions: [{ R: 1 }, { W: 1 }],
   },
+  // Echo {3}{W} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  // When this creature enters, you gain 5 life.
+  {
+    id: '8a0f39de-6ad2-410c-bc6c-75fd3c8d159b',
+    name: 'Radiant\'s Dragoons',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 2,
+    toughness: 5,
+    subtypes: ['human', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 3, W: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {3}{W}',
+      },
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'gainLife', params: { amount: 5 } }],
+        label: 'Enters: you gain 5 life',
+      },
+    ],
+  },
   // ({T}: Add {W}, {U}, or {B}.)
   // This land enters tapped.
   // Cycling {3} ({3}, Discard this card: Draw a card.)
@@ -54732,6 +61335,23 @@ const POOL_6: readonly CardDefinition[] = [
     keywords: { haste: true },
     subtypes: ['goblin', 'berserker'],
   },
+  // Whenever this creature blocks or becomes blocked, it gets +2/-2 until end of turn.
+  {
+    id: '07c284ce-33b8-4fb2-9dd9-4c477bedc774',
+    name: 'Raging Gorilla',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 2,
+    toughness: 3,
+    subtypes: ['ape'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: -2 } }],
+        label: 'Blocks or becomes blocked: ~ gets +2/-2 until end of turn',
+      },
+    ],
+  },
   // Flash
   // Haste
   {
@@ -54774,6 +61394,35 @@ const POOL_6: readonly CardDefinition[] = [
     toughness: 2,
     keywords: { doubleStrike: true },
     subtypes: ['goblin', 'knight'],
+  },
+  // Whenever this creature attacks, it deals 1 damage to any target.
+  {
+    id: '35e68007-ac45-40a4-91f3-4a1edf00bd0e',
+    name: 'Raging Regisaur',
+    types: ['creature'],
+    cost: { generic: 2, R: 1, G: 1 },
+    power: 4,
+    toughness: 4,
+    subtypes: ['dinosaur'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'dealDamage', params: { amount: 1 } }],
+        label: 'Attacks: ~ deals 1 damage to any target',
+        targets: 'any',
+      },
+    ],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: '0df2887c-e70b-4ff3-a437-450c0037fb07',
+    name: 'Raiding Nightstalker',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['nightstalker'],
   },
   // Rain of Embers deals 1 damage to each creature and each player.
   {
@@ -55664,6 +62313,25 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying
+  // Whenever this creature attacks, it gets +2/+0 until end of turn.
+  {
+    id: 'd0b6e655-e05e-44b5-9c7f-9dbbc66e6e28',
+    name: 'Ravenous Skirge',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true },
+    subtypes: ['phyrexian', 'imp'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        label: 'Attacks: ~ gets +2/+0 until end of turn',
+      },
+    ],
+  },
   // Menace (This creature can't be blocked except by two or more creatures.)
   // {1}{B}: This creature gets +1/+1 until end of turn.
   {
@@ -55703,6 +62371,26 @@ const POOL_6: readonly CardDefinition[] = [
     cost: { generic: 3, W: 1 },
     flashback: { generic: 4, W: 2 },
     effects: [{ primitive: 'destroyTarget', params: { targets: 'artifactOrEnchantment' } }],
+  },
+  // Target player mills a card.
+  // Draw a card at the beginning of the next turn's upkeep.
+  {
+    id: '5a09fc0b-7b9c-4283-8336-f2607f5ffaf5',
+    name: 'Ray of Erasure',
+    types: ['instant'],
+    cost: { U: 1 },
+    effects: [
+      { primitive: 'mill', params: { amount: 1, targets: 'player' } },
+      {
+        primitive: 'scheduleDelayedEffects',
+        params: {
+          on: 'upkeep',
+          who: 'any',
+          effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+          label: 'Draw a card at the beginning of the next turn\'s upkeep',
+        },
+      },
+    ],
   },
   // Destroy target enchantment.
   // Flashback {G} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
@@ -55765,6 +62453,35 @@ const POOL_6: readonly CardDefinition[] = [
     additionalCost: { kind: 'sacrifice', filter: { anyOfTypes: ['land'] }, label: 'Sacrifice a land' },
     effects: [{ primitive: 'destroyTarget', params: { targets: 'land' } }],
   },
+  // First strike
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: '2fb022a3-5f9e-491e-8340-087e33f927d6',
+    name: 'Razor Swine',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { firstStrike: true, infect: true },
+    subtypes: ['phyrexian', 'boar'],
+  },
+  // Whenever this creature becomes blocked, it gets +2/+2 until end of turn.
+  {
+    id: '08c0cdbe-ca74-4edc-96ea-6db8eefe99d8',
+    name: 'Razorclaw Bear',
+    types: ['creature'],
+    cost: { generic: 2, G: 2 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['bear'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'Becomes blocked: ~ gets +2/+2 until end of turn',
+      },
+    ],
+  },
   {
     id: 'b0a74203-d342-489d-a584-bca78ef3331d',
     name: 'Razorfield Thresher',
@@ -55813,6 +62530,19 @@ const POOL_6: readonly CardDefinition[] = [
     keywords: { indestructible: true },
     entersTapped: true,
     producesOptions: [{ W: 1 }, { U: 1 }],
+  },
+  // Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  {
+    id: '92750247-eba4-4810-a758-f943cd8a16b1',
+    name: 'Razortooth Rats',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+    },
+    subtypes: ['rat'],
   },
   // This land enters tapped unless you control two or fewer other lands.
   // {T}: Add {G} or {W}.
@@ -55870,6 +62600,16 @@ const POOL_6: readonly CardDefinition[] = [
         },
       ],
     },
+  },
+  // Devoid (This card has no color.)
+  // Reality Hemorrhage deals 2 damage to any target.
+  {
+    id: 'c044168d-cb08-493d-98c1-b66b6149fe5a',
+    name: 'Reality Hemorrhage',
+    types: ['instant'],
+    cost: { generic: 1, R: 1 },
+    colors: [],
+    effects: [{ primitive: 'dealDamage', params: { amount: 2 } }],
   },
   // Create a 2/2 black Zombie creature token.
   // Flashback {4}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
@@ -55950,6 +62690,18 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // Haste (This creature can attack and {T} as soon as it comes under your control.)
+  // This creature attacks each combat if able.
+  {
+    id: '5fd32a9e-1d39-4792-9657-69d17e5e0134',
+    name: 'Reckless Brute',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 3,
+    toughness: 1,
+    keywords: { haste: true, mustAttack: true },
+    subtypes: ['ogre', 'warrior'],
+  },
   // Target creature gets +3/+0 and gains haste until end of turn.
   // Flashback {2}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
   {
@@ -56002,6 +62754,23 @@ const POOL_6: readonly CardDefinition[] = [
           { primitive: 'createPredefinedToken', params: { token: 'treasure' } },
         ],
         label: '{2}{r}, sacrifice ~: draw a card and create a treasure token',
+      },
+    ],
+  },
+  // Whenever this creature attacks, it gets +1/+1 until end of turn.
+  {
+    id: '4662c681-fcc9-4fc8-a598-b068208132fd',
+    name: 'Reckless Pangolin',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['pangolin'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Attacks: ~ gets +1/+1 until end of turn',
       },
     ],
   },
@@ -56199,6 +62968,37 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // This creature can't attack unless defending player controls an Island.
+  {
+    id: 'd0391b4f-e819-409a-9e81-1bff932808e7',
+    name: 'Red Cliffs Armada',
+    types: ['creature'],
+    cost: { generic: 4, U: 1 },
+    power: 5,
+    toughness: 4,
+    keywords: { cantAttackUnlessDefenderControls: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['human', 'soldier'],
+  },
+  // Haste
+  // This creature attacks each combat if able.
+  // {2}, Sacrifice this creature: Draw a card.
+  {
+    id: '6c137a44-9ab6-4e59-8324-34d9dca8f5a6',
+    name: 'Red Herring',
+    types: ['artifact', 'creature'],
+    cost: { generic: 1, R: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { haste: true, mustAttack: true },
+    subtypes: ['clue', 'fish'],
+    activated: [
+      {
+        cost: { mana: { generic: 2 }, sacrificeSelf: true },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{2}, sacrifice ~: draw a card',
+      },
+    ],
+  },
   // When this creature enters, create a Treasure token. (It's an artifact with "{T}, Sacrifice this token: Add one mana of any color.")
   {
     id: 'cda6bdeb-a0d6-46ca-ba8c-317ee0096416',
@@ -56370,6 +63170,34 @@ const POOL_6: readonly CardDefinition[] = [
     ],
     effects: [{ primitive: 'gainLife', params: { amount: 6 } }],
   },
+  // Fading 2 (This artifact enters with two fade counters on it. At the beginning of your upkeep, remove a fade counter from it. If you can't, sacrifice it.)
+  // {T}: You gain 2 life.
+  {
+    id: 'b97f86ce-4758-4ae3-af29-b08a4d771652',
+    name: 'Rejuvenation Chamber',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    entersWithCounters: [{ kind: 'fade', count: 2 }],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'tickDownCounter',
+            params: { counter: 'fade', sacrificeWhen: 'noneToRemove' },
+          },
+        ],
+        label: 'Fading 2',
+      },
+    ],
+    activated: [
+      {
+        cost: { tap: true },
+        effects: [{ primitive: 'gainLife', params: { amount: 2 } }],
+        label: '{t}: you gain 2 life',
+      },
+    ],
+  },
   // Create four 1/1 white Dog creature tokens.
   {
     id: '7e1df99a-c139-44c9-8881-077dbfd7332f',
@@ -56532,6 +63360,25 @@ const POOL_6: readonly CardDefinition[] = [
     ],
     produces: ['U'],
   },
+  // Wither (This deals damage to creatures in the form of -1/-1 counters.)
+  // Persist (When this creature dies, if it had no -1/-1 counters on it, return it to the battlefield under its owner's control with a -1/-1 counter on it.)
+  {
+    id: 'bc293a4b-abd6-47b6-99d1-578bc22580de',
+    name: 'Rendclaw Trow',
+    types: ['creature'],
+    cost: { generic: 2, hybrid: [['B', 'G']] },
+    power: 2,
+    toughness: 2,
+    keywords: { wither: true },
+    subtypes: ['troll'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [{ primitive: 'persistReturn', params: { minusCounters: 1 } }],
+        label: 'Persist: return with a -1/-1 counter',
+      },
+    ],
+  },
   {
     id: 'bbd61cbe-92b8-4141-b11c-04046e35578a',
     name: 'Renegade Demon',
@@ -56551,6 +63398,37 @@ const POOL_6: readonly CardDefinition[] = [
     toughness: 2,
     keywords: { haste: true },
     subtypes: ['human', 'soldier'],
+  },
+  // As an additional cost to cast this spell, sacrifice a land.
+  // Search your library for a basic land card, put that card onto the battlefield, then shuffle.
+  // Draw a card at the beginning of the next turn's upkeep.
+  {
+    id: 'ab998cd1-2f49-42e7-b889-c6717b0ce884',
+    name: 'Renewal',
+    types: ['sorcery'],
+    cost: { generic: 2, G: 1 },
+    additionalCost: { kind: 'sacrifice', filter: { anyOfTypes: ['land'] }, label: 'Sacrifice a land' },
+    effects: [
+      {
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 1,
+          filter: { anyOfTypes: ['land'] },
+          nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+          destination: 'battlefield',
+        },
+      },
+      {
+        primitive: 'scheduleDelayedEffects',
+        params: {
+          on: 'upkeep',
+          who: 'any',
+          effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+          label: 'Draw a card at the beginning of the next turn\'s upkeep',
+        },
+      },
+    ],
   },
   // {1}{G}, Sacrifice this creature: Create a 1/3 green Spider enchantment creature token with reach. (It can block creatures with flying.)
   {
@@ -56628,6 +63506,30 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
     effects: [{ primitive: 'returnToHand', params: { targets: 'permanent' } }],
+  },
+  // Haste, protection from Coyotes
+  // {3}: This creature can't be blocked this turn except by creatures with haste.
+  {
+    id: 'e07d3ee9-d3c4-4f07-839e-ec81c2587ae0',
+    name: 'Resilient Roadrunner',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { haste: true, protectionFrom: ['subtype:Coyote'] },
+    subtypes: ['bird'],
+    activated: [
+      {
+        cost: { mana: { generic: 3 } },
+        effects: [
+          {
+            primitive: 'grantKeywordUntilEndOfTurn',
+            params: { keywords: { blockRestriction: { blockerMustHaveAnyOf: ['haste'] } } },
+          },
+        ],
+        label: '{3}: ~ can\'t be blocked this turn except by creatures with haste',
+      },
+    ],
   },
   // Reach (This creature can block creatures with flying.)
   // Menace (This creature can't be blocked except by two or more creatures.)
@@ -57121,6 +64023,34 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  // When this creature enters, you gain 3 life.
+  {
+    id: '1e9f43c8-9df6-49df-b145-4a19bc55e8f4',
+    name: 'Rhox Bodyguard',
+    types: ['creature'],
+    cost: { generic: 3, W: 1, G: 1 },
+    power: 2,
+    toughness: 3,
+    subtypes: ['rhino', 'monk', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'gainLife', params: { amount: 3 } }],
+        label: 'Enters: you gain 3 life',
+      },
+    ],
+  },
   {
     id: '382fba19-78d3-4aa3-9508-c7c1f13e0b33',
     name: 'Rhox Brute',
@@ -57129,6 +64059,30 @@ const POOL_6: readonly CardDefinition[] = [
     power: 4,
     toughness: 4,
     subtypes: ['rhino', 'warrior'],
+  },
+  // Trample
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  {
+    id: '8aaae6a3-ae3c-4b7e-82e8-69147f61ee18',
+    name: 'Rhox Charger',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { trample: true },
+    subtypes: ['rhino', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+    ],
   },
   // When this creature enters, draw a card.
   {
@@ -57237,6 +64191,62 @@ const POOL_6: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { doubleStrike: true },
     subtypes: ['dinosaur', 'beast'],
+  },
+  // Rift Bolt deals 3 damage to any target.
+  // Suspend 1—{R} (Rather than cast this card from your hand, you may pay {R} and exile it with a time counter on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)
+  {
+    id: '4ccd0ada-92b2-48f3-b5ae-96346fc138b6',
+    name: 'Rift Bolt',
+    types: ['sorcery'],
+    cost: { generic: 2, R: 1 },
+    suspend: { count: 1, cost: { R: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+    effects: [{ primitive: 'dealDamage', params: { amount: 3 } }],
+  },
+  // {T}: Add one mana of any color.
+  // Suspend 2—{G} (Rather than cast this card from your hand, you may pay {G} and exile it with two time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.)
+  {
+    id: '97dbd212-f1e8-429a-bf00-b2ea966d880e',
+    name: 'Rift Sower',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 1,
+    toughness: 3,
+    subtypes: ['elf', 'druid'],
+    suspend: { count: 2, cost: { G: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+    producesOptions: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+  },
+  // Flying
+  // When this creature enters, return target permanent to its owner's hand.
+  // Suspend 3—{1}{U} (Rather than cast this card from your hand, you may pay {1}{U} and exile it with three time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.)
+  {
+    id: '1a2b228d-db4d-44a3-b208-6cf7a9f57da6',
+    name: 'Riftwing Cloudskate',
+    types: ['creature'],
+    cost: { generic: 3, U: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true },
+    subtypes: ['illusion'],
+    suspend: { count: 3, cost: { generic: 1, U: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'returnToHand', params: { targets: 'permanent' } }],
+        label: 'Enters: return target permanent to its owner\'s hand',
+        targets: 'permanent',
+      },
+    ],
+  },
+  // Plainswalk (This creature can't be blocked as long as defending player controls a Plains.)
+  {
+    id: '3d5e7afd-57b9-4052-a1b9-45d324955d72',
+    name: 'Righteous Avengers',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 3,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'plains' }] },
+    subtypes: ['human', 'soldier'],
   },
   // Choose three. You may choose the same mode more than once.
   // • Create a 2/2 white Knight creature token with vigilance.
@@ -57396,6 +64406,18 @@ const POOL_6: readonly CardDefinition[] = [
       label: 'Equip {2}',
       modifies: { power: 1, toughness: 2, keywords: {} },
     },
+  },
+  // First strike
+  // This creature attacks each combat if able.
+  {
+    id: '4daaccd2-733c-4b3b-aa3f-cc825bcc3e53',
+    name: 'Riot Piker',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { firstStrike: true, mustAttack: true },
+    subtypes: ['goblin', 'berserker'],
   },
   // ({B/R} can be paid with either {B} or {R}.)
   // Enchant creature
@@ -57590,6 +64612,18 @@ const POOL_6: readonly CardDefinition[] = [
     keywords: { vigilance: true },
     subtypes: ['elemental'],
   },
+  // Flying
+  // This creature can block only creatures with flying.
+  {
+    id: 'b3ea87f1-fbe2-4905-8a97-ceef9d3d0faf',
+    name: 'Rishadan Airship',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 3,
+    toughness: 1,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['human', 'pirate'],
+  },
   // Surveil 2, then draw two cards. You lose 2 life. (To surveil 2, look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)
   {
     id: '1f8aa705-6177-42e9-95cb-e7f880c186e3',
@@ -57697,6 +64731,40 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // Enchant creature
+  // When this Aura enters, draw a card at the beginning of the next turn's upkeep.
+  // Enchanted creature gets +0/+2.
+  {
+    id: '21205189-0d00-44d5-9772-820e607dba25',
+    name: 'Ritual of Steel',
+    types: ['enchantment'],
+    cost: { generic: 2, W: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'scheduleDelayedEffects',
+            params: {
+              on: 'upkeep',
+              who: 'any',
+              effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+              label: 'Draw a card at the beginning of the next turn\'s upkeep',
+            },
+          },
+        ],
+        label: 'Enters: draw a card at the beginning of the next turn\'s upkeep',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 0, toughness: 2, keywords: {} },
+    },
+  },
   // {T}: Add {B}.
   {
     id: 'ed665227-02ba-4977-a8e7-ea4e46a626e6',
@@ -57708,6 +64776,36 @@ const POOL_6: readonly CardDefinition[] = [
     legendary: true,
     subtypes: ['human', 'advisor'],
     produces: ['B'],
+  },
+  // Islandwalk (This creature can't be blocked as long as defending player controls an Island.)
+  {
+    id: '518bf281-80bc-4e85-9b8e-15577dfcdec7',
+    name: 'River Bear',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['bear'],
+  },
+  // Islandwalk (This creature can't be blocked as long as defending player controls an Island.)
+  // {G}: Regenerate this creature.
+  {
+    id: 'edfbf056-c3b7-40e9-8e2b-333585978ac9',
+    name: 'River Boa',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['snake'],
+    activated: [
+      {
+        cost: { mana: { G: 1 } },
+        effects: [{ primitive: 'regenerate' }],
+        label: '{g}: regenerate ~',
+      },
+    ],
   },
   // Flying
   // {3}{G}{U}: You gain 2 life and draw a card.
@@ -58032,6 +65130,17 @@ const POOL_6: readonly CardDefinition[] = [
     keywords: { flying: true },
     subtypes: ['bird'],
   },
+  // Mountainwalk (This creature can't be blocked as long as defending player controls a Mountain.)
+  {
+    id: '49dc08b0-491f-470c-b920-2ca961d0d569',
+    name: 'Rock Badger',
+    types: ['creature'],
+    cost: { generic: 4, R: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'mountain' }] },
+    subtypes: ['badger', 'beast'],
+  },
   // This land enters tapped unless you control two or more other lands.
   // {T}: Add {R} or {G}.
   {
@@ -58195,6 +65304,42 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // Bushido 2 (Whenever this creature blocks or becomes blocked, it gets +2/+2 until end of turn.)
+  {
+    id: '3c532e5a-01f4-4258-ba48-99257cc577d4',
+    name: 'Ronin Cavekeeper',
+    types: ['creature'],
+    cost: { generic: 5, R: 1 },
+    power: 4,
+    toughness: 3,
+    subtypes: ['human', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'Bushido 2',
+      },
+    ],
+  },
+  // Haste
+  // Bushido 1 (Whenever this creature blocks or becomes blocked, it gets +1/+1 until end of turn.)
+  {
+    id: '614ead7b-1975-4a99-bdc2-f8afc6cf92d7',
+    name: 'Ronin Houndmaster',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { haste: true },
+    subtypes: ['human', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Bushido 1',
+      },
+    ],
+  },
   // Sacrifice this creature: Destroy target enchantment.
   {
     id: 'b3275ed0-30b2-4d30-aa03-0dbda913f530',
@@ -58310,6 +65455,17 @@ const POOL_6: readonly CardDefinition[] = [
         cost: { mana: { generic: 1 } },
       },
     ],
+  },
+  // Islandwalk (This creature can't be blocked as long as defending player controls an Island.)
+  {
+    id: '1da47bd4-58b6-4ef3-bd42-caf947e38645',
+    name: 'Rootwater Commando',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['merfolk'],
   },
   // {T}, Sacrifice this creature: Return target artifact card from your graveyard to your hand.
   {
@@ -58558,6 +65714,23 @@ const POOL_6: readonly CardDefinition[] = [
     keywords: { flying: true },
     subtypes: ['bird'],
   },
+  // Whenever this creature blocks, it gets +2/+2 until end of turn.
+  {
+    id: 'd2ef5a76-e91c-4687-8323-7436ced35153',
+    name: 'Royal Trooper',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'blocks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'Blocks: ~ gets +2/+2 until end of turn',
+      },
+    ],
+  },
   // Destroy target land. Scry 2.
   {
     id: '8ace095a-3ea9-4121-8ffb-5b3612b96985',
@@ -58613,6 +65786,17 @@ const POOL_6: readonly CardDefinition[] = [
         targets: 'creature',
       },
     ],
+  },
+  // This creature attacks each combat if able.
+  {
+    id: 'b0d43107-713d-4ff2-8cbd-237c7393229f',
+    name: 'Rubblebelt Recluse',
+    types: ['creature'],
+    cost: { generic: 4, R: 1 },
+    power: 6,
+    toughness: 5,
+    keywords: { mustAttack: true },
+    subtypes: ['ogre', 'berserker'],
   },
   // Red spells you cast cost {1} less to cast.
   {
@@ -58874,6 +66058,27 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // Reach, vigilance
+  // Ruric Thar attacks each combat if able.
+  // Whenever a player casts a noncreature spell, Ruric Thar deals 6 damage to that player.
+  {
+    id: 'aa828bdc-221e-4e81-9e71-6f288690ddcd',
+    name: 'Ruric Thar, the Unbowed',
+    types: ['creature'],
+    cost: { generic: 4, R: 1, G: 1 },
+    power: 6,
+    toughness: 6,
+    legendary: true,
+    keywords: { reach: true, vigilance: true, mustAttack: true },
+    subtypes: ['ogre', 'warrior'],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'any', spellTypeNoneOf: ['creature'] },
+        effects: [{ primitive: 'dealDamage', params: { amount: 6, whichPlayer: 'triggering' } }],
+        label: 'Any player casts noncreature: ~ deals 6 damage to that player',
+      },
+    ],
+  },
   // Target creature gets +2/+1 and gains trample until end of turn.
   {
     id: 'd0def54b-9f0a-4ab1-9df9-25506a06350c',
@@ -58887,6 +66092,17 @@ const POOL_6: readonly CardDefinition[] = [
         params: { keywords: { trample: true }, targets: 'creature' },
       },
     ],
+  },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  {
+    id: '3ed23582-3260-44c6-9884-904d294442ad',
+    name: 'Rushwood Dryad',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['dryad'],
   },
   // Trample
   // At the beginning of your upkeep, you may put a +1/+1 counter on this creature.
@@ -58955,9 +66171,6 @@ const POOL_6: readonly CardDefinition[] = [
     subtypes: ['golem'],
     entersTapped: true,
   },
-];
-
-const POOL_7: readonly CardDefinition[] = [
   // Sacrifice an artifact: Regenerate this creature.
   {
     id: 'f2228ee5-507a-46ba-82ae-72ba3088a568',
@@ -58974,6 +66187,18 @@ const POOL_7: readonly CardDefinition[] = [
         label: 'Sacrifice an artifact: regenerate ~',
       },
     ],
+  },
+  // First strike
+  // Wither (This deals damage to creatures in the form of -1/-1 counters.)
+  {
+    id: 'daa0dd3e-51d1-4d75-b0f4-835992f420d6',
+    name: 'Rustrazor Butcher',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 1,
+    toughness: 2,
+    keywords: { firstStrike: true, wither: true },
+    subtypes: ['goblin', 'warrior'],
   },
   // This land enters tapped.
   // Indestructible
@@ -59197,6 +66422,23 @@ const POOL_7: readonly CardDefinition[] = [
     subtypes: ['mountain', 'plains'],
     entersTapped: true,
     producesOptions: [{ R: 1 }, { W: 1 }],
+  },
+  // Whenever this creature becomes blocked, you gain 1 life.
+  {
+    id: 'e965d32c-3151-48e8-b256-0b7fa8a8a211',
+    name: 'Sacred Prey',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['horse'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [{ primitive: 'gainLife', params: { amount: 1 } }],
+        label: 'Becomes blocked: you gain 1 life',
+      },
+    ],
   },
   // Hexproof (This creature can't be the target of spells or abilities your opponents control.)
   {
@@ -59581,6 +66823,23 @@ const POOL_7: readonly CardDefinition[] = [
           },
         ],
         label: '{w}, sacrifice ~: return target artifact card from your graveyard to your hand',
+      },
+    ],
+  },
+  // Bushido 2 (Whenever this creature blocks or becomes blocked, it gets +2/+2 until end of turn.)
+  {
+    id: '8b2be3fe-87a2-47b2-8af1-b99a48622c7b',
+    name: 'Samurai Enforcers',
+    types: ['creature'],
+    cost: { generic: 4, W: 2 },
+    power: 4,
+    toughness: 4,
+    subtypes: ['human', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'Bushido 2',
       },
     ],
   },
@@ -60675,6 +67934,32 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // At the beginning of your upkeep, sacrifice this creature unless you pay {1}{U}.
+  {
+    id: '71217af5-3538-4e42-9343-3949b5306671',
+    name: 'School of Piranha',
+    types: ['creature'],
+    cost: { generic: 1, U: 1 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['fish'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 1, U: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {1}{u}',
+      },
+    ],
+  },
   // {T}: Add {C}.
   // {2}, {T}: Add one mana of any color.
   {
@@ -60830,6 +68115,9 @@ const POOL_7: readonly CardDefinition[] = [
     cost: { R: 1 },
     effects: [{ primitive: 'dealDamage', params: { amount: 1 } }],
   },
+];
+
+const POOL_8: readonly CardDefinition[] = [
   {
     id: 'ca4d9198-52a7-4dfe-8f7f-4fa6e19a2479',
     name: 'Scoria Elemental',
@@ -60921,6 +68209,17 @@ const POOL_7: readonly CardDefinition[] = [
         label: 'Enters: you gain 1 life',
       },
     ],
+  },
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: '45ded51b-2ced-46d6-a1d4-0f49d4b1ed2d',
+    name: 'Scourge Servant',
+    types: ['creature'],
+    cost: { generic: 4, B: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { infect: true },
+    subtypes: ['phyrexian', 'zombie'],
   },
   // Enchant creature
   // When this Aura enters, draw a card.
@@ -61014,6 +68313,18 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
     effects: [{ primitive: 'destroyTarget', params: { targets: 'artifact' } }],
+  },
+  // Flying (This creature can't be blocked except by creatures with flying or reach.)
+  // This creature can block only creatures with flying.
+  {
+    id: '740fc68d-1f08-4e9e-a797-427dcd7733ba',
+    name: 'Scrapskin Drake',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['zombie', 'drake'],
   },
   // {1}, Sacrifice another artifact: This creature gets +2/+1 until end of turn.
   {
@@ -61247,6 +68558,26 @@ const POOL_7: readonly CardDefinition[] = [
     cost: { generic: 3 },
     copyAsEnters: { filter: { anyOfTypes: ['artifact'] } },
   },
+  // Myriad, myriad (Whenever this creature attacks, for each opponent other than defending player, you may create a token that's a copy of this creature that's tapped and attacking that player or a planeswalker they control. Then do it again. Exile the tokens at end of combat.)
+  // Whenever this creature deals combat damage to a player, put a +1/+1 counter on target creature you control.
+  {
+    id: '0739248e-a76f-4713-84ab-95a0f8c15f4f',
+    name: 'Scurry of Squirrels',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { myriad: true },
+    subtypes: ['squirrel', 'scout'],
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer' },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, targets: 'creatureYouControl' } }],
+        label: 'Combat damage to a player: put a +1/+1 counter on target creature you control',
+        targets: 'creatureYouControl',
+      },
+    ],
+  },
   // At the beginning of your upkeep, if you control five or more lands, put four +1/+1 counters on this creature.
   {
     id: '28d10cf2-c40d-4748-add0-f9cdd606030c',
@@ -61299,6 +68630,41 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // Sacrifice this creature: Target creature gets -1/-1 until end of turn.
+  // Soulshift 4 (When this creature dies, you may return target Spirit card with mana value 4 or less from your graveyard to your hand.)
+  {
+    id: '7f68a90c-1afb-43d3-aed2-4704f4599e75',
+    name: 'Scuttling Death',
+    types: ['creature'],
+    cost: { generic: 4, B: 1 },
+    power: 4,
+    toughness: 2,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 4 } },
+          },
+        ],
+        label: 'Soulshift 4',
+      },
+    ],
+    activated: [
+      {
+        cost: { sacrificeSelf: true },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: -1, toughness: -1, targets: 'creature' },
+          },
+        ],
+        label: 'Sacrifice ~: target creature gets -1/-1 until end of turn',
+      },
+    ],
+  },
   // Trample
   // Persist (When this creature dies, if it had no -1/-1 counters on it, return it to the battlefield under its owner's control with a -1/-1 counter on it.)
   {
@@ -61317,6 +68683,17 @@ const POOL_7: readonly CardDefinition[] = [
         label: 'Persist: return with a -1/-1 counter',
       },
     ],
+  },
+  // Wither (This deals damage to creatures in the form of -1/-1 counters.)
+  {
+    id: '8e2ed66f-75bd-43d8-90c4-cb0a5827b2f0',
+    name: 'Scuzzback Scrapper',
+    types: ['creature'],
+    cost: { hybrid: [['R', 'G']] },
+    power: 1,
+    toughness: 1,
+    keywords: { wither: true },
+    subtypes: ['goblin', 'warrior'],
   },
   // Landfall — Whenever a land you control enters, this creature gets +1/+1 until end of turn.
   {
@@ -61345,6 +68722,17 @@ const POOL_7: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { flying: true },
     subtypes: ['bird'],
+  },
+  // This creature can't attack unless defending player controls an Island.
+  {
+    id: '6a1d7d4b-721e-4946-803d-b04ddbe7b718',
+    name: 'Sea Monster',
+    types: ['creature'],
+    cost: { generic: 4, U: 2 },
+    power: 6,
+    toughness: 6,
+    keywords: { cantAttackUnlessDefenderControls: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['serpent'],
   },
   // {T}: Add {C}.
   // {1}, {T}: Add {U}.
@@ -61497,6 +68885,27 @@ const POOL_7: readonly CardDefinition[] = [
     types: ['instant'],
     cost: { generic: 1, R: 1 },
     effects: [{ primitive: 'dealDamage', params: { amount: 4, targets: 'creatureOrPlaneswalker' } }],
+  },
+  // Search your library for a basic land card, put it onto the battlefield, then shuffle.
+  // Suspend 2—{G} (Rather than cast this card from your hand, you may pay {G} and exile it with two time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)
+  {
+    id: '4a0c73a9-38a2-4a3d-938e-b81ba166f0ff',
+    name: 'Search for Tomorrow',
+    types: ['sorcery'],
+    cost: { generic: 2, G: 1 },
+    suspend: { count: 2, cost: { G: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+    effects: [
+      {
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 1,
+          filter: { anyOfTypes: ['land'] },
+          nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+          destination: 'battlefield',
+        },
+      },
+    ],
   },
   // Flying
   // When this creature enters, create a 1/1 colorless Spirit creature token.
@@ -61775,6 +69184,17 @@ const POOL_7: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { flying: true, vigilance: true },
     subtypes: ['angel'],
+  },
+  // Islandwalk (This creature can't be blocked as long as defending player controls an Island.)
+  {
+    id: '8f796dd2-9ecf-490a-86c0-acb46130518b',
+    name: 'Segovian Leviathan',
+    types: ['creature'],
+    cost: { generic: 4, U: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['leviathan'],
   },
   // Trample
   // {2}{R}, Sacrifice a land: Draw a card.
@@ -62462,6 +69882,28 @@ const POOL_7: readonly CardDefinition[] = [
     cost: { U: 1 },
     effects: [{ primitive: 'drawCards', params: { count: 1 } }, { primitive: 'scry', params: { count: 2 } }],
   },
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  {
+    id: 'e00a2b22-a473-44ae-919f-29bc8be05543',
+    name: 'Servant of Nefarox',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 3,
+    toughness: 1,
+    subtypes: ['human', 'cleric'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+    ],
+  },
   // When this creature leaves the battlefield, sacrifice a creature.
   {
     id: '691afabb-f266-45fd-b5a3-577be4f10f86',
@@ -62562,6 +70004,19 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  {
+    id: '82633f38-5af1-429e-8c9d-db536af85309',
+    name: 'Severed Legion',
+    types: ['creature'],
+    cost: { generic: 1, B: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+    },
+    subtypes: ['zombie'],
+  },
   // Flying, haste
   {
     id: 'dbf97c08-e074-4353-b9fa-c79793622585',
@@ -62573,6 +70028,25 @@ const POOL_7: readonly CardDefinition[] = [
     keywords: { flying: true, haste: true },
     subtypes: ['zombie', 'drake'],
   },
+  // {W}: This creature gets +1/+1 until end of turn.
+  // Suspend 3—{W} (Rather than cast this card from your hand, you may pay {W} and exile it with three time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.)
+  {
+    id: 'a4e4d9c6-416b-47fd-93a5-6c19d89b7c7f',
+    name: 'Shade of Trokair',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 1,
+    toughness: 2,
+    subtypes: ['shade'],
+    suspend: { count: 3, cost: { W: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+    activated: [
+      {
+        cost: { mana: { W: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: '{w}: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
   // Flying
   {
     id: 'b4ffaf62-2e12-4b1d-a590-f63aacb4a30b',
@@ -62583,6 +70057,44 @@ const POOL_7: readonly CardDefinition[] = [
     toughness: 2,
     keywords: { flying: true },
     subtypes: ['kor', 'soldier'],
+  },
+  // Flanking (Whenever a creature without flanking blocks this creature, the blocking creature gets -1/-1 until end of turn.)
+  {
+    id: '5bfdec24-e689-4cca-a546-a8f5d0929f8d',
+    name: 'Shadow Rider',
+    types: ['creature'],
+    cost: { generic: 2, B: 2 },
+    power: 3,
+    toughness: 3,
+    keywords: { flanking: true },
+    subtypes: ['knight'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlockedByCreature', counterpartLacksKeyword: 'flanking' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: -1, toughness: -1, subject: 'triggering' },
+          },
+        ],
+        label: 'Flanking',
+      },
+    ],
+  },
+  // Target creature gains shadow until end of turn. (It can block or be blocked by only creatures with shadow.)
+  // Draw a card.
+  {
+    id: '06f6d0bd-19b9-45d0-8768-691a6a593d81',
+    name: 'Shadow Rift',
+    types: ['instant'],
+    cost: { U: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordUntilEndOfTurn',
+        params: { keywords: { shadow: true }, targets: 'creature' },
+      },
+      { primitive: 'drawCards', params: { count: 1 } },
+    ],
   },
   // Create two tapped 1/1 white Spirit creature tokens with flying.
   {
@@ -62644,6 +70156,36 @@ const POOL_7: readonly CardDefinition[] = [
     name: 'Shadowblood Ridge',
     types: ['land'],
     manaAbilities: [{ produces: [{ B: 1, R: 1 }], cost: { mana: { generic: 1 } } }],
+  },
+  // Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  // Whenever this creature deals combat damage to a player, you may draw a card.
+  {
+    id: '2ac920d7-013f-40ad-b79f-0bb59062d42a',
+    name: 'Shadowmage Infiltrator',
+    types: ['creature'],
+    cost: { generic: 1, U: 1, B: 1 },
+    power: 1,
+    toughness: 3,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+    },
+    subtypes: ['human', 'wizard'],
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may draw a card',
+              valence: 'gain',
+              effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+            },
+          },
+        ],
+        label: 'Combat damage to a player: you may draw a card',
+      },
+    ],
   },
   // ({T}: Add {W} or {B}.)
   // This land enters tapped.
@@ -62714,6 +70256,17 @@ const POOL_7: readonly CardDefinition[] = [
         label: '{r}{g}: ~ gets +1/-1 until end of turn',
       },
     ],
+  },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  {
+    id: '90e8ff87-22e8-4c04-84bc-f0ea2c12a86c',
+    name: 'Shanodin Dryads',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['nymph', 'dryad'],
   },
   // Target creature gets +0/+5 and gains reach until end of turn. (It can block creatures with flying.)
   {
@@ -63099,6 +70652,18 @@ const POOL_7: readonly CardDefinition[] = [
       { primitive: 'scry' },
     ],
   },
+  // Menace
+  // Toxic 2 (Players dealt combat damage by this creature also get two poison counters.)
+  {
+    id: '8c6b818f-6912-4ea1-a35a-c8cd7ee9aead',
+    name: 'Sheoldred\'s Headcleaver',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 2,
+    toughness: 4,
+    keywords: { menace: true, toxic: 2 },
+    subtypes: ['phyrexian', 'warrior'],
+  },
   // Flying, first strike, vigilance
   {
     id: 'd8c70f2f-985c-4982-97eb-99da3810e048',
@@ -63431,6 +70996,16 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // Shivan Meteor deals 13 damage to target creature.
+  // Suspend 2—{1}{R}{R} (Rather than cast this card from your hand, you may pay {1}{R}{R} and exile it with two time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)
+  {
+    id: 'cb5a98f0-ceb4-4e23-b2ec-1c4f4e4e22aa',
+    name: 'Shivan Meteor',
+    types: ['sorcery'],
+    cost: { generic: 3, R: 2 },
+    suspend: { count: 2, cost: { generic: 1, R: 2 }, upkeep: [{ primitive: 'suspendTick' }] },
+    effects: [{ primitive: 'dealDamage', params: { amount: 13, targets: 'creature' } }],
+  },
   // This land enters tapped.
   // {T}: Add {R} or {G}.
   {
@@ -63439,6 +71014,34 @@ const POOL_7: readonly CardDefinition[] = [
     types: ['land'],
     entersTapped: true,
     producesOptions: [{ R: 1 }, { G: 1 }],
+  },
+  // First strike, haste
+  // Echo {2}{R} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  {
+    id: '0fc45153-3cb1-43bc-b694-06f6a74b3eb7',
+    name: 'Shivan Raptor',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 3,
+    toughness: 1,
+    keywords: { firstStrike: true, haste: true },
+    subtypes: ['dinosaur'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 2, R: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {2}{R}',
+      },
+    ],
   },
   // {T}: Add {C}.
   // {T}: Add {U} or {R}. This land deals 1 damage to you.
@@ -63591,6 +71194,17 @@ const POOL_7: readonly CardDefinition[] = [
     toughness: 4,
     subtypes: ['crab'],
   },
+  // Protection from Kavu
+  {
+    id: 'd895b3b8-2acc-4c9f-8341-f651c1255b7c',
+    name: 'Shoreline Raider',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { protectionFrom: ['subtype:Kavu'] },
+    subtypes: ['merfolk'],
+  },
   // Flying
   // Islandcycling {2} ({2}, Discard this card: Search your library for an Island card, reveal it, put it into your hand, then shuffle.)
   {
@@ -63723,6 +71337,18 @@ const POOL_7: readonly CardDefinition[] = [
     },
   },
   // Flying
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: '73071a3b-9329-418e-9285-fa4765463d1f',
+    name: 'Shriek Raptor',
+    types: ['creature'],
+    cost: { generic: 3, W: 2 },
+    power: 2,
+    toughness: 3,
+    keywords: { flying: true, infect: true },
+    subtypes: ['phyrexian', 'bird'],
+  },
+  // Flying
   // When this creature enters, return a creature you control to its owner's hand.
   {
     id: '9f1cc39f-898c-4e92-82a0-a17606b60574',
@@ -63765,6 +71391,45 @@ const POOL_7: readonly CardDefinition[] = [
     cost: { G: 1 },
     effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -5, toughness: 0, targets: 'creature' } }],
   },
+  // Horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  {
+    id: 'b8761f17-6f6d-45c3-a626-003396093142',
+    name: 'Shu Cavalry',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { horsemanship: true, blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] } },
+    subtypes: ['human', 'soldier'],
+  },
+  // Whenever this creature blocks, it gets +0/+2 until end of turn.
+  {
+    id: 'ee57a9ab-c385-4a51-aff7-6a654f5d7611',
+    name: 'Shu Defender',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'blocks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 0, toughness: 2 } }],
+        label: 'Blocks: ~ gets +0/+2 until end of turn',
+      },
+    ],
+  },
+  // Horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  {
+    id: '4e4b456f-f4d8-412b-afac-11eaae51b0fd',
+    name: 'Shu Elite Companions',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { horsemanship: true, blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] } },
+    subtypes: ['human', 'soldier'],
+  },
   {
     id: '36bcd751-1142-4e72-9d87-7a25c74c038b',
     name: 'Shu Elite Infantry',
@@ -63781,6 +71446,21 @@ const POOL_7: readonly CardDefinition[] = [
     cost: { generic: 2, W: 1 },
     power: 2,
     toughness: 3,
+    subtypes: ['human', 'soldier'],
+  },
+  // Vigilance; horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  {
+    id: '167c1d3f-e013-48b7-a961-590136bda297',
+    name: 'Shu General',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: {
+      horsemanship: true,
+      blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] },
+      vigilance: true,
+    },
     subtypes: ['human', 'soldier'],
   },
   // When this creature enters, you gain 2 life.
@@ -63967,6 +71647,60 @@ const POOL_7: readonly CardDefinition[] = [
       modifies: { power: -1, toughness: -1, keywords: {} },
     },
   },
+  // Wither (This deals damage to creatures in the form of -1/-1 counters.)
+  {
+    id: '831462c0-476b-4106-8381-e4177626b570',
+    name: 'Sickle Ripper',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { wither: true },
+    subtypes: ['elemental', 'warrior'],
+  },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +2/+2.
+  // Equip {4}
+  {
+    id: '62f449cc-461e-4e89-8cd2-83e539bb40f4',
+    name: 'Sickleslicer',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 4 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {4}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {4}',
+      modifies: { power: 2, toughness: 2, keywords: {} },
+    },
+  },
   {
     id: '71fd27a8-2de6-454f-8174-a60918bfe60e',
     name: 'Siege Mastodon',
@@ -63997,6 +71731,44 @@ const POOL_7: readonly CardDefinition[] = [
         label: 'Enters: each opponent loses 3 life and you gain 3 life',
       },
     ],
+  },
+  // Split second (As long as this spell is on the stack, players can't cast spells or activate abilities that aren't mana abilities.)
+  // Choose one —
+  // • Destroy target artifact.
+  // • Target creature gets +3/+2 and gains trample until end of turn.
+  {
+    id: 'f33e3b25-76f5-4263-a309-9ea97f2d8248',
+    name: 'Siege Smash',
+    types: ['instant'],
+    cost: { generic: 1, R: 1 },
+    keywords: { splitSecond: true },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Destroy target artifact',
+          effects: [{ primitive: 'destroyTarget', params: { targets: 'artifact' } }],
+          targets: 'artifact',
+        },
+        {
+          id: 'mode2',
+          label: 'Target creature gets +3/+2 and gains trample until end of turn',
+          effects: [
+            {
+              primitive: 'pumpUntilEndOfTurn',
+              params: { power: 3, toughness: 2, targets: 'creature' },
+            },
+            {
+              primitive: 'grantKeywordUntilEndOfTurn',
+              params: { keywords: { trample: true }, targets: 'creature' },
+            },
+          ],
+          targets: 'creature',
+        },
+      ],
+    },
   },
   // At the beginning of combat on your turn, put a +1/+1 counter on target creature you control.
   // Whenever another nontoken Soldier you control dies, create a 1/1 colorless Soldier artifact creature token.
@@ -64128,6 +71900,52 @@ const POOL_7: readonly CardDefinition[] = [
           },
         ],
         label: 'Cast enchantment: create a 4/4 white angel creature token with flying',
+      },
+    ],
+  },
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  {
+    id: 'e0195ee6-c5d9-402e-8339-2caa50c4e46b',
+    name: 'Sigiled Behemoth',
+    types: ['creature'],
+    cost: { generic: 4, W: 1, G: 1 },
+    power: 5,
+    toughness: 4,
+    subtypes: ['beast'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+    ],
+  },
+  // First strike
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  {
+    id: '4b22520d-c495-4528-9b24-4aa19e046a9e',
+    name: 'Sigiled Paladin',
+    types: ['creature'],
+    cost: { W: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { firstStrike: true },
+    subtypes: ['human', 'knight'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
       },
     ],
   },
@@ -64534,6 +72352,25 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flash
+  // Bushido 1 (Whenever this creature blocks or becomes blocked, it gets +1/+1 until end of turn.)
+  {
+    id: '10d2a6d9-5848-4481-a0f9-42320ff2c230',
+    name: 'Silverstorm Samurai',
+    types: ['creature'],
+    cost: { generic: 4, W: 2 },
+    power: 3,
+    toughness: 3,
+    keywords: { flash: true },
+    subtypes: ['fox', 'samurai'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Bushido 1',
+      },
+    ],
+  },
   // Trample
   // {G}: Regenerate Silvos.
   {
@@ -64551,6 +72388,34 @@ const POOL_7: readonly CardDefinition[] = [
         cost: { mana: { G: 1 } },
         effects: [{ primitive: 'regenerate' }],
         label: '{g}: regenerate ~',
+      },
+    ],
+  },
+  // Flash
+  // Echo {2}{G} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  {
+    id: '15104b03-b122-40ba-ad9f-51289f627a19',
+    name: 'Simian Grunts',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 3,
+    toughness: 4,
+    keywords: { flash: true },
+    subtypes: ['ape'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 2, G: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {2}{G}',
       },
     ],
   },
@@ -64942,6 +72807,49 @@ const POOL_7: readonly CardDefinition[] = [
         targets: 'creature',
       },
     ],
+  },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +2/+2 and has flying.
+  // Equip {6}
+  {
+    id: '3c65e0ff-7dab-4090-8a99-f42d486728c9',
+    name: 'Skinwing',
+    types: ['artifact'],
+    cost: { generic: 4 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 6 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {6}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {6}',
+      modifies: { power: 2, toughness: 2, keywords: { flying: true } },
+    },
   },
   // Sacrifice a Goblin: Add {R}.
   {
@@ -65472,6 +73380,31 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // Fading 2 (This creature enters with two fade counters on it. At the beginning of your upkeep, remove a fade counter from it. If you can't, sacrifice it.)
+  // This creature enters tapped.
+  {
+    id: '1c01d17e-45a2-4b6f-aaa5-2af9c8f26181',
+    name: 'Skyshroud Behemoth',
+    types: ['creature'],
+    cost: { generic: 5, G: 2 },
+    power: 10,
+    toughness: 10,
+    subtypes: ['beast'],
+    entersTapped: true,
+    entersWithCounters: [{ kind: 'fade', count: 2 }],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'tickDownCounter',
+            params: { counter: 'fade', sacrificeWhen: 'noneToRemove' },
+          },
+        ],
+        label: 'Fading 2',
+      },
+    ],
+  },
   // Flying, vigilance
   {
     id: 'a41aec1d-d86f-4a52-a446-5cef71d1ebd4',
@@ -65492,6 +73425,29 @@ const POOL_7: readonly CardDefinition[] = [
     types: ['land'],
     entersTapped: true,
     manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ G: 1 }, { U: 1 }], rider: { damageToController: 1 } }],
+  },
+  // Fading 2 (This creature enters with two fade counters on it. At the beginning of your upkeep, remove a fade counter from it. If you can't, sacrifice it.)
+  {
+    id: '410896ab-d3dc-478c-bfd1-c0cad5b1180a',
+    name: 'Skyshroud Ridgeback',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 2,
+    toughness: 3,
+    subtypes: ['beast'],
+    entersWithCounters: [{ kind: 'fade', count: 2 }],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'tickDownCounter',
+            params: { counter: 'fade', sacrificeWhen: 'noneToRemove' },
+          },
+        ],
+        label: 'Fading 2',
+      },
+    ],
   },
   // {1}{G}: Regenerate this creature.
   {
@@ -65545,6 +73501,25 @@ const POOL_7: readonly CardDefinition[] = [
     keywords: { flying: true, doubleStrike: true },
     subtypes: ['human', 'soldier'],
   },
+  // Reach
+  // Whenever this creature blocks a creature with flying, this creature gets +5/+0 until end of turn.
+  {
+    id: 'dfea9941-3675-4c0f-bc4d-981c28deed36',
+    name: 'Skystinger',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { reach: true },
+    subtypes: ['insect', 'warrior'],
+    triggers: [
+      {
+        condition: { on: 'blocks', counterpartHasKeyword: 'flying' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 5, toughness: 0 } }],
+        label: 'Blocks a creature with flying: ~ gets +5/+0 until end of turn',
+      },
+    ],
+  },
   // Flying
   // Whenever an artifact you control enters, you may draw a card. If you do, discard a card.
   {
@@ -65586,6 +73561,18 @@ const POOL_7: readonly CardDefinition[] = [
     toughness: 4,
     keywords: { flying: true },
     subtypes: ['bird'],
+  },
+  // Flying
+  // This creature can block only creatures with flying.
+  {
+    id: '628213e9-bde9-43fd-a0d9-8c7fb17be879',
+    name: 'Skywinder Drake',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 3,
+    toughness: 1,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['drake'],
   },
   // Affinity for artifacts (This spell costs {1} less to cast for each artifact you control.)
   // {1}, Sacrifice an artifact: This creature deals 1 damage to any target.
@@ -65671,6 +73658,23 @@ const POOL_7: readonly CardDefinition[] = [
           },
         ],
         label: 'Attacks: create a 2/2 red mutant creature token',
+      },
+    ],
+  },
+  // Whenever this creature becomes blocked, it gets +2/+2 until end of turn.
+  {
+    id: 'c4aa7846-adb7-48df-b838-ffbe9f7bfd85',
+    name: 'Slashing Tiger',
+    types: ['creature'],
+    cost: { generic: 2, G: 2 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['cat'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'Becomes blocked: ~ gets +2/+2 until end of turn',
       },
     ],
   },
@@ -65856,6 +73860,36 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // Wither (This deals damage to creatures in the form of -1/-1 counters.)
+  // Whenever this creature blocks or becomes blocked, it gets -3/-0 until end of turn.
+  {
+    id: 'b259c6cd-43c8-415e-baca-b31e2374631f',
+    name: 'Slinking Giant',
+    types: ['creature'],
+    cost: { generic: 2, R: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { wither: true },
+    subtypes: ['giant', 'rogue'],
+    triggers: [
+      {
+        condition: { on: 'blocksOrBecomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -3, toughness: 0 } }],
+        label: 'Blocks or becomes blocked: ~ gets -3/-0 until end of turn',
+      },
+    ],
+  },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  {
+    id: '070a7004-5a28-4ccb-8640-ad6b07b51ece',
+    name: 'Slinking Serpent',
+    types: ['creature'],
+    cost: { generic: 2, U: 1, B: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['serpent'],
+  },
   // Flying
   // {2}, Sacrifice this creature: Draw a card.
   {
@@ -65873,6 +73907,23 @@ const POOL_7: readonly CardDefinition[] = [
         effects: [{ primitive: 'drawCards', params: { count: 1 } }],
         label: '{2}, sacrifice ~: draw a card',
       },
+    ],
+  },
+  // Devoid (This card has no color.)
+  // Target creature can't be blocked this turn.
+  // Draw a card.
+  {
+    id: '2dee6dca-9c7e-4347-bea7-7fecc69e5827',
+    name: 'Slip Through Space',
+    types: ['sorcery'],
+    cost: { U: 1 },
+    colors: [],
+    effects: [
+      {
+        primitive: 'grantKeywordUntilEndOfTurn',
+        params: { keywords: { unblockable: true }, targets: 'creature' },
+      },
+      { primitive: 'drawCards', params: { count: 1 } },
     ],
   },
   // Hexproof (This creature can't be the target of spells or abilities your opponents control.)
@@ -65902,6 +73953,25 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
     produces: ['G'],
+  },
+  // This creature can't attack unless defending player controls an Island.
+  // Cycling {1}{U} ({1}{U}, Discard this card: Draw a card.)
+  {
+    id: '68ce4a14-b003-4a61-8979-c400fe4392b8',
+    name: 'Slipstream Eel',
+    types: ['creature'],
+    cost: { generic: 5, U: 2 },
+    power: 6,
+    toughness: 6,
+    keywords: { cantAttackUnlessDefenderControls: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['fish', 'beast'],
+    cycling: [
+      {
+        cost: { generic: 1, U: 1 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {1}{U}',
+      },
+    ],
   },
   // Flying
   // Whenever this creature deals combat damage to a player, put a +1/+1 counter on it.
@@ -65978,6 +74048,29 @@ const POOL_7: readonly CardDefinition[] = [
     keywords: { trample: true },
     subtypes: ['slith'],
     triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer' },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: 'Combat damage to a player: put a +1/+1 counter on it',
+      },
+    ],
+  },
+  // Whenever this creature becomes blocked, draw a card.
+  // Whenever this creature deals combat damage to a player, put a +1/+1 counter on it.
+  {
+    id: 'ce9ae86a-3a1c-44bc-83bd-ab9422133548',
+    name: 'Slith Strider',
+    types: ['creature'],
+    cost: { generic: 1, U: 2 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['slith'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Becomes blocked: draw a card',
+      },
       {
         condition: { on: 'combatDamageToPlayer' },
         effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
@@ -66135,6 +74228,17 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // Wither (This deals damage to creatures in the form of -1/-1 counters.)
+  {
+    id: '7f764936-fceb-4a3d-ac32-15397d7ce664',
+    name: 'Smoldering Butcher',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 4,
+    toughness: 2,
+    keywords: { wither: true },
+    subtypes: ['elemental', 'warrior'],
+  },
   // This land enters tapped.
   // {T}: Add {R}.
   // Cycling {2} ({2}, Discard this card: Draw a card.)
@@ -66209,6 +74313,27 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // Devoid (This card has no color.)
+  // {T}: Add {C}{C}.
+  // {3}{C}, {T}: Draw a card.
+  {
+    id: '9185371c-2dde-48ad-ab27-08be04b3c522',
+    name: 'Snapping Voidcraw',
+    types: ['creature'],
+    cost: { generic: 1, U: 1, G: 1 },
+    power: 1,
+    toughness: 3,
+    colors: [],
+    subtypes: ['eldrazi', 'turtle'],
+    produces: ['C', 'C'],
+    activated: [
+      {
+        cost: { mana: { generic: 3, C: 1 }, tap: true },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{3}{c}, {t}: draw a card',
+      },
+    ],
+  },
   // Target creature gets +1/+1 and gains reach until end of turn. (It can block creatures with flying.)
   {
     id: '28f75827-a144-4fe2-a713-4439ae7567eb',
@@ -66233,6 +74358,25 @@ const POOL_7: readonly CardDefinition[] = [
     toughness: 2,
     keywords: { flying: true, haste: true },
     subtypes: ['thopter'],
+  },
+  // Reach
+  // Whenever this creature blocks a creature with flying, this creature gets +2/+0 until end of turn.
+  {
+    id: '0b51c3b5-db70-4976-986d-ed3fc8584d1a',
+    name: 'Snarespinner',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 1,
+    toughness: 3,
+    keywords: { reach: true },
+    subtypes: ['spider'],
+    triggers: [
+      {
+        condition: { on: 'blocks', counterpartHasKeyword: 'flying' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        label: 'Blocks a creature with flying: ~ gets +2/+0 until end of turn',
+      },
+    ],
   },
   // Menace
   // Whenever another creature you control with power 2 or less enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)
@@ -66277,6 +74421,23 @@ const POOL_7: readonly CardDefinition[] = [
           { primitive: 'gainLife', params: { amount: 2 } },
         ],
         label: 'Enters: each opponent loses 2 life and you gain 2 life',
+      },
+    ],
+  },
+  // Whenever this creature becomes blocked, it gets +2/+2 until end of turn.
+  {
+    id: 'e568503e-a886-4c8b-9d46-8520c2cdda48',
+    name: 'Snorting Gahr',
+    types: ['creature'],
+    cost: { generic: 2, G: 2 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['rhino', 'beast'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'Becomes blocked: ~ gets +2/+2 until end of turn',
       },
     ],
   },
@@ -66465,6 +74626,17 @@ const POOL_7: readonly CardDefinition[] = [
     entersTappedUnless: { minBasicLands: 2 },
     producesOptions: [{ G: 1 }, { U: 1 }],
   },
+  // Mountainwalk (This creature can't be blocked as long as defending player controls a Mountain.)
+  {
+    id: '2d147088-2191-49e8-9c0b-419d4048604a',
+    name: 'Sokenzan Bruiser',
+    types: ['creature'],
+    cost: { generic: 4, R: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'mountain' }] },
+    subtypes: ['ogre', 'warrior'],
+  },
   // Vigilance (Attacking doesn't cause this creature to tap.)
   {
     id: '039cb105-f8f7-4d04-a137-34b13491ee9a',
@@ -66501,6 +74673,16 @@ const POOL_7: readonly CardDefinition[] = [
     effects: [{ primitive: 'chooseAsEnters', params: {} }],
     manaAbilities: [{ chosenColor: true, label: 'Add one mana of the chosen color' }],
   },
+  // Suspend 3—{1} (Rather than cast this card from your hand, pay {1} and exile it with three time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)
+  // {T}: Add {C}{C}.
+  {
+    id: 'a51fb64d-cc0c-400d-971f-78c28d42043b',
+    name: 'Sol Talisman',
+    types: ['artifact'],
+    noManaCost: true,
+    suspend: { count: 3, cost: { generic: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+    produces: ['C', 'C'],
+  },
   // {T}: Add {C}{C}. Spend this mana only to activate abilities of artifacts.
   {
     id: '87174f2d-bd11-4a40-b1c7-79040be04716',
@@ -66517,6 +74699,31 @@ const POOL_7: readonly CardDefinition[] = [
           label: 'only to activate abilities of artifacts',
           allow: [{ purpose: 'activate', types: ['artifact'] }],
         },
+      },
+    ],
+  },
+  // Cumulative upkeep {1} (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)
+  // {1}: This creature gets +1/+0 until end of turn.
+  {
+    id: '9d60f16a-0a67-4ad7-8dad-ee97cd01fb89',
+    name: 'Soldevi Simulacrum',
+    types: ['artifact', 'creature'],
+    cost: { generic: 4 },
+    power: 2,
+    toughness: 4,
+    subtypes: ['soldier'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [{ primitive: 'cumulativeUpkeep', params: { mana: { generic: 1 } } }],
+        label: 'Cumulative upkeep {1}',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        label: '{1}: ~ gets +1/+0 until end of turn',
       },
     ],
   },
@@ -66557,6 +74764,79 @@ const POOL_7: readonly CardDefinition[] = [
       { primitive: 'gainLife', params: { amount: 4 } },
     ],
   },
+  // Shadow (This creature can block or be blocked by only creatures with shadow.)
+  // {1}{W}: This creature gets +1/+0 until end of turn.
+  {
+    id: '6cd07471-b216-465c-9946-1eac689db32e',
+    name: 'Soltari Crusader',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { shadow: true },
+    subtypes: ['soltari', 'knight'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, W: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        label: '{1}{w}: ~ gets +1/+0 until end of turn',
+      },
+    ],
+  },
+  // Shadow (This creature can block or be blocked by only creatures with shadow.)
+  {
+    id: 'bdf295dc-72df-4097-b767-d89ab807bf2e',
+    name: 'Soltari Foot Soldier',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { shadow: true },
+    subtypes: ['soltari', 'soldier'],
+  },
+  // Protection from black
+  // Shadow (This creature can block or be blocked by only creatures with shadow.)
+  {
+    id: '7b65aaa5-0b1b-4298-a3c7-1808b240491f',
+    name: 'Soltari Monk',
+    types: ['creature'],
+    cost: { W: 2 },
+    power: 2,
+    toughness: 1,
+    keywords: { protectionFrom: ['black'], shadow: true },
+    subtypes: ['soltari', 'monk', 'cleric'],
+  },
+  // Protection from red
+  // Shadow (This creature can block or be blocked by only creatures with shadow.)
+  {
+    id: '45a3854c-147e-4644-8438-d973648c974d',
+    name: 'Soltari Priest',
+    types: ['creature'],
+    cost: { W: 2 },
+    power: 2,
+    toughness: 1,
+    keywords: { protectionFrom: ['red'], shadow: true },
+    subtypes: ['soltari', 'cleric'],
+  },
+  // Shadow (This creature can block or be blocked by only creatures with shadow.)
+  // Whenever this creature attacks, it gets +1/+1 until end of turn.
+  {
+    id: '1bc2cfc0-bc62-4a36-a30b-77c6912be2e9',
+    name: 'Soltari Trooper',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { shadow: true },
+    subtypes: ['soltari', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Attacks: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
   // Search your library for an instant or sorcery card, reveal it, put it into your hand, then shuffle.
   {
     id: '66c04ee2-c1e0-45fb-aaf5-1b4459df80fc',
@@ -66587,6 +74867,17 @@ const POOL_7: readonly CardDefinition[] = [
     keywords: { flying: true },
     subtypes: ['drone'],
     castCostReductionPerPermanent: { amount: 1, filter: { anyOfTypes: ['artifact'] } },
+  },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  {
+    id: '307edca0-769d-4071-9654-3537341e96bd',
+    name: 'Somberwald Dryad',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['dryad'],
   },
   // {T}: Add three mana of any one color. Spend this mana only to cast creature spells.
   {
@@ -67140,6 +75431,19 @@ const POOL_7: readonly CardDefinition[] = [
       { primitive: 'gainLife', params: { amount: 2 } },
     ],
   },
+  // Intimidate (This creature can't be blocked except by artifact creatures and/or creatures that share a color with it.)
+  {
+    id: 'b47e4e56-8bde-480d-b59c-17a017665b19',
+    name: 'Spectral Rider',
+    types: ['creature'],
+    cost: { W: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'sharesColorWithAttacker' }] },
+    },
+    subtypes: ['spirit', 'knight'],
+  },
   // Flash (You may cast this spell any time you could cast an instant.)
   // Flying
   // {3}{U}: Draw a card.
@@ -67307,9 +75611,6 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_8: readonly CardDefinition[] = [
   // Reach, trample
   // Ward {2} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.)
   {
@@ -67470,6 +75771,30 @@ const POOL_8: readonly CardDefinition[] = [
         effects: [{ primitive: 'addCounters', params: { amount: 1, targets: 'creatureYouControl' } }],
         label: 'Dies: put a +1/+1 counter on target creature you control',
         targets: 'creatureYouControl',
+      },
+    ],
+  },
+  // Flying
+  // At the beginning of your upkeep, sacrifice this creature unless you pay {U}.
+  {
+    id: 'c881c388-430f-4a4b-9cd1-fba0a2bc2cd6',
+    name: 'Spindrift Drake',
+    types: ['creature'],
+    cost: { U: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { flying: true },
+    subtypes: ['drake'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { U: 1 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {u}',
       },
     ],
   },
@@ -68284,6 +76609,22 @@ const POOL_8: readonly CardDefinition[] = [
       modifies: { power: 1, toughness: 1, keywords: { lifelink: true } },
     },
   },
+  // Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  {
+    id: 'e47793a3-9a98-4733-8d6a-2fb1a67b15c9',
+    name: 'Squirming Mass',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+    },
+    subtypes: ['horror'],
+  },
+];
+
+const POOL_9: readonly CardDefinition[] = [
   // Other Squirrels you control get +1/+1.
   {
     id: '8f739d55-30d6-4879-872a-82c6778113de',
@@ -68376,6 +76717,28 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+  // Swampwalk, forestwalk (This creature can't be blocked as long as defending player controls a Swamp or a Forest.)
+  {
+    id: '5c0eed33-553a-4865-9b22-30c33fbd1c51',
+    name: 'Stalker Hag',
+    types: ['creature'],
+    cost: { hybrid: [['B', 'G'], ['B', 'G'], ['B', 'G']] },
+    power: 3,
+    toughness: 2,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }, { kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['hag'],
+  },
+  // This creature can't be blocked by more than one creature.
+  {
+    id: '2048b66a-586f-49ad-bd2b-7fce1eb45ce6',
+    name: 'Stalking Tiger',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { maxBlockers: 1 },
+    subtypes: ['cat'],
+  },
   // Trample
   // At the beginning of each combat, if you control a creature with power 4 or greater, this creature gets +1/+1 until end of turn.
   {
@@ -68431,6 +76794,27 @@ const POOL_8: readonly CardDefinition[] = [
     toughness: 4,
     keywords: { vigilance: true },
     subtypes: ['human', 'soldier'],
+  },
+  // Flying, vigilance
+  // Other creatures you control have ward {2}.
+  // Suspend 6—{1}{U} (Rather than cast this card from your hand, you may pay {1}{U} and exile it with six time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.)
+  {
+    id: '82dca4c3-efd6-4b6b-ac49-5a916135a592',
+    name: 'Star Whale',
+    types: ['creature'],
+    cost: { generic: 6, U: 2 },
+    power: 8,
+    toughness: 8,
+    keywords: { flying: true, vigilance: true },
+    subtypes: ['alien', 'whale'],
+    suspend: { count: 6, cost: { generic: 1, U: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'you', excludeSource: true },
+        keywords: { ward: 2 },
+        label: 'other creatures you control have ward {2}',
+      },
+    ],
   },
   {
     id: 'ecf2358f-542d-45c9-b5c5-c57b2b0c1122',
@@ -68665,6 +77049,23 @@ const POOL_8: readonly CardDefinition[] = [
     toughness: 3,
     subtypes: ['dwarf', 'soldier'],
   },
+  // Whenever this creature attacks, it gets +0/+2 until end of turn.
+  {
+    id: '5e1b65a7-d385-428b-986c-a0d9283a5f75',
+    name: 'Steadfast Cathar',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 2,
+    toughness: 1,
+    subtypes: ['human', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 0, toughness: 2 } }],
+        label: 'Attacks: ~ gets +0/+2 until end of turn',
+      },
+    ],
+  },
   // Vigilance (Attacking doesn't cause this creature to tap.)
   {
     id: '42a5c12b-c947-4a71-b54f-e310150858a3',
@@ -68740,6 +77141,17 @@ const POOL_8: readonly CardDefinition[] = [
     types: ['sorcery'],
     cost: { generic: 2, R: 1 },
     effects: [{ primitive: 'dealDamageToEach', params: { amount: 2, creatures: true, players: true } }],
+  },
+  // This creature can't attack unless defending player controls an Island.
+  {
+    id: 'ec3193cb-2c00-4ef8-bf2e-d3b1e3b875a3',
+    name: 'Steam Frigate',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { cantAttackUnlessDefenderControls: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['human', 'pirate'],
   },
   // Reach (This creature can block creatures with flying.)
   // {R}: This creature gets +1/+0 until end of turn.
@@ -69214,6 +77626,22 @@ const POOL_8: readonly CardDefinition[] = [
       modifies: { power: 0, toughness: 10, keywords: {} },
     },
   },
+  // Split second (As long as this spell is on the stack, players can't cast spells or activate abilities that aren't mana abilities.)
+  // Target creature gets +5/+5 and gains shroud until end of turn. (It can't be the target of spells or abilities.)
+  {
+    id: '1b300e67-04d2-4c69-b516-c5cc0a6ff2e7',
+    name: 'Stonewood Invocation',
+    types: ['instant'],
+    cost: { generic: 3, G: 1 },
+    keywords: { splitSecond: true },
+    effects: [
+      { primitive: 'pumpUntilEndOfTurn', params: { power: 5, toughness: 5, targets: 'creature' } },
+      {
+        primitive: 'grantKeywordUntilEndOfTurn',
+        params: { keywords: { shroud: true }, targets: 'creature' },
+      },
+    ],
+  },
   // {7}{G}: This creature gets +5/+5 until end of turn.
   {
     id: 'e4ea6aac-d42b-4522-b7a9-4c99ed9c14bd',
@@ -69578,6 +78006,49 @@ const POOL_8: readonly CardDefinition[] = [
     keywords: { lifelink: true },
     subtypes: ['dwarf', 'cleric'],
   },
+  // Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)
+  // Equipped creature gets +2/+4 and has reach.
+  // Equip {4}
+  {
+    id: 'd0d7ff8f-7733-4323-8575-c50b3e730dbc',
+    name: 'Strandwalker',
+    types: ['artifact'],
+    cost: { generic: 5 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'livingWeaponGerm',
+            params: {
+              name: 'Phyrexian Germ',
+              power: 0,
+              toughness: 0,
+              colors: ['B'],
+              types: ['creature'],
+              subtypes: ['Phyrexian', 'Germ'],
+            },
+          },
+        ],
+        label: 'Living weapon: create a 0/0 black Phyrexian Germ and attach this to it',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 4 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {4}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {4}',
+      modifies: { power: 2, toughness: 4, keywords: { reach: true } },
+    },
+  },
   // Strangle deals 3 damage to target creature or planeswalker.
   {
     id: '4b91d727-c0ee-4bf0-8c7d-8475ecb88083',
@@ -69593,6 +78064,18 @@ const POOL_8: readonly CardDefinition[] = [
     types: ['instant'],
     cost: { generic: 3, B: 1 },
     effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -3, toughness: -3, targets: 'creature' } }],
+  },
+  // Flying
+  // This creature can block only creatures with flying.
+  {
+    id: '7ccfc49d-2a07-4088-a288-ba7be4da7bc2',
+    name: 'Stratozeppelid',
+    types: ['creature'],
+    cost: { generic: 4, U: 1 },
+    power: 4,
+    toughness: 4,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['beast'],
   },
   {
     id: '8ae5ba21-eb8e-4663-bfd8-3e19a0c10774',
@@ -69836,6 +78319,25 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+  // Shadow (This creature can block or be blocked by only creatures with shadow.)
+  // Whenever this creature deals combat damage to a player, each player discards a card.
+  {
+    id: '87761f00-bfbc-42dc-b96d-9f4258b43a8b',
+    name: 'Stronghold Rats',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { shadow: true },
+    subtypes: ['rat'],
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer' },
+        effects: [{ primitive: 'discardCard', params: { who: 'eachPlayer' } }],
+        label: 'Combat damage to a player: each player discards a card',
+      },
+    ],
+  },
   // Other black creatures get -1/-1.
   {
     id: '6171c210-01b5-45a9-9dd3-dbf96a33a750',
@@ -69853,6 +78355,18 @@ const POOL_8: readonly CardDefinition[] = [
         label: 'other black creatures get -1/-1',
       },
     ],
+  },
+  // Flying
+  // This creature can block only creatures with flying.
+  {
+    id: 'd672110d-b7c4-4233-9c46-73323be7204d',
+    name: 'Stronghold Zeppelin',
+    types: ['creature'],
+    cost: { generic: 2, U: 2 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['human'],
   },
   // Whenever you cast a noncreature spell, you gain 2 life.
   {
@@ -70069,6 +78583,26 @@ const POOL_8: readonly CardDefinition[] = [
       { primitive: 'createPredefinedToken', params: { token: 'treasure' } },
     ],
   },
+  // Split second (As long as this spell is on the stack, players can't cast spells or activate abilities that aren't mana abilities.)
+  // Target creature gets -4/-4 until end of turn.
+  {
+    id: '5d724faa-a988-4c08-875d-d18f48926a0a',
+    name: 'Sudden Death',
+    types: ['instant'],
+    cost: { generic: 1, B: 2 },
+    keywords: { splitSecond: true },
+    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -4, toughness: -4, targets: 'creature' } }],
+  },
+  // Split second (As long as this spell is on the stack, players can't cast spells or activate abilities that aren't mana abilities.)
+  // Sudden Shock deals 2 damage to any target.
+  {
+    id: '5b659a3b-0f66-40f2-8e2e-f13b694e270e',
+    name: 'Sudden Shock',
+    types: ['instant'],
+    cost: { generic: 1, R: 1 },
+    keywords: { splitSecond: true },
+    effects: [{ primitive: 'dealDamage', params: { amount: 2 } }],
+  },
   // Target creature gets +3/+3 until end of turn.
   // Draw a card.
   {
@@ -70102,6 +78636,27 @@ const POOL_8: readonly CardDefinition[] = [
     effects: [
       { primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 0, targets: 'creature' } },
       { primitive: 'drawCards', params: { count: 1 } },
+    ],
+  },
+  // Flash
+  // Split second (As long as this spell is on the stack, players can't cast spells or activate abilities that aren't mana abilities.)
+  // White creatures get +1/-1.
+  {
+    id: '0aed10f9-8c52-400b-a432-a0d8c6458e87',
+    name: 'Sulfur Elemental',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 3,
+    toughness: 2,
+    keywords: { flash: true, splitSecond: true },
+    subtypes: ['elemental'],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'any', anyOfColors: ['W'] },
+        power: 1,
+        toughness: -1,
+        label: 'white creatures get +1/-1',
+      },
     ],
   },
   // This land enters tapped unless you control an Island or a Mountain.
@@ -70278,6 +78833,36 @@ const POOL_8: readonly CardDefinition[] = [
           effects: [{ primitive: 'loseTheGame' }],
           label: 'at the beginning of your next upkeep, pay {2}{g}{g}. if you don\'t, you lose the game',
         },
+      },
+    ],
+  },
+  // Horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  // When Sun Ce enters, you may return target creature to its owner's hand.
+  {
+    id: '6f5f375f-38b0-413e-8099-64044cad98a3',
+    name: 'Sun Ce, Young Conquerer',
+    types: ['creature'],
+    cost: { generic: 3, U: 2 },
+    power: 3,
+    toughness: 3,
+    legendary: true,
+    keywords: { horsemanship: true, blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] } },
+    subtypes: ['human', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may return target creature to its owner\'s hand',
+              valence: 'gain',
+              effects: [{ primitive: 'returnToHand', params: { targets: 'creature' } }],
+            },
+          },
+        ],
+        label: 'Enters: you may return target creature to its owner\'s hand',
+        targets: 'creature',
       },
     ],
   },
@@ -70495,6 +79080,34 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+  // At the beginning of your upkeep, sacrifice this enchantment unless you pay {U}{U}.
+  // Blue creatures get +1/+1.
+  {
+    id: '2262d907-2801-4314-813b-d9e14aba4826',
+    name: 'Sunken City',
+    types: ['enchantment'],
+    cost: { U: 2 },
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { U: 2 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {u}{u}',
+      },
+    ],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'any', anyOfColors: ['U'] },
+        power: 1,
+        toughness: 1,
+        label: 'blue creatures get +1/+1',
+      },
+    ],
+  },
   // ({T}: Add {U} or {B}.)
   // This land enters tapped unless you control two or more basic lands.
   {
@@ -70672,6 +79285,30 @@ const POOL_8: readonly CardDefinition[] = [
     cost: { generic: 1, W: 2, U: 1 },
     cantBeCountered: true,
     effects: [{ primitive: 'destroyAll' }],
+  },
+  // Haste
+  // Flanking (Whenever a creature without flanking blocks this creature, the blocking creature gets -1/-1 until end of turn.)
+  {
+    id: 'c9cd519a-c6f4-47a8-b773-a058e50e4440',
+    name: 'Suq\'Ata Lancer',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { haste: true, flanking: true },
+    subtypes: ['human', 'knight'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlockedByCreature', counterpartLacksKeyword: 'flanking' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: -1, toughness: -1, subject: 'triggering' },
+          },
+        ],
+        label: 'Flanking',
+      },
+    ],
   },
   // Target creature gets +3/+0 and gains first strike until end of turn. (It deals combat damage before creatures without first strike.)
   {
@@ -70860,6 +79497,25 @@ const POOL_8: readonly CardDefinition[] = [
           },
         ],
         label: '{3}, {t}: target creature can\'t be blocked this turn',
+      },
+    ],
+  },
+  // Flying
+  // Whenever this creature blocks, it gets +0/+2 until end of turn.
+  {
+    id: 'e9f7e21e-d4d8-4d6c-9530-b17d5204e9e7',
+    name: 'Sustainer of the Realm',
+    types: ['creature'],
+    cost: { generic: 2, W: 2 },
+    power: 2,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'blocks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 0, toughness: 2 } }],
+        label: 'Blocks: ~ gets +0/+2 until end of turn',
       },
     ],
   },
@@ -71596,6 +80252,18 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying
+  // Myriad (Whenever this creature attacks, for each opponent other than defending player, you may create a token copy that's tapped and attacking that player or a planeswalker they control. Exile the tokens at end of combat.)
+  {
+    id: '43e38761-70e0-4f6e-a4c2-7c9a17557d25',
+    name: 'Tabaxi Toucaneers',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 3,
+    toughness: 2,
+    keywords: { flying: true, myriad: true },
+    subtypes: ['cat', 'ranger'],
+  },
   // ({T}: Add {R} or {G}.)
   {
     id: '0c2c39fc-b564-4ab5-833c-ff029760b7a7',
@@ -71643,6 +80311,20 @@ const POOL_8: readonly CardDefinition[] = [
     manaAbilities: [
       { produces: [{ C: 1 }] },
       { produces: [{ B: 1 }, { R: 1 }], restriction: { controlsSubtype: ['swamp'] } },
+    ],
+  },
+  // Target creature gets +1/+0 and gains infect until end of turn. (It deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: 'd0f82007-99f6-4c6c-8182-ee631c33531f',
+    name: 'Tainted Strike',
+    types: ['instant'],
+    cost: { B: 1 },
+    effects: [
+      { primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0, targets: 'creature' } },
+      {
+        primitive: 'grantKeywordUntilEndOfTurn',
+        params: { keywords: { infect: true }, targets: 'creature' },
+      },
     ],
   },
   // {T}: Add {C}.
@@ -72241,6 +80923,18 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying
+  // This creature can block only creatures with flying.
+  {
+    id: 'fd8ac8da-7497-4b07-af86-29bac1361c8e',
+    name: 'Tattered Haunter',
+    types: ['creature'],
+    cost: { generic: 1, U: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['spirit'],
+  },
   // When this creature dies, each opponent loses 2 life.
   {
     id: '4c006ad5-db2b-42c6-8018-660e08f18f50',
@@ -72257,6 +80951,17 @@ const POOL_8: readonly CardDefinition[] = [
         label: 'Dies: each opponent loses 2 life',
       },
     ],
+  },
+  // This creature attacks each combat if able.
+  {
+    id: '88f80d05-0bc9-4f35-afc4-8e2ae81b94df',
+    name: 'Tattermunge Maniac',
+    types: ['creature'],
+    cost: { hybrid: [['R', 'G']] },
+    power: 2,
+    toughness: 1,
+    keywords: { mustAttack: true },
+    subtypes: ['goblin', 'warrior'],
   },
   // Landfall — Whenever a land you control enters, you gain 1 life and draw a card.
   {
@@ -72359,6 +81064,60 @@ const POOL_8: readonly CardDefinition[] = [
         condition: { on: 'etb' },
         effects: [{ primitive: 'gainLife', params: { amount: 1 } }],
         label: 'Enters: you gain 1 life',
+      },
+    ],
+  },
+  // Echo {4}{R}{R} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  // This creature attacks each combat if able.
+  {
+    id: '9c8aaf09-312f-4c82-9e0a-bd797e7f26c3',
+    name: 'Tectonic Fiend',
+    types: ['creature'],
+    cost: { generic: 4, R: 2 },
+    power: 7,
+    toughness: 7,
+    keywords: { mustAttack: true },
+    subtypes: ['elemental'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 4, R: 2 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {4}{R}{R}',
+      },
+    ],
+  },
+  // Flying; trample; rampage 4 (Whenever this creature becomes blocked, it gets +4/+4 until end of turn for each creature blocking it beyond the first.)
+  {
+    id: '57e8971d-baeb-4e4f-8c4d-0e8109e4505e',
+    name: 'Teeka\'s Dragon',
+    types: ['artifact', 'creature'],
+    cost: { generic: 9 },
+    power: 5,
+    toughness: 5,
+    keywords: { flying: true, trample: true },
+    subtypes: ['dragon'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: {
+              power: { countOf: 'creaturesBlockingThisBeyondFirst', times: 4 },
+              toughness: { countOf: 'creaturesBlockingThisBeyondFirst', times: 4 },
+            },
+          },
+        ],
+        label: 'Rampage 4',
       },
     ],
   },
@@ -72523,6 +81282,18 @@ const POOL_8: readonly CardDefinition[] = [
         label: '{1}{g}: regenerate ~',
       },
     ],
+  },
+  // Protection from artifacts
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: '643891b6-23d0-4734-81e0-b315d2d58f50',
+    name: 'Tel-Jilad Fallen',
+    types: ['creature'],
+    cost: { generic: 2, G: 2 },
+    power: 3,
+    toughness: 1,
+    keywords: { protectionFrom: ['artifacts'], infect: true },
+    subtypes: ['phyrexian', 'elf', 'warrior'],
   },
   // Destroy target artifact. Scry 2. (Look at the top two cards of your library, then put any number of them on the bottom and the rest on top in any order.)
   {
@@ -72860,6 +81631,25 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+  // This creature can't be blocked by more than one creature.
+  // Whenever this creature deals combat damage to a player, put a +1/+1 counter on it.
+  {
+    id: '4adec7ae-b6aa-4018-bbc8-7ad378cbb1f8',
+    name: 'Tenacious Tosk',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 4,
+    toughness: 4,
+    keywords: { maxBlockers: 1 },
+    subtypes: ['tosk', 'rogue'],
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer' },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: 'Combat damage to a player: put a +1/+1 counter on it',
+      },
+    ],
+  },
   // As an additional cost to cast this spell, sacrifice a creature.
   // Target opponent discards two cards.
   {
@@ -73139,6 +81929,36 @@ const POOL_8: readonly CardDefinition[] = [
         targets: 'creatureYouControl',
       },
     ],
+  },
+  // Shadow (This creature can block or be blocked by only creatures with shadow.)
+  // When this creature leaves the battlefield, draw a card.
+  {
+    id: '50210dd8-83c6-4e64-a488-f8e7fd85d992',
+    name: 'Thalakos Seer',
+    types: ['creature'],
+    cost: { U: 2 },
+    power: 1,
+    toughness: 1,
+    keywords: { shadow: true },
+    subtypes: ['thalakos', 'wizard'],
+    triggers: [
+      {
+        condition: { on: 'leaves' },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Leaves: draw a card',
+      },
+    ],
+  },
+  // Shadow (This creature can block or be blocked by only creatures with shadow.)
+  {
+    id: '739a13d6-5f73-4166-b923-9db8ee3f2cf7',
+    name: 'Thalakos Sentry',
+    types: ['creature'],
+    cost: { generic: 1, U: 1 },
+    power: 1,
+    toughness: 2,
+    keywords: { shadow: true },
+    subtypes: ['thalakos', 'soldier'],
   },
   // {2}, Sacrifice a creature: Draw a card.
   {
@@ -73837,6 +82657,28 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+  // Soulshift 7 (When this creature dies, you may return target Spirit card with mana value 7 or less from your graveyard to your hand.)
+  {
+    id: '5c88355e-dff0-4d51-a33c-08e14d6217d4',
+    name: 'Thousand-legged Kami',
+    types: ['creature'],
+    cost: { generic: 6, G: 2 },
+    power: 6,
+    toughness: 6,
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 7 } },
+          },
+        ],
+        label: 'Soulshift 7',
+      },
+    ],
+  },
   // When this creature enters, investigate. (Create a Clue token. It's an artifact with "{2}, Sacrifice this token: Draw a card.")
   {
     id: 'caa02547-66e3-4e27-a2d3-5e94f3e7a069',
@@ -73909,6 +82751,30 @@ const POOL_8: readonly CardDefinition[] = [
     types: ['artifact'],
     cost: { generic: 4 },
     produces: ['C', 'C', 'C'],
+  },
+  // Echo {4} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  // This creature attacks each combat if able.
+  {
+    id: '5908714a-be91-4279-b87e-e2bc09dbaaba',
+    name: 'Thran War Machine',
+    types: ['artifact', 'creature'],
+    cost: { generic: 4 },
+    power: 4,
+    toughness: 5,
+    keywords: { mustAttack: true },
+    subtypes: ['construct'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { generic: 4 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'Echo {4}',
+      },
+    ],
   },
   // {1}, Sacrifice this creature: Destroy target artifact or enchantment.
   {
@@ -74046,6 +82912,35 @@ const POOL_8: readonly CardDefinition[] = [
     types: ['instant'],
     cost: { generic: 4, B: 1 },
     effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -4, toughness: -4, targets: 'creature' } }],
+  },
+  // Affinity for Slivers (This spell costs {1} less to cast for each Sliver you control.)
+  // Slivers you control have double strike and haste.
+  // At the beginning of your upkeep, create two 1/1 colorless Sliver creature tokens.
+  {
+    id: '85caf659-7b43-462e-a342-34703d46eb57',
+    name: 'Thrumming Hivepool',
+    types: ['artifact'],
+    cost: { generic: 6 },
+    castCostReductionPerPermanent: { amount: 1, filter: { anyOfSubtypes: ['Sliver'] } },
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: { power: 1, toughness: 1, name: 'Sliver', colors: [], subtypes: ['Sliver'], count: 2 },
+          },
+        ],
+        label: 'your upkeep: create two 1/1 colorless sliver creature tokens',
+      },
+    ],
+    statics: [
+      {
+        affects: { anyOfSubtypes: ['sliver'], controller: 'you' },
+        keywords: { doubleStrike: true, haste: true },
+        label: 'slivers you control have double strike and haste',
+      },
+    ],
   },
   // Flying
   // Whenever this creature deals combat damage to a player, proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.)
@@ -74204,6 +83099,18 @@ const POOL_8: readonly CardDefinition[] = [
         label: '{g}, {t}: target creature gets +1/+1 until end of turn',
       },
     ],
+  },
+  // Haste
+  // Myriad (Whenever this creature attacks, for each opponent other than defending player, you may create a token copy that's tapped and attacking that player or a planeswalker they control. Exile the tokens at end of combat.)
+  {
+    id: '279c2ec3-abfc-4054-bdd9-3c8fa7d8b426',
+    name: 'Tiamat\'s Fanatics',
+    types: ['creature'],
+    cost: { generic: 4, R: 1 },
+    power: 4,
+    toughness: 3,
+    keywords: { haste: true, myriad: true },
+    subtypes: ['dragon', 'warrior'],
   },
   // Target creature gains double strike until end of turn. (It deals both first-strike and regular combat damage.)
   {
@@ -74420,6 +83327,18 @@ const POOL_8: readonly CardDefinition[] = [
         label: '{t}, sacrifice ~: add {r}{w}',
       },
     ],
+  },
+  // Flying
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  {
+    id: '845b665e-8236-4ab9-bee4-414f075461d2',
+    name: 'Tine Shrike',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { flying: true, infect: true },
+    subtypes: ['phyrexian', 'bird'],
   },
   // As an additional cost to cast this spell, sacrifice an artifact.
   // Search your library for an artifact card, put that card onto the battlefield, then shuffle.
@@ -74900,6 +83819,30 @@ const POOL_8: readonly CardDefinition[] = [
       modifies: { power: 2, toughness: 0, keywords: {} },
     },
   },
+  // Vigilance (Attacking doesn't cause this creature to tap.)
+  // Soulshift 4 (When this creature dies, you may return target Spirit card with mana value 4 or less from your graveyard to your hand.)
+  {
+    id: 'b8ec0916-f320-4fad-9ec5-99aeecfda0e3',
+    name: 'Torii Watchward',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { vigilance: true },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 4 } },
+          },
+        ],
+        label: 'Soulshift 4',
+      },
+    ],
+  },
   // Enchant creature
   // Enchanted creature gets -3/-0.
   {
@@ -75078,6 +84021,29 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+  // This spell can't be countered.
+  // Indestructible
+  // Toski attacks each combat if able.
+  // Whenever a creature you control deals combat damage to a player, draw a card.
+  {
+    id: 'e82e61d1-488d-4627-a54c-d8496a967814',
+    name: 'Toski, Bearer of Secrets',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 1,
+    toughness: 1,
+    legendary: true,
+    cantBeCountered: true,
+    keywords: { indestructible: true, mustAttack: true },
+    subtypes: ['squirrel'],
+    triggers: [
+      {
+        condition: { on: 'creatureCombatDamageToPlayer' },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'A creature you control deals combat damage to a player: draw a card',
+      },
+    ],
+  },
   // When this creature enters, you may search your library for an Aura card, reveal it, put it into your hand, then shuffle.
   {
     id: '589346d3-b32b-40f2-8513-741ceb88bf7b',
@@ -75121,6 +84087,27 @@ const POOL_8: readonly CardDefinition[] = [
     types: ['sorcery'],
     cost: { generic: 3, U: 1 },
     effects: [{ primitive: 'drawCards', params: { count: 2 } }],
+  },
+  // Touch of Death deals 1 damage to target player or planeswalker. You gain 1 life.
+  // Draw a card at the beginning of the next turn's upkeep.
+  {
+    id: '15e529fb-b951-4f64-85c9-1c2e3b9581a2',
+    name: 'Touch of Death',
+    types: ['sorcery'],
+    cost: { generic: 2, B: 1 },
+    effects: [
+      { primitive: 'dealDamage', params: { amount: 1, targets: 'playerOrPlaneswalker' } },
+      { primitive: 'gainLife', params: { amount: 1 } },
+      {
+        primitive: 'scheduleDelayedEffects',
+        params: {
+          on: 'upkeep',
+          who: 'any',
+          effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+          label: 'Draw a card at the beginning of the next turn\'s upkeep',
+        },
+      },
+    ],
   },
   // Target creature can't be blocked this turn.
   // Draw a card.
@@ -75295,6 +84282,23 @@ const POOL_8: readonly CardDefinition[] = [
     keywords: { reach: true },
     subtypes: ['beast'],
   },
+  // Whenever this creature blocks, it gets +0/+2 until end of turn.
+  {
+    id: 'e5e9db36-0592-4e59-951a-d9d6c1522b99',
+    name: 'Town Sentry',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'blocks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 0, toughness: 2 } }],
+        label: 'Blocks: ~ gets +0/+2 until end of turn',
+      },
+    ],
+  },
   // When this creature enters, you lose 2 life.
   {
     id: 'f435329e-6de7-4b05-ba70-cb63d121116e',
@@ -75309,6 +84313,25 @@ const POOL_8: readonly CardDefinition[] = [
         condition: { on: 'etb' },
         effects: [{ primitive: 'loseLife', params: { amount: 2 } }],
         label: 'Enters: you lose 2 life',
+      },
+    ],
+  },
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  // {B}: Regenerate this creature.
+  {
+    id: '5823990c-8d40-4352-8d34-74332934adb2',
+    name: 'Toxic Nim',
+    types: ['creature'],
+    cost: { generic: 4, B: 2 },
+    power: 4,
+    toughness: 1,
+    keywords: { infect: true },
+    subtypes: ['phyrexian', 'zombie'],
+    activated: [
+      {
+        cost: { mana: { B: 1 } },
+        effects: [{ primitive: 'regenerate' }],
+        label: '{b}: regenerate ~',
       },
     ],
   },
@@ -75366,9 +84389,6 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_9: readonly CardDefinition[] = [
   {
     id: 'b55e0487-3abb-4f2b-b34c-d6ad49164e73',
     name: 'Trained Armodon',
@@ -75388,6 +84408,23 @@ const POOL_9: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { lifelink: true },
     subtypes: ['cat'],
+  },
+  // Whenever this creature becomes blocked, it gets +1/+1 until end of turn.
+  {
+    id: 'ab242eab-5cab-41a0-bcf8-93a6919e4558',
+    name: 'Trained Cheetah',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['cat'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Becomes blocked: ~ gets +1/+1 until end of turn',
+      },
+    ],
   },
   {
     id: '01deb3cc-91e8-4ef3-964f-f36c6a21207c',
@@ -75601,6 +84638,19 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // Affinity for Towns (This spell costs {1} less to cast for each Town you control.)
+  // Draw four cards.
+  {
+    id: 'aa5086e0-e2f2-498f-9035-1b31e1d21e0a',
+    name: 'Travel the Overworld',
+    types: ['sorcery'],
+    cost: { generic: 5, U: 2 },
+    castCostReductionPerPermanent: { amount: 1, filter: { anyOfSubtypes: ['Town'] } },
+    effects: [{ primitive: 'drawCards', params: { count: 4 } }],
+  },
+];
+
+const POOL_10: readonly CardDefinition[] = [
   // {T}: Target creature gets +1/+0 until end of turn. You gain 1 life. Activate only as a sorcery.
   {
     id: 'e672a05c-5f1a-4aa6-9398-e33df01c7c96',
@@ -76508,6 +85558,16 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // Devoid (This card has no color.)
+  // Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn.
+  {
+    id: '4de8ef35-f141-4bc6-8ea1-f87aa6f5ecd7',
+    name: 'Turn Against',
+    types: ['instant'],
+    cost: { generic: 4, R: 1 },
+    colors: [],
+    effects: [{ primitive: 'gainControl', params: { targets: 'creature', untap: true, haste: true } }],
+  },
   // When this creature enters, you gain 3 life.
   {
     id: 'b33b6922-2584-43e1-98d4-e722e7c9393c',
@@ -76876,6 +85936,77 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // Haste
+  // Toxic 3 (Players dealt combat damage by this creature also get three poison counters.)
+  {
+    id: '157cf43c-f7f2-4362-bfc8-11682e94b747',
+    name: 'Tyrranax Atrocity',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { haste: true, toxic: 3 },
+    subtypes: ['phyrexian', 'dinosaur'],
+  },
+  // This spell can't be countered.
+  // Trample, ward {4}, haste
+  // Toxic 4 (Players dealt combat damage by this creature also get four poison counters.)
+  {
+    id: '0fb52b44-da5f-4f7a-a6c2-7924b855e051',
+    name: 'Tyrranax Rex',
+    types: ['creature'],
+    cost: { generic: 4, G: 3 },
+    power: 8,
+    toughness: 8,
+    cantBeCountered: true,
+    keywords: { trample: true, ward: 4, haste: true, toxic: 4 },
+    subtypes: ['phyrexian', 'dinosaur'],
+  },
+  // Flying, haste
+  // Echo {1}{G}{G} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  {
+    id: '8b8c401a-8c66-4054-894f-afd866b3b95b',
+    name: 'Uktabi Drake',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { flying: true, haste: true },
+    subtypes: ['drake'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 1, G: 2 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {1}{G}{G}',
+      },
+    ],
+  },
+  // Cumulative upkeep {G} (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)
+  {
+    id: '3678a224-d314-4108-8a39-de0c1b635b5c',
+    name: 'Uktabi Efreet',
+    types: ['creature'],
+    cost: { generic: 2, G: 2 },
+    power: 5,
+    toughness: 4,
+    subtypes: ['efreet'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [{ primitive: 'cumulativeUpkeep', params: { mana: { G: 1 } } }],
+        label: 'Cumulative upkeep {G}',
+      },
+    ],
+  },
   // Flying
   // {3}{G}, Sacrifice this creature: Destroy target artifact.
   {
@@ -77216,6 +86347,27 @@ const POOL_9: readonly CardDefinition[] = [
     entersTapped: true,
     producesOptions: [{ U: 1 }, { B: 1 }],
     triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'surveil' }], label: 'Enters: surveil 1' }],
+  },
+  // Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  // {B}: This creature gets +1/+1 until end of turn.
+  {
+    id: '6609aa2e-6832-4c20-beda-e5f2506bf9b2',
+    name: 'Undercity Shade',
+    types: ['creature'],
+    cost: { generic: 4, B: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+    },
+    subtypes: ['shade'],
+    activated: [
+      {
+        cost: { mana: { B: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: '{b}: ~ gets +1/+1 until end of turn',
+      },
+    ],
   },
   // Deathtouch
   {
@@ -77702,6 +86854,29 @@ const POOL_9: readonly CardDefinition[] = [
     cost: { generic: 3, G: 1 },
     effects: [{ primitive: 'dealDamage', params: { amount: 2 } }],
   },
+  // Target creature gains flying until end of turn.
+  // Draw a card at the beginning of the next turn's upkeep.
+  {
+    id: '7b4c1316-d6df-4bc4-9bfe-0458ff7c2908',
+    name: 'Updraft',
+    types: ['instant'],
+    cost: { generic: 1, U: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordUntilEndOfTurn',
+        params: { keywords: { flying: true }, targets: 'creature' },
+      },
+      {
+        primitive: 'scheduleDelayedEffects',
+        params: {
+          on: 'upkeep',
+          who: 'any',
+          effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+          label: 'Draw a card at the beginning of the next turn\'s upkeep',
+        },
+      },
+    ],
+  },
   // Flying
   {
     id: '9621c700-569d-4d07-847e-68b97113415f',
@@ -77749,6 +86924,18 @@ const POOL_9: readonly CardDefinition[] = [
         label: 'Enters: create a 4/4 white angel creature token with flying',
       },
     ],
+  },
+  // Flying
+  // This creature attacks each combat if able.
+  {
+    id: '2c87088f-6613-413b-aef9-0ef08c6b637f',
+    name: 'Urborg Drake',
+    types: ['creature'],
+    cost: { generic: 1, U: 1, B: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { flying: true, mustAttack: true },
+    subtypes: ['drake'],
   },
   // {T}: Add {B}, {G}, or {U}.
   {
@@ -77830,6 +87017,33 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // Echo {6} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  // {T}: Draw a card.
+  {
+    id: '1fd2b6a7-b93a-42d3-b66a-a70b573fc58a',
+    name: 'Urza\'s Blueprints',
+    types: ['artifact'],
+    cost: { generic: 6 },
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { generic: 6 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'Echo {6}',
+      },
+    ],
+    activated: [
+      {
+        cost: { tap: true },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{t}: draw a card',
+      },
+    ],
+  },
   // {T}: Add {C}.
   // {3}, {T}, Sacrifice this land: Search your library for a land card, put it onto the battlefield tapped, then shuffle.
   {
@@ -77905,6 +87119,67 @@ const POOL_9: readonly CardDefinition[] = [
     types: ['instant'],
     cost: { generic: 2, W: 1, B: 1 },
     effects: [{ primitive: 'exileTarget', params: { targets: 'nonlandPermanent' } }],
+  },
+  // Flying
+  // This creature attacks each combat if able.
+  {
+    id: '19098bc5-c5bc-4cef-9c73-1d5f3e0ac4e1',
+    name: 'Utvara Scalper',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 1,
+    toughness: 2,
+    keywords: { flying: true, mustAttack: true },
+    subtypes: ['goblin', 'scout'],
+  },
+  // Flying
+  // At the beginning of your upkeep, sacrifice Vaevictis Asmadi unless you pay {B}{R}{G}.
+  // {B}: Vaevictis Asmadi gets +1/+0 until end of turn.
+  // {R}: Vaevictis Asmadi gets +1/+0 until end of turn.
+  // {G}: Vaevictis Asmadi gets +1/+0 until end of turn.
+  {
+    id: 'df01b548-9738-4c84-beb6-9a375f41d496',
+    name: 'Vaevictis Asmadi',
+    types: ['creature'],
+    cost: { generic: 2, B: 2, R: 2, G: 2 },
+    power: 7,
+    toughness: 7,
+    legendary: true,
+    keywords: { flying: true },
+    subtypes: ['elder', 'dragon'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { B: 1, R: 1, G: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {b}{r}{g}',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { B: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        label: '{b}: ~ gets +1/+0 until end of turn',
+      },
+      {
+        cost: { mana: { R: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        label: '{r}: ~ gets +1/+0 until end of turn',
+      },
+      {
+        cost: { mana: { G: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        label: '{g}: ~ gets +1/+0 until end of turn',
+      },
+    ],
   },
   // {8}: This creature deals 3 damage to any target.
   {
@@ -78022,6 +87297,18 @@ const POOL_9: readonly CardDefinition[] = [
         label: 'Enters: you gain 4 life',
       },
     ],
+  },
+  // Haste
+  // This creature attacks each combat if able.
+  {
+    id: '8543adbd-0dd1-47d3-ac41-2ec72d6a5d35',
+    name: 'Valley Dasher',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { haste: true, mustAttack: true },
+    subtypes: ['human', 'berserker'],
   },
   // Vigilance (Attacking doesn't cause this creature to tap.)
   // When this creature enters, create a 2/2 white Knight creature token with vigilance.
@@ -78383,6 +87670,18 @@ const POOL_9: readonly CardDefinition[] = [
     ],
   },
   // Flying
+  // This creature can block only creatures with flying.
+  {
+    id: '2c074399-36e9-41f7-918e-5fae267e9da2',
+    name: 'Vaporkin',
+    types: ['creature'],
+    cost: { generic: 1, U: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['elemental'],
+  },
+  // Flying
   {
     id: 'dfc61748-029f-4bae-a7ec-e08b7059226d',
     name: 'Vassal Soul',
@@ -78608,6 +87907,30 @@ const POOL_9: readonly CardDefinition[] = [
         cost: { mana: { generic: 1, B: 1 } },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
         label: '{1}{b}: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
+  // Reach (This creature can block creatures with flying.)
+  // Soulshift 4 (When this creature dies, you may return target Spirit card with mana value 4 or less from your graveyard to your hand.)
+  {
+    id: '308566ed-18cc-4e3b-b5ab-d5b17795f2f1',
+    name: 'Venerable Kumo',
+    types: ['creature'],
+    cost: { generic: 4, G: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { reach: true },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 4 } },
+          },
+        ],
+        label: 'Soulshift 4',
       },
     ],
   },
@@ -78944,6 +88267,19 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // Devoid (This card has no color.)
+  // Trample
+  {
+    id: 'a5d84986-64a1-4bd1-a4f6-3eb147aca357',
+    name: 'Vestige of Emrakul',
+    types: ['creature'],
+    cost: { generic: 3, R: 1 },
+    power: 3,
+    toughness: 4,
+    colors: [],
+    keywords: { trample: true },
+    subtypes: ['eldrazi', 'drone'],
+  },
   // You may have this land enter tapped as a copy of any land on the battlefield.
   {
     id: '0726f70a-c1c4-4edb-86fb-9be280d9ea73',
@@ -79119,6 +88455,32 @@ const POOL_9: readonly CardDefinition[] = [
         cost: { tap: true },
         effects: [{ primitive: 'dealDamage', params: { amount: 1 } }],
         label: '{t}: ~ deals 1 damage to any target',
+      },
+    ],
+  },
+  // Echo {2}{R} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  {
+    id: '26ba659c-7e0f-4d8b-b91c-3c0725102ba2',
+    name: 'Viashino Outrider',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 4,
+    toughness: 3,
+    subtypes: ['lizard'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 2, R: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {2}{R}',
       },
     ],
   },
@@ -79321,6 +88683,23 @@ const POOL_9: readonly CardDefinition[] = [
       { primitive: 'gainLife', params: { amount: 2 } },
     ],
   },
+  // Whenever this creature attacks, it gets +2/+0 until end of turn.
+  {
+    id: '31e9e629-7c25-4d45-aa35-9ba5f95b43cb',
+    name: 'Vicious Kavu',
+    types: ['creature'],
+    cost: { generic: 1, B: 1, R: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['kavu'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        label: 'Attacks: ~ gets +2/+0 until end of turn',
+      },
+    ],
+  },
   // All Slivers have "{2}, Sacrifice this permanent: You gain 4 life."
   {
     id: '097d513b-23e9-49a5-aa14-a381a3018cec',
@@ -79477,6 +88856,30 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // Menace (This creature can't be blocked except by two or more creatures.)
+  // Soulshift 6 (When this creature dies, you may return target Spirit card with mana value 6 or less from your graveyard to your hand.)
+  {
+    id: 'fa5241c8-7f50-413e-9ac0-9ab0ad5c884c',
+    name: 'Vine Kami',
+    types: ['creature'],
+    cost: { generic: 6, G: 1 },
+    power: 4,
+    toughness: 4,
+    keywords: { menace: true },
+    subtypes: ['spirit'],
+    triggers: [
+      {
+        condition: { on: 'dies' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, optional: true, filter: { anyOfSubtypes: ['Spirit'], maxManaValue: 6 } },
+          },
+        ],
+        label: 'Soulshift 6',
+      },
+    ],
+  },
   // Defender (This creature can't attack.)
   // {T}: Add {G}.
   {
@@ -79538,6 +88941,26 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  // {3}{U}: Proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.)
+  {
+    id: 'd89b312b-cc90-4f08-ae2e-043a79e51156',
+    name: 'Viral Drake',
+    types: ['creature'],
+    cost: { generic: 3, U: 1 },
+    power: 1,
+    toughness: 4,
+    keywords: { flying: true, infect: true },
+    subtypes: ['phyrexian', 'drake'],
+    activated: [
+      {
+        cost: { mana: { generic: 3, U: 1 } },
+        effects: [{ primitive: 'proliferate' }],
+        label: '{3}{u}: proliferate',
+      },
+    ],
+  },
   // {1}, {T}: Add {B}{G}.
   {
     id: '54d852fc-0f3a-4791-a147-b21ca6964763',
@@ -79583,6 +89006,26 @@ const POOL_9: readonly CardDefinition[] = [
       label: 'Equip {1}',
       modifies: { power: 1, toughness: 0, keywords: { firstStrike: true } },
     },
+  },
+  // Infect (This creature deals damage to creatures in the form of -1/-1 counters and to players in the form of poison counters.)
+  // When this creature enters, destroy target artifact.
+  {
+    id: 'd3178acf-9c5a-418c-bbf7-8e430534396d',
+    name: 'Viridian Corrupter',
+    types: ['creature'],
+    cost: { generic: 1, G: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { infect: true },
+    subtypes: ['phyrexian', 'elf', 'shaman'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'destroyTarget', params: { targets: 'artifact' } }],
+        label: 'Enters: destroy target artifact',
+        targets: 'artifact',
+      },
+    ],
   },
   // Equipped creature has "{T}: This creature deals 1 damage to any target."
   // Equip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)
@@ -79728,6 +89171,25 @@ const POOL_9: readonly CardDefinition[] = [
         cost: { sacrificeAnother: { anyOfTypes: ['creature'] } },
         effects: [{ primitive: 'scry' }],
         label: 'Sacrifice a creature: scry 1',
+      },
+    ],
+  },
+  // {U}: This creature gets +1/+0 until end of turn.
+  // Suspend 4—{U} (Rather than cast this card from your hand, you may pay {U} and exile it with four time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost. It has haste.)
+  {
+    id: 'cdc9f54e-7fba-4f03-83ca-6d293dffc07a',
+    name: 'Viscerid Deepwalker',
+    types: ['creature'],
+    cost: { generic: 4, U: 1 },
+    power: 2,
+    toughness: 3,
+    subtypes: ['homarid', 'warrior'],
+    suspend: { count: 4, cost: { U: 1 }, upkeep: [{ primitive: 'suspendTick' }] },
+    activated: [
+      {
+        cost: { mana: { U: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        label: '{u}: ~ gets +1/+0 until end of turn',
       },
     ],
   },
@@ -80287,6 +89749,34 @@ const POOL_9: readonly CardDefinition[] = [
     effects: [
       { primitive: 'exileTarget', params: { targets: 'creatureOrPlaneswalker' } },
       { primitive: 'gainLife', params: { amount: 2 } },
+    ],
+  },
+  // Mountainwalk (This creature can't be blocked as long as defending player controls a Mountain.)
+  // Echo {1}{R}{R} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  {
+    id: '39bbb1f6-f3c4-4e11-bb71-91ea31797d1e',
+    name: 'Vug Lizard',
+    types: ['creature'],
+    cost: { generic: 1, R: 2 },
+    power: 3,
+    toughness: 4,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'mountain' }] },
+    subtypes: ['lizard'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 1, R: 2 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {1}{R}{R}',
+      },
     ],
   },
   // Trample
@@ -80962,6 +90452,41 @@ const POOL_9: readonly CardDefinition[] = [
     toughness: 6,
     subtypes: ['zombie', 'turtle'],
   },
+  // Flying
+  // This creature can block only creatures with flying.
+  {
+    id: '7bb3ce5d-330d-427e-a053-8cc4eeb2941b',
+    name: 'Wanderlight Spirit',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['spirit'],
+  },
+  // Vanishing 2 (This creature enters with two time counters on it. At the beginning of your upkeep, remove a time counter from it. When the last is removed, sacrifice it.)
+  {
+    id: 'b20b0048-f93a-4349-b5d1-201ab0a38d1b',
+    name: 'Waning Wurm',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 7,
+    toughness: 6,
+    subtypes: ['zombie', 'wurm'],
+    entersWithCounters: [{ kind: 'time', count: 2 }],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceHasCounter', counter: 'time' } },
+        effects: [
+          {
+            primitive: 'tickDownCounter',
+            params: { counter: 'time', sacrificeWhen: 'lastRemoved' },
+          },
+        ],
+        label: 'Vanishing 2',
+      },
+    ],
+  },
   // {3}, {T}: Target creature gains trample until end of turn.
   {
     id: 'd0ea0c6c-aa76-4b16-bc99-2ff46dc56d4e',
@@ -81018,6 +90543,18 @@ const POOL_9: readonly CardDefinition[] = [
         targets: 'enchantment',
       },
     ],
+  },
+  // Haste
+  // Myriad (Whenever this creature attacks, for each opponent other than defending player, you may create a token copy that's tapped and attacking that player or a planeswalker they control. Exile the tokens at end of combat.)
+  {
+    id: '49b311c5-90f5-4d26-86ce-b9f645c137e4',
+    name: 'Warchief Giant',
+    types: ['creature'],
+    cost: { generic: 3, R: 2 },
+    power: 5,
+    toughness: 3,
+    keywords: { haste: true, myriad: true },
+    subtypes: ['giant', 'warrior'],
   },
   // First strike (This creature deals combat damage before creatures without first strike.)
   {
@@ -81179,6 +90716,17 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // Protection from Goblins
+  {
+    id: '7ab5fe17-5499-427b-9267-3b3a9676a087',
+    name: 'Warren-Scourge Elf',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { protectionFrom: ['subtype:Goblin'] },
+    subtypes: ['elf', 'warrior'],
+  },
   // Trample (This creature can deal excess combat damage to the player it's attacking.)
   {
     id: 'c8a5b28b-ff0d-4680-81cd-0d61e0e55e8e',
@@ -81207,6 +90755,17 @@ const POOL_9: readonly CardDefinition[] = [
     power: 2,
     toughness: 1,
     subtypes: ['human', 'scout'],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: 'd65630c7-3813-404c-9919-0e46c557f7b8',
+    name: 'Warthog',
+    types: ['creature'],
+    cost: { generic: 1, G: 2 },
+    power: 3,
+    toughness: 2,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['boar'],
   },
   // Vigilance
   {
@@ -81488,6 +91047,30 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying
+  // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
+  {
+    id: 'e75ebcb4-5db8-4c72-9f65-8ee8f2c893ea',
+    name: 'Waveskimmer Aven',
+    types: ['creature'],
+    cost: { generic: 2, W: 1, U: 1, G: 1 },
+    power: 2,
+    toughness: 4,
+    keywords: { flying: true },
+    subtypes: ['bird', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'creatureAttacksAlone' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 1, toughness: 1, subject: 'triggering' },
+          },
+        ],
+        label: 'Exalted',
+      },
+    ],
+  },
   // Target creature gets +2/+2 until end of turn.
   {
     id: '4744b086-fea2-4992-bfef-68c58cdf9cf0',
@@ -81735,6 +91318,34 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // Whenever this creature attacks, it gets +2/+0 until end of turn.
+  {
+    id: '9b241ba4-cff5-48ce-83bd-d70fb5e20ff4',
+    name: 'Wei Ambush Force',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 0 } }],
+        label: 'Attacks: ~ gets +2/+0 until end of turn',
+      },
+    ],
+  },
+  // Horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  {
+    id: 'f2393871-86a8-4c23-b3ec-2bc68bdaf087',
+    name: 'Wei Elite Companions',
+    types: ['creature'],
+    cost: { generic: 4, B: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { horsemanship: true, blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] } },
+    subtypes: ['human', 'soldier'],
+  },
   {
     id: '30a227a1-625d-443a-bc6b-d0e51ddece60',
     name: 'Wei Infantry',
@@ -81742,6 +91353,28 @@ const POOL_9: readonly CardDefinition[] = [
     cost: { generic: 1, B: 1 },
     power: 2,
     toughness: 1,
+    subtypes: ['human', 'soldier'],
+  },
+  // Horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  {
+    id: 'a11d58fb-fb70-4e8f-8f64-232ad2c1f59b',
+    name: 'Wei Scout',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { horsemanship: true, blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] } },
+    subtypes: ['human', 'soldier', 'scout'],
+  },
+  // Horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  {
+    id: '0b4cc234-f6b7-4801-a6d0-c98b72f446cf',
+    name: 'Wei Strike Force',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { horsemanship: true, blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] } },
     subtypes: ['human', 'soldier'],
   },
   // Draw three cards. Target player mills three cards.
@@ -81857,6 +91490,18 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying (This creature can't be blocked except by creatures with flying or reach.)
+  // This creature can block only creatures with flying.
+  {
+    id: 'aa9b56b7-73f1-47fd-834b-37408482cebc',
+    name: 'Welkin Tern',
+    types: ['creature'],
+    cost: { generic: 1, U: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { flying: true, blockOnly: { attackerMustHaveAnyOf: ['flying'] } },
+    subtypes: ['bird'],
+  },
   // When this Equipment enters, you gain 2 life.
   // Equipped creature gets +1/+1.
   // Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)
@@ -81934,6 +91579,28 @@ const POOL_9: readonly CardDefinition[] = [
           },
         ],
         label: '{r}: target creature gains haste until end of turn',
+      },
+    ],
+  },
+  // At the beginning of your upkeep, sacrifice this creature unless you pay {B}.
+  {
+    id: '9cd00b0b-2ac1-4926-a735-215f402ba1c4',
+    name: 'Whipstitched Zombie',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['zombie'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { B: 1 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {b}',
       },
     ],
   },
@@ -82028,6 +91695,25 @@ const POOL_9: readonly CardDefinition[] = [
     effects: [
       { primitive: 'pumpUntilEndOfTurn', params: { power: -1, toughness: -1, targets: 'creature' } },
       { primitive: 'proliferate' },
+    ],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  // {B}: This creature gets +1/+1 until end of turn.
+  {
+    id: '5fbfdc2a-7bf3-4461-bef7-fa499d29d1b8',
+    name: 'Whispering Shade',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['shade'],
+    activated: [
+      {
+        cost: { mana: { B: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: '{b}: ~ gets +1/+1 until end of turn',
+      },
     ],
   },
   // Buyback {5} (You may pay an additional {5} as you cast this spell. If you do, put this card into your hand as it resolves.)
@@ -82238,6 +91924,39 @@ const POOL_9: readonly CardDefinition[] = [
     toughness: 3,
     subtypes: ['cat'],
   },
+  // At the beginning of your upkeep, sacrifice this creature unless you pay {G}.
+  {
+    id: 'a47bc387-ac1a-42b4-9427-fc944094b3a1',
+    name: 'Wild Leotau',
+    types: ['creature'],
+    cost: { generic: 2, G: 2 },
+    power: 5,
+    toughness: 4,
+    subtypes: ['cat'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: { cost: { G: 1 }, effects: [{ primitive: 'sacrificeSelf' }], stake: 'source' },
+          },
+        ],
+        label: 'your upkeep: sacrifice ~ unless you pay {g}',
+      },
+    ],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: 'b2c2a31a-4432-45ff-80fc-8bad90719736',
+    name: 'Wild Ox',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['ox'],
+  },
   // When this creature enters, you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
   {
     id: '0d20e020-30e1-4deb-8dfc-4c5fe056193d',
@@ -82356,6 +92075,17 @@ const POOL_9: readonly CardDefinition[] = [
       { primitive: 'drawCards', params: { count: 1 } },
     ],
   },
+  // Wither (This deals damage to creatures in the form of -1/-1 counters.)
+  {
+    id: '3323467c-132f-469a-90fc-9d3b0fb004aa',
+    name: 'Wildslayer Elves',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { wither: true },
+    subtypes: ['elf', 'warrior'],
+  },
   // Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)
   {
     id: '0c56ed5b-9a3b-4d2d-a598-7534231143fa',
@@ -82390,6 +92120,17 @@ const POOL_9: readonly CardDefinition[] = [
     toughness: 4,
     subtypes: ['golem'],
     costAssist: 'convoke',
+  },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  {
+    id: '1def835b-aabb-4a9d-8fb9-460452de0d79',
+    name: 'Willow Dryad',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['dryad'],
   },
   {
     id: 'c063a072-0cd4-45fb-ac68-96e359bf3ef5',
@@ -82593,6 +92334,32 @@ const POOL_9: readonly CardDefinition[] = [
           { primitive: 'gainLife', params: { amount: 3 } },
         ],
         label: 'Enters: mill three cards and you gain 3 life',
+      },
+    ],
+  },
+  // Echo {4}{G} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  {
+    id: 'ed75dc43-172c-4302-8807-23bfdd65baf4',
+    name: 'Winding Wurm',
+    types: ['creature'],
+    cost: { generic: 4, G: 1 },
+    power: 6,
+    toughness: 6,
+    subtypes: ['wurm'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 4, G: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {4}{G}',
       },
     ],
   },
@@ -82853,6 +92620,16 @@ const POOL_9: readonly CardDefinition[] = [
       ],
     },
   },
+  // Split second (As long as this spell is on the stack, players can't cast spells or activate abilities that aren't mana abilities.)
+  // Return target permanent to its owner's hand.
+  {
+    id: '2ece0707-72f7-4a0a-8c37-9fbe0c694f9b',
+    name: 'Wipe Away',
+    types: ['instant'],
+    cost: { generic: 1, U: 2 },
+    keywords: { splitSecond: true },
+    effects: [{ primitive: 'returnToHand', params: { targets: 'permanent' } }],
+  },
   // Exile target enchantment.
   // Cycling {3} ({3}, Discard this card: Draw a card.)
   {
@@ -83012,6 +92789,9 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_11: readonly CardDefinition[] = [
   {
     id: '8c9f3b3b-de16-4ae5-844e-1373e0f84469',
     name: 'Witch\'s Familiar',
@@ -83162,6 +92942,32 @@ const POOL_9: readonly CardDefinition[] = [
       { produces: [{ W: 1 }, { B: 1 }], cost: { mana: { generic: 2 } } },
     ],
   },
+  // Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)
+  // Whenever this creature deals combat damage to a player, you may return target creature card from your graveyard to your hand.
+  {
+    id: 'c5a6e960-169d-431a-9ebd-c4413aa67377',
+    name: 'Woebearer',
+    types: ['creature'],
+    cost: { generic: 4, B: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: {
+      blockRestriction: { blockerMustMatchAnyOf: [{ kind: 'artifact' }, { kind: 'color', color: 'B' }] },
+    },
+    subtypes: ['zombie'],
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer' },
+        effects: [
+          {
+            primitive: 'returnFromGraveyard',
+            params: { count: 1, filter: { anyOfTypes: ['creature'] }, optional: true },
+          },
+        ],
+        label: 'Combat damage to a player: you may return target creature card from your graveyard to your hand',
+      },
+    ],
+  },
   // This creature enters tapped.
   {
     id: '7dbeced9-d27d-476c-92d4-3c14d8a40458',
@@ -83220,6 +93026,31 @@ const POOL_9: readonly CardDefinition[] = [
       label: 'Enchant creature',
       modifies: { power: 2, toughness: 2, keywords: {} },
     },
+  },
+  // Rampage 2 (Whenever this creature becomes blocked, it gets +2/+2 until end of turn for each creature blocking it beyond the first.)
+  {
+    id: 'fab6d1e8-0985-4560-aea2-7ad1925a2f5a',
+    name: 'Wolverine Pack',
+    types: ['creature'],
+    cost: { generic: 2, G: 2 },
+    power: 2,
+    toughness: 4,
+    subtypes: ['wolverine'],
+    triggers: [
+      {
+        condition: { on: 'becomesBlocked' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: {
+              power: { countOf: 'creaturesBlockingThisBeyondFirst', times: 2 },
+              toughness: { countOf: 'creaturesBlockingThisBeyondFirst', times: 2 },
+            },
+          },
+        ],
+        label: 'Rampage 2',
+      },
+    ],
   },
   // When this creature enters, search your library for a Forest card, put that card onto the battlefield, then shuffle.
   {
@@ -83379,6 +93210,37 @@ const POOL_9: readonly CardDefinition[] = [
     entersTapped: true,
     producesOptions: [{ G: 1 }, { U: 1 }],
   },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  // Protection from green
+  {
+    id: '11f1e6fe-e959-4030-9925-9ccc27040275',
+    name: 'Woodlot Crawler',
+    types: ['creature'],
+    cost: { U: 1, B: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }], protectionFrom: ['green'] },
+    subtypes: ['insect'],
+  },
+  // Reach (This creature can block creatures with flying.)
+  // Whenever this creature blocks a creature with flying, this creature gets +0/+2 until end of turn.
+  {
+    id: '2496a40a-1d67-44ea-900d-9c5fbd5034a7',
+    name: 'Woolly Spider',
+    types: ['creature'],
+    cost: { generic: 1, G: 2 },
+    power: 2,
+    toughness: 3,
+    keywords: { reach: true },
+    subtypes: ['spider'],
+    triggers: [
+      {
+        condition: { on: 'blocks', counterpartHasKeyword: 'flying' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 0, toughness: 2 } }],
+        label: 'Blocks a creature with flying: ~ gets +0/+2 until end of turn',
+      },
+    ],
+  },
   {
     id: 'cf7188d8-d37f-49ec-ab52-8ea080725ca7',
     name: 'Woolly Thoctar',
@@ -83414,9 +93276,6 @@ const POOL_9: readonly CardDefinition[] = [
     xCost: 1,
     effects: [{ primitive: 'addCounters', params: { amount: { chosenX: true }, self: true } }],
   },
-];
-
-const POOL_10: readonly CardDefinition[] = [
   // {3}{U}: Target creature can't be blocked this turn.
   {
     id: '2d0fd73f-e161-4e42-b4f9-9246a9dba785',
@@ -83616,6 +93475,17 @@ const POOL_10: readonly CardDefinition[] = [
     cost: { B: 1 },
     effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -3, toughness: -1, targets: 'creature' } }],
   },
+  // Horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  {
+    id: 'd034a3a0-714b-4b36-b1b8-eb723de7e51e',
+    name: 'Wu Elite Cavalry',
+    types: ['creature'],
+    cost: { generic: 3, U: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { horsemanship: true, blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] } },
+    subtypes: ['human', 'soldier'],
+  },
   {
     id: 'ebe4115e-7ca3-4996-a390-133c2e6d09b7',
     name: 'Wu Infantry',
@@ -83623,6 +93493,28 @@ const POOL_10: readonly CardDefinition[] = [
     cost: { generic: 1, U: 1 },
     power: 2,
     toughness: 1,
+    subtypes: ['human', 'soldier'],
+  },
+  // Horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  {
+    id: '60e55b25-fde2-4b57-b5db-65b75262ff3d',
+    name: 'Wu Light Cavalry',
+    types: ['creature'],
+    cost: { generic: 1, U: 1 },
+    power: 1,
+    toughness: 2,
+    keywords: { horsemanship: true, blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] } },
+    subtypes: ['human', 'soldier'],
+  },
+  // This creature can't attack unless defending player controls an Island.
+  {
+    id: '935fc8cf-c2c5-4bfc-9dd8-0a0d52058312',
+    name: 'Wu Warship',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { cantAttackUnlessDefenderControls: [{ kind: 'subtype', subtype: 'island' }] },
     subtypes: ['human', 'soldier'],
   },
   // {T}: Target creature gets +1/+1 until end of turn.
@@ -83646,6 +93538,17 @@ const POOL_10: readonly CardDefinition[] = [
         label: '{t}: target creature gets +1/+1 until end of turn',
       },
     ],
+  },
+  // Myriad (Whenever this creature attacks, for each opponent other than defending player, you may create a token copy that's tapped and attacking that player or a planeswalker they control. Exile the tokens at end of combat.)
+  {
+    id: 'f00a57fc-b4a6-48fa-a20c-864c10099e4b',
+    name: 'Wyrm\'s Crossing Patrol',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { myriad: true },
+    subtypes: ['human', 'soldier'],
   },
   // ({T}: Add {U}, {B}, or {R}.)
   // This land enters tapped.
@@ -83730,6 +93633,25 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
+  // Trample, haste
+  // Cumulative upkeep {G}{G} (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)
+  {
+    id: '41fba6db-fc52-43f2-a5d6-72001be126af',
+    name: 'Yavimaya Ants',
+    types: ['creature'],
+    cost: { generic: 2, G: 2 },
+    power: 5,
+    toughness: 1,
+    keywords: { trample: true, haste: true },
+    subtypes: ['insect'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [{ primitive: 'cumulativeUpkeep', params: { mana: { G: 2 } } }],
+        label: 'Cumulative upkeep {G}{G}',
+      },
+    ],
+  },
   // Protection from blue
   {
     id: '8e17377d-4dad-4144-b0ce-c849636096a2',
@@ -83765,6 +93687,59 @@ const POOL_10: readonly CardDefinition[] = [
         cost: { mana: { G: 1 } },
         effects: [{ primitive: 'regenerate' }],
         label: '{g}: regenerate ~',
+      },
+    ],
+  },
+  // Echo {2}{G} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+  // When this creature enters, you may search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.
+  {
+    id: '05414a41-b50c-49b6-9c27-f3170017d9b0',
+    name: 'Yavimaya Granger',
+    types: ['creature'],
+    cost: { generic: 2, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['elf'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you', intervening: { kind: 'sourceControlledSinceLastUpkeep' } },
+        effects: [
+          {
+            primitive: 'payManaOrElse',
+            params: {
+              cost: { generic: 2, G: 1 },
+              effects: [{ primitive: 'sacrificeSelf' }],
+              stake: 'source',
+            },
+          },
+        ],
+        label: 'Echo {2}{G}',
+      },
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may search your library for a basic land card, put that card onto the battlefield tapped, then shuffle',
+              valence: 'gain',
+              effects: [
+                {
+                  primitive: 'searchLibrary',
+                  params: {
+                    who: 'controller',
+                    count: 1,
+                    filter: { anyOfTypes: ['land'] },
+                    nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+                    destination: 'battlefield',
+                    tapped: true,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        label: 'Enters: you may search your library for a basic land card, put that card onto the battlefield tapped, then shuffle',
       },
     ],
   },
@@ -83824,6 +93799,38 @@ const POOL_10: readonly CardDefinition[] = [
         params: { who: 'opponent', filter: { anyOfTypes: ['land'] } },
       },
     ],
+  },
+  // Horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  // This creature can't block.
+  {
+    id: '84460666-4f6b-422c-b20e-dc1651c66e15',
+    name: 'Yellow Scarves Cavalry',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: {
+      horsemanship: true,
+      blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] },
+      cantBlock: true,
+    },
+    subtypes: ['human', 'soldier'],
+  },
+  // Horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  // This creature can't block.
+  {
+    id: '06e98691-6227-41f2-a3f4-3131b07a3a6f',
+    name: 'Yellow Scarves General',
+    types: ['creature'],
+    cost: { generic: 3, R: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: {
+      horsemanship: true,
+      blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] },
+      cantBlock: true,
+    },
+    subtypes: ['human', 'soldier'],
   },
   // This creature can't block.
   {
@@ -84167,6 +94174,17 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  {
+    id: 'b3aeb7fb-8618-4595-84b4-20881b824b3e',
+    name: 'Zendikar Farguide',
+    types: ['creature'],
+    cost: { generic: 4, G: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['elemental'],
+  },
   // Landfall — Whenever a land you control enters, create a 2/2 green Elemental creature token.
   {
     id: '60297593-2438-48d7-9414-48af114a93d2',
@@ -84292,6 +94310,42 @@ const POOL_10: readonly CardDefinition[] = [
     produces: ['C'],
     triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'scry' }], label: 'Enters: scry 1' }],
   },
+  // Vigilance; horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  {
+    id: '6364eba6-6aba-4c18-b9f0-aead17064b48',
+    name: 'Zhang Fei, Fierce Warrior',
+    types: ['creature'],
+    cost: { generic: 4, W: 2 },
+    power: 4,
+    toughness: 4,
+    legendary: true,
+    keywords: {
+      horsemanship: true,
+      blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] },
+      vigilance: true,
+    },
+    subtypes: ['human', 'soldier', 'warrior'],
+  },
+  // Horsemanship (This creature can't be blocked except by creatures with horsemanship.)
+  // Whenever Zhao Zilong blocks, it gets +1/+1 until end of turn.
+  {
+    id: '2d16cf1d-a7c3-4038-a648-299c1bedae99',
+    name: 'Zhao Zilong, Tiger General',
+    types: ['creature'],
+    cost: { generic: 3, W: 2 },
+    power: 3,
+    toughness: 3,
+    legendary: true,
+    keywords: { horsemanship: true, blockRestriction: { blockerMustHaveAnyOf: ['horsemanship'] } },
+    subtypes: ['human', 'soldier', 'warrior'],
+    triggers: [
+      {
+        condition: { on: 'blocks' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Blocks: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
   // Menace (This creature can't be blocked except by two or more creatures.)
   {
     id: 'f3fa493e-b58a-4b77-88e8-b8890eefb2b7',
@@ -84302,6 +94356,18 @@ const POOL_10: readonly CardDefinition[] = [
     toughness: 5,
     legendary: true,
     keywords: { menace: true },
+    subtypes: ['human', 'soldier'],
+  },
+  // Zhou Yu can't attack unless defending player controls an Island.
+  {
+    id: '6e2cf83b-417d-41ca-8e65-86aa65180c40',
+    name: 'Zhou Yu, Chief Commander',
+    types: ['creature'],
+    cost: { generic: 5, U: 2 },
+    power: 8,
+    toughness: 8,
+    legendary: true,
+    keywords: { cantAttackUnlessDefenderControls: [{ kind: 'subtype', subtype: 'island' }] },
     subtypes: ['human', 'soldier'],
   },
   // ({T}: Add {B}, {R}, or {G}.)
@@ -84321,6 +94387,127 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
     producesOptions: [{ B: 1 }, { R: 1 }, { G: 1 }],
+  },
+  // Mountainwalk (This creature can't be blocked as long as defending player controls a Mountain.)
+  {
+    id: 'cc61aa62-25ee-40a4-9b6e-d6277316b464',
+    name: 'Zodiac Dog',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'mountain' }] },
+    subtypes: ['dog'],
+  },
+  // Mountainwalk (This creature can't be blocked as long as defending player controls a Mountain.)
+  {
+    id: '52510462-2802-4e16-87d4-da376ee2e3be',
+    name: 'Zodiac Goat',
+    types: ['creature'],
+    cost: { R: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'mountain' }] },
+    subtypes: ['goat'],
+  },
+  // Islandwalk (This creature can't be blocked as long as defending player controls an Island.)
+  {
+    id: 'fb24cb19-3409-45f7-b0e0-7c652064d2dd',
+    name: 'Zodiac Horse',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'island' }] },
+    subtypes: ['horse'],
+  },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  {
+    id: '1670108c-c3c8-4052-8f19-30dcb2266774',
+    name: 'Zodiac Monkey',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['monkey'],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: '1a731b3a-0065-448d-841c-28700d78a4fd',
+    name: 'Zodiac Ox',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['ox'],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: '52e364b5-55ca-4df5-8755-6643218b0969',
+    name: 'Zodiac Pig',
+    types: ['creature'],
+    cost: { generic: 3, B: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['boar'],
+  },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  {
+    id: 'ab4211d0-deef-4113-84e0-47ce0df7a5c6',
+    name: 'Zodiac Rabbit',
+    types: ['creature'],
+    cost: { G: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['rabbit'],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: 'fb6e5814-e1b5-48d2-9c4f-62b5727f333f',
+    name: 'Zodiac Rat',
+    types: ['creature'],
+    cost: { B: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['rat'],
+  },
+  // Plainswalk (This creature can't be blocked as long as defending player controls a Plains.)
+  {
+    id: '81dd362e-42f6-4eeb-9fe7-0d9cbeb4f21e',
+    name: 'Zodiac Rooster',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'plains' }] },
+    subtypes: ['bird'],
+  },
+  // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
+  {
+    id: '6d30d6f0-ca4c-4442-a47f-ecdf52088ecc',
+    name: 'Zodiac Snake',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
+    subtypes: ['snake'],
+  },
+  // Forestwalk (This creature can't be blocked as long as defending player controls a Forest.)
+  {
+    id: 'aafd78d5-df9f-46a3-a634-ebf7634a6358',
+    name: 'Zodiac Tiger',
+    types: ['creature'],
+    cost: { generic: 2, G: 2 },
+    power: 3,
+    toughness: 4,
+    keywords: { landwalk: [{ kind: 'subtype', subtype: 'forest' }] },
+    subtypes: ['cat'],
   },
   // Each opponent loses 4 life and you gain 4 life.
   {
@@ -84432,4 +94619,4 @@ const POOL_10: readonly CardDefinition[] = [
   },
 ];
 
-export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([...POOL_0, ...POOL_1, ...POOL_2, ...POOL_3, ...POOL_4, ...POOL_5, ...POOL_6, ...POOL_7, ...POOL_8, ...POOL_9, ...POOL_10]);
+export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([...POOL_0, ...POOL_1, ...POOL_2, ...POOL_3, ...POOL_4, ...POOL_5, ...POOL_6, ...POOL_7, ...POOL_8, ...POOL_9, ...POOL_10, ...POOL_11]);

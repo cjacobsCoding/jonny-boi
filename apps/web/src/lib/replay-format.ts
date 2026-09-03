@@ -78,6 +78,12 @@ export function describeEvent(event: GameEvent, name: NameResolver): LogLine | n
         )} life (now ${event.to}).`,
         tone: 'life',
       };
+    case 'poisonChanged':
+      // The poison clock (§3.105), phrased like the life line above.
+      return {
+        text: `Player ${event.player} gets ${event.delta} poison counter${event.delta === 1 ? '' : 's'} (now ${event.to}).`,
+        tone: 'life',
+      };
     case 'gainLife':
       // Paired with the `lifeChanged` that precedes it (see `changeLife` in
       // packages/cards), so printing both duplicated every life-gain in the replay

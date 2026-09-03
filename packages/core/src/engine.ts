@@ -127,11 +127,30 @@ import {
   addCardGrant,
   castPermissionFor,
   expireCardGrants,
-  flashbackCostOf,
   hasCardGrants,
   pruneCardGrantsFor,
 } from './card-grants.js';
 import { declineMadness } from './madness.js';
+// §3.111 — the graveyard-casting family: activated abilities of a card in a
+// graveyard, the graveyard-cast kinds, and the additional-cost kinds they add.
+import {
+  ADDITIONAL_COST_ZONE,
+  GRAVEYARD_CAST_EXIT,
+  additionalCostPool,
+  canPayAdditionalCost,
+  castXCountOf,
+  graveyardCastOptionFor,
+  graveyardCastOptionsOf,
+  spellAdditionalCostOf,
+  type GraveyardAbility,
+} from './graveyard-casting.js';
+// §3.106 — upkeep costs and time counters; suspend.
+import { markBattlefieldEntry, TIME_COUNTER } from './upkeep-costs.js';
+import { suspendWindowOpenFor } from './suspend.js';
+// §3.113 — the spell-count family: cast triggers and the library-pile windows.
+import { pushCastTriggers } from './cast-triggers.js';
+import { isFreeCastWindow, settleCastWindowAfterCast, spellOnStackById } from './cascade.js';
+import { createDelayedTrigger } from './delayed.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
 import { clearTurnFacts, turnFactHolds } from './turn-facts.js';
@@ -166,6 +185,10 @@ import {
   tapAttackers,
 } from './internal/combat.js';
 import { attackingCreatureIds } from './combat-removal.js';
+// The combat keyword family (DESIGN §3.107): attack restrictions/requirements
+// (CR 508.1c/d) and the split-second lock (CR 702.61), each read from one file.
+import { attackDeclarationProblem, attackRequirementProblem, requiredAttackerIds } from './attack-requirements.js';
+import { SPLIT_SECOND_REJECTION, splitSecondOnStack } from './split-second.js';
 import { entersTapped, isAttackable, isCreature, isPlaneswalker } from './card.js';
 import { applyCopyAsEntersAnswer, askCopyAsEnters, extraLoyaltyForCopy } from './copy.js';
 import { addLoyalty, applyEnteringDefense, applyEnteringLoyalty, loyaltyOf, removeLoyalty } from './internal/stats.js';
@@ -476,6 +499,24 @@ function advanceStep(state: GameState, config: RulesConfig, emit: (e: GameEvent)
     // the second pass finds a legal hand and nothing left to expire.
     performStepTurnBasedActions(state, 'cleanup', config, emit);
     return;
+  }
+
+  // THE FORCED ATTACK (CR 508.1d, DESIGN §3.107). Passing through the
+  // declare-attackers step is how this engine declares "no attackers" — but with
+  // a creature that "attacks each combat if able" on the board and able, an
+  // empty declaration is not a legal one. The only legal minimum is exactly the
+  // required creatures at the defending player, so the engine declares that
+  // itself (through the same commit the action path uses: taps, event, triggers)
+  // and hands priority back with attackers declared, instead of refusing the
+  // pass — a refused pass would deadlock every pilot that answers "pass" to a
+  // step it does not understand. One keyword read per creature when the board
+  // carries no requirement, which is what every ordinary combat pays.
+  if (state.step === 'declareAttackers' && state.combat && !state.combat.attackersDeclared) {
+    const required = requiredAttackerIds(state, indexContinuous(state), defendingPlayerOf(state));
+    if (required.length > 0) {
+      commitAttackDeclaration(state, required, undefined, emit);
+      return;
+    }
   }
 
   const next = STEP_ORDER[idx + 1] as Step;
@@ -863,6 +904,8 @@ function resolveTopOfStack(
       ...(top.xValue !== undefined ? { xValue: top.xValue } : {}),
       ...(top.kicked !== undefined ? { kicked: top.kicked } : {}),
       ...(top.kickCount !== undefined ? { kickCount: top.kickCount } : {}),
+      // §3.106 — a suspend-cast creature's haste rides the frame like the kick does.
+      ...(top.hasteOnEntry === true ? { hasteOnEntry: true } : {}),
       ...(modal ? { effectTargets: modal.effectTargets } : {}),
     },
     registry,
@@ -887,7 +930,15 @@ function resolveTriggeredAbility(
   // holding is removed from the stack and does nothing. Checked here, before any
   // effect runs, against the same evaluator the collector used when the ability
   // triggered — one condition, one reader, no way for the two to disagree.
-  if (!interveningIfHolds(state, obj.intervening, obj.sourceInstanceId, obj.controller, obj.triggeringPlayer)) {
+  if (
+    obj.intervening !== undefined &&
+    !interveningIfHolds(state, obj.intervening, obj.sourceInstanceId, obj.controller, obj.triggeringPlayer, {
+      // DESIGN §3.110 — the LKI counter snapshot and the event's subject, so
+      // undying's and evolve's "if" read the same facts at both CR 603.4 checks.
+      amount: obj.triggeringAmount,
+      instances: obj.triggeringInstances,
+    })
+  ) {
     emit({
       type: 'triggerFizzled',
       sourceInstanceId: obj.sourceInstanceId,
@@ -915,6 +966,8 @@ function resolveTriggeredAbility(
       // "that player draws an additional card" is read during it.
       ...(obj.triggeringPlayer !== undefined ? { triggeringPlayer: obj.triggeringPlayer } : {}),
       ...(obj.triggeringAmount !== undefined ? { triggeringAmount: obj.triggeringAmount } : {}),
+      // "That creature" (DESIGN §3.107) rides the frame for the same reason.
+      ...(obj.triggeringInstances !== undefined ? { triggeringInstances: obj.triggeringInstances } : {}),
     },
     registry,
     emit,
@@ -935,6 +988,10 @@ function frameSource(state: GameState, frame: ResolutionFrame): CardInstance {
   const id = frame.sourceInstanceId ?? 0;
   return (
     findOnBattlefield(state, id) ??
+    // §3.113 — a CAST TRIGGER's source is the spell still on the stack (storm
+    // copies it; cascade reads its mana value). The stack is no player zone,
+    // so `findInstanceAnywhere` would hand back the "unknown" stand-in below.
+    spellOnStackById(state, id)?.card ??
     findInstanceAnywhere(state, id) ?? {
       instanceId: id,
       def: { id: 'unknown-trigger-source', name: 'unknown', types: [] },
@@ -985,6 +1042,7 @@ function runResolution(
         kickCount: frame.kickCount,
         triggeringPlayer: frame.triggeringPlayer,
     triggeringAmount: frame.triggeringAmount,
+        triggeringInstances: frame.triggeringInstances,
       },
       emit,
       refTargets,
@@ -1030,6 +1088,8 @@ function finishResolution(state: GameState, frame: ResolutionFrame, emit: (e: Ga
 interface KickRecord {
   readonly kicked?: boolean;
   readonly kickCount?: number;
+  /** §3.106 — cast through a suspend window: a creature enters unsick (CR 702.62a). */
+  readonly hasteOnEntry?: boolean;
 }
 
 /** Move a finished spell/permanent off the stack into its destination zone. */
@@ -1078,6 +1138,12 @@ function finishSpellResolution(
     // A planeswalker enters with its printed loyalty (CR 306.5b) — said AFTER the
     // zoneChange so a replay folds "entered, then at loyalty N" in order.
     applyEnteringLoyalty(card, emit);
+    // §3.106 — the entry-time facts (echo's control stamp, "enters with N
+    // time/fade counters"), and a suspend-cast creature's haste (CR 702.62a):
+    // haste in this engine IS "not summoning sick", and every control change
+    // re-sets sickness, which is exactly "until you lose control of it".
+    markBattlefieldEntry(state, card, emit);
+    if (kick?.hasteOnEntry === true) card.summoningSick = false;
     // "…except it enters with an ADDITIONAL loyalty counter on it if it's a
     // planeswalker" (Spark Double). Added after the printed number rather than
     // folded into it, because that is what the card says and because the
@@ -1521,6 +1587,10 @@ function dispatchAction(
       return applyCastSpell(state, prevState, action, config, emit, events);
     case 'cycleCard':
       return applyCycleCard(state, prevState, action, emit, events);
+    case 'suspendCard':
+      return applySuspendCard(state, prevState, action, emit, events);
+    case 'activateGraveyardAbility': // §3.111
+      return applyActivateGraveyardAbility(state, prevState, action, emit, events);
     case 'activateAbility':
       return applyActivateAbility(state, prevState, action, config, emit, events);
     case 'declareAttackers':
@@ -1667,7 +1737,7 @@ function applyAnswerChoice(
       choice.kind === 'selectCards' &&
       answer.kind === 'selectCards'
     ) {
-      const extra = casting.card.def.additionalCost;
+      const extra = spellAdditionalCostOf(casting); // §3.111 — the cost this cast owes
       if (extra) payAdditionalCost(state, extra, choice.chooser, answer.instanceIds, emit);
       patchSpellOnStack(state, casting.instanceId, {
         additionalCostPaid: true,
@@ -3259,12 +3329,20 @@ function applyCastSpell(
     state.madnessWindow?.instanceId === card.instanceId &&
     state.madnessWindow?.controller === action.player;
   const permission = fromZone === 'exile' && !madnessWindowOpen ? castPermissionFor(state, card) : undefined;
-  const madnessCost = madnessWindowOpen ? card.def.madness : undefined;
+  // §3.106 — a SUSPEND window is the same window with a different price: the
+  // cast is "without paying its mana cost" (CR 702.62a), so it has no cost to
+  // look up and nothing to refuse for lacking one.
+  const suspendCast = madnessWindowOpen && suspendWindowOpenFor(state, card, action.player);
+  // §3.113 — a CASCADE / RIPPLE window's cast is free too (CR 702.85a /
+  // 702.60a), read off the one closed table `isFreeCastWindow` keeps. Kept
+  // apart from `suspendCast` because only suspend's cast grants haste.
+  const pileWindowCast = madnessWindowOpen && !suspendCast && isFreeCastWindow(state.madnessWindow);
+  const madnessCost = madnessWindowOpen && !suspendCast && !pileWindowCast ? card.def.madness : undefined;
   if (fromZone === 'exile') {
     if (!madnessWindowOpen && permission === undefined) {
       return rejectWith(prevState, 'that card has no open madness window and no permission to be cast from exile');
     }
-    if (madnessWindowOpen && madnessCost === undefined) {
+    if (madnessWindowOpen && !suspendCast && !pileWindowCast && madnessCost === undefined) {
       return rejectWith(prevState, 'that card has no madness cost');
     }
     // The permission names ONE face. Casting the other half of an exiled
@@ -3313,12 +3391,33 @@ function applyCastSpell(
   // the offer even checked affordability against the granted cost — and refused
   // here with "that card has no flashback". Offer and apply must read the same
   // accessor or the menu lies. Found by the full-pool soak at seed 1200969370.
-  const flashbackCost =
+  //
+  // §3.111 — flashback is one of FOUR graveyard-cast kinds (retrace, jump-start
+  // and escape are the others), and the action names which. The one accessor
+  // `graveyardCastOptionFor` reads the grant-or-printed flashback cost exactly
+  // as before for the default kind, and each keyword's own cost otherwise.
+  const graveyardCastKind = action.graveyardCast ?? 'flashback';
+  const graveyardCast =
     fromZone === 'graveyard' && !aftermath
-      ? (flashbackCostOf(state, card) ?? castDef.flashback)
+      ? graveyardCastOptionFor(state, card, castDef, graveyardCastKind)
       : undefined;
-  if (fromZone === 'graveyard' && !aftermath && flashbackCost === undefined) {
-    return rejectWith(prevState, 'that card has no flashback');
+  const flashbackCost = graveyardCast?.cost;
+  if (fromZone === 'graveyard' && !aftermath && graveyardCast === undefined) {
+    return rejectWith(
+      prevState,
+      graveyardCastKind === 'flashback' ? 'that card has no flashback' : `that card has no ${graveyardCastKind}`,
+    );
+  }
+
+  // SPLIT SECOND (CR 702.61, DESIGN §3.107): the same wall the offer pass
+  // enforces, here because the engine — not the menu — is the authority.
+  if (state.stack.length > 0 && splitSecondOnStack(state)) return rejectWith(prevState, SPLIT_SECOND_REJECTION);
+  // §3.106 — CR 202.1b: a card with NO mana cost cannot be cast by paying it.
+  // From the hand there is nothing else to pay, so the cast is refused; from
+  // exile a free permission or a suspend window pays nothing and is fine, and
+  // a graveyard cast pays its flashback cost. See `pushCastOffers`.
+  if (castDef.noManaCost === true && fromZone === 'hand') {
+    return rejectWith(prevState, 'a card with no mana cost cannot be cast from your hand (CR 202.1b)');
   }
 
   // Timing: sorcery-speed spells require your main phase, empty stack, your priority.
@@ -3366,12 +3465,26 @@ function applyCastSpell(
   // the offer loop screens with.
   const additionalCostProblem = unpayableAdditionalCostReason(state, castDef, action.player, card.instanceId);
   if (additionalCostProblem) return rejectWith(prevState, additionalCostProblem);
+  // §3.111 — a graveyard-cast keyword's own rider (retrace's land, escape's
+  // exiled cards, "Flashback—Sacrifice three creatures"), judged by the same
+  // CR 601.2h gate and the same helper, with the keyword's cost in place of the
+  // printed one.
+  if (graveyardCast?.additional !== undefined) {
+    const riderProblem = unpayableAdditionalCostReason(
+      state,
+      castDef,
+      action.player,
+      card.instanceId,
+      graveyardCast.additional,
+    );
+    if (riderProblem) return rejectWith(prevState, riderProblem);
+  }
 
   // A flashback cost may print a LIFE rider ("Flashback—{1}{U}, Pay 3 life").
   // It is a mandatory part of the cost, not a choice, so a caster who cannot pay
   // it simply cannot cast (CR 118.4) — checked before any mana leaves the pool,
   // so a refusal can never strand a half-paid cost.
-  const flashbackLife = fromZone === 'graveyard' && !aftermath ? (castDef.flashbackLifeCost ?? 0) : 0;
+  const flashbackLife = graveyardCast?.lifeCost ?? 0;
   if (flashbackLife > 0 && !canAffordLifeCost(state, action.player, flashbackLife)) {
     return rejectWith(prevState, `you do not have ${flashbackLife} life to pay this flashback cost`);
   }
@@ -3387,7 +3500,9 @@ function applyCastSpell(
     state,
     action.player,
     castDef,
-    permission?.free
+    // §3.106 — a suspend-window cast pays nothing, exactly as a free permission does.
+    // §3.113 — and so does a cascade / ripple window's.
+    permission?.free || suspendCast || pileWindowCast
       ? undefined
       : fromZone === 'graveyard' && !aftermath
         ? flashbackCost
@@ -3445,6 +3560,13 @@ function applyCastSpell(
   // The madness window is CONSUMED by the cast: the card has left exile, so
   // nothing may decline it afterwards. A permission cast never had a window and
   // must not clear somebody else's.
+  // §3.113 — a consumed CASCADE / RIPPLE window still owns its pile: the cards
+  // not cast go to the library's bottom (before the cast spell resolves, which
+  // is when the trigger's own text puts them there), and a ripple with another
+  // same-name card left re-opens the window on it. Captured here, settled once
+  // the card is on the stack, because a ripple re-open reads the cast card's
+  // name off the stack object.
+  const consumedPileWindow = madnessWindowOpen && !suspendCast && pileWindowCast ? state.madnessWindow : null;
   if (madnessWindowOpen) state.madnessWindow = null;
   card.zone = 'stack';
   // The card just changed zones, so any grant on it stops applying (CR 400.7).
@@ -3468,7 +3590,7 @@ function applyCastSpell(
   const resolvesTo: SpellStackObject['resolvesTo'] = isPermanentType(castDef)
     ? 'battlefield'
     : fromZone === 'graveyard'
-      ? 'exile'
+      ? GRAVEYARD_CAST_EXIT[graveyardCastKind] // §3.111 — the same table `spellLeaveDestination` reads
       : 'graveyard';
   const stackObject: SpellStackObject = {
     kind: 'spell',
@@ -3478,6 +3600,10 @@ function applyCastSpell(
     resolvesTo,
     targets: action.targets ?? [],
     ...(fromZone === 'hand' ? {} : { castFrom: fromZone }),
+    // §3.111 — a non-flashback graveyard cast says so, for the exit and the rider.
+    ...(graveyardCast !== undefined && graveyardCast.kind !== 'flashback' ? { graveyardCast: graveyardCast.kind } : {}),
+    // §3.106 — "if you cast a creature spell this way, it gains haste" (CR 702.62a).
+    ...(suspendCast && isCreature(castDef) ? { hasteOnEntry: true } : {}),
   };
   state.stack.push(stackObject);
   emit({
@@ -3494,6 +3620,11 @@ function applyCastSpell(
   // engine sees — no effect resolves and no event exists a data trigger could
   // watch.
   pushWardTriggers(state, action.player, stackObject.targets, card.instanceId, emit);
+  // §3.113 — storm / cascade / ripple: "when you cast this spell" is likewise a
+  // moment only the engine sees. Pushed AFTER the `spellCast` above so storm's
+  // count already includes this spell (`pushCastTriggers` subtracts it).
+  pushCastTriggers(state, stackObject, emit);
+  if (consumedPileWindow) settleCastWindowAfterCast(state, consumedPileWindow, emit);
   // Caster retains priority after putting something on the stack.
   state.priorityPlayer = action.player;
   state.consecutivePasses = 0;
@@ -3625,8 +3756,9 @@ function maxAffordableKicks(state: GameState, player: PlayerId, cost: ManaCost):
  * because which cost is being paid is a fact about the cast, not the card.
  */
 function xCountForCast(spell: SpellStackObject): number {
-  const def = spell.card.def;
-  return spell.castFrom === 'graveyard' ? (def.flashbackXCost ?? 0) : (def.xCost ?? 0);
+  // §3.111 — a retrace or jump-start cast pays the PRINTED cost (and its X);
+  // only a flashback cast reads the flashback cost's. One table-backed reader.
+  return castXCountOf(spell, spell.card.def);
 }
 
 /**
@@ -3865,10 +3997,9 @@ export function additionalCostCandidates(
   caster: PlayerId,
   excludeInstanceId?: InstanceId,
 ): readonly CardInstance[] {
-  const source =
-    cost.kind === 'sacrifice'
-      ? state.battlefield.filter((perm) => perm.controller === caster)
-      : state.players[caster].hand;
+  // §3.111 — WHICH zone is the closed per-kind table (a tap cost names only
+  // untapped permanents; escape's fuel names graveyard cards).
+  const source = additionalCostPool(state, cost, caster);
   const out: CardInstance[] = [];
   for (const card of source) {
     if (card.instanceId === excludeInstanceId) continue;
@@ -3890,8 +4021,10 @@ export function unpayableAdditionalCostReason(
   def: CardDefinition,
   caster: PlayerId,
   excludeInstanceId?: InstanceId,
+  // §3.111 — a graveyard cast owes its KEYWORD'S additional cost rather than
+  // the card's printed one; the caller that knows which passes it.
+  cost: AdditionalCastCost | undefined = def.additionalCost,
 ): string | undefined {
-  const cost = def.additionalCost;
   if (!cost) return undefined;
   const need = cost.count ?? 1;
   const have = additionalCostCandidates(state, cost, caster, excludeInstanceId).length;
@@ -3918,11 +4051,21 @@ function payAdditionalCost(
   emit: (e: GameEvent) => void,
 ): void {
   for (const id of instanceIds) {
-    const card =
-      cost.kind === 'sacrifice'
-        ? state.battlefield.find((perm) => perm.instanceId === id && perm.controller === caster)
-        : state.players[caster].hand.find((held) => held.instanceId === id);
+    // §3.111 — the payer is found in the kind's own zone (the same closed table
+    // the candidates came from), and what "paying" does is per kind: a
+    // sacrifice or discard is the graveyard move below; a TAP taps (CR 602.2b
+    // — nothing changes zones); escape's fuel is exiled from the graveyard.
+    const card = additionalCostPool(state, cost, caster).find((candidate) => candidate.instanceId === id);
     if (!card) continue; // already gone — never a throw (rule 6)
+    if (cost.kind === 'tap') {
+      card.tapped = true;
+      emit({ type: 'tapped', instanceId: card.instanceId });
+      continue;
+    }
+    if (cost.kind === 'exileFromGraveyard') {
+      moveToZone(state, card, 'exile', emit, card.owner);
+      continue;
+    }
     moveToZone(state, card, 'graveyard', emit, card.owner);
     resetInstanceForNewZone(card);
   }
@@ -4068,7 +4211,8 @@ function askCostChoices(state: GameState, spellInstanceId: InstanceId, emit: (e:
   // enough candidates is not stopped to collect the inevitable.
   const afterBuyback = spellOnStack(state, spellInstanceId);
   if (!afterBuyback) return;
-  const extra = def.additionalCost;
+  // §3.111 — the cost THIS CAST owes: a graveyard keyword's rider, or the printed one.
+  const extra = spellAdditionalCostOf(afterBuyback);
   if (extra && afterBuyback.additionalCostPaid === undefined) {
     const count = extra.count ?? 1;
     const candidates = additionalCostCandidates(state, extra, caster);
@@ -4089,7 +4233,7 @@ function askCostChoices(state: GameState, spellInstanceId: InstanceId, emit: (e:
         // Paying a cost is a LOSS — the pilot gives up its worst qualifying
         // card, which is the whole skill in a sacrifice outlet.
         valence: 'loss',
-        fromZone: extra.kind === 'sacrifice' ? 'battlefield' : 'hand',
+        fromZone: ADDITIONAL_COST_ZONE[extra.kind], // §3.111 — one table with the candidates
       },
       { id: state.nextInstanceId++, sourceInstanceId: afterBuyback.instanceId, sourceName: def.name },
     );
@@ -4194,6 +4338,9 @@ function applyCycleCard(
   const index = action.abilityIndex ?? 0;
   const ability = card.def.cycling?.[index];
   if (!ability) return rejectWith(prevState, 'that card has no such cycling ability');
+  // SPLIT SECOND (CR 702.61, DESIGN §3.107): cycling is an activated ability
+  // (CR 702.29a) and not a mana ability, so it is locked with the rest.
+  if (state.stack.length > 0 && splitSecondOnStack(state)) return rejectWith(prevState, SPLIT_SECOND_REJECTION);
   // Cycling is an ACTIVATED ability of a card in your hand (CR 702.29a), so
   // restricted mana that may activate abilities of that kind of source may fund
   // it and mana that may only cast spells may not.
@@ -4232,6 +4379,251 @@ function applyCycleCard(
     label: ability.label,
   });
   // The cycling player retains priority, as with casting a spell.
+  state.priorityPlayer = action.player;
+  state.consecutivePasses = 0;
+  return { state, events };
+}
+
+// --- §3.106 suspend (CR 702.62) ----------------------------------------------------
+
+/**
+ * Why `card` may NOT be suspended right now, or `undefined` when it may. THE
+ * accessor for the special action: the offer loop skips a card it names a
+ * reason for, and `applySuspendCard` rejects with that reason, so a hostile
+ * client cannot suspend a card the menu would never show.
+ *
+ * "If you could begin to cast this card by putting it onto the stack" (CR
+ * 702.62a) is read as the card's own cast TIMING — a sorcery-speed card needs
+ * the sorcery-speed window, an instant or a flash card needs only priority —
+ * and NOT as "could pay its mana cost": a card with no mana cost (Ancestral
+ * Vision) is the printed point of the keyword. The suspend cost itself must be
+ * fundable from the pool, as every from-hand cost is.
+ */
+function unsuspendableReason(
+  state: GameState,
+  card: CardInstance,
+  player: PlayerId,
+  sorcerySpeedWindow: boolean,
+): string | undefined {
+  const suspend = card.def.suspend;
+  if (suspend === undefined) return 'that card has no suspend';
+  if (castTiming(card.def) !== 'instant' && !sorcerySpeedWindow) {
+    return 'this card can only be suspended when you could begin to cast it (your main phase, empty stack)';
+  }
+  const pool = state.players[player].manaPool;
+  if (!canPay(pool, suspend.cost, spendPurposeIfRestricted(pool, card.def, 'activate'))) {
+    return 'insufficient mana to pay the suspend cost';
+  }
+  return undefined;
+}
+
+/**
+ * SUSPEND a card from hand (CR 702.62a): pay the suspend cost, exile the card
+ * with N time counters, and create the exile-side upkeep ability.
+ *
+ * Modelled on `applyCycleCard`, the other from-hand cost the engine charges:
+ * validate everything, pay in full, then move the card. The card is exiled
+ * through the ONE zone funnel and then counted — `resetInstanceForNewZone`
+ * clears counters on the way out of the battlefield only, but the order is
+ * kept explicit so a future reset on every move cannot silently strip the time
+ * counters this action just put on.
+ *
+ * The exile-side abilities become a DELAYED triggered ability on the state (see
+ * suspend.ts for why they are not trigger sources): "at the beginning of your
+ * upkeep, remove a time counter" as the cards package compiled it into
+ * `SuspendAbility.upkeep`. Its source is the suspended card itself, so the
+ * resolution's `ctx.source` — resolved anywhere by `frameSource` — is the card
+ * in exile whose counter it removes.
+ */
+function applySuspendCard(
+  state: GameState,
+  prevState: GameState,
+  action: Extract<GameAction, { kind: 'suspendCard' }>,
+  emit: (e: GameEvent) => void,
+  events: GameEvent[],
+): EngineResult {
+  if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
+  const player = state.players[action.player];
+  const card = instanceIn(player.hand, action.instanceId);
+  if (!card) return rejectWith(prevState, 'that card is not in your hand');
+  const sorcerySpeedWindow =
+    action.player === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
+  const refusal = unsuspendableReason(state, card, action.player, sorcerySpeedWindow);
+  if (refusal !== undefined) return rejectWith(prevState, refusal);
+  const suspend = card.def.suspend as NonNullable<CardDefinition['suspend']>;
+  // Suspending is a special action, not a cast: restricted mana that may
+  // activate abilities of this card may fund it, cast-only mana may not.
+  const purpose = spendPurposeIfRestricted(player.manaPool, card.def, 'activate');
+  const paid = payCost(player.manaPool, suspend.cost, purpose);
+  if (!paid.ok) return rejectWith(prevState, paid.reason);
+  player.manaPool = paid.pool;
+
+  moveToZone(state, card, 'exile', emit, card.owner);
+  card.counters = { ...card.counters, [TIME_COUNTER]: suspend.count };
+  emit({ type: 'counterAdded', instanceId: card.instanceId, kind: TIME_COUNTER, amount: suspend.count });
+  emit({
+    type: 'cardSuspended',
+    player: action.player,
+    instanceId: card.instanceId,
+    name: card.def.name,
+    timeCounters: suspend.count,
+  });
+  const label = `Suspend: ${card.def.name}`;
+  const id = createDelayedTrigger(state, {
+    condition: { on: 'upkeep', who: 'you' },
+    effects: suspend.upkeep,
+    label,
+    controller: action.player,
+    sourceInstanceId: card.instanceId,
+  });
+  emit({ type: 'delayedTriggerCreated', id, sourceInstanceId: card.instanceId, controller: action.player, label });
+  // A special action does not use the stack (CR 116.1); the player keeps priority.
+  state.priorityPlayer = action.player;
+  state.consecutivePasses = 0;
+  return { state, events };
+}
+
+// --- §3.111 activated abilities of a card in a graveyard (CR 702.84a et al.) ------
+
+/**
+ * The permanents `player` may pay a graveyard ability's "Sacrifice a <noun>"
+ * cost with. The graveyard card is not on the battlefield, so "another" needs
+ * no exclusion; the filter is the same closed `CardFilter` every other cost
+ * reads. ONE answer for the offer path, the payability gate and the apply path.
+ */
+function graveyardAbilityPayers(state: GameState, player: PlayerId, ability: GraveyardAbility): readonly CardInstance[] {
+  const filter = ability.cost.sacrificeAnother;
+  if (filter === undefined) return [];
+  const out: CardInstance[] = [];
+  for (const perm of state.battlefield) {
+    if (perm.controller !== player) continue;
+    if (!matchesCardFilter(perm, filter)) continue;
+    out.push(perm);
+  }
+  return out;
+}
+
+/**
+ * Why `player` may NOT activate this graveyard ability of `card` right now, or
+ * `undefined` when they may. THE accessor: the offer loop skips a reason, the
+ * apply path rejects with it. A card in a graveyard pays mana, life and
+ * sacrifices exactly as a permanent does; it has no {T} to pay and no
+ * summoning sickness to obey, which is the whole reason this is not
+ * `unpayableActivationReason`.
+ */
+function unpayableGraveyardAbilityReason(
+  state: GameState,
+  card: CardInstance,
+  player: PlayerId,
+  ability: GraveyardAbility,
+): string | undefined {
+  const cost = ability.cost;
+  const owner = state.players[player];
+  if (cost.mana && !canPay(owner.manaPool, cost.mana, spendPurposeIfRestricted(owner.manaPool, card.def, 'activate'))) {
+    return 'insufficient mana for that ability';
+  }
+  if (cost.life && cost.life > 0 && owner.life <= cost.life) {
+    return 'you do not have enough life to pay that cost';
+  }
+  if (cost.sacrificeAnother !== undefined) {
+    const needed = cost.sacrificeCount ?? 1;
+    if (graveyardAbilityPayers(state, player, ability).length < needed) {
+      return 'you do not control enough permanents to pay that sacrifice cost';
+    }
+  }
+  return undefined;
+}
+
+/**
+ * ACTIVATE an ability of a card in the graveyard (CR 702.84a unearth, 702.96a
+ * scavenge, 702.128a embalm, 702.129a eternalize, 702.141a encore): validate
+ * everything, pay in full — including the printed "Exile this card from your
+ * graveyard", which is a COST (CR 702.96a: "Exile this card from your
+ * graveyard: …") and so happens here, before the ability is on the stack —
+ * then push the ability as the same `trigger` stack object a battlefield
+ * activation becomes, with `origin: 'activated'`.
+ *
+ * Modelled on `applyCycleCard`, the other activation from a non-battlefield
+ * zone. The source of the stack object is the card itself: for unearth it is
+ * still in the graveyard as the ability resolves and the body moves it; for
+ * the exile-as-cost kinds `frameSource` finds it in exile, which is where
+ * "this card's power" (scavenge) and "a copy of it" (embalm) are read from.
+ */
+function applyActivateGraveyardAbility(
+  state: GameState,
+  prevState: GameState,
+  action: Extract<GameAction, { kind: 'activateGraveyardAbility' }>,
+  emit: (e: GameEvent) => void,
+  events: GameEvent[],
+): EngineResult {
+  if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
+  const player = state.players[action.player];
+  const card = instanceIn(player.graveyard, action.instanceId);
+  if (!card) return rejectWith(prevState, 'that card is not in your graveyard');
+  const ability = card.def.graveyardAbilities?.[action.abilityIndex];
+  if (!ability) return rejectWith(prevState, 'that card has no such graveyard ability');
+  const sorcerySpeedOk =
+    action.player === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
+  if ((ability.timing ?? 'instant') === 'sorcery' && !sorcerySpeedOk) {
+    return rejectWith(prevState, 'this ability can only be activated at sorcery speed');
+  }
+  // SPLIT SECOND (CR 702.61): an activated ability, locked with the rest.
+  if (state.stack.length > 0 && splitSecondOnStack(state)) return rejectWith(prevState, SPLIT_SECOND_REJECTION);
+  const problem = unpayableGraveyardAbilityReason(state, card, action.player, ability);
+  if (problem) return rejectWith(prevState, problem);
+  const targetProblem = illegalTargetReasonForEffects(
+    state,
+    `${card.def.name}'s ability`,
+    ability.effects,
+    action.targets ?? [],
+    action.player,
+    card.def,
+  );
+  if (targetProblem) return rejectWith(prevState, targetProblem);
+
+  // --- pay the cost, in full, before anything reaches the stack ---
+  const cost = ability.cost;
+  if (cost.mana) {
+    const paid = payCost(player.manaPool, cost.mana, spendPurposeIfRestricted(player.manaPool, card.def, 'activate'));
+    if (!paid.ok) return rejectWith(prevState, paid.reason);
+    player.manaPool = paid.pool;
+  }
+  if (cost.life && cost.life > 0) {
+    player.life -= cost.life;
+    emit({ type: 'lifeChanged', player: action.player, delta: -cost.life, to: player.life });
+  }
+  if (cost.sacrificeAnother !== undefined) {
+    const needed = cost.sacrificeCount ?? 1;
+    const named = action.costInstanceIds ?? [];
+    const legal = new Set(graveyardAbilityPayers(state, action.player, ability).map((c) => c.instanceId));
+    if (named.length !== needed || new Set(named).size !== needed || named.some((id) => !legal.has(id))) {
+      return rejectWith(prevState, `${card.def.name}'s ability needs ${needed} legal permanent(s) to sacrifice`);
+    }
+    for (const id of named) {
+      const victim = findOnBattlefield(state, id);
+      if (!victim) return rejectWith(prevState, 'a permanent named to pay the cost has left the battlefield');
+      moveToZone(state, victim, 'graveyard', emit, victim.owner);
+      resetInstanceForNewZone(victim);
+    }
+  }
+  // "Exile this card from your graveyard" — through the ONE zone funnel, so the
+  // grant prune and every zone-change observer see it as any other exile.
+  if (ability.exileSelf === true) moveToZone(state, card, 'exile', emit, card.owner);
+
+  const abilityStackId = state.nextInstanceId++;
+  state.stack.push({
+    kind: 'trigger',
+    instanceId: abilityStackId,
+    sourceInstanceId: card.instanceId,
+    controller: action.player,
+    effects: ability.effects,
+    targets: action.targets ?? [],
+    label: ability.label,
+    origin: 'activated',
+  });
+  emit({ type: 'abilityActivated', player: action.player, instanceId: card.instanceId, label: ability.label });
+  pushWardTriggers(state, action.player, action.targets ?? [], abilityStackId, emit);
+  // The activating player retains priority, as with casting a spell.
   state.priorityPlayer = action.player;
   state.consecutivePasses = 0;
   return { state, events };
@@ -4281,6 +4673,9 @@ function applyActivateAbility(
   if (timing === 'sorcery' && !sorcerySpeedOk) {
     return rejectWith(prevState, 'this ability can only be activated at sorcery speed');
   }
+  // SPLIT SECOND (CR 702.61, DESIGN §3.107): a non-mana ability is locked while
+  // the spell is on the stack. Mana abilities are `tapForMana`, never this path.
+  if (state.stack.length > 0 && splitSecondOnStack(state)) return rejectWith(prevState, SPLIT_SECOND_REJECTION);
 
   const problem = unpayableActivationReason(state, source, ability);
   if (problem) return rejectWith(prevState, problem);
@@ -4519,18 +4914,24 @@ function applyDeclareAttackers(
   // Validate each attacker. Read EFFECTIVE keywords (printed OR continuous grants)
   // so an until-EOT haste/defender grant is honored for attack legality (DESIGN §3.9).
   const cont = indexContinuous(state);
+  const defendingPlayer = defendingPlayerOf(state);
   for (const id of action.attackers) {
     const a = findOnBattlefield(state, id);
     if (!a) return rejectWith(prevState, `attacker ${id} is not on the battlefield`);
     if (a.controller !== action.player) return rejectWith(prevState, `you do not control ${a.def.name}`);
     if (!isCreature(a.def)) return rejectWith(prevState, `${a.def.name} is not a creature`);
-    if (a.tapped) return rejectWith(prevState, `${a.def.name} is tapped and cannot attack`);
     const kw = effectiveKeywords(a, cont.get(a.instanceId) ?? NO_MOD);
-    if (a.summoningSick && !kw.haste) {
-      return rejectWith(prevState, `${a.def.name} has summoning sickness`);
-    }
-    if (kw.defender) return rejectWith(prevState, `${a.def.name} has defender and cannot attack`);
+    // The attack RESTRICTIONS (CR 508.1c) — tapped, summoning-sick, defender,
+    // "can't attack unless defending player controls an Island" — from the ONE
+    // reader the offer path and the requirement half also use (DESIGN §3.107).
+    const problem = attackDeclarationProblem(a, kw, defendingPlayer, state.battlefield);
+    if (problem !== undefined) return rejectWith(prevState, problem);
   }
+  // The attack REQUIREMENTS (CR 508.1d): a creature that "attacks each combat if
+  // able" and is able must be in the declaration. Judged after every declared
+  // creature passed its restrictions, which is the order the rule states.
+  const requirementProblem = attackRequirementProblem(state, cont, defendingPlayer, action.attackers);
+  if (requirementProblem !== undefined) return rejectWith(prevState, requirementProblem);
 
   // Per-attacker attacked OBJECTS (a planeswalker rather than the player). Every
   // entry must name a declared attacker, and its value must be the defending
@@ -4568,19 +4969,40 @@ function applyDeclareAttackers(
     }
   }
 
-  state.combat.attackers = [...action.attackers];
-  state.combat.attackersDeclared = true;
-  if (storedTargets !== undefined) state.combat.attackTargets = storedTargets;
-  tapAttackers(state, action.attackers, emit);
+  commitAttackDeclaration(state, action.attackers, storedTargets, emit);
+  return { state, events };
+}
+
+/**
+ * Record a validated attack declaration: the attackers, what they attack, the
+ * taps, the event, and priority back to the active player (who may now cast a
+ * trick before blockers).
+ *
+ * The ONE place a declaration becomes combat state, shared by the action path
+ * above and by the forced minimum `advanceStep` performs when the active
+ * player passes with a creature that "attacks each combat if able" on the
+ * board (CR 508.1d, DESIGN §3.107) — so the forced declaration taps, emits and
+ * triggers exactly as a chosen one does.
+ */
+function commitAttackDeclaration(
+  state: GameState,
+  attackers: readonly InstanceId[],
+  storedTargets: Record<InstanceId, InstanceId | PlayerId> | undefined,
+  emit: (e: GameEvent) => void,
+): void {
+  const combat = state.combat as NonNullable<GameState['combat']>;
+  combat.attackers = [...attackers];
+  combat.attackersDeclared = true;
+  if (storedTargets !== undefined) combat.attackTargets = storedTargets;
+  tapAttackers(state, attackers, emit);
   emit({
     type: 'attackersDeclared',
-    attackers: [...action.attackers],
+    attackers: [...attackers],
     ...(storedTargets !== undefined ? { attackTargets: { ...storedTargets } } : {}),
   });
   // Priority passes to active player (could cast a trick), then on to blockers.
-  state.priorityPlayer = action.player;
+  state.priorityPlayer = state.activePlayer;
   state.consecutivePasses = 0;
-  return { state, events };
 }
 
 function applyDeclareBlockers(
@@ -4623,7 +5045,9 @@ function applyDeclareBlockers(
     if (!attackingCreatureIds(state.combat).includes(attacker)) {
       return rejectWith(prevState, `${a.def.name} is not attacking`);
     }
-    if (!canBlock(a, b, cont)) return rejectWith(prevState, `${b.def.name} cannot block ${a.def.name}`);
+    // The live battlefield rides along for LANDWALK (DESIGN §3.107), which
+    // reads the defender's lands — the one evasion rule that needs the board.
+    if (!canBlock(a, b, cont, state.battlefield)) return rejectWith(prevState, `${b.def.name} cannot block ${a.def.name}`);
   }
 
   // Declaration-level restrictions (menace) AND requirements ("must be blocked if
@@ -4644,6 +5068,7 @@ function applyDeclareBlockers(
     action.blocks,
     cont,
     availableBlockers,
+    state.battlefield,
   );
   if (declarationProblem) return rejectWith(prevState, declarationProblem);
 
@@ -4686,11 +5111,16 @@ function madnessActionsFor(state: GameState): GameAction[] {
   // produce before the offer can appear at all.
   pushManaTapActions(state, me, actions);
   const card = instanceIn(player.exile, window.instanceId);
-  const cost = card?.def.madness;
+  // §3.106 — a SUSPEND window's cast is free (CR 702.62a), so the pool gate
+  // that keeps an unaffordable madness cast off the menu does not apply.
+  // §3.113 — and a cascade / ripple window's (one closed table, `isFreeCastWindow`).
+  const free = isFreeCastWindow(window);
+  const cost = free ? undefined : card?.def.madness;
   if (
     !card ||
-    cost === undefined ||
-    !canPay(player.manaPool, cost, spendPurposeIfRestricted(player.manaPool, card.def, 'cast'))
+    (!free &&
+      (cost === undefined ||
+        !canPay(player.manaPool, cost, spendPurposeIfRestricted(player.manaPool, card.def, 'cast'))))
   ) {
     return actions;
   }
@@ -4895,40 +5325,54 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
         AFTERMATH_OFFER,
       );
     }
-    const flashbackCost = flashbackCostOf(state, card);
-    if (flashbackCost === undefined || isLand(card.def)) continue;
+    // §3.111 — flashback is one of the graveyard-cast KINDS (retrace, jump-start
+    // and escape beside it), enumerated from the one accessor the cast path
+    // accepts by. Each kind is its own offer: its own mana cost, its own
+    // non-mana rider (judged by the same CR 601.2h gate the cast path uses),
+    // and its own exit from the stack.
+    if (isLand(card.def)) continue;
+    const graveyardCasts = graveyardCastOptionsOf(state, card, card.def);
+    if (graveyardCasts.length === 0) continue;
     const timing = castTiming(card.def);
     if (timing !== 'instant' && !sorcerySpeedWindow) continue;
-    if (
-      !canPay(
-        player.manaPool,
-        flashbackCost,
-        spendPurposeIfRestricted(player.manaPool, card.def, 'cast'),
-      )
-    ) {
-      continue;
-    }
-    // A flashback cost may print a mandatory life rider ("Flashback—{1}{U}, Pay
-    // 3 life"). It is part of the cost, so a caster who cannot pay it is not
-    // offered the cast — the same gate `applyCastSpell` enforces.
-    const lifeCost = card.def.flashbackLifeCost ?? 0;
-    if (lifeCost > 0 && !canAffordLifeCost(state, me, lifeCost)) continue;
     // A modal spell cast from the graveyard obeys the same "can you announce a
     // mode at all?" rule as one cast from hand.
     if (!modalSpellIsCastable(state, card.def, me)) continue;
     const restriction = modalSpecOf(card.def) ? undefined : targetRestrictionOf(card.def);
-    if (restriction === undefined) {
-      actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, fromZone: 'graveyard' });
-      continue;
-    }
-    for (const target of legalTargetsFor(state, restriction, me, card.def)) {
-      actions.push({
-        kind: 'castSpell',
-        player: me,
-        instanceId: card.instanceId,
-        targets: [target],
-        fromZone: 'graveyard',
-      });
+    for (const option of graveyardCasts) {
+      if (
+        !canPay(
+          player.manaPool,
+          option.cost,
+          spendPurposeIfRestricted(player.manaPool, card.def, 'cast'),
+        )
+      ) {
+        continue;
+      }
+      // A flashback cost may print a mandatory life rider ("Flashback—{1}{U},
+      // Pay 3 life"). It is part of the cost, so a caster who cannot pay it is
+      // not offered the cast — the same gate `applyCastSpell` enforces.
+      if (option.lifeCost > 0 && !canAffordLifeCost(state, me, option.lifeCost)) continue;
+      // The non-mana rider: the card itself never pays it (it is about to be
+      // on the stack), which is what `excludeInstanceId` says.
+      if (option.additional !== undefined && !canPayAdditionalCost(state, option.additional, me, card.instanceId)) {
+        continue;
+      }
+      const kindPart = option.kind === 'flashback' ? {} : { graveyardCast: option.kind };
+      if (restriction === undefined) {
+        actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, fromZone: 'graveyard', ...kindPart });
+        continue;
+      }
+      for (const target of legalTargetsFor(state, restriction, me, card.def)) {
+        actions.push({
+          kind: 'castSpell',
+          player: me,
+          instanceId: card.instanceId,
+          targets: [target],
+          fromZone: 'graveyard',
+          ...kindPart,
+        });
+      }
     }
   }
 
@@ -4976,6 +5420,56 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
         continue;
       }
       actions.push({ kind: 'cycleCard', player: me, instanceId: card.instanceId, abilityIndex: index });
+    }
+  }
+
+  // §3.106 — SUSPEND a card from hand (CR 702.62a), a special action offered
+  // "any time you could begin to cast this card": the card's own cast timing
+  // decides the window, and the pool must cover the suspend cost — the same
+  // pool-funds-it gate as cycling, so a pilot taps toward it first. Judged by
+  // the same helper the apply path refuses with, so offer and accept agree.
+  for (let h = 0; h < player.hand.length; h++) {
+    const card = player.hand[h] as CardInstance;
+    if (card.def.suspend === undefined) continue;
+    if (unsuspendableReason(state, card, me, sorcerySpeedWindow) !== undefined) continue;
+    actions.push({ kind: 'suspendCard', player: me, instanceId: card.instanceId });
+  }
+
+  // §3.111 — ACTIVATE an ability of a card in your GRAVEYARD (unearth,
+  // scavenge, embalm, eternalize, encore, "{cost}: Return ~ from your graveyard
+  // to your hand"). Mirrors the battlefield activation loop below: the timing
+  // gate, the whole cost payable (judged by the helper the apply path refuses
+  // with), one offer per legal target, one per legal sacrifice payer.
+  for (let g = 0; g < player.graveyard.length; g++) {
+    const card = player.graveyard[g] as CardInstance;
+    const abilities = card.def.graveyardAbilities;
+    if (abilities === undefined || abilities.length === 0) continue;
+    for (let index = 0; index < abilities.length; index++) {
+      const ability = abilities[index] as GraveyardAbility;
+      if ((ability.timing ?? 'instant') === 'sorcery' && !sorcerySpeedWindow) continue;
+      if (unpayableGraveyardAbilityReason(state, card, me, ability) !== undefined) continue;
+      const restriction = restrictionOfEffects(ability.effects);
+      const payers =
+        ability.cost.sacrificeAnother === undefined
+          ? [undefined]
+          : graveyardAbilityPayers(state, me, ability).map((c) => [c.instanceId] as const);
+      for (const payer of payers) {
+        const costPart = payer === undefined ? {} : { costInstanceIds: [...payer] };
+        if (restriction === undefined) {
+          actions.push({ kind: 'activateGraveyardAbility', player: me, instanceId: card.instanceId, abilityIndex: index, ...costPart });
+          continue;
+        }
+        for (const target of legalTargetsFor(state, restriction, me, card.def)) {
+          actions.push({
+            kind: 'activateGraveyardAbility',
+            player: me,
+            instanceId: card.instanceId,
+            abilityIndex: index,
+            targets: [target],
+            ...costPart,
+          });
+        }
+      }
     }
   }
 
@@ -5045,6 +5539,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     // Effective keywords (printed OR continuous grants) so a haste/defender granted
     // by an until-EOT effect is reflected in the eligible-attacker set (DESIGN §3.9).
     const cont = indexContinuous(state);
+    const defendingPlayer = defendingPlayerOf(state);
     // One pass building the id list directly. `filter(...).map(...)` allocated two
     // closures and an intermediate array of instances that was thrown away.
     const eligible: InstanceId[] = [];
@@ -5052,7 +5547,9 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
       const c = battlefield[b] as CardInstance;
       if (c.controller !== me || !isCreature(c.def) || c.tapped) continue;
       const kw = effectiveKeywords(c, cont.get(c.instanceId) ?? NO_MOD);
-      if ((c.summoningSick && !kw.haste) || kw.defender) continue;
+      // The same restriction reader the apply path uses (CR 508.1c, DESIGN
+      // §3.107), so the menu and the wall cannot disagree about who may attack.
+      if (attackDeclarationProblem(c, kw, defendingPlayer, battlefield) !== undefined) continue;
       eligible.push(c.instanceId);
     }
     if (eligible.length > 0) {
@@ -5072,6 +5569,17 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     !state.combat.blockersDeclared
   ) {
     actions.push({ kind: 'declareBlockers', player: me, blocks: [] });
+  }
+
+  // SPLIT SECOND (CR 702.61, DESIGN §3.107): while such a spell is on the stack
+  // nobody may cast a spell or activate a non-mana ability, so those offers are
+  // withdrawn here — one filter over the finished menu, paid only while the lock
+  // holds (a stack walk otherwise). Mana abilities are `tapForMana` and stay;
+  // so do passing and the combat declarations, which are not abilities at all.
+  if (state.stack.length > 0 && splitSecondOnStack(state)) {
+    return actions.filter(
+      (a) => a.kind !== 'castSpell' && a.kind !== 'activateAbility' && a.kind !== 'cycleCard',
+    );
   }
 
   return actions;
@@ -5107,6 +5615,15 @@ function pushCastOffers(
   if (isLand(def)) return; // lands are played, not cast (the MDFC land half)
   const timing = castTiming(def);
   if (timing !== 'instant' && !sorcerySpeedWindow) return;
+  // §3.106 — CR 202.1b: an object with NO mana cost has an unpayable cost and
+  // cannot be cast by paying it; only a permission that says "without paying
+  // its mana cost" (a suspend window, a Siege reward) or an alternative cost
+  // (flashback, madness) casts it. Found the day the first costless suspend
+  // cards compiled: an empty cost read as "free", and Profane Tutor was on the
+  // menu from hand for nothing. Same judgement `applyCastSpell` makes. Keyed on
+  // `noManaCost`, not on an absent `cost`: a printed `{0}` compiles to the
+  // same absent cost and is payable.
+  if (def.noManaCost === true && options?.free !== true && options?.fromZone === undefined) return;
   // `free` is a permission that says "without paying its mana cost" (a Siege
   // reward, CR 310.4). Otherwise the face's own printed cost - which is also
   // exactly what an AFTERMATH half cast from the graveyard pays, and which any

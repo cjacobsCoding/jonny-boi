@@ -98,6 +98,7 @@ import { createStatsAccumulator, finishStats } from './search-stats.js';
 import type { PositionFingerprint } from './tree-reuse.js';
 import { decayAndCountSubtree, findNodeByFingerprint, fingerprintPosition } from './tree-reuse.js';
 import { lethalAttackers } from './tactical.js';
+import { withRequiredAttackers } from './attack-requirements.js';
 
 /** The id the hybrid pilot registers under and is selected by from data. */
 export const HYBRID_PILOT_ID = 'hybrid';
@@ -430,15 +431,13 @@ function takeLethal(ctx: DecisionContext, config: HybridConfig): GameAction | un
   // why the leaf evaluator does without it — but this answer is about to be
   // played, and an anthem or an until-EOT pump changes whether the kill is there.
   const state = view as GameState;
-  const attackers = lethalAttackers(
-    state,
-    me,
-    indexContinuous(state),
-    config.tactical,
-    offered.attackers,
-  );
+  const index = indexContinuous(state);
+  const attackers = lethalAttackers(state, me, index, config.tactical, offered.attackers);
   if (!attackers || attackers.length === 0) return undefined;
-  return { kind: 'declareAttackers', player: me, attackers: [...attackers] };
+  // Plus any creature that "attacks each combat if able" (CR 508.1d, §3.107):
+  // a proven kill that left one home would be an illegal declaration.
+  const roster = withRequiredAttackers(view, index, attackers, offered.attackers);
+  return { kind: 'declareAttackers', player: me, attackers: [...roster] };
 }
 
 /** Package a chosen macro into "play this now, remember the rest". */

@@ -24,6 +24,10 @@ import { eventTypeWatchBit, matchTriggers, orderPendingTriggers, watchedEventMas
 import { interveningIfHolds } from '../intervening.js';
 import type { DelayedTriggeredAbility } from '../delayed.js';
 import { matchDelayedTriggers, pendingFromDelayed, removeDelayedTrigger } from '../delayed.js';
+// The combat keyword family's counterpart filter (DESIGN §3.107) reads
+// EFFECTIVE keywords, which is why it lives here and not in the pure matcher.
+import { aggregateFor } from './continuous.js';
+import { effectiveKeywords } from './stats.js';
 
 /**
  * Which event types can COINCIDE with a change to the trigger-SOURCE set — the
@@ -87,6 +91,8 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   continuousEffectAdded: false,
   continuousEffectExpired: false,
   counterAdded: false,
+  // §3.110 — a designation and a reveal change no source set.
+  becameRenowned: false,
   counterPrevented: false,
   damageDealt: false,
   damagePrevented: false,
@@ -100,7 +106,19 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   lifeChanged: false,
   loyaltyChanged: false,
   madnessDeclined: false,
+  // poison family (§3.105): no printed trigger watches poison arriving yet.
+  poisonChanged: false,
   madnessWindowOpened: false,
+  // §3.106 — suspend moves a card hand → exile and back to the stack; the
+  // battlefield source set changes only when it later RESOLVES (`zoneChange`).
+  cardSuspended: false,
+  suspendWindowOpened: false,
+  suspendDeclined: false,
+  // §3.113 — cascade / ripple: the library-to-exile-to-library shuffle of a
+  // pile never touches the battlefield; the cast that follows is a `spellCast`.
+  cascadeWindowOpened: false,
+  rippleWindowOpened: false,
+  pileBottomed: false,
   manaAdded: false,
   manaCostPaid: false,
   manaPoolEmptied: false,
@@ -136,6 +154,41 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   delayedTriggerCreated: false,
   delayedTriggerFired: false,
 });
+
+/**
+ * Whether a matched combat trigger's COUNTERPART filter holds (DESIGN §3.107):
+ * every object the event was about must have (`counterpartHasKeyword`) or lack
+ * (`counterpartLacksKeyword`) the named keyword, read EFFECTIVE — a flying
+ * granted by an anthem is flying, and a flanking lost to nothing is still
+ * flanking. An object no longer on the battlefield fails the filter: a trigger
+ * firing on an unknown creature would do more than printed.
+ *
+ * The per-creature kind (`becomesBlockedByCreature`) arrives here with exactly
+ * one instance per pending ability, so this is genuinely a per-blocker test —
+ * which is what CR 702.25b's "each creature … triggers separately" needs.
+ */
+function counterpartFilterHolds(state: GameState, pending: PendingTrigger): boolean {
+  const instances = pending.triggeringInstances;
+  if (instances === undefined || instances.length === 0) return false;
+  const must = pending.ability.condition.counterpartHasKeyword;
+  const mustNot = pending.ability.condition.counterpartLacksKeyword;
+  for (let i = 0; i < instances.length; i++) {
+    const id = instances[i] as InstanceId;
+    let counterpart: CardInstance | undefined;
+    for (let b = 0; b < state.battlefield.length; b++) {
+      const permanent = state.battlefield[b] as CardInstance;
+      if (permanent.instanceId === id) {
+        counterpart = permanent;
+        break;
+      }
+    }
+    if (counterpart === undefined) return false;
+    const keywords = effectiveKeywords(counterpart, aggregateFor(state, id));
+    if (must !== undefined && keywords[must] !== true) return false;
+    if (mustNot !== undefined && keywords[mustNot] === true) return false;
+  }
+  return true;
+}
 
 /**
  * A trigger collector bound to a draft state and a base emit. Call `emit` exactly
@@ -417,13 +470,48 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     if ((watchedMask & eventTypeWatchBit(event.type)) === 0) return;
     const matched = matchTriggers(snapshot, event, resolveSubject);
     if (matched.length === 0) return;
-    for (const m of matched) {
+    for (const matchedTrigger of matched) {
+      // --- the counter keyword family (DESIGN §3.110) --------------------------
+      // A `dies` trigger that reads how many counters the source HAD (undying's
+      // "if it had no +1/+1 counters", modular's "its +1/+1 counters") takes
+      // its snapshot HERE, as the death event is emitted: every death funnel
+      // emits `creatureDied` BEFORE the zone move wipes the counters, so the
+      // instance still carries them (CR 603.10a — last-known information).
+      // Opt-in per condition (`snapshotsCounters`), so every other dies trigger
+      // is pushed byte-for-byte as before.
+      const snapshotKind = matchedTrigger.ability.condition.snapshotsCounters;
+      const m: PendingTrigger =
+        snapshotKind !== undefined && matchedTrigger.ability.condition.on === 'dies'
+          ? {
+              ...matchedTrigger,
+              triggeringAmount: resolveSubject(matchedTrigger.sourceInstanceId)?.card.counters[snapshotKind] ?? 0,
+            }
+          : matchedTrigger;
       // CR 603.4's FIRST check: an ability whose intervening "if" is false does
       // not trigger at all — it never reaches the stack, so nobody may respond
       // to it. Done here rather than inside `matchTriggers` because the answer
       // needs the game state and `triggers.ts` is a pure matcher.
+      // (The `about` record is built only for a trigger that PRINTS an "if" —
+      // the common trigger allocates nothing here.)
+      const intervening = m.ability.condition.intervening;
       if (
-        !interveningIfHolds(state, m.ability.condition.intervening, m.sourceInstanceId, m.controller, m.triggeringPlayer)
+        intervening !== undefined &&
+        !interveningIfHolds(state, intervening, m.sourceInstanceId, m.controller, m.triggeringPlayer, {
+          amount: m.triggeringAmount,
+          instances: m.triggeringInstances,
+        })
+      ) {
+        continue;
+      }
+      // The combat keyword family's COUNTERPART filter (DESIGN §3.107): "a
+      // creature WITHOUT flanking blocks this creature", "blocks a creature
+      // WITH flying". Part of the condition, so a failing filter means the
+      // ability never triggers — and judged here rather than in the matcher
+      // because it reads the counterpart's EFFECTIVE keywords off the state.
+      if (
+        (m.ability.condition.counterpartHasKeyword !== undefined ||
+          m.ability.condition.counterpartLacksKeyword !== undefined) &&
+        !counterpartFilterHolds(state, m)
       ) {
         continue;
       }
@@ -468,6 +556,8 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
         // names no player is pushed byte-for-byte as it always was.
         ...(pending.triggeringPlayer !== undefined ? { triggeringPlayer: pending.triggeringPlayer } : {}),
         ...(pending.triggeringAmount !== undefined ? { triggeringAmount: pending.triggeringAmount } : {}),
+        // "That creature" / "the blocking creature" (DESIGN §3.107), same reason.
+        ...(pending.triggeringInstances !== undefined ? { triggeringInstances: pending.triggeringInstances } : {}),
         // Carried for CR 603.4's second check, made as the ability resolves.
         ...(pending.ability.condition.intervening !== undefined
           ? { intervening: pending.ability.condition.intervening }

@@ -23,6 +23,8 @@ import type { DelayedTriggeredAbility } from './delayed.js';
 import type { CardGrant } from './card-grants.js';
 import type { PendingChoice, ResolutionFrame } from './choices.js';
 import type { TargetRestriction } from './targeting.js';
+// §3.111 — the closed exit table every graveyard cast leaves the stack by.
+import { GRAVEYARD_CAST_EXIT } from './graveyard-casting.js';
 
 /** Opaque, stable identity for a player. */
 export type PlayerId = 'A' | 'B';
@@ -289,6 +291,44 @@ export interface CardInstance {
    * jailer left, the release trigger ran, and found nothing to free. §3.56.
    */
   exiledUntilLeavesBy?: InstanceId;
+  /**
+   * §3.111 — UNEARTH's replacement (CR 702.84c): "If it would leave the
+   * battlefield, exile it instead of putting it anywhere else." Written as the
+   * unearthed card enters, read by both leave-the-battlefield funnels through
+   * `leaveBattlefieldDestination`, cleared by `resetInstanceForNewZone` once
+   * the object has left. Written ONLY on an unearthed permanent, for the same
+   * object-shape reason as {@link exiledUntilLeavesBy}; anyone adding a field
+   * here must also edit `internal/clone.ts`.
+   */
+  exileIfLeaves?: boolean;
+  /**
+   * §3.106 — the turn on which this permanent CAME UNDER ITS CURRENT
+   * CONTROLLER'S CONTROL: written as it enters the battlefield and again on
+   * every control change, read by echo's intervening "if this permanent came
+   * under your control since the beginning of your last upkeep" (CR 702.30a).
+   *
+   * Written ONLY on permanents whose definition asks the question
+   * (`definitionTracksControlSince` in upkeep-costs.ts), so the ordinary
+   * permanent keeps the object shape `cloneInstance` was measured on — the
+   * same discipline as {@link attachedTo}. Cleared as the permanent leaves
+   * the battlefield (CR 400.7). Anyone adding a field here must also edit
+   * `internal/clone.ts`.
+   */
+  controlledSinceTurn?: number;
+  // --- the counter keyword family (DESIGN §3.110) ------------------------------
+  /**
+   * RENOWNED (CR 702.112a) — the once-only designation a renown creature gains
+   * the first time it deals combat damage to a player: "if it isn't renowned,
+   * put N +1/+1 counters on it and it becomes renowned". A DESIGNATION, not a
+   * counter: it is neither proliferated nor removed, and it is the thing the
+   * intervening "if" reads (`sourceNotRenowned`). Lost as the permanent leaves
+   * the battlefield (CR 400.7 — a new object is not renowned).
+   *
+   * Written ONLY by the renown body, for the same object-shape/throughput
+   * reason as {@link attachedTo}. Anyone adding a field here must also edit
+   * `internal/clone.ts`.
+   */
+  renowned?: boolean;
 }
 
 /**
@@ -306,6 +346,18 @@ export interface PlayerState {
   landsPlayedThisTurn: number;
   /** Set when this player has lost (and why is in the event log). */
   hasLost: boolean;
+  // --- poison family (§3.105) ---------------------------------------------------
+  /**
+   * POISON COUNTERS (CR 122.1f) — the one counter a PLAYER can carry in this
+   * engine. Ten or more loses the game as a state-based action (CR 704.5c).
+   *
+   * OPTIONAL, for the reason `turnFactsA` is: every state serialized, persisted
+   * or hand-built before poison existed has no field here, and "absent" must
+   * read as zero rather than as `undefined` arithmetic. Never read it directly —
+   * `poisonOf` / `addPoisonCounters` in `poison.ts` are the one reader and the
+   * one writer, exactly as `life` has one damage funnel.
+   */
+  poison?: number;
   // Zones owned by this player. Battlefield instances are addressed globally too
   // (see GameState.battlefield) but each card's `controller` is authoritative.
   library: CardInstance[];
@@ -407,6 +459,26 @@ export interface SpellStackObject {
    * spells without multikicker; any positive count also sets {@link kicked}.
    */
   readonly kickCount?: number;
+  /**
+   * §3.111 — HOW a spell cast from the graveyard was cast, when it was not a
+   * flashback: retrace, jump-start or escape. Absent on a flashback cast (and
+   * on every stack object written before this existed), so `castFrom:
+   * 'graveyard'` alone still means flashback. Read by `spellLeaveDestination`
+   * through the closed `GRAVEYARD_CAST_EXIT` table — a retraced or escaped
+   * spell goes back to the graveyard, the other two are exiled — and by the
+   * cast-time question for WHICH additional cost this cast owes. Rides the
+   * stack object because that is the one place the exit from the stack can
+   * read it; see `graveyard-casting.ts`.
+   */
+  readonly graveyardCast?: import('./graveyard-casting.js').GraveyardCastKind;
+  /**
+   * §3.106 — set when this creature spell was cast through a SUSPEND window
+   * (CR 702.62a: "if you cast a creature spell this way, it gains haste until
+   * you lose control of the spell or the permanent it becomes"). Rides the
+   * stack object into the resolution frame exactly as {@link kicked} does, so
+   * the entry can arrive unsick. Absent for every other cast.
+   */
+  readonly hasteOnEntry?: boolean;
   /**
    * The MODES chosen for a modal spell, in PRINTED order, one entry per pick
    * (a repeated mode appears once per time it was chosen). Each pick's
@@ -530,7 +602,9 @@ export function spellLeaveDestination(
   // leaves the stack, so it outranks everything else here. It is also what
   // AFTERMATH (CR 702.127a) rides — its second half is cast only from the
   // graveyard and is exiled after it resolves, which is the same sentence.
-  if (spell.castFrom === 'graveyard') return 'exile';
+  // §3.111 — keyed on HOW it was cast: flashback and jump-start exile, retrace
+  // and escape put the card back (their whole design). One closed table.
+  if (spell.castFrom === 'graveyard') return GRAVEYARD_CAST_EXIT[spell.graveyardCast ?? 'flashback'];
   // An ADVENTURE exiles its own card, but ONLY as it resolves (CR 715.3d): an
   // adventure spell that is countered goes to the graveyard like anything else,
   // and the creature half is then gone for good. Reading the face that is on
@@ -562,7 +636,37 @@ export interface MadnessWindow {
   readonly instanceId: InstanceId;
   /** Whose window it is — the discarding player, who alone may act on it. */
   readonly controller: PlayerId;
+  /**
+   * §3.106 — WHICH printed window this is. Absent means madness, which keeps
+   * every state written before suspend existed meaning what it always meant.
+   *
+   * SUSPEND (CR 702.62a) reuses this record rather than growing a second one
+   * because the two are the same shape of moment: one player is handed priority
+   * with exactly two moves — cast this exiled card, or pass to decline — and
+   * `dispatchAction`, the offer loop and the pilots already know how to play
+   * that. The kind decides the two things that differ: what the cast COSTS
+   * (madness pays `def.madness`; suspend pays nothing) and where a DECLINE
+   * leaves the card (madness buries it; a declined suspend "remains exiled").
+   */
+  readonly kind?: CastWindowKind;
+  // --- the spell-count family (§3.113): cascade and ripple ---------------------
+  /**
+   * The LIBRARY PILE a cascade or ripple window owns — every card taken off the
+   * top of the library for this window, the offered card included. Whatever is
+   * still in exile when the window closes (by a cast or a decline) goes to the
+   * bottom of the library: random order for cascade (CR 702.85a), revealed
+   * order for ripple (CR 702.60a). Read only by `cascade.ts`'s two closers.
+   * Absent on a madness or suspend window, which owns no other cards.
+   */
+  readonly pile?: readonly InstanceId[];
 }
+
+/**
+ * See {@link MadnessWindow.kind}. `cascade` / `ripple` (§3.113) are the
+ * library-pile windows: a free cast like suspend's, plus a {@link
+ * MadnessWindow.pile} to bottom when the window closes.
+ */
+export type CastWindowKind = 'madness' | 'suspend' | 'cascade' | 'ripple';
 
 /**
  * A triggered ability on the stack (DESIGN §3.9). Unlike a spell it carries no card
@@ -639,6 +743,13 @@ export interface TriggeredStackObject {
    * reason: the body reads it as the ability RESOLVES, after the event is gone.
    */
   readonly triggeringAmount?: number;
+  /**
+   * WHICH OBJECTS the triggering event was about — "that creature", "the
+   * blocking creature" (DESIGN §3.107). Carried beside {@link triggeringPlayer}
+   * for the same reason: the body reads it as the ability RESOLVES, after the
+   * declaration event is gone. See `PendingTrigger.triggeringInstances`.
+   */
+  readonly triggeringInstances?: readonly InstanceId[];
   /**
    * The trigger's printed intervening "if", carried so it can be re-checked as
    * the ability RESOLVES (CR 603.4's second check). Absent for every trigger
@@ -819,6 +930,16 @@ export interface GameState {
    */
   turnFactsA?: number;
   turnFactsB?: number;
+  // --- the spell-count family (§3.113) -----------------------------------------
+  /**
+   * How many spells have been CAST this turn, by either player — storm's
+   * count (CR 702.40a "each other spell that was cast before it this turn").
+   * A COUNT beside the boolean turn facts because no bitmask can hold it; same
+   * lifetime (cleared as a turn begins), same feed point (`recordTurnFacts`),
+   * same optional shape so every state written before it existed reads as
+   * zero. Read through `spellsCastThisTurn`, never indexed directly.
+   */
+  spellsCastThisTurn?: number;
 }
 
 /** Build a fresh, empty player. */

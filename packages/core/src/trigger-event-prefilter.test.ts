@@ -52,6 +52,29 @@ const CANONICAL: Readonly<
     condition: { on: 'attacks' },
     event: { type: 'attackersDeclared', attackers: [SOURCE_ID] },
   },
+  blocksOrBecomesBlocked: {
+    condition: { on: 'blocksOrBecomesBlocked' },
+    event: { type: 'blockersDeclared', blocks: [{ blocker: OTHER_ID, attacker: SOURCE_ID }] },
+  },
+  // The combat keyword family (DESIGN §3.107). Exalted's event reads the lone
+  // attacker as its SUBJECT, resolved the way the runtime resolves it.
+  creatureAttacksAlone: {
+    condition: { on: 'creatureAttacksAlone' },
+    event: { type: 'attackersDeclared', attackers: [OTHER_ID] },
+    subject: { controller: 'A', card: { def: { types: ['creature'] } } },
+  },
+  blocks: {
+    condition: { on: 'blocks' },
+    event: { type: 'blockersDeclared', blocks: [{ blocker: SOURCE_ID, attacker: OTHER_ID }] },
+  },
+  becomesBlocked: {
+    condition: { on: 'becomesBlocked' },
+    event: { type: 'blockersDeclared', blocks: [{ blocker: OTHER_ID, attacker: SOURCE_ID }] },
+  },
+  becomesBlockedByCreature: {
+    condition: { on: 'becomesBlockedByCreature' },
+    event: { type: 'blockersDeclared', blocks: [{ blocker: OTHER_ID, attacker: SOURCE_ID }] },
+  },
   dies: {
     condition: { on: 'dies' },
     event: { type: 'creatureDied', instanceId: SOURCE_ID, name: 'Canary' },
@@ -59,6 +82,11 @@ const CANONICAL: Readonly<
   leaves: {
     condition: { on: 'leaves' },
     event: { type: 'zoneChange', instanceId: SOURCE_ID, from: 'battlefield', to: 'exile' },
+  },
+  // §3.111 — Rancor's "put into a graveyard from the battlefield".
+  putIntoGraveyardFromBattlefield: {
+    condition: { on: 'putIntoGraveyardFromBattlefield' },
+    event: { type: 'zoneChange', instanceId: SOURCE_ID, from: 'battlefield', to: 'graveyard' },
   },
   castSpell: {
     condition: { on: 'castSpell', who: 'you' },

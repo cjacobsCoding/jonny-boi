@@ -43,6 +43,7 @@
 
 import type { GameEvent } from './events.js';
 import type { GameState, InstanceId, PlayerId } from './state.js';
+import { opponentOf } from './state.js';
 import { findInstance } from './internal/zones.js';
 
 /**
@@ -70,7 +71,15 @@ export type TurnFact =
   | 'permanentLeftBattlefield'
   | 'creatureDied'
   | 'youGainedLife'
-  | 'drewInOwnDrawStep';
+  | 'drewInOwnDrawStep'
+  /**
+   * §3.110 — "**an opponent was dealt damage this turn**" (BLOODTHIRST, CR
+   * 702.54a; Skarrgan Firebird's activation restriction). True for a player
+   * when a `damageDealt` event landed on THEIR OPPONENT — combat or not, by
+   * any source — so it is recorded for the player on the other side of the
+   * damage, never for the one who took it.
+   */
+  | 'opponentWasDealtDamage';
 
 /** Every tracked fact, in canonical order — the closed vocabulary itself. */
 export const TURN_FACTS: readonly TurnFact[] = Object.freeze([
@@ -78,6 +87,7 @@ export const TURN_FACTS: readonly TurnFact[] = Object.freeze([
   'creatureDied',
   'youGainedLife',
   'drewInOwnDrawStep',
+  'opponentWasDealtDamage',
 ]);
 
 /** The bit each fact occupies in a player's mask. */
@@ -86,12 +96,25 @@ const FACT_BIT: Readonly<Record<TurnFact, number>> = Object.freeze({
   creatureDied: 1 << 1,
   youGainedLife: 1 << 2,
   drewInOwnDrawStep: 1 << 3,
+  opponentWasDealtDamage: 1 << 4,
 });
 
 /** Clear every player's facts. Called as a turn begins. */
 export function clearTurnFacts(state: GameState): void {
   state.turnFactsA = 0;
   state.turnFactsB = 0;
+  // §3.113 — the spell count has the facts' lifetime: it is a turn's memory.
+  state.spellsCastThisTurn = 0;
+}
+
+// --- the spell-count family (§3.113) -------------------------------------------
+/**
+ * How many spells have been cast so far this turn, by either player — storm's
+ * count (CR 702.40a). A state with no record answers zero, for the reason
+ * `turnFactHolds` does.
+ */
+export function spellsCastThisTurn(state: GameState): number {
+  return state.spellsCastThisTurn ?? 0;
 }
 
 /**
@@ -158,6 +181,22 @@ export function recordTurnFacts(state: GameState, event: GameEvent): void {
       if (state.step === 'draw' && event.player === state.activePlayer) {
         setTurnFact(state, 'drewInOwnDrawStep', event.player);
       }
+      return;
+    }
+    // §3.110 — damage that LANDED on a player is a fact for their opponent
+    // (bloodthirst). A player target is a PlayerId string; an instance id is a
+    // number, which is how "to a player" is told from "to a creature" here.
+    case 'damageDealt': {
+      if (typeof event.target === 'string' && event.amount > 0) {
+        setTurnFact(state, 'opponentWasDealtDamage', opponentOf(event.target));
+      }
+      return;
+    }
+    // §3.113 — storm's count. Every cast by either player, counted at the one
+    // chokepoint every event passes; a COPY of a spell is never cast (CR
+    // 707.10) and emits `spellCopied`, not `spellCast`, so it is not counted.
+    case 'spellCast': {
+      state.spellsCastThisTurn = (state.spellsCastThisTurn ?? 0) + 1;
       return;
     }
     default:

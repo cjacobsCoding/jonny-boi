@@ -163,6 +163,9 @@ export type SoakMechanicId =
   | 'modal-cast'
   | 'flashback-cast'
   | 'graveyard-grant'
+  // §3.111
+  | 'graveyard-ability'
+  | 'graveyard-cast'
   | 'protection'
   | 'ward'
   | 'indestructible'
@@ -191,6 +194,10 @@ export type SoakMechanicId =
   | 'graveyard-recursion'
   | 'optional-payment'
   | 'lifegain'
+  // Poison counters as a player resource (§3.105): infect, toxic and
+  // proliferate's player half all witness through the one `poisonChanged`
+  // event, so one id covers the family.
+  | 'poison'
   // The four systems merged into main on 2026-08-20. Each is watched from the
   // day it lands, so nobody has to remember to come back and add it.
   | 'second-castable-face'
@@ -222,7 +229,21 @@ export type SoakMechanicId =
   // "This spell can't be countered", whose whole observable behaviour is a counter
   // effect resolving and doing NOTHING — so the prevented-counter event is the
   // only witness there is.
-  | 'uncounterable';
+  | 'uncounterable'
+  // §3.106 — SUSPEND (CR 702.62): the special action from hand, the exile-side
+  // upkeep tick, and the free-cast window. Its own id and not a flavour of
+  // `madness` even though it reuses the madness WINDOW: a madness deck proves
+  // nothing about a card that was never discarded.
+  // The upkeep BILLS of the same section (echo, cumulative upkeep, vanishing,
+  // fading, "sacrifice ~ unless you pay") have no id of their own: what they do
+  // is already witnessed as `optional-payment` (the bill asked) and `counters`
+  // (the tick), and a mechanic is only as honest as the event that proves it.
+  | 'suspend'
+  // §3.113 — CASCADE (CR 702.85) and RIPPLE (CR 702.60): a library pile and a
+  // free-cast window each. Storm has no id of its own: its whole observable
+  // behaviour is copies on the stack, which `spell-copy` already witnesses.
+  | 'cascade'
+  | 'ripple';
 
 /**
  * How a mechanic is proved to have HAPPENED.
@@ -436,10 +457,49 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     // table rather than into the anchored deck.
     enabledBy: (_c, t) => t.includes('"counterSpell"'),
     enablerBelongsToOpponent: true,
+    // A SEQUENCED witness across two seats: the anchored seat must cast one of
+    // its uncounterable spells while the opponent both HOLDS a counterspell and
+    // judges that spell worth countering. The 5,623-card pool (§3.118) made the
+    // grid's six attempts miss it on the observation scan's seed lane — the same
+    // shape token-copy hit, and the same remedy: the overtime lane, which only
+    // runs when the grid left the mechanic unfired.
+    extraAnchorAttempts: SOAK_SEQUENCED_EXTRA_ATTEMPTS,
   },
   { id: 'x-cost', label: '{X} costs — an X announced and paid', witnessKind: 'event', printedBy: hasKey('xCost') },
   { id: 'kicker', label: 'kicker — the optional cost offered at cast', witnessKind: 'event', printedBy: hasKey('kicker') },
   { id: 'cycling', label: 'cycling — a card cycled from hand', witnessKind: 'action', printedBy: hasKey('cycling') },
+  // §3.106
+  { id: 'suspend', label: 'suspend — a card suspended from hand (CR 702.62)', witnessKind: 'action', printedBy: hasKey('suspend') },
+  // §3.111 — the graveyard-casting family. Two witnesses because the two
+  // shapes are two different actions: an ability ACTIVATED from a graveyard
+  // (unearth/scavenge/embalm/eternalize/encore/return-to-hand) and a CAST from
+  // the graveyard by a non-flashback keyword (retrace/jump-start/escape); a
+  // flashback with a non-mana cost is still a flashback cast and rides that row.
+  {
+    id: 'graveyard-ability',
+    label: 'graveyard abilities — unearth / scavenge / embalm / eternalize / encore activated from a graveyard (CR 702.84a et al.)',
+    witnessKind: 'action',
+    printedBy: hasKey('graveyardAbilities'),
+  },
+  {
+    id: 'graveyard-cast',
+    label: 'graveyard casts — retrace / jump-start / escape cast from a graveyard (CR 702.81a, 702.133a, 702.138a)',
+    witnessKind: 'action',
+    printedBy: hasKey('graveyardCasts'),
+  },
+  // §3.113 — the library-pile windows, keyed on the cast trigger's keyword tag.
+  {
+    id: 'cascade',
+    label: 'cascade — a cast trigger exiled to a cheaper nonland card and opened its window (CR 702.85)',
+    witnessKind: 'event',
+    printedBy: (c) => c.castTriggers?.some((t) => t.keyword === 'cascade') === true,
+  },
+  {
+    id: 'ripple',
+    label: 'ripple — a reveal found a same-name card and opened its window (CR 702.60)',
+    witnessKind: 'event',
+    printedBy: (c) => c.castTriggers?.some((t) => t.keyword === 'ripple') === true,
+  },
   {
     id: 'buyback',
     label: 'buyback — the optional cost offered at cast',
@@ -638,6 +698,15 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     printedBy: (_c, t) => t.includes('counterUnlessPaid') || t.includes('unlessPaid') || t.includes('mayEffects'),
   },
   { id: 'lifegain', label: 'life gain — a player gained life', witnessKind: 'event', printedBy: (_c, t) => t.includes('gainLife') },
+  {
+    id: 'poison',
+    label: 'poison — a player got poison counters (infect, toxic, proliferate)',
+    witnessKind: 'event',
+    // The KEYWORD FIELDS, named exactly as the definition serializes them: an
+    // infect flag or a toxic value is a card that WILL hand out poison the
+    // moment it connects, which is the evidence the anchored deck needs.
+    printedBy: (_c, t) => t.includes('"infect":true') || t.includes('"toxic":'),
+  },
 
   /*
    * --- the 2026-08-20 arrivals -------------------------------------------------
@@ -739,6 +808,8 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
    */
   effectUnsupported: null,
   lifeChanged: null,
+  // poison family (§3.105): the one event every poison counter passes through.
+  poisonChanged: 'poison',
   creatureDied: null,
   playerLost: null,
   gameOver: null,
@@ -806,6 +877,9 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
    * counter KIND instead.
    */
   counterAdded: null,
+  // §3.110 — a designation and a reveal are bookkeeping of mechanics the
+  // `counterAdded` / `zoneChange` events already attribute.
+  becameRenowned: null,
 
   // --- One event, one mechanic. ---------------------------------------------
   loyaltyChanged: 'planeswalker-loyalty',
@@ -837,6 +911,17 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   cardGrantExpired: 'graveyard-grant',
   cardCycled: 'cycling',
   madnessWindowOpened: 'madness',
+  // §3.106 — the suspend action is the strongest witness; the window and the
+  // decline are the same mechanic further along.
+  cardSuspended: 'suspend',
+  suspendWindowOpened: 'suspend',
+  suspendDeclined: 'suspend',
+  // §3.113 — a window opening is the strongest witness of each keyword; the
+  // bottoming happens for both (and for a cascade that found nothing), so it
+  // names neither.
+  cascadeWindowOpened: 'cascade',
+  rippleWindowOpened: 'ripple',
+  pileBottomed: null,
   madnessDeclined: 'madness',
   cardsMilled: 'mill',
   tokenCreated: 'token',

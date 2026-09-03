@@ -117,7 +117,7 @@ export const copySpell: EffectPrimitive = (ctx) => {
  * about at all. Both are the same direction: the copy keeps the original's aim,
  * which can never play better than the printed card.
  */
-function retargetCopy(ctx: EffectContext, copy: SpellStackObject): SpellStackObject | undefined {
+export function retargetCopy(ctx: EffectContext, copy: SpellStackObject): SpellStackObject | undefined {
   let aimed = copy;
   for (const slot of spellCopyAimSlots(copy)) {
     const restriction = spellCopyAimRestriction(aimed, slot);
@@ -295,7 +295,7 @@ export const createTokenCopy: EffectPrimitive = (ctx) => {
  * prints a delayed sacrifice — the token is gone before cleanup either way — and
  * saying it exactly costs nothing.
  */
-function grantToCreated(ctx: EffectContext, created: readonly InstanceId[]): void {
+export function grantToCreated(ctx: EffectContext, created: readonly InstanceId[]): void {
   if (created.length === 0) return;
   const keywords = grantedKeywordsParam(ctx);
   if (keywords === undefined) return;
@@ -319,7 +319,7 @@ function grantToCreated(ctx: EffectContext, created: readonly InstanceId[]): voi
  * exist, and an ability with nothing to do would still put an object on the
  * stack for a spectator to explain.
  */
-function createDelayedRemoval(ctx: EffectContext, created: readonly InstanceId[]): void {
+export function createDelayedRemoval(ctx: EffectContext, created: readonly InstanceId[]): void {
   if (created.length === 0) return;
   const action = ctx.params.delayedRemoval;
   if (action !== 'sacrifice' && action !== 'exile') return;

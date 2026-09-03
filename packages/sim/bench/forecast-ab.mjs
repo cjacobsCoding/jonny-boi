@@ -18,6 +18,12 @@
  * Usage:
  *   node packages/sim/bench/forecast-ab.mjs --weight crackBackPerPoint --value 0.25
  *   node packages/sim/bench/forecast-ab.mjs --weight racePerTurn --value 2 --games 60
+ *   node packages/sim/bench/forecast-ab.mjs --feature gangBlock
+ *
+ * `--feature <name>` flips a `HeuristicFeatures` flag ON the shipped pilot (§3.108):
+ * the heuristic's blocking, spell and land rules all reach lookahead through its
+ * delegation, so a feature that changes one of them must be judged HERE as well as
+ * by `feature-ab.mjs`, which only ever measures the heuristic pilot.
  */
 import { createLookaheadPilot, DEFAULT_FORECAST_WEIGHTS, DEFAULT_HEURISTIC_WEIGHTS } from '@jonny-boi/ai';
 import { buildRegistry, loadCardPool } from '@jonny-boi/cards';
@@ -36,6 +42,7 @@ function arg(name, fallback) {
 // sequencing and spell choice all live there and all reach the shipped pilot.
 const WEIGHT = arg('weight', undefined);
 const HEURISTIC_WEIGHT = arg('heuristic', undefined);
+const FEATURE = arg('feature', undefined);
 const VALUE = Number(arg('value', NaN));
 const gamesPerOrientation = Number(arg('games', 40));
 const seedShift = Number(arg('seed', 0));
@@ -44,17 +51,23 @@ if (HEURISTIC_WEIGHT && !(HEURISTIC_WEIGHT in DEFAULT_HEURISTIC_WEIGHTS)) {
   console.error(`unknown heuristic weight "${HEURISTIC_WEIGHT}"`);
   process.exit(2);
 }
-if (!WEIGHT && !HEURISTIC_WEIGHT) {
-  console.error('usage: node packages/sim/bench/forecast-ab.mjs --weight <name> --value <number> [--games N] [--seed S]');
+if (!WEIGHT && !HEURISTIC_WEIGHT && !FEATURE) {
+  console.error(
+    'usage: node packages/sim/bench/forecast-ab.mjs (--weight <name> | --heuristic <name>) --value <number> | --feature <name>  [--games N] [--seed S]',
+  );
   process.exit(2);
 }
 if (WEIGHT && !(WEIGHT in DEFAULT_FORECAST_WEIGHTS)) {
   console.error(`unknown forecast weight "${WEIGHT}". Known:\n  ${Object.keys(DEFAULT_FORECAST_WEIGHTS).join('\n  ')}`);
   process.exit(2);
 }
-const NAME = WEIGHT ?? HEURISTIC_WEIGHT;
-const wasValue = WEIGHT ? DEFAULT_FORECAST_WEIGHTS[WEIGHT] : DEFAULT_HEURISTIC_WEIGHTS[HEURISTIC_WEIGHT];
-if (wasValue === VALUE) {
+const NAME = WEIGHT ?? HEURISTIC_WEIGHT ?? FEATURE;
+const wasValue = WEIGHT
+  ? DEFAULT_FORECAST_WEIGHTS[WEIGHT]
+  : HEURISTIC_WEIGHT
+    ? DEFAULT_HEURISTIC_WEIGHTS[HEURISTIC_WEIGHT]
+    : false;
+if (!FEATURE && wasValue === VALUE) {
   console.error(`${NAME} is already ${VALUE} — that A/B compares a pilot with itself.`);
   process.exit(2);
 }
@@ -72,8 +85,13 @@ const outcome = confirmedAb(
         pilotA: createLookaheadPilot(
           HEURISTIC_WEIGHT ? { ...DEFAULT_HEURISTIC_WEIGHTS, [HEURISTIC_WEIGHT]: VALUE } : DEFAULT_HEURISTIC_WEIGHTS,
           WEIGHT ? { ...DEFAULT_FORECAST_WEIGHTS, [WEIGHT]: VALUE } : DEFAULT_FORECAST_WEIGHTS,
+          FEATURE ? { [FEATURE]: true } : {},
         ),
-        pilotB: createLookaheadPilot(DEFAULT_HEURISTIC_WEIGHTS, DEFAULT_FORECAST_WEIGHTS),
+        pilotB: createLookaheadPilot(
+          DEFAULT_HEURISTIC_WEIGHTS,
+          DEFAULT_FORECAST_WEIGHTS,
+          FEATURE ? { [FEATURE]: false } : {},
+        ),
       },
       registry,
       gamesPerOrientation,
@@ -85,7 +103,9 @@ const outcome = confirmedAb(
 );
 
 report(
-  `lookahead ${NAME}: ${VALUE} vs ${wasValue} (shipped) — ${decks.length} decks, ` +
-    `${gamesPerOrientation} games/pair/orientation, ${outcome.dev[0].result.totalGames} games per run`,
+  (FEATURE
+    ? `lookahead ${FEATURE} ON vs OFF`
+    : `lookahead ${NAME}: ${VALUE} vs ${wasValue} (shipped)`) +
+    ` — ${decks.length} decks, ${gamesPerOrientation} games/pair/orientation, ${outcome.dev[0].result.totalGames} games per run`,
   outcome,
 );

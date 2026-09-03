@@ -112,6 +112,7 @@ describe('the fast pass never changes the game it is playing', () => {
     const seats = makeSeats(deckA, deckB, { pilotA: pilot, pilotB: pilot }, registry);
     let gateFired = 0;
     let sawStack = 0;
+    let gatedOnStack = 0;
     runMatch(seats, 4242, {
       sim: DEFAULT_SIM_CONFIG,
       startingPlayer: 'A',
@@ -130,9 +131,15 @@ describe('the fast pass never changes the game it is playing', () => {
     for (let i = 0; i < 2000 && !s.gameOver; i++) {
       const gate = pilot.willPassPriority?.(s, DEFAULT_RULES) ?? false;
       if (gate) gateFired += 1;
+      // A non-empty stack is NOT a refusal in itself (§3.108): the gate reasons
+      // about what this seat could cast INTO it exactly as it does about an
+      // empty one — a counterspell has a target now, a sorcery cannot be cast at
+      // all — and the promise below is what must hold there, not the old
+      // gate's blanket "no". An earlier version of this test pinned that "no",
+      // which was the same shape-pinning mistake the comment above describes.
       if (s.stack.length > 0) {
         sawStack += 1;
-        expect(gate, 'never fast-pass with something on the stack').toBe(false);
+        if (gate) gatedOnStack += 1;
       }
       if (s.pendingChoice) expect(gate, 'never fast-pass a parked question').toBe(false);
       const legal = generateLegalActions(s, DEFAULT_RULES);
@@ -152,5 +159,8 @@ describe('the fast pass never changes the game it is playing', () => {
     // The gate must actually FIRE, or 'it never lied' is a claim about nothing.
     expect(gateFired, 'the gate must fire in a real game').toBeGreaterThan(100);
     expect(sawStack, 'the replay must have seen a non-empty stack').toBeGreaterThan(0);
+    // And it must have fired with something on the stack, or the reasoning that
+    // handles that window was never exercised by the promise check above.
+    expect(gatedOnStack, 'the gate must fire with a non-empty stack').toBeGreaterThan(0);
   }, 120_000);
 });

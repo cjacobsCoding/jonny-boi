@@ -41,10 +41,12 @@ import type {
   RuleContext,
   TriggerBodyResult,
   UnsupportedClause,
+  VacuousClause,
 } from './types.js';
 import {
   EFFECT_RULES,
   KEYWORD_ABILITY_BUILDERS,
+  joinPayloadKeywords,
   KEYWORD_FLAGS,
   MANA_RULES,
   STATIC_RULES,
@@ -52,7 +54,7 @@ import {
   ABILITY_WORDS,
   explainUnsupported,
   isVacuousClause,
-  parseProtectionOrWard,
+  parsePayloadKeyword,
   COST_NOUNS,
   COST_NOUN_PHRASE,
 } from './rules.js';
@@ -117,12 +119,113 @@ const COST_ASSIST_KEYWORDS: ReadonlySet<string> = new Set(['convoke', 'improvise
  * here holds to: a line the rule table did not match compiles no trigger, so
  * the card still reports honestly through that line’s own `missing` entry.
  */
-const TRIGGER_BACKED_KEYWORDS: ReadonlySet<string> = new Set(['bushido']);
+const TRIGGER_BACKED_KEYWORDS: ReadonlySet<string> = new Set([
+  'bushido',
+  // SOULSHIFT N (§3.122): a dies trigger labelled "Soulshift N", so a printed
+  // line the rule table matched is the evidence the sweep reads. A 'Soulshift X'
+  // form (none is printed) would compile no trigger and still report.
+  'soulshift',
+  // RAMPAGE N (CR 702.23a, DESIGN §3.107): the same shape as bushido — the
+  // number is the whole payload, so it is a pattern rule labelled "Rampage N".
+  'rampage',
+  // §3.106 — the upkeep-cost family: each compiles to an `upkeep` trigger whose
+  // label starts with the keyword ("Echo {2}{R}", "Cumulative upkeep {1}",
+  // "Vanishing 3", "Fading 2"). A cost form outside the closed table (an echo
+  // paid in cards, a cumulative upkeep paid in sacrifices) compiles no trigger
+  // and reports through its own line.
+  'echo',
+  'cumulative upkeep',
+  'vanishing',
+  'fading',
+  // §3.110 — the counter keyword family's PARAMETRISED members, each a pattern
+  // rule whose trigger label starts with the keyword ("Modular 2", "Renown 1",
+  // "Fabricate 2", "Backup 1", "Afterlife 2"). The argument-less members
+  // (undying, evolve, riot, unleash, dethrone) are `KEYWORD_ABILITY_BUILDERS`
+  // rows and need no evidence here; a form outside the table ("Modular—
+  // Sunburst") compiles no trigger and reports through its own line.
+  'modular',
+  'renown',
+  'backup',
+  'afterlife',
+]);
 
-const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freeze({
+/**
+ * §3.110 — a keyword whose whole implementation is an ACTIVATED ability the
+ * printed line compiled (outlast: "{cost}, {T}: put a +1/+1 counter on this
+ * creature. Activate only as a sorcery"). The evidence is an activated ability
+ * whose label starts with the keyword — the activated-side twin of
+ * {@link TRIGGER_BACKED_KEYWORDS}, and a table for the same reason.
+ */
+const ACTIVATED_BACKED_KEYWORDS: ReadonlySet<string> = new Set(['outlast']);
+
+/**
+ * Scryfall's tag for EVERY landwalk printing is the bare word "Landwalk" beside
+ * the printed one ("Islandwalk", "Legendary landwalk") — so a compiled
+ * `keywords.landwalk` payload answers for any tag ending in the word, exactly
+ * as a compiled `cycling` list answers for "Plainscycling" (DESIGN §3.107).
+ * Evidence-based like every guard here: a walk outside the closed
+ * `LandCondition` table compiles no payload and still reports through its own
+ * line.
+ */
+function isLandwalkKeyword(word: string): boolean {
+  return word.endsWith('landwalk');
+}
+
+/**
+ * Keywords whose PAYLOAD lives in a keyword FIELD rather than a flag — Scryfall
+ * lists the bare word ("Ward", "Protection", "Toxic") while the printed line
+ * carries the value ("Ward {2}", "Protection from red", "Toxic 1"). The sweep
+ * treats the compiled field as the evidence that the line was implemented; a
+ * line the closed tables could not read leaves the field unset, so the keyword
+ * still reports through that line's own `missing` entry. The same table shape
+ * as {@link TRIGGER_BACKED_KEYWORDS}, and for the same reason (§3.105): the
+ * next payload keyword is a ROW here, not another `if (word === …)`.
+ */
+const PAYLOAD_KEYWORD_EVIDENCE: Readonly<Record<string, keyof KeywordFlags>> = Object.freeze({
+  ward: 'ward',
+  protection: 'protectionFrom',
+  toxic: 'toxic',
+});
+
+/**
+ * §3.111 — Scryfall's names for the GRAVEYARD-ACTIVATED keywords, each mapped
+ * to the `GraveyardAbilityKind` its printed line compiles into. Evidence-based
+ * like every guard here: a line the closed cost table could not read
+ * ("Unearth—Pay eight {E}") compiles no ability of that kind and the keyword
+ * still reports through the line's own `missing` entry.
+ */
+const GRAVEYARD_ABILITY_KEYWORDS: Readonly<Record<string, import('@jonny-boi/core').GraveyardAbilityKind>> =
+  Object.freeze({
+    unearth: 'unearth',
+    scavenge: 'scavenge',
+    embalm: 'embalm',
+    eternalize: 'eternalize',
+    encore: 'encore',
+  });
+
+/** §3.111 — the same table for the GRAVEYARD-CAST keywords (`GraveyardCastKind`). */
+const GRAVEYARD_CAST_KEYWORDS: Readonly<Record<string, import('@jonny-boi/core').GraveyardCastKind>> = Object.freeze({
+  retrace: 'retrace',
+  'jump-start': 'jumpStart',
+  // Scryfall tags every jump-start card with BOTH "Jump-start" and a phantom
+  // "Jump" (Direct Current: `["Jump","Jump-start"]`). No such keyword exists;
+  // it is the same printed line, so the same compiled cast is its evidence —
+  // the §3.109 shape (a tag the engine HAS was still blocking cards), one row.
+  jump: 'jumpStart',
+  escape: 'escape',
+});
+
+
+const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string | readonly string[]>> = Object.freeze({
   scry: 'scry',
   surveil: 'surveil',
-  mill: 'mill',
+  // §3.113 — "from among the milled cards" mills through its own primitive
+  // (the same funnel), so either is the evidence the line compiled.
+  mill: ['mill', 'millThenReturn'],
+  // §3.113 — Scryfall tags "Learn" and "Double" (the power-doubling verb, CR
+  // 701.10b — the damage-doubling replacement is `SCALING_KEYWORDS`' guard).
+  learn: 'learn',
+  double: 'doublePower',
   // Scryfall tags a card "Treasure" / "Food" / "Investigate" when its text
   // creates the predefined token; the compiled evidence is the lookup
   // primitive. A wording the create rule did not match compiles none and
@@ -131,10 +234,38 @@ const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freez
   food: 'createPredefinedToken',
   investigate: 'createPredefinedToken',
   proliferate: 'proliferate',
+  // §3.110 — the counter keyword family's ACTION and ENTRY-SCRIPT members:
+  // amass (CR 701.47) and bolster (701.39) are keyword actions printed as
+  // spell text, explore (701.44) is a trigger body, and bloodthirst (702.54),
+  // devour (702.82), riot (702.136) and unleash (702.98) compile to the
+  // permanent's own entry script. Same evidence contract: a form the rule table
+  // could not read ("Bloodthirst X", "Devour X") compiles no primitive and
+  // reports through its own line.
+  amass: 'amass',
+  bolster: 'bolster',
+  explore: 'explore',
+  bloodthirst: 'bloodthirstCounters',
+  devour: 'devourChoice',
+  fabricate: 'fabricateChoice',
   // Scryfall tags the card "Regenerate"; the compiled evidence is the shield
-  // primitive the printed ability built (CR 701.15).
+  // primitive the printed ability built (CR 701.19).
   regenerate: 'regenerate',
+  // §3.113 — Scryfall ALSO tags every regenerate card "Heal", after the word in
+  // its reminder text ("…and heal all damage on it"). Measured over the whole
+  // corpus: 33 cards carry the tag, 32 print regenerate, and NONE prints a
+  // "Heal" line of its own — so the compiled regenerate is the evidence, and a
+  // real Heal keyword line, should one ever be printed, compiles none and
+  // still reports through its own missing entry.
+  heal: 'regenerate',
 });
+
+/**
+ * §3.113 — the keywords whose printed line compiles to a CAST TRIGGER
+ * (`CardDefinition.castTriggers`): storm, cascade, ripple. The sweep's
+ * evidence is a trigger tagged with the keyword, the same evidence-based
+ * contract as every guard above.
+ */
+const CAST_TRIGGER_KEYWORDS: ReadonlySet<string> = new Set(['storm', 'cascade', 'ripple']);
 
 /**
  * Every effect-primitive name reachable in a compiled assembly.
@@ -164,6 +295,13 @@ function compiledPrimitives(assembly: Assembly): ReadonlySet<string> {
   visit(assembly.triggers);
   visit(assembly.activated);
   visit(assembly.statics);
+  // §3.113 — two more homes a primitive can have, found by the sweep reporting
+  // "Scry" on Oracle's Insight ("Enchanted creature has '{T}: Scry 1, then draw
+  // a card.'") and "Surveil" on Spellgyre (a MODE prints it): the granted
+  // ability lives on the attachment's modification, and a mode's effects live
+  // on the modal spec. Both compiled; neither was walked.
+  visit(assembly.attachmentModifies);
+  visit(assembly.modal);
   return found;
 }
 
@@ -369,12 +507,25 @@ interface Assembly {
   flashbackXCost?: number;
   /** The "Pay N life" rider on a flashback cost. */
   flashbackLifeCost?: number;
+  // --- §3.111 the graveyard-casting family --------------------------------------
+  /** A non-mana flashback cost, once a "Flashback—Sacrifice …" / "—Tap …" line compiles. */
+  flashbackAdditionalCost?: import('@jonny-boi/core').AdditionalCastCost;
+  /** Retrace / jump-start / escape, accumulated (created on first use). */
+  graveyardCasts?: import('@jonny-boi/core').GraveyardCastAbility[];
+  /** Unearth / scavenge / embalm / eternalize / encore / the return template, accumulated. */
+  graveyardAbilities?: import('@jonny-boi/core').GraveyardAbility[];
   /** Cycling abilities, accumulated — a card may print cycling AND landcycling. */
   readonly cycling: import('@jonny-boi/core').CyclingAbility[];
   /** The printed buyback cost, once a "Buyback {…}" line compiles. */
   buyback?: ManaCost;
   /** The printed madness cost, once a "Madness {…}" line compiles. */
   madness?: ManaCost;
+  /** §3.106 — the printed suspend, once a "Suspend N—{…}" line compiles. */
+  suspend?: import('@jonny-boi/core').SuspendAbility;
+  /** §3.113 — the printed cast triggers (storm / cascade / ripple), accumulated. */
+  castTriggers?: import('@jonny-boi/core').CastTriggeredAbility[];
+  /** §3.106 — counters the permanent enters with (vanishing / fading), accumulated. */
+  readonly entersWithCounters: import('@jonny-boi/core').EnteringCounters[];
   /** The formula behind a `*` P/T box, once a line compiles one. */
   characteristicPT?: import('@jonny-boi/core').CharacteristicPT;
   /** The "Enchant …" / "Equip {N}" half of an attachment, once some line prints it. */
@@ -383,6 +534,7 @@ interface Assembly {
   attachmentModifies?: PermanentModification;
   /** Set once a line prints the keyword **Changeling**. */
   changeling?: boolean;
+  colorless?: boolean;
   /** Set once a line prints "This spell can't be countered". */
   cantBeCountered?: boolean;
   /** Set once a line prints "Spells [you control] can't be countered". */
@@ -391,6 +543,8 @@ interface Assembly {
   noMaximumHandSize?: boolean;
   /** Land-play zones this card unlocks, accumulated across lines. */
   playLandsFrom?: import('@jonny-boi/core').LandPlayZone[];
+  /** Clauses implemented by doing nothing, with their reasons (DESIGN §3.107). */
+  vacuous?: VacuousClause[];
   readonly matchedRules: string[];
   readonly missing: UnsupportedClause[];
 }
@@ -448,16 +602,33 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.cycling) assembly.cycling.push(...contribution.cycling);
   if (contribution.buyback) assembly.buyback = contribution.buyback;
   if (contribution.madness) assembly.madness = contribution.madness;
+  // §3.106
+  if (contribution.suspend) assembly.suspend = contribution.suspend;
+  // §3.113 — accumulated: "Cascade, cascade" is two triggers (CR 702.85a per instance).
+  if (contribution.castTriggers) (assembly.castTriggers ??= []).push(...contribution.castTriggers);
+  if (contribution.entersWithCounters) assembly.entersWithCounters.push(...contribution.entersWithCounters);
   if (contribution.characteristicPT) assembly.characteristicPT = contribution.characteristicPT;
   if (contribution.flashback !== undefined) assembly.flashback = contribution.flashback;
   if (contribution.flashbackXCost !== undefined) assembly.flashbackXCost = contribution.flashbackXCost;
   if (contribution.flashbackLifeCost !== undefined) {
     assembly.flashbackLifeCost = contribution.flashbackLifeCost;
   }
+  // §3.111 — the graveyard-casting family. Lists are created on first use so
+  // the ordinary card's assembly keeps the shape it had.
+  if (contribution.flashbackAdditionalCost !== undefined) {
+    assembly.flashbackAdditionalCost = contribution.flashbackAdditionalCost;
+  }
+  if (contribution.graveyardCasts) (assembly.graveyardCasts ??= []).push(...contribution.graveyardCasts);
+  if (contribution.graveyardAbilities) {
+    (assembly.graveyardAbilities ??= []).push(...contribution.graveyardAbilities);
+  }
   if (contribution.changeling) assembly.changeling = true;
+  if (contribution.colorless) assembly.colorless = true;
   if (contribution.cantBeCountered) assembly.cantBeCountered = true;
   if (contribution.spellsCantBeCountered) assembly.spellsCantBeCountered = contribution.spellsCantBeCountered;
   if (contribution.noMaximumHandSize) assembly.noMaximumHandSize = true;
+  // A vacuous clause is RECORDED, never dropped (DESIGN §3.107).
+  if (contribution.vacuous !== undefined) (assembly.vacuous ??= []).push(contribution.vacuous);
   if (contribution.playLandsFrom) {
     // Accumulated, not replaced: Bolas's Citadel prints one zone and a second
     // line could print another, and both permissions are real at once.
@@ -748,10 +919,21 @@ function capitalizeFirst(text: string): string {
  * line is reported rather than silently dropping an ability.
  */
 function compileKeywordLine(line: string, assembly: Assembly, ctx: RuleContext): boolean {
-  const words = line
-    .split(',')
-    .map((word) => normalizeClause(word))
-    .filter((word) => word.length > 0);
+  // Oracle separates keywords with a comma, EXCEPT where one of them carries a
+  // comma of its own — then the whole line switches to semicolons ("Flying;
+  // trample; rampage 4", "Trample; haste; shroud"). Thirty printed cards use
+  // the semicolon form, and every one of them was reported as an unmodelled
+  // "Flying" until both separators were read.
+  // The comma split also breaks a multi-quality protection line apart
+  // ("protection from Vampires, from Werewolves, and from Zombies" — Elite
+  // Inquisitor); `joinPayloadKeywords` hands the fragments back to the
+  // protection phrase before them, as the grant parser already does.
+  const words = joinPayloadKeywords(
+    line
+      .split(/[,;]/)
+      .map((word) => normalizeClause(word))
+      .filter((word) => word.length > 0),
+  );
   if (words.length === 0) return false;
 
   let flags: KeywordFlags = {};
@@ -761,10 +943,11 @@ function compileKeywordLine(line: string, assembly: Assembly, ctx: RuleContext):
       flags = mergeKeywordGrant(flags, { [field]: true });
       continue;
     }
-    // The two payload keywords - `Ward {N}` and `Protection from ...` - are not
-    // boolean flags, so they parse through their own closed tables. A form
-    // outside them ("Ward-Pay 3 life") falls through and reports the line.
-    const special = parseProtectionOrWard(word);
+    // The payload keywords - `Ward {N}`, `Protection from ...` and `Toxic N`
+    // (§3.105) - are not boolean flags, so they parse through their own closed
+    // tables. A form outside them ("Ward-Pay 3 life") falls through and
+    // reports the line.
+    const special = parsePayloadKeyword(word);
     if (special) {
       flags = mergeKeywordGrant(flags, special);
       continue;
@@ -782,6 +965,16 @@ function compileKeywordLine(line: string, assembly: Assembly, ctx: RuleContext):
       const result = applyRules(TRIGGER_RULES, expansion, ctx);
       if (!result) return false;
       absorb(assembly, result.contribution, `keyword:${word}`);
+      continue;
+    }
+    // A PARAMETRISED keyword inside a list ("trample; rampage 2", "haste,
+    // bushido 1") — the pattern rules that compile it as a whole line
+    // (`keyword-bushido`, `keyword-rampage`) are tried on the one word, so a
+    // list is compiled exactly as its members would be alone (DESIGN §3.107).
+    // A word no rule matches still returns false and reports the line.
+    const parametrised = applyRules(TRIGGER_RULES, word, ctx);
+    if (parametrised && parametrised.ruleId.startsWith('keyword-')) {
+      absorb(assembly, parametrised.contribution, parametrised.ruleId);
       continue;
     }
     return false; // not a keyword we model — report the line
@@ -904,6 +1097,7 @@ function newAssembly(): Assembly {
     replacements: [],
     keywords: {},
     cycling: [],
+    entersWithCounters: [],
     entersTapped: false,
     matchedRules: [],
     missing: [],
@@ -1002,6 +1196,12 @@ export function compileCard(card: CompilableCard): CompileResult {
     });
   }
   const cost = toCoreCost(card, hybrid);
+  // §3.106 — a NONLAND card with no printed mana cost (CR 202.1b) is marked
+  // so the engine refuses to cast it by paying nothing. `toCoreCost` folds
+  // `{0}` and "no cost" into the same `undefined`, which is right for the
+  // pool's `{0}` cards and wrong for Ancestral Vision; the parse keeps the
+  // difference and this is where it lands on the definition.
+  const noManaCost = card.manaCost.absent === true && !types.includes('land');
 
   const isCreatureCard = types.includes('creature');
 
@@ -1265,12 +1465,13 @@ export function compileCard(card: CompilableCard): CompileResult {
     // (prowess via its template, persist via a direct builder) — Scryfall
     // listing them again is not a second, unmodelled ability.
     if (KEYWORD_ABILITY_TEXT[word] || KEYWORD_ABILITY_BUILDERS[word]) continue;
-    // Scryfall lists ward and protection by their bare names; the printed line
-    // carries the payload ("Ward {2}", "Protection from red") and has already
-    // compiled it into the keyword fields - or already reported the line, in
-    // which case the missing-scan below still refuses a duplicate entry.
-    if (word === 'ward' && assembly.keywords.ward !== undefined) continue;
-    if (word === 'protection' && assembly.keywords.protectionFrom !== undefined) continue;
+    // Scryfall lists ward, protection and toxic by their bare names; the
+    // printed line carries the payload ("Ward {2}", "Protection from red",
+    // "Toxic 1") and has already compiled it into the keyword FIELD the table
+    // names - or already reported the line, in which case the missing-scan
+    // below still refuses a duplicate entry (see PAYLOAD_KEYWORD_EVIDENCE).
+    const payloadField = PAYLOAD_KEYWORD_EVIDENCE[word];
+    if (payloadField !== undefined && assembly.keywords[payloadField] !== undefined) continue;
     // "Enchant" and "Equip" are Scryfall's names for the attachment ability the
     // card's own printed line already compiled (see `assembleAttachment`). Without
     // this, every Aura and Equipment would report its central ability as missing
@@ -1298,7 +1499,14 @@ export function compileCard(card: CompilableCard): CompileResult {
     // not match compiles no primitive and still reports through its own `missing`
     // entry (the scry/mill template hints).
     const backingPrimitive = PRIMITIVE_BACKED_KEYWORDS[word];
-    if (backingPrimitive !== undefined && primitivesCompiled.has(backingPrimitive)) continue;
+    if (
+      backingPrimitive !== undefined &&
+      (typeof backingPrimitive === 'string'
+        ? primitivesCompiled.has(backingPrimitive)
+        : backingPrimitive.some((primitive) => primitivesCompiled.has(primitive)))
+    ) {
+      continue;
+    }
     // A keyword whose implementation IS a triggered ability: the evidence is a
     // compiled trigger labelled with the keyword (see TRIGGER_BACKED_KEYWORDS).
     if (
@@ -1307,6 +1515,17 @@ export function compileCard(card: CompilableCard): CompileResult {
     ) {
       continue;
     }
+    // §3.110 — a keyword whose implementation IS an activated ability (outlast):
+    // the evidence is a compiled activation labelled with the keyword.
+    if (
+      ACTIVATED_BACKED_KEYWORDS.has(word) &&
+      assembly.activated.some((a) => a.label.toLowerCase().startsWith(word))
+    ) {
+      continue;
+    }
+    // LANDWALK (DESIGN §3.107): "Landwalk", "Islandwalk", "Legendary landwalk"
+    // are all answered by the compiled payload — see `isLandwalkKeyword`.
+    if (isLandwalkKeyword(word) && assembly.keywords.landwalk !== undefined) continue;
     // Cycling and its typed variants: Scryfall lists "Cycling", "Typecycling"
     // and "Landcycling" as keywords, and the printed line has already compiled
     // into `assembly.cycling`. A cycling line that did NOT compile (an {X}
@@ -1340,6 +1559,30 @@ export function compileCard(card: CompilableCard): CompileResult {
     if (COST_ASSIST_KEYWORDS.has(word) && assembly.costAssist !== undefined) continue;
     if (word === 'buyback' && assembly.buyback !== undefined) continue;
     if (word === 'madness' && assembly.madness !== undefined) continue;
+    // §3.111 — the graveyard-casting family: the evidence is a compiled
+    // ability/cast OF THAT KIND (see the two tables), never the keyword's
+    // presence. "Retrace" and "Jump-start" are builders and never reach here.
+    const graveyardAbilityKind = GRAVEYARD_ABILITY_KEYWORDS[word];
+    if (
+      graveyardAbilityKind !== undefined &&
+      assembly.graveyardAbilities?.some((ability) => ability.kind === graveyardAbilityKind) === true
+    ) {
+      continue;
+    }
+    const graveyardCastKind = GRAVEYARD_CAST_KEYWORDS[word];
+    if (
+      graveyardCastKind !== undefined &&
+      assembly.graveyardCasts?.some((cast) => cast.kind === graveyardCastKind) === true
+    ) {
+      continue;
+    }
+    // §3.106 — same shape as madness: the printed "Suspend N—{…}" line compiled
+    // into `assembly.suspend`; a "Suspend X" line leaves it unset and reports.
+    if (word === 'suspend' && assembly.suspend !== undefined) continue;
+    // §3.113 — storm / cascade / ripple: the evidence is a compiled CAST
+    // TRIGGER tagged with the keyword. Keyed on the tag, not the label, so a
+    // "Ripple 4" line that did not compile leaves no trigger and still reports.
+    if (CAST_TRIGGER_KEYWORDS.has(word) && assembly.castTriggers?.some((t) => t.keyword === word)) continue;
     // An ABILITY WORD (Revolt, Morbid, …) is a label, not an ability — CR
     // 207.2c. It is skipped only when the line it labels actually compiled;
     // a line that failed put its own text (word included) into `missing`, so
@@ -1455,6 +1698,10 @@ export function compileCard(card: CompilableCard): CompileResult {
     // Changeling is a characteristic-defining ability that applies in EVERY zone,
     // so it rides the definition rather than the keyword-flag bag.
     ...(assembly.changeling ? { changeling: true } : {}),
+    // `[]` is meaningful and distinct from the field being absent: it says
+    // "printed colourless" where absent says "read my pips" (see
+    // `CardDefinition.colors`). Devoid is the only thing that sets it today.
+    ...(assembly.colorless ? { colors: [] } : {}),
     ...(assembly.cantBeCountered ? { cantBeCountered: true } : {}),
     ...(assembly.spellsCantBeCountered ? { spellsCantBeCountered: assembly.spellsCantBeCountered } : {}),
     ...(assembly.noMaximumHandSize ? { noMaximumHandSize: true } : {}),
@@ -1494,8 +1741,26 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(assembly.cycling.length > 0 ? { cycling: assembly.cycling } : {}),
     ...(assembly.buyback ? { buyback: assembly.buyback } : {}),
     ...(assembly.madness ? { madness: assembly.madness } : {}),
+    // §3.106
+    ...(noManaCost ? { noManaCost: true } : {}),
+    ...(assembly.suspend ? { suspend: assembly.suspend } : {}),
+    // §3.113
+    ...(assembly.castTriggers !== undefined && assembly.castTriggers.length > 0
+      ? { castTriggers: assembly.castTriggers }
+      : {}),
+    ...(assembly.entersWithCounters.length > 0 ? { entersWithCounters: assembly.entersWithCounters } : {}),
     ...(assembly.flashback !== undefined ? { flashback: assembly.flashback } : {}),
     ...(assembly.flashbackXCost !== undefined ? { flashbackXCost: assembly.flashbackXCost } : {}),
+    // §3.111
+    ...(assembly.flashbackAdditionalCost !== undefined
+      ? { flashbackAdditionalCost: assembly.flashbackAdditionalCost }
+      : {}),
+    ...(assembly.graveyardCasts !== undefined && assembly.graveyardCasts.length > 0
+      ? { graveyardCasts: assembly.graveyardCasts }
+      : {}),
+    ...(assembly.graveyardAbilities !== undefined && assembly.graveyardAbilities.length > 0
+      ? { graveyardAbilities: assembly.graveyardAbilities }
+      : {}),
     ...(assembly.flashbackLifeCost !== undefined
       ? { flashbackLifeCost: assembly.flashbackLifeCost }
       : {}),
@@ -1519,6 +1784,9 @@ export function compileCard(card: CompilableCard): CompileResult {
     definition,
     matchedRules: assembly.matchedRules,
     missing: assembly.missing,
+    // Present only when a clause was implemented by doing nothing (DESIGN
+    // §3.107), so every other card's result is byte-for-byte what it was.
+    ...(assembly.vacuous !== undefined ? { vacuous: assembly.vacuous } : {}),
   };
 }
 

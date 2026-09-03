@@ -94,6 +94,73 @@ export type GameEvent =
       readonly instanceId: InstanceId;
       readonly name: string;
     }
+  // --- §3.106 suspend (CR 702.62) ---------------------------------------------
+  | {
+      /**
+       * A card was SUSPENDED from hand: its suspend cost paid, and the card
+       * exiled with `timeCounters` time counters (CR 702.62a). The `zoneChange`
+       * into exile is emitted separately; this is the special action itself.
+       */
+      readonly type: 'cardSuspended';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+      readonly timeCounters: number;
+    }
+  | {
+      /**
+       * The last time counter left a suspended card and its owner now has the
+       * window to cast it without paying its mana cost (CR 702.62a). The same
+       * window record as madness (`MadnessWindow.kind`), its own event because
+       * a replay must not report a discard that never happened.
+       */
+      readonly type: 'suspendWindowOpened';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
+  | {
+      /** The suspend window closed without a cast: the card remains exiled. */
+      readonly type: 'suspendDeclined';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
+  // --- §3.113 the spell-count family: cascade and ripple windows ----------------
+  | {
+      /**
+       * A cascade trigger exiled its way to a nonland card that costs less and
+       * its controller now has the window to cast it for nothing (CR 702.85a).
+       * The exiles themselves are the ordinary `zoneChange`s before this.
+       */
+      readonly type: 'cascadeWindowOpened';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
+  | {
+      /**
+       * A ripple reveal found a card sharing the spell's name, and its
+       * controller has the window to cast it for nothing (CR 702.60a). Emitted
+       * once per same-name card offered — a chain re-opens the window.
+       */
+      readonly type: 'rippleWindowOpened';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
+  | {
+      /**
+       * A cascade / ripple pile went to the bottom of its owner's library —
+       * the cards taken off the top that were not cast — `random` for cascade's
+       * "random order", false for ripple's revealed order. One event for the
+       * whole pile, in bottom order top-down.
+       */
+      readonly type: 'pileBottomed';
+      readonly player: PlayerId;
+      readonly instanceIds: readonly InstanceId[];
+      readonly random: boolean;
+    }
   | {
       readonly type: 'stackResolved';
       readonly instanceId: InstanceId;
@@ -157,27 +224,6 @@ export type GameEvent =
       readonly type: 'cardsLookedAt';
       readonly player: PlayerId;
       readonly amount: number;
-    }
-  | {
-      /**
-       * fix/reports-2026-09-01 — a card was REVEALED from a hidden zone, by name,
-       * to everyone (Goblin Guide's "defending player reveals the top card of
-       * their library"). The identity is PUBLIC as printed — a reveal is the one
-       * act whose whole point is that both players see the card — which is why
-       * this event, unlike `cardsLookedAt`, carries the name. Bug report
-       * 20260901_210413: the reveal happened and nobody could see it.
-       *
-       * `matched` says whether the reveal's own condition held (Goblin Guide: it
-       * was a land, so it goes to the revealing player's hand) — the consequence
-       * arrives as its own `zoneChange`; this only explains it.
-       */
-      readonly type: 'cardRevealed';
-      readonly player: PlayerId;
-      readonly instanceId: InstanceId;
-      readonly name: string;
-      readonly fromZone: ZoneName;
-      readonly sourceInstanceId: InstanceId;
-      readonly matched: boolean;
     }
   | {
       /** A non-mana activated ability was activated and put on the stack. */
@@ -294,6 +340,20 @@ export type GameEvent =
     }
   | { readonly type: 'lifeChanged'; readonly player: PlayerId; readonly delta: number; readonly to: number }
   | { readonly type: 'gainLife'; readonly player: PlayerId; readonly amount: number }
+  // --- poison family (§3.105) ---------------------------------------------------
+  | {
+      /**
+       * A player's POISON COUNTERS changed (CR 122.1f) — by infect damage
+       * (CR 702.90b), toxic (CR 702.164c), proliferate (CR 701.34) or a card
+       * that hands them out. `lifeChanged`'s shape exactly: the delta and the
+       * resulting total, so a replay can show the poison clock beside the life
+       * clock without folding the whole log.
+       */
+      readonly type: 'poisonChanged';
+      readonly player: PlayerId;
+      readonly delta: number;
+      readonly to: number;
+    }
   | { readonly type: 'creatureDied'; readonly instanceId: InstanceId; readonly name: string }
   | {
       /**
@@ -371,6 +431,39 @@ export type GameEvent =
   | { readonly type: 'gameOver'; readonly winner: PlayerId | null }
   | { readonly type: 'actionRejected'; readonly reason: string }
   | { readonly type: 'counterAdded'; readonly instanceId: InstanceId; readonly kind: string; readonly amount: number }
+  // --- the counter keyword family (DESIGN §3.110) ------------------------------
+  /** A renown creature connected and gained its once-only designation (CR 702.112a). */
+  | { readonly type: 'becameRenowned'; readonly instanceId: InstanceId; readonly name: string }
+  /**
+   * A card was REVEALED — explore's top card (CR 701.44a), Goblin Guide's
+   * attack trigger, any "reveal the top card" clause. Public by definition:
+   * revealing is showing the card to every player, so the observation layer
+   * passes the name through unmasked.
+   *
+   * ⚠️ ONE event for every reveal, deliberately (CLAUDE.md rule 12). Two
+   * branches added this independently — §3.110's explore and §3.119's
+   * `revealTopCard` — with two different shapes, and two events meaning "a card
+   * was revealed" is exactly the pair that eventually disagree. The union is
+   * the merge: the three fields every reveal has are REQUIRED, and the three
+   * that only a FILTERED reveal can answer are optional.
+   *
+   * `fromZone` is where it was revealed from; `sourceInstanceId` is the
+   * permanent whose ability revealed it; `matched` says whether the reveal's own
+   * condition held (Goblin Guide: it was a land, so it goes to the revealing
+   * player's hand). The consequence always arrives as its own `zoneChange` —
+   * these only explain it. A reveal with no filter (explore) omits `matched`
+   * rather than claiming `false`, because "the condition did not hold" and
+   * "there was no condition" are different facts.
+   */
+  | {
+      readonly type: 'cardRevealed';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+      readonly fromZone?: ZoneName;
+      readonly sourceInstanceId?: InstanceId;
+      readonly matched?: boolean;
+    }
   | {
       /**
        * A permanent NAMED a value as it entered — "As ~ enters, choose a creature

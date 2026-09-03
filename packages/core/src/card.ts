@@ -288,13 +288,168 @@ export interface KeywordFlags {
    * with two ward abilities charges the sum, which is what paying both costs.
    */
   readonly ward?: number;
+  // --- poison family (§3.105) ---------------------------------------------------
+  /**
+   * **Infect** (CR 702.90) — damage this source deals is still DAMAGE, but its
+   * RESULTS change (CR 120.3): to a creature it lands as that many -1/-1
+   * counters instead of marked damage (120.3d); to a player it lands as that
+   * many poison counters instead of life loss (120.3b). Deathtouch, lifelink,
+   * "deals damage" triggers and prevention all still apply, which is why this is
+   * a flag read at the ONE damage-result funnel (`damage-result.ts`) and not a
+   * replacement effect. Multiple instances are redundant (702.90f).
+   */
+  readonly infect?: boolean;
+  /**
+   * **Wither** (CR 702.80) — infect's creature half only: damage to a creature
+   * lands as -1/-1 counters (120.3d); damage to a player is ordinary life loss.
+   * Printed on spells as well as creatures (Puncture Blast), so the funnel reads
+   * the SOURCE's keywords wherever the source is (702.80c).
+   */
+  readonly wither?: boolean;
+  /**
+   * **Toxic N** (CR 702.164) — a player dealt COMBAT damage by this creature
+   * also gets N poison counters, in ADDITION to the damage's other results
+   * (120.3g). Only combat damage, and only players: a toxic creature that
+   * fights, or that hits a planeswalker, gives no poison.
+   *
+   * A PAYLOAD keyword, not a boolean: "total toxic value" is the SUM of every
+   * instance (702.164b), so it merges additively exactly as `ward` does.
+   */
+  readonly toxic?: number;
+
+  // --- the combat keyword family (DESIGN §3.107) ------------------------------
+  /**
+   * **Shadow** (CR 702.28b) — "can block or be blocked by only creatures with
+   * shadow". A SYMMETRIC pair rule: a shadow creature can't be blocked by a
+   * non-shadow creature, and a non-shadow creature can't be blocked by a shadow
+   * one. Judged per pair in `canBlock`, on both sides of the pair at once.
+   */
+  readonly shadow?: boolean;
+  /**
+   * **Flanking** (CR 702.25a) — a flag with no effect of its own, exactly like
+   * {@link horsemanship}: it exists so flanking's trigger ("whenever a creature
+   * WITHOUT flanking blocks this creature, the blocking creature gets −1/−1")
+   * can read the quality off the blocker. The trigger itself is compiled beside
+   * the flag (`becomesBlockedByCreature` + `counterpartLacksKeyword`).
+   */
+  readonly flanking?: boolean;
+  /**
+   * **Split second** (CR 702.61a) — "as long as this spell is on the stack,
+   * players can't cast spells or activate abilities that aren't mana
+   * abilities". A timing flag like {@link flash}, read by the engine's offer
+   * pass (`splitSecondOnStack`) and by the cast/activate/cycle apply paths, so
+   * the lock is enforced from both sides. Triggered abilities still trigger
+   * and resolve (CR 702.61b) — nothing here touches them.
+   */
+  readonly splitSecond?: boolean;
+  /**
+   * **Myriad** (CR 702.116a) — "whenever this creature attacks, for each
+   * opponent OTHER THAN defending player, you may create a token copy … attacking
+   * that player".
+   *
+   * ⚠️ VACUOUS IN THIS ENGINE, AND RECORDED RATHER THAN DROPPED. The game is
+   * strictly two-player (`PLAYER_IDS` has length 2, enforced by the conformance
+   * manifest), so the set "opponents other than defending player" is EMPTY and
+   * the ability does exactly nothing — that is the printed rule, not an
+   * approximation. The flag stays on the definition so a future multiplayer
+   * engine finds every myriad card by grepping for the field instead of
+   * rediscovering the keyword one card at a time; the compiler reports the
+   * vacuity in `CompileResult.vacuous` for the same reason.
+   */
+  readonly myriad?: boolean;
+  /**
+   * **"~ attacks each combat if able"** — an attack REQUIREMENT (CR 508.1d),
+   * the attacker-side mirror of {@link mustBeBlocked}. A declaration that
+   * leaves such a creature home while it was ABLE to attack (untapped, not
+   * summoning-sick, no defender, no unmet {@link cantAttackUnlessDefenderControls})
+   * is illegal; passing the declare-attackers step with one on the board
+   * declares exactly the required creatures (`attack-requirements.ts`).
+   */
+  readonly mustAttack?: boolean;
+  /**
+   * **Landwalk** (CR 702.18b) — "can't be blocked as long as defending player
+   * controls a [land of this kind]". A LIST because a creature may print
+   * several ("islandwalk, swampwalk"), any one of which makes it unblockable;
+   * grants UNION, like {@link protectionFrom}. The kinds are the closed
+   * {@link LandCondition} table — a walk outside it keeps reporting.
+   *
+   * Judged per pair in `canBlock`, which reads the DEFENDER's lands off the
+   * battlefield it is handed — the one evasion rule that depends on something
+   * other than the two creatures.
+   */
+  readonly landwalk?: readonly LandCondition[];
+  /**
+   * **"~ can't attack unless defending player controls an Island"** — an
+   * attack RESTRICTION (CR 508.1c) reading the same closed {@link LandCondition}
+   * table as {@link landwalk}, from the same helper, so "an Island" cannot mean
+   * two things. Every entry must hold (each printed line is its own
+   * restriction); grants CONCATENATE.
+   */
+  readonly cantAttackUnlessDefenderControls?: readonly LandCondition[];
+  /**
+   * **"~ can't be blocked by more than one creature"** — the DUAL of
+   * {@link minBlockers} (CR 509.1b), and like it a restriction on the whole
+   * DECLARATION rather than any single pair: each blocker may block it, and
+   * what the rule forbids is a second one doing so. Merges by MINIMUM — the
+   * stricter cap is the one in force.
+   */
+  readonly maxBlockers?: number;
+  /**
+   * **"~ can block only creatures with flying"** — a restriction on what THIS
+   * creature may block (CR 509.1b), the blocker-side mirror of
+   * {@link blockRestriction}. The attacker must have at least one of the named
+   * keywords; the table of nameable keywords is the compiler's closed
+   * `BLOCKER_QUALITY_KEYWORDS`. Two printed lines merge by INTERSECTION of the
+   * lists (both must be satisfied by the one attacker).
+   */
+  readonly blockOnly?: BlockOnlyRestriction;
+}
+
+/**
+ * A condition on the DEFENDING player's lands, read by landwalk (CR 702.18b)
+ * and by "can't attack unless defending player controls …" (CR 508.1c).
+ *
+ * A CLOSED union, and closed on purpose: each kind is something `land-conditions.ts`
+ * can answer exactly from the board. "Legendary landwalk" and "nonbasic
+ * landwalk" are real printed lines (Ayumi, the Last Visitor; Dryad
+ * Sophisticate), so they are rows; a walk naming anything else ("snow
+ * landwalk", "Desertwalk") is outside the table and its card keeps reporting
+ * rather than compiling into a creature that is never unblockable.
+ */
+export type LandCondition =
+  /** "an Island" / "a Forest" … — a land with the named basic land type. */
+  | { readonly kind: 'subtype'; readonly subtype: BasicLandSubtype }
+  /** "a legendary land". */
+  | { readonly kind: 'legendary' }
+  /** "a nonbasic land". */
+  | { readonly kind: 'nonbasic' };
+
+/** The five basic land types a `LandCondition` may name. */
+export type BasicLandSubtype = 'plains' | 'island' | 'swamp' | 'mountain' | 'forest';
+
+/**
+ * A restriction on what a BLOCKER may block — "~ can block only creatures with
+ * flying" (Welkin Tern, Cloud Sprite). The attacker must carry at least one of
+ * the listed keywords. Named by {@link BooleanKeywordName}, so a keyword that
+ * does not exist cannot be written here.
+ */
+export interface BlockOnlyRestriction {
+  readonly attackerMustHaveAnyOf: readonly BooleanKeywordName[];
 }
 
 /**
  * The qualities a printed "protection from …" can name, each with an exact
  * engine meaning (see `sourceHasQuality` in `protection.ts`). A closed list on
- * purpose: a quality outside it ("protection from Demons", "from instants") has
- * no faithful check, so the compiler reports those cards instead of guessing.
+ * purpose: a quality outside it ("protection from mana value 3 or less", "from
+ * the chosen color") has no faithful check, so the compiler reports those cards
+ * instead of guessing.
+ *
+ * A quality is a STRING, never a record, so the lists can be unioned, compared
+ * and serialised with `includes`/`===` everywhere they already are. The one
+ * open-ended family — a printed SUBTYPE ("protection from Dragons", "from
+ * Arcane") — is therefore the prefixed form `subtype:<Name>`, read through
+ * `hasSubtype` so a changeling counts as every creature type here as it does
+ * for every other subtype question in the engine.
  */
 export type ProtectionQuality =
   | 'white'
@@ -304,14 +459,31 @@ export type ProtectionQuality =
   | 'green'
   /** A source with NO colors (true colorless — lands, most artifacts). */
   | 'colorless'
+  /** A source with exactly one color (Guardian of the Guildpact). */
+  | 'monocolored'
   /** A source with two or more colors. */
   | 'multicolored'
   /** Any source whose card is an artifact. */
   | 'artifacts'
   /** Any source whose card is a creature. */
   | 'creatures'
+  /** Any source whose card is an enchantment (Azorius First-Wing). */
+  | 'enchantments'
+  /** Any source whose card is a land (Horizon Drake). */
+  | 'lands'
+  /** Any source whose card is a planeswalker (Greensleeves, Maro-Sorcerer). */
+  | 'planeswalkers'
+  /** Any source whose card is an instant (Sword of Wealth and Power). */
+  | 'instants'
+  /** Any source whose card is a sorcery. */
+  | 'sorceries'
+  /** Any source with the named printed subtype — `subtype:Dragon`, `subtype:Arcane`. */
+  | `subtype:${string}`
   /** Every source, whatever its qualities. */
   | 'everything';
+
+/** The prefix of the subtype-shaped {@link ProtectionQuality}. */
+export const PROTECTION_SUBTYPE_PREFIX = 'subtype:';
 
 /**
  * Union two protection lists without duplicates — the one merge rule everywhere
@@ -407,6 +579,16 @@ export interface CardDefinition {
   readonly basic?: boolean;
   /** Mana cost. Absent for lands and other free-to-play cards. */
   readonly cost?: ManaCost;
+  /**
+   * §3.106 — this nonland card prints NO mana cost (CR 202.1b): Ancestral
+   * Vision, Living End, the suspend cycle. It cannot be cast by paying its
+   * mana cost — from the hand there is nothing else to pay, so the engine never
+   * offers or accepts the cast — and reaches the stack only through a
+   * permission that says "without paying its mana cost" (a suspend window, a
+   * Siege reward) or an alternative cost. Distinct from an absent {@link cost},
+   * which a printed `{0}` also produces and which IS payable.
+   */
+  readonly noManaCost?: boolean;
   /**
    * How many `{X}` symbols the printed cost carries (1 for `{X}{R}`, 2 for
    * `{X}{X}{U}`). The X portion is deliberately NOT part of {@link cost}: X is 0
@@ -877,6 +1059,37 @@ export interface CardDefinition {
    * alongside {@link flashback}.
    */
   readonly flashbackLifeCost?: number;
+  // --- the graveyard-casting family (§3.111) -----------------------------------
+  /**
+   * A NON-MANA rider on the flashback cost — "Flashback—Sacrifice three
+   * creatures" (Dread Return), "Flashback—Tap three untapped white creatures
+   * you control" (Battle Screech), "Flashback—Sacrifice a Mountain" (Lava
+   * Dart). The SAME closed shape a printed "as an additional cost" uses
+   * ({@link additionalCost}), paid through the same cast-time question, and
+   * charged only on the graveyard cast. Sits beside {@link flashback}, whose
+   * mana half is then EMPTY for every card that prints one of these.
+   */
+  readonly flashbackAdditionalCost?: AdditionalCastCost;
+  /**
+   * The OTHER "cast this card from your graveyard" keywords — retrace (CR
+   * 702.81a), jump-start (702.133a), escape (702.138a). Each is a kind, an
+   * optional alternative mana cost and a mandatory non-mana rider; how the
+   * spell LEAVES the stack is the closed `GRAVEYARD_CAST_EXIT` table. Read
+   * beside {@link flashback} by ONE accessor, `graveyardCastOptionsOf`, so the
+   * offer loop, the cast path and the pilot agree on every way a card in the
+   * graveyard may be cast. See `graveyard-casting.ts`.
+   */
+  readonly graveyardCasts?: readonly import('./graveyard-casting.js').GraveyardCastAbility[];
+  /**
+   * ACTIVATED abilities that function while this card is in a GRAVEYARD —
+   * unearth (CR 702.84a), scavenge (702.96a), embalm (702.128a), eternalize
+   * (702.129a), encore (702.141a) and the printed "{cost}: Return ~ from your
+   * graveyard to your hand". Indexed by the `activateGraveyardAbility` action
+   * exactly as {@link activated} is by `activateAbility`, and kept apart from
+   * it for the reason {@link cycling} is: a battlefield activation starts by
+   * finding a permanent. See `graveyard-casting.ts`.
+   */
+  readonly graveyardAbilities?: readonly import('./graveyard-casting.js').GraveyardAbility[];
   /**
    * CYCLING — "{cost}, Discard this card: Draw a card" (CR 702.29), plus the
    * TYPECYCLING/LANDCYCLING variants whose effect is a library search instead of
@@ -950,6 +1163,37 @@ export interface CardDefinition {
    * ("Madness—Pay six {C}") or with a non-mana component stays reported.
    */
   readonly madness?: ManaCost;
+  // --- upkeep costs and time counters (§3.106) ------------------------------------
+  /**
+   * Counters this permanent ENTERS WITH — "This permanent enters with N time
+   * counters on it" (vanishing, CR 702.63a) / "N fade counters" (fading, CR
+   * 702.32a). A CR 614.1c replacement on the entry itself, applied by the ONE
+   * helper every battlefield-entry path calls (`applyEnteringCounters`, the
+   * sibling of `applyEnteringLoyalty`), so a land played, a creature cast, a
+   * token made and a permanent put onto the battlefield all arrive counted —
+   * the reason this is a definition field and not an entry in the ETB script,
+   * which only a resolving spell runs.
+   */
+  readonly entersWithCounters?: readonly EnteringCounters[];
+  /**
+   * **Suspend N—[cost]** (CR 702.62a). The static half — "if you could begin to
+   * cast this card, you may pay [cost] and exile it with N time counters" — is a
+   * SPECIAL ACTION (`suspendCard`) the engine offers from hand; the exile-side
+   * halves (the upkeep tick and the free cast when the last counter leaves)
+   * live in the delayed-ability record the action creates, because a card in
+   * exile is on no trigger source. See `suspend.ts`.
+   */
+  readonly suspend?: SuspendAbility;
+  // --- the spell-count family (§3.113): storm, cascade, ripple ------------------
+  /**
+   * "When you cast this spell, …" abilities that function on the STACK — storm
+   * (CR 702.40a), cascade (CR 702.85a), ripple (CR 702.60a). Not `triggers`,
+   * because the trigger collector reads the battlefield and the command zone
+   * only; the cast path pushes these itself the moment the spell is cast (see
+   * `cast-triggers.ts`). One record per printed instance: "Cascade, cascade"
+   * is two.
+   */
+  readonly castTriggers?: readonly import('./cast-triggers.js').CastTriggeredAbility[];
   /**
    * Triggered abilities (DESIGN §3.9), as data: each is a condition (what event
    * sets it off) + an effect-ref list run when it resolves. Opaque to most of core
@@ -1186,7 +1430,17 @@ export type DerivedCountName =
    * resolution rather than about the board, so `evaluateDerivedCount` cannot
    * answer it; `intParam` reads it off the context instead.
    */
-  | 'triggeringAmount';
+  | 'triggeringAmount'
+  /**
+   * RAMPAGE's count (CR 702.23a) — "for each creature blocking it BEYOND THE
+   * FIRST": the number of creatures currently blocking the effect's SOURCE,
+   * minus one, floored at zero. Read as the ability RESOLVES (CR 702.23b — the
+   * bonus is calculated once, when the trigger resolves), off the live combat
+   * state. A fact about the source rather than about a player, so like
+   * `timesThisWasKicked` it is answered by `intParam` (which holds the source)
+   * and not by the board-only evaluator.
+   */
+  | 'creaturesBlockingThisBeyondFirst';
 
 /**
  * One half of a characteristic-defining P/T: a derived count plus an optional
@@ -1294,8 +1548,15 @@ export function colorsOfDefinition(def: CardDefinition): readonly ManaColor[] {
  * that prints one is implemented.
  */
 export interface AdditionalCastCost {
-  /** Which zone the payment leaves, and what the move means. */
-  readonly kind: 'sacrifice' | 'discard';
+  /**
+   * Which zone the payment leaves, and what the move means. §3.111 added the
+   * two kinds the graveyard-casting family prints — `tap` ("Flashback—Tap
+   * three untapped white creatures you control": tap N untapped permanents
+   * matching the filter) and `exileFromGraveyard` (escape's "Exile five other
+   * cards from your graveyard"). Where each is paid from is the closed
+   * `ADDITIONAL_COST_ZONE` table in `graveyard-casting.ts`.
+   */
+  readonly kind: 'sacrifice' | 'discard' | 'tap' | 'exileFromGraveyard';
   /** How many cards/permanents (default 1). */
   readonly count?: number;
   /** What qualifies. Absent means "any card in that zone". */
@@ -1391,6 +1652,37 @@ export interface CyclingAbility {
   readonly effects: readonly EffectRef[];
   /** Human-readable text for the log, the inspector, and the replay viewer. */
   readonly label: string;
+}
+
+// --- upkeep costs and time counters (§3.106) --------------------------------------
+
+/** Counters a permanent enters with (CR 614.1c) — see `CardDefinition.entersWithCounters`. */
+export interface EnteringCounters {
+  /** The counter kind, exactly as `CardInstance.counters` keys it (`'time'`, `'fade'`). */
+  readonly kind: string;
+  readonly count: number;
+}
+
+/**
+ * The printed **Suspend N—[cost]** (CR 702.62a).
+ *
+ * Only the plain form is modelled: a fixed count and a mana cost. "Suspend
+ * X—{X}{W}{W}" and the cards that add abilities to the exiled card ("whenever a
+ * time counter is removed from this card while it's exiled…") stay reported —
+ * the count and the exile-side triggers are things this record cannot say.
+ */
+export interface SuspendAbility {
+  /** How many time counters the card is exiled with. */
+  readonly count: number;
+  /** The suspend cost, paid as the special action is taken. */
+  readonly cost: ManaCost;
+  /**
+   * The body of the exile-side upkeep ability, compiled by the cards package
+   * exactly as `CyclingAbility.effects` is — core creates the delayed ability
+   * and never names a primitive itself. It removes a time counter and, when the
+   * last one leaves, opens the free-cast window.
+   */
+  readonly upkeep: readonly EffectRef[];
 }
 
 /**

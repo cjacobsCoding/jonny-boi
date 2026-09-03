@@ -136,6 +136,38 @@ export interface CastSpellAction {
    * face's cost, types, timing, targets and script. See {@link CastFace}.
    */
   readonly face?: CastFace;
+  /**
+   * §3.111 — WHICH graveyard-cast keyword a `fromZone: 'graveyard'` cast uses:
+   * retrace, jump-start or escape. Omitted means flashback, which keeps every
+   * action written before this existed meaning what it always meant. The
+   * engine reads the cost, the additional cost and the exit from the stack off
+   * this kind through `graveyardCastOptionFor` — the same accessor the offer
+   * loop enumerated it from.
+   */
+  readonly graveyardCast?: import('./graveyard-casting.js').GraveyardCastKind;
+}
+
+/**
+ * §3.111 — ACTIVATE an ability of a card in your GRAVEYARD: unearth (CR
+ * 702.84a), scavenge (702.96a), embalm (702.128a), eternalize (702.129a),
+ * encore (702.141a), and the printed "{cost}: Return ~ from your graveyard to
+ * your hand". Pays the cost — including the printed "Exile this card from your
+ * graveyard" where the keyword has one — and puts the ability on the stack.
+ *
+ * Its own action kind rather than an `activateAbility` with a zone, for the
+ * reason cycling is: that path starts by finding a permanent on the
+ * battlefield and judges {T} costs and summoning sickness, none of which a
+ * card in a graveyard has. `abilityIndex` indexes
+ * `CardDefinition.graveyardAbilities` exactly as `activateAbility` indexes
+ * `activated`; `targets` and `costInstanceIds` mean what they mean there.
+ */
+export interface ActivateGraveyardAbilityAction {
+  readonly kind: 'activateGraveyardAbility';
+  readonly player: PlayerId;
+  readonly instanceId: InstanceId;
+  readonly abilityIndex: number;
+  readonly targets?: ReadonlyArray<InstanceId | PlayerId>;
+  readonly costInstanceIds?: readonly InstanceId[];
 }
 
 /**
@@ -226,6 +258,27 @@ export interface AnswerChoiceAction {
   readonly answer: ChoiceAnswer;
 }
 
+/**
+ * §3.106 — SUSPEND a card from hand (CR 702.62a): pay its suspend cost and
+ * exile it with N time counters. A SPECIAL ACTION (CR 116.2) — it uses no
+ * stack and can be taken any time its player "could begin to cast this card",
+ * which the engine reads as the card's own cast timing (a sorcery-speed card
+ * is suspended at sorcery speed, an instant or a flash card whenever its owner
+ * holds priority).
+ *
+ * Its own action kind rather than a `castSpell` with a flag, for the same
+ * reason cycling is: nothing is cast, no spell reaches the stack, and the
+ * legality question — can I pay the suspend cost, is the timing open — is
+ * answered by `def.suspend`, not by the card's mana cost. A card with NO mana
+ * cost (Ancestral Vision) may be suspended although it can never be cast from
+ * hand; that is what makes it a card at all.
+ */
+export interface SuspendCardAction {
+  readonly kind: 'suspendCard';
+  readonly player: PlayerId;
+  readonly instanceId: InstanceId;
+}
+
 /** The union of all player actions. */
 export type GameAction =
   | PassPriorityAction
@@ -233,6 +286,8 @@ export type GameAction =
   | TapForManaAction
   | CastSpellAction
   | CycleCardAction
+  | SuspendCardAction
+  | ActivateGraveyardAbilityAction
   | ActivateAbilityAction
   | DeclareAttackersAction
   | DeclareBlockersAction

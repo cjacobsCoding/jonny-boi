@@ -16,7 +16,7 @@
  * the ability resolves. Nothing here can crash the engine.
  */
 
-import type { CardType, EffectRef } from './card.js';
+import type { BooleanKeywordName, CardType, EffectRef } from './card.js';
 import type { GameEvent } from './events.js';
 import type { CardFilter } from './choices.js';
 import { matchesCardFilter } from './choices.js';
@@ -89,8 +89,55 @@ export type TriggerEvent =
    * blocker. A card that wants the count reads `event.blocks` itself.
    */
   | 'blocksOrBecomesBlocked'
+  /*
+   * THE COMBAT KEYWORD FAMILY'S EVENTS (DESIGN §3.107). Each is a distinct
+   * printed shape with its own firing count, which is why they are rows rather
+   * than a widening of `blocksOrBecomesBlocked`:
+   */
+  /**
+   * "Whenever A CREATURE YOU CONTROL attacks alone" — exalted (CR 702.90a).
+   * NOT self-referential: the source is any permanent (Cathedral of War is a
+   * land), and the object the event is about is the lone attacker, which
+   * rides to the body as `triggeringInstances` so "that creature gets +1/+1"
+   * pumps the attacker rather than the source. "Alone" is CR 506.5: exactly
+   * one creature was declared. Scoped by `who` (default `'you'`) against the
+   * attacker's controller, resolved by the runtime as the event's subject.
+   */
+  | 'creatureAttacksAlone'
+  /**
+   * "Whenever ~ BLOCKS" — the blocker's half alone (Shu Defender, Netcaster
+   * Spider's "blocks a creature with flying"). Fires once per declaration; the
+   * creature it blocked is its `triggeringInstances`, which is what a
+   * `counterpartHasKeyword` filter reads.
+   */
+  | 'blocks'
+  /**
+   * "Whenever ~ BECOMES BLOCKED" — the attacker's half alone (rampage, CR
+   * 702.23a; Deeproot Warrior). ONE fire per declaration however many blockers
+   * (CR 509.1h), exactly as `blocksOrBecomesBlocked`; every blocker is in its
+   * `triggeringInstances`.
+   */
+  | 'becomesBlocked'
+  /**
+   * "Whenever A CREATURE [without flanking] BLOCKS THIS CREATURE" — flanking
+   * (CR 702.25a). The one combat trigger that fires ONCE PER BLOCKER (CR
+   * 702.25b: each blocking creature sets it off separately), so the matcher
+   * emits one pending ability per qualifying blocker, each carrying that
+   * blocker alone as its `triggeringInstances` — "the blocking creature gets
+   * −1/−1" then shrinks exactly that one. The "[without flanking]" is the
+   * `counterpartLacksKeyword` filter, applied by the runtime.
+   */
+  | 'becomesBlockedByCreature'
   | 'dies'
   | 'leaves'
+  /**
+   * §3.111 — "When ~ is put into a graveyard from the battlefield" (Rancor,
+   * the Aura that comes back). NOT `dies`, which is `creatureDied` and never
+   * fires for an Aura or an artifact; NOT `leaves`, which also fires on an
+   * exile or a bounce and would return a Rancor that had been exiled. Exactly
+   * the battlefield → graveyard move, for any permanent.
+   */
+  | 'putIntoGraveyardFromBattlefield'
   | 'castSpell'
   | 'upkeep'
   | 'drawStep'
@@ -241,6 +288,48 @@ export interface TriggerCondition {
    * this file has said the event matched.
    */
   readonly intervening?: InterveningIf;
+  /**
+   * For the pair-shaped combat events (`blocks`, `becomesBlocked`,
+   * `becomesBlockedByCreature` — DESIGN §3.107): the OTHER creature in the
+   * pair must HAVE this keyword — "whenever ~ blocks a creature WITH FLYING".
+   *
+   * Part of the CONDITION, not the body, for the same reason an intervening
+   * "if" is: a trigger that reached the stack and then did nothing would still
+   * be counted, responded to, and logged. Applied by the RUNTIME
+   * (`triggers-runtime.ts`), which has the state, against the counterpart's
+   * EFFECTIVE keywords — a flying granted by an anthem is flying; this file
+   * stays a pure matcher. Named by {@link BooleanKeywordName}, so a keyword
+   * that does not exist cannot be written here.
+   */
+  readonly counterpartHasKeyword?: BooleanKeywordName;
+  /**
+   * The negative form: the other creature must LACK this keyword — flanking's
+   * "whenever a creature WITHOUT flanking blocks this creature". Same runtime,
+   * same reasoning as {@link counterpartHasKeyword}.
+   */
+  readonly counterpartLacksKeyword?: BooleanKeywordName;
+  // --- the counter keyword family (DESIGN §3.110) ------------------------------
+  /**
+   * For `permanentEnters` / `permanentDies`: the body or the intervening "if"
+   * reads "**that creature**" — the permanent the event was about rides to the
+   * ability as `triggeringInstances` (evolve's "if that creature has greater
+   * power or toughness than this creature", CR 702.100a).
+   *
+   * OPT-IN rather than always on, so every board-watching trigger written
+   * before this existed is pushed byte-for-byte as it always was; a Soul
+   * Warden's stack object gains no field it never reads.
+   */
+  readonly carriesSubject?: boolean;
+  /**
+   * For `dies`: the body or the intervening "if" reads how many counters of
+   * this KIND the source had AS IT DIED — undying's "if it had no +1/+1
+   * counters on it" (CR 702.93a), modular's "put its +1/+1 counters on target
+   * artifact creature" (CR 702.43a). That is last-known information (CR
+   * 603.10a): the graveyard card's counters are already wiped, so the runtime
+   * snapshots the count as the death event is emitted and carries it as
+   * `triggeringAmount`. Opt-in for the reason {@link carriesSubject} is.
+   */
+  readonly snapshotsCounters?: string;
 }
 
 /** What a condition watches when it does not say: the permanent it is printed on. */
@@ -354,6 +443,20 @@ export interface PendingTrigger {
    * event has no amount, which is almost all of them.
    */
   readonly triggeringAmount?: number;
+  /**
+   * WHICH OBJECTS the event was about, relative to this source — the referent
+   * of a body's "**that creature**" / "**the blocking creature**" (DESIGN
+   * §3.107): the lone attacker for `creatureAttacksAlone`, the creature this one
+   * blocked for `blocks`, the blockers for `becomesBlocked`, and exactly ONE
+   * blocker for each `becomesBlockedByCreature` firing.
+   *
+   * Carried like {@link triggeringPlayer} and for the same reason: the body is
+   * read as the ability RESOLVES, after the declaration event is gone. A
+   * primitive reads it through `params.subject: 'triggering'`. Absent for every
+   * trigger whose event names no such object — which is every trigger written
+   * before this field existed, so none of them changes.
+   */
+  readonly triggeringInstances?: readonly InstanceId[];
 }
 
 /** The card-name + source needed to describe a pending trigger for events. */
@@ -433,6 +536,30 @@ export function conditionMatches(
       // event's doc comment for why one declaration is one fire.
       return event.blocks.some((b) => b.blocker === watched || b.attacker === watched);
     }
+    // --- the combat keyword family (DESIGN §3.107) ------------------------------
+    case 'creatureAttacksAlone': {
+      // CR 506.5: "alone" is exactly one declared attacker. Whose creature it is
+      // comes from the SUBJECT the runtime resolved (the attacker), judged by
+      // `who` against the source's controller — the same relational shape as
+      // every board-watching trigger, and a missing subject matches nothing.
+      if (event.type !== 'attackersDeclared' || event.attackers.length !== 1) return false;
+      if (subject === undefined) return false;
+      return whoMatches(condition.who, subject.controller, sourceController);
+    }
+    case 'blocks': {
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
+      if (watched === null || event.type !== 'blockersDeclared') return false;
+      return event.blocks.some((b) => b.blocker === watched);
+    }
+    case 'becomesBlocked':
+    case 'becomesBlockedByCreature': {
+      // Both answer "did the watched creature become blocked?" here; how MANY
+      // times the per-creature kind fires is decided by `matchTriggers`, which
+      // fans one pending ability out per blocker for it.
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
+      if (watched === null || event.type !== 'blockersDeclared') return false;
+      return event.blocks.some((b) => b.attacker === watched);
+    }
     case 'dies': {
       const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
       return watched !== null && event.type === 'creatureDied' && event.instanceId === watched;
@@ -444,6 +571,17 @@ export function conditionMatches(
         watched !== null &&
         event.type === 'zoneChange' &&
         event.from === 'battlefield' &&
+        event.instanceId === watched
+      );
+    }
+    case 'putIntoGraveyardFromBattlefield': {
+      // §3.111 — the one move, for any permanent type (see the event's doc).
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
+      return (
+        watched !== null &&
+        event.type === 'zoneChange' &&
+        event.from === 'battlefield' &&
+        event.to === 'graveyard' &&
         event.instanceId === watched
       );
     }
@@ -711,8 +849,15 @@ export const TRIGGER_EVENT_SOURCES: Readonly<Record<TriggerEvent, readonly GameE
     etb: ['zoneChange'],
     attacks: ['attackersDeclared'],
     blocksOrBecomesBlocked: ['blockersDeclared'],
+    // The combat keyword family's events (DESIGN §3.107): one attack-side, three
+    // block-side, all read straight off the two declaration events.
+    creatureAttacksAlone: ['attackersDeclared'],
+    blocks: ['blockersDeclared'],
+    becomesBlocked: ['blockersDeclared'],
+    becomesBlockedByCreature: ['blockersDeclared'],
     dies: ['creatureDied'],
     leaves: ['zoneChange'],
+    putIntoGraveyardFromBattlefield: ['zoneChange'],
     castSpell: ['spellCast'],
     upkeep: ['stepBegin'],
     drawStep: ['stepBegin'],
@@ -816,7 +961,13 @@ export function matchTriggers(
             // combat-damage trigger reads its controller and creatureness).
             event.type === 'damageDealt' && typeof event.source === 'number'
             ? resolveSubject(event.source)
-            : undefined
+            : // A LONE attack's subject is the attacker — what exalted's "a
+              // creature you control attacks alone" reads the controller of
+              // (DESIGN §3.107). Two or more attackers have no subject: nothing
+              // attacked alone.
+              event.type === 'attackersDeclared' && event.attackers.length === 1
+              ? resolveSubject(event.attackers[0] as InstanceId)
+              : undefined
         : undefined;
     }
     return subject;
@@ -836,6 +987,8 @@ export function matchTriggers(
         // creature.
         ability.condition.on === 'groupCombatDamageToPlayer' ||
         ability.condition.on === 'creatureCombatDamageToPlayer' ||
+        // Exalted reads the lone ATTACKER's controller (DESIGN §3.107).
+        ability.condition.on === 'creatureAttacksAlone' ||
         // A cast trigger narrowed by the chosen creature type needs the SPELL
         // object, for the same reason and through the same seam.
         ability.condition.spellSubtypeIsChosen === true;
@@ -866,17 +1019,88 @@ export function matchTriggers(
         event,
         watchesBoard ? subjectOf() : undefined,
       );
-      (pending ??= []).push({
-        sourceInstanceId: src.instanceId,
-        controller: src.controller,
-        ability,
-        abilityIndex,
-        ...(triggeringPlayer !== undefined ? { triggeringPlayer } : {}),
-        ...(triggeringAmount !== undefined ? { triggeringAmount } : {}),
-      });
+      // The combat keyword family (DESIGN §3.107): which objects the event was
+      // about, and — for the one per-creature kind — one pending ability PER
+      // object, each carrying that object alone. Every other trigger kind
+      // yields `undefined` here and is pushed byte-for-byte as it always was.
+      const triggering = triggeringInstancesFor(ability.condition, event, src.instanceId, attachedTo);
+      const fanOut = triggering !== undefined && FIRES_PER_TRIGGERING_INSTANCE.has(ability.condition.on);
+      const firings = fanOut ? triggering.length : 1;
+      for (let f = 0; f < firings; f++) {
+        const instances = fanOut ? [triggering[f] as InstanceId] : triggering;
+        (pending ??= []).push({
+          sourceInstanceId: src.instanceId,
+          controller: src.controller,
+          ability,
+          abilityIndex,
+          ...(triggeringPlayer !== undefined ? { triggeringPlayer } : {}),
+          ...(triggeringAmount !== undefined ? { triggeringAmount } : {}),
+          ...(instances !== undefined ? { triggeringInstances: instances } : {}),
+        });
+      }
     }
   }
   return pending ?? NO_PENDING_TRIGGERS;
+}
+
+// --- the combat keyword family (DESIGN §3.107): what a declaration is ABOUT --------
+
+/**
+ * The trigger kinds that fire ONCE PER TRIGGERING OBJECT rather than once per
+ * event. Flanking is the printed case (CR 702.25b: "each creature blocking it
+ * that doesn't have flanking triggers flanking separately"). A closed set, read
+ * by `matchTriggers` to fan a match out — so a kind added here is a row, and a
+ * kind not here keeps the one-declaration-one-fire rule of CR 509.1h.
+ */
+const FIRES_PER_TRIGGERING_INSTANCE: ReadonlySet<TriggerEvent> = new Set<TriggerEvent>([
+  'becomesBlockedByCreature',
+]);
+
+/**
+ * The objects a combat-declaration event is about, relative to the watched
+ * creature — the referent of "that creature" / "the blocking creature":
+ *   - `creatureAttacksAlone`: the lone attacker;
+ *   - `blocks`: the creature(s) the watched creature blocked;
+ *   - `becomesBlocked` / `becomesBlockedByCreature`: the creatures blocking it.
+ *
+ * `undefined` for every other kind, which is what keeps those pushed exactly as
+ * before. Pure and allocation-free on the no-match path: only called for a
+ * trigger that already matched.
+ */
+export function triggeringInstancesFor(
+  condition: TriggerCondition,
+  event: GameEvent,
+  sourceInstanceId: InstanceId,
+  attachedTo?: InstanceId | null,
+): readonly InstanceId[] | undefined {
+  switch (condition.on) {
+    case 'creatureAttacksAlone':
+      return event.type === 'attackersDeclared' ? event.attackers : undefined;
+    case 'blocks': {
+      if (event.type !== 'blockersDeclared') return undefined;
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
+      const blocked: InstanceId[] = [];
+      for (const pair of event.blocks) if (pair.blocker === watched) blocked.push(pair.attacker);
+      return blocked;
+    }
+    case 'becomesBlocked':
+    case 'becomesBlockedByCreature': {
+      if (event.type !== 'blockersDeclared') return undefined;
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
+      const blockers: InstanceId[] = [];
+      for (const pair of event.blocks) if (pair.attacker === watched) blockers.push(pair.blocker);
+      return blockers;
+    }
+    // --- the counter keyword family (DESIGN §3.110) ----------------------------
+    case 'permanentEnters':
+    case 'permanentDies':
+      // "That creature" — only for a condition that ASKS (`carriesSubject`),
+      // so every board-watching trigger written before this is unchanged.
+      if (condition.carriesSubject !== true || event.type !== 'zoneChange') return undefined;
+      return [event.instanceId];
+    default:
+      return undefined;
+  }
 }
 
 /**

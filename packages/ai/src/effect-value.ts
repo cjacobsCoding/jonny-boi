@@ -53,6 +53,8 @@ import {
   matchesCardFilter,
   modalSpecOf,
   opponentOf,
+  // §3.110 — bloodthirst's turn fact.
+  turnFactHolds,
   PLAYER_IDS,
 } from '@jonny-boi/core';
 import type { CardFilter } from '@jonny-boi/core';
@@ -60,6 +62,8 @@ import { cardValue, findInstance, type CardValueContext } from './card-value.js'
 import type { ContinuousIndex } from './board-stats.js';
 import { keywordsOf, power as effPower, statTotal, toughnessLeft } from './board-stats.js';
 import type { HeuristicWeights } from './weights.js';
+// poison family (§3.105): the two lethal clocks, kept apart.
+import { attackerPressure, lifeEquivalent, pressureIsLethal } from './poison-pressure.js';
 
 /**
  * Everything a scorer needs: the board, whose side we are scoring for, and the
@@ -665,14 +669,21 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     // decision — rebuilding it here walked the battlefield again for every
     // fog the pilot priced.
     const index = ctx.index;
-    let incoming = 0;
+    // Both clocks (§3.105): an infect swing is priced at the life scale and
+    // lethal is asked of each clock on its own, as the main-phase fog does.
+    let damage = 0;
+    let poison = 0;
     for (const id of combat.attackers) {
       const attacker = ctx.state.battlefield.find((c) => c.instanceId === id);
-      if (attacker && attacker.controller !== ctx.player) incoming += effPower(attacker, index);
+      if (!attacker || attacker.controller === ctx.player) continue;
+      const p = attackerPressure(attacker, effPower(attacker, index), index);
+      damage += p.damage;
+      poison += p.poison;
     }
+    const incoming = lifeEquivalent({ damage, poison }, ctx.weights);
     if (incoming <= 0) return 0;
     const life = ctx.state.players[ctx.player].life;
-    if (incoming >= life) return ctx.weights.lethalBurnScore;
+    if (pressureIsLethal(ctx.state, ctx.player, { damage, poison })) return ctx.weights.lethalBurnScore;
     if (incoming < ctx.weights.fogMinimumDamagePrevented && life > ctx.weights.desperateLifeThreshold) {
       return 0;
     }
@@ -705,6 +716,16 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
 
   /** A body on the board, priced like casting one. */
   makeToken: (params, ctx) => tokenValue(params, ctx),
+
+  /**
+   * LIVING WEAPON (§3.121) — the Germ is priced by the SAME token formula, and
+   * deliberately at its printed 0/0 rather than at what the Equipment will make
+   * it: the buff is the Equipment attachment already on the card, so pricing the
+   * pumped body here would count the same stats twice. What living weapon is
+   * really worth over a bare Equipment is a body to carry it, which is exactly
+   * what a 0/0 token prices at.
+   */
+  livingWeaponGerm: (params, ctx) => tokenValue(params, ctx),
 
   /**
    * PROLIFERATE — worth what the board offers it: one more counter on each of
@@ -755,6 +776,46 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
   scheduleDelayedPayment: (params, ctx) => {
     const consequence = params['effects'];
     const worth = Array.isArray(consequence) ? valueOfEffects(consequence as readonly EffectRef[], ctx) : 0;
+    return worth * ctx.weights.bankedEffectValueShare;
+  },
+
+  // --- §3.106 upkeep costs and time counters ----------------------------------
+  /**
+   * "Sacrifice ~" — the consequence of every declined upkeep bill. The context
+   * carries no source, so the loss is priced as a permanent gone: the creature
+   * base value, which is what every sacrifice choice reads for a body with no
+   * stats to add. Negative from the controller's seat.
+   */
+  sacrificeSelf: (_params, ctx) => -ctx.weights.choiceCreatureBaseValue,
+  /** The life-cost bill, priced exactly as the mana one: nothing when it can be paid. */
+  payLifeOrElse: (params, ctx) => {
+    const consequence = params['effects'];
+    const amount = typeof params['amount'] === 'number' ? params['amount'] : 0;
+    const worth = Array.isArray(consequence) ? valueOfEffects(consequence as readonly EffectRef[], ctx) : 0;
+    return ctx.state.players[ctx.player].life > amount ? 0 : worth;
+  },
+  /**
+   * The first age counter's bill, banked: a cumulative upkeep is a tax that
+   * grows every turn, so the permanent is worth its printed self LESS one bill
+   * a turn away — the same discount a banked Clue gets, in the other direction.
+   */
+  cumulativeUpkeep: (params, ctx) => {
+    const mana = params['mana'];
+    const life = typeof params['life'] === 'number' ? params['life'] : 0;
+    const perTurn =
+      mana !== null && typeof mana === 'object'
+        ? convertedManaCost(mana as ManaCost)
+        : life;
+    return -perTurn * ctx.weights.bankedEffectValueShare;
+  },
+  /**
+   * The general delayed body ("draw a card at the beginning of the next turn's
+   * upkeep"): the effects it schedules, discounted exactly as the Pact's bill
+   * is — a turn away is a turn away whichever direction the value points.
+   */
+  scheduleDelayedEffects: (params, ctx) => {
+    const body = params['effects'];
+    const worth = Array.isArray(body) ? valueOfEffects(body as readonly EffectRef[], ctx) : 0;
     return worth * ctx.weights.bankedEffectValueShare;
   },
 
@@ -1065,6 +1126,84 @@ const LEDGERED_EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.fre
     return who === ctx.player ? value : -value;
   },
 
+  // --- the spell-count family (DESIGN §3.113) ---------------------------------
+  /**
+   * LEARN (CR 701.48a) — "you may discard a card, and if you do, draw a card":
+   * a rummage, worth a draw minus what the discard costs. Priced through the
+   * two entries that already answer both halves rather than with a constant of
+   * its own, so a learn card and a printed "discard a card, then draw a card"
+   * cannot be valued differently.
+   *
+   * With an EMPTY HAND it is worth zero, which is the primitive's own rule:
+   * nothing to discard means no draw.
+   */
+  learn: (_params, ctx) => {
+    if (ctx.state.players[ctx.player].hand.length === 0) return 0;
+    return ctx.weights.modeDrawCardValue - ctx.weights.modeDiscardBaseScore / 2;
+  },
+
+  /**
+   * MILL-THEN-RETURN — the mill is priced by the `mill` entry's own self-mill
+   * rate (so an about-to-deck library still reads as the catastrophe it is),
+   * and the card taken back out of it is a draw's worth: the CHOICE is what
+   * the printed card is for, and it converts one of the milled cards into a
+   * card in hand.
+   */
+  millThenReturn: (params, ctx) => {
+    const amount = intParam(params, 'amount', 0);
+    if (amount <= 0) return 0;
+    const library = ctx.state.players[ctx.player].library.length;
+    if (library === 0) return 0;
+    if (amount >= library) return -ctx.weights.modeSelfDeckPenalty;
+    return ctx.weights.modeDrawCardValue - ctx.weights.modeMillPerCardValue * amount;
+  },
+
+  /**
+   * The ASK half of the above, enqueued by it with the milled ids in its
+   * params. Priced as the card it puts in hand — and at ZERO when its list is
+   * empty, because then there is nothing to take.
+   */
+  returnMilledCard: (params, ctx) => {
+    const ids = params['instanceIds'];
+    if (!Array.isArray(ids) || ids.length === 0) return 0;
+    return ctx.weights.modeDrawCardValue;
+  },
+
+  /**
+   * DOUBLE THE POWER (CR 701.10b) — a pump whose size is the creature's own
+   * power, so it is priced through the same per-stat weight and the same sign
+   * logic `pumpUntilEndOfTurn` uses: our creature positive, an opponent's
+   * negative (doubling theirs is the printed-first-target blunder). A 0-power
+   * creature doubles to nothing and prices zero, exactly as the primitive
+   * resolves it.
+   */
+  doublePower: (params, ctx) => {
+    if (strParam(params, 'each') === 'yours') {
+      let total = 0;
+      for (const permanent of ctx.state.battlefield) {
+        if (permanent.controller !== ctx.player || !isCreature(permanent.def)) continue;
+        total += effPower(permanent, ctx.index);
+      }
+      return total * ctx.weights.modePumpPerStatValue;
+    }
+    const target = firstTargetPermanent(ctx);
+    if (!target || !isCreature(target.def)) return 0;
+    const value = effPower(target, ctx.index) * ctx.weights.modePumpPerStatValue;
+    return target.controller === ctx.player ? value : -value;
+  },
+
+  /**
+   * REVEAL THE TOP CARD AND DRAW IF IT MATCHES — a conditional draw. Priced at
+   * a draw discounted by the bank's share, which is this vocabulary's standing
+   * answer for "a card, but not certainly and not yet"; the filter's real hit
+   * rate is a decklist fact the pilot has no model for, and guessing one would
+   * be the half-measure rule 2 forbids.
+   */
+  revealTopDrawIf: (_params, ctx) => {
+    if (ctx.state.players[ctx.player].library.length === 0) return 0;
+    return ctx.weights.modeDrawCardValue * ctx.weights.bankedEffectValueShare;
+  },
+
   /**
    * +1/+1 / -1/-1 COUNTERS — a PERMANENT stat change, priced per stat point at
    * `modeCounterPerStatValue` (between a pump that wears off and an Equipment
@@ -1358,6 +1497,69 @@ const LEDGERED_EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.fre
    * without its source (the value context carries targets, not the dying
    * card), and a base-plus-shrink floor is the honest number that remains.
    */
+  // --- §3.110 the counter keyword family ---------------------------------------
+  //
+  // Every body here is a +1/+1 COUNTER placed somewhere, so every price is the
+  // permanent stat value `addCounters` already uses (`modeCounterPerStatValue`
+  // per stat point, two points per counter), signed by whose creature grows —
+  // one ruler, so a fabricate's counter mode and a plain "put a counter" line
+  // cannot be priced two ways.
+
+  /** Undying's return — persist's mirror, and the counter is a GAIN, not a shrink. */
+  undyingReturn: (params, ctx) =>
+    ctx.weights.castCreatureBaseScore +
+    counterStatValue(Math.max(intParam(params, 'amount', 1), 0), ctx.weights),
+  /**
+   * Modular's death move — the counters are last-known information the value
+   * context does not carry, so this is priced as ONE counter's worth on the
+   * aimed artifact creature: enough to prefer our Ravager over their Myr.
+   */
+  modularMove: (_params, ctx) => {
+    const target = firstTargetPermanent(ctx);
+    if (!target) return 0;
+    return target.controller === ctx.player ? counterStatValue(1, ctx.weights) : -ctx.weights.modeSelfHarmPenalty;
+  },
+  becomeRenowned: (params, ctx) => counterStatValue(intParam(params, 'amount', 0), ctx.weights),
+  /** Bloodthirst pays out only when the turn's fact says an opponent was hit. */
+  bloodthirstCounters: (params, ctx) =>
+    turnFactHolds(ctx.state, 'opponentWasDealtDamage', ctx.player)
+      ? counterStatValue(intParam(params, 'amount', 0), ctx.weights)
+      : 0,
+  /** Riot and unleash: the question is answered on the board; the ref is worth its counter. */
+  riotChoice: (_params, ctx) => counterStatValue(1, ctx.weights),
+  unleashChoice: (_params, ctx) => counterStatValue(1, ctx.weights),
+  /** Devour: one feed's worth — the question decides how many, on the board. */
+  devourChoice: (params, ctx) => counterStatValue(intParam(params, 'amount', 0), ctx.weights),
+  /**
+   * Fabricate: ONE ref carrying both printed halves, so it is worth whichever
+   * a rational chooser takes — the counters or the Servos. Pricing it as the
+   * MAX is what a mode-by-mode price would have come to, and it keeps the
+   * decision itself in `answerConfirm`, where the board is.
+   */
+  fabricateChoice: (params, ctx) => {
+    const count = intParam(params, 'amount', 0);
+    return Math.max(
+      counterStatValue(count, ctx.weights),
+      tokenValue({ count, power: 1, toughness: 1 }, ctx),
+    );
+  },
+  /** Amass: N counters on our Army (a 0/0 one is made first if we have none). */
+  amass: (params, ctx) => counterStatValue(intParam(params, 'amount', 0), ctx.weights),
+  /** Bolster: N counters on our weakest creature — worth nothing with no creature. */
+  bolster: (params, ctx) =>
+    ctx.state.battlefield.some((p) => p.controller === ctx.player && isCreature(p.def))
+      ? counterStatValue(intParam(params, 'amount', 0), ctx.weights)
+      : 0,
+  /** Backup: the counters, signed by whose creature they land on (the grant rides free). */
+  backup: (params, ctx) => {
+    const target = firstTargetPermanent(ctx);
+    const value = counterStatValue(intParam(params, 'amount', 0), ctx.weights);
+    if (!target) return value;
+    return target.controller === ctx.player ? value : -ctx.weights.modeSelfHarmPenalty;
+  },
+  /** Explore: a look at the top card plus, more often than not, a counter. */
+  explore: (_params, ctx) => ctx.weights.modeSelectionValue + counterStatValue(1, ctx.weights) / 2,
+
   persistReturn: (params, ctx) => {
     const minus = Math.max(intParam(params, 'minusCounters', 1), 0);
     return Math.max(
@@ -1434,6 +1636,16 @@ function lifeSwing(
 }
 
 /** A token's worth, priced exactly like casting a creature of the same size. */
+/**
+ * §3.110 — what `counters` +1/+1 counters are worth as a permanent stat change:
+ * two stat points each at `modeCounterPerStatValue`. The one ruler every
+ * counter-placing body in the family is priced by (see the block above
+ * `persistReturn`), and the same arithmetic `addCounters` uses.
+ */
+function counterStatValue(counters: number, weights: HeuristicWeights): number {
+  return Math.max(counters, 0) * 2 * weights.modeCounterPerStatValue;
+}
+
 function tokenValue(params: Readonly<Record<string, unknown>>, ctx: EffectValueContext): number {
   const weights = ctx.weights;
   const count = Math.max(intParam(params, 'count', 1), 0);

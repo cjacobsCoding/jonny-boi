@@ -573,6 +573,11 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       power: 3,
       toughness: 2,
       keywords: { flying: true },
+      // A transforming back face has NO mana cost (CR 712.8b, and CR 202.1b makes
+      // it uncastable as a face) — the same flag the compiler sets for every
+      // costless non-land, so the hand-authored Delver and the compiled one agree
+      // byte for byte (transform-play.test.ts holds them to that).
+      noManaCost: true,
     },
   },
   {

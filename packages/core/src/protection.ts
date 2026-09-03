@@ -43,8 +43,8 @@
  * to `effectUnsupported` — a safe no-op, never a crash.
  */
 
-import type { CardDefinition, ProtectionQuality } from './card.js';
-import { colorsOfDefinition } from './card.js';
+import type { CardDefinition, CardType, ProtectionQuality } from './card.js';
+import { PROTECTION_SUBTYPE_PREFIX, colorsOfDefinition, hasSubtype } from './card.js';
 import type { CardInstance, GameState } from './state.js';
 import type { ManaColor } from './mana.js';
 import { effectiveKeywords } from './internal/stats.js';
@@ -65,7 +65,11 @@ export const WARD_COUNTER_PRIMITIVE = 'wardCounterUnlessPaid';
 /** The param name carrying the ward cost on a {@link WARD_COUNTER_PRIMITIVE} ref. */
 export const WARD_COST_PARAM = 'unlessPaid';
 
-/** Every spellable protection quality, for validation at the data boundary. */
+/**
+ * Every FIXED protection quality, for validation at the data boundary. The
+ * subtype family (`subtype:<Name>`) is open by construction and is validated by
+ * its prefix in {@link isProtectionQuality} instead.
+ */
 export const PROTECTION_QUALITIES: readonly ProtectionQuality[] = Object.freeze([
   'white',
   'blue',
@@ -73,15 +77,34 @@ export const PROTECTION_QUALITIES: readonly ProtectionQuality[] = Object.freeze(
   'red',
   'green',
   'colorless',
+  'monocolored',
   'multicolored',
   'artifacts',
   'creatures',
+  'enchantments',
+  'lands',
+  'planeswalkers',
+  'instants',
+  'sorceries',
   'everything',
 ]);
 
+/** The card type a type-word quality names — the one table both checks read. */
+const QUALITY_CARD_TYPES: Readonly<Partial<Record<ProtectionQuality, CardType>>> = Object.freeze({
+  artifacts: 'artifact',
+  creatures: 'creature',
+  enchantments: 'enchantment',
+  lands: 'land',
+  planeswalkers: 'planeswalker',
+  instants: 'instant',
+  sorceries: 'sorcery',
+});
+
 /** Whether an arbitrary value names a protection quality. */
 export function isProtectionQuality(value: unknown): value is ProtectionQuality {
-  return typeof value === 'string' && (PROTECTION_QUALITIES as readonly string[]).includes(value);
+  if (typeof value !== 'string') return false;
+  if ((PROTECTION_QUALITIES as readonly string[]).includes(value)) return true;
+  return value.startsWith(PROTECTION_SUBTYPE_PREFIX) && value.length > PROTECTION_SUBTYPE_PREFIX.length;
 }
 
 /** Color-word qualities mapped to the mana pip that makes a source that color. */
@@ -100,13 +123,19 @@ export function sourceHasQuality(source: CardDefinition, quality: ProtectionQual
       return true;
     case 'colorless':
       return colorsOfDefinition(source).length === 0;
+    case 'monocolored':
+      return colorsOfDefinition(source).length === 1;
     case 'multicolored':
       return colorsOfDefinition(source).length >= 2;
-    case 'artifacts':
-      return source.types.includes('artifact');
-    case 'creatures':
-      return source.types.includes('creature');
     default: {
+      const type = QUALITY_CARD_TYPES[quality];
+      if (type !== undefined) return source.types.includes(type);
+      // "Protection from Dragons": read through `hasSubtype`, the single funnel
+      // every subtype question goes through, so a changeling source is a Dragon
+      // here exactly as it is for a lord or a typal search.
+      if (quality.startsWith(PROTECTION_SUBTYPE_PREFIX)) {
+        return hasSubtype(source, quality.slice(PROTECTION_SUBTYPE_PREFIX.length));
+      }
       const pip = QUALITY_COLOR_PIPS[quality];
       return pip !== undefined && colorsOfDefinition(source).includes(pip);
     }

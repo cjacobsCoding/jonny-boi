@@ -48,6 +48,8 @@ export interface ReplayPermanent {
  */
 export interface ReplaySide {
   readonly life: number;
+  /** Poison counters (CR 122.1f, §3.105) — shown beside life once nonzero. */
+  readonly poison: number;
   readonly handCount: number;
   readonly libraryCount: number;
   readonly graveyardCount: number;

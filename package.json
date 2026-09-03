@@ -23,6 +23,7 @@
     "sim": "npm run sim --workspace @jonny-boi/sim --",
     "sim:fast": "npm run sim:fast --workspace @jonny-boi/sim --",
     "verify": "npm run lint && node apps/web/scripts/build-card-index.mjs --check && npm run build && vitest run",
+    "verify:deploy": "node scripts/verify-deploy.mjs",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
