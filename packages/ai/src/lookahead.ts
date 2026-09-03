@@ -49,6 +49,7 @@ import type { ForecastWeights } from './combat-forecast.js';
 import { chooseAttackPlan, DEFAULT_FORECAST_WEIGHTS } from './combat-forecast.js';
 import { createHeuristicPilot, planWalkerAttack } from './heuristic.js';
 import { DEFAULT_TACTICAL_CONFIG, lethalAttackers } from './tactical.js';
+import { withRequiredAttackers } from './attack-requirements.js';
 import type { HeuristicWeights } from './weights.js';
 import { DEFAULT_HEURISTIC_WEIGHTS } from './weights.js';
 
@@ -116,7 +117,9 @@ function decideAttack(
   // 1. The proven kill — exact, engine-eligible, no judgement involved.
   const kill = lethalAttackers(state, me, index, DEFAULT_TACTICAL_CONFIG, offered.attackers);
   if (kill && kill.length > 0) {
-    const action: GameAction = { kind: 'declareAttackers', player: me, attackers: [...kill] };
+    // Plus the required attackers (CR 508.1d, §3.107) — see `withRequiredAttackers`.
+    const roster = withRequiredAttackers(view, index, kill, offered.attackers);
+    const action: GameAction = { kind: 'declareAttackers', player: me, attackers: [...roster] };
     ctx.trace?.({ action, reason: 'lookahead: proven lethal — unblockable by any assignment' });
     return action;
   }
@@ -124,7 +127,11 @@ function decideAttack(
   // 2. The forecast argmax over attack plans (the empty plan included).
   const choice = chooseAttackPlan(view, offered.attackers, weights, forecastWeights, index);
   const f = choice.forecast;
-  if (choice.attackers.length === 0) {
+  // A plan that leaves a creature which "attacks each combat if able" at home
+  // is not one the engine accepts (CR 508.1d, §3.107) — including the EMPTY
+  // plan, so "hold everything back" becomes "send only what must go".
+  const forecastRoster = withRequiredAttackers(view, index, choice.attackers, offered.attackers);
+  if (forecastRoster.length === 0) {
     const pass: GameAction = { kind: 'passPriority', player: me };
     ctx.trace?.({
       action: pass,
@@ -138,11 +145,11 @@ function decideAttack(
 
   // The same planeswalker/battle diversion the heuristic makes for its chosen
   // set, so objects stay attackable under the forecast pilot too.
-  const attackTargets = planWalkerAttack(view, opp, choice.attackers, weights, index);
+  const attackTargets = planWalkerAttack(view, opp, forecastRoster, weights, index);
   const action: GameAction = {
     kind: 'declareAttackers',
     player: me,
-    attackers: choice.attackers as InstanceId[],
+    attackers: forecastRoster as InstanceId[],
     ...(attackTargets !== undefined ? { attackTargets } : {}),
   };
   ctx.trace?.({

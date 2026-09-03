@@ -644,10 +644,23 @@ export const RULES_MANIFEST: RulesManifest = {
       { rule: '508.1a', title: 'a tapped creature cannot be declared as an attacker' },
       { rule: '508.1f', title: 'declaring an attacker taps it — unless it has vigilance' },
       { rule: '508.1', title: 'the same creature cannot be declared as an attacker twice' },
+      // The combat keyword family (DESIGN §3.107): the attacker-side mirror of
+      // the block solver — `attack-requirements.ts`.
+      {
+        rule: '508.1c',
+        title: 'a creature that can’t attack unless the defender controls an Island is not declared without one',
+      },
+      { rule: '508.1d', title: 'a creature that attacks each combat if able must be in the declaration' },
+      { rule: '508.1d', title: 'passing the declare-attackers step declares the required creatures rather than none' },
     ],
+    note:
+      'CR 508.1c/d are judged by `attack-requirements.ts` from ONE reader (`attackDeclarationProblem`) ' +
+      'shared by the offer path, the apply path and the requirement half. Every expressible requirement ' +
+      'is per-creature and unconditional, so "maximum requirements" needs no search yet — the module ' +
+      'comment says where a search would start.',
     shortfall:
-      'CR 508.1d attack REQUIREMENTS ("attacks each combat if able") are not modelled; CR 508.1c ' +
-      'restrictions exist only as defender/summoning sickness. CR 508.1e banding is absent.',
+      'CR 508.1e banding is absent. A requirement that depends on the rest of the declaration ' +
+      '("can’t attack alone", provoke’s untap-and-block) is not expressible and its cards keep reporting.',
   },
   '509': {
     status: 'covered',
@@ -959,6 +972,15 @@ export const RULES_MANIFEST: RulesManifest = {
     tests: [
       { rule: '702.21', title: 'targeting an opponent’s warded permanent puts its ward trigger above the spell' },
       { rule: '702.21', title: 'a permanent’s own controller never triggers its ward' },
+      // The combat keyword family (DESIGN §3.107).
+      { rule: '702.28b', title: 'a creature with shadow can be blocked only by a creature with shadow, and vice versa' },
+      { rule: '702.18b', title: 'a creature with islandwalk can’t be blocked while the defending player controls an Island' },
+      {
+        rule: '702.61a',
+        title: 'while a spell with split second is on the stack, players can’t cast spells or activate non-mana abilities',
+      },
+      { rule: '702.90a', title: 'exalted pumps the creature that attacks alone, once per instance of exalted' },
+      { rule: '702.25a', title: 'flanking gives each blocking creature without flanking −1/−1' },
     ],
     note:
       'Ward is here because it was the one shipped keyword whose TRIGGER nothing drove ' +
@@ -1186,6 +1208,21 @@ export const KEYWORD_RULES: KeywordRules = {
   // A comparing restriction ("except by creatures with haste", a power bound,
   // skulk) is still a restriction, so it indexes with the others.
   blockRestriction: '509.1b',
+  // --- the combat keyword family (DESIGN §3.107) ------------------------------
+  shadow: '702.28',
+  flanking: '702.25',
+  splitSecond: '702.61',
+  myriad: '702.116',
+  landwalk: '702.18',
+  // Attack REQUIREMENTS and RESTRICTIONS are the attacker-side half of the
+  // declaration rules, exactly as `mustBeBlocked` / `unblockable` are the
+  // blocker-side half — so they index to CR 508.1d / 508.1c, not to 702.
+  mustAttack: '508.1d',
+  cantAttackUnlessDefenderControls: '508.1c',
+  // The two blocker-declaration restrictions the family added: a CAP on blockers
+  // (the dual of `minBlockers`) and a blocker's own "can block only" list.
+  maxBlockers: '509.1b',
+  blockOnly: '509.1b',
 };
 
 /** Every step of a turn → the CR rule that defines it. Mapped over `Step`. */

@@ -35,6 +35,8 @@ import type { ActivatedAbility } from '../card.js';
 import type { CardInstance } from '../state.js';
 import type { BlockerQuality, BlockRestriction, KeywordFlags } from '../card.js';
 import { unionProtection } from '../card.js';
+import type { BlockOnlyRestriction, LandCondition } from '../card.js';
+import { unionLandConditions } from '../land-conditions.js';
 import type { AggregatedMod } from './continuous.js';
 import { NO_MOD } from './continuous.js';
 
@@ -266,6 +268,12 @@ export function mergeKeywordGrant(base: KeywordFlags, granted: KeywordFlags): Ke
     } else if (key === 'blockRestriction') {
       const merged = intersectBlockRestrictions(base.blockRestriction, value as BlockRestriction | undefined);
       if (merged !== undefined) out[key] = merged;
+    } else if (isCombatFamilyPayloadKey(key)) {
+      // The combat keyword family's four payloads (DESIGN §3.107), each by its
+      // own rule in `mergeCombatFamilyPayload` — the ONE place both this merge
+      // and the continuous layer's `grantInto` read it from.
+      const merged = mergeCombatFamilyPayload(key, base, value);
+      if (merged !== undefined) out[key] = merged;
     } else if (value === true) {
       out[key] = true;
     }
@@ -335,6 +343,81 @@ export function intersectBlockRestrictions(
       ? { blockerPowerAtMostMine: true }
       : {}),
   };
+}
+
+// --- the combat keyword family (DESIGN §3.107): the four PAYLOAD merges ----------
+
+/**
+ * The `KeywordFlags` fields of the combat keyword family that carry a PAYLOAD
+ * rather than a boolean, and so cannot be OR-ed. Listed once so
+ * {@link mergeKeywordGrant} and the continuous layer's `grantInto` fold them by
+ * the same rule — two merge sites with their own idea of what "landwalk plus
+ * landwalk" means is exactly the shape rule 12 forbids.
+ */
+export const COMBAT_FAMILY_PAYLOAD_KEYS = [
+  'landwalk',
+  'cantAttackUnlessDefenderControls',
+  'maxBlockers',
+  'blockOnly',
+] as const;
+
+export type CombatFamilyPayloadKey = (typeof COMBAT_FAMILY_PAYLOAD_KEYS)[number];
+
+/** Whether a keyword key is one of the family's payload fields. */
+export function isCombatFamilyPayloadKey(key: string): key is CombatFamilyPayloadKey {
+  return (COMBAT_FAMILY_PAYLOAD_KEYS as readonly string[]).includes(key);
+}
+
+/**
+ * Fold one family payload grant onto a base keyword set, returning the merged
+ * value — or `undefined` when the grant adds nothing valid, so the caller
+ * leaves the field untouched.
+ *
+ *   - `landwalk` lists UNION (islandwalk plus a granted swampwalk is both —
+ *     either land makes the creature unblockable);
+ *   - `cantAttackUnlessDefenderControls` lists CONCATENATE (every printed
+ *     restriction must hold);
+ *   - `maxBlockers` takes the MINIMUM (the stricter cap is in force);
+ *   - `blockOnly` lists INTERSECT (the one attacker must satisfy every printed
+ *     "can block only" line — the same argument `intersectBlockRestrictions`
+ *     makes for `blockerMustHaveAnyOf`).
+ */
+export function mergeCombatFamilyPayload(
+  key: CombatFamilyPayloadKey,
+  base: KeywordFlags,
+  value: unknown,
+): unknown {
+  switch (key) {
+    case 'landwalk':
+      return Array.isArray(value) && value.length > 0
+        ? unionLandConditions(base.landwalk, value as readonly LandCondition[])
+        : undefined;
+    case 'cantAttackUnlessDefenderControls':
+      return Array.isArray(value) && value.length > 0
+        ? [...(base.cantAttackUnlessDefenderControls ?? []), ...(value as readonly LandCondition[])]
+        : undefined;
+    case 'maxBlockers': {
+      const granted = typeof value === 'number' && value > 0 ? value : 0;
+      if (granted === 0) return undefined;
+      return base.maxBlockers === undefined ? granted : Math.min(base.maxBlockers, granted);
+    }
+    case 'blockOnly': {
+      const granted = value as BlockOnlyRestriction | undefined;
+      if (granted === undefined || !Array.isArray(granted.attackerMustHaveAnyOf)) return undefined;
+      const current = base.blockOnly;
+      if (current === undefined) return granted;
+      return {
+        attackerMustHaveAnyOf: current.attackerMustHaveAnyOf.filter((keyword) =>
+          granted.attackerMustHaveAnyOf.includes(keyword),
+        ),
+      };
+    }
+    default: {
+      const _exhaustive: never = key;
+      void _exhaustive;
+      return undefined;
+    }
+  }
 }
 
 /** The smaller of two optional bounds (either may be absent = no bound). */

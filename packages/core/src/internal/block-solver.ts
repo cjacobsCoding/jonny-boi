@@ -76,6 +76,13 @@ export interface BlockAssignment {
  */
 const MAX_REQUIREMENT_STATE_SPACE = 1 << 20;
 
+/**
+ * The board handed to `canBlock` when a caller passes none — "the defender
+ * controls no lands", which only LANDWALK reads (DESIGN §3.107). Every real
+ * caller (the engine, the pilot) passes the live battlefield.
+ */
+const NO_PERMANENTS: readonly CardInstance[] = Object.freeze([]);
+
 /** An attacker carrying a block requirement, with everything the search needs. */
 interface RequirementAttacker {
   readonly attacker: CardInstance;
@@ -101,6 +108,10 @@ function collectRequirements(
   attackers: readonly CardInstance[],
   defenders: readonly CardInstance[],
   index: ContinuousIndex,
+  // Threaded to `canBlock` for LANDWALK (DESIGN §3.107): "able to block" must
+  // read the same board the pair check reads, or a lure with islandwalk facing
+  // an Island would demand a block the pair check then refuses.
+  battlefield: readonly CardInstance[],
 ): RequirementAttacker[] | undefined {
   // THE EMPTY CHECK. One pass, no allocation, and it is what almost every combat
   // in a simulated game pays in total.
@@ -120,7 +131,7 @@ function collectRequirements(
     const keywords = effectiveKeywords(attacker, index.get(attacker.instanceId) ?? NO_MOD);
     const everyAbleBlocker = keywords.blockedByAllAble === true;
     if (!everyAbleBlocker && keywords.mustBeBlocked !== true) continue;
-    const candidates = defenders.filter((defender) => canBlock(attacker, defender, index));
+    const candidates = defenders.filter((defender) => canBlock(attacker, defender, index, battlefield));
     // "If able": a minimum this defender cannot meet means nobody is able to block
     // it, so it requires nothing (a menacing lure facing one untapped creature).
     const minimum = Math.max(1, requiredBlockerCount(attacker, index));
@@ -305,8 +316,9 @@ export function blockRequirementProblem(
   defenders: readonly CardInstance[],
   blocks: readonly BlockAssignment[],
   index: ContinuousIndex,
+  battlefield: readonly CardInstance[] = NO_PERMANENTS,
 ): string | undefined {
-  const requirements = collectRequirements(attackers, defenders, index);
+  const requirements = collectRequirements(attackers, defenders, index, battlefield);
   if (!requirements) return undefined;
   const { best } = solve(requirements);
   if (best === 0) return undefined;
@@ -333,8 +345,9 @@ export function forcedBlockAssignment(
   attackers: readonly CardInstance[],
   defenders: readonly CardInstance[],
   index: ContinuousIndex,
+  battlefield: readonly CardInstance[] = NO_PERMANENTS,
 ): readonly BlockAssignment[] | undefined {
-  const requirements = collectRequirements(attackers, defenders, index);
+  const requirements = collectRequirements(attackers, defenders, index, battlefield);
   if (!requirements) return undefined;
   const { best, assignment } = solve(requirements);
   return best > 0 ? assignment : undefined;

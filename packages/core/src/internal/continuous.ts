@@ -64,6 +64,7 @@ import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js'
 import type { ActivatedAbility, BooleanKeywordName, KeywordFlags } from '../card.js';
 import { unionProtection } from '../card.js';
 import { effectivePower, effectiveToughness, intersectBlockRestrictions } from './stats.js';
+import { COMBAT_FAMILY_PAYLOAD_KEYS, mergeCombatFamilyPayload } from './stats.js';
 import type { GameEvent } from '../events.js';
 import type { StaticAbility } from '../statics.js';
 import { modificationIsInert, staticAppliesTo, staticIsInert, staticsOf } from '../statics.js';
@@ -183,6 +184,13 @@ const KEYWORD_KEYS = [
   'indestructible',
   'mustBeBlocked',
   'blockedByAllAble',
+  // The combat keyword family's BOOLEAN flags (DESIGN §3.107). Its four
+  // payload fields are folded by `mergeCombatFamilyPayload` in `grantInto`.
+  'shadow',
+  'flanking',
+  'splitSecond',
+  'myriad',
+  'mustAttack',
 ] as const;
 
 /**
@@ -286,6 +294,18 @@ function grantInto(agg: MutableMod, grant: KeywordFlags | undefined): void {
     if (merged !== undefined) {
       (agg.keywords as { blockRestriction?: KeywordFlags['blockRestriction'] }).blockRestriction = merged;
     }
+  }
+  // The combat keyword family's payloads (DESIGN §3.107) — landwalk lists,
+  // attack restrictions, a blocker cap, a "can block only" list — each by the
+  // ONE rule `mergeKeywordGrant` also applies, so a granted landwalk and a
+  // printed one fold the same way on both paths.
+  for (const key of COMBAT_FAMILY_PAYLOAD_KEYS) {
+    const value = grant[key];
+    if (value === undefined) continue;
+    const merged = mergeCombatFamilyPayload(key, agg.keywords, value);
+    if (merged === undefined) continue;
+    if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
+    (agg.keywords as Record<string, unknown>)[key] = merged;
   }
 }
 

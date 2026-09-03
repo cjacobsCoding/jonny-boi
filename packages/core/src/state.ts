@@ -640,6 +640,13 @@ export interface TriggeredStackObject {
    */
   readonly triggeringAmount?: number;
   /**
+   * WHICH OBJECTS the triggering event was about — "that creature", "the
+   * blocking creature" (DESIGN §3.107). Carried beside {@link triggeringPlayer}
+   * for the same reason: the body reads it as the ability RESOLVES, after the
+   * declaration event is gone. See `PendingTrigger.triggeringInstances`.
+   */
+  readonly triggeringInstances?: readonly InstanceId[];
+  /**
    * The trigger's printed intervening "if", carried so it can be re-checked as
    * the ability RESOLVES (CR 603.4's second check). Absent for every trigger
    * that prints no such clause, which is almost all of them.

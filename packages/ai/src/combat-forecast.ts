@@ -377,7 +377,8 @@ function forecastPlan(ctx: ForecastContext, plan: readonly CardInstance[]): Plan
     const blockersOf: CardInstance[][] = new Array(sorted.length);
     for (let i = 0; i < sorted.length; i++) blockersOf[i] = [];
 
-    const forced = forcedBlockAssignment(sorted, ctx.defenders, index);
+    // The live board for LANDWALK (§3.107) — the same read the live pilot makes.
+    const forced = forcedBlockAssignment(sorted, ctx.defenders, index, ctx.state.battlefield);
     if (forced) {
       for (const assignment of forced) {
         const at = sorted.findIndex((a) => a.instanceId === assignment.attacker);
@@ -393,7 +394,7 @@ function forecastPlan(ctx: ForecastContext, plan: readonly CardInstance[]): Plan
     const doomed = delayedRemovalTargets(ctx.view);
     for (let i = 0; i < sorted.length; i++) {
       const attacker = sorted[i] as CardInstance;
-      const blocker = pickBlocker(attacker, ctx.defenders, used, desperate, weights, index, doomed);
+      const blocker = pickBlocker(attacker, ctx.defenders, used, desperate, weights, index, doomed, ctx.state.battlefield);
       if (blocker) {
         (blockersOf[i] as CardInstance[]).push(blocker);
         used.add(blocker.instanceId);

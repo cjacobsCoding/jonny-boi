@@ -288,6 +288,125 @@ export interface KeywordFlags {
    * with two ward abilities charges the sum, which is what paying both costs.
    */
   readonly ward?: number;
+
+  // --- the combat keyword family (DESIGN §3.107) ------------------------------
+  /**
+   * **Shadow** (CR 702.28b) — "can block or be blocked by only creatures with
+   * shadow". A SYMMETRIC pair rule: a shadow creature can't be blocked by a
+   * non-shadow creature, and a non-shadow creature can't be blocked by a shadow
+   * one. Judged per pair in `canBlock`, on both sides of the pair at once.
+   */
+  readonly shadow?: boolean;
+  /**
+   * **Flanking** (CR 702.25a) — a flag with no effect of its own, exactly like
+   * {@link horsemanship}: it exists so flanking's trigger ("whenever a creature
+   * WITHOUT flanking blocks this creature, the blocking creature gets −1/−1")
+   * can read the quality off the blocker. The trigger itself is compiled beside
+   * the flag (`becomesBlockedByCreature` + `counterpartLacksKeyword`).
+   */
+  readonly flanking?: boolean;
+  /**
+   * **Split second** (CR 702.61a) — "as long as this spell is on the stack,
+   * players can't cast spells or activate abilities that aren't mana
+   * abilities". A timing flag like {@link flash}, read by the engine's offer
+   * pass (`splitSecondOnStack`) and by the cast/activate/cycle apply paths, so
+   * the lock is enforced from both sides. Triggered abilities still trigger
+   * and resolve (CR 702.61b) — nothing here touches them.
+   */
+  readonly splitSecond?: boolean;
+  /**
+   * **Myriad** (CR 702.116a) — "whenever this creature attacks, for each
+   * opponent OTHER THAN defending player, you may create a token copy … attacking
+   * that player".
+   *
+   * ⚠️ VACUOUS IN THIS ENGINE, AND RECORDED RATHER THAN DROPPED. The game is
+   * strictly two-player (`PLAYER_IDS` has length 2, enforced by the conformance
+   * manifest), so the set "opponents other than defending player" is EMPTY and
+   * the ability does exactly nothing — that is the printed rule, not an
+   * approximation. The flag stays on the definition so a future multiplayer
+   * engine finds every myriad card by grepping for the field instead of
+   * rediscovering the keyword one card at a time; the compiler reports the
+   * vacuity in `CompileResult.vacuous` for the same reason.
+   */
+  readonly myriad?: boolean;
+  /**
+   * **"~ attacks each combat if able"** — an attack REQUIREMENT (CR 508.1d),
+   * the attacker-side mirror of {@link mustBeBlocked}. A declaration that
+   * leaves such a creature home while it was ABLE to attack (untapped, not
+   * summoning-sick, no defender, no unmet {@link cantAttackUnlessDefenderControls})
+   * is illegal; passing the declare-attackers step with one on the board
+   * declares exactly the required creatures (`attack-requirements.ts`).
+   */
+  readonly mustAttack?: boolean;
+  /**
+   * **Landwalk** (CR 702.18b) — "can't be blocked as long as defending player
+   * controls a [land of this kind]". A LIST because a creature may print
+   * several ("islandwalk, swampwalk"), any one of which makes it unblockable;
+   * grants UNION, like {@link protectionFrom}. The kinds are the closed
+   * {@link LandCondition} table — a walk outside it keeps reporting.
+   *
+   * Judged per pair in `canBlock`, which reads the DEFENDER's lands off the
+   * battlefield it is handed — the one evasion rule that depends on something
+   * other than the two creatures.
+   */
+  readonly landwalk?: readonly LandCondition[];
+  /**
+   * **"~ can't attack unless defending player controls an Island"** — an
+   * attack RESTRICTION (CR 508.1c) reading the same closed {@link LandCondition}
+   * table as {@link landwalk}, from the same helper, so "an Island" cannot mean
+   * two things. Every entry must hold (each printed line is its own
+   * restriction); grants CONCATENATE.
+   */
+  readonly cantAttackUnlessDefenderControls?: readonly LandCondition[];
+  /**
+   * **"~ can't be blocked by more than one creature"** — the DUAL of
+   * {@link minBlockers} (CR 509.1b), and like it a restriction on the whole
+   * DECLARATION rather than any single pair: each blocker may block it, and
+   * what the rule forbids is a second one doing so. Merges by MINIMUM — the
+   * stricter cap is the one in force.
+   */
+  readonly maxBlockers?: number;
+  /**
+   * **"~ can block only creatures with flying"** — a restriction on what THIS
+   * creature may block (CR 509.1b), the blocker-side mirror of
+   * {@link blockRestriction}. The attacker must have at least one of the named
+   * keywords; the table of nameable keywords is the compiler's closed
+   * `BLOCKER_QUALITY_KEYWORDS`. Two printed lines merge by INTERSECTION of the
+   * lists (both must be satisfied by the one attacker).
+   */
+  readonly blockOnly?: BlockOnlyRestriction;
+}
+
+/**
+ * A condition on the DEFENDING player's lands, read by landwalk (CR 702.18b)
+ * and by "can't attack unless defending player controls …" (CR 508.1c).
+ *
+ * A CLOSED union, and closed on purpose: each kind is something `land-conditions.ts`
+ * can answer exactly from the board. "Legendary landwalk" and "nonbasic
+ * landwalk" are real printed lines (Ayumi, the Last Visitor; Dryad
+ * Sophisticate), so they are rows; a walk naming anything else ("snow
+ * landwalk", "Desertwalk") is outside the table and its card keeps reporting
+ * rather than compiling into a creature that is never unblockable.
+ */
+export type LandCondition =
+  /** "an Island" / "a Forest" … — a land with the named basic land type. */
+  | { readonly kind: 'subtype'; readonly subtype: BasicLandSubtype }
+  /** "a legendary land". */
+  | { readonly kind: 'legendary' }
+  /** "a nonbasic land". */
+  | { readonly kind: 'nonbasic' };
+
+/** The five basic land types a `LandCondition` may name. */
+export type BasicLandSubtype = 'plains' | 'island' | 'swamp' | 'mountain' | 'forest';
+
+/**
+ * A restriction on what a BLOCKER may block — "~ can block only creatures with
+ * flying" (Welkin Tern, Cloud Sprite). The attacker must carry at least one of
+ * the listed keywords. Named by {@link BooleanKeywordName}, so a keyword that
+ * does not exist cannot be written here.
+ */
+export interface BlockOnlyRestriction {
+  readonly attackerMustHaveAnyOf: readonly BooleanKeywordName[];
 }
 
 /**
@@ -1186,7 +1305,17 @@ export type DerivedCountName =
    * resolution rather than about the board, so `evaluateDerivedCount` cannot
    * answer it; `intParam` reads it off the context instead.
    */
-  | 'triggeringAmount';
+  | 'triggeringAmount'
+  /**
+   * RAMPAGE's count (CR 702.23a) — "for each creature blocking it BEYOND THE
+   * FIRST": the number of creatures currently blocking the effect's SOURCE,
+   * minus one, floored at zero. Read as the ability RESOLVES (CR 702.23b — the
+   * bonus is calculated once, when the trigger resolves), off the live combat
+   * state. A fact about the source rather than about a player, so like
+   * `timesThisWasKicked` it is answered by `intParam` (which holds the source)
+   * and not by the board-only evaluator.
+   */
+  | 'creaturesBlockingThisBeyondFirst';
 
 /**
  * One half of a characteristic-defining P/T: a derived count plus an optional

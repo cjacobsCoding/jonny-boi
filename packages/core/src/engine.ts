@@ -165,6 +165,10 @@ import {
   tapAttackers,
 } from './internal/combat.js';
 import { attackingCreatureIds } from './combat-removal.js';
+// The combat keyword family (DESIGN §3.107): attack restrictions/requirements
+// (CR 508.1c/d) and the split-second lock (CR 702.61), each read from one file.
+import { attackDeclarationProblem, attackRequirementProblem, requiredAttackerIds } from './attack-requirements.js';
+import { SPLIT_SECOND_REJECTION, splitSecondOnStack } from './split-second.js';
 import { entersTapped, isAttackable, isCreature, isPlaneswalker } from './card.js';
 import { applyCopyAsEntersAnswer, askCopyAsEnters, extraLoyaltyForCopy } from './copy.js';
 import { addLoyalty, applyEnteringDefense, applyEnteringLoyalty, loyaltyOf, removeLoyalty } from './internal/stats.js';
@@ -475,6 +479,24 @@ function advanceStep(state: GameState, config: RulesConfig, emit: (e: GameEvent)
     // the second pass finds a legal hand and nothing left to expire.
     performStepTurnBasedActions(state, 'cleanup', config, emit);
     return;
+  }
+
+  // THE FORCED ATTACK (CR 508.1d, DESIGN §3.107). Passing through the
+  // declare-attackers step is how this engine declares "no attackers" — but with
+  // a creature that "attacks each combat if able" on the board and able, an
+  // empty declaration is not a legal one. The only legal minimum is exactly the
+  // required creatures at the defending player, so the engine declares that
+  // itself (through the same commit the action path uses: taps, event, triggers)
+  // and hands priority back with attackers declared, instead of refusing the
+  // pass — a refused pass would deadlock every pilot that answers "pass" to a
+  // step it does not understand. One keyword read per creature when the board
+  // carries no requirement, which is what every ordinary combat pays.
+  if (state.step === 'declareAttackers' && state.combat && !state.combat.attackersDeclared) {
+    const required = requiredAttackerIds(state, indexContinuous(state), defendingPlayerOf(state));
+    if (required.length > 0) {
+      commitAttackDeclaration(state, required, undefined, emit);
+      return;
+    }
   }
 
   const next = STEP_ORDER[idx + 1] as Step;
@@ -903,6 +925,8 @@ function resolveTriggeredAbility(
       // "that player draws an additional card" is read during it.
       ...(obj.triggeringPlayer !== undefined ? { triggeringPlayer: obj.triggeringPlayer } : {}),
       ...(obj.triggeringAmount !== undefined ? { triggeringAmount: obj.triggeringAmount } : {}),
+      // "That creature" (DESIGN §3.107) rides the frame for the same reason.
+      ...(obj.triggeringInstances !== undefined ? { triggeringInstances: obj.triggeringInstances } : {}),
     },
     registry,
     emit,
@@ -973,6 +997,7 @@ function runResolution(
         kickCount: frame.kickCount,
         triggeringPlayer: frame.triggeringPlayer,
     triggeringAmount: frame.triggeringAmount,
+        triggeringInstances: frame.triggeringInstances,
       },
       emit,
       refTargets,
@@ -3308,6 +3333,10 @@ function applyCastSpell(
     return rejectWith(prevState, 'that card has no flashback');
   }
 
+  // SPLIT SECOND (CR 702.61, DESIGN §3.107): the same wall the offer pass
+  // enforces, here because the engine — not the menu — is the authority.
+  if (state.stack.length > 0 && splitSecondOnStack(state)) return rejectWith(prevState, SPLIT_SECOND_REJECTION);
+
   // Timing: sorcery-speed spells require your main phase, empty stack, your priority.
   const timing = castTiming(castDef);
   const sorcerySpeedOk =
@@ -4181,6 +4210,9 @@ function applyCycleCard(
   const index = action.abilityIndex ?? 0;
   const ability = card.def.cycling?.[index];
   if (!ability) return rejectWith(prevState, 'that card has no such cycling ability');
+  // SPLIT SECOND (CR 702.61, DESIGN §3.107): cycling is an activated ability
+  // (CR 702.29a) and not a mana ability, so it is locked with the rest.
+  if (state.stack.length > 0 && splitSecondOnStack(state)) return rejectWith(prevState, SPLIT_SECOND_REJECTION);
   // Cycling is an ACTIVATED ability of a card in your hand (CR 702.29a), so
   // restricted mana that may activate abilities of that kind of source may fund
   // it and mana that may only cast spells may not.
@@ -4268,6 +4300,9 @@ function applyActivateAbility(
   if (timing === 'sorcery' && !sorcerySpeedOk) {
     return rejectWith(prevState, 'this ability can only be activated at sorcery speed');
   }
+  // SPLIT SECOND (CR 702.61, DESIGN §3.107): a non-mana ability is locked while
+  // the spell is on the stack. Mana abilities are `tapForMana`, never this path.
+  if (state.stack.length > 0 && splitSecondOnStack(state)) return rejectWith(prevState, SPLIT_SECOND_REJECTION);
 
   const problem = unpayableActivationReason(state, source, ability);
   if (problem) return rejectWith(prevState, problem);
@@ -4506,18 +4541,24 @@ function applyDeclareAttackers(
   // Validate each attacker. Read EFFECTIVE keywords (printed OR continuous grants)
   // so an until-EOT haste/defender grant is honored for attack legality (DESIGN §3.9).
   const cont = indexContinuous(state);
+  const defendingPlayer = defendingPlayerOf(state);
   for (const id of action.attackers) {
     const a = findOnBattlefield(state, id);
     if (!a) return rejectWith(prevState, `attacker ${id} is not on the battlefield`);
     if (a.controller !== action.player) return rejectWith(prevState, `you do not control ${a.def.name}`);
     if (!isCreature(a.def)) return rejectWith(prevState, `${a.def.name} is not a creature`);
-    if (a.tapped) return rejectWith(prevState, `${a.def.name} is tapped and cannot attack`);
     const kw = effectiveKeywords(a, cont.get(a.instanceId) ?? NO_MOD);
-    if (a.summoningSick && !kw.haste) {
-      return rejectWith(prevState, `${a.def.name} has summoning sickness`);
-    }
-    if (kw.defender) return rejectWith(prevState, `${a.def.name} has defender and cannot attack`);
+    // The attack RESTRICTIONS (CR 508.1c) — tapped, summoning-sick, defender,
+    // "can't attack unless defending player controls an Island" — from the ONE
+    // reader the offer path and the requirement half also use (DESIGN §3.107).
+    const problem = attackDeclarationProblem(a, kw, defendingPlayer, state.battlefield);
+    if (problem !== undefined) return rejectWith(prevState, problem);
   }
+  // The attack REQUIREMENTS (CR 508.1d): a creature that "attacks each combat if
+  // able" and is able must be in the declaration. Judged after every declared
+  // creature passed its restrictions, which is the order the rule states.
+  const requirementProblem = attackRequirementProblem(state, cont, defendingPlayer, action.attackers);
+  if (requirementProblem !== undefined) return rejectWith(prevState, requirementProblem);
 
   // Per-attacker attacked OBJECTS (a planeswalker rather than the player). Every
   // entry must name a declared attacker, and its value must be the defending
@@ -4555,19 +4596,40 @@ function applyDeclareAttackers(
     }
   }
 
-  state.combat.attackers = [...action.attackers];
-  state.combat.attackersDeclared = true;
-  if (storedTargets !== undefined) state.combat.attackTargets = storedTargets;
-  tapAttackers(state, action.attackers, emit);
+  commitAttackDeclaration(state, action.attackers, storedTargets, emit);
+  return { state, events };
+}
+
+/**
+ * Record a validated attack declaration: the attackers, what they attack, the
+ * taps, the event, and priority back to the active player (who may now cast a
+ * trick before blockers).
+ *
+ * The ONE place a declaration becomes combat state, shared by the action path
+ * above and by the forced minimum `advanceStep` performs when the active
+ * player passes with a creature that "attacks each combat if able" on the
+ * board (CR 508.1d, DESIGN §3.107) — so the forced declaration taps, emits and
+ * triggers exactly as a chosen one does.
+ */
+function commitAttackDeclaration(
+  state: GameState,
+  attackers: readonly InstanceId[],
+  storedTargets: Record<InstanceId, InstanceId | PlayerId> | undefined,
+  emit: (e: GameEvent) => void,
+): void {
+  const combat = state.combat as NonNullable<GameState['combat']>;
+  combat.attackers = [...attackers];
+  combat.attackersDeclared = true;
+  if (storedTargets !== undefined) combat.attackTargets = storedTargets;
+  tapAttackers(state, attackers, emit);
   emit({
     type: 'attackersDeclared',
-    attackers: [...action.attackers],
+    attackers: [...attackers],
     ...(storedTargets !== undefined ? { attackTargets: { ...storedTargets } } : {}),
   });
   // Priority passes to active player (could cast a trick), then on to blockers.
-  state.priorityPlayer = action.player;
+  state.priorityPlayer = state.activePlayer;
   state.consecutivePasses = 0;
-  return { state, events };
 }
 
 function applyDeclareBlockers(
@@ -4610,7 +4672,9 @@ function applyDeclareBlockers(
     if (!attackingCreatureIds(state.combat).includes(attacker)) {
       return rejectWith(prevState, `${a.def.name} is not attacking`);
     }
-    if (!canBlock(a, b, cont)) return rejectWith(prevState, `${b.def.name} cannot block ${a.def.name}`);
+    // The live battlefield rides along for LANDWALK (DESIGN §3.107), which
+    // reads the defender's lands — the one evasion rule that needs the board.
+    if (!canBlock(a, b, cont, state.battlefield)) return rejectWith(prevState, `${b.def.name} cannot block ${a.def.name}`);
   }
 
   // Declaration-level restrictions (menace) AND requirements ("must be blocked if
@@ -4631,6 +4695,7 @@ function applyDeclareBlockers(
     action.blocks,
     cont,
     availableBlockers,
+    state.battlefield,
   );
   if (declarationProblem) return rejectWith(prevState, declarationProblem);
 
@@ -5032,6 +5097,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     // Effective keywords (printed OR continuous grants) so a haste/defender granted
     // by an until-EOT effect is reflected in the eligible-attacker set (DESIGN §3.9).
     const cont = indexContinuous(state);
+    const defendingPlayer = defendingPlayerOf(state);
     // One pass building the id list directly. `filter(...).map(...)` allocated two
     // closures and an intermediate array of instances that was thrown away.
     const eligible: InstanceId[] = [];
@@ -5039,7 +5105,9 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
       const c = battlefield[b] as CardInstance;
       if (c.controller !== me || !isCreature(c.def) || c.tapped) continue;
       const kw = effectiveKeywords(c, cont.get(c.instanceId) ?? NO_MOD);
-      if ((c.summoningSick && !kw.haste) || kw.defender) continue;
+      // The same restriction reader the apply path uses (CR 508.1c, DESIGN
+      // §3.107), so the menu and the wall cannot disagree about who may attack.
+      if (attackDeclarationProblem(c, kw, defendingPlayer, battlefield) !== undefined) continue;
       eligible.push(c.instanceId);
     }
     if (eligible.length > 0) {
@@ -5059,6 +5127,17 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     !state.combat.blockersDeclared
   ) {
     actions.push({ kind: 'declareBlockers', player: me, blocks: [] });
+  }
+
+  // SPLIT SECOND (CR 702.61, DESIGN §3.107): while such a spell is on the stack
+  // nobody may cast a spell or activate a non-mana ability, so those offers are
+  // withdrawn here — one filter over the finished menu, paid only while the lock
+  // holds (a stack walk otherwise). Mana abilities are `tapForMana` and stay;
+  // so do passing and the combat declarations, which are not abilities at all.
+  if (state.stack.length > 0 && splitSecondOnStack(state)) {
+    return actions.filter(
+      (a) => a.kind !== 'castSpell' && a.kind !== 'activateAbility' && a.kind !== 'cycleCard',
+    );
   }
 
   return actions;

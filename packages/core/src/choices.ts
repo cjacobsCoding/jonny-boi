@@ -1463,4 +1463,10 @@ export interface ResolutionFrame {
   triggeringPlayer?: PlayerId;
   /** "That much" — the amount the triggering event carried. See the trigger. */
   triggeringAmount?: number;
+  /**
+   * "That creature" / "the blocking creature" — the objects the triggering
+   * event was about (DESIGN §3.107), carried off the stack object for the same
+   * reason as {@link triggeringPlayer}. See `PendingTrigger.triggeringInstances`.
+   */
+  triggeringInstances?: readonly InstanceId[];
 }

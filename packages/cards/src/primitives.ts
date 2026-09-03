@@ -91,6 +91,7 @@ import {
   selfIfCreature,
   strArrayParam,
   strParam,
+  subjectCreatures,
   targetedSpellOnStack,
 } from './effect-helpers.js';
 import { CHOICE_PRIMITIVES } from './choice-primitives.js';
@@ -382,9 +383,13 @@ export const pumpUntilEndOfTurn: EffectPrimitive = (ctx) => {
   const power = intParam(ctx, 'power', 0);
   const toughness = intParam(ctx, 'toughness', 0);
   if (power === 0 && toughness === 0) return;
-  const target = firstPermanentTarget(ctx) ?? selfIfCreature(ctx);
-  if (!target || !isCreature(target.def)) return;
-  ctx.addContinuousEffect({ target: target.instanceId, power, toughness, duration: 'endOfTurn' });
+  // The creature(s) pumped: the chosen target, else the source — or, with
+  // `subject: 'triggering'`, the object(s) the trigger's event was about
+  // (exalted's lone attacker, flanking's blocker — DESIGN §3.107). One reader
+  // for the question, so the default path resolves exactly as it always has.
+  for (const target of subjectCreatures(ctx)) {
+    ctx.addContinuousEffect({ target: target.instanceId, power, toughness, duration: 'endOfTurn' });
+  }
 };
 
 /**

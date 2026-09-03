@@ -41,6 +41,7 @@ import type {
   RuleContext,
   TriggerBodyResult,
   UnsupportedClause,
+  VacuousClause,
 } from './types.js';
 import {
   EFFECT_RULES,
@@ -117,7 +118,25 @@ const COST_ASSIST_KEYWORDS: ReadonlySet<string> = new Set(['convoke', 'improvise
  * here holds to: a line the rule table did not match compiles no trigger, so
  * the card still reports honestly through that line’s own `missing` entry.
  */
-const TRIGGER_BACKED_KEYWORDS: ReadonlySet<string> = new Set(['bushido']);
+const TRIGGER_BACKED_KEYWORDS: ReadonlySet<string> = new Set([
+  'bushido',
+  // RAMPAGE N (CR 702.23a, DESIGN §3.107): the same shape as bushido — the
+  // number is the whole payload, so it is a pattern rule labelled "Rampage N".
+  'rampage',
+]);
+
+/**
+ * Scryfall's tag for EVERY landwalk printing is the bare word "Landwalk" beside
+ * the printed one ("Islandwalk", "Legendary landwalk") — so a compiled
+ * `keywords.landwalk` payload answers for any tag ending in the word, exactly
+ * as a compiled `cycling` list answers for "Plainscycling" (DESIGN §3.107).
+ * Evidence-based like every guard here: a walk outside the closed
+ * `LandCondition` table compiles no payload and still reports through its own
+ * line.
+ */
+function isLandwalkKeyword(word: string): boolean {
+  return word.endsWith('landwalk');
+}
 
 const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freeze({
   scry: 'scry',
@@ -391,6 +410,8 @@ interface Assembly {
   noMaximumHandSize?: boolean;
   /** Land-play zones this card unlocks, accumulated across lines. */
   playLandsFrom?: import('@jonny-boi/core').LandPlayZone[];
+  /** Clauses implemented by doing nothing, with their reasons (DESIGN §3.107). */
+  vacuous?: VacuousClause[];
   readonly matchedRules: string[];
   readonly missing: UnsupportedClause[];
 }
@@ -458,6 +479,8 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.cantBeCountered) assembly.cantBeCountered = true;
   if (contribution.spellsCantBeCountered) assembly.spellsCantBeCountered = contribution.spellsCantBeCountered;
   if (contribution.noMaximumHandSize) assembly.noMaximumHandSize = true;
+  // A vacuous clause is RECORDED, never dropped (DESIGN §3.107).
+  if (contribution.vacuous !== undefined) (assembly.vacuous ??= []).push(contribution.vacuous);
   if (contribution.playLandsFrom) {
     // Accumulated, not replaced: Bolas's Citadel prints one zone and a second
     // line could print another, and both permissions are real at once.
@@ -748,8 +771,12 @@ function capitalizeFirst(text: string): string {
  * line is reported rather than silently dropping an ability.
  */
 function compileKeywordLine(line: string, assembly: Assembly, ctx: RuleContext): boolean {
+  // Keywords are separated by a comma ("Flying, trample") OR a semicolon —
+  // Oracle uses the semicolon when a keyword carries a parameter ("Trample;
+  // rampage 2", "Vigilance; horsemanship"). Both are the same list (DESIGN
+  // §3.107); splitting on one alone reported every semicolon line whole.
   const words = line
-    .split(',')
+    .split(/[,;]/)
     .map((word) => normalizeClause(word))
     .filter((word) => word.length > 0);
   if (words.length === 0) return false;
@@ -782,6 +809,16 @@ function compileKeywordLine(line: string, assembly: Assembly, ctx: RuleContext):
       const result = applyRules(TRIGGER_RULES, expansion, ctx);
       if (!result) return false;
       absorb(assembly, result.contribution, `keyword:${word}`);
+      continue;
+    }
+    // A PARAMETRISED keyword inside a list ("trample; rampage 2", "haste,
+    // bushido 1") — the pattern rules that compile it as a whole line
+    // (`keyword-bushido`, `keyword-rampage`) are tried on the one word, so a
+    // list is compiled exactly as its members would be alone (DESIGN §3.107).
+    // A word no rule matches still returns false and reports the line.
+    const parametrised = applyRules(TRIGGER_RULES, word, ctx);
+    if (parametrised && parametrised.ruleId.startsWith('keyword-')) {
+      absorb(assembly, parametrised.contribution, parametrised.ruleId);
       continue;
     }
     return false; // not a keyword we model — report the line
@@ -1307,6 +1344,9 @@ export function compileCard(card: CompilableCard): CompileResult {
     ) {
       continue;
     }
+    // LANDWALK (DESIGN §3.107): "Landwalk", "Islandwalk", "Legendary landwalk"
+    // are all answered by the compiled payload — see `isLandwalkKeyword`.
+    if (isLandwalkKeyword(word) && assembly.keywords.landwalk !== undefined) continue;
     // Cycling and its typed variants: Scryfall lists "Cycling", "Typecycling"
     // and "Landcycling" as keywords, and the printed line has already compiled
     // into `assembly.cycling`. A cycling line that did NOT compile (an {X}
@@ -1519,6 +1559,9 @@ export function compileCard(card: CompilableCard): CompileResult {
     definition,
     matchedRules: assembly.matchedRules,
     missing: assembly.missing,
+    // Present only when a clause was implemented by doing nothing (DESIGN
+    // §3.107), so every other card's result is byte-for-byte what it was.
+    ...(assembly.vacuous !== undefined ? { vacuous: assembly.vacuous } : {}),
   };
 }
 

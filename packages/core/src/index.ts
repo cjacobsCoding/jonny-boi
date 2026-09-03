@@ -174,6 +174,31 @@ export { hasNoMaximumHandSize, landPlayZonesFor } from './player-statics.js';
  */
 export type { BlockAssignment } from './internal/block-solver.js';
 export { forcedBlockAssignment } from './internal/block-solver.js';
+
+/**
+ * THE COMBAT KEYWORD FAMILY (DESIGN §3.107). Attack restrictions and
+ * requirements (CR 508.1c/d) are the attacker-side mirror of the block solver,
+ * and the pilot reads them through the same seam so it never proposes a
+ * declaration the engine refuses; `controlsLandMatching*` is the one reader
+ * of the closed `LandCondition` table (landwalk, "can't attack unless …");
+ * `splitSecondOnStack` is the timing lock the offer pass applies.
+ */
+export type { BasicLandSubtype, BlockOnlyRestriction, LandCondition } from './card.js';
+export {
+  attackDeclarationProblem,
+  attackRequirementProblem,
+  requiredAttackerIds,
+} from './attack-requirements.js';
+export {
+  controlsLandMatching,
+  controlsLandMatchingAll,
+  controlsLandMatchingAny,
+  describeLandCondition,
+  sameLandCondition,
+  unionLandConditions,
+} from './land-conditions.js';
+export { SPLIT_SECOND_REJECTION, splitSecondOnStack } from './split-second.js';
+export { triggeringInstancesFor } from './triggers.js';
 export type { UncounterableSpellsAbility } from './countering.js';
 export { spellCanBeCountered } from './countering.js';
 

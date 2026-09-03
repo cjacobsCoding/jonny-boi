@@ -65,6 +65,14 @@ export type DerivedCount = DerivedCountName;
 /** A numeric param that is computed at resolution instead of printed. */
 export interface DerivedValue {
   readonly countOf: DerivedCount;
+  /**
+   * "+N/+N FOR EACH …" — the printed multiplier on a per-count value (rampage's
+   * "+2/+2 for each creature blocking it beyond the first", DESIGN §3.107).
+   * Absent means one per count, which is every derived value written before
+   * this existed. A SCALING parameter on the one reader rather than a second
+   * primitive, so damage, draws and pumps all learn "for each" at once.
+   */
+  readonly times?: number;
 }
 
 /** Whether a param value is a derived-value descriptor. */
@@ -127,11 +135,33 @@ function isKickedSwitch(value: unknown): value is KickedSwitchValue {
  * uses for a characteristic-defining P/T, so a count cannot mean two things.
  */
 export function evaluateDerived(ctx: EffectContext, value: DerivedValue): number {
+  // "For each" (DESIGN §3.107): the printed multiplier applies to whatever the
+  // count below turns out to be. One multiplication here, so no branch below
+  // has to remember it.
+  const times = typeof value.times === 'number' && Number.isFinite(value.times) ? Math.trunc(value.times) : 1;
+  return times === 1 ? countOfDerived(ctx, value) : countOfDerived(ctx, value) * times;
+}
+
+/** The unscaled count behind a derived value — see {@link evaluateDerived}. */
+function countOfDerived(ctx: EffectContext, value: DerivedValue): number {
   // Every count core can answer from the BOARD is answered by core, from the one
   // shared evaluator (so a spell's "equal to the number of X" and a `*` P/T box
   // count the identical set). The kick count is the single exception, and it has
   // to be: it is a fact about THIS RESOLUTION, which core's board-only evaluator
   // has no way to see.
+  if (value.countOf === 'creaturesBlockingThisBeyondFirst') {
+    // RAMPAGE (CR 702.23a/b, DESIGN §3.107): the creatures blocking the SOURCE
+    // right now, minus the first — read as the trigger resolves, off the live
+    // block map, which is what "calculated only once, when the triggered
+    // ability resolves" means. No combat, or an unblocked source, is zero.
+    const blocks = ctx.state.combat?.blocks;
+    if (blocks === undefined) return 0;
+    let blocking = 0;
+    for (const blocker in blocks) {
+      if (blocks[Number(blocker) as InstanceId] === ctx.source.instanceId) blocking += 1;
+    }
+    return Math.max(0, blocking - 1);
+  }
   if (value.countOf === 'timesThisWasKicked') {
     // Two readings, and both are needed. DURING the spell's own resolution the
     // count rides the frame (`ctx.kickCount`, with a plain kicker counting as
@@ -234,6 +264,17 @@ export function keywordsParam(ctx: EffectContext): KeywordFlags {
   if (typeof blockRestriction === 'object' && blockRestriction !== null) {
     out.blockRestriction = blockRestriction;
   }
+  // The combat keyword family's LIST and RECORD payloads (DESIGN §3.107) —
+  // landwalk, "can't attack unless …", "can block only …" — copied through by
+  // shape exactly as the ones above are; `maxBlockers` is a row in
+  // `NUMERIC_KEYWORD_KEYS`. Each is folded by core's `mergeCombatFamilyPayload`
+  // when the grant meets the printed set.
+  for (const listKey of LIST_KEYWORD_KEYS) {
+    const value = src[listKey];
+    if (Array.isArray(value) && value.length > 0) out[listKey] = value;
+  }
+  const blockOnly = src.blockOnly;
+  if (typeof blockOnly === 'object' && blockOnly !== null) out.blockOnly = blockOnly;
   return out as KeywordFlags;
 }
 
@@ -242,7 +283,41 @@ export function keywordsParam(ctx: EffectContext): KeywordFlags {
  * A table so adding one is a data edit here rather than another `if` above —
  * and so the omission that made this function drop them cannot recur silently.
  */
-const NUMERIC_KEYWORD_KEYS: readonly string[] = Object.freeze(['ward', 'minBlockers']);
+const NUMERIC_KEYWORD_KEYS: readonly string[] = Object.freeze(['ward', 'minBlockers', 'maxBlockers']);
+
+/** The keyword flags whose value is a LIST of conditions (DESIGN §3.107). */
+const LIST_KEYWORD_KEYS: readonly string[] = Object.freeze(['landwalk', 'cantAttackUnlessDefenderControls']);
+
+/**
+ * THE CREATURES A PRIMITIVE ACTS ON when it names no target (DESIGN §3.107).
+ *
+ * `params.subject: 'triggering'` means "the object(s) the triggering event was
+ * about" — exalted's lone attacker, flanking's blocker — read off
+ * `ctx.triggeringInstances`; anything else (the default, which is every effect
+ * written before this existed) is the first chosen creature target, else the
+ * source itself, exactly as `pumpUntilEndOfTurn` has always resolved it.
+ *
+ * Only creatures still on the battlefield are returned: a blocker that died in
+ * response is not there to shrink, and a pump aimed at a graveyard is a no-op
+ * by every other reading too.
+ */
+export function subjectCreatures(ctx: EffectContext): readonly CardInstance[] {
+  if (strParam(ctx, 'subject') === 'triggering') {
+    const ids = ctx.triggeringInstances;
+    if (ids === undefined || ids.length === 0) return NO_CREATURES;
+    const found: CardInstance[] = [];
+    for (const id of ids) {
+      const permanent = permanentById(ctx.state, id);
+      if (permanent !== undefined && isCreature(permanent.def)) found.push(permanent);
+    }
+    return found;
+  }
+  const single = firstPermanentTarget(ctx) ?? selfIfCreature(ctx);
+  return single !== undefined && isCreature(single.def) ? [single] : NO_CREATURES;
+}
+
+/** Shared empty answer, so the no-subject path allocates nothing. */
+const NO_CREATURES: readonly CardInstance[] = Object.freeze([]);
 
 /**
  * Read a `ManaCost`-shaped param (`{ generic: 3 }`, `{ generic: 1, U: 1 }`) — the

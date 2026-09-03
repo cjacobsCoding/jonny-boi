@@ -24,6 +24,10 @@ import { eventTypeWatchBit, matchTriggers, orderPendingTriggers, watchedEventMas
 import { interveningIfHolds } from '../intervening.js';
 import type { DelayedTriggeredAbility } from '../delayed.js';
 import { matchDelayedTriggers, pendingFromDelayed, removeDelayedTrigger } from '../delayed.js';
+// The combat keyword family's counterpart filter (DESIGN §3.107) reads
+// EFFECTIVE keywords, which is why it lives here and not in the pure matcher.
+import { aggregateFor } from './continuous.js';
+import { effectiveKeywords } from './stats.js';
 
 /**
  * Which event types can COINCIDE with a change to the trigger-SOURCE set — the
@@ -134,6 +138,41 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   delayedTriggerCreated: false,
   delayedTriggerFired: false,
 });
+
+/**
+ * Whether a matched combat trigger's COUNTERPART filter holds (DESIGN §3.107):
+ * every object the event was about must have (`counterpartHasKeyword`) or lack
+ * (`counterpartLacksKeyword`) the named keyword, read EFFECTIVE — a flying
+ * granted by an anthem is flying, and a flanking lost to nothing is still
+ * flanking. An object no longer on the battlefield fails the filter: a trigger
+ * firing on an unknown creature would do more than printed.
+ *
+ * The per-creature kind (`becomesBlockedByCreature`) arrives here with exactly
+ * one instance per pending ability, so this is genuinely a per-blocker test —
+ * which is what CR 702.25b's "each creature … triggers separately" needs.
+ */
+function counterpartFilterHolds(state: GameState, pending: PendingTrigger): boolean {
+  const instances = pending.triggeringInstances;
+  if (instances === undefined || instances.length === 0) return false;
+  const must = pending.ability.condition.counterpartHasKeyword;
+  const mustNot = pending.ability.condition.counterpartLacksKeyword;
+  for (let i = 0; i < instances.length; i++) {
+    const id = instances[i] as InstanceId;
+    let counterpart: CardInstance | undefined;
+    for (let b = 0; b < state.battlefield.length; b++) {
+      const permanent = state.battlefield[b] as CardInstance;
+      if (permanent.instanceId === id) {
+        counterpart = permanent;
+        break;
+      }
+    }
+    if (counterpart === undefined) return false;
+    const keywords = effectiveKeywords(counterpart, aggregateFor(state, id));
+    if (must !== undefined && keywords[must] !== true) return false;
+    if (mustNot !== undefined && keywords[mustNot] === true) return false;
+  }
+  return true;
+}
 
 /**
  * A trigger collector bound to a draft state and a base emit. Call `emit` exactly
@@ -425,6 +464,18 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
       ) {
         continue;
       }
+      // The combat keyword family's COUNTERPART filter (DESIGN §3.107): "a
+      // creature WITHOUT flanking blocks this creature", "blocks a creature
+      // WITH flying". Part of the condition, so a failing filter means the
+      // ability never triggers — and judged here rather than in the matcher
+      // because it reads the counterpart's EFFECTIVE keywords off the state.
+      if (
+        (m.ability.condition.counterpartHasKeyword !== undefined ||
+          m.ability.condition.counterpartLacksKeyword !== undefined) &&
+        !counterpartFilterHolds(state, m)
+      ) {
+        continue;
+      }
       // "Whenever ONE OR MORE creatures … deal combat damage" fires ONCE per
       // batch (CR 603.2 — the printed word "one or more" is a single event
       // however many objects qualify). Combat damage lands as one run of
@@ -466,6 +517,8 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
         // names no player is pushed byte-for-byte as it always was.
         ...(pending.triggeringPlayer !== undefined ? { triggeringPlayer: pending.triggeringPlayer } : {}),
         ...(pending.triggeringAmount !== undefined ? { triggeringAmount: pending.triggeringAmount } : {}),
+        // "That creature" / "the blocking creature" (DESIGN §3.107), same reason.
+        ...(pending.triggeringInstances !== undefined ? { triggeringInstances: pending.triggeringInstances } : {}),
         // Carried for CR 603.4's second check, made as the ability resolves.
         ...(pending.ability.condition.intervening !== undefined
           ? { intervening: pending.ability.condition.intervening }

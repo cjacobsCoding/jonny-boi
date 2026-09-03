@@ -92,6 +92,15 @@ export interface EffectContext {
    * param in the library understands it without a primitive changing.
    */
   readonly triggeringAmount?: number;
+  /**
+   * "THAT CREATURE" / "THE BLOCKING CREATURE" — the objects the event that set
+   * this TRIGGER off was about (DESIGN §3.107): exalted's lone attacker,
+   * flanking's blocker. A primitive whose params say `subject: 'triggering'`
+   * acts on these instead of on its target or its source; see
+   * `subjectCreatures` in the cards package's `effect-helpers.ts`. Absent for
+   * spells and for every trigger whose event names no such object.
+   */
+  readonly triggeringInstances?: readonly InstanceId[];
   /** Append an event to the log. */
   emit(event: GameEvent): void;
   /**
@@ -447,6 +456,7 @@ export function applyEffectRef(
     kickCount: base.kickCount,
     triggeringPlayer: base.triggeringPlayer,
     triggeringAmount: base.triggeringAmount,
+    triggeringInstances: base.triggeringInstances,
     emit,
     addContinuousEffect(mod) {
       return addContinuousEffectToState(base.state, base.source.instanceId, base.controller, mod, emit);
@@ -554,6 +564,7 @@ export type EffectContextBase = Pick<
   | 'kickCount'
   | 'triggeringPlayer'
   | 'triggeringAmount'
+  | 'triggeringInstances'
 >;
 
 /**
