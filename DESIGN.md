@@ -2588,6 +2588,97 @@ this section adds to those is that the strength band was NOT empty: the blocking
 measured — and the default pilot still beats the heuristic 178/98, so the forecast's attack step, at
 0.75 ms a decision, is both the next strength ceiling and the next speed lever.
 
+### 3.111 The graveyard-casting family — unearth, scavenge, retrace, embalm, eternalize, encore, escape, jump-start, and flashback's non-mana costs — ✅ done
+
+Picked as a FAMILY off the §3.102 queue: every printed ability that FUNCTIONS WHILE THE CARD IS IN A
+GRAVEYARD, measured with `keyword-cards.mjs` BEFORE building.
+
+| keyword / template | CR | sole | predicted | shipped |
+|---|---|---|---|---|
+| unearth {cost} | 702.84a | 23 | 23 | **23** |
+| scavenge {cost} | 702.96a | 11 | 11 | **11** |
+| retrace | 702.81a | 8 | 8 | **8** |
+| embalm {cost} | 702.128a | 6 | 6 | **6** |
+| eternalize {cost} | 702.129a | 7 | 7 | **5** (a discard rider, and a LAND that eternalizes) |
+| encore {cost} | 702.141a | 7 | 7 | **7** |
+| escape—{cost}, exile N | 702.138a | 6 | 6 | **6** |
+| jump-start | 702.133a | 6 | 6 | **6** |
+| flashback—Sacrifice/Tap … | 702.34a | 4 | 4 | **4** |
+| "{2}{B}: Return ~ from your graveyard to your hand" | 602.2 | 8 | 8 | **11** |
+| "when ~ is put into a graveyard from the battlefield, return it to its owner's hand" | 603.2 | 7 | 7 | **12** |
+| "return [up to two] target [instant or sorcery] cards from your graveyard to your hand" | — | 16 | 16 | **38** |
+
+**Measured: 5,623 → 5,769 complete cards. +146 against 78 predicted for the keywords** (76 landed;
+eternalize is the one that fell short). The rule tally accounts for 137 and the surplus is the three
+TEMPLATES, which the near-miss report counts per exact sentence while the rules read a shape — the
+graveyard-return rule now reads "up to N target" and "instant **or** sorcery" as well as the single
+type it always did, and the return-to-hand trigger reads Rancor's event as well as "dies".
+
+**TWO SHAPES, and the whole family is one of them.** Flashback was already the funnel for "cast this
+from your graveyard for an altered cost, then exile it", so the work was to make the funnel say which
+KEYWORD is casting: `graveyardCastOptionsOf` is the ONE accessor the offer loop, the cast path and the
+pilot all enumerate by (printed flashback, a granted one through `flashbackCostOf`, and the card's own
+`graveyardCasts`), and `GRAVEYARD_CAST_EXIT` is the closed table `spellLeaveDestination` reads — so
+retrace and escape go BACK to the graveyard (their entire design) while flashback and jump-start
+exile, and a retraced spell cannot become an exiled one by a clone dropping a field. The other shape
+is an ACTIVATED ability of a card in a graveyard: `CardDefinition.graveyardAbilities` +
+the `activateGraveyardAbility` action (which `ACTION_RULES` forced a manifest row for), its own action
+for the reason cycling has one — `activateAbility` starts by finding a permanent on the battlefield
+and judges {T} costs and summoning sickness, none of which a card in a graveyard has.
+
+**The non-mana costs are the additional-cost machinery, not a second cost model.** "Flashback—Sacrifice
+three creatures" (Dread Return), "—Tap three untapped white creatures you control" (Battle Screech)
+and retrace's/jump-start's discard are all `AdditionalCastCost`, paid by the same cast-time question,
+with two new closed kinds: `tap` (CR 602.2b — only UNTAPPED permanents qualify, and paying taps them
+rather than moving anything) and `exileFromGraveyard` (escape's fuel). `ADDITIONAL_COST_ZONE` is the
+one table the candidate list and the question's `fromZone` both read, so a sacrifice cannot look in a
+hand. A rider outside the table — "Flashback—{R}{R}, Discard X cards" (Conflagrate), "Escape—…, Exile
+any number of other cards with four or more card types among them" (Nethergoyf) — reports.
+
+⚠️ **Unearth's exile clause is a replacement on the OBJECT, asked by both leave funnels.** "If it would
+leave the battlefield, exile it instead of putting it anywhere else" (CR 702.84c) is
+`CardInstance.exileIfLeaves`, read through `leaveBattlefieldDestination` by core's `moveToZone` AND the
+cards package's `movePermanentTo` — exactly as madness's `discardDestination` is asked by both discard
+funnels, and for the same reason: a rule in one funnel only is a rule that depends on which primitive
+killed the creature. The clone trap fired here too and the test caught it: the flag rides the instance,
+so `cloneInstance` needs its own line or an unearthed Zombie dies to the graveyard one action boundary
+later and is unearthed again next turn.
+
+**Embalm and eternalize are the COPY seam, not new tokens.** `CopyExceptions` gained the four clauses
+those two print — a replaced colour, "no mana cost" (CR 202.1b, so the token's mana value is zero), and
+eternalize's 4/4 base P/T — applied in `applyCopyExceptions`, the one pure function every copy goes
+through, so an embalmed Sacred Cat is a white Zombie Cat that still has lifelink and copies as printed
+(CR 707.2: a card that died wearing counters copies without them). Encore is the same primitive with
+`perOpponent`: in a two-player game that is exactly ONE token, which is the printed count and not an
+approximation of it, and "attacks that opponent this turn if able" is the `mustAttack` grant because
+with one opponent there is nobody else it could attack.
+
+**Rancor needed an EVENT, and neither existing one was it.** "When ~ is put into a graveyard from the
+battlefield" is not `dies` (which is `creatureDied` and never fires for an Aura) and not `leaves`
+(which also fires on an exile or a bounce, and would return a Rancor that had been exiled).
+`putIntoGraveyardFromBattlefield` is a `TriggerEvent` with its row in `TRIGGER_EVENT_SOURCES` and in
+the prefilter's canonical table; the body is the same `returnSourceFromGraveyard` the "{cost}: Return ~
+from your graveyard to your hand" template runs, so the two cannot disagree about which hand it is.
+
+**The pilot plays all of it.** `bestGraveyardAbility` prices each ability by its KIND — the closed
+vocabulary core defines — because every body reads its SOURCE and the effect-value context carries
+none: an unearth or an encore buys ONE ATTACK (the Kiki-Jiki pricing, plus the creature's own ETB
+value, and nothing outside the precombat main where the attack has already happened), a scavenge is
+counters on the pilot's BEST attacker, an embalm/eternalize is the token's real body, a self-return is
+the card discounted by `graveyardReturnShare`. The graveyard CASTS ride the same `scoredSpellGoals`
+seam flashback does, with the keyword's rider PRICED against the spell — the cards the pilot's own loss
+policy will actually hand over (`cardValue`, cheapest first) for a discard or a sacrifice, and
+`graveyardFuelCardValue` per card for escape's yard and a tapped attacker — so a Flame Jab is retraced
+when the land it pitches is chaff and an Escape Bolt is escaped for lethal, not for value.
+
+⚠️ **Left out, and why.** *Eternalize with a discard rider* (Sinuous Striker) and *unearth priced in
+energy* (Salvation Colossus) are cost forms outside the closed tables. *Lazotep Archway* eternalizes a
+LAND into "a 4/4 black Zombie creature that loses all other card types" — a type REPLACEMENT
+`CopyExceptions` cannot say. *Nethergoyf*'s and *Lunar Hatchling*'s escape costs, and *Conflagrate*'s
+{X}-scaled discard, are riders the additional-cost shape cannot count. "This creature escapes with a
++1/+1 counter on it" is its own printed line and still reports on its own — the CAST compiles, so those
+cards wait on one clause rather than two.
+
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 
 Not every measured idea survives, and this is the write-up of one that did not. It is recorded
