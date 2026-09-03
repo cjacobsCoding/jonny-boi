@@ -2106,14 +2106,6 @@ function bestPumpPlay(
   return best;
 }
 
-/**
- * Emit the next micro-action toward casting `funded.goal`: cast it once the pool
- * covers the cost, otherwise make the next tap in its funding plan.
- *
- * Because the plan only ever contains taps that move us closer to paying, the
- * pilot stops tapping the moment the cost is covered — no more floating a fifth
- * mana for a four-mana turn.
- */
 /** A cycling play the pilot wants to make: which card, how it is funded, why. */
 interface CycleGoal {
   readonly action: Extract<GameAction, { kind: 'cycleCard' }>;
@@ -2214,6 +2206,24 @@ function pursueCycle(ctx: DecisionContext, goal: CycleGoal): GameAction {
   return emit(ctx, tap, goal.reason, goal.score);
 }
 
+/**
+ * Emit the next micro-action toward casting `funded.goal`: cast it once the pool
+ * covers the cost, otherwise make the next tap in its funding plan.
+ *
+ * Because the plan only ever contains taps that move us closer to paying, the
+ * pilot stops tapping the moment the cost is covered — no more floating a fifth
+ * mana for a four-mana turn.
+ *
+ * ONE STEP, NOT A PROMISE. The pilot emits a single tap here and re-decides from
+ * the live board next time it holds priority, so the goal it ends up casting can
+ * differ from the one this tap was made for. That is deliberate — the board may
+ * have changed — but it also means the plan seam must be complete: a cost the
+ * planner cannot plan is a card the pilot only ever casts by accident, once mana
+ * tapped toward something else happens to cover it. Hybrid costs were exactly
+ * that until `planManaPayment` learned to plan a dual land's COLOUR against a
+ * hybrid pip (its test pins the Kitchen Finks board); the planner is now the one
+ * place that answers "can this be paid from here", for every cost shape it models.
+ */
 function pursueSpell(ctx: DecisionContext, funded: FundedGoal): GameAction {
   const { view } = ctx;
   const me = view.priorityPlayer;

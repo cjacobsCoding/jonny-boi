@@ -560,6 +560,46 @@ describe('heuristic pilot — hybrid mana costs (regression)', () => {
     expect(action.kind).toBe('tapForMana');
   });
 
+  it('casts Finks from an EMPTY pool when the only green comes from B/G duals offered B-first', () => {
+    // THE REPORTED BOARD (2026-09-02): Jungle Hollow, Forest, two Golgari Guildgates
+    // — four untapped green sources — and the pilot never cast Finks, because the
+    // planner tapped the duals for B (their first-listed mode) and then found the
+    // hybrids unpayable. It only cast Finks by accident, after tapping G, G, B
+    // toward a plain {1}{G}{G} card, which biased every A/B verdict with one in it.
+    const bgDual = (id: string): Parameters<typeof putOnBattlefield>[2][number] => ({
+      id,
+      name: id,
+      types: ['land'],
+      producesOptions: [{ B: 1 }, { G: 1 }],
+    });
+    let state = freshGame();
+    intoMainPhase(state);
+    putOnBattlefield(state, 'A', [
+      bgDual('JungleHollow'),
+      landDef('Forest', 'G'),
+      bgDual('Guildgate1'),
+      bgDual('Guildgate2'),
+    ]);
+    const [card] = giveHand(state, 'A', [finks]);
+
+    // Three taps then the cast; a fifth decision is one more than it needs. The
+    // whole trail is asserted so a failure says what the pilot did instead.
+    // `applyAction` clones, so the game advances through the state it returns.
+    const DECISIONS = 5;
+    const trail: string[] = [];
+    for (let i = 0; i < DECISIONS; i++) {
+      const action = choose(state);
+      const result = applyAction(state, action, undefined, createTestRegistry());
+      expect(result.events.some((e) => e.type === 'actionRejected')).toBe(false);
+      state = result.state;
+      trail.push(
+        action.kind === 'castSpell' && action.instanceId === card!.instanceId ? 'cast Finks' : action.kind,
+      );
+      if (trail[trail.length - 1] === 'cast Finks') break;
+    }
+    expect(trail).toEqual(['tapForMana', 'tapForMana', 'tapForMana', 'cast Finks']);
+  });
+
   it("agrees with core's canPay on every hybrid pool (the invariant the pilot relies on)", () => {
     // The pilot's payability test must be the engine's, or it proposes illegal
     // casts. We assert the equivalence behaviourally: for each pool, the pilot

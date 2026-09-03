@@ -101,21 +101,27 @@ export function tapActionFor(player: PlayerId, tap: ManaTapPlan): GameAction {
  * This RANKS candidate taps (it runs for every source × mode on every step of the
  * plan, so it must not allocate); it is deliberately NOT the authority on whether
  * a cost is payable. `canPay` is, and the planner defers to it — a cost model can
- * grow symbols this simple per-colour subtraction doesn't understand (hybrid
- * symbols payable by either of two colours being the live example), and a second
- * opinion baked in here would silently disagree with the engine.
+ * grow symbols this per-colour subtraction doesn't understand (restricted mana
+ * parcels being the live example), and a second opinion baked in here would
+ * silently disagree with the engine.
+ *
+ * It DOES understand hybrid symbols, and it has to: this estimate is what tells
+ * the planner which colour a dual land should make. When it read `{G/W}{G/W}` as
+ * no coloured demand at all, every tap looked equally useful, so a B/G dual whose
+ * modes are offered B-first was tapped for B — and Kitchen Finks was unpayable
+ * from four untapped green sources. A hybrid symbol is distance 1 unless some
+ * colour that may pay it is spare, exactly as `canPay` decides it.
+ *
+ * The same dense arithmetic as the planner's own hot loop, so the two can never
+ * answer differently; this entry point merely densifies its two sparse records
+ * first, into buffers of its own so it never disturbs a plan in progress.
  */
 export function distanceToPayable(pool: ManaPool, cost: ManaCost): number {
-  let short = 0;
-  let spare = 0;
-  for (const color of MANA_COLORS) {
-    const need = cost[color] ?? 0;
-    const have = pool[color];
-    if (have < need) short += need - have;
-    else spare += have - need;
-  }
-  const generic = cost.generic ?? 0;
-  return short + Math.max(0, generic - spare);
+  const s = scratch;
+  densifyInto(pool, s.estimatePool, 0);
+  densifyInto(cost, s.estimateCost, 0);
+  const hybridCount = densifyHybridsInto(cost);
+  return denseDistanceToPayable(s.estimatePool, s.estimateCost, cost.generic ?? 0, hybridCount);
 }
 
 /**
@@ -160,8 +166,61 @@ function densifyInto(record: Partial<Record<ManaColor, number>>, into: Int32Arra
   for (let i = 0; i < COLOR_COUNT; i++) into[at + i] = record[MANA_COLORS[i] as ManaColor] ?? 0;
 }
 
-/** {@link distanceToPayable} over dense colour arrays — the ranking hot loop. */
-function denseDistanceToPayable(pool: Int32Array, cost: Int32Array, generic: number): number {
+/** Hybrid symbols a cost is expected to print before the mask buffer has to grow. */
+const INITIAL_HYBRID_CAPACITY = 4;
+
+/**
+ * The hybrid symbols of `cost` as dense colour BITMASKS (bit `i` set ⇔ the colour
+ * at `MANA_COLORS[i]` may pay that symbol), one per printed symbol, into
+ * `scratch.hybridMask`. Returns how many there are — zero for the overwhelming
+ * majority of costs, which is the count the hot loop then branches on.
+ */
+function densifyHybridsInto(cost: ManaCost): number {
+  const hybrids = cost.hybrid;
+  if (hybrids === undefined || hybrids.length === 0) return 0;
+  const s = scratch;
+  if (hybrids.length > s.hybridMask.length) s.hybridMask = new Int32Array(hybrids.length * 2);
+  for (let h = 0; h < hybrids.length; h++) {
+    const symbol = hybrids[h] as readonly ManaColor[];
+    let mask = 0;
+    for (let c = 0; c < symbol.length; c++) {
+      const index = MANA_COLORS.indexOf(symbol[c] as ManaColor);
+      if (index >= 0) mask |= 1 << index;
+    }
+    s.hybridMask[h] = mask;
+  }
+  return hybrids.length;
+}
+
+/**
+ * {@link distanceToPayable} over dense colour arrays — the ranking hot loop.
+ *
+ * `hybridCount` is how many symbols `scratch.hybridMask` currently describes
+ * (from {@link densifyHybridsInto}). Zero takes the fixed-cost path untouched;
+ * otherwise the answer is the SMALLEST distance over every assignment of a colour
+ * to each hybrid symbol. Exhaustive rather than greedy on purpose, mirroring
+ * `canPayWithHybrids`: `{G/W}{G/U}` against a floating G and W is payable only
+ * by giving the W to the first symbol, which a greedy "take the first spare
+ * colour" would miss. Two colours per symbol and a handful of symbols per card
+ * keeps that search trivially small, and it only ever runs for a hybrid cost.
+ */
+function denseDistanceToPayable(
+  pool: Int32Array,
+  cost: Int32Array,
+  generic: number,
+  hybridCount: number,
+): number {
+  if (hybridCount === 0) return denseFixedDistance(pool, cost, generic);
+  return leastHybridDistance(pool, cost, generic, 0, hybridCount);
+}
+
+/**
+ * The fixed-symbol distance — the pre-hybrid hot loop, kept as its own monomorphic
+ * function so the ordinary cost pays nothing for the hybrid search: a shared body
+ * taking an optional `extra` array would make its call site polymorphic and cost
+ * the inlining V8 gives this loop today.
+ */
+function denseFixedDistance(pool: Int32Array, cost: Int32Array, generic: number): number {
   let short = 0;
   let spare = 0;
   for (let i = 0; i < COLOR_COUNT; i++) {
@@ -171,6 +230,50 @@ function denseDistanceToPayable(pool: Int32Array, cost: Int32Array, generic: num
     else spare += have - need;
   }
   return short + (generic > spare ? generic - spare : 0);
+}
+
+/** {@link denseFixedDistance} plus the per-colour demands one hybrid assignment chose. */
+function denseFixedDistanceWithExtra(
+  pool: Int32Array,
+  cost: Int32Array,
+  generic: number,
+  extra: Int32Array,
+): number {
+  let short = 0;
+  let spare = 0;
+  for (let i = 0; i < COLOR_COUNT; i++) {
+    const need = (cost[i] as number) + (extra[i] as number);
+    const have = pool[i] as number;
+    if (have < need) short += need - have;
+    else spare += have - need;
+  }
+  return short + (generic > spare ? generic - spare : 0);
+}
+
+/**
+ * The minimum fixed distance over every colour assignment to hybrid symbols
+ * `index..count`, accumulating the choices in `scratch.hybridExtra` in place
+ * (incremented on the way down, decremented on the way back — no allocation).
+ */
+function leastHybridDistance(
+  pool: Int32Array,
+  cost: Int32Array,
+  generic: number,
+  index: number,
+  count: number,
+): number {
+  const s = scratch;
+  if (index === count) return denseFixedDistanceWithExtra(pool, cost, generic, s.hybridExtra);
+  const mask = s.hybridMask[index] as number;
+  let best = Infinity;
+  for (let i = 0; i < COLOR_COUNT; i++) {
+    if ((mask & (1 << i)) === 0) continue;
+    s.hybridExtra[i] = (s.hybridExtra[i] as number) + 1;
+    const distance = leastHybridDistance(pool, cost, generic, index + 1, count);
+    s.hybridExtra[i] = (s.hybridExtra[i] as number) - 1;
+    if (distance < best) best = distance;
+  }
+  return best;
 }
 
 /**
@@ -197,6 +300,26 @@ const scratch = {
   cost: new Int32Array(COLOR_COUNT),
   pool: new Int32Array(COLOR_COUNT),
   trial: new Int32Array(COLOR_COUNT),
+  /**
+   * The cost's hybrid symbols as colour bitmasks, one per symbol — see
+   * {@link densifyHybridsInto}. Only the first `hybridCount` entries are live.
+   */
+  hybridMask: new Int32Array(INITIAL_HYBRID_CAPACITY),
+  /**
+   * The per-colour demands the hybrid search has CHOSEN so far on its way down
+   * one assignment. The exception to "written before read": this one is
+   * incremented and decremented symmetrically by `leastHybridDistance`, so it
+   * is all zeros between calls and the search relies on finding it so.
+   */
+  hybridExtra: new Int32Array(COLOR_COUNT),
+  /**
+   * Dense forms for the public {@link distanceToPayable}, separate from `cost`
+   * and `pool` so an estimate asked for from outside never clobbers a plan in
+   * progress (the planner is not re-entrant, but the estimate is a public seam
+   * and this costs twelve integers).
+   */
+  estimatePool: new Int32Array(COLOR_COUNT),
+  estimateCost: new Int32Array(COLOR_COUNT),
   /**
    * What each tap COSTS ITS CONTROLLER IN LIFE — a "Pay 1 life" cost plus a
    * rider's damage, added together because both come off the same total and the
@@ -462,6 +585,9 @@ export function planManaPayment(
   }
 
   densifyInto(cost, s.cost, 0);
+  // Zero for nearly every cost; a hybrid cost is what makes the ranking below
+  // choose a dual land's COLOUR rather than merely its tap.
+  const hybridCount = densifyHybridsInto(cost);
   // The dense buffer holds what this payment may actually SPEND, so the ranking
   // heuristic never counts mana `canPay` will refuse. Identical to the plain
   // colour amounts whenever the pool carries no restriction, which is the
@@ -489,11 +615,13 @@ export function planManaPayment(
   let lifeLeft = view.players[player].life;
 
   while (!canPay(pool, cost, anyRestricted ? resolvePurpose() : undefined)) {
-    // At least one pip is still owed (canPay said so). Flooring at 1 matters when
-    // the heuristic can't see the shortfall — a hybrid symbol reads as satisfied
-    // by either colour — so a useful tap is still accepted instead of the planner
-    // concluding the cost is unpayable.
-    const owed = Math.max(denseDistanceToPayable(s.pool, s.cost, genericOwed), 1);
+    // At least one pip is still owed (canPay said so). Flooring at 1 covers any
+    // shortfall the heuristic cannot see but `canPay` can (a restricted parcel it
+    // counted as spendable), so a useful tap is still accepted instead of the
+    // planner concluding the cost is unpayable. Hybrid symbols used to be the
+    // reason this floor existed; they are modelled now, and the floor stays as
+    // the honest gap between an estimate and the authority.
+    const owed = Math.max(denseDistanceToPayable(s.pool, s.cost, genericOwed, hybridCount), 1);
     let bestTap = -1;
     let bestGroup = -1;
     let bestDistance = owed;
@@ -541,7 +669,7 @@ export function planManaPayment(
           // planner would prefer it to a plain land for a single pip.
           size += add - (afterCost ? (s.pool[i] as number) - have : 0);
         }
-        const distance = denseDistanceToPayable(s.trial, s.cost, genericOwed);
+        const distance = denseDistanceToPayable(s.trial, s.cost, genericOwed, hybridCount);
         if (distance >= owed) continue; // buys us nothing — never make this tap
         // WHAT THIS TAP COSTS IN LIFE — a "Pay 1 life" cost plus a rider's damage.
         // Zero on every ordinary board, where `anyTapPain` keeps this out of the

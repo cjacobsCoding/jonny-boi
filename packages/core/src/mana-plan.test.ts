@@ -31,7 +31,7 @@ import {
 import type { GameAction } from './actions.js';
 import type { CardDefinition } from './card.js';
 import type { ManaCost, ManaPool } from './mana.js';
-import { emptyPool } from './mana.js';
+import { canPay, emptyPool } from './mana.js';
 import type { CardInstance, InstanceId, PlayerId } from './state.js';
 
 const FOREST: CardDefinition = { id: 'Forest', name: 'Forest', types: ['land'], produces: ['G'] };
@@ -488,7 +488,114 @@ describe('planManaPayment — one call never leaks into the next', () => {
   });
 });
 
+describe('planManaPayment — hybrid costs plan the COLOUR of a dual, not just its tap', () => {
+  /**
+   * THE REPORTED BOARD (2026-09-02). Every source here can make G, yet the planner
+   * answered "unpayable" for Kitchen Finks — because the distance heuristic did
+   * not read `cost.hybrid`, every colour looked equally useful, and the B/G duals
+   * (whose modes the pool lists B-first) were tapped for B until nothing was left.
+   * Eternal Witness, a plain `{1}{G}{G}`, planned fine from the same four lands,
+   * so hybrid-cost cards were only ever cast by accident — after mana tapped
+   * toward something else happened to be the right colours.
+   */
+  const B_G_DUAL: CardDefinition = {
+    id: 'JungleHollow',
+    name: 'Jungle Hollow',
+    types: ['land'],
+    producesOptions: [{ B: 1 }, { G: 1 }],
+  };
+  const B_G_GUILDGATE: CardDefinition = {
+    id: 'GolgariGuildgate',
+    name: 'Golgari Guildgate',
+    types: ['land'],
+    producesOptions: [{ B: 1 }, { G: 1 }],
+  };
+  const PLAINS: CardDefinition = { id: 'Plains', name: 'Plains', types: ['land'], produces: ['W'] };
+  const KITCHEN_FINKS_COST: ManaCost = { generic: 1, hybrid: [['G', 'W'], ['G', 'W']] };
+  const ETERNAL_WITNESS_COST: ManaCost = { generic: 1, G: 2 };
+  const reportedBoard = () => [
+    permanent(1, B_G_DUAL),
+    permanent(2, FOREST),
+    permanent(3, B_G_GUILDGATE),
+    permanent(4, B_G_GUILDGATE),
+  ];
+
+  /** The pool a plan leaves floating, so a test can ask the engine's own authority. */
+  function poolAfter(plan: NonNullable<ReturnType<typeof planManaPayment>>): ManaPool {
+    const pool: ManaPool = emptyPool();
+    for (const tap of plan) {
+      for (const color of Object.keys(tap.production) as (keyof ManaPool)[]) {
+        if (color === 'restricted') continue;
+        pool[color] += tap.production[color] ?? 0;
+      }
+    }
+    return pool;
+  }
+
+  it('plans Kitchen Finks from an EMPTY pool on the reported board', () => {
+    const lands = reportedBoard();
+    const plan = planManaPayment(board(lands), 'A', KITCHEN_FINKS_COST, offeredTaps(lands));
+    // Three taps, Forest first (least flexible). WHICH dual makes the G and which
+    // the generic's B is a tie the planner may break either way — both are legal
+    // payments — so the pin is the engine's own authority on the pool that results.
+    expect(plan).toHaveLength(3);
+    expect(taps(plan)?.[0]).toBe('2:0');
+    expect(canPay(poolAfter(plan!), KITCHEN_FINKS_COST)).toBe(true);
+  });
+
+  it('still plans Eternal Witness from the same board in three taps', () => {
+    const lands = reportedBoard();
+    const plan = planManaPayment(board(lands), 'A', ETERNAL_WITNESS_COST, offeredTaps(lands));
+    expect(plan).toHaveLength(3);
+    expect(canPay(poolAfter(plan!), ETERNAL_WITNESS_COST)).toBe(true);
+  });
+
+  it('pays two different hybrid symbols from two different colours', () => {
+    // {G/W}{G/U} from a Forest and a Plains: the Plains can only ever pay the
+    // first symbol, so the planner has to give it that one and the Forest the other.
+    const lands = [permanent(1, FOREST), permanent(2, PLAINS)];
+    const cost: ManaCost = { hybrid: [['G', 'W'], ['G', 'U']] };
+    const plan = planManaPayment(board(lands), 'A', cost, offeredTaps(lands));
+    expect(taps(plan)).toEqual(['1:0', '2:0']);
+    expect(canPay(poolAfter(plan!), cost)).toBe(true);
+  });
+
+  it('refuses a hybrid cost no colour on the board can pay', () => {
+    const lands = [permanent(1, ISLAND), permanent(2, ISLAND), permanent(3, ISLAND)];
+    expect(planManaPayment(board(lands), 'A', KITCHEN_FINKS_COST, offeredTaps(lands))).toBeUndefined();
+  });
+
+  it('never taps a source whose only colours pay nothing the hybrid needs', () => {
+    // Islands can only fund the generic pip; the two hybrids need the Forests.
+    const lands = [permanent(1, ISLAND), permanent(2, ISLAND), permanent(3, FOREST), permanent(4, FOREST)];
+    const plan = planManaPayment(board(lands), 'A', KITCHEN_FINKS_COST, offeredTaps(lands));
+    expect(plan).toHaveLength(3);
+    expect(taps(plan)).toEqual(expect.arrayContaining(['3:0', '4:0']));
+    expect(canPay(poolAfter(plan!), KITCHEN_FINKS_COST)).toBe(true);
+  });
+});
+
 describe('distanceToPayable', () => {
+  it('sees a hybrid symbol as one pip payable by either of its colours', () => {
+    const finks: ManaCost = { generic: 1, hybrid: [['G', 'W'], ['G', 'W']] };
+    expect(distanceToPayable(emptyPool(), finks)).toBe(3);
+    expect(distanceToPayable({ ...emptyPool(), G: 1 }, finks)).toBe(2);
+    expect(distanceToPayable({ ...emptyPool(), G: 1, W: 1 }, finks)).toBe(1);
+    expect(distanceToPayable({ ...emptyPool(), G: 2, B: 1 }, finks)).toBe(0);
+    // Black pays the generic and nothing else: two hybrid pips still owed.
+    expect(distanceToPayable({ ...emptyPool(), B: 3 }, finks)).toBe(2);
+  });
+
+  it('assigns colours to hybrid symbols exhaustively, not greedily', () => {
+    // {G/W}{G/U} with G and W floating is payable only if the W takes the first
+    // symbol; a greedy "spend the first spare colour" would give it the G and
+    // then find nothing for {G/U}.
+    const cost: ManaCost = { hybrid: [['G', 'W'], ['G', 'U']] };
+    expect(distanceToPayable({ ...emptyPool(), G: 1, W: 1 }, cost)).toBe(0);
+    expect(distanceToPayable({ ...emptyPool(), G: 1 }, cost)).toBe(1);
+    expect(distanceToPayable({ ...emptyPool(), B: 2 }, cost)).toBe(2);
+  });
+
   it('counts the pips still unfunded, colour by colour', () => {
     expect(distanceToPayable(emptyPool(), { G: 2 })).toBe(2);
     expect(distanceToPayable({ ...emptyPool(), G: 1 }, { G: 2 })).toBe(1);
