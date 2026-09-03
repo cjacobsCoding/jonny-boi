@@ -449,6 +449,13 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     // table rather than into the anchored deck.
     enabledBy: (_c, t) => t.includes('"counterSpell"'),
     enablerBelongsToOpponent: true,
+    // A SEQUENCED witness across two seats: the anchored seat must cast one of
+    // its uncounterable spells while the opponent both HOLDS a counterspell and
+    // judges that spell worth countering. The 5,623-card pool (§3.118) made the
+    // grid's six attempts miss it on the observation scan's seed lane — the same
+    // shape token-copy hit, and the same remedy: the overtime lane, which only
+    // runs when the grid left the mechanic unfired.
+    extraAnchorAttempts: SOAK_SEQUENCED_EXTRA_ATTEMPTS,
   },
   { id: 'x-cost', label: '{X} costs — an X announced and paid', witnessKind: 'event', printedBy: hasKey('xCost') },
   { id: 'kicker', label: 'kicker — the optional cost offered at cast', witnessKind: 'event', printedBy: hasKey('kicker') },

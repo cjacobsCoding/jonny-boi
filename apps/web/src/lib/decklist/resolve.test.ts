@@ -73,13 +73,16 @@ describe('resolveDecklist', () => {
     expect(plan.counts).toEqual({ total: 24, playable: 24, blocked: 0, notFound: 0 });
   });
 
+  // "Sunblade Seraph" is not a printed card ON PURPOSE: the app ships every card
+  // the compiler can play (§3.118), so no real card can stand in for one from
+  // outside the pool any more — Baneslayer Angel, the old stand-in, is in it.
   it('compiles an outside card into a genuinely playable definition', async () => {
-    const { entries } = parseDeckText('2 Baneslayer Angel');
+    const { entries } = parseDeckText('2 Sunblade Seraph');
     const plan = await resolveDecklist(
       entries,
       fakeScryfall([
         scryfallCard({
-          name: 'Baneslayer Angel',
+          name: 'Sunblade Seraph',
           mana_cost: '{3}{W}{W}',
           cmc: 5,
           type_line: 'Creature — Angel',
@@ -95,7 +98,7 @@ describe('resolveDecklist', () => {
     expect(line!.status).toBe('compiled');
     expect(isPlayable(line!)).toBe(true);
     expect(line!.definition).toMatchObject({
-      name: 'Baneslayer Angel',
+      name: 'Sunblade Seraph',
       types: ['creature'],
       cost: { generic: 3, W: 2 },
       power: 4,
@@ -182,9 +185,9 @@ describe('resolveDecklist', () => {
     let requests = 0;
     const counting: FetchLike = async (url, init) => {
       requests += 1;
-      return fakeScryfall([scryfallCard({ name: 'Baneslayer Angel' })])(url, init);
+      return fakeScryfall([scryfallCard({ name: 'Sunblade Seraph' })])(url, init);
     };
-    const { entries } = parseDeckText('2 Baneslayer Angel\n2 Baneslayer Angel\n1 Baneslayer Angel');
+    const { entries } = parseDeckText('2 Sunblade Seraph\n2 Sunblade Seraph\n1 Sunblade Seraph');
     await resolveDecklist(entries, counting);
 
     expect(requests).toBe(1);
