@@ -905,10 +905,10 @@ describe('CR 702 — the counter keyword family (§3.110)', () => {
       for (let guard = 0; guard < 12 && s.stack.length > 0; guard++) s = pass(s, familyRegistry);
       return s;
     };
-    let s = castAndSettle(state, squire!.instanceId);
+    const afterSquire = castAndSettle(state, squire!.instanceId);
     // A 1/1 beside a 0/1: greater power, so it fires.
     expect(noted).toEqual(['evolve']);
-    s = castAndSettle(s, giant!.instanceId);
+    castAndSettle(afterSquire, giant!.instanceId);
     expect(noted).toEqual(['evolve', 'evolve']);
     // Its own entry compares the source to itself and fails: a control.
     noted.length = 0;
