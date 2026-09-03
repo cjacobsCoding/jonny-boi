@@ -60,6 +60,8 @@ import { cardValue, findInstance, type CardValueContext } from './card-value.js'
 import type { ContinuousIndex } from './board-stats.js';
 import { keywordsOf, power as effPower, statTotal, toughnessLeft } from './board-stats.js';
 import type { HeuristicWeights } from './weights.js';
+// poison family (§3.105): the two lethal clocks, kept apart.
+import { attackerPressure, lifeEquivalent, pressureIsLethal } from './poison-pressure.js';
 
 /**
  * Everything a scorer needs: the board, whose side we are scoring for, and the
@@ -665,14 +667,21 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     // decision — rebuilding it here walked the battlefield again for every
     // fog the pilot priced.
     const index = ctx.index;
-    let incoming = 0;
+    // Both clocks (§3.105): an infect swing is priced at the life scale and
+    // lethal is asked of each clock on its own, as the main-phase fog does.
+    let damage = 0;
+    let poison = 0;
     for (const id of combat.attackers) {
       const attacker = ctx.state.battlefield.find((c) => c.instanceId === id);
-      if (attacker && attacker.controller !== ctx.player) incoming += effPower(attacker, index);
+      if (!attacker || attacker.controller === ctx.player) continue;
+      const p = attackerPressure(attacker, effPower(attacker, index), index);
+      damage += p.damage;
+      poison += p.poison;
     }
+    const incoming = lifeEquivalent({ damage, poison }, ctx.weights);
     if (incoming <= 0) return 0;
     const life = ctx.state.players[ctx.player].life;
-    if (incoming >= life) return ctx.weights.lethalBurnScore;
+    if (pressureIsLethal(ctx.state, ctx.player, { damage, poison })) return ctx.weights.lethalBurnScore;
     if (incoming < ctx.weights.fogMinimumDamagePrevented && life > ctx.weights.desperateLifeThreshold) {
       return 0;
     }

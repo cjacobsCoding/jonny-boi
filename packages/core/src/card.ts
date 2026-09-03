@@ -288,6 +288,34 @@ export interface KeywordFlags {
    * with two ward abilities charges the sum, which is what paying both costs.
    */
   readonly ward?: number;
+  // --- poison family (§3.105) ---------------------------------------------------
+  /**
+   * **Infect** (CR 702.90) — damage this source deals is still DAMAGE, but its
+   * RESULTS change (CR 120.3): to a creature it lands as that many -1/-1
+   * counters instead of marked damage (120.3d); to a player it lands as that
+   * many poison counters instead of life loss (120.3b). Deathtouch, lifelink,
+   * "deals damage" triggers and prevention all still apply, which is why this is
+   * a flag read at the ONE damage-result funnel (`damage-result.ts`) and not a
+   * replacement effect. Multiple instances are redundant (702.90f).
+   */
+  readonly infect?: boolean;
+  /**
+   * **Wither** (CR 702.80) — infect's creature half only: damage to a creature
+   * lands as -1/-1 counters (120.3d); damage to a player is ordinary life loss.
+   * Printed on spells as well as creatures (Puncture Blast), so the funnel reads
+   * the SOURCE's keywords wherever the source is (702.80c).
+   */
+  readonly wither?: boolean;
+  /**
+   * **Toxic N** (CR 702.164) — a player dealt COMBAT damage by this creature
+   * also gets N poison counters, in ADDITION to the damage's other results
+   * (120.3g). Only combat damage, and only players: a toxic creature that
+   * fights, or that hits a planeswalker, gives no poison.
+   *
+   * A PAYLOAD keyword, not a boolean: "total toxic value" is the SUM of every
+   * instance (702.164b), so it merges additively exactly as `ward` does.
+   */
+  readonly toxic?: number;
 }
 
 /**

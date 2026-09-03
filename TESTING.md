@@ -159,6 +159,7 @@ The pure, deterministic MTG engine. Everything here runs without DOM or network.
 | `combat.test.ts` | Attack/block legality, damage assignment, evasion |
 | `combat-declaration.test.ts` | Declaring **no** attackers/blockers still advances the step |
 | `sba.test.ts` | State-based actions (lethal damage, 0 toughness, life ≤ 0) |
+| `poison.test.ts` | Infect / wither / toxic through the one CR 120.3 damage-result funnel; ten poison loses (CR 704.5c); poison survives clone/serialize (§3.105) |
 | `triggers.test.ts` | Triggered abilities: matching, ordering, resolution |
 | `continuous.test.ts` | "Until end of turn" effects apply then genuinely expire |
 | `mana.test.ts` / `mana-abilities.test.ts` | Cost payment; **summoning sickness gates `{T}`**; one tap = one mode |

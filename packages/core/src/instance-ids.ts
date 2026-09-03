@@ -133,6 +133,8 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
   replacementExpired: { id: 'none', source: 'id' },
   lifeChanged: { player: 'none', delta: 'none', to: 'none' },
   gainLife: { player: 'none', amount: 'none' },
+  // poison family (§3.105) — `lifeChanged`'s shape: a player and two counts.
+  poisonChanged: { player: 'none', delta: 'none', to: 'none' },
   creatureDied: { instanceId: 'id', name: 'none' },
   loyaltyChanged: { instanceId: 'id', delta: 'none', to: 'none' },
   planeswalkerDied: { instanceId: 'id', name: 'none' },

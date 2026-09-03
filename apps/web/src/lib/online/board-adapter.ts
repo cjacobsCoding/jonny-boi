@@ -99,6 +99,7 @@ function seatView(
     id: player.id,
     name,
     life: player.life,
+    poison: player.poison,
     handCount: player.handCount,
     // The server already decided visibility: own hand present, opponent's is null.
     hand: player.hand ? visibleHand(player.hand) : null,

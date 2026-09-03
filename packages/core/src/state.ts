@@ -306,6 +306,18 @@ export interface PlayerState {
   landsPlayedThisTurn: number;
   /** Set when this player has lost (and why is in the event log). */
   hasLost: boolean;
+  // --- poison family (§3.105) ---------------------------------------------------
+  /**
+   * POISON COUNTERS (CR 122.1f) — the one counter a PLAYER can carry in this
+   * engine. Ten or more loses the game as a state-based action (CR 704.5c).
+   *
+   * OPTIONAL, for the reason `turnFactsA` is: every state serialized, persisted
+   * or hand-built before poison existed has no field here, and "absent" must
+   * read as zero rather than as `undefined` arithmetic. Never read it directly —
+   * `poisonOf` / `addPoisonCounters` in `poison.ts` are the one reader and the
+   * one writer, exactly as `life` has one damage funnel.
+   */
+  poison?: number;
   // Zones owned by this player. Battlefield instances are addressed globally too
   // (see GameState.battlefield) but each card's `controller` is authoritative.
   library: CardInstance[];

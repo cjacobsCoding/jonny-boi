@@ -162,6 +162,9 @@ function clonePlayer(p: PlayerState): PlayerState {
     manaPool: clonePool(p.manaPool),
     landsPlayedThisTurn: p.landsPlayedThisTurn,
     hasLost: p.hasLost,
+    // poison family (§3.105): copied only when present, so a state that never had
+    // the field stays byte-identical to one cloned before poison existed.
+    ...(p.poison !== undefined ? { poison: p.poison } : {}),
     library: cloneInstances(p.library),
     hand: cloneInstances(p.hand),
     graveyard: cloneInstances(p.graveyard),

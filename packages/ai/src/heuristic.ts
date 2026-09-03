@@ -60,9 +60,7 @@ import {
   forcedBlockAssignment,
   hasCardGrants,
   hasCastableBackFace,
-  indexReplacements,
   playableFaceOf,
-  projectDamage,
   hasType,
   isCreature,
   isLand,
@@ -98,6 +96,8 @@ import { bestLandDrop, describeLandDrop, rankLandDrops, totalAvailableMana } fro
 import { manaPreferenceOf } from './mana-preference.js';
 import type { DecisionContext, DecisionTrace, Pilot, PilotView } from './pilot.js';
 import type { HeuristicWeights } from './weights.js';
+// poison family (§3.105): the two lethal clocks, kept apart.
+import { attackPressure, attackerPressure, faceThreat, lifeEquivalent, poisonRemaining, pressureIsLethal } from './poison-pressure.js';
 import { DEFAULT_HEURISTIC_WEIGHTS } from './weights.js';
 
 /** The id the heuristic pilot registers under and is selected by from data. */
@@ -1928,10 +1928,13 @@ function fogValue(
   // attacker, and one that guards only its own controller does nothing at all.
   if (view.activePlayer === me) return 0;
   if (intent.protectsMeOnly && defendingPlayer(view) !== me) return 0;
-  const incoming = totalIncomingDamage(view, combat.attackers, index);
+  // Both clocks (§3.105): lethal is asked of each; the fog's VALUE is priced on
+  // the life scale, so a fog against an infect swing is worth what it saves.
+  const pressure = attackPressure(view, combat.attackers, me, index);
+  const incoming = lifeEquivalent(pressure, weights);
   if (incoming <= 0) return 0;
   const life = view.players[me].life;
-  if (incoming >= life) return weights.lethalBurnScore;
+  if (pressureIsLethal(view, me, pressure)) return weights.lethalBurnScore;
   // A fog is a whole card, so a poke is not worth one — unless we are already in
   // the red, where every point is worth spending a card on.
   if (incoming < weights.fogMinimumDamagePrevented && life > weights.desperateLifeThreshold) return 0;
@@ -2021,11 +2024,18 @@ function bestPumpPlay(
 
   // Face damage already coming through from our unblocked attackers — the baseline
   // the pump adds to when we're deciding whether it's lethal.
+  // Kept as the two clocks (§3.105): an unblocked infect attacker is poison,
+  // and pumping it adds to the POISON clock, never to the life one.
   let unblockedDamage = 0;
+  let unblockedPoison = 0;
   if (iAmAttacking) {
     for (let i = 0; i < engagements.length; i++) {
       const e = engagements[i] as { own: CardInstance; enemies: CardInstance[] };
-      if (e.enemies.length === 0) unblockedDamage += power(e.own, index);
+      if (e.enemies.length === 0) {
+        const p = attackerPressure(e.own, power(e.own, index), index);
+        unblockedDamage += p.damage;
+        unblockedPoison += p.poison;
+      }
     }
   }
 
@@ -2034,12 +2044,15 @@ function bestPumpPlay(
     if (enemies.length === 0) {
       // Unblocked attacker: the pump is face damage. Lethal is the whole game.
       if (!iAmAttacking) continue;
-      if (unblockedDamage + intent.power >= view.players[opp].life) {
+      const pumped = attackerPressure(own, intent.power, index);
+      const withPump = { damage: unblockedDamage + pumped.damage, poison: unblockedPoison + pumped.poison };
+      if (pressureIsLethal(view, opp, withPump)) {
         return {
           target: own.instanceId,
           score: weights.lethalBurnScore,
           reason: explain
-            ? `pump ${own.def.name} for lethal (${unblockedDamage} + ${intent.power} ≥ ${view.players[opp].life})`
+            ? `pump ${own.def.name} for lethal (${unblockedDamage} + ${intent.power} ≥ ${view.players[opp].life}` +
+              (withPump.poison > 0 ? `, or ${withPump.poison} poison ≥ ${poisonRemaining(view, opp)} remaining)` : ')')
             : NO_REASON,
         };
       }
@@ -2270,20 +2283,36 @@ function lethalAlphaStrike(
 ): readonly InstanceId[] | undefined {
   const life = view.players[opp]?.life ?? 0;
   if (life <= 0) return undefined; // already won; nothing to plan
-  const powers: number[] = [];
+  // TWO CLOCKS, judged separately (§3.105). An infect attacker's power is
+  // poison and cannot be added to the life sum; a toxic attacker's power is
+  // life damage with poison riding on it. Each clock is asked "is this group
+  // alone lethal even if EVERY blocker is spent on it?" — the conservative
+  // direction: however the defender actually splits blockers between the two
+  // groups, the group they under-block connects for at least that much.
+  const damagePowers: number[] = [];
+  const poisonPowers: number[] = [];
+  let total = 0;
   for (const id of eligible) {
     const attacker = findInstance(view, id);
     if (!attacker) continue;
-    powers.push(power(attacker, index));
+    total += 1;
+    const p = attackerPressure(attacker, power(attacker, index), index);
+    if (p.damage > 0) damagePowers.push(p.damage);
+    if (p.poison > 0) poisonPowers.push(p.poison);
   }
-  if (powers.length === 0) return undefined;
+  if (total === 0) return undefined;
   const blockers = creaturesControlledBy(view, opp).filter((c) => !c.tapped).length;
-  if (blockers >= powers.length) return undefined; // they can block everything
+  if (blockers >= total) return undefined; // they can block everything
   // Sort descending and drop the ones the defender would most want to stop.
-  powers.sort((a, b) => b - a);
-  let connecting = 0;
-  for (let i = blockers; i < powers.length; i++) connecting += powers[i] as number;
-  return connecting >= life ? eligible : undefined;
+  const connecting = (powers: number[]): number => {
+    powers.sort((a, b) => b - a);
+    let sum = 0;
+    for (let i = blockers; i < powers.length; i++) sum += powers[i] as number;
+    return sum;
+  };
+  if (connecting(damagePowers) >= life) return eligible;
+  const remaining = poisonRemaining(view, opp);
+  return poisonPowers.length > 0 && connecting(poisonPowers) >= remaining ? eligible : undefined;
 }
 
 /**
@@ -2890,20 +2919,27 @@ function chooseBlock(
   if (Object.keys(combat.blocks).length > 0) return undefined;
 
   const myLife = view.players[me].life;
-  const incomingDamage = totalIncomingDamage(view, combat.attackers, index);
-  const facingLethal = incomingDamage >= myLife;
-  const desperate = facingLethal || myLife <= weights.desperateLifeThreshold;
+  // Both clocks (§3.105): lethal asked of each, desperation when EITHER is short
+  // — nine poison is the poison clock's "one life", whatever the life total says.
+  const pressure = attackPressure(view, combat.attackers, me, index);
+  const incomingDamage = lifeEquivalent(pressure, weights);
+  const facingLethal = pressureIsLethal(view, me, pressure);
+  const desperate =
+    facingLethal ||
+    myLife <= weights.desperateLifeThreshold ||
+    poisonRemaining(view, me) * weights.poisonCounterLifeEquivalent <= weights.desperateLifeThreshold;
 
   const availableBlockers = creaturesControlledBy(view, me).filter((c) => !c.tapped);
   const used = new Set<InstanceId>();
   const blocks: { blocker: InstanceId; attacker: InstanceId }[] = [];
 
-  // Sort attackers by power desc — block the biggest hits first (most life saved /
-  // worst threat removed).
+  // Sort attackers by face threat desc — block the biggest hits first (most life
+  // saved / worst threat removed). Face threat is power on the life scale, so an
+  // infect attacker sorts ahead of a vanilla one of the same power.
   const attackers = [...combat.attackers]
     .map((id) => findInstance(view, id))
     .filter((c): c is CardInstance => c !== undefined)
-    .sort((a, b) => power(b, index) - power(a, index));
+    .sort((a, b) => faceThreat(b, index, weights) - faceThreat(a, index, weights));
 
   // BLOCK REQUIREMENTS FIRST (CR 509.1c/d). These are not a preference — a
   // declaration that satisfies fewer requirements than it could is REJECTED
@@ -2961,8 +2997,8 @@ function chooseBlock(
  * is a blocker, a first-striker that kills outright is not a trade, and against a
  * TRAMPLER the body chosen is the one that soaks the most (DESIGN §3.43).
  *
- * Exported (with `canBlockByEvasion`, `needsMultipleBlockers`, `planWalkerAttack`,
- * `saboteurTriggerCount` and `totalIncomingDamage`) for `combat-forecast.ts`
+ * Exported (with `canBlockByEvasion`, `needsMultipleBlockers`, `planWalkerAttack`
+ * and `saboteurTriggerCount`) for `combat-forecast.ts`
  * (DESIGN §3.47): the lookahead pilot predicts the DEFENDER's response with this
  * exact function, so the model and the modelled defender cannot drift apart.
  * Export-only — no behaviour here changed.
@@ -3246,8 +3282,11 @@ function biggestThreatWithin(
  * requirements existed.
  */
 function threatRank(creature: CardInstance, index: ContinuousIndex, weights: HeuristicWeights): number {
+  // `faceThreat` is `power` priced on the life scale (§3.105): an infect 2/2
+  // is the four-damage clock it actually is, a toxic 1/1 carries its counters.
+  // Byte-identical to bare power on every creature without either keyword.
   return (
-    power(creature, index) +
+    faceThreat(creature, index, weights) +
     (hasBlockRequirement(creature, index) ? weights.blockRequirementThreatValue : 0)
   );
 }
@@ -3271,36 +3310,9 @@ function biggestThreat(
   return best;
 }
 
-/** Total unblocked-if-unblocked damage the listed attackers represent. */
-export function totalIncomingDamage(
-  view: PilotView,
-  attackerIds: readonly InstanceId[],
-  index: ContinuousIndex,
-): number {
-  // The replacement layer (CR 614/615), asked ONCE for the whole swing: a
-  // Gratuitous Violence on their side makes every attacker hit twice as hard,
-  // and a Fog already on the stack makes the whole attack worth nothing. A
-  // blocking decision made on printed power in front of either is a decision
-  // made about a different board.
-  //
-  // PROJECTED, never applied — `projectDamage` writes nothing, so a pilot
-  // weighing its options cannot spend the prevention shield it is weighing.
-  // Inert when nothing replaces anything: one `.length` read.
-  const replacements = indexReplacements(view as GameState);
-  const defender = defendingPlayer(view);
-  let total = 0;
-  for (const id of attackerIds) {
-    const a = findInstance(view, id);
-    if (!a) continue;
-    const printed = power(a, index);
-    total +=
-      replacements.length === 0
-        ? printed
-        : projectDamage(view as GameState, replacements, a, a.controller, undefined, defender, printed, true)
-            .amount;
-  }
-  return total;
-}
+// `totalIncomingDamage` used to live here. It became `attackPressure` in
+// `poison-pressure.ts` (§3.105), which answers the same question as a PAIR —
+// life damage and poison — with the same once-per-swing replacement projection.
 
 /**
  * Whether this permanent shrugs off an effect that says "destroy".
@@ -3687,13 +3699,18 @@ function collectBlockCandidates(
   if (Object.keys(combat.blocks).length > 0) return; // already declared
 
   const myLife = view.players[me].life;
-  const incoming = totalIncomingDamage(view, combat.attackers, index);
-  const desperate = incoming >= myLife || myLife <= weights.desperateLifeThreshold;
+  // The same two-clock read as `chooseBlock` (§3.105), so the search and the
+  // live pilot cannot disagree about what "desperate" means.
+  const pressure = attackPressure(view, combat.attackers, me, index);
+  const desperate =
+    pressureIsLethal(view, me, pressure) ||
+    myLife <= weights.desperateLifeThreshold ||
+    poisonRemaining(view, me) * weights.poisonCounterLifeEquivalent <= weights.desperateLifeThreshold;
   const available = creaturesControlledBy(view, me).filter((c) => !c.tapped);
   const attackers = [...combat.attackers]
     .map((id) => findInstance(view, id))
     .filter((c): c is CardInstance => c !== undefined)
-    .sort((a, b) => power(b, index) - power(a, index));
+    .sort((a, b) => faceThreat(b, index, weights) - faceThreat(a, index, weights));
 
   // Both the value-judged block and the survival block, when they differ: under
   // pressure "chump to live" and "only trade profitably" are genuinely different

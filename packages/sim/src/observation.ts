@@ -328,6 +328,8 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   counterPrevented: 'public',
   lifeChanged: 'public',
   gainLife: 'public',
+  // poison family (§3.105): a poison total is as face-up as a life total.
+  poisonChanged: 'public',
   creatureDied: 'public',
   // A walker's loyalty and its death are face-up battlefield facts, exactly
   // like a creature dying or a counter landing.

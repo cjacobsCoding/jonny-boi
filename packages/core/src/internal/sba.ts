@@ -34,6 +34,7 @@ import {
 import { moveToZone, resetInstanceForNewZone } from './zones.js';
 import { indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './continuous.js';
 import { detachFromHost, isLegallyAttached } from '../attachments.js';
+import { hasLethalPoison, POISON_LOSS_REASON } from '../poison.js';
 
 /** Run all pending SBAs until a fixpoint. Mutates the draft; emits events. */
 export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) => void): void {
@@ -155,8 +156,12 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
       // Cost: the keyword read is placed AFTER the damage test on purpose, so a
       // creature that is not dying at all — nearly every creature on nearly every
       // pass of this loop — never pays for it.
-      const destroyedByDamage =
-        remainingToughness(inst, mod) <= 0 || (inst.markedByDeathtouch && inst.damageMarked > 0);
+      // `markedByDeathtouch` stands ALONE (§3.105): it is set only by the damage
+      // funnel, only for nonzero damage, and infect/wither damage from a
+      // deathtouch source lands as -1/-1 counters with NO marked damage — yet CR
+      // 702.2b still destroys the creature, because it was dealt damage. Gating
+      // on `damageMarked > 0` would let a deathtouch-infect hit through.
+      const destroyedByDamage = remainingToughness(inst, mod) <= 0 || inst.markedByDeathtouch;
       const dead =
         effectiveToughness(inst, mod) <= 0 ||
         (destroyedByDamage && !effectiveKeywords(inst, mod).indestructible);
@@ -191,6 +196,13 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
       const p = state.players[pid];
       if (!p.hasLost && p.life <= 0) {
         loseGame(state, pid, 'life total 0 or less', emit);
+        changed = true;
+      }
+      // poison family (§3.105) — CR 704.5c: ten or more poison counters loses.
+      // Checked in the same pass as life, and independently of it: a player at
+      // 20 life and 10 poison has lost exactly as surely as one at 0 life.
+      if (!p.hasLost && hasLethalPoison(p)) {
+        loseGame(state, pid, POISON_LOSS_REASON, emit);
         changed = true;
       }
     }
@@ -432,6 +444,8 @@ export function stateBasedActionsPossible(state: GameState): boolean {
   // CR 704.5a/b — a lost seat not yet resolved into a winner, or a life total the
   // check has not seen yet.
   if (a.hasLost || b.hasLost || a.life <= 0 || b.life <= 0) return true;
+  // CR 704.5c (§3.105) — a poison total the check has not seen yet.
+  if (hasLethalPoison(a) || hasLethalPoison(b)) return true;
   // An "until end of turn" effect that SHRINKS something (a -X/-X, a Weakness).
   const continuous = state.continuous;
   for (let i = 0; i < continuous.length; i++) {

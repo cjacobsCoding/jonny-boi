@@ -10,6 +10,10 @@
  *   - trample: excess damage beyond a blocker's lethal threshold tramples to the
  *     defending player.
  *   - lifelink: damage dealt also gains its controller that much life.
+ *   - infect / wither / toxic (§3.105): what damage DOES once it lands — marks or
+ *     -1/-1 counters, life or poison, lifelink and toxic on top — is CR 120.3's
+ *     table, applied in ONE place (`damage-result.ts`) for combat and noncombat
+ *     damage alike; this file only decides how much is assigned to whom.
  *
  * Keywords and P/T are read through the continuous-effects layer (internal/
  * continuous.ts): a `ContinuousIndex` is built once per combat pass and threaded so
@@ -35,8 +39,6 @@ import {
   effectiveKeywords,
   loyaltyOf,
   remainingToughness,
-  removeDefense,
-  removeLoyalty,
 } from './stats.js';
 import { hasType, isBattle, isPlaneswalker } from '../card.js';
 import { protectionBlocksSource } from '../protection.js';
@@ -47,6 +49,7 @@ import { indexContinuous, NO_MOD } from './continuous.js';
 import { blockRequirementProblem } from './block-solver.js';
 import type { ReplacementIndex } from './replacement.js';
 import { indexReplacements, replaceDamage } from './replacement.js';
+import { applyDamageResult } from './damage-result.js';
 
 /** Effective keywords for an instance under the given continuous index. */
 function kw(inst: CardInstance, index: ContinuousIndex): KeywordFlags {
@@ -361,43 +364,13 @@ function applyDamage(
     // already had).
     if (amount <= 0) return;
   }
-  if (typeof target === 'string') {
-    const player = state.players[target];
-    player.life -= amount;
-    emit({ type: 'damageDealt', source: source.instanceId, target, amount, combat: true });
-    emit({ type: 'lifeChanged', player: target, delta: -amount, to: player.life });
-  } else if (isPlaneswalker(target.def)) {
-    // Damage to a planeswalker removes that many loyalty counters immediately
-    // (CR 120.3c) — loyalty is its life total, not marked damage cleared at
-    // cleanup. The 0-loyalty death is the SBA pass that follows the damage step.
-    const removed = removeLoyalty(target, amount);
-    emit({ type: 'damageDealt', source: source.instanceId, target: target.instanceId, amount, combat: true });
-    if (removed > 0) {
-      emit({ type: 'loyaltyChanged', instanceId: target.instanceId, delta: -removed, to: loyaltyOf(target) });
-    }
-  } else if (isBattle(target.def)) {
-    // Damage to a battle removes that many DEFENSE counters immediately
-    // (CR 120.3d) — the exact shape of walker loyalty, and the 0-defense
-    // defeat is likewise the SBA pass that follows the damage step.
-    const removed = removeDefense(target, amount);
-    emit({ type: 'damageDealt', source: source.instanceId, target: target.instanceId, amount, combat: true });
-    if (removed > 0) {
-      emit({ type: 'defenseChanged', instanceId: target.instanceId, delta: -removed, to: defenseOf(target) });
-    }
-  } else {
-    // Protection's second half (CR 702.16e) was already applied at the top of
-    // this function, before the replacement layer — see the comment there for
-    // why the order matters.
-    target.damageMarked += amount;
-    if (kw(source, index).deathtouch) target.markedByDeathtouch = true;
-    emit({ type: 'damageDealt', source: source.instanceId, target: target.instanceId, amount, combat: true });
-  }
-  if (kw(source, index).lifelink) {
-    const controller = state.players[source.controller];
-    controller.life += amount;
-    emit({ type: 'gainLife', player: source.controller, amount });
-    emit({ type: 'lifeChanged', player: source.controller, delta: amount, to: controller.life });
-  }
+  // THE ONE DAMAGE-RESULT FUNNEL (CR 120.3, §3.105). Life loss or poison, loyalty,
+  // defense, marked damage or -1/-1 counters, deathtouch, lifelink and toxic are
+  // decided in `damage-result.ts` for combat and noncombat damage alike, so an
+  // infect creature that FIGHTS lands counters exactly as one that attacks.
+  // Protection's second half (CR 702.16e) was already applied at the top of this
+  // function, before the replacement layer — see the comment there for why.
+  applyDamageResult(state, source, target, amount, true, index, emit);
 }
 
 /**

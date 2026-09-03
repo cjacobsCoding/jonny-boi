@@ -388,6 +388,13 @@ export const KEYWORD_FLAGS: Readonly<Record<string, string>> = Object.freeze({
   // and specific - destruction effects and lethal damage, never 0 toughness or a
   // sacrifice. See `KeywordFlags.indestructible` in core for the whole rule.
   indestructible: 'indestructible',
+  // poison family (§3.105): infect (CR 702.90) and wither (CR 702.80) are read
+  // at core's CR 120.3 damage-result funnel. Being rows HERE also puts both into
+  // `KEYWORD_TOKEN`, so "gains infect until end of turn" (Tainted Strike) and
+  // "creatures you control have infect" compile as grants with no further rule.
+  // Toxic carries a NUMBER and parses through `parsePayloadKeyword` instead.
+  infect: 'infect',
+  wither: 'wither',
 });
 
 /** The keyword alternation used inside "gains … until end of turn" patterns. */
@@ -1023,6 +1030,33 @@ export function parseProtectionOrWard(word: string): KeywordFlags | null {
     return qualities === null ? null : { protectionFrom: qualities };
   }
   return null;
+}
+
+// --- poison family (§3.105) -----------------------------------------------------
+
+/** `Toxic N` (CR 702.164a) — "written 'toxic N,' where N is a number". */
+const TOXIC_PATTERN = /^toxic (\d+)$/;
+
+/**
+ * The third payload keyword. Toxic's whole payload is its number, so it parses
+ * like ward rather than like a flag; a form outside the pattern ("toxic X")
+ * returns `null` and the line reports, exactly as an odd ward cost does.
+ */
+function parseToxic(word: string): KeywordFlags | null {
+  const toxic = TOXIC_PATTERN.exec(word.trim().toLowerCase());
+  if (!toxic) return null;
+  const value = parseSignedInt(toxic[1] ?? '');
+  return Number.isFinite(value) && value > 0 ? { toxic: value } : null;
+}
+
+/**
+ * Every payload-carrying keyword the compiler reads — ward, protection AND
+ * toxic — behind one door, so the keyword-line compiler and the grant parser
+ * cannot disagree about which printed forms are real. `parseProtectionOrWard`
+ * keeps its name and its callers' meaning; this is the superset.
+ */
+export function parsePayloadKeyword(word: string): KeywordFlags | null {
+  return parseProtectionOrWard(word) ?? parseToxic(word);
 }
 
 /**
@@ -6214,14 +6248,14 @@ function parseKeywordList(text: string): KeywordFlags | null {
       flags[field] = true;
       continue;
     }
-    // The two PAYLOAD keywords — "ward {1}", "protection from black and from
-    // green" — carry a value rather than a boolean, and core already models
-    // both. They go through the same parser the printed keyword LINE uses
-    // (`parseProtectionOrWard`) so an Equipment and a creature cannot end up
-    // disagreeing about which forms are real: a quality outside the closed
-    // table ("protection from instants") still returns null and the whole
-    // line keeps reporting.
-    const payload = parseProtectionOrWard(word);
+    // The PAYLOAD keywords — "ward {1}", "protection from black and from
+    // green", "toxic 1" (§3.105) — carry a value rather than a boolean, and
+    // core models all three. They go through the same parser the printed
+    // keyword LINE uses (`parsePayloadKeyword`) so an Equipment and a creature
+    // cannot end up disagreeing about which forms are real: a quality outside
+    // the closed table ("protection from instants") still returns null and the
+    // whole line keeps reporting.
+    const payload = parsePayloadKeyword(word);
     if (payload === null) return null;
     Object.assign(flags, payload);
   }

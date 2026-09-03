@@ -52,7 +52,7 @@ import {
   ABILITY_WORDS,
   explainUnsupported,
   isVacuousClause,
-  parseProtectionOrWard,
+  parsePayloadKeyword,
   COST_NOUNS,
   COST_NOUN_PHRASE,
 } from './rules.js';
@@ -118,6 +118,22 @@ const COST_ASSIST_KEYWORDS: ReadonlySet<string> = new Set(['convoke', 'improvise
  * the card still reports honestly through that line’s own `missing` entry.
  */
 const TRIGGER_BACKED_KEYWORDS: ReadonlySet<string> = new Set(['bushido']);
+
+/**
+ * Keywords whose PAYLOAD lives in a keyword FIELD rather than a flag — Scryfall
+ * lists the bare word ("Ward", "Protection", "Toxic") while the printed line
+ * carries the value ("Ward {2}", "Protection from red", "Toxic 1"). The sweep
+ * treats the compiled field as the evidence that the line was implemented; a
+ * line the closed tables could not read leaves the field unset, so the keyword
+ * still reports through that line's own `missing` entry. The same table shape
+ * as {@link TRIGGER_BACKED_KEYWORDS}, and for the same reason (§3.105): the
+ * next payload keyword is a ROW here, not another `if (word === …)`.
+ */
+const PAYLOAD_KEYWORD_EVIDENCE: Readonly<Record<string, keyof KeywordFlags>> = Object.freeze({
+  ward: 'ward',
+  protection: 'protectionFrom',
+  toxic: 'toxic',
+});
 
 const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freeze({
   scry: 'scry',
@@ -761,10 +777,11 @@ function compileKeywordLine(line: string, assembly: Assembly, ctx: RuleContext):
       flags = mergeKeywordGrant(flags, { [field]: true });
       continue;
     }
-    // The two payload keywords - `Ward {N}` and `Protection from ...` - are not
-    // boolean flags, so they parse through their own closed tables. A form
-    // outside them ("Ward-Pay 3 life") falls through and reports the line.
-    const special = parseProtectionOrWard(word);
+    // The payload keywords - `Ward {N}`, `Protection from ...` and `Toxic N`
+    // (§3.105) - are not boolean flags, so they parse through their own closed
+    // tables. A form outside them ("Ward-Pay 3 life") falls through and
+    // reports the line.
+    const special = parsePayloadKeyword(word);
     if (special) {
       flags = mergeKeywordGrant(flags, special);
       continue;
@@ -1265,12 +1282,13 @@ export function compileCard(card: CompilableCard): CompileResult {
     // (prowess via its template, persist via a direct builder) — Scryfall
     // listing them again is not a second, unmodelled ability.
     if (KEYWORD_ABILITY_TEXT[word] || KEYWORD_ABILITY_BUILDERS[word]) continue;
-    // Scryfall lists ward and protection by their bare names; the printed line
-    // carries the payload ("Ward {2}", "Protection from red") and has already
-    // compiled it into the keyword fields - or already reported the line, in
-    // which case the missing-scan below still refuses a duplicate entry.
-    if (word === 'ward' && assembly.keywords.ward !== undefined) continue;
-    if (word === 'protection' && assembly.keywords.protectionFrom !== undefined) continue;
+    // Scryfall lists ward, protection and toxic by their bare names; the
+    // printed line carries the payload ("Ward {2}", "Protection from red",
+    // "Toxic 1") and has already compiled it into the keyword FIELD the table
+    // names - or already reported the line, in which case the missing-scan
+    // below still refuses a duplicate entry (see PAYLOAD_KEYWORD_EVIDENCE).
+    const payloadField = PAYLOAD_KEYWORD_EVIDENCE[word];
+    if (payloadField !== undefined && assembly.keywords[payloadField] !== undefined) continue;
     // "Enchant" and "Equip" are Scryfall's names for the attachment ability the
     // card's own printed line already compiled (see `assembleAttachment`). Without
     // this, every Aura and Equipment would report its central ability as missing

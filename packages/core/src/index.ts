@@ -695,3 +695,21 @@ export { loseGame, winGame } from './internal/sba.js';
 export type { SerializedState } from './serialize.js';
 export { serializeState, dumpState } from './serialize.js';
 
+// --- poison family (§3.105) -----------------------------------------------------
+// Poison counters as a player resource (CR 122.1f / 704.5c): the one reader and
+// the one writer of `PlayerState.poison`, exported so the cards package's
+// proliferate and "gets a poison counter" primitives, the pilot's lethal
+// arithmetic and the web seat panel all read the same number.
+export {
+  POISON_LOSS_THRESHOLD,
+  POISON_LOSS_REASON,
+  addPoisonCounters,
+  hasLethalPoison,
+  isPoisoned,
+  poisonOf,
+} from './poison.js';
+// The CR 120.3 damage-RESULT funnel — life loss or poison, loyalty, defense,
+// marked damage or -1/-1 counters, deathtouch, lifelink and toxic — exported so
+// every noncombat damage primitive applies the same table combat does.
+export { applyDamageResult } from './internal/damage-result.js';
+

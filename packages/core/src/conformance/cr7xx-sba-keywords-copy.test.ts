@@ -29,6 +29,9 @@ import {
   effectivePower,
   effectiveToughness,
   effectiveWardOf,
+  POISON_LOSS_THRESHOLD,
+  addPoisonCounters,
+  poisonOf,
   type CardDefinition,
   type CardInstance,
   type GameAction,
@@ -318,6 +321,85 @@ describe('CR 704 — state-based actions', () => {
     expect(after.players.B.hasLost).toBe(true);
     expect(after.gameOver).toBe(true);
     expect(after.winner).toBe('A');
+  });
+});
+
+// --- CR 702 / 704.5c: the poison family (§3.105) -----------------------------------
+
+describe('CR 702 / 704.5c — infect, wither, toxic and the poison loss', () => {
+  const INFECT_ELF: CardDefinition = creatureDef('Glistener Elf', 1, 1, { keywords: { infect: true } });
+  const WITHER_GANG: CardDefinition = creatureDef('Boggart Ram-Gang', 3, 3, { keywords: { wither: true } });
+  const TOXIC_REX: CardDefinition = creatureDef('Tyrranax Atrocity', 4, 4, { keywords: { toxic: 3 } });
+
+  /** A's `attacker` attacks; B blocks with `blocker` when given; combat resolves. */
+  function swing(state: GameState, attacker: CardInstance, blocker?: CardInstance): GameState {
+    let s = advanceTo(state, 'declareAttackers', registry);
+    s = act(s, { kind: 'declareAttackers', player: 'A', attackers: [attacker.instanceId] }, registry);
+    s = advanceTo(s, 'declareBlockers', registry);
+    s = act(
+      s,
+      {
+        kind: 'declareBlockers',
+        player: nonActive(s),
+        blocks: blocker ? [{ blocker: blocker.instanceId, attacker: attacker.instanceId }] : [],
+      },
+      registry,
+    );
+    // Not `advanceTo`: the 704.5c case ENDS the game at the damage step's SBA
+    // check, and a helper that insists on reaching postcombat would call the
+    // rule working correctly a failure to advance.
+    for (let guard = 0; guard < 100 && s.step !== 'postcombatMain' && !s.gameOver; guard++) s = pass(s, registry);
+    return s;
+  }
+
+  crTest('702.90c', 'infect damage to a creature is -1/-1 counters, and no damage is marked', () => {
+    const state = atMain();
+    const elf = putOnBattlefield(state, 'A', INFECT_ELF);
+    const bear = putOnBattlefield(state, 'B', creatureDef('Big Bear', 3, 3));
+    const s = swing(state, elf, bear);
+    const after = onBattlefield(s, bear.instanceId);
+    expect(after?.counters[MINUS_ONE_COUNTER]).toBe(1);
+    expect(after?.damageMarked).toBe(0);
+  });
+
+  crTest('702.90b', 'infect damage to a player is poison counters, and no life is lost', () => {
+    const state = atMain();
+    const elf = putOnBattlefield(state, 'A', INFECT_ELF);
+    const s = swing(state, elf);
+    expect(s.players.B.life).toBe(state.players.B.life);
+    expect(poisonOf(s.players.B)).toBe(1);
+  });
+
+  crTest('702.80a', 'wither damage to a creature is -1/-1 counters; to a player it is ordinary life loss', () => {
+    const blocked = atMain();
+    const gang = putOnBattlefield(blocked, 'A', WITHER_GANG);
+    const wall = putOnBattlefield(blocked, 'B', creatureDef('Wall', 0, 5));
+    const s1 = swing(blocked, gang, wall);
+    expect(onBattlefield(s1, wall.instanceId)?.counters[MINUS_ONE_COUNTER]).toBe(3);
+    const unblocked = atMain();
+    const gang2 = putOnBattlefield(unblocked, 'A', WITHER_GANG);
+    const s2 = swing(unblocked, gang2);
+    expect(s2.players.B.life).toBe(unblocked.players.B.life - 3);
+    expect(poisonOf(s2.players.B)).toBe(0);
+  });
+
+  crTest('702.164c', 'a player dealt combat damage by a toxic creature also gets N poison counters', () => {
+    const state = atMain();
+    const rex = putOnBattlefield(state, 'A', TOXIC_REX);
+    const s = swing(state, rex);
+    expect(s.players.B.life).toBe(state.players.B.life - 4);
+    expect(poisonOf(s.players.B)).toBe(3);
+  });
+
+  crTest('704.5c', 'a player with ten or more poison counters loses the game', () => {
+    const state = atMain();
+    const elf = putOnBattlefield(state, 'A', INFECT_ELF);
+    addPoisonCounters(state, 'B', POISON_LOSS_THRESHOLD - 1, () => {});
+    const s = swing(state, elf);
+    expect(poisonOf(s.players.B)).toBe(POISON_LOSS_THRESHOLD);
+    expect(s.players.B.hasLost).toBe(true);
+    expect(s.gameOver).toBe(true);
+    expect(s.winner).toBe('A');
   });
 });
 
