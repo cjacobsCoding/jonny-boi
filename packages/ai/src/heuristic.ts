@@ -86,6 +86,10 @@ import {
   DEFAULT_TRIGGER_WATCHES,
 } from '@jonny-boi/core';
 import type { TargetRestriction, TriggeredAbility } from '@jonny-boi/core';
+// The combat keyword family (DESIGN §3.107): core's own land reader for the
+// landwalk mirror, and the attack-requirement roster fix-up.
+import { controlsLandMatchingAny } from '@jonny-boi/core';
+import { boardOf, withRequiredAttackers } from './attack-requirements.js';
 import { cardValue, cardValueContext } from './card-value.js';
 import type { ContinuousIndex } from './board-stats.js';
 import { boardIndex, keywordsOf, power, statTotal, toughness, toughnessLeft } from './board-stats.js';
@@ -2453,7 +2457,7 @@ function buildAttackMatrix(
     const needsMany = needsMultipleBlockers(attacker, index);
     for (let b = 0; b < m; b++) {
       const blocker = enemyBlockers[b] as CardInstance;
-      if (needsMany || !canBlockByEvasion(attacker, blocker, index)) {
+      if (needsMany || !canBlockByEvasion(attacker, blocker, index, boardOf(view))) {
         matrix.blockValue[a * m + b] = ILLEGAL_BLOCK;
         continue;
       }
@@ -2634,6 +2638,16 @@ function chooseAttack(
     }
   }
 
+  // ATTACK REQUIREMENTS (CR 508.1d, §3.107): a creature that "attacks each
+  // combat if able" is added whatever the profit judgement said — leaving it
+  // home is an illegal declaration, and passing would only have the engine
+  // declare it alone. Same reference back when nothing was required.
+  const roster = withRequiredAttackers(view, index, chosen, eligible);
+  if (roster !== chosen) {
+    chosen.length = 0;
+    chosen.push(...roster);
+  }
+
   if (chosen.length === 0) {
     // Nothing profitable to attack with → declare no attackers (pass the step).
     return emit(ctx, passAction(view), 'no profitable attack — holding back', weights.passScore);
@@ -2807,7 +2821,7 @@ function attackIsProfitable(
   let bestEnemyValue = -Infinity; // value to the OPPONENT of their best block
   let eligibleBlockers = 0;
   for (const b of enemyBlockers) {
-    if (!canBlockByEvasion(attacker, b, index)) continue;
+    if (!canBlockByEvasion(attacker, b, index, boardOf(view))) continue;
     eligibleBlockers += 1;
     const bPower = power(b, index);
     const bTough = toughness(b, index);
@@ -2948,7 +2962,10 @@ function chooseBlock(
   // pilot and the engine cannot disagree about what the rule demands; it returns
   // `undefined` after one keyword pass when nothing on the board requires
   // anything, which is every ordinary combat.
-  const forced = forcedBlockAssignment(attackers, availableBlockers, index);
+  // The live board rides into the solver and the per-pair check for LANDWALK
+  // (§3.107): "able to block" must read the same lands the engine reads.
+  const board = boardOf(view);
+  const forced = forcedBlockAssignment(attackers, availableBlockers, index, board);
   if (forced) {
     for (const assignment of forced) {
       blocks.push(assignment);
@@ -2960,7 +2977,7 @@ function chooseBlock(
   // empty set by reference in every game with no delayed ability at all.
   const doomed = delayedRemovalTargets(view);
   for (const attacker of attackers) {
-    const blocker = pickBlocker(attacker, availableBlockers, used, desperate, weights, index, doomed);
+    const blocker = pickBlocker(attacker, availableBlockers, used, desperate, weights, index, doomed, board);
     if (blocker) {
       blocks.push({ blocker: blocker.instanceId, attacker: attacker.instanceId });
       used.add(blocker.instanceId);
@@ -3012,6 +3029,8 @@ export function pickBlocker(
   index: ContinuousIndex,
   /** Permanents a delayed ability will remove anyway — see {@link attackIsProfitable}. */
   doomed: ReadonlySet<InstanceId>,
+  /** The live board, for LANDWALK's read of the defender's lands (§3.107). */
+  battlefield: readonly CardInstance[] = NO_PERMANENTS,
 ): CardInstance | undefined {
   // A creature that can only be blocked by two or more is one this pilot cannot
   // block at all: it assigns a single blocker per attacker, and a lone blocker on
@@ -3025,7 +3044,7 @@ export function pickBlocker(
   let bestValue = -Infinity;
   for (const b of blockers) {
     if (used.has(b.instanceId)) continue;
-    if (!canBlockByEvasion(attacker, b, index)) continue;
+    if (!canBlockByEvasion(attacker, b, index, battlefield)) continue;
     const bPower = power(b, index);
     const bTough = toughness(b, index);
     // Who actually dies — deathtouch, first strike, indestructible and damage
@@ -3349,6 +3368,7 @@ export function canBlockByEvasion(
   attacker: CardInstance,
   blocker: CardInstance,
   index: ContinuousIndex,
+  battlefield: readonly CardInstance[] = NO_PERMANENTS,
 ): boolean {
   const ak = keywordsOf(attacker, index);
   const bk = keywordsOf(blocker, index);
@@ -3356,6 +3376,22 @@ export function canBlockByEvasion(
   if (bk.cantBlock) return false;
   if (ak.unblockable) return false;
   if (ak.flying && !(bk.flying || bk.reach)) return false;
+  /*
+   * THE COMBAT KEYWORD FAMILY (DESIGN §3.107), mirrored from core's `canBlock`
+   * for the same reason as everything else here: one illegal pair rejects the
+   * WHOLE declaration. Shadow is symmetric (CR 702.28b); "can block only
+   * creatures with flying" is the BLOCKER's restriction; landwalk reads the
+   * defender's lands off the battlefield the caller passes, exactly as core
+   * does (`controlsLandMatchingAny` is core's own reader, so the two agree).
+   */
+  if ((ak.shadow === true) !== (bk.shadow === true)) return false;
+  const blockOnly = bk.blockOnly;
+  if (blockOnly !== undefined && !blockOnly.attackerMustHaveAnyOf.some((keyword) => ak[keyword] === true)) {
+    return false;
+  }
+  if (ak.landwalk !== undefined && controlsLandMatchingAny(battlefield, blocker.controller, ak.landwalk)) {
+    return false;
+  }
   /*
    * PROTECTION'S BLOCKING HALF (CR 702.16e): an attacker with protection from a
    * quality can't be blocked by creatures having it. Core's `canBlock` has
@@ -3415,6 +3451,14 @@ export function canBlockByEvasion(
   }
   return true;
 }
+
+/**
+ * The board `canBlockByEvasion` / `pickBlocker` read when a caller passes none
+ * — "the defender controls no lands", read only by LANDWALK (§3.107). Every
+ * live decision passes the view's battlefield; the default exists for the
+ * test helpers that build two creatures and nothing else.
+ */
+const NO_PERMANENTS: readonly CardInstance[] = Object.freeze([]);
 
 /**
  * Whether this creature carries a block REQUIREMENT — "must be blocked if able" /
@@ -3641,11 +3685,15 @@ function collectAttackCandidates(
   const opp = otherPlayer(me);
   const enemyBlockers = creaturesControlledBy(view, opp).filter((c) => !c.tapped);
 
-  const profitable: InstanceId[] = [];
+  const judged: InstanceId[] = [];
   for (const id of offered.attackers) {
     const attacker = findInstance(view, id);
-    if (attacker && attackIsProfitable(attacker, enemyBlockers, weights, index, view)) profitable.push(id);
+    if (attacker && attackIsProfitable(attacker, enemyBlockers, weights, index, view)) judged.push(id);
   }
+  // Plus the required attackers (CR 508.1d, §3.107) — a candidate that left one
+  // home would be rejected by the engine, and a search cannot score a line it
+  // is never allowed to play.
+  const profitable = withRequiredAttackers(view, index, judged, offered.attackers) as InstanceId[];
   if (profitable.length > 0) {
     // The value-judged attack carries the same walker assignment the plain
     // heuristic would make, so the search's preferred line can actually kill a
@@ -3722,7 +3770,7 @@ function collectBlockCandidates(
     const used = new Set<InstanceId>();
     const blocks: { blocker: InstanceId; attacker: InstanceId }[] = [];
     for (const attacker of attackers) {
-      const blocker = pickBlocker(attacker, available, used, mode, weights, index, doomed);
+      const blocker = pickBlocker(attacker, available, used, mode, weights, index, doomed, boardOf(view));
       if (blocker) {
         blocks.push({ blocker: blocker.instanceId, attacker: attacker.instanceId });
         used.add(blocker.instanceId);

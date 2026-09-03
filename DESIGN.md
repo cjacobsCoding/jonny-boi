@@ -2370,6 +2370,83 @@ STATIC condition ("as long as"), which the layer system has no intervening-if fo
 away and were left for the measured next pick. The pilot does not price a spell's *own* infect
 (Tainted Strike as burn-to-lethal), and `effect-value` prices infect damage on creatures as the
 removal it already is through `toughnessLeft`, not as the permanent shrink it also is.
+### 3.107 The combat keyword family — exalted, rampage, flanking, landwalk, shadow, split second, provoke, myriad, and the attack-requirement solver — ✅ done
+
+Third pick off the §3.102 queue, and the first taken as a whole FAMILY: every keyword and one-clause
+template whose rule lives in the declare-attackers or declare-blockers step. Measured before building
+(`probe.mjs --keyword`, `near-miss-report.mjs`): exalted 20, rampage 10, flanking 7, landwalk 16 (13
+islandwalk + legendary + nonbasic), shadow 9, split second 8, myriad 12, provoke 4; templates "attacks
+each combat if able" 24, "can block only creatures with flying" 20, "attacks, it gets +0/+2" 17, "can't
+attack unless defending player controls an Island" 10, "more than one creature" 8, "blocks, it gets" 7,
+"becomes blocked, it gets" 7, "blocks a creature with flying" 6, "block an additional creature" 8.
+**Predicted ≈ 181 (provoke and the additional-blocker template deliberately excluded).**
+
+**Measured: 5,151 → 5,418 complete cards. +267.** More than predicted, and the excess is accounted for:
+two of the fixes were CLASS-level and reached cards outside the measured shapes — keyword lines split on
+`;` as well as `,` ("Flying; trample; rampage 4", "Vigilance; horsemanship" — Oracle's separator when a
+keyword carries a parameter), and a self-referential trigger body opening with "it" ("whenever ~ attacks,
+**it** gains flying") now compiles through the same self rule "~ gets" does. Both are rows, not branches.
+
+**The seam that unblocked three keywords at once is `triggeringInstances`** — "that creature" / "the
+blocking creature" — carried from the declaration event through `PendingTrigger`, the stack object, the
+clone, the resolution frame and into `EffectContext`, exactly the road `triggeringPlayer` already travels.
+`pumpUntilEndOfTurn` reads it through `params.subject: 'triggering'` (one reader, `subjectCreatures`);
+no second pump primitive. Four `TriggerEvent` rows sit beside `blocksOrBecomesBlocked`, each with its own
+printed firing count: `creatureAttacksAlone` (exalted, CR 506.5 "alone" = exactly one attacker; the
+source may be a land — Cathedral of War), `blocks`, `becomesBlocked` (ONE fire per declaration, CR
+509.1h), and `becomesBlockedByCreature` (ONE fire PER BLOCKER, CR 702.25b — the matcher fans out one
+pending ability per blocker, `FIRES_PER_TRIGGERING_INSTANCE`). Flanking's "without flanking" and "blocks a
+creature with flying" are `counterpartLacksKeyword` / `counterpartHasKeyword` on the CONDITION, judged
+by the runtime against EFFECTIVE keywords — a flier by anthem counts — so `triggers.ts` stays pure.
+
+**Rampage is a scaled pump, not a primitive:** `DerivedValue.times` ("+N/+N for each") on the one
+`intParam` reader, and a `creaturesBlockingThisBeyondFirst` count read off the live block map as the
+ability resolves (CR 702.23b — calculated once, on resolution). `TRIGGER_BACKED_KEYWORDS` gained its row.
+
+**The pair rules are rows in `canBlock`:** shadow as one inequality (CR 702.28b is symmetric, and the
+half an evasion-only implementation forgets is that a Soltari cannot block a Bear); `blockOnly` as the
+blocker's own restriction; landwalk reading the DEFENDER's lands through `land-conditions.ts`, the one
+reader of the closed `LandCondition` table (`subtype | legendary | nonbasic`) that "can't attack unless
+defending player controls an Island" also reads. Landwalk is the one evasion rule that needs the board,
+so `canBlock` and the solver take a `battlefield` parameter; a caller that omits it is asserting the
+defender has no lands, and every live caller passes the real one. `maxBlockers` is the dual of
+`minBlockers`, judged at the same declaration-level site.
+
+**Attack requirements are the mirror of the block solver** (`attack-requirements.ts`, CR 508.1c/d): ONE
+reader (`attackDeclarationProblem`) for the offer path, the apply path and the requirement half; a
+declaration that leaves a Goblin Brigand home is rejected. ⚠️ Passing the step used to mean "no
+attackers"; with a required creature able, that is not a legal declaration, so `advanceStep` performs the
+forced minimum ITSELF through the same `commitAttackDeclaration` the action path uses (taps, event,
+exalted triggers) — refusing the pass would deadlock every pilot that answers "pass" to a step it does not
+understand. No search is needed yet: every expressible requirement is per-creature and unconditional, and
+the module comment says where a solver would start.
+
+**Split second** is a flag like flash, read from both sides: the offer pass withdraws casts, cyclings
+and non-mana activations while it holds (one filter, paid only then), and the three apply paths refuse
+them with one wording. Mana abilities are `tapForMana` and are never touched (CR 702.61b).
+
+**Myriad compiles to a RECORDED vacuity.** Two players means "each opponent other than defending
+player" is the empty set; the flag stays on the definition and `CompileResult.vacuous` carries the
+reason (`MYRIAD_VACUOUS_REASON`), so a third seat finds these twelve cards by grep rather than by surprise.
+
+**Mirrored in the pilot**, for the reason §3.102 gives: `canBlockByEvasion` reads shadow/blockOnly/
+landwalk off the same board; every roster-building site (heuristic, policy candidates, hybrid's proven
+lethal, lookahead's forecast) runs through `withRequiredAttackers`, which asks core's
+`requiredAttackerIds` rather than restating the rule.
+
+⚠️ **Left out, and why.** Provoke (4 cards) needs a requirement that a SPECIFIC blocker block a SPECIFIC
+attacker plus an untap — a per-blocker row the block solver's DP does not carry yet; its cards keep
+reporting. "Can block an additional creature each combat" (8) needs `combat.blocks` to stop being a
+blocker→attacker map, which is a damage-assignment change, not a keyword. Exalted/rampage/flanking are
+not yet priced by the attack forecaster — legal play was the bar this round, not valuation.
+
+⚠️ **The bench number, honestly.** The first after-run read 105 games/sec against a 146 baseline taken
+earlier in the day — a 28% "regression" that a CPU profile could not find (no new function in the top
+40; `generateLegalActions` still the flat 6% it was). The machine was at 65% load from three sibling
+agents. An INTERLEAVED A/B — stash the family, rebuild, bench; restore, rebuild, bench, same minute —
+read 113/93 (baseline) vs 149/150 (family) games/sec with identical game outcomes (A won 628/1500 in
+both). So: no measurable hot-path cost, and a reminder that a single bench number under shared load is
+not a measurement. Gate: full suite green; lint 0 errors.
 
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
 

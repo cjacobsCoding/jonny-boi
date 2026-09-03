@@ -120,6 +120,13 @@ export interface CompileResult {
   readonly matchedRules: readonly string[];
   /** Empty when `status` is `'complete'`. */
   readonly missing: readonly UnsupportedClause[];
+  /**
+   * Printed abilities that compiled by doing NOTHING because the rule is
+   * vacuously satisfied in this engine (myriad at two players — DESIGN §3.107).
+   * Present only when at least one clause is such; a card here is still
+   * `'complete'`, and the list is the record a future multiplayer engine reads.
+   */
+  readonly vacuous?: readonly VacuousClause[];
 }
 
 /**
@@ -303,6 +310,27 @@ export interface ClauseContribution {
    * one field rather than two flags.
    */
   readonly playLandsFrom?: readonly import('@jonny-boi/core').LandPlayZone[];
+  /**
+   * A clause that compiled COMPLETELY and does NOTHING in this engine because
+   * the rule it states is vacuously satisfied here — myriad's "for each
+   * opponent other than defending player" over a two-player table (DESIGN
+   * §3.107). Recorded on the result as {@link CompileResult.vacuous}, never
+   * dropped: the day a third seat exists this is the list of cards whose
+   * meaning changes, and a grep for the keyword field on the definition finds
+   * them too.
+   */
+  readonly vacuous?: VacuousClause;
+}
+
+/**
+ * A printed ability that is implemented by DOING NOTHING, with the reason that
+ * is exact rather than an approximation — see {@link ClauseContribution.vacuous}.
+ */
+export interface VacuousClause {
+  /** The printed keyword or clause. */
+  readonly text: string;
+  /** Why nothing is the faithful implementation HERE, and what would change it. */
+  readonly reason: string;
 }
 
 /** A compiler rule: a pattern over one normalized clause + what it builds. */

@@ -32,6 +32,7 @@ import {
   POISON_LOSS_THRESHOLD,
   addPoisonCounters,
   poisonOf,
+  generateLegalActions,
   type CardDefinition,
   type CardInstance,
   type GameAction,
@@ -50,6 +51,7 @@ import {
   pass,
   putOnBattlefield,
   registryWith,
+  rejectionOf,
 } from './harness.js';
 
 const FILE = 'cr7xx-sba-keywords-copy';
@@ -443,6 +445,150 @@ describe('CR 702 — ward', () => {
     const s = shockAt(state, mine);
     expect(s.stack).toHaveLength(1);
     expect(s.stack[0]?.kind).toBe('spell');
+  });
+});
+
+// --- CR 702: the combat keyword family (DESIGN §3.107) ------------------------------
+
+describe('CR 702 — the combat keyword family', () => {
+  const SHADOW = creatureDef('Dauthi Mercenary', 2, 1, { keywords: { shadow: true } });
+  const ISLANDWALKER = creatureDef('Pale Bears', 2, 2, { keywords: { landwalk: [{ kind: 'subtype', subtype: 'island' }] } });
+  /** A land with the Island SUBTYPE — landwalk reads the type line, not the name. */
+  const ISLAND: CardDefinition = { ...landDef('Island', 'U'), subtypes: ['Island'] };
+  /** The family's registry: a probe that pumps the TRIGGERING creatures. */
+  const familyRegistry = registryWith({
+    noop: () => {},
+    pumpTriggering: (ctx) => {
+      const power = typeof ctx.params.power === 'number' ? ctx.params.power : 0;
+      const toughness = typeof ctx.params.toughness === 'number' ? ctx.params.toughness : 0;
+      for (const id of ctx.triggeringInstances ?? []) {
+        ctx.addContinuousEffect({ target: id, power, toughness, duration: 'endOfTurn' });
+      }
+    },
+  });
+
+  /** A's creature attacks; the defender is offered blockers; returns that state. */
+  function attackInto(state: GameState, attackerId: number, reg = registry): GameState {
+    const declare = advanceTo(state, 'declareAttackers', reg);
+    let s = act(declare, { kind: 'declareAttackers', player: 'A', attackers: [attackerId] }, reg);
+    for (let guard = 0; guard < 20 && s.stack.length > 0; guard++) s = pass(pass(s, reg), reg);
+    s = advanceTo(s, 'declareBlockers', reg);
+    return s.priorityPlayer === nonActive(s) ? s : pass(s, reg);
+  }
+
+  crTest('702.28b', 'a creature with shadow can be blocked only by a creature with shadow, and vice versa', () => {
+    const state = atMain();
+    const mercenary = putOnBattlefield(state, 'A', SHADOW);
+    const bear = putOnBattlefield(state, 'B', BEAR);
+    const blockers = attackInto(state, mercenary.instanceId);
+    expect(
+      rejectionOf(blockers, { kind: 'declareBlockers', player: 'B', blocks: [{ blocker: bear.instanceId, attacker: mercenary.instanceId }] }, registry),
+    ).toMatch(/cannot block/);
+    // The mirror: a Bear attacks, and the shadow creature may not block it.
+    const reverse = atMain();
+    const attacker = putOnBattlefield(reverse, 'A', BEAR);
+    const shade = putOnBattlefield(reverse, 'B', SHADOW);
+    const reverseBlockers = attackInto(reverse, attacker.instanceId);
+    expect(
+      rejectionOf(reverseBlockers, { kind: 'declareBlockers', player: 'B', blocks: [{ blocker: shade.instanceId, attacker: attacker.instanceId }] }, registry),
+    ).toMatch(/cannot block/);
+  });
+
+  crTest('702.18b', 'a creature with islandwalk can’t be blocked while the defending player controls an Island', () => {
+    const state = atMain();
+    const bears = putOnBattlefield(state, 'A', ISLANDWALKER);
+    const blocker = putOnBattlefield(state, 'B', BEAR);
+    putOnBattlefield(state, 'B', ISLAND);
+    const blockers = attackInto(state, bears.instanceId);
+    expect(
+      rejectionOf(blockers, { kind: 'declareBlockers', player: 'B', blocks: [{ blocker: blocker.instanceId, attacker: bears.instanceId }] }, registry),
+    ).toMatch(/cannot block/);
+    // Without the Island the same block stands.
+    const dry = atMain();
+    const bears2 = putOnBattlefield(dry, 'A', ISLANDWALKER);
+    const blocker2 = putOnBattlefield(dry, 'B', BEAR);
+    const dryBlockers = attackInto(dry, bears2.instanceId);
+    expect(
+      rejectionOf(dryBlockers, { kind: 'declareBlockers', player: 'B', blocks: [{ blocker: blocker2.instanceId, attacker: bears2.instanceId }] }, registry),
+    ).toBeUndefined();
+  });
+
+  crTest('702.61a', 'while a spell with split second is on the stack, players can’t cast spells or activate non-mana abilities', () => {
+    const suddenShock: CardDefinition = {
+      id: 'sudden-shock-7xx',
+      name: 'Sudden Shock',
+      types: ['instant'],
+      cost: { generic: 1 },
+      keywords: { splitSecond: true },
+      effects: [{ primitive: 'noop' }],
+    };
+    const response: CardDefinition = { id: 'response-7xx', name: 'Response', types: ['instant'], effects: [{ primitive: 'noop' }] };
+    const state = atMain();
+    const [shock] = giveHand(state, 'A', [suddenShock]);
+    const [answer] = giveHand(state, 'B', [response]);
+    const land = putOnBattlefield(state, 'A', MOUNTAIN);
+    let s = act(state, { kind: 'tapForMana', player: 'A', instanceId: land.instanceId }, registry);
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: shock!.instanceId }, registry);
+    // B, holding a free instant, is offered no cast and is refused one.
+    const toB = pass(s, registry);
+    expect(toB.priorityPlayer).toBe('B');
+    expect(generateLegalActions(toB).some((a) => a.kind === 'castSpell')).toBe(false);
+    expect(rejectionOf(toB, { kind: 'castSpell', player: 'B', instanceId: answer!.instanceId }, registry)).toMatch(/split second/);
+    // Mana abilities are exempt (CR 702.61b): a land still taps.
+    const theirLand = putOnBattlefield(toB, 'B', MOUNTAIN);
+    expect(rejectionOf(toB, { kind: 'tapForMana', player: 'B', instanceId: theirLand.instanceId }, registry)).toBeUndefined();
+  });
+
+  crTest('702.90a', 'exalted pumps the creature that attacks alone, once per instance of exalted', () => {
+    const exalted: CardDefinition = {
+      ...landDef('Cathedral of War', 'C'),
+      triggers: [
+        { condition: { on: 'creatureAttacksAlone' }, effects: [{ primitive: 'pumpTriggering', params: { power: 1, toughness: 1 } }], label: 'Exalted' },
+      ],
+    };
+    const state = atMain();
+    const bear = putOnBattlefield(state, 'A', BEAR);
+    putOnBattlefield(state, 'A', exalted);
+    putOnBattlefield(state, 'A', exalted);
+    const blockers = attackInto(state, bear.instanceId, familyRegistry);
+    const it = onBattlefield(blockers, bear.instanceId)!;
+    expect(effectivePower(it, aggregateFor(blockers, it.instanceId))).toBe(BEAR.power! + 2);
+    expect(effectiveToughness(it, aggregateFor(blockers, it.instanceId))).toBe(BEAR.toughness! + 2);
+  });
+
+  crTest('702.25a', 'flanking gives each blocking creature without flanking −1/−1', () => {
+    const cavalry: CardDefinition = {
+      ...creatureDef('Benalish Cavalry', 2, 2, { keywords: { flanking: true } }),
+      triggers: [
+        {
+          condition: { on: 'becomesBlockedByCreature', counterpartLacksKeyword: 'flanking' },
+          effects: [{ primitive: 'pumpTriggering', params: { power: -1, toughness: -1 } }],
+          label: 'Flanking',
+        },
+      ],
+    };
+    const state = atMain();
+    const attacker = putOnBattlefield(state, 'A', cavalry);
+    const bear = putOnBattlefield(state, 'B', BEAR);
+    const knight = putOnBattlefield(state, 'B', creatureDef('Flanking Knight', 2, 2, { keywords: { flanking: true } }));
+    let s = attackInto(state, attacker.instanceId, familyRegistry);
+    s = act(
+      s,
+      {
+        kind: 'declareBlockers',
+        player: 'B',
+        blocks: [
+          { blocker: bear.instanceId, attacker: attacker.instanceId },
+          { blocker: knight.instanceId, attacker: attacker.instanceId },
+        ],
+      },
+      familyRegistry,
+    );
+    for (let guard = 0; guard < 20 && s.stack.length > 0; guard++) s = pass(pass(s, familyRegistry), familyRegistry);
+    const shrunk = onBattlefield(s, bear.instanceId)!;
+    const exempt = onBattlefield(s, knight.instanceId)!;
+    expect(effectivePower(shrunk, aggregateFor(s, shrunk.instanceId))).toBe(BEAR.power! - 1);
+    expect(effectivePower(exempt, aggregateFor(s, exempt.instanceId))).toBe(2);
   });
 });
 

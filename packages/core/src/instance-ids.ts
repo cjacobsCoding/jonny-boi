@@ -273,6 +273,14 @@ const NON_EVENT_INSTANCE_ID_FIELDS = [
   'instanceIds',
   /** `ResolutionFrame.effectTargets` — per-effect aims parked mid-resolution. */
   'effectTargets',
+  /**
+   * `PendingTrigger` / `TriggeredStackObject` / `ResolutionFrame` /
+   * `EffectContext.triggeringInstances` — "that creature": the objects a combat
+   * declaration was about, carried to the trigger's body (DESIGN §3.107).
+   * Always creatures declared attacking or blocking, which the whole table
+   * watched — never a card in a hand or a library.
+   */
+  'triggeringInstances',
   /** `ModeChoice.appliesToInstanceId` — which object a chosen mode applies to. */
   'appliesToInstanceId',
   /** `ReplacementQuery.recipientIs` — the object a replacement is asked about. */

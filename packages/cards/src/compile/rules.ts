@@ -16,6 +16,7 @@
 
 import type {
   BooleanKeywordName,
+  LandCondition,
   CardFilter,
   CardType,
   ChosenValueSubject,
@@ -401,6 +402,11 @@ export const KEYWORD_FLAGS: Readonly<Record<string, string>> = Object.freeze({
   // Toxic carries a NUMBER and parses through `parsePayloadKeyword` instead.
   infect: 'infect',
   wither: 'wither',
+  // The combat keyword family (DESIGN §3.107): shadow is the symmetric block
+  // rule `canBlock` reads (CR 702.28b); split second is the timing lock the
+  // engine's offer pass reads (CR 702.61a), a flag exactly as flash is.
+  shadow: 'shadow',
+  'split second': 'splitSecond',
 });
 
 /** The keyword alternation used inside "gains … until end of turn" patterns. */
@@ -4414,12 +4420,87 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       );
     },
   },
+  // --- the combat keyword family (DESIGN §3.107) --------------------------------
+  {
+    // RAMPAGE N (CR 702.23a) — "Whenever this creature becomes blocked, it gets
+    // +N/+N until end of turn for each creature blocking it beyond the first."
+    //
+    // A pattern rule like bushido (the number is the payload), but NOT built
+    // through `triggerFrom`: no Oracle sentence compiles to a count-scaled pump,
+    // so the effect is authored directly — the same `pumpUntilEndOfTurn` every
+    // pump uses, with a DERIVED power/toughness whose `times` is N. The count is
+    // read as the ability resolves (CR 702.23b), off the live block map.
+    id: 'keyword-rampage',
+    description: '"Rampage N" — the becomes-blocked pump scaling with blockers beyond the first',
+    pattern: /^rampage ([0-9]+)$/,
+    build(match) {
+      const amount = Number.parseInt(match[1] ?? '', 10);
+      if (!Number.isFinite(amount)) return null;
+      const perBlocker = { countOf: 'creaturesBlockingThisBeyondFirst' as const, times: amount };
+      return {
+        triggers: [
+          {
+            condition: { on: 'becomesBlocked' },
+            effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: perBlocker, toughness: perBlocker } }],
+            label: `Rampage ${amount}`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    // "Whenever ~ blocks a creature with FLYING, ~ gets +2/+0 until end of
+    // turn" (Netcaster Spider). The quality is a CONDITION on the other creature
+    // in the pair, judged by the runtime against its effective keywords — so a
+    // flier by anthem counts — and the nameable qualities are the closed
+    // `BLOCKER_QUALITY_KEYWORDS` table.
+    id: 'trigger-blocks-creature-with',
+    description: '"Whenever ~ blocks a creature with KEYWORD, BODY"',
+    pattern: /^whenever ~ blocks a creature with ([a-z ]+), (.+)$/,
+    build(match, ctx) {
+      const keyword = BLOCKER_QUALITY_KEYWORDS[(match[1] ?? '').trim()];
+      if (keyword === undefined) return null;
+      const body = selfBody(match[2] ?? '');
+      return triggerFrom(ctx, { on: 'blocks', counterpartHasKeyword: keyword }, body, `Blocks a creature with ${match[1]}: ${body}`);
+    },
+  },
+  {
+    id: 'trigger-blocks',
+    description: '"Whenever ~ blocks, BODY" — the blocker\'s half alone (Shu Defender)',
+    pattern: /^whenever ~ blocks, (.+)$/,
+    build(match, ctx) {
+      const body = selfBody(match[1] ?? '');
+      return triggerFrom(ctx, { on: 'blocks' }, body, `Blocks: ${body}`);
+    },
+  },
+  {
+    id: 'trigger-becomes-blocked',
+    description: '"Whenever ~ becomes blocked, BODY" — the attacker\'s half alone (Deeproot Warrior)',
+    pattern: /^whenever ~ becomes blocked, (.+)$/,
+    build(match, ctx) {
+      const body = selfBody(match[1] ?? '');
+      return triggerFrom(ctx, { on: 'becomesBlocked' }, body, `Becomes blocked: ${body}`);
+    },
+  },
+  {
+    // The printed union bushido's reminder text spells out, on a card that
+    // prints it directly rather than as the keyword.
+    id: 'trigger-blocks-or-becomes-blocked',
+    description: '"Whenever ~ blocks or becomes blocked, BODY"',
+    pattern: /^whenever ~ blocks or becomes blocked, (.+)$/,
+    build(match, ctx) {
+      const body = selfBody(match[1] ?? '');
+      return triggerFrom(ctx, { on: 'blocksOrBecomesBlocked' }, body, `Blocks or becomes blocked: ${body}`);
+    },
+  },
   {
     id: 'trigger-attacks',
     description: '"Whenever ~ attacks, BODY"',
     pattern: /^whenever ~ attacks, (.+)$/,
     build(match, ctx) {
-      return triggerFrom(ctx, { on: 'attacks' }, match[1] ?? '', `Attacks: ${match[1] ?? ''}`);
+      // "it gets +0/+2" is the source pumping itself — see `selfBody` (§3.107).
+      const body = selfBody(match[1] ?? '');
+      return triggerFrom(ctx, { on: 'attacks' }, body, `Attacks: ${body}`);
     },
   },
   {
@@ -5500,6 +5581,57 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       // "except by X or more" has no fixed value to enforce - report it.
       if (minimum === null || minimum < 1) return null;
       return { keywords: { minBlockers: minimum } };
+    },
+  },
+  // --- the combat keyword family (DESIGN §3.107): one-clause combat templates ----
+  {
+    // The dual of the rule above: a CAP on blockers rather than a minimum,
+    // judged at the same declaration-level site (Norwood Riders, Charging Rhino).
+    id: 'cant-be-blocked-by-more-than-n',
+    description: `"~ can't be blocked by more than one creature"`,
+    pattern: new RegExp(`^~ can'?t be blocked by more than ${COUNT_TOKEN} creatures?$`),
+    build(match) {
+      const cap = parseCount(match[1]);
+      if (cap === null || cap < 1) return null;
+      return { keywords: { maxBlockers: cap } };
+    },
+  },
+  {
+    // The BLOCKER'S own restriction on what it may block (Welkin Tern, Cloud
+    // Sprite): the attacker must carry one of the named keywords. The nameable
+    // qualities are the closed `BLOCKER_QUALITY_KEYWORDS` table, exactly as for
+    // "except by creatures with …" — "can block only Walls" keeps reporting.
+    id: 'can-block-only-creatures-with',
+    description: `"~ can block only creatures with flying"`,
+    pattern: /^~ can block only creatures with ([a-z ]+)$/,
+    build(match) {
+      const keyword = BLOCKER_QUALITY_KEYWORDS[(match[1] ?? '').trim()];
+      if (keyword === undefined) return null;
+      return { keywords: { blockOnly: { attackerMustHaveAnyOf: [keyword] } } };
+    },
+  },
+  {
+    // An attack REQUIREMENT (CR 508.1d) — the attacker-side mirror of "must be
+    // blocked if able" (Goblin Brigand, Bloodrock Cyclops). Judged by core's
+    // `attack-requirements.ts`, which also performs the forced declaration when
+    // the active player passes the step.
+    id: 'attacks-each-combat-if-able',
+    description: '"~ attacks each combat if able" — an attack REQUIREMENT (CR 508.1d)',
+    pattern: /^~ attacks each combat if able$/,
+    build() {
+      return { keywords: { mustAttack: true } };
+    },
+  },
+  {
+    // An attack RESTRICTION (CR 508.1c) reading the defender's lands through
+    // the same closed table landwalk uses (Sea Monster, Red Cliffs Armada).
+    id: 'cant-attack-unless-defender-controls',
+    description: `"~ can't attack unless defending player controls an Island"`,
+    pattern: /^~ can'?t attack unless defending player controls (an? [a-z ]+)$/,
+    build(match) {
+      const condition = LAND_CONDITION_PHRASES[(match[1] ?? '').trim()];
+      if (condition === undefined) return null;
+      return { keywords: { cantAttackUnlessDefenderControls: [condition] } };
     },
   },
   {
@@ -7526,6 +7658,50 @@ export function isVacuousClause(clause: string): boolean {
 }
 
 /**
+ * Why myriad compiles to nothing here — worded for the result's `vacuous`
+ * list, where a future multiplayer engine will read it (DESIGN §3.107).
+ */
+export const MYRIAD_VACUOUS_REASON =
+  'myriad (CR 702.116a) creates token copies attacking each opponent OTHER THAN the defending player; ' +
+  'this engine is strictly two-player, so that set is empty and the ability does nothing — ' +
+  'the printed rule, not an approximation. Re-examine the moment a third seat exists.';
+
+/** A landwalk contribution for one row of the closed `LandCondition` table. */
+function landwalkOf(condition: LandCondition): ClauseContribution {
+  return { keywords: { landwalk: [condition] } };
+}
+
+/**
+ * The printed land phrases a "can't attack unless defending player controls …"
+ * line may name, mapped to the closed `LandCondition` table — the SAME table
+ * landwalk compiles to, so "an Island" cannot mean two things (DESIGN §3.107).
+ * A phrase outside it ("a Desert", "two Islands") keeps reporting.
+ */
+const LAND_CONDITION_PHRASES: Readonly<Record<string, LandCondition>> = Object.freeze({
+  'a plains': { kind: 'subtype', subtype: 'plains' },
+  'an island': { kind: 'subtype', subtype: 'island' },
+  'a swamp': { kind: 'subtype', subtype: 'swamp' },
+  'a mountain': { kind: 'subtype', subtype: 'mountain' },
+  'a forest': { kind: 'subtype', subtype: 'forest' },
+  'a legendary land': { kind: 'legendary' },
+  'a nonbasic land': { kind: 'nonbasic' },
+});
+
+/**
+ * Rewrite the pronoun a SELF-REFERENTIAL trigger's body opens with — "whenever
+ * ~ attacks, IT gets +0/+2" — to the compiler's `~`, so the body compiles
+ * through the same self-pump rule "~ gets +0/+2" does (DESIGN §3.107).
+ *
+ * Only the self-watching trigger rules call this (attacks / blocks / becomes
+ * blocked), where "it" can mean nothing but the source. It is deliberately NOT
+ * a general normalisation: a spell's second sentence "It gets +1/+1" refers to
+ * the spell's target, and rewriting that would pump the caster's own card.
+ */
+function selfBody(body: string): string {
+  return body.replace(/^it (gets|gains|deals)\b/, '~ $1');
+}
+
+/**
  * Keyword abilities with a real implementation built from primitives, expressed
  * as a direct contribution. Persist is modelled exactly as the hand-authored
  * pool models it: a dies-trigger running `persistReturn`, which brings the
@@ -7588,6 +7764,62 @@ export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContr
     horsemanship: () => ({
       keywords: { horsemanship: true, blockRestriction: { blockerMustHaveAnyOf: ['horsemanship' as const] } },
     }),
+    // --- the combat keyword family (DESIGN §3.107) ------------------------------
+    // EXALTED (CR 702.90a) — "Whenever a creature you control attacks alone,
+    // that creature gets +1/+1 until end of turn." The trigger is NOT
+    // self-referential (the source may be a land — Cathedral of War), and the
+    // pumped creature is the ATTACKER: `subject: 'triggering'` reads the lone
+    // attacker the runtime carried to the body. One instance of exalted is one
+    // trigger, so a board of three exalted permanents pumps +3/+3 by firing
+    // three separate abilities — exactly CR 702.90b.
+    exalted: () => ({
+      triggers: [
+        {
+          condition: { on: 'creatureAttacksAlone' as const },
+          effects: [
+            { primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1, subject: 'triggering' } },
+          ],
+          label: 'Exalted',
+        },
+      ],
+    }),
+    // FLANKING (CR 702.25a) — "Whenever a creature without flanking blocks this
+    // creature, the blocking creature gets -1/-1 until end of turn." The FLAG is
+    // what the counterpart filter reads (a flanking blocker is exempt), and the
+    // trigger fires once PER qualifying blocker (CR 702.25b) with that blocker
+    // as its subject.
+    flanking: () => ({
+      keywords: { flanking: true },
+      triggers: [
+        {
+          condition: { on: 'becomesBlockedByCreature' as const, counterpartLacksKeyword: 'flanking' as const },
+          effects: [
+            { primitive: 'pumpUntilEndOfTurn', params: { power: -1, toughness: -1, subject: 'triggering' } },
+          ],
+          label: 'Flanking',
+        },
+      ],
+    }),
+    // MYRIAD (CR 702.116a) — "for each opponent OTHER THAN defending player,
+    // create a token copy attacking that player". This engine is strictly
+    // two-player, so that set is EMPTY and the ability does nothing: the exact
+    // rule, not an approximation. The flag is still recorded on the definition
+    // and the vacuity on the result, so a third seat cannot forget these cards.
+    myriad: () => ({
+      keywords: { myriad: true },
+      vacuous: { text: 'Myriad', reason: MYRIAD_VACUOUS_REASON },
+    }),
+    // LANDWALK (CR 702.18b) — one builder per printed walk, all rows of the
+    // closed `LandCondition` table core's `canBlock` reads. "Legendary
+    // landwalk" and "nonbasic landwalk" are real printed lines and so real
+    // rows; a walk outside the table has no builder and keeps reporting.
+    plainswalk: () => landwalkOf({ kind: 'subtype', subtype: 'plains' }),
+    islandwalk: () => landwalkOf({ kind: 'subtype', subtype: 'island' }),
+    swampwalk: () => landwalkOf({ kind: 'subtype', subtype: 'swamp' }),
+    mountainwalk: () => landwalkOf({ kind: 'subtype', subtype: 'mountain' }),
+    forestwalk: () => landwalkOf({ kind: 'subtype', subtype: 'forest' }),
+    'legendary landwalk': () => landwalkOf({ kind: 'legendary' }),
+    'nonbasic landwalk': () => landwalkOf({ kind: 'nonbasic' }),
     persist: () => ({
       triggers: [
         {
