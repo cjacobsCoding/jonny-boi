@@ -71,6 +71,17 @@ const KNOWN_UNPRICED: Readonly<Record<string, string>> = Object.freeze({
   // its counters left; a suspended card is priced by the spell it becomes).
   tickDownCounter: 'upkeep-trigger body only — the pilot prices the time/fade counters through cardValue',
   suspendTick: 'delayed-trigger body only — the free cast it leads to is priced as the spell itself',
+  // §3.111 — the graveyard-casting family's bodies. Every one reads its SOURCE
+  // (the card in the graveyard or in exile) and the value context carries no
+  // source, so a price here could only be flat. The pilot prices them where the
+  // source IS known: `bestGraveyardAbility` in heuristic.ts, by the closed
+  // `GraveyardAbilityKind` table (an unearth is one attack, a scavenge is
+  // counters on the best attacker, an embalm is a body, a return is a card).
+  unearthReturn: 'graveyard-ability body — priced by kind in bestGraveyardAbility, which knows the source',
+  scavengeCounters: 'graveyard-ability body — priced by kind in bestGraveyardAbility, which knows the source',
+  graveyardTokenCopy: 'graveyard-ability body — priced by kind in bestGraveyardAbility, which knows the source',
+  returnSourceFromGraveyard:
+    'graveyard-ability body and Rancor’s trigger body — priced by kind in bestGraveyardAbility; as a trigger it is card advantage the pilot cannot steer',
   createEmblem: 'unreachable from pool refs today; an emblem would score flat',
   fight: 'unreachable from pool refs today; a fight would score flat, blind to both bodies',
   returnChosenToHand: 'unreachable from pool refs today',

@@ -1059,6 +1059,37 @@ export interface CardDefinition {
    * alongside {@link flashback}.
    */
   readonly flashbackLifeCost?: number;
+  // --- the graveyard-casting family (§3.111) -----------------------------------
+  /**
+   * A NON-MANA rider on the flashback cost — "Flashback—Sacrifice three
+   * creatures" (Dread Return), "Flashback—Tap three untapped white creatures
+   * you control" (Battle Screech), "Flashback—Sacrifice a Mountain" (Lava
+   * Dart). The SAME closed shape a printed "as an additional cost" uses
+   * ({@link additionalCost}), paid through the same cast-time question, and
+   * charged only on the graveyard cast. Sits beside {@link flashback}, whose
+   * mana half is then EMPTY for every card that prints one of these.
+   */
+  readonly flashbackAdditionalCost?: AdditionalCastCost;
+  /**
+   * The OTHER "cast this card from your graveyard" keywords — retrace (CR
+   * 702.81a), jump-start (702.133a), escape (702.138a). Each is a kind, an
+   * optional alternative mana cost and a mandatory non-mana rider; how the
+   * spell LEAVES the stack is the closed `GRAVEYARD_CAST_EXIT` table. Read
+   * beside {@link flashback} by ONE accessor, `graveyardCastOptionsOf`, so the
+   * offer loop, the cast path and the pilot agree on every way a card in the
+   * graveyard may be cast. See `graveyard-casting.ts`.
+   */
+  readonly graveyardCasts?: readonly import('./graveyard-casting.js').GraveyardCastAbility[];
+  /**
+   * ACTIVATED abilities that function while this card is in a GRAVEYARD —
+   * unearth (CR 702.84a), scavenge (702.96a), embalm (702.128a), eternalize
+   * (702.129a), encore (702.141a) and the printed "{cost}: Return ~ from your
+   * graveyard to your hand". Indexed by the `activateGraveyardAbility` action
+   * exactly as {@link activated} is by `activateAbility`, and kept apart from
+   * it for the reason {@link cycling} is: a battlefield activation starts by
+   * finding a permanent. See `graveyard-casting.ts`.
+   */
+  readonly graveyardAbilities?: readonly import('./graveyard-casting.js').GraveyardAbility[];
   /**
    * CYCLING — "{cost}, Discard this card: Draw a card" (CR 702.29), plus the
    * TYPECYCLING/LANDCYCLING variants whose effect is a library search instead of
@@ -1507,8 +1538,15 @@ export function colorsOfDefinition(def: CardDefinition): readonly ManaColor[] {
  * that prints one is implemented.
  */
 export interface AdditionalCastCost {
-  /** Which zone the payment leaves, and what the move means. */
-  readonly kind: 'sacrifice' | 'discard';
+  /**
+   * Which zone the payment leaves, and what the move means. §3.111 added the
+   * two kinds the graveyard-casting family prints — `tap` ("Flashback—Tap
+   * three untapped white creatures you control": tap N untapped permanents
+   * matching the filter) and `exileFromGraveyard` (escape's "Exile five other
+   * cards from your graveyard"). Where each is paid from is the closed
+   * `ADDITIONAL_COST_ZONE` table in `graveyard-casting.ts`.
+   */
+  readonly kind: 'sacrifice' | 'discard' | 'tap' | 'exileFromGraveyard';
   /** How many cards/permanents (default 1). */
   readonly count?: number;
   /** What qualifies. Absent means "any card in that zone". */

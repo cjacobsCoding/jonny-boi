@@ -94,6 +94,13 @@ export function actionEquivalenceKey(state: GameState, action: GameAction): stri
       const name = handCardName(state, action.player, action.instanceId);
       return `suspend:${name}`;
     }
+    case 'activateGraveyardAbility': {
+      // §3.111 — keyed by NAME: two copies of the same unearth card in the
+      // graveyard are one move, exactly as two cycling lands in hand are.
+      const card = state.players[action.player].graveyard.find((c) => c.instanceId === action.instanceId);
+      const name = card?.def.name ?? String(action.instanceId);
+      return `gyact:${name}:${action.abilityIndex}:${targetsKey(action.targets)}`;
+    }
     case 'declareAttackers':
       return `atk:${[...action.attackers].sort(numeric).join(',')}`;
     case 'declareBlockers':

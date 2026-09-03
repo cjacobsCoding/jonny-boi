@@ -1443,11 +1443,39 @@ export const COST_NOUNS: Readonly<Record<string, CardFilter>> = Object.freeze({
   'legendary creature': { anyOfTypes: ['creature'], legendary: true },
   food: { anyOfSubtypes: ['Food'] },
   treasure: { anyOfSubtypes: ['Treasure'] },
+  // §3.111 — the basic land types, for "Flashback—Sacrifice a Mountain" (Lava
+  // Dart). Subtype filters, so a Mountain-typed dual pays exactly as printed.
+  plains: { anyOfSubtypes: ['Plains'] },
+  island: { anyOfSubtypes: ['Island'] },
+  swamp: { anyOfSubtypes: ['Swamp'] },
+  mountain: { anyOfSubtypes: ['Mountain'] },
+  forest: { anyOfSubtypes: ['Forest'] },
   clue: { anyOfSubtypes: ['Clue'] },
   goblin: { anyOfSubtypes: ['Goblin'] },
   desert: { anyOfSubtypes: ['Desert'] },
   token: { isToken: true },
 });
+
+/**
+ * §3.111 — the PLURAL forms a counted cost prints ("Sacrifice three
+ * creatures", "Tap three untapped white creatures you control"), mapped to
+ * the {@link COST_NOUNS} row each means. Closed on purpose: a plural outside
+ * it ("Sacrifice X Mountains" is refused for its X first) reports.
+ */
+const COST_NOUN_PLURALS: Readonly<Record<string, string>> = Object.freeze({
+  creatures: 'creature',
+  artifacts: 'artifact',
+  lands: 'land',
+  permanents: 'permanent',
+  mountains: 'mountain',
+  islands: 'island',
+  swamps: 'swamp',
+  forests: 'forest',
+});
+
+/** §3.111 — eternalize's token is "a 4/4" whatever the card printed (CR 702.129a). */
+const ETERNALIZED_POWER = 4;
+const ETERNALIZED_TOUGHNESS = 4;
 
 /** The cost nouns as an alternation, longest first so none is truncated. */
 export const COST_NOUN_PHRASE = Object.keys(COST_NOUNS)
@@ -3877,14 +3905,23 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // resolution-time choice, narrowed by the printed card type. Like that rule
     // it carries no `needsChosenTarget` — the card is picked by a CHOICE when the
     // effect resolves — so it may also be the body of a triggered ability.
+    // §3.111 widened by the corpus: "up to two target creature cards" (a count
+    // the chooser may fall short of — `optional` with the count as the max)
+    // and "target instant or sorcery card" (a two-type filter). Same primitive,
+    // same choice; two more rows of the printed shape.
     pattern: new RegExp(
-      `^(you may )?return target (${Object.keys(SPELL_TYPE_WORDS).join('|')}) card from your graveyard to your hand$`,
+      `^(you may )?return (?:target|up to ${COUNT_TOKEN} target) (${Object.keys(SPELL_TYPE_WORDS).join('|')})(?: or (${Object.keys(SPELL_TYPE_WORDS).join('|')}))? cards? from your graveyard to your hand$`,
     ),
     build(match) {
-      const type = SPELL_TYPE_WORDS[match[2] ?? ''];
+      const type = SPELL_TYPE_WORDS[match[3] ?? ''];
       if (!type) return null;
-      const params: Record<string, unknown> = { count: 1, filter: { anyOfTypes: [type] } };
-      if (match[1]) params.optional = true;
+      const second = match[4] === undefined ? undefined : SPELL_TYPE_WORDS[match[4]];
+      if (match[4] !== undefined && second === undefined) return null;
+      const upTo = match[2] === undefined ? null : parseCount(match[2]);
+      if (match[2] !== undefined && (upTo === null || upTo <= 0)) return null;
+      const types = second === undefined ? [type] : [type, second];
+      const params: Record<string, unknown> = { count: upTo ?? 1, filter: { anyOfTypes: types } };
+      if (match[1] || upTo !== null) params.optional = true;
       return effects({ primitive: 'returnFromGraveyard', params });
     },
   },
@@ -4696,6 +4733,32 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       // "it gets +0/+2" is the source pumping itself — see `selfBody` (§3.107).
       const body = selfBody(match[1] ?? '');
       return triggerFrom(ctx, { on: 'attacks' }, body, `Attacks: ${body}`);
+    },
+  },
+  {
+    // §3.111 — the card that RETURNS ITSELF from the graveyard as it arrives
+    // there. Rancor's wording is "put into a graveyard from the battlefield",
+    // which is neither `dies` (creatures only) nor `leaves` (an exiled Rancor
+    // must not come back) — it is its own `TriggerEvent`. The body is the one
+    // primitive the "{cost}: Return ~ from your graveyard to your hand"
+    // template runs, so the two cannot disagree about which hand it goes to.
+    // Whole-line rather than a body rule, so "return it to its owner's hand"
+    // as a spell's second sentence (about a target) is never mistaken for it.
+    id: 'trigger-returns-self-to-hand-from-graveyard',
+    description:
+      `"When ~ is put into a graveyard from the battlefield, return it to its owner's hand." (Rancor) / "When ~ dies, return it to its owner's hand."`,
+    pattern: /^when ~ (dies|is put into a graveyard from the battlefield), return it to its owner['’]s hand$/,
+    build(match) {
+      const on: TriggerCondition['on'] = match[1] === 'dies' ? 'dies' : 'putIntoGraveyardFromBattlefield';
+      return {
+        triggers: [
+          {
+            condition: { on },
+            effects: [{ primitive: 'returnSourceFromGraveyard', params: { to: 'hand' } }],
+            label: match[1] === 'dies' ? "Dies: return it to its owner's hand" : "Put into a graveyard: return it to its owner's hand",
+          },
+        ],
+      };
     },
   },
   {
@@ -5972,6 +6035,256 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const cost = parseManaSymbols(match[2] ?? '');
       if (!cost) return null;
       return { suspend: { count, cost, upkeep: [{ primitive: 'suspendTick' }] } };
+    },
+  },
+  // --- §3.111 the graveyard-casting family --------------------------------------
+  // Every rule below compiles a printed keyword LINE into one of the two
+  // shapes core's `graveyard-casting.ts` defines: an activated ability of a
+  // card in a graveyard (`graveyardAbilities`) or a cast from the graveyard
+  // (`graveyardCasts` / `flashbackAdditionalCost`). The reminder text is
+  // stripped before the table sees the line, so each pattern is the keyword
+  // and its cost and nothing else — and each cost table is CLOSED: a form
+  // outside it ("Unearth—Pay eight {E}", "Eternalize—{3}{U}{U}, Discard a
+  // card", "Flashback—{R}{R}, Discard X cards") matches nothing and reports.
+  {
+    id: 'unearth-cost',
+    description:
+      '"Unearth {2}{W}" (Scrapwork Cohort, Dregscape Zombie, Mishra\'s Research Desk) — CR 702.84a: return it to the battlefield with haste, exile it at the next end step or if it would leave',
+    pattern: /^unearth ((?:\{[^}]+\})+)$/,
+    build(match) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return {
+        graveyardAbilities: [
+          {
+            kind: 'unearth',
+            cost: { mana: cost },
+            effects: [{ primitive: 'unearthReturn' }],
+            timing: 'sorcery',
+            label: `Unearth ${formatManaCost(cost)}`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'scavenge-cost',
+    description:
+      '"Scavenge {4}{G}{G}" (Deadbridge Goliath, Slitherhead) — CR 702.96a: exile it from your graveyard, +1/+1 counters equal to its power on target creature',
+    pattern: /^scavenge ((?:\{[^}]+\})+)$/,
+    build(match, ctx) {
+      // "Equal to this card's power" is the PRINTED power; a `*` box (Boneyard
+      // Mycodrax) is a number this rule cannot read and stays reported.
+      if (typeof ctx.card.power !== 'number' || !Number.isInteger(ctx.card.power)) return null;
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return {
+        graveyardAbilities: [
+          {
+            kind: 'scavenge',
+            cost: { mana: cost },
+            exileSelf: true,
+            effects: [{ primitive: 'scavengeCounters', params: { targets: CREATURE_TARGET } }],
+            timing: 'sorcery',
+            label: `Scavenge ${formatManaCost(cost)}`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'embalm-cost',
+    description:
+      '"Embalm {3}{U}" (Tah-Crop Skirmisher, Sacred Cat) — CR 702.128a: exile it from your graveyard, a token copy that is a white Zombie with no mana cost',
+    pattern: /^embalm ((?:\{[^}]+\})+)$/,
+    build(match, ctx) {
+      // Printed only on creatures; the token is "a copy of it" and the
+      // exceptions below are the whole of CR 702.128a's "except" tail.
+      if (!ctx.card.typeLine.types.map((t) => t.toLowerCase()).includes('creature')) return null;
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return {
+        graveyardAbilities: [
+          {
+            kind: 'embalm',
+            cost: { mana: cost },
+            exileSelf: true,
+            effects: [
+              {
+                primitive: 'graveyardTokenCopy',
+                params: { except: { colors: ['W'], addSubtypes: ['zombie'], noManaCost: true } },
+              },
+            ],
+            timing: 'sorcery',
+            label: `Embalm ${formatManaCost(cost)}`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'eternalize-cost',
+    description:
+      '"Eternalize {4}{U}{U}" (Proven Combatant, Adorned Pouncer) — CR 702.129a: exile it from your graveyard, a token copy that is a 4/4 black Zombie with no mana cost',
+    // "Eternalize—{3}{U}{U}, Discard a card." (Sinuous Striker) prints a
+    // discard rider the graveyard-ability cost has no field for, and stays
+    // reported. Lazotep Archway (a LAND that eternalizes into a creature and
+    // "loses all other card types") is a type change this tail cannot say.
+    pattern: /^eternalize ((?:\{[^}]+\})+)$/,
+    build(match, ctx) {
+      if (!ctx.card.typeLine.types.map((t) => t.toLowerCase()).includes('creature')) return null;
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return {
+        graveyardAbilities: [
+          {
+            kind: 'eternalize',
+            cost: { mana: cost },
+            exileSelf: true,
+            effects: [
+              {
+                primitive: 'graveyardTokenCopy',
+                params: {
+                  except: {
+                    colors: ['B'],
+                    addSubtypes: ['zombie'],
+                    noManaCost: true,
+                    power: ETERNALIZED_POWER,
+                    toughness: ETERNALIZED_TOUGHNESS,
+                  },
+                },
+              },
+            ],
+            timing: 'sorcery',
+            label: `Eternalize ${formatManaCost(cost)}`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'encore-cost',
+    description:
+      '"Encore {4}{B}" (Exquisite Huntmaster, Impulsive Pilferer) — CR 702.141a: exile it from your graveyard; for each opponent a hasty token copy that attacks that opponent, sacrificed at the next end step',
+    pattern: /^encore ((?:\{[^}]+\})+)$/,
+    build(match, ctx) {
+      if (!ctx.card.typeLine.types.map((t) => t.toLowerCase()).includes('creature')) return null;
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return {
+        graveyardAbilities: [
+          {
+            kind: 'encore',
+            cost: { mana: cost },
+            exileSelf: true,
+            effects: [
+              {
+                primitive: 'graveyardTokenCopy',
+                // "Attacks that opponent this turn if able" is `mustAttack`:
+                // with one opponent there is nobody else the token could
+                // attack, so the printed sentence and the flag are the same
+                // rule. "They gain haste" is the Kiki-Jiki grant.
+                params: { perOpponent: true, grantKeywords: { haste: true, mustAttack: true }, delayedRemoval: 'sacrifice' },
+              },
+            ],
+            timing: 'sorcery',
+            label: `Encore ${formatManaCost(cost)}`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'return-self-from-graveyard-to-hand',
+    description:
+      '"{2}{B}: Return ~ from your graveyard to your hand." (Reassembling Skeleton\'s hand-bound cousins) — an activated ability that functions in the graveyard, CR 602.2',
+    // Matched here, ahead of the generic activated-ability parser, because that
+    // parser builds a BATTLEFIELD activation and this line's source is never on
+    // the battlefield when it can be activated.
+    pattern: /^((?:\{[^}]+\})+): return ~ from your graveyard to your hand$/,
+    build(match) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return {
+        graveyardAbilities: [
+          {
+            kind: 'returnToHand',
+            cost: { mana: cost },
+            effects: [{ primitive: 'returnSourceFromGraveyard', params: { to: 'hand' } }],
+            label: `${formatManaCost(cost)}: Return this card from your graveyard to your hand`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'escape-cost',
+    description:
+      '"Escape—{2}{U}, Exile five other cards from your graveyard." (Glimpse of Freedom, Fruit of Tizerus) — CR 702.138a: cast from the graveyard for the escape cost, and NOT exiled afterwards',
+    // "Exile any number of other cards … with four or more card types among
+    // them" (Nethergoyf) and "Exile a land you control, Exile five other cards"
+    // (Lunar Hatchling) are cost shapes outside the table and stay reported.
+    // "~ escapes with a +1/+1 counter" is its own printed line and reports on
+    // its own; the cast itself compiles.
+    pattern: new RegExp(`^escape[—-] ?((?:\\{[^}]+\\})+), exile ${COUNT_TOKEN} other cards? from your graveyard$`),
+    build(match, ctx) {
+      if (ctx.card.typeLine.types.map((t) => t.toLowerCase()).includes('land')) return null;
+      const cost = parseManaSymbols(match[1] ?? '');
+      const count = parseCount(match[2]);
+      if (!cost || count === null || count <= 0) return null;
+      return {
+        graveyardCasts: [
+          {
+            kind: 'escape',
+            cost,
+            additional: {
+              kind: 'exileFromGraveyard',
+              count,
+              label: `Exile ${count} other card${count === 1 ? '' : 's'} from your graveyard`,
+            },
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'flashback-nonmana-cost',
+    description:
+      '"Flashback—Sacrifice three creatures." (Dread Return) / "Flashback—Sacrifice a Mountain." (Lava Dart) / "Flashback—Tap three untapped white creatures you control." (Battle Screech) — a flashback whose whole cost is a sacrifice or a tap',
+    // The mana half is EMPTY and the rider is the same closed `AdditionalCastCost`
+    // shape "as an additional cost" prints, paid by the same cast-time question.
+    // The noun goes through `COST_NOUNS` (singular) via the plural table below;
+    // a noun outside it reports rather than widening to "any permanent".
+    pattern: new RegExp(
+      `^flashback[—-] ?(sacrifice|tap) (an?|${COUNT_TOKEN}) (untapped )?(white |blue |black |red |green )?([a-z ]+?)( you control)?$`,
+    ),
+    build(match, ctx) {
+      const types = ctx.card.typeLine.types.map((t) => t.toLowerCase());
+      if (!types.includes('instant') && !types.includes('sorcery')) return null;
+      // `COUNT_TOKEN` is itself a capture group, so the groups after it sit one
+      // index further along than the pattern reads: 2 = the whole count word,
+      // 3 = its inner capture, 4 = "untapped ", 5 = the colour, 6 = the noun,
+      // 7 = " you control".
+      const verb = match[1] as 'sacrifice' | 'tap';
+      const count = match[2] === 'a' || match[2] === 'an' ? 1 : parseCount(match[2]);
+      if (count === null || count <= 0) return null;
+      // A tap cost names UNTAPPED permanents by definition; the printed word is
+      // required so a wording this rule has not seen ("tap three creatures")
+      // does not silently pass.
+      if (verb === 'tap' && match[4] === undefined) return null;
+      const nounWord = (match[6] ?? '').trim();
+      const noun = count === 1 ? nounWord : (COST_NOUN_PLURALS[nounWord] ?? nounWord);
+      const base = COST_NOUNS[noun];
+      if (base === undefined) return null;
+      const colorWord = (match[5] ?? '').trim();
+      const color = colorWord.length > 0 ? COLOR_WORDS[colorWord] : undefined;
+      if (colorWord.length > 0 && color === undefined) return null;
+      const filter: CardFilter = color === undefined ? base : { ...base, anyOfColors: [color] };
+      const printed = `${verb === 'tap' ? 'Tap' : 'Sacrifice'} ${match[2]} ${match[4] ?? ''}${match[5] ?? ''}${nounWord}${match[7] ?? ''}`;
+      return {
+        flashback: {},
+        flashbackAdditionalCost: { kind: verb, count, filter, label: printed },
+      };
     },
   },
   {
@@ -8034,6 +8347,25 @@ export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContr
     forestwalk: () => landwalkOf({ kind: 'subtype', subtype: 'forest' }),
     'legendary landwalk': () => landwalkOf({ kind: 'legendary' }),
     'nonbasic landwalk': () => landwalkOf({ kind: 'nonbasic' }),
+    // --- §3.111 the graveyard-casting family --------------------------------
+    // RETRACE (CR 702.81a) — "You may cast this card from your graveyard by
+    // discarding a land card in addition to paying its other costs." The
+    // printed cost plus a discard rider in the additional-cost shape; the
+    // spell goes back to the graveyard afterwards (no exile clause), which is
+    // the closed `GRAVEYARD_CAST_EXIT` table's row for it.
+    retrace: () => ({
+      graveyardCasts: [
+        {
+          kind: 'retrace' as const,
+          additional: { kind: 'discard' as const, filter: { anyOfTypes: ['land' as const] }, label: 'Discard a land card' },
+        },
+      ],
+    }),
+    // JUMP-START (CR 702.133a) — the same shape with "discard a card", and
+    // "then exile this card" (the flashback exit).
+    'jump-start': () => ({
+      graveyardCasts: [{ kind: 'jumpStart' as const, additional: { kind: 'discard' as const, label: 'Discard a card' } }],
+    }),
     persist: () => ({
       triggers: [
         {
@@ -8397,7 +8729,7 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   {
     pattern: /\bflashback\b/,
     missingEngineSystem:
-      'a flashback template the compiler does not recognize yet (plain "Flashback {cost}" and the Snapcaster-style grant are supported; {X}/additional-cost flashback is not)',
+      'a flashback template the compiler does not recognize yet (plain "Flashback {cost}", "Flashback—Sacrifice/Tap …" and the Snapcaster-style grant are supported; a discard or {X}-scaled flashback rider is not)',
   },
   {
     // Attachment IS implemented now (core's `attachments.ts` + the

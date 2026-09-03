@@ -40,7 +40,7 @@ import {
   type GameState,
   type PlayerId,
 } from '../index.js';
-import { creatureDef, deckOf, giveHand, landDef } from '../test-fixtures.js';
+import { creatureDef, deckOf, giveGraveyard, giveHand, landDef, spellDef } from '../test-fixtures.js';
 import {
   act,
   advanceTo,
@@ -763,6 +763,161 @@ describe('CR 702 — upkeep costs and time counters (§3.106)', () => {
     expect(entered).toBeDefined();
     // "It gains haste until you lose control of it": it entered unsick.
     expect(entered?.summoningSick).toBe(false);
+  });
+});
+
+// --- §3.111 the graveyard-casting family --------------------------------------------
+
+describe('CR 702 — the graveyard-casting family (§3.111)', () => {
+  const resolvedIn: string[] = [];
+  const registry = registryWith({
+    noteZone: (ctx) => {
+      resolvedIn.push(ctx.source.zone);
+    },
+    // Unearth's body in miniature — the cards package's `unearthReturn` does
+    // the same through the shared entry helper: graveyard → battlefield,
+    // unsick, with CR 702.84c's replacement recorded on the object.
+    unearth: (ctx) => {
+      const owner = ctx.state.players[ctx.source.owner];
+      const index = owner.graveyard.findIndex((c) => c.instanceId === ctx.source.instanceId);
+      const [card] = index < 0 ? [] : owner.graveyard.splice(index, 1);
+      if (!card) return;
+      card.zone = 'battlefield';
+      card.controller = ctx.controller;
+      card.summoningSick = false;
+      card.exileIfLeaves = true;
+      ctx.state.battlefield.push(card);
+      ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'graveyard', to: 'battlefield' });
+    },
+  });
+  const SWAMP = landDef('Swamp', 'B');
+  const BEAR = creatureDef('bear', 2, 2, { cost: { generic: 1, G: 1 }, name: 'Bear' });
+  const UNEARTHER: CardDefinition = {
+    ...creatureDef('unearther', 2, 1, { cost: { generic: 1, B: 1 }, name: 'Unearther' }),
+    graveyardAbilities: [{ kind: 'unearth', cost: { mana: { C: 1 } }, effects: [{ primitive: 'unearth' }], timing: 'sorcery', label: 'Unearth {1}' }],
+  };
+  const SCAVENGER: CardDefinition = {
+    ...creatureDef('scavenger', 3, 3, { cost: { generic: 2, G: 1 }, name: 'Scavenger' }),
+    graveyardAbilities: [
+      { kind: 'scavenge', cost: { mana: { C: 1 } }, exileSelf: true, effects: [{ primitive: 'noteZone', params: { targets: 'creature' } }], timing: 'sorcery', label: 'Scavenge {1}' },
+    ],
+  };
+  const RETRACER: CardDefinition = {
+    ...spellDef('retracer', 'sorcery', [{ primitive: 'noteZone' }], { C: 1 }),
+    graveyardCasts: [{ kind: 'retrace', additional: { kind: 'discard', filter: { anyOfTypes: ['land'] }, label: 'Discard a land card' } }],
+  };
+  const JUMPER: CardDefinition = {
+    ...spellDef('jumper', 'sorcery', [{ primitive: 'noteZone' }], { C: 1 }),
+    graveyardCasts: [{ kind: 'jumpStart', additional: { kind: 'discard', label: 'Discard a card' } }],
+  };
+  const ESCAPER: CardDefinition = {
+    ...spellDef('escaper', 'sorcery', [{ primitive: 'noteZone' }], { C: 3 }),
+    graveyardCasts: [{ kind: 'escape', cost: { C: 1 }, additional: { kind: 'exileFromGraveyard', count: 2, label: 'Exile two other cards from your graveyard' } }],
+  };
+  const DREAD: CardDefinition = {
+    ...spellDef('dread', 'sorcery', [{ primitive: 'noteZone' }], { C: 4 }),
+    flashback: {},
+    flashbackAdditionalCost: { kind: 'sacrifice', count: 2, filter: { anyOfTypes: ['creature'] }, label: 'Sacrifice two creatures' },
+  };
+
+  function atMainWithGraveyard(defs: readonly CardDefinition[]): { state: GameState; cards: CardInstance[] } {
+    const state = advanceTo(newGame({ registry }), 'precombatMain', registry);
+    state.players.A.hand = [];
+    state.players.B.hand = [];
+    const cards = giveGraveyard(state, 'A', defs);
+    state.players.A.manaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 1 };
+    return { state, cards };
+  }
+  const settle = (s: GameState): GameState => pass(pass(s, registry), registry);
+  const zoneOf = (s: GameState, id: number): string =>
+    s.battlefield.some((c) => c.instanceId === id)
+      ? 'battlefield'
+      : s.players.A.graveyard.some((c) => c.instanceId === id)
+        ? 'graveyard'
+        : s.players.A.exile.some((c) => c.instanceId === id)
+          ? 'exile'
+          : 'elsewhere';
+
+  crTest('702.84a', 'unearth is activated from the graveyard, at sorcery speed, for its cost, and returns the card to the battlefield', () => {
+    const { state, cards } = atMainWithGraveyard([UNEARTHER]);
+    const id = cards[0]!.instanceId;
+    expect(offers(state, 'activateGraveyardAbility')).toBe(true);
+    let s = act(state, { kind: 'activateGraveyardAbility', player: 'A', instanceId: id, abilityIndex: 0 }, registry);
+    expect(s.players.A.manaPool.C).toBe(0);
+    s = settle(s);
+    expect(zoneOf(s, id)).toBe('battlefield');
+    // Not at instant speed: on the opponent's turn the ability is not offered.
+    const offTurn = advanceToTurn(s, 2, 'precombatMain', registry);
+    const other = giveGraveyard(offTurn, 'A', [UNEARTHER]);
+    offTurn.players.A.manaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 1 };
+    const rejected = rejectionOf(offTurn, { kind: 'activateGraveyardAbility', player: 'A', instanceId: other[0]!.instanceId, abilityIndex: 0 }, registry);
+    expect(rejected).toBeDefined();
+  });
+
+  crTest('702.84c', 'an unearthed permanent that would leave the battlefield is exiled instead of going anywhere else', () => {
+    const { state, cards } = atMainWithGraveyard([UNEARTHER]);
+    const id = cards[0]!.instanceId;
+    let s = settle(act(state, { kind: 'activateGraveyardAbility', player: 'A', instanceId: id, abilityIndex: 0 }, registry));
+    const body = onBattlefield(s, id) as CardInstance;
+    body.damageMarked = body.def.toughness ?? 1;
+    s = pass(s, registry);
+    expect(zoneOf(s, id)).toBe('exile');
+  });
+
+  crTest('702.96a', 'scavenge exiles the card from the graveyard as a COST, before its ability resolves', () => {
+    resolvedIn.length = 0;
+    const { state, cards } = atMainWithGraveyard([SCAVENGER]);
+    const bear = putOnBattlefield(state, 'A', BEAR);
+    let s = act(state, { kind: 'activateGraveyardAbility', player: 'A', instanceId: cards[0]!.instanceId, abilityIndex: 0, targets: [bear.instanceId] }, registry);
+    expect(zoneOf(s, cards[0]!.instanceId)).toBe('exile');
+    s = settle(s);
+    expect(resolvedIn).toEqual(['exile']);
+  });
+
+  crTest('702.81a', 'retrace casts the card from the graveyard for its printed cost plus a discarded land card, and the card returns to the graveyard', () => {
+    const { state, cards } = atMainWithGraveyard([RETRACER]);
+    const id = cards[0]!.instanceId;
+    expect(rejectionOf(state, { kind: 'castSpell', player: 'A', instanceId: id, fromZone: 'graveyard', graveyardCast: 'retrace' }, registry)).toMatch(/additional cost/);
+    const [land] = giveHand(state, 'A', [SWAMP]);
+    let s = act(state, { kind: 'castSpell', player: 'A', instanceId: id, fromZone: 'graveyard', graveyardCast: 'retrace' }, registry);
+    expect(s.players.A.manaPool.C).toBe(0);
+    expect(zoneOf(s, land!.instanceId)).toBe('graveyard');
+    s = settle(s);
+    expect(zoneOf(s, id)).toBe('graveyard');
+  });
+
+  crTest('702.133a', 'jump-start casts the card from the graveyard for its printed cost plus a discarded card, then exiles it', () => {
+    const { state, cards } = atMainWithGraveyard([JUMPER]);
+    const id = cards[0]!.instanceId;
+    const [pitched] = giveHand(state, 'A', [BEAR]);
+    let s = act(state, { kind: 'castSpell', player: 'A', instanceId: id, fromZone: 'graveyard', graveyardCast: 'jumpStart' }, registry);
+    expect(zoneOf(s, pitched!.instanceId)).toBe('graveyard');
+    s = settle(s);
+    expect(zoneOf(s, id)).toBe('exile');
+  });
+
+  crTest('702.138a', 'escape casts the card from the graveyard for its escape cost plus N other exiled graveyard cards, and does not exile it', () => {
+    const { state, cards } = atMainWithGraveyard([ESCAPER, SWAMP, SWAMP]);
+    const id = cards[0]!.instanceId;
+    // The escape cost is {1}, not the printed {3}: one colourless pays it.
+    let s = act(state, { kind: 'castSpell', player: 'A', instanceId: id, fromZone: 'graveyard', graveyardCast: 'escape' }, registry);
+    expect(zoneOf(s, cards[1]!.instanceId)).toBe('exile');
+    expect(zoneOf(s, cards[2]!.instanceId)).toBe('exile');
+    s = settle(s);
+    expect(zoneOf(s, id)).toBe('graveyard');
+  });
+
+  crTest('702.34a', 'a flashback cost printed as a sacrifice is paid by sacrificing, with no mana, and the spell is still exiled as it leaves the stack', () => {
+    const { state, cards } = atMainWithGraveyard([DREAD]);
+    const id = cards[0]!.instanceId;
+    state.players.A.manaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
+    expect(offers(state, 'castSpell')).toBe(false);
+    const bears = [putOnBattlefield(state, 'A', BEAR), putOnBattlefield(state, 'A', BEAR)];
+    expect(offers(state, 'castSpell')).toBe(true);
+    let s = act(state, { kind: 'castSpell', player: 'A', instanceId: id, fromZone: 'graveyard' }, registry);
+    for (const bear of bears) expect(zoneOf(s, bear.instanceId)).toBe('graveyard');
+    s = settle(s);
+    expect(zoneOf(s, id)).toBe('exile');
   });
 });
 

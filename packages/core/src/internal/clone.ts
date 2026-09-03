@@ -111,6 +111,11 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // Same conditional-copy rule (only echo permanents carry it) and the same
   // stakes: drop it and every echo bill reads "not owed" one action later.
   if (inst.controlledSinceTurn !== undefined) copy.controlledSinceTurn = inst.controlledSinceTurn;
+  // §3.111 — unearth's "if it would leave the battlefield, exile it instead"
+  // (CR 702.84c). Same conditional-copy rule (only an unearthed permanent
+  // carries it) and the same stakes: drop it and the creature dies to the
+  // graveyard one action boundary later, to be unearthed again next turn.
+  if (inst.exileIfLeaves !== undefined) copy.exileIfLeaves = inst.exileIfLeaves;
   // NOTE FOR THE NEXT FIELD, because this copy has now dropped one four times:
   // a fact that belongs to the CARD rather than to this object's runtime state
   // needs no line here at all. `def` is shared by reference above, so a
@@ -257,6 +262,11 @@ function cloneStackObject(o: StackObject): StackObject {
     // two action boundaries, and the marker rode neither. Found by the first
     // test that cast a suspended creature.
     ...(o.hasteOnEntry !== undefined ? { hasteOnEntry: o.hasteOnEntry } : {}),
+    // §3.111 — which graveyard-cast keyword this spell was cast by. Dropping it
+    // would turn a retraced spell into a flashback one at the first action
+    // boundary and EXILE it as it resolved — a card playing weaker than
+    // printed, silently.
+    ...(o.graveyardCast !== undefined ? { graveyardCast: o.graveyardCast } : {}),
     // Dropping this one would re-ask the as-enters COPY question every time the
     // resolution is re-entered — and a DECLINE leaves nothing on the instance to
     // notice, so the spell would never finish resolving. Same shape, same rule.

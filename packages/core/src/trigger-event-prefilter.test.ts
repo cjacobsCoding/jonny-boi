@@ -83,6 +83,11 @@ const CANONICAL: Readonly<
     condition: { on: 'leaves' },
     event: { type: 'zoneChange', instanceId: SOURCE_ID, from: 'battlefield', to: 'exile' },
   },
+  // §3.111 — Rancor's "put into a graveyard from the battlefield".
+  putIntoGraveyardFromBattlefield: {
+    condition: { on: 'putIntoGraveyardFromBattlefield' },
+    event: { type: 'zoneChange', instanceId: SOURCE_ID, from: 'battlefield', to: 'graveyard' },
+  },
   castSpell: {
     condition: { on: 'castSpell', who: 'you' },
     event: { type: 'spellCast', player: 'A', instanceId: OTHER_ID, name: 'Bolt', castTypes: ['instant'] },

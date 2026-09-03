@@ -12,6 +12,7 @@ import type { GameEvent } from '../events.js';
 import { pruneCardGrantsFor } from '../card-grants.js';
 import { discardDestination } from '../madness.js';
 import { markBattlefieldEntry } from '../upkeep-costs.js';
+import { leaveBattlefieldDestination } from '../graveyard-casting.js';
 
 /**
  * Find a battlefield permanent by id, or undefined.
@@ -111,7 +112,13 @@ export function moveToZone(
   // destination of a discard. Asked through the shared `discardDestination` so
   // this funnel and the cards package's `moveOwnedCard` cannot disagree about
   // where a discarded madness card ends up.
-  const destination = from === 'hand' && to === 'graveyard' ? discardDestination(state, inst, emit) : to;
+  // §3.111 — and an UNEARTHED permanent leaving the battlefield is exiled
+  // instead (CR 702.84c), through the helper the cards package's leave funnel
+  // asks too, so the two cannot disagree.
+  const destination =
+    from === 'hand' && to === 'graveyard'
+      ? discardDestination(state, inst, emit)
+      : leaveBattlefieldDestination(inst, to);
   removeFromCurrentZone(state, inst);
   inst.zone = destination;
   // CR 400.7: a card that changes zones is a new object, and a grant made on
@@ -183,6 +190,10 @@ export function ceaseToExistIfToken(
  * battlefield (so it re-enters clean). Counters persist only while on field.
  */
 export function resetInstanceForNewZone(inst: CardInstance): void {
+  // §3.111 — unearth's exile replacement has done its work by the time the
+  // object has left (the funnel read it before moving); a card that comes
+  // back later is a new object with no such clause (CR 400.7).
+  if (inst.exileIfLeaves !== undefined) delete inst.exileIfLeaves;
   inst.tapped = false;
   inst.damageMarked = 0;
   inst.markedByDeathtouch = false;

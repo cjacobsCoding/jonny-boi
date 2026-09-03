@@ -164,6 +164,34 @@ const PAYLOAD_KEYWORD_EVIDENCE: Readonly<Record<string, keyof KeywordFlags>> = O
   toxic: 'toxic',
 });
 
+/**
+ * §3.111 — Scryfall's names for the GRAVEYARD-ACTIVATED keywords, each mapped
+ * to the `GraveyardAbilityKind` its printed line compiles into. Evidence-based
+ * like every guard here: a line the closed cost table could not read
+ * ("Unearth—Pay eight {E}") compiles no ability of that kind and the keyword
+ * still reports through the line's own `missing` entry.
+ */
+const GRAVEYARD_ABILITY_KEYWORDS: Readonly<Record<string, import('@jonny-boi/core').GraveyardAbilityKind>> =
+  Object.freeze({
+    unearth: 'unearth',
+    scavenge: 'scavenge',
+    embalm: 'embalm',
+    eternalize: 'eternalize',
+    encore: 'encore',
+  });
+
+/** §3.111 — the same table for the GRAVEYARD-CAST keywords (`GraveyardCastKind`). */
+const GRAVEYARD_CAST_KEYWORDS: Readonly<Record<string, import('@jonny-boi/core').GraveyardCastKind>> = Object.freeze({
+  retrace: 'retrace',
+  'jump-start': 'jumpStart',
+  // Scryfall tags every jump-start card with BOTH "Jump-start" and a phantom
+  // "Jump" (Direct Current: `["Jump","Jump-start"]`). No such keyword exists;
+  // it is the same printed line, so the same compiled cast is its evidence —
+  // the §3.109 shape (a tag the engine HAS was still blocking cards), one row.
+  jump: 'jumpStart',
+  escape: 'escape',
+});
+
 const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freeze({
   scry: 'scry',
   surveil: 'surveil',
@@ -414,6 +442,13 @@ interface Assembly {
   flashbackXCost?: number;
   /** The "Pay N life" rider on a flashback cost. */
   flashbackLifeCost?: number;
+  // --- §3.111 the graveyard-casting family --------------------------------------
+  /** A non-mana flashback cost, once a "Flashback—Sacrifice …" / "—Tap …" line compiles. */
+  flashbackAdditionalCost?: import('@jonny-boi/core').AdditionalCastCost;
+  /** Retrace / jump-start / escape, accumulated (created on first use). */
+  graveyardCasts?: import('@jonny-boi/core').GraveyardCastAbility[];
+  /** Unearth / scavenge / embalm / eternalize / encore / the return template, accumulated. */
+  graveyardAbilities?: import('@jonny-boi/core').GraveyardAbility[];
   /** Cycling abilities, accumulated — a card may print cycling AND landcycling. */
   readonly cycling: import('@jonny-boi/core').CyclingAbility[];
   /** The printed buyback cost, once a "Buyback {…}" line compiles. */
@@ -508,6 +543,15 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.flashbackXCost !== undefined) assembly.flashbackXCost = contribution.flashbackXCost;
   if (contribution.flashbackLifeCost !== undefined) {
     assembly.flashbackLifeCost = contribution.flashbackLifeCost;
+  }
+  // §3.111 — the graveyard-casting family. Lists are created on first use so
+  // the ordinary card's assembly keeps the shape it had.
+  if (contribution.flashbackAdditionalCost !== undefined) {
+    assembly.flashbackAdditionalCost = contribution.flashbackAdditionalCost;
+  }
+  if (contribution.graveyardCasts) (assembly.graveyardCasts ??= []).push(...contribution.graveyardCasts);
+  if (contribution.graveyardAbilities) {
+    (assembly.graveyardAbilities ??= []).push(...contribution.graveyardAbilities);
   }
   if (contribution.changeling) assembly.changeling = true;
   if (contribution.colorless) assembly.colorless = true;
@@ -1431,6 +1475,23 @@ export function compileCard(card: CompilableCard): CompileResult {
     if (COST_ASSIST_KEYWORDS.has(word) && assembly.costAssist !== undefined) continue;
     if (word === 'buyback' && assembly.buyback !== undefined) continue;
     if (word === 'madness' && assembly.madness !== undefined) continue;
+    // §3.111 — the graveyard-casting family: the evidence is a compiled
+    // ability/cast OF THAT KIND (see the two tables), never the keyword's
+    // presence. "Retrace" and "Jump-start" are builders and never reach here.
+    const graveyardAbilityKind = GRAVEYARD_ABILITY_KEYWORDS[word];
+    if (
+      graveyardAbilityKind !== undefined &&
+      assembly.graveyardAbilities?.some((ability) => ability.kind === graveyardAbilityKind) === true
+    ) {
+      continue;
+    }
+    const graveyardCastKind = GRAVEYARD_CAST_KEYWORDS[word];
+    if (
+      graveyardCastKind !== undefined &&
+      assembly.graveyardCasts?.some((cast) => cast.kind === graveyardCastKind) === true
+    ) {
+      continue;
+    }
     // §3.106 — same shape as madness: the printed "Suspend N—{…}" line compiled
     // into `assembly.suspend`; a "Suspend X" line leaves it unset and reports.
     if (word === 'suspend' && assembly.suspend !== undefined) continue;
@@ -1598,6 +1659,16 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(assembly.entersWithCounters.length > 0 ? { entersWithCounters: assembly.entersWithCounters } : {}),
     ...(assembly.flashback !== undefined ? { flashback: assembly.flashback } : {}),
     ...(assembly.flashbackXCost !== undefined ? { flashbackXCost: assembly.flashbackXCost } : {}),
+    // §3.111
+    ...(assembly.flashbackAdditionalCost !== undefined
+      ? { flashbackAdditionalCost: assembly.flashbackAdditionalCost }
+      : {}),
+    ...(assembly.graveyardCasts !== undefined && assembly.graveyardCasts.length > 0
+      ? { graveyardCasts: assembly.graveyardCasts }
+      : {}),
+    ...(assembly.graveyardAbilities !== undefined && assembly.graveyardAbilities.length > 0
+      ? { graveyardAbilities: assembly.graveyardAbilities }
+      : {}),
     ...(assembly.flashbackLifeCost !== undefined
       ? { flashbackLifeCost: assembly.flashbackLifeCost }
       : {}),

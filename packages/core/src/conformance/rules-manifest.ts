@@ -1011,6 +1011,26 @@ export const RULES_MANIFEST: RulesManifest = {
         title:
           'suspend exiles the card with N time counters for its suspend cost, and the last counter leaving lets it be cast for nothing',
       },
+      // §3.111 — the graveyard-casting family's core halves. The printed bodies
+      // (unearth's return, scavenge's counters, the embalm/eternalize/encore
+      // token copies) are cards-package primitives, pinned on the real printed
+      // cards in packages/cards/src/graveyard-cast-family.test.ts.
+      { rule: '702.84a', title: 'unearth is activated from the graveyard, at sorcery speed, for its cost, and returns the card to the battlefield' },
+      { rule: '702.84c', title: 'an unearthed permanent that would leave the battlefield is exiled instead of going anywhere else' },
+      { rule: '702.96a', title: 'scavenge exiles the card from the graveyard as a COST, before its ability resolves' },
+      {
+        rule: '702.81a',
+        title: 'retrace casts the card from the graveyard for its printed cost plus a discarded land card, and the card returns to the graveyard',
+      },
+      { rule: '702.133a', title: 'jump-start casts the card from the graveyard for its printed cost plus a discarded card, then exiles it' },
+      {
+        rule: '702.138a',
+        title: 'escape casts the card from the graveyard for its escape cost plus N other exiled graveyard cards, and does not exile it',
+      },
+      {
+        rule: '702.34a',
+        title: 'a flashback cost printed as a sacrifice is paid by sacrificing, with no mana, and the spell is still exiled as it leaves the stack',
+      },
     ],
     note:
       'Ward is here because it was the one shipped keyword whose TRIGGER nothing drove ' +
@@ -1302,6 +1322,7 @@ export const ACTION_RULES: ActionRules = {
   castSpell: '601.2',
   cycleCard: '702.29',
   suspendCard: '702.62a',
+  activateGraveyardAbility: '702.84a', // §3.111 — unearth defines the model; scavenge/embalm/eternalize/encore ride it
   activateAbility: '602.2a',
   declareAttackers: '508.1a',
   declareBlockers: '509.1a',

@@ -466,6 +466,27 @@ export {
   markControlChange,
 } from './upkeep-costs.js';
 export { isSuspended, openSuspendWindow, suspendWindowOpenFor } from './suspend.js';
+// §3.111 — the graveyard-casting family (graveyard-casting.ts): activated
+// abilities of a card in a graveyard, the graveyard-cast kinds and their closed
+// exit table, and the two additional-cost kinds the family added.
+export type {
+  GraveyardAbility,
+  GraveyardAbilityKind,
+  GraveyardCastAbility,
+  GraveyardCastKind,
+  GraveyardCastOption,
+} from './graveyard-casting.js';
+export {
+  ADDITIONAL_COST_ZONE,
+  GRAVEYARD_ABILITY_RULES,
+  GRAVEYARD_CAST_EXIT,
+  additionalCostPool,
+  canPayAdditionalCost,
+  graveyardCastOptionFor,
+  graveyardCastOptionsOf,
+  leaveBattlefieldDestination,
+  spellAdditionalCostOf,
+} from './graveyard-casting.js';
 
 // State
 export type {
