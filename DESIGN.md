@@ -2680,11 +2680,14 @@ creature with lesser power" — and `TargetRestriction` is a flat string union r
 nothing; amass beyond the three printed Army types; the two "bolster X" forms; and modular on a land.
 All report.
 
-**Gate:** suite green, run PACKAGE BY PACKAGE with a single worker and the per-package summaries
-summed — this box ran out of memory with five agents on it (a one-shot `vitest run` died with exit
-code 9 and no output, and the sharded runs are what fit in ~550 MB free). Lint 0 errors;
-`build-card-index --check` clean. Pilot bench at parity —
-162 → 163 games/sec (137 → 136 games/CPU-sec) with **identical outcomes**, A won 845/2000 in both
+**Gate:** **369 files / 19,777 tests, 0 failed** (5 skipped), summed from PACKAGE-BY-PACKAGE runs
+with a single worker — core 86/1,183, cards 92/16,498, ai 47/512, sim 31/291, data-tools 7/83,
+protocol 2/27, apps/server 6/78, apps/web 98/1,105. A one-shot `vitest run` is not usable on this
+box right now: five agents exhausted the 7 GB, one attempt died with exit code 9 and no output, and
+two others silently DROPPED FILES — a sim run reported "29 files, 0 failed" where 31 exist, with
+`Worker exited unexpectedly` the only clue. Re-run alone, both were green (sim 31/291). That is the
+hazard TESTING.md warns about, met in the wild. Lint 0 errors; `build-card-index --check` clean.
+Pilot bench at parity — 162 → 163 games/sec (137 → 136 games/CPU-sec) with **identical outcomes**, A won 845/2000 in both
 runs, which is the honest reading for lock decks that print no counters.
 
 ### 3.75 A refuted hypothesis, kept on the record — holding attackers back is WORSE — ✅ done
