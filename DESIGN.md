@@ -2680,7 +2680,10 @@ creature with lesser power" — and `TargetRestriction` is a flat string union r
 nothing; amass beyond the three printed Army types; the two "bolster X" forms; and modular on a land.
 All report.
 
-**Gate:** full suite green; lint 0 errors; `build-card-index --check` clean. Pilot bench at parity —
+**Gate:** suite green, run PACKAGE BY PACKAGE with a single worker and the per-package summaries
+summed — this box ran out of memory with five agents on it (a one-shot `vitest run` died with exit
+code 9 and no output, and the sharded runs are what fit in ~550 MB free). Lint 0 errors;
+`build-card-index --check` clean. Pilot bench at parity —
 162 → 163 games/sec (137 → 136 games/CPU-sec) with **identical outcomes**, A won 845/2000 in both
 runs, which is the honest reading for lock decks that print no counters.
 
