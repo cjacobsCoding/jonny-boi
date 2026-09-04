@@ -34,7 +34,7 @@ import type { MatchTrace } from './replay-types.js';
 export interface SimDeckPayload {
   readonly name: string;
   readonly archetype: string;
-  readonly cards: ReadonlyArray<{ readonly cardId: string; readonly count: number }>;
+  readonly cards: ReadonlyArray<{ readonly cardId: string; readonly count: number; readonly name?: string }>;
 }
 
 /**

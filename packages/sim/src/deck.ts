@@ -21,6 +21,19 @@ export interface DeckEntry {
   readonly cardId: string;
   /** Copies of this card in the deck (≥ 1). */
   readonly count: number;
+  /**
+   * The card's NAME, when the author knew it (§3.123). Optional and additive, so
+   * every existing decklist is unchanged.
+   *
+   * Why it exists: a web deck stores a Scryfall PRINTING id, and an imported
+   * printing the pool does not carry made the whole deck unplayable with the
+   * message `unknown card "f413a83d-…"`. But the pool resolves by name too, and
+   * a different printing of the same card is the same card as far as the rules
+   * are concerned. So the loader falls back to this name when the id misses —
+   * the deck PLAYS with the pool's printing — and if the name misses as well, the
+   * refusal at least says which card it is talking about.
+   */
+  readonly name?: string;
 }
 
 /** A deck as authored in data: a name, an archetype label, and its entries. */
@@ -54,9 +67,25 @@ export class DeckLoadError extends Error {
   }
 }
 
-/** Resolve a deck entry's card by id first, then by exact name. */
-function resolveCard(pool: CardPool, ref: string): CardDefinition | undefined {
-  return pool.get(ref) ?? pool.getByName(ref);
+/**
+ * Resolve a deck entry's card: by id, then by the entry's recorded name (§3.123),
+ * then by treating the ref itself as a name (hand-authored lists say "Forest").
+ *
+ * The recorded name is tried BEFORE the ref-as-name so that a printing id which
+ * happens to collide with nothing still reaches the card the author meant; the
+ * three lookups are ordered from most to least specific.
+ */
+function resolveCard(pool: CardPool, entry: DeckEntry): CardDefinition | undefined {
+  return (
+    pool.get(entry.cardId) ??
+    (entry.name !== undefined ? pool.getByName(entry.name) : undefined) ??
+    pool.getByName(entry.cardId)
+  );
+}
+
+/** How an unresolvable entry is named in a reason: the card's name if we have it. */
+function describeEntry(entry: DeckEntry): string {
+  return entry.name !== undefined && entry.name !== '' ? `${entry.name} [id ${entry.cardId}]` : `"${entry.cardId}"`;
 }
 
 /**
@@ -82,9 +111,9 @@ export function loadDeck(deck: Deck, pool: CardPool, rules: DeckRules = DEFAULT_
       reasons.push(`entry "${entry.cardId}" has an invalid count (${entry.count})`);
       continue;
     }
-    const def = resolveCard(pool, entry.cardId);
+    const def = resolveCard(pool, entry);
     if (!def) {
-      reasons.push(`unknown card "${entry.cardId}" (not in the pool by id or name)`);
+      reasons.push(`unknown card ${describeEntry(entry)} (not in the pool by id or name)`);
       continue;
     }
     const tally = copiesByCard.get(def.id);

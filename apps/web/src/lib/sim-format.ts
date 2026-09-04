@@ -18,7 +18,14 @@ export function toSimPayload(deck: Deck): SimDeckPayload {
   return {
     name: deck.name,
     archetype: deck.name,
-    cards: deck.cards.map((entry) => ({ cardId: entry.cardId, count: entry.count })),
+    // The recorded name rides along (§3.123) so the sim can resolve a printing the
+    // pool does not carry to the pool's printing of the same card — and name the
+    // card, not a uuid, when it cannot.
+    cards: deck.cards.map((entry) => ({
+      cardId: entry.cardId,
+      count: entry.count,
+      ...(entry.name !== undefined ? { name: entry.name } : {}),
+    })),
   };
 }
 
