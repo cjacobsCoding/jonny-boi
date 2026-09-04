@@ -2889,6 +2889,38 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.123 A deck with a printing the pool lacks now PLAYS — the entry's name resolves it — ✅ done
+
+Found live during §3.61's verification and handed over by it: a saved deck refused to start with
+`unknown card "f413a83d-a40d-434c-b20a-4c707c0527fa" (not in the pool by id or name)`. §3.61 fixed
+half — a `DeckEntry` now remembers its card's NAME, so the Deck Builder can say which card is
+missing. This is the other half, in the sim's loader, and it turns the refusal into a game.
+
+**The pool already resolves by name; the name just never crossed the seam.** A web deck stores a
+Scryfall PRINTING id. An imported printing the pool does not carry is, as far as the rules are
+concerned, the same card as the pool's printing of it — §3.61 made exactly that point when it kept
+per-slot printings art-only. So the sim's `DeckEntry` gained an optional `name`, the web payload
+carries it (`sim-format.ts`), and `resolveCard` tries **id → recorded name → the ref as a name**,
+most specific first. An id that resolves still wins outright — a stale or wrong name can never
+redirect a good id (pinned). When even the name misses, the reason now reads
+`unknown card Definitely Not A Card [id f413a83d-…]`: the card first, the uuid for whoever is debugging.
+
+**Purely additive.** Every existing decklist — the sample decks, hand-authored lists that say
+"Forest", the CLI — has no `name` and behaves exactly as before; a legacy entry with no name still
+reports the id it has (pinned). Seed-99 gauntlet rows cannot move because no sample deck carries a
+name.
+
+⚠️ **Online is deliberately NOT changed.** `online/deck-list.ts` builds the protocol's `DeckList`
+for the server, which validates against the curated pool only — imported printings are refused there
+by policy (§3.61's `explainOnlineProblem`), so carrying the name would change a wire contract to
+enable nothing. If online ever accepts imports, the same optional field is the whole change.
+
+📊 Verified in the browser against the exact saved-deck shape that failed live: an entry with that
+same out-of-pool id and a known name no longer produces "Not ready" on Solo Setup, and the game
+starts. Four new loader tests: resolves through the name (all 60 copies are the pool's printing);
+names the card not the uuid when both miss; a legacy nameless entry still names its id; the id wins
+over a wrong name.
+
 ### 3.122 Soulshift — one rule-table row, eighteen cards — ✅ done
 
 The cheapest entry left on the §3.120 queue, and worth recording because of how little it needed.

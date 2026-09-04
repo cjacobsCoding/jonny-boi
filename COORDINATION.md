@@ -260,6 +260,12 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-09-04 integrator: `fix/deck-entry-name-resolves` ✅ MERGED — DESIGN §3.123, the loader
+  half of the `unknown card "<uuid>"` handover from §3.61. packages/sim `deck.ts` (+ optional
+  `DeckEntry.name`, id → name → ref resolution, card-named reasons) + `deck.test.ts`; apps/web
+  `sim-format.ts` + `sim-protocol.ts` carry the name. Online wire format untouched on purpose (it
+  refuses imports by policy). No sample deck carries a name, so the seed-99 rows cannot move.
+
 - 2026-08-31 integrator: `feat/copilot` ✅ MERGED + DEPLOYED — DESIGN §3.67, the AI co-pilot. apps/web only:
   NEW `lib/play/copilot.ts` + test, `components/play/PlayBoard.tsx` (toggle, hint line, outline on
   the suggested card/bar), NEW `components/play/copilot.css`, `lib/config.ts` (preference key),

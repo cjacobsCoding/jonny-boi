@@ -53,6 +53,77 @@ describe('loadDeck', () => {
     expect(problems.some((p) => p.includes('Black Lotus'))).toBe(true);
   });
 
+  // §3.123 — a web deck stores a PRINTING id. An imported printing the pool does
+  // not carry used to make the whole deck unplayable with `unknown card
+  // "f413a83d-…"`. The entry's recorded name now resolves it to the pool's
+  // printing of the same card, and names the card when even that fails.
+  describe('an entry whose id is not in the pool (§3.123)', () => {
+    const forest = pool.getByName('Forest');
+    if (!forest) throw new Error('the pool has no Forest');
+    const UNKNOWN_PRINTING = 'f413a83d-a40d-434c-b20a-4c707c0527fa';
+
+    it('resolves through its recorded name, so the deck PLAYS', () => {
+      const deck: Deck = {
+        name: 'other-printing',
+        archetype: 'test',
+        cards: [
+          { cardId: UNKNOWN_PRINTING, count: 4, name: 'Forest' },
+          { cardId: 'Forest', count: 56 },
+        ],
+      };
+      const loaded = loadDeck(deck, pool);
+      expect(loaded.size).toBe(60);
+      // Every copy is the pool's Forest — the same card, the pool's printing.
+      expect(loaded.library.filter((c) => c.id === forest.id)).toHaveLength(60);
+    });
+
+    it('names the CARD, not the uuid, when the name is unknown too', () => {
+      const deck: Deck = {
+        name: 'truly-missing',
+        archetype: 'test',
+        cards: [
+          // A name no pool will ever carry — a real card's name might resolve
+          // (the pool grows), which is the feature, not a failure of it.
+          { cardId: UNKNOWN_PRINTING, count: 4, name: 'Definitely Not A Card' },
+          { cardId: 'Forest', count: 56 },
+        ],
+      };
+      const problems = validateDeck(deck, pool);
+      expect(problems.some((p) => p.includes('Definitely Not A Card'))).toBe(true);
+      // The id is still there for anyone debugging, but it is not the headline.
+      expect(problems.some((p) => p.includes(UNKNOWN_PRINTING))).toBe(true);
+    });
+
+    it('a legacy entry with no name still reports the id it has', () => {
+      const deck: Deck = {
+        name: 'legacy',
+        archetype: 'test',
+        cards: [
+          { cardId: UNKNOWN_PRINTING, count: 4 },
+          { cardId: 'Forest', count: 56 },
+        ],
+      };
+      const problems = validateDeck(deck, pool);
+      expect(problems.some((p) => p.includes(UNKNOWN_PRINTING))).toBe(true);
+    });
+
+    it('the id still wins when it resolves — the name is a fallback, not an override', () => {
+      const mountain = pool.getByName('Mountain');
+      if (!mountain) throw new Error('the pool has no Mountain');
+      const deck: Deck = {
+        name: 'id-wins',
+        archetype: 'test',
+        cards: [
+          // A stale or wrong name must not redirect a perfectly good id.
+          { cardId: mountain.id, count: 4, name: 'Forest' },
+          { cardId: 'Forest', count: 56 },
+        ],
+      };
+      const loaded = loadDeck(deck, pool);
+      expect(loaded.library.filter((c) => c.id === mountain.id)).toHaveLength(4);
+    });
+  });
+
   it('rejects an undersized deck', () => {
     const deck: Deck = {
       name: 'too-small',
