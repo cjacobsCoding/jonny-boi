@@ -36,7 +36,12 @@ export class RoomManager {
    * at capacity or the code space is exhausted (the caller emits an `internal`
    * error); the creator's connection is sent `roomJoined`/`lobby` by the room.
    */
-  create(conn: Connection, name: string, deck?: Parameters<Room['createSeat']>[2]): CreateResult | null {
+  create(
+    conn: Connection,
+    name: string,
+    deck?: Parameters<Room['createSeat']>[2],
+    startingPlayer?: Parameters<Room['createSeat']>[3],
+  ): CreateResult | null {
     // Reclaim anything already abandoned before declaring the server full, so a burst
     // of short-lived rooms can never leave capacity permanently consumed.
     if (this.rooms.size >= MAX_ROOMS) this.pruneEmpty();
@@ -45,7 +50,7 @@ export class RoomManager {
     if (!code) return null;
     const room = new RoomImpl(code);
     this.rooms.set(code, room);
-    const result = room.createSeat(conn, name, deck);
+    const result = room.createSeat(conn, name, deck, startingPlayer);
     return { room, seat: 'A', token: result.token };
   }
 

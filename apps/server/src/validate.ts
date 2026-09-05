@@ -10,7 +10,12 @@
  */
 
 import { PLAYER_IDS, type GameAction, type PlayerId } from '@jonny-boi/core';
-import type { ClientMessage, DeckList } from '@jonny-boi/protocol';
+import {
+  STARTING_PLAYER_CHOICES,
+  type ClientMessage,
+  type DeckList,
+  type StartingPlayerChoice,
+} from '@jonny-boi/protocol';
 import {
   MAX_CARD_ID_LENGTH,
   MAX_DECK_ENTRIES,
@@ -48,6 +53,11 @@ function isBoundedString(x: unknown, maxLength: number): x is string {
  * out-of-memory kill: it would take down every other room on the server with it.
  * Deep validity (real card ids, format legality) stays the loader's job.
  */
+/** Membership in the protocol's closed set of first-turn choices (§3.125). */
+function isStartingPlayerChoice(value: unknown): value is StartingPlayerChoice {
+  return typeof value === 'string' && (STARTING_PLAYER_CHOICES as readonly string[]).includes(value);
+}
+
 function isDeckList(x: unknown): x is DeckList {
   if (!isObject(x)) return false;
   if (!isBoundedString(x.name, MAX_DECK_NAME_LENGTH)) return false;
@@ -98,11 +108,15 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       const name = normalizeName(data.name);
       if (name === null) return null;
       if (data.deck !== undefined && !isDeckList(data.deck)) return null;
+      // §3.125 — optional, and a CLOSED set: a value outside it is refused rather
+      // than widened to the nearest thing that happens to exist.
+      if (data.startingPlayer !== undefined && !isStartingPlayerChoice(data.startingPlayer)) return null;
       return {
         t: 'createRoom',
         protocolVersion: data.protocolVersion,
         name,
         ...(data.deck !== undefined ? { deck: data.deck } : {}),
+        ...(data.startingPlayer !== undefined ? { startingPlayer: data.startingPlayer } : {}),
       };
     }
     case 'joinRoom': {

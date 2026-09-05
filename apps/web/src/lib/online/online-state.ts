@@ -15,6 +15,7 @@ import type {
   MaskedGameView,
   RoomPhase,
   ServerMessage,
+  StartingPlayerChoice,
 } from '@jonny-boi/protocol';
 import type { ConnectionStatus } from './connection.js';
 
@@ -58,6 +59,8 @@ export interface OnlineState {
   readonly roomPhase: RoomPhase | null;
   /** Both lobby players (names, ready, hasDeck). */
   readonly lobbyPlayers: readonly LobbyPlayer[];
+  /** Who the creator chose to take the first turn (§3.125); null until the lobby says. */
+  readonly startingPlayer: StartingPlayerChoice | null;
   /** Whether THIS client has chosen a deck (local intent echo). */
   readonly deckChosen: boolean;
   /** Whether THIS client is ready (local intent echo; server lobby is authoritative). */
@@ -84,6 +87,7 @@ export const INITIAL_ONLINE_STATE: OnlineState = Object.freeze({
   spectator: false,
   roomPhase: null,
   lobbyPlayers: [],
+  startingPlayer: null,
   deckChosen: false,
   ready: false,
   mulliganHand: null,
@@ -170,6 +174,8 @@ function reduceServer(state: OnlineState, msg: ServerMessage): OnlineState {
         code: msg.code,
         roomPhase: msg.phase,
         lobbyPlayers: msg.players,
+        // Absent from an older server's lobby message → keep whatever we knew.
+        startingPlayer: msg.startingPlayer ?? state.startingPlayer,
         screen: screenForPhase(msg.phase, state.screen),
       };
     case 'gameStarted':

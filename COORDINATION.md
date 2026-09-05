@@ -260,6 +260,12 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-09-04 integrator: `feat/online-first-player` ✅ MERGED — DESIGN §3.125, the online half of
+  report 210805. packages/protocol (`StartingPlayerChoice`, optional on `createRoom` and `lobby`),
+  apps/server (`validate.ts` closed-set check, `room.ts` choice + salted seed flip, `room-manager`,
+  `handlers`), apps/web online (`online-state`, `useOnlineGame`, `OnlinePlay` select + lobby line).
+  Additive both ways — no PROTOCOL_VERSION bump needed; documented on the type. ⚠️ Deploying the
+  SERVER is what makes the choice take effect; the web alone still sends it harmlessly.
 - 2026-09-04 integrator: `feat/battlefield-labels` ✅ MERGED — DESIGN §3.124 (report 205636).
   apps/web only: `components/play/SeatPanel.tsx` (BATTLEFIELD_ROWS table; vertical captions on
   POPULATED rows only), `components/play/board-clarity.css`, NEW `battlefield-labels.test.ts`.

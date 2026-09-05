@@ -60,7 +60,7 @@ export class MessageRouter {
           return;
         }
         this.leaveCurrentRoom(conn, session);
-        const created = this.manager.create(conn, msg.name, msg.deck);
+        const created = this.manager.create(conn, msg.name, msg.deck, msg.startingPlayer);
         if (!created) {
           conn.send({ t: 'error', code: 'internal', message: 'unable to create a room (server at capacity)' });
           return;

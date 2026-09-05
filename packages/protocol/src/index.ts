@@ -450,8 +450,31 @@ export interface LobbyPlayer {
 // Client → Server messages.
 // ---------------------------------------------------------------------------
 
+/**
+ * Who takes the first turn of an online game, as the room's CREATOR chooses it
+ * (§3.125). 'host' is the creating seat (A), 'guest' the joining seat (B), and
+ * 'random' a coin the SERVER flips when the game starts — never the client, so
+ * neither player can pick a flip they like. Optional and additive on `createRoom`:
+ * an older server's validator rebuilds the message from the fields it knows and
+ * simply drops this one, so an old server still starts the host, exactly as it
+ * always did.
+ */
+export type StartingPlayerChoice = 'host' | 'guest' | 'random';
+
+/** The closed set, for validators — a value outside it is refused, not widened. */
+export const STARTING_PLAYER_CHOICES: readonly StartingPlayerChoice[] = Object.freeze(['host', 'guest', 'random']);
+
+/** The choice the room falls back to when the creator did not make one. */
+export const DEFAULT_STARTING_PLAYER_CHOICE: StartingPlayerChoice = 'host';
+
 export type ClientMessage =
-  | { readonly t: 'createRoom'; readonly protocolVersion: number; readonly name: string; readonly deck?: DeckList }
+  | {
+      readonly t: 'createRoom';
+      readonly protocolVersion: number;
+      readonly name: string;
+      readonly deck?: DeckList;
+      readonly startingPlayer?: StartingPlayerChoice;
+    }
   | { readonly t: 'joinRoom'; readonly protocolVersion: number; readonly code: string; readonly name: string; readonly deck?: DeckList }
   /**
    * Reclaim a seat after a dropped socket, using the `reconnectToken` the server
@@ -493,7 +516,18 @@ export type ServerMessage =
        */
       readonly reconnectToken?: string;
     }
-  | { readonly t: 'lobby'; readonly code: string; readonly phase: RoomPhase; readonly players: readonly LobbyPlayer[] }
+  | {
+      readonly t: 'lobby';
+      readonly code: string;
+      readonly phase: RoomPhase;
+      readonly players: readonly LobbyPlayer[];
+      /**
+       * What the creator chose for the first turn (§3.125), so the joining player
+       * sees it in the lobby rather than discovering it when the board appears.
+       * Optional: older servers do not send it and older clients ignore it.
+       */
+      readonly startingPlayer?: StartingPlayerChoice;
+    }
   | { readonly t: 'gameStarted'; readonly yourSeat: PlayerId }
   | { readonly t: 'mulliganPrompt'; readonly hand: readonly CardInstance[]; readonly mulligansTaken: number }
   | {

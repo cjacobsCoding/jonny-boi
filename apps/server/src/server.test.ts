@@ -20,7 +20,8 @@ import { SAMPLE_DECKS } from '@jonny-boi/sim';
 import { describe, expect, it } from 'vitest';
 import { MessageRouter } from './handlers.js';
 import type { Connection } from './room.js';
-import { Room } from './room.js';
+import { Room, resolveStartingPlayer } from './room.js';
+import { parseClientMessage } from './validate.js';
 import { RoomManager } from './room-manager.js';
 
 /** A fake connection: records every message the server sends it. */
@@ -410,5 +411,96 @@ describe('robustness', () => {
     expect([...PLAYER_IDS]).toEqual([..._PLAYER_IDS]);
     const ids: PlayerId[] = ['A', 'B'];
     expect(ids).toEqual([...PLAYER_IDS]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §3.125 — the creator chooses who goes first; 'random' is the SERVER's coin.
+// ---------------------------------------------------------------------------
+describe('who goes first online (§3.125)', () => {
+  function playedWith(startingPlayer?: 'host' | 'guest' | 'random'): { a: FakeConnection; b: FakeConnection } {
+    const manager = new RoomManager();
+    const router = new MessageRouter(manager);
+    const a = new FakeConnection('a');
+    const b = new FakeConnection('b');
+    router.handle(a, {
+      t: 'createRoom',
+      protocolVersion: PROTOCOL_VERSION,
+      name: 'Alice',
+      ...(startingPlayer !== undefined ? { startingPlayer } : {}),
+    });
+    const code = a.last('roomJoined')!.code;
+    router.handle(b, { t: 'joinRoom', protocolVersion: PROTOCOL_VERSION, code, name: 'Bob' });
+    router.handle(a, { t: 'chooseDeck', deck: sampleDeck(0) });
+    router.handle(b, { t: 'chooseDeck', deck: sampleDeck(1) });
+    router.handle(a, { t: 'setReady', ready: true });
+    router.handle(b, { t: 'setReady', ready: true });
+    router.handle(a, { t: 'mulligan', keep: true });
+    router.handle(b, { t: 'mulligan', keep: true });
+    return { a, b };
+  }
+
+  it("'guest' hands the first turn to the joining seat", () => {
+    const { a } = playedWith('guest');
+    expect(a.last('state')!.view.activePlayer).toBe('B');
+  });
+
+  it("'host' — and the legacy message with no choice at all — start the creator", () => {
+    expect(playedWith('host').a.last('state')!.view.activePlayer).toBe('A');
+    expect(playedWith().a.last('state')!.view.activePlayer).toBe('A');
+  });
+
+  it('the lobby tells both players what was chosen, so the guest is not surprised', () => {
+    const { a, b } = playedWith('guest');
+    expect(a.last('lobby')!.startingPlayer).toBe('guest');
+    expect(b.last('lobby')!.startingPlayer).toBe('guest');
+  });
+
+  it("'random' is a fair coin flipped from the game seed — reproducible, and both faces occur", () => {
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 64; seed++) {
+      const first = resolveStartingPlayer('random', seed);
+      expect(resolveStartingPlayer('random', seed)).toBe(first); // same seed, same flip
+      seen.add(first);
+    }
+    expect([...seen].sort()).toEqual(['A', 'B']);
+  });
+
+  it("'random' is not simply the shuffle's first bit — the flip is salted", () => {
+    // If the flip were the raw seed's parity, half the seeds would agree with a
+    // trivially computable function of the seed. Check it is not just parity.
+    let agreesWithParity = 0;
+    for (let seed = 1; seed <= 200; seed++) {
+      if ((seed % 2 === 0 ? 'A' : 'B') === resolveStartingPlayer('random', seed)) agreesWithParity++;
+    }
+    expect(agreesWithParity).toBeGreaterThan(60);
+    expect(agreesWithParity).toBeLessThan(140);
+  });
+
+  it('a value outside the closed set is refused at the wire, not widened to a seat', () => {
+    // `router.handle` takes an already-typed message; the wire goes through the
+    // validator first, and THAT is where an unknown value must die.
+    const bad = parseClientMessage(JSON.stringify({
+      t: 'createRoom',
+      protocolVersion: PROTOCOL_VERSION,
+      name: 'Alice',
+      startingPlayer: 'coinflip',
+    }));
+    expect(bad).toBeNull();
+    const good = parseClientMessage(JSON.stringify({
+      t: 'createRoom',
+      protocolVersion: PROTOCOL_VERSION,
+      name: 'Alice',
+      startingPlayer: 'guest',
+    }));
+    expect(good && good.t === 'createRoom' ? good.startingPlayer : null).toBe('guest');
+  });
+
+  it('an in-process caller cannot smuggle an unknown value past the closed set either', () => {
+    const room = new Room('ZZZZ');
+    const a = new FakeConnection('a');
+    room.createSeat(a, 'Alice', undefined, 'coinflip' as never);
+    // The room kept the DEFAULT rather than treating the junk as a coin flip.
+    expect(a.last('lobby')!.startingPlayer).toBe('host');
   });
 });

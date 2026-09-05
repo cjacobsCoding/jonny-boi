@@ -14,6 +14,7 @@ import {
   type ClientMessage,
   type DeckList,
   type ErrorCode,
+  type StartingPlayerChoice,
 } from '@jonny-boi/protocol';
 import { isLegacyVersion, negotiateOnError } from './negotiation.js';
 import type { GameAction } from '@jonny-boi/core';
@@ -28,7 +29,7 @@ import {
 export interface OnlineGameApi {
   readonly state: OnlineState;
   /** Create a new room under `name`, optionally pre-sending a deck. */
-  createRoom(name: string, deck?: DeckList): void;
+  createRoom(name: string, deck?: DeckList, startingPlayer?: StartingPlayerChoice): void;
   /** Join an existing room by `code` under `name`. */
   joinRoom(code: string, name: string, deck?: DeckList): void;
   /** Choose/replace this seat's deck in the lobby. */
@@ -118,9 +119,15 @@ export function useOnlineGame(options?: ConnectionOptions): OnlineGameApi {
   }, []);
 
   const createRoom = useCallback(
-    (name: string, deck?: DeckList) => {
+    (name: string, deck?: DeckList, startingPlayer?: StartingPlayerChoice) => {
       dispatch({ kind: 'requestCreate' });
-      sendHandshake((protocolVersion) => ({ t: 'createRoom', protocolVersion, name, deck }));
+      sendHandshake((protocolVersion) => ({
+        t: 'createRoom',
+        protocolVersion,
+        name,
+        deck,
+        ...(startingPlayer !== undefined ? { startingPlayer } : {}),
+      }));
     },
     [sendHandshake],
   );

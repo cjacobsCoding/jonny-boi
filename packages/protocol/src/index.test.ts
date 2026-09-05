@@ -401,3 +401,18 @@ describe('message contract', () => {
     expect(tagOf({ t: 'pong' })).toBe('pong');
   });
 });
+
+// §3.125 — who goes first is a CLOSED set, and the default is a member of it.
+import { DEFAULT_STARTING_PLAYER_CHOICE, STARTING_PLAYER_CHOICES } from './index.js';
+
+describe('StartingPlayerChoice (§3.125)', () => {
+  it('is a closed set of exactly host, guest and random', () => {
+    expect([...STARTING_PLAYER_CHOICES].sort()).toEqual(['guest', 'host', 'random']);
+    expect(Object.isFrozen(STARTING_PLAYER_CHOICES)).toBe(true);
+  });
+
+  it('defaults to the host — the behaviour every game had before the choice existed', () => {
+    expect(DEFAULT_STARTING_PLAYER_CHOICE).toBe('host');
+    expect(STARTING_PLAYER_CHOICES).toContain(DEFAULT_STARTING_PLAYER_CHOICE);
+  });
+});

@@ -17,6 +17,7 @@ import { buildRegistry, loadCardPool, type CardPool } from '@jonny-boi/cards';
 import {
   applyAction,
   createGame,
+  createRng,
   DEFAULT_RULES,
   generateLegalActions,
   PLAYER_IDS,
@@ -28,10 +29,13 @@ import {
 import {
   maskStateForSeat,
   maskStateForSpectator,
+  DEFAULT_STARTING_PLAYER_CHOICE,
+  STARTING_PLAYER_CHOICES,
   MIN_COMPATIBLE_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
   type DeckList,
   type LobbyPlayer,
+  type StartingPlayerChoice,
   type RoomPhase,
   type ServerMessage,
 } from '@jonny-boi/protocol';
@@ -112,6 +116,25 @@ function getPool(): CardPool {
   return sharedPool;
 }
 
+/**
+ * Salt for the first-turn coin (§3.125), so the flip is not simply the shuffle's
+ * first bit: both derive from the game seed, and a player who noticed the two
+ * always agreeing would be learning something about the deck order.
+ */
+const STARTING_PLAYER_SALT = 0x51a7e1;
+
+/**
+ * Resolve the creator's choice to the seat that actually starts. 'random' is a
+ * coin flipped from THIS game's seed, so it is reproducible for the game and
+ * fresh for the next one (a rematch draws a new seed), and it is the SERVER's
+ * flip — a client cannot choose a flip it likes.
+ */
+export function resolveStartingPlayer(choice: StartingPlayerChoice, seed: number): PlayerId {
+  if (choice === 'host') return 'A';
+  if (choice === 'guest') return 'B';
+  return createRng((seed ^ STARTING_PLAYER_SALT) >>> 0).next() < 0.5 ? 'A' : 'B';
+}
+
 export class Room {
   readonly code: string;
   private readonly config: RulesConfig;
@@ -124,6 +147,12 @@ export class Room {
   private state: GameState | null = null;
   /** Monotonic seed so each rematch is a fresh, still-reproducible game. */
   private nextSeed: number;
+  /**
+   * Who takes the first turn, as the creator chose it (§3.125). Kept as the
+   * CHOICE rather than a resolved seat because 'random' is flipped per game — a
+   * rematch flips again, from that game's own seed.
+   */
+  private startingPlayerChoice: StartingPlayerChoice = DEFAULT_STARTING_PLAYER_CHOICE;
 
   /**
    * `pool` overrides the shared curated pool. Production always takes the default;
@@ -209,9 +238,20 @@ export class Room {
    * Seat a creating player as A. Validates an optional deck immediately so the
    * lobby reflects `hasDeck`. Returns the join result + the seat's reconnect token.
    */
-  createSeat(conn: Connection, name: string, deck?: DeckList): JoinResult & { token: string } {
+  createSeat(
+    conn: Connection,
+    name: string,
+    deck?: DeckList,
+    startingPlayer?: StartingPlayerChoice,
+  ): JoinResult & { token: string } {
     const seat = this.seats.A;
     seat.claimed = true;
+    // The wire validator already refuses values outside the closed set; this
+    // repeats the check for in-process callers so an unknown value keeps the
+    // default rather than falling through to the 'random' branch.
+    if (startingPlayer !== undefined && STARTING_PLAYER_CHOICES.includes(startingPlayer)) {
+      this.startingPlayerChoice = startingPlayer;
+    }
     seat.name = name;
     seat.connection = conn;
     if (deck) this.tryChooseDeck('A', deck, conn);
@@ -370,7 +410,7 @@ export class Room {
     const seed = this.nextSeed;
     const created = createGame({
       seed,
-      startingPlayer: 'A',
+      startingPlayer: resolveStartingPlayer(this.startingPlayerChoice, seed),
       config: this.config,
       registry: this.registry,
       decks: {
@@ -765,6 +805,7 @@ export class Room {
       code: this.code,
       phase: this.phase,
       players: this.lobbyPlayers(),
+      startingPlayer: this.startingPlayerChoice,
     };
     this.broadcastToAll(msg);
   }
