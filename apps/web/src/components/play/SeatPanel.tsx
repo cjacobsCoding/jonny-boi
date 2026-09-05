@@ -15,6 +15,23 @@ const MANA_ORDER = ['W', 'U', 'B', 'R', 'G', 'C'] as const;
 const POISON_DANGER_MARGIN = 2;
 const POISON_DANGER_AT = POISON_LOSS_THRESHOLD - POISON_DANGER_MARGIN;
 
+/**
+ * THE BATTLEFIELD ROWS, NAMED ONCE (§3.124, report 20260901_205636 — "Battlefield
+ * zone naming/organization"). The rows had aria-labels a screen reader spoke and
+ * NO visible caption, so sighted players saw two unlabelled strips of tiles while
+ * assistive tech heard "creatures and other permanents" — the same zone described
+ * two different ways. One table now feeds BOTH the caption on screen and the
+ * accessible name, so they cannot drift apart again. Adding a row is a ROW.
+ */
+const BATTLEFIELD_ROWS = Object.freeze({
+  permanents: Object.freeze({
+    label: 'Creatures',
+    aria: 'creatures and other permanents',
+    emptyText: 'Battlefield — no creatures',
+  }),
+  lands: Object.freeze({ label: 'Lands', aria: 'lands', emptyText: 'No lands' }),
+});
+
 /** How a board permanent may be interacted with this frame. */
 export interface PermInteraction {
   /** Permanents that can be clicked (e.g. eligible attackers / targets / tap). */
@@ -198,16 +215,52 @@ export function SeatPanel({
         )}
       </div>
 
-      <div className="seat__board">
+      <div className="seat__board" role="group" aria-label={`${seat.name} battlefield`}>
+        {/* The battlefield is a zone like the others (CR 400.1) and was the ONE
+            zone never named on screen. Its name runs vertically beside the rows
+            rather than sitting in the rail as a chip: a chip wrapped the rail onto
+            a second line and cost the height §3.62 fought for, whereas a rotated
+            word beside rows that are a tile tall costs none.
+
+            ⚠️ ONLY while something is on the battlefield. A rotated word is ~60px
+            tall, and beside two EMPTY rows ("No creatures" / "No lands", ~20px
+            each) it is the tallest thing there — it grew every turn-one board by
+            a caption's height and broke §3.62's fit. An empty battlefield names
+            itself in its empty text instead. Same rule per row, below. */}
+        {seat.permanents.length > 0 && (
+          <span className="seat__board-label" aria-hidden="true">
+            Battlefield
+          </span>
+        )}
+        <div className="seat__board-rows">
         <div
           className="seat__row"
-          aria-label={`${seat.name} creatures and other permanents`}
+          aria-label={`${seat.name} ${BATTLEFIELD_ROWS.permanents.aria}`}
           data-anim-anchor={`board:${seat.id}`}
         >
-          {nonlands.length === 0 ? <span className="seat__empty">No creatures</span> : nonlands.map(renderPerm)}
+          {nonlands.length === 0 ? (
+            <span className="seat__empty">{BATTLEFIELD_ROWS.permanents.emptyText}</span>
+          ) : (
+            <>
+              <span className="seat__row-label" aria-hidden="true">
+                {BATTLEFIELD_ROWS.permanents.label}
+              </span>
+              {nonlands.map(renderPerm)}
+            </>
+          )}
         </div>
-        <div className="seat__row seat__row--lands" aria-label={`${seat.name} lands`}>
-          {lands.length === 0 ? <span className="seat__empty">No lands</span> : lands.map(renderPerm)}
+        <div className="seat__row seat__row--lands" aria-label={`${seat.name} ${BATTLEFIELD_ROWS.lands.aria}`}>
+          {lands.length === 0 ? (
+            <span className="seat__empty">{BATTLEFIELD_ROWS.lands.emptyText}</span>
+          ) : (
+            <>
+              <span className="seat__row-label" aria-hidden="true">
+                {BATTLEFIELD_ROWS.lands.label}
+              </span>
+              {lands.map(renderPerm)}
+            </>
+          )}
+        </div>
         </div>
       </div>
     </section>

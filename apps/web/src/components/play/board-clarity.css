@@ -272,3 +272,47 @@
 .aiming-bar__what {
   font-size: var(--text-sm);
 }
+
+/* §3.124 — the battlefield rows carry a visible caption cut from the same cloth
+   as the zone chips above them, so "Creatures" and "Lands" read as zone names
+   rather than decoration. It is the first flex item of a row that is already at
+   least a tile tall, so it costs no height — which matters under §3.62's budget.
+   Hidden from assistive tech because the row's aria-label already says the same
+   words (both come from ONE table in SeatPanel); reading it twice is noise. */
+/* The board becomes a row: the zone's vertical name, then the column of rows it
+   always was. `.seat__board` keeps its class so §3.62's height cap and scroll
+   rules (which target it) apply unchanged; only its inner arrangement moved. */
+.play-board .seat__board {
+  flex-direction: row;
+  align-items: stretch;
+  gap: var(--space-1);
+}
+
+.play-board .seat__board-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  flex: 1;
+}
+
+.play-board .seat__board-label,
+.play-board .seat__row-label {
+  align-self: center;
+  flex: 0 0 auto;
+  color: var(--color-fg-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.6rem;
+  /* Reads top-to-bottom beside the tiles: a whole word of width would push the
+     first tile a card's-width right on a phone; a rotated word costs ~0.8rem. */
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  line-height: 1;
+  padding: 0 1px;
+}
+
+.play-board .seat__board-label {
+  color: var(--color-fg-muted);
+  letter-spacing: 0.08em;
+}
