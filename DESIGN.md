@@ -2889,6 +2889,36 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.125 Online: the creator chooses who goes first — and 'random' is the server's coin — ✅ done
+
+The other half of report 210805, left open by §3.63: the online surface had no first-player control
+at all. The server hard-coded `startingPlayer: 'A'` — the creator always went first.
+
+**One optional field, all the way through.** `createRoom` gains `startingPlayer?: 'host' | 'guest' |
+'random'` (`StartingPlayerChoice`, a CLOSED set exported beside its default). The web's create panel
+offers the same choice the Solo setup does; the server validates it at the wire (a value outside the
+set is refused, not widened), remembers the CHOICE on the room, resolves it when each game starts,
+and tells both players in the `lobby` message so the guest is not surprised when the board appears.
+Additive and backward-compatible in both directions: an older server's validator rebuilds the
+message from the fields it knows and drops this one (the host starts, as always); an older client
+ignores the new lobby field.
+
+**Why 'random' is flipped on the SERVER, from the game's seed.** A client-side flip would let the
+client pick a flip it likes. Resolving from the seed makes it reproducible for that game and fresh for
+the next — a rematch draws a new seed, so it flips again. The seed is SALTED before the flip so the
+first turn is not simply the shuffle's first bit; a player who noticed the two always agreeing would
+be learning something about the deck order. Pinned: same seed → same flip, both faces occur, and the
+result is not the seed's parity.
+
+**The choice is kept, not the seat.** The room stores what was chosen because 'random' must re-flip
+per game; the resolved seat is what `createGame` receives. `createSeat` repeats the closed-set check
+for in-process callers, so an unknown value keeps the default rather than falling through to the
+coin — the wire validator is the funnel, but a guard that only exists at one entrance is a guard
+that will be walked around.
+
+📊 Pinned end to end through the real router: 'guest' starts seat B; 'host' and a legacy message
+with no field start A; the lobby carries the choice to both seats; the wire refuses 'coinflip'.
+
 ### 3.123 A deck with a printing the pool lacks now PLAYS — the entry's name resolves it — ✅ done
 
 Found live during §3.61's verification and handed over by it: a saved deck refused to start with

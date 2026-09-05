@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactElement } from 'react';
+import { DEFAULT_STARTING_PLAYER_CHOICE, type StartingPlayerChoice } from '@jonny-boi/protocol';
 import { isLand, type PlayerId } from '@jonny-boi/core';
 import type { DecksApi } from '../../lib/useDecks.js';
 import { useOnlineGame } from '../../lib/online/useOnlineGame.js';
@@ -18,6 +19,14 @@ import { ConnectionIndicator } from './ConnectionIndicator.js';
 import { OnlineBoard } from './OnlineBoard.js';
 import { MulliganScreen } from '../play/MulliganScreen.js';
 import { EndScreen } from '../play/EndScreen.js';
+
+
+/** The lobby's words for the creator's first-turn choice (§3.125). */
+const STARTING_PLAYER_TEXT: Readonly<Record<StartingPlayerChoice, string>> = Object.freeze({
+  host: 'the host',
+  guest: 'the guest',
+  random: 'a coin flip when the game starts',
+});
 
 /**
  * The online play flow: create/join a room, lobby with deck selection + ready, the
@@ -174,6 +183,7 @@ function MenuScreen({
   menu: ReturnType<typeof buildDeckMenu>;
 }): ReactElement {
   const [name, setName] = useState('Player');
+  const [starter, setStarter] = useState<StartingPlayerChoice>(DEFAULT_STARTING_PLAYER_CHOICE);
   const [code, setCode] = useState('');
   const codeOk = isPlausibleRoomCode(code);
 
@@ -200,11 +210,27 @@ function MenuScreen({
         <div className="online-menu__panel">
           <div className="section-label">Create a room</div>
           <p className="online__hint">You'll get a code to share with your opponent.</p>
+          {/* §3.125 — the creator picks who goes first, the same choice the Solo
+              setup offers. 'random' is the SERVER's coin, flipped when the game
+              starts, so neither player can pick a flip they like. */}
+          <label className="play-setup__field">
+            <span>On the play</span>
+            <select
+              className="select"
+              value={starter}
+              onChange={(e) => setStarter(e.target.value as StartingPlayerChoice)}
+              aria-label="Who goes first"
+            >
+              <option value="host">You (the host)</option>
+              <option value="guest">Your opponent</option>
+              <option value="random">Random (coin flip)</option>
+            </select>
+          </label>
           <button
             type="button"
             className="btn btn--primary"
             disabled={menu.length === 0}
-            onClick={() => online.createRoom(name.trim() || 'Player')}
+            onClick={() => online.createRoom(name.trim() || 'Player', undefined, starter)}
           >
             Create room
           </button>
@@ -311,6 +337,11 @@ function LobbyScreen({
         })}
       </div>
 
+      {state.startingPlayer && (
+        <p className="online__hint" role="status">
+          On the play: {STARTING_PLAYER_TEXT[state.startingPlayer]}
+        </p>
+      )}
       {me && (
         <div className="online-lobby__controls">
           <label className="play-setup__field">
