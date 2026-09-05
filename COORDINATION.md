@@ -266,6 +266,12 @@ _Append dated notes here; keep them short. Newest at top._
   `handlers`), apps/web online (`online-state`, `useOnlineGame`, `OnlinePlay` select + lobby line).
   Additive both ways — no PROTOCOL_VERSION bump needed; documented on the type. ⚠️ Deploying the
   SERVER is what makes the choice take effect; the web alone still sends it harmlessly.
+- 2026-09-04 integrator: `feat/battlefield-labels` ✅ MERGED — DESIGN §3.124 (report 205636).
+  apps/web only: `components/play/SeatPanel.tsx` (BATTLEFIELD_ROWS table; vertical captions on
+  POPULATED rows only), `components/play/board-clarity.css`, NEW `battlefield-labels.test.ts`.
+  ⚠️ Found while measuring: the §3.62 layout harness reads 28/31 on PRISTINE main — three inherited
+  regressions (9-permanent board 726/600, tall-window cards 96px not 148, phone 673/600). Nobody
+  runs `verify-board-fits.mjs` because it is not in the vitest gate. Taking it next.
 
 - 2026-09-04 integrator: `fix/deck-entry-name-resolves` ✅ MERGED — DESIGN §3.123, the loader
   half of the `unknown card "<uuid>"` handover from §3.61. packages/sim `deck.ts` (+ optional

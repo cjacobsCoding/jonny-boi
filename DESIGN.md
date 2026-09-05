@@ -2918,6 +2918,37 @@ that will be walked around.
 
 📊 Pinned end to end through the real router: 'guest' starts seat B; 'host' and a legacy message
 with no field start A; the lobby carries the choice to both seats; the wire refuses 'coinflip'.
+### 3.124 The battlefield is named on screen, in the words a screen reader hears — ✅ done
+
+Report 20260901_205636 ("Battlefield zone naming/organization"), triaged as: no visible "Battlefield"
+anywhere; the battlefield rows carried aria-labels ("creatures and other permanents", "lands") and NO
+caption, so sighted players saw two unlabelled strips of tiles while assistive tech heard zone names —
+the same zone described two different ways. §3.119 had already turned the zone RAIL into labelled
+chips (Hand / Library / Graveyard / Exile); the battlefield was the one zone left out.
+
+**One table feeds both the eye and the ear.** `BATTLEFIELD_ROWS` in `SeatPanel` holds each row's
+caption, its accessible name and its empty text; the visible caption and the `aria-label` are read
+from the same row, so they cannot drift again. The zone's own name — "Battlefield" — runs vertically
+beside the rows, and each populated row carries a vertical "Creatures" / "Lands" caption in the rail
+chips' typography.
+
+⚠️ **Captions appear only on rows that hold tiles, and this is load-bearing for §3.62.** A rotated
+word is ~55–65px tall. Beside a POPULATED row (a tile is 82–120px) it costs nothing; beside an EMPTY
+row ("No creatures", ~20px) it is the tallest thing there, and the first cut grew every turn-one board
+by a caption's height — the layout harness caught it at 658px of a 600px slot. An empty battlefield
+names itself in its empty text ("Battlefield — no creatures") instead. The first cut also tried a
+"Battlefield N" chip in the rail; that wrapped the 7rem rail onto a second line and was dropped for
+the same reason.
+
+📊 The layout harness (`verify-board-fits.mjs`) reads **28/31 with this change — identical to
+pristine main**, which is the point: the captions are free. ⚠️ The three failures are INHERITED, not
+new: pristine `origin/main` (e6f0131) already fails "9 permanents: 726 of 600", "tall window
+full-size cards: 96px" and "phone: 673 of 600". §3.62's guarantees regressed somewhere in
+§3.68–§3.122 and nobody ran the harness, because it is not in the vitest gate. Tracked as its own item.
+
+Pinned by `components/play/battlefield-labels.test.ts` (static render): captions on populated rows,
+the zone name once anything is on the battlefield, NO vertical caption on an empty board, and the
+aria-labels carrying the same words as the table.
 
 ### 3.123 A deck with a printing the pool lacks now PLAYS — the entry's name resolves it — ✅ done
 
