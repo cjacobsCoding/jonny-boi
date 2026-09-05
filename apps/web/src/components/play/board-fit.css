@@ -74,11 +74,24 @@
      the hand or the action bar, which rule 5 forbids shrinking. */
   --play-seat-rows-max: 17dvh;
 
+  /* The least a battlefield strip may be squeezed to: one tile row (art plus
+     footer), so the battlefield never vanishes — anything beyond that scrolls
+     inside the strip. Derived from the tile token so it shrinks with the tiles. */
+  --play-seat-rows-min: var(--play-tile-w);
+
+  /* The floor of a strip with nothing on it: two lines of empty text plus the
+     gap between the creature and land rows. */
+  --play-seat-rows-empty-min: 3rem;
+
   /* The log is the designated slack (see rule 3) — but "yields first" was
      unbounded in both directions: with a long history it grew to whatever the
      content wanted and took the difference out of the seats. It now has a
      floor (still a log) and a ceiling (never more than this). */
-  --play-log-min-h: 5rem;
+  /* §3.119 set a flat 5rem floor so the log stays a log; on an 800px window that
+     is 80px of a 600px board and the last 35px that would not fit once the hand
+     was drawn at its designed size. The floor now scales with the window and
+     keeps 5rem as its ceiling, so a tall screen sees exactly what §3.119 chose. */
+  --play-log-min-h: clamp(2rem, 5dvh, 5rem);
   --play-log-max-h: 22dvh;
 
 
@@ -129,9 +142,12 @@
 .app:has(.play-board) .play-board__center {
   /* Yields FIRST — the log is the one region whose content is a history rather
      than the position, and the only one that scrolls without losing anything.
+     Flex shrinks every item in proportion to its size, so "first" has to be
+     said: a shrink factor several times the seats' means the log gives up its
+     slack before a battlefield strip loses a pixel.
      Bounded at both ends in §3.119: without a ceiling it grew with the history
      and crunched the battlefield (report 20260901_204618). */
-  flex: 0 1 auto;
+  flex: 0 4 auto;
   min-height: var(--play-log-min-h);
   max-height: var(--play-log-max-h);
   overflow-y: hidden;
@@ -176,7 +192,15 @@
    nothing moved). The extra class makes the override a fact rather than a
    coincidence. The scope is also honest: the mulligan screen shows seven cards
    on a page of its own and has no reason to shrink. */
-.play-board .play-card--full {
+/* ⚠️ A hand card carries BOTH classes — `play-card play-card--full` — so these two
+   rules compete, and at equal specificity the LATER one wins. That is how every
+   hand rendered at TILE size (96px on a 1100px-tall window, 80px at 800px)
+   instead of the full-face size the token names: the `.play-card` rule below
+   used to lose only because a `min-width` keyed on `.hand-card-slot > …` propped
+   the width up, and an upstream wrapper element broke that child combinator.
+   The full-face rule now wins by SPECIFICITY (.play-card.play-card--full), which
+   no reordering and no wrapper can undo. */
+.play-board .play-card.play-card--full {
   width: var(--play-card-w);
 }
 
@@ -187,8 +211,10 @@
 /* The opponent's hand is a COUNT, not information — it earns the smallest
    footprint of anything on the board. */
 .play-board .play-card--back {
-  width: calc(var(--play-tile-w) * 0.66);
-  height: calc(var(--play-tile-w) * 0.92);
+  width: calc(var(--play-tile-w) * 0.6);
+  /* A count wants no height; this is the step that made the 800px budget close
+     once the hand was drawn at its designed size again. */
+  height: calc(var(--play-tile-w) * 0.7);
 }
 
 /* --- Rule 2: the hand fans --------------------------------------------------- */
@@ -210,7 +236,9 @@
   overflow: visible;
 }
 
-.play-board .play-hand .hand-card-slot > .play-card--full {
+/* Descendant, not child: the card is no longer the slot's direct child (a
+   wrapper was added upstream), and a `>` here silently matched nothing. */
+.play-board .play-hand .hand-card-slot .play-card--full {
   /* The card keeps its true width while its slot compresses. */
   min-width: var(--play-card-w);
 }
@@ -254,10 +282,16 @@
   .play-board .seat {
     display: grid;
     grid-template-columns: minmax(7rem, max-content) 1fr;
-    grid-template-rows: auto auto;
+    /* Row 1 is the name/life line and never shrinks; row 2 may shrink to the
+       zone counters' own height and no further — which is exactly the floor
+       that protects the rail when the band is squeezed (rule 5). */
+    grid-template-rows: auto minmax(min-content, 1fr);
     column-gap: var(--space-3);
     align-items: start;
     padding: var(--space-2);
+    /* The grid may be squeezed down to the sum of its rows' minimums — the rail —
+       and no further; `0` here let it shrink THROUGH the rail. */
+    min-height: min-content;
   }
 
   .play-board .seat__head {
@@ -277,7 +311,10 @@
   .play-board .seat__board {
     grid-column: 2;
     grid-row: 1 / span 2;
-    min-height: 100%;
+    /* Spanning both rows, the strip is as tall as the rail and no taller than
+       its cap; `min-height: 0` (not 100%) is what lets it be squeezed. */
+    min-height: 0;
+    align-self: stretch;
   }
 }
 
@@ -319,27 +356,82 @@
  * own hand off-screen — technically "the page doesn't scroll", practically
  * worse than what it replaced.
  */
-/* ⚠️ NOTHING HERE SHRINKS. Three attempts at this rule made the seats flexible
-   and each one failed the same way: a box free to shrink shrinks THROUGH its own
-   contents, and the first squeeze cut "Computer ♥ 20" off mid-line — a seat
-   hiding the life total it exists to show, to win a fight about pixels. So the
-   seats are sized by their content (`flex: 0 0 auto`), the ONE region with
-   unbounded content is capped instead, and the log is the only thing that
-   stretches or yields. Deterministic beats clever: with nothing shrinking, there
-   is no squeeze to get wrong. */
+/* ⚠️ WHAT SHRINKS, AND WHAT NEVER DOES. §3.62 first made the seats shrink and
+   they shrank THROUGH their own rails ("Computer ♥ 20" cut off mid-line), so it
+   froze them (`flex: 0 0 auto`) and capped the battlefield strip instead. Then
+   §3.119 raised that cap (11 → 17dvh, so two tile rows never crunch into one
+   band) and gave the log a floor — both right — and the sum no longer fit 800px:
+   the board fell back to scrolling ITSELF, which took the hand and the action
+   bar with it. That is the one outcome rule 5 exists to forbid.
+
+   The resolution needs the §3.62 rail layout, which did not exist for the first
+   attempt: the seat's identity (name, life, counters) lives in grid column 1
+   with rows `auto minmax(min-content, 1fr)`, so the grid cannot shrink below
+   the rail's own content, while the battlefield strip in column 2 — the ONE
+   region whose content is unbounded, and already a scroller — is what absorbs
+   the squeeze. So the bands may shrink again, the rail is protected by the
+   grid's minimums rather than by a guess, the strip scrolls inside whatever
+   height is left (its cap stays as the ceiling), and the hand and action bar
+   are never asked to move. */
 .play-board .play-board__opponent,
 .play-board .play-board__self {
   display: flex;
   flex-direction: column;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  /* `min-content`, not 0. With 0 the band shrank THROUGH its own hand — the seat
+     stopped at its floor and the hand spilled 30px past the board, which is rule
+     5's forbidden outcome one level up. The band's min-content is exactly what
+     must stay whole: the rail, one row of the strip (size-contained below), and
+     the hand. Everything above that is negotiable; nothing below it is. */
+  min-height: min-content;
 }
 
-/* The battlefield is the only part of a seat that grows without limit, so it is
-   the only part that is capped — and it scrolls inside that cap rather than
-   pushing the hand and the action bar off the screen. */
+/* The seat wrappers pass the constraint down: a block `.drop-zone` would size
+   to its content and overflow the band instead of letting the grid shrink. */
+/* `min-content`, not 0: a seat's min-content is its RAIL (name/life line plus
+   zone counters), because the battlefield strip is a scroller with no minimum
+   and contributes nothing. That is the floor the squeeze stops at — measured in
+   §3.62 attempt two as impossible, but only because the strip was not yet a
+   separate scroller and the whole battlefield counted toward min-content. */
+.play-board .play-board__opponent > .seat,
+.play-board .play-board__self > .drop-zone {
+  flex: 1 1 auto;
+  min-height: min-content;
+}
+
+.play-board .play-board__self > .drop-zone {
+  display: flex;
+  flex-direction: column;
+}
+
+.play-board .play-board__self > .drop-zone > .seat {
+  flex: 1 1 auto;
+  min-height: min-content;
+}
+
+/* The battlefield strip: capped above (§3.119's two-row height on a normal
+   window), free to be shorter when the window is, and a scroller either way.
+
+   ⚠️ `contain: size` is the load-bearing line. A scroll container still reports
+   its CONTENT's height as its min-content contribution to grid and flex sizing,
+   so without this the seat's "minimum" was rail + entire battlefield and the
+   strip never gave an inch — the board fell back to scrolling itself and took
+   the hand with it. Size containment removes the content from intrinsic sizing
+   (the strip still lays out and scrolls its children); the explicit `min-height`
+   is then the only floor: one tile row. */
 .play-board .seat__board {
+  contain: size;
+  min-height: var(--play-seat-rows-min);
   max-height: var(--play-seat-rows-max);
   overflow-y: auto;
+}
+
+/* An EMPTY strip has no tile to keep a row for — its floor is its two lines of
+   "no creatures / no lands" text. Without this, size containment held every
+   turn-one strip open at a tile's height and the board overflowed by exactly
+   the difference. `SeatPanel` sets the modifier from the permanent count. */
+.play-board .seat__board--empty {
+  min-height: var(--play-seat-rows-empty-min);
 }
 
 .play-board .play-board__opponent > .play-hand,
@@ -350,7 +442,9 @@
 /* The board's own rhythm tightens with everything else — at these sizes a
    16px gutter between four stacked regions is a card's worth of nothing. */
 .app:has(.play-board) .play-board {
-  gap: var(--space-2);
+  /* Five stacked regions with their own borders; at these sizes a gutter is a
+     line, not a space. This is the last ~20px of an 800px budget. */
+  gap: var(--space-1);
 }
 
 
@@ -385,6 +479,26 @@
 
   .play-board .play-hand--hidden {
     display: none;
+  }
+
+  /* Stacked seat (no rail below this width): make it a column whose battlefield
+     strip is the only part allowed to give, so a squeeze can never eat the
+     name/life line or the zone counters. */
+  .play-board .seat {
+    display: flex;
+    flex-direction: column;
+    /* Head + counters are the floor; the strip below is a scroller with none. */
+    min-height: min-content;
+  }
+
+  .play-board .seat__head,
+  .play-board .seat__zones {
+    flex: 0 0 auto;
+  }
+
+  .play-board .seat__board {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
   /* On a phone the CHROME is the expensive part, not the cards: the status line
