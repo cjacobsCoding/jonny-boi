@@ -260,6 +260,14 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-09-04 integrator: `fix/hand-card-size` ✅ MERGED — DESIGN §3.126. Two things: (1) every hand
+  card had been rendering at TILE size (80px at 800px, 96px at 1100px) since an upstream wrapper broke
+  the `min-width` mask — a specificity fix; (2) with hands at their designed size §3.119's row cap +
+  log floor pushed the hand off-screen on a crowded 800px board — resolved by `contain: size` on the
+  battlefield strip so it is the only thing that gives, bands floored at min-content, log yields
+  first. Layout harness 32/32 (was 28/31 on pristine main). apps/web only: `board-fit.css`,
+  `SeatPanel.tsx` (an `--empty` modifier), `verify-board-fits.mjs` (exact token-width check).
+
 - 2026-09-04 integrator: `feat/online-first-player` ✅ MERGED — DESIGN §3.125, the online half of
   report 210805. packages/protocol (`StartingPlayerChoice`, optional on `createRoom` and `lobby`),
   apps/server (`validate.ts` closed-set check, `room.ts` choice + salted seed flip, `room-manager`,

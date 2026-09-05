@@ -215,7 +215,11 @@ export function SeatPanel({
         )}
       </div>
 
-      <div className="seat__board" role="group" aria-label={`${seat.name} battlefield`}>
+      <div
+        className={`seat__board${seat.permanents.length === 0 ? ' seat__board--empty' : ''}`}
+        role="group"
+        aria-label={`${seat.name} battlefield`}
+      >
         {/* The battlefield is a zone like the others (CR 400.1) and was the ONE
             zone never named on screen. Its name runs vertically beside the rows
             rather than sitting in the rail as a chip: a chip wrapped the rail onto

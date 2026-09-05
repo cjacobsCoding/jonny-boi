@@ -2889,6 +2889,51 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.126 The board fits again — hands at their designed size, and only the battlefield strip gives — ✅ done
+
+Found by running §3.62's layout harness for the first time since §3.68: pristine main read **28/31**.
+Two things had happened, one of them a real regression nobody had seen.
+
+**Every hand was drawn at TILE size.** A hand card carries both `play-card` and `play-card--full`, and
+`board-fit.css` sized the two at equal specificity — so the later `.play-card` rule won and hands got
+`--play-tile-w` (96px on an 1100px window, 80px at 800px) instead of the 148px/112px the token names.
+It had been masked by a `min-width` keyed on `.hand-card-slot > .play-card--full`; an upstream wrapper
+element broke that child combinator and the mask fell away. The full-face rule now wins by
+**specificity** (`.play-card.play-card--full`), which no reordering or nesting can undo, and the
+`min-width` uses a descendant selector. The harness's "smaller than 148" check passed for months while
+this was wrong; it now asserts the hand card equals the size token's value, resolved through a probe.
+
+**Restoring the hand size exposed the real squeeze.** §3.119 raised the battlefield-row cap
+(11 → 17dvh, so two tile rows never crunch into one band) and gave the log a 5rem floor — both right for
+the report they answered — and with hands at their designed size the 800px budget was gone: the board
+fell back to scrolling ITSELF, taking the hand and the action bar with it, the one outcome rule 5
+forbids. §3.62 had frozen the seats because shrinking them clipped their rails; the resolution needs
+its own rail layout, which did not exist for that first attempt:
+
+- the seat's rail lives in grid column 1 with rows `auto minmax(min-content, 1fr)`, so the grid's
+  minimum IS the rail — the floor is structural, not a guessed rem;
+- the battlefield strip is `contain: size` — the load-bearing line. A scroll container still reports
+  its content's height as its min-content contribution, so without containment the seat's "minimum"
+  was rail + entire battlefield and the strip never gave an inch. Containment removes the content from
+  intrinsic sizing (the strip still lays out and scrolls); an explicit floor of one tile row keeps the
+  battlefield from vanishing, and an empty strip's floor is its two lines of text;
+- the bands floor at `min-content` (rail + one strip row + hand), because at `0` a band shrank
+  THROUGH its hand — the hand spilled 30px past the board, rule 5's violation one level up;
+- the log yields FIRST by flex weight (`flex: 0 4 auto`): flex shrinks proportionally, so "first"
+  has to be said; its 5rem floor now scales (`clamp(2rem, 5dvh, 5rem)`) so a tall screen sees exactly
+  what §3.119 chose and an 800px one does not pay 80px for it;
+- the opponent's card backs and the inter-region gutter each gave a step.
+
+📊 **32/32** — the crowded 800px board reads exactly 600 of 600 with hand, action bar and every rail
+whole; the tall window shows 148px cards again; the phone fits. Drag-to-play re-verified through real
+pointer events after the change, since the seats became scroll containers again. Every number here
+was set by running the harness, not by eye — three intermediate states each failed a different check
+(rails clipped, then the hand off-screen, then empty strips held open at a tile's height) and each
+failure named its own fix.
+
+⚠️ The harness is still not in the vitest gate (it needs Chrome and a build). Until it is, treat any
+delta from 32/32 as your change.
+
 ### 3.125 Online: the creator chooses who goes first — and 'random' is the server's coin — ✅ done
 
 The other half of report 210805, left open by §3.63: the online surface had no first-player control

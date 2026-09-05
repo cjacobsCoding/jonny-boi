@@ -165,7 +165,17 @@ async function measure(page) {
       return r.height > 0 && r.top >= -1 && r.bottom <= window.innerHeight + 1;
     };
     const hand = [...document.querySelectorAll('.play-hand')].find((h) => !h.className.includes('hidden'));
-    const card = document.querySelector('.play-board .play-card--full');
+    // The HAND card specifically — not the first `.play-card--full` in document
+    // order — and, beside it, what the size token actually resolves to on this
+    // window. The token is a clamp(); only a real box resolves it, so a probe
+    // element borrows it for one frame. Comparing the two is the check that
+    // catches a card drawn at the wrong size while still "smaller than 148".
+    const card = document.querySelector('.play-board .play-hand:not(.play-hand--hidden) .play-card--full');
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;width:var(--play-card-w)';
+    board.appendChild(probe);
+    const tokenCardWidth = Math.round(parseFloat(getComputedStyle(probe).width));
+    probe.remove();
     // A seat squeezed past its own rail hides the life total it exists to show.
     const seats = [...document.querySelectorAll('.play-board .seat')];
     const seatClipped = seats.some((seat) => seat.scrollHeight > seat.clientHeight + 1);
@@ -185,6 +195,7 @@ async function measure(page) {
       handVisible: whole(hand),
       actionBarVisible: whole(document.querySelector('.action-bar')),
       cardWidth: card ? Math.round(parseFloat(getComputedStyle(card).width)) : null,
+      tokenCardWidth,
       seatClipped,
       railClipped,
     };
@@ -285,6 +296,14 @@ async function main() {
       'laptop: cards shrank to fit rather than overflowing',
       fresh.cardWidth !== null && fresh.cardWidth < FULL_CARD_WIDTH_PX,
       `${fresh.cardWidth}px`,
+    );
+    // "Smaller than full size" passed for MONTHS while hands rendered at tile
+    // size (80px where the token said 112px): a competing rule won the cascade.
+    // The hand card must be exactly what the size token resolves to here.
+    check(
+      'laptop: the hand card is drawn at the size token’s value, not a competing rule’s',
+      fresh.cardWidth !== null && fresh.cardWidth === fresh.tokenCardWidth,
+      `card ${fresh.cardWidth}px vs token ${fresh.tokenCardWidth}px`,
     );
     await shot(page, '01-laptop-turn-1.png');
 
