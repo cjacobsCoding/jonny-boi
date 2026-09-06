@@ -260,6 +260,13 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-09-05 integrator: `feat/harness-ci` ✅ MERGED — DESIGN §3.127 + §3.128 (running the guards found a real core bug: the ⛁ chip hidden behind a duplicate Forest; `packages/core/src/mana-plan.ts` gained a same-kind exclusion pass). NEW
+  `apps/web/scripts/lib/find-chrome.mjs` (one platform-keyed Chrome lookup) replaces four copied
+  candidate lists in `verify-*.mjs`; NEW `.github/workflows/browser-harnesses.yml` runs all four
+  against the built app on ubuntu-latest, advisory (beside Deploy PWA, not gating it). ⚠️ Run the
+  harnesses ONE AT A TIME (each starts a vite preview; game-resume rebuilds mid-run) and never beside
+  vitest. If the CI job is red on a harness that is green locally, suspect runner timing first.
+
 - 2026-09-04 integrator: `fix/hand-card-size` ✅ MERGED — DESIGN §3.126. Two things: (1) every hand
   card had been rendering at TILE size (80px at 800px, 96px at 1100px) since an upstream wrapper broke
   the `min-width` mask — a specificity fix; (2) with hands at their designed size §3.119's row cap +

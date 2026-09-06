@@ -25,6 +25,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
+import { describeChromeSearch, findChrome } from './lib/find-chrome.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = resolve(HERE, '..');
@@ -32,14 +33,8 @@ const OUT_DIR = resolve(WEB_ROOT, 'verify-out', 'mana-choice');
 const VIEWPORT = { width: 1180, height: 1500 }; // tall on purpose: the whole board + hand in one shot
 const AI_BEAT_MS = 700; // > HOTSEAT_CONFIG.aiThinkMs (450), so the pilot's move lands between steps
 const TURN_BUDGET = 40; // hard ceiling on the drive loop
-
-const CHROME_CANDIDATES = [
-  `${process.env.ProgramFiles}\\Google\\Chrome\\Application\\chrome.exe`,
-  `${process.env['ProgramFiles(x86)']}\\Google\\Chrome\\Application\\chrome.exe`,
-  `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`,
-  `${process.env.ProgramFiles}\\Microsoft\\Edge\\Application\\msedge.exe`,
-  `${process.env['ProgramFiles(x86)']}\\Microsoft\\Edge\\Application\\msedge.exe`,
-];
+/** The deck's mana creatures — the alternative to a Forest that makes a choice real. */
+const MANA_CREATURES = /Elvish Mystic|Llanowar Elves|Birds of Paradise/;
 
 const checks = [];
 function check(name, passed, detail = '') {
@@ -142,7 +137,7 @@ async function installProbes(page) {
     window.__mc = {
       /** Every card in the viewer's hand: name, and whether it shows the ⛁ chip. */
       hand: () =>
-        [...(document.querySelector('[aria-label$=" hand"]:last-of-type') ?? document).querySelectorAll('.hand-card-slot')].map(
+        [...(document.querySelector('.play-hand:not(.play-hand--hidden)') ?? document).querySelectorAll('.hand-card-slot')].map(
           (slot) => ({
             name: slot.querySelector('button[aria-label^="Inspect"]')?.getAttribute('aria-label')?.replace('Inspect ', ''),
             chip: slot.querySelector('.hand-card-slot__choose-mana') !== null,
@@ -223,11 +218,8 @@ async function toMyMain(page) {
 
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
-  const chrome = CHROME_CANDIDATES.find((p) => p && existsSync(p));
-  if (!chrome) {
-    console.error('no Chrome/Edge found');
-    process.exit(2);
-  }
+  const chrome = findChrome();
+  if (!chrome) throw new Error(describeChromeSearch());
   const preview = await startPreview();
   const browser = await puppeteer.launch({
     executablePath: chrome,
@@ -341,11 +333,34 @@ async function main() {
       await page.evaluate(() => window.__mc.play('Forest'));
       await sleep(300);
       await installProbes(page);
+      // The choice needs a mana CREATURE on the board beside the Forests. The
+      // scripted game used to keep its Mystic alive; a stronger opponent now
+      // kills it, and from then on every source is a Forest and there is —
+      // correctly — nothing to choose. So keep the board arranged by PLAYING:
+      // if no mana creature is out and one is in hand, cast it now, and the
+      // chip shows on the next {G} spell once everything untaps.
+      const board = await page.evaluate(() => window.__mc.mine());
+      if (!board.some((perm) => MANA_CREATURES.test(perm.text))) {
+        const inHand = (await page.evaluate(() => window.__mc.hand())).find((c) => MANA_CREATURES.test(c.name ?? ''));
+        if (inHand) {
+          await page.evaluate((n) => window.__mc.play(n), inHand.name);
+          await sleep(400);
+          await installProbes(page);
+        }
+      }
       const hand = await page.evaluate(() => window.__mc.hand());
       const chipCard = hand.find((c) => c.chip);
       if (chipCard) {
         reopened = await page.evaluate((n) => window.__mc.chooseMana(n), chipCard.name);
         await sleep(400);
+      } else {
+        // A miss must be DIAGNOSABLE from the log alone — in CI there is no one
+        // to open the screenshot. Say what was in hand and on the board.
+        const mine = await page.evaluate(() => window.__mc.mine());
+        console.log(
+          `  no ⛁ chip at "${phase}" — hand: ${hand.map((c) => c.name).join(', ') || '(empty)'}; ` +
+            `mine: ${mine.map((p) => `${p.text}${p.tapped ? ' (tapped)' : ''}`).join(', ') || '(none)'}`,
+        );
       }
       if (!reopened) {
         await clickButton(page, /Pass \/ advance|Pass priority/, { timeoutMs: 4000 });

@@ -1,0 +1,79 @@
+name: Browser harnesses
+
+# Runs every `apps/web/scripts/verify-*.mjs` harness against the BUILT app in a
+# real Chrome (§3.127). These harnesses exist because their claims are ones the
+# unit suite cannot see — layout fits the window, a saved game resumes exactly,
+# the mana picker cancels cleanly, the bug reporter captures a real frame — and
+# a guard nobody runs is a guard that drifts: the layout harness sat at 28/31 on
+# main for three days (§3.126) because it was only ever run by hand.
+#
+# ADVISORY, not a deploy gate: it runs alongside `Deploy PWA`, not inside it, so
+# a flaky Chrome timing cannot hold up a release. Promote a harness into the
+# deploy job once it has a clean run history here.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - 'packages/**'
+      - '.github/workflows/browser-harnesses.yml'
+  pull_request:
+    paths:
+      - 'apps/web/**'
+      - 'packages/**'
+      - '.github/workflows/browser-harnesses.yml'
+  workflow_dispatch: {}
+
+concurrency:
+  group: browser-harnesses-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  harnesses:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The harnesses drive the SHIPPING bundle, so build exactly what deploys.
+      - name: Build
+        run: npm run build
+
+      # GitHub's Ubuntu images ship Google Chrome; the shared lookup
+      # (apps/web/scripts/lib/find-chrome.mjs) finds it on PATH. Saying where it
+      # was found in the log is what makes a "no browser" failure diagnosable.
+      - name: Locate Chrome
+        run: node -e "import('./apps/web/scripts/lib/find-chrome.mjs').then(m => { const p = m.findChrome(); console.log('chrome:', p); if (!p) { console.error(m.describeChromeSearch()); process.exit(1); } })"
+
+      # Each harness is its own step so the summary names the one that failed.
+      - name: Layout fits the window (§3.62)
+        run: node apps/web/scripts/verify-board-fits.mjs
+
+      - name: Saved games resume exactly (§3.58)
+        run: node apps/web/scripts/verify-game-resume.mjs
+
+      - name: Mana picker and auto-tap (§3.60)
+        run: node apps/web/scripts/verify-mana-choice.mjs
+
+      - name: Bug reporter captures a real frame
+        run: node apps/web/scripts/verify-bug-reporter.mjs
+
+      # Screenshots are the evidence when a harness fails — keep them.
+      - name: Upload harness screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-screenshots
+          path: apps/web/verify-out/
+          if-no-files-found: ignore
+          retention-days: 14

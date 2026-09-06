@@ -20,6 +20,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
+import { describeChromeSearch, findChrome } from './lib/find-chrome.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = resolve(HERE, '..');
@@ -28,14 +29,6 @@ const VIEWPORT = { width: 900, height: 560 }; // small on purpose: the board mus
 const AI_BEAT_MS = 700; // > HOTSEAT_CONFIG.aiThinkMs (450) so the pilot's move lands between steps
 const PASS_CLICK_BUDGET = 60; // hard ceiling on the drive loop
 const TARGET_TURN = 4; // "several turns"
-
-const CHROME_CANDIDATES = [
-  `${process.env.ProgramFiles}\\Google\\Chrome\\Application\\chrome.exe`,
-  `${process.env['ProgramFiles(x86)']}\\Google\\Chrome\\Application\\chrome.exe`,
-  `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`,
-  `${process.env.ProgramFiles}\\Microsoft\\Edge\\Application\\msedge.exe`,
-  `${process.env['ProgramFiles(x86)']}\\Microsoft\\Edge\\Application\\msedge.exe`,
-];
 
 const checks = [];
 function check(name, passed, detail = '') {
@@ -155,6 +148,10 @@ async function boardFingerprint(page) {
   return page.evaluate(() => ({
     board: document.querySelector('.play-view')?.innerText ?? '',
     scrollY: Math.round(window.scrollY),
+    // §3.62 made the play surface a fixed-height canvas: on most windows the
+    // PAGE has no scroll range at all, so "restore scrollY" has nothing to
+    // restore and asserting a non-zero position would be asserting a bug.
+    pageScrollable: document.documentElement.scrollHeight > window.innerHeight + 1,
   }));
 }
 
@@ -167,11 +164,8 @@ async function shot(page, name) {
 
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
-  const chrome = CHROME_CANDIDATES.find((p) => p && existsSync(p));
-  if (!chrome) {
-    console.error('no Chrome/Edge found');
-    process.exit(2);
-  }
+  const chrome = findChrome();
+  if (!chrome) throw new Error(describeChromeSearch());
   const preview = await startPreview();
   const browser = await puppeteer.launch({
     executablePath: chrome,
@@ -252,7 +246,14 @@ async function main() {
     await page.evaluate(() => window.scrollTo(0, 240));
     await sleep(600); // > PLAY_PERSIST_DEBOUNCE_MS
     const live = await boardFingerprint(page);
-    check('board scrolled to a non-zero position', live.scrollY > 0, `scrollY=${live.scrollY}`);
+    // A page that fits the window (§3.62) cannot be scrolled; the check then
+    // records that fact rather than failing a promise the layout removed. The
+    // equality checks below still hold on such a page — 0 restores to 0.
+    check(
+      'board scrolled to a non-zero position (or the page fits the window)',
+      live.pageScrollable ? live.scrollY > 0 : true,
+      live.pageScrollable ? `scrollY=${live.scrollY}` : 'page fits the window — no page scroll to restore (§3.62)',
+    );
     await shot(page, '01-live-board.png');
 
     // ---- hard reload: manual navigation, so the MENU offers the resume ---------------

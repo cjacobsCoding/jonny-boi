@@ -31,6 +31,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
+import { describeChromeSearch, findChrome } from './lib/find-chrome.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = resolve(HERE, '..');
@@ -53,14 +54,6 @@ const FULL_CARD_WIDTH_PX = 148;
 const AI_BEAT_MS = 700; // > HOTSEAT_CONFIG.aiThinkMs (450)
 const DRIVE_STEPS = 260; // enough to reach a crowded board; the loop stops early when it does
 const CROWDED_ENOUGH = 8; // permanents that count as "a real board" rather than turn one
-
-const CHROME_CANDIDATES = [
-  `${process.env.ProgramFiles}\\Google\\Chrome\\Application\\chrome.exe`,
-  `${process.env['ProgramFiles(x86)']}\\Google\\Chrome\\Application\\chrome.exe`,
-  `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`,
-  `${process.env.ProgramFiles}\\Microsoft\\Edge\\Application\\msedge.exe`,
-  `${process.env['ProgramFiles(x86)']}\\Microsoft\\Edge\\Application\\msedge.exe`,
-];
 
 const checks = [];
 function check(name, passed, detail = '') {
@@ -274,8 +267,8 @@ async function drivePlayer(page) {
 }
 
 async function main() {
-  const chrome = CHROME_CANDIDATES.find((p) => p && existsSync(p));
-  if (!chrome) throw new Error('no Chrome/Edge found');
+  const chrome = findChrome();
+  if (!chrome) throw new Error(describeChromeSearch());
   const preview = await startPreview();
   const browser = await puppeteer.launch({
     executablePath: chrome,

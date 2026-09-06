@@ -401,6 +401,29 @@ describe('manaPaymentChoiceExists — only ask when the choice is real (§3.60)'
     expect(manaPaymentChoiceExists(board(perms), 'A', { G: 1 }, offeredTaps(perms))).toBe(true);
   });
 
+  it('still says yes when a SECOND Forest could stand in for the first (§3.127)', () => {
+    // The blind spot the mana-choice harness found: with two Forests and an
+    // Elves paying {G}, excluding the planned Forest re-planned onto the OTHER
+    // Forest — same multiset, "no choice" — and the elf was never considered.
+    // A Forest and an elf is a decision however many Forests there are.
+    const perms = [permanent(1, FOREST), permanent(2, FOREST), permanent(3, LLANOWAR_ELVES)];
+    expect(manaPaymentChoiceExists(board(perms), 'A', { G: 1 }, offeredTaps(perms))).toBe(true);
+  });
+
+  it('keeps finding the one-card swap for a larger cost (the instance pass)', () => {
+    // {1}{G} with two Forests and an Elves: {Forest, Forest} vs {Forest, Elves}.
+    // Excluding ALL Forests leaves the cost unpayable, so this alternative is
+    // only visible to the pass that excludes a single instance — both passes
+    // are load-bearing, which is why there are two.
+    const perms = [permanent(1, FOREST), permanent(2, FOREST), permanent(3, LLANOWAR_ELVES)];
+    expect(manaPaymentChoiceExists(board(perms), 'A', { G: 1, generic: 1 }, offeredTaps(perms))).toBe(true);
+  });
+
+  it('still says NO for three identical Forests — duplicates of a duplicate are not a choice', () => {
+    const perms = [permanent(1, FOREST), permanent(2, FOREST), permanent(3, FOREST)];
+    expect(manaPaymentChoiceExists(board(perms), 'A', { G: 1 }, offeredTaps(perms))).toBe(false);
+  });
+
   it('says NO when two identical Forests could pay — that is not a decision', () => {
     // The nag guard. Losing a Forest is losing a Forest; which physical card it
     // was is not something to interrupt a player for.

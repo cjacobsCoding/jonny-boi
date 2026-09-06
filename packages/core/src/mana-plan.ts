@@ -698,25 +698,31 @@ export function manaPaymentChoiceExists(
   const autoKey = sourceIdentityKey(view.battlefield, auto);
   for (let i = 0; i < auto.length; i++) {
     const excluded = (auto[i] as ManaTapPlan).instanceId;
-    const without = legalActions.filter(
-      (action) =>
-        !(
-          action.kind === 'tapForMana' &&
-          action.player === player &&
-          action.instanceId === excluded
-        ),
-    );
-    const alternative = planManaPayment(
-      view,
-      player,
-      cost,
-      without,
-      spendFor,
-      spendKind,
-      preference,
-    );
-    if (alternative === undefined) continue; // that source was load-bearing
-    if (sourceIdentityKey(view.battlefield, alternative) !== autoKey) return true;
+    // Two passes per planned source, because each finds an alternative the
+    // other cannot:
+    //  - excluding THIS INSTANCE finds a plan that swaps one card for another
+    //    kind ({Forest, Forest} → {Forest, Mystic} for {1}{G});
+    //  - excluding EVERY CARD OF THE SAME KIND finds the alternative that a
+    //    duplicate was hiding. With two Forests and a Mystic paying {G}, the
+    //    instance pass re-plans onto the OTHER Forest — same multiset, "no
+    //    choice" — and the Mystic was never considered, although the rule this
+    //    function exists to serve says a Forest and an elf IS a decision
+    //    (§3.60). Found by the mana-choice harness, which stopped seeing the ⛁
+    //    chip once its scripted game reached a two-Forest board.
+    const kind = findOnBattlefield(view.battlefield, excluded)?.def.id;
+    const passes: ReadonlyArray<(id: InstanceId) => boolean> = [
+      (id) => id === excluded,
+      (id) => kind !== undefined && findOnBattlefield(view.battlefield, id)?.def.id === kind,
+    ];
+    for (const isExcluded of passes) {
+      const without = legalActions.filter(
+        (action) =>
+          !(action.kind === 'tapForMana' && action.player === player && isExcluded(action.instanceId)),
+      );
+      const alternative = planManaPayment(view, player, cost, without, spendFor, spendKind, preference);
+      if (alternative === undefined) continue; // those sources were load-bearing
+      if (sourceIdentityKey(view.battlefield, alternative) !== autoKey) return true;
+    }
   }
   return false;
 }
