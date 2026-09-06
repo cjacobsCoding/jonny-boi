@@ -76,7 +76,7 @@ export function StopsMenu({
               checked={stops.stopOnOwnStack}
               onChange={(e) => onSwitch('stopOnOwnStack', e.currentTarget.checked)}
             />
-            Stop over your OWN spells and triggers too (Strionic Resonator wants this)
+            Always stop over your OWN spells and triggers (a response like Strionic Resonator already pauses on its own)
           </label>
           <label className="stops-menu__row">
             <input

@@ -179,6 +179,15 @@ export interface AbilityOption {
   readonly label: string;
   /** Legal target choices, or null when the ability takes no target. */
   readonly targets: readonly AbilityTargetChoice[] | null;
+  /**
+   * §3.129 — funding, mirrored from {@link CastOption}. Set when the engine did
+   * NOT already offer this ability and it is offerable only after auto-tapping
+   * for its mana cost (an untapped Strionic Resonator with two lands to spare).
+   * Absent ⇒ already on the engine's menu (the pool pays now); a click then
+   * routes straight through `activateAbility`. The online twin never sets it —
+   * online mana is floated by hand, so the server offer already covers the cost.
+   */
+  readonly affordableWithTap?: boolean;
 }
 
 /**
@@ -509,8 +518,12 @@ export class GameSession {
       if (action.kind === 'passPriority' || action.kind === 'tapForMana') continue;
       return true; // playLand / castSpell / declareAttackers / declareBlockers
     }
-    // Nothing castable off the floating pool, but maybe castable after tapping.
-    return this.castOptions().length > 0;
+    // Nothing in the raw menu but a pass or a mana tap — yet there may still be a
+    // real play once mana is floated: a spell castable after auto-tapping, or an
+    // activated ability the engine hides until its cost is paid (§3.129 — an
+    // untapped Strionic Resonator with a trigger to copy). Both are genuine
+    // choices, so a window holding one must not be auto-passed as "nothing to do".
+    return this.castOptions().length > 0 || this.abilityOptions().length > 0;
   }
 
   /**
@@ -977,7 +990,116 @@ export class GameSession {
         targets: [...(existing?.targets ?? []), choice],
       });
     }
+    this.appendTapToAffordAbilities(byAbility);
     return [...byAbility.values()];
+  }
+
+  /**
+   * TAP-TO-AFFORD activated abilities (§3.129) — the class Strionic Resonator
+   * fell into, and the reason a human could not use it. The engine offers a
+   * mana-costed activated ability only once the FLOATING pool already covers it
+   * (the same gate that hid these from the AI until §3.40), and a human never
+   * floats mana speculatively — so the ability had no button, and `canRespond`
+   * could not see it, so the Solo board auto-passed the very window in which the
+   * copy would be made. Its ⛁ trigger resolved untouched, every time.
+   *
+   * This mirrors what {@link computeCastOptions} and {@link computeCycleOptions}
+   * already do for spells and cycling: plan the taps, then ask the ENGINE what
+   * it would offer with that mana floated — so timing, targets and every
+   * non-mana gate (summoning sickness, "you control", a legal trigger to aim at)
+   * stay the engine's ruling, never this layer's guess. The option is marked
+   * `affordableWithTap` so the click routes through {@link activateWithAutoTap}.
+   *
+   * Gated hard for the hot path: it does nothing when there is no mana to tap,
+   * and per permanent only for a PRINTED activated ability with a mana cost the
+   * engine did not already offer. Sacrifice- and loyalty-cost abilities are left
+   * out on purpose — the offer the engine builds for them carries a payer that
+   * {@link AbilityOption} has nowhere to keep, so auto-tapping one would submit
+   * an action the engine itself would reject.
+   */
+  private appendTapToAffordAbilities(byAbility: Map<string, AbilityOption>): void {
+    const player = this.priorityPlayer;
+    if (!this.legalActions().some((a) => a.kind === 'tapForMana')) return; // nothing to float
+    for (const perm of this.state.battlefield) {
+      if (perm.controller !== player) continue;
+      const abilities = perm.def.activated;
+      if (!abilities) continue;
+      for (let index = 0; index < abilities.length; index++) {
+        const key = `${perm.instanceId}:${index}`;
+        if (byAbility.has(key)) continue; // already on the engine's own menu
+        const ability = abilities[index] as NonNullable<(typeof abilities)[number]>;
+        const manaCost = ability.cost.mana;
+        // No mana cost ⇒ any absence from the menu is a NON-mana gate (tapped,
+        // summoning-sick, no target); floating mana would not change it.
+        if (!manaCost) continue;
+        if (ability.cost.sacrificeAnother !== undefined || ability.cost.loyalty !== undefined) continue;
+        if (!this.canAffordWithTaps(player, manaCost, perm.def, 'activate')) continue;
+        const floated = this.trialFloatToward(manaCost, perm.def);
+        if (!floated) continue;
+        for (const offer of generateLegalActions(floated.state)) {
+          if (offer.kind !== 'activateAbility') continue;
+          if (offer.instanceId !== perm.instanceId || offer.abilityIndex !== index) continue;
+          const existing = byAbility.get(key);
+          const offeredTarget = offer.targets?.[0];
+          const label = ability.label ?? `Ability ${index + 1}`;
+          if (offeredTarget === undefined) {
+            if (!existing) {
+              byAbility.set(key, {
+                instanceId: perm.instanceId,
+                sourceName: perm.def.name,
+                abilityIndex: index,
+                label,
+                targets: null,
+                affordableWithTap: true,
+              });
+            }
+            continue;
+          }
+          // A target id names a stack object or a permanent that exists in the
+          // REAL state (floating mana never touched it), so `nameOf` labels it.
+          const choice: AbilityTargetChoice = {
+            target: offeredTarget,
+            label:
+              offeredTarget === 'A' || offeredTarget === 'B'
+                ? `${this.names[offeredTarget]} (player)`
+                : this.nameOf(offeredTarget),
+          };
+          byAbility.set(key, {
+            instanceId: perm.instanceId,
+            sourceName: perm.def.name,
+            abilityIndex: index,
+            label,
+            targets: [...(existing?.targets ?? []), choice],
+            affordableWithTap: true,
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * Tap sources toward `cost` in a THROWAWAY session and return it (or null if
+   * the board cannot pay), for asking the engine what it would offer with that
+   * mana floated. The tap loop is the one {@link cycleWithAutoTap} uses, so
+   * "would this be offered" and "pay for it" agree on which sources get spent.
+   */
+  private trialFloatToward(cost: ManaCost, def: CardDefinition): GameSession | null {
+    const player = this.priorityPlayer;
+    const purposeFor = (session: GameSession) =>
+      spendPurposeIfRestricted(session.state.players[player].manaPool, def, 'activate');
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    let working: GameSession = this;
+    const guard = this.state.battlefield.length + 1;
+    let taps = 0;
+    while (!canPay(working.state.players[player].manaPool, cost, purposeFor(working)) && taps < guard) {
+      const next = working.nextTapToward(player, cost, def, 'activate');
+      if (!next) break;
+      const tapped = working.tapForMana(next.instanceId, next.mode);
+      if (tapped.rejected) break;
+      working = tapped.session;
+      taps += 1;
+    }
+    return canPay(working.state.players[player].manaPool, cost, purposeFor(working)) ? working : null;
   }
 
   /**
@@ -997,6 +1119,46 @@ export class GameSession {
       abilityIndex,
       ...(targets.length > 0 ? { targets } : {}),
     });
+  }
+
+  /**
+   * Activate a permanent's ability, auto-tapping for its mana cost first — the
+   * one-click path for an `affordableWithTap` {@link AbilityOption} (§3.129).
+   * The taps are the same ones {@link cycleWithAutoTap} and {@link castWithAutoTap}
+   * plan, and a rejected activation rolls back to the pre-tap session so a failed
+   * activation never strands tapped lands. An ability whose cost is already paid
+   * needs no float and this is just {@link activateAbility} with a tidy name.
+   */
+  activateWithAutoTap(
+    instanceId: InstanceId,
+    abilityIndex: number,
+    targets: readonly (InstanceId | PlayerId)[] = [],
+  ): SubmitResult {
+    const player = this.priorityPlayer;
+    const perm = this.state.battlefield.find((c) => c.instanceId === instanceId);
+    const ability = perm?.def.activated?.[abilityIndex];
+    if (!perm || !ability) {
+      return { session: this, rejected: 'that permanent has no such ability', events: [] };
+    }
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    let working: GameSession = this;
+    if (ability.cost.mana) {
+      const floated = this.trialFloatToward(ability.cost.mana, perm.def);
+      if (!floated) {
+        return { session: this, rejected: 'not enough mana available to activate this ability', events: [] };
+      }
+      working = floated;
+    }
+    const activated = working.submit({
+      kind: 'activateAbility',
+      player,
+      instanceId,
+      abilityIndex,
+      ...(targets.length > 0 ? { targets } : {}),
+    });
+    // Roll back to the pre-tap session so a failed activation doesn't strand lands.
+    if (activated.rejected) return { session: this, rejected: activated.rejected, events: activated.events };
+    return activated;
   }
 
   /**

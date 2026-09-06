@@ -260,6 +260,17 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-09-06 integrator: `feat/strionic-usable` ✅ MERGED — DESIGN §3.129. Strionic Resonator was
+  playable by the ENGINE and the PILOT but NOT by a human: a mana-costed activated ability is invisible
+  until its mana is already floating, so `abilityOptions`/`canRespond`/`hasMeaningfulChoice` all missed
+  it and the Solo walker auto-passed the copy window. Web-only fix, mirroring the cast/cycle auto-tap
+  seam: `session.ts` gained `appendTapToAffordAbilities` + `activateWithAutoTap` + `AbilityOption.affordableWithTap`;
+  the stop rule gained `canRespondToOwnStack` so the card works BY DEFAULT (pauses only when you can
+  actually copy something), the §3.119 own-stack toggle relabelled as the "always pause" override.
+  No `packages/ai`/`sim` caller touched — seeded baselines unchanged. Guard: the reported board driven
+  end to end (life 20 → 30) in `priority-stops.test.ts`.
+
+
 - 2026-09-05 integrator: `feat/harness-ci` ✅ MERGED — DESIGN §3.127 + §3.128 (running the guards found a real core bug: the ⛁ chip hidden behind a duplicate Forest; `packages/core/src/mana-plan.ts` gained a same-kind exclusion pass). NEW
   `apps/web/scripts/lib/find-chrome.mjs` (one platform-keyed Chrome lookup) replaces four copied
   candidate lists in `verify-*.mjs`; NEW `.github/workflows/browser-harnesses.yml` runs all four

@@ -130,6 +130,16 @@ export interface StopContext {
   readonly canRespond: boolean;
   /** Who controls the top of the stack, or null when it is empty. */
   readonly stackTopController: PlayerId | null;
+  /**
+   * §3.129 — the holder has an instant-speed response that legally AIMS AT one
+   * of their OWN objects on the stack (an untapped Strionic Resonator with a
+   * trigger to copy). This is what makes such a card usable out of the box: a
+   * stop over your own stack is worth taking only when you can actually act on
+   * it, so the default resolves your ordinary triggers silently yet pauses the
+   * one turn you can copy one. `stopOnOwnStack` remains the manual override for
+   * pausing over EVERY own object, response or not.
+   */
+  readonly canRespondToOwnStack: boolean;
 }
 
 /**
@@ -149,7 +159,12 @@ export function shouldStopForPriority(ctx: StopContext, stops: PriorityStops): b
     // Only a RESPONSE matters here: a sorcery in hand cannot be cast over a
     // stack, so stopping would offer nothing but the pass button.
     if (!ctx.canRespond) return false;
-    return ctx.stackTopController === ctx.holder ? stops.stopOnOwnStack : stops.stopOnOpponentStack;
+    if (ctx.stackTopController === ctx.holder) {
+      // Your own stack: pause when you have a response that aims at it (§3.129 —
+      // Strionic Resonator works by default), or when you asked to always pause.
+      return stops.stopOnOwnStack || ctx.canRespondToOwnStack;
+    }
+    return stops.stopOnOpponentStack;
   }
   const key = stepStopKeyFor(ctx.step, ctx.activePlayer, ctx.holder);
   const stepOn = stepStopIsOn(stops, key);
