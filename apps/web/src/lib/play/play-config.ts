@@ -125,6 +125,36 @@ export const ANIMATION_CONFIG: AnimationConfig = Object.freeze({
   spriteWidthPx: 52,
 });
 
+/** Procedural game-audio knobs (§3.130) — every timing/level named, none inline. */
+export interface SoundConfig {
+  /** Whether audio is on out of the box (before the player ever touches it). */
+  readonly defaultEnabled: boolean;
+  /** Master volume out of the box, 0..1. */
+  readonly defaultVolume: number;
+  /**
+   * Most sound cues ONE batch of events may play. A board wipe emits many
+   * `creatureDied` events; a cast auto-taps many lands — past the cap the
+   * remaining cues are dropped rather than played as a machine-gun. Identical
+   * cues in a batch are coalesced to one BEFORE this cap applies.
+   */
+  readonly maxPerBatch: number;
+  /** Gap between staggered cues in one batch, so two sounds read as two. */
+  readonly staggerMs: number;
+}
+
+/**
+ * The default audio configuration. On by default because the whole point is the
+ * MTGA-style feel; a mute toggle rides the action bar and the choice persists.
+ * The volume is deliberately gentle — procedural tones are pure and carry, so a
+ * modest master keeps them a texture rather than a nuisance.
+ */
+export const SOUND_CONFIG: SoundConfig = Object.freeze({
+  defaultEnabled: true,
+  defaultVolume: 0.55,
+  maxPerBatch: 6,
+  staggerMs: 70,
+});
+
 /**
  * The seed the co-pilot asks the pilot from (§3.67). FIXED on purpose: the
  * advice for a given board must be the same every time it is drawn, or a hint

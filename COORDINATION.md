@@ -260,6 +260,14 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-09-06 integrator: `feat/game-audio` ✅ MERGED — DESIGN §3.130 (game feel, part 1). Procedural
+  Web Audio SFX (no asset files): NEW `sound-cues.ts` (pure event→cue table, twin of `animations.ts`),
+  `sound-engine.ts` (synth recipe table), `sound-prefs.ts`, `useGameSounds.ts`; a 🔊/🔇 toggle in the
+  action bar (persisted). Combat motion in NEW `game-fx.css` (attacker lunge / blocker brace, reduced-
+  motion gated) — the tapped tilt already lived in `styles.css` and is left alone (one rule per look).
+  Web/Solo board only; no `packages/ai`/`sim` caller. NEXT: §3.131 the VFX layer (particles/glows/
+  screen-flash) off the same event seam — that completes the "vfx, animations, and sfx" ask.
+
 - 2026-09-06 integrator: `feat/strionic-usable` ✅ MERGED — DESIGN §3.129. Strionic Resonator was
   playable by the ENGINE and the PILOT but NOT by a human: a mana-costed activated ability is invisible
   until its mana is already floating, so `abilityOptions`/`canRespond`/`hasMeaningfulChoice` all missed

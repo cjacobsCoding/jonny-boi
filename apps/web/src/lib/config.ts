@@ -53,6 +53,13 @@ export const COPILOT_STORAGE_KEY = 'jonny-boi.play.copilot.v1';
 export const PRIORITY_STOPS_STORAGE_KEY = 'jonny-boi.play.priorityStops.v1';
 
 /**
+ * localStorage key for the game-audio preference (§3.130 — the procedural SFX
+ * engine): whether sound is on, and the master volume. A player setting that
+ * outlives a game, like the mana and stops prefs above.
+ */
+export const SOUND_STORAGE_KEY = 'jonny-boi.play.sound.v1';
+
+/**
  * sessionStorage key for the "this reload was triggered by an app UPDATE" flag
  * (see `lib/update/updater.ts`). Written immediately before an update-triggered
  * reload — never by user navigation — and consumed (removed) on the next boot,

@@ -49,9 +49,13 @@ import { describeCastTarget, makeRefIndex, type KnownRef } from '../../lib/play/
 import type { AnimationCardInfo } from '../../lib/play/animations.js';
 import { AnimationLayer, useZoneAnimations } from './AnimationLayer.js';
 import { CombatLines } from './CombatLines.js';
+import { SoundEngine } from '../../lib/play/sound-engine.js';
+import { useGameSounds } from '../../lib/play/useGameSounds.js';
+import { loadSoundPrefs, saveSoundPrefs, type SoundPrefs } from '../../lib/play/sound-prefs.js';
 import './action-bar.css';
 import './mana-picker.css';
 import './board-fit.css';
+import './game-fx.css';
 import {
   loadCopilotPref,
   saveCopilotPref,
@@ -191,6 +195,33 @@ export function PlayBoard({
   const [toast, setToast] = useState<string | null>(null);
   /** "Always let me choose my mana" — the persisted §3.60 preference. */
   const [alwaysChooseMana, setAlwaysChooseMana] = useState<boolean>(loadManaChoicePref);
+
+  /**
+   * §3.130 — the procedural game audio. ONE engine per board (a ref, so a
+   * rematch keeps its gesture-unlocked AudioContext), driven by the session's
+   * event log through `useGameSounds`. The preference outlives the game like the
+   * mana and co-pilot ones; toggling it is a user gesture, which is also what
+   * unlocks the browser's audio.
+   */
+  const [soundPrefs, setSoundPrefs] = useState<SoundPrefs>(loadSoundPrefs);
+  // Created once (a lazy state initializer, never re-set) so a rematch keeps its
+  // gesture-unlocked AudioContext; from here it is only fed and configured.
+  const [soundEngine] = useState(() => new SoundEngine(soundPrefs.enabled, soundPrefs.volume));
+  useEffect(() => {
+    soundEngine.setEnabled(soundPrefs.enabled);
+    soundEngine.setVolume(soundPrefs.volume);
+  }, [soundEngine, soundPrefs]);
+  useEffect(() => () => soundEngine.dispose(), [soundEngine]);
+  useGameSounds(session.events, viewer, soundEngine, !soundPrefs.enabled);
+  const onToggleSound = useCallback((): void => {
+    setSoundPrefs((prev) => {
+      const next = { ...prev, enabled: !prev.enabled };
+      saveSoundPrefs(next);
+      return next;
+    });
+    // The click IS the user gesture the autoplay policy wants — unlock now.
+    void soundEngine.resume();
+  }, [soundEngine]);
   /**
    * §3.119 — WHERE THE GAME STOPS. The persisted per-step stops, read once and
    * written on every change. The board does not auto-advance itself (PlayView
@@ -1204,6 +1235,8 @@ export function PlayBoard({
           setCopilotOn(on);
           saveCopilotPref(on);
         }}
+        soundOn={soundPrefs.enabled}
+        onToggleSound={onToggleSound}
         onAlwaysChooseMana={setAlwaysChoose}
         onPass={() => run(() => session.passPriority())}
         onDeclareAttackers={(ids) =>
@@ -1506,6 +1539,8 @@ function ActionBar({
   suggested,
   copilotOn,
   onCopilot,
+  soundOn,
+  onToggleSound,
   onAlwaysChooseMana,
   onPass,
   onDeclareAttackers,
@@ -1536,6 +1571,9 @@ function ActionBar({
   suggested: boolean;
   copilotOn: boolean;
   onCopilot: (on: boolean) => void;
+  /** Whether procedural game audio is on (§3.130). */
+  soundOn: boolean;
+  onToggleSound: () => void;
   onAlwaysChooseMana: (always: boolean) => void;
   onPass: () => void;
   onDeclareAttackers: (ids: readonly InstanceId[]) => void;
@@ -1623,6 +1661,18 @@ function ActionBar({
         onClick={() => onCopilot(!copilotOn)}
       >
         {copilotOn ? '🧭 Co-pilot on' : '🧭 Co-pilot'}
+      </button>
+      {/* §3.130 — mute the procedural game audio. A player setting, so it lives
+          beside the others; the click doubles as the gesture that unlocks the
+          browser's AudioContext. */}
+      <button
+        type="button"
+        className={`btn btn--toggle${soundOn ? ' btn--toggle-on' : ''}`}
+        aria-pressed={soundOn}
+        title={soundOn ? 'Mute game sounds' : 'Unmute game sounds'}
+        onClick={onToggleSound}
+      >
+        {soundOn ? '🔊 Sound' : '🔇 Muted'}
       </button>
       <span className="action-bar__hint">{hint}</span>
     </div>

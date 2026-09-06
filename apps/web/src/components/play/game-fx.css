@@ -1,0 +1,45 @@
+/*
+ * COMBAT MOTION (§3.130) — the tactile half of the game-feel pass that pairs
+ * with the procedural audio. A tapped permanent already tips over (styles.css
+ * owns that "spent" read, and this file deliberately does NOT re-answer it —
+ * one rule per question). What was missing is COMBAT motion: a declared
+ * attacker only ever carried a static red frame. Now it leans in and breathes,
+ * and a blocker braces, so a declaration reads as movement.
+ *
+ * Motion is gated on `prefers-reduced-motion` — the same courtesy the
+ * zone-flight layer extends — so a player who asked for less movement keeps the
+ * frames and badges (board-clarity.css) with none of the looping.
+ */
+
+@media (prefers-reduced-motion: no-preference) {
+  .play-board .perm--attacking {
+    animation: perm-attack-lunge 900ms ease-in-out infinite;
+  }
+
+  .play-board .perm--blocking {
+    animation: perm-block-brace 1100ms ease-in-out infinite;
+  }
+}
+
+/* The attacker leans toward the fight. It rides OVER the tapped tilt during
+   combat on purpose: while a creature is attacking, that is the louder fact,
+   and a vigilance attacker is not tapped anyway. */
+@keyframes perm-attack-lunge {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-5px) scale(1.03);
+  }
+}
+
+@keyframes perm-block-brace {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(2px) scale(0.985);
+  }
+}

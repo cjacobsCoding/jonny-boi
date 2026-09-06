@@ -2889,6 +2889,47 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.130 Game feel, part 1 — procedural audio and combat motion — ✅ done
+
+Asked for outright: "add vfx, animations, and sfx to rival MTGA." Sound is the biggest missing lever
+— there was NONE — and it is delivered here with the tactile combat motion; the visual-effects layer
+follows as §3.131 so each half ships verified rather than as one unreviewable pile.
+
+**The whole soundscape is synthesized — zero audio files.** `sound-engine.ts` builds every cue from
+Web Audio primitives (oscillators, gain envelopes, filtered noise): a low wooden *thock* for a land, an
+upward whoosh for a cast, a tap click, an impact for damage, a rising third for lifegain, a triumphant
+arpeggio for the win. So the "rival MTGA" soundscape costs no asset bytes and trips no asset CSP, and a
+browser without Web Audio (or a blocked context) degrades to silence, never a crash. Adding a sound is a
+row in the `RECIPES` table plus a `SoundCue` member.
+
+**Driven by the event log, exactly like the animation layer.** `sound-cues.ts` is the pure twin of
+`animations.ts`: game events in, sound-cue hits out, decided in one TABLE (`SOUND_CUE_FOR_EVENT`) a test
+pins. A handful of rows are viewer-relative — a draw sounds for YOUR draw only, life splits on the
+delta's sign, the game-over sting is a win or a loss depending on who won. Identical cues in one batch
+COALESCE to a single hit and the batch is capped, so a cast that auto-taps five lands reads as "tap …
+cast" and a board wipe is one death sound, not a machine-gun. `useGameSounds` folds fresh events into
+plays, baselined at mount so a board opening mid-game never replays history.
+
+**Autoplay handled honestly.** Browsers refuse an `AudioContext` before a user gesture, so the engine is
+lazy and the action-bar toggle's click doubles as the unlock (`resume()`); a cue that arrives before any
+gesture is dropped, and the next one — after the player's first click — is heard. On by default (the
+whole point is the feel), a modest master volume, muteable from the bar, and the choice persists like the
+mana and stops prefs (`sound-prefs.ts`, decoded defensively).
+
+**Combat motion (the animation half of this part).** A declared attacker only ever carried a static red
+frame; now it leans in and breathes and a blocker braces (`game-fx.css`), gated on
+`prefers-reduced-motion` like the zone flights. ⚠️ The tapped-permanent tilt was ALREADY there
+(`styles.css`, `rotate(8deg)`) — an early read of this pass wrongly thought it missing; this file
+deliberately does NOT re-answer that question (one rule per look), which a lint of the stylesheet and a
+DOM check of the live rule both confirmed.
+
+📊 Verified: 11 new pure tests for the cue table and the pref decode; `session`/`play`/component suites
+green (331/331 across play + components); web tsc clean; lint 0 errors. In the live board the sound
+toggle renders and persists, a played land runs the event→cue→synth path with zero console errors, and
+the AudioContext unlocks on the toggle gesture. The audio itself is a thing to HEAR — it cannot be
+captured in a headless pane, so the ear test is the player's. Human/Solo board only: no `packages/ai` or
+`sim` caller, so the seeded baselines are untouched.
+
 ### 3.129 Strionic Resonator, usable at last — the human never floated mana for an ability — ✅ done
 
 Reported plainly: "did you fix Strionic Resonator so players can actually use it?" It had been fixed
