@@ -33,6 +33,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import puppeteer from 'puppeteer-core';
+import { describeChromeSearch, findChrome } from './lib/find-chrome.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = resolve(HERE, '..');
@@ -50,22 +51,24 @@ const PREVIEW_START_MS = 90_000;
 /** Below this a "PNG" is a header and a blank rectangle, not a screenshot. */
 const MIN_FRAME_BYTES = 20_000;
 
-const CHROME_CANDIDATES = [
-  `${process.env.ProgramFiles}\\Google\\Chrome\\Application\\chrome.exe`,
-  `${process.env['ProgramFiles(x86)']}\\Google\\Chrome\\Application\\chrome.exe`,
-  `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`,
-  `${process.env.ProgramFiles}\\Microsoft\\Edge\\Application\\msedge.exe`,
-  `${process.env['ProgramFiles(x86)']}\\Microsoft\\Edge\\Application\\msedge.exe`,
-  '/usr/bin/google-chrome',
-  '/usr/bin/chromium',
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-];
+/**
+ * How long the Cards view may take to mount the reporter's launcher. The view
+ * renders EVERY card in the pool — thousands of tiles now, not the ~190 this
+ * harness was written against — and a CI runner is slower than a dev box; a
+ * 10 s wait started failing the harness before it had asserted anything.
+ */
+const LAUNCHER_WAIT_MS = 90_000;
+
+/** rrweb event types the clip checks read (rrweb's EventType enum). */
+const RRWEB_INCREMENTAL = 3;
+/** A stream with fewer mutations than this replays as a frozen frame. */
+const MIN_INCREMENTAL_EVENTS = 3;
 
 const args = process.argv.slice(2);
 const headful = args.includes('--headful');
 const urlArg = args.indexOf('--url') >= 0 ? args[args.indexOf('--url') + 1] : null;
 // Which view to file the report from. Cards is the DEFAULT because it is the
-// worst case in the whole app — ~190 card tiles, thousands of nodes — and a
+// worst case in the whole app — every pool card as a tile, thousands of nodes — and a
 // harness that only ever measures the easy view is a harness that will not
 // notice the reporter becoming unusable.
 const viewArg = args.indexOf('--view') >= 0 ? args[args.indexOf('--view') + 1] : null;
@@ -80,10 +83,6 @@ const checks = [];
 function check(name, passed, detail = '') {
   checks.push({ name, passed, detail });
   console.log(`  ${passed ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
-}
-
-function findChrome() {
-  return CHROME_CANDIDATES.find((path) => path && existsSync(path)) ?? null;
 }
 
 /** A port nothing is listening on, so `--strictPort` cannot lose a race. */
@@ -182,7 +181,7 @@ function dataUrlToBuffer(dataUrl) {
 async function main() {
   const chromePath = findChrome();
   if (chromePath === null) {
-    console.error('No Chrome or Edge found. Checked:\n  ' + CHROME_CANDIDATES.join('\n  '));
+    console.error(describeChromeSearch());
     return EXIT_CANNOT_RUN;
   }
   console.log(`Browser: ${chromePath}`);
@@ -219,10 +218,10 @@ async function main() {
     // Readiness is the app's own launcher appearing, which is waited on below.
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: PREVIEW_START_MS });
 
-    // The Cards view is the WORST CASE on purpose: ~190 card tiles, most of them
+    // The Cards view is the WORST CASE on purpose: thousands of card tiles, most of them
     // off screen. It is the view that made an earlier build of this capture run
     // past 30 seconds, so it is the one worth checking.
-    await page.waitForSelector('.bugreport-launcher', { timeout: 10_000 });
+    await page.waitForSelector('.bugreport-launcher', { timeout: LAUNCHER_WAIT_MS });
     if (viewArg !== null) {
       await page.evaluate((label) => {
         const nav = [...document.querySelectorAll('.nav-link')].find(
@@ -541,8 +540,16 @@ async function main() {
       }
       if (extracted['clip.json']) {
         const clip = JSON.parse(Buffer.from(extracted['clip.json'], 'base64').toString('utf8'));
-        check('the clip carries a real event stream', Array.isArray(clip) && clip.length > 10,
-          `${Array.isArray(clip) ? clip.length : 0} events`);
+        // "A real stream" is a STRUCTURAL claim, not a count: rrweb replays from
+        // a full snapshot (type 2) plus the incremental mutations (type 3) that
+        // follow it. The old `> 10` was a bare number the ring happened to land
+        // on exactly (10) once the capture window and the harness's short
+        // interaction shrank the clip — a guard that fails on arithmetic rather
+        // than on a broken recording.
+        const incremental = Array.isArray(clip) ? clip.filter((e) => e && e.type === RRWEB_INCREMENTAL).length : 0;
+        check('the clip carries a real event stream (a snapshot followed by mutations)',
+          Array.isArray(clip) && incremental >= MIN_INCREMENTAL_EVENTS,
+          `${Array.isArray(clip) ? clip.length : 0} events, ${incremental} incremental`);
         // Type 2 is rrweb's full snapshot. Without one the replay has nothing to
         // start from, which is the failure the chunked ring exists to prevent.
         const snapshots = Array.isArray(clip) ? clip.filter((e) => e && e.type === 2).length : 0;

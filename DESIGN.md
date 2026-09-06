@@ -2889,6 +2889,82 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.128 The mana picker missed a choice hidden behind a duplicate land — ✅ done
+
+Found by running §3.60's own harness (§3.127): with **two Forests and an untapped Elvish Mystic**,
+casting a `{G}` creature showed no ⛁ chip, so the picker was never offered — while `{1}{G}` on the
+same board was. `manaPaymentChoiceExists` decided "is there a real choice" by re-planning with the
+planned source excluded and comparing the multiset of cards spent. Excluding one Forest re-planned onto
+the *other* Forest: same multiset, "no choice" — and the elf, the alternative the rule exists to
+surface ("a Forest and an elf IS a decision"), was never considered. A duplicate hid it.
+
+**Two passes per planned source, because each finds an alternative the other cannot.** Excluding the
+single INSTANCE finds a one-card swap for a larger cost (`{Forest, Forest}` → `{Forest, Elves}` for
+`{1}{G}`, where excluding every Forest would leave the cost unpayable). Excluding every card of the
+SAME KIND finds what a duplicate was hiding (`{Forest}` → `{Elves}` for `{G}`). Pinned both ways, and
+"three identical Forests" still says no — duplicates of a duplicate are not a choice.
+
+Human-path only by construction: the finder's callers are all in the web session (`session.ts`); no
+`packages/ai` or `sim` code reaches it, so the pilot and the seed-99 rows are untouched.
+
+### 3.127 The browser harnesses run in CI — a guard nobody runs is a guard that drifts — ✅ done
+
+§3.126 was the second time §3.62's layout guarantees had to be repaired, and both times the cause
+was the same: `verify-board-fits.mjs` existed, passed when written, and was never run again, because
+it needs a built app and a real Chrome and so lives outside the vitest gate. Main sat at 28/31 for
+three days with nobody knowing. Rule 10 says ship the guard with the fix; this is the guard for the
+guards.
+
+**One Chrome lookup for every harness.** The four `apps/web/scripts/verify-*.mjs` harnesses each
+carried their own copy of a candidate list — three identical, one with Linux paths sketched in and
+never exercised — and all four were Windows-first, so none could start on a Linux runner. That DRY
+debt is now `scripts/lib/find-chrome.mjs`: a TABLE keyed by platform, two env overrides
+(`CHROME_PATH`, `PUPPETEER_EXECUTABLE_PATH`) tried first, then well-known install paths, then a bare
+name on PATH (which is how GitHub's Ubuntu images expose `google-chrome`). A miss returns `null`
+and `describeChromeSearch()` says exactly what was tried, so a harness fails with a message rather
+than a puppeteer stack trace. Adding a browser or a platform is a row, understood by all four.
+
+**A workflow, advisory by design.** `.github/workflows/browser-harnesses.yml` builds the shipping
+bundle and runs each harness as its own step (so the summary names the one that failed), on pushes to
+main and on pull requests that touch `apps/web/**` or `packages/**`, with the screenshots uploaded as
+artifacts on every run. It runs BESIDE `Deploy PWA`, not inside it: a flaky Chrome timing must not
+hold up a release. Promote a harness into the deploy job once it has a clean history here — that
+decision should be made from the run history, not in advance.
+
+⚠️ Two traps met while doing this, recorded so the next refactor of these files avoids them: the
+three "identical" lookup blocks were followed by DIFFERENT failure code (a one-line `throw` in one
+file, a multi-line `if { console.error; process.exit }` in two), and a pattern that swallowed only the
+`if` line left the body and its closing brace orphaned — `node --check` on every harness is now part
+of finishing a change to them. And the harnesses each start a vite preview, so they must run one at
+a time, and never beside the vitest suite (the worker-crash quirk).
+
+**What running the guards found — the point of running them.** The first full pass through all four
+harnesses failed one check in each of three, and a baseline on the ORIGINAL scripts against the same
+build failed the same checks (two of them crashed outright), so none of it was the refactor:
+- *game-resume* asserted `scrollY > 0` after scrolling the page — vacuous since §3.62 made the page a
+  fixed-height canvas that cannot scroll. The check now records "page fits the window — nothing to
+  restore" when there is no scroll range, and still asserts restoration when there is.
+- *bug-reporter* required `clip.length > 10`, a bare number the capture ring now lands on exactly; the
+  check is structural instead (a full snapshot followed by at least `MIN_INCREMENTAL_EVENTS`
+  mutations). Its launcher wait was also a hard-coded 10 s written when the Cards view had ~190
+  tiles; it has thousands now, and a CI runner is slower — `LAUNCHER_WAIT_MS` names the budget.
+- *mana-choice* stopped seeing the ⛁ chip, for TWO reasons stacked: a REAL product bug in core (a
+  duplicate Forest hid the elf as an alternative — fixed as §3.128), and a drifted assumption in the
+  script itself. Its scripted game used to keep its Elvish Mystic alive; today's stronger opponent
+  kills the 1/1 on turn 8, after which every source is a Forest and there is — correctly — nothing to
+  choose. The loop now keeps the board arranged BY PLAYING (cast a mana creature when none is out),
+  and a chip miss logs the hand and the board, because a CI failure that only says FAIL is not
+  diagnosable.
+
+⚠️ The general lesson, recorded because it will recur: a browser harness that drives a real game
+encodes a game TRAJECTORY, and every upstream change to the pilot or the pool can move that
+trajectory. Write the drive loop to arrange the state it needs, never to assume the game will
+arrive there on its own.
+
+📊 Verified locally through the shared lookup on this Windows box after those fixes: board-fits
+32/32, game-resume 18/18, bug-reporter 31/31, mana-choice 19/19. The first CI run happens on this
+merge; its result is the real proof, and it is watched.
+
 ### 3.126 The board fits again — hands at their designed size, and only the battlefield strip gives — ✅ done
 
 Found by running §3.62's layout harness for the first time since §3.68: pristine main read **28/31**.
