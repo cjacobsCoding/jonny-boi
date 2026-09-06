@@ -32,8 +32,12 @@ import { ANIMATION_CONFIG } from '../../lib/play/play-config.js';
  * disables the transitions besides.
  */
 
-/** Resolve an anchor element's rect inside `root` ("library:A", "hand:B"…). */
-function anchorRect(root: HTMLElement | null, anchor: string): DOMRect | undefined {
+/**
+ * Resolve an anchor element's rect inside `root` ("library:A", "hand:B", "board:A"…).
+ * Exported so the VFX layer (§3.131) measures seat anchors with the SAME reader —
+ * one answer to "where is this zone on screen", not two that can drift.
+ */
+export function anchorRect(root: HTMLElement | null, anchor: string): DOMRect | undefined {
   if (!root) return undefined;
   const el = root.querySelector(`[data-anim-anchor="${anchor}"]`);
   return el instanceof HTMLElement ? el.getBoundingClientRect() : undefined;

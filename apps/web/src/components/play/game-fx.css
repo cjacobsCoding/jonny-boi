@@ -43,3 +43,119 @@
     transform: translateY(2px) scale(0.985);
   }
 }
+
+/* ===========================================================================
+ * VISUAL EFFECTS (§3.131) — the DOM half of vfx-cues.ts. A full-screen tint for
+ * your life swinging, a glow flare where a spell is cast or a token enters, and
+ * a particle burst where damage lands or a creature dies. The layer is inert to
+ * the pointer and sits above the board; nothing here is interactive, and under
+ * prefers-reduced-motion the hook mounts none of it.
+ * ======================================================================== */
+
+.vfx-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40; /* above the board, below modals/prompts */
+  overflow: hidden;
+}
+
+/* --- full-screen life flash --- */
+.vfx-flash {
+  position: fixed;
+  inset: 0;
+  opacity: 0;
+  animation-name: vfx-flash-kf;
+  animation-timing-function: ease-out;
+  animation-fill-mode: forwards;
+}
+.vfx-flash--gain {
+  /* Life gained: a soft green bloom from the edges. */
+  background: radial-gradient(ellipse at center, transparent 55%, rgb(60 200 110 / 34%) 100%);
+}
+.vfx-flash--loss {
+  /* Life lost: a red bloom from the edges. */
+  background: radial-gradient(ellipse at center, transparent 52%, rgb(220 50 50 / 40%) 100%);
+}
+@keyframes vfx-flash-kf {
+  0% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* --- cast / token glow flare (positioned at a seat's board center) --- */
+.vfx-flare {
+  position: fixed;
+  width: 120px;
+  height: 120px;
+  margin: -60px 0 0 -60px; /* centre on the measured point */
+  border-radius: 50%;
+  opacity: 0;
+  animation-name: vfx-flare-kf;
+  animation-timing-function: ease-out;
+  animation-fill-mode: forwards;
+}
+.vfx-flare--cast {
+  background: radial-gradient(circle, rgb(120 160 255 / 60%) 0%, rgb(120 160 255 / 0%) 70%);
+}
+.vfx-flare--token {
+  background: radial-gradient(circle, rgb(90 220 140 / 60%) 0%, rgb(90 220 140 / 0%) 70%);
+}
+@keyframes vfx-flare-kf {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+/* --- damage / death particle burst (positioned at a tile centre) --- */
+.vfx-burst {
+  position: fixed;
+  width: 0;
+  height: 0;
+}
+.vfx-burst__p {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  opacity: 0;
+  animation-name: vfx-burst-kf;
+  animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1);
+  animation-fill-mode: forwards;
+}
+.vfx-burst--damage .vfx-burst__p {
+  background: radial-gradient(circle, #ffd36b 0%, #ff6a2b 70%);
+}
+.vfx-burst--death .vfx-burst__p {
+  background: radial-gradient(circle, #d9c7ff 0%, #6b4fb0 70%);
+}
+@keyframes vfx-burst-kf {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(1);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--vfx-dx, 0), var(--vfx-dy, 0)) scale(0.4);
+  }
+}

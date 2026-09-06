@@ -2889,6 +2889,37 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.131 Game feel, part 2 — the visual-effects layer — ✅ done
+
+The third of "add vfx, animations, and sfx to rival MTGA," completing the ask. A sibling of the
+zone-flight layer (§3.57) and the audio layer (§3.130): the SAME event-log seam, folded a third way.
+
+**Three shapes, positioned three ways.** `vfx-cues.ts` is the pure table — events in, effect cues out:
+- a full-screen `flash` when YOUR life swings (green up, red down; the opponent's life change is told by
+  their number, not a flash of your screen);
+- a `flare` glow where a spell is cast or a token enters, at that seat's board;
+- a particle `burst` where damage lands on a creature or a creature dies, at that TILE.
+
+`VfxLayer` is the DOM half, and it reuses the flight layer's own machinery: the exported `anchorRect`
+for seat anchors and the same last-known tile rects the death ghost uses, so a burst still lands where a
+creature stood the instant it dies — one answer to "where is this on screen", not two that drift.
+
+**Coalescing keeps a wrath from strobing.** Flashes at one place collapse to one per batch; tile bursts
+at DISTINCT tiles are kept, so a board wipe reads as a poof at each spot a creature stood, then the
+batch is capped. Reduced motion is honored at the source, like the flight layer: `reducedMotion`
+derives nothing, so no effect is ever mounted — the frames and badges (board-clarity.css) carry the same
+facts without movement.
+
+**No new assets, no interactivity.** Every effect is CSS (radial gradients, transforms, a particle ring
+of `<span>`s); the layer is `pointer-events: none` above the board and below the prompts, so it can never
+swallow a click. Adding an effect is a row in the table plus a class.
+
+📊 Verified: 8 new pure tests for the cue table; web tsc clean; lint 0 errors. In the live board the
+layer mounts only while an effect is in flight (idle = not in the DOM), and a frozen tableau of all three
+real effect classes rendered correctly on screen — the red loss flash, the blue cast flare, the orange
+damage burst — with no application console errors. Human/Solo board only: no `packages/ai` or `sim`
+caller, so the seeded baselines are untouched.
+
 ### 3.130 Game feel, part 1 — procedural audio and combat motion — ✅ done
 
 Asked for outright: "add vfx, animations, and sfx to rival MTGA." Sound is the biggest missing lever

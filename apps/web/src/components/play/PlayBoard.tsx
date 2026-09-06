@@ -48,6 +48,7 @@ import { groupJailedByJailer, jailSourcesOf } from '../../lib/play/jail-view.js'
 import { describeCastTarget, makeRefIndex, type KnownRef } from '../../lib/play/option-labels.js';
 import type { AnimationCardInfo } from '../../lib/play/animations.js';
 import { AnimationLayer, useZoneAnimations } from './AnimationLayer.js';
+import { VfxLayer, useGameVfx } from './VfxLayer.js';
 import { CombatLines } from './CombatLines.js';
 import { SoundEngine } from '../../lib/play/sound-engine.js';
 import { useGameSounds } from '../../lib/play/useGameSounds.js';
@@ -631,6 +632,9 @@ export function PlayBoard({
   );
 
   const { sprites, retire } = useZoneAnimations(session.events, animLookup);
+  // §3.131 — the visual-effects layer, folded from the same event log and
+  // positioned with the same anchors/tile rects as the zone-flight layer.
+  const { effects: vfxEffects, retire: retireVfx } = useGameVfx(session.events, viewer);
 
   /**
    * LAST-KNOWN tile rect per instance, refreshed after every commit and never
@@ -1515,6 +1519,12 @@ export function PlayBoard({
         boardRootRef={boardRootRef}
         tileRectOf={tileRectOf}
         onDone={retire}
+      />
+      <VfxLayer
+        effects={vfxEffects}
+        boardRootRef={boardRootRef}
+        tileRectOf={tileRectOf}
+        onDone={retireVfx}
       />
     </div>
   );
