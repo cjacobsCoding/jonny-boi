@@ -155,6 +155,33 @@ export const SOUND_CONFIG: SoundConfig = Object.freeze({
   staggerMs: 70,
 });
 
+/** Visual-effects knobs (§3.131) — the particle/glow/flash layer's timings. */
+export interface VfxConfig {
+  /** How long a full-screen life flash takes to bloom and fade. */
+  readonly flashMs: number;
+  /** How long a cast/token glow flare lives. */
+  readonly flareMs: number;
+  /** How long a damage/death particle burst lives. */
+  readonly burstMs: number;
+  /** Particles in one burst — enough to read as a spray, not a swarm. */
+  readonly burstParticles: number;
+  /**
+   * Most effects ONE batch of events may spawn — a board wipe is better told by
+   * a few poofs than by twenty overlapping ones. Screen flashes coalesce to one
+   * BEFORE this cap; tile bursts at distinct tiles are kept (up to the cap).
+   */
+  readonly maxPerBatch: number;
+}
+
+/** The default visual-effects configuration (see {@link VfxConfig}). */
+export const VFX_CONFIG: VfxConfig = Object.freeze({
+  flashMs: 620,
+  flareMs: 560,
+  burstMs: 620,
+  burstParticles: 10,
+  maxPerBatch: 8,
+});
+
 /**
  * The seed the co-pilot asks the pilot from (§3.67). FIXED on purpose: the
  * advice for a given board must be the same every time it is drawn, or a hint

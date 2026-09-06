@@ -260,6 +260,14 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-09-06 integrator: `feat/game-vfx` ✅ MERGED — DESIGN §3.131 (game feel, part 2), completing
+  "vfx, animations, and sfx". NEW `vfx-cues.ts` (pure event→effect table, sibling of `sound-cues.ts`)
+  and `VfxLayer.tsx` (life flash / cast+token flare / damage+death particle burst), folded from the same
+  event log and positioned with the flight layer's own `anchorRect` (now exported from `AnimationLayer`)
+  and tile rects. All CSS in `game-fx.css`, `pointer-events:none`, reduced-motion gated. Web/Solo board
+  only; no `packages/ai`/`sim` caller. The audio+VFX are a thing to HEAR/SEE — a headless pane can't hear
+  and measures 0×0 until an explicit resize, so the player's is the final check.
+
 - 2026-09-06 integrator: `feat/game-audio` ✅ MERGED — DESIGN §3.130 (game feel, part 1). Procedural
   Web Audio SFX (no asset files): NEW `sound-cues.ts` (pure event→cue table, twin of `animations.ts`),
   `sound-engine.ts` (synth recipe table), `sound-prefs.ts`, `useGameSounds.ts`; a 🔊/🔇 toggle in the
