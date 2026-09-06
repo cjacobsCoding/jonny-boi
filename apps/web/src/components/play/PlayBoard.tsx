@@ -309,7 +309,13 @@ export function PlayBoard({
   const onChooseAbility = (opt: AbilityOption): void => {
     setAbilitySource(null);
     if (opt.targets === null) {
-      run(() => session.activateAbility(opt.instanceId, opt.abilityIndex));
+      // §3.129 — a tap-to-afford ability (an untapped Strionic Resonator with
+      // lands to spare) floats its mana first; one already payable does not.
+      run(() =>
+        opt.affordableWithTap
+          ? session.activateWithAutoTap(opt.instanceId, opt.abilityIndex)
+          : session.activateAbility(opt.instanceId, opt.abilityIndex),
+      );
     } else {
       setPendingAbility(opt);
     }
@@ -1409,7 +1415,11 @@ export function PlayBoard({
         <AbilityTargetPrompt
           ability={pendingAbility}
           onPick={(target) =>
-            run(() => session.activateAbility(pendingAbility.instanceId, pendingAbility.abilityIndex, [target]))
+            run(() =>
+              pendingAbility.affordableWithTap
+                ? session.activateWithAutoTap(pendingAbility.instanceId, pendingAbility.abilityIndex, [target])
+                : session.activateAbility(pendingAbility.instanceId, pendingAbility.abilityIndex, [target]),
+            )
           }
           onCancel={() => setPendingAbility(null)}
           annotateTarget={refIndex.noteOf}

@@ -89,6 +89,7 @@ const base: StopContext = {
   hasAnyPlay: true,
   canRespond: true,
   stackTopController: null,
+  canRespondToOwnStack: false,
 };
 
 describe('shouldStopForPriority — the pure rule', () => {
@@ -129,6 +130,26 @@ describe('shouldStopForPriority — the pure rule', () => {
     expect(shouldStopForPriority({ ...base, stackTopController: 'A' }, DEFAULT_PRIORITY_STOPS)).toBe(false);
     const hold: PriorityStops = { ...DEFAULT_PRIORITY_STOPS, stopOnOwnStack: true };
     expect(shouldStopForPriority({ ...base, stackTopController: 'A' }, hold)).toBe(true);
+  });
+
+  it('§3.129 — your OWN stack DOES stop by default when you can respond to it (Strionic Resonator)', () => {
+    // The out-of-the-box defaults, but with a response that aims at your own
+    // stack object: the game pauses so you can actually use it, no menu needed.
+    expect(
+      shouldStopForPriority({ ...base, stackTopController: 'A', canRespondToOwnStack: true }, DEFAULT_PRIORITY_STOPS),
+    ).toBe(true);
+    // Still nothing to do ⇒ still no stop, even with the flag set (guards the
+    // ordering: "nothing to do" outranks every stack rule).
+    expect(
+      shouldStopForPriority(
+        { ...base, stackTopController: 'A', canRespondToOwnStack: true, hasAnyPlay: false, canRespond: false },
+        DEFAULT_PRIORITY_STOPS,
+      ),
+    ).toBe(false);
+    // And an ordinary own trigger you have no response to still resolves silently.
+    expect(shouldStopForPriority({ ...base, stackTopController: 'A', canRespond: true }, DEFAULT_PRIORITY_STOPS)).toBe(
+      false,
+    );
   });
 
   it('the per-step table decides an empty-stack window, per side', () => {
@@ -229,6 +250,59 @@ describe('the reported boards, driven through the real session', () => {
     s = s.autoAdvancePriority(undefined, rule);
     expect(s.state.battlefield.some((p) => p.def.name === 'Angel of Serenity')).toBe(true);
     expect(s.state.players.A.hand.map((c) => c.def.name)).toEqual(['Cloudshift']);
+  });
+
+  it('§3.129 — Strionic Resonator is USABLE: the game stops over your own trigger and one click copies it', () => {
+    // The board from report 20260901_210141, driven end to end through the real
+    // session under the DEFAULT stops (no menu touched): a Thragtusk cast, its
+    // ETB "gain 5 life" trigger on the stack, an untapped Resonator and two
+    // Forests to spare. Before §3.129 the game auto-passed this window — the
+    // engine hid the {2},{T} activation because the pool was empty, so nothing
+    // could see it — and the trigger resolved untouched every time.
+    const forest = card('Forest');
+    const created = createGame({
+      seed: 41,
+      decks: {
+        A: { cards: Array.from({ length: 40 }, () => forest) },
+        B: { cards: Array.from({ length: 40 }, () => forest) },
+      },
+      registry,
+    });
+    const st = created.state;
+    st.players.A.hand = [instance(st, card('Thragtusk'), 'A', 'hand')];
+    st.players.B.hand = [];
+    for (let i = 0; i < 7; i++) st.battlefield.push(instance(st, forest, 'A', 'battlefield'));
+    st.battlefield.push(instance(st, card('Strionic Resonator'), 'A', 'battlefield'));
+    let s = GameSession.fromCreated(created, registry, SEAT_NAMES);
+    let guard = 0;
+    while (s.state.step !== 'precombatMain' && guard++ < 20) s = s.passPriority().session;
+
+    const rule = (session: GameSession) => shouldStopForPriority(stopContextFor(session), DEFAULT_PRIORITY_STOPS);
+    s = s.castWithAutoTap(s.state.players.A.hand[0]!.instanceId, []).session;
+    s = s.autoAdvancePriority(undefined, rule);
+
+    // The spell resolved (nobody can respond to it), but the game STOPPED over
+    // the resulting trigger — because the Resonator is a fundable response to it.
+    const top = s.state.stack[s.state.stack.length - 1];
+    expect(top?.kind, 'stopped with the ETB trigger on the stack').toBe('trigger');
+    expect(s.priorityPlayer).toBe('A');
+    expect(s.state.players.A.life, 'the trigger has NOT resolved yet').toBe(20);
+
+    // The Resonator is offered, marked tap-to-afford, aimed at the trigger.
+    const reso = s.abilityOptions().find((o) => o.sourceName === 'Strionic Resonator');
+    expect(reso, 'the Resonator ability is on the menu with an empty pool').toBeDefined();
+    expect(reso!.affordableWithTap, 'it needs a tap first — the whole §3.129 point').toBe(true);
+    const aim = reso!.targets?.[0];
+    expect(aim?.target, 'the only legal target is the trigger on the stack').toBe(top!.instanceId);
+
+    // One click: auto-tap two Forests and copy the trigger.
+    const act = s.activateWithAutoTap(reso!.instanceId, reso!.abilityIndex, [aim!.target]);
+    expect(act.rejected, 'the activation paid for itself and resolved legally').toBeNull();
+    s = act.session;
+    // Resolve the copy and the original: 20 + 5 + 5 = 30.
+    let g2 = 0;
+    while (g2++ < 12 && s.state.stack.length > 0) s = s.passPriority().session.autoAdvancePriority(undefined, rule);
+    expect(s.state.players.A.life, 'both the copy and the original gained life').toBe(30);
   });
 
   it('an instant in hand no longer stops in every window of the opponent turn (20260901_211359)', () => {

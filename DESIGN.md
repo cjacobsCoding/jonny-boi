@@ -2889,6 +2889,57 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.129 Strionic Resonator, usable at last — the human never floated mana for an ability — ✅ done
+
+Reported plainly: "did you fix Strionic Resonator so players can actually use it?" It had been fixed
+at the ENGINE (§3.39 copies a trigger, §3.40 taught the PILOT to float mana for an ability), and
+§3.119 even added the "stop over your own stack" toggle whose menu label named this very card. Yet a
+human still could not use it, and driving the reported board through the real session showed exactly
+why — three layers each blind to the same thing, in the same shape as §3.40's pilot bug.
+
+**The class: a mana-costed activated ability is invisible until its mana is already floating.** The
+engine offers an `activateAbility` only once the pool covers its cost (the gate `unpayableActivationReason`
+puts on it), and a human never floats mana speculatively — the auto-tap pays a cost at the moment of
+casting. So with an untapped Resonator, two spare lands and your own ⛁ trigger on the stack:
+- `abilityOptions()` showed **no button** (the engine offered nothing to fund), so even a player who
+  knew to stop had nothing to click;
+- `canRespond()` — which asks the engine's offer list — answered **false**, so the Arena-style stop
+  rule skipped the window;
+- `hasMeaningfulChoice()` answered **false** for the same reason, so the walker auto-PASSED the window
+  even under "full control", and the trigger resolved untouched every time.
+
+The cast path and the cycling path had each already solved this shape (`castOptions`/`castWithAutoTap`,
+`cycleOptions`/`cycleWithAutoTap`: plan the taps, offer the option, pay on click). Activated abilities
+were the one member of the family without it. `appendTapToAffordAbilities` is that member: for each
+printed activated ability with a mana cost the engine did not already offer, it plans the taps, floats
+them in a THROWAWAY session, and asks the ENGINE what it would then offer — so timing, targets and
+every non-mana gate (summoning sickness, "you control", a legal trigger to aim at) stay the engine's
+ruling, never this layer's guess. The option is marked `affordableWithTap` and the board's click routes
+through the new `activateWithAutoTap`, which pays then activates and rolls back a rejection so a failed
+activation never strands a tapped land. `hasMeaningfulChoice` and `canRespond` now read `abilityOptions`,
+so all three blind spots close from one source of truth.
+
+**Usable BY DEFAULT, not buried in a menu.** §3.119 left "stop over your own stack" off by default so
+ordinary triggers resolve without nagging — correct, but it made Resonator need a menu hunt, and the
+toggle was in fact DEAD (with `canRespond` false it never fired). The stop rule now also stops over
+your own stack object when you have a response that legally AIMS AT it (`canRespondToOwnStack`, read
+off the same `abilityOptions` the board renders): your ordinary Thragtusk trigger still resolves
+silently, and the one turn you can copy one, the game pauses and offers the Resonator. The manual
+toggle survives as the "always pause over everything of mine" override, relabelled to say so.
+
+⚠️ Sacrifice- and loyalty-cost abilities are deliberately NOT auto-tap-enumerated: the engine's offer
+for them carries a payer that `AbilityOption` has nowhere to keep, so auto-tapping one would submit an
+action the engine would reject. They still appear the moment their cost is already paid, exactly as
+before. Hot path guarded: the walk does nothing when there is no mana to tap, and only trial-floats a
+printed activated ability with a mana cost — zero cost on the ordinary board that has no such permanent.
+
+📊 The guard is the report itself, driven end to end through the real `GameSession` under the DEFAULT
+stops (no menu touched): cast Thragtusk, its ⛁ trigger lands on the stack, the game STOPS, the
+Resonator is offered `affordableWithTap` aimed at the trigger, one `activateWithAutoTap` copies it, and
+life goes 20 → 30. Pure-rule cases pin `canRespondToOwnStack`; `session`/`priority-stops`/`online`
+suites stay green (web 405/405 across play + online, web tsc clean). Human-path only: no `packages/ai`
+or `sim` caller, so the seeded baselines are untouched.
+
 ### 3.128 The mana picker missed a choice hidden behind a duplicate land — ✅ done
 
 Found by running §3.60's own harness (§3.127): with **two Forests and an untapped Elvish Mystic**,
