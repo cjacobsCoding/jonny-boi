@@ -266,6 +266,8 @@ _Append dated notes here; keep them short. Newest at top._
   against the built app on ubuntu-latest, advisory (beside Deploy PWA, not gating it). ⚠️ Run the
   harnesses ONE AT A TIME (each starts a vite preview; game-resume rebuilds mid-run) and never beside
   vitest. If the CI job is red on a harness that is green locally, suspect runner timing first.
+  2026-09-06: first CI runs (push + PR) GREEN, counts identical to local — 32/32, 18/18, 19/19, 31/31;
+  job ≈5.5 min, ≈2 min of it the bug-reporter.
 
 - 2026-09-04 integrator: `fix/hand-card-size` ✅ MERGED — DESIGN §3.126. Two things: (1) every hand
   card had been rendering at TILE size (80px at 800px, 96px at 1100px) since an upstream wrapper broke

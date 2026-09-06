@@ -2962,8 +2962,12 @@ trajectory. Write the drive loop to arrange the state it needs, never to assume 
 arrive there on its own.
 
 📊 Verified locally through the shared lookup on this Windows box after those fixes: board-fits
-32/32, game-resume 18/18, bug-reporter 31/31, mana-choice 19/19. The first CI run happens on this
-merge; its result is the real proof, and it is watched.
+32/32, game-resume 18/18, bug-reporter 31/31, mana-choice 19/19. **First CI runs (2026-09-06,
+the merge's push run and its pull-request run, both on ubuntu-latest): green, with counts identical
+to the local ones.** Chrome came from the PATH row (`/usr/bin/google-chrome`); per harness the runner
+took board-fits 37 s, game-resume 50 s, mana-choice 38 s, bug-reporter 113 s (its `LAUNCHER_WAIT_MS`
+is most of that), 5 min 39 s for the whole job including `npm ci` (12 s) and the build (69 s). Two
+green runs are a history of two — promotion into the deploy job still waits on more of them.
 
 ### 3.126 The board fits again — hands at their designed size, and only the battlefield strip gives — ✅ done
 
