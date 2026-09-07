@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { GameEvent, PlayerId } from '@jonny-boi/core';
-import { deriveVfxCues, type VfxCue } from './vfx-cues.js';
+import { burstParticleOffsets, deriveVfxCues, type VfxCue } from './vfx-cues.js';
 
 const VIEWER: PlayerId = 'A';
 
@@ -62,6 +62,14 @@ describe('deriveVfxCues — the table', () => {
       { type: 'lifeChanged', player: 'A', delta: -2, to: 16 },
     ];
     expect(vfx(doubleLoss)).toHaveLength(1); // same place + tone ⇒ coalesced
+  });
+
+  it('§3.132 — burstParticleOffsets returns the asked-for count of finite points', () => {
+    const pts = burstParticleOffsets(10);
+    expect(pts).toHaveLength(10);
+    expect(pts.every((p) => Number.isFinite(p.dx) && Number.isFinite(p.dy))).toBe(true);
+    // Not all at the origin — a real spray.
+    expect(pts.some((p) => p.dx !== 0 || p.dy !== 0)).toBe(true);
   });
 
   it('reduced motion derives nothing at all', () => {

@@ -2889,6 +2889,31 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.132 The effects preview bench — observing and tuning the game feel — ✅ done
+
+Rule 3 says a system is not done until you can observe and drive it at runtime, and §3.130/§3.131
+shipped without that — an oversight, and a practical one: the audio in particular can only be JUDGED by
+ear, and it otherwise fires only in the flow of a match, so there was no way to tune it. The bench, in
+the About view, is that observability: hear every sound and preview every visual effect on demand.
+
+**It reuses the real pieces, so the audition is honest.** The same `SoundEngine` and recipe table play
+the sounds; the same `.vfx-*` CSS classes and the same `burstParticleOffsets` (now a shared pure helper,
+read by the live layer AND the bench) draw the effects. The master mute and volume ARE the game's
+persisted audio preference — the bench is the audio settings screen too — and a sound preview `force`s a
+play so you can audition a cue with game audio muted.
+
+**A drift guard, because a table and a preview can fall out of step.** `SoundEngine` now exports
+`SYNTHESIZABLE_CUES` (its recipe keys, which the `Record<SoundCue, Recipe>` type already makes
+exhaustive), and a test pins it equal to the pure `ALL_SOUND_CUES` the bench iterates — so a cue can
+never ship listed-but-silent, or synthesized-but-unlisted. The web app has no interactive debug
+inspector to host this (only the bug-reporter's state-dump seam), so it lives as a real, user-facing
+settings-and-preview section rather than a per-feature key binding, which rule 3 forbids.
+
+📊 Verified: the parity test plus a `burstParticleOffsets` shape test (22 pure FX tests in all); web tsc
+clean; lint 0 errors. In the live About view all 20 sound buttons and 6 effect previews render, a sound
+click runs the force-play path and a burst spawns its ten particles, with no application console errors.
+The sound is still a thing to HEAR — but now there is one screen to hear it all from.
+
 ### 3.131 Game feel, part 2 — the visual-effects layer — ✅ done
 
 The third of "add vfx, animations, and sfx to rival MTGA," completing the ask. A sibling of the

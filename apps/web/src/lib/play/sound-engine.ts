@@ -174,6 +174,14 @@ const RECIPES: Readonly<Record<SoundCue, Recipe>> = Object.freeze({
 });
 
 /**
+ * Every cue the engine can actually synthesize (the recipe table's keys). The
+ * `Record<SoundCue, Recipe>` type already makes `RECIPES` exhaustive at compile
+ * time; exporting the keys lets a test assert the pure cue list and the preview
+ * bench stay in lockstep with it, so a new cue can never ship with no sound.
+ */
+export const SYNTHESIZABLE_CUES: readonly SoundCue[] = Object.freeze(Object.keys(RECIPES) as SoundCue[]);
+
+/**
  * A stateful, best-effort audio player. One instance per board; construct it
  * eagerly (cheap — no context yet) and call {@link play} on each cue. Enable
  * state and volume are settable live so the action-bar toggle takes effect
@@ -217,9 +225,13 @@ export class SoundEngine {
     }
   }
 
-  /** Play one cue now. A no-op when disabled, unsupported, or not yet resumed. */
-  play(cue: SoundCue): void {
-    if (!this.enabled) return;
+  /**
+   * Play one cue now. A no-op when unsupported or not yet resumed, and when
+   * disabled UNLESS `force` — the preview bench (§3.132) forces a play so you
+   * can audition a cue even with game audio muted.
+   */
+  play(cue: SoundCue, force = false): void {
+    if (!this.enabled && !force) return;
     const ctx = this.ensureContext();
     const master = this.master;
     if (!ctx || !master) return;

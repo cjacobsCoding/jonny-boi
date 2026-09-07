@@ -6,7 +6,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { GameEvent, PlayerId } from '@jonny-boi/core';
-import { deriveSoundCues, type SoundCue } from './sound-cues.js';
+import { ALL_SOUND_CUES, deriveSoundCues, type SoundCue } from './sound-cues.js';
+import { SYNTHESIZABLE_CUES } from './sound-engine.js';
 import { SOUND_CONFIG } from './play-config.js';
 
 const VIEWER: PlayerId = 'A';
@@ -85,5 +86,18 @@ describe('deriveSoundCues — the table', () => {
     expect(hits.length).toBe(SOUND_CONFIG.maxPerBatch);
     expect(new Set(hits.map((h) => h.key)).size).toBe(hits.length);
     expect(hits[0]!.key).toBe('100');
+  });
+});
+
+describe('§3.132 — the cue list, the recipes and no duplicates stay in lockstep', () => {
+  it('every listed cue has a synth recipe, and every recipe is listed', () => {
+    // The preview bench and `canRespond`-style consumers iterate ALL_SOUND_CUES;
+    // the engine can only play what has a recipe. If these ever diverge, a cue
+    // ships with no sound (or a button plays nothing) — so pin them equal.
+    expect(new Set(SYNTHESIZABLE_CUES)).toEqual(new Set<SoundCue>(ALL_SOUND_CUES));
+  });
+
+  it('ALL_SOUND_CUES has no duplicates', () => {
+    expect(new Set(ALL_SOUND_CUES).size).toBe(ALL_SOUND_CUES.length);
   });
 });

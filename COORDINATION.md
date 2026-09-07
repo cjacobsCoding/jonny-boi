@@ -260,6 +260,14 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-09-06 integrator: `feat/effects-preview` ✅ MERGED — DESIGN §3.132. An effects preview bench in
+  the About view (NEW `components/play/EffectsPreview.tsx` + `effects-preview.css`): hear every sound,
+  preview every VFX, and it doubles as the audio settings (persisted mute + volume). Reuses the real
+  `SoundEngine`/recipes and `.vfx-*` classes; `burstParticleOffsets` extracted to `vfx-cues.ts` and read
+  by both the live layer and the bench. `SoundEngine.play(cue, force)` added so a preview plays while
+  muted; NEW export `SYNTHESIZABLE_CUES` + a test pinning it equal to `ALL_SOUND_CUES` (no listed-but-
+  silent cue). Rule 3 observability for §3.130/§3.131. Web-only; no `packages/ai`/`sim` caller.
+
 - 2026-09-06 integrator: `feat/game-vfx` ✅ MERGED — DESIGN §3.131 (game feel, part 2), completing
   "vfx, animations, and sfx". NEW `vfx-cues.ts` (pure event→effect table, sibling of `sound-cues.ts`)
   and `VfxLayer.tsx` (life flash / cast+token flare / damage+death particle burst), folded from the same

@@ -14,6 +14,7 @@ import {
   unsupportedMechanics,
 } from '../lib/cards/unsupportedRegistry.js';
 import { copyText } from '../lib/clipboard.js';
+import { EffectsPreview } from '../components/play/EffectsPreview.js';
 import './about.css';
 
 /** How long the copy button's success/failure notice stays up. */
@@ -248,6 +249,8 @@ export function AboutView(): ReactElement {
           </>
         )}
       </article>
+
+      <EffectsPreview />
     </section>
   );
 }

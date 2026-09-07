@@ -1,0 +1,69 @@
+/*
+ * The effects preview bench (§3.132) — layout only. The effects themselves are
+ * the real .vfx-* classes from game-fx.css and the real SoundEngine; nothing
+ * here restyles them, it only lays out the controls and the stage they play on.
+ */
+
+.effects-preview__master {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4, 16px);
+  margin: var(--space-3, 12px) 0;
+}
+
+.effects-preview__check,
+.effects-preview__vol {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.effects-preview__vol input[type='range'] {
+  width: 140px;
+}
+
+.effects-preview__vol-num {
+  min-width: 3ch;
+  color: var(--color-fg-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.effects-preview__sub {
+  margin: var(--space-3, 12px) 0 var(--space-2, 8px);
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-fg-muted, inherit);
+}
+
+.effects-preview__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-2, 8px);
+}
+
+.effects-preview__btn {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+/* Where a flare/burst preview lands. A calm dotted frame so the effect reads
+   against it in either theme; the flash previews fill the whole screen instead. */
+.effects-preview__stage {
+  position: relative;
+  height: 120px;
+  margin-top: var(--space-3, 12px);
+  border: 1px dashed var(--color-border-strong, #8886);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-bg, #0000000d);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.effects-preview__stage-label {
+  color: var(--color-fg-faint);
+  font-size: var(--text-xs, 0.75rem);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
