@@ -92,6 +92,21 @@ const VFX_FOR_EVENT: Partial<Record<GameEvent['type'], VfxResolver>> = Object.fr
     event.type === 'creatureDied' ? { kind: 'burst', tone: 'death', at: { where: 'tile', instanceId: event.instanceId } } : undefined,
 });
 
+/**
+ * The (dx, dy) each burst particle is flung to — a ring in three reaches so the
+ * spray is not a clean circle. Pure and shared, so the live layer and the
+ * preview bench (§3.132) draw the identical burst.
+ */
+export function burstParticleOffsets(count: number): readonly { readonly dx: number; readonly dy: number }[] {
+  const out: { dx: number; dy: number }[] = [];
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2;
+    const reach = 18 + (i % 3) * 8;
+    out.push({ dx: Math.cos(angle) * reach, dy: Math.sin(angle) * reach });
+  }
+  return out;
+}
+
 /** Shared empty result so a muted/silent/reduced frame allocates nothing. */
 const NO_VFX: readonly VfxCue[] = Object.freeze([]);
 

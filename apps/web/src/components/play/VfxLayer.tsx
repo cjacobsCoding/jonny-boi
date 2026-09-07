@@ -9,7 +9,7 @@ import {
   type RefObject,
 } from 'react';
 import type { GameEvent, InstanceId, PlayerId } from '@jonny-boi/core';
-import { deriveVfxCues, type VfxCue } from '../../lib/play/vfx-cues.js';
+import { burstParticleOffsets, deriveVfxCues, type VfxCue } from '../../lib/play/vfx-cues.js';
 import { VFX_CONFIG } from '../../lib/play/play-config.js';
 import { anchorRect, usePrefersReducedMotion } from './AnimationLayer.js';
 
@@ -139,23 +139,19 @@ function VfxEffect({
   // A burst: a ring of particles flung outward, each with its own angle/reach.
   return (
     <div className={`vfx-burst vfx-burst--${effect.tone}`} style={style}>
-      {Array.from({ length: VFX_CONFIG.burstParticles }, (_, i) => {
-        const angle = (i / VFX_CONFIG.burstParticles) * Math.PI * 2;
-        const reach = 18 + (i % 3) * 8; // three rings so the spray is not a clean circle
-        return (
-          <span
-            key={i}
-            className="vfx-burst__p"
-            style={
-              {
-                animationDuration: `${lifetime}ms`,
-                ['--vfx-dx' as string]: `${Math.cos(angle) * reach}px`,
-                ['--vfx-dy' as string]: `${Math.sin(angle) * reach}px`,
-              } as CSSProperties
-            }
-          />
-        );
-      })}
+      {burstParticleOffsets(VFX_CONFIG.burstParticles).map((p, i) => (
+        <span
+          key={i}
+          className="vfx-burst__p"
+          style={
+            {
+              animationDuration: `${lifetime}ms`,
+              ['--vfx-dx' as string]: `${p.dx}px`,
+              ['--vfx-dy' as string]: `${p.dy}px`,
+            } as CSSProperties
+          }
+        />
+      ))}
     </div>
   );
 }
