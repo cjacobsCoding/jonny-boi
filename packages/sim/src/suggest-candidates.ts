@@ -23,6 +23,7 @@ import type { Deck } from './deck.js';
 import { validateDeck } from './deck.js';
 import type { CardSwap, SwapEvaluation, SwapVerdict } from './swap.js';
 import { applySwap, copiesSwappedBy } from './swap.js';
+import { compareForUpgrade, roleOf } from './card-role.js';
 import { DEFAULT_DECK_RULES, DEFAULT_SWAP_SCOPE, type DeckRules, type SwapScope } from './config.js';
 import {
   DEFAULT_HEURISTIC_WEIGHTS,
@@ -144,7 +145,7 @@ export function generateCandidates(
         inId: inDef.id,
         outName: outDef.name,
         inName: inDef.name,
-        heuristicScore: scoreCandidate(inDef, deckProfile, weights),
+        heuristicScore: scoreCandidate(inDef, deckProfile, weights, outDef),
         traits: traitsOf(inDef),
         variantDeckName: variant.name,
         copiesSwapped: copiesSwappedBy(base, swap, pool, scope),
@@ -188,7 +189,17 @@ function profileDeck(base: Deck, pool: CardPool): DeckProfile {
  * colored pips the deck can cast (colorMatch) and whose mana value sits near the
  * deck's curve (curveFit). The sim makes the real call.
  */
-export function scoreCandidate(inDef: CardDefinition, profile: DeckProfile, weights: HeuristicWeights): number {
+export function scoreCandidate(
+  inDef: CardDefinition,
+  profile: DeckProfile,
+  weights: HeuristicWeights,
+  /**
+   * §3.135 — the card this candidate would REPLACE. Supplying it turns on the
+   * like-for-like and no-brainer rewards; omitting it scores exactly as before,
+   * so every existing caller and test keeps its meaning.
+   */
+  outDef?: CardDefinition,
+): number {
   const pips = coloredPips(inDef);
   const castable = pips.length === 0 || pips.every((c) => profile.colors.has(c));
   const colorScore = castable ? weights.colorMatch : 0;
@@ -198,7 +209,14 @@ export function scoreCandidate(inDef: CardDefinition, profile: DeckProfile, weig
   // match, approaching 0 as it drifts away (a smooth, parameter-free falloff).
   const curveScore = weights.curveFit / (1 + Math.abs(mv - profile.avgSpellMv));
 
-  return colorScore + curveScore;
+  // §3.135 — the two job-aware rewards. Without an `outDef` there is no swap to
+  // judge, so both are zero and the score is the original colour+curve number.
+  if (outDef === undefined) return colorScore + curveScore;
+  const { sameRole, strictUpgrade } = compareForUpgrade(outDef, inDef, profile.colors);
+  const roleScore = sameRole ? weights.roleMatch : 0;
+  const upgradeScore = strictUpgrade ? weights.strictUpgrade : 0;
+
+  return colorScore + curveScore + roleScore + upgradeScore;
 }
 
 /**
@@ -210,7 +228,7 @@ export function traitsOf(inDef: CardDefinition): CandidateTraits {
   return {
     colorKey: coloredPips(inDef).join(''),
     manaValue: inDef.cost ? convertedManaCost(inDef.cost) : 0,
-    role: inDef.types[0] ?? 'unknown',
+    role: roleOf(inDef),
   };
 }
 

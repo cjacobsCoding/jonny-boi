@@ -64,11 +64,26 @@ export interface HeuristicWeights {
   readonly colorMatch: number;
   /** Reward an `in` card near the deck's average spell mana-value (curve fit). */
   readonly curveFit: number;
+  /**
+   * §3.135 — reward a LIKE-FOR-LIKE swap: the candidate holds the same job as
+   * the card it replaces (removal for removal, a trick for a trick). Asked for
+   * directly, and it is what makes a suggestion legible rather than a shuffle.
+   */
+  readonly roleMatch: number;
+  /**
+   * §3.135 — reward the NO-BRAINER: same job, castable, does at least everything
+   * the cut card does, and is cheaper (or the same cost with a better body).
+   * Weighted well above the others so the obvious swaps are simulated FIRST —
+   * this only decides what gets measured early, never what wins.
+   */
+  readonly strictUpgrade: number;
 }
 
 export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   colorMatch: 1,
   curveFit: 1,
+  roleMatch: 1.5,
+  strictUpgrade: 6,
 });
 
 /**

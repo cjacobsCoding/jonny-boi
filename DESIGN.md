@@ -2889,6 +2889,60 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.135 Suggestions learn what a card is FOR — like-for-like, and the no-brainers first — ✅ done
+
+Asked for: "make sure it is looking at super obvious swaps first… cards that can be cast by the deck's
+manabase, do effectively the same thing, but for less mana", and "is there any consideration to
+swapping things for things that fill a similar role first? Like removal spell for removal spell".
+
+**What the pre-rank knew before this: two things.** `scoreCandidate` scored a candidate on colour match
+(can the deck cast its pips — so the manabase question WAS already asked) and curve fit (is its mana
+value near the deck's average). Nothing about what either card DOES. "Role" existed in the reported
+traits but was `types[0]` — the card type, so every instant was the same "role" as every other instant.
+Like-for-like and no-brainer were not questions the engine could ask.
+
+**A card's job, read off its compiled effects.** `card-role.ts` is a TABLE from effect primitive to
+job, built from the vocabulary the pool actually uses (a scan of all 5,651 compiled cards, 65 distinct
+primitives): `destroyTarget` → removal, `drawCards` → draw, `pumpUntilEndOfTurn` → pump, and so on.
+`roleOf` takes the highest-priority job a card holds, because a creature whose enters-trigger destroys
+something is a removal spell wearing a body. It reads all three homes — spell effects, triggers and
+activated abilities — so Elvish Visionary (no spell effects at all; its draw is a trigger) classifies
+as draw, and Llanowar Elves (no effects whatsoever) falls through to `produces` and classifies as ramp.
+
+⚠️ The table is CLOSED in this project's sense: a primitive with no row contributes no job rather than
+being bent to the nearest one, and a card with nothing to match ends at `'other'` — an honest "we do
+not know". One coarseness is documented rather than papered over: `searchLibrary` is `'dig'`, because
+the primitive genuinely cannot tell a land fetch from a tutor.
+
+**The no-brainer test, and the two ways it would have lied.** `compareForUpgrade` asks: same job, the
+deck can cast it, it does at least everything the cut card does, and it is cheaper (or the same cost
+with a bigger body). "Does at least everything" is the load-bearing half, and comparing primitive NAMES
+alone is not enough — both of these are real pairs in this pool:
+- **Shock vs Lightning Strike.** Both are `dealDamage`. Shock is a mana cheaper and deals 2 where
+  Strike deals 3. Names alone would call the cheaper one free, so numeric parameters must be ≥ the cut
+  card's.
+- **Doom Blade vs Murder.** Both `destroyTarget`, Doom Blade a mana cheaper — but it carries
+  `notColor: 'B'` and cannot kill black creatures. A parameter the candidate ADDS is a restriction we
+  cannot prove harmless, so any difference in the non-numeric parameters disqualifies it.
+
+The canonical pass is Lightning Bolt over Lightning Strike: identical `dealDamage` with `amount: 3`,
+one mana instead of two. Effects are matched one-to-one, so a card with one draw cannot "cover" a card
+with two.
+
+⚠️ Conservative on purpose, and it is worth being precise about what this changes: the pre-rank decides
+only what gets SIMULATED FIRST. The sim still decides what wins. A false negative costs a little search
+order; a false positive would put a worse card at the front of the queue, which is why every
+uncertainty resolves to "not a no-brainer".
+
+📊 19 new pure tests on real pool cards (both false-positive pairs pinned), plus an end-to-end ordering
+guard: in a deck running Lightning Strike, the Lightning Bolt candidate outranks an unrelated one and
+sorts first. Suite green; sim package 309→ tests all passing; lint 0 errors.
+
+**Still open from the same brief** (not built here): scoping the search to chosen cards and to a chosen
+NUMBER of copies (the engine has `cutOnly`/`inOnly` and a one-or-playset scope, but no arbitrary count
+and no UI for either), archetype detection ("what kind of deck is this"), and gap screening ("this deck
+has no removal").
+
 ### 3.134 Which pilot is actually best, and the Selesnya Blink verdict — ✅ done
 
 Asked directly: "out of all the AI type options we have right now, which is actually smarter currently,
