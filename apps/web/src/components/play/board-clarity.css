@@ -316,3 +316,60 @@
   color: var(--color-fg-muted);
   letter-spacing: 0.08em;
 }
+
+/* --- what is ON this card (§3.133) -----------------------------------------
+ * Reported: "really hard to see if a card has special effects on it like 1/1
+ * counters or +1/+1 to end of turn". The tile showed one merged number beside
+ * the P/T, which cannot distinguish a PERMANENT +1/+1 counter from a pump that
+ * wears off — a difference the player trades combat on.
+ *
+ * So the card now carries the reason, in chips: one per counter kind (green for
+ * +1/+1, red for -1/-1, neutral for anything else the pool prints), plus a
+ * distinct ✦ chip for the part of the buff that came from a spell or ability.
+ * Bottom-right of the art, so they clear the combat band (top) and the TAPPED
+ * word (bottom-left). Never colour alone: every chip prints its own text.
+ */
+.perm__marks {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  pointer-events: none;
+}
+
+.perm__mark {
+  font-size: 0.5rem;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  padding: 0 3px;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 75%);
+  white-space: nowrap;
+}
+
+/* A +1/+1 counter: permanent, and the good kind. */
+.perm__mark--boost {
+  background: rgb(38 140 70 / 92%);
+}
+
+/* A -1/-1 counter: permanent, and the bad kind. */
+.perm__mark--shrink {
+  background: rgb(170 45 45 / 92%);
+}
+
+/* Any other printed counter kind (charge, stun, …) — named, not guessed at. */
+.perm__mark--other {
+  background: rgb(70 70 84 / 92%);
+}
+
+/* NOT a counter: an anthem or an until-end-of-turn pump. Deliberately a
+   different hue AND a different glyph from the counter chips, because "does
+   this wear off?" is the whole question the chip exists to answer. */
+.perm__mark--effect {
+  background: rgb(150 100 20 / 94%);
+}

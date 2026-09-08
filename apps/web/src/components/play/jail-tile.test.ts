@@ -35,6 +35,8 @@ const JAILER: BoardPermanent = {
   printedPower: 2,
   printedToughness: 2,
   ptDelta: null,
+  ptFromEffects: null,
+  counters: [],
   damageMarked: 0,
   keywords: {},
   producesIfTapped: [],

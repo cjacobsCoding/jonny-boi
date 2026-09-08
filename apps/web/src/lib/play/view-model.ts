@@ -27,6 +27,10 @@ import {
   manaColorsOffered,
   MANA_COLORS,
   NO_MOD,
+  PLUS_ONE_COUNTER,
+  MINUS_ONE_COUNTER,
+  LOYALTY_COUNTER,
+  DEFENSE_COUNTER,
   type CardInstance,
   type ContinuousIndex,
   type GameState,
@@ -114,6 +118,20 @@ export interface BoardPermanent {
   readonly printedPower: number;
   readonly printedToughness: number;
   readonly ptDelta: { readonly power: number; readonly toughness: number } | null;
+  /**
+   * §3.133 — the delta SPLIT by where it came from, because "+1/+1 counter" and
+   * "+1/+1 until end of turn" look identical in a single number and are not the
+   * same fact: one is permanent, one wears off. `ptFromEffects` is the part of
+   * {@link ptDelta} that is NOT counters (an anthem, a pump), so the tile can
+   * badge the two differently. Null when every point came from counters.
+   */
+  readonly ptFromEffects: { readonly power: number; readonly toughness: number } | null;
+  /**
+   * Counters ON this permanent, by kind, non-zero only. Loyalty and defense are
+   * counters too but are excluded: they already have their own badges, and
+   * saying it twice is noise.
+   */
+  readonly counters: readonly { readonly kind: string; readonly count: number }[];
   readonly damageMarked: number;
   readonly keywords: KeywordFlags;
   /** Mana this source can still produce this turn (empty when not a mana source or tapped). */
@@ -206,6 +224,47 @@ function visibleHand(hand: readonly CardInstance[]): VisibleHandCard[] {
   }));
 }
 
+/**
+ * §3.133 — SPLIT a creature's buff by where it came from, and list its counters.
+ *
+ * A `+1/+1` counter is PERMANENT and a pump is not, and "is that mine forever or
+ * does it wear off at end of turn?" is a decision the player makes every combat.
+ * One merged number cannot answer it, so this returns the two halves:
+ *  - `counters` — every non-zero counter kind ON the permanent, EXCEPT loyalty
+ *    and defense, which already have their own badges on the tile;
+ *  - `ptFromEffects` — the part of `ptDelta` that is NOT counters (an anthem, an
+ *    until-end-of-turn pump), or null when every point came from counters.
+ *
+ * ⚠️ SHARED by the hotseat view-model and the ONLINE board adapter on purpose: a
+ * clarity fix that reaches only one of the two boards is exactly the drift §3.57
+ * warned about. `counterNet` mirrors the engine's own arithmetic (stats.ts):
+ * +1/+1 counters minus -1/-1 counters, each worth a point of each stat.
+ *
+ * Online there is no continuous index, so `ptDelta` is the counters alone and
+ * this honestly reports no effect delta rather than inventing one.
+ */
+export function permanentMarks(
+  inst: CardInstance,
+  ptDelta: { readonly power: number; readonly toughness: number } | null,
+  creature: boolean,
+): {
+  readonly counters: readonly { readonly kind: string; readonly count: number }[];
+  readonly ptFromEffects: { readonly power: number; readonly toughness: number } | null;
+} {
+  const counterNet = (inst.counters[PLUS_ONE_COUNTER] ?? 0) - (inst.counters[MINUS_ONE_COUNTER] ?? 0);
+  const effectPower = (ptDelta?.power ?? 0) - counterNet;
+  const effectToughness = (ptDelta?.toughness ?? 0) - counterNet;
+  return {
+    counters: Object.entries(inst.counters)
+      .filter(([kind, count]) => count !== 0 && kind !== LOYALTY_COUNTER && kind !== DEFENSE_COUNTER)
+      .map(([kind, count]) => ({ kind, count })),
+    ptFromEffects:
+      creature && (effectPower !== 0 || effectToughness !== 0)
+        ? { power: effectPower, toughness: effectToughness }
+        : null,
+  };
+}
+
 function boardPermanent(state: GameState, inst: CardInstance, cont: ContinuousIndex): BoardPermanent {
   const mod = cont.get(inst.instanceId) ?? NO_MOD;
   const creature = isCreature(inst.def);
@@ -217,6 +276,7 @@ function boardPermanent(state: GameState, inst: CardInstance, cont: ContinuousIn
     creature && (power !== printedPower || toughness !== printedToughness)
       ? { power: power - printedPower, toughness: toughness - printedToughness }
       : null;
+  const { counters, ptFromEffects } = permanentMarks(inst, ptDelta, creature);
   const combat = state.combat;
   const attacking = combat !== null && combat.attackers.includes(inst.instanceId);
   const blocking = combat !== null ? (combat.blocks[inst.instanceId] ?? null) : null;
@@ -243,6 +303,8 @@ function boardPermanent(state: GameState, inst: CardInstance, cont: ContinuousIn
     printedPower,
     printedToughness,
     ptDelta,
+    ptFromEffects,
+    counters,
     damageMarked: inst.damageMarked,
     keywords: effectiveKeywords(inst, mod),
     // Which mana this source could still make. Reads normalised MODES, so a modal

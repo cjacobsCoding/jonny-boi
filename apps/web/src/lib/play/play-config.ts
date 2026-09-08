@@ -155,6 +155,24 @@ export const SOUND_CONFIG: SoundConfig = Object.freeze({
   staggerMs: 70,
 });
 
+/**
+ * "What the opponent just did" feed (§3.133). The hold is the whole point: an
+ * AI instant is cast and resolved inside one auto-passed burst, so the note has
+ * to OUTLIVE the stack object it describes for a human to read it.
+ */
+export interface OpponentFeedConfig {
+  /** How long one note stays on screen after the play. */
+  readonly holdMs: number;
+  /** Most notes shown at once — a long turn scrolls past, it does not stack up. */
+  readonly maxShown: number;
+}
+
+/** The default opponent-feed configuration (see {@link OpponentFeedConfig}). */
+export const OPPONENT_FEED_CONFIG: OpponentFeedConfig = Object.freeze({
+  holdMs: 7000,
+  maxShown: 4,
+});
+
 /** Visual-effects knobs (§3.131) — the particle/glow/flash layer's timings. */
 export interface VfxConfig {
   /** How long a full-screen life flash takes to bloom and fade. */

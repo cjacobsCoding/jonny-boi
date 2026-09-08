@@ -34,6 +34,8 @@ const PERMANENT: BoardPermanent = {
   printedPower: 0,
   printedToughness: 0,
   ptDelta: null,
+  ptFromEffects: null,
+  counters: [],
   damageMarked: 0,
   keywords: {},
   producesIfTapped: [],
