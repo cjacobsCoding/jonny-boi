@@ -26,7 +26,14 @@ import { loadDeck } from './deck.js';
 import type { MatchupPilots, RunOptions } from './matchup.js';
 import { gameSeedFor, makeSeats, onPlayFor, resolveRunRange } from './matchup.js';
 import { runMatch } from './match.js';
-import { DEFAULT_DECK_RULES, DEFAULT_STATS_CONFIG, DEFAULT_SWAP_SCOPE, type StatsConfig, type SwapScope } from './config.js';
+import {
+  copiesForScope,
+  DEFAULT_DECK_RULES,
+  DEFAULT_STATS_CONFIG,
+  DEFAULT_SWAP_SCOPE,
+  type StatsConfig,
+  type SwapScope,
+} from './config.js';
 import {
   mcNemarTest,
   wilsonInterval,
@@ -125,24 +132,29 @@ export function applySwap(
   const outEntry = entries[outIdx];
   if (outEntry === undefined) throw new Error(`"${outDef.name}" is not in deck "${base.name}"`);
 
-  if (scope === 'playset') {
-    // EVERY copy becomes the in card, in the same entry at the same index and with
-    // the same count — so the expanded library differs at exactly those slots and
-    // nowhere else. This preserves the common-random-numbers pairing even more
-    // cleanly than the one-copy case, which has to split the entry in two.
+  // §3.136 — ONE path for every scope. `copiesForScope` decides how many copies
+  // move (the whole line, a single copy, or an asked-for count clamped into the
+  // line), and the rewrite below is the same shape it always was:
+  //
+  //  - the whole line: EVERY copy becomes the in card, in the same entry at the
+  //    same index with the same count, so the expanded library differs at exactly
+  //    those slots and nowhere else — the cleanest common-random-numbers pairing;
+  //  - fewer than the whole line: the line is shortened and an in-card line sits
+  //    immediately after it, which expands to the base library with exactly those
+  //    slots rewritten. (`loadDeck` totals copies per card across entries, so the
+  //    4-of rule still catches an in card already maxed elsewhere.)
+  const copies = copiesForScope(outEntry.count, scope);
+  if (copies >= outEntry.count) {
     entries.splice(outIdx, 1, { cardId: inDef.id, count: outEntry.count });
   } else {
-    // The out entry's LAST copy becomes the in card, right where it sat. One entry
-    // when the line is cut to nothing, otherwise a shortened line plus a one-card
-    // line immediately after it — which expands to the base library with a single
-    // slot rewritten. (`loadDeck` totals copies per card across entries, so the
-    // 4-of rule still catches an in card that is already maxed elsewhere.)
-    const replacement = { cardId: inDef.id, count: 1 };
-    if (outEntry.count <= 1) entries.splice(outIdx, 1, replacement);
-    else entries.splice(outIdx, 1, { ...outEntry, count: outEntry.count - 1 }, replacement);
+    entries.splice(
+      outIdx,
+      1,
+      { ...outEntry, count: outEntry.count - copies },
+      { cardId: inDef.id, count: copies },
+    );
   }
 
-  const copies = copiesMovedBy(outEntry.count, scope);
   return {
     // The name records HOW MANY copies moved, so a result is never ambiguous
     // about what was actually tested.
@@ -161,10 +173,6 @@ function entryMatches(entry: { cardId: string }, def: CardDefinition, pool: Card
   return resolved?.id === def.id;
 }
 
-/** Copies a swap moves, given the cut LINE's count: the whole line, or one. */
-function copiesMovedBy(lineCount: number, scope: SwapScope): number {
-  return scope === 'playset' ? lineCount : 1;
-}
 
 /**
  * How many copies applying `swap` to `base` would actually move.
@@ -185,7 +193,7 @@ export function copiesSwappedBy(
   const outDef = resolve(pool, swap.out);
   if (!outDef) return 1;
   const line = base.cards.find((entry) => entryMatches(entry, outDef, pool));
-  return copiesMovedBy(line?.count ?? 1, scope);
+  return copiesForScope(line?.count ?? 1, scope);
 }
 
 /**

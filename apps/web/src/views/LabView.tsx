@@ -193,6 +193,9 @@ export function LabView({ decks, sim, selection }: { decks: DecksApi; sim: SimWo
             {...sharedProps}
             gamesConfig={SUGGEST_GAMES}
             maxCandidatesConfig={SUGGEST_MAX_CANDIDATES}
+            // §3.136 — the SAME hero card list the A/B tab cuts from, so the two
+            // tabs can never offer different cards for the same deck.
+            cutOptions={hero ? heroOutOptions(hero) : []}
           />
         )}
       </div>
@@ -203,8 +206,8 @@ export function LabView({ decks, sim, selection }: { decks: DecksApi; sim: SimWo
 /** The hero's distinct cards, as out-swap options (named, deduped, sorted). */
 function heroOutOptions(hero: Deck): CardOption[] {
   const options: CardOption[] = [];
-  for (const { card } of resolveEntries(hero)) {
-    options.push({ cardId: card.id, name: card.name });
+  for (const { card, count } of resolveEntries(hero)) {
+    options.push({ cardId: card.id, name: card.name, count });
   }
   return options.sort((a, b) => a.name.localeCompare(b.name));
 }

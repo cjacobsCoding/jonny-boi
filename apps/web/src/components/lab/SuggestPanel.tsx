@@ -13,9 +13,10 @@ import {
 import { estimateSuggestionGames } from '../../lib/sim/plan.js';
 import { pilotLabel } from '../../lib/sim/pilots.js';
 import { PilotStamp, RunCostNote } from './PilotControls.js';
-import type { PanelProps, GamesConfig } from './panel-types.js';
+import type { PanelProps, GamesConfig, CardOption } from './panel-types.js';
 import type { SimDeckPayload } from '../../lib/sim-protocol.js';
 import type { SuggestionHistory } from '@jonny-boi/sim';
+import './suggest-focus.css';
 
 /**
  * The suggestion engine surface: rank candidate single-card swaps that improve
@@ -58,9 +59,28 @@ export function SuggestPanel({
   onApplySwap,
   gamesConfig,
   maxCandidatesConfig,
-}: PanelProps & { gamesConfig: GamesConfig; maxCandidatesConfig: GamesConfig }): ReactElement {
+  cutOptions,
+}: PanelProps & {
+  gamesConfig: GamesConfig;
+  maxCandidatesConfig: GamesConfig;
+  /** The hero's cards, for the §3.136 focus picker. */
+  cutOptions: readonly CardOption[];
+}): ReactElement {
   const [games, setGames] = useState(gamesConfig.default);
   const [maxCandidates, setMaxCandidates] = useState(maxCandidatesConfig.default);
+  /**
+   * §3.136 — the focus. `cutFocus` empty means "search the whole deck", which is
+   * what the panel always did; `copies` is how much of a card a candidate swap
+   * moves, defaulting to the whole playset exactly as the engine does.
+   */
+  const [cutFocus, setCutFocus] = useState<ReadonlySet<string>>(() => new Set());
+  const [copies, setCopies] = useState<number | 'playset'>('playset');
+  const focusSummary =
+    cutFocus.size === 0 && copies === 'playset'
+      ? '— whole deck, whole playsets'
+      : `— ${cutFocus.size === 0 ? 'whole deck' : `${cutFocus.size} card${cutFocus.size === 1 ? '' : 's'}`}, ${
+          copies === 'playset' ? 'whole playsets' : `${copies} cop${copies === 1 ? 'y' : 'ies'}`
+        }`;
 
   const running = sim.status === 'running';
   const canRun = heroLegal && heroPayload !== null && chosenOpponents.length > 0 && !running;
@@ -144,12 +164,87 @@ export function SuggestPanel({
               pilotId,
               // Carrying the record is what makes a re-run explore new ground.
               ...(stored ? { history: stored } : {}),
+              // §3.136 — the focus, when the player narrowed it.
+              ...(cutFocus.size > 0 ? { cutOnly: [...cutFocus] } : {}),
+              ...(copies === 'playset' ? {} : { swapScope: { copies } }),
             })
           }
         >
           {stored ? `Suggest swaps (run ${stored.runsCompleted + 1})` : 'Suggest swaps'}
         </button>
       </div>
+
+      {/*
+        §3.136 — FOCUS THE SEARCH. Asked for directly: "can the Suggestions tab be
+        scoped to looking at just specific cards in the deck? And at specific
+        amounts to swap? … maybe I have 3 elvish visionaries but I want to look
+        for suggestions to swap out 2 of them."
+
+        Collapsed by default so the common "just search everything" run is still
+        one click, and the summary line says what the current focus is rather than
+        making the player open it to find out.
+      */}
+      <details className="suggest-focus">
+        <summary>
+          Focus the search <span className="suggest-focus__summary">{focusSummary}</span>
+        </summary>
+        <div className="suggest-focus__body">
+          <div className="suggest-focus__scope">
+            <label htmlFor="suggest-copies">Swap</label>
+            <select
+              id="suggest-copies"
+              className="select"
+              value={String(copies)}
+              disabled={running}
+              onChange={(ev) =>
+                setCopies(ev.target.value === 'playset' ? 'playset' : Number(ev.target.value))
+              }
+            >
+              <option value="playset">the whole playset — does this card belong at all?</option>
+              <option value="1">1 copy — is the last copy earning its slot?</option>
+              <option value="2">2 copies</option>
+              <option value="3">3 copies</option>
+              <option value="4">4 copies</option>
+            </select>
+          </div>
+
+          <fieldset className="suggest-focus__cards">
+            <legend>
+              Consider cutting
+              {cutFocus.size > 0 && (
+                <button type="button" className="btn btn--ghost" onClick={() => setCutFocus(new Set())}>
+                  Clear ({cutFocus.size})
+                </button>
+              )}
+            </legend>
+            <p className="suggest-focus__hint">
+              Tick nothing to search the whole deck. Ticking cards restricts the search to swapping
+              those out — far fewer candidates, so each one gets more games.
+            </p>
+            <div className="suggest-focus__grid">
+              {cutOptions.map((o) => (
+                <label key={o.cardId} className="suggest-focus__card">
+                  <input
+                    type="checkbox"
+                    checked={cutFocus.has(o.cardId)}
+                    disabled={running}
+                    onChange={(ev) =>
+                      setCutFocus((prev) => {
+                        const next = new Set(prev);
+                        if (ev.target.checked) next.add(o.cardId);
+                        else next.delete(o.cardId);
+                        return next;
+                      })
+                    }
+                  />
+                  {o.name}
+                  {o.count !== undefined && <span className="suggest-focus__count"> ×{o.count}</span>}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </div>
+      </details>
 
       {chosenOpponents.length > 0 && (
         <RunCostNote

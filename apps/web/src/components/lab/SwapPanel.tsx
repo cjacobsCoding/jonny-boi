@@ -109,20 +109,36 @@ export function SwapPanel({
 
       <label className="lab-field lab-scope">
         <span className="section-label">How many copies</span>
+        {/*
+          §3.136 — the named scopes PLUS a count. Suggestions can now recommend a
+          swap at "2 of 3", so this tab has to be able to verify one at the same
+          scope; a Lab that recommends what it cannot test contradicts itself.
+        */}
         <select
           className="select"
-          value={scope}
-          onChange={(ev) => setScope(ev.target.value as SwapScope)}
+          value={typeof scope === 'string' ? scope : String(scope.copies)}
+          onChange={(ev) =>
+            setScope(
+              ev.target.value === 'playset' || ev.target.value === 'one'
+                ? ev.target.value
+                : { copies: Number(ev.target.value) },
+            )
+          }
           disabled={running}
           aria-label="How many copies to swap"
         >
           <option value="playset">The whole playset — does this card belong at all?</option>
           <option value="one">A single copy — is the last copy earning its slot?</option>
+          <option value="2">Exactly 2 copies</option>
+          <option value="3">Exactly 3 copies</option>
+          <option value="4">Exactly 4 copies</option>
         </select>
         <span className="lab-scope__hint">
           {scope === 'playset'
             ? 'Every copy of the cut card is replaced. Much larger effect, so a verdict is reachable in far fewer games.'
-            : 'One copy is replaced. A small effect — expect “inconclusive” unless you run a lot of games.'}
+            : scope === 'one'
+              ? 'One copy is replaced. A small effect — expect “inconclusive” unless you run a lot of games.'
+              : `Up to ${scope.copies} copies are replaced (fewer if the deck runs fewer). The more copies, the larger the effect and the sooner a verdict lands.`}
         </span>
       </label>
 

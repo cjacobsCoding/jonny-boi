@@ -38,7 +38,37 @@ export const BASIC_LAND_NAMES: ReadonlySet<string> = new Set([
  * Lives here rather than in `swap.ts` so `matchup.ts`'s `RunOptions` can name it
  * without importing the module that imports it.
  */
-export type SwapScope = 'one' | 'playset';
+export type SwapScope = 'one' | 'playset' | { readonly copies: number };
+
+/**
+ * §3.136 — how many copies a scope actually moves out of a line of `lineCount`.
+ *
+ * THE one place the question is answered, so `applySwap` (which moves them),
+ * `copiesSwappedBy` (which reports them) and the candidate generator (which
+ * stamps the number on every candidate) cannot disagree — the drift this whole
+ * module was factored to prevent.
+ *
+ * The named scopes are the two questions people usually ask; `{ copies: n }` is
+ * the third, asked for directly ("I have 3 Elvish Visionaries but I want to look
+ * at swapping 2 of them"). A count is CLAMPED into the line rather than refused:
+ * asking for 5 copies of a 3-of gets 3, which is the only sensible reading, and
+ * asking for 0 or a fraction gets 1.
+ */
+export function copiesForScope(lineCount: number, scope: SwapScope): number {
+  if (scope === 'playset') return lineCount;
+  if (scope === 'one') return 1;
+  const asked = Math.trunc(scope.copies);
+  if (!Number.isFinite(asked)) return 1;
+  return Math.max(1, Math.min(asked, lineCount));
+}
+
+/** A human-readable name for a scope, for logs, deck names and UI copy. */
+export function describeScope(scope: SwapScope): string {
+  if (scope === 'playset') return 'the whole playset';
+  if (scope === 'one') return 'one copy';
+  const n = Math.max(1, Math.trunc(scope.copies));
+  return n === 1 ? 'one copy' : `${n} copies`;
+}
 
 /**
  * How much of a card an A/B swap replaces by default.

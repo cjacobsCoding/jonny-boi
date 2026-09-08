@@ -113,6 +113,18 @@ export interface SuggestRequest extends PilotedRequest {
    * carries the updated record back for the caller to persist.
    */
   readonly history?: SuggestionHistory;
+  /**
+   * §3.136 — FOCUSED MODE: consider cutting only these cards (names or ids).
+   * Asked for directly ("scoped to looking at just specific cards in the deck").
+   * Omit to search the whole deck.
+   */
+  readonly cutOnly?: readonly string[];
+  /**
+   * §3.136 — how many copies each candidate swap moves: one, the whole playset,
+   * or a named count ("I have 3 Elvish Visionaries but I want to swap 2").
+   * Omit for `DEFAULT_SWAP_SCOPE`.
+   */
+  readonly swapScope?: SwapScope;
 }
 
 /**

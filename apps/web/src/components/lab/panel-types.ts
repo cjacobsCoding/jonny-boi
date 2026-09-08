@@ -19,6 +19,8 @@ export interface GamesConfig {
 export interface CardOption {
   readonly cardId: string;
   readonly name: string;
+  /** How many copies the hero runs, when the option came from a deck (§3.136). */
+  readonly count?: number;
 }
 
 /** Props every run panel shares. */
