@@ -1,0 +1,90 @@
+/*
+ * FOCUS THE SEARCH (§3.136) — the Suggestions tab's scoping controls.
+ *
+ * Collapsed by default, because the common run is "search everything" and that
+ * must stay one click. The summary line carries the current focus so a player
+ * never has to open the block to find out what the next run will do.
+ */
+
+.suggest-focus {
+  margin: var(--space-3, 12px) 0;
+  border: 1px solid var(--color-border, #8884);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  background: var(--color-surface, transparent);
+}
+
+.suggest-focus > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.suggest-focus__summary {
+  font-weight: 400;
+  color: var(--color-fg-faint);
+}
+
+.suggest-focus__body {
+  margin-top: var(--space-3, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.suggest-focus__scope {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.suggest-focus__scope .select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.suggest-focus__cards {
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.suggest-focus__cards legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 600;
+  padding: 0;
+}
+
+.suggest-focus__hint {
+  margin: var(--space-1, 4px) 0 var(--space-2, 8px);
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-fg-muted, inherit);
+}
+
+/* A dense two-or-more column grid: a 60-card deck is ~15 distinct cards, and a
+   single column would push the run button off a laptop screen. */
+.suggest-focus__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 2px var(--space-3, 12px);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.suggest-focus__card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  font-size: var(--text-sm, 0.875rem);
+  padding: 1px 0;
+  cursor: pointer;
+}
+
+.suggest-focus__count {
+  color: var(--color-fg-faint);
+  font-variant-numeric: tabular-nums;
+}

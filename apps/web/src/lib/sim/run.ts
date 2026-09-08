@@ -16,6 +16,7 @@ import {
   planSequentialLooks,
   type PrecisionDecision,
   type SequentialOutcome,
+  type SwapScope,
 } from '@jonny-boi/sim';
 import type {
   GauntletRequest,
@@ -184,6 +185,8 @@ function contextFor(
     readonly hero: GauntletRequest['hero'];
     readonly seed: number;
     readonly pilotId: string;
+    /** §3.136 — carried when the caller asked for a non-default swap scope. */
+    readonly swapScope?: SwapScope;
   },
   opponentNames: readonly string[],
 ): ShardContext {
@@ -192,6 +195,9 @@ function contextFor(
     opponentNames,
     seed: request.seed,
     pilotId: request.pilotId,
+    // Omitted (not `undefined`) when unset, so the context stays byte-identical
+    // to what every previous run sent and no cache key shifts under it.
+    ...(request.swapScope ? { swapScope: request.swapScope } : {}),
   };
 }
 
@@ -441,6 +447,9 @@ export async function runSuggest(
       maxCandidates: request.maxCandidates,
       gamesPerCandidate: request.gamesPerCandidate,
       ...(request.history ? { history: request.history } : {}),
+      // §3.136 — which cards the search may cut. The scope rides the context
+      // (the arms need it too); this is the planning half.
+      ...(request.cutOnly && request.cutOnly.length > 0 ? { cutOnly: request.cutOnly } : {}),
     },
     () => {},
   )) as SuggestPlanResult;

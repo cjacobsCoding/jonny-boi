@@ -127,3 +127,53 @@ describe('swap scope', () => {
     );
   });
 });
+
+/**
+ * §3.136 — an ARBITRARY copy count. Asked for directly: "maybe I have 3 elvish
+ * visionaries in the deck but I want to look for suggestions to swap out 2 of
+ * them". The two named scopes stay as the two questions people usually ask; a
+ * count is the third, and it must behave exactly like them at the boundaries.
+ */
+describe('a swap scope can name a COUNT, not just one-or-all', () => {
+  it('moves exactly the asked-for number of copies, leaving the rest', () => {
+    const variant = applySwap(baseDeck(), { out: 'Lightning Bolt', in: 'Shock' }, pool, { copies: 2 });
+    expect(copies(variant, 'Shock'), 'two came in').toBe(2);
+    expect(copies(variant, 'Lightning Bolt'), 'two stayed').toBe(2);
+  });
+
+  it('the deck stays the same size, so the paired design still holds', () => {
+    const base = baseDeck();
+    const variant = applySwap(base, { out: 'Lightning Bolt', in: 'Shock' }, pool, { copies: 3 });
+    expect(loadDeck(variant, pool).library.length).toBe(loadDeck(base, pool).library.length);
+  });
+
+  it('the deck NAME records the real count, so a result is never ambiguous', () => {
+    const variant = applySwap(baseDeck(), { out: 'Lightning Bolt', in: 'Shock' }, pool, { copies: 2 });
+    expect(variant.name).toContain('−2× Lightning Bolt');
+    expect(variant.name).toContain('+2× Shock');
+  });
+
+  it('a count at or above the line is the playset swap, exactly', () => {
+    const asCount = applySwap(baseDeck(), { out: 'Lightning Bolt', in: 'Shock' }, pool, { copies: 4 });
+    const asPlayset = applySwap(baseDeck(), { out: 'Lightning Bolt', in: 'Shock' }, pool, 'playset');
+    expect(asCount).toEqual(asPlayset);
+    // Asking for more copies than exist is clamped, not refused.
+    const asTen = applySwap(baseDeck(), { out: 'Lightning Bolt', in: 'Shock' }, pool, { copies: 10 });
+    expect(asTen).toEqual(asPlayset);
+  });
+
+  it('a count of one is the single-copy swap, exactly', () => {
+    const asCount = applySwap(baseDeck(), { out: 'Lightning Bolt', in: 'Shock' }, pool, { copies: 1 });
+    const asOne = applySwap(baseDeck(), { out: 'Lightning Bolt', in: 'Shock' }, pool, 'one');
+    expect(asCount).toEqual(asOne);
+  });
+
+  it('a nonsense count degrades to one copy rather than corrupting the deck', () => {
+    const base = baseDeck();
+    for (const copiesAsked of [0, -3, Number.NaN]) {
+      const variant = applySwap(base, { out: 'Lightning Bolt', in: 'Shock' }, pool, { copies: copiesAsked });
+      expect(copies(variant, 'Shock'), `copies: ${copiesAsked}`).toBe(1);
+      expect(loadDeck(variant, pool).library.length).toBe(loadDeck(base, pool).library.length);
+    }
+  });
+});

@@ -112,9 +112,9 @@ Usage:
   npm run sim -- match <deckA> <deckB> [--games N] [--seed S] [--pilot ${SELECTABLE_PILOT_IDS.join('|')}] [--workers W]
   npm run sim -- gauntlet <deck> [--games N] [--seed S] [--pilot ${SELECTABLE_PILOT_IDS.join('|')}] [--workers W]
                                 [--until-precise H]
-  npm run sim -- swap <deck> --out "<card>" --in "<card>" [--games N] [--seed S] [--pilot id] [--scope one|playset] [--workers W]
+  npm run sim -- swap <deck> --out "<card>" --in "<card>" [--games N] [--seed S] [--pilot id] [--scope one|playset|N] [--workers W]
                              [--until-decided [--looks K]]
-  npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--max-candidates K] [--seed S]
+  npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--max-candidates K] [--seed S] [--scope one|playset|N]
                                [--pilot id] [--history <file>] [--no-adaptive] [--workers W]
                                [--full-ladder]
   npm run sim -- pilot-ab [--pilot-a id] [--pilot-b id] [--games N] [--seed S] [--workers W]
@@ -301,10 +301,19 @@ function parseFlags(args: readonly string[]): Flags {
         break;
       case '--scope': {
         const value = requireValue(arg, args[++i]);
-        if (value !== 'one' && value !== 'playset') {
-          throw new CliError(`option "--scope" must be "one" or "playset", got "${value}"`);
+        if (value === 'one' || value === 'playset') {
+          scope = value;
+          break;
         }
-        scope = value;
+        // §3.136 — a COUNT, so "swap 2 of my 3" is askable. Whole numbers only,
+        // and the error names all three forms rather than just the two words.
+        const copies = Number(value);
+        if (!Number.isInteger(copies) || copies < 1) {
+          throw new CliError(
+            `option "--scope" must be "one", "playset", or a whole number of copies, got "${value}"`,
+          );
+        }
+        scope = { copies };
         break;
       }
       case '--out':
@@ -884,36 +893,36 @@ async function cmdPilotAb(flags: Flags): Promise<number> {
 /** How often `pilot-ab` prints a progress line, in deck pairs. */
 const PILOT_AB_PROGRESS_EVERY_PAIRS = 6;
 
-/**
- * Play a swap in group-sequential WINDOWS, stopping when the boundary is crossed.
- *
- * The windows are prefixes of the same run — every game seeds off its absolute
- * index, so stopping after window k plays exactly the games a full run's first k
- * windows would have (`sequential.test.ts` pins this). Nothing about the
- * experiment changes; the only difference is how much of it gets played.
- *
- * ⚠️ The boundary is PRE-REGISTERED, not chosen after looking. `planSequentialLooks`
- * fixes the checkpoints and the per-look threshold before the first game, which is
- * what keeps the overall false-positive rate at the alpha the report quotes —
- * see `sequential.ts` for why the naive "stop at the first p < 0.05" does not.
- */
-async function runSwapInWindows(
-  args: {
-    readonly baseDeck: Deck;
-    readonly swap: { readonly out: string; readonly in: string };
-    readonly scope: SwapScope;
-    readonly gauntletDecks: readonly LoadedDeck[];
-    readonly games: number;
-    readonly seed: number;
-    readonly workers: number;
-    readonly looks: number;
-    readonly init: WorkerInitSpec;
-  },
-): Promise<{ readonly evaluation: SwapEvaluation; readonly outcome: SequentialOutcome }> {
-  const plan = planSequentialLooks(args.games, args.looks);
-  // One in-process context for the whole run when there is no pool — the SAME
-  // executor the workers use, so the two transports cannot diverge.
-  const local = args.workers > 1 ? undefined : createParallelContext(args.init);
+/**
+ * Play a swap in group-sequential WINDOWS, stopping when the boundary is crossed.
+ *
+ * The windows are prefixes of the same run — every game seeds off its absolute
+ * index, so stopping after window k plays exactly the games a full run's first k
+ * windows would have (`sequential.test.ts` pins this). Nothing about the
+ * experiment changes; the only difference is how much of it gets played.
+ *
+ * ⚠️ The boundary is PRE-REGISTERED, not chosen after looking. `planSequentialLooks`
+ * fixes the checkpoints and the per-look threshold before the first game, which is
+ * what keeps the overall false-positive rate at the alpha the report quotes —
+ * see `sequential.ts` for why the naive "stop at the first p < 0.05" does not.
+ */
+async function runSwapInWindows(
+  args: {
+    readonly baseDeck: Deck;
+    readonly swap: { readonly out: string; readonly in: string };
+    readonly scope: SwapScope;
+    readonly gauntletDecks: readonly LoadedDeck[];
+    readonly games: number;
+    readonly seed: number;
+    readonly workers: number;
+    readonly looks: number;
+    readonly init: WorkerInitSpec;
+  },
+): Promise<{ readonly evaluation: SwapEvaluation; readonly outcome: SequentialOutcome }> {
+  const plan = planSequentialLooks(args.games, args.looks);
+  // One in-process context for the whole run when there is no pool — the SAME
+  // executor the workers use, so the two transports cannot diverge.
+  const local = args.workers > 1 ? undefined : createParallelContext(args.init);
   /*
    * ⚠️ ONE POOL FOR EVERY WINDOW. `runJobsOnWorkers` is pool-run-close, so calling
    * it per window hires six fresh worker threads each time — and worker boot is the
@@ -922,45 +931,45 @@ async function runSwapInWindows(
    * what makes the saved games actually show up as saved time.
    */
   const pool = args.workers > 1 ? createWorkerPool(args.init, args.workers) : undefined;
-
-  const slices: PairedSliceResult[] = [];
-  let from = 0;
-  let looksTaken = 0;
-  let evaluation: SwapEvaluation | undefined;
-
-  for (const checkpoint of plan.checkpoints) {
-    const jobs = planPairedSlices(
-      args.gauntletDecks.length,
-      args.games,
-      args.workers,
-      args.seed,
-      { out: args.swap.out, in: args.swap.in, scope: args.scope },
-      { gameStart: from, gameEnd: checkpoint },
-    );
-    const played =
-      local !== undefined
-        ? (jobs.map((job) => executeParallelJob(local, job)) as PairedSliceResult[])
-        : ((await (pool as WorkerPool).run(jobs)) as readonly PairedSliceResult[]);
-    slices.push(...played);
-    from = checkpoint;
-    looksTaken += 1;
-    evaluation = mergeSwapFromSlices(slices, args.swap);
-    if (evaluation.pValue < plan.perLookAlpha) break;
-  }
-
+
+  const slices: PairedSliceResult[] = [];
+  let from = 0;
+  let looksTaken = 0;
+  let evaluation: SwapEvaluation | undefined;
+
+  for (const checkpoint of plan.checkpoints) {
+    const jobs = planPairedSlices(
+      args.gauntletDecks.length,
+      args.games,
+      args.workers,
+      args.seed,
+      { out: args.swap.out, in: args.swap.in, scope: args.scope },
+      { gameStart: from, gameEnd: checkpoint },
+    );
+    const played =
+      local !== undefined
+        ? (jobs.map((job) => executeParallelJob(local, job)) as PairedSliceResult[])
+        : ((await (pool as WorkerPool).run(jobs)) as readonly PairedSliceResult[]);
+    slices.push(...played);
+    from = checkpoint;
+    looksTaken += 1;
+    evaluation = mergeSwapFromSlices(slices, args.swap);
+    if (evaluation.pValue < plan.perLookAlpha) break;
+  }
+
   await pool?.close();
-  if (!evaluation) throw new CliError('the sequential plan produced no games to play');
-  return {
-    evaluation,
-    outcome: {
-      gamesPlayed: from,
-      looksTaken,
-      stoppedEarly: from < args.games,
-      perLookAlpha: plan.perLookAlpha,
-    },
-  };
-}
-
+  if (!evaluation) throw new CliError('the sequential plan produced no games to play');
+  return {
+    evaluation,
+    outcome: {
+      gamesPlayed: from,
+      looksTaken,
+      stoppedEarly: from < args.games,
+      perLookAlpha: plan.perLookAlpha,
+    },
+  };
+}
+
 async function cmdSwap(flags: Flags): Promise<number> {
   const [heroSel] = flags.positionals;
   if (!heroSel) throw new CliError('swap needs a deck: swap <deck> --out X --in Y');
@@ -1148,6 +1157,11 @@ async function cmdSuggest(flags: Flags): Promise<number> {
     // planned, so a run can be compared against the rule rather than only trusted.
     adaptiveConfig: { ...DEFAULT_ADAPTIVE_CONFIG, stopWhenLeaderSettled: !flags.fullLadder },
     cutOnly: flags.cut.length > 0 ? flags.cut : undefined,
+    // §3.136 — the search now honours `--scope` too, so "look at swapping 2 of
+    // my 3 Elvish Visionaries" is askable: `--cut` picks WHICH card, `--scope`
+    // picks HOW MANY of it. Without this the suggestion search always tested the
+    // whole playset, whatever the flag said.
+    ...(flags.scope ? { runOptions: { swapScope: flags.scope } } : {}),
     adaptive: !flags.noAdaptive,
     ...(priorHistory ? { history: priorHistory } : {}),
     // Stamps the record and lets `acceptHistory` refuse one gathered at a

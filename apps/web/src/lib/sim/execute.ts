@@ -326,6 +326,12 @@ export function runSuggestPlan(job: SuggestPlanJob, context: SimContext): Sugges
     gamesPerCandidate: job.gamesPerCandidate,
     suggestConfig: { ...DEFAULT_SUGGEST_CONFIG, maxCandidates: job.maxCandidates },
     ...(job.history ? { history: job.history } : {}),
+    // §3.136 — the focus the caller asked for. `swapScope` MUST match what the
+    // arms will actually build, or every candidate's recorded copy count would
+    // describe a different experiment than the one that gets played; it rides
+    // the shared context for precisely that reason.
+    ...(job.cutOnly ? { cutOnly: job.cutOnly } : {}),
+    ...(job.context.swapScope ? { swapScope: job.context.swapScope } : {}),
   });
 
   const skip = suggestionRunner(context, job.context, plan.runSeed).runner.identicalGameSkip;
@@ -381,11 +387,16 @@ function suggestionRunner(
   // The pilot is part of the key: base games played by one pilot are not the base
   // games of a run piloted by another, and adopting them would silently compare a
   // variant arm against the wrong control.
+  // §3.136 — the SCOPE is part of the key too. Base games are shared across a
+  // run's candidates, but a runner built at one scope constructs different
+  // variants than one built at another, so reusing it across scopes would
+  // compare arms from two different experiments.
   const key = JSON.stringify([
     shardContext.hero,
     shardContext.opponentNames,
     runSeed,
     shardContext.pilotId,
+    shardContext.swapScope ?? null,
   ]);
   const cached = context.runnerCache;
   if (cached?.key === key) return cached.runner;
@@ -400,6 +411,8 @@ function suggestionRunner(
     seed: runSeed,
     baseRecords: (slot) => supplied.get(slot),
     onGame: (games) => holder.tick?.(games),
+    // §3.136 — build variants at the scope the plan was made with.
+    ...(shardContext.swapScope ? { runOptions: { swapScope: shardContext.swapScope } } : {}),
   });
   const entry: SuggestionRunner = {
     runner,

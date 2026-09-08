@@ -55,6 +55,14 @@ export interface ShardContext {
    * win rate, and nothing downstream could tell.
    */
   readonly pilotId: string;
+  /**
+   * §3.136 — how many copies a candidate swap moves (one, the playset, or a
+   * named count). It belongs in the CONTEXT for exactly the reason the pilot and
+   * the seed do: two shards building variants at different scopes would merge
+   * two different experiments into one win rate, and nothing downstream could
+   * tell. Absent ⇒ `DEFAULT_SWAP_SCOPE`, which is what every run did before.
+   */
+  readonly swapScope?: SwapScope;
 }
 
 /** A half-open range of game indices `[gameStart, gameEnd)` within one matchup. */
@@ -158,6 +166,11 @@ export interface SuggestPlanJob {
   readonly gamesPerCandidate: number;
   /** The record a previous run on this deck returned, if the UI kept one. */
   readonly history?: SuggestionHistory;
+  /**
+   * §3.136 — FOCUSED MODE: consider cutting only these cards (names or ids).
+   * Omit to search the whole deck, which is what every run did before.
+   */
+  readonly cutOnly?: readonly string[];
 }
 
 /** The plan a suggestions run will execute, straight from the sim. */

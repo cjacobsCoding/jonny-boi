@@ -324,8 +324,12 @@ describe('a parallel A/B swap test', () => {
   // The scope decides which variant deck is built, so a plan that dropped it
   // would not fail — it would quietly answer the OTHER question, at full
   // confidence. Both scopes are pinned against the sim's own evaluation.
-  for (const scope of ['one', 'playset'] as const) {
-    it(`carries swapScope '${scope}' through every shard, matching evaluateSwap`, async () => {
+  // §3.136 adds a COUNT scope alongside the two named ones; it crosses the same
+  // worker boundary as an object rather than a string, so it is pinned here too.
+  const SCOPES: readonly SwapScope[] = ['one', 'playset', { copies: 2 }];
+  for (const scope of SCOPES) {
+    const label = typeof scope === 'string' ? scope : `${scope.copies} copies`;
+    it(`carries swapScope '${label}' through every shard, matching evaluateSwap`, async () => {
       const reference = evaluateSwap(
         HERO,
         { out: candidate.outId, in: candidate.inId },
@@ -339,8 +343,11 @@ describe('a parallel A/B swap test', () => {
       );
       const parallel = await runRequest(requestFor(scope), 12, 'reverse');
       expect(parallel).toEqual(reference);
-      expect(parallel.scope).toBe(scope);
-      expect(parallel.copiesSwapped).toBe(scope === 'playset' ? copiesInHero(candidate.outId) : 1);
+      expect(parallel.scope).toEqual(scope);
+      const inDeck = copiesInHero(candidate.outId);
+      const expectedCopies =
+        scope === 'playset' ? inDeck : scope === 'one' ? 1 : Math.min(scope.copies, inDeck);
+      expect(parallel.copiesSwapped).toBe(expectedCopies);
     });
   }
 

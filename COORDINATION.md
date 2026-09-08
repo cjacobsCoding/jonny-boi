@@ -260,6 +260,17 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-09-08 integrator: `feat/suggest-scoping` ✅ MERGED — DESIGN §3.136. `SwapScope` gains
+  `{ copies: n }` beside `'one'|'playset'`; NEW `copiesForScope`/`describeScope` in `config.ts` are the
+  ONE answer to "how many copies does this move", read by `applySwap`, `copiesSwappedBy` and the
+  candidate generator. `applySwap` is now ONE path (the old two fall out of it; equivalences pinned).
+  The scope rides `ShardContext` (like seed/pilot) and is part of the arm-runner cache key — two shards
+  at different scopes would merge two experiments. `suggest` CLI now honours `--scope` (it silently
+  ignored it before) and accepts `--scope N`. Lab Suggestions gains a "Focus the search" block (per-card
+  checkboxes + copies select, NEW `suggest-focus.css`); the A/B tab got the same copies options so it can
+  verify what Suggestions recommends. ⚠️ `apps/web` resolves `@jonny-boi/sim` via dist — rebuild the sim
+  package before trusting a web type-check. STILL OPEN: archetype detection and gap screening.
+
 - 2026-09-07 integrator: `feat/suggest-roles` ✅ MERGED — DESIGN §3.135. NEW `packages/sim/src/card-role.ts`:
   a TABLE from effect primitive → functional job (removal/draw/ramp/pump/…), built from the 65 primitives
   the pool actually uses, reading spell effects + triggers + activated abilities (and falling through to

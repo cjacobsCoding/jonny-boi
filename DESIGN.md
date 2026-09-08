@@ -2889,6 +2889,53 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.136 Scoping the suggestion search — which cards, and how many copies — ✅ done
+
+Asked for: "can the Lab → Suggestions tab be scoped to looking at just specific cards in the deck? And
+at specific amounts to swap? For example, maybe I have 3 elvish visionaries in the deck but I want to
+look for suggestions to swap out 2 of them?"
+
+**Where it actually stood.** The ENGINE could already restrict which cards may be cut (`cutOnly`, and an
+`inOnly` shortlist), and the CLI exposed it as `--cut`. Nothing in the Lab UI did. And no layer could
+express "2 of 3" at all: `SwapScope` was the closed pair `'one' | 'playset'`, so the only questions
+askable were "is the last copy earning its slot" and "does this card belong at all". The suggestion CLI
+also silently ignored `--scope` — it never threaded it — so a `suggest --scope one` run tested playsets
+regardless of the flag.
+
+**A scope can now name a COUNT.** `SwapScope` gains `{ copies: n }` beside the two named forms, which
+stay because they are the two questions people usually ask. `copiesForScope` is the ONE place the
+question "how many copies does this move" is answered — `applySwap`, `copiesSwappedBy` and the candidate
+generator all read it, so they cannot disagree. A count is CLAMPED into the line rather than refused:
+asking for 5 copies of a 3-of gets 3, and a zero or a fraction gets 1, because a refusal here would be a
+crash in the middle of a search.
+
+⚠️ `applySwap` now has ONE path instead of two, and the old branches fall out of it exactly: a count at
+or above the line rewrites the entry in place (the playset case, the cleanest common-random-numbers
+pairing), and a smaller count shortens the line and puts an in-card line immediately after it (the
+single-copy case, generalised). Tests pin both equivalences — `{copies:4}` on a 4-of equals `'playset'`,
+`{copies:1}` equals `'one'` — so the generalisation cannot drift from what it replaced.
+
+**Through the workers, and into the UI.** The scope crosses a worker boundary, so it rides `ShardContext`
+alongside the seed and the pilot, for the same reason those do: two shards building variants at different
+scopes would merge two different experiments into one win rate and nothing downstream could tell. It is
+part of the arm-runner cache key too. The Suggestions panel gains a collapsed "Focus the search" block —
+a checkbox per deck card (with its copy count) and a copies select — whose summary line states the
+current focus so the common "search everything" run stays one click.
+
+⚠️ The A/B Swap tab got the same copies options, deliberately. Suggestions can now recommend a swap at
+"2 of 3"; a Lab that recommends what its own verification tab cannot test contradicts itself — the same
+argument `poolInOptions` makes about the two card lists being drawn from one pool.
+
+📊 Verified: the count survives every shard and matches the sim's own `evaluateSwap` (the existing
+scope-determinism guard now runs `one`, `playset` AND `{copies:2}`), plus the boundary equivalences and
+the nonsense-count degradation. Driven live in the Lab: selecting Selesnya Blink lists all 16 distinct
+cards with their counts, ticking two and choosing "2 copies" updates the summary to "2 cards, 2 copies",
+no console errors.
+
+**Still open from the same brief:** archetype detection ("what kind of deck is this", and what decks
+like it typically run) and gap screening ("this deck has no removal"). §3.135's role classifier is the
+foundation both need.
+
 ### 3.135 Suggestions learn what a card is FOR — like-for-like, and the no-brainers first — ✅ done
 
 Asked for: "make sure it is looking at super obvious swaps first… cards that can be cast by the deck's
