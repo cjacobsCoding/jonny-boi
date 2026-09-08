@@ -2889,6 +2889,49 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.133 Reading the board — tapped, what they played, and what is ON a card — ✅ done
+
+Three complaints from one session, and one root cause between them: the board KNEW all of this and
+said none of it loudly enough. "I often cannot tell what the heck is going on in the game."
+
+**1. Tapped did not look tapped.** The tell was an 8° tilt at 0.85 opacity — a difference you have to
+already be looking for. A tapped permanent now turns 24°, desaturates, dims and wears the WORD
+(`⟳ TAPPED`, bottom-left so it never collides with the combat band along the top): four signals, none
+of them colour alone. ⚠️ It stops well short of a table's 90° on purpose — `transform` does not reflow,
+so a fully sideways card would overlap its neighbours in the fixed board grid §3.62 fought for.
+
+**2. "The computer plays instants and sorceries and I have no idea what they played."** Everything
+needed was already on screen and already GONE: `StackPanel` names a spell and its targets perfectly,
+but the Solo board auto-passes, so an AI instant is cast and resolved inside one burst and the panel
+may never render with it on. The fix is not more information, it is PERSISTENCE — a feed pinned to the
+board's top-right that holds each opponent play for `OPPONENT_FEED_CONFIG.holdMs` after the fact,
+naming the spell AND what it pointed at.
+
+⚠️ It folds the accepted ACTIONS, not the event log, and that is the load-bearing choice: a `spellCast`
+event carries the name but NOT the targets — targets live on the stack object, which is gone by the
+time anyone looks — while `castSpell.targets` is right there on the action `GameSession.actions`
+durably records. Lands are deliberately not announced: a land is sitting on the battlefield, visible,
+and saying so is noise. The feed is `pointer-events: none`, so it can never eat a click on a card
+underneath, and it clears the status row so it cannot hide Concede.
+
+**3. Counters and buffs, drawn on the card.** `ptDelta` merged every source into one number, which
+cannot tell a PERMANENT `+1/+1` counter from a pump that wears off at end of turn — a difference the
+player trades combat on. `permanentMarks` splits it: every non-zero counter kind (loyalty and defense
+excluded, they already have badges) and `ptFromEffects`, the part of the delta that is NOT counters.
+The tile draws them as chips at the art's bottom-right — green for `+1/+1`, red for `-1/-1`, neutral
+for any other printed kind, and a distinct amber `✦` chip for the spell/ability part. Every chip
+prints its own text, so none of it is colour alone.
+
+⚠️ `permanentMarks` is SHARED by the hotseat view-model and the ONLINE board adapter. A clarity fix
+that reaches only one of the two boards is exactly the drift §3.57 warned about. Online there is no
+continuous index, so the delta is the counters alone and the helper honestly reports no effect delta
+rather than inventing one.
+
+📊 Verified: 12 new pure tests (the counter/effect split incl. both-at-once and the loyalty exclusion;
+the opponent fold incl. player targets, untargeted spells, own-plays-are-not-news and key offsets).
+Web tsc clean; lint 0 errors. Driven live in a Solo game: a tapped land renders at 24° with the badge,
+and the feed reported four real AI casts in a row while leaving Concede clickable and visible.
+
 ### 3.132 The effects preview bench — observing and tuning the game feel — ✅ done
 
 Rule 3 says a system is not done until you can observe and drive it at runtime, and §3.130/§3.131

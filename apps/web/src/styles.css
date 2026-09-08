@@ -1812,9 +1812,19 @@ button {
   overflow: hidden;
   transition: transform 0.12s ease;
 }
+/*
+ * §3.133 — TAPPED HAS TO BE OBVIOUS. Reported as "cards that are tapped don't
+ * LOOK tapped": an 8° tilt at 0.85 opacity is a difference you have to be
+ * looking for. A tapped card is now turned hard, drained of colour and dimmed,
+ * and wears the word (see `.perm__tap-badge`) — four signals instead of one,
+ * none of them colour alone. The turn stops well short of a table's 90° because
+ * `transform` does not reflow: a fully sideways card would overlap its
+ * neighbours in the fixed board grid §3.62 fought for.
+ */
 .perm--tapped {
-  transform: rotate(8deg);
-  opacity: 0.85;
+  transform: rotate(24deg);
+  opacity: 0.72;
+  filter: grayscale(0.55) brightness(0.82);
 }
 .perm__art {
   position: relative;
@@ -1837,15 +1847,20 @@ button {
   color: var(--color-fg-muted);
   text-align: center;
 }
+/* The word, not just a glyph — §3.133. Sits bottom-left so it never collides
+   with the combat band along the top. */
 .perm__tap-badge {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  font-size: var(--text-xs);
-  background: var(--color-bg);
+  bottom: 2px;
+  left: 2px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: rgb(20 20 24 / 88%);
   border-radius: var(--radius-sm);
-  padding: 0 2px;
-  color: var(--color-accent-soft);
+  padding: 1px 4px;
+  color: #ffd9a0;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 70%);
 }
 .perm__foot {
   display: flex;

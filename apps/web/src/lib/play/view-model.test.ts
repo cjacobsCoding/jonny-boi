@@ -103,6 +103,77 @@ describe('effective vs printed power/toughness', () => {
   });
 });
 
+/**
+ * §3.133 — reported as "really hard to see if a card has special effects on it
+ * like 1/1 counters or +1/+1 to end of turn". One merged delta cannot tell a
+ * PERMANENT counter from a pump that wears off, so the view-model splits them
+ * and the tile draws them differently. These pin the split.
+ */
+describe('counters vs. effects — why a creature is the size it is', () => {
+  it('counters alone: listed as counters, with NO effect delta', () => {
+    const state = fresh();
+    const vine = place(state, card('Gatecreeper Vine'), 'A');
+    vine.counters = { '+1/+1': 2 };
+    const shown = buildBoardView(state, 'A', NAMES).self.permanents.find((p) => p.instanceId === vine.instanceId)!;
+    expect(shown.counters).toEqual([{ kind: '+1/+1', count: 2 }]);
+    expect(shown.ptFromEffects, 'every point came from counters').toBeNull();
+    expect(shown.ptDelta).toEqual({ power: 2, toughness: 2 });
+  });
+
+  it('a pump alone: an effect delta, and no counters', () => {
+    const state = fresh();
+    const swiftspear = place(state, card('Monastery Swiftspear'), 'A');
+    state.continuous.push({
+      id: state.nextInstanceId++,
+      targetInstanceId: swiftspear.instanceId,
+      sourceInstanceId: swiftspear.instanceId,
+      duration: 'endOfTurn',
+      power: 1,
+      toughness: 1,
+    });
+    const shown = buildBoardView(state, 'A', NAMES).self.permanents.find(
+      (p) => p.instanceId === swiftspear.instanceId,
+    )!;
+    expect(shown.counters).toEqual([]);
+    expect(shown.ptFromEffects).toEqual({ power: 1, toughness: 1 });
+  });
+
+  it('both at once: the counters are named and the REST is attributed to the effect', () => {
+    const state = fresh();
+    const vine = place(state, card('Gatecreeper Vine'), 'A');
+    vine.counters = { '+1/+1': 2 };
+    state.continuous.push({
+      id: state.nextInstanceId++,
+      targetInstanceId: vine.instanceId,
+      sourceInstanceId: vine.instanceId,
+      duration: 'endOfTurn',
+      power: 3,
+      toughness: 1,
+    });
+    const shown = buildBoardView(state, 'A', NAMES).self.permanents.find((p) => p.instanceId === vine.instanceId)!;
+    expect(shown.ptDelta, 'the total is still the total').toEqual({ power: 5, toughness: 3 });
+    expect(shown.counters).toEqual([{ kind: '+1/+1', count: 2 }]);
+    expect(shown.ptFromEffects, 'the pump alone, counters removed').toEqual({ power: 3, toughness: 1 });
+  });
+
+  it('-1/-1 counters count against the net, and are listed', () => {
+    const state = fresh();
+    const vine = place(state, card('Gatecreeper Vine'), 'A');
+    vine.counters = { '-1/-1': 1 };
+    const shown = buildBoardView(state, 'A', NAMES).self.permanents.find((p) => p.instanceId === vine.instanceId)!;
+    expect(shown.counters).toEqual([{ kind: '-1/-1', count: 1 }]);
+    expect(shown.ptFromEffects).toBeNull();
+  });
+
+  it('loyalty is NOT listed as a generic counter — it already has its own badge', () => {
+    const state = fresh();
+    const walker = place(state, card('Gatecreeper Vine'), 'A');
+    walker.counters = { loyalty: 3, '+1/+1': 1 };
+    const shown = buildBoardView(state, 'A', NAMES).self.permanents.find((p) => p.instanceId === walker.instanceId)!;
+    expect(shown.counters, 'loyalty excluded, the +1/+1 kept').toEqual([{ kind: '+1/+1', count: 1 }]);
+  });
+});
+
 describe('combat roles', () => {
   it('marks attackers and blockers straight off the engine combat state, and nothing after combat', () => {
     const state = fresh();

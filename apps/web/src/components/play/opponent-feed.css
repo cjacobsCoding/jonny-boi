@@ -1,0 +1,75 @@
+/*
+ * "What the computer just did" (§3.133). Reported: "the computer plays instant
+ * and sorcery spells and I have no idea what they played".
+ *
+ * Pinned over the board's top-right, above the tiles but inert to the pointer,
+ * because the one thing it must never do is eat a click on a card underneath.
+ * Newest note last, so a turn reads downward in the order it happened.
+ */
+
+.opp-feed {
+  position: absolute;
+  /*
+   * Clears the board's status row, which is one line tall and carries the
+   * Concede button at the right — the feed is pointer-transparent so it could
+   * never BLOCK that button, but sitting on top of it hid the word. Named here
+   * rather than inlined so the two are obviously related if the row grows.
+   */
+  --opp-feed-status-clearance: 3.9rem;
+  top: var(--opp-feed-status-clearance);
+  right: var(--space-2, 8px);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-end;
+  pointer-events: none;
+  max-width: min(52%, 380px);
+}
+
+.opp-feed__note {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm, 4px);
+  /* Its own dark plate rather than a theme surface: it sits over card art, and
+     it has to stay readable against whatever is behind it in either theme. */
+  background: rgb(18 18 24 / 92%);
+  border-left: 3px solid var(--color-error, #d24545);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 45%);
+  animation: opp-feed-in 180ms ease-out;
+}
+
+.opp-feed__who {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #ff9c9c;
+  white-space: nowrap;
+}
+
+.opp-feed__what {
+  font-size: 0.75rem;
+  color: #f2f2f5;
+  /* A long "→ target, target" wraps rather than running off the board. */
+  overflow-wrap: anywhere;
+}
+
+@keyframes opp-feed-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opp-feed__note {
+    animation: none;
+  }
+}

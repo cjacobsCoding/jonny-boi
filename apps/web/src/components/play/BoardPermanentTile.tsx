@@ -37,6 +37,22 @@ export const COMBAT_BADGES = Object.freeze({
 });
 
 /**
+ * §3.133 — how a COUNTER kind is drawn. A row per kind that means something to
+ * the eye; every other kind falls back to its own printed name, so a charge or
+ * a stun counter shows up correctly the day a card makes one rather than being
+ * silently dropped.
+ */
+const COUNTER_TONE: Readonly<Record<string, 'boost' | 'shrink'>> = {
+  '+1/+1': 'boost',
+  '-1/-1': 'shrink',
+};
+
+/** The label a counter chip prints: "+1/+1 ×3", "stun ×1". */
+export function formatCounterChip(kind: string, count: number): string {
+  return count === 1 ? kind : `${kind} ×${count}`;
+}
+
+/**
  * A battlefield permanent for the hotseat board. Renders effective P/T (continuous
  * effects already folded by the view-model), tapped + summoning-sick indicators,
  * marked damage, and keyword chips. Optionally selectable (for declaring attackers/
@@ -107,6 +123,10 @@ export function BoardPermanentTile({
       : '') +
     (perm.isPlaneswalker ? ` · ${perm.loyalty} loyalty` : '') +
     (perm.isBattle ? ` · ${perm.defense} defense · protected by ${perm.protector}` : '') +
+    (perm.counters.length > 0
+      ? ` · ${perm.counters.map((c) => `${c.count}× ${c.kind} counter`).join(', ')}`
+      : '') +
+    (perm.ptFromEffects ? ` · ${formatPtDelta(perm.ptFromEffects)} from a spell or ability` : '') +
     (perm.tapped ? ' · tapped' : '') +
     (perm.attacking ? ' · attacking' : '') +
     (perm.blocking !== null ? ' · blocking' : '') +
@@ -127,8 +147,36 @@ export function BoardPermanentTile({
         )}
         {perm.tapped && (
           <span className="perm__tap-badge" aria-label="Tapped">
-            ⤵
+            ⟳ TAPPED
           </span>
+        )}
+        {/*
+          §3.133 — WHY this creature is the size it is, on the card. A +1/+1
+          counter is permanent and a pump is not, so they get different chips:
+          the counter says its kind and how many, the effect chip says the rest
+          of the delta came from a spell or ability. Reported as "really hard to
+          see if a card has special effects on it".
+        */}
+        {(perm.counters.length > 0 || perm.ptFromEffects !== null) && (
+          <div className="perm__marks">
+            {perm.counters.map((c) => (
+              <span
+                key={c.kind}
+                className={`perm__mark perm__mark--${COUNTER_TONE[c.kind] ?? 'other'}`}
+                title={`${c.count} ${c.kind} counter${c.count === 1 ? '' : 's'} — permanent`}
+              >
+                {formatCounterChip(c.kind, c.count)}
+              </span>
+            ))}
+            {perm.ptFromEffects !== null && (
+              <span
+                className="perm__mark perm__mark--effect"
+                title={`${formatPtDelta(perm.ptFromEffects)} from a spell or ability (an anthem, or until end of turn) — not a counter`}
+              >
+                ✦ {formatPtDelta(perm.ptFromEffects)}
+              </span>
+            )}
+          </div>
         )}
         {perm.attacking && (
           <span className="perm__combat perm__combat--attacking" aria-label="Attacking">

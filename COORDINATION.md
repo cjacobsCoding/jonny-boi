@@ -260,6 +260,17 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-09-07 integrator: `feat/board-readability` ✅ MERGED — DESIGN §3.133, three reported "I can't
+  tell what's going on" problems. (1) TAPPED now reads: 24° turn + grayscale + dim + a `⟳ TAPPED` word
+  (was an 8° tilt); edited at its source in `styles.css`, not shadowed. (2) NEW `opponent-actions.ts` +
+  `OpponentActionFeed.tsx` + `opponent-feed.css` — a held feed of what the OPPONENT cast and at what,
+  folded from `GameSession.actions` (the accepted actions carry `targets`; the `spellCast` EVENT does
+  not), because the Solo auto-pass resolves an AI instant before `StackPanel` can render it.
+  (3) NEW shared `permanentMarks()` in `view-model.ts` splits `ptDelta` into COUNTERS vs
+  `ptFromEffects`, drawn as chips on the tile — read by the hotseat view-model AND the online
+  board-adapter, so the two boards cannot drift. `BoardPermanent` gained `counters` + `ptFromEffects`
+  (three test fixtures updated). Web-only; no `packages/ai`/`sim` caller.
+
 - 2026-09-06 integrator: `feat/effects-preview` ✅ MERGED — DESIGN §3.132. An effects preview bench in
   the About view (NEW `components/play/EffectsPreview.tsx` + `effects-preview.css`): hear every sound,
   preview every VFX, and it doubles as the audio settings (persisted mute + volume). Reuses the real

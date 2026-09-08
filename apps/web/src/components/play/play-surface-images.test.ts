@@ -49,6 +49,8 @@ function permanent(overrides: Partial<BoardPermanent> = {}): BoardPermanent {
     printedPower: 1,
     printedToughness: 2,
     ptDelta: null,
+    ptFromEffects: null,
+    counters: [],
     damageMarked: 0,
     keywords: { haste: true },
     producesIfTapped: [],

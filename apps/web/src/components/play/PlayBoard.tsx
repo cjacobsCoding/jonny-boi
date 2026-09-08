@@ -49,6 +49,7 @@ import { describeCastTarget, makeRefIndex, type KnownRef } from '../../lib/play/
 import type { AnimationCardInfo } from '../../lib/play/animations.js';
 import { AnimationLayer, useZoneAnimations } from './AnimationLayer.js';
 import { VfxLayer, useGameVfx } from './VfxLayer.js';
+import { OpponentActionFeed, useOpponentFeed } from './OpponentActionFeed.js';
 import { CombatLines } from './CombatLines.js';
 import { SoundEngine } from '../../lib/play/sound-engine.js';
 import { useGameSounds } from '../../lib/play/useGameSounds.js';
@@ -635,6 +636,14 @@ export function PlayBoard({
   // §3.131 — the visual-effects layer, folded from the same event log and
   // positioned with the same anchors/tile rects as the zone-flight layer.
   const { effects: vfxEffects, retire: retireVfx } = useGameVfx(session.events, viewer);
+  // §3.133 — what the OPPONENT just did, held on screen after the stack has
+  // already resolved it. Folded from the accepted ACTIONS (they carry targets;
+  // the events do not) and labelled with the session's own resolver.
+  const labelTarget = useCallback(
+    (ref: InstanceId | PlayerId): string => (ref === 'A' || ref === 'B' ? names[ref] : session.nameOf(ref)),
+    [names, session],
+  );
+  const opponentNotes = useOpponentFeed(session.actions, viewer, labelTarget);
 
   /**
    * LAST-KNOWN tile rect per instance, refreshed after every commit and never
@@ -1526,6 +1535,7 @@ export function PlayBoard({
         tileRectOf={tileRectOf}
         onDone={retireVfx}
       />
+      <OpponentActionFeed notes={opponentNotes} opponentName={names[otherOf(viewer)]} />
     </div>
   );
 }

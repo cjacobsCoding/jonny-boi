@@ -39,7 +39,7 @@ import type {
   StackView,
   VisibleHandCard,
 } from '../play/view-model.js';
-import { poolColorCounts, poolRestrictionLabels } from '../play/view-model.js';
+import { permanentMarks, poolColorCounts, poolRestrictionLabels } from '../play/view-model.js';
 
 /** The opposite seat. */
 function otherSeat(p: PlayerId): PlayerId {
@@ -70,6 +70,10 @@ function boardPermanent(inst: CardInstance, combat: MaskedGameView['combat']): B
   const toughness = creature ? effectiveToughness(inst, NO_MOD) : 0;
   const printedPower = creature ? (inst.def.power ?? 0) : 0;
   const printedToughness = creature ? (inst.def.toughness ?? 0) : 0;
+  const ptDelta =
+    creature && (power !== printedPower || toughness !== printedToughness)
+      ? { power: power - printedPower, toughness: toughness - printedToughness }
+      : null;
   return {
     instanceId: inst.instanceId,
     cardId: inst.def.id,
@@ -92,10 +96,11 @@ function boardPermanent(inst: CardInstance, combat: MaskedGameView['combat']): B
     toughness,
     printedPower,
     printedToughness,
-    ptDelta:
-      creature && (power !== printedPower || toughness !== printedToughness)
-        ? { power: power - printedPower, toughness: toughness - printedToughness }
-        : null,
+    ptDelta,
+    // §3.133 — the SAME split the hotseat board draws, from the shared helper.
+    // Online there is no continuous index, so the delta is the counters alone
+    // and `ptFromEffects` honestly comes back null rather than inventing one.
+    ...permanentMarks(inst, ptDelta, creature),
     damageMarked: inst.damageMarked,
     keywords: effectiveKeywords(inst, NO_MOD),
     // Normalised modes, not the legacy `produces` list — see the hotseat
