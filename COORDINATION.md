@@ -260,6 +260,15 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-09-07 integrator: `docs/pilot-verdict` ✅ MERGED — DESIGN §3.134. Measured all five pilots on the
+  current build: `lookahead` (the default) is both the strongest (pilot-ab STRONGER vs heuristic, p=2.0e-3
+  over 7,200 games) and effectively the fastest (183 vs 188 games/sec) — hybrid is ~1,100× slower for no
+  measurable gain, mcts ~5,900×. ⚠️ CORRECTED a stale claim in the `DEFAULT_PILOT_ID` comment: "EVERY
+  deck row ≥ 51%" did not reproduce (Golgari 48.6%, Orzhov 49.4% on seed 7) — per-deck rows near 50%
+  move with the seed; judge by the paired McNemar verdict. ALSO closed the long-open §3.66 brief: the
+  bundled Selesnya Blink deck scores 75.2% (1804/2400) and WINS all 8 gauntlet matchups, so nothing was
+  ever wrong with the deck or the pilot — the "so bad" reading was the §3.65 attribution bug.
+
 - 2026-09-07 integrator: `feat/board-readability` ✅ MERGED — DESIGN §3.133, three reported "I can't
   tell what's going on" problems. (1) TAPPED now reads: 24° turn + grayscale + dim + a `⟳ TAPPED` word
   (was an 8° tilt); edited at its source in `styles.css`, not shadowed. (2) NEW `opponent-actions.ts` +
