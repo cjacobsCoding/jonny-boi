@@ -119,6 +119,39 @@ describe('generateCandidates (pure)', () => {
     expect(candidates.every((c) => c.inName === 'Sol Ring')).toBe(true);
   });
 
+  /**
+   * §3.135 — "make sure it is looking at super obvious swaps first". A candidate
+   * that holds the SAME job, is castable, does everything the cut card does and
+   * costs less must be scouted before an unrelated card of similar colour/curve.
+   * The pre-rank only decides what gets SIMULATED first; the sim still decides
+   * what wins. This pins the ordering, which is the part that was missing.
+   */
+  it('a no-brainer upgrade outranks an unrelated candidate', () => {
+    const burn: Deck = {
+      name: 'upgrade test',
+      archetype: 'test',
+      cards: [
+        { cardId: 'Lightning Strike', count: 4 }, // {1}{R}, 3 damage
+        { cardId: 'Goblin Guide', count: 4 },
+        { cardId: 'Mountain', count: 52 },
+      ],
+    };
+    const { candidates } = generateCandidates(burn, pool, undefined, undefined, undefined, {
+      cutOnly: ['Lightning Strike'],
+      // Lightning Bolt is the same 3 damage for one less mana — the no-brainer.
+      // Grizzly Bears is a green body: castable by nothing here, and a different job.
+      inOnly: ['Lightning Bolt', 'Grizzly Bears'],
+    });
+    const bolt = candidates.find((c) => c.inName === 'Lightning Bolt');
+    const bears = candidates.find((c) => c.inName === 'Grizzly Bears');
+    expect(bolt, 'the cheaper burn spell is a candidate').toBeDefined();
+    expect(bears, 'the unrelated card is also a candidate').toBeDefined();
+    expect(bolt!.heuristicScore, 'same job + cheaper + does everything ⇒ scouted first').toBeGreaterThan(
+      bears!.heuristicScore,
+    );
+    expect(candidates[0]!.inName).toBe('Lightning Bolt');
+  });
+
   it('orders candidates by descending heuristic score (cap-relevant ordering)', () => {
     const { candidates } = generateCandidates(MONO_RED_AGGRO, pool);
     for (let i = 1; i < candidates.length; i++) {

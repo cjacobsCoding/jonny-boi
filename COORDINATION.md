@@ -260,6 +260,18 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-09-07 integrator: `feat/suggest-roles` ✅ MERGED — DESIGN §3.135. NEW `packages/sim/src/card-role.ts`:
+  a TABLE from effect primitive → functional job (removal/draw/ramp/pump/…), built from the 65 primitives
+  the pool actually uses, reading spell effects + triggers + activated abilities (and falling through to
+  `produces` so a mana creature is ramp). `compareForUpgrade` is the NO-BRAINER test — same job, castable,
+  does at least everything the cut card does, cheaper or same-cost-bigger-body. ⚠️ It compares effect
+  PARAMETERS, not just primitive names: Shock-vs-Lightning-Strike (amount 2 vs 3) and Doom-Blade-vs-Murder
+  (`notColor:'B'`) are both real pool pairs that name-only comparison would call free upgrades. Wired into
+  `scoreCandidate` via new `roleMatch`/`strictUpgrade` weights, so obvious and like-for-like swaps are
+  SIMULATED FIRST (ordering only — the sim still decides what wins). `traits.role` is now the functional
+  job, not `types[0]`. STILL OPEN from the same brief: scoping to chosen cards + an arbitrary copy count
+  (engine has cutOnly/inOnly and one-or-playset only, no UI), archetype detection, and gap screening.
+
 - 2026-09-07 integrator: `docs/pilot-verdict` ✅ MERGED — DESIGN §3.134. Measured all five pilots on the
   current build: `lookahead` (the default) is both the strongest (pilot-ab STRONGER vs heuristic, p=2.0e-3
   over 7,200 games) and effectively the fastest (183 vs 188 games/sec) — hybrid is ~1,100× slower for no
