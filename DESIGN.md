@@ -2889,6 +2889,54 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.134 Which pilot is actually best, and the Selesnya Blink verdict — ✅ done
+
+Asked directly: "out of all the AI type options we have right now, which is actually smarter currently,
+and which is the fastest?" Measured rather than answered from the docs — and the docs turned out to be
+overstating one claim.
+
+**Speed (single-threaded, `pilot-bench.mjs`, current build).**
+
+| pilot | games/sec | per game |
+|---|---|---|
+| heuristic | 188 | 5 ms |
+| lookahead (default) | 183 | 5 ms |
+| random | 110 | 9 ms |
+| hybrid | 0.17 | 6.1 s |
+| mcts | 0.03 | 32.6 s |
+
+⚠️ `random` is SLOWER than the heuristic, which reads as a paradox and is not one: bad play drags games
+out, so a random pilot burns more actions per game. Throughput is engine work, not thinking.
+
+**Strength (`pilot-ab`, head-to-head against the heuristic, same decks and seeds, both orientations).**
+
+| pilot | verdict | share | games |
+|---|---|---|---|
+| lookahead | **STRONGER** (McNemar p = 2.0e-3) | 50.6% (49.5–51.8) | 7,200 |
+| hybrid | inconclusive (p = 1.00) | 50.7% (44.0–57.3) | 216 |
+| random | **WEAKER** | 0.04% (3 wins) | 7,200 |
+| mcts | not re-run — hours at 32.6 s/game | — | — |
+
+**The answer: `lookahead` is both the strongest and, in practice, the fastest**, so the default is
+already right and there is no speed-for-smarts trade to make. Hybrid and MCTS stay registered as the
+research controls §59 wants, and the measurement is why they are not defaults: hybrid costs ~1,100× the
+time of lookahead for no measurable gain, MCTS ~5,900×. In Lab terms a 600-game gauntlet is ~3 s on
+lookahead, ~1 hour on hybrid, ~5.4 hours on MCTS.
+
+⚠️ **A doc claim corrected.** The comment on `DEFAULT_PILOT_ID` said §3.47's run had "EVERY deck row ≥
+51%". Re-run on seed 7 the VERDICT reproduces (STRONGER, p = 2.0e-3) but the share is 50.6% and two
+rows sit below even — Golgari Midrange 48.6%, Orzhov Lifegain 49.4%. That line read a single seed's
+per-deck detail as a property, and rows near 50% are exactly the numbers that move with the seed. The
+comment now says so, and says to judge the pilot by the paired McNemar verdict over the whole run.
+
+📊 **Selesnya Blink, finally measured — and it is fine.** The §3.66-era brief ("figure out why the
+Selesnya Blink deck is so bad against the Gauntlet… the AI must be stupid or rules broken") is closed:
+the deck bundled in the app scores **75.2% (1804/2400, seed 7, 300 games per opponent)** and WINS every
+matchup — Mono-Red 88.0%, Rakdos 87.7%, Golgari 84.0%, UW Control 79.7%, Boros 72.3%, Izzet 71.0%,
+Orzhov 65.0%, Mono-Green Ramp 53.7% (the only close one). Nothing is broken in the deck or the pilot.
+The "so bad" reading was the gauntlet table attributing win rates to the wrong deck, fixed in §3.65;
+this run is the confirmation that nothing else was ever wrong.
+
 ### 3.133 Reading the board — tapped, what they played, and what is ON a card — ✅ done
 
 Three complaints from one session, and one root cause between them: the board KNEW all of this and

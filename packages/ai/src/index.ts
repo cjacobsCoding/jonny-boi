@@ -280,11 +280,21 @@ export function registerBuiltInPilots(registry: AiRegistry): void {
  */
 // §3.47 flipped this to `lookahead`, and the bar the doc above sets was met with
 // the committed yardstick rather than a hand-run: pilot-ab 3754–3274 over 7,200
-// games (STRONGER, McNemar p < 1e-16), EVERY deck row ≥ 51% (a broad gain, not an
-// archetype tilt), at 99% of the heuristic's single-matchup throughput (87.6 vs
-// 88.5 games/sec) and 75.7 g/s on the full mixed run. The lookahead pilot IS the
-// heuristic everywhere except the attack declaration, which it decides by an
-// adversarial plan search — so every throughput argument above survives intact.
+// games (STRONGER, McNemar p < 1e-16), at 99% of the heuristic's single-matchup
+// throughput (87.6 vs 88.5 games/sec) and 75.7 g/s on the full mixed run. The
+// lookahead pilot IS the heuristic everywhere except the attack declaration,
+// which it decides by an adversarial plan search — so every throughput argument
+// above survives intact.
+//
+// ⚠️ §3.134 — the VERDICT reproduces; the size of the win is smaller than this
+// note used to claim. Re-run on seed 7 (7,200 games): lookahead 3559–3468,
+// STRONGER at McNemar p = 2.0e-3, but a 50.6% share, and NOT every deck row is
+// above even — Golgari Midrange 48.6% and Orzhov Lifegain 49.4%. The old
+// "EVERY deck row ≥ 51%" line was a single seed's per-deck detail read as a
+// property, and per-deck rows sitting near 50% are exactly the numbers that
+// move with the seed. Judge this pilot by the paired McNemar verdict over the
+// whole run, which is what the harness is built to answer; treat any single
+// deck row as noise unless it is re-run across seeds.
 // Re-verify any time: `npm run sim -- pilot-ab --pilot-a lookahead --pilot-b heuristic`.
 export const DEFAULT_PILOT_ID = LOOKAHEAD_PILOT_ID;
 
