@@ -51,6 +51,30 @@ describe('roleOf — a card names its own job', () => {
     expect(roleOf(card('Llanowar Elves'))).toBe('ramp');
   });
 
+  /**
+   * §3.138 — REPORTED: "Banisher Priest, Fiend Hunter, Acidic Slime, and Angel of
+   * Serenity are all removal." They are, and one of them was misread.
+   *
+   * Fiend Hunter's exile is wrapped in `mayEffects` ("you MAY exile another
+   * target creature"), and reading only the top level of a card's effects saw
+   * nothing but the `returnExiledByThis` half — so a removal creature classified
+   * as RECURSION. The collector now follows wrappers into their payload.
+   */
+  it('a creature whose removal is a "may" is still removal (the reported miss)', () => {
+    expect(primitivesOf(card('Fiend Hunter')), 'the wrapper AND its payload').toContain('exileUntilLeaves');
+    for (const name of ['Banisher Priest', 'Fiend Hunter', 'Acidic Slime', 'Angel of Serenity']) {
+      expect(roleOf(card(name)), `${name} is removal`).toBe('removal');
+    }
+  });
+
+  it('flickering your own permanent is its OWN job, not graveyard recursion', () => {
+    // Cloudshift, Conjurer's Closet and Restoration Angel used to fall to
+    // 'other' (the Closet's and the Angel's blink is also behind a "may").
+    for (const name of ['Cloudshift', "Conjurer's Closet", 'Restoration Angel']) {
+      expect(roleOf(card(name)), `${name} is blink`).toBe('blink');
+    }
+  });
+
   it('a library search is "dig" — the primitive cannot tell a land fetch from a tutor', () => {
     // Honest coarseness, documented: Rampant Growth and a creature tutor compile
     // to the same `searchLibrary`, so the classifier does not pretend to know.

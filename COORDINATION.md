@@ -260,6 +260,18 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-09-08 integrator: `fix/wrapped-effect-roles` ✅ MERGED — DESIGN §3.138. USER-REPORTED: Fiend
+  Hunter classified as `recursion`, not `removal`. Cause: `primitivesOf` read effects one level deep and
+  several primitives are WRAPPERS carrying the payload in a nested `effects` param (`mayEffects`,
+  `mayCostEffects`, `ifKicked`, `substituteIf`, `scheduleDelayedEffects`) — Fiend Hunter's exile is
+  behind a "you may". The collector now follows nested effect lists GENERICALLY (any param holding a
+  list of effect refs, depth-capped), so a new wrapper needs no edit here. Also NEW role `'blink'`
+  (`blinkTarget` had no row, so Cloudshift/Conjurer's Closet/Restoration Angel were `'other'`) — the
+  bundled Selesnya Blink now reads `blink: 9` where it read `other: 7`. ⚠️ §3.137's field measurement is
+  unchanged (7 of 9 at 12–16 answers, 2 at zero). ⚠️ NOTE for anyone reading a gap report: the bundled
+  `Selesnya Blink` sample contains none of Banisher Priest / Fiend Hunter / Acidic Slime / Angel of
+  Serenity — the user's real list differs from the bundled one, the same mismatch §3.134 hit.
+
 - 2026-09-08 integrator: `feat/deck-shape` ✅ MERGED — DESIGN §3.137, completing the Suggestions brief.
   NEW `packages/sim/src/deck-shape.ts`: `shapeOf` / `detectFamily` / `familyOf` / `referenceProfile` /
   `findRoleGaps` / `describeGap`. Every norm is the MEDIAN over real bundled decks (never a hand-written

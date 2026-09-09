@@ -2889,6 +2889,41 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.138 A wrapper hid the removal — "you MAY exile" is still removal — ✅ done
+
+Reported, sharply: "The deck is short on removal? You're joking right? Banisher priest, Fiend Hunter,
+Acidic Slime, and Serenity Angel are all removal." They are. One of them was genuinely misread, and the
+miss had a shape worth fixing rather than a card worth special-casing.
+
+**The bug.** `primitivesOf` read a card's effects one level deep — spell effects, trigger effects,
+activated-ability effects — and several primitives are WRAPPERS that carry the real effect in a nested
+`effects` param: `mayEffects` ("you may …"), `mayCostEffects`, `ifKicked`, `substituteIf`,
+`scheduleDelayedEffects`. Fiend Hunter's exile lives inside a "you may", so all the classifier could see
+was the `returnExiledByThis` half of the O-Ring pair, and a removal creature came back as RECURSION.
+Conjurer's Closet and Restoration Angel fell to `'other'` the same way.
+
+⚠️ The fix follows nested effect lists GENERICALLY — any param holding a list of effect refs is
+followed, depth-capped — rather than naming the five wrappers. A wrapper added tomorrow is handled
+without a matching edit here, which is the difference between fixing the class and fixing the instance.
+
+**A second gap the same report exposed.** `blinkTarget` had no row at all, so Cloudshift was `'other'`.
+Blink is now its own job rather than being folded into the nearest existing one: flickering your own
+permanent to re-use its enters trigger is not graveyard recursion, and in a deck built on it the blink
+IS the engine. The bundled Selesnya Blink now reads `blink: 9` where it read `other: 7`.
+
+📊 After the fix: Banisher Priest, Fiend Hunter, Acidic Slime and Angel of Serenity all classify as
+removal, and Cloudshift / Conjurer's Closet / Restoration Angel as blink — all pinned. The field
+measurement §3.137 rests on is UNCHANGED (still 7 of 9 decks at 12–16 answers, 2 at zero), so the gap
+report's headline finding survives the correction.
+
+⚠️ **What the report was actually reading, and the mismatch worth recording.** The Lab's "no removal"
+line was about the BUNDLED `Selesnya Blink` sample, whose decklist contains none of those four cards —
+it is Cloudshift, Conjurer's Closet, Wall of Omens, Wall of Blossoms, Elvish Visionary, Lone Missionary,
+Skyclave Cleric, Wood Elves, Eternal Witness, Attended Knight, Thragtusk and Restoration Angel. For that
+list the reading was correct. The deck being described in the report is a DIFFERENT, removal-carrying
+Selesnya Blink that the bundled sample does not represent — the same mismatch §3.134 closed the win-rate
+question against. A gap report is only ever as right as the decklist it is handed.
+
 ### 3.137 What kind of deck is this, and what is it missing — ✅ done
 
 The last of the Suggestions brief: "is there any consideration currently to 'what kind of deck does it

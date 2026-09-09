@@ -47,6 +47,7 @@ export type CardRole =
   | 'attachment'
   | 'lifegain'
   | 'protection'
+  | 'blink'
   | 'threat'
   | 'land'
   | 'other';
@@ -113,6 +114,11 @@ export const PRIMITIVE_ROLE: Readonly<Record<string, CardRole>> = Object.freeze(
   gainLife: 'lifegain',
   regenerate: 'protection',
   preventDamage: 'protection',
+  // Flickering your OWN permanent to re-use its enters trigger. Its own job
+  // rather than being folded into the nearest existing one: a blink is not
+  // graveyard recursion, and in a deck built on it — Cloudshift, Conjurer's
+  // Closet, Restoration Angel — it is the engine, not a footnote.
+  blinkTarget: 'blink',
 });
 
 /**
@@ -134,6 +140,7 @@ export const ROLE_PRIORITY: readonly CardRole[] = Object.freeze([
   'counters',
   'pump',
   'protection',
+  'blink',
   'dig',
   'lifegain',
   'threat',
@@ -198,22 +205,57 @@ function doesAtLeastAsMuch(outDef: CardDefinition, inDef: CardDefinition): boole
   return true;
 }
 
-/** Every effect a card can produce, from all three of its homes. */
+/** How deep to follow nested effects. A wrapper inside a wrapper is already rare. */
+const MAX_EFFECT_DEPTH = 6;
+
+/**
+ * Collect effects, FOLLOWING WRAPPERS into their payload.
+ *
+ * ⚠️ This is the fix for a reported miss, and the shape of it matters. Several
+ * primitives are wrappers that carry the real effect in a nested `effects` param
+ * — `mayEffects` ("you may …"), `mayCostEffects`, `ifKicked`, `substituteIf`,
+ * `scheduleDelayedEffects`. Reading only the top level, Fiend Hunter looked like
+ * pure `returnExiledByThis` and classified as RECURSION, because its exile is
+ * wrapped in a "you may": it is removal, and the classifier could not see it.
+ * Conjurer's Closet and Cloudshift fell to 'other' the same way.
+ *
+ * The recursion is generic rather than a list of wrapper names on purpose: any
+ * param holding a list of effect refs is followed, so a wrapper added tomorrow
+ * is handled without a matching edit here. Depth-capped as a cheap guard.
+ */
+function collectEffectRefs(
+  effects: readonly { primitive: string; params?: unknown }[] | undefined,
+  out: { primitive: string; params?: unknown }[],
+  depth: number,
+): void {
+  if (!effects || depth > MAX_EFFECT_DEPTH) return;
+  for (const effect of effects) {
+    out.push(effect);
+    const params = effect.params as Record<string, unknown> | undefined;
+    if (!params || typeof params !== 'object') continue;
+    for (const value of Object.values(params)) {
+      if (!Array.isArray(value)) continue;
+      const nested = value.filter(
+        (v): v is { primitive: string; params?: unknown } =>
+          typeof v === 'object' && v !== null && typeof (v as { primitive?: unknown }).primitive === 'string',
+      );
+      if (nested.length > 0) collectEffectRefs(nested, out, depth + 1);
+    }
+  }
+}
+
+/** Every effect a card can produce, from all three of its homes, wrappers followed. */
 function effectRefsOf(def: CardDefinition): readonly { primitive: string; params?: unknown }[] {
   const out: { primitive: string; params?: unknown }[] = [];
-  for (const e of def.effects ?? []) out.push(e);
-  for (const t of def.triggers ?? []) for (const e of t.effects ?? []) out.push(e);
-  for (const a of def.activated ?? []) for (const e of a.effects ?? []) out.push(e);
+  collectEffectRefs(def.effects, out, 0);
+  for (const t of def.triggers ?? []) collectEffectRefs(t.effects, out, 0);
+  for (const a of def.activated ?? []) collectEffectRefs(a.effects, out, 0);
   return out;
 }
 
 /** Every effect primitive a card can produce, from all three of its homes. */
 export function primitivesOf(def: CardDefinition): readonly string[] {
-  const out: string[] = [];
-  for (const e of def.effects ?? []) out.push(e.primitive);
-  for (const t of def.triggers ?? []) for (const e of t.effects ?? []) out.push(e.primitive);
-  for (const a of def.activated ?? []) for (const e of a.effects ?? []) out.push(e.primitive);
-  return out;
+  return effectRefsOf(def).map((e) => e.primitive);
 }
 
 /**
