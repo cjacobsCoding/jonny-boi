@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 import { FidelityNote } from '../FidelityNote.js';
 import { RunSlider } from './RunSlider.js';
 import { ciStr, pct, signedPct, pValueStr, throughputText, verdictDisplay } from '../../lib/sim-format.js';
@@ -15,7 +15,19 @@ import { pilotLabel } from '../../lib/sim/pilots.js';
 import { PilotStamp, RunCostNote } from './PilotControls.js';
 import type { PanelProps, GamesConfig, CardOption } from './panel-types.js';
 import type { SimDeckPayload } from '../../lib/sim-protocol.js';
-import type { SuggestionHistory } from '@jonny-boi/sim';
+import {
+  SAMPLE_DECKS,
+  describeGap,
+  familyOf,
+  findRoleGaps,
+  referenceProfile,
+  shapeOf,
+  type Deck as SimDeck,
+  type SuggestionHistory,
+} from '@jonny-boi/sim';
+import { loadCardPool } from '../../lib/sim-pool.js';
+import { toSimPayload } from '../../lib/sim-format.js';
+import type { Deck } from '../../lib/deck.js';
 import './suggest-focus.css';
 
 /**
@@ -50,6 +62,7 @@ import './suggest-focus.css';
  * a line lists the searches other pilots still hold.
  */
 export function SuggestPanel({
+  hero,
   heroPayload,
   heroLegal,
   chosenOpponents,
@@ -114,6 +127,8 @@ export function SuggestPanel({
         cheap scout batch; the budget then concentrates on the ones still plausibly better, so only
         finalists are played to full depth. Verdicts are corrected for testing many cards at once.
       </p>
+
+      <DeckShapeNote hero={hero} />
 
       <SearchMemory
         stored={stored}
@@ -395,6 +410,68 @@ export function SuggestPanel({
  * the user cannot see is indistinguishable from a deletion, and a user who thinks
  * their evidence is gone will press Reset and make it true.
  */
+/** How many gaps to print. Past a few it stops being a reading and becomes a list. */
+const MAX_GAPS_SHOWN = 3;
+
+/**
+ * §3.137 — WHAT KIND OF DECK IS THIS, AND WHAT IS IT MISSING.
+ *
+ * Reported as a question: "is there any consideration to 'what kind of deck does
+ * it seem to be' … 'this deck has no removal - that seems bad for this type of
+ * deck'." This is the answer, and it is shown BEFORE a run rather than inside a
+ * finished report, because "your deck runs no removal" is worth knowing before
+ * you spend ten thousand games finding out.
+ *
+ * Every number comes from real decklists (the bundled field), never a
+ * hand-written idea of what a deck should look like — and the sample size is
+ * printed, because the same-family cohort is sometimes small enough that the
+ * comparison falls back to the whole field.
+ */
+function DeckShapeNote({ hero }: { hero: Deck | null }): ReactElement | null {
+  const reading = useMemo(() => {
+    if (!hero) return null;
+    try {
+      const pool = loadCardPool();
+      const deck = toSimPayload(hero) as SimDeck;
+      const shape = shapeOf(deck, pool);
+      if (shape.spells === 0) return null; // an empty deck has no shape to read
+      const family = familyOf(deck, shape);
+      const reference = referenceProfile(family, SAMPLE_DECKS, pool, deck.name);
+      return { family, reference, gaps: findRoleGaps(shape, reference) };
+    } catch {
+      // A deck the pool cannot resolve is not worth an error here — the panel's
+      // job is suggestions, and the legality banner already speaks for it.
+      return null;
+    }
+  }, [hero]);
+
+  if (!reading) return null;
+  const { family, reference, gaps } = reading;
+  const cohort = reference.fellBackToField
+    ? `all ${reference.sampleSize} decks in the field`
+    : `the ${reference.sampleSize} ${reference.family} decks in the field`;
+
+  return (
+    <div className="deck-shape-note">
+      <span className="deck-shape-note__family">
+        {family === 'unknown' ? 'Deck shape' : `Looks like a ${family} deck`}
+      </span>{' '}
+      <span className="deck-shape-note__cohort">— compared with {cohort}:</span>
+      {gaps.length === 0 ? (
+        <span className="deck-shape-note__ok"> nothing looks out of place.</span>
+      ) : (
+        <ul className="deck-shape-note__gaps">
+          {gaps.slice(0, MAX_GAPS_SHOWN).map((gap) => (
+            <li key={gap.role} className={`deck-shape-note__gap deck-shape-note__gap--${gap.kind}`}>
+              {describeGap(gap)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function SearchMemory({
   stored,
   rejected,

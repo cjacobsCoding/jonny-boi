@@ -105,7 +105,34 @@ export {
   GAMES_PER_PAIRED_GAME,
 } from './swap.js';
 export type { SwapScope } from './config.js';
-export { DEFAULT_SWAP_SCOPE } from './config.js';
+export { DEFAULT_SWAP_SCOPE, copiesForScope, describeScope } from './config.js';
+
+/**
+ * WHAT A CARD IS FOR, AND WHAT A DECK IS MISSING (§3.135, §3.137) — the job a
+ * compiled card holds, and how a deck's mix of jobs compares to real decks like
+ * it. Exported because the Lab shows the gaps ("this deck has no removal") before
+ * a single game is played, not only inside a finished suggestion report.
+ */
+export { roleOf, compareForUpgrade, primitivesOf, castableIn, type CardRole } from './card-role.js';
+export {
+  shapeOf,
+  familyOf,
+  familyFromTag,
+  detectFamily,
+  referenceProfile,
+  findRoleGaps,
+  describeGap,
+  countRoles,
+  ANSWER_ROLES,
+  CARD_FLOW_ROLES,
+  BOARD_ROLES,
+  MIN_COHORT,
+  type ArchetypeFamily,
+  type DeckShape,
+  type ReferenceProfile,
+  type RoleGap,
+  type GapKind,
+} from './deck-shape.js';
 
 /**
  * THE DECK-NEUTRAL PILOT A/B (DESIGN §3.46) — "is this pilot stronger?", asked so
