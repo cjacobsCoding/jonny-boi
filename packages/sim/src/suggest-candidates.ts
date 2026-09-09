@@ -23,7 +23,9 @@ import type { Deck } from './deck.js';
 import { validateDeck } from './deck.js';
 import type { CardSwap, SwapEvaluation, SwapVerdict } from './swap.js';
 import { applySwap, copiesSwappedBy } from './swap.js';
-import { compareForUpgrade, roleOf } from './card-role.js';
+import { compareForUpgrade, roleOf, type CardRole } from './card-role.js';
+import { familyOf, findRoleGaps, referenceProfile, shapeOf } from './deck-shape.js';
+import { SAMPLE_DECKS } from '../data/decks/index.js';
 import { DEFAULT_DECK_RULES, DEFAULT_SWAP_SCOPE, type DeckRules, type SwapScope } from './config.js';
 import {
   DEFAULT_HEURISTIC_WEIGHTS,
@@ -164,6 +166,14 @@ interface DeckProfile {
   readonly colors: ReadonlySet<ManaColor>;
   /** Mean mana value of the deck's non-land spells (0 when none). */
   readonly avgSpellMv: number;
+  /**
+   * §3.137 — jobs this deck is MISSING or thin on compared with decks like it.
+   * Bringing one of these in is usually a bigger win than a marginally better
+   * card, so a candidate holding one is scouted sooner.
+   */
+  readonly gapRoles: ReadonlySet<CardRole>;
+  /** §3.137 — jobs this deck is HEAVY on: the first place to look for a cut. */
+  readonly surplusRoles: ReadonlySet<CardRole>;
 }
 
 function profileDeck(base: Deck, pool: CardPool): DeckProfile {
@@ -180,7 +190,20 @@ function profileDeck(base: Deck, pool: CardPool): DeckProfile {
       spellCount += entry.count;
     }
   }
-  return { colors, avgSpellMv: spellCount > 0 ? mvSum / spellCount : 0 };
+  // §3.137 — how this deck compares to decks like it. The reference is the
+  // BUNDLED FIELD (the same decks a gauntlet run faces), with the deck itself
+  // excluded so it cannot pull the norm toward its own shape and hide its gap.
+  // Same-family when that cohort is big enough, the whole field when it is not —
+  // `referenceProfile` decides and records which.
+  const shape = shapeOf(base, pool);
+  const reference = referenceProfile(familyOf(base, shape), SAMPLE_DECKS, pool, base.name);
+  const gapRoles = new Set<CardRole>();
+  const surplusRoles = new Set<CardRole>();
+  for (const gap of findRoleGaps(shape, reference)) {
+    if (gap.kind === 'heavy') surplusRoles.add(gap.role);
+    else gapRoles.add(gap.role);
+  }
+  return { colors, avgSpellMv: spellCount > 0 ? mvSum / spellCount : 0, gapRoles, surplusRoles };
 }
 
 /**
@@ -216,7 +239,13 @@ export function scoreCandidate(
   const roleScore = sameRole ? weights.roleMatch : 0;
   const upgradeScore = strictUpgrade ? weights.strictUpgrade : 0;
 
-  return colorScore + curveScore + roleScore + upgradeScore;
+  // §3.137 — and does this swap fix the deck's SHAPE? Bringing in a job the deck
+  // lacks, or cutting one it has too much of, is scouted ahead of a like-for-like
+  // shuffle that leaves the hole exactly where it was.
+  const gapScore = profile.gapRoles.has(roleOf(inDef)) ? weights.fillsGap : 0;
+  const surplusScore = profile.surplusRoles.has(roleOf(outDef)) ? weights.cutsSurplus : 0;
+
+  return colorScore + curveScore + roleScore + upgradeScore + gapScore + surplusScore;
 }
 
 /**

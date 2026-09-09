@@ -260,6 +260,18 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-09-08 integrator: `feat/deck-shape` ✅ MERGED — DESIGN §3.137, completing the Suggestions brief.
+  NEW `packages/sim/src/deck-shape.ts`: `shapeOf` / `detectFamily` / `familyOf` / `referenceProfile` /
+  `findRoleGaps` / `describeGap`. Every norm is the MEDIAN over real bundled decks (never a hand-written
+  table); the deck is excluded from its own reference; and a same-family cohort under `MIN_COHORT` (3)
+  falls back to the whole field and SAYS so (the repo has Control ×1, Tempo ×1). `detectFamily`'s
+  thresholds were read off the bundled decks and a test pins that shape alone reproduces all NINE decks'
+  own archetype tags. 📊 Measured: 7 of 9 field decks run 12–16 answer cards; Mono-Green Ramp and
+  Selesnya Blink run ZERO. New pre-rank weights `fillsGap`/`cutsSurplus` steer the search toward holes.
+  The Lab shows the reading above the run controls, before any games. ⚠️ With default weights a vanilla
+  body also scores a gap for Blink (it is genuinely thin on threats too) — correct, and the ordering test
+  isolates the gap term rather than pretending otherwise.
+
 - 2026-09-08 integrator: `feat/suggest-scoping` ✅ MERGED — DESIGN §3.136. `SwapScope` gains
   `{ copies: n }` beside `'one'|'playset'`; NEW `copiesForScope`/`describeScope` in `config.ts` are the
   ONE answer to "how many copies does this move", read by `applySwap`, `copiesSwappedBy` and the

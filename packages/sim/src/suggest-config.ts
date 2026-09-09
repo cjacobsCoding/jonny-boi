@@ -77,6 +77,19 @@ export interface HeuristicWeights {
    * this only decides what gets measured early, never what wins.
    */
   readonly strictUpgrade: number;
+  /**
+   * §3.137 — reward bringing IN a card whose job this deck is missing or thin on
+   * compared with decks like it ("are there cards that decks like this typically
+   * have that this deck is missing?"). Weighted near the no-brainer, because a
+   * hole in the deck is usually a bigger win than a marginally better card.
+   */
+  readonly fillsGap: number;
+  /**
+   * §3.137 — reward cutting OUT a card from a job this deck is heavy on relative
+   * to decks like it ("does a deck like this typically have such cards — if not,
+   * target those for swap suggestions first").
+   */
+  readonly cutsSurplus: number;
 }
 
 export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
@@ -84,6 +97,8 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   curveFit: 1,
   roleMatch: 1.5,
   strictUpgrade: 6,
+  fillsGap: 5,
+  cutsSurplus: 2.5,
 });
 
 /**

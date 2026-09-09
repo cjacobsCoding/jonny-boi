@@ -15,7 +15,7 @@ import {
 } from './suggest.js';
 import { DEFAULT_SUGGEST_CONFIG } from './suggest-config.js';
 import { DEFAULT_DECK_RULES } from './config.js';
-import { MONO_RED_AGGRO, MONO_GREEN_STOMPY, UW_CONTROL } from '../data/decks/index.js';
+import { MONO_RED_AGGRO, MONO_GREEN_STOMPY, UW_CONTROL, SAMPLE_DECKS } from '../data/decks/index.js';
 
 const pool = loadCardPool({ onWarn: () => {} });
 const registry = buildRegistry();
@@ -150,6 +150,38 @@ describe('generateCandidates (pure)', () => {
       bears!.heuristicScore,
     );
     expect(candidates[0]!.inName).toBe('Lightning Bolt');
+  });
+
+  /**
+   * §3.137 — "are there cards that decks like this typically have that this deck
+   * is missing? (and if so, try to swap for those first)". Selesnya Blink runs
+   * ZERO answers where seven of the nine field decks run 12–16, so a removal
+   * spell must be scouted ahead of a card that leaves the hole where it was.
+   */
+  it('a card that fills a hole in the deck outranks one that does not', () => {
+    const blink = SAMPLE_DECKS.find((d) => d.name === 'Selesnya Blink')!;
+    // Weights isolated to the gap term: colour and curve would otherwise decide
+    // this, and they are not what is under test. (Left at their defaults, Grizzly
+    // Bears also scores a gap — Blink is genuinely thin on THREATS as well as
+    // missing removal — which is correct behaviour, just not a clean contrast.)
+    const gapOnly = {
+      colorMatch: 0,
+      curveFit: 0,
+      roleMatch: 0,
+      strictUpgrade: 0,
+      fillsGap: 5,
+      cutsSurplus: 0,
+    };
+    const { candidates } = generateCandidates(blink, pool, undefined, gapOnly, undefined, {
+      cutOnly: ['Elvish Visionary'],
+      // Swords to Plowshares is REMOVAL, which this deck runs none of.
+      // Divination is DRAW, which it already runs more of than its field.
+      inOnly: ['Swords to Plowshares', 'Divination'],
+    });
+    const byName = new Map(candidates.map((c) => [c.inName, c.heuristicScore]));
+    expect(byName.get('Swords to Plowshares'), 'removal fills the hole').toBe(gapOnly.fillsGap);
+    expect(byName.get('Divination'), 'more draw does not').toBe(0);
+    expect(candidates[0]!.inName).toBe('Swords to Plowshares');
   });
 
   it('orders candidates by descending heuristic score (cap-relevant ordering)', () => {

@@ -88,3 +88,54 @@
   color: var(--color-fg-faint);
   font-variant-numeric: tabular-nums;
 }
+
+/*
+ * WHAT KIND OF DECK IS THIS, AND WHAT IS IT MISSING (§3.137).
+ *
+ * Shown above the run controls, because "your deck runs no removal" is worth
+ * knowing BEFORE you spend ten thousand games finding out. Every figure behind
+ * it comes from real decklists, and the line names the sample it compared to.
+ */
+.deck-shape-note {
+  margin: var(--space-3, 12px) 0;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border-left: 3px solid var(--color-accent, #7aa2f7);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--color-surface-raised, #8881);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.deck-shape-note__family {
+  font-weight: 600;
+}
+
+.deck-shape-note__cohort {
+  color: var(--color-fg-muted, inherit);
+}
+
+.deck-shape-note__ok {
+  color: var(--color-fg-muted, inherit);
+}
+
+.deck-shape-note__gaps {
+  margin: var(--space-2, 8px) 0 0;
+  padding-left: 1.1rem;
+}
+
+.deck-shape-note__gap {
+  margin: 1px 0;
+}
+
+/* Running NONE of something the field runs is the loudest reading here. */
+.deck-shape-note__gap--missing {
+  color: var(--color-error, #d24545);
+  font-weight: 600;
+}
+
+.deck-shape-note__gap--thin {
+  color: var(--color-warning, #d2a145);
+}
+
+.deck-shape-note__gap--heavy {
+  color: var(--color-fg-muted, inherit);
+}

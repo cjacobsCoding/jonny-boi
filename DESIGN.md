@@ -2889,6 +2889,54 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.137 What kind of deck is this, and what is it missing — ✅ done
+
+The last of the Suggestions brief: "is there any consideration currently to 'what kind of deck does it
+seem to be' and 'does a deck like this typically have such cards (if not, target those for swap
+suggestions first)' or 'are there cards that decks like this typically have that this deck is
+missing?' … For example 'this deck has no removal - that seems bad for this type of deck'." There was
+none of it. This is it, built on §3.135's role classifier.
+
+**Every number comes from real decklists.** Nothing here carries a hand-written table of what a good
+deck looks like — that would be one person's opinion wearing the costume of a measurement.
+`referenceProfile` computes the median cards-per-job across ACTUAL decks (the bundled field), so adding
+a deck to the gauntlet updates the norm by itself.
+
+⚠️ **And the sample size travels with the answer.** The repo's field is Aggro ×3, Midrange ×4,
+Control ×1, Tempo ×1, so a same-family comparison is sometimes a comparison against ONE deck.
+`MIN_COHORT` is the honesty gate: below it the profile falls back to the whole field, sets its family
+back to `'unknown'`, and the Lab says "compared with all 9 decks in the field" rather than passing n=1
+off as a norm. The deck is also excluded from its own reference, or it would pull the median toward
+itself and hide the very gap this exists to find.
+
+**Classification is validated, not asserted.** `detectFamily` reads a deck's shape — counterspells,
+card flow, board presence, curve — and the thresholds were read off the bundled decks rather than
+chosen by taste. `deck-shape.test.ts` pins that shape alone reproduces all NINE decks' own archetype
+tags; if a future deck breaks that, the thresholds are wrong, which is what the test is for. A deck
+that declares a tag is believed rather than guessed at, and an unrecognisable one is `'unknown'`
+instead of being bent to the nearest family.
+
+📊 **The measurement that makes this worth having.** Across the bundled field, seven of nine decks run
+12–16 ANSWER cards (removal + damage + counterspells) and two run **zero** — Mono-Green Ramp and
+Selesnya Blink. That is a robust n=9 signal, far stronger than any four-way label this data supports,
+and it is pinned by a test. So the Lab can now tell you, before a single game: *Selesnya Blink — looks
+like a midrange deck; compared with the 3 midrange decks in the field: no removal cards at all (decks
+like this run about 8), no ramp cards at all (about 4), only 2 threat cards (about 16).*
+
+**It steers the search, not just the reading.** Two new pre-rank weights: `fillsGap` rewards bringing in
+a job the deck lacks, `cutsSurplus` rewards cutting one it has too much of — so "target those for swap
+suggestions first" is what the engine actually does. As with §3.135 this only decides what gets
+SIMULATED first; the sim still decides what wins.
+
+⚠️ One honest coarseness, found while testing: with default weights a vanilla creature ALSO scores a gap
+for Selesnya Blink, because the deck is genuinely thin on threats as well as missing removal. That is
+correct behaviour rather than a bug, and the ordering test isolates the gap term instead of pretending
+otherwise.
+
+📊 20 new pure tests (family detection across all nine decks, the field measurement, cohort fallback,
+self-exclusion, and the Selesnya gap) plus an isolated ordering guard. Suite green; lint 0 errors.
+Verified live in the Lab, with no console errors.
+
 ### 3.136 Scoping the suggestion search — which cards, and how many copies — ✅ done
 
 Asked for: "can the Lab → Suggestions tab be scoped to looking at just specific cards in the deck? And
