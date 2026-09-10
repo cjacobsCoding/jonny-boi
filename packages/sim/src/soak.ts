@@ -128,14 +128,18 @@ export interface SoakReport {
    */
   readonly actionCapHits: number;
   /**
-   * Games that ended as a DRAW by CR 104.4b — one turn ran past
-   * `maxActionsPerTurn`, which only a mandatory loop does.
+   * Games that ended because ONE TURN ran past `maxActionsPerTurn` and was drawn.
    *
-   * Counted, not a violation. Some real card pairs genuinely are mandatory
-   * infinite loops (Dualcaster Mage + Rite of Replication), and the rules end
-   * those games rather than calling them broken. But a loop must stay VISIBLE:
-   * a silent pass is how "the soak is green" would start meaning less than it
-   * does. A sharp rise here is a finding even though no test fails on it.
+   * ⚠️ Each one is also a {@link SOAK_INVARIANTS.gameCanEnd} violation, and this
+   * count is the summary of them. It used to be "counted, not a violation — a
+   * sharp rise here is a finding even though no test fails on it", on the
+   * reasoning that only a MANDATORY loop overruns a turn (Dualcaster Mage + Rite
+   * of Replication) and the rules legitimately draw those.
+   *
+   * That reasoning was wrong in the direction that costs the most: nothing
+   * watched the count, and a pilot that will not stop overruns a turn exactly the
+   * same way. Reverting §3.33 makes seed 1390617766 resolve 661 spell copies in
+   * one game — a loop draw, zero violations, green. See DESIGN §3.139.
    */
   readonly loopDraws: number;
   readonly wins: Readonly<Record<PlayerId, number>>;
@@ -948,6 +952,30 @@ function playOne(
     push(
       SOAK_INVARIANTS.gameCanEnd,
       `the game burned the ${sim.maxActionsPerGame}-action cap without ending (turn ${result.turns})`,
+      result.turns,
+    );
+  }
+  // ⚠️ THE OTHER DOOR OUT OF A RUNAWAY, and it is the one every runaway now takes.
+  //
+  // The per-turn bound (2,000) is a THIRD of the game-wide cap (6,000), so a game
+  // that cannot end trips it first, is recorded as a CR 104.4b draw and never
+  // reaches the cap the line above watches. That is not a hypothetical: revert
+  // §3.33's copy-chain valuation and seed 1390617766 resolves 661 spell copies in
+  // one game, ends `loop`, and this whole function reported nothing. See §3.139.
+  //
+  // Reported rather than adjudicated, because the engine CANNOT tell the two
+  // apart from here. CR 104.4b draws a MANDATORY loop; a pilot re-aiming a copy
+  // 661 times is not in one, it simply will not stop. `{kind:'loop'}` is inferred
+  // from an action counter and means only "this turn overran" — so the soak says
+  // what it saw and leaves the ruling to whoever reads the row. A genuine
+  // mandatory loop (Dualcaster Mage + Rite of Replication) becomes a pinned row
+  // that says so, exactly like every other soak finding.
+  if (result.outcome.kind === 'loop') {
+    push(
+      SOAK_INVARIANTS.gameCanEnd,
+      `one turn ran past the ${sim.maxActionsPerTurn}-action turn bound and the game was drawn ` +
+        `(turn ${result.turns}, ${result.actions} actions). Either a MANDATORY loop (CR 104.4b — ` +
+        `legal, pin the row and say which cards) or a pilot that will not stop (a bug).`,
       result.turns,
     );
   }

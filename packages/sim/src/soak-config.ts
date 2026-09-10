@@ -1035,7 +1035,20 @@ export const SOAK_INVARIANTS = {
   legalActionsOnly: 'every action a pilot submits came from generateLegalActions',
   noRejectedActions: 'the engine never rejects an action it offered',
   noUnsupportedEffect: 'no pool card resolves an effect the registry cannot provide',
-  gameCanEnd: 'a game never reaches the action cap',
+  /*
+   * ⚠️ "NEVER REACHES THE ACTION CAP" WAS NOT THE SAME QUESTION, and the gap
+   * between the two silently switched this invariant off (DESIGN §3.139).
+   *
+   * The game-wide cap is 6,000 actions; the per-TURN bound CR 104.4b's draw hangs
+   * off is 2,000. A runaway therefore trips the per-turn bound FIRST, is recorded
+   * as a rules-legal `loop` draw, and never touches the cap — so the check that
+   * exists to catch "this game cannot end" reported green for exactly that.
+   * Measured: with §3.33's copy-chain valuation reverted, seed 1390617766
+   * resolves 661 spell copies in ONE game and every soak assertion stays green.
+   *
+   * So the invariant is about how a game ENDED, not about which counter it hit.
+   */
+  gameCanEnd: 'a game ends on the board, never on a runaway bound',
   stackEmpties: 'the stack empties before the turn ends',
   stackDepth: 'the stack never runs away',
   uniqueZones: 'an instance is in exactly one zone',
