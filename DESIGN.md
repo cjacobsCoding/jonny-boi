@@ -2955,6 +2955,7 @@ tables, and every entry names cards from BOTH decks; (2) the mandatory-loop row 
 whatever matched its criterion, so INVERTING the chosen/auto-answered discriminator simply found a
 different seed that satisfied the inverted reading — it now rules on the first seed that runs away and
 goes red if that game's recorded ruling no longer holds.
+
 ### 3.139 Trigger BODIES — rescuing a stranded branch, and the sentence after the comma — ✅ done
 
 A branch built three weeks ago (`feat/trigger-body-templates`, tip `b1ea6c2`) was killed by a usage
