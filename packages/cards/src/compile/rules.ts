@@ -3701,6 +3701,36 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'each-player-sacrifices',
+    description:
+      '"Each player sacrifices a [nontoken] creature of their choice" (Fleshbag Marauder, Merciless Executioner, Accursed Marauder)',
+    // Ordered BEFORE `each-opponent-sacrifices` only for readability — the two
+    // patterns are disjoint ("each player" vs "each opponent"/"each other
+    // player"). They are separate entries because they are separate CARDS: this
+    // one hits its own controller too, and compiling it as the opponent-only
+    // form would print a strictly better card.
+    //
+    // "Of their choice" is the printed reminder that the VICTIM picks, which is
+    // what `sacrificeChosen` does by construction; it is optional in the pattern
+    // because older printings omit it.
+    pattern:
+      /^each player sacrifices an? (nontoken )?(creature|land|artifact|permanent)(?: of their choice)?$/,
+    build(match) {
+      const kind = match[2]!;
+      const filter: Record<string, unknown> = {};
+      if (kind !== 'permanent') filter.anyOfTypes = [kind as CardType];
+      // "Nontoken" is a printed narrowing with an exact `CardFilter` field, so it
+      // is expressible rather than reported: a token creature does not qualify.
+      if (match[1]) filter.isToken = false;
+      return effects({
+        primitive: 'sacrificeChosen',
+        // Same spelling of the word as `discardCard`'s branch — one vocabulary
+        // for "both seats answer this" across the choice primitives.
+        params: { who: 'eachPlayer', ...(Object.keys(filter).length > 0 ? { filter } : {}) },
+      });
+    },
+  },
+  {
     id: 'each-opponent-sacrifices',
     description:
       '"Each opponent sacrifices a creature of their choice" (Dictate of Erebos; Grave Pact prints "each other player")',
