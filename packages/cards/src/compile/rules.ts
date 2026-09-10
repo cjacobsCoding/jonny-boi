@@ -353,6 +353,25 @@ const DERIVED_COUNTS: Readonly<Record<string, string>> = Object.freeze({
   'creature cards in your graveyard': 'creaturesInYourGraveyard',
 });
 
+/**
+ * The printed subject **"you "**, made optional.
+ *
+ * Every "you may …" wrapper in this file — `mayEffectsFrom`, the inline
+ * `optional` branches, `optionalTriggerFrom` — hands the effect table what is
+ * left after the words "you may " are removed. Oracle text writes the life
+ * clauses with an explicit subject ("You gain 1 life"), so Soul's Attendant's
+ * "you may gain 1 life" arrives here as the bare "gain 1 life" and a pattern
+ * anchored on "^you " refuses a card whose only unread word is one the wrapper
+ * itself removed.
+ *
+ * ONE fragment rather than a `(?:you )?` typed into each rule, so the set of
+ * clauses that accept a dropped subject is a single readable list. It is spent
+ * ONLY on clauses whose printed subject is literally "you" — an imperative like
+ * "Draw a card" prints no subject to drop, and widening it would accept text no
+ * card prints.
+ */
+const OPTIONAL_YOU = '(?:you )?';
+
 /** The alternation of the phrases above, longest-first so none is truncated. */
 const DERIVED_PHRASE = `(${Object.keys(DERIVED_COUNTS)
   .sort((a, b) => b.length - a.length)
@@ -1793,8 +1812,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'gain-life-equal-to-count',
-    description: '"You gain life equal to the number of X"',
-    pattern: new RegExp(`^you gain life equal to the number of ${DERIVED_PHRASE}$`),
+    description: '"[You] gain life equal to the number of X"',
+    pattern: new RegExp(`^${OPTIONAL_YOU}gain life equal to the number of ${DERIVED_PHRASE}$`),
     build(match) {
       const amount = derivedValue(match[1]!);
       if (!amount) return null;
@@ -1816,8 +1835,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'x-draw',
-    description: '"Draw X cards" — X is the value chosen at cast time (Mind Spring)',
-    pattern: /^(?:you )?draw x cards$/,
+    description: '"[You] draw X cards" — X is the value chosen at cast time (Mind Spring)',
+    pattern: new RegExp(`^${OPTIONAL_YOU}draw x cards$`),
     build(_match, ctx) {
       if (!cardHasXCost(ctx)) return null;
       return effects({ primitive: 'drawCards', params: { count: CHOSEN_X_PARAM } });
@@ -1825,8 +1844,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'x-gain-life',
-    description: '"You gain X life" — X is the value chosen at cast time',
-    pattern: /^you gain x life$/,
+    description: '"[You] gain X life" — X is the value chosen at cast time',
+    pattern: new RegExp(`^${OPTIONAL_YOU}gain x life$`),
     build(_match, ctx) {
       if (!cardHasXCost(ctx)) return null;
       return effects({ primitive: 'gainLife', params: { amount: CHOSEN_X_PARAM } });
@@ -1990,8 +2009,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'gain-life',
-    description: '"You gain N life"',
-    pattern: new RegExp(`^you gain ${COUNT_TOKEN} life$`),
+    description: '"[You] gain N life" (Soul Warden prints the subject; Soul\'s Attendant\'s "you may gain 1 life" reaches here without it)',
+    pattern: new RegExp(`^${OPTIONAL_YOU}gain ${COUNT_TOKEN} life$`),
     build(match) {
       const amount = parseCount(match[1]);
       return amount === null ? null : effects({ primitive: 'gainLife', params: { amount } });
@@ -1999,8 +2018,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'you-lose-life',
-    description: '"You lose N life"',
-    pattern: new RegExp(`^you lose ${COUNT_TOKEN} life$`),
+    description: '"[You] lose N life"',
+    pattern: new RegExp(`^${OPTIONAL_YOU}lose ${COUNT_TOKEN} life$`),
     build(match) {
       const amount = parseCount(match[1]);
       return amount === null ? null : effects({ primitive: 'loseLife', params: { amount } });
@@ -5282,6 +5301,21 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'trigger-dies-you-may',
+    description: '"When ~ dies, you may BODY" (Solemn Simulacrum, Pilgrim\'s Eye)',
+    // Ordered AFTER `trigger-dies`, for the reason spelled out on
+    // `trigger-etb-you-may`: a body that implements its own option plays better
+    // on the rule that knows about it, and this is the general fallback. The
+    // plain rule above is tried first and returns null when the whole
+    // "you may …" string compiles to nothing, which is what lets this one see
+    // the card at all.
+    pattern: /^when ~ dies, you may (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return optionalTriggerFrom(ctx, { on: 'dies' }, body, `Dies: you may ${body}`);
+    },
+  },
+  {
     id: 'trigger-leaves',
     description: '"When ~ leaves the battlefield, BODY"',
     // Core has had the `leaves` trigger event all along; only this pattern was
@@ -5533,6 +5567,38 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'trigger-cast-spell-you-may',
+    description:
+      '"Whenever you cast a(n) TYPE spell, you may BODY" (Mesa Enchantress, Verduran Enchantress)',
+    // Ordered AFTER `trigger-cast-spell`, the same way every other optional
+    // sibling in this table is.
+    //
+    // It cannot use `optionalTriggerFrom`, which builds ONE trigger: a printed
+    // type word can mean SEVERAL engine filters (`spellFiltersFor` returns a
+    // list), and each of those conditions gets its OWN `mayEffects` wrapper. A
+    // card whose filter expands to two conditions therefore asks exactly once
+    // per occurrence rather than once for the card.
+    pattern: /^whenever you cast an? ([a-z ]+?) spell, you may (.+)$/,
+    build(match, ctx) {
+      const conditions = spellFiltersFor(match[1] ?? '');
+      if (!conditions) return null;
+      const body = match[2] ?? '';
+      const compiled = ctx.compileTriggerBody(body);
+      if (compiled === null) return null;
+      const effectRefs = mayEffectsFrom(body, compiled.effects);
+      if (effectRefs === null || effectRefs.length === 0) return null;
+      return {
+        triggers: conditions.map((condition) => ({
+          condition,
+          effects: effectRefs,
+          label: `Cast ${describeSpellFilter(condition)}: you may ${body}`,
+          ...(compiled.targets ? { targets: compiled.targets } : {}),
+          ...(compiled.targetCount ? { targetCount: compiled.targetCount } : {}),
+        })),
+      };
+    },
+  },
+  {
     id: 'trigger-draws-card',
     description: '"Whenever you / a player / an opponent draws a card, BODY"',
     // The draw WATCHER, not the draw step. It fires on every draw — the turn's
@@ -5553,6 +5619,24 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
         { on: 'drawsCard', who },
         match[2] ?? '',
         `${printed} draws: ${match[2] ?? ''}`,
+      );
+    },
+  },
+  {
+    id: 'trigger-draws-card-you-may',
+    description:
+      '"Whenever you / a player / an opponent draws a card, you may BODY" (Consecrated Sphinx)',
+    // Ordered AFTER `trigger-draws-card`, like every other optional sibling.
+    pattern: /^whenever (you|a player|an opponent) draws a card, you may (.+)$/,
+    build(match, ctx) {
+      const printed = match[1] ?? '';
+      const who: TriggerWho = printed === 'you' ? 'you' : printed === 'an opponent' ? 'opponent' : 'any';
+      const body = match[2] ?? '';
+      return optionalTriggerFrom(
+        ctx,
+        { on: 'drawsCard', who },
+        body,
+        `${printed} draws: you may ${body}`,
       );
     },
   },
