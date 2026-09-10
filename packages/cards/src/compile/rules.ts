@@ -9887,19 +9887,27 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   },
   {
     // The printed word "you may" IS implemented now, as the `mayEffects`
-    // wrapper: "When ~ enters, you may BODY" and "At the beginning of your
-    // <step>, you may BODY" compile to a real yes/no whose no is a complete
-    // outcome — and so is "As ~ enters, choose a creature type / a color / a
+    // wrapper, and so is "As ~ enters, choose a creature type / a color / a
     // player / a basic land type", which compiles to a naming REMEMBERED on the
     // permanent. So this hint no longer claims either system is missing; that
-    // would send the next agent to rebuild something that exists. What still
-    // lands here is a TEMPLATE: an optional clause whose BODY has no rule (a
-    // blink, a copy, a sacrifice-then-if-you-do chain), a naming this engine
-    // could store but no printed line can yet read ("choose a number between 1
-    // and 10"), a "choose" that is neither a yes/no nor a naming, or an
-    // ADDITIONAL COST offering a CHOICE of payments ("discard a card or pay 3
-    // life") — the mandatory single-payment forms compile (see the sacrifice
-    // hint below).
+    // would send the next agent to rebuild something that exists.
+    //
+    // ⚠️ THE WRAPPER IS MISSING ON NO TRIGGER FAMILY. It ships as a sibling rule
+    // ordered after each plain form (so a body implementing its OWN option still
+    // wins) for: enters, DIES, leaves-scoped equipment/aura hosts, attacks,
+    // combat damage to a player, CAST-A-SPELL, DRAWS-A-CARD, the board-watching
+    // arrival/death trigger and every "at the beginning of…" step. A clause
+    // reaching this hint with "you may" in it is one whose INNER BODY has no
+    // rule — a different piece of work from the wrapper, and it must not be
+    // reported as one.
+    //
+    // What still lands here is therefore a TEMPLATE: an optional clause whose
+    // BODY has no rule (a blink, a copy, a sacrifice-then-if-you-do chain), a
+    // naming this engine could store but no printed line can yet read ("choose a
+    // number between 1 and 10"), a "choose" that is neither a yes/no nor a
+    // naming, or an ADDITIONAL COST offering a CHOICE of payments ("discard a
+    // card or pay 3 life") — the mandatory single-payment forms compile (see the
+    // sacrifice hint below).
     pattern: /\byou may\b|\bchoose\b|\bchooses\b|discards? a card|\bdiscards\b/,
     missingEngineSystem: 'a "you may / choose" template the compiler does not recognize yet',
   },
@@ -10311,11 +10319,22 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // stack object into the resolution so a body can say "that player".
     //
     // What lands here is therefore a BODY with no rule — not a trigger the
-    // engine cannot express. Named so nobody re-builds finished work, the bodies
-    // still missing in the corpus are: "you win/lose the game", blink (exile
-    // then return), token COPIES of a permanent, the city's blessing/ascend,
-    // amass, discover, the Ring, a delayed "at the beginning of your NEXT
-    // upkeep", and any count derived from a revealed card's mana value.
+    // engine cannot express. A further round of BODIES has since shipped and is
+    // named here for the same reason: the triggering-player edict ("that player
+    // sacrifices a [nontoken] NOUN of their choice"), its each-player sibling,
+    // the causative life loss ("have that player lose N life"), and a "FOR EACH
+    // <counted thing>" count behind "gain 1 life" / "draw a card".
+    //
+    // Named so nobody re-builds finished work, the bodies STILL missing in the
+    // corpus are: "you win/lose the game" behind an intervening "if" this table
+    // cannot express ("if you have 40 or more life", "if you have exactly
+    // thirteen cards in your hand" — the BODY compiles; the CONDITION is the
+    // gap), blink (exile then return), token COPIES of a permanent, the city's
+    // blessing/ascend, amass, discover, the Ring, a delayed "at the beginning of
+    // your NEXT upkeep", any count derived from a revealed card's mana value,
+    // and a "for each" count with a MULTIPLIER above one (a `DerivedValue`
+    // carries a count with no scale factor, so "gain 2 life for each …" has no
+    // honest encoding and is refused rather than halved).
     pattern: /^at the beginning of /,
     missingEngineSystem:
       'an "at the beginning of…" trigger BODY the compiler does not recognize yet (the trigger itself — every printed scope, the "you may" form, the intervening "if", and the triggering player a body points at — is implemented)',
