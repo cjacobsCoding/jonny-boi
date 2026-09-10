@@ -910,6 +910,14 @@ function loadSoakDeck(deck: SoakDeck, pool: CardPool): LoadedDeck {
 function describeWhoChose(counts: ReadonlyMap<GameEvent['type'], number>): string {
   const chosen = counts.get(SOAK_RUNAWAY_CHOSEN_EVENT) ?? 0;
   const forced = counts.get(SOAK_RUNAWAY_FORCED_EVENT) ?? 0;
+  // ⚠️ SAY "THIS TELLS YOU NOTHING" WHEN IT TELLS YOU NOTHING. A loop can be made
+  // of plain ACTIONS rather than questions — all eight Bog Initiate runaways read
+  // 0 and 0, because activating a mana ability 667 times asks nobody anything —
+  // and printing "0 answered, 0 auto-answered, CR 104.4b is compulsory" next to
+  // that would dress an absent measurement up as a verdict.
+  if (chosen === 0 && forced === 0) {
+    return 'The loop asked nobody anything: it is made of plain actions, so this split cannot rule it.';
+  }
   return (
     `Of the game's questions ${chosen} were ANSWERED by a player and ${forced} had a single legal ` +
     `option (auto-answered) — CR 104.4b's draw is compulsory at every step.`
@@ -1618,8 +1626,8 @@ export function formatSoakReport(report: SoakReport): string {
     lines.push(
       `  ↻ ${report.loopDraws} game(s) ended on the TURN bound, not on the board — each is a ` +
         `"${SOAK_INVARIANTS.gameCanEnd}" violation below, with the traffic that produced it. ` +
-        `Rule on each: a MANDATORY loop (CR 104.4b) is legal and belongs in soak.test.ts's pinned ` +
-        `table; a pilot that will not stop is a bug.`,
+        `Rule on each: a MANDATORY loop (CR 104.4b) is legal and belongs in loop-runaway.test.ts's ` +
+        `ruled table; a pilot that will not stop is a bug.`,
     );
   }
   const fired = [...report.mechanicGames.entries()].sort((a, b) => b[1] - a[1]);

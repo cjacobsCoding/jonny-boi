@@ -204,6 +204,12 @@ export const SOAK_RUNAWAY_NOISE_EVENTS: ReadonlySet<GameEvent['type']> = new Set
  * Reported on every runaway row rather than left to the traffic list, which
  * ranks by volume and would have dropped `choiceAutoAnswered` off the end of the
  * Dualcaster row at rank five — the one line that made it ruleable.
+ *
+ * ⚠️ It rules only a loop made of QUESTIONS. All eight Bog Initiate runaways the
+ * deep tier found read 0 and 0, because activating a mana ability 667 times asks
+ * nobody anything — so the report says the split cannot rule that row rather
+ * than printing two zeroes beside a rule of thumb, and the reader falls back to
+ * the traffic (`abilityActivated ×667`).
  */
 export const SOAK_RUNAWAY_CHOSEN_EVENT = 'choiceAnswered' satisfies GameEvent['type'];
 
