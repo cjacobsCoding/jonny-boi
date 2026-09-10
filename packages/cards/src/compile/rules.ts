@@ -1440,6 +1440,37 @@ function effects(...refs: EffectRef[]): ClauseContribution {
 }
 
 /**
+ * The nouns an edict may name — "target player sacrifices a **creature**".
+ *
+ * ONE alternation read by all four "… sacrifices a NOUN" rules (target player,
+ * each opponent, each player, that player) and by the sacrifice half of
+ * `may-cost-then-effect`, so a noun added for one of them is understood by all
+ * of them in the same edit. Four copies of the list is how they end up
+ * disagreeing about what an edict may take.
+ */
+const SACRIFICE_NOUNS = 'creature|land|artifact|permanent';
+
+/**
+ * The `filter` param a printed sacrifice noun means — the one answer every
+ * edict rule reads.
+ *
+ * Returns the params to SPREAD rather than a bare filter, because "a permanent"
+ * is every type and its rule must emit no `filter` key at all: an empty filter
+ * object would be a second way to spell "everything" sitting in the compiled
+ * card.
+ *
+ * "Nontoken" (Accursed Marauder) is a printed narrowing with an exact
+ * `CardFilter` field, so it is expressible rather than reported — a token
+ * creature does not qualify.
+ */
+function sacrificeNounFilter(noun: string, nontoken: boolean): { filter?: CardFilter } {
+  const filter: Record<string, unknown> = {};
+  if (noun !== 'permanent') filter.anyOfTypes = [noun as CardType];
+  if (nontoken) filter.isToken = false;
+  return Object.keys(filter).length > 0 ? { filter: filter as CardFilter } : {};
+}
+
+/**
  * The param value meaning "the X chosen (and paid for) at cast time" — the
  * shape `intParam` in `../effect-helpers.ts` resolves from
  * `EffectContext.xValue`. Mirrored here as data rather than imported so the
@@ -2020,8 +2051,14 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'that-player-loses-life',
-    description: '"That player loses N life" — a trigger body aimed at the TRIGGERING player',
-    pattern: new RegExp(`^that player loses ${COUNT_TOKEN} life$`),
+    description:
+      '"That player loses N life" / "have that player lose N life" (Suture Priest, Blood Seeker) — a trigger body aimed at the TRIGGERING player',
+    // TWO printed spellings of ONE clause, so ONE rule. The causative "have that
+    // player lose 1 life" is what a card prints when the sentence needs a verb
+    // the controller performs (it is always printed under a "you may"); the loss
+    // it causes is the same loss, aimed at the same seat. A second rule would be
+    // a second answer to the question of what "that player" means.
+    pattern: new RegExp(`^(?:that player loses|have that player lose) ${COUNT_TOKEN} life$`),
     build(match) {
       const amount = parseCount(match[1]);
       return amount === null
@@ -3726,18 +3763,17 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // check would let "you may sacrifice a land" grant the payoff on an empty
     // board. The payoff must itself compile, target-free — it runs inside the
     // resolution with no aiming step of its own.
-    pattern: /^you may (sacrifice an? (?:creature|land|artifact|permanent)|discard a card)\. if you do, (.+)$/,
+    pattern: new RegExp(
+      `^you may (sacrifice an? (?:${SACRIFICE_NOUNS})|discard a card)\\. if you do, (.+)$`,
+    ),
     build(match, ctx) {
       const costText = match[1]!;
-      const sacrifice = costText.match(/^sacrifice an? (creature|land|artifact|permanent)$/);
+      const sacrifice = new RegExp(`^sacrifice an? (${SACRIFICE_NOUNS})$`).exec(costText);
       const cost =
         sacrifice !== null
           ? {
               primitive: 'sacrificeChosen',
-              params: {
-                who: 'controller',
-                ...(sacrifice[1] === 'permanent' ? {} : { filter: { anyOfTypes: [sacrifice[1] as CardType] } }),
-              },
+              params: { who: 'controller', ...sacrificeNounFilter(sacrifice[1]!, false) },
             }
           : { primitive: 'discardCard', params: { who: 'controller' } };
       const payoff = ctx.compileEffectClause(match[2]!, { targetFree: true });
@@ -3755,21 +3791,38 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'target-player-sacrifices',
     description: '"Target player sacrifices a creature" (the edict template; Liliana\'s −2)',
-    pattern: /^target (player|opponent) sacrifices an? (creature|land|artifact|permanent)$/,
+    pattern: new RegExp(`^target (player|opponent) sacrifices an? (${SACRIFICE_NOUNS})$`),
     needsChosenTarget: true,
     build(match) {
       const restriction = match[1] === 'opponent' ? OPPONENT_TARGET : PLAYER_TARGET;
-      const kind = match[2]!;
       // "a permanent" is any type; the rest narrow by card type. The VICTIM
       // chooses which — that is the whole card (see `sacrificeChosen`).
-      const filter = kind === 'permanent' ? undefined : { anyOfTypes: [kind as CardType] };
       return effects({
         primitive: 'sacrificeChosen',
         params: {
           targets: restriction,
           who: 'targetPlayer',
-          ...(filter ? { filter } : {}),
+          ...sacrificeNounFilter(match[2]!, false),
         },
+      });
+    },
+  },
+  {
+    id: 'that-player-sacrifices',
+    description:
+      '"That player sacrifices a [nontoken] NOUN of their choice" (Sheoldred, Whispering One) — an edict aimed at the TRIGGERING player',
+    // The triggering-player sibling of `each-player-sacrifices` below, reading
+    // the same `triggering` vocabulary `that-player-loses-life` reads: "at the
+    // beginning of EACH OPPONENT'S upkeep" resolves under its source's
+    // controller on both turns, so a body that read `ctx.controller` would make
+    // Sheoldred sacrifice her own creatures.
+    pattern: new RegExp(
+      `^that player sacrifices an? (nontoken )?(${SACRIFICE_NOUNS})(?: of their choice)?$`,
+    ),
+    build(match) {
+      return effects({
+        primitive: 'sacrificeChosen',
+        params: { who: 'triggering', ...sacrificeNounFilter(match[2]!, match[1] !== undefined) },
       });
     },
   },
@@ -3786,20 +3839,15 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // "Of their choice" is the printed reminder that the VICTIM picks, which is
     // what `sacrificeChosen` does by construction; it is optional in the pattern
     // because older printings omit it.
-    pattern:
-      /^each player sacrifices an? (nontoken )?(creature|land|artifact|permanent)(?: of their choice)?$/,
+    pattern: new RegExp(
+      `^each player sacrifices an? (nontoken )?(${SACRIFICE_NOUNS})(?: of their choice)?$`,
+    ),
     build(match) {
-      const kind = match[2]!;
-      const filter: Record<string, unknown> = {};
-      if (kind !== 'permanent') filter.anyOfTypes = [kind as CardType];
-      // "Nontoken" is a printed narrowing with an exact `CardFilter` field, so it
-      // is expressible rather than reported: a token creature does not qualify.
-      if (match[1]) filter.isToken = false;
       return effects({
         primitive: 'sacrificeChosen',
         // Same spelling of the word as `discardCard`'s branch — one vocabulary
         // for "both seats answer this" across the choice primitives.
-        params: { who: 'eachPlayer', ...(Object.keys(filter).length > 0 ? { filter } : {}) },
+        params: { who: 'eachPlayer', ...sacrificeNounFilter(match[2]!, match[1] !== undefined) },
       });
     },
   },
@@ -3814,14 +3862,13 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // here: this engine seats exactly two players, so the printed plural has
     // exactly one referent. Both wordings are accepted for that reason, and for
     // no broader one.
-    pattern:
-      /^each (?:opponent|other player) sacrifices an? (creature|land|artifact|permanent)(?: of their choice)?$/,
+    pattern: new RegExp(
+      `^each (?:opponent|other player) sacrifices an? (nontoken )?(${SACRIFICE_NOUNS})(?: of their choice)?$`,
+    ),
     build(match) {
-      const kind = match[1]!;
-      const filter = kind === 'permanent' ? undefined : { anyOfTypes: [kind as CardType] };
       return effects({
         primitive: 'sacrificeChosen',
-        params: { who: 'opponent', ...(filter ? { filter } : {}) },
+        params: { who: 'opponent', ...sacrificeNounFilter(match[2]!, match[1] !== undefined) },
       });
     },
   },
