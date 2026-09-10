@@ -383,6 +383,47 @@ function derivedValue(phrase: string): { countOf: string } | null {
   return countOf ? { countOf } : null;
 }
 
+/**
+ * The SINGULAR half of the same vocabulary — the phrase a card prints after
+ * "**for each**". "You gain 1 life for each *card in your hand*" counts exactly
+ * the set "the number of *cards in your hand*" counts.
+ *
+ * A row is the singular spelling and the PLURAL ROW IT MEANS, never a second
+ * copy of the count: the answer still has exactly one definition
+ * ({@link DERIVED_COUNTS}), so the two spellings cannot drift into different
+ * numbers, and `derived-count-vocabulary.test.ts` fails the build if a row here
+ * ever names a plural row that does not exist.
+ *
+ * A table and not a de-pluralising regex, for the reason every table in this
+ * file is closed: "creature card in your graveyard" de-pluralises cleanly and
+ * "card types among cards in all graveyards" does not, and a rule that
+ * half-understands a count makes a card quietly stronger or weaker than printed.
+ * The resolution-facing counts (`timesThisWasKicked`, `triggeringAmount`) are
+ * absent because they print their own "for each" wording, already handled where
+ * multikicker is.
+ */
+const DERIVED_EACH_TO_PLURAL: Readonly<Record<string, string>> = Object.freeze({
+  'creature you control': 'creatures you control',
+  'creature your opponents control': 'creatures your opponents control',
+  'creature your opponent controls': 'creatures your opponent controls',
+  'creature on the battlefield': 'creatures on the battlefield',
+  'land you control': 'lands you control',
+  'card in your hand': 'cards in your hand',
+  'card in your graveyard': 'cards in your graveyard',
+  'creature card in your graveyard': 'creature cards in your graveyard',
+});
+
+/** The alternation of the "for each" phrases, longest-first. */
+const DERIVED_EACH_PHRASE = `(${Object.keys(DERIVED_EACH_TO_PLURAL)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/** The derived descriptor a printed "for each …" phrase means, or null. */
+function derivedEachValue(phrase: string): { countOf: string } | null {
+  const plural = DERIVED_EACH_TO_PLURAL[phrase.trim().toLowerCase()];
+  return plural === undefined ? null : derivedValue(plural);
+}
+
 /** Persist returns the creature with this many -1/-1 counters (the printed value). */
 const PERSIST_MINUS_COUNTERS = 1;
 
@@ -1806,6 +1847,38 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: new RegExp(`^draw cards equal to the number of ${DERIVED_PHRASE}$`),
     build(match) {
       const count = derivedValue(match[1]!);
+      if (!count) return null;
+      return effects({ primitive: 'drawCards', params: { count } });
+    },
+  },
+  {
+    id: 'gain-life-for-each',
+    description: '"[You] gain 1 life for each X" (Venser\'s Journal, Angelic Accord\'s cousins)',
+    // The "for each" spelling of `gain-life-equal-to-count` one rule down, and
+    // it compiles to the IDENTICAL descriptor — one derived count, read by
+    // `intParam`.
+    //
+    // ⚠️ ONLY the multiplier of ONE compiles. "Gain 2 life for each creature you
+    // control" is `2 × count`, and a `DerivedValue` carries a count with no
+    // scale factor — so there is no honest way to emit it and the card reports
+    // instead. Emitting the bare count would print a card that gains HALF the
+    // life it says, which is the class of infidelity nothing would ever notice.
+    pattern: new RegExp(`^${OPTIONAL_YOU}gain ${COUNT_TOKEN} life for each ${DERIVED_EACH_PHRASE}$`),
+    build(match) {
+      if (parseCount(match[1]) !== 1) return null;
+      const amount = derivedEachValue(match[2] ?? '');
+      if (!amount) return null;
+      return effects({ primitive: 'gainLife', params: { amount } });
+    },
+  },
+  {
+    id: 'draw-for-each',
+    description: '"Draw a card for each X" (Shamanic Revelation\'s cousins)',
+    // Same shape, same restriction as `gain-life-for-each`: one card PER thing
+    // counted, never two — a `DerivedValue` has no multiplier to carry.
+    pattern: new RegExp(`^${OPTIONAL_YOU}draw a card for each ${DERIVED_EACH_PHRASE}$`),
+    build(match) {
+      const count = derivedEachValue(match[1] ?? '');
       if (!count) return null;
       return effects({ primitive: 'drawCards', params: { count } });
     },
