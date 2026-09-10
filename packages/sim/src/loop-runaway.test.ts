@@ -28,9 +28,10 @@ import { describe, expect, it } from 'vitest';
 import { createDefaultAiRegistry, DEFAULT_PILOT_ID, type Pilot } from '@jonny-boi/ai';
 import { buildRegistry, loadCardPool } from '@jonny-boi/cards';
 import type { GameAction, InstanceId } from '@jonny-boi/core';
-import { SOAK_INVARIANTS } from './soak-config.js';
-import { PINNED_MATCHUPS } from './soak-pinned-decks.js';
-import { formatViolations, replaySoakMixedGame } from './soak.js';
+import type { SoakDeck } from './soak-decks.js';
+import { SOAK_BASE_SEED, SOAK_INVARIANTS } from './soak-config.js';
+import { PINNED_IDENTITIES, PINNED_MATCHUPS } from './soak-pinned-decks.js';
+import { formatViolations, replaySoakMixedGame, runawayGames, runSoak, soakSimConfig } from './soak.js';
 
 const pool = loadCardPool({ onWarn: () => {} });
 const registry = buildRegistry();
@@ -106,37 +107,34 @@ const RUNAWAYS: ReadonlyArray<{
   readonly onPlay: 'A' | 'B';
   readonly ruling: 'pilot-will-not-stop' | 'mandatory-loop';
   readonly what: string;
-  /** Cards without which this seed is not the game that found the bug. */
-  readonly mustContain: readonly string[];
 }> = [
   {
     seed: 1390617766,
     onPlay: 'A',
     ruling: 'pilot-will-not-stop',
     what: 'the Twincast mirror — a copy re-aimed at the Twincast that made it, forever',
-    mustContain: ['Twincast', 'Dream Twist'],
   },
   {
     seed: 3434778477,
     onPlay: 'B',
     ruling: 'pilot-will-not-stop',
     what: 'the same mirror on Reverberate, seat B',
-    mustContain: ['Reverberate'],
   },
   {
     seed: 113343071,
     onPlay: 'A',
     ruling: 'pilot-will-not-stop',
     what: "the same mirror with Reverberate + Narset's Reversal, seat A",
-    mustContain: ['Reverberate', "Narset's Reversal"],
   },
 ];
 
 describe('a turn that overran is a game that could not END', () => {
-  for (const { seed, onPlay, ruling, what, mustContain } of RUNAWAYS) {
+  for (const { seed, onPlay, ruling, what } of RUNAWAYS) {
     it(`seed ${seed} (${ruling}): ${what}`, () => {
       const pinnedDecks = PINNED_MATCHUPS[seed];
+      const mustContain = PINNED_IDENTITIES[seed];
       expect(pinnedDecks, `seed ${seed} has no recorded decklist`).toBeDefined();
+      expect(mustContain, `seed ${seed} has no recorded identity`).toBeDefined();
       const { violations, decks } = replaySoakMixedGame({
         pool,
         registry,
@@ -153,7 +151,7 @@ describe('a turn that overran is a game that could not END', () => {
        * flipped one bit of the opponent-deck seed and the pinned test stayed
        * green, happily replaying a different match and finding nothing in it.
        */
-      for (const card of mustContain) {
+      for (const card of mustContain!) {
         expect(decks, `seed ${seed} no longer deals ${card} — this row is replaying a DIFFERENT game\n${decks}\n`).toContain(
           card,
         );
@@ -179,4 +177,161 @@ describe('a turn that overran is a game that could not END', () => {
       );
     }, 120000);
   }
+});
+
+/**
+ * THE SUMMARY AND THE VIOLATION LIST ARE ONE FACT — and this is where they are
+ * made to agree.
+ *
+ * `SoakReport.loopDraws` counts the games; `runawayGames` lists them. Two
+ * renderings of one question is exactly how the original blindness lasted: the
+ * count existed the whole time, said "8", and no assertion read it. A run where
+ * the two disagree is a bug in the report, and the tiers assert on both.
+ *
+ * The bound is dropped to one action so EVERY game overruns, which is the only
+ * way to make the funnel fire without waiting for a real loop to be dealt. What
+ * is pinned is the plumbing, deliberately: `loop-draw.test.ts` owns "an
+ * overrunning turn is a draw, not a timeout", the rows above own "a real runaway
+ * is caught", and this owns "and the report says so in both places".
+ */
+describe('the report counts a runaway exactly once, in both places', () => {
+  it('every loop draw is a gameCanEnd violation and vice versa', () => {
+    const report = runSoak({
+      pool,
+      registry,
+      pilot: heuristic,
+      mixedGames: 4,
+      // One attempt per mechanic: with a one-action bound no mechanic can ever
+      // fire, and the default retry budget would re-roll every one of them.
+      anchorAttempts: 1,
+      baseSeed: SOAK_BASE_SEED,
+      sim: { ...soakSimConfig(), maxActionsPerTurn: 1 },
+    });
+    expect(report.loopDraws, 'a one-action turn bound must draw every game').toBeGreaterThan(0);
+    expect(report.actionCapHits, 'the turn bound trips long before the game cap — that is the whole finding').toBe(0);
+    expect(runawayGames(report).length, `the summary and the list disagree\n${formatViolations(report.violations)}`).toBe(
+      report.loopDraws,
+    );
+  }, 300000);
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * AND THE OTHER VERDICT: a loop the RULES draw.
+ * ---------------------------------------------------------------------------
+ */
+
+/** The pair CR 104.4b is written for — put in BY NAME, never hoped for from a seed. */
+const MANDATORY_LOOP_CARDS = ['Dualcaster Mage', 'Rite of Replication'] as const;
+
+/**
+ * Seeds on that board which end `loop`. Several, deliberately.
+ *
+ * ⚠️ Pinning ONE was this repo's recorded mistake: `loop-draw.test.ts`'s header
+ * records that its first version pinned a single seed where the heuristic looped
+ * and "the very next pilot improvement made it WIN that game instead". A whole
+ * board is what is pinned here, and any one of these seeds satisfies the row —
+ * measured at 238 loops in 300 games, so losing all six means the pilot stopped
+ * walking into mandatory loops at all, which is a FINDING to re-rule rather than
+ * a regression to fix.
+ */
+const MANDATORY_LOOP_SEEDS: ReadonlyArray<readonly [number, 'A' | 'B']> = [
+  [635374, 'A'],
+  [7000, 'A'],
+  [111729, 'A'],
+  [111729, 'B'],
+  [216458, 'A'],
+  [7000, 'B'],
+];
+
+/** A legal 60 with the loop's two halves in it, and enough mana to cast them. */
+function mandatoryLoopDeck(): SoakDeck {
+  const idOf = (name: string) => {
+    const card = pool.cards.find((c) => c.name === name);
+    if (!card) throw new Error(`the pool no longer prints '${name}' — re-rule this row`);
+    return card.id;
+  };
+  return {
+    name: 'cr104-4b-mandatory-loop',
+    archetype: 'loop/UR',
+    seed: 0,
+    colors: ['U', 'R'],
+    cards: [
+      { cardId: idOf('Dualcaster Mage'), count: 4 },
+      { cardId: idOf('Rite of Replication'), count: 4 },
+      { cardId: idOf('Twincast'), count: 4 },
+      { cardId: idOf('Island'), count: 32 },
+      { cardId: idOf('Mountain'), count: 16 },
+    ],
+  };
+}
+
+/** `… N were ANSWERED by a player and M had a single legal option …` → [N, M]. */
+function whoChose(detail: string): readonly [number, number] {
+  const m = /questions (\d+) were ANSWERED by a player and (\d+) had a single legal option/.exec(detail);
+  return m ? [Number(m[1]), Number(m[2])] : [0, 0];
+}
+
+describe('a loop the RULES draw is reported too — and is TOLD APART, not swallowed', () => {
+  it('CR 104.4b: Dualcaster Mage + Rite of Replication, compulsory at every step', () => {
+    const deck = mandatoryLoopDeck();
+    let found: { detail: string; decks: string } | null = null;
+    for (const [seed, onPlay] of MANDATORY_LOOP_SEEDS) {
+      const { violations, decks } = replaySoakMixedGame({
+        pool,
+        registry,
+        pilot: heuristic,
+        seed,
+        decks: { A: deck, B: deck },
+        onPlay,
+      });
+      // WHICH GAME, before anything else — the two cards are the position.
+      for (const card of MANDATORY_LOOP_CARDS) {
+        expect(decks, `seed ${seed} is not the CR 104.4b board\n${decks}\n`).toContain(card);
+      }
+      const runaway = violations.find((v) => v.invariant === SOAK_INVARIANTS.gameCanEnd);
+      if (!runaway) continue;
+      const [chosen, forced] = whoChose(runaway.detail);
+      // The RULING, made here by a human and re-checked by the row: this loop is
+      // compulsory. A loop whose steps were mostly ANSWERED is the other verdict
+      // and belongs in `RUNAWAYS` above, not here.
+      if (forced > chosen) {
+        found = { detail: runaway.detail, decks };
+        break;
+      }
+    }
+    expect(
+      found,
+      `none of the ${MANDATORY_LOOP_SEEDS.length} pinned seeds produced a COMPULSORY loop on this ` +
+        `board. That is a finding to re-rule, not a regression to fix: either the pilot stopped ` +
+        `walking into CR 104.4b, or the two cards stopped combining.`,
+    ).not.toBeNull();
+
+    // ⚠️ THE DISTINCTION, asserted rather than described. This is the row that
+    // proves the report can tell a legal draw from a pilot that will not stop:
+    // here the loop's steps had ONE legal option each and nobody was asked, while
+    // every `RUNAWAYS` row above is hundreds of answers a pilot chose to give.
+    const [chosen, forced] = whoChose(found!.detail);
+    expect(forced, `a mandatory loop must be mostly auto-answered\n${found!.detail}`).toBeGreaterThan(chosen);
+    expect(forced, 'and it must be a LOOP, not two forced steps').toBeGreaterThan(RUNAWAY_MIN_COPIES);
+  }, 600000);
+
+  it('and the copy mirror is the OTHER verdict, on the same measurement', () => {
+    // The pair to the row above, deliberately adjacent: same invariant, same
+    // report, opposite reading. If both rows ever agree, the split has stopped
+    // discriminating and the ruling column is decoration.
+    const { violations } = replaySoakMixedGame({
+      pool,
+      registry,
+      pilot: stubbornCopyPilot(heuristic),
+      seed: 1390617766,
+      decks: PINNED_MATCHUPS[1390617766]!,
+      onPlay: 'A',
+    });
+    const runaway = violations.find((v) => v.invariant === SOAK_INVARIANTS.gameCanEnd);
+    expect(runaway, 'the mirror stopped being a runaway').toBeDefined();
+    const [chosen, forced] = whoChose(runaway!.detail);
+    expect(chosen, `a pilot that will not stop must be mostly ANSWERED\n${runaway!.detail}`).toBeGreaterThan(forced);
+    expect(chosen).toBeGreaterThan(RUNAWAY_MIN_COPIES);
+  }, 120000);
 });

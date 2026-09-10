@@ -83,7 +83,9 @@ import {
   SOAK_MAX_STACK_DEPTH,
   SOAK_MAX_TURNS_PER_GAME,
   SOAK_MECHANICS,
+  SOAK_RUNAWAY_CHOSEN_EVENT,
   SOAK_RUNAWAY_EVIDENCE_TYPES,
+  SOAK_RUNAWAY_FORCED_EVENT,
   SOAK_RUNAWAY_NOISE_EVENTS,
   serializeDefinition,
   type SoakInvariantName,
@@ -898,6 +900,23 @@ function loadSoakDeck(deck: SoakDeck, pool: CardPool): LoadedDeck {
 }
 
 /**
+ * WHO CHOSE — the half of the evidence that actually decides a runaway row.
+ *
+ * See {@link SOAK_RUNAWAY_CHOSEN_EVENT}. Stated on every row rather than left to
+ * {@link describeGameTraffic}'s volume ranking, which would have dropped it off
+ * the end of the one row it mattered most on. It reports the split and stops:
+ * naming which side wins would be the engine ruling on intent it cannot see.
+ */
+function describeWhoChose(counts: ReadonlyMap<GameEvent['type'], number>): string {
+  const chosen = counts.get(SOAK_RUNAWAY_CHOSEN_EVENT) ?? 0;
+  const forced = counts.get(SOAK_RUNAWAY_FORCED_EVENT) ?? 0;
+  return (
+    `Of the game's questions ${chosen} were ANSWERED by a player and ${forced} had a single legal ` +
+    `option (auto-answered) — CR 104.4b's draw is compulsory at every step.`
+  );
+}
+
+/**
  * WHAT THE GAME WAS FULL OF — the evidence a runaway row is ruled on.
  *
  * A `{kind:'loop'}` outcome is inferred from an action counter and says only
@@ -1025,9 +1044,10 @@ function playOne(
       SOAK_INVARIANTS.gameCanEnd,
       `one turn ran past the ${sim.maxActionsPerTurn}-action turn bound and the game was drawn ` +
         `(turn ${result.turns}, ${result.actions} actions). The GAME's heaviest traffic — the ` +
-        `overrunning turn is most of it: ${describeGameTraffic(watcher.eventCounts)}. RULE ON IT: a ` +
-        `MANDATORY loop (CR 104.4b) is legal and belongs in soak.test.ts's pinned table naming the ` +
-        `cards; a pilot that will not stop is a bug.`,
+        `overrunning turn is most of it: ${describeGameTraffic(watcher.eventCounts)}. ` +
+        `${describeWhoChose(watcher.eventCounts)} RULE ON IT: a MANDATORY loop (CR 104.4b) is legal ` +
+        `and belongs in loop-runaway.test.ts's table, ruled and naming the cards; a pilot that ` +
+        `will not stop is a bug.`,
       result.turns,
     );
   }

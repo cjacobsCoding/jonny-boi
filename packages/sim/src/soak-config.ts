@@ -187,6 +187,29 @@ export const SOAK_RUNAWAY_NOISE_EVENTS: ReadonlySet<GameEvent['type']> = new Set
   'stackResolved',
 ]);
 
+/**
+ * THE ONE FACT THAT DECIDES A RUNAWAY — was the loop CHOSEN or COMPULSORY.
+ *
+ * CR 104.4b draws a loop no player can decline; a pilot that will not stop is
+ * answering the same question over and over. The engine cannot rule between
+ * them and must not try — but it does know which of the two events each step
+ * emitted, and the split is measured, not rhetorical:
+ *
+ *  - the copy mirror (a pilot that will not stop) — `choiceAnswered ×664`,
+ *    `choiceAutoAnswered ×0`. Every step was a decision somebody made.
+ *  - Dualcaster Mage + Rite of Replication (CR 104.4b) — `choiceAnswered ×398`
+ *    for the whole game against `choiceAutoAnswered ×1,980` inside the loop.
+ *    Nobody was offered anything: there was one legal option each time.
+ *
+ * Reported on every runaway row rather than left to the traffic list, which
+ * ranks by volume and would have dropped `choiceAutoAnswered` off the end of the
+ * Dualcaster row at rank five — the one line that made it ruleable.
+ */
+export const SOAK_RUNAWAY_CHOSEN_EVENT = 'choiceAnswered' satisfies GameEvent['type'];
+
+/** The other half of {@link SOAK_RUNAWAY_CHOSEN_EVENT} — one legal option, nobody asked. */
+export const SOAK_RUNAWAY_FORCED_EVENT = 'choiceAutoAnswered' satisfies GameEvent['type'];
+
 // ---------------------------------------------------------------------------
 // The mechanic inventory.
 // ---------------------------------------------------------------------------
