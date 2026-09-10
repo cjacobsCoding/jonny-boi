@@ -63,6 +63,7 @@ import {
   moveOwnedCard,
   movePermanentTo,
   otherPlayer,
+  playersForParam,
   putOntoBattlefield,
   strArrayParam,
   strParam,
@@ -1148,6 +1149,18 @@ export function sacrificePermanent(ctx: EffectContext, perm: CardInstance): void
 export const sacrificeChosen: EffectPrimitive = (ctx) => {
   const count = intParam(ctx, 'count', 1);
   if (count <= 0) return;
+  // "EACH PLAYER sacrifices a creature of their choice" (Fleshbag Marauder,
+  // Merciless Executioner): the same question asked of both seats, so it is a
+  // `who` VALUE rather than a second primitive — the same shape, and the same
+  // spelling of the word, as `discardCard`'s `'eachPlayer'` branch above.
+  //
+  // It is NOT "each opponent, and also me": the printed words are *each player*,
+  // which includes the controller, and a card that spared its own controller
+  // would be strictly better than the one that is printed.
+  if (strParam(ctx, 'who') === 'eachPlayer') {
+    sacrificeEachPlayer(ctx, count);
+    return;
+  }
   const victim = playerParam(ctx, 'who', 'targetPlayer');
   if (!victim) return;
   const candidates = collectCardOptions(ctx.state, 'battlefield', {
@@ -1208,6 +1221,52 @@ export const returnChosenToHand: EffectPrimitive = (ctx) => {
     if (perm) movePermanentTo(ctx, perm, 'hand');
   }
 };
+
+/**
+ * The "each player sacrifices …" branch of {@link sacrificeChosen}.
+ *
+ * Mirrors `discardEachPlayer`, and for its reason: BOTH answers are collected
+ * before ANYTHING leaves the battlefield. Sacrificing the active player's pick
+ * first would let the second chooser answer on a board the rules say they never
+ * saw, and would let a dies-trigger resolve between the two halves of what CR
+ * 701.16 makes one simultaneous event.
+ *
+ * APNAP order (CR 101.4) comes from the shared `playersForParam` vocabulary, so
+ * the pair of answers is reproducible from a seed instead of depending on which
+ * seat the source happens to sit in.
+ *
+ * A seat with no qualifying permanent auto-answers "none", and one with fewer
+ * than the card demands gives up every one it has — core's `normalizeCounts`
+ * clamps `min` to the candidate count, so this asks the same impossible-free
+ * question the single-victim branch does.
+ */
+function sacrificeEachPlayer(ctx: EffectContext, count: number): void {
+  const order = playersForParam(ctx, 'each');
+  const picks: (readonly InstanceId[])[] = [];
+  for (const victim of order) {
+    const candidates = collectCardOptions(ctx.state, 'battlefield', {
+      controller: victim,
+      filter: filterParam(ctx),
+    });
+    const chosen = ctx.chooseCards({
+      chooser: victim,
+      prompt: `Sacrifice ${count} permanent(s)`,
+      candidates,
+      min: count,
+      max: count,
+      valence: 'loss',
+      fromZone: 'battlefield',
+    });
+    if (!chosen) return; // parked — nothing mutated yet
+    picks.push(chosen);
+  }
+  for (let i = 0; i < order.length; i++) {
+    for (const id of picks[i]!) {
+      const perm = ctx.state.battlefield.find((c) => c.instanceId === id);
+      if (perm) sacrificePermanent(ctx, perm);
+    }
+  }
+}
 
 /** The two pile ids the split offers — data the UI/AI answer refers back to. */
 const PILE_ONE = 'pile1';

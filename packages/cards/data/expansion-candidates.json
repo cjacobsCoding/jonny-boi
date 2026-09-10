@@ -1239,6 +1239,24 @@
         "Paragon of Modernity",
         "Shepherd of the Lost"
       ]
+    },
+    {
+      "role": "trigger and ETB BODIES — the sentence AFTER the comma. The triggers themselves all fired already (every printed scope, the 'you may' wrapper, the intervening 'if'); these are the cards whose BODY had no rule: the optional dies/cast-a-spell/draws-a-card siblings, the bare-subject life gain a 'you may' wrapper leaves behind, the each-player and triggering-player edicts, and a 'for each' count in a trigger body.",
+      "names": [
+        "Solemn Simulacrum",
+        "Mesa Enchantress",
+        "Verduran Enchantress",
+        "Consecrated Sphinx",
+        "Soul's Attendant",
+        "Suture Priest",
+        "Blood Seeker",
+        "Fleshbag Marauder",
+        "Merciless Executioner",
+        "Accursed Marauder",
+        "Sheoldred, Whispering One",
+        "Venser's Journal",
+        "Riot Control"
+      ]
     }
   ]
 }
