@@ -139,11 +139,53 @@ export const SOAK_MAX_STACK_DEPTH = 100;
  * The fraction of soaked games allowed to end in a turn-cap timeout draw.
  *
  * Random decks stall more than curated ones — a pile of defenders really can go
- * to turn 60 — so zero is the wrong bar. What is NOT allowed is the ACTION cap
- * (see {@link SOAK_MAX_ACTIONS_PER_GAME}), which no legitimate game reaches and
- * which is the signature of "the game cannot end".
+ * to turn 60 — so zero is the wrong bar. What is NOT allowed is either RUNAWAY
+ * bound: the game-wide action cap ({@link SOAK_MAX_ACTIONS_PER_GAME}) or the
+ * per-turn one that draws by CR 104.4b. Both are the signature of "the game
+ * cannot end", and both are `gameCanEnd` violations — see DESIGN §3.139 for the
+ * years this invariant spent watching only the first of them.
  */
 export const SOAK_MAX_TIMEOUT_RATE = 0.35;
+
+/**
+ * How many event types a runaway violation names as EVIDENCE.
+ *
+ * A `loop` outcome is inferred from an action counter, so the soak can never say
+ * WHY a turn overran — but it can say what the game was full of, and that is the
+ * whole difference between a row a reader can rule on and a row nobody can. The
+ * types are read off the game's own traffic rather than out of a list, so a new
+ * event type becomes evidence the day it is first emitted.
+ *
+ * Four, measured on the two known runaway shapes: the copy mirror reports
+ * `choiceAsked ×665, choiceAnswered ×664, spellCopied ×661` and the Bog Initiate
+ * turn reports `manaAdded ×688, abilityActivated ×667, triggeredAbilityResolved
+ * ×665` — in both cases the culprit is third, so three would sit exactly on the
+ * boundary. A reader who needs more replays the seed.
+ */
+export const SOAK_RUNAWAY_EVIDENCE_TYPES = 4;
+
+/**
+ * Events the runaway evidence LEAVES OUT — the engine's bookkeeping spine.
+ *
+ * ⚠️ Without this the evidence reports that the engine was running. All three
+ * scale with the ACTION COUNT by construction — a priority pass per window, an
+ * effect per resolution, a stack object leaving the stack — so a game that spent
+ * 2,000 actions inside one turn is guaranteed to have them as its top three
+ * whatever the loop was. Measured on both known runaways: they buried
+ * `spellCopied ×661` at rank 6 and `abilityActivated ×667` at rank 4, which is
+ * the difference between a row somebody can rule on and a row nobody can.
+ *
+ * A type belongs here ONLY if every action emits it. Anything that names what the
+ * game was DOING — a spell copied, an ability activated, a question answered —
+ * is evidence however loud it is, and `choiceAsked` in particular is the closest
+ * thing the soak has to a mandatory-loop test: CR 104.4b's draw is compulsory at
+ * every step, and hundreds of answered questions is somebody choosing to go on.
+ */
+export const SOAK_RUNAWAY_NOISE_EVENTS: ReadonlySet<GameEvent['type']> = new Set([
+  'priorityPassed',
+  'effectApplied',
+  'stackResolved',
+]);
 
 // ---------------------------------------------------------------------------
 // The mechanic inventory.

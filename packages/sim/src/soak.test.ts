@@ -43,6 +43,7 @@ import {
   formatSoakReport,
   formatViolations,
   replaySoakMixedGame,
+  runawayGames,
   runSoak,
   soakSimConfig,
 } from './soak.js';
@@ -195,7 +196,16 @@ describe('the fast soak', () => {
     // The recorded failure shape: a combat-declaration bug once made games
     // unable to finish while every test in the repo passed, because every test
     // asserted "it finished" via a cap that the bug simply hit.
-    expect(report.actionCapHits, `\n${formatSoakReport(report)}\n`).toBe(0);
+    //
+    // ⚠️ ASKED THROUGH `runawayGames`, not through `actionCapHits`. This line WAS
+    // `expect(report.actionCapHits).toBe(0)`, and that is a different question:
+    // the per-turn bound is a third of the game-wide cap, so a runaway trips it
+    // first, is drawn by CR 104.4b, and never touches the cap this test named. It
+    // was green for exactly the thing it exists to catch (DESIGN §3.139).
+    expect(runawayGames(report).length, `\n${formatSoakReport(report)}\n`).toBe(0);
+    // Belt and braces: the summary counters and the violation list are two
+    // renderings of one fact, and a divergence between them is itself a bug.
+    expect(report.actionCapHits + report.loopDraws).toBe(0);
   });
 
   it('finishes most games on the board rather than on the turn cap', () => {
