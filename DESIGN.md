@@ -2955,6 +2955,78 @@ tables, and every entry names cards from BOTH decks; (2) the mandatory-loop row 
 whatever matched its criterion, so INVERTING the chosen/auto-answered discriminator simply found a
 different seed that satisfied the inverted reading — it now rules on the first seed that runs away and
 goes red if that game's recorded ruling no longer holds.
+### 3.139 Trigger BODIES — rescuing a stranded branch, and the sentence after the comma — ✅ done
+
+A branch built three weeks ago (`feat/trigger-body-templates`, tip `b1ea6c2`) was killed by a usage
+limit before it could be pushed, and `origin/main` moved 362 commits past it. This is that work,
+ported forward — and, first, an honest account of how much of it was still needed.
+
+**Half of it had already shipped, under different names.** The karoo bounce body it built
+(`returnChosenToHand` + "return a land you control to its owner's hand") landed independently as
+`return-chosen-land-you-control`, and the permanent additional-land grant landed as
+`additional-land-plays` reading `CardDefinition.additionalLandPlays`. Both were re-verified on real
+cards (Azorius Chancery and Exploration compile `'complete'` on main) and **main's versions were kept
+and the branch's dropped**. Re-landing either under a second name is the exact "one concept, two
+definitions" failure this repo has unwound before. What survived the port was the rest.
+
+**The family is BODIES, not triggers.** Every printed trigger scope already fires; so does the
+`mayEffects` "you may" wrapper and the intervening "if". What kept a large corpus cluster reporting
+was the sentence AFTER the comma. Shipped here:
+
+- **The last three trigger scopes with no optional sibling** — `dies`, `cast-a-spell` and
+  `draws-a-card` (Solemn Simulacrum, Mesa Enchantress, Verduran Enchantress, Consecrated Sphinx). The
+  cast sibling cannot use the shared `optionalTriggerFrom`, which builds ONE trigger: a printed type
+  word can mean several engine filters, and each condition needs its own wrapper so a card asks once
+  per OCCURRENCE, not once per card.
+- **`OPTIONAL_YOU` — the dropped subject.** Every "you may" wrapper hands the effect table the text
+  with the words "you may " removed, so Soul's Attendant's "you may gain 1 life" arrives as the bare
+  "gain 1 life" and a pattern anchored on `^you ` refused a card whose only unread word was one the
+  wrapper itself had removed. ONE named fragment, spent only on the clauses whose printed subject is
+  literally "you" (an imperative like "Draw a card" prints no subject to drop). `x-draw` had already
+  typed `(?:you )?` by hand and now reads the shared fragment.
+- **The edict family, completed.** `each player sacrifices a [nontoken] NOUN of their choice`
+  (Fleshbag Marauder, Merciless Executioner, Accursed Marauder) is a `who` VALUE on `sacrificeChosen`,
+  spelled the way `discardCard`'s branch spells it — not a second primitive. ⚠️ BOTH answers are
+  collected before ANYTHING leaves the battlefield: CR 701.16 makes it one simultaneous event, so the
+  second chooser must not answer on a board the first already changed and no dies-trigger may resolve
+  between the halves. And `that player sacrifices …` (Sheoldred, Whispering One) is its
+  triggering-player sibling — "at the beginning of each OPPONENT'S upkeep" resolves under its source's
+  controller on both turns, so a body reading `ctx.controller` would make Sheoldred eat her own board.
+- **`have that player lose N life`** (Suture Priest, Blood Seeker) — the causative spelling of a clause
+  that already existed, so it is one rule with two spellings, never two rules.
+- **"FOR EACH <counted thing>"** behind "gain 1 life" and "draw a card" (Venser's Journal, Riot
+  Control, Shamanic Revelation's draw line). ⚠️ Unlike the stranded branch, the singular phrases are
+  NOT a second copy of the counts: a row is the singular spelling and the PLURAL ROW IT MEANS, so the
+  number keeps exactly one definition and a test walks the alternation out of the shipped pattern and
+  fails if a row ever names a plural that does not exist. The MULTIPLIER stays refused — a
+  `DerivedValue` carries a count with no scale factor, so "gain 2 life for each creature" reports
+  rather than quietly gaining half what it prints.
+
+**And the class behind them, since the context was loaded.** The printed edict noun list existed in
+FOUR copies and the noun→filter answer in three. `SACRIFICE_NOUNS` + `sacrificeNounFilter` are now the
+single answer all five sacrifice rules read, so a noun added for one is understood by all of them.
+
+📊 **Measured, as a SET and not a count.** `packages/cards/scripts/playable-set.mjs` (new, committed —
+two runs can agree on 709 and disagree about WHICH 709) over the 2,100-card corpus: **709 → 722
+playable, thirteen names gained and ZERO lost.** Gained: Accursed Marauder, Blood Seeker, Consecrated
+Sphinx, Fleshbag Marauder, Merciless Executioner, Mesa Enchantress, Riot Control, Sheoldred Whispering
+One, Solemn Simulacrum, Soul's Attendant, Suture Priest, Venser's Journal, Verduran Enchantress.
+
+📊 **19 tests, and 15 sabotages all RED.** Every closure is proven twice — a real printed card compiles
+`'complete'` with pinned params, and the compiled definition PLAYS in a seeded game. ⚠️ One sabotage
+found a real hole: "sacrifice as each seat answers" SURVIVED the first draft of the each-player test,
+because asserting that both seats were asked says nothing about whether the second was asked on a board
+the first had already changed. The test now reads the battlefield at each ask. That is the second time
+this family's own sabotage pass has caught its own untested refusal.
+
+**Deliberately left out, with the measurement that decided it.** The one-shot additional land play
+("You may play an additional land THIS TURN" — Explore, Urban Evolution) needs a new per-seat turn
+field in `PlayerState` plus its clone/serialize/reset answers and a new primitive, and the symmetric
+static ("EACH player may play an additional land on each of THEIR turns" — Rites of Flourishing,
+Ghirapur Orrery) needs `additionalLandPlays` to grow a `who`, which is a shape change to generated
+pool data. Measured payoff: **2 cards and 1 card respectively.** The audit's own top rows are worth
+10–21 each, so the measurement says these are not next and this section says so rather than shipping
+them on the strength of the three-week-old plan that motivated them.
 
 ### 3.138 A wrapper hid the removal — "you MAY exile" is still removal — ✅ done
 

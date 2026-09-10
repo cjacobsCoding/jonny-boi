@@ -353,6 +353,25 @@ const DERIVED_COUNTS: Readonly<Record<string, string>> = Object.freeze({
   'creature cards in your graveyard': 'creaturesInYourGraveyard',
 });
 
+/**
+ * The printed subject **"you "**, made optional.
+ *
+ * Every "you may …" wrapper in this file — `mayEffectsFrom`, the inline
+ * `optional` branches, `optionalTriggerFrom` — hands the effect table what is
+ * left after the words "you may " are removed. Oracle text writes the life
+ * clauses with an explicit subject ("You gain 1 life"), so Soul's Attendant's
+ * "you may gain 1 life" arrives here as the bare "gain 1 life" and a pattern
+ * anchored on "^you " refuses a card whose only unread word is one the wrapper
+ * itself removed.
+ *
+ * ONE fragment rather than a `(?:you )?` typed into each rule, so the set of
+ * clauses that accept a dropped subject is a single readable list. It is spent
+ * ONLY on clauses whose printed subject is literally "you" — an imperative like
+ * "Draw a card" prints no subject to drop, and widening it would accept text no
+ * card prints.
+ */
+const OPTIONAL_YOU = '(?:you )?';
+
 /** The alternation of the phrases above, longest-first so none is truncated. */
 const DERIVED_PHRASE = `(${Object.keys(DERIVED_COUNTS)
   .sort((a, b) => b.length - a.length)
@@ -362,6 +381,47 @@ const DERIVED_PHRASE = `(${Object.keys(DERIVED_COUNTS)
 function derivedValue(phrase: string): { countOf: string } | null {
   const countOf = DERIVED_COUNTS[phrase.trim().toLowerCase()];
   return countOf ? { countOf } : null;
+}
+
+/**
+ * The SINGULAR half of the same vocabulary — the phrase a card prints after
+ * "**for each**". "You gain 1 life for each *card in your hand*" counts exactly
+ * the set "the number of *cards in your hand*" counts.
+ *
+ * A row is the singular spelling and the PLURAL ROW IT MEANS, never a second
+ * copy of the count: the answer still has exactly one definition
+ * ({@link DERIVED_COUNTS}), so the two spellings cannot drift into different
+ * numbers, and `derived-count-vocabulary.test.ts` fails the build if a row here
+ * ever names a plural row that does not exist.
+ *
+ * A table and not a de-pluralising regex, for the reason every table in this
+ * file is closed: "creature card in your graveyard" de-pluralises cleanly and
+ * "card types among cards in all graveyards" does not, and a rule that
+ * half-understands a count makes a card quietly stronger or weaker than printed.
+ * The resolution-facing counts (`timesThisWasKicked`, `triggeringAmount`) are
+ * absent because they print their own "for each" wording, already handled where
+ * multikicker is.
+ */
+const DERIVED_EACH_TO_PLURAL: Readonly<Record<string, string>> = Object.freeze({
+  'creature you control': 'creatures you control',
+  'creature your opponents control': 'creatures your opponents control',
+  'creature your opponent controls': 'creatures your opponent controls',
+  'creature on the battlefield': 'creatures on the battlefield',
+  'land you control': 'lands you control',
+  'card in your hand': 'cards in your hand',
+  'card in your graveyard': 'cards in your graveyard',
+  'creature card in your graveyard': 'creature cards in your graveyard',
+});
+
+/** The alternation of the "for each" phrases, longest-first. */
+const DERIVED_EACH_PHRASE = `(${Object.keys(DERIVED_EACH_TO_PLURAL)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/** The derived descriptor a printed "for each …" phrase means, or null. */
+function derivedEachValue(phrase: string): { countOf: string } | null {
+  const plural = DERIVED_EACH_TO_PLURAL[phrase.trim().toLowerCase()];
+  return plural === undefined ? null : derivedValue(plural);
 }
 
 /** Persist returns the creature with this many -1/-1 counters (the printed value). */
@@ -1380,6 +1440,37 @@ function effects(...refs: EffectRef[]): ClauseContribution {
 }
 
 /**
+ * The nouns an edict may name — "target player sacrifices a **creature**".
+ *
+ * ONE alternation read by all four "… sacrifices a NOUN" rules (target player,
+ * each opponent, each player, that player) and by the sacrifice half of
+ * `may-cost-then-effect`, so a noun added for one of them is understood by all
+ * of them in the same edit. Four copies of the list is how they end up
+ * disagreeing about what an edict may take.
+ */
+const SACRIFICE_NOUNS = 'creature|land|artifact|permanent';
+
+/**
+ * The `filter` param a printed sacrifice noun means — the one answer every
+ * edict rule reads.
+ *
+ * Returns the params to SPREAD rather than a bare filter, because "a permanent"
+ * is every type and its rule must emit no `filter` key at all: an empty filter
+ * object would be a second way to spell "everything" sitting in the compiled
+ * card.
+ *
+ * "Nontoken" (Accursed Marauder) is a printed narrowing with an exact
+ * `CardFilter` field, so it is expressible rather than reported — a token
+ * creature does not qualify.
+ */
+function sacrificeNounFilter(noun: string, nontoken: boolean): { filter?: CardFilter } {
+  const filter: Record<string, unknown> = {};
+  if (noun !== 'permanent') filter.anyOfTypes = [noun as CardType];
+  if (nontoken) filter.isToken = false;
+  return Object.keys(filter).length > 0 ? { filter: filter as CardFilter } : {};
+}
+
+/**
  * The param value meaning "the X chosen (and paid for) at cast time" — the
  * shape `intParam` in `../effect-helpers.ts` resolves from
  * `EffectContext.xValue`. Mirrored here as data rather than imported so the
@@ -1792,9 +1883,41 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'gain-life-for-each',
+    description: '"[You] gain 1 life for each X" (Venser\'s Journal, Riot Control)',
+    // The "for each" spelling of `gain-life-equal-to-count` one rule down, and
+    // it compiles to the IDENTICAL descriptor — one derived count, read by
+    // `intParam`.
+    //
+    // ⚠️ ONLY the multiplier of ONE compiles. "Gain 2 life for each creature you
+    // control" is `2 × count`, and a `DerivedValue` carries a count with no
+    // scale factor — so there is no honest way to emit it and the card reports
+    // instead. Emitting the bare count would print a card that gains HALF the
+    // life it says, which is the class of infidelity nothing would ever notice.
+    pattern: new RegExp(`^${OPTIONAL_YOU}gain ${COUNT_TOKEN} life for each ${DERIVED_EACH_PHRASE}$`),
+    build(match) {
+      if (parseCount(match[1]) !== 1) return null;
+      const amount = derivedEachValue(match[2] ?? '');
+      if (!amount) return null;
+      return effects({ primitive: 'gainLife', params: { amount } });
+    },
+  },
+  {
+    id: 'draw-for-each',
+    description: '"Draw a card for each X" — the draw half of Shamanic Revelation',
+    // Same shape, same restriction as `gain-life-for-each`: one card PER thing
+    // counted, never two — a `DerivedValue` has no multiplier to carry.
+    pattern: new RegExp(`^${OPTIONAL_YOU}draw a card for each ${DERIVED_EACH_PHRASE}$`),
+    build(match) {
+      const count = derivedEachValue(match[1] ?? '');
+      if (!count) return null;
+      return effects({ primitive: 'drawCards', params: { count } });
+    },
+  },
+  {
     id: 'gain-life-equal-to-count',
-    description: '"You gain life equal to the number of X"',
-    pattern: new RegExp(`^you gain life equal to the number of ${DERIVED_PHRASE}$`),
+    description: '"[You] gain life equal to the number of X"',
+    pattern: new RegExp(`^${OPTIONAL_YOU}gain life equal to the number of ${DERIVED_PHRASE}$`),
     build(match) {
       const amount = derivedValue(match[1]!);
       if (!amount) return null;
@@ -1816,8 +1939,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'x-draw',
-    description: '"Draw X cards" — X is the value chosen at cast time (Mind Spring)',
-    pattern: /^(?:you )?draw x cards$/,
+    description: '"[You] draw X cards" — X is the value chosen at cast time (Mind Spring)',
+    pattern: new RegExp(`^${OPTIONAL_YOU}draw x cards$`),
     build(_match, ctx) {
       if (!cardHasXCost(ctx)) return null;
       return effects({ primitive: 'drawCards', params: { count: CHOSEN_X_PARAM } });
@@ -1825,8 +1948,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'x-gain-life',
-    description: '"You gain X life" — X is the value chosen at cast time',
-    pattern: /^you gain x life$/,
+    description: '"[You] gain X life" — X is the value chosen at cast time',
+    pattern: new RegExp(`^${OPTIONAL_YOU}gain x life$`),
     build(_match, ctx) {
       if (!cardHasXCost(ctx)) return null;
       return effects({ primitive: 'gainLife', params: { amount: CHOSEN_X_PARAM } });
@@ -1928,8 +2051,14 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'that-player-loses-life',
-    description: '"That player loses N life" — a trigger body aimed at the TRIGGERING player',
-    pattern: new RegExp(`^that player loses ${COUNT_TOKEN} life$`),
+    description:
+      '"That player loses N life" / "have that player lose N life" (Suture Priest, Blood Seeker) — a trigger body aimed at the TRIGGERING player',
+    // TWO printed spellings of ONE clause, so ONE rule. The causative "have that
+    // player lose 1 life" is what a card prints when the sentence needs a verb
+    // the controller performs (it is always printed under a "you may"); the loss
+    // it causes is the same loss, aimed at the same seat. A second rule would be
+    // a second answer to the question of what "that player" means.
+    pattern: new RegExp(`^(?:that player loses|have that player lose) ${COUNT_TOKEN} life$`),
     build(match) {
       const amount = parseCount(match[1]);
       return amount === null
@@ -1990,8 +2119,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'gain-life',
-    description: '"You gain N life"',
-    pattern: new RegExp(`^you gain ${COUNT_TOKEN} life$`),
+    description: '"[You] gain N life" (Soul Warden prints the subject; Soul\'s Attendant\'s "you may gain 1 life" reaches here without it)',
+    pattern: new RegExp(`^${OPTIONAL_YOU}gain ${COUNT_TOKEN} life$`),
     build(match) {
       const amount = parseCount(match[1]);
       return amount === null ? null : effects({ primitive: 'gainLife', params: { amount } });
@@ -1999,8 +2128,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'you-lose-life',
-    description: '"You lose N life"',
-    pattern: new RegExp(`^you lose ${COUNT_TOKEN} life$`),
+    description: '"[You] lose N life"',
+    pattern: new RegExp(`^${OPTIONAL_YOU}lose ${COUNT_TOKEN} life$`),
     build(match) {
       const amount = parseCount(match[1]);
       return amount === null ? null : effects({ primitive: 'loseLife', params: { amount } });
@@ -3634,18 +3763,17 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // check would let "you may sacrifice a land" grant the payoff on an empty
     // board. The payoff must itself compile, target-free — it runs inside the
     // resolution with no aiming step of its own.
-    pattern: /^you may (sacrifice an? (?:creature|land|artifact|permanent)|discard a card)\. if you do, (.+)$/,
+    pattern: new RegExp(
+      `^you may (sacrifice an? (?:${SACRIFICE_NOUNS})|discard a card)\\. if you do, (.+)$`,
+    ),
     build(match, ctx) {
       const costText = match[1]!;
-      const sacrifice = costText.match(/^sacrifice an? (creature|land|artifact|permanent)$/);
+      const sacrifice = new RegExp(`^sacrifice an? (${SACRIFICE_NOUNS})$`).exec(costText);
       const cost =
         sacrifice !== null
           ? {
               primitive: 'sacrificeChosen',
-              params: {
-                who: 'controller',
-                ...(sacrifice[1] === 'permanent' ? {} : { filter: { anyOfTypes: [sacrifice[1] as CardType] } }),
-              },
+              params: { who: 'controller', ...sacrificeNounFilter(sacrifice[1]!, false) },
             }
           : { primitive: 'discardCard', params: { who: 'controller' } };
       const payoff = ctx.compileEffectClause(match[2]!, { targetFree: true });
@@ -3663,21 +3791,63 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'target-player-sacrifices',
     description: '"Target player sacrifices a creature" (the edict template; Liliana\'s −2)',
-    pattern: /^target (player|opponent) sacrifices an? (creature|land|artifact|permanent)$/,
+    pattern: new RegExp(`^target (player|opponent) sacrifices an? (${SACRIFICE_NOUNS})$`),
     needsChosenTarget: true,
     build(match) {
       const restriction = match[1] === 'opponent' ? OPPONENT_TARGET : PLAYER_TARGET;
-      const kind = match[2]!;
       // "a permanent" is any type; the rest narrow by card type. The VICTIM
       // chooses which — that is the whole card (see `sacrificeChosen`).
-      const filter = kind === 'permanent' ? undefined : { anyOfTypes: [kind as CardType] };
       return effects({
         primitive: 'sacrificeChosen',
         params: {
           targets: restriction,
           who: 'targetPlayer',
-          ...(filter ? { filter } : {}),
+          ...sacrificeNounFilter(match[2]!, false),
         },
+      });
+    },
+  },
+  {
+    id: 'that-player-sacrifices',
+    description:
+      '"That player sacrifices a [nontoken] NOUN of their choice" (Sheoldred, Whispering One) — an edict aimed at the TRIGGERING player',
+    // The triggering-player sibling of `each-player-sacrifices` below, reading
+    // the same `triggering` vocabulary `that-player-loses-life` reads: "at the
+    // beginning of EACH OPPONENT'S upkeep" resolves under its source's
+    // controller on both turns, so a body that read `ctx.controller` would make
+    // Sheoldred sacrifice her own creatures.
+    pattern: new RegExp(
+      `^that player sacrifices an? (nontoken )?(${SACRIFICE_NOUNS})(?: of their choice)?$`,
+    ),
+    build(match) {
+      return effects({
+        primitive: 'sacrificeChosen',
+        params: { who: 'triggering', ...sacrificeNounFilter(match[2]!, match[1] !== undefined) },
+      });
+    },
+  },
+  {
+    id: 'each-player-sacrifices',
+    description:
+      '"Each player sacrifices a [nontoken] creature of their choice" (Fleshbag Marauder, Merciless Executioner, Accursed Marauder)',
+    // Ordered BEFORE `each-opponent-sacrifices` only for readability — the two
+    // patterns are disjoint ("each player" vs "each opponent"/"each other
+    // player"). They are separate entries because they are separate CARDS: this
+    // one hits its own controller too, and compiling it as the opponent-only
+    // form would print a strictly better card.
+    //
+    // "Of their choice" is the printed reminder that the VICTIM picks, which is
+    // what `sacrificeChosen` does by construction; it is optional in the pattern
+    // because older printings omit it.
+    pattern: new RegExp(
+      `^each player sacrifices an? (nontoken )?(${SACRIFICE_NOUNS})(?: of their choice)?$`,
+    ),
+    build(match) {
+      return effects({
+        primitive: 'sacrificeChosen',
+        // Same spelling of the word as `discardCard`'s branch — one vocabulary
+        // for "both seats answer this" across the choice primitives.
+        params: { who: 'eachPlayer', ...sacrificeNounFilter(match[2]!, match[1] !== undefined) },
       });
     },
   },
@@ -3692,14 +3862,13 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // here: this engine seats exactly two players, so the printed plural has
     // exactly one referent. Both wordings are accepted for that reason, and for
     // no broader one.
-    pattern:
-      /^each (?:opponent|other player) sacrifices an? (creature|land|artifact|permanent)(?: of their choice)?$/,
+    pattern: new RegExp(
+      `^each (?:opponent|other player) sacrifices an? (nontoken )?(${SACRIFICE_NOUNS})(?: of their choice)?$`,
+    ),
     build(match) {
-      const kind = match[1]!;
-      const filter = kind === 'permanent' ? undefined : { anyOfTypes: [kind as CardType] };
       return effects({
         primitive: 'sacrificeChosen',
-        params: { who: 'opponent', ...(filter ? { filter } : {}) },
+        params: { who: 'opponent', ...sacrificeNounFilter(match[2]!, match[1] !== undefined) },
       });
     },
   },
@@ -5282,6 +5451,21 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'trigger-dies-you-may',
+    description: '"When ~ dies, you may BODY" (Solemn Simulacrum, Pilgrim\'s Eye)',
+    // Ordered AFTER `trigger-dies`, for the reason spelled out on
+    // `trigger-etb-you-may`: a body that implements its own option plays better
+    // on the rule that knows about it, and this is the general fallback. The
+    // plain rule above is tried first and returns null when the whole
+    // "you may …" string compiles to nothing, which is what lets this one see
+    // the card at all.
+    pattern: /^when ~ dies, you may (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return optionalTriggerFrom(ctx, { on: 'dies' }, body, `Dies: you may ${body}`);
+    },
+  },
+  {
     id: 'trigger-leaves',
     description: '"When ~ leaves the battlefield, BODY"',
     // Core has had the `leaves` trigger event all along; only this pattern was
@@ -5533,6 +5717,38 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'trigger-cast-spell-you-may',
+    description:
+      '"Whenever you cast a(n) TYPE spell, you may BODY" (Mesa Enchantress, Verduran Enchantress)',
+    // Ordered AFTER `trigger-cast-spell`, the same way every other optional
+    // sibling in this table is.
+    //
+    // It cannot use `optionalTriggerFrom`, which builds ONE trigger: a printed
+    // type word can mean SEVERAL engine filters (`spellFiltersFor` returns a
+    // list), and each of those conditions gets its OWN `mayEffects` wrapper. A
+    // card whose filter expands to two conditions therefore asks exactly once
+    // per occurrence rather than once for the card.
+    pattern: /^whenever you cast an? ([a-z ]+?) spell, you may (.+)$/,
+    build(match, ctx) {
+      const conditions = spellFiltersFor(match[1] ?? '');
+      if (!conditions) return null;
+      const body = match[2] ?? '';
+      const compiled = ctx.compileTriggerBody(body);
+      if (compiled === null) return null;
+      const effectRefs = mayEffectsFrom(body, compiled.effects);
+      if (effectRefs === null || effectRefs.length === 0) return null;
+      return {
+        triggers: conditions.map((condition) => ({
+          condition,
+          effects: effectRefs,
+          label: `Cast ${describeSpellFilter(condition)}: you may ${body}`,
+          ...(compiled.targets ? { targets: compiled.targets } : {}),
+          ...(compiled.targetCount ? { targetCount: compiled.targetCount } : {}),
+        })),
+      };
+    },
+  },
+  {
     id: 'trigger-draws-card',
     description: '"Whenever you / a player / an opponent draws a card, BODY"',
     // The draw WATCHER, not the draw step. It fires on every draw — the turn's
@@ -5553,6 +5769,24 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
         { on: 'drawsCard', who },
         match[2] ?? '',
         `${printed} draws: ${match[2] ?? ''}`,
+      );
+    },
+  },
+  {
+    id: 'trigger-draws-card-you-may',
+    description:
+      '"Whenever you / a player / an opponent draws a card, you may BODY" (Consecrated Sphinx)',
+    // Ordered AFTER `trigger-draws-card`, like every other optional sibling.
+    pattern: /^whenever (you|a player|an opponent) draws a card, you may (.+)$/,
+    build(match, ctx) {
+      const printed = match[1] ?? '';
+      const who: TriggerWho = printed === 'you' ? 'you' : printed === 'an opponent' ? 'opponent' : 'any';
+      const body = match[2] ?? '';
+      return optionalTriggerFrom(
+        ctx,
+        { on: 'drawsCard', who },
+        body,
+        `${printed} draws: you may ${body}`,
       );
     },
   },
@@ -9653,19 +9887,27 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   },
   {
     // The printed word "you may" IS implemented now, as the `mayEffects`
-    // wrapper: "When ~ enters, you may BODY" and "At the beginning of your
-    // <step>, you may BODY" compile to a real yes/no whose no is a complete
-    // outcome — and so is "As ~ enters, choose a creature type / a color / a
+    // wrapper, and so is "As ~ enters, choose a creature type / a color / a
     // player / a basic land type", which compiles to a naming REMEMBERED on the
     // permanent. So this hint no longer claims either system is missing; that
-    // would send the next agent to rebuild something that exists. What still
-    // lands here is a TEMPLATE: an optional clause whose BODY has no rule (a
-    // blink, a copy, a sacrifice-then-if-you-do chain), a naming this engine
-    // could store but no printed line can yet read ("choose a number between 1
-    // and 10"), a "choose" that is neither a yes/no nor a naming, or an
-    // ADDITIONAL COST offering a CHOICE of payments ("discard a card or pay 3
-    // life") — the mandatory single-payment forms compile (see the sacrifice
-    // hint below).
+    // would send the next agent to rebuild something that exists.
+    //
+    // ⚠️ THE WRAPPER IS MISSING ON NO TRIGGER FAMILY. It ships as a sibling rule
+    // ordered after each plain form (so a body implementing its OWN option still
+    // wins) for: enters, DIES, leaves-scoped equipment/aura hosts, attacks,
+    // combat damage to a player, CAST-A-SPELL, DRAWS-A-CARD, the board-watching
+    // arrival/death trigger and every "at the beginning of…" step. A clause
+    // reaching this hint with "you may" in it is one whose INNER BODY has no
+    // rule — a different piece of work from the wrapper, and it must not be
+    // reported as one.
+    //
+    // What still lands here is therefore a TEMPLATE: an optional clause whose
+    // BODY has no rule (a blink, a copy, a sacrifice-then-if-you-do chain), a
+    // naming this engine could store but no printed line can yet read ("choose a
+    // number between 1 and 10"), a "choose" that is neither a yes/no nor a
+    // naming, or an ADDITIONAL COST offering a CHOICE of payments ("discard a
+    // card or pay 3 life") — the mandatory single-payment forms compile (see the
+    // sacrifice hint below).
     pattern: /\byou may\b|\bchoose\b|\bchooses\b|discards? a card|\bdiscards\b/,
     missingEngineSystem: 'a "you may / choose" template the compiler does not recognize yet',
   },
@@ -10077,11 +10319,22 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // stack object into the resolution so a body can say "that player".
     //
     // What lands here is therefore a BODY with no rule — not a trigger the
-    // engine cannot express. Named so nobody re-builds finished work, the bodies
-    // still missing in the corpus are: "you win/lose the game", blink (exile
-    // then return), token COPIES of a permanent, the city's blessing/ascend,
-    // amass, discover, the Ring, a delayed "at the beginning of your NEXT
-    // upkeep", and any count derived from a revealed card's mana value.
+    // engine cannot express. A further round of BODIES has since shipped and is
+    // named here for the same reason: the triggering-player edict ("that player
+    // sacrifices a [nontoken] NOUN of their choice"), its each-player sibling,
+    // the causative life loss ("have that player lose N life"), and a "FOR EACH
+    // <counted thing>" count behind "gain 1 life" / "draw a card".
+    //
+    // Named so nobody re-builds finished work, the bodies STILL missing in the
+    // corpus are: "you win/lose the game" behind an intervening "if" this table
+    // cannot express ("if you have 40 or more life", "if you have exactly
+    // thirteen cards in your hand" — the BODY compiles; the CONDITION is the
+    // gap), blink (exile then return), token COPIES of a permanent, the city's
+    // blessing/ascend, amass, discover, the Ring, a delayed "at the beginning of
+    // your NEXT upkeep", any count derived from a revealed card's mana value,
+    // and a "for each" count with a MULTIPLIER above one (a `DerivedValue`
+    // carries a count with no scale factor, so "gain 2 life for each …" has no
+    // honest encoding and is refused rather than halved).
     pattern: /^at the beginning of /,
     missingEngineSystem:
       'an "at the beginning of…" trigger BODY the compiler does not recognize yet (the trigger itself — every printed scope, the "you may" form, the intervening "if", and the triggering player a body points at — is implemented)',
