@@ -31,7 +31,13 @@ import type { GameAction, InstanceId } from '@jonny-boi/core';
 import type { SoakDeck } from './soak-decks.js';
 import { SOAK_BASE_SEED, SOAK_INVARIANTS } from './soak-config.js';
 import { PINNED_IDENTITIES, PINNED_MATCHUPS } from './soak-pinned-decks.js';
-import { formatViolations, replaySoakMixedGame, runawayGames, runSoak, soakSimConfig } from './soak.js';
+import {
+  formatViolations,
+  replaySoakMixedGame,
+  runawayGames,
+  runSoak,
+  soakSimConfig,
+} from './soak.js';
 
 const pool = loadCardPool({ onWarn: () => {} });
 const registry = buildRegistry();
@@ -152,9 +158,10 @@ describe('a turn that overran is a game that could not END', () => {
        * green, happily replaying a different match and finding nothing in it.
        */
       for (const card of mustContain!) {
-        expect(decks, `seed ${seed} no longer deals ${card} — this row is replaying a DIFFERENT game\n${decks}\n`).toContain(
-          card,
-        );
+        expect(
+          decks,
+          `seed ${seed} no longer deals ${card} — this row is replaying a DIFFERENT game\n${decks}\n`,
+        ).toContain(card);
       }
 
       // WHAT THE SOAK SAID. One `gameCanEnd` row, whatever else the game did.
@@ -171,10 +178,13 @@ describe('a turn that overran is a game that could not END', () => {
       // that moves; a row pinned to an exact count would go red for a pilot
       // improvement, which is a test measuring the wrong thing.
       const detail = runaway[0]!.detail;
-      expect(detail, 'a runaway row that names no traffic cannot be ruled on').toContain('spellCopied');
-      expect(copiesReported(detail), `only ${copiesReported(detail)} copies — this is not the mirror\n${detail}`).toBeGreaterThan(
-        RUNAWAY_MIN_COPIES,
+      expect(detail, 'a runaway row that names no traffic cannot be ruled on').toContain(
+        'spellCopied',
       );
+      expect(
+        copiesReported(detail),
+        `only ${copiesReported(detail)} copies — this is not the mirror\n${detail}`,
+      ).toBeGreaterThan(RUNAWAY_MIN_COPIES);
     }, 120000);
   }
 });
@@ -208,10 +218,14 @@ describe('the report counts a runaway exactly once, in both places', () => {
       sim: { ...soakSimConfig(), maxActionsPerTurn: 1 },
     });
     expect(report.loopDraws, 'a one-action turn bound must draw every game').toBeGreaterThan(0);
-    expect(report.actionCapHits, 'the turn bound trips long before the game cap — that is the whole finding').toBe(0);
-    expect(runawayGames(report).length, `the summary and the list disagree\n${formatViolations(report.violations)}`).toBe(
-      report.loopDraws,
-    );
+    expect(
+      report.actionCapHits,
+      'the turn bound trips long before the game cap — that is the whole finding',
+    ).toBe(0);
+    expect(
+      runawayGames(report).length,
+      `the summary and the list disagree\n${formatViolations(report.violations)}`,
+    ).toBe(report.loopDraws);
   }, 300000);
 });
 
@@ -237,12 +251,24 @@ const MANDATORY_LOOP_CARDS = ['Dualcaster Mage', 'Rite of Replication'] as const
  */
 const MANDATORY_LOOP_SEEDS: ReadonlyArray<readonly [number, 'A' | 'B']> = [
   [635374, 'A'],
-  [7000, 'A'],
-  [111729, 'A'],
-  [111729, 'B'],
-  [216458, 'A'],
-  [7000, 'B'],
+  [740103, 'B'],
+  [1159019, 'A'],
+  [1159019, 'B'],
+  [2101580, 'A'],
+  [2101580, 'B'],
 ];
+
+/**
+ * How decisively the split has to fall before a row may call it either way.
+ *
+ * Measured over 80 games on this board: 56 ended `loop`, and the readings are
+ * bimodal — 398 answered against 1,980 auto-answered (five to one, compulsory)
+ * or 1,185 answered against 0 (a pilot that will not stop). Between them sit
+ * eight games at 396 vs 397, which is not a verdict at all; a bare `>` would let
+ * a coin flip decide a CR 104.4b ruling, so the seeds pinned above are the
+ * decisive ones and a row that lands on a near-tie goes red and asks for a human.
+ */
+const RULING_MARGIN = 2;
 
 /** A legal 60 with the loop's two halves in it, and enough mana to cast them. */
 function mandatoryLoopDeck(): SoakDeck {
@@ -268,7 +294,9 @@ function mandatoryLoopDeck(): SoakDeck {
 
 /** `… N were ANSWERED by a player and M had a single legal option …` → [N, M]. */
 function whoChose(detail: string): readonly [number, number] {
-  const m = /questions (\d+) were ANSWERED by a player and (\d+) had a single legal option/.exec(detail);
+  const m = /questions (\d+) were ANSWERED by a player and (\d+) had a single legal option/.exec(
+    detail,
+  );
   return m ? [Number(m[1]), Number(m[2])] : [0, 0];
 }
 
@@ -290,20 +318,21 @@ describe('a loop the RULES draw is reported too — and is TOLD APART, not swall
         expect(decks, `seed ${seed} is not the CR 104.4b board\n${decks}\n`).toContain(card);
       }
       const runaway = violations.find((v) => v.invariant === SOAK_INVARIANTS.gameCanEnd);
+      // ⚠️ THE FIRST SEED THAT RUNS AWAY IS THE ONE RULED ON. The scan skips a
+      // seed that produced no runaway at all (a pilot change can do that) and
+      // NEVER a seed whose reading it dislikes. Scanning for a match is how this
+      // row escaped its own sabotage the first time: inverting the chosen /
+      // auto-answered discriminator made it walk down the list until it found a
+      // game satisfying the inverted reading, and pass. A row that keeps looking
+      // until it agrees with itself is not a check.
       if (!runaway) continue;
-      const [chosen, forced] = whoChose(runaway.detail);
-      // The RULING, made here by a human and re-checked by the row: this loop is
-      // compulsory. A loop whose steps were mostly ANSWERED is the other verdict
-      // and belongs in `RUNAWAYS` above, not here.
-      if (forced > chosen) {
-        found = { detail: runaway.detail, decks };
-        break;
-      }
+      found = { detail: runaway.detail, decks };
+      break;
     }
     expect(
       found,
-      `none of the ${MANDATORY_LOOP_SEEDS.length} pinned seeds produced a COMPULSORY loop on this ` +
-        `board. That is a finding to re-rule, not a regression to fix: either the pilot stopped ` +
+      `none of the ${MANDATORY_LOOP_SEEDS.length} pinned seeds ran away on this board at all. That ` +
+        `is a finding to re-rule, not a regression to fix: either the pilot stopped ` +
         `walking into CR 104.4b, or the two cards stopped combining.`,
     ).not.toBeNull();
 
@@ -312,8 +341,13 @@ describe('a loop the RULES draw is reported too — and is TOLD APART, not swall
     // here the loop's steps had ONE legal option each and nobody was asked, while
     // every `RUNAWAYS` row above is hundreds of answers a pilot chose to give.
     const [chosen, forced] = whoChose(found!.detail);
-    expect(forced, `a mandatory loop must be mostly auto-answered\n${found!.detail}`).toBeGreaterThan(chosen);
-    expect(forced, 'and it must be a LOOP, not two forced steps').toBeGreaterThan(RUNAWAY_MIN_COPIES);
+    expect(
+      forced,
+      `RE-RULE THIS ROW: this board produced a loop that was mostly CHOSEN, not compulsory\n${found!.detail}`,
+    ).toBeGreaterThan(chosen * RULING_MARGIN);
+    expect(forced, 'and it must be a LOOP, not two forced steps').toBeGreaterThan(
+      RUNAWAY_MIN_COPIES,
+    );
   }, 600000);
 
   it('and the copy mirror is the OTHER verdict, on the same measurement', () => {
@@ -331,7 +365,10 @@ describe('a loop the RULES draw is reported too — and is TOLD APART, not swall
     const runaway = violations.find((v) => v.invariant === SOAK_INVARIANTS.gameCanEnd);
     expect(runaway, 'the mirror stopped being a runaway').toBeDefined();
     const [chosen, forced] = whoChose(runaway!.detail);
-    expect(chosen, `a pilot that will not stop must be mostly ANSWERED\n${runaway!.detail}`).toBeGreaterThan(forced);
+    expect(
+      chosen,
+      `a pilot that will not stop must be mostly ANSWERED\n${runaway!.detail}`,
+    ).toBeGreaterThan(forced * RULING_MARGIN);
     expect(chosen).toBeGreaterThan(RUNAWAY_MIN_COPIES);
   }, 120000);
 });
