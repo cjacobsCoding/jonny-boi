@@ -1884,7 +1884,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'gain-life-for-each',
-    description: '"[You] gain 1 life for each X" (Venser\'s Journal, Angelic Accord\'s cousins)',
+    description: '"[You] gain 1 life for each X" (Venser\'s Journal, Riot Control)',
     // The "for each" spelling of `gain-life-equal-to-count` one rule down, and
     // it compiles to the IDENTICAL descriptor — one derived count, read by
     // `intParam`.
@@ -1904,7 +1904,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'draw-for-each',
-    description: '"Draw a card for each X" (Shamanic Revelation\'s cousins)',
+    description: '"Draw a card for each X" — the draw half of Shamanic Revelation',
     // Same shape, same restriction as `gain-life-for-each`: one card PER thing
     // counted, never two — a `DerivedValue` has no multiplier to carry.
     pattern: new RegExp(`^${OPTIONAL_YOU}draw a card for each ${DERIVED_EACH_PHRASE}$`),
