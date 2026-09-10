@@ -1037,8 +1037,9 @@ function playOne(
   // will not stop. `{kind:'loop'}` is inferred from an action counter and means
   // only "this turn overran" — so the soak states what it saw, hands over the
   // traffic that produced it, and leaves the ruling to whoever reads the row. A
-  // loop a human has ruled MANDATORY becomes a pinned row in `soak.test.ts` that
-  // says so and names the cards, exactly like every other soak finding.
+  // loop a human has ruled MANDATORY becomes a pinned row in
+  // `loop-runaway.test.ts` that says so and names the cards, exactly like every
+  // other soak finding.
   if (result.outcome.kind === 'loop') {
     push(
       SOAK_INVARIANTS.gameCanEnd,
