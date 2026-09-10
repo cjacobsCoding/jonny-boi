@@ -511,12 +511,20 @@ describe('"each player sacrifices a [nontoken] creature of their choice"', () =>
     s = act(s, { kind: 'castSpell', player: 'A', instanceId: inHand.instanceId }, reg);
 
     const askedOf: PlayerId[] = [];
-    s = settle(s, reg, (choice) => {
+    s = settle(s, reg, (choice, atAsk) => {
       askedOf.push(choice.chooser);
       if (choice.kind === 'selectCards') {
         // Only creatures are ever offered — B's Island is not a candidate.
         expect(choice.candidates.every((c) => c.name !== 'Island')).toBe(true);
       }
+      // NOTHING has left the battlefield yet, on EITHER ask. CR 701.16 makes
+      // this one simultaneous event: the second chooser must not be answering
+      // on a board the first chooser's sacrifice already changed, and no
+      // dies-trigger may resolve between the two halves.
+      expect(
+        atAsk.battlefield.filter((c) => c.def.name === 'Grizzly Bears').length,
+        `${choice.chooser} was asked on a board that had already changed`,
+      ).toBe(2);
       // Each seat gives up a Grizzly Bears, keeping its Ogre.
       return { kind: 'selectCards', instanceIds: [candidateNamed(choice, 'Grizzly Bears')] };
     });
