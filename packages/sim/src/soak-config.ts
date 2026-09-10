@@ -142,7 +142,7 @@ export const SOAK_MAX_STACK_DEPTH = 100;
  * to turn 60 — so zero is the wrong bar. What is NOT allowed is either RUNAWAY
  * bound: the game-wide action cap ({@link SOAK_MAX_ACTIONS_PER_GAME}) or the
  * per-turn one that draws by CR 104.4b. Both are the signature of "the game
- * cannot end", and both are `gameCanEnd` violations — see DESIGN §3.139 for the
+ * cannot end", and both are `gameCanEnd` violations — see DESIGN §3.140 for the
  * years this invariant spent watching only the first of them.
  */
 export const SOAK_MAX_TIMEOUT_RATE = 0.35;
@@ -1108,7 +1108,7 @@ export const SOAK_INVARIANTS = {
   noUnsupportedEffect: 'no pool card resolves an effect the registry cannot provide',
   /*
    * ⚠️ "NEVER REACHES THE ACTION CAP" WAS NOT THE SAME QUESTION, and the gap
-   * between the two silently switched this invariant off (DESIGN §3.139).
+   * between the two silently switched this invariant off (DESIGN §3.140).
    *
    * The game-wide cap is 6,000 actions; the per-TURN bound CR 104.4b's draw hangs
    * off is 2,000. A runaway therefore trips the per-turn bound FIRST, is recorded

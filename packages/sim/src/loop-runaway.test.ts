@@ -1,5 +1,5 @@
 /**
- * THE RUNAWAY THE GUARD COULD NOT SEE — DESIGN §3.139.
+ * THE RUNAWAY THE GUARD COULD NOT SEE — DESIGN §3.140.
  *
  * `soak-config.ts`'s `gameCanEnd` invariant exists for one class: *this game
  * cannot end*. It watched the game-wide action cap (6,000). A game has a SECOND
@@ -67,7 +67,7 @@ const RUNAWAY_MIN_COPIES = 100;
 function stubbornCopyPilot(inner: Pilot): Pilot {
   return {
     id: `${inner.id}-will-not-stop`,
-    description: 'always re-aims a copy at another copy spell (DESIGN §3.139 fixture)',
+    description: 'always re-aims a copy at another copy spell (DESIGN §3.140 fixture)',
     chooseAction(ctx): GameAction {
       const pending = ctx.view.pendingChoice;
       if (pending?.kind === 'selectTargets') {
@@ -168,7 +168,7 @@ describe('a turn that overran is a game that could not END', () => {
       const runaway = violations.filter((v) => v.invariant === SOAK_INVARIANTS.gameCanEnd);
       expect(
         runaway.length,
-        `the turn overran and the soak reported no runaway — the §3.139 blindness is back\n${formatViolations(violations)}\n`,
+        `the turn overran and the soak reported no runaway — the §3.140 blindness is back\n${formatViolations(violations)}\n`,
       ).toBe(1);
 
       // AND WHY IT IS RULEABLE. The detail carries the traffic, which is the only

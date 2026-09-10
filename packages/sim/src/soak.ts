@@ -148,7 +148,7 @@ export interface SoakReport {
    * `loop-runaway.test.ts` measures it: the copy mirror §3.33 fixed ends `loop`
    * at 661 copies and 2,280 actions, against a 6,000-action cap. The deep tier's
    * first sweep with the door watched turned up EIGHT of these, all one card.
-   * See DESIGN §3.139.
+   * See DESIGN §3.140.
    */
   readonly loopDraws: number;
   readonly wins: Readonly<Record<PlayerId, number>>;
@@ -1037,7 +1037,7 @@ function playOne(
   // "this game cannot end" was therefore structurally incapable of catching it:
   // `loop-runaway.test.ts` drives the exact copy mirror §3.33 fixed and the game
   // ends `loop` at 661 copies, 2,280 actions — nowhere near the 6,000 the check
-  // above wanted. Before this push it reported nothing at all. See DESIGN §3.139.
+  // above wanted. Before this push it reported nothing at all. See DESIGN §3.140.
   //
   // Reported rather than ADJUDICATED, because the engine cannot tell the two
   // apart from here and must not pretend to. CR 104.4b legitimately draws a
@@ -1588,7 +1588,7 @@ export function runSoak(options: SoakOptions): SoakReport {
  * that tripped the turn bound first — which is EVERY runaway, the bound being a
  * third of the cap — was counted as a legal loop draw and passed. Asking the
  * question twice in two tiers is how that gap survived a rewrite, so the tiers
- * now ask it here (DESIGN §3.139).
+ * now ask it here (DESIGN §3.140).
  */
 export function runawayGames(report: SoakReport): readonly SoakViolation[] {
   return report.violations.filter((v) => v.invariant === SOAK_INVARIANTS.gameCanEnd);
@@ -1620,7 +1620,7 @@ export function formatSoakReport(report: SoakReport): string {
   // below. Summarised here as well because a reader scanning the head of a report
   // must not have to count `✗` lines to learn that eight games could not end —
   // and because this line spent its whole life saying a loop draw was legal and
-  // merely watched, which is how the invariant stayed switched off (§3.139).
+  // merely watched, which is how the invariant stayed switched off (§3.140).
   if (report.actionCapHits > 0) lines.push(`  ⚠ ${report.actionCapHits} game(s) hit the ACTION cap — a game that cannot end`);
   if (report.loopDraws > 0) {
     lines.push(

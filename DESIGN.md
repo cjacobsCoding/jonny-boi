@@ -2889,7 +2889,7 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
-### 3.139 The guard that could not see its own class — a runaway leaves by the TURN bound — ✅ done
+### 3.140 The guard that could not see its own class — a runaway leaves by the TURN bound — ✅ done
 
 §3.32 handed §3.33 three soak games that "burned the 6,000-action cap without ending". §3.33 fixed the
 pilot defect behind them and recorded the deep tier's `gameCanEnd` going **3 → 0**. Both halves were

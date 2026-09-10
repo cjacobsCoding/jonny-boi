@@ -72,7 +72,7 @@ describe.skipIf(games <= 0)(`deep soak (${games} mixed games — set ${SOAK_DEEP
     // Both runaway doors, through the one funnel — see `runawayGames`. Asking it
     // as `actionCapHits === 0` (what this line used to be) let every runaway that
     // tripped the per-turn bound FIRST pass as a legal CR 104.4b draw, and the
-    // first sweep with that door watched turned up eight of them. DESIGN §3.139.
+    // first sweep with that door watched turned up eight of them. DESIGN §3.140.
     const runaways = runawayGames(report);
     expect(runaways.length, formatViolations(runaways)).toBe(0);
     expect(report.actionCapHits + report.loopDraws).toBe(0);

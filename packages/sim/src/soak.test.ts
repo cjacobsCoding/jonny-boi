@@ -201,7 +201,7 @@ describe('the fast soak', () => {
     // `expect(report.actionCapHits).toBe(0)`, and that is a different question:
     // the per-turn bound is a third of the game-wide cap, so a runaway trips it
     // first, is drawn by CR 104.4b, and never touches the cap this test named. It
-    // was green for exactly the thing it exists to catch (DESIGN §3.139).
+    // was green for exactly the thing it exists to catch (DESIGN §3.140).
     expect(runawayGames(report).length, `\n${formatSoakReport(report)}\n`).toBe(0);
     // Belt and braces: the summary counters and the violation list are two
     // renderings of one fact, and a divergence between them is itself a bug.
