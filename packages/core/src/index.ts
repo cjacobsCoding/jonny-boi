@@ -423,6 +423,35 @@ export {
   NO_MOD,
 } from './internal/continuous.js';
 
+// CHARACTERISTIC PROVENANCE (§3.143 / UX-17) — the OTHER half of the continuous
+// seam: the aggregation above keeps the sum, and this keeps the story. ONE list
+// answers every characteristic, so the board tile, the hover card, the stack card
+// and the prompt card all read the same array and filter it rather than each
+// re-deriving "where did that +1/+1 come from" (rule 12). Lazily walked: nothing
+// here is on the aggregation's hot path.
+export type {
+  CharacteristicContribution,
+  CharacteristicExplanation,
+  CharacteristicKind,
+  CharacteristicSupport,
+  ContributionLayer,
+  ContributionMode,
+  ContributionSource,
+  ContributionSourceKind,
+} from './provenance.js';
+export {
+  CHARACTERISTIC_KINDS,
+  CHARACTERISTIC_SUPPORT,
+  CONTINUOUS_EFFECT_CHARACTERISTICS,
+  CONTRIBUTION_LAYERS,
+  CONTRIBUTION_MODES,
+  CONTRIBUTION_SOURCE_KINDS,
+  MODIFICATION_CHARACTERISTICS,
+  UNEXPLAINED_SOURCE_NAME,
+  VANISHED_SOURCE_NAME,
+  explainCharacteristics,
+} from './provenance.js';
+
 // Replacement + prevention effects (CR 614/615/616) — the ONE seam damage,
 // counters and draws all consult. `replacement.ts` is the card-facing
 // vocabulary (what a card DECLARES); `internal/replacement.ts` is the engine
@@ -784,6 +813,11 @@ export {
   effectiveToughness,
   remainingToughness,
   effectiveKeywords,
+  // Printed abilities first, then granted — the ONE accessor an ability INDEX means
+  // (see internal/stats.ts). Exported because a UI that renders a card's rules text
+  // needs the granted abilities' printed wording, and re-deriving "printed plus
+  // granted" in the app would give that index a second answer.
+  effectiveActivated,
   mergeKeywordGrant,
   hasKeyword,
   PLUS_ONE_COUNTER,
