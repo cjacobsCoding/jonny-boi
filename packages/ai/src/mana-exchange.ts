@@ -178,6 +178,33 @@ export function manaExchangeIsNoOp(
 }
 
 /**
+ * {@link manaExchangeIsNoOp}, asked of the pool a FUNDING PLAN would leave
+ * floating — for the caller that has not tapped yet.
+ *
+ * A separate entry point rather than an argument, for one reason that is about
+ * cost: `bestFundedActivation` runs on every priority decision AND inside the
+ * MCTS rollout policy, where (see `heuristic.ts`'s header) everything it
+ * allocates is multiplied by ~20,000 per look-ahead decision. Predicting the
+ * pool means a battlefield scan and a pool copy per planned tap — work worth
+ * doing for the two cards in the pool that could loop and for nothing else. So
+ * the CHEAP half runs first: `pureManaExchange` refuses almost every ability on
+ * one property read, and the prediction is never built for those.
+ *
+ * Written as `f(cheap) && g(expensive)` at the call site instead, this ordering
+ * would be one refactor away from being lost.
+ */
+export function manaExchangeIsNoOpOnceFunded(
+  ability: ActivatedAbility,
+  def: CardDefinition,
+  view: PilotView,
+  player: PlayerId,
+  plan: readonly ManaTapPlan[],
+): boolean {
+  if (pureManaExchange(ability) === undefined) return false;
+  return manaExchangeIsNoOp(ability, def, poolAfterPlan(view, player, plan));
+}
+
+/**
  * The pool a funding plan would leave floating — `pool` plus everything the plan
  * taps for — or `undefined` when it cannot be predicted.
  *
@@ -188,7 +215,7 @@ export function manaExchangeIsNoOp(
  * second time (core's pool already does), this says so and
  * {@link manaExchangeIsNoOp} declines to rule.
  */
-export function poolAfterPlan(
+function poolAfterPlan(
   view: PilotView,
   player: PlayerId,
   plan: readonly ManaTapPlan[],

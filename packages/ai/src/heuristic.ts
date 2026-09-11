@@ -126,7 +126,7 @@ import { manaPreferenceOf } from './mana-preference.js';
 // §3.141 — the ability that gives back exactly what it takes. ONE predicate, read
 // by every scorer that can choose an activation, so a mana ability the pilot must
 // not repeat cannot be refused on one path and taken on another.
-import { manaExchangeIsNoOp, poolAfterPlan } from './mana-exchange.js';
+import { manaExchangeIsNoOp, manaExchangeIsNoOpOnceFunded } from './mana-exchange.js';
 import type { DecisionContext, DecisionTrace, Pilot, PilotView } from './pilot.js';
 import type { HeuristicWeights } from './weights.js';
 // poison family (§3.105): the two lethal clocks, kept apart.
@@ -1450,7 +1450,7 @@ function bestFundedActivation(
       // tap and only then discover the activation was worthless: the mana is
       // stranded (pools empty at end of step) and the source a real spell wanted
       // is gone. Deciding before the tap costs nothing and strands nothing.
-      if (manaExchangeIsNoOp(ability, perm.def, poolAfterPlan(view, me, plan))) continue;
+      if (manaExchangeIsNoOpOnceFunded(ability, perm.def, view, me, plan)) continue;
 
       // The activation itself is taken from the ENGINE's menu, never rebuilt —
       // see `offeredActivation`. When mana still has to be tapped there is no
