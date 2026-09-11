@@ -24,7 +24,8 @@ import {
   type GameState,
   type InstanceId,
 } from '@jonny-boi/core';
-import { createHeuristicPilot } from './heuristic.js';
+import { indexContinuous } from '@jonny-boi/core';
+import { createHeuristicPilot, legalizeBlocks } from './heuristic.js';
 import { creatureDef, landDef, putOnBattlefield } from './test-support.js';
 
 function stubDeck(): DeckList {
@@ -156,6 +157,103 @@ describe('the gang-block search respects the SIZE of a block requirement', () =>
       ]);
       expect(rejectionOf(applyAction(state, action))).toBeUndefined();
     }
+  });
+});
+
+
+describe('the gang-block search respects the CAP on a block requirement', () => {
+  it("proposes no PAIR on an attacker that can't be blocked by more than one creature", () => {
+    /*
+     * THE INCIDENT (DESIGN §3.141, soak seed 3455580742): the pilot's count
+     * mirror read only the MINIMUM bound of CR 509.1b, so Bristling Boar's
+     * "can't be blocked by more than one creature" looked like NO constraint at
+     * all. The gang search paired Millennial Gargoyle and Screeching Sliver onto
+     * it, the engine refused the whole declaration, and after three rejections
+     * the harness passed priority and the defender took the attack unblocked.
+     *
+     * It is the SAME defect as the three-blocker case above, one bound over:
+     * a mirror that answers a coarser question than the rule it mirrors. Both
+     * bounds are now one core predicate (`blockerCountAllowed`).
+     */
+    const state = freshGame(3455580742);
+    const [boar] = putOnBattlefield(state, 'A', [
+      // Bristling Boar's rule on a 3/3 body: sized so the pair is a trade the
+      // search genuinely WANTS (the CONTROL below proves it takes it), because a
+      // test where it declines for value would pass whatever the rule said.
+      creatureDef('Bristling Boar', 3, 3, { keywords: { maxBlockers: 1 } }),
+    ]);
+    // The pair the search wants: two 2/2s together kill it and neither does
+    // alone, which is exactly the trade `addGangBlocks` exists to find.
+    putOnBattlefield(state, 'B', [creatureDef('Bear One', 2, 2), creatureDef('Bear Two', 2, 2)]);
+    intoDeclareBlockers(state, [boar!.instanceId]);
+
+    const action = choose(state);
+    expect(rejectionOf(applyAction(state, action))).toBeUndefined();
+    if (action.kind === 'declareBlockers') {
+      expect(action.blocks.filter((b) => b.attacker === boar!.instanceId).length).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('CONTROL: the same pair gang-blocks the same body without the cap', () => {
+    // Without `maxBlockers` the search must still form the pair, or the fix
+    // turned gang blocking off rather than teaching it the rule.
+    const state = freshGame(3455580742);
+    const [boar] = putOnBattlefield(state, 'A', [creatureDef('Uncapped Boar', 3, 3)]);
+    putOnBattlefield(state, 'B', [creatureDef('Bear One', 2, 2), creatureDef('Bear Two', 2, 2)]);
+    intoDeclareBlockers(state, [boar!.instanceId]);
+
+    const action = choose(state);
+    expect(action.kind).toBe('declareBlockers');
+    if (action.kind === 'declareBlockers') {
+      expect(action.blocks.filter((b) => b.attacker === boar!.instanceId)).toHaveLength(2);
+      expect(rejectionOf(applyAction(state, action))).toBeUndefined();
+    }
+  });
+});
+
+describe('the ask-core gate sheds the illegal pair, not the whole declaration', () => {
+  /*
+   * The price of getting a block rule wrong is what makes this gate worth its
+   * cost: ONE illegal pair rejects the entire `declareBlockers`, so a pilot that
+   * proposed one lost every other block in the same action. `legalizeBlocks`
+   * hands the finished blocks to the engine's own judge and drops pairs until
+   * they stand — so the next clause somebody forgets costs a block, not a combat.
+   */
+  it('drops both blockers from a capped attacker and keeps the legal block', () => {
+    const state = freshGame(3455580742);
+    const [boar, bear] = putOnBattlefield(state, 'A', [
+      creatureDef('Bristling Boar', 4, 3, { keywords: { maxBlockers: 1 } }),
+      creatureDef('Plain Attacker', 2, 2),
+    ]);
+    const defenders = putOnBattlefield(state, 'B', [
+      creatureDef('Blocker One', 2, 2),
+      creatureDef('Blocker Two', 2, 2),
+      creatureDef('Blocker Three', 2, 2),
+    ]);
+    const blocks = [
+      { blocker: defenders[2]!.instanceId, attacker: bear!.instanceId },
+      { blocker: defenders[0]!.instanceId, attacker: boar!.instanceId },
+      { blocker: defenders[1]!.instanceId, attacker: boar!.instanceId },
+    ];
+    legalizeBlocks([boar!, bear!], blocks, new Set(), indexContinuous(state), defenders, state.battlefield);
+    // The capped attacker's whole group goes — leaving ONE of its two blockers
+    // would be legal here, but a group is shed whole because for a menacing
+    // attacker the leftover single blocker is illegal for a new reason.
+    expect(blocks).toEqual([{ blocker: defenders[2]!.instanceId, attacker: bear!.instanceId }]);
+  });
+
+  it("never sheds a block core's own requirement solver demanded", () => {
+    // A lure's block is REQUIRED (CR 509.1d): dropping it is the other way to
+    // have a declaration refused, so the gate declares nothing instead.
+    const state = freshGame(3455580742);
+    const [lure] = putOnBattlefield(state, 'A', [
+      creatureDef('Lure Target', 2, 2, { keywords: { blockedByAllAble: true } }),
+    ]);
+    const defenders = putOnBattlefield(state, 'B', [creatureDef('Blocker One', 2, 2)]);
+    const blocks = [{ blocker: defenders[0]!.instanceId, attacker: lure!.instanceId }];
+    const forced = new Set([lure!.instanceId]);
+    legalizeBlocks([lure!], blocks, forced, indexContinuous(state), defenders, state.battlefield);
+    expect(blocks).toEqual([{ blocker: defenders[0]!.instanceId, attacker: lure!.instanceId }]);
   });
 });
 

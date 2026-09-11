@@ -4116,8 +4116,13 @@ function chooseBlock(
  * returns after a single keyword read per attacker when nothing on the board
  * prints a count rule or a requirement — the ordinary combat. The shedding loop
  * runs only when the engine has actually refused something.
+ *
+ * EXPORTED for its own test. A safety net whose behaviour is only ever reached
+ * when something else is already broken is a net nobody can prove is there —
+ * `gang-block-landwalk.test.ts` hands it a declaration the engine refuses and
+ * checks WHICH blocks survive.
  */
-function legalizeBlocks(
+export function legalizeBlocks(
   attackers: readonly CardInstance[],
   blocks: { blocker: InstanceId; attacker: InstanceId }[],
   forcedAttackers: ReadonlySet<InstanceId>,
