@@ -7678,6 +7678,42 @@ reads.
 - **"Destroy all nontoken creatures"** (Hour of Reckoning) — `destroyAll` takes no `CardFilter` at all,
   so the token flag has nothing to narrow there; that is a `destroyAll` gap, not a token one.
 
+### 3.143 The MTGA-parity play surface — seventeen items, nine lanes — 🚧 in progress
+
+Raised 2026-09-11 as one request. **The scope lives in
+[docs/MTGA-UX-OVERHAUL.md](docs/MTGA-UX-OVERHAUL.md), the request verbatim plus seventeen numbered
+items, and THAT file is the checklist** — this entry tracks status only, because a scope summarised
+twice is a scope that will be summarised differently the second time.
+
+§§3.130–3.133 gave the board sound, VFX, an effects bench and a post-hoc opponent feed. What is
+still missing is everything a player needs to *understand* a game rather than merely watch one: the
+stack is a list of NAMES, the battlefield is a flat grid, a cast is irrevocable the moment it starts,
+and a creature that is secretly a 5/6 still shows its printed 4/5.
+
+**Three of the seventeen are CLASS problems wearing UI clothes, and are why this is not a CSS
+ticket:**
+
+1. **Provenance (UX-17).** `indexContinuous` aggregates every continuous effect into one
+   `AggregatedMod` per instance and throws the ATTRIBUTION away; `view-model.ts` can therefore show a
+   bare `ptDelta` badge but can never say WHICH enchantment supplied it. "Show 5/6, and on hover say
+   where each point came from" cannot be built honestly on a sum, and a UI that re-derives the answer
+   is the two-places-one-question failure rule 12 forbids. The aggregation grows an OPT-IN
+   contribution list — opt-in because it sits in the sim hot path — and every surface reads that
+   one list.
+2. **The optional gate (UX-6).** `optional-trigger.ts` already fixed "may asked after targets", but
+   only for a TRIGGERED ability, on `def.triggers`, with `mayEffects` at the TOP level, and
+   `min > 0`. The complaint recurring ("I'm still getting a lot of situations") is the signature of a
+   one-off fix on a class-shaped bug. The fix is a CLOSED TABLE of gate shapes, scanned recursively
+   over the whole effect tree, applied to triggered, activated, spell and replacement sources alike,
+   with an untabulated shape REPORTING (falling back to today's ordering) rather than being guessed
+   at. **Measure the miss count against the real pool before writing it (rule 11).**
+3. **The two-phase cast (UX-3/4/5).** The engine mutates during `castSpell` — it pays costs and
+   moves the card to the stack — and only then parks the `selectTargets` question. Rewriting that
+   inside the engine is a large change to the hottest path, so the commit boundary lives in the
+   SESSION as a transaction: snapshot, propose, cancel-restores. That is sound only while no other
+   seat has decided and nothing hidden has been revealed — an invariant that is enforced and tested,
+   with the cancel affordance DISAPPEARING rather than lying when it fails.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.
