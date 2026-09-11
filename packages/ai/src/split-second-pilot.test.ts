@@ -30,7 +30,7 @@ import {
   type GameAction,
   type GameState,
 } from '@jonny-boi/core';
-import { createHeuristicPilot } from './heuristic.js';
+import { createHeuristicPilot, policyCandidates } from './heuristic.js';
 import { burnDef, creatureDef, giveHand, landDef, putOnBattlefield, putOnStack } from './test-support.js';
 
 const MOUNTAIN = landDef('Mountain', 'R');
@@ -109,6 +109,26 @@ describe('the pilot never plays into a split-second lock', () => {
     const action = choose(state);
     expect(['castSpell', 'tapForMana']).toContain(action.kind);
     expect(rejectionOf(state, action)).toBeUndefined();
+  });
+
+  it('offers a SEARCH nothing but the pass under the lock', () => {
+    /*
+     * THE SAME DEFECT'S OTHER HOME. `policyCandidates` is the seam the search
+     * pilots reach, and it builds the same constructed casts, cycles and
+     * activations `decide` does — so a class fixed only in `decide` is fixed in
+     * one of its two homes. The soak walks the DEFAULT pilot, which reaches
+     * `decide`; nothing in that run would ever have found this one.
+     */
+    const state = board(SPLIT_SECOND_SPELL);
+    const options = policyCandidates(state, generateLegalActions(state));
+    expect(options).toHaveLength(1);
+    expect(options[0]!.plies.map((p) => p.kind)).toEqual(['passPriority']);
+  });
+
+  it('CONTROL: the search gets real options without the keyword', () => {
+    const state = board(PLAIN_SPELL);
+    const options = policyCandidates(state, generateLegalActions(state));
+    expect(options.length).toBeGreaterThan(1);
   });
 
   it('acts again the moment the lock lifts', () => {

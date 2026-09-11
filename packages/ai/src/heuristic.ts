@@ -4847,7 +4847,18 @@ export function policyCandidates(
     collectAttackCandidates(view, legalActions, weights, explain, index, out);
   } else if (view.step === 'declareBlockers' && me === defendingPlayer(view)) {
     collectBlockCandidates(view, weights, explain, index, out);
-  } else {
+  } else if (!splitSecondOnStack(state)) {
+    // SPLIT SECOND (CR 702.61, DESIGN §3.141) — the SAME gate `decide` applies,
+    // at the matching seam, because this function has the same defect: every
+    // priority candidate below is a CONSTRUCTED cast, cycle or activation, and
+    // the lock forbids all three. The combat declarations above are untouched
+    // (core still offers those under the lock), and the pass appended below
+    // keeps the menu non-empty, so a search always has a move.
+    //
+    // Fixed here rather than left for the next soak because it is one defect
+    // with two homes: the DEFAULT pilot reaches `decide`, the search pilots
+    // reach this, and the soak only ever walks the first. A class fixed in one
+    // of its two homes is not fixed.
     collectPriorityCandidates(view, legalActions, weights, explain, index, out);
   }
 
