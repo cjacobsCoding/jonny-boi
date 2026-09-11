@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { getCard, cardImage } from '../lib/cards.js';
+import { CardFace } from './play/CardFace.js';
 import { previewPlacement, type PreviewAnchor } from './card-hover-position.js';
 import { hoverShouldClose, type HoverSignal } from './card-hover-dismiss.js';
+import type { CharacteristicExplanation } from '@jonny-boi/core';
 import './card-hover.css';
 
 /**
@@ -11,6 +13,26 @@ import './card-hover.css';
  * a game is unreadable otherwise: the battlefield tiles are art crops with a
  * name, and a `title` attribute is a slow, plain-text tooltip that can't show
  * rules text at all.
+ *
+ * ## ⚠️ THE PREVIEW IS A `CardFace`, NOT A PRINTED `<img>` (§3.143 GAP-7)
+ * A battlefield tile under an aura prints **5/6**. Until wave 2 the thing you
+ * hovered it with to read it was the bare Scryfall scan, which prints 4/5 — two
+ * answers to one question, on the exact surface a player opens to check. So the
+ * preview renders lane P's `CardFace` at `size="full"`, carrying the SAME
+ * `explanation` the surface it was opened from is carrying. That is also what
+ * makes the merged keyword line reachable ("vigilance, first strike, **flying**"):
+ * a 96px tile can only show the condensed aftermarket words, and this preview is
+ * where the whole line is read.
+ *
+ * Every card-bearing surface in the app already wraps in this component, so
+ * passing `explanation` through is also what puts the glossary and the
+ * aftermarket styling on the hand, the stack, the prompts and the mulligan
+ * without a sixth card renderer (scope §2.4).
+ *
+ * ⚠️ The panel stays `pointer-events: none` — it must never steal the hover that
+ * opened it — so the glossary pops INSIDE the preview are visible-but-not
+ * hoverable. The surfaces where a pop is genuinely reachable with a mouse are
+ * the ones mounted in the page: the battlefield tile and `CardZoomOverlay`.
  *
  * Self-contained on purpose: it owns its own hover state and portals the panel to
  * `document.body`, so a caller only wraps its children and no app-wide provider
@@ -33,6 +55,10 @@ import './card-hover.css';
  */
 export function CardHover({
   cardId,
+  explanation,
+  name,
+  isCreature,
+  unavailableReason,
   children,
   className,
 }: {
@@ -42,6 +68,19 @@ export function CardHover({
    * either absence simply renders the children with no preview.
    */
   readonly cardId?: string | null;
+  /**
+   * Core's characteristic breakdown for the object being hovered, when the
+   * surface has one (`BoardPermanent.explanation`). Absent is a real answer — a
+   * card in hand or on the stack is not on the battlefield and nothing is
+   * modifying it — and renders the plain printed card with its glossary intact.
+   */
+  readonly explanation?: CharacteristicExplanation | undefined;
+  /** Display name, for the token/no-pool-card case. Defaults to the pool card's. */
+  readonly name?: string;
+  /** Whether to draw a P/T box; the caller knows the type line, core does not. */
+  readonly isCreature?: boolean;
+  /** Why there is no provenance here, when the surface genuinely cannot supply it. */
+  readonly unavailableReason?: string;
   readonly children: ReactNode;
   readonly className?: string;
 }): ReactElement {
@@ -113,7 +152,17 @@ export function CardHover({
     >
       {children}
       {anchor && image && card
-        ? createPortal(<CardHoverPanel anchor={anchor} image={image} name={card.name} />, document.body)
+        ? createPortal(
+            <CardHoverPanel
+              anchor={anchor}
+              cardId={card.id}
+              name={name ?? card.name}
+              {...(explanation !== undefined ? { explanation } : {})}
+              {...(isCreature !== undefined ? { isCreature } : {})}
+              {...(unavailableReason !== undefined ? { unavailableReason } : {})}
+            />,
+            document.body,
+          )
         : null}
     </span>
   );
@@ -123,15 +172,25 @@ export function CardHover({
  * The floating panel itself. Placement (including the off-screen clamping) lives
  * in the pure, unit-tested `previewPlacement`; this component only reads the live
  * viewport and paints the result.
+ *
+ * The card inside it is `CardFace` — see the module header. The panel keeps the
+ * sizing and the clamping; the face keeps every decision about what the card
+ * currently SAYS, so there is one card renderer and not two (scope §2.4).
  */
 function CardHoverPanel({
   anchor,
-  image,
+  cardId,
   name,
+  explanation,
+  isCreature,
+  unavailableReason,
 }: {
   readonly anchor: PreviewAnchor;
-  readonly image: string;
+  readonly cardId: string;
   readonly name: string;
+  readonly explanation?: CharacteristicExplanation | undefined;
+  readonly isCreature?: boolean;
+  readonly unavailableReason?: string;
 }): ReactElement {
   const { left, top, width } = previewPlacement(anchor, {
     width: window.innerWidth,
@@ -145,7 +204,15 @@ function CardHoverPanel({
       role="tooltip"
       aria-label={name}
     >
-      <img className="card-hover-preview__img" src={image} alt={name} decoding="async" />
+      <CardFace
+        className="card-hover-preview__face"
+        size="full"
+        cardId={cardId}
+        name={name}
+        {...(explanation !== undefined ? { explanation } : {})}
+        {...(isCreature !== undefined ? { isCreature } : {})}
+        {...(unavailableReason !== undefined ? { unavailableReason } : {})}
+      />
     </div>
   );
 }

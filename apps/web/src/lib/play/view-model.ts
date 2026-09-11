@@ -139,8 +139,10 @@ export interface BoardPermanent {
    *
    * This is what `CardFace` draws: the 5/6 in place of the 4/5, the granted
    * "flying" merged into the printed keyword line, and the hover breakdown that
-   * names the enchantment. Built once per render pass from the SHARED
-   * continuous index, never per tile.
+   * names the enchantment.
+   *
+   * ⚠️ **LAZY** — see {@link explainerFor}. Reading it builds the breakdown on
+   * demand (once per `buildBoardView` pass); not reading it costs nothing.
    *
    * Optional because the online adapter cannot produce one; `CardFace` states
    * that absence rather than drawing an empty breakdown, which would read as
@@ -288,7 +290,68 @@ export function permanentMarks(
   };
 }
 
-function boardPermanent(state: GameState, inst: CardInstance, cont: ContinuousIndex): BoardPermanent {
+/**
+ * THE LAZY PROVENANCE READER (§3.143 / UX-17), memoised per `buildBoardView` pass.
+ *
+ * `explainCharacteristics` walks `state.continuous`, the attachments and the
+ * counters for ONE permanent. Built EAGERLY — which is how §3.143 wave 1 shipped
+ * it — that is one such walk per permanent per pass, twenty on a real board, for
+ * a breakdown that only the tile the player is actually looking at ever reads.
+ * The overhaul's own §2.1 asked for the opposite in as many words: *"Attribution
+ * is built only when asked for (a separate entry point / lazy field), never on
+ * every `effectivePower` read."*
+ *
+ * A GETTER rather than a method, so every consumer keeps reading
+ * `perm.explanation` and no call site had to learn a new shape. The cache is per
+ * pass, so two reads of one tile in one frame walk once and a new state never
+ * serves a stale breakdown.
+ *
+ * ⚠️ A getter is only safe because `BoardView` is React render input and is
+ * never serialized or structured-cloned (either would evaluate every one of
+ * them, which is precisely the eager cost this removes). If that ever changes,
+ * this has to change with it.
+ */
+function explainerFor(
+  state: GameState,
+  cont: ContinuousIndex,
+  cache: Map<InstanceId, CharacteristicExplanation | undefined>,
+): (instanceId: InstanceId) => CharacteristicExplanation | undefined {
+  return (instanceId) => {
+    // `has`, not a truthy check: `undefined` is a real answer (an instance core
+    // cannot find) and must not be recomputed on every read.
+    if (!cache.has(instanceId)) cache.set(instanceId, explainCharacteristics(state, instanceId, cont));
+    return cache.get(instanceId);
+  };
+}
+
+/**
+ * Core's characteristic breakdown for an instance the board draws FULL SIZE
+ * OUTSIDE the battlefield — the card a target prompt is about to cast, an
+ * opponent's spell held on the stack before it resolves (§3.143 / UX-8 + UX-17).
+ *
+ * The ONE producer for those faces, so a prompt and a tile cannot explain one
+ * card two different ways (rule 12). `null`/`undefined` in gives `undefined`
+ * out, and so does an id core cannot find (a token that has ceased to exist, an
+ * id from a stale frame) — `CardFace` renders those as the plain printed card.
+ *
+ * ⚠️ HIDDEN INFORMATION IS THE CALLER'S PROBLEM. `explainCharacteristics` reads
+ * every zone including both hands, so this must only ever be called with an
+ * instance the viewer may already see: their own hand card, or a public object.
+ */
+export function explainForFace(
+  state: GameState,
+  instanceId: InstanceId | null | undefined,
+): CharacteristicExplanation | undefined {
+  if (instanceId === null || instanceId === undefined) return undefined;
+  return explainCharacteristics(state, instanceId);
+}
+
+function boardPermanent(
+  state: GameState,
+  inst: CardInstance,
+  cont: ContinuousIndex,
+  explain: (instanceId: InstanceId) => CharacteristicExplanation | undefined,
+): BoardPermanent {
   const mod = cont.get(inst.instanceId) ?? NO_MOD;
   const creature = isCreature(inst.def);
   const power = creature ? effectivePower(inst, mod) : 0;
@@ -320,8 +383,11 @@ function boardPermanent(state: GameState, inst: CardInstance, cont: ContinuousIn
     defense: isBattle(inst.def) ? defenseOf(inst) : 0,
     protector: isBattle(inst.def) ? protectorOf(inst) : null,
     // The SHARED index is handed straight through, so the whole board costs one
-    // `indexContinuous` rather than one per permanent (lane E's contract).
-    explanation: explainCharacteristics(state, inst.instanceId, cont),
+    // `indexContinuous` rather than one per permanent (lane E's contract) — and
+    // the walk behind it happens only for a tile somebody reads ({@link explainerFor}).
+    get explanation(): CharacteristicExplanation | undefined {
+      return explain(inst.instanceId);
+    },
     tapped: inst.tapped,
     summoningSick: inst.summoningSick,
     power,
@@ -358,11 +424,12 @@ function seatView(
   name: string,
   reveal: boolean,
   cont: ContinuousIndex,
+  explain: (instanceId: InstanceId) => CharacteristicExplanation | undefined,
 ): SeatView {
   const p = state.players[seat];
   const permanents = state.battlefield
     .filter((c) => c.controller === seat)
-    .map((c) => boardPermanent(state, c, cont));
+    .map((c) => boardPermanent(state, c, cont, explain));
   return {
     id: seat,
     name,
@@ -433,6 +500,8 @@ export function buildBoardView(
   // ONE index for the whole pass — both seats' permanents and every
   // `explainCharacteristics` read it (see `seatView`).
   const cont = indexContinuous(state);
+  // ONE provenance cache for the whole pass, read through both seats' tiles.
+  const explain = explainerFor(state, cont, new Map());
   const combat = state.combat
     ? {
         attackers: [...state.combat.attackers],
@@ -450,8 +519,8 @@ export function buildBoardView(
     step: state.step,
     stack: stackView(state),
     combat,
-    self: seatView(state, viewer, names[viewer], true, cont),
-    opponent: seatView(state, opponentId, names[opponentId], false, cont),
+    self: seatView(state, viewer, names[viewer], true, cont, explain),
+    opponent: seatView(state, opponentId, names[opponentId], false, cont, explain),
     gameOver: state.gameOver,
     winner: state.winner,
   };

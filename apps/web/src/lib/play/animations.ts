@@ -29,6 +29,46 @@
 import type { GameEvent, InstanceId, PlayerId } from '@jonny-boi/core';
 import { ANIMATION_CONFIG } from './play-config.js';
 
+/**
+ * THE SEAT-ANCHOR TABLE — the `data-anim-anchor` names a seat publishes, named
+ * ONCE (§3.143 GAP-13).
+ *
+ * Every anchor is a contract between a component that PUBLISHES it and one or
+ * more overlays that MEASURE it, spelled as a template literal at each end. That
+ * is two places answering "what is this anchor called" (rule 12), and it already
+ * cost the overhaul a real defect: the damage layer and the combat arcs both
+ * aimed at `life:<seat>`, `SeatPanel` published no such element, and face damage
+ * silently fell back to the defender's creature row — so an attack "on a player"
+ * pointed at their creatures. Nothing could fail, because nothing named the
+ * anchor in a place a test could reach.
+ *
+ * Adding an anchor is a ROW. A kind not in the table does not exist, which is
+ * what makes `anchor-adoption.test.ts` able to check publisher against reader.
+ */
+export const SEAT_ANCHOR_NAMES = Object.freeze({
+  /** The life total. What damage to a player, and an attack on a player, aim at. */
+  life: 'life',
+  /** The hand COUNT chip in the zone rail (not the hand itself — see `hand`). */
+  handCount: 'hand-count',
+  library: 'library',
+  graveyard: 'graveyard',
+  /** The creature row — where a permanent-flavoured effect blooms. */
+  board: 'board',
+  /** The rendered hand region, published by the board rather than the seat panel. */
+  hand: 'hand',
+});
+
+/** One anchor kind (see {@link SEAT_ANCHOR_NAMES}). */
+export type SeatAnchorKind = keyof typeof SEAT_ANCHOR_NAMES;
+
+/**
+ * The `data-anim-anchor` value for one seat's anchor — the ONE spelling, used
+ * by whoever publishes it and by whoever measures it.
+ */
+export function seatAnchor(kind: SeatAnchorKind, seat: PlayerId): string {
+  return `${SEAT_ANCHOR_NAMES[kind]}:${seat}`;
+}
+
 /** The four scoped animation kinds (see the module doc). */
 export type AnimationKind = 'draw' | 'mill' | 'discard' | 'death';
 

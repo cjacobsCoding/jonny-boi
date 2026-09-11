@@ -22,6 +22,8 @@ import {
   type MeasuredRect,
   type Measurement,
 } from '../../lib/play/combat-lines.js';
+import type { PlayerId } from '@jonny-boi/core';
+import { seatAnchor, type SeatAnchorKind } from '../../lib/play/animations.js';
 import { COMBAT_ADVANCE_CONFIG, COMBAT_ARC_CONFIG } from '../../lib/play/play-config.js';
 import { usePrefersReducedMotion } from './AnimationLayer.js';
 import './combat-arcs.css';
@@ -267,17 +269,18 @@ const ARC_SETTLE_STABLE_FRAMES = 2;
 /**
  * Where a SEAT sits on screen, in preference order — first measurable wins.
  *
- * An attack on a player has to point AT the player, and the only anchors that
- * exist today are the zone rail and the creature row (`SeatPanel.tsx`). A
- * `life:<seat>` anchor on the life readout is the right target and is one
- * attribute away; until it exists, the defender's own creature row is the
- * correct END OF THE TABLE and reads honestly. A seat none of these can measure
- * contributes NO arc — the overlay never invents a destination.
+ * An attack on a player points AT that player's LIFE TOTAL, which `SeatPanel`
+ * publishes as `life:<seat>` (§3.143 GAP-13). The creature row stays as the
+ * second row rather than being deleted: a board that renders a seat without the
+ * life readout (the effects bench's stage, a future compact layout) still gets
+ * an honest destination instead of no arc. A seat NEITHER row can measure
+ * contributes no arc — the overlay never invents a destination.
+ *
+ * Spelled from `seatAnchor`, not as literals: the publisher and this reader must
+ * not be able to disagree about the name, which is precisely how the life anchor
+ * came to be aimed at and never published.
  */
-const SEAT_ANCHORS: readonly ((seat: string) => string)[] = [
-  (seat) => `life:${seat}`,
-  (seat) => `board:${seat}`,
-];
+const SEAT_ANCHOR_ORDER: readonly SeatAnchorKind[] = ['life', 'board'];
 
 /** Measure every arc's ends inside `container`; unmeasurable ends drop out. */
 function measureArcs(container: HTMLElement | null, arcs: readonly CombatArc[]): Measurement {
@@ -301,9 +304,9 @@ function permanentRect(container: HTMLElement, instanceId: number): MeasuredRect
   return el instanceof HTMLElement ? rectOf(el) : undefined;
 }
 
-function seatRect(container: HTMLElement, seat: string): MeasuredRect | undefined {
-  for (const anchorFor of SEAT_ANCHORS) {
-    const el = container.querySelector(`[data-anim-anchor="${anchorFor(seat)}"]`);
+function seatRect(container: HTMLElement, seat: PlayerId): MeasuredRect | undefined {
+  for (const kind of SEAT_ANCHOR_ORDER) {
+    const el = container.querySelector(`[data-anim-anchor="${seatAnchor(kind, seat)}"]`);
     if (el instanceof HTMLElement) return rectOf(el);
   }
   return undefined;

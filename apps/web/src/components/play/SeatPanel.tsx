@@ -3,6 +3,7 @@ import type { InstanceId, PlayerId } from '@jonny-boi/core';
 import { POISON_LOSS_THRESHOLD } from '@jonny-boi/core';
 import type { BoardPermanent, SeatView } from '../../lib/play/view-model.js';
 import type { JailedCardView } from '../../lib/play/jail-view.js';
+import { seatAnchor } from '../../lib/play/animations.js';
 import { BoardPermanentTile } from './BoardPermanentTile.js';
 
 /** Order mana colors consistently (WUBRG + C) for the pool readout. */
@@ -119,10 +120,20 @@ export function SeatPanel({
            * else - hard to notice". The heart is what makes a bare number read
            * as a life total at a glance.
            */}
+          {/*
+           * THE `life:<seat>` ANCHOR (§3.143 GAP-13). Damage to a player, and
+           * an attack declared on a player, both aim here — Caleb's whole point
+           * about readability is that an arrow at a PLAYER must point at that
+           * player, and the only seat anchor that existed was the creature row,
+           * so face damage and alpha strikes aimed at the defender's creatures.
+           * Both readers already preferred this anchor and fell back to
+           * `board:<seat>`; publishing it is what makes the preference real.
+           */}
           <span
             className={`seat__life${seat.life <= 5 ? ' seat__life--low' : ''}`}
             title="Life total"
             aria-label={`${seat.name} life`}
+            data-anim-anchor={seatAnchor('life', seat.id)}
           >
             <span aria-hidden="true">❤</span> {seat.life}
           </span>
@@ -157,11 +168,11 @@ export function SeatPanel({
         attributes are unchanged: they are what §3.57's sprites measure.
       */}
       <div className="seat__zones">
-        <span className="seat__zone" title="Cards in hand" data-anim-anchor={`hand-count:${seat.id}`}>
+        <span className="seat__zone" title="Cards in hand" data-anim-anchor={seatAnchor('handCount', seat.id)}>
           <span className="seat__zone-label">Hand</span>
           <span className="seat__zone-count">{seat.handCount}</span>
         </span>
-        <span className="seat__zone" title="Cards left in library" data-anim-anchor={`library:${seat.id}`}>
+        <span className="seat__zone" title="Cards left in library" data-anim-anchor={seatAnchor('library', seat.id)}>
           <span className="seat__zone-label">Library</span>
           <span className="seat__zone-count">{seat.libraryCount}</span>
         </span>
@@ -171,14 +182,14 @@ export function SeatPanel({
             className="seat__zone seat__zone-btn"
             title="Open graveyard"
             aria-label={`Open ${seat.name} graveyard (${seat.graveyardCount} cards)`}
-            data-anim-anchor={`graveyard:${seat.id}`}
+            data-anim-anchor={seatAnchor('graveyard', seat.id)}
             onClick={onGraveyardClick}
           >
             <span className="seat__zone-label">Graveyard</span>
             <span className="seat__zone-count">{seat.graveyardCount}</span>
           </button>
         ) : (
-          <span className="seat__zone" title="Graveyard" data-anim-anchor={`graveyard:${seat.id}`}>
+          <span className="seat__zone" title="Graveyard" data-anim-anchor={seatAnchor('graveyard', seat.id)}>
             <span className="seat__zone-label">Graveyard</span>
             <span className="seat__zone-count">{seat.graveyardCount}</span>
           </span>
@@ -240,7 +251,7 @@ export function SeatPanel({
         <div
           className="seat__row"
           aria-label={`${seat.name} ${BATTLEFIELD_ROWS.permanents.aria}`}
-          data-anim-anchor={`board:${seat.id}`}
+          data-anim-anchor={seatAnchor('board', seat.id)}
         >
           {nonlands.length === 0 ? (
             <span className="seat__empty">{BATTLEFIELD_ROWS.permanents.emptyText}</span>

@@ -145,17 +145,16 @@ const ENTRIES = {
   landwalk: {
     term: 'Landwalk',
     kind: 'keyword',
-    // ⚠️ SUSPECTED WRONG AT THE SOURCE, MIRRORED ANYWAY, AND REPORTED. The
-    // conformance manifest gives BOTH `shroud` and `landwalk` the rule '702.18'
-    // (rules-manifest.ts:1298 and :1330), and one file cannot define two
-    // keywords. Shroud is the one CR 702.18 actually is; landwalk's number looks
-    // like a copy slip.
-    //
-    // This row mirrors the manifest rather than "correcting" it, because a
-    // second independent answer is the fork rule 12 forbids — and
-    // `keyword-glossary.test.ts` pins the mirror, so the day the manifest is
-    // fixed this row fails until it is updated with it. Fix belongs in core.
-    rule: '702.18',
+    // The mirror worked exactly as designed, so this is the record of it: this
+    // row used to read '702.18' because the conformance manifest did, and
+    // '702.18' is SHROUD — one CR section cannot define two keywords. The row
+    // mirrored the manifest rather than "correcting" it (a second independent
+    // answer is the fork rule 12 forbids) and `keyword-glossary.test.ts` pinned
+    // the mirror. Core fixed the manifest to '702.14' (§3.143 wave 2, GAP-15)
+    // and this row went RED until it followed. Landwalk sits between intimidate
+    // (702.13) and lifelink (702.15). Keep mirroring: never edit this number
+    // except to match `KEYWORD_RULES`.
+    rule: '702.14',
     flag: 'landwalk',
     text: 'Printed as "swampwalk", "islandwalk", "nonbasic landwalk" and so on. It cannot be blocked at all as long as the player it is attacking controls a land of that kind — one is enough, and it does not have to be tapped or doing anything.',
   },
@@ -712,7 +711,7 @@ export function normalizeGlossaryTerm(raw: string): string {
  * A term whose keyword is its PREFIX or its SUFFIX, by the rule's own wording.
  *
  * ⚠️ This is not a fuzzy fallback, and the difference matters. "Swampwalk" is a
- * landwalk ability *because CR 702.18b defines landwalk as "[type]walk"* — the
+ * landwalk ability *because CR 702.14b defines landwalk as "[type]walk"* — the
  * affix IS the definition, so resolving it is exact. What is forbidden, and what
  * this table exists instead of, is nearest-match guessing: a term that matches
  * no row and no affix returns `undefined` and the caller shows no tooltip,

@@ -1413,3 +1413,74 @@ export const CARD_FACE_BENCH_SAMPLES: readonly CardFaceBenchSample[] = Object.fr
     },
   } as const),
 ]);
+
+/* -------------------------------------------------------------------------- */
+/* 9. Where a tooltip is DRAWN — the pure half of the portal (§3.143 GAP-6)    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The pop's placement knobs.
+ *
+ * They live here, in this lane's own module, rather than in `play-config.ts`:
+ * they describe a TOOLTIP's relationship to the word it hangs off, which no
+ * other surface has an opinion about, and `components/card-hover-config.ts` is
+ * the repo's existing precedent for a single component's placement constants.
+ */
+export const POP_PLACEMENT_CONFIG = Object.freeze({
+  /** Clear air between the word and its tooltip, in CSS px. */
+  gapPx: 8,
+  /** How close to a viewport edge the tooltip may come, in CSS px. */
+  viewportMarginPx: 8,
+});
+
+/** A measured rectangle, in viewport coordinates (a `DOMRect` satisfies it). */
+export interface PopRect {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** The viewport the tooltip must stay inside. */
+export interface PopViewport {
+  readonly width: number;
+  readonly height: number;
+}
+
+/** Resolved placement, in viewport pixels — fed straight to `position: fixed`. */
+export interface PopPlacement {
+  readonly left: number;
+  readonly top: number;
+  /** True when the tooltip sits ABOVE its trigger; false when it was flipped under it. */
+  readonly above: boolean;
+}
+
+/**
+ * Place a tooltip against its trigger, clamped inside the viewport.
+ *
+ * Pure and DOM-free so the one part of the portal with real arithmetic can be
+ * tested in Node — the portal itself cannot be, which is exactly how wave 1
+ * shipped a tooltip that no player could ever see.
+ *
+ * ABOVE by default, because a tooltip under a word covers the next line of the
+ * card it is explaining; it flips below only when there is genuinely no room
+ * above. Horizontally it is centred on the trigger and then clamped.
+ *
+ * When the viewport is SMALLER than the tooltip, the top-left margin wins (the
+ * same convention `previewPlacement` settled on): a tooltip whose first words
+ * are on screen is readable, one whose last words are is not.
+ */
+export function popPlacement(anchor: PopRect, pop: PopRect, viewport: PopViewport): PopPlacement {
+  const { gapPx, viewportMarginPx } = POP_PLACEMENT_CONFIG;
+
+  const above = anchor.top - gapPx - pop.height >= viewportMarginPx;
+  const lowestTop = viewport.height - viewportMarginPx - pop.height;
+  const wantedTop = above ? anchor.top - gapPx - pop.height : anchor.top + anchor.height + gapPx;
+  const top = Math.max(viewportMarginPx, Math.min(wantedTop, lowestTop));
+
+  const centred = anchor.left + anchor.width / 2 - pop.width / 2;
+  const rightmostLeft = viewport.width - viewportMarginPx - pop.width;
+  const left = Math.max(viewportMarginPx, Math.min(centred, rightmostLeft));
+
+  return { left, top, above };
+}

@@ -65,7 +65,7 @@ import type { RulesConfig } from './config.js';
 import { DEFAULT_RULES } from './config.js';
 import type { ChoiceChannel, EffectRegistry } from './effects.js';
 import { applyEffectRef, createEffectRegistry, shuffleLibraryInState } from './effects.js';
-import type { GameEvent } from './events.js';
+import type { CombatDamageRound, GameEvent } from './events.js';
 import { createRng, shuffle } from './rng.js';
 import type { ManaColor, ManaCost, ManaProduction } from './mana.js';
 import { repeatCost } from './mana.js';
@@ -755,15 +755,39 @@ function otherPlayer(p: PlayerId): PlayerId {
 
 // --- combat damage orchestration ----------------------------------------------
 
+/**
+ * Deal one combat-damage step's damage, with every damage event it emits marked
+ * with the step it belonged to (CR 510.4).
+ *
+ * THE ONE PLACE THAT KNOWS THE ROUND. The marker is stamped by decorating the
+ * emitter here rather than by threading a `round` argument down through
+ * `applyDamage` → `applyDamageResult` → every caller, because only this function
+ * runs the steps and so only this function can answer the question. Threading it
+ * would put the answer in a dozen signatures, half of which (a burn spell, a
+ * fight) have no round to pass and would have to pass `undefined` forever.
+ *
+ * Only the two damage events are rewritten; everything else (the life loss, the
+ * deaths, the lifelink gain) passes through untouched, so the decoration cannot
+ * change what any other consumer sees.
+ */
+function dealCombatDamageStep(state: GameState, emit: (e: GameEvent) => void, round: CombatDamageRound): void {
+  assignAndDealCombatDamage(
+    state,
+    (event) =>
+      emit(event.type === 'damageDealt' || event.type === 'damagePrevented' ? { ...event, round } : event),
+    round,
+  );
+}
+
 /** Run the first-strike step (if needed) + the normal step, with SBAs between. */
 function resolveCombatDamage(state: GameState, emit: (e: GameEvent) => void): void {
   if (!state.combat || state.combat.attackers.length === 0) return;
   if (hasAnyFirstStrike(state, state.combat)) {
-    assignAndDealCombatDamage(state, emit, 'firstStrike');
+    dealCombatDamageStep(state, emit, 'firstStrike');
     checkStateBasedActions(state, emit);
     if (state.gameOver) return;
   }
-  assignAndDealCombatDamage(state, emit, 'normal');
+  dealCombatDamageStep(state, emit, 'normal');
 }
 
 // --- priority + the stack ------------------------------------------------------

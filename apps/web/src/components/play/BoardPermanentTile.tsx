@@ -307,7 +307,20 @@ export function BoardPermanentTile({
 
   const interactive = Boolean(onClick && selectable) && !isCopy;
   const tile = (
-    <CardHover cardId={perm.cardId}>
+    /*
+      §3.143 GAP-7/GAP-8: the hover preview carries the SAME explanation the tile
+      does. Without it the tile printed 5/6 and the full card you raised to read
+      it printed 4/5 — and the merged keyword line ("vigilance, first strike,
+      flying") lives on the full-size face, because a ~96px tile can only carry
+      the condensed aftermarket words. This one prop is what makes the line Caleb
+      asked for reachable from the battlefield at all.
+    */
+    <CardHover
+      cardId={perm.cardId}
+      explanation={perm.explanation}
+      name={perm.name}
+      isCreature={perm.isCreature}
+    >
       {interactive ? (
         <button type="button" className={className} {...anchors} onClick={onClick} title={title} aria-pressed={selected}>
           {body}

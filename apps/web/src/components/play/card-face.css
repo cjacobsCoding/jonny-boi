@@ -25,13 +25,38 @@
  * sighted-only; `opacity: 0` + `pointer-events: none` keeps it readable to
  * assistive tech and inert to the mouse.
  *
- * ⚠️ REJECTED ALTERNATIVE: making the text box a scroller. `overflow` on any
- * ancestor CLIPS an absolutely-positioned pop, and every ability word in the box
- * has one — so the box is `overflow: visible`. It is anchored by its BOTTOM
+ * ## ⚠️ AN OPEN POP IS PORTALED, SO IT IS STYLED FROM `:root`, NOT FROM `.card-face`
+ * §3.143 wave 2 / GAP-6: the inline pop could never be SEEN on the battlefield —
+ * `.perm` clips (`overflow: hidden`), `.seat__row` clips, and `.perm-turn`'s tap
+ * `transform` re-roots even a `position: fixed` descendant back into that clip.
+ * `CardFace.tsx` therefore `createPortal`s an OPEN pop to `document.body`, where
+ * it is no longer a descendant of `.card-face` — and a portaled element inherits
+ * custom properties from `<body>`, NOT from its React parent. So every tunable
+ * the pop reads is declared at `:root` below: one definition, read identically by
+ * the inline copy and the floating one (rule 12).
+ *
+ * The pop's own `overflow` reasoning is unchanged and still load-bearing INSIDE
+ * the face: the text box stays `overflow: visible` and is anchored by its BOTTOM
  * edge, so a wordy card's text grows upward over its own art rather than off the
- * end of the card. An unclipped tooltip beats a tidy edge, and art you can still
- * see a third of beats rules text you cannot read.
+ * end of the card. (A scroller there would clip the closed pop out of the layout
+ * it is measured in, which is what the floating placement reads.)
  */
+
+/* The pop's tunables — at the ROOT because an open pop is portaled out of
+ * `.card-face` entirely. See the header. */
+:root {
+  --card-face-pop-w: min(22rem, 80vw);
+  --card-face-pop-ms: 90ms;
+  /* The INLINE (closed, invisible) copy's stacking slot, kept deliberately far
+   * below the play surface's fixed overlays (z40–z70, styles.css). */
+  --card-face-pop-z: 30;
+  /* The FLOATING copy's. It is a child of <body>, so it is a sibling of every
+   * overlay rather than nested under one, and a tooltip a player is actively
+   * pointing at must be on top of whatever it was opened from — including the
+   * zoom overlay (z60) and `CardHover`'s preview panel (z9999, card-hover.css),
+   * which is the surface a card's rules text is read on. */
+  --card-face-pop-float-z: 10000;
+}
 
 .card-face {
   /* ---- frame geometry -------------------------------------------------- *
@@ -80,14 +105,6 @@
    * 0deg by default, so the hover/zoom face — which is a SIBLING of the scene,
    * not a descendant — is untouched. */
   --card-face-counter-tilt-deg: 0deg;
-
-  /* ---- pop ------------------------------------------------------------- */
-  --card-face-pop-w: min(22rem, 80vw);
-  --card-face-pop-ms: 90ms;
-  /* Above sibling tiles inside the board's own stacking context. Deliberately
-   * far below the play surface's fixed overlays (z40–z70, styles.css): a
-   * tooltip must never cover a prompt the player has to answer. */
-  --card-face-pop-z: 30;
 
   position: relative;
   display: block;
@@ -417,12 +434,27 @@
   transition: opacity var(--card-face-pop-ms) ease;
 }
 
-.card-face__tok:hover > .card-face__pop,
-.card-face__tok:focus-within > .card-face__pop,
-.card-face__chip:hover > .card-face__pop,
-.card-face__chip:focus-within > .card-face__pop,
-.card-face__pt:hover > .card-face__pop,
-.card-face__pt:focus-within > .card-face__pop {
+/*
+ * THE OPEN POP (GAP-6). It is the SAME element, moved to `document.body` by
+ * `createPortal`, so it escapes every clipping and transformed ancestor on the
+ * battlefield — which is the only way the breakdown Caleb asked for can be seen
+ * at all. `inset: auto` is required, not decorative: the base rule anchors the
+ * inline copy by `bottom`/`left`, and a fixed box with both `top` and `bottom`
+ * set and `height: auto` is stretched between them. The component supplies
+ * `left`/`top` inline from `popPlacement`.
+ *
+ * There is deliberately NO `:hover` rule left in this file: opening is JS now,
+ * because only JS can measure where the trigger actually is. A CSS-only pop
+ * cannot leave its clip, which is precisely how wave 1 shipped a tooltip that no
+ * player could ever see.
+ */
+.card-face__pop--floating {
+  position: fixed;
+  inset: auto;
+  z-index: var(--card-face-pop-float-z);
+  /* No centring shift and no scene counter-tilt: the pop is placed in viewport
+   * coordinates and is no longer inside the tilted table. */
+  transform: none;
   opacity: 1;
 }
 
@@ -556,4 +588,32 @@
   .card-face__pop {
     border-color: CanvasText;
   }
+}
+
+/* ---------- mount sites (GAP-7): the face IS the zoom ---------- */
+
+/*
+ * The full-card overlay (`CardZoomOverlay`) used to show a bare printed <img>,
+ * so a tile reading 5/6 was inspected with a picture reading 4/5 — the two
+ * answers rule 12 forbids, on the one surface a player opens to READ a card.
+ *
+ * Sized by HEIGHT from styles.css's own `--card-zoom-max-h`, the same token the
+ * <img> it replaces used, so the overlay keeps its size in one place. The width
+ * follows from the card aspect the component sets, so nothing here restates the
+ * card's shape.
+ */
+.card-face--zoomed {
+  width: auto;
+  height: var(--card-zoom-max-h);
+  max-width: 92vw;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgb(0 0 0 / 60%);
+}
+
+/* The zoom is a modal dialog with live pointer events, so this is the surface
+ * where "hovering over any ability … should show a tooltip" is genuinely
+ * reachable with a mouse — the hover preview is pointer-transparent by design.
+ * Give the box room for the text it now carries. */
+.card-face--zoomed .card-face__textbox {
+  font-size: clamp(0.72rem, 1.6dvh, 0.95rem);
 }

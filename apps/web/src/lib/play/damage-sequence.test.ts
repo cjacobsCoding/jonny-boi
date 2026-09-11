@@ -27,6 +27,12 @@ import { DAMAGE_ANIM_CONFIG } from './play-config.js';
 
 const { travelMs, impactMs, staggerMs, settleHoldMs, maxPerBatch, maxTotalMs } = DAMAGE_ANIM_CONFIG;
 
+/**
+ * An UNMARKED hit — no `round`. That is deliberately the default here: it is the
+ * shape of a log recorded before GAP-12 (and of non-combat damage), so every
+ * test written against it is exercising the FALLBACK path. The marked path,
+ * which is what a live game now produces, is exercised by {@link inRound}.
+ */
 const hit = (source: InstanceId, target: InstanceId | PlayerId, amount = 2, combat = true): GameEvent => ({
   type: 'damageDealt',
   source,
@@ -34,6 +40,10 @@ const hit = (source: InstanceId, target: InstanceId | PlayerId, amount = 2, comb
   amount,
   combat,
 });
+
+/** The same hit, carrying core's combat-damage step marker (CR 510.4). */
+const inRound = (event: GameEvent, round: 'firstStrike' | 'normal'): GameEvent =>
+  ({ ...event, round }) as GameEvent;
 
 const prevented = (source: InstanceId, target: InstanceId | PlayerId, amount = 2): GameEvent => ({
   type: 'damagePrevented',
@@ -173,18 +183,58 @@ describe('deriveDamageSequence — rounds (first strike must read as two)', () =
     expect(beats.map((b) => b.roundIndex)).toEqual([0, 0]);
   });
 
-  it('⚠️ THE DOCUMENTED BLIND SPOT: a first-strike round that kills nothing and repeats no pair reads as ONE round', () => {
+  it('THE FORMER BLIND SPOT, NOW SEEN: the marker splits two rounds nothing else could tell apart', () => {
     // A 2/2 first-striker and a 3/3 vanilla, both unblocked. Two damage steps in
-    // the engine; ONE round in the log, because nothing died and no source/
-    // recipient pair repeats. The hits still animate individually — what is lost
-    // is the beat between the rounds.
-    //
-    // THIS IS NOT AN ACCEPTED DEFECT, IT IS AN UNMET REQUIREMENT WITH A KNOWN
-    // FIX: core must say which combat-damage step a hit belonged to (a `round`
-    // field on `damageDealt`, or a `combatDamageStep` marker event). The day it
-    // does, this expectation flips to [0, 1] and the pair rule can be deleted.
+    // the engine; nothing dies, no source/recipient pair repeats, and both hits
+    // land on the same seat — so the CR 510.2 pair rule is blind to the
+    // boundary. Core's `round` marker (§3.143 GAP-12) is what makes it visible,
+    // and the two rounds are separated by the settle beat like any other pair.
+    const beats = plan([inRound(hit(1, 'B', 2), 'firstStrike'), inRound(hit(3, 'B', 3), 'normal')]);
+    expect(beats.map((b) => b.roundIndex)).toEqual([0, 1]);
+    expect(beats.map((b) => b.round)).toEqual(['firstStrike', 'normal']);
+    expect(beats[1]?.startMs).toBe(travelMs + impactMs + settleHoldMs);
+  });
+
+  it('the same two hits UNMARKED still read as one round — the fallback, degrading honestly', () => {
+    // The pre-GAP-12 log. Kept as a test rather than deleted: the fold must not
+    // start inventing a boundary when there is no marker to read, and a replay
+    // recorded before the marker existed must still play.
     const beats = plan([hit(1, 'B', 2), hit(3, 'B', 3)]);
     expect(beats.map((b) => b.roundIndex)).toEqual([0, 0]);
+    expect(beats.map((b) => b.round)).toEqual([undefined, undefined]);
+  });
+
+  it('THE MARKER OVERRULES THE PAIR RULE: one step may repeat a pair without splitting', () => {
+    // THE CLASS: two answers to "is this a new round?". Core ran the steps and
+    // knows; the pair rule only guesses. If the guess were still consulted
+    // alongside the marker, a single step that hit one recipient twice (a
+    // replacement effect splitting a hit, a future multi-assignment) would be
+    // torn into two rounds that never happened.
+    const beats = plan([inRound(hit(1, 2, 2), 'normal'), inRound(hit(1, 2, 2), 'normal')]);
+    expect(beats.map((b) => b.roundIndex)).toEqual([0, 0]);
+  });
+
+  it('a marked hit and an unmarked one are never the same round', () => {
+    // A burn spell (no step) followed by combat damage (a step) is two beats,
+    // because they are two different things happening at two different times.
+    const beats = plan([hit(9, 2, 3, false), inRound(hit(1, 2, 2), 'normal')]);
+    expect(beats.map((b) => b.roundIndex)).toEqual([0, 1]);
+    expect(beats.map((b) => b.round)).toEqual([undefined, 'normal']);
+  });
+
+  it('a CONDENSED beat that swallowed rounds with different markers names none of them', () => {
+    // Untabulated ⇒ report, never approximate: one bloom standing for a
+    // first-strike round AND a normal one cannot honestly be labelled either.
+    // Six one-hit rounds, alternating markers, is more than the time budget
+    // allows — the tail collapses into a single condensed group spanning both.
+    const alternating = Array.from({ length: 6 }, (_, i) =>
+      inRound(hit(100 + i, 200 + i, 1), i % 2 === 0 ? 'firstStrike' : 'normal'),
+    );
+    const beats = plan(alternating);
+    const tail = beats.filter((b) => b.kind === 'condensed' && b.round === undefined);
+    expect(tail.length).toBeGreaterThan(0);
+    // …while a condensed group that swallowed ONE round still names it.
+    expect(beats.some((b) => b.kind === 'condensed' && b.round !== undefined)).toBe(true);
   });
 });
 

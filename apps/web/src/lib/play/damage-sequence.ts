@@ -11,22 +11,24 @@
  * file. Nothing is stored: a derived value cannot go stale, and a replay
  * re-derives the identical sequence from the identical log.
  *
- * ## Rounds — why a fold has to find them, and exactly how
+ * ## Rounds — the engine now SAYS which one, and the fallback for logs that don't
  * A combat with a first-striker is TWO damage steps (CR 510.4), and the brief is
- * that they must read as two rounds rather than one blur. The engine runs them as
- * two calls to `assignAndDealCombatDamage` with a state-based-action check
- * between — but **it emits no marker saying which round a hit belonged to**, so
- * this fold has to recover the boundary. It does that from two facts about the
- * RULES, never from the engine's loop order (which is an implementation detail
- * this layer must not couple to):
+ * that they must read as two rounds rather than one blur. Core marks every combat
+ * damage event with the step that dealt it (`damageDealt.round` /
+ * `damagePrevented.round`, §3.143 GAP-12), so the primary rule is simply: **a hit
+ * whose marker differs from the current round's starts a new round.** One answer,
+ * read from the one place that knows it, rather than re-derived here (rule 12).
  *
- *  1. **All damage in one step is dealt simultaneously** (CR 510.2). So one
- *     source cannot deal damage to the same recipient twice in one round —
- *     seeing that pair a second time means a second round has begun. This is
- *     exactly how double strike shows up (CR 702.4b), which is the commonest
- *     reason two rounds exist at all. Note the pair, not the source: a trampler
- *     hits its blocker AND the defending player in ONE round, and an attacker
- *     blocked by three creatures deals to all three in one round.
+ * Two rules still carry the cases the marker cannot:
+ *
+ *  1. **An UNMARKED hit falls back to the pair rule.** All damage in one step is
+ *     dealt simultaneously (CR 510.2), so one source cannot deal damage to the
+ *     same recipient twice in one round — seeing that pair a second time means a
+ *     second round began. This is what a log written before the marker existed,
+ *     and non-combat damage (which belongs to no step at all), are folded by.
+ *     Note the pair, not the source: a trampler hits its blocker AND the
+ *     defending player in ONE round, and an attacker blocked by three creatures
+ *     deals to all three in one round.
  *  2. **Nothing dies mid-step.** Deaths are state-based actions between steps, so
  *     any `creatureDied` / `planeswalkerDied` / `battleDefeated` / `playerLost`
  *     ends the round it follows — and attributes LETHALITY to it, which is how a
@@ -42,14 +44,12 @@
  * were — the failure mode the other way round is the "one blur" the brief
  * forbids.
  *
- * ⚠️ **The one case this cannot see, stated honestly:** a first-strike round that
- * kills nothing, contains no double-striker and shares no source/recipient pair
- * with the normal round is indistinguishable from one round in the event log.
- * Its hits still animate, staggered and individually legible; what is lost is the
- * beat between the rounds. The real fix is one field in core — a `round` on
- * `damageDealt`, or a `combatDamageStep` marker event — and the day it exists
- * this fold should read it and delete rule 1 above. `damage-sequence.test.ts`
- * pins the blind spot so it cannot be quietly forgotten.
+ * ⚠️ **What is only as good as the fallback:** a log with no markers — a replay
+ * recorded before GAP-12, or a `reducedMotion`-free re-derive of one — still
+ * cannot see a first-strike round that kills nothing and repeats no
+ * source/recipient pair. Its hits animate individually; what is lost is the beat
+ * between the rounds. `damage-sequence.test.ts` pins BOTH halves: the marked log
+ * splits, the unmarked one degrades honestly.
  *
  * ## The cap, and what "condensed" means
  * A twenty-creature combat must not stall the game, and it must not silently drop
@@ -68,6 +68,15 @@
  */
 import type { GameEvent, InstanceId, PlayerId } from '@jonny-boi/core';
 import { DAMAGE_ANIM_CONFIG } from './play-config.js';
+
+/**
+ * Which combat-damage step a hit belonged to (CR 510.4).
+ *
+ * DERIVED from the event rather than re-spelled, so the web never holds a second
+ * copy of a table core owns: add a third step in core and this widens with it
+ * instead of silently disagreeing.
+ */
+export type CombatDamageRound = NonNullable<Extract<GameEvent, { type: 'damageDealt' }>['round']>;
 
 /** Where one end of a hit is — a permanent's tile, or a player's seat. */
 export type DamageEnd =
@@ -96,6 +105,18 @@ export interface DamageBeat {
    * `DAMAGE_ANIM_CONFIG.settleHoldMs`.
    */
   readonly roundIndex: number;
+  /**
+   * WHICH combat-damage step this round was, straight from core's marker —
+   * `'firstStrike'` and `'normal'` are the two beats a first-strike combat must
+   * read as, and the layer labels them from this rather than from `roundIndex`,
+   * which only counts rounds and cannot name them.
+   *
+   * `undefined` when the damage belonged to no step (a burn spell, a fight) or
+   * when the log predates the marker — the presentation then shows a round
+   * without naming it, which is honest, rather than guessing "first strike"
+   * from an index.
+   */
+  readonly round: CombatDamageRound | undefined;
   /** The source's tile. `null` on a condensed beat — it has many sources. */
   readonly from: DamageEnd | null;
   readonly to: DamageEnd;
@@ -193,11 +214,15 @@ interface Hit {
   readonly amount: number;
   readonly outcome: DamageOutcome;
   readonly combat: boolean;
+  /** Core's step marker, or `undefined` for non-combat / pre-marker logs. */
+  readonly round: CombatDamageRound | undefined;
 }
 
 /** One damage round: hits dealt simultaneously, plus what died right after them. */
 interface Round {
   readonly hits: Hit[];
+  /** The step marker every hit in this round shares (see {@link Hit.round}). */
+  readonly round: CombatDamageRound | undefined;
   /** `source→recipient:outcome` triples already seen — a repeat means a new round. */
   readonly pairs: Set<string>;
   /** Ends that died after this round (see {@link DEATH_SUBJECT}). */
@@ -222,7 +247,29 @@ function hitOf(event: GameEvent, eventIndex: number): Hit | undefined {
     amount: event.amount,
     outcome: event.type === 'damageDealt' ? 'dealt' : 'prevented',
     combat: event.combat,
+    round: event.round,
   };
+}
+
+/**
+ * Does this hit begin a new round?
+ *
+ * THE MARKER IS THE AUTHORITY when either side has one: core ran the steps and
+ * said so, and re-deriving what it already answered is the "two places, one
+ * question" failure (rule 12). A marked hit therefore stays in its round even
+ * when its source/recipient pair repeats — which is what the pair rule alone
+ * could never get right for a first-striker that hits the same target twice for
+ * two different reasons.
+ *
+ * Only when BOTH sides are unmarked — non-combat damage, or a log recorded
+ * before the marker existed — does the CR 510.2 pair rule decide. That is the
+ * documented fallback, not a second opinion: it is consulted exactly when there
+ * is no first opinion to consult.
+ */
+function startsNewRound(current: Round, hit: Hit, pair: string): boolean {
+  if (current.sealed) return true;
+  if (hit.round !== undefined || current.round !== undefined) return hit.round !== current.round;
+  return current.pairs.has(pair);
 }
 
 /** Split a batch into damage rounds (see the module doc for the two rules). */
@@ -234,8 +281,8 @@ function roundsIn(events: readonly GameEvent[], startIndex: number): Round[] {
     const hit = hitOf(event, startIndex + i);
     if (hit !== undefined) {
       const pair = `${hit.from.instanceId}>${hit.toKey}:${hit.outcome}`;
-      if (current === undefined || current.sealed || current.pairs.has(pair)) {
-        current = { hits: [], pairs: new Set(), died: new Set(), sealed: false };
+      if (current === undefined || startsNewRound(current, hit, pair)) {
+        current = { hits: [], round: hit.round, pairs: new Set(), died: new Set(), sealed: false };
         rounds.push(current);
       }
       current.pairs.add(pair);
@@ -306,6 +353,20 @@ function condense(rounds: readonly Round[]): CondensedShare[] {
   return [...byEnd.values()];
 }
 
+/**
+ * The step marker a condensed GROUP may honestly claim: the one every round in
+ * it shares, or `undefined` when they disagree.
+ *
+ * A condensed beat stands for several rounds at once, so labelling it
+ * "first strike" because the first round it swallowed was one would be a lie
+ * about the other rounds in the same bloom. Untabulated ⇒ report, don't guess.
+ */
+function sharedRoundOf(rounds: readonly Round[]): CombatDamageRound | undefined {
+  const first = rounds[0]?.round;
+  for (const round of rounds) if (round.round !== first) return undefined;
+  return first;
+}
+
 /** Did any of these rounds see this end die? */
 function diedIn(rounds: readonly Round[], toKey: string): boolean {
   for (const round of rounds) if (round.died.has(toKey)) return true;
@@ -330,12 +391,14 @@ export function deriveDamageSequence(
   const condensedMs = condensedRoundMs();
 
   const pushCondensed = (group: readonly Round[], roundIndex: number, startMs: number): void => {
+    const round = sharedRoundOf(group);
     for (const share of condense(group)) {
       const dealt = share.dealt > 0;
       out.push({
         key: `${share.firstEventIndex}:c${share.toKey}`,
         kind: 'condensed',
         roundIndex,
+        round,
         from: null,
         to: share.to,
         amount: dealt ? share.dealt : share.prevented,
@@ -362,6 +425,7 @@ export function deriveDamageSequence(
           key: `${hit.eventIndex}`,
           kind: 'hit',
           roundIndex: r,
+          round: round.round,
           from: hit.from,
           to: hit.to,
           amount: hit.amount,
@@ -453,14 +517,25 @@ const A = DAMAGE_BENCH_SOURCE_ID;
 const B = DAMAGE_BENCH_TARGET_ID;
 const C = DAMAGE_BENCH_THIRD_ID;
 
-/** A `damageDealt` event, spelled once so the rows below stay readable. */
-function dealt(source: InstanceId, target: InstanceId | PlayerId, amount: number, combat = true): GameEvent {
-  return { type: 'damageDealt', source, target, amount, combat };
+/**
+ * A `damageDealt` event, spelled once so the rows below stay readable.
+ *
+ * `round` defaults to `'normal'` because that is what core stamps on an ordinary
+ * combat: a bench that audition-ed unmarked events would be exercising the
+ * pre-GAP-12 fallback path rather than the one a live game takes.
+ */
+function dealt(
+  source: InstanceId,
+  target: InstanceId | PlayerId,
+  amount: number,
+  round: CombatDamageRound = 'normal',
+): GameEvent {
+  return { type: 'damageDealt', source, target, amount, combat: true, round };
 }
 
 /** A `damagePrevented` event (see {@link dealt}). */
 function prevented(source: InstanceId, target: InstanceId | PlayerId, amount: number): GameEvent {
-  return { type: 'damagePrevented', source, target, amount, combat: true };
+  return { type: 'damagePrevented', source, target, amount, combat: true, round: 'normal' };
 }
 
 /** A `creatureDied` event (see {@link dealt}). */
@@ -497,7 +572,11 @@ export const DAMAGE_BENCH_ROWS: readonly DamageBenchRow[] = Object.freeze([
   Object.freeze({
     id: 'firstStrike',
     label: 'First strike: two rounds',
-    events: Object.freeze([dealt(A, B, 2), dealt(A, B, 2), dealt(B, A, 3)]),
+    // THE SHAPE THE MARKER EXISTS FOR: the first-strike hit and the normal-step
+    // hit land on the SAME recipient from the SAME source, so nothing but the
+    // marker tells them apart — and the bench must audition the marked path,
+    // because that is the one a live game produces.
+    events: Object.freeze([dealt(A, B, 2, 'firstStrike'), dealt(A, B, 2), dealt(B, A, 3)]),
   }),
   Object.freeze({
     id: 'condensed',

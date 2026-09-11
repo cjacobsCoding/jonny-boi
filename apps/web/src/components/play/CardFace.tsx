@@ -11,22 +11,45 @@
  *
  * ## It is a thin renderer, deliberately
  * Every decision — which rows a breakdown has, how the ability list is assembled
- * and ordered, which treatment each change gets, which glyph carries it — is in
- * the pure, tested `lib/play/provenance-view.ts`. This file walks that model and
- * emits elements. The split is what lets the hard part be unit-tested in Node
- * with no DOM, and it is why the tables live there and not here.
+ * and ordered, which treatment each change gets, which glyph carries it, and
+ * where a tooltip lands — is in the pure, tested `lib/play/provenance-view.ts`.
+ * This file walks that model and emits elements. The split is what lets the hard
+ * parts be unit-tested in Node with no DOM, and it is why the tables live there
+ * and not here.
  *
- * ## The tooltips are CSS, not state
- * A pop opens on `:hover` and on `:focus-within` of its own trigger. No hook, no
- * portal, no measurement:
- *   - it renders inside `renderToStaticMarkup`, so a test can assert that a
+ * ## ⚠️ THE TOOLTIPS ARE PORTALED, AND THAT IS NOT A PREFERENCE
+ * Wave 1 reasoned about this exact trap in this very header and then mounted
+ * straight into it, so the breakdown Caleb asked for most specifically ("hovering
+ * over that 5/6 should show a full breakdown") could not be displayed at all.
+ * A battlefield face sits inside `.perm__art` → `.perm` (`overflow: hidden`,
+ * styles.css) → `.seat__row` (`overflow-x: auto`, board-fit.css), and the tile is
+ * also inside `.perm-turn`, which carries the tap `transform` — so an
+ * absolutely-positioned pop is CLIPPED, and a `position: fixed` one is re-rooted
+ * by that transform into the very same clip. Relaxing any of those three
+ * ancestors is not available either: they are load-bearing and owned elsewhere.
+ *
+ * So an OPEN pop is `createPortal`ed to `document.body` — the pattern `CardHover`
+ * and `CombatLines` already use in this repo for the same reason — and placed
+ * from the trigger's measured rect by the pure `popPlacement`.
+ *
+ * The CLOSED pop still renders INLINE, dimmed, and that is deliberate three
+ * times over:
+ *   - it is the `aria-describedby` target, and a `display: none` target is
+ *     dropped from the accessibility tree by most screen readers;
+ *   - it renders inside `renderToStaticMarkup`, so a test can still assert that a
  *     granted keyword really does carry its explanation and its source;
- *   - it needs no JS to reach the keyboard, and `aria-describedby` points at a
- *     pop that is dimmed rather than `display: none`, so assistive tech reads it;
- *   - the trigger is a focusable SPAN, never a `<button>`: a card face is mounted
- *     inside `BoardPermanentTile`, which is itself a `<button>` when selectable,
- *     and a button inside a button is invalid HTML that browsers repair by
- *     breaking the outer one.
+ *   - it is the SAME element, moved — never a second copy — so there is exactly
+ *     one tooltip with a given id at any moment (rule 12).
+ * The trigger is a focusable SPAN, never a `<button>`: a card face is mounted
+ * inside `BoardPermanentTile`, which is itself a `<button>` when selectable, and
+ * a button inside a button is invalid HTML that browsers repair by breaking the
+ * outer one.
+ *
+ * ## Where this face is MOUNTED is half the feature
+ * A renderer nothing mounts is a renderer nobody sees. The surfaces are pinned by
+ * the adoption table in `CardFace.test.ts`: the battlefield tile, the hover
+ * preview (`CardHover`, which every card-bearing surface in the app already
+ * wraps), the zoom overlay, the graveyard and the reveal banner.
  *
  * ## Degrading, in order (rule 6)
  * no explanation → the plain printed card with glossary tooltips still live;
@@ -34,16 +57,27 @@
  * `unavailableReason` → the plain card plus the stated reason, because an empty
  * breakdown reads as "nothing is modifying this", which is a different claim.
  */
-import { useId, type CSSProperties, type ReactElement, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { getCard, cardImage } from '../../lib/cards.js';
 import { CARD_ASPECT_HEIGHT_OVER_WIDTH } from '../../lib/play/play-config.js';
 import {
   ATTRIBUTION_PRESENTATION,
   buildCardFaceModel,
   GLOSSARY_KIND_LABELS,
+  popPlacement,
   TREATMENT_PRESENTATION,
   type BreakdownRow,
   type CharacteristicChange,
+  type PopPlacement,
   type PtView,
   type RulesLine,
   type RulesToken,
@@ -86,13 +120,13 @@ const SIZE_PRESETS: { readonly [S in CardFaceSize]: SizePreset } = Object.freeze
     image: 'art_crop',
     rules: 'aftermarketOnly',
     chips: false,
-    why: 'A battlefield tile is ~96px wide (board-fit.css `--play-tile-w-max`). A full text box there is unreadable, and the aftermarket words are exactly the part that is visible nowhere else — the printed text is one hover away, the granted flying is not. The change chips are off for the same reason and lose nothing: a copy already wears the copied card’s art here, and the altered seal tells the player there is more to read one hover away.',
+    why: 'A battlefield tile is ~96px wide (board-fit.css `--play-tile-w-max`) and its top strip is all the room there is. A full text box there is unreadable at any font size that fits, so the tile carries the CONDENSED form — the words that are visible nowhere else — and the MERGED line Caleb asked for ("vigilance, first strike, flying") is one hover away on the full-size face, which `CardHover` now raises from this very tile. The change chips are off for the same reason and lose nothing: a copy already wears the copied card’s art here, and the altered seal says there is more to read.',
   }),
   full: Object.freeze({
     image: 'large',
     rules: 'full',
     chips: true,
-    why: 'The hover/zoom face is where a player reads the card, so it carries the LIVE text box — the printed lines rendered as text (which is what makes every ability word hoverable at all) plus everything aftermarket.',
+    why: 'The hover/zoom face is where a player reads the card, so it carries the LIVE text box — the printed lines rendered as text (which is what makes every ability word hoverable at all) plus everything aftermarket, merged into one line in printed order.',
   }),
 });
 
@@ -235,6 +269,114 @@ export function CardFace({
 }
 
 /* -------------------------------------------------------------------------- */
+/* The pop — ONE trigger component, so there is one escape hatch to maintain   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A hoverable/focusable run of a card face and the tooltip it raises.
+ *
+ * ONE component for all three trigger kinds (an ability word, the P/T box, a
+ * change chip): the portal, the measurement and the open/close rule are the part
+ * that was wrong, and three copies of it is three chances to be wrong again
+ * (rule 12).
+ *
+ * The pop is the same element whether it is inline or floating — see the module
+ * header for why it is not two copies, and why the closed one is dimmed rather
+ * than unmounted.
+ */
+function PopTrigger({
+  popId,
+  className,
+  popClassName,
+  srLabel,
+  children,
+  pop,
+}: {
+  readonly popId: string;
+  readonly className: string;
+  readonly popClassName?: string;
+  /** An `aria-label` for the trigger, when its visible text is not the whole story. */
+  readonly srLabel?: string;
+  readonly children: ReactNode;
+  readonly pop: ReactNode;
+}): ReactElement {
+  const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<PopPlacement | null>(null);
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  const popRef = useRef<HTMLSpanElement>(null);
+
+  // MEASURE, then place — the one thing that genuinely cannot be derived during
+  // render, because it needs the browser's own layout of a node that does not
+  // exist until the pop is open.
+  //
+  // `useEffect` and not `useLayoutEffect` on purpose: the latter warns on every
+  // server render (this face is asserted through `renderToStaticMarkup`), and
+  // the pop fades in over `--card-face-pop-ms` anyway, so the one frame it
+  // spends at `opacity: 0` is never seen. Closing clears the placement in the
+  // handler rather than here, so the effect has exactly one job.
+  useEffect(() => {
+    if (!open) return;
+    const anchor = triggerRef.current?.getBoundingClientRect();
+    const box = popRef.current?.getBoundingClientRect();
+    if (anchor === undefined || box === undefined) return;
+    setPlacement(
+      popPlacement(anchor, box, { width: window.innerWidth, height: window.innerHeight }),
+    );
+  }, [open]);
+
+  const show = (): void => setOpen(true);
+  const hide = (): void => {
+    setOpen(false);
+    // Dropped with the pop: a stale placement would flash the NEXT opening in
+    // the last one's position before the effect re-measures.
+    setPlacement(null);
+  };
+
+  const popElement = (
+    <span
+      ref={popRef}
+      className={['card-face__pop', open ? 'card-face__pop--floating' : '', popClassName ?? '']
+        .filter((c) => c.length > 0)
+        .join(' ')}
+      role="tooltip"
+      id={popId}
+      // Unplaced for one frame: kept in the DOM (and so in the accessibility
+      // tree) but invisible, rather than flashing in the viewport's top-left.
+      style={open ? floatingStyle(placement) : undefined}
+    >
+      {pop}
+    </span>
+  );
+
+  return (
+    <span
+      ref={triggerRef}
+      className={className}
+      // tabIndex on a SPAN, not a <button> — see the module header: this face is
+      // mounted inside a tile that is itself a button when selectable.
+      tabIndex={0}
+      aria-describedby={popId}
+      {...(srLabel !== undefined ? { 'aria-label': srLabel } : {})}
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={show}
+      onBlur={hide}
+    >
+      {children}
+      {/* `document` is only ever touched from a pointer/focus handler, so the
+          server render never reaches it. */}
+      {open ? createPortal(popElement, document.body) : popElement}
+    </span>
+  );
+}
+
+/** The floating pop's inline geometry. Null placement = measured but not yet placed. */
+function floatingStyle(placement: PopPlacement | null): CSSProperties {
+  if (placement === null) return { opacity: 0 };
+  return { left: `${placement.left}px`, top: `${placement.top}px` };
+}
+
+/* -------------------------------------------------------------------------- */
 /* Pieces                                                                      */
 /* -------------------------------------------------------------------------- */
 
@@ -261,14 +403,8 @@ function Token({ token, popId }: { readonly token: RulesToken; readonly popId: s
     .filter((c) => c.length > 0)
     .join(' ');
 
-  return (
-    <span
-      className={classes}
-      // tabIndex on a SPAN, not a <button> — see the module header: this face is
-      // mounted inside a tile that is itself a button when selectable.
-      tabIndex={hasPop ? 0 : undefined}
-      {...(hasPop ? { 'aria-describedby': popId } : {})}
-    >
+  const body = (
+    <>
       {treatment.glyph.length > 0 && (
         <span className="card-face__glyph" aria-label={treatment.srLabel}>
           {treatment.glyph}
@@ -280,8 +416,20 @@ function Token({ token, popId }: { readonly token: RulesToken; readonly popId: s
           {attribution.glyph}
         </span>
       )}
-      {hasPop && (
-        <span className="card-face__pop" role="tooltip" id={popId}>
+    </>
+  );
+
+  // An aftermarket word with nothing to say still gets its treatment, but no
+  // trigger: a focusable span whose tooltip is empty is a keyboard trap for
+  // nothing.
+  if (!hasPop) return <span className={classes}>{body}</span>;
+
+  return (
+    <PopTrigger
+      popId={popId}
+      className={classes}
+      pop={
+        <>
           {token.glossary && (
             <>
               <span className="card-face__pop-head">
@@ -304,9 +452,11 @@ function Token({ token, popId }: { readonly token: RulesToken; readonly popId: s
               {note.text}
             </span>
           ))}
-        </span>
-      )}
-    </span>
+        </>
+      }
+    >
+      {body}
+    </PopTrigger>
   );
 }
 
@@ -324,21 +474,12 @@ function PtBox({ pt, popId }: { readonly pt: PtView; readonly popId: string }): 
 
   return (
     <span className={classes}>
-      <span className="card-face__pt-value" tabIndex={0} aria-describedby={popId} aria-label={pt.summary}>
-        {pt.power}/{pt.toughness}
-        {treatment.glyph.length > 0 && (
-          <span className="card-face__glyph" aria-label={treatment.srLabel}>
-            {treatment.glyph}
-          </span>
-        )}
-        {attribution.glyph.length > 0 && (
-          <span className="card-face__glyph" aria-label={attribution.srLabel}>
-            {attribution.glyph}
-          </span>
-        )}
-      </span>
-      <span className="card-face__pop card-face__pop--pt" role="tooltip" id={popId}>
-        {pt.breakdown.map((part) => (
+      <PopTrigger
+        popId={popId}
+        className="card-face__pt-value"
+        popClassName="card-face__pop--pt"
+        srLabel={pt.summary}
+        pop={pt.breakdown.map((part) => (
           <span key={part.characteristic} className="card-face__break">
             {part.rows.map((row, i) => (
               <BreakdownLine key={i} row={row} />
@@ -352,7 +493,19 @@ function PtBox({ pt, popId }: { readonly pt: PtView; readonly popId: string }): 
             )}
           </span>
         ))}
-      </span>
+      >
+        {pt.power}/{pt.toughness}
+        {treatment.glyph.length > 0 && (
+          <span className="card-face__glyph" aria-label={treatment.srLabel}>
+            {treatment.glyph}
+          </span>
+        )}
+        {attribution.glyph.length > 0 && (
+          <span className="card-face__glyph" aria-label={attribution.srLabel}>
+            {attribution.glyph}
+          </span>
+        )}
+      </PopTrigger>
     </span>
   );
 }
@@ -393,10 +546,18 @@ function ChangeChip({
   const treatment = TREATMENT_PRESENTATION[change.treatment];
   const attribution = ATTRIBUTION_PRESENTATION[change.attribution];
   return (
-    <span
+    <PopTrigger
+      popId={popId}
       className={`card-face__chip card-face__chip--${change.region} card-face__chip--${treatment.modifier}`}
-      tabIndex={0}
-      aria-describedby={popId}
+      pop={
+        <>
+          <span className="card-face__pop-head">{change.label}</span>
+          <span className="card-face__pop-body">
+            {change.from !== undefined ? `Was ${change.from}. Now ${change.to}.` : `Now ${change.to}.`}
+          </span>
+          <span className="card-face__pop-source">{change.note.text}</span>
+        </>
+      }
     >
       {treatment.glyph.length > 0 && (
         <span className="card-face__glyph" aria-label={treatment.srLabel}>
@@ -412,14 +573,7 @@ function ChangeChip({
           {attribution.glyph}
         </span>
       )}
-      <span className="card-face__pop" role="tooltip" id={popId}>
-        <span className="card-face__pop-head">{change.label}</span>
-        <span className="card-face__pop-body">
-          {change.from !== undefined ? `Was ${change.from}. Now ${change.to}.` : `Now ${change.to}.`}
-        </span>
-        <span className="card-face__pop-source">{change.note.text}</span>
-      </span>
-    </span>
+    </PopTrigger>
   );
 }
 
@@ -427,7 +581,9 @@ function ChangeChip({
  * The lines a TILE shows: those the card does not already print.
  *
  * A tile has no room for a text box, and the printed text is one hover away —
- * the granted flying is not, which is the whole complaint UX-17 answers.
+ * the granted flying is not, which is the whole complaint UX-17 answers. The
+ * MERGED line ("vigilance, first strike, flying") is the full-size face's job;
+ * see `SIZE_PRESETS.tile.why` and the `CardHover` that wraps every tile.
  */
 function aftermarketOnly(lines: readonly RulesLine[]): readonly RulesLine[] {
   const out: RulesLine[] = [];
