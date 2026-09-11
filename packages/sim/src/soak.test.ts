@@ -36,7 +36,7 @@ import {
   indexPoolForSoak,
   SOAK_DECK_SIZE,
 } from './soak-decks.js';
-import { PINNED_MATCHUPS } from './soak-pinned-decks.js';
+import { PINNED_IDENTITIES, PINNED_MATCHUPS } from './soak-pinned-decks.js';
 import type { SoakReport } from './soak.js';
 import {
   compareApplyPaths,
@@ -244,8 +244,6 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
     readonly seed: number;
     readonly onPlay?: 'A' | 'B';
     readonly what: string;
-    /** Cards without which this seed is not the game that found the bug. */
-    readonly mustContain: readonly string[];
   }> = [
     {
       seed: 4222011655,
@@ -254,9 +252,6 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
         "Costly Plunder's additional cost then sacrificed — the payment handed priority straight " +
         'back to the caster, so nothing checked state-based actions and the 0/0 sat there for five ' +
         'turns (fixed by moving the CR 704.3 boundary to the end of every action)',
-      // A's half of the interaction, and B's Aura. All four have to be dealt into
-      // the same game for the position to exist at all.
-      mustContain: ['Blood Artist', 'Trusty Machete', 'Costly Plunder', 'Weakness'],
     },
     /*
      * THE COPY-MIRROR LOOP — one defect, three seeds, both seats.
@@ -277,25 +272,87 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
       onPlay: 'A',
       what:
         'CR 707.10: a copy of Twincast re-aimed at the Twincast that made it, forever — the pilot ' +
-        'valued copying a copy spell at the copy spell\'s own face value, so the mirror always beat ' +
+        "valued copying a copy spell at the copy spell's own face value, so the mirror always beat " +
         'copying the Dream Twist underneath it (fixed by pricing a copy by what its chain delivers)',
-      mustContain: ['Twincast', 'Dream Twist'],
     },
     {
       seed: 3434778477,
       onPlay: 'B',
       what: 'CR 707.10: the same copy-mirror loop on Reverberate, seat B',
-      mustContain: ['Reverberate'],
     },
     {
       seed: 113343071,
       onPlay: 'A',
-      what: 'CR 707.10: the same copy-mirror loop with Reverberate + Narset\'s Reversal, seat A',
-      mustContain: ['Reverberate', "Narset's Reversal"],
+      what: "CR 707.10: the same copy-mirror loop with Reverberate + Narset's Reversal, seat A",
+    },
+    /*
+     * THREE ROWS, THREE UNRELATED DEFECTS, ONE SHAPE (DESIGN §3.141): a rules
+     * question answered somewhere other than by the rule.
+     *
+     * The first two are the pilot answering with its OWN copy of a core rule and
+     * the copy missing a clause — the repo's most-repeated defect, now on its
+     * fifth printing. The third is the opposite direction: a CHECK that compared
+     * two readings taken at different moments and reported a legal turn as a
+     * violation. All three are kept because their fixes are independent.
+     */
+    {
+      seed: 3736754678,
+      onPlay: 'B',
+      what:
+        'CR 702.61: B cast Mouser Attack! in response to its OWN Siege Smash — split second was on ' +
+        'the stack, the offer pass had withdrawn every cast, and the pilot built one anyway because ' +
+        '`scoredSpellGoals` derived castability from its own timing rule instead of asking core ' +
+        '(tripping legalActionsOnly and noRejectedActions at once, turn 27)',
+    },
+    {
+      seed: 3455580742,
+      onPlay: 'A',
+      what:
+        'CR 509.1b: the gang-block search put Millennial Gargoyle AND Screeching Sliver on a ' +
+        "Bristling Boar that can't be blocked by more than one creature — the pilot's count mirror " +
+        'read only the MINIMUM bound, so a cap looked like no constraint and the engine refused the ' +
+        "whole declaration (fixed by asking core's `blockerCountAllowed`, which reads both)",
+    },
+    {
+      seed: 3679986871,
+      onPlay: 'A',
+      what:
+        'NOT A RULES BUG: B legally played two lands on turn 16 under Icetill Explorer (an ' +
+        'additional land, plus lands from the graveyard), then lost the Explorer blocking on turn ' +
+        '17 — and the landDropCap invariant compared that stale count against a cap re-read after ' +
+        'the grantor died (fixed by judging the count against the largest cap the seat has held ' +
+        'since its own turn began)',
     },
   ];
 
-  for (const { seed, onPlay, what, mustContain } of PINNED) {
+  /*
+   * THE IDENTITY GUARD ON THE IDENTITY GUARD. A row whose `mustContain` names
+   * only ONE deck's cards is green for a match whose OTHER deck was swapped
+   * wholesale — the same escape the identity assertion exists to close, one deck
+   * deeper. So every entry is required to name a card from each side, checked
+   * against the pinned decklists themselves.
+   */
+  it('every pinned identity names cards from BOTH decks', () => {
+    const nameOf = (id: string) => pool.get(id)?.name ?? id;
+    for (const { seed } of PINNED) {
+      const matchup = PINNED_MATCHUPS[seed];
+      const identity = PINNED_IDENTITIES[seed];
+      expect(matchup, `seed ${seed} has no recorded decklist`).toBeDefined();
+      expect(identity, `seed ${seed} has no recorded identity`).toBeDefined();
+      for (const side of ['A', 'B'] as const) {
+        const names = new Set<string>();
+        for (const { cardId } of matchup![side].cards) names.add(nameOf(cardId));
+        const named = (identity ?? []).filter((card) => names.has(card));
+        expect(
+          named.length,
+          `seed ${seed}: PINNED_IDENTITIES names nothing from deck ${side}, so swapping deck ${side} ` +
+            `would leave this row green while replaying a different match`,
+        ).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  for (const { seed, onPlay, what } of PINNED) {
     it(`seed ${seed}: ${what}`, () => {
       // The decks are PINNED, not regenerated. Generating them from the seed
       // meant every pool change re-dealt these rows onto a different match —
@@ -313,7 +370,10 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
       });
       // WHICH GAME — asserted first, because it is what makes the next line mean
       // anything. A replay that drifted onto another match reports no violations
-      // and would otherwise read as a fix holding.
+      // and would otherwise read as a fix holding. The cards come from
+      // `PINNED_IDENTITIES`, which is where a matchup's identity lives ONCE.
+      const mustContain = PINNED_IDENTITIES[seed] ?? [];
+      expect(mustContain.length, `seed ${seed} has no recorded identity`).toBeGreaterThan(0);
       for (const card of mustContain) {
         expect(decks, `seed ${seed} no longer deals ${card} — this row is replaying a DIFFERENT game
 ${decks}
