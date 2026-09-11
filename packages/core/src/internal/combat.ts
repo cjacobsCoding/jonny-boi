@@ -251,6 +251,64 @@ function minimumBlockersFor(k: KeywordFlags): number {
 const MENACE_MINIMUM_BLOCKERS = 2;
 
 /**
+ * CR 509.1b's COUNT rules for one attacker, asked once: why a block of exactly
+ * `assigned` creatures on it is illegal, or `undefined` if that count stands.
+ *
+ * BOTH printed lines live here — "can't be blocked except by N or more" (menace
+ * is N = 2) and "can't be blocked by more than N" — because they are one
+ * question asked from two sides, and a caller that knew about one half and not
+ * the other is exactly the defect this exists to make impossible.
+ * {@link illegalBlockDeclaration} judges a finished declaration by it and
+ * {@link blockerCountAllowed} answers a pilot's "may I put N here?" from the
+ * SAME two reads, so the engine and any AI cannot disagree about the count.
+ *
+ * Zero is always fine: the rule forbids being blocked by too FEW, not being
+ * unblocked. A cap and a minimum are both in force at once — menace plus a cap
+ * of one is a creature nobody can legally block, which is what the two printed
+ * lines together say.
+ */
+function blockerCountProblem(
+  attacker: CardInstance,
+  keywords: KeywordFlags,
+  assigned: number,
+): string | undefined {
+  const required = minimumBlockersFor(keywords);
+  const cap = keywords.maxBlockers;
+  if (required === 0 && cap === undefined) return undefined;
+  if (assigned > 0 && assigned < required) {
+    return required === MENACE_MINIMUM_BLOCKERS
+      ? `${attacker.def.name} has menace and can't be blocked by exactly one creature`
+      : `${attacker.def.name} can't be blocked except by ${required} or more creatures`;
+  }
+  if (cap !== undefined && assigned > cap) {
+    return `${attacker.def.name} can't be blocked by more than ${cap === 1 ? 'one creature' : `${cap} creatures`}`;
+  }
+  return undefined;
+}
+
+/**
+ * THE PILOT'S SEAM INTO CR 509.1b: may exactly `count` creatures block this
+ * attacker?
+ *
+ * An AI that assigns blockers must know BOTH halves of the count rule before it
+ * commits, because one illegal pair rejects the WHOLE declaration and costs the
+ * defender every other block in it. Every recorded failure of that kind in this
+ * repo has the same shape — an AI mirror that answers a COARSER question than
+ * the rule it mirrors: a boolean "needs two?" that paired two blockers onto a
+ * Pathrazer of Ulamog (three, §3.118), and then a minimum-only read that paired
+ * two onto a Bristling Boar ("can't be blocked by more than one creature", soak
+ * seed 3455580742). So the pilot asks core, off core's own table, instead of
+ * mirroring the rule a third time.
+ */
+export function blockerCountAllowed(
+  attacker: CardInstance,
+  count: number,
+  index: ContinuousIndex,
+): boolean {
+  return blockerCountProblem(attacker, kw(attacker, index), count) === undefined;
+}
+
+/**
  * Why this whole block DECLARATION is illegal, or `undefined` if it stands.
  *
  * Menace lives here rather than in {@link canBlock} because it constrains the
@@ -289,23 +347,15 @@ export function illegalBlockDeclaration(
   for (const attacker of attackers) {
     const keywords = kw(attacker, index);
     if (keywords.mustBeBlocked === true || keywords.blockedByAllAble === true) anyRequirement = true;
-    const required = minimumBlockersFor(keywords);
-    // "~ can't be blocked by MORE THAN one creature" (DESIGN §3.107) — the dual
-    // of the minimum, read off the same keyword set in the same pass. A cap and a
-    // minimum together are both in force: menace plus a cap of one is a creature
-    // nobody can legally block, which is what the two printed lines say.
-    const cap = keywords.maxBlockers;
-    if (required === 0 && cap === undefined) continue;
+    // The COUNT half (CR 509.1b) — "except by N or more" and "by no more than
+    // N" — is `blockerCountProblem`'s single answer, and the SAME one a pilot
+    // asks through `blockerCountAllowed`. An attacker that prints neither bound
+    // is skipped before the blocks array is walked, which is what keeps the
+    // ordinary board at one keyword read and no allocation.
+    if (minimumBlockersFor(keywords) === 0 && keywords.maxBlockers === undefined) continue;
     const assigned = blocks.filter((b) => b.attacker === attacker.instanceId).length;
-    // Zero is fine — the rule forbids being blocked by TOO FEW, not being unblocked.
-    if (assigned > 0 && assigned < required) {
-      return required === MENACE_MINIMUM_BLOCKERS
-        ? `${attacker.def.name} has menace and can't be blocked by exactly one creature`
-        : `${attacker.def.name} can't be blocked except by ${required} or more creatures`;
-    }
-    if (cap !== undefined && assigned > cap) {
-      return `${attacker.def.name} can't be blocked by more than ${cap === 1 ? 'one creature' : `${cap} creatures`}`;
-    }
+    const countProblem = blockerCountProblem(attacker, keywords, assigned);
+    if (countProblem !== undefined) return countProblem;
   }
   // THE EMPTY CHECK, and the whole reason a rules-complete CR 509.1c/d solver can
   // live on this path: with nothing on the board requiring a block there is

@@ -309,7 +309,7 @@ seed **and both decklists**; paste them into a test.
 39–87 games/sec inside an hour. The tiers are sized in GAMES and the cost signal is
 `process.cpuUsage`.
 
-Two traps the soak itself fell into first, both worth knowing before you add an invariant:
+Traps the soak itself fell into first — every one worth knowing before you add an invariant:
 1. **State-based actions are not checked mid-resolution** (CR 704.3, 608.2). Magma Jet deals 2 damage
    and then asks a scry question; the dead creature legally stays on the battlefield until that
    question is answered. Assert SBAs only when `pendingChoice` and `resolution` are both null.
@@ -324,6 +324,16 @@ Two traps the soak itself fell into first, both worth knowing before you add an 
    card still sitting in that hand. The scan tracks the ids that have **never once** been out of a
    hand or a library — which is what the promise above actually says — and needs no exemption list as
    a result.
+4. **Some questions are about a HISTORY, and a settled state cannot answer them.** "Did this player
+   play too many lands?" reads its two halves at different moments: `landsPlayedThisTurn` is cleared
+   only for the seat whose turn is BEGINNING (so the other seat's is a leftover from its own turn),
+   and the cap itself moves, because `additionalLandPlays` comes from a permanent that can die. Seed
+   3679986871 played two legal lands under Icetill Explorer and lost the Explorer blocking a turn
+   later, and the flat comparison called that turn a rules violation (DESIGN §3.142). Asking the
+   right function (`maxLandPlaysFor`) at the wrong moment is still the wrong answer. The check now
+   lives in `packages/sim/src/land-drop-cap.ts` as a running judgement folded over every settled
+   state — the count against the largest cap that seat has been SEEN to hold since its own turn began
+   — and both consumers use the same one, because each had grown its own copy of the flat version.
 
 ### Web app — `apps/web`
 | Suite | What it guards |

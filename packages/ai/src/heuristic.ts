@@ -65,7 +65,6 @@ import {
   hasCardGrants,
   hasCastableBackFace,
   playableFaceOf,
-  hasType,
   isCreature,
   isLand,
   // §3.112 — the cast-alternative family.
@@ -79,7 +78,6 @@ import {
   isPlaneswalker,
   protectorOf,
   legalTargetsFor,
-  protectionBlocksSource,
   defenseOf,
   loyaltyOf,
   MANA_COLORS,
@@ -111,9 +109,23 @@ import {
   type GraveyardAbility,
   type GraveyardCastKind,
 } from '@jonny-boi/core';
-// The combat keyword family (DESIGN §3.107): core's own land reader for the
-// landwalk mirror, and the attack-requirement roster fix-up.
-import { controlsLandMatchingAny } from '@jonny-boi/core';
+/*
+ * THE COMBAT KEYWORD FAMILY (DESIGN §3.107), and the block-legality rules ASKED
+ * OF CORE rather than mirrored here. This file used to carry its own copy of CR
+ * 509.1a/b, and every time it did the copy was core's minus a clause — first
+ * protection, then landwalk, then "except by N or more creatures". Each cost
+ * the defender an entire declaration, because one illegal pair rejects all of
+ * it. `canBlock` (the pair), `blockerCountAllowed` (the count, from both sides)
+ * and `illegalBlockDeclaration` (the finished declaration, restrictions and CR
+ * 509.1c/d requirements together) are the engine's OWN answers.
+ */
+import {
+  blockerCountAllowed,
+  canBlock,
+  illegalBlockDeclaration,
+  requiredBlockerCount,
+  splitSecondOnStack,
+} from '@jonny-boi/core';
 import { boardOf, withRequiredAttackers } from './attack-requirements.js';
 import { cardValue, cardValueContext } from './card-value.js';
 import type { ContinuousIndex } from './board-stats.js';
@@ -752,6 +764,32 @@ function decide(ctx: DecisionContext, weights: HeuristicWeights, features: Resol
   if (view.step === 'declareBlockers' && me === defendingPlayer(view)) {
     const block = chooseBlock(ctx, weights, index, features);
     if (block) return block;
+  }
+
+  /*
+   * SPLIT SECOND (CR 702.61, DESIGN §3.107) — ASKED OF CORE, at the one seam
+   * every play below has to pass through.
+   *
+   * While such a spell is on the stack nobody may cast a spell, cycle a card or
+   * activate a non-mana ability, and `generateLegalActions` withdraws exactly
+   * those offers. The priority reasoning below does NOT read the offered menu to
+   * decide what to play: it scores the hand itself and CONSTRUCTS the cast
+   * (`castActionFor`), so it happily proposed one under the lock — an action the
+   * menu never contained and the apply path refuses. Both halves of the soak
+   * saw it at once (`legalActionsOnly` and `noRejectedActions`, seed 3736754678
+   * turn 27: B tapped two lands under its own Siege Smash and then cast into it).
+   *
+   * The cause is the same one as the block mirrors: `scoredSpellGoals` derives
+   * castability from its own timing rule ("mirrors core's timing gate") instead
+   * of asking. So the lock is asked of core here, once, rather than threaded as
+   * a fourth condition through every scorer that might build a play.
+   *
+   * Passing is the whole answer: mana abilities are still legal but buy nothing
+   * (no cast can follow), and the combat declarations — which core still offers
+   * under the lock — are decided ABOVE this line, so they are unaffected.
+   */
+  if (splitSecondOnStack(view as GameState)) {
+    return emit(ctx, passAction(view), explain ? 'split second is on the stack — nothing can be played' : NO_REASON);
   }
 
   // Otherwise: a priority window. Plan the best spell goal and act toward it,
@@ -3879,8 +3917,10 @@ function attackIsProfitable(
   // Our attacker's own blocking requirement decides how many of those eligible
   // blockers the defender actually needs: menace (or "except by N or more") means
   // a single blocker is not a legal block at all, so a lone potential blocker is
-  // no deterrent and this attack is really unopposed.
-  const blockersNeeded = needsMultipleBlockers(attacker, index) ? MENACE_BLOCKERS_NEEDED : 1;
+  // no deterrent and this attack is really unopposed. CORE'S count, so Pathrazer
+  // of Ulamog's three is three here rather than menace's two — a local constant
+  // for "how many" is the same mirror that produced §3.121.
+  const blockersNeeded = Math.max(1, requiredBlockerCount(attacker, index));
   const blockerExists = eligibleBlockers >= blockersNeeded;
 
   // If the opponent has a block that's good for them (positive value) AND it kills
@@ -4035,6 +4075,13 @@ function chooseBlock(
     addGangBlocks(attackers, availableBlockers, used, blocks, desperate, weights, index, doomed, board);
   }
 
+  // THE LAST GATE: ask the ENGINE whether this declaration stands, and drop
+  // blocks until it does. See {@link legalizeBlocks} — this is the guard that
+  // makes the recurring "the pilot's copy of a rule was missing a clause"
+  // defect cost a block instead of the whole declaration.
+  const forcedAttackers = new Set((forced ?? []).map((a) => a.attacker));
+  legalizeBlocks(attackers, blocks, forcedAttackers, index, availableBlockers, board);
+
   // Declaring zero blocks via an empty `declareBlockers` would leave combat.blocks
   // empty and get us re-offered the same choice forever, so no block declaration
   // is made. What happens INSTEAD is a fall-through, not a pass.
@@ -4054,6 +4101,75 @@ function chooseBlock(
     : forced ? `block ${blocks.length} attacker(s) — ${forced.length} forced by a block requirement`
     : `block ${blocks.length} attacker(s) for value`;
   return emit(ctx, action, reason);
+}
+
+/**
+ * THE ASK-CORE GATE on a finished block declaration: hand `blocks` to the
+ * engine's own judge and shed pairs, in place, until it stands.
+ *
+ * ## Why this exists at all
+ * Everything above already tries to propose only legal blocks — and three times
+ * now it has been WRONG in the same way, because it was answering a rules
+ * question with a local copy of the rule that was missing a clause (protection,
+ * landwalk, "can't be blocked by more than one creature"). The copies are gone
+ * (`canBlockByEvasion` and `blockCountAllowedFor` are core's answers now), but
+ * "the pilot got the rule right" is a claim that has failed repeatedly, and the
+ * PRICE of it failing is what makes this worth a check: one illegal pair makes
+ * the WHOLE `declareBlockers` illegal, the harness passes priority after three
+ * rejections, and the defender takes the ENTIRE attack unblocked. A guard that
+ * turns "lose every block" into "lose one block" is worth its cost.
+ *
+ * ## What it drops, and what it will not
+ * Pairs are shed one ATTACKER AT A TIME, last-proposed first, because the count
+ * rules (menace, "except by N or more") are about the group: dropping one of a
+ * menacing attacker's two blockers makes the declaration illegal for a new
+ * reason. Attackers whose block came from core's CR 509.1c/d solver are never
+ * dropped — those blocks are REQUIRED, and shedding one is the other way to
+ * have a declaration rejected.
+ *
+ * ## Cost
+ * One `illegalBlockDeclaration` call per declaration on the happy path, which
+ * returns after a single keyword read per attacker when nothing on the board
+ * prints a count rule or a requirement — the ordinary combat. The shedding loop
+ * runs only when the engine has actually refused something.
+ *
+ * EXPORTED for its own test. A safety net whose behaviour is only ever reached
+ * when something else is already broken is a net nobody can prove is there —
+ * `gang-block-landwalk.test.ts` hands it a declaration the engine refuses and
+ * checks WHICH blocks survive.
+ */
+export function legalizeBlocks(
+  attackers: readonly CardInstance[],
+  blocks: { blocker: InstanceId; attacker: InstanceId }[],
+  forcedAttackers: ReadonlySet<InstanceId>,
+  index: ContinuousIndex,
+  defenders: readonly CardInstance[],
+  battlefield: readonly CardInstance[],
+): void {
+  // Bounded by the number of attackers: every pass either returns or removes one
+  // attacker's whole group, and a group is never re-added.
+  for (let guard = attackers.length; guard >= 0; guard--) {
+    if (blocks.length === 0) return;
+    if (illegalBlockDeclaration(attackers, blocks, index, defenders, battlefield) === undefined) return;
+    let dropped = false;
+    for (let i = blocks.length - 1; i >= 0; i--) {
+      const attacker = (blocks[i] as { attacker: InstanceId }).attacker;
+      if (forcedAttackers.has(attacker)) continue;
+      for (let j = blocks.length - 1; j >= 0; j--) {
+        if ((blocks[j] as { attacker: InstanceId }).attacker === attacker) blocks.splice(j, 1);
+      }
+      dropped = true;
+      break;
+    }
+    // Only required blocks are left and the engine still refuses them: that is
+    // core's own solver disagreeing with core's own judge, which this pilot
+    // cannot repair. Declare nothing rather than something rejected.
+    if (!dropped) {
+      blocks.length = 0;
+      return;
+    }
+  }
+  blocks.length = 0;
 }
 
 /**
@@ -4169,12 +4285,15 @@ function addGangBlocks(
     const aPower = power(attacker, index);
     const aTough = toughness(attacker, index);
     const aToughLeft = Math.max(1, toughnessLeft(attacker, index));
-    // This search forms PAIRS, so an attacker that needs three or more blockers
-    // is one it cannot legally block at all — pairing two onto it would make the
-    // whole declaration illegal and cost every other block in it (§3.121).
-    const required = requiredBlockerCountFor(attacker, index);
-    if (required > GANG_BLOCK_SIZE) continue;
-    const mustGang = required > 1;
+    // This search forms PAIRS, so the only question it has about the count rule
+    // is "is a block of exactly two legal here?" — asked of core, which answers
+    // from BOTH bounds at once. Pathrazer of Ulamog needs three and Bristling
+    // Boar permits one; pairing two onto either makes the whole declaration
+    // illegal and costs every other block in it (§3.121, soak 3455580742).
+    if (!blockCountAllowedFor(attacker, GANG_BLOCK_SIZE, index)) continue;
+    // A lone blocker would be illegal here, so the pair is the ONLY way this
+    // attacker can be opposed — the desperate case spends a pair whatever it costs.
+    const mustGang = !blockCountAllowedFor(attacker, 1, index);
     const kill = weights.killEnemyPerStat * (aPower + aTough);
 
     let bestValue = -Infinity;
@@ -4515,21 +4634,25 @@ function isIndestructible(perm: CardInstance, index: ContinuousIndex): boolean {
 }
 
 /**
- * Whether `blocker` could legally block `attacker` PER PAIR. Mirrors core's
- * `canBlock` so the pilot only proposes declarations the engine will accept.
+ * Whether `blocker` could legally block `attacker` PER PAIR — CORE'S OWN
+ * ANSWER, not a mirror of it.
  *
- * ⚠️ It is deliberately the per-pair half only. Menace and "can't be blocked
- * except by N or more creatures" constrain the whole DECLARATION, and this pilot
- * assigns at most one blocker per attacker — so those are handled by
- * {@link needsMultipleBlockers} refusing to block such an attacker at all,
- * rather than by a pair test that cannot see the count.
+ * ⚠️ This function used to be a hand-written copy of `canBlock`, and every
+ * revision of it was core's rule MINUS A CLAUSE: protection (§3.102 — every
+ * white creature kept proposing a block on Black Knight, seed 1948110550),
+ * landwalk (§3.110 — the gang search called it with no board), fear/intimidate,
+ * the comparing restrictions. One illegal pair rejects the WHOLE declaration,
+ * so each omission cost the defender every other block in the same action. The
+ * copy is deleted; the rule is asked of the engine that judges it.
  *
- * Keywords are read EFFECTIVE, not printed: flying granted by an Aura or an
- * until-end-of-turn effect is flying, and a pilot that read only the printed box
- * proposed blocks the engine then rejected — the rules path and the AI path
- * answering one question two ways. (This doc-comment previously said the opposite,
- * and said it for the same reason the rest of the file did: nothing passed an
- * index. See `board-stats.ts`.)
+ * It stays a named function (and stays exported) because `combat-forecast.ts`
+ * models the defender with it and the call sites read as "could this block
+ * happen" — but it is now a one-line delegation, so there is nothing left to
+ * drift.
+ *
+ * ⚠️ It is still only the PER-PAIR half (CR 509.1a). The COUNT rules are
+ * {@link blockerCountAllowed} and the whole declaration is
+ * `illegalBlockDeclaration`; both are core's too.
  */
 export function canBlockByEvasion(
   attacker: CardInstance,
@@ -4542,86 +4665,11 @@ export function canBlockByEvasion(
   // caller holds a view; make it say so.
   battlefield: readonly CardInstance[],
 ): boolean {
-  const ak = keywordsOf(attacker, index);
-  const bk = keywordsOf(blocker, index);
-  // The blocker's own restriction disqualifies it whatever it would block.
-  if (bk.cantBlock) return false;
-  if (ak.unblockable) return false;
-  if (ak.flying && !(bk.flying || bk.reach)) return false;
-  /*
-   * THE COMBAT KEYWORD FAMILY (DESIGN §3.107), mirrored from core's `canBlock`
-   * for the same reason as everything else here: one illegal pair rejects the
-   * WHOLE declaration. Shadow is symmetric (CR 702.28b); "can block only
-   * creatures with flying" is the BLOCKER's restriction; landwalk reads the
-   * defender's lands off the battlefield the caller passes, exactly as core
-   * does (`controlsLandMatchingAny` is core's own reader, so the two agree).
-   */
-  if ((ak.shadow === true) !== (bk.shadow === true)) return false;
-  const blockOnly = bk.blockOnly;
-  if (blockOnly !== undefined && !blockOnly.attackerMustHaveAnyOf.some((keyword) => ak[keyword] === true)) {
-    return false;
-  }
-  if (ak.landwalk !== undefined && controlsLandMatchingAny(battlefield, blocker.controller, ak.landwalk)) {
-    return false;
-  }
-  /*
-   * PROTECTION'S BLOCKING HALF (CR 702.16e): an attacker with protection from a
-   * quality can't be blocked by creatures having it. Core's `canBlock` has
-   * always enforced this; this mirror did not, so every white creature the pilot
-   * owned kept proposing a block on a Black Knight — and because a single
-   * illegal pair makes the WHOLE `declareBlockers` action illegal, the engine
-   * rejected the declaration, the harness passed priority after three
-   * rejections, and the defender took the entire attack UNBLOCKED. Found by the
-   * full-pool soak (`packages/sim/src/soak.ts`), seed 1948110550: "Wall of Omens
-   * cannot block Black Knight".
-   */
-  if (ak.protectionFrom !== undefined && protectionBlocksSource(ak.protectionFrom, blocker.def)) return false;
-  // A COMPARING restriction — "except by creatures with haste", a power or
-  // toughness bound, skulk. Mirrored here for the same reason the evasion tests
-  // are: a pilot that proposed one of these blocks would have its WHOLE
-  // declaration rejected, losing every other block in the same action.
-  const restriction = ak.blockRestriction;
-  if (restriction !== undefined) {
-    const required = restriction.blockerMustHaveAnyOf;
-    if (required !== undefined && !required.some((keyword) => bk[keyword] === true)) return false;
-    /*
-     * FEAR and INTIMIDATE, mirrored for the same reason as everything else here:
-     * a pilot that proposes one illegal pair has its WHOLE `declareBlockers`
-     * rejected, and after three rejections the harness passes priority and the
-     * defender takes the ENTIRE attack unblocked. Reading printed colour/type
-     * matches what core does in `blockerHasQuality`; the two must move together.
-     */
-    const qualities = restriction.blockerMustMatchAnyOf;
-    if (
-      qualities !== undefined &&
-      !qualities.some((quality) => {
-        if (quality.kind === 'artifact') return hasType(blocker.def, 'artifact');
-        if (quality.kind === 'color') return (blocker.def.colors ?? []).includes(quality.color);
-        const mine = attacker.def.colors ?? [];
-        return (blocker.def.colors ?? []).some((color) => mine.includes(color));
-      })
-    ) {
-      return false;
-    }
-    const blockerPower = power(blocker, index);
-    if (restriction.maxBlockerPower !== undefined && blockerPower > restriction.maxBlockerPower) return false;
-    if (restriction.minBlockerPower !== undefined && blockerPower < restriction.minBlockerPower) return false;
-    if (restriction.blockerPowerAtMostMine === true && blockerPower > power(attacker, index)) return false;
-    const blockerToughness = toughness(blocker, index);
-    if (
-      restriction.maxBlockerToughness !== undefined &&
-      blockerToughness > restriction.maxBlockerToughness
-    ) {
-      return false;
-    }
-    if (
-      restriction.minBlockerToughness !== undefined &&
-      blockerToughness < restriction.minBlockerToughness
-    ) {
-      return false;
-    }
-  }
-  return true;
+  // `canBlock` also refuses a TAPPED blocker, which every caller here has
+  // already filtered out (`chooseBlock` builds `availableBlockers` from untapped
+  // creatures, and the forecast models the same list) — so the delegation is
+  // exact for these callers and strictly safer for any future one.
+  return canBlock(attacker, blocker, index, battlefield);
 }
 
 /**
@@ -4638,52 +4686,38 @@ function hasBlockRequirement(creature: CardInstance, index: ContinuousIndex): bo
 }
 
 /**
- * The smallest blocking requirement any printing of the rule states - menace's
- * "two or more". Used as the count a defender needs before such an attacker is
- * genuinely opposed.
- */
-const MENACE_BLOCKERS_NEEDED = 2;
-
-/**
  * How many blockers the gang-block search assigns to one attacker. It builds
- * PAIRS, so this is also the largest block requirement it can legally satisfy —
- * see `addGangBlocks`, which skips an attacker needing more.
+ * PAIRS, so an attacker whose legal count window excludes exactly two is one it
+ * cannot block at all — see `addGangBlocks`.
  */
 const GANG_BLOCK_SIZE = 2;
 
 /**
- * How many creatures it takes before ANY of them is legally blocking this
- * attacker — menace's two, or the general "except by N or more", whichever is
- * larger. Mirrors core's `requiredBlockerCount` (CR 509.1b), which is the rule
- * the engine judges the declaration by.
+ * May exactly `count` creatures block this attacker? CORE'S ANSWER (CR 509.1b),
+ * asked rather than mirrored.
  *
- * ⚠️ A NUMBER, not a boolean, and that is the point. It used to answer only
- * "two or more?", which was enough while the pilot assigned at most one blocker
- * per attacker — and stopped being enough the moment §3.108's gang-block search
- * started assigning exactly TWO. A boolean says Pathrazer of Ulamog (three) and
- * a menacing 2/2 are the same case; the gang search then paired two blockers
- * onto the Pathrazer and the engine rejected the WHOLE declaration, losing every
- * other block in it. The soak caught it on the regenerated pool (Rampaging
- * Ceratops, seed 3379471118), which is the §3.118 shape exactly: a mirror that
- * answers a coarser question than the rule it mirrors.
- *
- * Keywords are read EFFECTIVE, for the same reason `canBlockByEvasion` reads
- * them effective: menace GRANTED by an Aura or an until-end-of-turn pump is
- * menace, and the rules path reads the granted set.
+ * ⚠️ The mirror this replaces is the repo's most-repeated defect. It began as a
+ * boolean "needs two?", which read Pathrazer of Ulamog (three) and a menacing
+ * 2/2 as the same case and had the gang search pair two blockers onto the
+ * Pathrazer; it was widened to a NUMBER (the minimum) and then read Bristling
+ * Boar ("can't be blocked by MORE than one creature") as unconstrained and
+ * paired two blockers onto that (soak seed 3455580742). Both halves of the rule
+ * are one question, and `blockerCountAllowed` is where that question is
+ * answered — so the next printing of it needs no change here at all.
  */
-export function requiredBlockerCountFor(attacker: CardInstance, index: ContinuousIndex): number {
-  const ak = keywordsOf(attacker, index);
-  return Math.max(ak.menace === true ? MENACE_BLOCKERS_NEEDED : 0, ak.minBlockers ?? 0);
+function blockCountAllowedFor(attacker: CardInstance, count: number, index: ContinuousIndex): boolean {
+  return blockerCountAllowed(attacker, count, index);
 }
 
 /**
  * Whether this attacker needs more than one blocker at all — the question the
  * single-blocker path asks, kept as a named predicate because "proposing ANY
  * lone block on this creature is proposing an illegal declaration" is what it
- * means at that call site.
+ * means at that call site. Asked of core, which also makes it true for an
+ * attacker that may take no blockers at all.
  */
 export function needsMultipleBlockers(attacker: CardInstance, index: ContinuousIndex): boolean {
-  return requiredBlockerCountFor(attacker, index) > 1;
+  return !blockCountAllowedFor(attacker, 1, index);
 }
 
 function findInstance(view: PilotView, id: InstanceId): CardInstance | undefined {
@@ -4829,7 +4863,18 @@ export function policyCandidates(
     collectAttackCandidates(view, legalActions, weights, explain, index, out);
   } else if (view.step === 'declareBlockers' && me === defendingPlayer(view)) {
     collectBlockCandidates(view, weights, explain, index, out);
-  } else {
+  } else if (!splitSecondOnStack(state)) {
+    // SPLIT SECOND (CR 702.61, DESIGN §3.142) — the SAME gate `decide` applies,
+    // at the matching seam, because this function has the same defect: every
+    // priority candidate below is a CONSTRUCTED cast, cycle or activation, and
+    // the lock forbids all three. The combat declarations above are untouched
+    // (core still offers those under the lock), and the pass appended below
+    // keeps the menu non-empty, so a search always has a move.
+    //
+    // Fixed here rather than left for the next soak because it is one defect
+    // with two homes: the DEFAULT pilot reaches `decide`, the search pilots
+    // reach this, and the soak only ever walks the first. A class fixed in one
+    // of its two homes is not fixed.
     collectPriorityCandidates(view, legalActions, weights, explain, index, out);
   }
 

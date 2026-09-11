@@ -43,6 +43,12 @@ export interface PinnedMatchup {
  * GREEN — still reporting the runaway it expected, from a match it was never
  * meant to play. Every entry below now names at least one card from each side,
  * and the deck it comes from is written next to it.
+ *
+ * ⚠️ **AND THAT RULE IS NOW CHECKED, not merely written down** (DESIGN §3.142).
+ * `soak.test.ts`'s "every pinned identity names cards from BOTH decks" walks
+ * THIS table — not one test file's rows — against the decklists above, so a row
+ * added half-named to either consumer fails immediately. A rule that lives only
+ * in a doc comment is a rule the next row can be added without reading.
  */
 export type PinnedIdentity = readonly string[];
 
@@ -335,6 +341,192 @@ export const PINNED_3791358276: PinnedMatchup = {
     },
 };
 
+/**
+ * Seed 3736754678 — DESIGN §3.142. B's Siege Smash is the split-second spell it
+ * cast Mouser Attack! into; A is the UB deck the lock happened over.
+ */
+export const PINNED_3736754678: PinnedMatchup = {
+  A: {
+      name: "soak-mixed-3736754678",
+      archetype: "soak/UB",
+      seed: 3736754678,
+      colors: ["U","B"],
+      cards: [
+        { cardId: "4f5a3293-f3e7-4f68-af6a-b478959226c1", count: 3 },
+        { cardId: "b079f9db-974d-4525-a894-57b754ba9dcc", count: 4 },
+        { cardId: "1444786c-fb9f-4398-b442-c7cfd6f1df40", count: 1 },
+        { cardId: "edd8d1e8-be43-4c38-bb3a-83081fbaf0b5", count: 4 },
+        { cardId: "bb75ec92-7c8e-47d3-a412-01d0c98321fe", count: 1 },
+        { cardId: "98902dd9-f21c-4419-8205-4b9d6592bf28", count: 2 },
+        { cardId: "2222f499-09f9-45a6-8255-9de79df76f1c", count: 4 },
+        { cardId: "9d60f16a-0a67-4ad7-8dad-ee97cd01fb89", count: 4 },
+        { cardId: "95a52cb8-e02f-477a-adb6-2bfb7836c704", count: 2 },
+        { cardId: "f71a86e0-d15a-4fba-94f6-bfbaade8d837", count: 4 },
+        { cardId: "693a5a97-d81e-4f4d-ab8f-5a9cabd4c685", count: 1 },
+        { cardId: "18bbdc6c-b6c9-4f89-8f0a-6266e53c1fb9", count: 2 },
+        { cardId: "938066de-d111-4df2-87f0-9eb72aa4cdac", count: 1 },
+        { cardId: "3ac987ac-3f81-4704-b42c-651f44670641", count: 1 },
+        { cardId: "3bfa5ebc-5623-4eec-89ea-dc187489ee4a", count: 1 },
+        { cardId: "156df6eb-1ac9-4954-bf93-b1668096b8bd", count: 1 },
+        { cardId: "e9681a54-6413-4ff4-b6b1-ee4decb25bfa", count: 1 },
+        { cardId: "f8429762-e756-43e0-81b4-9d0a34270040", count: 3 },
+        { cardId: "94e0ad38-31b3-46ba-9999-9b6ff57906ae", count: 3 },
+        { cardId: "b2c6aa39-2d2a-459c-a555-fb48ba993373", count: 9 },
+        { cardId: "56719f6a-1a6c-4c0a-8d21-18f7d7350b68", count: 8 },
+      ],
+    },
+  B: {
+      name: "soak-mixed--110185767",
+      archetype: "soak/RBW",
+      seed: -110185767,
+      colors: ["R","B","W"],
+      cards: [
+        { cardId: "058490f4-0ada-45e6-b4f0-e433537f52d6", count: 2 },
+        { cardId: "24a256b0-e25b-43c6-9f7a-2ad76b268d22", count: 2 },
+        { cardId: "a084d0fb-8db2-4873-a2f9-e6e5fecdd38c", count: 1 },
+        { cardId: "f5f80d82-d64c-466f-8874-9cfb00469f02", count: 3 },
+        { cardId: "10dfc217-ae94-4ff0-bf30-7131f97aa3c9", count: 3 },
+        { cardId: "06ee5eda-41a9-4cae-bb2a-b63fd450d02d", count: 2 },
+        { cardId: "22a2b882-d616-495e-99f6-196031235f93", count: 2 },
+        { cardId: "978cc53c-c038-4442-bd46-e0b9e8cdd924", count: 1 },
+        { cardId: "fa755966-0b96-4747-ba1f-26182d265335", count: 1 },
+        { cardId: "0ebd63cf-7e8c-4c8d-844d-98535d5f3039", count: 3 },
+        { cardId: "f33e3b25-76f5-4263-a309-9ea97f2d8248", count: 3 },
+        { cardId: "1e7162e5-8c56-457e-91eb-b8ae4d1b6adb", count: 4 },
+        { cardId: "b1c6df1d-7709-41e4-a79f-0dc722600191", count: 4 },
+        { cardId: "ec66b814-9c47-4d17-8c02-1d9be565c76c", count: 3 },
+        { cardId: "926916ed-2f22-4ba9-9427-194886ad6c1e", count: 3 },
+        { cardId: "ac07e230-0297-4e1d-bdfe-119010e0ad8e", count: 2 },
+        { cardId: "a4580a1d-141e-449b-9018-e0258130634b", count: 2 },
+        { cardId: "73c423b7-cab8-4e69-8070-9edbf96a6c2c", count: 3 },
+        { cardId: "a3fb7228-e76b-4e96-a40e-20b5fed75685", count: 6 },
+        { cardId: "56719f6a-1a6c-4c0a-8d21-18f7d7350b68", count: 4 },
+        { cardId: "bc71ebf6-2056-41f7-be35-b2e5c34afa99", count: 6 },
+      ],
+    },
+};
+
+/**
+ * Seed 3455580742 — DESIGN §3.142. B's Bristling Boar can't be blocked by more
+ * than one creature; A's Millennial Gargoyle and Screeching Sliver are the pair
+ * the gang search put on it.
+ */
+export const PINNED_3455580742: PinnedMatchup = {
+  A: {
+      name: "soak-mixed-3455580742",
+      archetype: "soak/UW",
+      seed: 3455580742,
+      colors: ["U","W"],
+      cards: [
+        { cardId: "2fda4fe7-8b0c-489c-a000-6d358e614e34", count: 3 },
+        { cardId: "31c729e2-4e55-4a14-a288-9c3473e58b88", count: 3 },
+        { cardId: "2c697b0b-edba-491a-b40e-f88572a6e955", count: 3 },
+        { cardId: "e672a05c-5f1a-4aa6-9398-e33df01c7c96", count: 1 },
+        { cardId: "325f228e-46ff-43e2-bc1d-c2d2df443c51", count: 2 },
+        { cardId: "e52464ee-df8b-41ec-af93-4b0eb004383e", count: 4 },
+        { cardId: "068e7803-7c9f-43d7-b6dc-8e1390d902d0", count: 3 },
+        { cardId: "48c1a040-9045-4977-84e4-695de0f886a9", count: 4 },
+        { cardId: "fce74849-2e08-4d08-b387-4693f1b9f653", count: 2 },
+        { cardId: "b4fb87ab-8595-459a-a5f2-087296d9b120", count: 4 },
+        { cardId: "e3979b88-ac58-420a-8c03-37ea5d93d0f1", count: 2 },
+        { cardId: "313e71da-ce72-4976-8286-f4495ea56485", count: 3 },
+        { cardId: "cc2741d8-2c02-4acd-8ca2-55b4bf6aef1c", count: 4 },
+        { cardId: "b2c6aa39-2d2a-459c-a555-fb48ba993373", count: 14 },
+        { cardId: "bc71ebf6-2056-41f7-be35-b2e5c34afa99", count: 8 },
+      ],
+    },
+  B: {
+      name: "soak-mixed--366800535",
+      archetype: "soak/RWG",
+      seed: -366800535,
+      colors: ["R","W","G"],
+      cards: [
+        { cardId: "422aca0b-8e8f-4774-9a20-6f7a1cae967e", count: 4 },
+        { cardId: "489c6a2f-38b4-4ff9-95f7-431384480ed9", count: 4 },
+        { cardId: "407110e9-19af-4ff5-97b2-c03225031a73", count: 2 },
+        { cardId: "d3be1289-76f9-40b3-9387-b76a8b8d8797", count: 1 },
+        { cardId: "ce33ef5b-a0ff-459c-a9d4-a0a00ac66b31", count: 4 },
+        { cardId: "301310b3-c031-4fd3-a47e-9645b6177329", count: 1 },
+        { cardId: "b32c342f-ee1a-461c-9082-d2f6d9412f54", count: 2 },
+        { cardId: "71a25c69-8e57-4a44-955a-da1541bbe0fe", count: 1 },
+        { cardId: "c3c3243c-e9af-4b7d-8296-f7714436e571", count: 4 },
+        { cardId: "05d5a38f-5a60-46da-af1c-440e4bf7fe9e", count: 2 },
+        { cardId: "9aaf0df7-5e2d-4f49-a8cb-66523be15ad6", count: 1 },
+        { cardId: "0b79b30e-e7aa-490e-b130-de7533e6e13b", count: 4 },
+        { cardId: "70e888f9-c583-478a-9ef0-2e89db8a8dbb", count: 4 },
+        { cardId: "6389c242-2139-4f12-af30-2b080a1c5e83", count: 4 },
+        { cardId: "a3fb7228-e76b-4e96-a40e-20b5fed75685", count: 3 },
+        { cardId: "bc71ebf6-2056-41f7-be35-b2e5c34afa99", count: 9 },
+        { cardId: "b34bb2dc-c1af-4d77-b0b3-a0fb342a5fc6", count: 10 },
+      ],
+    },
+};
+
+/**
+ * Seed 3679986871 — DESIGN §3.142. B's Icetill Explorer prints BOTH "an
+ * additional land" and "you may play lands from your graveyard", which is what
+ * made two drops on turn 16 legal; A's board is what killed it on turn 17.
+ */
+export const PINNED_3679986871: PinnedMatchup = {
+  A: {
+      name: "soak-mixed-3679986871",
+      archetype: "soak/RG",
+      seed: 3679986871,
+      colors: ["R","G"],
+      cards: [
+        { cardId: "2b7cb1a3-761e-470e-a164-6e29dd9448cd", count: 3 },
+        { cardId: "7fddcd48-3efe-4b56-9d69-9659b3dc6021", count: 1 },
+        { cardId: "c69742a8-cc6d-457b-8d99-81d05ab1bf0b", count: 1 },
+        { cardId: "eefea84f-d657-491d-b60d-63e6a61e9eb2", count: 4 },
+        { cardId: "3469d73e-6de1-4b91-83e3-b1714ac29268", count: 3 },
+        { cardId: "ae115587-012d-40ff-a20d-270fabf2f8c6", count: 3 },
+        { cardId: "c4e319d7-53f3-40e8-9a75-fe1fd8716733", count: 1 },
+        { cardId: "05bc4236-566f-401b-b9d7-f58126fa228b", count: 3 },
+        { cardId: "5503186a-46fe-4956-8ae3-5ab3343f8a93", count: 3 },
+        { cardId: "4c97229f-2fc8-439a-a18b-efa09b366b70", count: 2 },
+        { cardId: "8f1e75e1-a827-46c1-896f-cd8fbdf79fa8", count: 2 },
+        { cardId: "2e0b23a4-5868-4dd8-ae68-846934e1bd52", count: 4 },
+        { cardId: "88a68767-9822-4f15-895e-32164e2159be", count: 1 },
+        { cardId: "1fa2963d-010f-491c-8ccc-3b4d4bc88398", count: 1 },
+        { cardId: "339acb17-4b8e-4836-9cc5-8a0a946ebc73", count: 2 },
+        { cardId: "989b5901-aeb0-4a48-8c53-3b0ec0e0deba", count: 3 },
+        { cardId: "727beb1f-1445-4398-970c-e31819d54bc6", count: 2 },
+        { cardId: "b33656ae-3473-4223-845f-f9147f87678b", count: 1 },
+        { cardId: "33145080-077e-4231-96ca-e8b1852b6380", count: 4 },
+        { cardId: "a3fb7228-e76b-4e96-a40e-20b5fed75685", count: 6 },
+        { cardId: "b34bb2dc-c1af-4d77-b0b3-a0fb342a5fc6", count: 10 },
+      ],
+    },
+  B: {
+      name: "soak-mixed--57880680",
+      archetype: "soak/GB",
+      seed: -57880680,
+      colors: ["G","B"],
+      cards: [
+        { cardId: "e34fa15b-4559-4a8f-aa29-5c43eb4eeef9", count: 4 },
+        { cardId: "0950bfe7-2600-4e01-8f54-f03a5c023520", count: 4 },
+        { cardId: "4724d00a-b93b-43fd-9c86-56f127db450b", count: 2 },
+        { cardId: "eaedd5c8-03c6-4bbb-bf83-632551830bd4", count: 4 },
+        { cardId: "d9482aab-6ddf-48e1-84fa-b13d5ff81e69", count: 4 },
+        { cardId: "16debeb1-fb2b-4172-b6da-726416d4fb38", count: 4 },
+        { cardId: "6d808a30-f1b5-484e-a90e-0a9f751ef597", count: 1 },
+        { cardId: "8f56705d-eb64-4cef-b716-edbeac60bf79", count: 2 },
+        { cardId: "8aaae6a3-ae3c-4b7e-82e8-69147f61ee18", count: 2 },
+        { cardId: "89a60271-edfc-4bb1-83d5-4d6fa0403b19", count: 3 },
+        { cardId: "a070b7af-7c85-4129-81ca-e2ec0540085e", count: 4 },
+        { cardId: "f8373e5a-94bb-4aa0-bd09-13a01e0cb02a", count: 1 },
+        { cardId: "88231c0d-0cc8-44ec-bf95-81d1710ac141", count: 1 },
+        { cardId: "1bd3e453-aa21-4ee6-95c2-d6d920ee8e7a", count: 2 },
+        { cardId: "226af626-873d-4bd2-b889-000f8316786f", count: 2 },
+        { cardId: "6db442e5-fbcc-4456-a4c5-bea1aee3fc8e", count: 2 },
+        { cardId: "cbab7e1f-305e-4733-aa70-b27285740925", count: 4 },
+        { cardId: "61fc0fba-c285-4fad-85a6-79fd7f3f9c35", count: 1 },
+        { cardId: "b34bb2dc-c1af-4d77-b0b3-a0fb342a5fc6", count: 7 },
+        { cardId: "56719f6a-1a6c-4c0a-8d21-18f7d7350b68", count: 6 },
+      ],
+    },
+};
+
 /** Every pinned matchup, by the seed it was found at. */
 export const PINNED_MATCHUPS: Readonly<Record<number, PinnedMatchup>> = Object.freeze({
   4222011655: PINNED_4222011655,
@@ -342,6 +534,9 @@ export const PINNED_MATCHUPS: Readonly<Record<number, PinnedMatchup>> = Object.f
   3434778477: PINNED_3434778477,
   113343071: PINNED_113343071,
   3791358276: PINNED_3791358276,
+  3736754678: PINNED_3736754678,
+  3455580742: PINNED_3455580742,
+  3679986871: PINNED_3679986871,
 });
 
 /** See {@link PinnedIdentity} — cards from BOTH decks, or the row is not pinned. */
@@ -364,4 +559,14 @@ export const PINNED_IDENTITIES: Readonly<Record<number, PinnedIdentity>> = Objec
   // swapped for any deck at all, which is the escape that got past the sabotage
   // pass once already.
   3791358276: ['Bog Initiate', 'Nezumi Cutthroat', 'Prodigal Pyromancer', 'Tar Pitcher'],
+  // A: the board the lock happened over. B: Siege Smash (the split-second spell)
+  // and the Mouser Attack! its own controller cast into it (DESIGN §3.142).
+  3736754678: ['Soldevi Simulacrum', 'Thoughtseize', 'Siege Smash', 'Mouser Attack!'],
+  // A: the two creatures the gang search paired onto it. B: Bristling Boar, the
+  // "can't be blocked by more than one creature" that refused the declaration.
+  3455580742: ['Millennial Gargoyle', 'Screeching Sliver', 'Bristling Boar'],
+  // A: the board whose combat killed it. B: Icetill Explorer, which prints BOTH
+  // the additional land and "play lands from your graveyard" that made two drops
+  // legal on turn 16 — and Mire Triton, B's alone.
+  3679986871: ['Nyxborn Brute', 'Tel-Jilad Chosen', 'Icetill Explorer', 'Mire Triton'],
 });

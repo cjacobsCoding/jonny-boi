@@ -2889,6 +2889,133 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.142 Three soak violations, one shape — a rule answered somewhere other than by the rule — ✅ done
+
+The 2,000-game deep-tier sweep (§3.140) surfaced twelve violations. Eight were one pilot defect owned
+by a sibling branch. The other four were three unrelated bugs — and diagnosing them turned out to be
+the same sentence three times: **something answered a rules question without asking the rule.** Two
+of the three were the PILOT answering with its own copy of a core rule; the third was a CHECK
+comparing two readings taken at different moments.
+
+**This section is §3.142, and has been renumbered twice.** It was written as §3.141 while
+`fix/pilot-repeatable-noop` was out with the same number, and moved again when that branch landed
+first — the §3.31 precedent. The sweep that produced these four reports is §3.140.
+
+Every claim below is from a replay of the reported seed through `replaySoakMixedGame` (~200 ms per
+game), instrumented until the game said what it was doing. Nothing here was inferred from the
+violation text alone.
+
+**1. Split second (CR 702.61) — the pilot BUILT a cast the menu had withdrawn.** Seed 3736754678,
+turn 27: B cast its own Siege Smash (split second) in its upkeep, then tapped two lands and cast
+Mouser Attack! in response to it. Two invariants fired together, which is the tell: the offered menu
+was `[passPriority, tapForMana, tapForMana]` — `generateLegalActions` had correctly withdrawn every
+cast — so the action was both never-offered (`legalActionsOnly`) and refused by the apply path
+(`noRejectedActions`). The offer and apply sides AGREED; the pilot was the third opinion. It does not
+pick casts off the menu at all: `scoredSpellGoals` scores the hand and `castActionFor` constructs the
+action, deriving castability from a comment that says in as many words "mirrors core's timing gate".
+The mirror had no split-second clause. **Fixed** by asking `splitSecondOnStack` — already exported
+for exactly this — once, at the seam in `decide` that every constructed play passes through, rather
+than threading a fourth condition through each scorer. Passing is the whole answer: mana abilities
+stay legal but buy nothing, and the combat declarations core still offers under the lock are decided
+above that line.
+
+⚠️ **And the same defect has a SECOND home the soak cannot reach.** `policyCandidates` — the seam the
+SEARCH pilots consume — builds the same constructed casts, cycles and activations, with the same
+missing clause. No soak run would ever have found it: the run plays the DEFAULT pilot, which goes
+through `decide`. It is gated here too, and tested here too. A class fixed in one of its two homes
+is not fixed, and "the sweep did not report it" is not evidence that it was not there.
+
+**2. CR 509.1b's cap — the count rule lived twice, and the second copy read one bound.** Seed
+3455580742, turn 12: the gang-block search put Millennial Gargoyle AND Screeching Sliver on a
+Bristling Boar ("can't be blocked by more than one creature"), the engine refused the whole
+declaration, and after three rejections the harness passed priority and the defender took the attack
+unblocked. Core's `illegalBlockDeclaration` reads BOTH bounds; the pilot's `requiredBlockerCountFor`
+read only the minimum, so a cap looked like no constraint at all. **This is the fifth printing of one
+defect** — the pilot's block mirror has been core's rule minus a clause for protection (§3.102),
+landwalk (§3.110), the requirement SIZE (§3.121), and now the cap — so the fix is not another clause:
+
+- CR 509.1b is now ONE core predicate, `blockerCountProblem`, asked by `illegalBlockDeclaration` and
+  exported to pilots as `blockerCountAllowed(attacker, count, index)` — the question an AI assigning
+  N blockers actually has, which is why every AI kept building its own.
+- The pilot's `canBlockByEvasion` — a ~70-line hand copy of `canBlock` — is now a one-line
+  delegation. There is nothing left to drift.
+- `chooseBlock` ends by handing its finished blocks to `illegalBlockDeclaration`, the engine's own
+  judge, and shedding optional pairs (whole attacker-groups, never a core-required block) until they
+  stand. **That gate is load-bearing and was measured to be**: with the count seam reverted to the
+  minimum-only defect and the gate left in, the pinned seed still replays clean; only with both
+  broken does it fail. The next forgotten clause costs a block, not a combat.
+
+**3. `landDropCap` — the check was wrong, not the engine.** Seed 3679986871, turn 17: "B played 2
+lands this turn". B had, and both were legal. B controlled Icetill Explorer, which prints *both*
+"you may play an additional land" *and* "you may play lands from your graveyard"; on turn 16 B played
+a Forest from hand and a Swamp its own landfall trigger had just milled. It blocked with the Explorer
+on turn 17 and lost it. The invariant then compared a count accumulated on turn 16 against a cap
+re-read on turn 17 — `landsPlayedThisTurn` is cleared only for the seat whose turn is BEGINNING, and
+`additionalLandPlays` comes from a permanent that can die. **No single state holds both halves of
+that comparison**, so the check was answering a question about a history from a snapshot. `maxLandPlaysFor`
+was already being asked (§3.71 fixed the config-vs-engine half of this); asking the right function at
+the wrong moment is the half that was left.
+
+**Fixed** by `packages/sim/src/land-drop-cap.ts`: one running judgement, folded over every settled
+state, that measures the count against **the largest cap that seat has been seen to hold since its
+own turn began**. That is an upper bound on what was legal at the moment of any of those plays, so a
+drop that escaped the counter still shows up while a legal turn cannot be reported. It is stateful on
+purpose — "was this legal?" is a question about a history. Both consumers use the same one: the soak
+watcher and `rules-audit.test.ts` each carried their own copy of the flat comparison.
+
+**What is GUARDED.** Three pinned soak rows (seeds above, decklists pinned so pool churn cannot
+re-deal them); `blockerCountAllowed` exercised on both bounds, on Pathrazer's three, and on a body
+with a cap AND a minimum that nobody can legally block, plus an explicit "agrees with the judge that
+decides the real declaration" pairing; the gang search declining a pair on a capped attacker with the
+CONTROL that proves it takes the same pair uncapped; `legalizeBlocks` handed a refused declaration
+directly, because a safety net only reached when something else is broken is a net nobody can prove
+is there; the pilot passing into a lock with the control that proves it wanted to cast; and the
+land-drop watch on the two false positives that motivated it plus the two violations it must still
+report.
+
+**And the identity guard got a guard.** §3.140 moved a matchup's identity into `PINNED_IDENTITIES`
+and wrote the rule it has to obey — *name cards from BOTH decks* — in the table's doc comment. This
+branch makes that rule EXECUTABLE: `soak.test.ts` walks the table (not one file's rows) against the
+pinned decklists and fails any entry that names nothing from one side, plus the reverse direction, a
+pinned matchup with no identity at all. A rule that lives only in a doc comment is a rule the next
+row can be added without reading — and this branch added three rows, which is exactly when that
+matters. Both branches reached `PINNED_IDENTITIES` independently; the merge keeps §3.140's table and
+doc and adds the check.
+
+**Measured, post-merge with §3.140.** **`npm run verify` exit 0** — 399 test files, **21,780 passed
+/ 0 failed**, 5 skipped — and `npm run build` exit 0. (An earlier bare `npx vitest run` on the same
+tree, taken while the box was busier, reported the same 21,778 green plus 2 failures in
+`apps/web/src/lib/sim/determinism.test.ts`'s settled-leader pair — flaky under concurrent agents by
+construction; that file passed 20/20 re-run in isolation, and the verify run above is green on it
+too.) The gauntlet
+at seed 99 is **byte-identical: 97/320 = 30.3%, rows 17 · 14 · 19 · 7 · 8 · 10 · 17 · 5** — the same
+numbers before the branch and after the merge, so none of this moved the pilot's play.
+
+**The deep tier went 12 → 8 → 0.** Measured twice on this branch, both at 2,083 games:
+
+  - **8**, before `fix/pilot-repeatable-noop` merged (506,860 ms CPU). Every one of the 8 was
+    `gameCanEnd`, on 8 distinct seeds, and **every one of their decklists contained Bog Initiate** —
+    the single pilot defect that branch owned, deliberately untouched here. All four violations THIS
+    branch was given were already gone at that point.
+  - **0**, with that branch merged in (287,766 ms CPU). The deep tier is clean.
+
+⚠️ **And the "before" only exists because a check started looking.** The same 2,000-game run on this
+branch's own starting point reported **0 violations and 8 "mandatory loop" DRAWS** — §3.140 is what
+turned those draws into the violations they always were. A count that falls is worth nothing without
+saying which check was counting.
+
+**Nine sabotages, no escapes**, and two of the results are findings rather than ticks:
+
+  - breaking core's cap clause goes red in 4 core tests and 2 pilot tests; disabling either
+    split-second gate, the shedding loop, or the land-drop history each goes red in its own test;
+    half-naming a pinned identity goes red with the message that names the deck it missed.
+  - ⚠️ **Reverting all three fixes leaves the BLOCKING pinned row green.** Sabotaging the SHARED
+    count rule makes the engine and the pilot agree, so nothing is rejected and the soak sees
+    nothing. That row guards the pilot's AGREEMENT with core, not core's rule — core's own rule is
+    guarded in `combat-keyword-family.test.ts`, which does go red. Reported rather than papered over.
+  - ⚠️ **Reverting only the pilot's count seam ALSO leaves it green** — because `legalizeBlocks`
+    catches it. That is the ask-core gate being measured rather than asserted: it takes both the seam
+    and the gate broken (the ninth sabotage) before the row fails.
 ### 3.141 An ability that gives back exactly what it takes — the pilot's repeatable no-op — ✅ done
 
 §3.140 un-blinded `gameCanEnd` and the first sweep with the door watched found **12 violations over

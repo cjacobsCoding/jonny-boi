@@ -50,7 +50,6 @@ import type {
   PlayerId,
 } from '@jonny-boi/core';
 import {
-  DEFAULT_RULES,
   defenseOf,
   effectiveKeywords,
   effectiveToughness,
@@ -64,12 +63,12 @@ import {
   PLAYER_IDS,
   PLUS_ONE_COUNTER,
   poolTotal,
-  maxLandPlaysFor,
 } from '@jonny-boi/core';
 import type { CardPool } from '@jonny-boi/cards';
 import type { EffectRegistry } from '@jonny-boi/core';
 import type { GameObserver, Observation, Pilot } from '@jonny-boi/ai';
 import { loadDeck, type LoadedDeck } from './deck.js';
+import { createLandDropCapWatch } from './land-drop-cap.js';
 import { DEFAULT_SIM_CONFIG, type SimConfig } from './config.js';
 import { runMatch, type MatchResult } from './match.js';
 import { gameSeedFor, makeSeats, onPlayFor } from './matchup.js';
@@ -562,13 +561,10 @@ function checkStateInvariants(state: GameState): { invariant: SoakInvariantName;
     if (poolTotal(player.manaPool) < 0) {
       record(SOAK_INVARIANTS.manaPoolNonNegative, `${pid}'s mana pool totals ${poolTotal(player.manaPool)}`);
     }
-    // ⚠️ ASKED OF THE ENGINE, not of the config. `maxLandsPerTurn` is the BASE;
-    // Exploration and friends raise it, so a flat comparison called a legal
-    // second land drop a rules violation the moment the pool grew enough to
-    // deal one (§3.71). One answer to one question — see `maxLandPlaysFor`.
-    if (player.landsPlayedThisTurn > maxLandPlaysFor(state, pid, DEFAULT_RULES)) {
-      record(SOAK_INVARIANTS.landDropCap, `${pid} played ${player.landsPlayedThisTurn} lands this turn`);
-    }
+    // THE LAND-DROP CAP is NOT checked here. It cannot be: the count and the cap
+    // are read at different moments, and no single state holds both. See
+    // `land-drop-cap.ts` — the watcher folds every settled state through one
+    // running judgement instead.
   }
 
   // A parked question owns the game: only its chooser may act, and only by
@@ -627,6 +623,13 @@ function createGameWatcher(inner: Pilot): GameWatcher {
   let lastTurn = 0;
   let lastState: GameState | null = null;
   let turnChecks = 0;
+  /*
+   * The land-drop cap is a running judgement, not a snapshot: the count belongs
+   * to the turn it was made in and the cap moves when the permanent granting it
+   * dies. See `land-drop-cap.ts` — this is the one that spent a 2,000-game soak
+   * reporting a legal turn as a violation.
+   */
+  const landDropCap = createLandDropCapWatch();
 
   const record = (invariant: SoakInvariantName, detail: string, state: GameState, action: string) => {
     // Once per (invariant, game): one systemic break must not bury the others.
@@ -671,6 +674,8 @@ function createGameWatcher(inner: Pilot): GameWatcher {
     learn(state);
     if (originalIds === null) originalIds = new Set(allInstances(state).map((e) => e.inst.instanceId));
     for (const v of checkStateInvariants(state)) record(v.invariant, v.detail, state, action);
+    const landDrops = landDropCap.check(state);
+    if (landDrops) record(SOAK_INVARIANTS.landDropCap, landDrops, state, action);
     mechanicsOfState(state, (id) => mechanics.add(id), defTextOf);
 
     if (state.turnNumber !== lastTurn) {

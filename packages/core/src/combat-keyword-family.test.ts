@@ -18,7 +18,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { CardDefinition, KeywordFlags } from './card.js';
-import { canBlock, illegalBlockDeclaration } from './internal/combat.js';
+import { blockerCountAllowed, canBlock, illegalBlockDeclaration } from './internal/combat.js';
 import { indexContinuous } from './internal/continuous.js';
 import { effectiveKeywords, mergeKeywordGrant } from './internal/stats.js';
 import { forcedBlockAssignment } from './internal/block-solver.js';
@@ -233,6 +233,73 @@ describe('"~ can\'t be blocked by more than one creature" — the dual of menace
         defenders,
         state.battlefield,
       ),
+    ).toMatch(/more than one creature/);
+  });
+});
+
+
+/*
+ * THE COUNT RULE, ASKED THE WAY AN AI HAS TO ASK IT (DESIGN §3.142).
+ *
+ * `illegalBlockDeclaration` judges a FINISHED declaration, which is the wrong
+ * shape for a pilot deciding whether to put N blockers somewhere — so every AI
+ * that needed the answer built its own, and every copy was this rule minus a
+ * bound. `blockerCountAllowed` is the same two reads, exported, so there is one
+ * answer to "may exactly N block this?" and the AI and the engine share it.
+ */
+describe('blockerCountAllowed — one predicate, both bounds of CR 509.1b', () => {
+  function allowed(def: CardDefinition, count: number): boolean {
+    const state = newGame();
+    const attacker = putOnBattlefield(state, 'A', def);
+    return blockerCountAllowed(attacker, count, indexContinuous(state));
+  }
+  const MENACER = creatureDef('Menacer', 3, 3, { keywords: { menace: true } });
+  const PATHRAZER = creatureDef('Pathrazer of Ulamog', 4, 4, { keywords: { minBlockers: 3 } });
+  const BOTH = creatureDef('Locked Out', 3, 3, { keywords: { menace: true, maxBlockers: 1 } });
+
+  it('an unconstrained creature allows any count, zero included', () => {
+    for (const n of [0, 1, 2, 3]) expect(allowed(BEAR, n)).toBe(true);
+  });
+
+  it('the CAP is a real answer, not the absence of a minimum', () => {
+    // The exact hole the pilot's minimum-only mirror had: Norwood Riders (and
+    // Bristling Boar) report no minimum, and the mirror read that as "anything
+    // goes" — so the gang search paired two blockers onto them.
+    expect(allowed(NORWOOD_RIDERS, 0)).toBe(true);
+    expect(allowed(NORWOOD_RIDERS, 1)).toBe(true);
+    expect(allowed(NORWOOD_RIDERS, 2)).toBe(false);
+  });
+
+  it('the MINIMUM is a size, not a boolean', () => {
+    expect(allowed(MENACER, 1)).toBe(false);
+    expect(allowed(MENACER, 2)).toBe(true);
+    // Pathrazer and a menacing 2/2 are NOT the same case — the defect that put
+    // two blockers on a three-requirement attacker (§3.121).
+    expect(allowed(PATHRAZER, 2)).toBe(false);
+    expect(allowed(PATHRAZER, 3)).toBe(true);
+  });
+
+  it('a cap and a minimum together leave NO legal block at all', () => {
+    expect(allowed(BOTH, 0)).toBe(true);
+    expect(allowed(BOTH, 1)).toBe(false);
+    expect(allowed(BOTH, 2)).toBe(false);
+  });
+
+  it('agrees with the judge that decides the real declaration', () => {
+    // The two must never disagree: they are the same rule, and this is the test
+    // that fails if one of them is edited alone.
+    const state = newGame();
+    const riders = putOnBattlefield(state, 'A', NORWOOD_RIDERS);
+    const one = putOnBattlefield(state, 'B', BEAR);
+    const two = putOnBattlefield(state, 'B', BEAR);
+    const index = indexContinuous(state);
+    const blocks = [
+      { blocker: one.instanceId, attacker: riders.instanceId },
+      { blocker: two.instanceId, attacker: riders.instanceId },
+    ];
+    expect(blockerCountAllowed(riders, blocks.length, index)).toBe(false);
+    expect(
+      illegalBlockDeclaration([riders], blocks, index, [one, two], state.battlefield),
     ).toMatch(/more than one creature/);
   });
 });

@@ -287,7 +287,7 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
       onPlay: 'A',
       what:
         'CR 707.10: a copy of Twincast re-aimed at the Twincast that made it, forever — the pilot ' +
-        'valued copying a copy spell at the copy spell\'s own face value, so the mirror always beat ' +
+        "valued copying a copy spell at the copy spell's own face value, so the mirror always beat " +
         'copying the Dream Twist underneath it (fixed by pricing a copy by what its chain delivers)',
     },
     {
@@ -298,7 +298,45 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
     {
       seed: 113343071,
       onPlay: 'A',
-      what: 'CR 707.10: the same copy-mirror loop with Reverberate + Narset\'s Reversal, seat A',
+      what: "CR 707.10: the same copy-mirror loop with Reverberate + Narset's Reversal, seat A",
+    },
+    /*
+     * THREE ROWS, THREE UNRELATED DEFECTS, ONE SHAPE (DESIGN §3.142): a rules
+     * question answered somewhere other than by the rule.
+     *
+     * The first two are the pilot answering with its OWN copy of a core rule and
+     * the copy missing a clause — the repo's most-repeated defect, now on its
+     * fifth printing. The third is the opposite direction: a CHECK that compared
+     * two readings taken at different moments and reported a legal turn as a
+     * violation. All three are kept because their fixes are independent.
+     */
+    {
+      seed: 3736754678,
+      onPlay: 'B',
+      what:
+        'CR 702.61: B cast Mouser Attack! in response to its OWN Siege Smash — split second was on ' +
+        'the stack, the offer pass had withdrawn every cast, and the pilot built one anyway because ' +
+        '`scoredSpellGoals` derived castability from its own timing rule instead of asking core ' +
+        '(tripping legalActionsOnly and noRejectedActions at once, turn 27)',
+    },
+    {
+      seed: 3455580742,
+      onPlay: 'A',
+      what:
+        'CR 509.1b: the gang-block search put Millennial Gargoyle AND Screeching Sliver on a ' +
+        "Bristling Boar that can't be blocked by more than one creature — the pilot's count mirror " +
+        'read only the MINIMUM bound, so a cap looked like no constraint and the engine refused the ' +
+        "whole declaration (fixed by asking core's `blockerCountAllowed`, which reads both)",
+    },
+    {
+      seed: 3679986871,
+      onPlay: 'A',
+      what:
+        'NOT A RULES BUG: B legally played two lands on turn 16 under Icetill Explorer (an ' +
+        'additional land, plus lands from the graveyard), then lost the Explorer blocking on turn ' +
+        '17 — and the landDropCap invariant compared that stale count against a cap re-read after ' +
+        'the grantor died (fixed by judging the count against the largest cap the seat has held ' +
+        'since its own turn began)',
     },
     /*
      * THE MANA EXCHANGE THAT PAID FOR ITSELF — §3.141, and the first row this
@@ -323,6 +361,46 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
         'a pure mana exchange that would leave the pool exactly as it found it)',
     },
   ];
+
+  /*
+   * THE IDENTITY GUARD ON THE IDENTITY GUARD (DESIGN §3.142). A row whose
+   * identity cards all sit in ONE deck is green for a match whose OTHER deck was
+   * swapped wholesale — the same escape the identity assertion exists to close,
+   * one deck deeper. `PinnedIdentity`'s doc states the rule; this is the rule
+   * being CHECKED, because a rule that lives only in a comment is one the next
+   * row can be added without reading.
+   *
+   * It walks the TABLE, not this file's rows: `loop-runaway.test.ts` pins from
+   * the same table, and a guard that only covered its own consumer would leave
+   * the other one free to add a half-named row.
+   */
+  it('every pinned identity names cards from BOTH decks', () => {
+    const nameOf = (id: string) => pool.get(id)?.name ?? id;
+    for (const key of Object.keys(PINNED_IDENTITIES)) {
+      const seed = Number(key);
+      const matchup = PINNED_MATCHUPS[seed];
+      const identity = PINNED_IDENTITIES[seed] ?? [];
+      expect(matchup, `seed ${seed} has an identity but no recorded decklist`).toBeDefined();
+      for (const side of ['A', 'B'] as const) {
+        const names = new Set<string>();
+        for (const { cardId } of matchup![side].cards) names.add(nameOf(cardId));
+        expect(
+          identity.filter((card) => names.has(card)).length,
+          `seed ${seed}: PINNED_IDENTITIES names nothing from deck ${side}, so substituting deck ` +
+            `${side} would leave every row on this seed green while replaying a different match`,
+        ).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  /* Every pinned decklist is reachable from an identity, and vice versa: a
+   * matchup with no identity is a row that can drift onto another game unnoticed.
+   */
+  it('every pinned matchup has an identity', () => {
+    for (const key of Object.keys(PINNED_MATCHUPS)) {
+      expect(PINNED_IDENTITIES[Number(key)], `seed ${key} has no recorded identity`).toBeDefined();
+    }
+  });
 
   for (const { seed, onPlay, what } of PINNED) {
     it(`seed ${seed}: ${what}`, () => {
