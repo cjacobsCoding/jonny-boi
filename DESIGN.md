@@ -2991,13 +2991,18 @@ too.) The gauntlet
 at seed 99 is **byte-identical: 97/320 = 30.3%, rows 17 · 14 · 19 · 7 · 8 · 10 · 17 · 5** — the same
 numbers before the branch and after the merge, so none of this moved the pilot's play.
 
-**The deep tier went 12 → 8** (2,083 games, 506,860 ms CPU). Every one of the 8 is
-`gameCanEnd`, on 8 distinct seeds, and **every one of their decklists contains Bog Initiate** — the
-single pilot defect `fix/pilot-repeatable-noop` owns, deliberately untouched here. All four
-violations this branch was given are gone. ⚠️ The same run on the branch point reported **0
-violations and 8 "mandatory loop" DRAWS**: §3.140 is what turned those draws into the violations
-they always were, which is a good illustration of its own point — the count only moved because the
-check started looking.
+**The deep tier went 12 → 8 → 0.** Measured twice on this branch, both at 2,083 games:
+
+  - **8**, before `fix/pilot-repeatable-noop` merged (506,860 ms CPU). Every one of the 8 was
+    `gameCanEnd`, on 8 distinct seeds, and **every one of their decklists contained Bog Initiate** —
+    the single pilot defect that branch owned, deliberately untouched here. All four violations THIS
+    branch was given were already gone at that point.
+  - **0**, with that branch merged in (287,766 ms CPU). The deep tier is clean.
+
+⚠️ **And the "before" only exists because a check started looking.** The same 2,000-game run on this
+branch's own starting point reported **0 violations and 8 "mandatory loop" DRAWS** — §3.140 is what
+turned those draws into the violations they always were. A count that falls is worth nothing without
+saying which check was counting.
 
 **Nine sabotages, no escapes**, and two of the results are findings rather than ticks:
 
