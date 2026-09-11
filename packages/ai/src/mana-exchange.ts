@@ -90,10 +90,14 @@ export interface ManaExchange {
  *  * any non-`addMana` effect — Pristine Talisman's `{T}: Add {C}` also gains a
  *    life, and a life is not mana; pricing that as an exchange would be lying.
  *
- * Of the pool's 41 printed `addMana` activations exactly one — Bog Initiate —
- * survives all five exclusions today. That is the point: the class has one member
- * because nobody has printed the second one yet, and the rule is written for the
- * shape rather than for the card.
+ * MEASURED against the shipped pool: of 43 printed `addMana` activations exactly
+ * TWO survive every exclusion — Bog Initiate's `{1}: Add {B}` and Agent of
+ * Stromgald's `{R}: Add {B}` — and only the first can ever be ruled a no-op,
+ * because black mana cannot pay `{R}`. Two members is the whole reason this is a
+ * shape and not a card name: the second one is already printed, it is fine, and
+ * the rule has to tell them apart without being told which is which.
+ * `mana-exchange.test.ts` re-measures both halves against the real pool, so the
+ * card printed tomorrow that re-opens the class fails there.
  */
 export function pureManaExchange(ability: ActivatedAbility): ManaExchange | undefined {
   const cost = ability.cost;
