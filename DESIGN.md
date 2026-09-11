@@ -2981,10 +2981,12 @@ row can be added without reading — and this branch added three rows, which is 
 matters. Both branches reached `PINNED_IDENTITIES` independently; the merge keeps §3.140's table and
 doc and adds the check.
 
-**Measured, post-merge with §3.140.** `npm run build` exit 0, `npm run lint` exit 0 (5 pre-existing
-warnings, 0 errors), the card-index check up to date, and `npx vitest run` **21,778 passed / 2
-failed** — both failures `apps/web/src/lib/sim/determinism.test.ts`'s settled-leader pair, which is
-flaky under concurrent agents by construction and passes **20/20 re-run in isolation**. The gauntlet
+**Measured, post-merge with §3.140.** **`npm run verify` exit 0** — 399 test files, **21,780 passed
+/ 0 failed**, 5 skipped — and `npm run build` exit 0. (An earlier bare `npx vitest run` on the same
+tree, taken while the box was busier, reported the same 21,778 green plus 2 failures in
+`apps/web/src/lib/sim/determinism.test.ts`'s settled-leader pair — flaky under concurrent agents by
+construction; that file passed 20/20 re-run in isolation, and the verify run above is green on it
+too.) The gauntlet
 at seed 99 is **byte-identical: 97/320 = 30.3%, rows 17 · 14 · 19 · 7 · 8 · 10 · 17 · 5** — the same
 numbers before the branch and after the merge, so none of this moved the pilot's play.
 
