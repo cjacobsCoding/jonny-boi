@@ -2891,9 +2891,11 @@ closed cost union.
 
 ### 3.141 Three soak violations, one shape — a rule answered somewhere other than by the rule — ✅ done
 
-The 2,000-game deep-tier sweep surfaced twelve violations. Eight were one pilot defect owned by a
-sibling branch. The other four were three unrelated bugs — and diagnosing them turned out to be the
-same sentence three times: **something answered a rules question without asking the rule.**
+The 2,000-game deep-tier sweep (§3.140) surfaced twelve violations. Eight were one pilot defect owned
+by a sibling branch. The other four were three unrelated bugs — and diagnosing them turned out to be
+the same sentence three times: **something answered a rules question without asking the rule.** Two
+of the three were the PILOT answering with its own copy of a core rule; the third was a CHECK
+comparing two readings taken at different moments.
 
 **This section is §3.141, not §3.140**: the sweep that produced these reports is §3.140 on the
 sibling branch, so the number moved rather than collide (the §3.31 precedent).
@@ -2979,7 +2981,33 @@ row can be added without reading — and this branch added three rows, which is 
 matters. Both branches reached `PINNED_IDENTITIES` independently; the merge keeps §3.140's table and
 doc and adds the check.
 
-**Measured.** PLACEHOLDER_MEASURED
+**Measured, post-merge with §3.140.** `npm run build` exit 0, `npm run lint` exit 0 (5 pre-existing
+warnings, 0 errors), the card-index check up to date, and `npx vitest run` **21,778 passed / 2
+failed** — both failures `apps/web/src/lib/sim/determinism.test.ts`'s settled-leader pair, which is
+flaky under concurrent agents by construction and passes **20/20 re-run in isolation**. The gauntlet
+at seed 99 is **byte-identical: 97/320 = 30.3%, rows 17 · 14 · 19 · 7 · 8 · 10 · 17 · 5** — the same
+numbers before the branch and after the merge, so none of this moved the pilot's play.
+
+**The deep tier went 12 → 8** (2,083 games, 506,860 ms CPU). Every one of the 8 is
+`gameCanEnd`, on 8 distinct seeds, and **every one of their decklists contains Bog Initiate** — the
+single pilot defect `fix/pilot-repeatable-noop` owns, deliberately untouched here. All four
+violations this branch was given are gone. ⚠️ The same run on the branch point reported **0
+violations and 8 "mandatory loop" DRAWS**: §3.140 is what turned those draws into the violations
+they always were, which is a good illustration of its own point — the count only moved because the
+check started looking.
+
+**Nine sabotages, no escapes**, and two of the results are findings rather than ticks:
+
+  - breaking core's cap clause goes red in 4 core tests and 2 pilot tests; disabling either
+    split-second gate, the shedding loop, or the land-drop history each goes red in its own test;
+    half-naming a pinned identity goes red with the message that names the deck it missed.
+  - ⚠️ **Reverting all three fixes leaves the BLOCKING pinned row green.** Sabotaging the SHARED
+    count rule makes the engine and the pilot agree, so nothing is rejected and the soak sees
+    nothing. That row guards the pilot's AGREEMENT with core, not core's rule — core's own rule is
+    guarded in `combat-keyword-family.test.ts`, which does go red. Reported rather than papered over.
+  - ⚠️ **Reverting only the pilot's count seam ALSO leaves it green** — because `legalizeBlocks`
+    catches it. That is the ask-core gate being measured rather than asserted: it takes both the seam
+    and the gate broken (the ninth sabotage) before the row fails.
 
 ### 3.140 The guard that could not see its own class — a runaway leaves by the TURN bound — ✅ done
 
