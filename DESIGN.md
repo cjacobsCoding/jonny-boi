@@ -2916,6 +2916,12 @@ than threading a fourth condition through each scorer. Passing is the whole answ
 stay legal but buy nothing, and the combat declarations core still offers under the lock are decided
 above that line.
 
+⚠️ **And the same defect has a SECOND home the soak cannot reach.** `policyCandidates` — the seam the
+SEARCH pilots consume — builds the same constructed casts, cycles and activations, with the same
+missing clause. No soak run would ever have found it: the run plays the DEFAULT pilot, which goes
+through `decide`. It is gated here too, and tested here too. A class fixed in one of its two homes
+is not fixed, and "the sweep did not report it" is not evidence that it was not there.
+
 **2. CR 509.1b's cap — the count rule lived twice, and the second copy read one bound.** Seed
 3455580742, turn 12: the gang-block search put Millennial Gargoyle AND Screeching Sliver on a
 Bristling Boar ("can't be blocked by more than one creature"), the engine refused the whole
