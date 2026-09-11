@@ -2964,19 +2964,83 @@ is there; the pilot passing into a lock with the control that proves it wanted t
 land-drop watch on the two false positives that motivated it plus the two violations it must still
 report.
 
-**And the identity guard got a guard.** A matchup's identity now lives ONCE, in `PINNED_IDENTITIES`
-beside the decklists rather than inline in the test table. On top of it, `soak.test.ts` asserts that
-every entry names a card from BOTH decks — a row that names only one deck's cards is green for a
-match whose OTHER deck was swapped wholesale, which is the same escape the identity assertion exists
-to close, one deck deeper. Two existing rows named only one side.
+**And the identity guard got a guard.** §3.140 moved a matchup's identity into `PINNED_IDENTITIES`
+and wrote the rule it has to obey — *name cards from BOTH decks* — in the table's doc comment. This
+branch makes that rule EXECUTABLE: `soak.test.ts` walks the table (not one file's rows) against the
+pinned decklists and fails any entry that names nothing from one side, plus the reverse direction, a
+pinned matchup with no identity at all. A rule that lives only in a doc comment is a rule the next
+row can be added without reading — and this branch added three rows, which is exactly when that
+matters. Both branches reached `PINNED_IDENTITIES` independently; the merge keeps §3.140's table and
+doc and adds the check.
 
-**Measured.** `npm run verify` exit 0, `npm run build` exit 0, full suite 0 failed. Eight sabotages
-run, all RED where a guard claims coverage — including one deliberately reported as GREEN: sabotaging
-the SHARED count rule leaves the blocking row passing, because the engine and the pilot then agree
-and nothing is rejected. That row guards the pilot's AGREEMENT with core, not core's rule; core's own
-rule is guarded in `combat-keyword-family.test.ts`, which does go red. The gauntlet at seed 99 is
-**byte-identical: 97/320 = 30.3%, rows 17 · 14 · 19 · 7 · 8 · 10 · 17 · 5.** The deep tier went from
-**12 violations to 4** — the eight that remain are the sibling branch's single pilot defect.
+**Measured.** PLACEHOLDER_MEASURED
+
+### 3.140 The guard that could not see its own class — a runaway leaves by the TURN bound — ✅ done
+
+§3.32 handed §3.33 three soak games that "burned the 6,000-action cap without ending". §3.33 fixed the
+pilot defect behind them and recorded the deep tier's `gameCanEnd` going **3 → 0**. Both halves were
+true. The invariant was still switched off, and had been the whole time.
+
+**The gap.** A soaked game has TWO bounds: the game-wide action cap (`SOAK_MAX_ACTIONS_PER_GAME`,
+6,000) and a per-TURN bound (`maxActionsPerTurn`, 2,000) that CR 104.4b draws the game on. The turn
+bound is a THIRD of the cap, so a game that cannot end trips the small one FIRST, is recorded as a
+legal loop draw, and never reaches the counter `gameCanEnd` was reading. `SoakReport.loopDraws`
+counted them and its own doc said "counted, not a violation … a sharp rise here is a finding even
+though no test fails on it" — and nothing ever read it. The check that exists for *this game cannot
+end* was **structurally incapable of catching a game that cannot end**.
+
+**Measured, not argued.** Revert §3.33's copy-chain valuation and seed 1390617766 resolves **661 spell
+copies in one game**, ends `loop` at 2,280 actions — nowhere near 6,000 — and `soak.test.ts` passes
+**19/19**, pinned rows included. The whole fast tier is green with the copy mirror wide open. That is
+the repo's most-recorded defect shape (*a check that reports something other than "I didn't check"*)
+sitting inside the guard written to catch it.
+
+**The fix.** Both doors push a `gameCanEnd` violation, and both tiers ask the question through ONE
+funnel — `runawayGames(report)` — instead of each spelling out a counter. `soak.test.ts`'s three §3.33
+rows therefore became real guards the moment the reclassification landed: with §3.33 reverted they now
+go **red**, where before they were green.
+
+⚠️ **What is deliberately NOT fixed: the engine cannot tell a mandatory loop from a pilot that will not
+stop, and nothing pretends it can.** CR 104.4b legitimately draws a compulsory loop; `{kind:'loop'}` is
+inferred from an action counter and means only "this turn overran". So the soak REPORTS and a human
+RULES. Each row carries the game's heaviest traffic (minus the bookkeeping spine — `priorityPassed` /
+`effectApplied` / `stackResolved` scale with the action count and are top-three in *every* runaway,
+which is how they buried `spellCopied ×661` at rank six) plus the one fact that decides it:
+
+| | answered by a player | auto-answered (one legal option) |
+|---|---|---|
+| the copy mirror — a pilot that will not stop | **664** | 0 |
+| Dualcaster Mage + Rite of Replication — CR 104.4b | 398 | **1,980** |
+
+`loop-runaway.test.ts` pins both verdicts side by side, and the pair is asserted to disagree: if the two
+ever read the same way, the split has stopped discriminating and the ruling column is decoration.
+
+**📊 The first sweep with the door watched — 2,000 deep-tier games, 12 violations where the tier had been
+reporting the loop draws as legal.** EIGHT are newly visible `gameCanEnd` runaways, and they are **one
+card**: seeds 3791358276, 3505743309, 437769586, 506638966, 2340004011, 1830547618, 44358381, 876545993,
+every one of them the pilot activating **Bog Initiate** ~665 times in a single turn (`abilityActivated
+×667`, `manaAdded ×688`). Its printed ability really is `{1}: Add {B}` — Invasion, not the `{U}` version
+memory supplies; the compiler is correct, confirmed against the committed Scryfall index
+(`colorIdentity: ["B"]`, and the true `{R}` cycle-mate Agent of Stromgald compiles to `mana: { R: 1 }`).
+**Measured class size: 0 cards mis-compiled** (563 printed coloured activation costs, all round-trip).
+So it pays `{1}` with the `{B}` it just made, forever, for no net change — and of the 13 generic-cost
+`addMana` abilities in the pool, twelve carry `tap`/`sacrificeSelf` and Bog Initiate is the **only**
+rider-free one. That is a PILOT defect (a repeatable ability with no net state change is worth nothing
+and must not be re-chosen), not a card-data one, and it is left to the pilot's owner with the seeds
+above. The other four violations are pre-existing and unrelated to this door: split second
+(`legalActionsOnly` + `noRejectedActions`, seed 3736754678 turn 27), a menace-style blocking restriction
+(`noRejectedActions`, seed 3455580742), and `landDropCap` (seed 3679986871, "B played 2 lands this turn").
+
+**Verified.** `npx vitest run` GATE_TESTS, `npm run verify` 0, `npm run build` 0. Gauntlet
+`"Mono-Red Aggro" --games 40 --seed 99` **byte-identical before and after** at **97/320 = 30.3%**, rows 17 - 14 - 19 - 7 - 8 - 10 - 17 - 5 — the
+soak is not on the gauntlet's code path. Sabotage-checked NINE ways; two ESCAPED and both were
+real defects in the new tests, fixed here: (1) seed 113343071's identity named only deck B's two copy
+spells, so swapping deck A left the row fully GREEN replaying a match it was never meant to play — a
+matchup's identity now lives once in `soak-pinned-decks.ts` (`PINNED_IDENTITIES`), read by both pinned
+tables, and every entry names cards from BOTH decks; (2) the mandatory-loop row scanned a seed list for
+whatever matched its criterion, so INVERTING the chosen/auto-answered discriminator simply found a
+different seed that satisfied the inverted reading — it now rules on the first seed that runs away and
+goes red if that game's recorded ruling no longer holds.
 
 ### 3.139 Trigger BODIES — rescuing a stranded branch, and the sentence after the comma — ✅ done
 

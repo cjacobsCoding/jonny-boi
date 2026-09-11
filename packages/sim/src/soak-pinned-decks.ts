@@ -25,6 +25,33 @@ export interface PinnedMatchup {
   readonly B: SoakDeck;
 }
 
+/**
+ * HOW A TEST RECOGNISES THE GAME IT JUST REPLAYED — one answer, read by every
+ * pinned row (`soak.test.ts`, `loop-runaway.test.ts`).
+ *
+ * "No violations" is also what a replay of the WRONG game reports, so an
+ * outcome-only assertion is green for two completely different reasons. Every
+ * pinned row asserts these card names are in the decklists it played BEFORE it
+ * asserts anything about what happened. The list lives here rather than in each
+ * test because it is a property of the MATCHUP, and two copies of it would
+ * eventually disagree about which game a seed is.
+ *
+ * ⚠️ **NAME CARDS FROM BOTH DECKS.** A row whose identity cards all sit in one
+ * deck survives a substitution of the other, and that is measured rather than
+ * feared: seed 113343071 named only `Reverberate` and `Narset's Reversal`, both
+ * in deck B, and swapping deck A for an unrelated pinned deck left the row fully
+ * GREEN — still reporting the runaway it expected, from a match it was never
+ * meant to play. Every entry below now names at least one card from each side,
+ * and the deck it comes from is written next to it.
+ *
+ * ⚠️ **AND THAT RULE IS NOW CHECKED, not merely written down** (DESIGN §3.141).
+ * `soak.test.ts`'s "every pinned identity names cards from BOTH decks" walks
+ * THIS table — not one test file's rows — against the decklists above, so a row
+ * added half-named to either consumer fails immediately. A rule that lives only
+ * in a doc comment is a rule the next row can be added without reading.
+ */
+export type PinnedIdentity = readonly string[];
+
 /** Seed 4222011655. */
 export const PINNED_4222011655: PinnedMatchup = {
   A: {
@@ -428,49 +455,6 @@ export const PINNED_3679986871: PinnedMatchup = {
     },
 };
 
-/**
- * WHICH GAME EACH PINNED SEED IS — the cards without which a replay is not the
- * match the bug came from.
- *
- * ⚠️ This is the half of a pinned test that can fail for the RIGHT reason. "No
- * violations" is also what a replay of the WRONG game reports, so an
- * outcome-only assertion is green for two completely different reasons and
- * cannot tell them apart. That is not a hypothesis: flipping one bit of the
- * opponent-deck seed once left a pinned row passing, happily replaying a
- * different match.
- *
- * ⚠️ EVERY ENTRY MUST NAME CARDS FROM BOTH DECKS. A row that named only one
- * deck's cards is the same escape one deck deeper — swap the OTHER deck and the
- * identity assertion still passes while the game being replayed is not the one
- * the row describes. `soak.test.ts` asserts exactly that of this table ("every
- * pinned identity names cards from BOTH decks"), so a new row cannot be added
- * half-named.
- *
- * It lives HERE, beside the decklists, because a matchup's identity and its
- * decklists are one fact. Two tables that could drift is two answers to "which
- * game was this", and the weaker one is the one a green test would believe.
- */
-export const PINNED_IDENTITIES: Readonly<Record<number, readonly string[]>> = Object.freeze({
-  // A's half of the CR 704.5f interaction, and B's Aura: all four have to be
-  // dealt into the same game for the position to exist at all.
-  4222011655: ['Blood Artist', 'Trusty Machete', 'Costly Plunder', 'Weakness'],
-  // The copy mirror — the copy spell, the spell underneath it, and the other
-  // seat's board it was aimed across.
-  1390617766: ['Twincast', 'Dream Twist', 'Goblin Piker', 'Mana Leak'],
-  3434778477: ['Reverberate', 'Invoke the Firemind', 'Font of Mythos', 'Adaptive Automaton'],
-  113343071: ['Reverberate', "Narset's Reversal", 'Darksteel Sentinel', 'Bone Splinters'],
-  // The split-second lock (DESIGN §3.141): B's Siege Smash, the Mouser Attack!
-  // it cast into its own lock, and A's side of the board it happened over.
-  3736754678: ['Siege Smash', 'Mouser Attack!', 'Soldevi Simulacrum', 'Thoughtseize'],
-  // The blocking cap (§3.141): B's Bristling Boar, and the two A creatures the
-  // gang search paired onto it.
-  3455580742: ['Bristling Boar', 'Millennial Gargoyle', 'Screeching Sliver'],
-  // The moving land-drop cap (§3.141): B's Icetill Explorer — the "additional
-  // land" AND "play lands from your graveyard" that made two drops legal — and
-  // A's board, whose combat killed it a turn later.
-  3679986871: ['Icetill Explorer', 'Mire Triton', 'Nyxborn Brute', 'Tel-Jilad Chosen'],
-});
-
 /** Every pinned matchup, by the seed it was found at. */
 export const PINNED_MATCHUPS: Readonly<Record<number, PinnedMatchup>> = Object.freeze({
   4222011655: PINNED_4222011655,
@@ -480,4 +464,30 @@ export const PINNED_MATCHUPS: Readonly<Record<number, PinnedMatchup>> = Object.f
   3736754678: PINNED_3736754678,
   3455580742: PINNED_3455580742,
   3679986871: PINNED_3679986871,
+});
+
+/** See {@link PinnedIdentity} — cards from BOTH decks, or the row is not pinned. */
+export const PINNED_IDENTITIES: Readonly<Record<number, PinnedIdentity>> = Object.freeze({
+  // A: the CR 704.5f interaction (Blood Artist held up by a Machete, sacrificed
+  // to Costly Plunder's additional cost). B: the Aura that set the toughness.
+  4222011655: ['Blood Artist', 'Trusty Machete', 'Costly Plunder', 'Weakness'],
+  // A: the copy spell and the real spell under it. B: a creature only this
+  // opponent runs, so substituting either deck breaks the row.
+  1390617766: ['Twincast', 'Dream Twist', 'Frolicking Familiar'],
+  // Reverberate is in BOTH decks here, which is why it cannot identify either:
+  // Invoke the Firemind is A's alone and Font of Mythos is B's alone.
+  3434778477: ['Reverberate', 'Invoke the Firemind', 'Font of Mythos'],
+  // The two copy spells are both in B; Heraldic Banner is A's, and adding it is
+  // what turned this row from decorative into a guard (see PinnedIdentity).
+  113343071: ['Reverberate', "Narset's Reversal", 'Heraldic Banner'],
+  // A: the board the lock happened over. B: Siege Smash (the split-second spell)
+  // and the Mouser Attack! its own controller cast into it (DESIGN §3.141).
+  3736754678: ['Soldevi Simulacrum', 'Thoughtseize', 'Siege Smash', 'Mouser Attack!'],
+  // A: the two creatures the gang search paired onto it. B: Bristling Boar, the
+  // "can't be blocked by more than one creature" that refused the declaration.
+  3455580742: ['Millennial Gargoyle', 'Screeching Sliver', 'Bristling Boar'],
+  // A: the board whose combat killed it. B: Icetill Explorer, which prints BOTH
+  // the additional land and "play lands from your graveyard" that made two drops
+  // legal on turn 16 — and Mire Triton, B's alone.
+  3679986871: ['Nyxborn Brute', 'Tel-Jilad Chosen', 'Icetill Explorer', 'Mire Triton'],
 });

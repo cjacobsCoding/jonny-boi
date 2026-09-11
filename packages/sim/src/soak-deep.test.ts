@@ -29,7 +29,7 @@ import {
   SOAK_MAX_TIMEOUT_RATE,
   SOAK_MECHANIC_SEED_ATTEMPTS,
 } from './soak-config.js';
-import { formatSoakReport, formatViolations, runSoak, type SoakReport } from './soak.js';
+import { formatSoakReport, formatViolations, runawayGames, runSoak, type SoakReport } from './soak.js';
 
 const requested = process.env[SOAK_DEEP_ENV_VAR];
 const games = requested === undefined ? 0 : Number(requested) || SOAK_DEEP_DEFAULT_GAMES;
@@ -69,7 +69,13 @@ describe.skipIf(games <= 0)(`deep soak (${games} mixed games — set ${SOAK_DEEP
   });
 
   it('never plays a game that cannot END', () => {
-    expect(report.actionCapHits).toBe(0);
+    // Both runaway doors, through the one funnel — see `runawayGames`. Asking it
+    // as `actionCapHits === 0` (what this line used to be) let every runaway that
+    // tripped the per-turn bound FIRST pass as a legal CR 104.4b draw, and the
+    // first sweep with that door watched turned up eight of them. DESIGN §3.140.
+    const runaways = runawayGames(report);
+    expect(runaways.length, formatViolations(runaways)).toBe(0);
+    expect(report.actionCapHits + report.loopDraws).toBe(0);
   });
 
   it('finishes most games on the board rather than on the turn cap', () => {

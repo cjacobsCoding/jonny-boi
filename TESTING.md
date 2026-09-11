@@ -205,6 +205,7 @@ The pure, deterministic MTG engine. Everything here runs without DOM or network.
 | `harness.test.ts` (`RunOptions.range`) | A run split into slices reassembles into exactly the whole |
 | `soak.test.ts` | **THE FULL-POOL SOAK, fast tier** — randomised legal decks from the whole 357-card pool, every invariant on every settled state, and every mechanic the pool prints required to FIRE |
 | `soak-deep.test.ts` | The same soak at thousands of games. Skipped unless `JB_SOAK_GAMES` is set (below) |
+| `loop-runaway.test.ts` | **A game that could not END, and the ruling it needs.** Drives a real soak game into a runaway and requires the soak to REPORT it; pins a CR 104.4b MANDATORY loop and a pilot-that-will-not-stop side by side, and asserts the two read differently (DESIGN §3.140) |
 | `observation.test.ts` | **The hidden-information guarantee** — the pilot feed, scanned over mechanic-anchored full-pool games (below) |
 | `masking.test.ts` | The same guarantee on the ONLINE side: every `maskStateForSeat` / spectator view over full-pool games |
 
@@ -280,7 +281,10 @@ npm run sim -- soak --games 2000                                         # the s
 
 **What it asserts** (`packages/sim/src/soak-config.ts` → `SOAK_INVARIANTS`, one constant per claim):
 every action a pilot submits is legal; **the engine never rejects an action it offered**; no game
-reaches the action cap; no stack object survives a turn; state-based actions leave no 0-toughness
+ends on a RUNAWAY BOUND — neither the game-wide action cap nor the per-TURN bound that draws it by
+CR 104.4b, asked through the one `runawayGames` funnel because this invariant spent its whole life
+watching only the first of them and the per-turn bound is a third of the cap, so every runaway left
+by the door nobody was looking at (§3.140); no stack object survives a turn; state-based actions leave no 0-toughness
 creature, 0-loyalty walker or 0-defense battle; an instance is in exactly one zone and says so; life,
 counters and mana pools stay in range; no card the table has never seen reaches an observation
 (scanned on EVERY game — measured at 6,125 ms CPU against 5,845 ms at the old 1-in-31 stride, paired

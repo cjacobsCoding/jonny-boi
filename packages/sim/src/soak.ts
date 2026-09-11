@@ -82,6 +82,10 @@ import {
   SOAK_MAX_STACK_DEPTH,
   SOAK_MAX_TURNS_PER_GAME,
   SOAK_MECHANICS,
+  SOAK_RUNAWAY_CHOSEN_EVENT,
+  SOAK_RUNAWAY_EVIDENCE_TYPES,
+  SOAK_RUNAWAY_FORCED_EVENT,
+  SOAK_RUNAWAY_NOISE_EVENTS,
   serializeDefinition,
   type SoakInvariantName,
   type SoakMechanicId,
@@ -127,14 +131,23 @@ export interface SoakReport {
    */
   readonly actionCapHits: number;
   /**
-   * Games that ended as a DRAW by CR 104.4b — one turn ran past
-   * `maxActionsPerTurn`, which only a mandatory loop does.
+   * Games that ended because ONE TURN ran past `maxActionsPerTurn` and was drawn.
    *
-   * Counted, not a violation. Some real card pairs genuinely are mandatory
-   * infinite loops (Dualcaster Mage + Rite of Replication), and the rules end
-   * those games rather than calling them broken. But a loop must stay VISIBLE:
-   * a silent pass is how "the soak is green" would start meaning less than it
-   * does. A sharp rise here is a finding even though no test fails on it.
+   * ⚠️ Each one is also a {@link SOAK_INVARIANTS.gameCanEnd} violation, and this
+   * count is the SUMMARY of them, never the report of them. It used to be
+   * "counted, not a violation — a sharp rise here is a finding even though no
+   * test fails on it", on the reasoning that only a MANDATORY loop overruns a
+   * turn (Dualcaster Mage + Rite of Replication) and the rules legitimately draw
+   * those.
+   *
+   * That reasoning was wrong in the direction that costs the most: nothing
+   * watched the count, a pilot that will not stop overruns a turn in exactly the
+   * same way, and the per-turn bound is a third of the game-wide cap — so every
+   * runaway left through this door and the `gameCanEnd` check never saw one.
+   * `loop-runaway.test.ts` measures it: the copy mirror §3.33 fixed ends `loop`
+   * at 661 copies and 2,280 actions, against a 6,000-action cap. The deep tier's
+   * first sweep with the door watched turned up EIGHT of these, all one card.
+   * See DESIGN §3.140.
    */
   readonly loopDraws: number;
   readonly wins: Readonly<Record<PlayerId, number>>;
@@ -574,6 +587,14 @@ interface GameWatcher {
   readonly onEvent: (event: GameEvent) => void;
   readonly violations: readonly { invariant: SoakInvariantName; detail: string; turn: number; step: string; action: string }[];
   readonly mechanics: ReadonlySet<SoakMechanicId>;
+  /**
+   * Every event this game emitted, by type — the EVIDENCE a runaway is ruled on.
+   *
+   * The mechanic set answers "did this fire at all", which is a different
+   * question and deliberately loses the count. A game that overran a turn is
+   * only adjudicable if somebody can see WHAT it did 600 times.
+   */
+  readonly eventCounts: ReadonlyMap<GameEvent['type'], number>;
   /** Turns at which a turn-boundary check ran (so the caller can see it did). */
   readonly turnChecks: number;
   /** The most recent settled state the wrapper was shown, or `null` before any. */
@@ -583,6 +604,7 @@ interface GameWatcher {
 function createGameWatcher(inner: Pilot): GameWatcher {
   const violations: { invariant: SoakInvariantName; detail: string; turn: number; step: string; action: string }[] = [];
   const mechanics = new Set<SoakMechanicId>();
+  const eventCounts = new Map<GameEvent['type'], number>();
   const reported = new Set<string>();
   /*
    * instanceId → definition, accumulated from every state the wrapper sees.
@@ -729,6 +751,7 @@ function createGameWatcher(inner: Pilot): GameWatcher {
   };
 
   const onEvent = (event: GameEvent): void => {
+    eventCounts.set(event.type, (eventCounts.get(event.type) ?? 0) + 1);
     const direct = SOAK_EVENT_WITNESS[event.type];
     if (direct) mechanics.add(direct);
     switch (event.type) {
@@ -813,6 +836,9 @@ function createGameWatcher(inner: Pilot): GameWatcher {
     get mechanics() {
       return mechanics;
     },
+    get eventCounts() {
+      return eventCounts;
+    },
     get turnChecks() {
       return turnChecks;
     },
@@ -876,6 +902,58 @@ function createLeakScanningPilot(
 /** Load a generated deck, or explain why it will not load. */
 function loadSoakDeck(deck: SoakDeck, pool: CardPool): LoadedDeck {
   return loadDeck(deck, pool);
+}
+
+/**
+ * WHO CHOSE — the half of the evidence that actually decides a runaway row.
+ *
+ * See {@link SOAK_RUNAWAY_CHOSEN_EVENT}. Stated on every row rather than left to
+ * {@link describeGameTraffic}'s volume ranking, which would have dropped it off
+ * the end of the one row it mattered most on. It reports the split and stops:
+ * naming which side wins would be the engine ruling on intent it cannot see.
+ */
+function describeWhoChose(counts: ReadonlyMap<GameEvent['type'], number>): string {
+  const chosen = counts.get(SOAK_RUNAWAY_CHOSEN_EVENT) ?? 0;
+  const forced = counts.get(SOAK_RUNAWAY_FORCED_EVENT) ?? 0;
+  // ⚠️ SAY "THIS TELLS YOU NOTHING" WHEN IT TELLS YOU NOTHING. A loop can be made
+  // of plain ACTIONS rather than questions — all eight Bog Initiate runaways read
+  // 0 and 0, because activating a mana ability 667 times asks nobody anything —
+  // and printing "0 answered, 0 auto-answered, CR 104.4b is compulsory" next to
+  // that would dress an absent measurement up as a verdict.
+  if (chosen === 0 && forced === 0) {
+    return 'The loop asked nobody anything: it is made of plain actions, so this split cannot rule it.';
+  }
+  return (
+    `Of the game's questions ${chosen} were ANSWERED by a player and ${forced} had a single legal ` +
+    `option (auto-answered) — CR 104.4b's draw is compulsory at every step.`
+  );
+}
+
+/**
+ * WHAT THE GAME WAS FULL OF — the evidence a runaway row is ruled on.
+ *
+ * A `{kind:'loop'}` outcome is inferred from an action counter and says only
+ * "this turn overran". The soak therefore cannot name the culprit, and must not
+ * pretend to; what it CAN do is hand the reader the traffic and let them rule.
+ * The heaviest {@link SOAK_RUNAWAY_EVIDENCE_TYPES} types have named the loop in
+ * every runaway found so far, and they are read off the game rather than out of
+ * a list, so nothing here has to be kept in step with the event union — except
+ * {@link SOAK_RUNAWAY_NOISE_EVENTS}, the bookkeeping that is loudest in EVERY
+ * runaway and therefore distinguishes none of them.
+ *
+ * ⚠️ GAME-WIDE, not turn-wide, and the caller's wording says so. The overrunning
+ * turn is `maxActionsPerTurn` of the game's actions by construction — 2,000 of
+ * ~2,200 in every row the deep tier has produced — so these counts are dominated
+ * by it, but they are not scoped to it and must not be reported as if they were.
+ */
+function describeGameTraffic(counts: ReadonlyMap<GameEvent['type'], number>): string {
+  const top = [...counts.entries()]
+    .filter(([type]) => !SOAK_RUNAWAY_NOISE_EVENTS.has(type))
+    // Count first, then NAME — a tie broken by insertion order would make the
+    // evidence depend on the order the engine happened to emit two equal types.
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, SOAK_RUNAWAY_EVIDENCE_TYPES);
+  return top.length === 0 ? '(nothing but bookkeeping)' : top.map(([type, n]) => `${type} ×${n}`).join(', ');
 }
 
 /**
@@ -953,6 +1031,37 @@ function playOne(
     push(
       SOAK_INVARIANTS.gameCanEnd,
       `the game burned the ${sim.maxActionsPerGame}-action cap without ending (turn ${result.turns})`,
+      result.turns,
+    );
+  }
+  // ⚠️ THE OTHER DOOR OUT OF A RUNAWAY, and it is the one every runaway takes.
+  //
+  // The per-turn bound (2,000) is a THIRD of the game-wide cap (6,000), so a game
+  // that cannot end trips it FIRST, is recorded as a CR 104.4b draw, and never
+  // reaches the cap the line above watches. The invariant that exists to catch
+  // "this game cannot end" was therefore structurally incapable of catching it:
+  // `loop-runaway.test.ts` drives the exact copy mirror §3.33 fixed and the game
+  // ends `loop` at 661 copies, 2,280 actions — nowhere near the 6,000 the check
+  // above wanted. Before this push it reported nothing at all. See DESIGN §3.140.
+  //
+  // Reported rather than ADJUDICATED, because the engine cannot tell the two
+  // apart from here and must not pretend to. CR 104.4b legitimately draws a
+  // MANDATORY loop; a pilot re-aiming a copy 661 times is not in one, it simply
+  // will not stop. `{kind:'loop'}` is inferred from an action counter and means
+  // only "this turn overran" — so the soak states what it saw, hands over the
+  // traffic that produced it, and leaves the ruling to whoever reads the row. A
+  // loop a human has ruled MANDATORY becomes a pinned row in
+  // `loop-runaway.test.ts` that says so and names the cards, exactly like every
+  // other soak finding.
+  if (result.outcome.kind === 'loop') {
+    push(
+      SOAK_INVARIANTS.gameCanEnd,
+      `one turn ran past the ${sim.maxActionsPerTurn}-action turn bound and the game was drawn ` +
+        `(turn ${result.turns}, ${result.actions} actions). The GAME's heaviest traffic — the ` +
+        `overrunning turn is most of it: ${describeGameTraffic(watcher.eventCounts)}. ` +
+        `${describeWhoChose(watcher.eventCounts)} RULE ON IT: a MANDATORY loop (CR 104.4b) is legal ` +
+        `and belongs in loop-runaway.test.ts's table, ruled and naming the cards; a pilot that ` +
+        `will not stop is a bug.`,
       result.turns,
     );
   }
@@ -1475,6 +1584,21 @@ export function runSoak(options: SoakOptions): SoakReport {
 // Reporting.
 // ---------------------------------------------------------------------------
 
+/**
+ * THE GAMES THAT COULD NOT END — one funnel, both doors.
+ *
+ * A game runs away through the game-wide action cap OR through the per-turn
+ * bound that draws it by CR 104.4b, and for years only the first was watched:
+ * `SoakReport.actionCapHits` was the number every tier asserted on, so a runaway
+ * that tripped the turn bound first — which is EVERY runaway, the bound being a
+ * third of the cap — was counted as a legal loop draw and passed. Asking the
+ * question twice in two tiers is how that gap survived a rewrite, so the tiers
+ * now ask it here (DESIGN §3.140).
+ */
+export function runawayGames(report: SoakReport): readonly SoakViolation[] {
+  return report.violations.filter((v) => v.invariant === SOAK_INVARIANTS.gameCanEnd);
+}
+
 /** A violation list, formatted as a bug report you can replay. */
 export function formatViolations(violations: readonly SoakViolation[]): string {
   if (violations.length === 0) return '  (none)';
@@ -1497,10 +1621,18 @@ export function formatSoakReport(report: SoakReport): string {
   // Said out loud on every run: "no leaks" and "nothing scanned" print the same
   // green otherwise, and this is the anti-cheat guarantee.
   lines.push(`  redaction scan: ${report.leakScanObservations} observation(s) checked`);
+  // The two doors out of a runaway, and both are `gameCanEnd` violations listed
+  // below. Summarised here as well because a reader scanning the head of a report
+  // must not have to count `✗` lines to learn that eight games could not end —
+  // and because this line spent its whole life saying a loop draw was legal and
+  // merely watched, which is how the invariant stayed switched off (§3.140).
   if (report.actionCapHits > 0) lines.push(`  ⚠ ${report.actionCapHits} game(s) hit the ACTION cap — a game that cannot end`);
   if (report.loopDraws > 0) {
     lines.push(
-      `  ↻ ${report.loopDraws} game(s) drew on a MANDATORY LOOP (CR 104.4b) — legal, but watch the count`,
+      `  ↻ ${report.loopDraws} game(s) ended on the TURN bound, not on the board — each is a ` +
+        `"${SOAK_INVARIANTS.gameCanEnd}" violation below, with the traffic that produced it. ` +
+        `Rule on each: a MANDATORY loop (CR 104.4b) is legal and belongs in loop-runaway.test.ts's ` +
+        `ruled table; a pilot that will not stop is a bug.`,
     );
   }
   const fired = [...report.mechanicGames.entries()].sort((a, b) => b[1] - a[1]);

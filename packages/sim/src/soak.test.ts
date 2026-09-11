@@ -43,6 +43,7 @@ import {
   formatSoakReport,
   formatViolations,
   replaySoakMixedGame,
+  runawayGames,
   runSoak,
   soakSimConfig,
 } from './soak.js';
@@ -195,7 +196,16 @@ describe('the fast soak', () => {
     // The recorded failure shape: a combat-declaration bug once made games
     // unable to finish while every test in the repo passed, because every test
     // asserted "it finished" via a cap that the bug simply hit.
-    expect(report.actionCapHits, `\n${formatSoakReport(report)}\n`).toBe(0);
+    //
+    // ⚠️ ASKED THROUGH `runawayGames`, not through `actionCapHits`. This line WAS
+    // `expect(report.actionCapHits).toBe(0)`, and that is a different question:
+    // the per-turn bound is a third of the game-wide cap, so a runaway trips it
+    // first, is drawn by CR 104.4b, and never touches the cap this test named. It
+    // was green for exactly the thing it exists to catch (DESIGN §3.140).
+    expect(runawayGames(report).length, `\n${formatSoakReport(report)}\n`).toBe(0);
+    // Belt and braces: the summary counters and the violation list are two
+    // renderings of one fact, and a divergence between them is itself a bug.
+    expect(report.actionCapHits + report.loopDraws).toBe(0);
   });
 
   it('finishes most games on the board rather than on the turn cap', () => {
@@ -235,9 +245,14 @@ describe('the fast soak', () => {
  * replay of the WRONG game reports, so an outcome-only assertion is green for two
  * completely different reasons and cannot tell them apart. This was not a
  * hypothesis: flipping one bit of the opponent-deck seed left the row below
- * passing, happily replaying a different match. `mustContain` is the half of the
- * test that fails when the pool churns until this seed no longer deals the
- * position — which is a finding, not a pass.
+ * passing, happily replaying a different match. That half of the test is what
+ * fails when the pool churns until this seed no longer deals the position —
+ * which is a finding, not a pass.
+ *
+ * The card names live in `soak-pinned-decks.ts` (`PINNED_IDENTITIES`), next to
+ * the decklists they describe and read by `loop-runaway.test.ts` too — one answer
+ * to "which game is this", and its doc carries the rule the list has to obey
+ * (name cards from BOTH decks, or substituting one of them goes unnoticed).
  */
 describe('soak violations stay fixed, replayed from their seed alone', () => {
   const PINNED: ReadonlyArray<{
@@ -326,29 +341,42 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
   ];
 
   /*
-   * THE IDENTITY GUARD ON THE IDENTITY GUARD. A row whose `mustContain` names
-   * only ONE deck's cards is green for a match whose OTHER deck was swapped
-   * wholesale — the same escape the identity assertion exists to close, one deck
-   * deeper. So every entry is required to name a card from each side, checked
-   * against the pinned decklists themselves.
+   * THE IDENTITY GUARD ON THE IDENTITY GUARD (DESIGN §3.141). A row whose
+   * identity cards all sit in ONE deck is green for a match whose OTHER deck was
+   * swapped wholesale — the same escape the identity assertion exists to close,
+   * one deck deeper. `PinnedIdentity`'s doc states the rule; this is the rule
+   * being CHECKED, because a rule that lives only in a comment is one the next
+   * row can be added without reading.
+   *
+   * It walks the TABLE, not this file's rows: `loop-runaway.test.ts` pins from
+   * the same table, and a guard that only covered its own consumer would leave
+   * the other one free to add a half-named row.
    */
   it('every pinned identity names cards from BOTH decks', () => {
     const nameOf = (id: string) => pool.get(id)?.name ?? id;
-    for (const { seed } of PINNED) {
+    for (const key of Object.keys(PINNED_IDENTITIES)) {
+      const seed = Number(key);
       const matchup = PINNED_MATCHUPS[seed];
-      const identity = PINNED_IDENTITIES[seed];
-      expect(matchup, `seed ${seed} has no recorded decklist`).toBeDefined();
-      expect(identity, `seed ${seed} has no recorded identity`).toBeDefined();
+      const identity = PINNED_IDENTITIES[seed] ?? [];
+      expect(matchup, `seed ${seed} has an identity but no recorded decklist`).toBeDefined();
       for (const side of ['A', 'B'] as const) {
         const names = new Set<string>();
         for (const { cardId } of matchup![side].cards) names.add(nameOf(cardId));
-        const named = (identity ?? []).filter((card) => names.has(card));
         expect(
-          named.length,
-          `seed ${seed}: PINNED_IDENTITIES names nothing from deck ${side}, so swapping deck ${side} ` +
-            `would leave this row green while replaying a different match`,
+          identity.filter((card) => names.has(card)).length,
+          `seed ${seed}: PINNED_IDENTITIES names nothing from deck ${side}, so substituting deck ` +
+            `${side} would leave every row on this seed green while replaying a different match`,
         ).toBeGreaterThan(0);
       }
+    }
+  });
+
+  /* Every pinned decklist is reachable from an identity, and vice versa: a
+   * matchup with no identity is a row that can drift onto another game unnoticed.
+   */
+  it('every pinned matchup has an identity', () => {
+    for (const key of Object.keys(PINNED_MATCHUPS)) {
+      expect(PINNED_IDENTITIES[Number(key)], `seed ${key} has no recorded identity`).toBeDefined();
     }
   });
 
@@ -359,7 +387,11 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
       // §3.35 added two cards and did exactly that to three of the four. See
       // `soak-pinned-decks.ts`.
       const pinnedDecks = PINNED_MATCHUPS[seed];
+      // WHICH CARDS MAKE IT THIS GAME — read from `soak-pinned-decks.ts`, which
+      // owns both halves of a matchup's identity so the two can never disagree.
+      const mustContain = PINNED_IDENTITIES[seed];
       expect(pinnedDecks, `seed ${seed} has no recorded decklist`).toBeDefined();
+      expect(mustContain, `seed ${seed} has no recorded identity`).toBeDefined();
       const { violations, decks } = replaySoakMixedGame({
         pool,
         registry,
@@ -370,11 +402,8 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
       });
       // WHICH GAME — asserted first, because it is what makes the next line mean
       // anything. A replay that drifted onto another match reports no violations
-      // and would otherwise read as a fix holding. The cards come from
-      // `PINNED_IDENTITIES`, which is where a matchup's identity lives ONCE.
-      const mustContain = PINNED_IDENTITIES[seed] ?? [];
-      expect(mustContain.length, `seed ${seed} has no recorded identity`).toBeGreaterThan(0);
-      for (const card of mustContain) {
+      // and would otherwise read as a fix holding.
+      for (const card of mustContain!) {
         expect(decks, `seed ${seed} no longer deals ${card} — this row is replaying a DIFFERENT game
 ${decks}
 `).toContain(card);
