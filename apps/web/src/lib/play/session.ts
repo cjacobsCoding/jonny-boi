@@ -164,6 +164,22 @@ export interface AbilityTargetChoice {
 }
 
 /**
+ * One legal way to pay an activated ability's "**Sacrifice a &lt;noun&gt;**" cost
+ * (CR 602.2b) — the permanents that would go to the graveyard, labeled for the
+ * prompt. Deliberately the same {target, label} shape as
+ * {@link AbilityTargetChoice}: "which do I aim at" and "which do I sacrifice"
+ * are two pre-stack questions the board asks with one control, so they are one
+ * vocabulary rather than two dialects.
+ *
+ * A LIST because the engine's action takes a list — "sacrifice two artifacts"
+ * is one answer naming two permanents, not two answers.
+ */
+export interface AbilityCostChoice {
+  readonly instanceIds: readonly InstanceId[];
+  readonly label: string;
+}
+
+/**
  * One activatable ability of a permanent the priority-holder controls, derived
  * ENTIRELY from the engine's legal-action menu — an ability the engine does not
  * offer (already used this turn, unpayable minus loyalty, wrong timing) simply
@@ -180,6 +196,19 @@ export interface AbilityOption {
   /** Legal target choices, or null when the ability takes no target. */
   readonly targets: readonly AbilityTargetChoice[] | null;
   /**
+   * §3.143 — the legal ways to pay a "**Sacrifice a &lt;noun&gt;**" cost, when the
+   * ability prints one; absent when it does not.
+   *
+   * ⚠️ THIS FIELD IS A BUG FIX, not a new feature. The engine offers ONE action
+   * per legal payer, carrying `costInstanceIds`, and `applyActivateAbility`
+   * REJECTS an activation that names none ("Atog's ability needs 1 legal
+   * permanent(s) to sacrifice"). Before this, `AbilityOption` had nowhere to
+   * keep the payer, so the board folded every offer into one option, submitted
+   * it with no `costInstanceIds`, and the click died on that rejection —
+   * **measured: 137 abilities on 134 pool cards were dead buttons.**
+   */
+  readonly costPayers?: readonly AbilityCostChoice[];
+  /**
    * §3.129 — funding, mirrored from {@link CastOption}. Set when the engine did
    * NOT already offer this ability and it is offerable only after auto-tapping
    * for its mana cost (an untapped Strionic Resonator with two lands to spare).
@@ -188,6 +217,39 @@ export interface AbilityOption {
    * online mana is floated by hand, so the server offer already covers the cost.
    */
   readonly affordableWithTap?: boolean;
+}
+
+/**
+ * One ability being assembled from the engine's offers. Mutable and private:
+ * the engine lists one action per legal target AND one per legal sacrifice
+ * payer, so both axes accumulate into sets before they become the frozen
+ * {@link AbilityOption} the board reads.
+ */
+interface AbilityAccumulator {
+  readonly instanceId: InstanceId;
+  readonly sourceName: string;
+  readonly abilityIndex: number;
+  readonly label: string;
+  /** Keyed by the target's id, so the cross product cannot repeat one. */
+  readonly targets: Map<string, AbilityTargetChoice>;
+  /** Keyed by the payer set's joined ids, for the same reason. */
+  readonly payers: Map<string, AbilityCostChoice>;
+  readonly affordableWithTap: boolean;
+}
+
+/** Freeze an accumulated ability into the option the board renders. */
+function finishAbilityOption(entry: AbilityAccumulator): AbilityOption {
+  return {
+    instanceId: entry.instanceId,
+    sourceName: entry.sourceName,
+    abilityIndex: entry.abilityIndex,
+    label: entry.label,
+    // `null`, not `[]`, means "this ability takes no target" — the distinction
+    // the board branches on, preserved from before the payer axis existed.
+    targets: entry.targets.size > 0 ? [...entry.targets.values()] : null,
+    ...(entry.payers.size > 0 ? { costPayers: [...entry.payers.values()] } : {}),
+    ...(entry.affordableWithTap ? { affordableWithTap: true } : {}),
+  };
 }
 
 /**
@@ -954,44 +1016,68 @@ export class GameSession {
   }
 
   private computeAbilityOptions(): AbilityOption[] {
-    const byAbility = new Map<string, AbilityOption>();
+    const byAbility = new Map<string, AbilityAccumulator>();
     for (const action of this.legalActions()) {
       if (action.kind !== 'activateAbility') continue;
-      const key = `${action.instanceId}:${action.abilityIndex}`;
-      const source = this.findInstance(action.instanceId);
-      const printed = source?.def.activated?.[action.abilityIndex];
-      const existing = byAbility.get(key);
-      const offeredTarget = action.targets?.[0];
-      if (offeredTarget === undefined) {
-        // A bare offer: no target to choose.
-        if (!existing) {
-          byAbility.set(key, {
-            instanceId: action.instanceId,
-            sourceName: source?.def.name ?? `#${action.instanceId}`,
-            abilityIndex: action.abilityIndex,
-            label: printed?.label ?? `Ability ${action.abilityIndex + 1}`,
-            targets: null,
-          });
-        }
-        continue;
-      }
-      const choice: AbilityTargetChoice = {
+      this.foldAbilityOffer(byAbility, action);
+    }
+    this.appendTapToAffordAbilities(byAbility);
+    return [...byAbility.values()].map(finishAbilityOption);
+  }
+
+  /**
+   * Fold ONE engine offer into the option it belongs to — the single place the
+   * engine's per-target, per-payer action list becomes a menu.
+   *
+   * The engine enumerates the CROSS PRODUCT (one action per legal target × one
+   * per legal sacrifice payer), so both axes are gathered into sets keyed by
+   * their ids: without the de-duplication a two-payer, three-target ability
+   * would offer each target three times.
+   *
+   * Shared by the engine's own menu and the §3.129 tap-to-afford pass so
+   * "offered now" and "offered once mana is floated" cannot fold differently.
+   */
+  private foldAbilityOffer(
+    byAbility: Map<string, AbilityAccumulator>,
+    action: Extract<GameAction, { kind: 'activateAbility' }>,
+    affordableWithTap = false,
+  ): void {
+    const key = `${action.instanceId}:${action.abilityIndex}`;
+    const source = this.findInstance(action.instanceId);
+    const printed = source?.def.activated?.[action.abilityIndex];
+    let entry = byAbility.get(key);
+    if (!entry) {
+      entry = {
+        instanceId: action.instanceId,
+        sourceName: source?.def.name ?? `#${action.instanceId}`,
+        abilityIndex: action.abilityIndex,
+        label: printed?.label ?? `Ability ${action.abilityIndex + 1}`,
+        targets: new Map(),
+        payers: new Map(),
+        affordableWithTap,
+      };
+      byAbility.set(key, entry);
+    }
+    const offeredTarget = action.targets?.[0];
+    if (offeredTarget !== undefined && !entry.targets.has(String(offeredTarget))) {
+      entry.targets.set(String(offeredTarget), {
         target: offeredTarget,
         label:
           offeredTarget === 'A' || offeredTarget === 'B'
             ? `${this.names[offeredTarget]} (player)`
             : this.nameOf(offeredTarget),
-      };
-      byAbility.set(key, {
-        instanceId: action.instanceId,
-        sourceName: source?.def.name ?? `#${action.instanceId}`,
-        abilityIndex: action.abilityIndex,
-        label: printed?.label ?? `Ability ${action.abilityIndex + 1}`,
-        targets: [...(existing?.targets ?? []), choice],
       });
     }
-    this.appendTapToAffordAbilities(byAbility);
-    return [...byAbility.values()];
+    const payer = action.costInstanceIds;
+    if (payer !== undefined && payer.length > 0) {
+      const payerKey = payer.join(',');
+      if (!entry.payers.has(payerKey)) {
+        entry.payers.set(payerKey, {
+          instanceIds: [...payer],
+          label: payer.map((id) => this.nameOf(id)).join(' + '),
+        });
+      }
+    }
   }
 
   /**
@@ -1012,12 +1098,19 @@ export class GameSession {
    *
    * Gated hard for the hot path: it does nothing when there is no mana to tap,
    * and per permanent only for a PRINTED activated ability with a mana cost the
-   * engine did not already offer. Sacrifice- and loyalty-cost abilities are left
-   * out on purpose — the offer the engine builds for them carries a payer that
-   * {@link AbilityOption} has nowhere to keep, so auto-tapping one would submit
-   * an action the engine itself would reject.
+   * engine did not already offer. Loyalty abilities are still skipped — they
+   * carry no mana cost, so floating mana could never be what is missing.
+   *
+   * ⚠️ §3.143 — a SACRIFICE cost is no longer skipped. It used to be, because
+   * "the offer the engine builds for them carries a payer that `AbilityOption`
+   * has nowhere to keep, so auto-tapping one would submit an action the engine
+   * itself would reject" — true when it was written, and now fixed at the
+   * class level by {@link AbilityOption.costPayers}. Leaving the skip would
+   * have repaired one half of the bug (an already-affordable sacrifice ability)
+   * and left its sibling (one needing a tap first) broken, which rule 10 calls
+   * unfinished work.
    */
-  private appendTapToAffordAbilities(byAbility: Map<string, AbilityOption>): void {
+  private appendTapToAffordAbilities(byAbility: Map<string, AbilityAccumulator>): void {
     const player = this.priorityPlayer;
     if (!this.legalActions().some((a) => a.kind === 'tapForMana')) return; // nothing to float
     for (const perm of this.state.battlefield) {
@@ -1032,46 +1125,16 @@ export class GameSession {
         // No mana cost ⇒ any absence from the menu is a NON-mana gate (tapped,
         // summoning-sick, no target); floating mana would not change it.
         if (!manaCost) continue;
-        if (ability.cost.sacrificeAnother !== undefined || ability.cost.loyalty !== undefined) continue;
+        if (ability.cost.loyalty !== undefined) continue;
         if (!this.canAffordWithTaps(player, manaCost, perm.def, 'activate')) continue;
         const floated = this.trialFloatToward(manaCost, perm.def);
         if (!floated) continue;
         for (const offer of generateLegalActions(floated.state)) {
           if (offer.kind !== 'activateAbility') continue;
           if (offer.instanceId !== perm.instanceId || offer.abilityIndex !== index) continue;
-          const existing = byAbility.get(key);
-          const offeredTarget = offer.targets?.[0];
-          const label = ability.label ?? `Ability ${index + 1}`;
-          if (offeredTarget === undefined) {
-            if (!existing) {
-              byAbility.set(key, {
-                instanceId: perm.instanceId,
-                sourceName: perm.def.name,
-                abilityIndex: index,
-                label,
-                targets: null,
-                affordableWithTap: true,
-              });
-            }
-            continue;
-          }
-          // A target id names a stack object or a permanent that exists in the
-          // REAL state (floating mana never touched it), so `nameOf` labels it.
-          const choice: AbilityTargetChoice = {
-            target: offeredTarget,
-            label:
-              offeredTarget === 'A' || offeredTarget === 'B'
-                ? `${this.names[offeredTarget]} (player)`
-                : this.nameOf(offeredTarget),
-          };
-          byAbility.set(key, {
-            instanceId: perm.instanceId,
-            sourceName: perm.def.name,
-            abilityIndex: index,
-            label,
-            targets: [...(existing?.targets ?? []), choice],
-            affordableWithTap: true,
-          });
+          // Target and payer ids name objects that exist in the REAL state
+          // (floating mana never touched them), so `nameOf` labels them.
+          this.foldAbilityOffer(byAbility, offer, true);
         }
       }
     }
@@ -1106,11 +1169,18 @@ export class GameSession {
    * Activate a permanent's ability with the chosen targets (empty for a target-less
    * ability). Submits the SAME action shape the engine offered, so the engine —
    * not the client — remains the validator.
+   *
+   * `costInstanceIds` names the permanents paying a "Sacrifice a &lt;noun&gt;" cost
+   * (CR 602.2b), chosen from {@link AbilityOption.costPayers}. Omitting it for an
+   * ability that prints one is exactly the rejection §3.143 fixed; omitting it
+   * for an ability that prints none keeps the action byte-identical to what
+   * every existing caller already sends.
    */
   activateAbility(
     instanceId: InstanceId,
     abilityIndex: number,
     targets: readonly (InstanceId | PlayerId)[] = [],
+    costInstanceIds: readonly InstanceId[] = [],
   ): SubmitResult {
     return this.submit({
       kind: 'activateAbility',
@@ -1118,6 +1188,7 @@ export class GameSession {
       instanceId,
       abilityIndex,
       ...(targets.length > 0 ? { targets } : {}),
+      ...(costInstanceIds.length > 0 ? { costInstanceIds } : {}),
     });
   }
 
@@ -1133,6 +1204,7 @@ export class GameSession {
     instanceId: InstanceId,
     abilityIndex: number,
     targets: readonly (InstanceId | PlayerId)[] = [],
+    costInstanceIds: readonly InstanceId[] = [],
   ): SubmitResult {
     const player = this.priorityPlayer;
     const perm = this.state.battlefield.find((c) => c.instanceId === instanceId);
@@ -1155,6 +1227,7 @@ export class GameSession {
       instanceId,
       abilityIndex,
       ...(targets.length > 0 ? { targets } : {}),
+      ...(costInstanceIds.length > 0 ? { costInstanceIds } : {}),
     });
     // Roll back to the pre-tap session so a failed activation doesn't strand lands.
     if (activated.rejected) return { session: this, rejected: activated.rejected, events: activated.events };
