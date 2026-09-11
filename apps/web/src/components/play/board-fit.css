@@ -179,7 +179,15 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
-.play-board .play-board__center:has(.stack-panel) {
+/* ⚠️ NARROWED TO THE COLUMN PLACEMENT (§3.143 / UX-2). The stack now floats
+   over the board (`placement="floating"`, StackPanel), which means it is
+   `position: absolute` and out of this grid's flow — but `:has()` still matches
+   a descendant that has left the flow, so the unnarrowed selector went on
+   reserving 12–22rem of the centre column for a panel that is not in it. That
+   column is `flex: 0 4 auto`, the designated first-to-yield, and the reserved
+   width came straight out of the game log. `--column` is the class the panel
+   sets only when it really is in the grid. */
+.play-board .play-board__center:has(.stack-panel--column) {
   grid-template-columns: minmax(12rem, 22rem) minmax(0, 1fr);
 }
 
@@ -343,9 +351,26 @@
   overflow-y: hidden;
 }
 
-.play-board .seat__row > .perm {
+/* ⚠️ THE FLEX CHILD IS `.perm-slot`, NOT `.perm` (§3.143 / UX-11). A tapped card
+   turns 90°, and `transform` does not reflow — so the LAYOUT footprint is a
+   wrapper's flex-basis, which is the only thing that can stop a sideways card
+   lying across its neighbours. board-scene.css owns the slot's sizing (it is
+   the file that knows the turn); this rule stays as the row's own floor for the
+   untapped case and is superseded there by the more specific `--tapped` rule. */
+.play-board .seat__row > .perm-slot {
   flex: 0 1 var(--play-tile-w);
   min-width: var(--play-tile-slice-min);
+}
+
+/* A TURNED card reserves its own height as width. `--perm-footprint` is
+   TAP_ROTATION_CONFIG.footprintRatio, set inline by the tile — which IS the
+   card's height-over-width, so the reserved box is exactly what the sideways
+   card occupies and not a guess. Kept in THIS file, at THIS specificity,
+   because the rule above would otherwise out-specify it and silently put every
+   tapped card back on top of its neighbour. */
+.play-board .seat__row > .perm-slot--tapped {
+  flex-basis: calc(var(--play-tile-w) * var(--perm-footprint));
+  min-width: calc(var(--play-tile-slice-min) * var(--perm-footprint));
 }
 
 /* --- Rule 5: the hand and the action bar are never what gives ---------------
@@ -434,9 +459,29 @@
   min-height: var(--play-seat-rows-empty-min);
 }
 
-.play-board .play-board__opponent > .play-hand,
-.play-board .play-board__self > .play-hand {
+/* ⚠️ THE VIEWER'S HAND LEFT THE SEAT BAND (§3.143 / UX-9) and is now a direct
+   child of `.play-board`, OUTSIDE `.board-scene`. Two reasons, both hard:
+    - a tilted hand is unreadable, and under a FLAT projection there is no
+      counter-rotation that can undo the parent's tilt (board-scene.css note 2);
+    - `.play-board` is a flex column, so subtracting the hand at the TOP level
+      strengthens rule 5 rather than weakening it: the hand is `flex: 0 0 auto`
+      against the whole board instead of against a band that could be squeezed.
+   The OPPONENT's fanned backs stay inside the scene: they are the far side of
+   the table and they carry no text to read. */
+.play-board > .play-hand,
+.play-board .play-board__opponent > .play-hand {
   flex: 0 0 auto;
+}
+
+/* ⚠️ AND IT GIVES BACK THE MARGIN IT NO LONGER NEEDS. `styles.css` puts
+   `margin-top: var(--space-2)` on `.play-hand` — correct when the hand sat
+   inside the seat band with no gap of its own, and now double-counted, because
+   the board's own `gap` already separates it from the scene. Nesting the three
+   regions cost ONE extra gap (4 boundaries instead of 3, ~4px); dropping this
+   margin returns 8px, so the §3.62 budget is a few pixels BETTER off than
+   before, not worse. Measured against the same 800px window the harness uses. */
+.play-board > .play-hand {
+  margin-top: 0;
 }
 
 /* The board's own rhythm tightens with everything else — at these sizes a

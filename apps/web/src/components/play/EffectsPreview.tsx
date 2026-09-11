@@ -3,9 +3,18 @@ import { ALL_SOUND_CUES, type SoundCue } from '../../lib/play/sound-cues.js';
 import { SoundEngine } from '../../lib/play/sound-engine.js';
 import { loadSoundPrefs, saveSoundPrefs, type SoundPrefs } from '../../lib/play/sound-prefs.js';
 import { burstParticleOffsets, type VfxKind, type VfxTone } from '../../lib/play/vfx-cues.js';
-import { VFX_CONFIG } from '../../lib/play/play-config.js';
+import {
+  BOARD_3D_CONFIG,
+  TAP_ROTATION_CONFIG,
+  VFX_CONFIG,
+} from '../../lib/play/play-config.js';
+import { DamageBench } from './AnimationLayer.js';
+import { CombatLines } from './CombatLines.js';
+import { COMBAT_ARC_BENCH_ARCS, COMBAT_ARC_BENCH_TILE_IDS } from '../../lib/play/combat-lines.js';
 import './game-fx.css';
+import './board-scene.css';
 import './effects-preview.css';
+import './effects-bench.css';
 
 /**
  * THE EFFECTS PREVIEW BENCH (§3.132) — the observability the game-feel systems
@@ -170,6 +179,21 @@ export function EffectsPreview(): ReactElement {
         <span className="effects-preview__stage-label">effect stage</span>
       </div>
 
+      {/*
+        §3.143 — THE NEW SYSTEMS REGISTER HERE (CLAUDE.md rule 3: a system is not
+        done until you can observe and drive it at runtime). Three benches, each
+        mounting the REAL component rather than a mock: a bench that draws its
+        own arcs can look right while the board looks wrong.
+      */}
+      <h4 className="effects-preview__sub">Tabletop (§3.143 UX-9 / UX-11)</h4>
+      <SceneBench />
+
+      <h4 className="effects-preview__sub">Combat arcs (§3.143 UX-14)</h4>
+      <CombatArcBench />
+
+      <h4 className="effects-preview__sub">Damage distribution (§3.143 UX-15)</h4>
+      <DamageBench />
+
       {/* The live preview effects — real .vfx-* classes, same as the board. */}
       <div className="vfx-layer" aria-hidden="true">
         {effects.map((e) =>
@@ -197,5 +221,149 @@ export function EffectsPreview(): ReactElement {
         )}
       </div>
     </article>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* §3.143 benches                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * THE TABLETOP, DRIVABLE (UX-9 / UX-11).
+ *
+ * The sliders write the same custom properties `PlayBoard` writes, onto the same
+ * `.board-scene` / `.board-scene__table` / `.perm-slot` / `.perm-turn` classes
+ * the board uses — so what is tuned here is what ships. The config values are
+ * the STARTING points, shown as numbers beside each control: a designer finds
+ * an angle by feel and then commits it to `BOARD_3D_CONFIG` /
+ * `TAP_ROTATION_CONFIG` rather than to a stylesheet.
+ */
+function SceneBench(): ReactElement {
+  const [tiltDeg, setTilt] = useState(BOARD_3D_CONFIG.tiltDeg);
+  const [perspectivePx, setPerspective] = useState(BOARD_3D_CONFIG.perspectivePx);
+  const [originY, setOriginY] = useState(BOARD_3D_CONFIG.perspectiveOriginYFraction);
+  const [tapped, setTapped] = useState(false);
+
+  const vars = {
+    '--board-perspective-px': `${perspectivePx}px`,
+    '--board-tilt-deg': `${tiltDeg}deg`,
+    '--board-origin-x': `${BOARD_3D_CONFIG.perspectiveOriginXFraction * 100}%`,
+    '--board-origin-y': `${originY * 100}%`,
+    '--board-scene-ms': `${BOARD_3D_CONFIG.sceneTransitionMs}ms`,
+    '--perm-turn-ms': `${TAP_ROTATION_CONFIG.turnMs}ms`,
+    '--perm-tapped-opacity': String(TAP_ROTATION_CONFIG.tappedOpacity),
+    '--perm-tapped-grayscale': String(TAP_ROTATION_CONFIG.tappedGrayscaleFraction),
+    '--perm-footprint': tapped ? String(TAP_ROTATION_CONFIG.footprintRatio) : '1',
+    '--perm-turn-deg': `${tapped ? TAP_ROTATION_CONFIG.tappedDeg : 0}deg`,
+  } as CSSProperties;
+
+  return (
+    <div className="play-board effects-preview__scene" style={vars}>
+      <div className="effects-preview__knobs">
+        <label className="effects-preview__vol">
+          Tilt
+          <input
+            type="range"
+            min={0}
+            max={20}
+            step={1}
+            value={tiltDeg}
+            onChange={(e) => setTilt(Number(e.currentTarget.value))}
+            aria-label="Tabletop tilt in degrees"
+          />
+          <span className="effects-preview__vol-num">
+            {tiltDeg}° (ships {BOARD_3D_CONFIG.tiltDeg}°)
+          </span>
+        </label>
+        <label className="effects-preview__vol">
+          Perspective
+          <input
+            type="range"
+            min={600}
+            max={3000}
+            step={50}
+            value={perspectivePx}
+            onChange={(e) => setPerspective(Number(e.currentTarget.value))}
+            aria-label="Perspective distance in px"
+          />
+          <span className="effects-preview__vol-num">
+            {perspectivePx}px (ships {BOARD_3D_CONFIG.perspectivePx}px)
+          </span>
+        </label>
+        <label className="effects-preview__vol">
+          Vanishing point
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.02}
+            value={originY}
+            onChange={(e) => setOriginY(Number(e.currentTarget.value))}
+            aria-label="Perspective origin, fraction down the scene"
+          />
+          <span className="effects-preview__vol-num">
+            {originY.toFixed(2)} (ships {BOARD_3D_CONFIG.perspectiveOriginYFraction})
+          </span>
+        </label>
+        <label className="effects-preview__check">
+          <input type="checkbox" checked={tapped} onChange={(e) => setTapped(e.currentTarget.checked)} />
+          Tap the cards (UX-11: {TAP_ROTATION_CONFIG.tappedDeg}°, footprint ×
+          {TAP_ROTATION_CONFIG.footprintRatio.toFixed(2)})
+        </label>
+      </div>
+      <div className="board-scene">
+        <div className="board-scene__table">
+          {['Opponent', 'You'].map((side) => (
+            <div key={side} className="effects-preview__row">
+              <span className="effects-preview__row-label">{side}</span>
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className={`perm-slot${tapped ? ' perm-slot--tapped' : ''}`}>
+                  <div className="perm-turn">
+                    <div className={`perm${tapped ? ' perm--tapped' : ''}`}>
+                      <div className="perm__art" />
+                      <div className="perm__foot">
+                        <span className="perm__name">card {i + 1}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * THE COMBAT ARCS, on a stage of their own (UX-14).
+ *
+ * Lane G's own fixture (`COMBAT_ARC_BENCH_ARCS`) driven through the REAL
+ * `CombatLines`, so the arcs, the arrowheads, the ember flow and the
+ * draft-vs-declared distinction are the ones the board draws. The stage's tile
+ * ids are negative on purpose — `InstanceId` is a positive engine counter, so a
+ * bench mounted beside a live board cannot collide with a real permanent.
+ */
+function CombatArcBench(): ReactElement {
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [nudge, setNudge] = useState(0);
+  const ids = COMBAT_ARC_BENCH_TILE_IDS;
+  return (
+    <div className="effects-preview__arcs" ref={stageRef}>
+      <div className="effects-preview__row" data-anim-anchor="board:A">
+        <div className="perm" data-perm-id={ids.defender} />
+        <div className="perm" data-perm-id={ids.blocker} />
+        <div className="perm" data-perm-id={ids.secondBlocker} />
+      </div>
+      <div className="effects-preview__row">
+        <div className="perm" data-perm-id={ids.attacker} />
+        <div className="perm" data-perm-id={ids.secondAttacker} />
+      </div>
+      <button type="button" className="btn effects-preview__btn" onClick={() => setNudge((n) => n + 1)}>
+        ↻ Re-measure the arcs
+      </button>
+      <CombatLines lines={COMBAT_ARC_BENCH_ARCS} containerRef={stageRef} measureKey={nudge} />
+    </div>
   );
 }

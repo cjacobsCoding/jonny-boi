@@ -45,6 +45,19 @@
   text-shadow: 0 1px 2px rgb(0 0 0 / 70%);
 }
 
+/* §3.143 — THE BAND OUTRANKS THE FACE'S OWN TEXT, in the one case where they
+   share a strip. The tile now draws lane P's `CardFace`, whose tile preset puts
+   any AFTERMARKET rules line across the top of the art — the same strip this
+   band uses. They can only meet on a creature that is BOTH in combat AND
+   carrying a granted ability, which is narrow but real, and when they do the
+   combat role is the more urgent fact: the granted keyword is one hover away
+   (which is lane P's own stated reason for showing only aftermarket lines at
+   this size), and a player who cannot tell what is attacking has already lost
+   the turn. `--card-face-pop-z` is 30, so a tooltip still wins over both. */
+.play-board .perm__combat {
+  z-index: 2;
+}
+
 .perm__combat--attacking {
   background: rgb(190 40 40 / 90%);
 }
@@ -329,15 +342,40 @@
  * Bottom-right of the art, so they clear the combat band (top) and the TAPPED
  * word (bottom-left). Never colour alone: every chip prints its own text.
  */
+/* §3.143 — THE FOUR CORNERS OF A TILE, ONCE THE FACE STATES ITS OWN P/T.
+ *
+ * `CardFace` draws the live P/T box in the card's BOTTOM-RIGHT, where a printed
+ * Magic card puts it — which is exactly where the counter chips used to sit, and
+ * where the tap badge's corner was free. So the chrome moved once, deliberately,
+ * rather than each piece being nudged when somebody noticed it:
+ *
+ *   top strip     the face's AFTERMARKET rules line (lane P), and the combat
+ *                 band above it in the narrow case they meet (see above)
+ *   top-right     the tap badge
+ *   bottom-left   the counter chips, growing upward
+ *   bottom-right  the face's live P/T
+ *
+ * No offsets were invented: every piece keeps the 2px inset it already had.
+ */
 .perm__marks {
   position: absolute;
-  right: 2px;
+  left: 2px;
   bottom: 2px;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  flex-direction: column-reverse;
+  align-items: flex-start;
   gap: 1px;
   pointer-events: none;
+}
+
+/* Out of the P/T box's corner and into the one the badge vacated. Overrides
+   styles.css by class count (0,2,0 vs 0,1,0), never by import order — the trap
+   board-fit.css:188-202 documents. */
+.play-board .perm__tap-badge {
+  left: auto;
+  right: 2px;
+  bottom: auto;
+  top: 2px;
 }
 
 .perm__mark {

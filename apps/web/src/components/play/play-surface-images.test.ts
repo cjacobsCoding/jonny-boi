@@ -11,8 +11,19 @@
  * to any of them fails here.
  *
  * Bug reports 20260901_204957 (a pumped 1/2 read as a 1/2) and 20260901_204854
- * ("way more clear who is attacking"): the tile now prints the delta from the
- * printed P/T and wears its combat role. Pinned on the literal Swiftspear.
+ * ("way more clear who is attacking"): the tile prints its current truth and
+ * wears its combat role. Pinned on the literal Swiftspear.
+ *
+ * ⚠️ §3.143 / UX-17 RETIRED THE BARE DELTA BADGE, and these tests were rewritten
+ * in the same edit rather than left knowingly red. The old assertions pinned
+ * `perm__pt-delta` — a "+1/+1" that could state the NUMBER but never the SOURCE,
+ * because `indexContinuous` aggregates a sum and throws the attribution away.
+ * The tile now renders lane P's `CardFace` over core's own
+ * `explainCharacteristics`, which prints the effective P/T in place with a hover
+ * breakdown naming every contributing card. Keeping both would be two answers to
+ * one question on one card (rule 12), so what is pinned here is the RETIREMENT:
+ * putting the badge back turns these red. The positive half — that the turn, the
+ * face and the anchors are right — lives in `tile-transform.test.ts`.
  */
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -93,22 +104,24 @@ describe('play-surface images load eagerly', () => {
 });
 
 describe('the tile says what the view-model knows', () => {
-  it('the reported Swiftspear: 2/3 with a "+1/+1" delta and the printed stats in the tooltip', () => {
+  it('the reported Swiftspear: the CARD FACE states the current P/T, not a badge beside it', () => {
     const html = renderToStaticMarkup(
       createElement(BoardPermanentTile, {
         perm: permanent({ power: 2, toughness: 3, ptDelta: { power: 1, toughness: 1 } }),
       }),
     );
+    // The number the combat used is on screen (this fixture carries no
+    // explanation, so it is the footer's honest fallback — see the tile's
+    // comment, and `tile-transform.test.ts` for the with-explanation case).
     expect(html).toContain('2/3');
-    expect(html).toContain('+1/+1');
-    expect(html).toContain('printed 1/2');
-    expect(html).toContain('perm__pt-delta');
+    // …and the unattributed badge that used to sit beside it is GONE.
+    expect(html).not.toContain('perm__pt-delta');
   });
 
-  it('an unpumped creature carries no delta badge', () => {
+  it('an unpumped creature carries no delta badge either — the retirement is total', () => {
     const html = renderToStaticMarkup(createElement(BoardPermanentTile, { perm: permanent() }));
     expect(html).not.toContain('perm__pt-delta');
-    expect(html).not.toContain('printed');
+    expect(html).not.toContain('perm__mark--effect');
   });
 
   it('an attacker wears the attacking band and class; a blocker the blocking one', () => {

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { createRng, defaultAnswerFor } from '@jonny-boi/core';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from 'react';
+import { createRng, opponentOf } from '@jonny-boi/core';
 import { createDefaultAiRegistry, DEFAULT_PILOT_ID } from '@jonny-boi/ai';
-import type { InstanceId, ManaCost, PlayerId } from '@jonny-boi/core';
+import type { CardDefinition, ChoiceAnswer, GameState, InstanceId, ManaCost, PlayerId } from '@jonny-boi/core';
 import type {
   AbilityOption,
   GameSession,
@@ -11,7 +11,16 @@ import type {
 } from '../../lib/play/session.js';
 import { buildBoardView } from '../../lib/play/view-model.js';
 import { isBoardTargetOption, optionToTarget, type TargetOption } from '../../lib/play/targeting.js';
-import { stepLabel, TOAST_MS, COPILOT_ADVICE_SEED } from '../../lib/play/play-config.js';
+import {
+  stepLabel,
+  TOAST_MS,
+  COPILOT_ADVICE_SEED,
+  BOARD_3D_CONFIG,
+  COMBAT_ADVANCE_CONFIG,
+  PROPOSAL_CONFIG,
+  SPELL_HOLD_CONFIG,
+  TAP_ROTATION_CONFIG,
+} from '../../lib/play/play-config.js';
 import { SeatPanel, type PermInteraction } from './SeatPanel.js';
 import { StackPanel } from './StackPanel.js';
 import { GameLog } from './GameLog.js';
@@ -40,14 +49,33 @@ import { withStepStop, type PriorityStops } from '../../lib/play/priority-stops.
 import { CardHover } from '../CardHover.js';
 import { RevealBanner } from './RevealBanner.js';
 import { latestReveal } from '../../lib/play/reveals.js';
-import { isDeclinedMayQuestion, optionalTargetDecline } from '../../lib/play/optional-trigger.js';
+import {
+  consumeDeferredMay,
+  EMPTY_MAY_LEDGER,
+  expireDeferredMay,
+  matchDeferredMay,
+  recordDeferredMay,
+  type DeferredMayLedger,
+} from '../../lib/play/optional-trigger.js';
 import { StopsMenu } from './StopsMenu.js';
 import './board-clarity.css';
-import { blockerLinePairs } from '../../lib/play/combat-lines.js';
+import './board-scene.css';
+import { combatArcPairs } from '../../lib/play/combat-lines.js';
+import { CombatStage, type StageEntry } from './CombatStage.js';
+import { NO_STAGED_PERMANENTS, StagedPermanentsContext } from './combat-stage-context.js';
+import { STAGED_HOME_TILE_OPACITY } from '../../lib/play/combat-stage.js';
+import { CardFace } from './CardFace.js';
+import { HOLD_KINDS, type SpellHold } from '../../lib/play/spell-hold.js';
 import { groupJailedByJailer, jailSourcesOf } from '../../lib/play/jail-view.js';
 import { describeCastTarget, makeRefIndex, type KnownRef } from '../../lib/play/option-labels.js';
 import type { AnimationCardInfo } from '../../lib/play/animations.js';
-import { AnimationLayer, useZoneAnimations } from './AnimationLayer.js';
+import {
+  AnimationLayer,
+  DamageLayer,
+  useDamageSequence,
+  usePrefersReducedMotion,
+  useZoneAnimations,
+} from './AnimationLayer.js';
 import { VfxLayer, useGameVfx } from './VfxLayer.js';
 import { OpponentActionFeed, useOpponentFeed } from './OpponentActionFeed.js';
 import { CombatLines } from './CombatLines.js';
@@ -134,12 +162,32 @@ export function PlayBoard({
   onConcede,
   stops,
   onStops,
+  hold,
+  onHoldPointer,
+  onHoldExtend,
+  onHoldRelease,
 }: {
   session: GameSession;
   viewer: PlayerId;
   /** Apply a session-producing action; PlayView stores the new session. */
   onSubmit: (run: () => SubmitResult) => void;
   onConcede: () => void;
+  /**
+   * §3.143 / UX-16 — the opponent's spell currently HELD on screen, or null.
+   *
+   * Owned by PlayView, not here, because the hold's whole job is to stop the
+   * auto-advance effect and the AI-seat effect, and both of those live there.
+   * The board only renders it and reports the player's attention back up: one
+   * value, so the pause and the walker cannot disagree about whether the game
+   * is moving — the same rule §3.119 set for the priority stops.
+   */
+  hold?: SpellHold | null;
+  /** The pointer moved onto / off the held card (it extends the hold). */
+  onHoldPointer?: (over: boolean) => void;
+  /** "Keep looking" — one explicit `extendMs`. */
+  onHoldExtend?: () => void;
+  /** "Let it resolve" — end the hold now. */
+  onHoldRelease?: () => void;
   /**
    * §3.119 — the priority stops, OWNED BY PlayView because it is the auto-pass
    * effect that has to obey them. The board renders their controls and reports
@@ -264,6 +312,20 @@ export function PlayBoard({
       : null;
   const suggestBar = suggestion !== null && suggestedCard === null;
 
+  /**
+   * THE ONE CANCEL (§3.143 / UX-4). Clears every half-decided, PRE-COMMIT state
+   * the board holds, and dispatches nothing at all — which is what makes it
+   * idempotent and free: a dropped `manaPicker` carries its own working session
+   * (and its own action-log entries, §3.58) away with it, so a cancelled cast
+   * leaves no trace, and every other state here is a local choice the engine has
+   * never been told about.
+   *
+   * ⚠️ ADD YOUR NEW PRE-COMMIT STATE HERE. The shape this replaces is "five
+   * independent half-decided states, each with its own ad-hoc cancel" — a sixth
+   * with a seventh cancel is how it comes back. `cancel-funnel.test.ts` fails if
+   * a `useState` that looks like a pending decision is missing a line below, and
+   * fails if this function ever dispatches.
+   */
   const resetTransient = (): void => {
     setPendingCast(null);
     setPendingCastAsks(false);
@@ -475,6 +537,18 @@ export function PlayBoard({
     saveManaChoicePref(always);
   };
 
+  /**
+   * A PUBLIC instance's card face, so a target — on the stack panel, in a
+   * prompt — is hoverable rather than a bare name (UX-1 / UX-8 / UX-10).
+   * `null` for anything with no pool card or no public home, which the
+   * consumers render as a named plate rather than guessing at art.
+   */
+  const faceOfInstance = useCallback(
+    (ref: InstanceId | PlayerId): string | null =>
+      typeof ref === 'number' ? (findInstanceAnywhere(session.state, ref)?.def.id ?? null) : null,
+    [session],
+  );
+
   // --- targeting -----------------------------------------------------------------
   // Asked of the SESSION with the cast option itself (§3.119), so core's own
   // enumerator answers with the caster and the card in hand: the set the engine
@@ -482,6 +556,18 @@ export function PlayBoard({
   // — the board's private table did not know `blinkTarget` targeted anything,
   // so Cloudshift was cast with no target and refused.
   const targetOptions: readonly TargetOption[] = pendingCast ? session.castTargets(pendingCast) : [];
+
+  /**
+   * The face of the card being cast, for the target prompt (UX-8). `CastOption`
+   * carries a name and not a card id, so it is resolved from the VIEWER'S OWN
+   * hand first (the one hidden zone this viewer may see) and from the public
+   * zones after — a flashback cast comes from a graveyard, a madness cast from
+   * exile. `null` for anything unresolvable, which draws a named plate.
+   */
+  const castFaceId = pendingCast
+    ? ((view.self.hand ?? []).find((c) => c.instanceId === pendingCast.instanceId)?.cardId ??
+      faceOfInstance(pendingCast.instanceId))
+    : null;
 
   /**
    * Finish a cast whose targets are settled: either hand the payment to the
@@ -674,6 +760,7 @@ export function PlayBoard({
     }
   });
   const tileRectOf = useCallback((id: InstanceId): DOMRect | undefined => tileRectsRef.current.get(id), []);
+
 
   const { drag, dropRef, handProps: dragHandProps } = useDragToPlay((id) => {
     const land = playableLands.includes(id);
@@ -932,12 +1019,103 @@ export function PlayBoard({
   // --- render --------------------------------------------------------------------
   const statusText = `Turn ${view.turnNumber} · ${stepLabel(step)} · ${names[view.activePlayer]}'s turn`;
 
-  // Which blocker→attacker lines to draw this frame (pure rule, tested).
-  const combatLines = blockerLinePairs({
+  /**
+   * §3.143 / UX-14 — the fiery arcs, both directions. `combatArcPairs` is the
+   * funnel: blocker→attacker as before, PLUS attacker→(player | planeswalker),
+   * which the board could never draw because `blockerLinePairs` knew only one
+   * pair kind. `defendingSeat` is required for an attack on a PLAYER to draw
+   * anything — who defends is a rules question (CR 506.2) core owns, and the
+   * arc module deliberately refuses to re-answer it.
+   */
+  const combatLines = combatArcPairs({
     step,
     declaredBlocks: view.combat?.blocks,
     draftAssign: blockAssign,
+    declaredAttackers: session.state.combat?.attackers,
+    ...(session.state.combat?.attackTargets !== undefined
+      ? { attackTargets: session.state.combat.attackTargets }
+      : {}),
+    defendingSeat: opponentOf(session.state.activePlayer),
+    draftAttackers: chosenAttackers,
+    draftAttackTargets: walkerAssign,
   });
+
+  /**
+   * §3.143 / UX-12 + UX-13 — WHICH CARDS WALK OUT.
+   *
+   * Declared attackers and declared blockers only. A DRAFT selection does not
+   * advance: while the player is still clicking, the cards must stay where they
+   * are so the next click lands on the tile they aimed at — the arcs already
+   * show the draft, dashed, which is the right channel for "not yet decided".
+   */
+  const stageEntries = useMemo((): readonly StageEntry[] => {
+    const combat = session.state.combat;
+    if (!combat || !combat.attackersDeclared) return [];
+    const permById = new Map<InstanceId, (typeof view.self.permanents)[number]>();
+    for (const seat of [view.self, view.opponent]) {
+      for (const perm of seat.permanents) permById.set(perm.instanceId, perm);
+    }
+    // The attacker's seat is the ACTIVE player's; everyone advances toward the
+    // midline, so the sign is "am I the viewer's seat or the far one".
+    const towardFor = (controller: PlayerId): 1 | -1 => (controller === viewer ? -1 : 1);
+    const entries: StageEntry[] = [];
+    for (const id of combat.attackers) {
+      const perm = permById.get(id);
+      if (perm) entries.push({ perm, role: 'attacker', toward: towardFor(perm.controller) });
+    }
+    if (combat.blockersDeclared) {
+      for (const [blockerId, attackerId] of Object.entries(combat.blocks)) {
+        const perm = permById.get(Number(blockerId));
+        if (perm) {
+          entries.push({
+            perm,
+            role: 'blocker',
+            toward: towardFor(perm.controller),
+            meets: attackerId,
+          });
+        }
+      }
+    }
+    return entries;
+  }, [session, view, viewer]);
+
+  /**
+   * Which cards are OUT, so their home tiles hand `data-perm-id` over to the
+   * copy the player is actually looking at. Delivered through a CONTEXT rather
+   * than a prop because `SeatPanel` renders every tile and belongs to no lane —
+   * see `combat-stage-context.ts`.
+   */
+  const [stagedIds, setStagedIds] = useState<ReadonlySet<InstanceId>>(NO_STAGED_PERMANENTS);
+
+  /** The element between the two seats: its vertical centre IS the midline. */
+  const midlineRef = useRef<HTMLDivElement>(null);
+
+  /** §3.143 / UX-15 — damage travels from source to recipient (lane H). */
+  const { beats: damageBeats, retire: retireDamage } = useDamageSequence(session.events);
+
+  /**
+   * §3.143 / UX-9 — the tabletop's own numbers, handed to the CSS as custom
+   * properties so `board-scene.css` contains no literal at all. A player who
+   * asked for reduced motion gets `reducedMotionTiltDeg` — a NUMBER, not a
+   * boolean, so a designer can pick a gentler tilt without a code change. A
+   * static perspective is not literally motion, but `prefers-reduced-motion` is
+   * the only signal browsers give for vestibular discomfort, and a tilted plane
+   * with tiles sliding across it is exactly that trigger.
+   */
+  const reducedMotion = usePrefersReducedMotion();
+  const sceneVars = {
+    '--board-perspective-px': `${BOARD_3D_CONFIG.perspectivePx}px`,
+    '--board-tilt-deg': `${reducedMotion ? BOARD_3D_CONFIG.reducedMotionTiltDeg : BOARD_3D_CONFIG.tiltDeg}deg`,
+    '--board-origin-x': `${BOARD_3D_CONFIG.perspectiveOriginXFraction * 100}%`,
+    '--board-origin-y': `${BOARD_3D_CONFIG.perspectiveOriginYFraction * 100}%`,
+    '--board-scene-ms': `${BOARD_3D_CONFIG.sceneTransitionMs}ms`,
+    '--perm-turn-ms': `${TAP_ROTATION_CONFIG.turnMs}ms`,
+    '--perm-tapped-opacity': String(TAP_ROTATION_CONFIG.tappedOpacity),
+    '--perm-tapped-grayscale': String(TAP_ROTATION_CONFIG.tappedGrayscaleFraction),
+    '--perm-staged-opacity': String(STAGED_HOME_TILE_OPACITY),
+    '--combat-advance-ms': `${COMBAT_ADVANCE_CONFIG.advanceMs}ms`,
+    '--spell-hold-fade-ms': `${SPELL_HOLD_CONFIG.fadeMs}ms`,
+  } as CSSProperties;
 
   // The §3.57 hint rule: the copy must describe the buttons that exist. The
   // attack window is the ACTIVE player's own declare step, pre-declaration;
@@ -979,41 +1157,108 @@ export function PlayBoard({
   );
 
   /**
-   * §3.119 — THE FOLDED "YOU MAY … TARGET …" (report 20260901_205339). The
-   * engine asks a mandatory target question on the way to the stack and the
-   * "may" at resolution, in that order, correctly. The board offers the decline
-   * on the FIRST prompt: taking it answers the target with the engine's own
-   * default and remembers the asking permanent, so the "may" that follows is
-   * answered NO without a second modal. Both questions are still asked and
-   * answered; the player is asked once.
-   */
-  const choiceSourceDef = pendingChoice
-    ? session.state.battlefield.find((p) => p.instanceId === pendingChoice.sourceInstanceId)?.def
-    : undefined;
-  const declineLabel = pendingChoice ? optionalTargetDecline(pendingChoice, choiceSourceDef) : null;
-
-  /**
-   * Answer BOTH of the trigger's questions in one gesture.
+   * §3.143 / UX-6 — "MAY" IS ASKED BEFORE TARGETS, and the answer is REMEMBERED.
    *
-   * The session is immutable and `answerChoice` returns the next one
-   * SYNCHRONOUSLY, so the "may" question the engine parks after the target is
-   * already on that returned session — no remembered flag, no effect, and no
-   * frame in which the second modal could flash. The engine still asks both, in
-   * the order the rules require; the player answered once.
+   * ⚠️ THE OLD FOLD DID NOT WORK, AND ITS DOC COMMENT WAS THE REASON. It
+   * answered the target and then read `aimed.session.pendingChoice`
+   * synchronously, on a comment asserting that the "may" was already parked on
+   * that session. Lane C measured it: it is `null` — the trigger is on the
+   * stack and needs a full priority round before it resolves and asks. So
+   * "Don't use Conjurer's Closet" chose a target FOR the player (via
+   * `defaultAnswerFor`) and then showed the may modal anyway, on all 24 cards
+   * of the class. The answer is now carried across that round in a LEDGER and
+   * spent by the effect below.
+   *
+   * ⚠️ AND THE SOURCE LOOKUP WAS BATTLEFIELD-ONLY. Every modal spell's per-mode
+   * target question carries the SPELL's instance id (it is on the stack, not the
+   * battlefield), so the prompt fell back to a named placeholder — 110 modal
+   * modes on 60 pool cards, measured by lane C. `findDefAnywhere` is what makes
+   * UX-8 ("show the actual card that is provoking the choice") true for them.
    */
-  const declineOptionalTrigger = (): void => {
+  const [mayLedger, setMayLedger] = useState<DeferredMayLedger>(EMPTY_MAY_LEDGER);
+  const choiceSourceDef = pendingChoice
+    ? findDefAnywhere(session.state, pendingChoice.sourceInstanceId)
+    : undefined;
+
+  const answerFoldedMay = (yes: boolean, answer: ChoiceAnswer): void => {
     const choice = pendingChoice;
     if (!choice) return;
+    const targets = answer.kind === 'selectTargets' ? [...answer.targets] : [];
     run(() => {
-      const aimed = session.answerChoice(defaultAnswerFor(choice));
-      if (aimed.rejected) return aimed;
-      const followUp = aimed.session.pendingChoice;
-      if (followUp && isDeclinedMayQuestion(followUp, choice.sourceInstanceId)) {
-        return aimed.session.answerChoice({ kind: 'confirm', yes: false });
+      const res = session.answerChoice(answer);
+      if (res.rejected === null) {
+        const turnNumber = res.session.state.turnNumber;
+        setMayLedger((ledger) =>
+          recordDeferredMay(expireDeferredMay(ledger, turnNumber), {
+            sourceInstanceId: choice.sourceInstanceId,
+            targets,
+            yes,
+            turnNumber,
+          }),
+        );
       }
-      return aimed;
+      return res;
     });
   };
+
+  // Spend a remembered "no" the moment the trigger finally asks. It fires a
+  // full priority round after the target was answered, which is exactly why the
+  // synchronous version above could never have worked.
+  useEffect(() => {
+    const choice = session.pendingChoice;
+    if (!choice || mayLedger.length === 0) return;
+    const hit = matchDeferredMay(mayLedger, choice, session.state.resolution);
+    if (!hit) return;
+    setMayLedger((ledger) => consumeDeferredMay(ledger, hit.index));
+    const res = session.answerChoice({ kind: 'confirm', yes: hit.yes });
+    if (!res.rejected) onSubmit(() => res);
+  }, [session, mayLedger, onSubmit]);
+
+  /**
+   * §3.143 / UX-4 — IS ANYTHING PRE-COMMIT OPEN RIGHT NOW?
+   *
+   * Caleb: *"Anytime I activate an ability or anything that targets cards, until
+   * I've actually chosen the targets, I should be able to back out of the
+   * spell/ability as long as nothing has mutated game state yet."*
+   *
+   * Every state in this predicate is Tier 1 in lane B's census — the answer
+   * rides the ACTION and nothing has been dispatched — which is 97.3% of the
+   * pool's 1,428 targeting prompts. For those, backing out is exactly
+   * {@link resetTransient}: drop the local decision, dispatch nothing.
+   *
+   * ⚠️ THE REMAINING 3.5% IS NOT COVERED HERE and is reported rather than
+   * pretended at: 177 pool cards park a cast-time question AFTER the object is
+   * on the stack and the cost is paid, and unwinding those needs lane B's
+   * `proposal.ts` session transaction, which is not wired (see the lane report).
+   * Those prompts still have no cancel, which is honest — the engine has
+   * genuinely already moved.
+   */
+  const preCommitOpen =
+    pendingCast !== null ||
+    pendingAbility !== null ||
+    abilitySource !== null ||
+    handChoice !== null ||
+    pendingManaTap !== null ||
+    manaPicker !== null;
+
+  /**
+   * Escape backs out, from ANY pre-commit step, repeatedly. The key is
+   * `PROPOSAL_CONFIG.cancelKey` rather than a fourth copy of the string
+   * `'Escape'` — the handler, the hint and the test all read the one value.
+   */
+  useEffect(() => {
+    if (!preCommitOpen) return undefined;
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== PROPOSAL_CONFIG.cancelKey) return;
+      event.preventDefault();
+      resetTransient();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // Keyed on WHETHER anything is open, not on which: `resetTransient` closes
+    // over setters React guarantees are stable, so re-binding per open is the
+    // cheap, correct thing.
+  }, [preCommitOpen]);
 
   /** The reveal to announce on the board, if any and not yet dismissed (§3.119). */
   const reveal = useMemo(
@@ -1039,7 +1284,18 @@ export function PlayBoard({
   const showReveal = reveal !== null && reveal.at !== dismissedReveal;
 
   return (
-    <div className="play-board" ref={boardRootRef}>
+    /*
+     * ⚠️ `.play-board` ITSELF CARRIES NO `transform` / `perspective` / `filter`
+     * / `contain: paint`, AND MUST NOT. Twelve `position: fixed` overlays are
+     * rendered as its descendants (the prompts, the toast, the reveal, the
+     * stops menu, the animation/VFX/damage/stage layers), and any of those four
+     * properties on an ancestor makes that ancestor their containing block —
+     * silently re-rooting every one of them and moving every measured
+     * coordinate. The tilt goes on `.board-scene`, which contains only the two
+     * seats and the log. `board-scene.test.ts` is the guard; the first person
+     * who wants a screen shake will need to read it.
+     */
+    <div className="play-board" ref={boardRootRef} style={sceneVars}>
       {suggestionHint && (
         <div className="copilot-hint" role="status">
           <span className="copilot-hint__label">Co-pilot</span>
@@ -1054,6 +1310,16 @@ export function PlayBoard({
         </button>
       </div>
 
+      {/*
+        THE TABLETOP (UX-9). Only the two seats and the centre column are tilted
+        — every modal, every overlay and the viewer's own hand are SIBLINGS of
+        this box, so none of them is projected, re-rooted or mis-measured.
+        The staged-permanent context wraps it because `SeatPanel` renders the
+        tiles and cannot be given a prop.
+      */}
+      <StagedPermanentsContext.Provider value={stagedIds}>
+      <div className="board-scene">
+      <div className="board-scene__table">
       {/* Opponent (top) — hand hidden. */}
       <div className="play-board__opponent">
         <SeatPanel
@@ -1076,9 +1342,13 @@ export function PlayBoard({
         </div>
       </div>
 
-      {/* Center column: stack + log. */}
-      <div className="play-board__center">
-        <StackPanel stack={view.stack} names={names} nameOf={session.nameOf} />
+      {/*
+        The centre column — now the LOG alone; the stack floats (see below).
+        It is also the MIDLINE: the region between the two seats, measured
+        rather than recomputed from seat heights, which is the one answer that
+        stays true when board-fit.css squeezes a seat.
+      */}
+      <div className="play-board__center" ref={midlineRef}>
         <GameLog events={session.events} resolvers={{ name: session.nameOf, playerName: session.playerName }} />
       </div>
 
@@ -1111,6 +1381,19 @@ export function PlayBoard({
             onClose={() => setGraveyardOpen(false)}
           />
         )}
+      </div>
+      </div>{/* .board-scene__table */}
+      </div>{/* .board-scene */}
+      </StagedPermanentsContext.Provider>
+
+      {/*
+        YOUR HAND IS OUTSIDE THE SCENE (UX-9). A tilted hand is unreadable, and
+        under `transform-style: flat` — which is all this board can have, see
+        board-scene.css — there is no counter-rotation that undoes the parent's
+        projection. board-fit.css rule 5 is unchanged and in fact stronger: the
+        hand is now `flex: 0 0 auto` against the whole board rather than against
+        a seat band that could be squeezed.
+      */}
         <div
           className="play-hand"
           aria-label={`${view.self.name} hand`}
@@ -1213,7 +1496,25 @@ export function PlayBoard({
           })}
           {(view.self.hand?.length ?? 0) === 0 && <span className="seat__empty">Empty hand</span>}
         </div>
-      </div>
+
+      {/*
+        §3.143 / UX-2 — THE STACK IS ALWAYS VISIBLE. It floats over the board
+        (`placement="floating"`, `position: absolute` inside the already-relative
+        `.play-board`) instead of sharing the centre column with the log, so it
+        costs the battlefield NO height — which matters because that column is
+        `flex: 0 4 auto`, the designated first-to-yield, and report
+        20260901_204618 ("Battleground is super crunched") was already paid once.
+        Mounted OUTSIDE `.board-scene`: an absolutely-positioned descendant of a
+        transformed box is positioned against that box and tilted with it.
+      */}
+      <StackPanel
+        stack={view.stack}
+        names={names}
+        nameOf={session.nameOf}
+        faceOf={faceOfInstance}
+        viewer={viewer}
+        placement="floating"
+      />
 
       {zoomed && (
         <CardZoomOverlay cardId={zoomed.cardId} name={zoomed.name} onClose={() => setZoomed(null)} />
@@ -1271,8 +1572,9 @@ export function PlayBoard({
           names={names}
           onAnswer={(answer) => run(() => session.answerChoice(answer))}
           zoneOf={refIndex.zoneOf}
-          declineLabel={declineLabel}
-          onDecline={declineOptionalTrigger}
+          sourceDef={choiceSourceDef ?? null}
+          cardIdOf={faceOfInstance}
+          onFoldedMay={answerFoldedMay}
         />
       )}
 
@@ -1472,23 +1774,32 @@ export function PlayBoard({
         />
       )}
 
-      {/* Targeting prompt (for player/spell targets; creature targets are clicked on the board). */}
+      {/* Targeting prompt (for player/spell targets; creature targets are clicked on the board).
+          §3.143 / UX-8 + UX-10: the SOURCE renders as a real face — lane P's
+          `CardFace`, so a granted keyword is visible on the card you are about
+          to aim — and every candidate that is a card is wrapped in the ONE hover
+          funnel. Both were bare strings; the complaint was "it should be showing
+          the actual card(s) that is provoking the choice - not just the card
+          name". */}
       {pendingCast && (
         <div className="target-prompt" role="dialog" aria-label="Choose a target">
           <div className="target-prompt__card">
             <div className="target-prompt__title">Choose a target for {pendingCast.name}</div>
+            <CardHover cardId={castFaceId}>
+              <CardFace size="full" cardId={castFaceId} name={pendingCast.name} />
+            </CardHover>
             <div className="target-prompt__options">
               {targetOptions.length === 0 && <span className="seat__empty">No legal targets — cancel.</span>}
               {targetOptions.map((opt) => (
-                <button
+                <CardHover
                   key={opt.kind === 'player' ? `p:${opt.player}` : `i:${opt.instanceId}`}
-                  type="button"
-                  className="btn"
-                  onClick={() => commitCast([optionToTarget(opt)])}
+                  cardId={opt.kind === 'player' ? null : faceOfInstance(opt.instanceId)}
                 >
-                  {/* Owner rides every row (§3.57): "Wall (yours)" vs "Wall (Computer’s)". */}
-                  {describeCastTarget(opt, viewer, names)}
-                </button>
+                  <button type="button" className="btn" onClick={() => commitCast([optionToTarget(opt)])}>
+                    {/* Owner rides every row (§3.57): "Wall (yours)" vs "Wall (Computer’s)". */}
+                    {describeCastTarget(opt, viewer, names)}
+                  </button>
+                </CardHover>
               ))}
             </div>
             <button type="button" className="btn btn--ghost" onClick={() => setPendingCast(null)}>
@@ -1501,6 +1812,14 @@ export function PlayBoard({
       {toast && (
         <div className="play-toast" role="status">
           {toast}
+        </div>
+      )}
+
+      {/* §3.143 / UX-4 — the cancel affordance SAYS it is there. A cancel that
+          exists but is never mentioned is a cancel the player does not have. */}
+      {preCommitOpen && (
+        <div className="play-cancel-hint" role="status">
+          {PROPOSAL_CONFIG.cancelKey} backs out — nothing has happened yet.
         </div>
       )}
 
@@ -1535,7 +1854,103 @@ export function PlayBoard({
         tileRectOf={tileRectOf}
         onDone={retireVfx}
       />
+      {/* §3.143 / UX-15 — damage TRAVELS from source to recipient, sequenced so
+          first-strike reads as two rounds rather than one blur (lane H). */}
+      <DamageLayer
+        beats={damageBeats}
+        boardRootRef={boardRootRef}
+        tileRectOf={tileRectOf}
+        onDone={retireDamage}
+      />
+      {/* §3.143 / UX-12 + UX-13 — the advanced attackers and blockers. An
+          UNCLIPPED sibling of the scene, because a transform on the tile is
+          clipped by its own row (lib/play/combat-stage.ts names the four
+          clipping boxes and why none of them can be relaxed). */}
+      <CombatStage
+        entries={stageEntries}
+        boardRootRef={boardRootRef}
+        midlineRef={midlineRef}
+        measureKey={session}
+        onPlaced={setStagedIds}
+      />
+      {/* §3.143 / UX-16 — the opponent's spell, held and inspectable BEFORE it
+          resolves. The post-hoc feed below still reports what happened; this is
+          the part that was missing. */}
+      {hold && (
+        <SpellHoldCard
+          hold={hold}
+          name={session.nameOf(hold.instanceId)}
+          cardId={faceOfInstance(hold.instanceId)}
+          opponentName={names[hold.controller]}
+          {...(onHoldPointer ? { onPointer: onHoldPointer } : {})}
+          {...(onHoldExtend ? { onExtend: onHoldExtend } : {})}
+          {...(onHoldRelease ? { onRelease: onHoldRelease } : {})}
+        />
+      )}
       <OpponentActionFeed notes={opponentNotes} opponentName={names[otherOf(viewer)]} />
+    </div>
+  );
+}
+
+/**
+ * §3.143 / UX-16 — AN OPPONENT'S SPELL, HELD ON SCREEN.
+ *
+ * Caleb: *"when an opponent casts a sorcery or instant card, I need to be able
+ * to see it and inspect the card before it goes off - even if I have no
+ * instant-speed things I could do in response … Right now, they just happen
+ * invisibly and I have no idea why things are happening."*
+ *
+ * The card is drawn by lane P's `CardFace` at full size and wrapped in the ONE
+ * hover funnel, so the held card is inspected exactly the way every other card
+ * on this surface is. Moving the pointer onto it extends the hold (bounded by
+ * `pointerHoldMs`); "Keep looking" adds one `extendMs`; "Let it resolve" ends
+ * it now — so it is never a click-through tax on a player who does not want it.
+ */
+function SpellHoldCard({
+  hold,
+  name,
+  cardId,
+  opponentName,
+  onPointer,
+  onExtend,
+  onRelease,
+}: {
+  hold: SpellHold;
+  name: string;
+  cardId: string | null;
+  opponentName: string;
+  onPointer?: (over: boolean) => void;
+  onExtend?: () => void;
+  onRelease?: () => void;
+}): ReactElement {
+  return (
+    <div
+      className="spell-hold"
+      role="dialog"
+      aria-label={`${opponentName} is casting ${name}`}
+      onPointerEnter={() => onPointer?.(true)}
+      onPointerLeave={() => onPointer?.(false)}
+    >
+      {/* The verb comes from the KIND table, not from an `if`: "is casting" and
+          "is activating" are different facts and a third kind is a row. */}
+      <span className="spell-hold__who">
+        {opponentName} {HOLD_KINDS[hold.kind].announce}:
+      </span>
+      <CardHover cardId={cardId}>
+        <CardFace size="full" cardId={cardId} name={name} />
+      </CardHover>
+      <span className="spell-hold__name">{name}</span>
+      <span className="spell-hold__hint">
+        Hover the card to keep reading it — it resolves on its own when you stop.
+      </span>
+      <div className="spell-hold__actions">
+        <button type="button" className="btn" onClick={onExtend}>
+          Keep looking
+        </button>
+        <button type="button" className="btn btn--ghost" onClick={onRelease}>
+          Let it resolve
+        </button>
+      </div>
     </div>
   );
 }
@@ -1701,4 +2116,36 @@ function ActionBar({
 
 function otherOf(p: PlayerId): PlayerId {
   return p === 'A' ? 'B' : 'A';
+}
+
+/**
+ * Find an instance in any PUBLIC zone, plus the stack.
+ *
+ * ⚠️ The battlefield alone is not enough, which is what made UX-8 miss every
+ * modal spell: a per-mode target question carries the SPELL's instance id, and
+ * a spell is on the STACK. Lane C measured the cost of that omission at 110
+ * modal modes across 60 pool cards, each of which showed a named placeholder
+ * where the card should have been.
+ *
+ * Public zones only — a hand is hidden information and this result is used to
+ * DRAW A CARD FACE.
+ */
+function findInstanceAnywhere(state: GameState, id: InstanceId): { def: CardDefinition } | undefined {
+  for (const perm of state.battlefield) if (perm.instanceId === id) return perm;
+  for (const pid of ['A', 'B'] as const) {
+    const player = state.players[pid];
+    for (const zone of [player.graveyard, player.exile]) {
+      const hit = zone.find((c) => c.instanceId === id);
+      if (hit) return hit;
+    }
+  }
+  for (const obj of state.stack) {
+    if (obj.kind === 'spell' && obj.instanceId === id) return obj.card;
+  }
+  return undefined;
+}
+
+/** The definition of whatever asked a question — see {@link findInstanceAnywhere}. */
+function findDefAnywhere(state: GameState, id: InstanceId): CardDefinition | undefined {
+  return findInstanceAnywhere(state, id)?.def;
 }

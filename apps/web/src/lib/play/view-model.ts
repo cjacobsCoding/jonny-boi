@@ -16,6 +16,7 @@ import {
   effectiveKeywords,
   effectivePower,
   effectiveToughness,
+  explainCharacteristics,
   indexContinuous,
   isCreature,
   isLand,
@@ -32,15 +33,16 @@ import {
   LOYALTY_COUNTER,
   DEFENSE_COUNTER,
   type CardInstance,
+  type CharacteristicExplanation,
   type ContinuousIndex,
   type GameState,
   type InstanceId,
   type KeywordFlags,
   type ManaPool,
   type PlayerId,
-  type StackObject,
   poisonOf,
 } from '@jonny-boi/core';
+import { stackEntries, type StackEntry } from './stack-view.js';
 
 /**
  * The six colour counts of a pool as a plain record — the shape every view, the
@@ -108,24 +110,43 @@ export interface BoardPermanent {
   readonly power: number;
   readonly toughness: number;
   /**
-   * The PRINTED power/toughness, so the board can show the difference. Bug
-   * report 20260901_204957: a 1/2 Monastery Swiftspear killed a 0/2 because a
-   * prowess pump had made it a 2/3 — correctly — and nothing on screen said
-   * so. `ptDelta` is the visible answer: non-null whenever the effective stats
-   * differ from the printed ones (a pump, an anthem, a +1/+1 counter), with the
-   * signed differences a badge can print as "+1/+1". Zero for non-creatures.
+   * ⚠️ SUPERSEDED ON THE HOTSEAT BOARD BY {@link BoardPermanent.explanation}
+   * (§3.143 / UX-17), AND KEPT ONLY FOR THE ONLINE ONE.
+   *
+   * These three answered "the stats changed — by how much?" with a number and
+   * no source, which is as far as a SUM can be pushed: `indexContinuous`
+   * aggregates every continuous effect and throws the attribution away, so a
+   * `ptDelta` badge could say "+1/+1" and never which enchantment supplied it.
+   * Core now answers the whole question (`explainCharacteristics`), the tile
+   * renders that, and `perm__pt-delta` is gone from the screen — two answers to
+   * one question on one card is what rule 12 forbids.
+   *
+   * They survive because `lib/online/board-adapter.ts` constructs a
+   * `BoardPermanent` by hand and has no engine to explain anything with (it
+   * renders a server-masked view), so for THAT surface the counters-only delta
+   * is still the most it can honestly say. Delete all three the day the online
+   * board carries a real explanation.
    */
   readonly printedPower: number;
   readonly printedToughness: number;
   readonly ptDelta: { readonly power: number; readonly toughness: number } | null;
-  /**
-   * §3.133 — the delta SPLIT by where it came from, because "+1/+1 counter" and
-   * "+1/+1 until end of turn" look identical in a single number and are not the
-   * same fact: one is permanent, one wears off. `ptFromEffects` is the part of
-   * {@link ptDelta} that is NOT counters (an anthem, a pump), so the tile can
-   * badge the two differently. Null when every point came from counters.
-   */
+  /** See {@link BoardPermanent.ptDelta} — online-only, superseded on this board. */
   readonly ptFromEffects: { readonly power: number; readonly toughness: number } | null;
+  /**
+   * CORE'S OWN CHARACTERISTIC BREAKDOWN for this permanent — what is printed,
+   * what is effective, and one attributed row per contributing source
+   * (`explainCharacteristics`, packages/core/src/provenance.ts).
+   *
+   * This is what `CardFace` draws: the 5/6 in place of the 4/5, the granted
+   * "flying" merged into the printed keyword line, and the hover breakdown that
+   * names the enchantment. Built once per render pass from the SHARED
+   * continuous index, never per tile.
+   *
+   * Optional because the online adapter cannot produce one; `CardFace` states
+   * that absence rather than drawing an empty breakdown, which would read as
+   * "nothing is modifying this".
+   */
+  readonly explanation?: CharacteristicExplanation | undefined;
   /**
    * Counters ON this permanent, by kind, non-zero only. Loyalty and defense are
    * counters too but are excluded: they already have their own badges, and
@@ -148,14 +169,16 @@ export interface BoardPermanent {
   readonly blocking: InstanceId | null;
 }
 
-/** A stack object rendered for the board. */
-export interface StackView {
-  readonly instanceId: InstanceId;
-  readonly kind: 'spell' | 'trigger';
-  readonly name: string;
-  readonly controller: PlayerId;
-  readonly targets: readonly (InstanceId | PlayerId)[];
-}
+/**
+ * A stack object rendered for the board.
+ *
+ * ⚠️ NOT A SHAPE OF ITS OWN ANY MORE. It is lane A's {@link StackEntry}, so the
+ * panel that shows real card faces (UX-1) and the model the board hands it are
+ * one type, produced by one function — `stackEntries`. The alias stays because
+ * `BoardView.stack` and `lib/online/board-adapter.ts` both name it, and a rename
+ * across an unowned file buys nothing.
+ */
+export type StackView = StackEntry;
 
 /** One player's public/private snapshot from the viewer's perspective. */
 export interface SeatView {
@@ -296,6 +319,9 @@ function boardPermanent(state: GameState, inst: CardInstance, cont: ContinuousIn
     // so this is the authoritative current value rather than the printed one.
     defense: isBattle(inst.def) ? defenseOf(inst) : 0,
     protector: isBattle(inst.def) ? protectorOf(inst) : null,
+    // The SHARED index is handed straight through, so the whole board costs one
+    // `indexContinuous` rather than one per permanent (lane E's contract).
+    explanation: explainCharacteristics(state, inst.instanceId, cont),
     tapped: inst.tapped,
     summoningSick: inst.summoningSick,
     power,
@@ -316,13 +342,24 @@ function boardPermanent(state: GameState, inst: CardInstance, cont: ContinuousIn
   };
 }
 
-/** Build the masked seat view for `seat`, revealing the hand only if `reveal`. */
-function seatView(state: GameState, seat: PlayerId, name: string, reveal: boolean): SeatView {
+/**
+ * Build the masked seat view for `seat`, revealing the hand only if `reveal`.
+ *
+ * ⚠️ `cont` is passed IN, not built here. It was built once per SEAT, which is
+ * twice per frame for a two-player board, and it walks the whole battlefield —
+ * and now every permanent's `explainCharacteristics` reads the same index, so
+ * building it per seat would also mean two seats' explanations came from two
+ * different index objects for one state. One per render pass, built by
+ * {@link buildBoardView}.
+ */
+function seatView(
+  state: GameState,
+  seat: PlayerId,
+  name: string,
+  reveal: boolean,
+  cont: ContinuousIndex,
+): SeatView {
   const p = state.players[seat];
-  // The continuous index is built ONCE per seat view rather than once per
-  // permanent: it walks the whole battlefield, and a crowded board of twenty
-  // permanents was rebuilding it twenty times per frame.
-  const cont = indexContinuous(state);
   const permanents = state.battlefield
     .filter((c) => c.controller === seat)
     .map((c) => boardPermanent(state, c, cont));
@@ -344,25 +381,41 @@ function seatView(state: GameState, seat: PlayerId, name: string, reveal: boolea
   };
 }
 
-function stackView(stack: readonly StackObject[]): StackView[] {
-  // Render top-of-stack first (resolves first) so the UI reads top-down.
-  return [...stack].reverse().map((obj) => {
-    if (obj.kind === 'spell') {
-      return {
-        instanceId: obj.instanceId,
-        kind: 'spell' as const,
-        name: obj.card.def.name,
-        controller: obj.controller,
-        targets: obj.targets,
-      };
+/**
+ * Any instance the board may need to NAME or draw a FACE for: every public zone
+ * plus the stack. Used only to resolve a stack object's targets, which are bare
+ * ids — so it walks public information only and never reaches into a hand.
+ */
+function instanceById(state: GameState, id: InstanceId): CardInstance | undefined {
+  for (const perm of state.battlefield) if (perm.instanceId === id) return perm;
+  for (const pid of ['A', 'B'] as const) {
+    const player = state.players[pid];
+    for (const zone of [player.graveyard, player.exile]) {
+      const hit = zone.find((c) => c.instanceId === id);
+      if (hit) return hit;
     }
-    return {
-      instanceId: obj.instanceId,
-      kind: 'trigger' as const,
-      name: obj.label,
-      controller: obj.controller,
-      targets: obj.targets,
-    };
+  }
+  for (const obj of state.stack) {
+    if (obj.kind === 'spell' && obj.instanceId === id) return obj.card;
+  }
+  return undefined;
+}
+
+/**
+ * The stack, as facts. DELEGATED to lane A's `stackEntries` — the ONE producer —
+ * so the panel gets a card id per row and can draw the real face (UX-1). It also
+ * distinguishes an ACTIVATED ability from a TRIGGERED one, which the hand-rolled
+ * version here collapsed into "Trigger" even though core has told them apart
+ * since `TriggeredStackObject.origin` was added.
+ *
+ * ⚠️ The reversal (engine order is bottom-first; the panel reads top-first)
+ * lives in `stackEntries` now. Reversing here as well would put the stack back
+ * the wrong way up.
+ */
+function stackView(state: GameState): readonly StackView[] {
+  return stackEntries(state.stack, {
+    nameOf: (id) => instanceById(state, id)?.def.name ?? `#${id}`,
+    faceOf: (id) => instanceById(state, id)?.def.id ?? null,
   });
 }
 
@@ -377,6 +430,9 @@ export function buildBoardView(
   names: Readonly<Record<PlayerId, string>>,
 ): BoardView {
   const opponentId: PlayerId = viewer === 'A' ? 'B' : 'A';
+  // ONE index for the whole pass — both seats' permanents and every
+  // `explainCharacteristics` read it (see `seatView`).
+  const cont = indexContinuous(state);
   const combat = state.combat
     ? {
         attackers: [...state.combat.attackers],
@@ -392,10 +448,10 @@ export function buildBoardView(
     activePlayer: state.activePlayer,
     priorityPlayer: state.priorityPlayer,
     step: state.step,
-    stack: stackView(state.stack),
+    stack: stackView(state),
     combat,
-    self: seatView(state, viewer, names[viewer], true),
-    opponent: seatView(state, opponentId, names[opponentId], false),
+    self: seatView(state, viewer, names[viewer], true, cont),
+    opponent: seatView(state, opponentId, names[opponentId], false, cont),
     gameOver: state.gameOver,
     winner: state.winner,
   };

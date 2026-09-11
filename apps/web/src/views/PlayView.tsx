@@ -29,7 +29,17 @@ import {
 } from '../lib/play/seat.js';
 import { aiAction, aiMustAct, type AiSeatConfig } from '../lib/play/ai-seat.js';
 import { PilotPicker } from '../components/lab/PilotControls.js';
-import { HOTSEAT_CONFIG } from '../lib/play/play-config.js';
+import { HOTSEAT_CONFIG, SPELL_HOLD_CONFIG } from '../lib/play/play-config.js';
+import { stackEntries } from '../lib/play/stack-view.js';
+import {
+  extendPressure,
+  holdDurationMs,
+  NO_HOLD_PRESSURE,
+  pointerPressure,
+  spellHoldDecision,
+  type HoldPressure,
+  type SpellHold,
+} from '../lib/play/spell-hold.js';
 import { buildBoardView } from '../lib/play/view-model.js';
 import { SetupScreen } from '../components/play/SetupScreen.js';
 import { MulliganScreen } from '../components/play/MulliganScreen.js';
@@ -831,15 +841,79 @@ function LocalPlay({
   // windows never do, and in between a per-step table the player owns decides.
   // Each pass re-renders and re-runs this, walking the game forward to the next
   // window that actually wants a human.
+  /**
+   * §3.143 / UX-16 — HOLDING AN OPPONENT'S SPELL ON SCREEN.
+   *
+   * It lives HERE, beside the two effects it gates, for the same reason the
+   * priority stops do: the hold's entire job is to stop the auto-passer and the
+   * AI seat for a beat, and a hold the board owned would be a pause the walker
+   * could not see. The RULE is the pure, tested `spellHoldDecision`; this is
+   * only its timer.
+   *
+   * ⚠️ NOT A CHANGE TO `shouldStopForPriority`. That predicate returning false
+   * on `!ctx.hasAnyPlay` is correct and §3.119 removed the alternative on
+   * purpose (report 20260901_211359). A hold grants no priority and answers no
+   * question — it just declines to advance for a moment.
+   */
+  const [hold, setHold] = useState<SpellHold | null>(null);
+  const [holdPressure, setHoldPressure] = useState<HoldPressure>(NO_HOLD_PRESSURE);
+  const announcedRef = useRef<Set<InstanceId>>(new Set());
+  const holdTurnRef = useRef<{ turn: number; spent: number }>({ turn: 0, spent: 0 });
+
+  useEffect(() => {
+    if (phase.kind !== 'play' || !session) return;
+    if (hold) return; // one at a time; the timer below is what ends it
+    const turnNumber = session.state.turnNumber;
+    // The per-turn budget resets with the turn, not with the game.
+    if (holdTurnRef.current.turn !== turnNumber) holdTurnRef.current = { turn: turnNumber, spent: 0 };
+    // The TOP of the stack, through lane A's own producer — so "is this an
+    // activated ability or a trigger?" is answered in exactly one place, the
+    // place the stack panel answers it (rule 12). The resolvers are trivial
+    // because this path needs the kind and the controller, not the words.
+    const top =
+      stackEntries(session.state.stack, { nameOf: () => '', faceOf: () => null })[0] ?? null;
+    const decision = spellHoldDecision(
+      {
+        viewer: revealed ?? session.state.priorityPlayer,
+        stackTop: top,
+        viewerWillStop: shouldStopForPriority(stopContextFor(session), stops),
+        announced: announcedRef.current,
+        holdsThisTurn: holdTurnRef.current.spent,
+        gameOver: session.gameOver,
+      },
+      SPELL_HOLD_CONFIG,
+    );
+    if (decision.kind !== 'hold') return;
+    announcedRef.current.add(decision.hold.instanceId);
+    holdTurnRef.current = { turn: turnNumber, spent: holdTurnRef.current.spent + 1 };
+    setHoldPressure(NO_HOLD_PRESSURE);
+    setHold(decision.hold);
+  }, [phase, session, stops, hold, revealed]);
+
+  // The timer. Re-armed whenever the pressure changes, so moving the pointer
+  // onto the card lengthens the hold that is already running rather than
+  // needing a second one.
+  useEffect(() => {
+    if (!hold) return undefined;
+    const handle = window.setTimeout(
+      () => setHold(null),
+      holdDurationMs(holdPressure, SPELL_HOLD_CONFIG),
+    );
+    return () => window.clearTimeout(handle);
+  }, [hold, holdPressure]);
+
   useEffect(() => {
     if (phase.kind !== 'play' || !session || session.gameOver) return;
+    // A hold is up: the board is showing the opponent's spell and the game must
+    // not walk out from under it.
+    if (hold) return;
     const advanced = session.autoAdvancePriority(undefined, (candidate) =>
       shouldStopForPriority(stopContextFor(candidate), stops),
     );
     // Identity-equal when nothing was skipped, so React bails out and this cannot
     // become a render loop.
     if (advanced !== session) setSession(advanced);
-  }, [phase, session, stops]);
+  }, [phase, session, stops, hold]);
 
   // --- the computer's seat -------------------------------------------------------
   //
@@ -864,6 +938,11 @@ function LocalPlay({
 
   useEffect(() => {
     if (!ai || !aiPilot || !session || phase.kind !== 'play') return;
+    // §3.143 / UX-16 — while an opponent's spell is held on screen the computer
+    // does not get to move either. Gating only the auto-passer would let the AI
+    // pass priority underneath the announce card and resolve the very spell the
+    // player is being shown, which is the bug wearing a new hat.
+    if (hold) return;
     if (!aiMustAct(session, ai.seat)) return;
     const handle = window.setTimeout(() => {
       const action = aiAction(session, aiPilot, aiRng);
@@ -875,7 +954,7 @@ function LocalPlay({
       setSession(result.rejected ? session.passPriority().session : result.session);
     }, HOTSEAT_CONFIG.aiThinkMs);
     return () => window.clearTimeout(handle);
-  }, [ai, aiPilot, aiRng, session, phase]);
+  }, [ai, aiPilot, aiRng, session, phase, hold]);
 
   // The computer keeps its opening hand. It has no mulligan policy of its own —
   // pilots decide in-game actions, not whether to ship a seven — so it always
@@ -1038,6 +1117,10 @@ function LocalPlay({
         onConcede={concede}
         stops={stops}
         onStops={changeStops}
+        hold={hold}
+        onHoldPointer={(over) => setHoldPressure((p) => pointerPressure(p, over))}
+        onHoldExtend={() => setHoldPressure(extendPressure)}
+        onHoldRelease={() => setHold(null)}
       />
     </div>
   );
