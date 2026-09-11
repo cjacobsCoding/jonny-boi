@@ -263,6 +263,16 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-09-11 integrator: ⚠️ **TWO SESSIONS ARE BOTH ON SPLIT SECOND — reconcile before landing a
+  second definition.** The other session has uncommitted work in the PRIMARY checkout
+  (`packages/ai/src/split-second-pilot.test.ts` + ~138 lines in `heuristic.ts`), and
+  `fix/soak-violations-sweep` was dispatched to fix the same thing from the soak side (seed
+  3736754678 trips `legalActionsOnly` AND `noRejectedActions` together — the offer and apply paths
+  disagreeing about what CR 702.82 forbids). **Whoever lands second: check by ID and by SYMBOL what
+  already exists, and DROP your copy rather than adding a rival** — `feat/trigger-body-templates-v2`
+  did exactly that in September (2 of its 7 commits had already shipped under different names) and
+  it is the reason the rule table has one answer per question. One concept, one definition.
+
 - 2026-09-08 integrator: `fix/wrapped-effect-roles` ✅ MERGED — DESIGN §3.138. USER-REPORTED: Fiend
   Hunter classified as `recursion`, not `removal`. Cause: `primitivesOf` read effects one level deep and
   several primitives are WRAPPERS carrying the payload in a nested `effects` param (`mayEffects`,
