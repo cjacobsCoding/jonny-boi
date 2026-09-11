@@ -32,10 +32,10 @@ import {
   type GameAction,
   type GameState,
   type PlayerId,
-  maxLandPlaysFor,
 } from '@jonny-boi/core';
 import { SAMPLE_DECKS } from '../data/decks/index.js';
 import { loadDeck } from './deck.js';
+import { createLandDropCapWatch } from './land-drop-cap.js';
 
 const pool = loadCardPool({ onWarn: () => {} });
 const registry = buildRegistry();
@@ -146,15 +146,10 @@ function checkInvariants(state: GameState): { invariant: string; detail: string 
   }
 
   // --- "I played four lands this turn" --------------------------------------
-  for (const pid of PLAYER_IDS) {
-    const played = state.players[pid].landsPlayedThisTurn;
-    // The cap is the BASE plus every "play an additional land" permanent the
-    // seat controls — the engine's own answer, so this audit cannot disagree
-    // with the rule it is auditing.
-    if (played > maxLandPlaysFor(state, pid, DEFAULT_RULES)) {
-      record('land drops are capped', `${pid} played ${played} lands this turn`);
-    }
-  }
+  // NOT here: the count and the cap are read at different moments and no single
+  // state holds both (`land-drop-cap.ts`). The game loop folds every settled
+  // state through one running judgement instead — the SAME one the soak uses, so
+  // the two audits cannot answer this differently.
 
   // --- combat bookkeeping ----------------------------------------------------
   // NOTE: an attacker or blocker LEAVING the battlefield mid-combat is legal and
@@ -214,6 +209,7 @@ function auditGame(deckAName: string, deckBName: string, seed: number): Violatio
   const originalIds = new Set(allInstances(state).map((e) => e.inst.instanceId));
 
   let lastTurn = state.turnNumber;
+  const landDropCap = createLandDropCapWatch(DEFAULT_RULES);
 
   for (let i = 0; i < MAX_ACTIONS && !state.gameOver; i++) {
     const legal = generateLegalActions(state, DEFAULT_RULES);
@@ -230,6 +226,8 @@ function auditGame(deckAName: string, deckBName: string, seed: number): Violatio
     state = applyAction(state, action, DEFAULT_RULES, registry).state;
 
     const found = checkInvariants(state);
+    const landDrops = landDropCap.check(state);
+    if (landDrops) found.push({ invariant: 'land drops are capped', detail: landDrops });
 
     // Turn-boundary invariants: things a player checks the instant their turn
     // starts. Evaluated once, the moment the turn number changes.
