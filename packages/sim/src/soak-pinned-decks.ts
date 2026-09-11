@@ -277,12 +277,71 @@ export const PINNED_113343071: PinnedMatchup = {
     },
 };
 
+/**
+ * Seed 3791358276 — DESIGN §3.141. B's Bog Initiate prints "{1}: Add {B}", the
+ * one rider-free mana exchange in the pool the pilot could fund out of its own
+ * output; A is the URG deck that gave it the turns to do it in.
+ */
+export const PINNED_3791358276: PinnedMatchup = {
+  A: {
+      name: "soak-mixed-3791358276",
+      archetype: "soak/URG",
+      seed: 3791358276,
+      colors: ["U","R","G"],
+      cards: [
+        { cardId: "226555ba-22af-45f1-a3f4-d265f8685dd5", count: 4 },
+        { cardId: "b6a79dc7-ce46-41f7-9375-8d12afe6355a", count: 1 },
+        { cardId: "87193af5-4b6b-48d0-9b75-8171bb1d6e53", count: 2 },
+        { cardId: "fb1e610e-a4a2-460b-8e4c-13674badbce3", count: 1 },
+        { cardId: "f341ed2c-353b-49a3-b200-94ae43cb8e24", count: 4 },
+        { cardId: "20a97cda-42b2-44f1-8e77-f64dd1c98f6f", count: 4 },
+        { cardId: "de8f4d5b-ea3c-4d01-b163-2fcfb1bcca8e", count: 2 },
+        { cardId: "092bfc5f-8002-43da-8e70-c19fccfe54ac", count: 2 },
+        { cardId: "30f40e38-2fcc-4927-9ce2-2080fa2d832c", count: 3 },
+        { cardId: "fd61f469-5377-4bc1-a42b-dd66ca4ede1d", count: 3 },
+        { cardId: "2fa39646-a609-4b37-b8de-97893ae43c49", count: 3 },
+        { cardId: "7ee07266-a95d-4cd8-9863-1664922e9490", count: 1 },
+        { cardId: "cf16600a-c2a5-49e4-89e2-260cfaf58b52", count: 4 },
+        { cardId: "dd222c07-0b28-41cb-9237-ad7991ab078f", count: 1 },
+        { cardId: "b2c6aa39-2d2a-459c-a555-fb48ba993373", count: 4 },
+        { cardId: "a3fb7228-e76b-4e96-a40e-20b5fed75685", count: 11 },
+        { cardId: "b34bb2dc-c1af-4d77-b0b3-a0fb342a5fc6", count: 10 },
+      ],
+    },
+  B: {
+      name: "soak-mixed--969973141",
+      archetype: "soak/B",
+      seed: -969973141,
+      colors: ["B"],
+      cards: [
+        { cardId: "3fd2f8b3-62f3-4e52-ae17-dd0a61bc0e26", count: 2 },
+        { cardId: "c53a55ec-0ada-4fc1-9de4-d4daa1ae4546", count: 3 },
+        { cardId: "eaedd5c8-03c6-4bbb-bf83-632551830bd4", count: 4 },
+        { cardId: "1b49b009-e6f2-494a-9235-f5c25c2d70a9", count: 1 },
+        { cardId: "25976da8-338d-4f46-b8ea-78a0aa3daa35", count: 2 },
+        { cardId: "8962dc3b-24ca-4c3c-ba1d-933c29cf7b73", count: 3 },
+        { cardId: "77eafe49-b9c5-461d-89c5-cec217dd2974", count: 4 },
+        { cardId: "be8956d0-5502-415d-bead-d8bbddf9871d", count: 2 },
+        { cardId: "8a9c29bf-a177-40d5-9ade-129221222900", count: 3 },
+        { cardId: "00ac1759-d4cc-41d5-a9b7-a89b80d2190c", count: 3 },
+        { cardId: "1071691c-5c65-42d4-ac96-d302185ca678", count: 3 },
+        { cardId: "342ad189-b221-493c-b2c1-73b63246ab47", count: 2 },
+        { cardId: "cf605c8e-e59f-4f49-bb55-1824e7eadec0", count: 1 },
+        { cardId: "af3da2c6-29ed-4563-8bae-d1cc05df8897", count: 1 },
+        { cardId: "33145080-077e-4231-96ca-e8b1852b6380", count: 2 },
+        { cardId: "bbb5d40b-f0e1-4e98-b4d3-1ee2cfa5b579", count: 1 },
+        { cardId: "56719f6a-1a6c-4c0a-8d21-18f7d7350b68", count: 23 },
+      ],
+    },
+};
+
 /** Every pinned matchup, by the seed it was found at. */
 export const PINNED_MATCHUPS: Readonly<Record<number, PinnedMatchup>> = Object.freeze({
   4222011655: PINNED_4222011655,
   1390617766: PINNED_1390617766,
   3434778477: PINNED_3434778477,
   113343071: PINNED_113343071,
+  3791358276: PINNED_3791358276,
 });
 
 /** See {@link PinnedIdentity} — cards from BOTH decks, or the row is not pinned. */
@@ -299,4 +358,10 @@ export const PINNED_IDENTITIES: Readonly<Record<number, PinnedIdentity>> = Objec
   // The two copy spells are both in B; Heraldic Banner is A's, and adding it is
   // what turned this row from decorative into a guard (see PinnedIdentity).
   113343071: ['Reverberate', "Narset's Reversal", 'Heraldic Banner'],
+  // §3.141. Bog Initiate is the loop, and it is B's alone — so B is named twice
+  // over (Nezumi Cutthroat is the second) and A twice over (Prodigal Pyromancer,
+  // Tar Pitcher). Naming only the Initiate would leave this row green with A
+  // swapped for any deck at all, which is the escape that got past the sabotage
+  // pass once already.
+  3791358276: ['Bog Initiate', 'Nezumi Cutthroat', 'Prodigal Pyromancer', 'Tar Pitcher'],
 });

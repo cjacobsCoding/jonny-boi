@@ -2889,6 +2889,107 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.141 An ability that gives back exactly what it takes — the pilot's repeatable no-op — ✅ done
+
+§3.140 un-blinded `gameCanEnd` and the first sweep with the door watched found **12 violations over
+2,000 deep-tier games — eight of them one card.** Every one of the eight was the pilot activating
+**Bog Initiate** roughly 665 times in a single turn (`abilityActivated ×667`, `manaAdded ×688`) until
+CR 104.4b drew the game. Its printed ability really is `{1}: Add {B}` (Invasion), the compiler is
+correct, and the activation is perfectly **legal** — the pilot simply paid `{1}` with the `{B}` it had
+just made, for ever, for no change at all.
+
+**The defect is a category error in pricing, not a bad card.** Every scorer in `packages/ai` prices an
+activation by what its EFFECTS are worth, which is right whenever the cost and the payoff are in
+different currencies: you spend mana and get a creature tapped, a card drawn, a body pumped. A mana
+ability is the one shape where cost and payoff are the SAME currency, so pricing only the credit side
+books a profit that does not exist. `addMana` scored `modeManaPerSymbolValue` (4) against a
+`passScore` of 0, the cost never entered the sum, and the ability funded its own next activation.
+
+**The rule, stated so it is safe:** *a pure mana exchange is worth nothing when the pool it would
+leave behind is the pool it started from.* Not "never activate a mana ability twice" — that would be
+wrong and would cost real games, because the very same `{1}: Add {B}` is a genuine COLOUR FIX when
+the pilot holds `{R}` and needs `{B}`. The test is an **equality, not an estimate**, which is what
+makes it narrow enough to be safe: a pool that changes is a pool with strictly fewer ways left to
+change, and an exchange that leaves it identical is one the pilot can repeat for ever without
+progressing.
+
+⚠️ **THE PREDICTION RUNS CORE'S OWN `payCost`, WITH THE SAME SPEND PURPOSE `applyActivateAbility`
+USES**, rather than a second opinion about which mana a generic pip eats — and that is not
+decoration. Core spends generic in `C,W,U,B,R,G` order, so on a `{B}{R}` pool Bog Initiate's `{1}`
+eats the **black it is about to remake** and the red is never touched: the exchange really does
+nothing there, and a pilot modelling the spend itself would have "fixed" a colour the engine was
+never going to fix. A pinned row in `mana-exchange.test.ts` was first written the other way round;
+the code was right.
+
+⚠️ **ASKED OF THE POOL AS IT WILL BE AT ACTIVATION, NOT AS IT IS.** `bestFundedActivation` plans the
+taps that fund an ability before it commits, so the guard is given the current pool **plus everything
+that plan produces**. A sabotage that made `poolAfterPlan` ignore its plan left every test GREEN: the
+pre-tap pool cannot pay the cost, so the guard ruled "not a no-op", the pilot emitted the tap, and the
+OFFERED path refused the activation one decision later. No loop — but a land spent on nothing, the
+mana stranded at end of step (CR 500.4) and a real spell left a source short. **"The loop stopped" and
+"the pilot plays well" are different claims**; the all-black row now asserts no tap either.
+
+**One predicate, both scorers.** `bestFundedActivation` (the ability whose mana is not yet floating)
+and `bestOfferedActivation` (§3.55 — the ability the engine already offers) can each choose this
+ability, and both answer through `manaExchangeIsNoOp` — the funded one via the wrapper below, which
+adds the pool prediction and nothing else. Sabotaging either call site alone reproduces the full
+runaway — 662 activations with the offered guard removed, 667 with the funded one — so both are
+pinned, and the replacement for one of them can never be a second opinion about the rule.
+
+📊 **THE CLASS, MEASURED RATHER THAN ASSUMED: 43 printed `addMana` activations in the pool, exactly
+TWO rider-free.** Bog Initiate's `{1}: Add {B}` and **Agent of Stromgald's `{R}: Add {B}`**. The
+second one is the reason this is a shape and not a card name: it can never be a no-op, because black
+mana cannot pay `{R}`, so it is never refused and the pilot uses it every time. Everything else
+carries `{T}`, `Sacrifice ~`, `Sacrifice a …` or a non-mana effect — riders that make an ability
+self-limiting or a real resource conversion, and every one is an explicit exclusion with its reason
+written next to it.
+
+✅ **THE GUARD FOR THE WHOLE CLASS reads the SHIPPED POOL, not a fixture**: every pure exchange must
+either be unable to pay its own cost or be ruled a no-op on a pool made of exactly its own output.
+The card printed tomorrow with Bog Initiate's shape fails there, in a millisecond, instead of in a
+2,000-game soak nobody runs.
+
+📊 **DEEP TIER, 2,000 games: `gameCanEnd` 8 → 0, total violations 12 → 4, and all eight seeds clean on
+BOTH seats.** (3791358276, 3505743309, 437769586, 506638966, 2340004011, 1830547618, 44358381,
+876545993 — replayed through `replaySoakMixedGame`, 16 rows, 0 violations.) **The four that remain are
+the pre-existing, unrelated ones §3.140 reported and did not fix**: split second (two rows, seed
+3736754678 turn 27 upkeep — `castSpell#61 was never offered`), a blocking restriction (seed 3455580742
+— "Bristling Boar can't be blocked by more than one creature") and `landDropCap` (seed 3679986871).
+The deep tier's `breaks no invariant` is therefore still red, for those four and nothing else. Seed
+3791358276 is pinned in `soak.test.ts`, its decklists recorded in `soak-pinned-decks.ts` and its
+identity naming cards from BOTH decks (`Bog Initiate` and `Nezumi Cutthroat` are B's, `Prodigal
+Pyromancer` and `Tar Pitcher` are A's) — swapping either deck turns the row red on identity, checked
+both ways.
+
+📊 **GAUNTLET `"Mono-Red Aggro" --games 40 --seed 99`: BYTE-IDENTICAL before and after — 97/320 =
+30.3%, rows 17 · 14 · 19 · 7 · 8 · 10 · 17 · 5** — both halves re-measured on this branch rather than
+quoted. **And the reason is measured too, not hoped for: none of the nine sample decks prints a
+rider-free `addMana` activation at all**, so the guard cannot fire in those 320 games. A pilot change
+that moves no baseline is only trustworthy when you can say why.
+
+**Not an engine rule, deliberately.** CR 602 lets a player activate `{1}: Add {B}` as often as they
+can pay for it; an engine that refused would be wrong about the game. What is wrong is *choosing* it,
+and that belongs to `packages/ai`.
+
+**The cheap half runs first, and the ordering is owned rather than written at the call site.**
+`bestFundedActivation` runs on every priority decision AND is the MCTS rollout policy, where
+`heuristic.ts`'s own header records that everything it allocates is multiplied by ~20,000 per
+look-ahead decision. Predicting the post-tap pool costs a battlefield scan and a pool copy per planned
+tap — worth paying for the two cards that could loop and for nothing else — so
+`manaExchangeIsNoOpOnceFunded` refuses on `pureManaExchange`'s one property read before it builds
+anything. **Deliberately NOT benchmarked, and the reason is the honest one**: the committed allocation
+probe (`core/bench/scavenge-probe.ts`) plays RANDOM actions rather than the pilot, so it cannot see
+this path at all, and wall clock on this shared box is worthless (§3.91 measured why). The claim here
+is "strictly less work", not a measured speed-up — and the decisions are pinned identical either way
+(all sixteen replays, all sixteen unit rows).
+
+**Sabotages: 11 run, ONE escaped** — the `poolAfterPlan` one above, which was a real hole in the tests
+and is now pinned. A twelfth finding along the way, reported rather than fixed: `test-support.ts`'s
+`createTestRegistry` registers only `dealDamage`, so a fixture that resolves any other primitive gets
+a silent no-op — this file's first draft drove the pilot correctly, watched the ability resolve, and
+found no mana in the pool. The new tests use `buildRegistry()` (the real bodies) and say why at the
+call site.
+
 ### 3.140 The guard that could not see its own class — a runaway leaves by the TURN bound — ✅ done
 
 §3.32 handed §3.33 three soak games that "burned the 6,000-action cap without ending". §3.33 fixed the

@@ -123,6 +123,10 @@ import { resolutionValueContext, valueOfEffects, valueOfMode } from './effect-va
 import { answerChoiceHeuristically, safeFallbackAction } from './choices.js';
 import { bestLandDrop, describeLandDrop, rankLandDrops, totalAvailableMana } from './land-sequencing.js';
 import { manaPreferenceOf } from './mana-preference.js';
+// §3.141 — the ability that gives back exactly what it takes. ONE predicate, read
+// by every scorer that can choose an activation, so a mana ability the pilot must
+// not repeat cannot be refused on one path and taken on another.
+import { manaExchangeIsNoOp, manaExchangeIsNoOpOnceFunded } from './mana-exchange.js';
 import type { DecisionContext, DecisionTrace, Pilot, PilotView } from './pilot.js';
 import type { HeuristicWeights } from './weights.js';
 // poison family (§3.105): the two lethal clocks, kept apart.
@@ -1268,6 +1272,10 @@ function bestOfferedActivation(
     if (ability.cost.loyalty !== undefined) continue;
     if (fetchesALand(ability)) continue;
     if (source!.def.attachment !== undefined) continue;
+    // §3.141 — the engine offers this one because the pool ALREADY pays for it,
+    // so the pool it would leave behind is decidable right here, with no plan to
+    // predict. An exchange that leaves it identical is the runaway.
+    if (manaExchangeIsNoOp(ability, source!.def, view.players[me].manaPool)) continue;
     cards ??= cardValueContext(view as GameState, index);
     const score = valueOfEffects(ability.effects, {
       state: view as GameState,
@@ -1435,6 +1443,14 @@ function bestFundedActivation(
 
       const plan = planManaPayment(view as GameState, me, mana, legalActions, perm.def, 'activate', manaPreferenceOf(weights));
       if (!plan) continue; // cannot fund it right now
+
+      // §3.141 — asked of the pool AS IT WILL BE WHEN THE ABILITY IS ACTIVATED,
+      // which is the current pool plus everything this plan taps for. Asking
+      // against the pre-tap pool would let the pilot spend a land on the first
+      // tap and only then discover the activation was worthless: the mana is
+      // stranded (pools empty at end of step) and the source a real spell wanted
+      // is gone. Deciding before the tap costs nothing and strands nothing.
+      if (manaExchangeIsNoOpOnceFunded(ability, perm.def, view, me, plan)) continue;
 
       // The activation itself is taken from the ENGINE's menu, never rebuilt —
       // see `offeredActivation`. When mana still has to be tapped there is no
