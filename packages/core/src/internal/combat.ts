@@ -347,15 +347,13 @@ export function illegalBlockDeclaration(
   for (const attacker of attackers) {
     const keywords = kw(attacker, index);
     if (keywords.mustBeBlocked === true || keywords.blockedByAllAble === true) anyRequirement = true;
-    // The COUNT half (CR 509.1b) — "except by N or more" and "by no more than N"
-    // — is `blockerCountProblem`'s single answer, which is also the one a pilot
-    // asks through `blockerCountAllowed`. Both bounds are read off the keyword
-    // set already in hand; the early-out for an attacker that prints neither
-    // lives inside it, so the ordinary board still walks no blocks array.
-    const assigned =
-      keywords.maxBlockers === undefined && minimumBlockersFor(keywords) === 0
-        ? 0
-        : blocks.filter((b) => b.attacker === attacker.instanceId).length;
+    // The COUNT half (CR 509.1b) — "except by N or more" and "by no more than
+    // N" — is `blockerCountProblem`'s single answer, and the SAME one a pilot
+    // asks through `blockerCountAllowed`. An attacker that prints neither bound
+    // is skipped before the blocks array is walked, which is what keeps the
+    // ordinary board at one keyword read and no allocation.
+    if (minimumBlockersFor(keywords) === 0 && keywords.maxBlockers === undefined) continue;
+    const assigned = blocks.filter((b) => b.attacker === attacker.instanceId).length;
     const countProblem = blockerCountProblem(attacker, keywords, assigned);
     if (countProblem !== undefined) return countProblem;
   }
