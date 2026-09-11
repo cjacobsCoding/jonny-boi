@@ -2889,6 +2889,95 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.141 Three soak violations, one shape — a rule answered somewhere other than by the rule — ✅ done
+
+The 2,000-game deep-tier sweep surfaced twelve violations. Eight were one pilot defect owned by a
+sibling branch. The other four were three unrelated bugs — and diagnosing them turned out to be the
+same sentence three times: **something answered a rules question without asking the rule.**
+
+**This section is §3.141, not §3.140**: the sweep that produced these reports is §3.140 on the
+sibling branch, so the number moved rather than collide (the §3.31 precedent).
+
+Every claim below is from a replay of the reported seed through `replaySoakMixedGame` (~200 ms per
+game), instrumented until the game said what it was doing. Nothing here was inferred from the
+violation text alone.
+
+**1. Split second (CR 702.61) — the pilot BUILT a cast the menu had withdrawn.** Seed 3736754678,
+turn 27: B cast its own Siege Smash (split second) in its upkeep, then tapped two lands and cast
+Mouser Attack! in response to it. Two invariants fired together, which is the tell: the offered menu
+was `[passPriority, tapForMana, tapForMana]` — `generateLegalActions` had correctly withdrawn every
+cast — so the action was both never-offered (`legalActionsOnly`) and refused by the apply path
+(`noRejectedActions`). The offer and apply sides AGREED; the pilot was the third opinion. It does not
+pick casts off the menu at all: `scoredSpellGoals` scores the hand and `castActionFor` constructs the
+action, deriving castability from a comment that says in as many words "mirrors core's timing gate".
+The mirror had no split-second clause. **Fixed** by asking `splitSecondOnStack` — already exported
+for exactly this — once, at the seam in `decide` that every constructed play passes through, rather
+than threading a fourth condition through each scorer. Passing is the whole answer: mana abilities
+stay legal but buy nothing, and the combat declarations core still offers under the lock are decided
+above that line.
+
+**2. CR 509.1b's cap — the count rule lived twice, and the second copy read one bound.** Seed
+3455580742, turn 12: the gang-block search put Millennial Gargoyle AND Screeching Sliver on a
+Bristling Boar ("can't be blocked by more than one creature"), the engine refused the whole
+declaration, and after three rejections the harness passed priority and the defender took the attack
+unblocked. Core's `illegalBlockDeclaration` reads BOTH bounds; the pilot's `requiredBlockerCountFor`
+read only the minimum, so a cap looked like no constraint at all. **This is the fifth printing of one
+defect** — the pilot's block mirror has been core's rule minus a clause for protection (§3.102),
+landwalk (§3.110), the requirement SIZE (§3.121), and now the cap — so the fix is not another clause:
+
+- CR 509.1b is now ONE core predicate, `blockerCountProblem`, asked by `illegalBlockDeclaration` and
+  exported to pilots as `blockerCountAllowed(attacker, count, index)` — the question an AI assigning
+  N blockers actually has, which is why every AI kept building its own.
+- The pilot's `canBlockByEvasion` — a ~70-line hand copy of `canBlock` — is now a one-line
+  delegation. There is nothing left to drift.
+- `chooseBlock` ends by handing its finished blocks to `illegalBlockDeclaration`, the engine's own
+  judge, and shedding optional pairs (whole attacker-groups, never a core-required block) until they
+  stand. **That gate is load-bearing and was measured to be**: with the count seam reverted to the
+  minimum-only defect and the gate left in, the pinned seed still replays clean; only with both
+  broken does it fail. The next forgotten clause costs a block, not a combat.
+
+**3. `landDropCap` — the check was wrong, not the engine.** Seed 3679986871, turn 17: "B played 2
+lands this turn". B had, and both were legal. B controlled Icetill Explorer, which prints *both*
+"you may play an additional land" *and* "you may play lands from your graveyard"; on turn 16 B played
+a Forest from hand and a Swamp its own landfall trigger had just milled. It blocked with the Explorer
+on turn 17 and lost it. The invariant then compared a count accumulated on turn 16 against a cap
+re-read on turn 17 — `landsPlayedThisTurn` is cleared only for the seat whose turn is BEGINNING, and
+`additionalLandPlays` comes from a permanent that can die. **No single state holds both halves of
+that comparison**, so the check was answering a question about a history from a snapshot. `maxLandPlaysFor`
+was already being asked (§3.71 fixed the config-vs-engine half of this); asking the right function at
+the wrong moment is the half that was left.
+
+**Fixed** by `packages/sim/src/land-drop-cap.ts`: one running judgement, folded over every settled
+state, that measures the count against **the largest cap that seat has been seen to hold since its
+own turn began**. That is an upper bound on what was legal at the moment of any of those plays, so a
+drop that escaped the counter still shows up while a legal turn cannot be reported. It is stateful on
+purpose — "was this legal?" is a question about a history. Both consumers use the same one: the soak
+watcher and `rules-audit.test.ts` each carried their own copy of the flat comparison.
+
+**What is GUARDED.** Three pinned soak rows (seeds above, decklists pinned so pool churn cannot
+re-deal them); `blockerCountAllowed` exercised on both bounds, on Pathrazer's three, and on a body
+with a cap AND a minimum that nobody can legally block, plus an explicit "agrees with the judge that
+decides the real declaration" pairing; the gang search declining a pair on a capped attacker with the
+CONTROL that proves it takes the same pair uncapped; `legalizeBlocks` handed a refused declaration
+directly, because a safety net only reached when something else is broken is a net nobody can prove
+is there; the pilot passing into a lock with the control that proves it wanted to cast; and the
+land-drop watch on the two false positives that motivated it plus the two violations it must still
+report.
+
+**And the identity guard got a guard.** A matchup's identity now lives ONCE, in `PINNED_IDENTITIES`
+beside the decklists rather than inline in the test table. On top of it, `soak.test.ts` asserts that
+every entry names a card from BOTH decks — a row that names only one deck's cards is green for a
+match whose OTHER deck was swapped wholesale, which is the same escape the identity assertion exists
+to close, one deck deeper. Two existing rows named only one side.
+
+**Measured.** `npm run verify` exit 0, `npm run build` exit 0, full suite 0 failed. Eight sabotages
+run, all RED where a guard claims coverage — including one deliberately reported as GREEN: sabotaging
+the SHARED count rule leaves the blocking row passing, because the engine and the pilot then agree
+and nothing is rejected. That row guards the pilot's AGREEMENT with core, not core's rule; core's own
+rule is guarded in `combat-keyword-family.test.ts`, which does go red. The gauntlet at seed 99 is
+**byte-identical: 97/320 = 30.3%, rows 17 · 14 · 19 · 7 · 8 · 10 · 17 · 5.** The deep tier went from
+**12 violations to 4** — the eight that remain are the sibling branch's single pilot defect.
+
 ### 3.139 Trigger BODIES — rescuing a stranded branch, and the sentence after the comma — ✅ done
 
 A branch built three weeks ago (`feat/trigger-body-templates`, tip `b1ea6c2`) was killed by a usage
