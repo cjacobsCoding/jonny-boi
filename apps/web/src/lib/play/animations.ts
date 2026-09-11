@@ -10,7 +10,8 @@
  * - zoneChange lib→grave  → a mill: the card's face flying library → graveyard.
  * - zoneChange hand→grave → a discard: the face flying hand → graveyard.
  * - zoneChange battlefield→graveyard/exile → a death/removal: the tile's ghost
- *   fading and shrinking where it stood.
+ *   fading and shrinking where it stood — HELD, when `deathHoldMsFor` says so,
+ *   until the damage that killed it has visibly landed (UX-15, §3.143).
  *
  * ## Hidden information
  * A DRAW descriptor deliberately carries NO card identity — not for the
@@ -53,6 +54,12 @@ export interface AnimationDescriptor {
   readonly name?: string;
   /** How many sprites precede this one in its batch (stagger slot). */
   readonly order: number;
+  /**
+   * Extra ms this sprite waits ON TOP of its stagger slot, so a death can be
+   * held until the damage that caused it has visibly landed (UX-15). Absent
+   * means 0; see {@link DeriveAnimationsOptions.deathHoldMsFor}.
+   */
+  readonly delayMs?: number;
 }
 
 /** What {@link deriveAnimations} needs beside the events. */
@@ -70,6 +77,17 @@ export interface DeriveAnimationsOptions {
    * which is the safe fallback (the log still tells the story).
    */
   readonly lookup: (id: InstanceId) => AnimationCardInfo | undefined;
+  /**
+   * How long this instance's DEATH must wait for the damage that killed it to
+   * land, ms (UX-15). Omitted (or 0) means "vanish immediately", which is right
+   * for a Doom Blade and wrong for a creature that just ate combat damage: a
+   * ghost that fades while the hit is still in flight tells the player the
+   * creature died of nothing.
+   *
+   * The number comes from `damage-sequence.damageHoldMsFor` — ONE clock shared
+   * by the two layers rather than each guessing at the other's timings.
+   */
+  readonly deathHoldMsFor?: (instanceId: InstanceId) => number;
 }
 
 /**
@@ -86,7 +104,7 @@ export function deriveAnimations(
   for (let i = 0; i < events.length; i++) {
     if (out.length >= ANIMATION_CONFIG.maxPerBatch) break;
     const event = events[i] as GameEvent;
-    const descriptor = descriptorFor(event, `${opts.startIndex + i}`, out.length, opts.lookup);
+    const descriptor = descriptorFor(event, `${opts.startIndex + i}`, out.length, opts);
     if (descriptor) out.push(descriptor);
   }
   return out;
@@ -100,7 +118,7 @@ function descriptorFor(
   event: GameEvent,
   key: string,
   order: number,
-  lookup: DeriveAnimationsOptions['lookup'],
+  opts: DeriveAnimationsOptions,
 ): AnimationDescriptor | undefined {
   if (event.type === 'drawCard') {
     // NO identity on purpose — a draw animates as a card back (hidden info).
@@ -109,8 +127,10 @@ function descriptorFor(
   if (event.type !== 'zoneChange') return undefined;
   const kind = zoneMoveKind(event.from, event.to);
   if (kind === undefined) return undefined;
-  const info = lookup(event.instanceId);
+  const info = opts.lookup(event.instanceId);
   if (info === undefined) return undefined;
+  // Only a DEATH waits: a mill or a discard has no hit in flight to wait for.
+  const hold = kind === 'death' ? (opts.deathHoldMsFor?.(event.instanceId) ?? 0) : 0;
   return {
     key,
     kind,
@@ -119,6 +139,7 @@ function descriptorFor(
     cardId: info.cardId,
     name: info.name,
     order,
+    ...(hold > 0 ? { delayMs: hold } : {}),
   };
 }
 

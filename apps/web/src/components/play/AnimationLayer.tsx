@@ -15,7 +15,19 @@ import {
   type AnimationCardInfo,
   type AnimationDescriptor,
 } from '../../lib/play/animations.js';
-import { ANIMATION_CONFIG } from '../../lib/play/play-config.js';
+import {
+  DAMAGE_BENCH_ROWS,
+  DAMAGE_BENCH_SEAT,
+  DAMAGE_BENCH_SOURCE_ID,
+  DAMAGE_BENCH_TARGET_ID,
+  DAMAGE_BENCH_THIRD_ID,
+  damageHoldMsFor,
+  deriveDamageSequence,
+  type DamageBeat,
+  type DamageEnd,
+} from '../../lib/play/damage-sequence.js';
+import { burstParticleOffsets } from '../../lib/play/vfx-cues.js';
+import { ANIMATION_CONFIG, VFX_CONFIG } from '../../lib/play/play-config.js';
 
 /**
  * The ZONE-CHANGE ANIMATION LAYER (§3.57) — the DOM half of `animations.ts`.
@@ -86,10 +98,22 @@ export function useZoneAnimations(
     const startIndex = seen.current;
     const fresh = events.slice(startIndex);
     seen.current = events.length;
+    // THE SHARED CLOCK (UX-15). A creature killed by combat damage must not
+    // vanish while the hit that killed it is still in flight, so the death ghost
+    // waits for the damage plan derived from THIS SAME batch. Derived here as
+    // well as in `useDamageSequence` on purpose: it is a pure function of one
+    // input, so the two cannot disagree, and that is cheaper (and far less
+    // brittle) than threading a second value through the board's props.
+    const plan = deriveDamageSequence(fresh, { reducedMotion, startIndex });
     // `lookup` swaps identity together with `events` (both derive from the
     // session), so depending on it adds no extra derivations — a lookup-only
     // run sees nothing fresh and is a no-op.
-    const derived = deriveAnimations(fresh, { reducedMotion, startIndex, lookup });
+    const derived = deriveAnimations(fresh, {
+      reducedMotion,
+      startIndex,
+      lookup,
+      deathHoldMsFor: (id) => damageHoldMsFor(plan, id),
+    });
     if (derived.length > 0) setSprites((current) => [...current, ...derived]);
   }, [events, reducedMotion, lookup]);
 
@@ -146,6 +170,15 @@ function flightDurationMs(kind: AnimationDescriptor['kind']): number {
   return kind === 'draw' ? ANIMATION_CONFIG.drawFlightMs : ANIMATION_CONFIG.graveFlightMs;
 }
 
+/**
+ * When a sprite starts: its stagger slot, plus any hold the descriptor carries
+ * (a death waiting for the damage that caused it — see `deathHoldMsFor`). ONE
+ * answer to "when does this sprite go", read by both sprite kinds.
+ */
+function spriteDelayMs(sprite: AnimationDescriptor): number {
+  return sprite.order * ANIMATION_CONFIG.staggerMs + (sprite.delayMs ?? 0);
+}
+
 /** Extra time past the transition before the sprite retires (cheap safety). */
 const RETIRE_SLACK_MS = 80;
 
@@ -177,7 +210,7 @@ function FlightSprite({
   const done = useRef(false);
   const width = ANIMATION_CONFIG.spriteWidthPx;
   const height = Math.round(width * CARD_ASPECT);
-  const delayMs = sprite.order * ANIMATION_CONFIG.staggerMs;
+  const delayMs = spriteDelayMs(sprite);
   const durationMs = flightDurationMs(sprite.kind);
 
   useLayoutEffect(() => {
@@ -268,7 +301,7 @@ function DeathGhost({
   const [leaving, setLeaving] = useState(false);
   const done = useRef(false);
   const durationMs = ANIMATION_CONFIG.deathFadeMs;
-  const delayMs = sprite.order * ANIMATION_CONFIG.staggerMs;
+  const delayMs = spriteDelayMs(sprite);
 
   useLayoutEffect(() => {
     const rect = tileRectOf(sprite.instanceId) ?? anchorRect(boardRootRef.current, `board:${sprite.seat}`);
@@ -308,6 +341,311 @@ function DeathGhost({
   return (
     <div className={`anim-ghost${leaving ? ' anim-ghost--leaving' : ''}`} style={style}>
       {art ? <img src={art} alt="" draggable={false} /> : <span className="anim-ghost__name">{sprite.name}</span>}
+    </div>
+  );
+}
+
+/* ===========================================================================
+ * THE DAMAGE LAYER (UX-15, §3.143) — the DOM half of `damage-sequence.ts`.
+ *
+ * Caleb: "Animations when block phase is over and damage is being distributed
+ * to players and creatures, just like MTGA does it, so you can clearly see
+ * what's happening." The pure fold decided WHAT hit WHAT, in which round, and at
+ * what millisecond; this layer measures the two ends and schedules the paint.
+ *
+ * ## Why this is pure CSS delays and not the two-rAF transition trick above
+ * The flight sprites flip a transition on the next frame because their endpoint
+ * is only known after measurement. A damage beat already knows its whole
+ * timeline from the plan, so each element is mounted once with an
+ * `animation-delay` and `animation-fill-mode: both` — invisible before its beat,
+ * self-cleaning after it. One mechanism, no frame-timing races, and a batch of
+ * ten beats costs ten style objects rather than twenty rAF callbacks.
+ *
+ * ## ⚠️ WHAT LANE D MUST NOT DO (the 3D-scene trap)
+ * `.dmg-layer` is `position: fixed` with raw VIEWPORT coordinates, exactly like
+ * `.anim-layer` and `.vfx-layer`. That is correct only while no ancestor of it
+ * is transformed: a `transform`/`perspective`/`filter` on an ancestor makes that
+ * ancestor the containing block for fixed descendants and silently re-roots all
+ * three layers. So the board's 3D scene wrapper (UX-9) must contain ONLY the
+ * seat regions, and this layer must be mounted as its SIBLING, never inside it.
+ * Measuring the tiles themselves is safe either way — `getBoundingClientRect`
+ * returns the PROJECTED box, so a hit lands on the tile the player can see
+ * (exact in x; in y, the midpoint of the projected top and bottom edges, a
+ * few px off the true centre at the tilts this scene uses — fine for a bloom).
+ * ======================================================================== */
+
+/**
+ * Fold the session's cumulative event log into live damage beats. Baselined at
+ * mount, like both sibling hooks, so a board opened mid-game never replays the
+ * combat that already happened.
+ */
+export function useDamageSequence(events: readonly GameEvent[]): {
+  readonly beats: readonly DamageBeat[];
+  readonly retire: (key: string) => void;
+} {
+  const [beats, setBeats] = useState<readonly DamageBeat[]>([]);
+  const reducedMotion = usePrefersReducedMotion();
+  const seen = useRef<number>(events.length);
+
+  useEffect(() => {
+    if (events.length <= seen.current) {
+      seen.current = events.length; // a rematch's shorter log: re-baseline, don't replay
+      return;
+    }
+    const startIndex = seen.current;
+    const fresh = events.slice(startIndex);
+    seen.current = events.length;
+    const derived = deriveDamageSequence(fresh, { reducedMotion, startIndex });
+    if (derived.length > 0) setBeats((current) => [...current, ...derived]);
+  }, [events, reducedMotion]);
+
+  const retire = useCallback((key: string): void => {
+    setBeats((current) => current.filter((b) => b.key !== key));
+  }, []);
+
+  return { beats, retire };
+}
+
+/** The overlay: one element pair (travelling hit + impact) per live beat. */
+export function DamageLayer({
+  beats,
+  boardRootRef,
+  tileRectOf,
+  onDone,
+}: {
+  beats: readonly DamageBeat[];
+  /** The board container the seat anchors are queried inside (read in effects only). */
+  boardRootRef: RefObject<HTMLElement | null>;
+  /** Last-known battlefield tile rect (a creature killed by this very hit is already gone). */
+  tileRectOf: (id: InstanceId) => DOMRect | undefined;
+  onDone: (key: string) => void;
+}): ReactElement | null {
+  if (beats.length === 0) return null;
+  return (
+    <div className="dmg-layer" aria-hidden="true">
+      {beats.map((beat) => (
+        <DamageBeatView key={beat.key} beat={beat} boardRootRef={boardRootRef} tileRectOf={tileRectOf} onDone={onDone} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Where one end of a hit is on screen.
+ *
+ * A seat aims at its LIFE readout if the board offers one and falls back to the
+ * seat's board row, which every board already anchors. Graceful by construction:
+ * the day `SeatPanel` grows a `life:<seat>` anchor the arcs re-aim themselves
+ * with no code change here, and until then face damage still lands somewhere
+ * honest instead of not animating at all.
+ */
+function endRect(
+  end: DamageEnd,
+  boardRoot: HTMLElement | null,
+  tileRectOf: (id: InstanceId) => DOMRect | undefined,
+): DOMRect | undefined {
+  if (end.where === 'tile') return tileRectOf(end.instanceId);
+  return anchorRect(boardRoot, `${SEAT_LIFE_ANCHOR}:${end.seat}`) ?? anchorRect(boardRoot, `board:${end.seat}`);
+}
+
+/** The anchor a face hit aims at when the board publishes one (see {@link endRect}). */
+const SEAT_LIFE_ANCHOR = 'life';
+
+/** The centre of a rect, in the viewport coordinates the layer paints in. */
+function centrePoint(rect: DOMRect): { x: number; y: number } {
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+}
+
+/** The CSS modifier suffixes a beat earns, in a fixed order so classes are stable. */
+function beatModifiers(beat: DamageBeat): string {
+  const parts: string[] = [];
+  if (beat.outcome === 'prevented') parts.push('prevented');
+  else if (beat.lethal) parts.push('lethal');
+  if (beat.to.where === 'seat') parts.push('seat');
+  if (beat.kind === 'condensed') parts.push('condensed');
+  return parts.join(' ');
+}
+
+/** Prefix the amount with a minus only for a player's life — a creature MARKS damage. */
+function beatText(beat: DamageBeat): string {
+  return beat.to.where === 'seat' ? `−${beat.amount}` : `${beat.amount}`;
+}
+
+/** One beat: measured once, scheduled entirely by CSS delays, retired by a timer. */
+function DamageBeatView({
+  beat,
+  boardRootRef,
+  tileRectOf,
+  onDone,
+}: {
+  beat: DamageBeat;
+  boardRootRef: RefObject<HTMLElement | null>;
+  tileRectOf: (id: InstanceId) => DOMRect | undefined;
+  onDone: (key: string) => void;
+}): ReactElement | null {
+  const [placed, setPlaced] = useState<{ bolt: CSSProperties | null; impact: CSSProperties } | null>(null);
+  const done = useRef(false);
+
+  useLayoutEffect(() => {
+    const boardRoot = boardRootRef.current;
+    const toRect = endRect(beat.to, boardRoot, tileRectOf);
+    if (!toRect) {
+      // The recipient is nowhere measurable (board re-flowed, panel scrolled out
+      // of existence) — skip the beat rather than bloom at the origin. The life
+      // total and the log still tell the story, which is the same fallback both
+      // sibling layers take.
+      onDone(beat.key);
+      return;
+    }
+    const to = centrePoint(toRect);
+    const impact: CSSProperties = {
+      left: to.x,
+      top: to.y,
+      animationDelay: `${beat.startMs + beat.travelMs}ms`,
+      animationDuration: `${beat.impactMs}ms`,
+    };
+    // A condensed beat has many sources and deliberately does not travel; a hit
+    // whose source has already left the board does not travel either.
+    const fromRect = beat.from ? endRect(beat.from, boardRoot, tileRectOf) : undefined;
+    let bolt: CSSProperties | null = null;
+    if (fromRect && beat.travelMs > 0) {
+      const from = centrePoint(fromRect);
+      bolt = {
+        left: from.x,
+        top: from.y,
+        animationDelay: `${beat.startMs}ms`,
+        animationDuration: `${beat.travelMs}ms`,
+        ['--dmg-dx' as string]: `${to.x - from.x}px`,
+        ['--dmg-dy' as string]: `${to.y - from.y}px`,
+      };
+    }
+    setPlaced({ bolt, impact });
+    const timer = window.setTimeout(
+      () => {
+        if (!done.current) {
+          done.current = true;
+          onDone(beat.key);
+        }
+      },
+      beat.startMs + beat.travelMs + beat.impactMs + RETIRE_SLACK_MS,
+    );
+    return () => window.clearTimeout(timer);
+    // Mounted once per beat key; the beat is immutable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [beat.key]);
+
+  if (!placed) return null;
+  const mods = beatModifiers(beat);
+  const cls = (base: string): string =>
+    mods === '' ? base : `${base} ${mods.split(' ').map((m) => `${base}--${m}`).join(' ')}`;
+  return (
+    <>
+      {placed.bolt && (
+        <div className={cls('dmg-bolt')} style={placed.bolt} data-dmg-round={beat.roundIndex}>
+          <span className="dmg-bolt__n">{beatText(beat)}</span>
+        </div>
+      )}
+      <div className={cls('dmg-impact')} style={placed.impact} data-dmg-round={beat.roundIndex}>
+        <span className="dmg-impact__ring" />
+        <span className="dmg-impact__n">{beatText(beat)}</span>
+      </div>
+      {/* The damage spray — the SAME particles `vfx-cues` used to fire at t=0,
+          now fired when the hit actually lands (see the note in vfx-cues.ts). */}
+      {beat.outcome === 'dealt' && beat.to.where === 'tile' && (
+        <div className="vfx-burst vfx-burst--damage" style={{ left: placed.impact.left, top: placed.impact.top }}>
+          {burstParticleOffsets(VFX_CONFIG.burstParticles).map((p, i) => (
+            <span
+              key={i}
+              className="vfx-burst__p"
+              style={
+                {
+                  animationDelay: placed.impact.animationDelay,
+                  animationDuration: placed.impact.animationDuration,
+                  ['--vfx-dx' as string]: `${p.dx}px`,
+                  ['--vfx-dy' as string]: `${p.dy}px`,
+                } as CSSProperties
+              }
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ===========================================================================
+ * THE DAMAGE BENCH (CLAUDE.md rule 3 — "a system isn't done until you can
+ * observe and drive it at runtime").
+ *
+ * It lives HERE, in the layer's own module, because the effects bench
+ * (`EffectsPreview.tsx`) belongs to no lane in this overhaul and four lanes need
+ * rows in it. Packaging the whole thing as ONE self-contained component means
+ * the registration is a single `<DamageBench />` line rather than a shared file
+ * four agents edit at once.
+ *
+ * It drives the REAL fold and the REAL layer: the buttons come from
+ * `DAMAGE_BENCH_ROWS`, a closed table of engine event batches, and each one is
+ * run through `deriveDamageSequence`. What you audition is what a game draws —
+ * the same discipline the sound/VFX bench already states about itself.
+ * ======================================================================== */
+
+/**
+ * Key stride between bench runs. Beat keys are minted from absolute event
+ * indices, so each replay needs its own index space or React reuses an element
+ * that is mid-animation. Comfortably larger than any row's event count.
+ */
+const BENCH_RUN_STRIDE = 1000;
+
+export function DamageBench(): ReactElement {
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [beats, setBeats] = useState<readonly DamageBeat[]>([]);
+  const runs = useRef(0);
+
+  const tileRectOf = useCallback((id: InstanceId): DOMRect | undefined => {
+    const el = stageRef.current?.querySelector(`[data-perm-id="${id}"]`);
+    return el instanceof HTMLElement ? el.getBoundingClientRect() : undefined;
+  }, []);
+
+  const retire = useCallback((key: string): void => {
+    setBeats((current) => current.filter((b) => b.key !== key));
+  }, []);
+
+  const play = useCallback((events: readonly GameEvent[]): void => {
+    const startIndex = ++runs.current * BENCH_RUN_STRIDE;
+    const derived = deriveDamageSequence(events, { reducedMotion: false, startIndex });
+    setBeats((current) => [...current, ...derived]);
+  }, []);
+
+  return (
+    <div className="dmg-bench">
+      <h4 className="dmg-bench__sub">Damage distribution (UX-15)</h4>
+      <p className="dmg-bench__note">
+        Each button replays a real batch of engine events through the real fold —
+        including the two-round read a first-striker produces and the condensed
+        presentation a board-wide combat degrades to.
+      </p>
+      <div className="dmg-bench__grid">
+        {DAMAGE_BENCH_ROWS.map((row) => (
+          <button key={row.id} type="button" className="btn dmg-bench__btn" onClick={() => play(row.events)}>
+            💥 {row.label}
+          </button>
+        ))}
+      </div>
+      <div className="dmg-bench__stage" ref={stageRef} aria-hidden="true">
+        <span className="dmg-bench__tile" data-perm-id={DAMAGE_BENCH_SOURCE_ID}>
+          source
+        </span>
+        <span className="dmg-bench__tile" data-perm-id={DAMAGE_BENCH_TARGET_ID}>
+          target
+        </span>
+        <span className="dmg-bench__tile" data-perm-id={DAMAGE_BENCH_THIRD_ID}>
+          other
+        </span>
+        <span className="dmg-bench__seat" data-anim-anchor={`${SEAT_LIFE_ANCHOR}:${DAMAGE_BENCH_SEAT}`}>
+          face ({DAMAGE_BENCH_SEAT})
+        </span>
+      </div>
+      <DamageLayer beats={beats} boardRootRef={stageRef} tileRectOf={tileRectOf} onDone={retire} />
     </div>
   );
 }
