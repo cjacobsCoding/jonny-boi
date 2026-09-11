@@ -2931,8 +2931,10 @@ mana stranded at end of step (CR 500.4) and a real spell left a source short. **
 
 **One predicate, both scorers.** `bestFundedActivation` (the ability whose mana is not yet floating)
 and `bestOfferedActivation` (§3.55 — the ability the engine already offers) can each choose this
-ability, and both read `manaExchangeIsNoOp`. Sabotaging either one alone reproduces the full runaway
-— 662 activations with the offered guard removed, 667 with the funded one — so both are pinned.
+ability, and both answer through `manaExchangeIsNoOp` — the funded one via the wrapper below, which
+adds the pool prediction and nothing else. Sabotaging either call site alone reproduces the full
+runaway — 662 activations with the offered guard removed, 667 with the funded one — so both are
+pinned, and the replacement for one of them can never be a second opinion about the rule.
 
 📊 **THE CLASS, MEASURED RATHER THAN ASSUMED: 43 printed `addMana` activations in the pool, exactly
 TWO rider-free.** Bog Initiate's `{1}: Add {B}` and **Agent of Stromgald's `{R}: Add {B}`**. The
@@ -2977,9 +2979,9 @@ tap — worth paying for the two cards that could loop and for nothing else — 
 `manaExchangeIsNoOpOnceFunded` refuses on `pureManaExchange`'s one property read before it builds
 anything. **Deliberately NOT benchmarked, and the reason is the honest one**: the committed allocation
 probe (`core/bench/scavenge-probe.ts`) plays RANDOM actions rather than the pilot, so it cannot see
-this path at all, and wall clock on this box is worthless (§3.53). The claim here is "strictly less
-work", not a measured speed-up — and the decisions are pinned identical either way (all sixteen
-replays, all sixteen unit rows).
+this path at all, and wall clock on this shared box is worthless (§3.91 measured why). The claim here
+is "strictly less work", not a measured speed-up — and the decisions are pinned identical either way
+(all sixteen replays, all sixteen unit rows).
 
 **Sabotages: 11 run, ONE escaped** — the `poolAfterPlan` one above, which was a real hole in the tests
 and is now pinned. A twelfth finding along the way, reported rather than fixed: `test-support.ts`'s
