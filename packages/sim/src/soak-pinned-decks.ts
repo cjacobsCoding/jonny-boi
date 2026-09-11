@@ -25,6 +25,27 @@ export interface PinnedMatchup {
   readonly B: SoakDeck;
 }
 
+/**
+ * HOW A TEST RECOGNISES THE GAME IT JUST REPLAYED — one answer, read by every
+ * pinned row (`soak.test.ts`, `loop-runaway.test.ts`).
+ *
+ * "No violations" is also what a replay of the WRONG game reports, so an
+ * outcome-only assertion is green for two completely different reasons. Every
+ * pinned row asserts these card names are in the decklists it played BEFORE it
+ * asserts anything about what happened. The list lives here rather than in each
+ * test because it is a property of the MATCHUP, and two copies of it would
+ * eventually disagree about which game a seed is.
+ *
+ * ⚠️ **NAME CARDS FROM BOTH DECKS.** A row whose identity cards all sit in one
+ * deck survives a substitution of the other, and that is measured rather than
+ * feared: seed 113343071 named only `Reverberate` and `Narset's Reversal`, both
+ * in deck B, and swapping deck A for an unrelated pinned deck left the row fully
+ * GREEN — still reporting the runaway it expected, from a match it was never
+ * meant to play. Every entry below now names at least one card from each side,
+ * and the deck it comes from is written next to it.
+ */
+export type PinnedIdentity = readonly string[];
+
 /** Seed 4222011655. */
 export const PINNED_4222011655: PinnedMatchup = {
   A: {
@@ -262,4 +283,20 @@ export const PINNED_MATCHUPS: Readonly<Record<number, PinnedMatchup>> = Object.f
   1390617766: PINNED_1390617766,
   3434778477: PINNED_3434778477,
   113343071: PINNED_113343071,
+});
+
+/** See {@link PinnedIdentity} — cards from BOTH decks, or the row is not pinned. */
+export const PINNED_IDENTITIES: Readonly<Record<number, PinnedIdentity>> = Object.freeze({
+  // A: the CR 704.5f interaction (Blood Artist held up by a Machete, sacrificed
+  // to Costly Plunder's additional cost). B: the Aura that set the toughness.
+  4222011655: ['Blood Artist', 'Trusty Machete', 'Costly Plunder', 'Weakness'],
+  // A: the copy spell and the real spell under it. B: a creature only this
+  // opponent runs, so substituting either deck breaks the row.
+  1390617766: ['Twincast', 'Dream Twist', 'Frolicking Familiar'],
+  // Reverberate is in BOTH decks here, which is why it cannot identify either:
+  // Invoke the Firemind is A's alone and Font of Mythos is B's alone.
+  3434778477: ['Reverberate', 'Invoke the Firemind', 'Font of Mythos'],
+  // The two copy spells are both in B; Heraldic Banner is A's, and adding it is
+  // what turned this row from decorative into a guard (see PinnedIdentity).
+  113343071: ['Reverberate', "Narset's Reversal", 'Heraldic Banner'],
 });

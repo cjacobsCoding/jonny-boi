@@ -139,11 +139,82 @@ export const SOAK_MAX_STACK_DEPTH = 100;
  * The fraction of soaked games allowed to end in a turn-cap timeout draw.
  *
  * Random decks stall more than curated ones — a pile of defenders really can go
- * to turn 60 — so zero is the wrong bar. What is NOT allowed is the ACTION cap
- * (see {@link SOAK_MAX_ACTIONS_PER_GAME}), which no legitimate game reaches and
- * which is the signature of "the game cannot end".
+ * to turn 60 — so zero is the wrong bar. What is NOT allowed is either RUNAWAY
+ * bound: the game-wide action cap ({@link SOAK_MAX_ACTIONS_PER_GAME}) or the
+ * per-turn one that draws by CR 104.4b. Both are the signature of "the game
+ * cannot end", and both are `gameCanEnd` violations — see DESIGN §3.140 for the
+ * years this invariant spent watching only the first of them.
  */
 export const SOAK_MAX_TIMEOUT_RATE = 0.35;
+
+/**
+ * How many event types a runaway violation names as EVIDENCE.
+ *
+ * A `loop` outcome is inferred from an action counter, so the soak can never say
+ * WHY a turn overran — but it can say what the game was full of, and that is the
+ * whole difference between a row a reader can rule on and a row nobody can. The
+ * types are read off the game's own traffic rather than out of a list, so a new
+ * event type becomes evidence the day it is first emitted.
+ *
+ * Four, measured on the two known runaway shapes: the copy mirror reports
+ * `choiceAsked ×665, choiceAnswered ×664, spellCopied ×661` and the Bog Initiate
+ * turn reports `manaAdded ×688, abilityActivated ×667, triggeredAbilityResolved
+ * ×665` — in both cases the culprit is third, so three would sit exactly on the
+ * boundary. A reader who needs more replays the seed.
+ */
+export const SOAK_RUNAWAY_EVIDENCE_TYPES = 4;
+
+/**
+ * Events the runaway evidence LEAVES OUT — the engine's bookkeeping spine.
+ *
+ * ⚠️ Without this the evidence reports that the engine was running. All three
+ * scale with the ACTION COUNT by construction — a priority pass per window, an
+ * effect per resolution, a stack object leaving the stack — so a game that spent
+ * 2,000 actions inside one turn is guaranteed to have them as its top three
+ * whatever the loop was. Measured on both known runaways: they buried
+ * `spellCopied ×661` at rank 6 and `abilityActivated ×667` at rank 4, which is
+ * the difference between a row somebody can rule on and a row nobody can.
+ *
+ * A type belongs here ONLY if every action emits it. Anything that names what the
+ * game was DOING — a spell copied, an ability activated, a question answered —
+ * is evidence however loud it is, and `choiceAsked` in particular is the closest
+ * thing the soak has to a mandatory-loop test: CR 104.4b's draw is compulsory at
+ * every step, and hundreds of answered questions is somebody choosing to go on.
+ */
+export const SOAK_RUNAWAY_NOISE_EVENTS: ReadonlySet<GameEvent['type']> = new Set([
+  'priorityPassed',
+  'effectApplied',
+  'stackResolved',
+]);
+
+/**
+ * THE ONE FACT THAT DECIDES A RUNAWAY — was the loop CHOSEN or COMPULSORY.
+ *
+ * CR 104.4b draws a loop no player can decline; a pilot that will not stop is
+ * answering the same question over and over. The engine cannot rule between
+ * them and must not try — but it does know which of the two events each step
+ * emitted, and the split is measured, not rhetorical:
+ *
+ *  - the copy mirror (a pilot that will not stop) — `choiceAnswered ×664`,
+ *    `choiceAutoAnswered ×0`. Every step was a decision somebody made.
+ *  - Dualcaster Mage + Rite of Replication (CR 104.4b) — `choiceAnswered ×398`
+ *    for the whole game against `choiceAutoAnswered ×1,980` inside the loop.
+ *    Nobody was offered anything: there was one legal option each time.
+ *
+ * Reported on every runaway row rather than left to the traffic list, which
+ * ranks by volume and would have dropped `choiceAutoAnswered` off the end of the
+ * Dualcaster row at rank five — the one line that made it ruleable.
+ *
+ * ⚠️ It rules only a loop made of QUESTIONS. All eight Bog Initiate runaways the
+ * deep tier found read 0 and 0, because activating a mana ability 667 times asks
+ * nobody anything — so the report says the split cannot rule that row rather
+ * than printing two zeroes beside a rule of thumb, and the reader falls back to
+ * the traffic (`abilityActivated ×667`).
+ */
+export const SOAK_RUNAWAY_CHOSEN_EVENT = 'choiceAnswered' satisfies GameEvent['type'];
+
+/** The other half of {@link SOAK_RUNAWAY_CHOSEN_EVENT} — one legal option, nobody asked. */
+export const SOAK_RUNAWAY_FORCED_EVENT = 'choiceAutoAnswered' satisfies GameEvent['type'];
 
 // ---------------------------------------------------------------------------
 // The mechanic inventory.
@@ -1035,7 +1106,20 @@ export const SOAK_INVARIANTS = {
   legalActionsOnly: 'every action a pilot submits came from generateLegalActions',
   noRejectedActions: 'the engine never rejects an action it offered',
   noUnsupportedEffect: 'no pool card resolves an effect the registry cannot provide',
-  gameCanEnd: 'a game never reaches the action cap',
+  /*
+   * ⚠️ "NEVER REACHES THE ACTION CAP" WAS NOT THE SAME QUESTION, and the gap
+   * between the two silently switched this invariant off (DESIGN §3.140).
+   *
+   * The game-wide cap is 6,000 actions; the per-TURN bound CR 104.4b's draw hangs
+   * off is 2,000. A runaway therefore trips the per-turn bound FIRST, is recorded
+   * as a rules-legal `loop` draw, and never touches the cap — so the check that
+   * exists to catch "this game cannot end" reported green for exactly that.
+   * Measured: with §3.33's copy-chain valuation reverted, seed 1390617766
+   * resolves 661 spell copies in ONE game and every soak assertion stays green.
+   *
+   * So the invariant is about how a game ENDED, not about which counter it hit.
+   */
+  gameCanEnd: 'a game ends on the board, never on a runaway bound',
   stackEmpties: 'the stack empties before the turn ends',
   stackDepth: 'the stack never runs away',
   uniqueZones: 'an instance is in exactly one zone',
