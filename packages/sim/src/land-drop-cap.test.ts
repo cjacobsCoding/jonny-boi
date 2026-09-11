@@ -1,5 +1,5 @@
 /**
- * THE LAND-DROP CAP CHECK, ON THE POSITIONS THAT BROKE IT (DESIGN §3.141).
+ * THE LAND-DROP CAP CHECK, ON THE POSITIONS THAT BROKE IT (DESIGN §3.142).
  *
  * `land-drop-cap.ts` explains why a snapshot cannot answer "did this player play
  * too many lands". These are the two states that proved it, plus the two the

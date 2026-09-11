@@ -164,7 +164,7 @@ describe('the gang-block search respects the SIZE of a block requirement', () =>
 describe('the gang-block search respects the CAP on a block requirement', () => {
   it("proposes no PAIR on an attacker that can't be blocked by more than one creature", () => {
     /*
-     * THE INCIDENT (DESIGN §3.141, soak seed 3455580742): the pilot's count
+     * THE INCIDENT (DESIGN §3.142, soak seed 3455580742): the pilot's count
      * mirror read only the MINIMUM bound of CR 509.1b, so Bristling Boar's
      * "can't be blocked by more than one creature" looked like NO constraint at
      * all. The gang search paired Millennial Gargoyle and Screeching Sliver onto

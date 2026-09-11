@@ -239,7 +239,7 @@ describe('"~ can\'t be blocked by more than one creature" — the dual of menace
 
 
 /*
- * THE COUNT RULE, ASKED THE WAY AN AI HAS TO ASK IT (DESIGN §3.141).
+ * THE COUNT RULE, ASKED THE WAY AN AI HAS TO ASK IT (DESIGN §3.142).
  *
  * `illegalBlockDeclaration` judges a FINISHED declaration, which is the wrong
  * shape for a pilot deciding whether to put N blockers somewhere — so every AI

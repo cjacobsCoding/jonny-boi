@@ -1,5 +1,5 @@
 /**
- * THE PILOT PLAYS SPLIT SECOND (CR 702.61, DESIGN §3.141).
+ * THE PILOT PLAYS SPLIT SECOND (CR 702.61, DESIGN §3.142).
  *
  * THE INCIDENT (soak seed 3736754678, turn 27): B cast its own Siege Smash —
  * split second — in its upkeep, then tapped two lands and cast Mouser Attack!

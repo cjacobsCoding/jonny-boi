@@ -329,7 +329,7 @@ Traps the soak itself fell into first — every one worth knowing before you add
    only for the seat whose turn is BEGINNING (so the other seat's is a leftover from its own turn),
    and the cap itself moves, because `additionalLandPlays` comes from a permanent that can die. Seed
    3679986871 played two legal lands under Icetill Explorer and lost the Explorer blocking a turn
-   later, and the flat comparison called that turn a rules violation (DESIGN §3.141). Asking the
+   later, and the flat comparison called that turn a rules violation (DESIGN §3.142). Asking the
    right function (`maxLandPlaysFor`) at the wrong moment is still the wrong answer. The check now
    lives in `packages/sim/src/land-drop-cap.ts` as a running judgement folded over every settled
    state — the count against the largest cap that seat has been SEEN to hold since its own turn began

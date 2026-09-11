@@ -301,7 +301,7 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
       what: "CR 707.10: the same copy-mirror loop with Reverberate + Narset's Reversal, seat A",
     },
     /*
-     * THREE ROWS, THREE UNRELATED DEFECTS, ONE SHAPE (DESIGN §3.141): a rules
+     * THREE ROWS, THREE UNRELATED DEFECTS, ONE SHAPE (DESIGN §3.142): a rules
      * question answered somewhere other than by the rule.
      *
      * The first two are the pilot answering with its OWN copy of a core rule and
@@ -338,10 +338,32 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
         'the grantor died (fixed by judging the count against the largest cap the seat has held ' +
         'since its own turn began)',
     },
+    /*
+     * THE MANA EXCHANGE THAT PAID FOR ITSELF — §3.141, and the first row this
+     * block could not have held before §3.140 un-blinded `gameCanEnd`: the turn
+     * bound tripped first, the game was filed as a legal CR 104.4b draw, and the
+     * runaway was invisible for as long as the class was live.
+     *
+     * Seven sibling seeds do the same thing with the same card (3505743309,
+     * 437769586, 506638966, 2340004011, 1830547618, 44358381, 876545993, and
+     * every one of them on BOTH seats). One is pinned rather than all eight
+     * because they are one position, not eight — each is B's Bog Initiate on an
+     * all-black pool — and a fast tier that replays one finding eight times is a
+     * tier somebody switches off.
+     */
+    {
+      seed: 3791358276,
+      onPlay: 'A',
+      what:
+        'CR 602: the pilot activated Bog Initiate ({1}: Add {B}) ~665 times in one turn, paying the ' +
+        '{1} with the {B} it had just made — a repeatable ability with no net state change, priced ' +
+        'at its output and never against its cost, until CR 104.4b drew the game (fixed by refusing ' +
+        'a pure mana exchange that would leave the pool exactly as it found it)',
+    },
   ];
 
   /*
-   * THE IDENTITY GUARD ON THE IDENTITY GUARD (DESIGN §3.141). A row whose
+   * THE IDENTITY GUARD ON THE IDENTITY GUARD (DESIGN §3.142). A row whose
    * identity cards all sit in ONE deck is green for a match whose OTHER deck was
    * swapped wholesale — the same escape the identity assertion exists to close,
    * one deck deeper. `PinnedIdentity`'s doc states the rule; this is the rule
