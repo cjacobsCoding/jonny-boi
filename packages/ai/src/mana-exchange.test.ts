@@ -374,7 +374,12 @@ describe('the shape, not the card — measured against the real pool', () => {
     const recognised: string[] = [];
     for (const card of pool.cards) {
       for (const ability of card.activated ?? []) {
-        if (!ability.effects.some((e) => e.primitive === 'addMana')) continue;
+        // EVERY effect, not merely SOME — a rider-free `{1}: Add {B}, gain 1
+        // life` is not a pure exchange (a life is not mana), and spelling this
+        // half as `some` would fail the equality below the day such a card is
+        // printed, for a disagreement that was only ever in this test.
+        if (!ability.effects.every((e) => e.primitive === 'addMana')) continue;
+        if (ability.effects.length === 0) continue;
         const cost = ability.cost;
         const free =
           cost.mana !== undefined &&
