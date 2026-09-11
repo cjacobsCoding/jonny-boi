@@ -178,6 +178,30 @@ export type { BlockAssignment } from './internal/block-solver.js';
 export { forcedBlockAssignment } from './internal/block-solver.js';
 
 /**
+ * THE BLOCK-LEGALITY RULES THEMSELVES, exported for the same reason
+ * `forcedBlockAssignment` is: a pilot that RE-IMPLEMENTS one of them drops a
+ * clause, and the cost of that is wholesale — one illegal pair rejects the
+ * ENTIRE declaration, the harness passes priority after three rejections, and
+ * the defender takes the whole attack unblocked. This repo has paid it three
+ * times (protection, landwalk, "except by N or more"), every time on a copy of
+ * a rule that already lived here. A second copy of a rule is the defect.
+ *
+ *   - `canBlock` — the PER-PAIR rule (CR 509.1a): evasion, the combat keyword
+ *     family, protection, and the comparing restrictions.
+ *   - `blockerCountAllowed` — CR 509.1b's COUNT rule from BOTH sides at once,
+ *     which is the question a pilot assigning N blockers actually has.
+ *   - `illegalBlockDeclaration` — the WHOLE declaration, restrictions and CR
+ *     509.1c/d requirements together: the last gate a pilot should put its
+ *     finished blocks through, because it is the gate the engine applies.
+ */
+export {
+  blockerCountAllowed,
+  canBlock,
+  illegalBlockDeclaration,
+  requiredBlockerCount,
+} from './internal/combat.js';
+
+/**
  * THE COMBAT KEYWORD FAMILY (DESIGN §3.107). Attack restrictions and
  * requirements (CR 508.1c/d) are the attacker-side mirror of the block solver,
  * and the pilot reads them through the same seam so it never proposes a
