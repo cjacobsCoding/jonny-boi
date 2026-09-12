@@ -3474,6 +3474,16 @@ mislead the reader who hits it; it hides a whole row from the instrument the roa
 `git diff origin/main --stat -- packages/cards/data` is EMPTY: no generated data was touched, so the
 silent text-merge drop that family is prone to cannot have happened here.
 
+⚠️ **AND A NOTE ON READING THAT GREEN, because a later re-run of the SAME tree went RED and the
+difference was the machine, not the code.** The gate above is the merge commit. Re-running `npm run
+verify` on the final tip exited 1 with a **tinypool `onUnexpectedExit`** — a worker process gone, no
+test assertion anywhere in the output. The box at that moment: **250 MB free RAM, 99% CPU, 25 node
+processes** from the other agents sharing it. That is an OOM-killed worker wearing the costume of a
+test failure, and the tell is the shape of the error: a FAILED ASSERTION names a test, a dead worker
+names a pool. Re-run with `--maxWorkers=2` so the suite fits in what the box actually had.
+Distinguishing the two matters more than the inconvenience: a crash read as a failure sends the next
+agent hunting a bug that does not exist, and a failure read as a crash ships one that does.
+
 ### 3.141 An ability that gives back exactly what it takes — the pilot's repeatable no-op — ✅ done
 
 §3.140 un-blinded `gameCanEnd` and the first sweep with the door watched found **12 violations over
