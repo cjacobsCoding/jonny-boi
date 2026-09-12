@@ -367,7 +367,8 @@
      so a deep fan is squeezed rather than hidden behind either. */
   --stack-float-edge-clearance: 4rem;
   top: 50%;
-  right: var(--space-2);
+  /* Clears the log rail — see `--play-board-right-overlay-inset` in board-fit.css. */
+  right: var(--play-board-right-overlay-inset, var(--space-2, 8px));
   transform: translateY(-50%);
   z-index: 30;
   width: max-content;

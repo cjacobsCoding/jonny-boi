@@ -227,6 +227,19 @@
   overflow-x: hidden;
 }
 
+/* THE BOARD'S RIGHT EDGE HAS AN OWNER NOW, and every absolutely-positioned
+   overlay pinned to it has to know. The log rail moved here in §3.143 wave 3;
+   two overlays were already sitting at `right: var(--space-2)` and both landed
+   ON it — the opponent feed printed over the words "GAME LOG" in three separate
+   harness screenshots, and the floating stack panel shares the same inset.
+   That is a CLASS, not two bugs, so the inset is ONE token read by both rather
+   than a number copied into each (rule 12). `--play-log-rail-w` is set inline on
+   this element by `PlayBoard`, so it resolves here.
+   `right-overlay-inset.test.ts` fails if a new right-pinned overlay skips it. */
+.app:has(.play-board) .play-board {
+  --play-board-right-overlay-inset: calc(var(--play-log-rail-w) + var(--space-2, 8px) * 2);
+}
+
 .app:has(.play-board) .board-rail {
   flex: 0 0 var(--play-log-rail-w);
   display: flex;
@@ -823,6 +836,13 @@
      it is what yields (as it always did), so the table keeps its own height. */
   .app:has(.play-board) .board-stage > .board-scene {
     overflow-y: visible;
+  }
+
+  /* Below this width the rail is stacked UNDER the table, not beside it, so the
+     right edge belongs to nobody again and an overlay must NOT reserve for it —
+     a 17rem clearance on a 375px screen would push the feed off the board. */
+  .app:has(.play-board) .play-board {
+    --play-board-right-overlay-inset: var(--space-2, 8px);
   }
 
   .app:has(.play-board) .board-rail {

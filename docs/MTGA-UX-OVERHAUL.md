@@ -391,8 +391,8 @@ belongs to §3.113, not to this branch):
 | Harness | What it proves | Result |
 | --- | --- | --- |
 | `node apps/web/scripts/verify-game-resume.mjs` | resume-exactly + defer-updates survive a real reload and a real service-worker update | **18/18 checks passed** — after the `role="status"` fix above; it was 17/18 with the loose probe |
-| `node apps/web/scripts/verify-board-fits.mjs` | nothing scrolls, the status line / hand / action bar are on screen, at four viewport sizes including a phone | **ran; tally not recorded here** — see the note below |
-| `node apps/web/scripts/verify-mana-choice.mjs` | the auto-tap spares the useful source; the picker asks only when there is a choice and cancels cleanly | **ran; tally not recorded here** — see the note below |
+| `node apps/web/scripts/verify-board-fits.mjs` | nothing scrolls, the status line / hand / action bar are on screen, at four viewport sizes including a phone | **32/32** (was 30/32 mid-branch: the scene wrapper added 171px of height, all of it the game log sitting between the battlefields) |
+| `node apps/web/scripts/verify-mana-choice.mjs` | the auto-tap spares the useful source; the picker asks only when there is a choice and cancels cleanly | **19/19** (unbroken across the whole branch, including the wave-2 rewrite that replaced the picker with a proposal stage) |
 
 ⚠️ **The two missing tallies are missing on purpose, not lost.** Their artifacts are on disk in
 `apps/web/verify-out/{board-fits,mana-choice}/` and post-date the last source edit on this branch, so
@@ -414,10 +414,36 @@ far seat visibly narrower than the near one, UX-9); the held opponent spell with
 and its two buttons (`board-fits/04-phone.png` — "Computer is casting: Aerial Responder", UX-16); a
 target prompt whose candidates are six real card faces with their keyword words underlined
 (`game-resume/01-live-board.png`, UX-8 and UX-17.4); the cancel affordance and its sentence
-("Escape backs out — nothing has happened yet.", `mana-choice/03-picker-open.png`, UX-4). **Not
-verified against pixels, and therefore claimed on source only: UX-1, UX-2, UX-11, UX-12, UX-13,
-UX-14 and UX-15** — no screenshot on disk shows a non-empty stack or a declared combat, so every
-combat visual on this branch is an unobserved claim. That is the single biggest hole in this record.
+("Escape backs out — nothing has happened yet.", `mana-choice/03-picker-open.png`, UX-4). 
+
+**✅ THE COMBAT HOLE IS NOW CLOSED — the integrator drove a real game to declared combat and looked.**
+This paragraph previously read "no screenshot on disk shows a non-empty stack or a declared combat,
+so every combat visual on this branch is an unobserved claim", and it was the single biggest hole in
+the record. A throwaway rig (solo game, Selesnya Blink, drive until the stack is non-empty and until
+`.perm--attacking` appears) wrote `verify-out/combat/`. What the pixels show:
+
+- **UX-1 / UX-2 CONFIRMED.** `01-stack-nonempty.png`: a "STACK 1" panel carrying a real card image,
+  "RESOLVES NEXT", the object's name, its kind and its controller — and it does NOT paint over the
+  log rail. The same frame shows **UX-16** at its best: "Computer is casting:" with the full,
+  readable Savannah Lions face and the "Keep looking" / "Let it resolve" buttons.
+- **UX-11, UX-12, UX-14 CONFIRMED.** `02-attackers-declared.png`: an attacking Savannah Lions turned
+  90° (it tapped to attack — the exact composition of tap-plus-attack that UX-11 exists for),
+  advanced toward the defender and stopping short of the seam, with a **fiery orange arc curving
+  from it to the defending player's life total** — which also confirms the `life:<seat>` anchor
+  (wave 2's GAP-13), since before it the arc aimed at the creature row.
+- **STILL UNOBSERVED: UX-13 and UX-15.** The rig reached declared attackers but not declared
+  BLOCKERS (the driven seat had no creatures to block with in that game), so the blocker advance and
+  the damage sequence remain source-only claims. That is now the biggest hole, and it is a much
+  smaller one.
+- **FOUND BY LOOKING, and fixed in the same pass:** the opponent feed printed its toasts over the
+  words "GAME LOG". It was not one bug — `.stack-panel--floating` sits at the identical inset, so
+  every overlay pinned to the board's right edge had the same defect. One shared token
+  (`--play-board-right-overlay-inset`) and `right-overlay-inset.test.ts`, whose EXEMPT table forces
+  the question nobody asked: pinned to WHAT?
+- **STILL OPEN, seen and not fixed:** the battlefield tiles remain visibly smaller than the hand
+  cards — an inverted size hierarchy versus MTGA, where the board is the thing you read. The
+  "ATTACKING" badge and the card name run vertically on a turned card, which reads as broken rather
+  than as a card lying on its side.
 
 ## 8. Standing note — how to check this surface, and when
 
