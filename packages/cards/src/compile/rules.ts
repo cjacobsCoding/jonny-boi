@@ -8404,13 +8404,13 @@ function buildCopyAsEnters(
  * selector the compiler only half-read produces a card that copies something
  * the printed one cannot.
  *
- * ⚠️ "ANOTHER target creature you control" (Orthion, Jaxis, The Jolly Balloon
- * Man) is still deliberately absent, and the blocker is specific: the printed
- * word "another" excludes the ASKING INSTANCE, while core's target vocabulary is
- * checked against a source DEFINITION (`isLegalTarget(state, restriction, ref,
- * controller, sourceDef)`) and never learns which object is asking. Compiling it
- * as plain "target creature you control" would let Orthion copy itself, which is
- * a card playing wider than printed.
+ * ⚠️ The printed word "**another**" is a real narrowing and is never dropped: it
+ * rides as core's `excludeSelf` param, which the trigger-body compiler lifts
+ * onto a TRIGGERED ability as `targetsExcludeSelf` and which the engine reads
+ * directly (`excludesSelfOfEffects`) when it offers and when it validates an
+ * ACTIVATED one. Compiling "another target creature you control" as plain
+ * "target creature you control" would let Orthion copy itself — a card playing
+ * wider than printed, which is the one outcome this compiler must never produce.
  */
 const TOKEN_COPY_SELECTORS: Readonly<Record<string, Readonly<Record<string, unknown>>>> = Object.freeze({
   'target creature': { targets: CREATURE_TARGET },
@@ -8422,6 +8422,15 @@ const TOKEN_COPY_SELECTORS: Readonly<Record<string, Readonly<Record<string, unkn
     excludeSelf: true,
   },
   'target creature you control': { targets: CREATURE_YOU_CONTROL_TARGET },
+  // "a copy of ANOTHER target creature you control" (Orthion, Jaxis, The Jolly
+  // Balloon Man). The same pairing as the nonland-permanent row above, on the
+  // restriction these three actually print — and the reason it reads as one ROW
+  // rather than a new restriction word is that "another" says nothing about what
+  // the object IS (see core's `TARGET_EXCLUDE_SELF_PARAM`).
+  'another target creature you control': {
+    targets: CREATURE_YOU_CONTROL_TARGET,
+    excludeSelf: true,
+  },
   // "target NONLEGENDARY creature you control" (Kiki-Jiki, Fable of the
   // Mirror-Breaker). Its own restriction rather than an approximation: the
   // printed word is the entire reason Kiki-Jiki cannot copy itself.

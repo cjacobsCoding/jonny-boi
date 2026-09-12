@@ -331,6 +331,19 @@ function isInstantOrSorcerySpell(spell: SpellStackObject): boolean {
 export const TARGET_RESTRICTION_PARAM = 'targets';
 
 /**
+ * The reserved effect-param name carrying the printed word "**another**"
+ * (Orthion, Jaxis, The Jolly Balloon Man, Extravagant Replication).
+ *
+ * A second reserved name beside {@link TARGET_RESTRICTION_PARAM} rather than a
+ * restriction WORD of its own, because "another" is not a kind of object: it is
+ * the same restriction with the asking permanent removed. Spelling it as
+ * `anotherCreatureYouControl`, `anotherArtifact`, … would double
+ * {@link ALL_TARGET_RESTRICTIONS} and each of its five homes for a word that
+ * changes nothing about what an object IS.
+ */
+export const TARGET_EXCLUDE_SELF_PARAM = 'excludeSelf';
+
+/**
  * The restriction assumed when a targeting effect declares none: unrestricted
  * "any target". Keeping this the default is what leaves every already-authored
  * card (Lightning Bolt, Shock, Searing Spear) behaving exactly as before.
@@ -1135,6 +1148,12 @@ export function illegalTargetReason(
  * An ACTIVATED ability has its own effects and therefore its own targeting
  * rules, independent of the spell script printed on the same card. `label` names
  * the thing being activated so a rejection reads as a sentence.
+ *
+ * `sourceInstanceId` is what makes the printed word "**another**" enforceable
+ * (see {@link excludesSelfOfEffects}). It is optional because most callers have
+ * no self to exclude, and an ability that prints "another" while its caller
+ * passes nothing is policed exactly as it was before — never MORE permissively
+ * than the restriction alone, which is the safe direction.
  */
 export function illegalTargetReasonForEffects(
   state: GameState,
@@ -1143,6 +1162,7 @@ export function illegalTargetReasonForEffects(
   targets: ReadonlyArray<InstanceId | PlayerId>,
   controller?: PlayerId,
   source?: CardDefinition,
+  sourceInstanceId?: InstanceId,
 ): string | undefined {
   const restriction = restrictionOfEffects(effects);
   if (restriction === undefined) return undefined; // unrestricted — not policed
@@ -1151,6 +1171,19 @@ export function illegalTargetReasonForEffects(
   }
   if (!isLegalTarget(state, restriction, targets[0]!, controller, source)) {
     return `${label} can only target ${describeRestriction(restriction)}`;
+  }
+  // "ANOTHER target creature you control" — the whole content of the printed
+  // word is that the asking permanent is not among the candidates. Checked HERE
+  // rather than inside `isLegalTarget`, which is answered from a source
+  // DEFINITION and deliberately never learns which object is asking: two
+  // Orthions on the battlefield share a definition and must still be able to
+  // copy each other.
+  if (
+    sourceInstanceId !== undefined &&
+    excludesSelfOfEffects(effects) &&
+    targets[0] === sourceInstanceId
+  ) {
+    return `${label} can only target another ${describeRestriction(restriction)}`;
   }
   return undefined;
 }
@@ -1165,6 +1198,21 @@ export function restrictionOfEffects(
     return declared;
   }
   return undefined;
+}
+
+/**
+ * Does any of these effects print the word "**another**"?
+ *
+ * The ONE answer to that question, beside {@link restrictionOfEffects}, and for
+ * the same reason: the offer path (which builds the candidate menu) and the
+ * validate path (which rejects an illegal submission) must agree, or the engine
+ * rejects an action it offered — a soak invariant this repo already enforces.
+ * A trigger lifts the same flag onto its ability as
+ * `TriggeredAbility.targetsExcludeSelf`, because a trigger is aimed as it goes
+ * on the stack rather than as it is activated; both read this param.
+ */
+export function excludesSelfOfEffects(effects: readonly EffectRef[]): boolean {
+  return effects.some((ref) => ref.params?.[TARGET_EXCLUDE_SELF_PARAM] === true);
 }
 
 /**

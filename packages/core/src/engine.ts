@@ -105,6 +105,7 @@ import {
 import type { TargetRestriction } from './targeting.js';
 import {
   describeRestriction,
+  excludesSelfOfEffects,
   illegalTargetReason,
   illegalTargetReasonForEffects,
   isPlayerTarget,
@@ -4958,6 +4959,11 @@ function applyActivateAbility(
     action.targets ?? [],
     action.player,
     source.def,
+    // The asking permanent, so a printed "another" is enforced on the way IN as
+    // well as filtered out of the menu. Without it the generator would offer a
+    // narrower list than the engine accepts, and a pilot replaying a recorded
+    // action could aim Orthion at Orthion.
+    source.instanceId,
   );
   if (targetProblem) return rejectWith(prevState, targetProblem);
 
@@ -5809,6 +5815,11 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
       if (timing === 'sorcery' && !sorcerySpeedWindow) continue;
       if (unpayableActivationReason(state, perm, ability)) continue;
       const restriction = restrictionOfEffects(ability.effects);
+      // "ANOTHER target creature you control" (Orthion, Jaxis, The Jolly Balloon
+      // Man): the printed word removes the ASKING permanent from the menu, and
+      // nothing else. Read through the same one accessor the rejection path
+      // reads, so the two can never disagree about what was offerable.
+      const excludeSelf = excludesSelfOfEffects(ability.effects);
       // A "Sacrifice a <noun>" cost is enumerated like a target: one action per
       // legal payer, because the cost is paid at ACTIVATION (CR 602.2b) and
       // there is no resolution in which to ask. Only ONE payer is enumerated
@@ -5832,6 +5843,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
           continue;
         }
         for (const target of legalTargetsFor(state, restriction, me, perm.def)) {
+          if (excludeSelf && target === perm.instanceId) continue;
           actions.push({
             kind: 'activateAbility',
             player: me,

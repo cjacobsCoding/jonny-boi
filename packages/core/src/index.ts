@@ -263,6 +263,7 @@ export {
 // offered, when a cast is applied, and again when the effect resolves.
 export type { TargetRestriction } from './targeting.js';
 export {
+  TARGET_EXCLUDE_SELF_PARAM,
   TARGET_RESTRICTION_PARAM,
   DEFAULT_TARGET_RESTRICTION,
   isTargetRestriction,
@@ -271,6 +272,7 @@ export {
   isLegalTarget,
   legalTargetsFor,
   illegalTargetReason,
+  excludesSelfOfEffects,
   restrictionOfEffects,
   describeRestriction,
   triggerTargetPrompt,

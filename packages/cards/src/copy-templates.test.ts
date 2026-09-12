@@ -25,7 +25,15 @@ import type {
   PlayerId,
   TriggeredStackObject,
 } from '@jonny-boi/core';
-import { isLegalTarget, legalTargetsFor } from '@jonny-boi/core';
+import {
+  DEFAULT_RULES,
+  applyAction,
+  createGame,
+  defaultAnswerFor,
+  generateLegalActions,
+  isLegalTarget,
+  legalTargetsFor,
+} from '@jonny-boi/core';
 import { compileCard } from './compile/compile.js';
 import type { CompilableCard } from './compile/types.js';
 import { buildRegistry } from './pool.js';
@@ -507,4 +515,166 @@ describe('substituteIf picks its branch from the board at resolution', () => {
     expect(run(5)).toEqual(['makeToken']);
     expect(run(6)).toEqual(['createTokenCopy']);
   });
+});
+
+// --- "ANOTHER target creature you control" — the printed word, enforced twice ------
+//
+// Orthion, Jaxis and The Jolly Balloon Man all print it, and it is the ONLY
+// thing that stops each of them from copying itself every turn for free. The
+// word had a home already (`excludeSelf` on the ref, lifted by the trigger-body
+// compiler onto a TRIGGERED ability) and no home at all on an ACTIVATED one:
+// the engine's activation menu and its rejection path both read the restriction
+// and neither read the flag. Three tests, because the class has three faces —
+// the compiler must EMIT it, the offer path must OMIT the source, and the
+// validate path must REFUSE it if an action naming the source arrives anyway.
+// The third is not redundant with the second: a generator-only fix leaves the
+// engine accepting an action it never offered, which is the exact pairing the
+// full-pool soak asserts.
+
+describe('the printed word "another" on an activated token-copy ability', () => {
+  const ORTHION_TEXT =
+    "{1}{R}, {T}: Create a token that's a copy of another target creature you control. " +
+    'It gains haste. Sacrifice it at the beginning of the next end step. Activate only as a sorcery.';
+
+  function orthion(): CardDefinition {
+    const result = compileCard(
+      makeCard({
+        name: 'Orthion, Hero of Lavabrink',
+        typeLine: { supertypes: ['Legendary'], types: ['Creature'], subtypes: ['Human', 'Soldier'] },
+        manaCost: { generic: 3, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+        power: '2',
+        toughness: '3',
+        oracleText: ORTHION_TEXT,
+      }),
+    );
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    return result.definition;
+  }
+
+  it('compiles Orthion whole — the selector, the haste GRANT and the delayed sacrifice', () => {
+    const params = orthion().activated?.[0]?.effects[0]?.params as Record<string, unknown>;
+    expect(params?.targets).toBe('creatureYouControl');
+    // The printed "another", carried as data rather than dropped.
+    expect(params?.excludeSelf).toBe(true);
+    // Layer 6, NOT folded into the copy's own keywords — a second copy of this
+    // token must not inherit the haste, and "except it has haste" would.
+    expect(params?.grantKeywords).toEqual({ haste: true });
+    expect(params?.except).toBeUndefined();
+    expect(params?.delayedRemoval).toBe('sacrifice');
+    expect(orthion().activated?.[0]?.timing).toBe('sorcery');
+  });
+
+  it('refuses to widen: the same line WITHOUT "another" is a different, self-copying card', () => {
+    const withoutAnother = compileCard(
+      makeCard({
+        name: 'Not Orthion',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: '2',
+        toughness: '3',
+        oracleText: ORTHION_TEXT.replace('another target creature', 'target creature'),
+      }),
+    );
+    expect(withoutAnother.status).toBe('complete');
+    expect(withoutAnother.definition.activated?.[0]?.effects[0]?.params?.excludeSelf).toBeUndefined();
+  });
+
+  it('the engine never OFFERS the source as its own target, but does offer the other creature', () => {
+    const { state, reg, orthionId, bearId } = boardWithOrthion();
+    const offers = generateLegalActions(state)
+      .filter((a) => a.kind === 'activateAbility' && a.instanceId === orthionId)
+      .map((a) => (a as { targets?: readonly (InstanceId | PlayerId)[] }).targets?.[0]);
+    expect(offers).toContain(bearId);
+    expect(offers).not.toContain(orthionId);
+    expect(reg.get('createTokenCopy')).toBeDefined();
+  });
+
+  it('the engine REJECTS an activation aimed at the source — the offer and the check agree', () => {
+    const { state, reg, orthionId } = boardWithOrthion();
+    const result = applyAction(
+      state,
+      { kind: 'activateAbility', player: 'A', instanceId: orthionId, abilityIndex: 0, targets: [orthionId] },
+      DEFAULT_RULES,
+      reg,
+    );
+    const rejected = result.events.find((e) => e.type === 'actionRejected') as { reason: string } | undefined;
+    expect(rejected?.reason).toMatch(/another/);
+  });
+
+  it('PLAYED: activating it on the other creature makes a hasty token copy of THAT creature', () => {
+    const { state, reg, orthionId, bearId } = boardWithOrthion();
+    const before = state.battlefield.length;
+    const result = applyAction(
+      state,
+      { kind: 'activateAbility', player: 'A', instanceId: orthionId, abilityIndex: 0, targets: [bearId] },
+      DEFAULT_RULES,
+      reg,
+    );
+    expect(result.events.some((e) => e.type === 'actionRejected')).toBe(false);
+    // The ability goes on the stack; resolve it the way the engine does.
+    let s = result.state;
+    let guard = 0;
+    while (s.stack.length > 0 && guard++ < 20) {
+      const next = generateLegalActions(s)[0];
+      if (!next) break;
+      s = applyAction(s, next, DEFAULT_RULES, reg).state;
+    }
+    const bear = state.battlefield.find((c) => c.instanceId === bearId)!;
+    const token = s.battlefield.find((c) => c.def.isToken === true);
+    expect(s.battlefield.length).toBe(before + 1);
+    // A COPY of the bear, not of Orthion — the whole point of the word.
+    expect(token?.def.name).toBe(bear.def.name);
+    expect(token?.def.power).toBe(bear.def.power);
+  });
+
+  /**
+   * A two-creature board with Orthion and one other creature, mana flooded and
+   * in a sorcery-speed window — the only window this ability is legal in.
+   */
+  function boardWithOrthion(): {
+    state: GameState;
+    reg: ReturnType<typeof buildRegistry>;
+    orthionId: InstanceId;
+    bearId: InstanceId;
+  } {
+    const reg = buildRegistry();
+    const forest = CARD_POOL.find((c) => c.name === 'Forest')!;
+    const { state } = createGame({
+      seed: 4401,
+      decks: { A: { cards: Array.from({ length: 60 }, () => forest) }, B: { cards: Array.from({ length: 60 }, () => forest) } },
+      registry: reg,
+    });
+    let s = state;
+    let guard = 0;
+    while (s.step !== 'precombatMain' && !s.gameOver && guard++ < 400) {
+      const question = s.pendingChoice;
+      s = applyAction(
+        s,
+        question
+          ? { kind: 'answerChoice', player: question.chooser, choiceId: question.id, answer: defaultAnswerFor(question) }
+          : { kind: 'passPriority', player: s.priorityPlayer },
+        DEFAULT_RULES,
+        reg,
+      ).state;
+    }
+    s.players.A.manaPool = { W: 9, U: 9, B: 9, R: 9, G: 9, C: 9 };
+    const put = (def: CardDefinition): InstanceId => {
+      const id = s.nextInstanceId++;
+      s.battlefield.push({
+        instanceId: id,
+        def,
+        controller: 'A',
+        owner: 'A',
+        zone: 'battlefield',
+        tapped: false,
+        summoningSick: false,
+        damageMarked: 0,
+        markedByDeathtouch: false,
+        counters: {},
+      });
+      return id;
+    };
+    const orthionId = put(orthion());
+    const bearId = put(CARD_POOL.find((c) => c.name === 'Grizzly Bears')!);
+    return { state: s, reg, orthionId, bearId };
+  }
 });
