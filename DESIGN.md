@@ -2889,7 +2889,7 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
-### 3.147 "Didn't copy properly" — the copy was right, the log was mute — ✅ done
+### 3.148 "Didn't copy properly" — the copy was right, the log was mute — ✅ done
 
 Report **20260911_194411**, filed from the live PWA against production `9b4524a`: *"used strionic
 resonator twice to exile enemy creatures and didnt copy properly."* Console: **0 lines, 0 errors** —
