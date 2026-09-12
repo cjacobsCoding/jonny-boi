@@ -2889,6 +2889,104 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.147 "Didn't copy properly" — the copy was right, the log was mute — ✅ done
+
+Report **20260911_194411**, filed from the live PWA against production `9b4524a`: *"used strionic
+resonator twice to exile enemy creatures and didnt copy properly."* Console: **0 lines, 0 errors** —
+nothing threw. Board at the frozen frame: turn 19, the Computer holding **EXILE 2** after two
+activations.
+
+**The copier is not the defect, and that is the finding.** Driven through the real engine —
+`GameSession`, `buildRegistry()`, the shipped Strionic Resonator and a shipped Banisher Priest — the
+copy goes on the stack **above** the original, carries the original's `sourceInstanceId` and aim, and
+the "you may choose new targets" question **is** asked whenever a second legal creature exists;
+answering it with the other creature exiles two. All five candidate failures the brief enumerated were
+ruled out by that run except the one that is **correct rules**: with only one legal creature on the
+board, CR 707.10c keeps the copy on the target the original already took, the copy exiles it, and the
+original is then the half that does nothing.
+
+#### The real defect: two different games printed the same log
+
+The two runs — one exiling two creatures, one exiling one — produced **byte-identical** feeds:
+
+```
+Player 1 is asked: Choose new targets for the copied ability? (a creature an opponent controls)
+Player 1 answers.
+{2}, {t}: copy target triggered ability you control. you may choose new targets for the copy resolves.
+Enters: exile target creature an opponent controls until this leaves (copy) resolves.
+Enters: exile target creature an opponent controls until this leaves resolves.
+```
+
+Four events carried the entire story and **every one of them formatted to `null`**:
+
+| event | what the player could not see |
+| --- | --- |
+| `abilityActivated` | the log never once names **Strionic Resonator** — the card they clicked |
+| `triggerCopied` | never says a copy was made; `spellCopied`, the other half of the same card family, has said so since it shipped |
+| `zoneChange` | the exile itself. "Banisher Priest exiles Grizzly Bears" was never a sentence this app could produce |
+| `triggerFizzled` | the half that did nothing said `… resolves.`, exactly like the half that worked |
+
+This is §3.55's shape again — *"it didnt seem to actually exile the chosen creature"* — one layer up.
+§3.55 fixed the case where a trigger is **removed** for want of a target; this is the case where it
+**stays** and then resolves onto a target that has since gone.
+
+#### CR 608.2b for triggered abilities (core)
+
+An ability every one of whose targets has become illegal **does not resolve**. Until now it resolved
+and each targeting primitive quietly no-opped on its own dead target. Same board, but by a route that
+**cannot be narrated** (`triggeredAbilityResolved` fired, so the log said "resolves"), and a genuine
+rules difference wherever the ability has an **untargeted effect beside the targeted one** — that half
+was still happening after the ability should have stopped.
+
+It reuses the `triggerFizzled` event the intervening-"if" check (CR 603.4) already emits, and reads the
+restriction through the **same** `restrictionOfEffects` the aiming pass used to choose those targets,
+so the two cannot disagree about what was aimable. Only a trigger that actually aimed is checked: "up
+to three" that chose none did so legitimately (CR 603.3d). **Blast radius: 0** — 21,885 existing tests
+unchanged, and the gauntlet did not move by a single game.
+
+Spells are deliberately **not** given the same central check. `resolveSpell` already documents why: a
+modal spell's mode whose target became illegal "simply does not happen, while its siblings still do",
+which is CR 608.2b applied per-mode. A blanket spell-level check would break that, and it is a
+separate question from this report.
+
+#### The guard: `default: return null` is gone from both formatters
+
+The class is not "four events were forgotten" — it is that a `switch` with a `default` **cannot
+report a gap**. Fifty of the eighty-five `GameEvent` types fell into it, and the four this report cost
+were indistinguishable from the forty-six that belong there. So both `play/play-format.ts` and
+`replay-format.ts` now classify **every** type into one of three groups:
+
+- **narrated** — has prose;
+- **silent by design, forever** — priority, step boundaries, the mana machine, effect/replacement/grant
+  plumbing;
+- **silent, and that is a gap** — real board changes with no sentence yet (`transformed`,
+  `controlChanged`, `legendRuleApplied`, `regenerated`, the attachment family, …), listed **apart**
+  from the group above so the debt is countable rather than hidden. A row to fill in, not an absence
+  to notice.
+
+closed by a `const unclassified: never = event`. **Adding a `GameEvent` type to core and not deciding
+here now fails the build** — the enforced-table pattern this repo already uses for `EVENT_ID_FIELDS`
+and `OBSERVATION_POLICY`, expressed in the switch that is already the one place the decision is made.
+
+`LEAVES_BATTLEFIELD_TEXT` is the new `zoneChange` row table (exile / hand / library). `graveyard` is
+deliberately absent — `creatureDied` already says it, and a row here would print every death twice.
+A **non-creature** permanent going to a graveyard is therefore still silent: a real gap, named rather
+than papered over, because the event cannot tell the two apart.
+
+#### The sibling, measured rather than assumed
+
+Spell copies do **not** share the reported defect: `spellCopied` is narrated, so a copied Lightning
+Bolt announces itself. Probing it did surface the other half of "a copy is illegible" — the feed read
+`#94 deals 3 to Grizzly Bears`. A spell copy is not a card and ceases to exist the instant it resolves
+(CR 704.5e), so by render time it is in no zone and on no stack, and `session.nameOf` had nothing to
+find. The name was already in the events the session keeps (`spellCopied.name`, `triggerCopied.label`,
+`spellCast.name`), so `nameOf` now falls back to the **newest** event that named the id.
+
+**Measured.** `npx vitest run` — 0 failed. `npm run verify` exit 0. Gauntlet `"Mono-Red Aggro" --games
+40 --seed 99`: **97/320 = 30.3%** before and after, rows 17·14·19·7·8·10·17·5 identical — this branch
+changes what the app *says*, and one rules check that reaches the same board. **12 sabotages run on
+the new tests, 0 escaped.**
+
 ### 3.146 A block bound the card does not print — Champion of Lambholt, and the second home of the settled-P/T pass — ✅ done
 
 The row said *"a block restriction whose SELECTOR compares creatures or reads effective P/T"* and named
