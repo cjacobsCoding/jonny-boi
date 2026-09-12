@@ -1409,7 +1409,41 @@ export function applyAction(
   config: RulesConfig = DEFAULT_RULES,
   registry?: EffectRegistry,
 ): EngineResult {
+  assertIsRulesConfig(config);
   return applyActionToDraft(cloneState(prevState), prevState, action, config, registry);
+}
+
+/**
+ * Refuse a third argument that is not a {@link RulesConfig}.
+ *
+ * ⚠️ THE MISTAKE THIS EXISTS FOR, and it was live in NINE places when this was
+ * written: `applyAction(state, action, { registry })`. The registry is the FOURTH
+ * parameter, so that call passes it as the config and leaves the registry
+ * `undefined` — every primitive then degrades to `effectUnsupported` and the test
+ * stays green, having silently checked a game where no spell did anything. It is
+ * a type error, and nothing catches it: NO tsconfig in this repo compiles a
+ * `*.test.ts` (180 such errors exist today, DESIGN §3.143), so a mis-call written
+ * in a test is only ever checked at runtime. This is that runtime check.
+ *
+ * Cheap by construction: the overwhelmingly common argument is `DEFAULT_RULES`
+ * itself, which exits on one pointer compare. Anything else costs a single
+ * property read, against a call that is about to deep-clone both libraries.
+ *
+ * Deliberately NOT on {@link applyActionInPlace}: that is the MCTS rollout path,
+ * ~20,000 calls per decision with no clone to hide behind, and its only two
+ * callers are internal to the search. The trap is a CALLER-FACING one — it is
+ * spelled in tests, which use the cloning entry point.
+ */
+function assertIsRulesConfig(config: RulesConfig): void {
+  if (config === DEFAULT_RULES) return;
+  if (typeof (config as { startingLife?: unknown }).startingLife === 'number') return;
+  throw new TypeError(
+    'applyAction(state, action, config, registry): the third argument is the RULES CONFIG, ' +
+      'not the effect registry. Received an object with no `startingLife`, which is almost ' +
+      'always `{ registry }` — pass `applyAction(state, action, undefined, registry)` instead. ' +
+      'Left as it was, the registry is dropped and every effect silently degrades to ' +
+      'effectUnsupported while the test stays green (DESIGN §3.143).',
+  );
 }
 
 /**

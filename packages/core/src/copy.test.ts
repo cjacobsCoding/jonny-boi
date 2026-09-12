@@ -174,14 +174,15 @@ function castAndCopy(
   const cast = applyAction(
     next,
     { kind: 'castSpell', player: 'A', instanceId: cardId },
-    { registry, config: undefined },
+    undefined,
+    registry,
   );
   next = cast.state;
   events.push(...cast.events);
 
   // Both players pass, which resolves the spell — and stops on the copy question.
   for (const player of ['A', 'B'] as const) {
-    const pass = applyAction(next, { kind: 'passPriority', player }, { registry, config: undefined });
+    const pass = applyAction(next, { kind: 'passPriority', player }, undefined, registry);
     next = pass.state;
     events.push(...pass.events);
   }
@@ -196,7 +197,8 @@ function castAndCopy(
       choiceId: (choice as NonNullable<typeof choice>).id,
       answer: { kind: 'selectCards', instanceIds: pick === null ? [] : [pick] },
     },
-    { registry, config: undefined },
+    undefined,
+    registry,
   );
   next = answered.state;
   events.push(...answered.events);
@@ -416,7 +418,7 @@ describe('the as-enters question, driven through the real action pipeline', () =
     // reverts. One boundary is not enough to catch it.
     const registry = createEffectRegistry();
     for (const player of ['A', 'B'] as const) {
-      state = applyAction(state, { kind: 'passPriority', player }, { registry, config: undefined }).state;
+      state = applyAction(state, { kind: 'passPriority', player }, undefined, registry).state;
     }
     const still = onBattlefield(state, result.permanent.instanceId);
     expect(still?.def.name).toBe('Test Bear');
@@ -444,10 +446,10 @@ describe('the as-enters question, driven through the real action pipeline', () =
     const registry = createEffectRegistry();
     const [card] = giveHand(state, 'A', [CLONE]);
     const id = (card as CardInstance).instanceId;
-    let next = applyAction(state, { kind: 'castSpell', player: 'A', instanceId: id }, { registry, config: undefined })
+    let next = applyAction(state, { kind: 'castSpell', player: 'A', instanceId: id }, undefined, registry)
       .state;
     for (const player of ['A', 'B'] as const) {
-      next = applyAction(next, { kind: 'passPriority', player }, { registry, config: undefined }).state;
+      next = applyAction(next, { kind: 'passPriority', player }, undefined, registry).state;
     }
     // Nothing to copy ⇒ the printed "you may" has one outcome, so the game must
     // not stop to ask it.

@@ -89,9 +89,9 @@ function pilotCopiesInto(state: GameState): string {
   const [card] = giveHand(state, 'A', [CLONE]);
   const cloneId = card!.instanceId;
 
-  let next = applyAction(state, { kind: 'castSpell', player: 'A', instanceId: cloneId }, { registry }).state;
+  let next = applyAction(state, { kind: 'castSpell', player: 'A', instanceId: cloneId }, undefined, registry).state;
   for (const player of ['A', 'B'] as const) {
-    next = applyAction(next, { kind: 'passPriority', player }, { registry }).state;
+    next = applyAction(next, { kind: 'passPriority', player }, undefined, registry).state;
   }
   const choice = next.pendingChoice;
   expect(choice, 'the pilot should have been asked which permanent to copy').toBeTruthy();
@@ -104,7 +104,7 @@ function pilotCopiesInto(state: GameState): string {
     rng,
     registry,
   });
-  next = applyAction(next, action, { registry }).state;
+  next = applyAction(next, action, undefined, registry).state;
 
   const resolved =
     next.battlefield.find((c) => c.instanceId === cloneId) ??

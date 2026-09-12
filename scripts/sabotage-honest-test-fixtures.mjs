@@ -1,5 +1,8 @@
 /**
- * SABOTAGE HARNESS for the AI test-fixture registry guard (DESIGN §3.143).
+ * SABOTAGE HARNESS for the two §3.143 honesty guards: the AI test-fixture registry
+ * (`test-support-registry.test.ts`) and applyAction's third-argument refusal
+ * (`apply-action-arguments.test.ts`). Each row names the suite its break must be
+ * seen by, so a sabotage caught by the WRONG test counts as an escape.
  *
  * A test that cannot fail is this repo's most-recorded defect shape, and the guard
  * added in §3.143 exists precisely to catch a fixture that stops checking. So the
@@ -12,7 +15,7 @@
  * reported as NOT APPLIED and counted as an escape. A row whose `find` text is
  * missing is a CHANGED SOURCE, not a passing sabotage.
  *
- * Usage: node scripts/sabotage-test-registry.mjs
+ * Usage: node scripts/sabotage-honest-test-fixtures.mjs
  * Exit 0 iff every row went RED. Restores every file it touched, always.
  */
 
@@ -24,6 +27,11 @@ import { dirname, join } from 'node:path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SUPPORT = join(ROOT, 'packages/ai/src/test-support.ts');
 const GUARD = join(ROOT, 'packages/ai/src/test-support-registry.test.ts');
+const ENGINE = join(ROOT, 'packages/core/src/engine.ts');
+const ARGS_GUARD = join(ROOT, 'packages/core/src/apply-action-arguments.test.ts');
+
+/** Which suite a row's `expect` should be looked for in. Defaults to the fixture guard. */
+const SUITES = { fixture: GUARD, args: ARGS_GUARD };
 
 /**
  * One sabotage: `file`, the exact text to replace, what to replace it with, and the
@@ -149,6 +157,32 @@ const SABOTAGES = [
     replace: "  registry.register('dealDamage_typo', (ctx) => {",
     expect: 'is the body a real cast actually resolves',
   },
+
+  // --- the applyAction third-argument refusal (§3.143, the neighbouring trap) ---
+  {
+    name: 'applyAction stops refusing a non-config third argument',
+    suite: 'args',
+    file: ENGINE,
+    find: '  assertIsRulesConfig(config);',
+    replace: '  void 0;',
+    expect: 'throws on the `{ registry }` mis-call',
+  },
+  {
+    name: 'the refusal stops naming the call that fixes it',
+    suite: 'args',
+    file: ENGINE,
+    find: "      'always `{ registry }` — pass `applyAction(state, action, undefined, registry)` instead. ' +",
+    replace: "      'always a registry. ' +",
+    expect: 'names the correct call in the failure',
+  },
+  {
+    name: 'the refusal over-fires and rejects a legitimate custom config',
+    suite: 'args',
+    file: ENGINE,
+    find: "  if (typeof (config as { startingLife?: unknown }).startingLife === 'number') return;",
+    replace: '  if (false) return;',
+    expect: 'accepts a CUSTOM config',
+  },
 ];
 
 const originals = new Map();
@@ -159,10 +193,10 @@ function restoreAll() {
   for (const [file, text] of originals) writeFileSync(file, text);
 }
 
-/** Run the guard suite. Returns { red, output }. A crash counts as RED only if the expectation appears. */
-function runGuard() {
+/** Run one guard suite. Returns { red, output }. A crash counts as RED only if the expectation appears. */
+function runGuard(suite) {
   try {
-    const out = execFileSync('npx', ['vitest', 'run', 'packages/ai/src/test-support-registry.test.ts', '--reporter=basic'], {
+    const out = execFileSync('npx', ['vitest', 'run', SUITES[suite ?? 'fixture'], '--reporter=basic'], {
       cwd: ROOT,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -190,7 +224,7 @@ try {
     for (const e of edits) {
       writeFileSync(e.file, readFileSync(e.file, 'utf8').replace(e.find, e.replace));
     }
-    const { red, output } = runGuard();
+    const { red, output } = runGuard(s.suite);
     const named = output.includes(s.expect);
     if (red && named) {
       rows.push({ name: s.name, verdict: 'CAUGHT' });
