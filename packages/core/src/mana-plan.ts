@@ -690,6 +690,15 @@ export function planManaPayment(
  * sources on real boards), so it costs a handful of `planManaPayment` calls and
  * a few small arrays. Call it when a player is about to be asked something — on
  * a cast click — never once per castable card per frame.
+ *
+ * `lifeSpend` is the life the caster has ALREADY put toward this cost's
+ * Phyrexian symbols (§3.143), and it rides every plan below. It must be the same
+ * amount the cast will pay: "{1} and 4 life" for Dismember taps one land while
+ * "{1}{B}{B}" taps three, so a picker raised for one reading and a cast that
+ * makes the other is precisely the "affordable answered by one policy, taps
+ * chosen by another" mismatch this predicate exists to keep out. Zero for every
+ * cost with no Phyrexian symbol, where every line below is the code that was
+ * here before.
  */
 export function manaPaymentChoiceExists(
   view: ManaPlanView,
@@ -699,8 +708,9 @@ export function manaPaymentChoiceExists(
   spendFor?: CardDefinition,
   spendKind: ManaSpendKind = 'cast',
   preference: ManaSourcePreference = MANA_SOURCE_PREFERENCE_DEFAULT,
+  lifeSpend = 0,
 ): boolean {
-  const auto = planManaPayment(view, player, cost, legalActions, spendFor, spendKind, preference);
+  const auto = planManaPayment(view, player, cost, legalActions, spendFor, spendKind, preference, lifeSpend);
   // Unpayable ⇒ nothing to choose between. Empty ⇒ the floating pool already
   // covers it and no tap happens at all, so there is nothing to pick either.
   if (auto === undefined || auto.length === 0) return false;
@@ -728,7 +738,7 @@ export function manaPaymentChoiceExists(
         (action) =>
           !(action.kind === 'tapForMana' && action.player === player && isExcluded(action.instanceId)),
       );
-      const alternative = planManaPayment(view, player, cost, without, spendFor, spendKind, preference);
+      const alternative = planManaPayment(view, player, cost, without, spendFor, spendKind, preference, lifeSpend);
       if (alternative === undefined) continue; // those sources were load-bearing
       if (sourceIdentityKey(view.battlefield, alternative) !== autoKey) return true;
     }

@@ -13,7 +13,17 @@
  * carries its OWNER from the chooser's point of view, so the picker reads like
  * every other picker in the game rather than like a second dialect.
  */
-import { formatManaCost, MANA_COLORS, type ManaColor, type ManaCost, type ManaPool } from '@jonny-boi/core';
+import {
+  formatManaCost,
+  isColorComponent,
+  isGenericComponent,
+  isLifeComponent,
+  MANA_COLORS,
+  type HybridComponent,
+  type ManaColor,
+  type ManaCost,
+  type ManaPool,
+} from '@jonny-boi/core';
 import type { InstanceId, PlayerId } from '@jonny-boi/core';
 import { ownerLabel } from './option-labels.js';
 import type { ManaTapOption } from './mana-tap.js';
@@ -28,8 +38,14 @@ import type { ManaTapOption } from './mana-tap.js';
  * payable, and the Confirm button is gated on THAT. A second opinion driving a
  * real decision is exactly the drift `mana-plan.ts`'s header warns about; a
  * second opinion driving a label is a label.
+ *
+ * `lifeSpend` is the life the CAST has already committed to this cost's
+ * Phyrexian symbols (§3.143) — the reading the player picked. Without it the
+ * readout for "Dismember, {1} and 4 life" would go on demanding {B}{B} the cast
+ * is never going to charge, and the row would still say "Still needed" after the
+ * last land was tapped.
  */
-export function manaStillNeeded(pool: ManaPool, cost: ManaCost): ManaCost {
+export function manaStillNeeded(pool: ManaPool, cost: ManaCost, lifeSpend = 0): ManaCost {
   const spare: Partial<Record<ManaColor, number>> = {};
   // Built mutable and handed back as the readonly `ManaCost` it is — the record
   // never escapes this function under a writable type.
@@ -40,16 +56,38 @@ export function manaStillNeeded(pool: ManaPool, cost: ManaCost): ManaCost {
     if (have < need) owed[color] = need - have;
     else spare[color] = have - need;
   }
-  // A hybrid symbol is paid by either of its colours, so it consumes spare of
-  // whichever half still has some; what no colour can cover stays owed.
-  const hybridOwed: (readonly ManaColor[])[] = [];
+  // Each hybrid symbol is settled by ONE of its printed alternatives, tried in
+  // the order this payment would actually use them: the life price first while
+  // the chosen reading still has life to give (that is what the player bought
+  // with it), then a colour that has spare mana, then the `{2}` half of a
+  // `{2/W}` — which is not "paid" here so much as FOLDED into the generic pile
+  // below, exactly as core's own payment search folds it. A symbol no
+  // alternative can settle stays owed and prints as itself.
+  let lifeLeft = lifeSpend;
+  let foldedGeneric = 0;
+  const hybridOwed: (readonly HybridComponent[])[] = [];
   for (const symbol of cost.hybrid ?? []) {
-    const payer = symbol.find((color) => (spare[color] ?? 0) > 0);
-    if (payer === undefined) hybridOwed.push(symbol);
-    else spare[payer] = (spare[payer] ?? 0) - 1;
+    const life = symbol.find(isLifeComponent);
+    if (life !== undefined && life.life <= lifeLeft) {
+      lifeLeft -= life.life;
+      continue;
+    }
+    const payer = symbol.find(
+      (component): component is ManaColor => isColorComponent(component) && (spare[component] ?? 0) > 0,
+    );
+    if (payer !== undefined) {
+      spare[payer] = (spare[payer] ?? 0) - 1;
+      continue;
+    }
+    const generic = symbol.find(isGenericComponent);
+    if (generic !== undefined) {
+      foldedGeneric += generic.generic;
+      continue;
+    }
+    hybridOwed.push(symbol);
   }
-  if (hybridOwed.length > 0) owed.hybrid = hybridOwed as ManaCost['hybrid'];
-  let generic = cost.generic ?? 0;
+  if (hybridOwed.length > 0) owed.hybrid = hybridOwed;
+  let generic = (cost.generic ?? 0) + foldedGeneric;
   for (const color of MANA_COLORS) {
     if (generic === 0) break;
     const available = spare[color] ?? 0;
