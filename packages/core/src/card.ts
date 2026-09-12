@@ -17,7 +17,7 @@
 
 import type { CastZone } from './actions.js';
 import type { ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
-import { MANA_COLORS, convertedManaCost } from './mana.js';
+import { MANA_COLORS, convertedManaCost, isColorComponent } from './mana.js';
 import type { LandPlayZone } from './actions.js';
 // Type-only, so it is erased at build time and no runtime import cycle exists
 // (`copy.ts` imports this module's `unionProtection` for real).
@@ -1556,9 +1556,14 @@ export function colorsOfDefinition(def: CardDefinition): readonly ManaColor[] {
         if ((cost[pip] ?? 0) > 0) colors.push(pip);
       }
       if (cost.hybrid) {
+        // A hybrid symbol carries every colour it COULD be paid with (CR 202.2b),
+        // and that is a fact about the PRINTED cost, never about the payment: a
+        // card with {W/P} is white even when every copy of it is paid with life,
+        // and {2/W} is white even when it is paid with two Mountains. So only the
+        // COLOUR components count — generic and life are not colours.
         for (const symbol of cost.hybrid) {
           for (const option of symbol) {
-            if (option !== 'C' && !colors.includes(option)) colors.push(option);
+            if (isColorComponent(option) && option !== 'C' && !colors.includes(option)) colors.push(option);
           }
         }
       }

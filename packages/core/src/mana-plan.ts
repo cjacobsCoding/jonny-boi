@@ -260,6 +260,14 @@ const scratch = {
  * pre-§3.60 ranking exactly, so every existing caller (both pilots, every
  * recorded sim baseline) is untouched by construction; the human cast paths opt
  * in to sparing the useful source.
+ *
+ * `lifeSpend` is the life the caster has ALREADY decided to put toward this
+ * cost's Phyrexian symbols (§3.143). It is threaded down to `canPay` — the one
+ * authority on "done" — rather than subtracted from the cost here, because
+ * WHICH Phyrexian symbol the life pays for can change which colours the mana
+ * must still cover, and only the payment search knows that. Zero for every cost
+ * with no Phyrexian symbol, where every line below is the code that was here
+ * before.
  */
 export function planManaPayment(
   view: ManaPlanView,
@@ -269,6 +277,7 @@ export function planManaPayment(
   spendFor?: CardDefinition,
   spendKind: ManaSpendKind = 'cast',
   preference: ManaSourcePreference = MANA_SOURCE_PREFERENCE_DEFAULT,
+  lifeSpend = 0,
 ): ManaTapPlan[] | undefined {
   // ⚠️ THE PURPOSE IS TAKEN AS A DEFINITION, NOT AS A BUILT `ManaSpendPurpose`,
   // AND IT IS RESOLVED LAZILY. Both halves matter.
@@ -307,7 +316,7 @@ export function planManaPayment(
   // `canPay` is the authority on "done"; the distance heuristic only orders taps.
   // Checked against the LIVE pool: `canPay` only reads, so the copy can wait until
   // we know we are going to mutate one.
-  if (canPay(current, cost, current.restricted === undefined ? undefined : resolvePurpose())) return [];
+  if (canPay(current, cost, current.restricted === undefined ? undefined : resolvePurpose(), lifeSpend)) return [];
 
   // Nothing to tap ⇒ nothing can change ⇒ unpayable. Returning here skips the
   // grouping pass entirely for nearly half of all calls. Indexed rather than
@@ -488,7 +497,7 @@ export function planManaPayment(
   // each be "affordable" on their own and lethal together.
   let lifeLeft = view.players[player].life;
 
-  while (!canPay(pool, cost, anyRestricted ? resolvePurpose() : undefined)) {
+  while (!canPay(pool, cost, anyRestricted ? resolvePurpose() : undefined, lifeSpend)) {
     // At least one pip is still owed (canPay said so). Flooring at 1 matters when
     // the heuristic can't see the shortfall — a hybrid symbol reads as satisfied
     // by either colour — so a useful tap is still accepted instead of the planner
