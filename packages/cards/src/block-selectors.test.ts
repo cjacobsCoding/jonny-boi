@@ -350,3 +350,48 @@ describe("Champion of Lambholt's restriction, played through the real engine", (
     expect(rejection(defending, blockAction([{ blocker: weakling, attacker: bear }]))).toBeUndefined();
   });
 });
+
+describe('the new bound meets the OTHER half of CR 509.1 — requirements', () => {
+  /**
+   * "Must be blocked if able" and a restriction are resolved TOGETHER (CR
+   * 509.1d): an attacker nobody can LEGALLY block generates no requirement at
+   * all. So a lure standing beside a Champion whose bound has priced every
+   * available blocker out demands nothing — and a defender who declares no
+   * blocks is legal.
+   *
+   * The failure this pins is the one the solver's own section names: a
+   * requirement checked WITHOUT the restriction demands an illegal declaration
+   * and wedges the combat. The restriction here is the one §3.143 added, so it
+   * has to reach the solver's "able to block" and not only `canBlock`.
+   */
+  const LURE: CardDefinition = {
+    id: 'test-lure',
+    name: 'Lure Beast',
+    types: ['creature'],
+    cost: { generic: 3 },
+    power: 1,
+    toughness: 1,
+    keywords: { mustBeBlocked: true },
+  };
+
+  it('a lure nobody may legally block requires nothing — declaring no blocks stands', () => {
+    const state = atDeclareAttackers();
+    const champion = place(state, CHAMPION, 'A');
+    const lure = place(state, LURE, 'A');
+    place(state, creature('Weakling', 1, 1), 'B');
+    const blockers = toDeclareBlockers(attackWith(state, [champion, lure]));
+    const defending = act(blockers, { kind: 'passPriority', player: 'A' });
+    expect(rejection(defending, blockAction([]))).toBeUndefined();
+  });
+
+  it('… and WITHOUT the Champion the same lure really does have to be blocked', () => {
+    // The control. Without it the test above would pass on a board where the
+    // requirement half simply never ran.
+    const state = atDeclareAttackers();
+    const lure = place(state, LURE, 'A');
+    place(state, creature('Weakling', 1, 1), 'B');
+    const blockers = toDeclareBlockers(attackWith(state, [lure]));
+    const defending = act(blockers, { kind: 'passPriority', player: 'A' });
+    expect(rejection(defending, blockAction([]))).toMatch(/blocking requirements/);
+  });
+});
