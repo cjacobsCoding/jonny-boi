@@ -40,7 +40,8 @@ export interface LogResolvers {
  * `zoneChange` formatted to `null`. So a player could not tell a copy that
  * exiled a second creature from one that did nothing.
  *
- * A TABLE rather than a chain, so the next destination is a row. `graveyard` is
+ * A TABLE rather than a chain, so the next destination is a ROW — text AND tone,
+ * because an exile and a bounce are not the same news. `graveyard` is
  * deliberately absent: `creatureDied` already says "X dies" for that move and a
  * row here would print every death twice. (A NON-creature permanent going to a
  * graveyard is therefore still silent — a real gap, but inventing a second death
@@ -50,10 +51,12 @@ export interface LogResolvers {
  * either already narrated by a richer event (a draw, a cycle, a mill, a cast) or
  * is hidden information this shared hotseat log must not leak.
  */
-const LEAVES_BATTLEFIELD_TEXT: Readonly<Record<string, (name: string) => string>> = Object.freeze({
-  exile: (name) => `${name} is exiled.`,
-  hand: (name) => `${name} returns to its owner's hand.`,
-  library: (name) => `${name} is put into its owner's library.`,
+const LEAVES_BATTLEFIELD_TEXT: Readonly<
+  Record<string, { readonly say: (name: string) => string; readonly tone: LogLine['tone'] }>
+> = Object.freeze({
+  exile: { say: (name) => `${name} is exiled.`, tone: 'death' },
+  hand: { say: (name) => `${name} returns to its owner's hand.`, tone: undefined },
+  library: { say: (name) => `${name} is put into its owner's library.`, tone: undefined },
 });
 
 /** A target token (player or permanent) → readable text. */
@@ -76,8 +79,8 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
     case 'zoneChange': {
       // See {@link LEAVES_BATTLEFIELD_TEXT} — the board change, not the plumbing.
       if (event.from !== 'battlefield') return null;
-      const say = LEAVES_BATTLEFIELD_TEXT[event.to];
-      return say ? { text: say(r.name(event.instanceId)), tone: 'death' } : null;
+      const row = LEAVES_BATTLEFIELD_TEXT[event.to];
+      return row ? { text: row.say(r.name(event.instanceId)), tone: row.tone } : null;
     }
     case 'spellCast':
       return { text: `${r.playerName(event.player)} casts ${event.name}.`, tone: 'cast' };

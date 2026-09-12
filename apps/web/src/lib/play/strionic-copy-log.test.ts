@@ -277,3 +277,120 @@ describe('a copied SPELL is legible too', () => {
     expect(lines).toContain('Lightning Bolt deals 3 to Grizzly Bears.');
   });
 });
+
+/**
+ * THE REPORTER ACTIVATED IT **TWICE**, and the brief's candidate 3 was that the
+ * second activation aimed at the wrong object. Half of that is real and is the
+ * card working: while the first Resonator's own ability is still on the stack it
+ * is the only other object there, and "copy target **TRIGGERED** ability"
+ * refuses it (CR 602 vs 603 — the `origin: 'activated'` stamp). A second
+ * Resonator activated in that window can only re-copy the SAME original.
+ *
+ * Once the first ability RESOLVES, the copy it made is itself a triggered
+ * ability you control, and copying that is legal. Pinned here through the
+ * engine's own menu rather than a hand-built action, so a menu that drifted
+ * narrower or wider than the rejection path fails this.
+ */
+describe('two Resonators, one trigger', () => {
+  it('refuses the first Resonator ABILITY as a target, and accepts the copy it makes', () => {
+    const plains = card('Plains');
+    const created = createGame({
+      seed: 41,
+      decks: {
+        A: { cards: Array.from({ length: 40 }, () => plains) },
+        B: { cards: Array.from({ length: 40 }, () => plains) },
+      },
+      registry,
+    });
+    const st = created.state;
+    const priest = instance(st, card('Banisher Priest'), 'A', 'hand');
+    st.players.A.hand = [priest];
+    st.players.B.hand = [];
+    for (let i = 0; i < 10; i++) st.battlefield.push(instance(st, plains, 'A', 'battlefield'));
+    const resoA = instance(st, card('Strionic Resonator'), 'A', 'battlefield');
+    const resoB = instance(st, card('Strionic Resonator'), 'A', 'battlefield');
+    st.battlefield.push(resoA, resoB);
+    const enemies = ['Grizzly Bears', 'Runeclaw Bear', 'Llanowar Elves'].map((n) =>
+      instance(st, card(n), 'B', 'battlefield'),
+    );
+    for (const e of enemies) st.battlefield.push(e);
+    let s = GameSession.fromCreated(created, registry, SEAT_NAMES);
+    let guard = 0;
+    while (s.state.step !== 'precombatMain' && guard++ < 20) s = s.passPriority().session;
+
+    s = s.castWithAutoTap(priest.instanceId, []).session;
+    let g1 = 0;
+    while (g1++ < 20 && !s.state.stack.some((o) => o.kind === 'trigger' && o.targets.length > 0)) {
+      if (s.pendingChoice) {
+        s = s.answerChoice({ kind: 'selectTargets', targets: [enemies[0]!.instanceId] }).session;
+        continue;
+      }
+      if (s.state.stack.length === 0) break;
+      s = s.passPriority().session;
+    }
+    const original = s.state.stack.find((o) => o.kind === 'trigger')!;
+    const from = s.events.length;
+
+    // FIRST activation, on the original trigger; the copy is re-aimed at enemy 2.
+    s = s.activateWithAutoTap(resoA.instanceId, 0, [original.instanceId]).session;
+
+    // While that ability is ON the stack, the second Resonator may NOT name it.
+    const resonatorAim = (session: GameSession, source: number): readonly (number | PlayerId)[] =>
+      session
+        .abilityOptions()
+        .filter((o) => o.instanceId === source)
+        .flatMap((o) => (o.targets ?? []).map((t) => t.target));
+    const activatedAbility = s.state.stack.find(
+      (o) => o.kind === 'trigger' && o.instanceId !== original.instanceId,
+    );
+    expect(activatedAbility, "the Resonator's own ability is on the stack").toBeDefined();
+    expect(
+      resonatorAim(s, resoB.instanceId),
+      'an ACTIVATED ability is not a triggered one, however it sits on the stack',
+    ).not.toContain(activatedAbility!.instanceId);
+
+    // Let it resolve. Now the COPY is a triggered ability you control.
+    const isCopy = (o: { kind: string; label?: string }): boolean =>
+      o.kind === 'trigger' && (o.label ?? '').endsWith('(copy)');
+    let g2 = 0;
+    while (g2++ < 12 && !s.state.stack.some((o) => isCopy(o as never))) {
+      if (s.pendingChoice) {
+        s = s.answerChoice({ kind: 'selectTargets', targets: [enemies[1]!.instanceId] }).session;
+        continue;
+      }
+      s = s.passPriority().session;
+    }
+    const copy = s.state.stack.find((o) => isCopy(o as never));
+    expect(copy, 'the copy is on the stack above the original').toBeDefined();
+    expect(resonatorAim(s, resoB.instanceId), 'a copy IS a triggered ability you control').toContain(
+      copy!.instanceId,
+    );
+
+    const second = s.activateWithAutoTap(resoB.instanceId, 0, [copy!.instanceId]);
+    expect(second.rejected, 'copying a copy is legal').toBeNull();
+    s = second.session;
+
+    let g3 = 0;
+    while (g3++ < 40 && (s.state.stack.length > 0 || s.pendingChoice)) {
+      if (s.pendingChoice) {
+        s = s.answerChoice({ kind: 'selectTargets', targets: [enemies[2]!.instanceId] }).session;
+        continue;
+      }
+      s = s.passPriority().session;
+    }
+
+    const lines = describeEvents(s.events.slice(from), { name: s.nameOf, playerName: s.playerName }).map(
+      (l) => l.text,
+    );
+    expect(
+      lines.filter((l) => l === 'Player 1 activates Strionic Resonator.'),
+      `both activations named; got:\n${lines.join('\n')}`,
+    ).toHaveLength(2);
+    expect(
+      lines.filter((l) => l.startsWith('Player 1 copies ')),
+      `both copies announced; got:\n${lines.join('\n')}`,
+    ).toHaveLength(2);
+    // Three halves, three different creatures — what the reporter expected to see.
+    expect(new Set(s.state.players.B.exile.map((c) => c.def.name)).size).toBe(3);
+  });
+});

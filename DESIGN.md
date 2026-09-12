@@ -2973,6 +2973,18 @@ deliberately absent — `creatureDied` already says it, and a row here would pri
 A **non-creature** permanent going to a graveyard is therefore still silent: a real gap, named rather
 than papered over, because the event cannot tell the two apart.
 
+#### "Twice" — candidate 3, half real and half the card working
+
+The reporter activated it **twice**, and the brief asked whether the second activation aimed at the
+wrong object. Half of that is real, and it is the card behaving: while the FIRST Resonator's ability
+is still on the stack it is the only other object there, and *"copy target **triggered** ability"*
+refuses it — CR 602 vs 603, carried by the `origin: 'activated'` stamp. A second Resonator activated
+in that window can only re-copy the same original, which is two copies of one trigger and (with one
+legal creature) one exile. Once the first ability **resolves**, the copy it made is itself a triggered
+ability you control and copying that is legal — three halves, three creatures. Both halves are pinned
+through the engine's own MENU rather than a hand-built action, so a menu that drifted wider or
+narrower than the rejection path fails the test.
+
 #### The sibling, measured rather than assumed
 
 Spell copies do **not** share the reported defect: `spellCopied` is narrated, so a copied Lightning
@@ -2984,7 +2996,7 @@ find. The name was already in the events the session keeps (`spellCopied.name`, 
 
 **Measured.** `npx vitest run` — 0 failed. `npm run verify` exit 0. Gauntlet `"Mono-Red Aggro" --games
 40 --seed 99`: **97/320 = 30.3%** before and after, rows 17·14·19·7·8·10·17·5 identical — this branch
-changes what the app *says*, and one rules check that reaches the same board. **12 sabotages run on
+changes what the app *says*, and one rules check that reaches the same board. **15 sabotages run on
 the new tests, 0 escaped.**
 
 ### 3.146 A block bound the card does not print — Champion of Lambholt, and the second home of the settled-P/T pass — ✅ done

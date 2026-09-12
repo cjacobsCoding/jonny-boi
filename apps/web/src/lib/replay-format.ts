@@ -38,10 +38,12 @@ export function seatLabel(player: PlayerId): string {
  * vanish from the board and never be told where it went. `graveyard` is absent
  * because `creatureDied` already says it.
  */
-const LEAVES_BATTLEFIELD_TEXT: Readonly<Record<string, (card: string) => string>> = Object.freeze({
-  exile: (card) => `${card} is exiled.`,
-  hand: (card) => `${card} returns to its owner's hand.`,
-  library: (card) => `${card} is put into its owner's library.`,
+const LEAVES_BATTLEFIELD_TEXT: Readonly<
+  Record<string, { readonly say: (card: string) => string; readonly tone: LogLine['tone'] }>
+> = Object.freeze({
+  exile: { say: (card) => `${card} is exiled.`, tone: 'death' },
+  hand: { say: (card) => `${card} returns to its owner's hand.`, tone: undefined },
+  library: { say: (card) => `${card} is put into its owner's library.`, tone: undefined },
 });
 
 /** A target that is either a player or a permanent → readable text. */
@@ -64,8 +66,8 @@ export function describeEvent(event: GameEvent, name: NameResolver): LogLine | n
     case 'zoneChange': {
       // See {@link LEAVES_BATTLEFIELD_TEXT} — the board change, not the plumbing.
       if (event.from !== 'battlefield') return null;
-      const say = LEAVES_BATTLEFIELD_TEXT[event.to];
-      return say ? { text: say(name(event.instanceId)), tone: 'death' } : null;
+      const row = LEAVES_BATTLEFIELD_TEXT[event.to];
+      return row ? { text: row.say(name(event.instanceId)), tone: row.tone } : null;
     }
     case 'spellCast':
       return { text: `Player ${event.player} casts ${event.name}.`, tone: 'cast' };
