@@ -106,6 +106,7 @@ export {
   explainUnsupported,
   BACK_FACE_ID_SUFFIX,
   SECOND_CASTABLE_FACE_GAP,
+  UNPAYABLE_MANA_SYMBOL_GAP,
   FUSE_GAP,
   ROOM_DOOR_GAP,
 } from './compile/index.js';

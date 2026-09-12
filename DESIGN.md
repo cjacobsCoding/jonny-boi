@@ -2889,6 +2889,306 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.146 A block bound the card does not print — Champion of Lambholt, and the second home of the settled-P/T pass — ✅ done
+
+The row said *"a block restriction whose SELECTOR compares creatures or reads effective P/T"* and named
+**16 cards**. The first honest finding is that the label is a **catch-all**: the coverage audit gives
+every unmatched clause mentioning blocking the same `system` string, so one bucket held sixteen
+different blockers. Probed one by one, only **Champion of Lambholt** is actually the shape the row
+names — and the row's headline blocker, the effective-P/T *selector*, had already shipped in
+`f03d7f8` (Tetsuko and Delney compile). What this branch found instead was that the shipped version of
+it was **wrong in its second home**, which is worth more than the card.
+
+#### The layer question, and the option taken
+
+`statics.ts` is printed-only by design, because asking a static about effective P/T is the CR 613.8
+dependency the repo has never had. Three answers were on the table: evaluate the selector at
+declare-blockers instead of as a static; implement a real dependency ordering; or a bounded fixpoint
+with a written-down cap. **None of them was needed, because a fourth is exact and already half-built:**
+`indexContinuous` folds every P/T layer, then runs a SECOND pass for statics that read the settled
+numbers, and every static in that pass may grant **KEYWORDS ONLY**.
+
+That restriction is the whole proof, and it is one sentence: **the settled pass reads POWERS and
+writes KEYWORDS, and nothing that produces a power reads a keyword.** So the pass's output can never
+be its own input, one extra pass IS the fixpoint, and two creatures whose bounds read each other
+terminate because there is nothing for a dependency ordering to order — not because a cap stopped
+them. A bounded fixpoint would have been a cap over a loop that does not exist.
+
+§3.146 extends that pass from a SELECTOR that reads settled P/T to a granted **BOUND** that does:
+`StaticAbility.blockBoundFromSourcePower` names which field of the granted `BlockRestriction` the
+source's own settled power fills. Champion of Lambholt's "creatures with power **less than this
+creature's power** can't block creatures you control" becomes `minBlockerPower = power(Champion)`,
+recomputed on every index build — so the +1/+1 counter its own trigger adds really does raise the bar,
+which is the entire card.
+
+⚠️ **`staticIsInert` had to learn the field.** A Champion-shaped static declares no keywords and no
+P/T delta, so the generic inertness test called it inert and skipped it **before it was ever
+deferred** — the card compiling `'complete'` and doing nothing, this project's signature failure. It
+is the first sabotage in the battery for that reason.
+
+#### THE PROOF IS EXECUTABLE, not a comment
+
+`effective-pt-statics.test.ts` builds the adversarial board — two source-power bounds reading powers
+the other's grant could plausibly have moved, under an anthem moving both — and then **runs iteration
+two by hand, off the index's own output**, demanding the same numbers. A pass that could feed itself
+would disagree on the second iteration. A second case crosses the two shapes: a Delney-style filter
+that reads the Champion's settled power to decide whether the Champion is even in its set, against the
+Champion's bound reading that same power. Both settle, and the settled power is unchanged by either
+grant.
+
+On the single-instance path the property is **structural rather than argued**: `aggregateFor` is now
+`aggregateWith(state, id, runSettledPass)`, and a source-power bound reads its source by calling back
+in with `runSettledPass` **false**. The number a bound reads can only come from a walk that runs no
+bounds, and the recursion is exactly one level deep by construction.
+
+#### ⚠️ THE SHIPPED DEFECT THIS FOUND, and it is the bigger half
+
+**`aggregateFor` ignored the settled-stats bounds entirely.** It is the single-instance twin of
+`indexContinuous` and a live production path — the engine's granted-ability lookup, `protection.ts`,
+`intervening.ts`, `triggers-runtime.ts`, the pilot's board reads, four primitives — and it folded such
+a static UNCONDITIONALLY, because `staticAppliesTo` does not read the effective bounds. So **Tetsuko
+Umezawa made a 4/4 unblockable** through that path while the index path got it right. Two answers to
+one question (rule 12), shipped, and the file's own comment three lines above warns about exactly this
+failure for emblems.
+
+The older `indexContinuous and aggregateFor give the same answer` test could not see it: **its board
+carried a plain anthem**, which has no bound to ignore. The replacement is a TABLE with one row per
+deferring field, so the next such field is a row rather than a shape nobody re-checked. `foldCommandStatics`
+(emblems) got the same treatment, since an emblem radiating a settled-stats static has to reach the
+same pass a battlefield source's does.
+
+#### The pilot asks; it does not mirror
+
+Nothing was added to the AI, deliberately. `chooseBlock` already ends by handing its blocks to core's
+`illegalBlockDeclaration`, and `canBlockByEvasion` is a one-line delegation to `canBlock` — so a bound
+that lands in `KeywordFlags.blockRestriction` is honoured by the pilot for free. That is the point of
+the sibling's deletion of the ~70-line copy: the sixth printing of "the pilot re-implements a core
+blocking rule and drops a clause" is not available to be written.
+
+#### 📊 Measured, as a SET diff
+
+**725 → 726 / 2100 playable — one name GAINED (Champion of Lambholt), ZERO lost.** The two full sets
+were dumped and diffed, not counted. It is one card, and the number is reported as one card: the
+sixteen in the bucket were sixteen different gaps, not sixteen instances of this one.
+
+#### 📏 Throughput — paired against a same-box `origin/main` worktree, `process.cpuUsage`, never wall clock
+
+`packages/core/bench/settled-static-cost.ts`, three arms interleaved in one process, best-of-5. The
+**CONTROL arm** is what makes it readable — an ordinary keyword-granting static, code `origin/main`
+has too — because a keyword grant allocates a flags object per affected permanent where an anthem only
+adds two numbers, so most of the distance between an anthem board and a Champion board is the price of
+granting a keyword at all.
+
+| 300k calls, 10 creatures + 1 anthem | `origin/main` | this branch |
+| --- | --- | --- |
+| `indexContinuous`, ordinary board | 940 ns | **780 ns** |
+| `indexContinuous`, + a keyword-granting static (same code both sides) | 6,197 ns | **6,250 ns** |
+| `indexContinuous`, + a Champion | *(inert — see below)* | **6,977 ns** |
+| `aggregateFor`, ordinary board | 103 ns | **103 ns** |
+| `aggregateFor`, + a keyword-granting static | 1,040 ns | **1,250 ns** |
+
+**The board every gauntlet game actually has is at parity** — `aggregateFor` exactly (103/103), and
+the two `indexContinuous` ordinary numbers straddle each other (940 vs 780 for *identical code*, which
+is the box variance this pairing exists to expose). The control arm agrees to 0.9%. The feature's own
+cost is **+12% over a keyword-granting static of the same reach** — one extra battlefield walk — and
+is paid only while such a card is on the battlefield.
+
+⚠️ **Running the Champion arm on `origin/main` measures NOTHING** and the bench says so: the field does
+not exist there, `staticIsInert` judges the ability inert, and the static is skipped. Arm A against
+arm A and arm B against arm B are the only cross-checkout comparisons, which is exactly the kind of
+"check that reports something other than *I did not check*" this repo keeps recording.
+
+**Gauntlet seed 99 is byte-identical**: 97/320 = 30.3%, rows 17·14·19·7·8·10·17·5. No gauntlet deck
+carries a settled-stats static, and the inert path did not move.
+
+#### 🔎 Sabotage: 11 run, 11 RED, 0 escapes — after the battery itself was caught lying
+
+Each mutation flips one thing and demands the suite go red: the bound never computed; the bound read
+off the PRINTED power; the bound off by one; `staticIsInert` forgetting the field; the deferral
+predicate forgetting it; `aggregateFor` un-deferring (the shipped defect, restored); `aggregateFor`
+skipping the effective bound; the compiled comparison inverted; the static made symmetric; the static
+given a phantom "other"; and the requirement solver no longer asking `canBlock`, so CR 509.1c's
+"if able" stops seeing the new bound.
+
+⚠️ **THE FIRST RUN OF THAT BATTERY PROVED NOTHING, and the reason generalises.** The suite was
+*already red* — `indestructible-and-blocking.test.ts`'s "STILL reports the restrictions this engine
+cannot express" probe named Champion of Lambholt and had gone stale the moment it compiled — so every
+mutation reported RED and the pass reported 10/10 while checking nothing. A sabotage battery now
+**asks whether the baseline is green and refuses to run if it is not**. A stale refusal probe is worse
+than no probe: it claims a gap that closed, which is how a backlog sends the next agent to build
+something twice. It now names the shapes that are genuinely still refused.
+
+#### ⛔ Deliberately NOT built, each with the NUMBER that decided it
+
+The other fifteen cards in the bucket, probed individually. None of them is this shape.
+
+| still blocked | the real blocker | whole cards it would close |
+| --- | --- | --- |
+| Access Tunnel, Escape Tunnel | "target creature **with power N or less**" — a TARGET carrying a numeric bound. `TargetRestriction` is a flat string union with **92 `restriction ===` comparison sites in `targeting.ts` alone**; a member per N is not a row, and giving the union a shape is a different size of change. Its own type comment already names this boundary, and the second card that needs it has now landed. | **2** |
+| Secret Tunnel | TWO targets that must share a creature type — a multi-target aim with a relation between the slots. | 1 |
+| Void Winnower | the block half is a `CardFilter` parity field away, but the card's OTHER line is "your opponents can't **cast** spells with even mana values" — and core has **no cast-restriction static at all** (zero `cantCast`/`castRestriction` symbols). That is a spell-legality system, not a block selector. | 0 |
+| Archangel of Tithes | a **COST to block**, which neither a restriction nor a requirement can express — CR 509.1 has no "unless you pay" in it. Its attack half is the same shape. | 0 |
+| Fighter Class | a per-combat **TARGETED** requirement ("up to one target creature blocks it this combat if able") — combat state, not a characteristic. Also needs Class levels. | 0 |
+| Odric, Lunarch Marshal | not a block selector at all: a conditional mass keyword-sharing grant over twelve named keywords. | 1 |
+| Lord of the Accursed | "**All** Zombies gain menace until end of turn" — a mass UEOT grant with a SUBTYPE noun and a both-players scope; §3.25's "typal anthem nouns" deferral, and the compiler's subtype tables are closed on purpose. | 1 |
+| White Sun's Twilight, Skrelv's Hive, Song of Totentanz, Lord Skitter | a token created with a QUOTED ability, `"This token can't block."` **Prototyped and MEASURED: +0 cards.** The quoted-keyword read alone removes the token clause as a blocker for Lord Skitter and Skrelv's Hive, but both keep a second unrelated gap (a graveyard exile; the corrupted lifelink static), and Song of Totentanz additionally needs `splitSentences` to treat a quoted sentence's closing period as a boundary — a pool-wide change, with a sibling live on token copies. Reverted rather than landed for +0. | 0 |
+| Brotherhood Regalia, Sticky Fingers, There and Back Again | each has a second gap in another family (an "Equip legendary creature {1}" cost; a granted quoted TRIGGERED ability; two Saga chapters). | 0 |
+
+The honest headline for whoever picks this bucket up: **the biggest single item left in it is the
+filtered target (2 cards), and it is a `TargetRestriction` refactor, not a blocking feature.**
+### 3.143 Phyrexian and monocolour hybrid mana — one symbol shape, three families — ✅ done
+
+Two printed cost symbols the engine refused by name — **`{2/W}`** ("two generic, or one white",
+CR 107.4e) and **`{W/P}`** ("one white, or **2 life**", CR 107.4f) — together with the colour/colour
+`{G/W}` that already worked. The refusal comment said they "need an alternative-payment concept this
+cost shape does not have". They do not. They need the SAME concept the cost shape already had, with
+the element widened.
+
+**The whole design is one type change.** A hybrid symbol was a list of COLOURS; it is now a list of
+**components**, each a colour, a generic amount, or a life price:
+
+| printed   | components              | CR      |
+|-----------|-------------------------|---------|
+| `{G/W}`   | `['G','W']`             | 107.4d  |
+| `{2/W}`   | `[{generic:2},'W']`     | 107.4e  |
+| `{W/P}`   | `['W',{life:2}]`        | 107.4f  |
+| `{G/U/P}` | `['G','U',{life:2}]`    | 107.4f  |
+
+Widening the ELEMENT rather than adding a second and a third field is what keeps ONE answer to each
+of the four questions a symbol is asked — its mana value, its colours, how it prints, and how it is
+paid. Three parallel fields would have meant four readers each learning three shapes, and a card
+compiled through one of them would have been wrong in the other three.
+
+**Mana value is the greatest component, and that is a rule with teeth (CR 202.3b/c).** `{2/W}` is 2,
+`{G/W}` is 1, and `{W/P}` is 1 **however it was paid** — a Dismember paid entirely with life is still
+mana value 3 and still black. Every consumer of mana value inherits it from one function: curve
+sorting, cost reduction, "mana value N or less" filters, and the card index's pip reconciliation. That
+last one is the trap: `data-tools`'s `checkCard` bracketed `cmc` as `known .. known + other.length`,
+i.e. **at most one pip per unattributed symbol** — so Flame Javelin's printed 6 sat outside a bracket
+that allowed 3, and the first monocolour hybrid card to reach the index would have failed an
+invariant several systems away from the mistake. The bracket now reads `maxSymbolManaValue`, which is
+a SECOND answer to "what is a printed symbol worth?" (that package deliberately has no dependencies
+and cannot call core), so `mana-value-parity.test.ts` fails when the two disagree — and both are
+checked against Scryfall's own `cmc` over the whole card index, because a table agreeing with itself
+proves nothing if both halves are wrong.
+
+**Colour identity is a fact about the PRINTED cost, never about the payment** (CR 202.2b). The
+generic and life components add no colour; the colour components do. Fixing that turned up a smaller
+defect of the same shape: `colorsOfDefinition` walked the five pips in WUBRG order for fixed pips and
+then appended hybrid colours in PRINTED order, so `{G/W}` answered `['G','W']` while `{W}{G}` answered
+`['W','G']` — two answers to one question. One walk over the five pips now, asking each colour
+whether the cost demands it in either form.
+
+#### The life is announced with the cast, not asked afterwards
+
+Phyrexian is a real decision with a real price, so both seats must make it. It is **not** an
+`awaitingCastChoice` question, and the reason is mechanical: a Phyrexian symbol is part of the BASE
+cost, and `applyCastSpell` charges the base cost *before* the spell reaches the stack and before
+`askNextCastChoice` runs. A question parked afterwards would be answering for mana that had already
+left the pool.
+
+So the answer rides the ACTION — `CastSpellAction.phyrexianLife`, omitted when zero, exactly as
+`face`, `fromZone` and `alternative` ride it — and `pushCastOffers` emits **one cast per fundable life
+amount**: Dismember on three Swamps is three offers ({1}{B}{B}, {1}{B} + 2 life, {1} + 4 life). This
+is the madness seam from §3.19, for the same reason it was right there: every seat — both pilots, the
+hotseat UI and the online server — already enumerates actions and submits one, so the decision needs
+no new transport, no new choice kind, and no new row in the four enforced tables a choice kind would
+have touched.
+
+Three rules make it exact rather than approximate:
+
+- **`phyrexianLifeOptions(cost, life)`** is the closed list of readings, ascending, capped by the
+  LIVE life total — CR 118.4 makes paying to exactly zero legal, the player's call, and promptly
+  lethal via the state-based actions, so the cap is `life`, not `life - 1`. It returns `[0]` for every
+  cost without a Phyrexian symbol, which is every cost in the game but a handful, so the offer loop
+  stays a single pass and every existing cast action is byte-identical.
+- **The payment spends EXACTLY the life it was told to.** `canPay`/`payCost` take a `lifeSpend`
+  argument (the `purpose` precedent: a fact about this payment, not a field on the cost) and the
+  exhaustive component search must land on that amount. Exactly, not "at most" — a caster who pays 4
+  life for Dismember does it to keep two black up, and a search free to under-spend would quietly
+  overrule them.
+- **`applyCastSpell` judges the announced amount against the same closed list.** An odd number, more
+  life than the symbols price, or life on a cost with no Phyrexian symbol is REFUSED, not clamped.
+
+What the engine still decides, deliberately: WHICH symbol the life pays for when a card prints two
+Phyrexian symbols of different colours. Nothing in Magic prints one, the readings are identical when
+they share a colour, and it is the same documented delegation as which land gets tapped and which
+colour pays a `{G/W}` — the decision the card prints is modelled in full; the sub-decision is the
+payment search's, in one place, for every seat.
+
+**No third copy of CR 704.3.** The first draft ran a state-based check after charging the life, the
+way the flashback life rider does. The sabotage pass showed it changed nothing: `applyCastSpell` ends
+with one and the action boundary runs another. It was deleted, with the reason recorded — a fourth
+copy of that rule would only be somewhere for the copies to disagree.
+
+#### Both seats
+
+**The pilot's policy is two rules, and always-pay and never-pay are opposite strength bugs.** One
+`planGoalPayment` helper funds every spell goal, so the heuristic and the search price a Phyrexian
+cast identically (a search exploring a price the pilot would not pay is exploring a different game).
+*Mana before life*: the options are ascending and the first fundable reading wins, so life is spent
+only when the board genuinely cannot produce the colour — a pilot that always took the discount would
+bleed for mana it was not going to spend. *Never below the danger line*: the remaining total must stay
+above `desperateLifeThreshold`, the SAME line `answerPayLife` holds a shockland to and the burn and
+combat math already treat as desperate, because "how low may I take myself by choice" gets one answer.
+Five tests pin it, including the boundary in both directions.
+
+One more wire was needed to keep the mechanic from being inert: the pilot's cheap affordability
+prefilter compared `convertedManaCost` against available mana, so Dismember's 3 against one untapped
+land made the card invisible **on exactly the boards its printed alternative exists for**. It now
+reads `minimumManaValue`, a deliberate LOWER bound (two symbols and 2 life is scored as if both could
+be life-paid, because sharing the budget between symbols is the payment search's job, not a filter's —
+under-filtering costs a scoring pass, over-filtering hides a castable card).
+
+**The human seats** get one entry per reading in the hand menu — the same "this card has more than
+one way to be played" menu a cycling land and a split card already use, labelled with what each way
+costs (`{1}{B/P}{B/P}` / `{1}{B/P} + 2 life` / `{1} + 4 life`) — and the auto-tap plans against the
+life amount the cast will actually pay, because a picker raised for one reading and a cast that makes
+the other is the same offer/accept mismatch this seam exists to prevent. ONE `castReadings` funnel
+feeds the hand, graveyard, exile and permission lists, so they cannot disagree about what a card
+costs. Four latent defects turned up in that lane and are fixed: the web's `displayCost` dropped
+hybrid symbols entirely (a synthesized `{1}{B/P}{B/P}` rendered as `{1}`, mana value 1, colourless);
+the mana picker did not compile against the widened type and its readout still demanded the symbols
+the life had already bought; the ONLINE `castChoicesFrom` merged the per-reading offers, so a 4-life
+reading's targets rode a button submitting a cast the server never offered; and the online auto-tap
+rebuilt tap actions by hand, dropping `costInstanceId`. **The online seat takes the CHEAPEST reading
+rather than asking**, deliberately and documented: that seat has no menu at all (the same reason its
+mana picker does not exist), and life is not a resource to spend on a player's behalf.
+
+#### Measured
+
+`playable-set.mjs` over the cached 2,100-card corpus: **722 → 725**, three names gained (**Dismember,
+Gut Shot, Phyrexian Metamorph**), **zero lost**.
+
+**The honest smaller number.** The row this branch was picked from said 8 cards. All 8 print
+Phyrexian; **none** of the 2,100 prints a monocolour hybrid at all. And of the 8, only 3 were blocked
+by the symbol ALONE — the other five each need another system, named: Noxious Revival a graveyard
+template, Tezzeret's Gambit a proliferate-tail template, K'rrik "for each {B} in a cost, you may pay 2
+life" (the general form of this very rule, applied to *another* card's costs), Vraska the Compleated
+keyword plus two loyalty templates, and Norn's Annex the attack tax that spends `{W/P}`. Monocolour
+hybrid is implemented anyway because it is the same three lines as the family beside it and because
+leaving half a printed symbol family refused while the other half works is the defect this repo keeps
+unwinding — but it unblocked **0 measured cards**, and that is the number.
+
+**Throughput, measured properly (rule 7).** The seed-99 gauntlet is byte-identical to the baseline —
+**97/320 = 30.3%**, rows 17·14·19·7·8·10·17·5 — and the allocation probe is at parity: 40 seeded
+self-play games produce **26,588 actions on both arms** (so the play is identical, not merely
+similar) at **534/535 scavenges against main's 532/533**, i.e. +2, the probe's documented floor.
+Wall clock is not quoted because on this box it is worthless.
+`payCost`/`canPay` take one extra defaulted argument that is only read inside the hybrid branch, and
+the hybrid branch only runs for a cost that HAS hybrid symbols, so every ordinary cost pays nothing.
+
+**Reported rather than approximated**, and the refusal was RENAMED: the old
+`'Phyrexian and monocolour hybrid mana costs'` promised two families it now delivers, so what remains
+is `UNPAYABLE_MANA_SYMBOL_GAP` — snow mana, and any symbol with a piece outside the closed component
+table. The compiler matches the hybrid SHAPE with one regex and decides what each piece MEANS with
+that table, so the next unreadable symbol reports by name instead of being widened to the nearest
+thing that happens to exist. Still refused elsewhere: `parseManaSymbols` (the clause-level cost parser
+behind activation, kicker, equip and upkeep costs) reads only plain pips, so a `{W/P}` or `{G/W}` in
+an ACTIVATION cost reports exactly as it did before this branch — and widening it was MEASURED before it was
+skipped: a spike that accepted every hybrid family there too left the corpus at **725 — zero cards
+gained, zero lost** — so the work is not worth its blast radius today, and the refusal names itself.
+
 ### 3.142 Three soak violations, one shape — a rule answered somewhere other than by the rule — ✅ done
 
 The 2,000-game deep-tier sweep (§3.140) surfaced twelve violations. Eight were one pilot defect owned
@@ -3016,7 +3316,7 @@ saying which check was counting.
   - ⚠️ **Reverting only the pilot's count seam ALSO leaves it green** — because `legalizeBlocks`
     catches it. That is the ask-core gate being measured rather than asserted: it takes both the seam
     and the gate broken (the ninth sabotage) before the row fails.
-### 3.143 The copy family's last vocabulary — and three hints that named the wrong system — ✅ done
+### 3.147 The copy family's last vocabulary — and three hints that named the wrong system — ✅ done
 
 The coverage audit's #1 row for weeks was *"a COPY-CREATING template outside the compiler's closed
 tables"*, **21 cards**. Every SYSTEM under it was already shipped — §3.24's layer-1 as-enters copy,

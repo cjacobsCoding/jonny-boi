@@ -1,7 +1,8 @@
 /**
- * OWNER + ZONE annotations for every picker row (pure, DOM-free, unit-tested) —
- * the §3.57 fix for "there was no way to tell which cards were mine vs theirs
- * vs battlefield vs graveyard".
+ * The words a picker row is labeled with (pure, DOM-free, unit-tested) — OWNER +
+ * ZONE for the §3.57 fix ("there was no way to tell which cards were mine vs
+ * theirs vs battlefield vs graveyard"), and the PRICE for the §3.143 one (a card
+ * offering several ways to pay must say what each of them costs).
  *
  * The engine's option snapshots already carry the facts (`CardOption.controller`
  * + `CardOption.zone`; `TargetOption.controller`): this module turns those ids
@@ -19,7 +20,17 @@
  *    exiles, the stack) plus the viewer's OWN hand. An id it does not know
  *    resolves to `undefined`, never to a lookup somewhere private.
  */
-import type { CardOption, InstanceId, PlayerId, TargetOption } from '@jonny-boi/core';
+import {
+  convertedManaCost,
+  formatManaCost,
+  isLifeComponent,
+  type CardOption,
+  type HybridComponent,
+  type InstanceId,
+  type ManaCost,
+  type PlayerId,
+  type TargetOption,
+} from '@jonny-boi/core';
 import { zoneLabel } from './choice-view.js';
 import type { TargetOption as CastTargetOption } from './targeting.js';
 
@@ -233,4 +244,79 @@ export function describeTargetSetWithOwners(
 ): string {
   if (set.length === 0) return 'No target';
   return set.map((ref) => index.describe(ref)).join(', ');
+}
+
+// --- how a CAST OPTION is priced (§3.143) -------------------------------------------
+
+/** What labelling one cast option needs to know — its name and how it pays. */
+export interface CastPricing {
+  readonly name: string;
+  /** The cost this cast pays (flashback/madness costs included); `undefined` = free. */
+  readonly cost: ManaCost | undefined;
+  /** Life put toward the cost's Phyrexian symbols — absent/0 = the all-mana reading. */
+  readonly phyrexianLife?: number;
+}
+
+/** What a cast that pays nothing at all says instead of a price. */
+const FREE_PRICE_TEXT = 'no cost';
+
+/**
+ * The printed cost with the Phyrexian symbols `lifeSpend` buys REMOVED, so a
+ * label can read "{1} + 4 life" instead of reprinting symbols this cast will not
+ * pay mana for.
+ *
+ * ⚠️ DISPLAY ONLY, exactly like `mana-picker.ts`'s `manaStillNeeded`. WHICH
+ * symbols the life pays for is the engine payment search's call, and it is
+ * unobservable while a printed card's Phyrexian symbols all print the same
+ * price — so this takes them in printed order until the budget runs out. Whole
+ * symbols only: one that the budget cannot buy keeps its printed form, because
+ * a `{B/P}` the player is paying {B} for is still the symbol on the card.
+ */
+function manaAfterPhyrexianLife(cost: ManaCost, lifeSpend: number): ManaCost {
+  if (lifeSpend <= 0) return cost;
+  const symbols = cost.hybrid ?? [];
+  let budget = lifeSpend;
+  const kept: (readonly HybridComponent[])[] = [];
+  for (const symbol of symbols) {
+    const life = symbol.find(isLifeComponent);
+    if (life !== undefined && life.life <= budget) {
+      budget -= life.life;
+      continue;
+    }
+    kept.push(symbol);
+  }
+  return kept.length === symbols.length ? cost : { ...cost, hybrid: kept };
+}
+
+/**
+ * What one cast option COSTS, said in one phrase: "{1}{B/P}{B/P}" for the
+ * all-mana reading, "{1} + 4 life" for the one that buys both Phyrexian symbols
+ * (§3.143, CR 107.4f), "4 life" when life buys the whole cost.
+ *
+ * One function so the hand menu, the badge and anything that comes later price a
+ * cast the same way — the printed cost alone is not an identity once a card can
+ * be cast three ways for three different prices.
+ */
+export function castPriceText(option: CastPricing): string {
+  const life = option.phyrexianLife ?? 0;
+  if (option.cost === undefined) return FREE_PRICE_TEXT;
+  if (life === 0) return formatManaCost(option.cost);
+  const mana = manaAfterPhyrexianLife(option.cost, life);
+  const lifeText = `${life} life`;
+  // A cost the life bought outright would render as "{0}", which reads as a
+  // price rather than as "there is no mana in this one".
+  return convertedManaCost(mana) === 0 ? lifeText : `${formatManaCost(mana)} + ${lifeText}`;
+}
+
+/**
+ * The button copy for ONE way to cast a card, given how many ways the card is
+ * offering. A card with a single way says "Cast it" — there is nothing to tell
+ * apart. A card with several names its half AND its price, because the halves of
+ * a split card and the readings of a Phyrexian cost are distinguished by
+ * different facts (name, price) and a button that showed only one of them would
+ * be ambiguous for the other.
+ */
+export function castWayLabel(option: CastPricing, ways: number): string {
+  if (ways <= 1) return 'Cast it';
+  return `Cast ${option.name} — ${castPriceText(option)}`;
 }

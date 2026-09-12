@@ -32,6 +32,7 @@ import type {
   ManaSpendRestriction,
   ProtectionQuality,
   ReplacementApplies,
+  SourcePowerBlockBound,
   SpellMode,
   StaticAbility,
   StaticAffects,
@@ -554,6 +555,22 @@ const CHOOSABLE_CARD_TYPES: readonly string[] = Object.freeze([
   'planeswalker',
   'battle',
 ]);
+
+/**
+ * The printed COMPARISON in "creatures with power {less,greater} than this
+ * creature's power can't block …", mapped to the bound of the granted block
+ * restriction that the source's own power fills.
+ *
+ * "Less than X can't block" means a legal blocker has power AT LEAST X; the
+ * mirror means at most it. Typed as `SourcePowerBlockBound` so a direction core
+ * cannot honour is a type error rather than a silently inverted card, and read
+ * by BOTH the rule's pattern and its body, so a word the table does not carry
+ * cannot even match.
+ */
+const SOURCE_POWER_BLOCK_BOUNDS: Readonly<Record<string, SourcePowerBlockBound>> = Object.freeze({
+  less: 'minBlockerPower',
+  greater: 'maxBlockerPower',
+});
 
 /**
  * Whether the card being compiled prints an "As ~ enters, choose …" line at all.
@@ -7936,6 +7953,54 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
                 : { maxEffectivePowerOrToughness: bound }),
             },
             keywords,
+            label: match[0],
+          },
+        ],
+      };
+    },
+  },
+  {
+    /**
+     * A block restriction whose BOUND is the source's OWN power — "Creatures
+     * with power less than this creature's power can't block creatures you
+     * control" (Champion of Lambholt, whose power climbs by a +1/+1 counter
+     * every time another creature enters).
+     *
+     * This is the shape §3.17 and §3.25 both deferred as "a restriction whose
+     * threshold is ANOTHER permanent's power". It is expressible now because
+     * core resolves such a static in its SETTLED-P/T pass, after every P/T
+     * layer has folded — so the bound is the Champion's real power at
+     * declare-blockers time, and the keyword-only rule on that pass is what
+     * keeps the continuous layer a single exact pass (see
+     * `StaticAbility.blockBoundFromSourcePower`).
+     *
+     * The printed COMPARISON is read, never inferred: "less than" means a legal
+     * blocker needs AT LEAST the source's power, "greater than" means at most
+     * it, and the two map through a closed table so the next printing is a row.
+     */
+    id: 'static-block-bound-from-source-power',
+    description:
+      `"Creatures with power less/greater than ~'s power can't block creatures you control" (Champion of Lambholt)`,
+    pattern: new RegExp(
+      `^creatures with power (${Object.keys(SOURCE_POWER_BLOCK_BOUNDS).join('|')}) than ~'?s power` +
+        ` can'?t block creatures you control$`,
+    ),
+    build(match, ctx) {
+      // Only a permanent radiates a static; an instant printing this shape would
+      // be a one-shot effect this rule does not implement.
+      const isPermanent = ctx.card.typeLine.types.every((type) => !/^(instant|sorcery)$/i.test(type));
+      if (!isPermanent) return null;
+      const bound = SOURCE_POWER_BLOCK_BOUNDS[match[1] ?? ''];
+      if (bound === undefined) return null;
+      return {
+        statics: [
+          {
+            // The restriction rides on the ATTACKERS — "can't block creatures
+            // you control" is a property of what they may be blocked BY, which
+            // is exactly what `KeywordFlags.blockRestriction` says. Champion
+            // itself is one of them: the printed line has no "other".
+            affects: { anyOfTypes: ['creature'], controller: 'you' },
+            blockBoundFromSourcePower: bound,
             label: match[0],
           },
         ],

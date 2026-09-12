@@ -30,14 +30,38 @@
  */
 
 import { loadCardPool } from '@jonny-boi/cards';
-import type { CardDefinition } from '@jonny-boi/core';
-import { MANA_COLORS } from '@jonny-boi/core';
+import type { CardDefinition, ManaColor, ManaCost } from '@jonny-boi/core';
+import { convertedManaCost, formatManaCost, isColorComponent, MANA_COLORS } from '@jonny-boi/core';
 import type { NormalizedCard } from '@jonny-boi/data-tools/pure';
 
 /** Set code used for synthesized records, so they are identifiable downstream. */
 export const SYNTHESIZED_SET = 'eng';
 
-/** Convert an engine `ManaCost` into the display `ManaCost` shape. */
+/**
+ * Each printed HYBRID symbol as `parseManaCost` records one — the brace-less
+ * text, so a synthesized record's `other` list is the same dialect the Scryfall
+ * records use and the pip renderer needs no second rule.
+ *
+ * Printed by core's own `formatManaCost`, not by a private copy of the symbol
+ * grammar: `{G/W}`, `{2/W}` and `{W/P}` all print from one table, and a second
+ * one here would be the place they drifted. Read off the LAST brace group,
+ * because the printer prepends `{0}` to a cost whose mana value is zero.
+ */
+function hybridSymbolTexts(cost: ManaCost): string[] {
+  return (cost.hybrid ?? []).map((symbol) => {
+    const printed = formatManaCost({ hybrid: [symbol] });
+    return printed.slice(printed.lastIndexOf('{') + 1, -1);
+  });
+}
+
+/**
+ * Convert an engine `ManaCost` into the display `ManaCost` shape.
+ *
+ * Hybrid symbols ride in `other`, which is exactly what that field is for
+ * ("recorded verbatim so callers can degrade gracefully rather than silently
+ * dropping cost information"). It used to be handed back empty, so a synthesized
+ * Dismember rendered as `{1}` — a card shown at a price it cannot be bought for.
+ */
 function displayCost(def: CardDefinition): NormalizedCard['manaCost'] {
   const cost = def.cost ?? {};
   return {
@@ -48,16 +72,35 @@ function displayCost(def: CardDefinition): NormalizedCard['manaCost'] {
     R: cost.R ?? 0,
     G: cost.G ?? 0,
     C: cost.C ?? 0,
-    other: [],
+    other: hybridSymbolTexts(cost),
   };
 }
 
-/** Converted mana cost — generic plus every coloured pip. */
+/**
+ * Converted mana cost — core's own answer, so a hybrid symbol counts for what
+ * CR 202.3b says it counts for (the greatest of its components) instead of for
+ * nothing. The hand-rolled sum this replaced put a `{1}{B/P}{B/P}` card on the
+ * curve at 1.
+ */
 function cmcOf(def: CardDefinition): number {
-  const cost = def.cost ?? {};
-  let total = cost.generic ?? 0;
-  for (const color of MANA_COLORS) total += cost[color] ?? 0;
-  return total;
+  return convertedManaCost(def.cost ?? {});
+}
+
+/**
+ * The colours a definition's cost prints (CR 202.2). A hybrid symbol makes a
+ * card every colour it lists — `{G/W}` is green AND white, `{B/P}` is black —
+ * so the colour columns and filters read the same hybrid list the cost does.
+ */
+function colorsOf(def: CardDefinition): ManaColor[] {
+  const cost = def.cost;
+  return MANA_COLORS.filter(
+    (color) =>
+      color !== 'C' &&
+      ((cost?.[color] ?? 0) > 0 ||
+        (cost?.hybrid ?? []).some((symbol) =>
+          symbol.some((component) => isColorComponent(component) && component === color),
+        )),
+  );
 }
 
 /** Title-case a type for the printed type line ("creature" → "Creature"). */
@@ -89,8 +132,8 @@ export function displayRecordFor(def: CardDefinition): NormalizedCard {
     oracleText: '',
     power: def.power ?? null,
     toughness: def.toughness ?? null,
-    colors: MANA_COLORS.filter((c) => c !== 'C' && (def.cost?.[c] ?? 0) > 0),
-    colorIdentity: MANA_COLORS.filter((c) => c !== 'C' && (def.cost?.[c] ?? 0) > 0),
+    colors: colorsOf(def),
+    colorIdentity: colorsOf(def),
     keywords: keywordNames(def),
     set: SYNTHESIZED_SET,
     collectorNumber: '0',

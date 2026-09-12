@@ -1257,6 +1257,26 @@
         "Venser's Journal",
         "Riot Control"
       ]
+    },
+    {
+      "role": "§3.143 Phyrexian and monocolour hybrid mana — the symbol families the cost shape used to refuse. The first three compile COMPLETE today; the rest are here on purpose as a coverage probe, each blocked by a DIFFERENT named system (a graveyard template, a proliferate tail, the Compleated keyword, an attack tax that spends {W/P}), and the monocolour hybrids because not one of them appears in the 2,100-card corpus this pool is measured against.",
+      "names": [
+        "Dismember",
+        "Gut Shot",
+        "Phyrexian Metamorph",
+        "Mutagenic Growth",
+        "Apostle's Blessing",
+        "Vault Skirge",
+        "Porcelain Legionnaire",
+        "Noxious Revival",
+        "Tezzeret's Gambit",
+        "Norn's Annex",
+        "Flame Javelin",
+        "Spectral Procession",
+        "Beseech the Queen",
+        "Kitchen Finks",
+        "Murderous Redcap"
+      ]
     }
   ]
 }

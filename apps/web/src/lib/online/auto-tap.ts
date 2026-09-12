@@ -18,14 +18,18 @@
  * Nothing here bypasses server authority — a rejected step just stops the sequence.
  */
 import {
+  phyrexianLifeOptions,
   planManaPayment,
+  tapActionFor,
   SPARE_USEFUL_MANA_SOURCES,
+  type CardDefinition,
   type CardInstance,
   type CastZone,
   type GameAction,
   type InstanceId,
   type ManaCost,
   type ManaPlanView,
+  type ManaTapPlan,
   type PlayerId,
 } from '@jonny-boi/core';
 
@@ -38,6 +42,9 @@ import {
  */
 const HUMAN_MANA_PREFERENCE = SPARE_USEFUL_MANA_SOURCES;
 
+/** The reading that pays a cost entirely in mana — every cast bar §3.143's few. */
+const ALL_MANA_READING = 0;
+
 /**
  * The cost this cast pays: the printed cost from hand, the flashback cost from
  * the graveyard (the engine's own rule at `applyCastSpell` — the two must agree
@@ -47,6 +54,62 @@ const HUMAN_MANA_PREFERENCE = SPARE_USEFUL_MANA_SOURCES;
 function castCost(card: CardInstance, fromZone: CastZone): ManaCost | undefined | null {
   if (fromZone === 'graveyard') return card.def.flashback ?? null;
   return card.def.cost;
+}
+
+/** A funded cast: the reading it pays, and the taps that pay for it. */
+interface FundedCast {
+  /** Life toward the cost's Phyrexian symbols — {@link ALL_MANA_READING} for most casts. */
+  readonly phyrexianLife: number;
+  /** Empty when the floating pool already pays; the server then offers the cast itself. */
+  readonly taps: readonly ManaTapPlan[];
+}
+
+/**
+ * The CHEAPEST reading of `cost` this board can fund, and the taps that fund it
+ * — `null` when no reading is fundable at all.
+ *
+ * THE ONE FUNNEL for "can this seat pay for that?", shared by the sequence
+ * builder and both castable-with-taps sets, so an affordance can never light up
+ * a card the sequence then refuses to build.
+ *
+ * CHEAPEST — the LEAST life — is the rule, and it is a deliberate one. §3.143
+ * makes a Phyrexian cost several offers ("{1}{B}{B}", "{1}{B} and 2 life",
+ * "{1} and 4 life"), the hotseat puts all of them on a menu, and this seat has
+ * no menu to put them on: it holds a redacted view and every tap is a server
+ * round trip (see the note at the foot of this file). Life is not a resource to
+ * spend on a player's behalf, so the seat takes the reading that spends the
+ * least of it and only ever reaches a life reading when no all-mana one exists —
+ * which is the difference between the mechanic working online and the card being
+ * uncastable there. `phyrexianLifeOptions` is ascending, so "first fundable" IS
+ * "cheapest", and it returns `[0]` for every cost with no Phyrexian symbol,
+ * where every line here is the code that was here before.
+ *
+ * A view with no `life` (the field is optional on `ManaPlanView`) yields the
+ * all-mana reading alone — honest degradation, never a guess at a life total.
+ */
+function fundCheapestReading(
+  view: ManaPlanView,
+  player: PlayerId,
+  cost: ManaCost | undefined,
+  def: CardDefinition,
+  legalActions: readonly GameAction[],
+): FundedCast | null {
+  if (!cost) return { phyrexianLife: ALL_MANA_READING, taps: [] };
+  const life = view.players[player].life ?? ALL_MANA_READING;
+  for (const phyrexianLife of phyrexianLifeOptions(cost, life)) {
+    const taps = planManaPayment(
+      view,
+      player,
+      cost,
+      legalActions,
+      def,
+      'cast',
+      HUMAN_MANA_PREFERENCE,
+      phyrexianLife,
+    );
+    if (taps) return { phyrexianLife, taps };
+  }
+  return null;
 }
 
 /**
@@ -59,6 +122,10 @@ function castCost(card: CardInstance, fromZone: CastZone): ManaCost | undefined 
  *
  * Actions must be sent in order; the server applies them sequentially, so each tap
  * is legal when it arrives and the cast is legal once the last one lands.
+ *
+ * The cast names the READING the taps were planned for (§3.143). Both come from
+ * one call to {@link fundCheapestReading}, so the sequence cannot tap for
+ * "{1}{B}{B}" and then ask the server for "{1} and 4 life".
  */
 export function castSequence(
   view: ManaPlanView,
@@ -70,31 +137,23 @@ export function castSequence(
 ): GameAction[] | null {
   const cost = castCost(card, fromZone);
   if (cost === null) return null; // graveyard cast of a card with no flashback
-  const plan = cost
-    ? planManaPayment(
-        view,
-        player,
-        cost,
-        legalActions,
-        card.def,
-        'cast',
-        HUMAN_MANA_PREFERENCE,
-      )
-    : [];
-  if (!plan) return null;
+  const funded = fundCheapestReading(view, player, cost, card.def, legalActions);
+  if (!funded) return null;
 
-  const actions: GameAction[] = plan.map((tap) => ({
-    kind: 'tapForMana',
-    player,
-    instanceId: tap.instanceId,
-    mode: tap.mode,
-  }));
+  // Built by core's own action builder, not rebuilt from `{instanceId, mode}`:
+  // a plan entry can also name the permanent that pays the source's ADDITIONAL
+  // cost (Springleaf Drum, Phyrexian Tower), and a tap that drops it is refused
+  // by the server that offered it.
+  const actions: GameAction[] = funded.taps.map((tap) => tapActionFor(player, tap));
   actions.push({
     kind: 'castSpell',
     player,
     instanceId: card.instanceId,
     targets: targets.length > 0 ? [...targets] : undefined,
     ...(fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
+    // Written only when it is not the default, so every cast that pays no life
+    // is the action object the server has always been sent.
+    ...(funded.phyrexianLife === ALL_MANA_READING ? {} : { phyrexianLife: funded.phyrexianLife }),
   });
   return actions;
 }
@@ -106,6 +165,10 @@ export function castSequence(
  * Only reports a card when a funding plan exists AND the server is currently
  * offering at least one tap, which is what tells us the timing window is open at
  * all (the server withholds `tapForMana` when the seat lacks priority).
+ *
+ * Asked through {@link fundCheapestReading}, the same funnel {@link castSequence}
+ * builds from, so "this card glows" and "clicking it produces a sequence" are one
+ * answer rather than two that can drift.
  */
 export function castableWithTaps(
   view: ManaPlanView,
@@ -119,9 +182,7 @@ export function castableWithTaps(
   for (const card of hand) {
     const cost = card.def.cost;
     if (!cost) continue;
-    if (planManaPayment(view, player, cost, legalActions, card.def, 'cast', HUMAN_MANA_PREFERENCE)) {
-      out.add(card.instanceId);
-    }
+    if (fundCheapestReading(view, player, cost, card.def, legalActions)) out.add(card.instanceId);
   }
   return out;
 }
@@ -150,9 +211,7 @@ export function graveyardCastableWithTaps(
     if (cost === undefined) continue;
     const instantSpeed = card.def.timing === 'instant' || card.def.types.includes('instant');
     if (!instantSpeed && !sorceryWindowOpen) continue;
-    if (planManaPayment(view, player, cost, legalActions, card.def, 'cast', HUMAN_MANA_PREFERENCE)) {
-      out.add(card.instanceId);
-    }
+    if (fundCheapestReading(view, player, cost, card.def, legalActions)) out.add(card.instanceId);
   }
   return out;
 }
@@ -173,4 +232,20 @@ export function graveyardCastableWithTaps(
  * asks — so the two seats cannot disagree about when a decision exists. A
  * wrapper for it is NOT parked here in the meantime: an exported helper with no
  * caller is dead code wearing a green checkmark.
+ *
+ * 📌 NEITHER IS THE ONLINE PHYREXIAN READING PICKER (§3.143), and for the same
+ * reason: it is a menu, and a menu is the thing this seat does not have.
+ *
+ * What it costs today is one option, not correctness. A Phyrexian spell IS
+ * castable online — {@link fundCheapestReading} takes the cheapest reading the
+ * board can fund, and the cast action names it — but a player who wants to pay
+ * MORE life than they have to, to keep a land up for a trick, cannot say so
+ * here. The hotseat can (`GameSession.castOptions` offers one option per
+ * fundable amount and the board's "how do you want to play this?" menu lists
+ * them by price).
+ *
+ * When it is built, it is the SAME menu, fed from `phyrexianLifeOptions` and
+ * `planManaPayment`'s `lifeSpend` — both already threaded through this module —
+ * and the sequence stops choosing for the player. Until then this file makes the
+ * one choice it can defend: the least life.
  */

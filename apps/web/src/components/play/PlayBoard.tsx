@@ -45,7 +45,12 @@ import { StopsMenu } from './StopsMenu.js';
 import './board-clarity.css';
 import { blockerLinePairs } from '../../lib/play/combat-lines.js';
 import { groupJailedByJailer, jailSourcesOf } from '../../lib/play/jail-view.js';
-import { describeCastTarget, makeRefIndex, type KnownRef } from '../../lib/play/option-labels.js';
+import {
+  castWayLabel,
+  describeCastTarget,
+  makeRefIndex,
+  type KnownRef,
+} from '../../lib/play/option-labels.js';
 import type { AnimationCardInfo } from '../../lib/play/animations.js';
 import { AnimationLayer, useZoneAnimations } from './AnimationLayer.js';
 import { VfxLayer, useGameVfx } from './VfxLayer.js';
@@ -68,17 +73,35 @@ import {
 import './copilot.css';
 
 /**
- * A cast option's identity — instance, zone AND face, because one instance can
- * offer several casts (a split card's two halves; a card castable from hand and
- * from the graveyard) and they are funded independently. The same three facts
- * `CastOption` itself is keyed on inside the session.
+ * A cast option's identity — instance, zone, face AND the life its Phyrexian
+ * symbols are paid with, because one instance can offer several casts (a split
+ * card's two halves; a card castable from hand and from the graveyard; §3.143's
+ * "{1}{B}{B}" and "{1} and 4 life") and every one of them is funded
+ * independently. The same four facts `CastOption` itself is keyed on inside the
+ * session.
  */
 function castOptionKey(option: CastOption): string {
-  return `${option.instanceId}:${option.fromZone ?? 'hand'}:${option.face ?? 'front'}`;
+  const life = option.phyrexianLife ?? 0;
+  return `${option.instanceId}:${option.fromZone ?? 'hand'}:${option.face ?? 'front'}:${life}`;
 }
 
 /** A shared empty cost, so the no-picker render allocates nothing per frame. */
 const EMPTY_COST: ManaCost = Object.freeze({});
+
+/**
+ * The hand badge for a card the player can cast: how many WAYS, counted from the
+ * options themselves rather than asserted.
+ *
+ * It said "2 halves" unconditionally, which was true while a split card was the
+ * only way one instance could offer two casts. §3.143 made it false — Dismember
+ * offers three casts of ONE half — so the count comes from the data: distinct
+ * faces when the ways really are halves, the plain number of readings otherwise.
+ */
+function castWaysBadge(casts: readonly CastOption[]): string {
+  if (casts.length <= 1) return 'castable';
+  const halves = new Set(casts.map((option) => option.face ?? 'front')).size;
+  return halves > 1 ? `castable · ${halves} halves` : `castable · ${casts.length} ways`;
+}
 
 /**
  * The first of a hand card's cast options that has a genuine choice of funding
@@ -411,9 +434,17 @@ export function PlayBoard({
     return ids;
   }, [session, isViewersPriority]);
 
-  /** The live "still needed: {1}{G}" readout, against the WORKING pool. */
+  /**
+   * The live "still needed: {1}{G}" readout, against the WORKING pool — and
+   * against the READING the paused cast is paying (§3.143), so the Phyrexian
+   * symbols its life already bought are not still being demanded in mana.
+   */
   const manaOwed = manaPicker
-    ? manaStillNeeded(session.state.players[session.priorityPlayer].manaPool, manaPicker.cast.cost ?? {})
+    ? manaStillNeeded(
+        session.state.players[session.priorityPlayer].manaPool,
+        manaPicker.cast.cost ?? EMPTY_COST,
+        manaPicker.cast.phyrexianLife ?? 0,
+      )
     : EMPTY_COST;
 
   /**
@@ -454,6 +485,7 @@ export function PlayBoard({
       picker.targets,
       picker.cast.fromZone ?? 'hand',
       picker.cast.face,
+      picker.cast.phyrexianLife,
     );
     if (result.rejected) {
       notify(result.rejected);
@@ -507,7 +539,17 @@ export function PlayBoard({
     }
     // `fromZone` rides the option: a flashback cast names its graveyard source
     // (and pays the flashback cost inside castWithAutoTap); hand casts omit it.
-    run(() => session.castWithAutoTap(cast.instanceId, targets, cast.fromZone ?? 'hand', cast.face));
+    // So does `phyrexianLife` — the option IS the reading the player picked, and
+    // dropping it here would auto-tap for one price and cast at another.
+    run(() =>
+      session.castWithAutoTap(
+        cast.instanceId,
+        targets,
+        cast.fromZone ?? 'hand',
+        cast.face,
+        cast.phyrexianLife,
+      ),
+    );
   };
 
   const commitCast = (targets: readonly (InstanceId | PlayerId)[]): void => {
@@ -687,6 +729,14 @@ export function PlayBoard({
    * Activate a graveyard card from the panel. Routed through the SAME
    * `onCastClick` chokepoint as a hand card, so the flashback flow (target
    * prompt, auto-tap, rejection toast) cannot diverge from the hand's.
+   *
+   * 📌 The panel has no "how do you want to play this?" menu, so a card offering
+   * several graveyard casts takes the FIRST — which is the cheapest reading, the
+   * session pushing them in ascending life order (§3.143). That is the safe
+   * default rather than an arbitrary one: a click must never spend life the
+   * player was not asked about. No printed card prints a Phyrexian flashback
+   * cost today; the day one does, the panel needs the hand's menu, not a
+   * different rule here.
    */
   const onGraveyardCardClick = (id: InstanceId): void => {
     const opt = graveyardCasts.find((o) => o.instanceId === id);
@@ -1120,8 +1170,9 @@ export function PlayBoard({
         >
           {(view.self.hand ?? []).map((c) => {
             const land = playableLands.includes(c.instanceId);
-            // A split card contributes ONE option per half; the badge summarises
-            // them and the menu below lists them by name.
+            // A split card contributes ONE option per half and a Phyrexian cost
+            // ONE per life amount it could be paid with; the badge summarises
+            // them and the menu below lists them by name and price.
             const casts = castOptions.filter((o) => o.instanceId === c.instanceId);
             const cast = casts[0];
             const cycles = cycleOptions.filter((o) => o.instanceId === c.instanceId);
@@ -1131,9 +1182,7 @@ export function PlayBoard({
                 ? 'Land · cycling'
                 : 'Land'
               : casts.some((o) => o.affordableNow)
-                ? casts.length > 1
-                  ? 'castable · 2 halves'
-                  : 'castable'
+                ? castWaysBadge(casts)
                 : cast
                   ? 'tap mana'
                   : cycles.length > 0
@@ -1376,10 +1425,11 @@ export function PlayBoard({
                 .filter((o) => o.instanceId === handChoice)
                 .map((o, _index, all) => (
                   <button
-                    // Keyed by FACE as well as instance: a split card puts two
-                    // buttons here for one card, and two identical React keys
-                    // would collapse them into one.
-                    key={`cast:${o.instanceId}:${o.face ?? 'front'}`}
+                    // Keyed by the option's whole identity: a split card puts two
+                    // buttons here for one card and a Phyrexian cost puts one per
+                    // life amount, and two identical React keys would collapse
+                    // them into one.
+                    key={`cast:${castOptionKey(o)}`}
                     type="button"
                     className="btn"
                     onClick={() => {
@@ -1387,7 +1437,11 @@ export function PlayBoard({
                       onCastClick(o);
                     }}
                   >
-                    {all.length > 1 ? `Cast ${o.name}` : 'Cast it'}
+                    {/* Name AND price: the halves of a split card are told apart
+                        by their names and the readings of a Phyrexian cost by
+                        their prices, so a button that showed only one of the two
+                        would be ambiguous for the other kind of card. */}
+                    {castWayLabel(o, all.length)}
                   </button>
                 ))}
               {cycleOptions

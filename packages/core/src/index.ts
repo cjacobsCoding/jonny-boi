@@ -32,9 +32,19 @@ export type { Rng } from './rng.js';
 export { createRng, shuffle } from './rng.js';
 
 // Mana
-export type { ManaColor, ManaCost, ManaPool, ManaProduction, PaymentResult } from './mana.js';
+export type {
+  GenericHybridComponent,
+  HybridComponent,
+  LifeHybridComponent,
+  ManaColor,
+  ManaCost,
+  ManaPool,
+  ManaProduction,
+  PaymentResult,
+} from './mana.js';
 export {
   MANA_COLORS,
+  PHYREXIAN_LIFE_PRICE,
   emptyPool,
   addMana,
   addProduction,
@@ -42,8 +52,14 @@ export {
   poolTotal,
   convertedManaCost,
   formatManaCost,
+  minimumManaValue,
+  hybridSymbolManaValue,
+  isColorComponent,
+  isGenericComponent,
+  isLifeComponent,
   payCost,
   canPay,
+  phyrexianLifeOptions,
   repeatCost,
   usableMana,
   restrictedTotal,
@@ -123,7 +139,13 @@ export {
  * Aggregated through the same `indexContinuous` path as until-end-of-turn effects,
  * so every consumer that already reads effective values gets statics for free.
  */
-export type { PermanentModification, StaticAbility, StaticAffects, StaticControllerScope } from './statics.js';
+export type {
+  PermanentModification,
+  SourcePowerBlockBound,
+  StaticAbility,
+  StaticAffects,
+  StaticControllerScope,
+} from './statics.js';
 
 /**
  * "As ~ enters, choose a…" (CR 614.1c) — the value a permanent NAMES as it

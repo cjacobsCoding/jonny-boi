@@ -16,8 +16,8 @@
  */
 
 import type { CastZone } from './actions.js';
-import type { ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
-import { MANA_COLORS, convertedManaCost } from './mana.js';
+import type { HybridComponent, ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
+import { MANA_COLORS, convertedManaCost, isColorComponent } from './mana.js';
 import type { LandPlayZone } from './actions.js';
 // Type-only, so it is erased at build time and no runtime import cycle exists
 // (`copy.ts` imports this module's `unionProtection` for real).
@@ -1535,6 +1535,18 @@ const COLOR_PIPS: readonly ManaColor[] = ['W', 'U', 'B', 'R', 'G'];
  * consumer (protection, colored card filters, coloured anthems) inherits that
  * limit together, from this one reader.
  */
+/** Whether any hybrid symbol in a cost offers `color` as one of its components. */
+function costHybridOffers(hybrid: NonNullable<ManaCost['hybrid']>, color: ManaColor): boolean {
+  for (let i = 0; i < hybrid.length; i++) {
+    const symbol = hybrid[i] as readonly HybridComponent[];
+    for (let c = 0; c < symbol.length; c++) {
+      const component = symbol[c] as HybridComponent;
+      if (isColorComponent(component) && component === color) return true;
+    }
+  }
+  return false;
+}
+
 export function colorsOfDefinition(def: CardDefinition): readonly ManaColor[] {
   const memoized = COLORS_MEMO.get(def);
   if (memoized) return memoized;
@@ -1552,15 +1564,25 @@ export function colorsOfDefinition(def: CardDefinition): readonly ManaColor[] {
   } else {
     const cost = def.cost;
     if (cost) {
+      // ONE walk over the five pips, asking each colour whether the cost demands
+      // it — as a fixed pip or as one alternative of a hybrid symbol (CR 202.2b:
+      // a hybrid symbol is every colour it COULD be paid with). Walking the
+      // colours rather than the cost is what fixes the ORDER: before this, a
+      // {G/W} card answered ['G','W'] while a {W}{G} card answered ['W','G'],
+      // which is two answers to one question.
+      //
+      // A hybrid symbol's colours are a fact about the PRINTED cost, never about
+      // the payment: a card with {W/P} is white even when every copy of it is
+      // paid with life, and {2/W} is white even when it is paid with two
+      // Mountains. So only the COLOUR components count — generic and life are
+      // not colours, and {C} is not one either.
       for (const pip of COLOR_PIPS) {
-        if ((cost[pip] ?? 0) > 0) colors.push(pip);
-      }
-      if (cost.hybrid) {
-        for (const symbol of cost.hybrid) {
-          for (const option of symbol) {
-            if (option !== 'C' && !colors.includes(option)) colors.push(option);
-          }
+        if ((cost[pip] ?? 0) > 0) {
+          colors.push(pip);
+          continue;
         }
+        if (cost.hybrid === undefined) continue;
+        if (costHybridOffers(cost.hybrid, pip)) colors.push(pip);
       }
     }
   }
