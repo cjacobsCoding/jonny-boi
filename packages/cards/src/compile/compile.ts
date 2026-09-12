@@ -59,6 +59,8 @@ import {
   COST_NOUN_PHRASE,
 } from './rules.js';
 import { mergeKeywordGrant } from '@jonny-boi/core';
+import type { HybridComponent } from '@jonny-boi/core';
+import { isLifeComponent, MANA_COLORS, PHYREXIAN_LIFE_PRICE } from '@jonny-boi/core';
 import type { CastZone, KeywordFlags } from '@jonny-boi/core';
 // §3.112 — the cast-alternative family's closed kind list, for the keyword sweep.
 import { ALTERNATIVE_COST_KINDS } from '@jonny-boi/core';
@@ -396,11 +398,53 @@ const KEYWORD_ABILITY_TEXT: Readonly<Record<string, string>> = Object.freeze({
 });
 
 /**
- * A color/color hybrid symbol as the Scryfall parser leaves it in `other`
- * (e.g. `G/W`). Monocolour hybrid (`2/W`) and Phyrexian (`W/P`) deliberately do
- * not match — the engine cannot pay those, so they must stay reported.
+ * A hybrid symbol as the Scryfall parser leaves it in `other` — two or more
+ * alternatives separated by slashes (`G/W`, `2/W`, `W/P`, `G/U/P`).
+ *
+ * The SHAPE is one regex because every hybrid family shares it; what each piece
+ * MEANS is `hybridComponentOf`, a CLOSED table. A piece outside that table
+ * (snow's `S`, the un-printable `1/2`) makes the whole symbol unreadable and the
+ * card reports — which is the point: a symbol we would mis-cost is never
+ * complete, and widening the regex to "anything with a slash" would silently
+ * accept exactly the symbols this refuses.
  */
-const HYBRID_SYMBOL = /^([WUBRGC])\/([WUBRGC])$/;
+const HYBRID_SYMBOL = /^[^/]+(?:\/[^/]+)+$/;
+
+/**
+ * Every alternative a printed hybrid symbol can offer, as a CLOSED table from
+ * the printed piece to the component it compiles to. A row is the whole cost of
+ * supporting a new hybrid family; a piece with no row reports by name.
+ *
+ *  - `W`…`C` — the colour option of `{G/W}` and of `{2/W}` (CR 107.4d/e).
+ *  - a bare number — the generic option of `{2/W}` (CR 107.4e).
+ *  - `P` — Phyrexian: pay 2 life instead of the colour (CR 107.4f).
+ */
+function hybridComponentOf(piece: string): HybridComponent | undefined {
+  if ((MANA_COLORS as readonly string[]).includes(piece)) return piece as ManaColor;
+  if (/^\d+$/.test(piece)) return { generic: Number.parseInt(piece, 10) };
+  if (piece === 'P') return { life: PHYREXIAN_LIFE_PRICE };
+  return undefined;
+}
+
+/**
+ * One printed hybrid symbol's components, or undefined when any piece is outside
+ * the closed table above.
+ *
+ * A symbol whose every piece is a LIFE price would have no mana reading at all,
+ * and nothing in Magic prints one — refused rather than modelled, so the payment
+ * search is never handed a symbol no amount of mana can satisfy.
+ */
+function hybridComponentsOf(symbol: string): HybridComponent[] | undefined {
+  const components: HybridComponent[] = [];
+  let payableWithMana = false;
+  for (const piece of symbol.split('/')) {
+    const component = hybridComponentOf(piece);
+    if (component === undefined) return undefined;
+    if (!isLifeComponent(component)) payableWithMana = true;
+    components.push(component);
+  }
+  return payableWithMana ? components : undefined;
+}
 
 /** Fold a fixed bundle of colors ({C}{C}) into the single mode one tap adds. */
 function bundleAsMode(bundle: readonly ManaColor[]): ManaProduction {
@@ -411,12 +455,12 @@ function bundleAsMode(bundle: readonly ManaColor[]): ManaProduction {
 
 /** Split `other` cost symbols into payable hybrids, `{X}` symbols, and genuinely unpayable ones. */
 function partitionOtherSymbols(symbols: readonly string[]): {
-  hybrid: ManaColor[][];
+  hybrid: HybridComponent[][];
   /** How many `{X}` symbols the cost prints — payable now (chosen at cast time). */
   xCount: number;
   unpayable: string[];
 } {
-  const hybrid: ManaColor[][] = [];
+  const hybrid: HybridComponent[][] = [];
   const unpayable: string[] = [];
   let xCount = 0;
   for (const symbol of symbols) {
@@ -427,15 +471,15 @@ function partitionOtherSymbols(symbols: readonly string[]): {
       xCount += 1;
       continue;
     }
-    const match = HYBRID_SYMBOL.exec(upper);
-    if (match) hybrid.push([match[1] as ManaColor, match[2] as ManaColor]);
+    const components = HYBRID_SYMBOL.test(upper) ? hybridComponentsOf(upper) : undefined;
+    if (components) hybrid.push(components);
     else unpayable.push(symbol);
   }
   return { hybrid, xCount, unpayable };
 }
 
 /** Convert a data-tools mana cost to the core cost shape (omitting zeroes). */
-function toCoreCost(card: CompilableCard, hybrid: readonly (readonly ManaColor[])[]): ManaCost | undefined {
+function toCoreCost(card: CompilableCard, hybrid: readonly (readonly HybridComponent[])[]): ManaCost | undefined {
   const source = card.manaCost;
   const cost: Record<string, unknown> = {};
   if (source.generic > 0) cost.generic = source.generic;
@@ -1219,16 +1263,17 @@ export function compileCard(card: CompilableCard): CompileResult {
   }
 
   // --- mana cost -------------------------------------------------------------
-  // Colour/colour hybrid symbols are payable (the mana system tries each
-  // assignment) and `{X}` is payable now too — its value is a cast-time choice
-  // the engine charges (`CardDefinition.xCost`). What remains in `other` —
-  // Phyrexian, monocolour hybrid, snow — genuinely cannot be paid, and a card
-  // we would mis-cost is never complete.
+  // EVERY hybrid family is payable (§3.143): the mana system searches the
+  // components of each symbol, and a Phyrexian one's life price is announced
+  // with the cast. `{X}` is payable too — its value is a cast-time choice the
+  // engine charges (`CardDefinition.xCost`). What remains in `other` — snow, and
+  // anything whose pieces are outside the closed component table — genuinely
+  // cannot be paid, and a card we would mis-cost is never complete.
   const { hybrid, xCount, unpayable } = partitionOtherSymbols(card.manaCost.other);
   if (unpayable.length > 0) {
     assembly.missing.push({
       text: unpayable.map((symbol) => `{${symbol}}`).join(''),
-      missingEngineSystem: 'Phyrexian and monocolour hybrid mana costs',
+      missingEngineSystem: UNPAYABLE_MANA_SYMBOL_GAP,
     });
   }
   const cost = toCoreCost(card, hybrid);
@@ -1856,6 +1901,18 @@ export function compileCard(card: CompilableCard): CompileResult {
  * layout with no cast path at all (meld, flip). Those are reported, never
  * played as their first half.
  */
+/**
+ * A printed mana symbol no amount of mana can pay.
+ *
+ * Every HYBRID family is payable since §3.143 — colour/colour, monocolour
+ * (`{2/W}`) and Phyrexian (`{W/P}`) — so what is left under this name is the
+ * residual: snow mana, and any symbol with a piece outside the closed component
+ * table. Named by the symbol rather than by a family, because the whole point of
+ * the closed table is that the NEXT unreadable symbol reports too.
+ */
+export const UNPAYABLE_MANA_SYMBOL_GAP =
+  'a printed mana symbol the engine cannot pay (every hybrid family — colour/colour, monocolour {2/W} and Phyrexian {W/P} — is paid today; snow mana and any symbol whose pieces are outside the component table are not)';
+
 export const SECOND_CASTABLE_FACE_GAP =
   'a two-halved card whose layout the compiler cannot read (split, aftermath, adventure, Siege and modal-DFC halves are all cast today; a meld or flip layout, or a record carrying only the combined name with no per-face data, is not)';
 
@@ -2145,8 +2202,10 @@ function withoutLayoutKeywordLine(text: string, keyword: string): string {
 /**
  * Sum two printed costs - CR 709.4's combined mana value AND combined colours in
  * one operation, because a mana cost is both. The hybrid lists concatenate
- * rather than add: each entry is one printed symbol with a choice of colours,
- * and two halves that each print one contribute two.
+ * rather than add: each entry is one printed SYMBOL with a choice of components,
+ * and two halves that each print one contribute two. Concatenation is also what
+ * keeps the combined MANA VALUE right for a monocolour hybrid, whose symbol is
+ * worth its largest component rather than one (CR 202.3b).
  */
 function combinedCost(left: ManaCost | undefined, right: ManaCost | undefined): ManaCost | undefined {
   if (!left) return right;
@@ -2159,7 +2218,7 @@ function combinedCost(left: ManaCost | undefined, right: ManaCost | undefined): 
     R?: number;
     G?: number;
     C?: number;
-    hybrid?: readonly (readonly import('@jonny-boi/core').ManaColor[])[];
+    hybrid?: readonly (readonly HybridComponent[])[];
   } = {};
   for (const symbol of COMBINABLE_COST_SYMBOLS) {
     const total = (left[symbol] ?? 0) + (right[symbol] ?? 0);

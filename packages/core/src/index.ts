@@ -32,9 +32,19 @@ export type { Rng } from './rng.js';
 export { createRng, shuffle } from './rng.js';
 
 // Mana
-export type { ManaColor, ManaCost, ManaPool, ManaProduction, PaymentResult } from './mana.js';
+export type {
+  GenericHybridComponent,
+  HybridComponent,
+  LifeHybridComponent,
+  ManaColor,
+  ManaCost,
+  ManaPool,
+  ManaProduction,
+  PaymentResult,
+} from './mana.js';
 export {
   MANA_COLORS,
+  PHYREXIAN_LIFE_PRICE,
   emptyPool,
   addMana,
   addProduction,
@@ -42,8 +52,13 @@ export {
   poolTotal,
   convertedManaCost,
   formatManaCost,
+  hybridSymbolManaValue,
+  isColorComponent,
+  isGenericComponent,
+  isLifeComponent,
   payCost,
   canPay,
+  phyrexianLifeOptions,
   repeatCost,
   usableMana,
   restrictedTotal,
