@@ -631,10 +631,44 @@ export function anyContinuousModification(state: GameState): boolean {
  *
  * Returns {@link NO_MOD} for an instance that is not on the battlefield and carries
  * no temporary effect — statics only reach permanents in play.
+ *
+ * ⚠️ THIS PATH AND `indexContinuous` MUST GIVE THE SAME ANSWER. They are two
+ * places answering one question, and they HAD diverged: this one folded a
+ * SETTLED-STATS static (Tetsuko's "power or toughness 1 or less") without its
+ * bound, because `staticAppliesTo` does not read the effective bounds — so the
+ * one-off read made every creature its controller owned unblockable while the
+ * bulk read got it right. `effective-pt-statics.test.ts` now quantifies the
+ * agreement over a table with one row per deferring field.
  */
 export function aggregateFor(state: GameState, instanceId: InstanceId): AggregatedMod {
+  return aggregateWith(state, instanceId, true);
+}
+
+/** One deferred static and the permanent radiating it. */
+interface DeferredStatic {
+  readonly ability: StaticAbility;
+  readonly source: CardInstance;
+}
+
+/**
+ * {@link aggregateFor}'s body, with the settled-stats pass switchable.
+ *
+ * THE SWITCH IS THE LOOP-ABSENCE PROOF, made structural rather than argued in a
+ * comment: a `blockBoundFromSourcePower` static needs its SOURCE'S settled
+ * power, which is read by calling back in here with `runSettledPass` FALSE. So
+ * the number a bound reads can only ever come from a walk that runs no bounds,
+ * the recursion is exactly one level deep by construction, and there is nothing
+ * for a CR 613.8 dependency ordering to order. It is sound for the same reason
+ * the bulk path is: the settled pass grants KEYWORDS ONLY, and nothing that
+ * produces a power reads a keyword, so switching it off cannot change a single
+ * power.
+ */
+function aggregateWith(state: GameState, instanceId: InstanceId, runSettledPass: boolean): AggregatedMod {
   const agg: MutableMod = { power: 0, toughness: 0, keywords: NO_KEYWORDS };
   let any = false;
+  // Statics that read a value this very walk is computing, held back exactly as
+  // the bulk path holds them back.
+  let deferred: DeferredStatic[] | null = null;
 
   // Layer 3 — statics and attachments. Find the permanent once, then test each live
   // modifier against it in the SAME battlefield walk.
@@ -661,7 +695,14 @@ export function aggregateFor(state: GameState, instanceId: InstanceId): Aggregat
       const declared = source.def.statics;
       if (declared === undefined || declared.length === 0) continue;
       for (const ability of declared) {
-        if (staticIsInert(ability) || !staticAppliesTo(ability, source, target)) continue;
+        if (staticIsInert(ability)) continue;
+        // Deferred for the same reason as in `indexContinuous`: the numbers this
+        // static reads are what this walk is computing.
+        if (readsSettledStats(ability)) {
+          if (runSettledPass) (deferred ??= []).push({ ability, source });
+          continue;
+        }
+        if (!staticAppliesTo(ability, source, target)) continue;
         any = true;
         agg.power += ability.power ?? 0;
         agg.toughness += ability.toughness ?? 0;
@@ -677,9 +718,17 @@ export function aggregateFor(state: GameState, instanceId: InstanceId): Aggregat
     //
     // Same direct-read guard as the bulk path: no iterator for a two-element list.
     const commandA = state.players.A.command;
-    if (commandA.length > 0) any = foldCommandStatics(commandA, target, agg) || any;
+    if (commandA.length > 0) {
+      const folded = foldCommandStatics(commandA, target, agg, runSettledPass);
+      any = folded.applied || any;
+      if (folded.deferred !== null) deferred = deferred === null ? folded.deferred : deferred.concat(folded.deferred);
+    }
     const commandB = state.players.B.command;
-    if (commandB.length > 0) any = foldCommandStatics(commandB, target, agg) || any;
+    if (commandB.length > 0) {
+      const folded = foldCommandStatics(commandB, target, agg, runSettledPass);
+      any = folded.applied || any;
+      if (folded.deferred !== null) deferred = deferred === null ? folded.deferred : deferred.concat(folded.deferred);
+    }
   }
   // Layer 4 — until-end-of-turn effects aimed at this instance.
   for (const eff of state.continuous) {
@@ -688,6 +737,28 @@ export function aggregateFor(state: GameState, instanceId: InstanceId): Aggregat
     agg.power += eff.power ?? 0;
     agg.toughness += eff.toughness ?? 0;
     grantInto(agg, eff.keywords);
+  }
+
+  // The SETTLED-P/T pass, single-instance twin. Every P/T layer above has now
+  // folded onto `agg`, so the selector bounds read final numbers — and the
+  // source-power bound reads its source through a walk with this very pass
+  // switched off (see the switch's note).
+  if (deferred !== null && target !== undefined) {
+    for (const { ability, source } of deferred) {
+      if (!staticAppliesTo(ability, source, target)) continue;
+      if (!withinEffectiveBounds(ability.affects, target, agg)) continue;
+      const bound =
+        ability.blockBoundFromSourcePower === undefined
+          ? undefined
+          : sourcePowerRestriction(
+              ability.blockBoundFromSourcePower,
+              effectivePower(source, aggregateWith(state, source.instanceId, false)),
+            );
+      if (ability.keywords === undefined && bound === undefined) continue;
+      any = true;
+      grantInto(agg, ability.keywords);
+      grantInto(agg, bound);
+    }
   }
 
   return any ? agg : NO_MOD;
@@ -702,21 +773,31 @@ function foldCommandStatics(
   zone: readonly CardInstance[],
   target: CardInstance,
   agg: MutableMod,
-): boolean {
+  collectDeferred: boolean,
+): { readonly applied: boolean; readonly deferred: DeferredStatic[] | null } {
   let applied = false;
+  let deferred: DeferredStatic[] | null = null;
   for (let i = 0; i < zone.length; i++) {
     const source = zone[i] as CardInstance;
     const declared = source.def.statics;
     if (declared === undefined || declared.length === 0) continue;
     for (const ability of declared) {
-      if (staticIsInert(ability) || !staticAppliesTo(ability, source, target)) continue;
+      if (staticIsInert(ability)) continue;
+      // An emblem may radiate a settled-stats static too, and it has to reach
+      // the same pass a battlefield source's does, or the two homes of one rule
+      // would answer differently.
+      if (readsSettledStats(ability)) {
+        if (collectDeferred) (deferred ??= []).push({ ability, source });
+        continue;
+      }
+      if (!staticAppliesTo(ability, source, target)) continue;
       applied = true;
       agg.power += ability.power ?? 0;
       agg.toughness += ability.toughness ?? 0;
       grantInto(agg, ability.keywords);
     }
   }
-  return applied;
+  return { applied, deferred };
 }
 
 /**
