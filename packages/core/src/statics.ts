@@ -230,7 +230,7 @@ export interface StaticAbility extends PermanentModification {
   /** Which permanents this modifies. */
   readonly affects: StaticAffects;
   /**
-   * §3.143 — the granted block restriction's bound is **this static's own
+   * §3.146 — the granted block restriction's bound is **this static's own
    * source's EFFECTIVE POWER**, not a printed number: "Creatures with power
    * less than this creature's power can't block creatures you control"
    * (Champion of Lambholt, whose power climbs by a +1/+1 counter every time

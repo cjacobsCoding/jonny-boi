@@ -1,7 +1,7 @@
 /**
  * What does the SETTLED-STATS deferral cost the continuous layer?
  *
- * §3.143 gave `indexContinuous` and `aggregateFor` a second pass for statics
+ * §3.146 gave `indexContinuous` and `aggregateFor` a second pass for statics
  * that read a value the layer system produces (Tetsuko's effective-P/T selector,
  * Champion of Lambholt's source-power bound). Both functions run several times
  * per action — combat, SBAs, legality, serialization — so the question that

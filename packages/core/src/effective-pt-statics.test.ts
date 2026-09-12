@@ -11,7 +11,7 @@
  * these afterwards, which is sound because such a static may grant KEYWORDS
  * ONLY (a P/T delta would need its own output as input).
  *
- * §3.143 adds the second shape that reads settled P/T — a granted BOUND that
+ * §3.146 adds the second shape that reads settled P/T — a granted BOUND that
  * reads the static SOURCE'S own power (Champion of Lambholt) — and the proof
  * that one settled pass is enough for both: the pass reads powers and writes
  * KEYWORDS, and nothing that produces a power reads a keyword, so its output

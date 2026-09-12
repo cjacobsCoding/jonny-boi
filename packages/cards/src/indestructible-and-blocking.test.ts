@@ -175,7 +175,7 @@ describe('the compiler understands the blocking restrictions', () => {
     // how a backlog sends the next agent to build something twice. Two shapes
     // have already left it: the EFFECTIVE-P/T selector (Tetsuko, Delney, when
     // core gained the settled-P/T pass) and the SOURCE-POWER bound (Champion of
-    // Lambholt, §3.143 — asserted in `block-selectors.test.ts`).
+    // Lambholt, §3.146 — asserted in `block-selectors.test.ts`).
     for (const oracleText of [
       // A bound read off a DIFFERENT permanent than the static's own source.
       "Creatures with power less than the strongest creature's power can't block creatures you control.",

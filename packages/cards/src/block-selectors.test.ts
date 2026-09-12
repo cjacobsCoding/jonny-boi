@@ -10,7 +10,7 @@
  *
  * DESIGN §3.17 and §3.25 both deferred this shape by name ("a restriction whose
  * threshold is ANOTHER permanent's power"), because asking a static about a
- * value the continuous layer produces is a CR 613.8 dependency. §3.143's answer
+ * value the continuous layer produces is a CR 613.8 dependency. §3.146's answer
  * is the settled-P/T pass: read the powers after every P/T layer has folded, and
  * write KEYWORDS ONLY, so the pass's output can never change its own input.
  *
@@ -361,7 +361,7 @@ describe('the new bound meets the OTHER half of CR 509.1 — requirements', () =
    *
    * The failure this pins is the one the solver's own section names: a
    * requirement checked WITHOUT the restriction demands an illegal declaration
-   * and wedges the combat. The restriction here is the one §3.143 added, so it
+   * and wedges the combat. The restriction here is the one §3.146 added, so it
    * has to reach the solver's "able to block" and not only `canBlock`.
    */
   const LURE: CardDefinition = {

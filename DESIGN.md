@@ -2889,7 +2889,7 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
-### 3.143 A block bound the card does not print — Champion of Lambholt, and the second home of the settled-P/T pass — ✅ done
+### 3.146 A block bound the card does not print — Champion of Lambholt, and the second home of the settled-P/T pass — ✅ done
 
 The row said *"a block restriction whose SELECTOR compares creatures or reads effective P/T"* and named
 **16 cards**. The first honest finding is that the label is a **catch-all**: the coverage audit gives
@@ -2914,7 +2914,7 @@ be its own input, one extra pass IS the fixpoint, and two creatures whose bounds
 terminate because there is nothing for a dependency ordering to order — not because a cap stopped
 them. A bounded fixpoint would have been a cap over a loop that does not exist.
 
-§3.143 extends that pass from a SELECTOR that reads settled P/T to a granted **BOUND** that does:
+§3.146 extends that pass from a SELECTOR that reads settled P/T to a granted **BOUND** that does:
 `StaticAbility.blockBoundFromSourcePower` names which field of the granted `BlockRestriction` the
 source's own settled power fills. Champion of Lambholt's "creatures with power **less than this
 creature's power** can't block creatures you control" becomes `minBlockerPower = power(Champion)`,
@@ -3001,13 +3001,14 @@ arm A and arm B against arm B are the only cross-checkout comparisons, which is 
 **Gauntlet seed 99 is byte-identical**: 97/320 = 30.3%, rows 17·14·19·7·8·10·17·5. No gauntlet deck
 carries a settled-stats static, and the inert path did not move.
 
-#### 🔎 Sabotage: 10 run, 10 RED, 0 escapes — after the battery itself was caught lying
+#### 🔎 Sabotage: 11 run, 11 RED, 0 escapes — after the battery itself was caught lying
 
 Each mutation flips one thing and demands the suite go red: the bound never computed; the bound read
 off the PRINTED power; the bound off by one; `staticIsInert` forgetting the field; the deferral
 predicate forgetting it; `aggregateFor` un-deferring (the shipped defect, restored); `aggregateFor`
 skipping the effective bound; the compiled comparison inverted; the static made symmetric; the static
-given a phantom "other".
+given a phantom "other"; and the requirement solver no longer asking `canBlock`, so CR 509.1c's
+"if able" stops seeing the new bound.
 
 ⚠️ **THE FIRST RUN OF THAT BATTERY PROVED NOTHING, and the reason generalises.** The suite was
 *already red* — `indestructible-and-blocking.test.ts`'s "STILL reports the restrictions this engine
