@@ -66,7 +66,7 @@ import { unionProtection } from '../card.js';
 import { effectivePower, effectiveToughness, intersectBlockRestrictions } from './stats.js';
 import { COMBAT_FAMILY_PAYLOAD_KEYS, mergeCombatFamilyPayload } from './stats.js';
 import type { GameEvent } from '../events.js';
-import type { StaticAbility } from '../statics.js';
+import type { SourcePowerBlockBound, StaticAbility } from '../statics.js';
 import { modificationIsInert, staticAppliesTo, staticIsInert, staticsOf } from '../statics.js';
 import { characteristicValue } from '../derived.js';
 import { markControlChange } from '../upkeep-costs.js';
@@ -469,11 +469,13 @@ export function indexContinuous(state: GameState): ContinuousIndex {
     for (const source of sources) {
       for (const ability of staticsOf(source.def)) {
         if (staticIsInert(ability)) continue;
-        // A selector that reads EFFECTIVE P/T cannot be answered yet — the
-        // numbers it reads are what this very pass is computing. Deferred to
-        // the settled-P/T pass below, which is exact because such a static may
-        // grant keywords only (see `StaticAffects.maxEffectivePower`).
-        if (readsEffectiveStats(ability.affects)) {
+        // A static that reads EFFECTIVE P/T — in its SELECTOR (Tetsuko, Delney)
+        // or in the BOUND it grants (Champion of Lambholt) — cannot be answered
+        // yet: the numbers it reads are what this very pass is computing.
+        // Deferred to the settled-P/T pass below, which is exact because such a
+        // static may grant keywords only (see `StaticAffects.maxEffectivePower`
+        // and `StaticAbility.blockBoundFromSourcePower`).
+        if (readsSettledStats(ability)) {
           (deferred ??= []).push({ ability, source });
           continue;
         }
@@ -498,26 +500,69 @@ export function indexContinuous(state: GameState): ContinuousIndex {
     agg.toughness += eff.toughness ?? 0;
     grantInto(agg, eff.keywords);
   }
-  // The SETTLED-P/T pass: statics whose selector reads a creature's effective
-  // power or toughness ("creatures you control with power 2 or less can't be
-  // blocked"). Every P/T layer above has finished, so the numbers these read
-  // are final — and because such a static may grant KEYWORDS ONLY, nothing it
-  // writes can feed back into a number anything else read. A P/T delta on one
-  // of these is dropped rather than applied out of layer order: the compiler
-  // never emits it, and applying it would silently reorder the layers.
+  // THE SETTLED-P/T PASS, and THE PROOF THAT ONE OF IT IS ENOUGH.
+  //
+  // Two kinds of static land here, and they read the same settled numbers:
+  //   - a SELECTOR that reads effective P/T ("creatures you control with power
+  //     2 or less can't be blocked" — Tetsuko, Delney);
+  //   - a granted BOUND that reads the SOURCE'S OWN effective power ("creatures
+  //     with power less than this creature's power can't block creatures you
+  //     control" — Champion of Lambholt).
+  //
+  // Every P/T layer above has finished, so the numbers both read are final. And
+  // because a static in this pass may grant KEYWORDS ONLY, what the pass WRITES
+  // is a keyword and what it READS is a power — and nothing that produces a
+  // power reads a keyword. So the pass's own output can never change its own
+  // input: this single extra pass IS the fixpoint, iterating it a second time
+  // would change nothing, and two creatures whose bounds read each other's
+  // power terminate for that reason rather than by a cap (CR 613.8's dependency
+  // ordering has nothing to order). `effective-pt-statics.test.ts` pins that
+  // equation executably, and a pool-wide guard pins the keyword-only rule on the
+  // authored side. A P/T delta on one of these is dropped rather than applied
+  // out of layer order: the compiler never emits it, and applying it would
+  // silently reorder the layers.
   if (deferred !== null) {
     const battlefield = state.battlefield;
     for (const { ability, source } of deferred) {
+      // The source-power bound is read ONCE per static, off the settled
+      // accumulator — the same number `effectivePower` would report to anything
+      // else on this board, never the printed box.
+      const bound =
+        ability.blockBoundFromSourcePower === undefined
+          ? undefined
+          : sourcePowerRestriction(
+              ability.blockBoundFromSourcePower,
+              effectivePower(source, map.get(source.instanceId) ?? NO_MOD),
+            );
       const keywords = ability.keywords;
-      if (keywords === undefined) continue;
+      if (keywords === undefined && bound === undefined) continue;
       for (const candidate of battlefield) {
         if (!staticAppliesTo(ability, source, candidate)) continue;
         if (!withinEffectiveBounds(ability.affects, candidate, map.get(candidate.instanceId))) continue;
-        grantInto(accumulatorFor(map, candidate.instanceId), keywords);
+        const agg = accumulatorFor(map, candidate.instanceId);
+        // Two grants rather than one merged object: `grantInto` already folds a
+        // block restriction field-by-field to the strictest of each, so the
+        // printed half and the computed half meet through the ONE merge every
+        // other granted restriction goes through.
+        grantInto(agg, keywords);
+        grantInto(agg, bound);
       }
     }
   }
   return map;
+}
+
+/**
+ * The one-field block restriction a {@link SourcePowerBlockBound} names, with
+ * the source's settled power in it.
+ *
+ * A TABLE READ, not a branch chain: the bound name IS the field name, so adding
+ * the next printed comparison is a row in `SourcePowerBlockBound` and nothing
+ * here changes. Kept as its own function so the object shape is built once and
+ * the caller's loop body stays a merge.
+ */
+function sourcePowerRestriction(bound: SourcePowerBlockBound, power: number): KeywordFlags {
+  return { blockRestriction: { [bound]: power } };
 }
 
 /**
@@ -838,9 +883,21 @@ export function dropContinuousEffectsFor(state: GameState, instanceId: InstanceI
   state.continuous = state.continuous.filter((e) => e.targetInstanceId !== instanceId);
 }
 
-/** Whether this filter reads a value the layer system itself produces. */
-function readsEffectiveStats(affects: StaticAbility['affects']): boolean {
-  return affects.maxEffectivePower !== undefined || affects.maxEffectivePowerOrToughness !== undefined;
+/**
+ * Whether this static reads a value the layer system itself produces — in its
+ * SELECTOR (Tetsuko, Delney) or in the BOUND it grants (Champion of Lambholt).
+ *
+ * ONE predicate for both, deliberately: the deferral and the keyword-only rule
+ * are the same rule, and a second predicate answering half the question is how a
+ * later field gets added to the type and forgotten by the pass.
+ */
+function readsSettledStats(ability: StaticAbility): boolean {
+  const affects = ability.affects;
+  return (
+    affects.maxEffectivePower !== undefined ||
+    affects.maxEffectivePowerOrToughness !== undefined ||
+    ability.blockBoundFromSourcePower !== undefined
+  );
 }
 
 /**
