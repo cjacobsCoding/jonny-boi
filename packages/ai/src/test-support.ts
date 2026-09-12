@@ -27,20 +27,55 @@ import { addMana, createEffectRegistry } from '@jonny-boi/core';
 // --- a tiny effect registry (full-fidelity rollouts in tests) ------------------
 
 /**
- * A minimal effect registry that resolves the one primitive the AI fixtures use:
- * `dealDamage`. The real primitive bodies live in `@jonny-boi/cards`, which the
- * `ai` package may not depend on — so the tests register their own faithful copy
- * here. With this registry threaded into both the match loop's `applyAction` AND
- * the pilot's `DecisionContext`, burn spells resolve at *full fidelity* (face
- * damage / creature damage), exactly mirroring how the sim harness hands the pool's
- * registry to look-ahead pilots in production. Without it, `dealDamage` no-ops
- * (graceful fallback) — which is what the empty-registry robustness test exercises.
+ * The primitive this fixture owns a body for, and the reason it owns one.
  *
- * Behaviour mirrors `cards`' canonical `dealDamage`: a player target loses life; a
- * creature target gets marked damage (the engine's SBA destroys it if lethal); no
- * target ⇒ safe no-op.
+ * `dealDamage` is minted by {@link burnDef}, which the pilot-scoring tests lean on
+ * constantly, and its behaviour is small enough to state exactly: a player target
+ * loses life; a creature target gets marked damage (the engine's SBA destroys it if
+ * lethal); no target ⇒ safe no-op. That mirrors `cards`' canonical body, and
+ * `test-support-registry.test.ts` FAILS if the two ever disagree — a second copy is
+ * only allowed to exist while something proves it has not drifted.
+ *
+ * Nothing else is copied here, deliberately. `destroyTarget` alone reaches for five
+ * `cards`-private helpers (`firstPermanentTarget`, `restrictionParam`,
+ * `passesDestroyFilter`, `isLegalTarget`, `destroyPermanent`); a hand-written
+ * imitation would be a second answer to the same question with no way to tell which
+ * one is right. A test that needs the real bodies passes them in — see
+ * {@link createTestRegistry}.
  */
-export function createTestRegistry(): EffectRegistry {
+const LOCAL_PRIMITIVE_IDS = ['dealDamage'] as const;
+
+/**
+ * An effect registry for the AI fixtures that **refuses what it does not know**.
+ *
+ * ⚠️ THE DEFECT THIS SHAPE EXISTS TO PREVENT. This factory used to register
+ * `dealDamage` and hand back core's plain registry, whose `get` returns `undefined`
+ * for an unknown id — so `applyEffectRef` emitted `effectUnsupported` and moved on.
+ * In an ENGINE that is right: an unimplemented card must degrade, not crash. In a
+ * TEST FIXTURE it is the opposite of right, because nothing in a test consumes that
+ * event: the pilot is driven correctly, the ability resolves, **nothing happens, and
+ * the assertion still passes**. That is this repo's most-recorded defect shape — a
+ * check that reports something other than "I didn't check" (DESIGN §3.143).
+ *
+ * So `get` THROWS on an id nobody registered. The failure lands at the exact moment
+ * the silent no-op used to, and names the primitive. `has`/`ids` stay honest (an
+ * unregistered id is simply not there); `get` is the only path core's
+ * `applyEffectRef` takes, which is why it is the one that refuses.
+ *
+ * ⚠️ NOT "register the real bodies here". The real bodies live in `@jonny-boi/cards`
+ * and this is `ai` source, which may not depend on it — and copying them would only
+ * move the trap: the NEXT primitive a fixture mints would no-op silently all over
+ * again, because a table of copies is only ever as current as the day it was
+ * written. Refusing the unknown fixes the SHAPE; copying fixes one row.
+ *
+ * @param bodies optional real primitive bodies to layer underneath the fixture's
+ *   own. A `*.test.ts` in this package MAY import `@jonny-boi/cards` (several
+ *   already do), so a test that needs removal, pumps or counterspells to actually
+ *   resolve passes `createTestRegistry(buildRegistry())` and gets full fidelity
+ *   without this file ever naming the `cards` package. The fixture's own bodies are
+ *   registered FIRST so a supplied real body wins — real beats imitation.
+ */
+export function createTestRegistry(bodies?: EffectRegistry): EffectRegistry {
   const registry = createEffectRegistry();
   registry.register('dealDamage', (ctx) => {
     const amount = typeof ctx.params.amount === 'number' ? ctx.params.amount : 0;
@@ -58,8 +93,54 @@ export function createTestRegistry(): EffectRegistry {
     perm.damageMarked += amount;
     ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target: perm.instanceId, amount, combat: false });
   });
-  return registry;
+  if (bodies) {
+    for (const id of bodies.ids) {
+      const body = bodies.get(id);
+      if (body) registry.register(id, body);
+    }
+  }
+  return {
+    register: (id, primitive) => {
+      registry.register(id, primitive);
+    },
+    get: (id) => {
+      const found = registry.get(id);
+      if (found) return found;
+      throw new Error(unregisteredPrimitiveMessage(id, registry.ids));
+    },
+    has: (id) => registry.has(id),
+    get ids() {
+      return registry.ids;
+    },
+  };
 }
+
+/**
+ * The refusal, written so the next author does not have to find this file to know
+ * what to do. Both escapes are one line, and which one is right depends only on
+ * whether the caller is a `*.test.ts` (may import `cards`) or not.
+ */
+function unregisteredPrimitiveMessage(id: string, registered: readonly string[]): string {
+  return [
+    `createTestRegistry(): no body registered for effect primitive "${id}".`,
+    '',
+    'This registry REFUSES unknown primitives instead of no-oping them, because a',
+    'no-op lets a test drive the pilot correctly, watch the ability resolve, and',
+    'assert an effect that never happened (DESIGN §3.143).',
+    '',
+    'Two ways forward, both one line:',
+    "  • in a *.test.ts (which MAY import @jonny-boi/cards) — the real bodies:",
+    "      import { buildRegistry } from '@jonny-boi/cards';",
+    '      const registry = createTestRegistry(buildRegistry());',
+    '  • or register a body yourself:',
+    `      const registry = createTestRegistry(); registry.register('${id}', fn);`,
+    '',
+    `Registered here: ${registered.join(', ')}`,
+  ].join('\n');
+}
+
+/** The ids this fixture writes bodies for itself — read by the divergence guard. */
+export const TEST_REGISTRY_LOCAL_IDS: readonly string[] = LOCAL_PRIMITIVE_IDS;
 
 // --- card definitions ----------------------------------------------------------
 
