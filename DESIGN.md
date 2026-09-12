@@ -3461,6 +3461,14 @@ list branch was never reached; rewritten with "banding" (alphabetic, a real prin
 here) plus a positive control. That is the third and fourth time this family's sabotage pass has
 caught its own untested refusal.
 
+🔎 **Splitting the lying hint REVEALED A NEW #1 ROW.** Re-running `coverage-audit.mjs` after this
+branch, the copy row falls to 20 and the top row is now **"an 'Activate only if/during …' ACTIVATION
+CONDITION the engine cannot check" — 25 cards** (Inventors' Fair, Shifting Woodland, Minas Tirith,
+Wishclaw Talisman, Bonders' Enclave, Cephalid Coliseum, Ojer Taq, Rivendell, +17). It was never a new
+gap — those cards were always blocked by it — but the clause text was explained by whichever other hint
+matched first, so the row did not exist to be ranked. A hint that names the wrong system does not only
+mislead the reader who hits it; it hides a whole row from the instrument the roadmap is picked from.
+
 ✅ **Gate, run AFTER the merge:** `npm run verify` exit 0 — lint + generated-data check + build +
 **21,909 passed / 0 failed** (407 files, 5 skipped). `npm run build` exit 0. And
 `git diff origin/main --stat -- packages/cards/data` is EMPTY: no generated data was touched, so the
