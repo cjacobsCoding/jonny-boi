@@ -5361,8 +5361,13 @@ The hotseat picker (`lib/play/mana-picker.ts` + `PlayBoard`) is a paused cast ho
 working `GameSession`**: taps fold into it, the board renders from it (so tapped lands, the pool
 readout and the live `Still needed: {1}{G}` line all come off the one derivation a committed tap
 uses), Confirm casts through `castWithAutoTap` — which taps nothing more, because the pool already
-covers the cost — and **Cancel is `setManaPicker(null)`**. Dropping the working session IS the
-rollback: it carries its own taps and its own §3.58 action-log entries away with it, so a cancelled
+covers the cost — and Cancel drops the working session. ⚠️ **§3.146 SUPERSEDED THE STATE THIS
+DESCRIBES, not the design.** The picker is no longer its own `manaPicker` React state: it is the
+`funding` STAGE of the cast proposal (`lib/play/proposal.ts`), so Confirm is `stepProposal` and
+Cancel is `cancelProposal`, and which session the board renders is decided by
+`BOARD_SESSION_BY_STAGE` rather than by `manaPicker?.working ?? committed`. The mechanism below is
+unchanged and is the reason the stage works at all; only the names moved. Dropping the working
+session IS the rollback: it carries its own taps and its own §3.58 action-log entries away with it, so a cancelled
 cast leaves no trace, no untap loop and no compensating action. Sources are clickable on the board or
 in the prompt's list, whose rows follow the §3.57 owner conventions (`Forest (yours) — G`); a modal
 source collapses to one "any colour" row that hands off to the existing which-colour prompt. Two ways
