@@ -8283,19 +8283,37 @@ function parseCopySelector(text: string): Partial<Pick<CopyAsEntersSpec, 'filter
  * Split the printed "except …" tail into its clauses.
  *
  * Real cards join them with ", " and a final ", and " / " and " (Spark Double
- * prints three, Sakashima three, Phantasmal Image two). Splitting on both
- * separators is safe because every clause the table below accepts is a fixed
- * short phrase containing neither — and a clause that DOES contain one (a quoted
- * granted ability, which always carries commas inside its quotes) simply fails
- * to match any entry, which reports the whole card. That is the right outcome
- * for it anyway.
+ * prints three, Sakashima three, Phantasmal Image two).
+ *
+ * ⚠️ THE SEPARATOR IS ONLY A SEPARATOR WHEN A CLAUSE FOLLOWS IT. Splitting on
+ * every " and " was safe only while no accepted clause contained one, and The
+ * Jolly Balloon Man's "it's a 1/1 red Balloon creature **in addition to its
+ * other colors and types**" ends that: the naive split tore it into "…its other
+ * colors" and "types", two fragments that match nothing, and the card reported a
+ * missing template when what was missing was the split. So the separator must be
+ * followed by a word an "except" clause can actually BEGIN with — which is the
+ * closed set {@link EXCEPT_CLAUSE_OPENERS}, taken from the openers the table
+ * below accepts, so the two cannot drift.
  */
 function splitExceptClauses(text: string): string[] {
   return text
-    .split(/,\s*and\s+|,\s*|\s+and\s+/)
+    .split(EXCEPT_CLAUSE_SEPARATOR)
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
 }
+
+/**
+ * The words an "except …" clause may start with, as an alternation. Every entry
+ * in {@link parseCopyException} is anchored on one of these, and a clause that
+ * begins with anything else is not a clause this compiler reads.
+ */
+const EXCEPT_CLAUSE_OPENERS = "it|it's|its|his|her|their|the token";
+
+/** ", " / ", and " / " and " — but only where a new clause actually begins. */
+const EXCEPT_CLAUSE_SEPARATOR = new RegExp(
+  `,\\s*and\\s+(?=(?:${EXCEPT_CLAUSE_OPENERS})\\b)|,\\s*(?=(?:${EXCEPT_CLAUSE_OPENERS})\\b)|\\s+and\\s+(?=(?:${EXCEPT_CLAUSE_OPENERS})\\b)`,
+  'i',
+);
 
 /**
  * Read one "except …" clause into a {@link CopyExceptions} patch, or `null` when
@@ -8347,11 +8365,57 @@ function parseCopyException(clause: string, ctx: RuleContext): CopyExceptions | 
   // "its name is ~" — the copy keeps the copying card's own printed name
   // (Sakashima the Impostor, Chameleon's "his name is …").
   if (/^(?:its|his|her|their) name is ~$/.test(clause)) return { name: ctx.card.name };
-  // "it has flying" — only words that are real engine keyword flags.
+  // "it's a 1/1 red Balloon creature in addition to its other colors and types"
+  // (The Jolly Balloon Man). One printed clause saying four things at once — a
+  // base P/T, an added colour, an added subtype and an added card type — and it
+  // is ONE row because the card prints it as one sentence: splitting it would
+  // invent clause boundaries the card does not have.
+  //
+  // The P/T REPLACES (layer 7a, exactly as eternalize's "it's a 4/4" does, with
+  // counters still applying on top) while the colour and the types are ADDED,
+  // because that is what the printed words "in addition to its other colors and
+  // types" say. `addColors` exists precisely to keep those two apart.
+  const shaped = clause.match(
+    /^it'?s an? (\d+)\/(\d+) ([a-z]+) ([a-z' ]+?) in addition to its other colors and types$/,
+  );
+  if (shaped) {
+    // The file's ONE colour table, not a copy of it: "red" means {R} in a
+    // removal restriction and in a copy's "except" tail alike.
+    const color = COLOR_WORDS[shaped[3] ?? ''];
+    if (color === undefined) return null;
+    const words = (shaped[4] ?? '').split(' ').filter((w) => w.length > 0);
+    if (words.length === 0) return null;
+    const types: CardType[] = [];
+    const subtypes: string[] = [];
+    for (const word of words) {
+      const asType = COPY_TYPE_WORDS[word];
+      if (asType !== undefined) types.push(asType);
+      else subtypes.push(word.charAt(0).toUpperCase() + word.slice(1));
+    }
+    return {
+      power: Number.parseInt(shaped[1] ?? '', 10),
+      toughness: Number.parseInt(shaped[2] ?? '', 10),
+      addColors: [color],
+      ...(types.length > 0 ? { addTypes: types } : {}),
+      ...(subtypes.length > 0 ? { addSubtypes: subtypes } : {}),
+    };
+  }
+  // "it has flying" / "it has flying and haste" — only words that are real
+  // engine keyword flags. The LIST form is read here rather than left to
+  // `splitExceptClauses`, because "flying and haste" is one printed clause
+  // granting two keywords, not two clauses: the separator splitter deliberately
+  // only cuts where a new clause BEGINS, and "haste" begins nothing.
   const keyword = clause.match(/^it has ([a-z' ]+)$/);
   if (keyword) {
-    const flag = KEYWORD_FLAGS[(keyword[1] ?? '').trim()];
-    return flag === undefined ? null : { addKeywords: { [flag]: true } as KeywordFlags };
+    const granted: KeywordFlags = {};
+    for (const word of (keyword[1] ?? '').split(/\s+and\s+|,\s*/)) {
+      const flag = KEYWORD_FLAGS[word.trim()];
+      // One unreadable word refuses the WHOLE clause: granting the half that
+      // parsed would be a copy missing a printed ability.
+      if (flag === undefined) return null;
+      (granted as Record<string, boolean>)[flag] = true;
+    }
+    return Object.keys(granted).length > 0 ? { addKeywords: granted } : null;
   }
   // "it enters with an additional +1/+1 counter on it if it's a creature".
   if (/^it enters with an additional \+1\/\+1 counter on it if it'?s a creature$/.test(clause)) {
@@ -9836,15 +9900,39 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
       'a copy whose legal targets depend on THE AMOUNT OF MANA SPENT to cast it (copy effects themselves are implemented — nothing records how much mana paid for a spell)',
   },
   {
-    // Phantasmal Image and Sakashima the Impostor. Both print an "except … and
-    // it has "<ability>" tail that GRANTS an ability to the copy — a
-    // triggered ability on "becomes the target of a spell or ability" (an event
-    // the engine does not raise for data triggers) and an activated ability
-    // with a delayed "at the beginning of the next end step" return. Granting
-    // the ability is the missing half, not the copying.
-    pattern: /as a copy of .*, except .*\bit has "/,
+    // "Activate only if <condition>" on an ACTIVATED ability (Kitsa's "only if
+    // ~'s power is 3 or greater", Shifting Woodland's "only if there are four or
+    // more card types among cards in your graveyard").
+    //
+    // ⚠️ ABOVE the copy hints on purpose, and this is why the rows below it are
+    // narrower than they look: Kitsa's copy line is READ IN FULL — the rule, the
+    // restriction, the re-aim permission — and the only unread words are this
+    // trailing sentence. Left underneath, the copy hint claimed the copy was the
+    // gap and sent a reader to widen a table that already had the row.
+    //
+    // "Activate only as a sorcery" is NOT here: `compileActivatedAbility` strips
+    // it into `timing: 'sorcery'`, which the engine enforces.
+    pattern: /\bactivate only (?:if|during|once each turn|when)\b/,
     missingEngineSystem:
-      'a copy that GRANTS AN ABILITY printed in quotes (copy effects and their "except" tail are implemented — an ability granted as text is not)',
+      'an "Activate only if/during …" ACTIVATION CONDITION the engine cannot check (the ability around it, including "Activate only as a sorcery", is implemented — dropping the condition would make the ability activatable in windows the printed one is not)',
+  },
+  {
+    // Phantasmal Image and Sakashima the Impostor print it as an "except … it
+    // has "<ability>"" tail, which is COPIABLE (CR 707.2 — a second copy of the
+    // object inherits it). Jaxis and Electroduplicate print the same quoted
+    // ability as a FOLLOW-UP grant ("It gains haste and "When this token dies,
+    // draw a card.""), which is layer 6 and is NOT copiable. Both are blocked on
+    // the same missing half — an ability granted as text — which is why one hint
+    // covers both wordings and says which is which.
+    //
+    // The pattern deliberately reaches BOTH copy heads: "as a copy of"
+    // (as-enters) and "a copy of" inside "create a token that's a copy of".
+    // Both halves allow keywords BEFORE the quote — Electroduplicate prints
+    // "except it has haste and \"At the beginning of the end step, sacrifice this
+    // token.\"", so the quote is not adjacent to "it has".
+    pattern: /\ba copy of .*(?:, except .*\bit has (?:[a-z' ]+ and )?"|\bgains? [a-z' ]+ and ")/,
+    missingEngineSystem:
+      'a copy that GRANTS AN ABILITY printed in quotes (copy effects, their "except" tail and their keyword-granting follow-up sentence are all implemented — an ability granted as TEXT is not; note the two are not interchangeable: an "except" ability is copiable and a granted one is layer 6)',
   },
   {
     // ⚠️ THIS HINT USED TO CLAIM THE DELAYED ABILITY ITSELF WAS MISSING, AND IT
@@ -9874,46 +9962,54 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
       'a DELAYED triggered ability (CR 603.7) attached to an effect that is NOT a token copy — "exile it at the beginning of the next end step" on a reanimation (Whip of Erebos) or on a card another effect exiled (Mimic Vat). Delayed triggers themselves are implemented (`createDelayedTrigger`), and `createTokenCopy` already compiles this sentence; what is missing is a ref for the clause to ride, because the delayed ability must NAME the objects and only the creating ref knows them',
   },
   {
-    // What is LEFT of the copy-creating family now that the system is shipped.
-    // `copySpell` and `createTokenCopy` are real primitives, so this hint must
-    // not say copying is missing — that would send the next contributor to
-    // rebuild something that exists. Every card that lands here is blocked on
-    // the SELECTOR, or on what kind of object it copies:
+    // What is LEFT of the copy-creating family. `copySpell` and
+    // `createTokenCopy` are real primitives and most of the printed vocabulary
+    // around them is read, so this hint must not say copying is missing — that
+    // would send the next contributor to rebuild something that exists.
     //
-    //  - "copy target ACTIVATED OR TRIGGERED ability" (Lithoform Engine, Return
-    //    the Favor). An ability on the stack is a `TriggeredStackObject`, which
-    //    carries effect refs rather than a card, and nothing can target one:
-    //    `TargetRestriction` reaches spells and permanents only.
-    //  - "target NONLEGENDARY creature you control" (Kiki-Jiki), "ANOTHER target
-    //    creature you control" (Orthion, Jaxis), "target TOKEN you control"
-    //    (Caretaker’s Talent), "a card exiled with this artifact" (Mimic Vat) —
-    //    selectors outside the closed `TOKEN_COPY_SELECTORS` table, each of
-    //    which would need a target restriction of its own.
-    //  - "create a TAPPED token that’s a copy of …" (Skyclave Relic, Kambal), and
-    //    "tapped and attacking" (Delina, Thousand-Faced Shadow): a token that
-    //    arrives already tapped, which no `createToken` path can express.
-    //  - "whenever you cast a spell, COPY THAT SPELL" (Reflections of Littjara,
-    //    Jin-Gitaxias, Sword of Wealth and Power): the copy is of the spell that
-    //    TRIGGERED the ability, and a trigger carries its triggering PLAYER but
-    //    not the stack object that set it off.
-    //  - a FOLLOW-UP SENTENCE about the object the previous one created — "That
-    //    token gains haste" (Helm of the Host), "It gains haste" (Mimic Vat,
-    //    Orthion). Deliberately NOT folded into the copy's own keywords, which
-    //    would look identical on the board and be wrong one step later: a grant
-    //    is layer 6 on THAT object, so it is not among the copiable values a
-    //    second copy would take, and "except it has haste" is.
-    //  - an "except …" tail on a SPELL copy: "except that the copy is red"
-    //    (Fork). `CopyExceptions` is shared with the as-enters copy and models
-    //    types, subtypes, keywords, a name and legendary-ness — not colour, and
-    //    not a spell's characteristics generally. A token copy's tail is read;
-    //    a spell copy is created without one.
-    //  - a COUNT that depends on something else: "if this spell was cast from a
-    //    graveyard, copy that spell TWICE instead" (Increasing Vengeance). The
-    //    count itself is a param on the copy ref; what is missing is a condition
-    //    on the zone the spell was cast from.
+    // IMPLEMENTED, and named here so nobody re-adds them: the controller-scoped
+    // spell and ability copies (Lithoform Engine, Kitsa); "copy target activated
+    // or triggered ability"; the selectors "nonlegendary creature you control",
+    // "token you control", "artifact or creature you control" and "ANOTHER target
+    // creature / nonland permanent you control"; TAPPED (and tapped-and-attacking)
+    // token copies; the "for each token you control" iteration; the
+    // board-conditional "create a copy … instead"; the keyword-granting follow-up
+    // sentence ("It gains haste") as a layer-6 grant; the delayed "sacrifice/exile
+    // it at the beginning of the next end step"; "copy THAT spell" naming the
+    // spell that triggered the ability; and an "except" tail carrying a base P/T,
+    // an ADDED colour, added types and subtypes, and a keyword LIST.
+    //
+    // ⚠️ WHAT IS ACTUALLY LEFT, each with the card that prints it:
+    //  - a COUNT that is X — "Create X tokens that are copies of target token you
+    //    control" (For the Common Good). `TOKEN_COPY_COUNTS` is a closed table of
+    //    printed count WORDS; an X count is the spell's own announced value, which
+    //    this ref has no way to read.
+    //  - selectors still outside `TOKEN_COPY_SELECTORS`: "target artifact or
+    //    enchantment you control" (Adagia), "that creature" meaning the attached
+    //    one (Springheart Nantuko, Delina), "it" meaning the source that just died
+    //    (Vaultborn Tyrant), "a card exiled with this artifact" (Mimic Vat), and a
+    //    creature CARD in a graveyard (The Scarab God) — which is not a battlefield
+    //    permanent at all, so it needs a different lookup rather than another row.
+    //  - "copy target instant spell, sorcery spell, activated ability, OR triggered
+    //    ability" (Return the Favor) — a four-way union of two different KINDS of
+    //    stack object, which no single `TargetRestriction` spells.
+    //  - "…from an enchantment source" (Weaver of Harmony): an ability target
+    //    narrowed by what kind of permanent produced it.
+    //  - an "except …" tail on a SPELL copy: "except that the copy is red" (Fork).
+    //    A token copy's tail is read; a spell copy is created without one. NOT IN
+    //    THE 2,100-CARD CORPUS — measured, and left unbuilt for that reason.
+    //  - a COUNT conditional on the zone the spell was cast from: "if this spell
+    //    was cast from a graveyard, copy that spell TWICE instead" (Increasing
+    //    Vengeance). Also absent from the corpus, and unbuilt for the same reason.
+    //
+    // ⚠️ A CLAUSE CAN LAND HERE WITH ITS COPY HALF FULLY READ. The pattern matches
+    // the printed copy WORDS, not the blocker: Homunculus Horde's copy body
+    // compiles on its own, and what it is waiting for is the TRIGGER SCOPE
+    // "whenever you draw your second card each turn". Check the vocabulary above
+    // before assuming this hint names your card's problem.
     pattern: /\bcopy (?:that|target) (?:spell|instant|sorcery|activated)\b|tokens? that(?:'?s| are) (?:a )?cop(?:y|ies)/,
     missingEngineSystem:
-      'a COPY-CREATING template outside the compiler’s closed tables (spell/ability copies with the "you control" scopes, token copies — tapped, "nonlegendary"/"artifact or creature" targets, a haste-grant follow-up sentence and a delayed "sacrifice/exile it at the beginning of the next end step" are ALL implemented; so are the "token you control" target, the "for each token you control" iteration and the "create a copy … instead" board-conditional substitution; what is missing is this selector or tail: "copy THAT spell" naming the spell that triggered the ability, an "except …" tail on a SPELL copy, or a copy COUNT conditional on where the spell was cast from)',
+      'a COPY-CREATING template outside the compiler’s closed tables. The copy SYSTEMS are all shipped, and so is most of the vocabulary — the "you control" scopes, ability copies, the "nonlegendary"/"token"/"artifact or creature"/"another" selectors, tapped and tapped-and-attacking tokens, the "for each token" iteration, the "create a copy … instead" substitution, the keyword-granting follow-up sentence, the delayed "sacrifice/exile it at the beginning of the next end step", "copy THAT spell" naming the spell that triggered the ability, and an "except" tail carrying a base P/T, an added colour, added types/subtypes and a keyword list. WHAT IS LEFT: an X token COUNT (For the Common Good); the selectors "artifact or enchantment you control" (Adagia), "that creature" meaning the attached one (Springheart Nantuko), "it" meaning the source that died (Vaultborn Tyrant), a creature CARD in a graveyard (The Scarab God) and a card exiled with the source (Mimic Vat); the four-way "instant spell, sorcery spell, activated ability, or triggered ability" union (Return the Favor); "from an enchantment source" (Weaver of Harmony); and — absent from this corpus and so deliberately unbuilt — an "except" tail on a SPELL copy (Fork) and a copy count conditional on the zone the spell was cast from (Increasing Vengeance). A clause can land here with its copy half fully read: Homunculus Horde is blocked by its TRIGGER SCOPE, not by the copy',
   },
   {
     // Everything else in the family: a selector or an "except" clause outside

@@ -11,7 +11,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { compileCard } from './index.js';
+import { UNSUPPORTED_HINTS, compileCard, explainUnsupported } from './index.js';
 import type { CompilableCard } from './types.js';
 
 /** A minimal compilable record — only the fields the rule table reads. */
@@ -338,5 +338,77 @@ describe('the Kindred card type (CR 308)', () => {
     });
     expect(result.status).toBe('incomplete');
     expect(result.missing.some((m) => /a card type the engine can represent/.test(m.missingEngineSystem))).toBe(true);
+  });
+});
+
+/**
+ * THE HINT MUST NAME THE RIGHT SYSTEM — a guard for a defect class this file has
+ * already been bitten by twice.
+ *
+ * `explainUnsupported` returns the FIRST hint whose pattern matches the clause
+ * TEXT, and one printed sentence can appear inside several different templates.
+ * The delayed-removal sentence is the worst case: it is fully implemented on a
+ * token copy, so every Orthion-shaped card reported "this engine has no delayed
+ * triggers" while the real blocker was a selector three words away. A reader
+ * acting on that would rebuild a system that already exists.
+ *
+ * These are table rows: a clause, and the system its report must NAME. Adding a
+ * hint that steals one of them fails here rather than in someone's afternoon.
+ */
+describe('an unsupported clause reports the system that is actually missing', () => {
+  const CASES: ReadonlyArray<{ clause: string; names: RegExp; notNames?: RegExp }> = [
+    {
+      // Whip of Erebos: the delayed exile rides no creating ref.
+      clause:
+        'return target creature card from your graveyard to the battlefield. it gains haste. exile it at the beginning of the next end step.',
+      names: /DELAYED triggered ability/,
+    },
+    {
+      // Jaxis: the delayed sacrifice is READ; the quoted ability is not.
+      clause:
+        `create a token that's a copy of another target creature you control. it gains haste and "when this token dies, draw a card." sacrifice it at the beginning of the next end step.`,
+      names: /GRANTS AN ABILITY printed in quotes/,
+      notNames: /DELAYED triggered ability/,
+    },
+    {
+      // Electroduplicate: the quote sits after a keyword, not against "it has".
+      clause:
+        `create a token that's a copy of target creature you control, except it has haste and "at the beginning of the end step, sacrifice this token."`,
+      names: /GRANTS AN ABILITY printed in quotes/,
+    },
+    {
+      // Kitsa: the copy line is read in full; the trailing condition is not.
+      clause:
+        "copy target instant or sorcery spell you control. you may choose new targets for the copy. activate only if ~'s power is 3 or greater.",
+      names: /ACTIVATION CONDITION/,
+      notNames: /COPY-CREATING template/,
+    },
+    {
+      // Mockingbird: a fact nothing records, not a template.
+      clause:
+        'you may have ~ enter as a copy of any creature on the battlefield with mana value less than or equal to the amount of mana spent to cast ~.',
+      names: /AMOUNT OF MANA SPENT/,
+    },
+  ];
+
+  for (const { clause, names, notNames } of CASES) {
+    it(`names the right system for: ${clause.slice(0, 54)}…`, () => {
+      const explained = explainUnsupported(clause);
+      expect(explained).toMatch(names);
+      if (notNames) expect(explained).not.toMatch(notNames);
+    });
+  }
+
+  it('every hint that says a system is IMPLEMENTED is telling the truth about delayed triggers', () => {
+    // The specific stale claim that cost time: a hint asserting the engine has
+    // no delayed triggered abilities, while `createTokenCopy` compiles one.
+    const delayed = UNSUPPORTED_HINTS.find((h) => /DELAYED triggered ability/.test(h.missingEngineSystem));
+    expect(delayed).toBeDefined();
+    expect(delayed!.missingEngineSystem).toMatch(/implemented/);
+    // And it must NOT claim a token copy's own delayed sentence is missing.
+    expect(delayed!.pattern.test('sacrifice it at the beginning of the next end step')).toBe(true);
+    expect(
+      explainUnsupported("create a token that's a copy of that thing. sacrifice it at the beginning of the next end step."),
+    ).not.toMatch(/DELAYED triggered ability/);
   });
 });

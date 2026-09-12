@@ -20,6 +20,7 @@
 import { describe, expect, it } from 'vitest';
 import type {
   CardDefinition,
+  CardInstance,
   GameState,
   InstanceId,
   PlayerId,
@@ -33,6 +34,7 @@ import {
   generateLegalActions,
   isLegalTarget,
   legalTargetsFor,
+  tokenCopyDefOf,
 } from '@jonny-boi/core';
 import { compileCard } from './compile/compile.js';
 import type { CompilableCard } from './compile/types.js';
@@ -805,3 +807,125 @@ describe('copying the spell that TRIGGERED the ability', () => {
   });
 });
 
+// --- the "except" tail that says FOUR things, and the splitter that broke on it ------
+
+describe('an "except" tail carrying a base P/T, an added colour and a keyword list', () => {
+  const JOLLY_TEXT =
+    "{1}, {T}: Create a token that's a copy of another target creature you control, except it's a " +
+    "1/1 red Balloon creature in addition to its other colors and types and it has flying and haste. " +
+    'Sacrifice it at the beginning of the next end step. Activate only as a sorcery.';
+
+  function jollyExcept(): Record<string, unknown> {
+    const result = compileCard(
+      makeCard({
+        name: 'The Jolly Balloon Man',
+        typeLine: { supertypes: ['Legendary'], types: ['Creature'], subtypes: ['Human', 'Clown'] },
+        manaCost: { generic: 1, W: 1, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+        power: '2',
+        toughness: '3',
+        oracleText: `Haste
+${JOLLY_TEXT}`,
+      }),
+    );
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    return result.definition.activated?.[0]?.effects[0]?.params?.except as Record<string, unknown>;
+  }
+
+  it('reads every printed word of the tail — and keeps ADDED colour apart from REPLACED', () => {
+    const except = jollyExcept();
+    // The P/T REPLACES (layer 7a, like eternalize's "it's a 4/4").
+    expect(except.power).toBe(1);
+    expect(except.toughness).toBe(1);
+    // The colour is ADDED — "in addition to its other colors". Writing it into
+    // `colors` would make a copy of a green creature mono-red, which is a
+    // different card the moment anything asks about green.
+    expect(except.addColors).toEqual(['R']);
+    expect(except.colors).toBeUndefined();
+    expect(except.addTypes).toEqual(['creature']);
+    expect(except.addSubtypes).toEqual(['Balloon']);
+    // BOTH keywords: "flying and haste" is one clause granting two.
+    expect(except.addKeywords).toEqual({ flying: true, haste: true });
+  });
+
+  it('core ADDS the colour to the copied ones rather than replacing them', () => {
+    // A green bear copied as "red in addition" is BOTH — and red is not listed
+    // twice when the original was already red.
+    const green: CardDefinition = { id: 'g', name: 'Green Bear', types: ['creature'], colors: ['G'], power: 2, toughness: 2 };
+    const red: CardDefinition = { id: 'r', name: 'Red Bear', types: ['creature'], colors: ['R'], power: 2, toughness: 2 };
+    const asInstance = (def: CardDefinition): CardInstance =>
+      ({
+        instanceId: 1,
+        def,
+        controller: 'A',
+        owner: 'A',
+        zone: 'battlefield',
+        tapped: false,
+        summoningSick: false,
+        damageMarked: 0,
+        markedByDeathtouch: false,
+        counters: {},
+      }) as unknown as CardInstance;
+    const tail = { addColors: ['R' as const], power: 1, toughness: 1 };
+    expect(tokenCopyDefOf(asInstance(green), tail).colors).toEqual(['G', 'R']);
+    expect(tokenCopyDefOf(asInstance(red), tail).colors).toEqual(['R']);
+    expect(tokenCopyDefOf(asInstance(green), tail).power).toBe(1);
+  });
+
+  it('the splitter cuts only where a CLAUSE begins — "colors and types" survives intact', () => {
+    // The class this fixes: " and " inside a clause used to be a separator, so
+    // the tail tore into fragments that matched nothing and the card reported a
+    // missing template when what was missing was the split. Proven by the
+    // three-clause tail Spark Double prints still parsing as three.
+    const spark = compileCard(
+      makeCard({
+        name: 'Spark Double',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Shapeshifter'] },
+        power: '0',
+        toughness: '0',
+        oracleText:
+          "You may have ~ enter as a copy of a creature you control, except it isn't legendary and it enters with an additional +1/+1 counter on it if it's a creature.",
+      }),
+    );
+    expect(spark.status, JSON.stringify(spark.missing)).toBe('complete');
+    const except = spark.definition.copyAsEnters?.except as Record<string, unknown>;
+    expect(except.legendary).toBe(false);
+    expect(except.extraCounters).toBeDefined();
+  });
+
+  /**
+   * ⚠️ WRITTEN TWICE. The first version used "flying and bushido 2", which never
+   * reached the keyword-list branch at all — the digit fails the `[a-z' ]+`
+   * match, so the clause was refused one level up and a sabotage that made the
+   * list SKIP unreadable words sailed through. The word has to be alphabetic and
+   * simply not a flag this engine has.
+   */
+  it('still REFUSES a keyword list containing a word the engine has no flag for', () => {
+    // Half a grant is a copy missing a printed ability — the widening this
+    // compiler must never do. "Banding" is a real printed keyword with no flag
+    // here, so the clause parses as a list and the list must refuse it.
+    const partial = compileCard(
+      makeCard({
+        name: 'Half Reader',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        oracleText: "Create a token that's a copy of target creature you control, except it has flying and banding.",
+      }),
+    );
+    expect(partial.status).toBe('incomplete');
+    // …and the FLYING half was not quietly kept: the card contributes nothing.
+    expect(partial.definition.effects ?? []).toHaveLength(0);
+    // The control: the same shape with two readable keywords compiles, so the
+    // refusal above is about the unreadable word and not about the list form.
+    const both = compileCard(
+      makeCard({
+        name: 'Whole Reader',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        oracleText: "Create a token that's a copy of target creature you control, except it has flying and haste.",
+      }),
+    );
+    expect(both.status, JSON.stringify(both.missing)).toBe('complete');
+    expect((both.definition.effects?.[0]?.params?.except as { addKeywords?: unknown })?.addKeywords).toEqual({
+      flying: true,
+      haste: true,
+    });
+  });
+});

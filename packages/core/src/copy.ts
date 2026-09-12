@@ -144,6 +144,18 @@ export interface CopyExceptions {
    */
   readonly colors?: readonly ManaColor[];
   /**
+   * "except it's a 1/1 **red** Balloon creature **in addition to its other
+   * colors** and types" (The Jolly Balloon Man) — the colour is ADDED to the
+   * copied ones rather than replacing them.
+   *
+   * A separate field from {@link colors} because the printed words differ and so
+   * does the result: embalm's token "is white" whatever the card was, and a copy
+   * of a green creature that is red IN ADDITION is both. Folding the two would
+   * make one of the two cards wrong, and the board would look identical until
+   * something asked about the colour it lost — a protection, a filter, a fear.
+   */
+  readonly addColors?: readonly ManaColor[];
+  /**
    * "except … it has **no mana cost**" (embalm, eternalize). The copy drops the
    * copied cost and is marked as CR 202.1b's no-cost object: its mana value is
    * zero and it can never be cast by paying a cost.
@@ -340,6 +352,7 @@ export function applyCopyExceptions(
 function applyGraveyardCopyExceptions(copied: CardDefinition, exceptions: CopyExceptions): CardDefinition {
   if (
     exceptions.colors === undefined &&
+    exceptions.addColors === undefined &&
     exceptions.noManaCost !== true &&
     exceptions.power === undefined &&
     exceptions.toughness === undefined
@@ -348,6 +361,14 @@ function applyGraveyardCopyExceptions(copied: CardDefinition, exceptions: CopyEx
   }
   const shaped: { -readonly [K in keyof CardDefinition]: CardDefinition[K] } = { ...copied };
   if (exceptions.colors !== undefined) shaped.colors = [...exceptions.colors];
+  // "…red IN ADDITION to its other colors" — a UNION, and deduplicated, because
+  // a copy of a card that was already red must not list red twice for anything
+  // that counts colours (devotion, a colour-count filter).
+  if (exceptions.addColors !== undefined) {
+    const merged = [...(shaped.colors ?? [])];
+    for (const color of exceptions.addColors) if (!merged.includes(color)) merged.push(color);
+    shaped.colors = merged;
+  }
   if (exceptions.noManaCost === true) {
     delete shaped.cost;
     shaped.noManaCost = true;
