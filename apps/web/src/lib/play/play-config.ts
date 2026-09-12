@@ -240,28 +240,53 @@ export const CARD_ASPECT_HEIGHT_OVER_WIDTH = 680 / 488;
  * {@link Board3dConfig.counterTiltDeg} is its exact negation and two literals
  * that must stay equal and opposite is a divergence waiting to happen (rule 12:
  * where a second copy is unavoidable, derive both from one source).
+ *
+ * ⚠️ RAISED FROM 8° (§3.143 wave 3), because 8° was measured and found to be
+ * NOTHING: a real screenshot of a real game showed a flat vertical stack with
+ * no tabletop in it at all, while every structural test passed.
+ *
+ * THE ARITHMETIC THAT SETTLED IT, because "slanted just a bit" is not a number
+ * until someone writes one down. A tilt COSTS cos(tilt) of vertical height and
+ * BUYS the perspective KEYSTONE — the far edge of the table narrowing — which
+ * is the signal the eye actually reads as "table". Against the scene this board
+ * really renders (335px tall, measured at 1280×800 with nine permanents):
+ *
+ *          squash            keystone: perspective / (perspective + 335·sin θ)
+ *   8°     0.990  (1%)       1600 / 1646 = 97%   ← shipped in wave 1: invisible
+ *   12°    0.978  (2%)        700 /  770 = 91%   ← here
+ *   18°    0.951  (5%)       1000 / 1111 = 90%   ← same keystone, twice the cost
+ *
+ * So the tilt is NOT the expensive knob — {@link Board3dConfig.perspectivePx}
+ * is. Nine percent of keystone at two percent of squash is the trade this line
+ * makes; 18° was tried, measured and dropped because it bought nothing 12° with
+ * a shorter perspective does not, and paid five percent for it.
  */
-const BOARD_TILT_DEG = 8;
+const BOARD_TILT_DEG = 12;
 
 /** The 3D tabletop scene (UX-9). */
 export interface Board3dConfig {
   /**
-   * CSS `perspective` distance, px. SMALLER = stronger foreshortening. 1600px
-   * against a board roughly 700–900px tall is a gentle projection: the far seat
-   * reads as further away without the fish-eye that a sub-1000px perspective
-   * gives a box this size, where the near row's corners visibly bulge.
+   * CSS `perspective` distance, px. SMALLER = stronger foreshortening.
+   *
+   * ⚠️ SHORTENED FROM 1600 TO 700 (§3.143 wave 3), and THIS is the knob that
+   * made the tabletop visible — see the table in {@link BOARD_TILT_DEG}. 1600px
+   * against the 335px scene this board really renders put the far edge at 97%
+   * of true width; beside a 1% squash, that is what made wave 1's "3D tabletop"
+   * a flat vertical stack in a real screenshot. At 700px the same scene's far
+   * edge reads at 91%, which the eye registers as depth rather than as a
+   * rendering artefact.
+   *
+   * The fish-eye the old comment feared cannot happen here: the tilt is a pure
+   * `rotateX`, so z varies only with Y and there is no horizontal distortion at
+   * all, and the near edge is at z = 0 (the transform-origin note in
+   * board-scene.css) where a projection cannot bulge it.
    */
   readonly perspectivePx: number;
   /**
    * Tilt of the tabletop away from the viewer, degrees. Caleb asked for
-   * "looking down and slanted **just a bit**", and this is the "just a bit".
-   *
-   * The trade-off is legibility: every degree of tilt vertically compresses the
-   * far row's card art and its P/T footer by `cos(tilt)`, and past roughly 12°
-   * the opponent's tiles — already the smaller half of the height budget
-   * (`--play-seat-rows-max`, board-fit.css) — stop being readable at a glance,
-   * which is the opposite of what this overhaul is for. 8° costs 1% of height
-   * and still visibly seats the board on a table.
+   * "looking down and slanted **just a bit**", and this is the "just a bit" —
+   * see {@link BOARD_TILT_DEG} for the measurement that set it, and for why the
+   * first attempt's 8° was a tilt only a stylesheet could see.
    */
   readonly tiltDeg: number;
   /**
@@ -322,7 +347,7 @@ export interface Board3dConfig {
 
 /** The default 3D-scene configuration (see {@link Board3dConfig}). */
 export const BOARD_3D_CONFIG: Board3dConfig = Object.freeze({
-  perspectivePx: 1600,
+  perspectivePx: 700,
   tiltDeg: BOARD_TILT_DEG,
   reducedMotionTiltDeg: 0,
   perspectiveOriginXFraction: 0.5,
@@ -331,6 +356,105 @@ export const BOARD_3D_CONFIG: Board3dConfig = Object.freeze({
   liftScale: 1.06,
   liftShadowPx: 14,
   sceneTransitionMs: 220,
+});
+
+/**
+ * WHERE THE PIECES OF THE TABLE GO (§3.143 wave 3, UX-9).
+ *
+ * The first two waves built a tilt and could not show it, because the BLOCKER
+ * was never the angle — it was the layout. A real screenshot of a real game
+ * said three things at once, and all three are arrangement:
+ *
+ *  1. THE GAME LOG SAT ON THE MIDLINE, between the two battlefields, 171px of
+ *     a 600px board (measured at 1280×800, nine permanents). On a table — and
+ *     in MTGA — the midline is where combat happens; it is the one place a
+ *     scrolling history must not be. It also owned the height that made every
+ *     battlefield tile tiny, and it is why the board overflowed its own box
+ *     (725 needed of 600) after the scene wrapper was introduced.
+ *  2. BATTLEFIELD TILES WERE ART CROPS with a truncated name under them, while
+ *     the hand showed whole cards. The resting board was unreadable.
+ *  3. A TAPPED CARD read as a sliver, because the slot reserved a PRINTED
+ *     CARD's footprint (1.393 × width) for a tile whose real aspect was about
+ *     0.95 — nearly square. Half the reserved box was empty.
+ *
+ * Every number below is one of those three decisions. They live together
+ * because they trade against each other inside ONE vertical budget: the log's
+ * height is exactly what pays for the tiles, and the tile's aspect is exactly
+ * what the turned card's footprint has to match.
+ */
+export interface BoardLayoutConfig {
+  /**
+   * Width of the side rail the game log moved into, rem.
+   *
+   * A rail, not a band: horizontal space is the plentiful axis on every window
+   * this board targets except a phone (board-fit.css rule 4 already makes that
+   * trade for the seat's own identity rail, and states why). 17rem is the
+   * narrowest width at which a log line — "Player 1 casts Wall of Omens" —
+   * wraps to at most two lines at the log's own type size, measured rather than
+   * chosen: narrower and every line wraps, which is harder to scan than fewer
+   * lines would be worth.
+   */
+  readonly logRailWidthRem: number;
+  /**
+   * ⚠️ THE RAIL'S FOLD IS NOT A NUMBER HERE, DELIBERATELY. A rail costs width
+   * and a phone has none to give, so below a threshold it folds back into a
+   * band under the scene — and board-fit.css rule 6 ALREADY owns that
+   * threshold (40rem) for the seat's own identity rail. A second copy of it
+   * here would be two answers to "how narrow is narrow" (rule 12), and the two
+   * would eventually disagree, laying the board out two ways in one window.
+   * The fold lives with the breakpoint that already exists.
+   */
+  /**
+   * Thickness of the table's midline seam, px. The element between the seats is
+   * what `PlayBoard` measures the combat midline from (UX-12's clamp), so it
+   * has to exist whatever it costs; 2px is a line rather than a region, which
+   * is the whole point of evicting the log from it.
+   */
+  readonly midlineThicknessPx: number;
+  /**
+   * The FAR seat's tiles, as a fraction of the near seat's.
+   *
+   * Not a space-saving trick — it is the same fact the tilt states: you are
+   * sitting at this table and the opponent's half is further away. Giving both
+   * halves the same tile width and dividing the height budget evenly produced
+   * ~58px cards on both sides (measured); spending 55% of the budget on the
+   * side whose cards you make decisions with produces ~85px near and ~69px far,
+   * which is the pair of numbers a player can actually read.
+   *
+   * ⚠️ It is a floor on the FAR side, not a licence: below about 0.7 the
+   * opponent's row stops being legible at a glance and the tilt's own
+   * foreshortening (another ~10%) compounds it.
+   */
+  readonly farSeatTileScale: number;
+  /**
+   * A LAND tile, as a fraction of a creature tile on the same side.
+   *
+   * Lands are the row you count and check for tapped-ness; creatures are the
+   * row you read. Two equal rows of card-shaped tiles do not fit an 800px
+   * window at any readable size (measured: 58px each), and shrinking the row
+   * that carries the least text is the cheapest honest place to take it.
+   */
+  readonly landTileScale: number;
+  /**
+   * The opponent's fanned card BACKS, as a fraction of a far-seat LAND tile.
+   *
+   * Their only content is a number, and the ✋ HAND counter in the opponent's
+   * rail states that number exactly — so they earn the smallest footprint of
+   * anything on the table (the argument board-fit.css rule 6 already makes for
+   * a phone, applied to the axis that is actually scarce here). Measured: the
+   * backs band cost 56px of a 600px board before this, for a count that was
+   * already printed four inches away.
+   */
+  readonly opponentBacksScale: number;
+}
+
+/** The default board arrangement (see {@link BoardLayoutConfig}). */
+export const BOARD_LAYOUT_CONFIG: BoardLayoutConfig = Object.freeze({
+  logRailWidthRem: 17,
+  midlineThicknessPx: 2,
+  farSeatTileScale: 0.8,
+  landTileScale: 0.6,
+  opponentBacksScale: 0.5,
 });
 
 /** Tapping a permanent turns it sideways (UX-11). */
@@ -358,6 +482,16 @@ export interface TapRotationConfig {
    * in the first place. The footprint has to come from the slot's `flex-basis`,
    * and `.seat__board`'s `contain: size` (board-fit.css, called "the load-bearing
    * line" by its own comment) means the strip will NOT grow to absorb it.
+   *
+   * ⚠️ THIS RATIO WAS A LIE UNTIL §3.143 wave 3, and the lie is what a tapped
+   * land looked like. The slot reserved a printed card's 1.393 for a TILE whose
+   * real aspect was art-crop-plus-footer ≈ 0.95, so a turned card occupied two
+   * thirds of its own box and the rest was a gap — the "sideways sliver" a real
+   * screenshot showed. The tile is now genuinely card-shaped (board-fit.css
+   * gives `.perm` a height of `--play-tile-w × --perm-footprint`), so the slot
+   * and the card are the same box and this number is exact rather than
+   * aspirational. If the tile ever stops being a card, this stops being right,
+   * and `tile-transform.test.ts` is where that has to be caught.
    */
   readonly footprintRatio: number;
   /**

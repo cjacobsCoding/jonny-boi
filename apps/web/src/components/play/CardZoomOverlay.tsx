@@ -27,7 +27,36 @@ import type { CharacteristicExplanation } from '@jonny-boi/core';
  *
  * Dismissal is deliberately promiscuous — click anywhere, Escape, the ✕ — since
  * an overlay a player struggles to close is worse than none.
+ *
+ * ## ⚠️ THE PROP THAT NOBODY PASSED (§3.143 wave 3, GAP-C)
+ * `explanation` shipped in wave 2 and **every call site passed only
+ * `{cardId, name}`** — the zoomed state was literally typed that narrowly — so
+ * the one surface with live pointer events over a full card, the surface where
+ * the glossary is genuinely reachable with a mouse, showed a card with no
+ * provenance at all. {@link ZoomedCard} is that state, widened once and shared
+ * by every surface that opens this overlay, so a new caller cannot quietly
+ * re-narrow it.
  */
+
+/**
+ * What a surface must remember about the card a player asked to inspect.
+ *
+ * One record for all four openers (both boards' hands, the battlefield, the
+ * mulligan grid, the jail peek) — `cardId` and `name` are what a hand card can
+ * say, and everything else is what a BATTLEFIELD object can say on top. Each
+ * optional member absent is a real state, not a gap: a card in hand is not on
+ * the battlefield, so nothing is modifying it.
+ */
+export interface ZoomedCard {
+  readonly cardId: string;
+  readonly name: string;
+  /** Core's breakdown, on a surface that has one. */
+  readonly explanation?: CharacteristicExplanation | undefined;
+  readonly isCreature?: boolean;
+  /** Why provenance is unavailable here (the online board carries none). */
+  readonly unavailableReason?: string;
+}
+
 export function CardZoomOverlay({
   cardId,
   name,

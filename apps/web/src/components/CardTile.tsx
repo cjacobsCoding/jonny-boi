@@ -43,6 +43,18 @@ interface CardTileProps {
  * The tile's art stays LAZY (`CardArt`) on purpose: this grid is thousands of
  * cards long, and rule 7's eager-image rule is scoped to play surfaces, where
  * nothing is ever off-screen. The hover preview loads one card, on demand.
+ *
+ * ## The art button’s reset is a CLASS, never an inline style (rule 7)
+ *
+ * The button carried `style={{ all: 'unset', ... }}`. The CSSOM expands an
+ * inline `all` into every CSS longhand, so each tile serialised ~7.4 KB of
+ * `style` attribute: 5,651 tiles = a 42 MB DOM on the app’s landing view, which
+ * took ~40 s to render under an attached MutationObserver and put
+ * `verify-game-resume.mjs` over its 30 s post-reload budget.
+ * `.card-tile__art-btn` says exactly the same thing for free. The button does
+ * NOT wear `.card-tile__art` any more — every declaration of that rule was
+ * being unset here anyway, so it was dead weight that only looked meaningful;
+ * the real `.card-tile__art` box is `CardArt`'s own wrapper div.
  */
 export function CardTile({ card, onSelect, deck }: CardTileProps): ReactElement {
   const pt =
@@ -60,10 +72,9 @@ export function CardTile({ card, onSelect, deck }: CardTileProps): ReactElement 
       <CardHover cardId={card.id}>
         <button
           type="button"
-          className="card-tile__art"
+          className="card-tile__art-btn"
           onClick={() => onSelect(card)}
           aria-label={`View ${card.name}`}
-          style={{ all: 'unset', cursor: 'pointer', display: 'block' }}
         >
           <CardArt card={card} size="normal" />
         </button>

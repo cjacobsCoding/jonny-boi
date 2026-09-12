@@ -2,7 +2,7 @@ import { useState, type ReactElement } from 'react';
 import type { InstanceId, PlayerId } from '@jonny-boi/core';
 import type { VisibleHandCard } from '../../lib/play/view-model.js';
 import { PlayCard } from './PlayCard.js';
-import { CardZoomOverlay } from './CardZoomOverlay.js';
+import { CardZoomOverlay, type ZoomedCard } from './CardZoomOverlay.js';
 import { CardHover } from '../CardHover.js';
 import { mulliganCopy } from '../../lib/play/mulligan-copy.js';
 
@@ -40,8 +40,18 @@ export function MulliganScreen({
   const mustBottom = mulligansTaken; // London: bottom one card per mulligan taken
   const [deciding, setDeciding] = useState<'choose' | 'bottom'>('choose');
   const [selected, setSelected] = useState<Set<InstanceId>>(new Set());
-  /** The card being inspected full-size, if any (report 20260825_210026). */
-  const [zoomed, setZoomed] = useState<VisibleHandCard | null>(null);
+  /**
+   * The card being inspected full-size, if any (report 20260825_210026).
+   *
+   * §3.143 GAP-C widened this state to {@link ZoomedCard} everywhere it is
+   * kept. Here it carries no `explanation`, and that is the TRUTH rather than a
+   * gap: a card in the opening hand is in no zone anything can modify, so the
+   * printed card IS the card. (A battlefield permanent's zoom does carry one.)
+   */
+  const [zoomed, setZoomed] = useState<ZoomedCard | null>(null);
+
+  /** Open the zoom on one hand card — the one place this screen builds that state. */
+  const inspect = (c: VisibleHandCard): void => setZoomed({ cardId: c.cardId, name: c.name });
 
   const toggle = (id: InstanceId): void => {
     setSelected((cur) => {
@@ -86,7 +96,7 @@ export function MulliganScreen({
             className="hand-card-slot"
             onContextMenu={(e) => {
               e.preventDefault();
-              setZoomed(c);
+              inspect(c);
             }}
           >
             <CardHover cardId={c.cardId}>
@@ -104,16 +114,14 @@ export function MulliganScreen({
               className="hand-card-slot__zoom"
               aria-label={`Inspect ${c.name}`}
               title={`Inspect ${c.name}`}
-              onClick={() => setZoomed(c)}
+              onClick={() => inspect(c)}
             >
               🔍
             </button>
           </div>
         ))}
       </div>
-      {zoomed && (
-        <CardZoomOverlay cardId={zoomed.cardId} name={zoomed.name} onClose={() => setZoomed(null)} />
-      )}
+      {zoomed && <CardZoomOverlay {...zoomed} onClose={() => setZoomed(null)} />}
 
       <div className="mulligan__actions">
         {deciding === 'choose' ? (

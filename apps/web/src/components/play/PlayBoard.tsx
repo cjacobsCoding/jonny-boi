@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type ReactElement,
+} from 'react';
 import { createRng, opponentOf } from '@jonny-boi/core';
 import { createDefaultAiRegistry, DEFAULT_PILOT_ID } from '@jonny-boi/ai';
 import type {
@@ -8,6 +17,7 @@ import type {
   GameState,
   InstanceId,
   ManaCost,
+  PendingChoice,
   PlayerId,
 } from '@jonny-boi/core';
 import type {
@@ -18,7 +28,7 @@ import type {
   CycleOption,
   SubmitResult,
 } from '../../lib/play/session.js';
-import { buildBoardView, explainForFace } from '../../lib/play/view-model.js';
+import { buildBoardView, explainForFace, type BoardPermanent } from '../../lib/play/view-model.js';
 /**
  * §3.143 / UX-3..UX-5 + the commit half of UX-7 — THE CAST TRANSACTION.
  *
@@ -44,6 +54,7 @@ import {
   TOAST_MS,
   COPILOT_ADVICE_SEED,
   BOARD_3D_CONFIG,
+  BOARD_LAYOUT_CONFIG,
   COMBAT_ADVANCE_CONFIG,
   PROPOSAL_CONFIG,
   SPELL_HOLD_CONFIG,
@@ -54,10 +65,16 @@ import { StackPanel } from './StackPanel.js';
 import { GameLog } from './GameLog.js';
 import { PlayCard, CardBack } from './PlayCard.js';
 import { DRAG_ID_ATTR, useDragToPlay } from '../../lib/play/useDragToPlay.js';
-import { CardZoomOverlay } from './CardZoomOverlay.js';
+import { CardZoomOverlay, type ZoomedCard } from './CardZoomOverlay.js';
 import { ChoicePrompt } from './ChoicePrompt.js';
 import { GraveyardPanel } from './GraveyardPanel.js';
-import { AbilityMenuPrompt, AbilityTargetPrompt } from './AbilityPrompts.js';
+import {
+  AbilityMenuPrompt,
+  AbilityTargetPrompt,
+  ProposalCancelButton,
+  type AbilityPromptFaces,
+} from './AbilityPrompts.js';
+import './ability-prompts.css';
 import { graveyardPanelView } from '../../lib/play/graveyard-cast.js';
 import { isChoiceForViewer, waitingForChoiceText } from '../../lib/play/choice-view.js';
 import { isModalTap, manaTapMenu, tappableIds, type ManaTapOption } from '../../lib/play/mana-tap.js';
@@ -452,6 +469,28 @@ export function PlayBoard({
   // A parked question preempts everything: while it stands the engine offers no
   // other action, so the board's own controls must go quiet until it is answered.
   const pendingChoice = session.pendingChoice;
+  /**
+   * §3.143 wave 3 — THE QUESTION COMES FROM STATE. THE PROPOSAL IS A ROUTE FOR
+   * THE ANSWER, NOT THE REASON THE QUESTION IS ON SCREEN.
+   *
+   * Wave 2 rendered the engine-parked cast-time question (kicker, X, modes, an
+   * additional cost) ONLY inside `announcingQuestion && proposal`, with the
+   * session's own `pendingChoice` as the `else` arm of a ternary. A `Proposal`
+   * is transient React state; a parked choice lives in `GameState` and survives
+   * a reload, a resume and a rebuild. Gating the rendering on the transient half
+   * means that the day the two disagree — a proposal dropped by the
+   * stale-snapshot effect, a resume, a remount — the board shows NO question for
+   * a game that is waiting on one, and nothing else is offered either (see
+   * `isViewersPriority` just above, which goes quiet while a question stands).
+   * That is a stranded game.
+   *
+   * So: the question is whichever state has one, the proposal only decides
+   * where the answer is sent, and NOTHING about the rendering is conditional on
+   * a proposal existing. `play-board-mount.test.ts` fails if that inverts again.
+   */
+  const parkedQuestion: PendingChoice | null =
+    announcingQuestion?.choice ??
+    (pendingChoice && isChoiceForViewer(pendingChoice, viewer) ? pendingChoice : null);
   const isViewersPriority =
     session.priorityPlayer === viewer && !pendingChoice && announcingQuestion === null;
   const playableLands = isViewersPriority ? session.playableLands() : [];
@@ -506,8 +545,9 @@ export function PlayBoard({
    * `session.activateAbility(id, idx)` — with NO `costInstanceIds` — and
    * `applyActivateAbility` rejects that outright for any ability that prints a
    * sacrifice cost. `AbilityOption.costPayers` existed; nothing on a screen read
-   * it. `sacrifice-cost-activation.test.ts` drives a real pool card through this
-   * same funnel and fails if the engine refuses.
+   * it. `proposal-adoption.test.ts` drives a real pool card (Atog) through this
+   * same funnel and fails if the engine refuses — and separately fails if any
+   * activation on this board stops going through the proposal at all.
    */
   const onChooseAbility = (opt: AbilityOption): void => {
     setAbilitySource(null);
@@ -631,6 +671,24 @@ export function PlayBoard({
     (ref: InstanceId | PlayerId): string | null =>
       typeof ref === 'number' ? (findInstanceAnywhere(questionState, ref)?.def.id ?? null) : null,
     [questionState],
+  );
+
+  /**
+   * §3.143 wave 3 / UX-8 — how the SHARED ability prompts turn an engine ref
+   * into a drawable card. Wired once here and handed to both prompts, so
+   * "which face does #7 show, and what is modifying it?" has one answer on this
+   * board (rule 12) rather than one per dialog.
+   *
+   * A PlayerId ref resolves to no card and no explanation, which is the honest
+   * answer — a seat is not a card — and the prompt draws a named plate for it.
+   */
+  const promptFaces: AbilityPromptFaces = useMemo(
+    () => ({
+      cardIdOf: faceOfInstance,
+      explanationOf: (ref: InstanceId | PlayerId) =>
+        typeof ref === 'number' ? explainForFace(session.state, ref) : undefined,
+    }),
+    [faceOfInstance, session],
   );
 
   /**
@@ -849,8 +907,77 @@ export function PlayBoard({
   // diverge from what clicking the card would have done (menus for multi-way
   // cards included). The re-lookup on drop is deliberate: the frame may have
   // changed mid-gesture, and stale affordances must not fire.
-  /** The card being inspected full-size, if any (report 20260825_210026). */
-  const [zoomed, setZoomed] = useState<{ cardId: string; name: string } | null>(null);
+  /**
+   * The card being inspected full-size, if any (report 20260825_210026).
+   *
+   * {@link ZoomedCard}, not `{cardId, name}`: a battlefield permanent carries
+   * its live P/T, its granted keywords and their sources, and the zoom is the
+   * one surface where a player can actually hover those words (§3.143 GAP-C).
+   */
+  const [zoomed, setZoomed] = useState<ZoomedCard | null>(null);
+
+  /**
+   * Every permanent on the table by id — the board's answer to "what is #7, as
+   * the player can currently see it?". Built from the SAME `BoardView` the seats
+   * are drawn from, so the zoom cannot disagree with the tile it was opened
+   * from; a second lookup would be a second answer (rule 12).
+   */
+  const permById = useMemo(() => {
+    const map = new Map<InstanceId, BoardPermanent>();
+    for (const perm of [...view.self.permanents, ...view.opponent.permanents]) {
+      map.set(perm.instanceId, perm);
+    }
+    return map;
+  }, [view]);
+
+  /**
+   * §3.143 wave 3 / GAP-C — A WAY IN FROM THE BATTLEFIELD.
+   *
+   * The zoom had exactly two doors — a hand card and the jail peek — so the
+   * cards a whole game is played with were the ones a player could never open
+   * full-size with a pointer. (`CardHover`'s preview is deliberately
+   * `pointer-events: none`, so its glossary pops are visible and not hoverable;
+   * this overlay is the only place UX-17.4 is genuinely reachable with a mouse.)
+   *
+   * DELEGATED from the seat wrapper rather than added to the tile, because
+   * `SeatPanel` and `BoardPermanentTile` belong to another lane — `data-perm-home`
+   * is the anchor those files already publish and it is enough.
+   *
+   * TWO gestures, and the split is deliberate:
+   *  - RIGHT-CLICK anywhere on a tile, matching the hand card's own context
+   *    menu, so one gesture inspects a card wherever it sits;
+   *  - a PLAIN CLICK only when the click did not land on a control. A tile is a
+   *    `<button>` exactly when it is selectable (an attacker, a block, a land to
+   *    tap), and hijacking that click would cost the player a real move — while
+   *    a click on a NON-interactive permanent does nothing at all today, which
+   *    is the affordance a touch device can reach.
+   */
+  const inspectPermanentFrom = useCallback(
+    (event: ReactMouseEvent, requireInert: boolean): void => {
+      const from = event.target instanceof Element ? event.target : null;
+      if (from === null) return;
+      if (requireInert && from.closest('button') !== null) return;
+      const tile = from.closest('[data-perm-home]');
+      const raw = tile?.getAttribute('data-perm-home');
+      if (raw === null || raw === undefined) return;
+      const perm = permById.get(Number(raw) as InstanceId);
+      if (perm === undefined) return;
+      event.preventDefault();
+      setZoomed({
+        cardId: perm.cardId,
+        name: perm.name,
+        isCreature: perm.isCreature,
+        ...(perm.explanation !== undefined ? { explanation: perm.explanation } : {}),
+      });
+    },
+    [permById],
+  );
+
+  /** The two handlers every seat gets, spread onto its wrapper. */
+  const seatInspectProps = {
+    onContextMenu: (event: ReactMouseEvent) => inspectPermanentFrom(event, false),
+    onClick: (event: ReactMouseEvent) => inspectPermanentFrom(event, true),
+  };
 
   // --- §3.57 clarity systems -------------------------------------------------------
   /** The board container: the combat-lines canvas and the animation anchors' root. */
@@ -1313,6 +1440,19 @@ export function PlayBoard({
     '--perm-staged-opacity': String(STAGED_HOME_TILE_OPACITY),
     '--combat-advance-ms': `${COMBAT_ADVANCE_CONFIG.advanceMs}ms`,
     '--spell-hold-fade-ms': `${SPELL_HOLD_CONFIG.fadeMs}ms`,
+    // §3.143 wave 3 — the ARRANGEMENT's own numbers (BOARD_LAYOUT_CONFIG). The
+    // same rule as the tilt's: board-fit.css says how the board reads them and
+    // contains none of them.
+    '--play-log-rail-w': `${BOARD_LAYOUT_CONFIG.logRailWidthRem}rem`,
+    '--board-midline-h': `${BOARD_LAYOUT_CONFIG.midlineThicknessPx}px`,
+    '--play-tile-far-scale': String(BOARD_LAYOUT_CONFIG.farSeatTileScale),
+    '--play-land-tile-scale': String(BOARD_LAYOUT_CONFIG.landTileScale),
+    '--play-backs-scale': String(BOARD_LAYOUT_CONFIG.opponentBacksScale),
+    // The tile's own SHAPE. Distinct from the per-tile `--perm-footprint`
+    // (which is 1 or the ratio depending on whether THAT card is tapped): this
+    // one is the card's aspect unconditionally, because an untapped tile is a
+    // card standing up and a tapped one is the same card lying down.
+    '--perm-aspect': String(TAP_ROTATION_CONFIG.footprintRatio),
   } as CSSProperties;
 
   // The §3.57 hint rule: the copy must describe the buttons that exist. The
@@ -1535,18 +1675,26 @@ export function PlayBoard({
         tiles and cannot be given a prop.
       */}
       <StagedPermanentsContext.Provider value={stagedIds}>
+      {/*
+        THE STAGE: the table, and the rail beside it. A ROW, which is the whole
+        of wave 3's layout fix — the game log used to sit in the COLUMN between
+        the two battlefields, where it cost 171px of a 600px board (measured at
+        1280×800, nine permanents), owned the height that made every tile tiny,
+        and put a scrolling history on the one line a table reserves for combat.
+        Moved sideways it costs the table no height at all, and the midline
+        below is a seam again. Below `railFoldsBelowPx` the stage folds back to
+        a column — a phone has no width to spend (board-fit.css rule 6).
+      */}
+      <div className="board-stage">
       <div className="board-scene">
       <div className="board-scene__table">
-      {/* Opponent (top) — hand hidden. */}
-      <div className="play-board__opponent">
-        <SeatPanel
-          seat={view.opponent}
-          isActive={view.activePlayer === view.opponent.id}
-          hasPriority={view.priorityPlayer === view.opponent.id}
-          interaction={opponentInteraction}
-          jails={jails}
-          onInspectCard={setZoomed}
-        />
+      {/*
+        THE FAR EDGE OF THE TABLE. The opponent's fanned backs are drawn ABOVE
+        their battlefield, not below it: on a real table the player opposite
+        holds their hand at their own edge, and the old order put their hand
+        between their creatures and the midline — the one place nothing belongs.
+      */}
+      <div className="play-board__opponent" {...seatInspectProps}>
         <div
           className="play-hand play-hand--hidden"
           aria-label={`${view.opponent.name} hand (hidden)`}
@@ -1557,20 +1705,33 @@ export function PlayBoard({
           ))}
           {view.opponent.handCount === 0 && <span className="seat__empty">Empty hand</span>}
         </div>
+        <SeatPanel
+          seat={view.opponent}
+          isActive={view.activePlayer === view.opponent.id}
+          hasPriority={view.priorityPlayer === view.opponent.id}
+          interaction={opponentInteraction}
+          jails={jails}
+          onInspectCard={setZoomed}
+        />
       </div>
 
       {/*
-        The centre column — now the LOG alone; the stack floats (see below).
-        It is also the MIDLINE: the region between the two seats, measured
-        rather than recomputed from seat heights, which is the one answer that
-        stays true when board-fit.css squeezes a seat.
+        THE MIDLINE — a seam on the table, and the element `PlayBoard` measures
+        UX-12's midline clamp from. It is measured rather than recomputed from
+        seat heights, which is the one answer that stays true when board-fit.css
+        squeezes a seat.
+
+        ⚠️ It is NOT `.play-board__center` any more. That class still names the
+        log/stack column on the ONLINE board (`OnlineBoard.tsx`), which board-fit
+        .css sizes as the designated first-to-yield; reusing it for a 2px seam
+        would have one selector answering two questions (rule 12). Decorative,
+        so it is hidden from assistive tech: a screen reader reads the two seats
+        in order and a line between them says nothing.
       */}
-      <div className="play-board__center" ref={midlineRef}>
-        <GameLog events={session.events} resolvers={{ name: session.nameOf, playerName: session.playerName }} />
-      </div>
+      <div className="board-midline" ref={midlineRef} aria-hidden="true" />
 
       {/* Viewer (bottom) — own hand face-up. */}
-      <div className="play-board__self">
+      <div className="play-board__self" {...seatInspectProps}>
         {/* The seat panel doubles as the drag-to-play drop zone, exactly as on
             the online board: dashed while a card is in flight, solid when over. */}
         <div
@@ -1601,6 +1762,16 @@ export function PlayBoard({
       </div>
       </div>{/* .board-scene__table */}
       </div>{/* .board-scene */}
+      {/*
+        THE LOG'S RAIL. Outside `.board-scene`, so the history is never tilted:
+        it is the one region on this surface made entirely of words, and words
+        on a slant is exactly the legibility cost UX-9 must not pay. It is a
+        `<aside>` because that is what it is — the table is the article.
+      */}
+      <aside className="board-rail" aria-label="Game log">
+        <GameLog events={session.events} resolvers={{ name: session.nameOf, playerName: session.playerName }} />
+      </aside>
+      </div>{/* .board-stage */}
       </StagedPermanentsContext.Provider>
 
       {/*
@@ -1733,9 +1904,11 @@ export function PlayBoard({
         placement="floating"
       />
 
-      {zoomed && (
-        <CardZoomOverlay cardId={zoomed.cardId} name={zoomed.name} onClose={() => setZoomed(null)} />
-      )}
+      {/* §3.143 GAP-C — the zoom carries whatever the surface that opened it
+          knows. A hand card knows its name and face; a battlefield permanent
+          also knows its live P/T and every card granting it a keyword, and this
+          overlay is the only surface where those words are hoverable. */}
+      {zoomed && <CardZoomOverlay {...zoomed} onClose={() => setZoomed(null)} />}
 
       {/* Action bar. */}
       <ActionBar
@@ -1786,37 +1959,33 @@ export function PlayBoard({
         hotseat handoff already gates the device on the engine moving priority to
         the chooser, so in practice the viewer IS the chooser here.
       */}
-      {announcingQuestion && proposal ? (
-        /*
-          §3.143 / UX-7's commit half — a CAST-TIME question the engine parked
-          (kicker, X, modes, an additional cost) on a spell that is on the
-          WORKING stack only. It is answered THROUGH the proposal, so backing out
-          here really does leave nothing behind, and when the announcement is
-          over the proposal says so in words rather than dropping the affordance.
-          Its source is looked up in `questionState` because the spell exists in
-          no other one.
-        */
+      {/*
+        ONE question site, fed by `parkedQuestion` — see its definition for why
+        the state is the authority and the proposal is only a route.
+
+        §3.143 / UX-7's commit half rides the same element: when a CAST-TIME
+        question was parked on a spell that is on the WORKING stack only (kicker,
+        X, modes, an additional cost), the answer goes THROUGH the proposal, so
+        backing out really does leave nothing behind. Without a proposal the same
+        question is answered straight against the session — which is what a
+        resumed game does, and what it could not do before.
+        The source is looked up in `questionState` because an announcing spell
+        exists in no other one.
+      */}
+      {parkedQuestion && (
         <ChoicePrompt
-          choice={announcingQuestion.choice}
+          choice={parkedQuestion}
           names={names}
-          onAnswer={(answer) => applyStep(stepProposal(proposal, { kind: 'answer', answer }))}
+          onAnswer={
+            announcingQuestion && proposal
+              ? (answer) => applyStep(stepProposal(proposal, { kind: 'answer', answer }))
+              : (answer) => run(() => session.answerChoice(answer))
+          }
           zoneOf={refIndex.zoneOf}
           sourceDef={choiceSourceDef ?? null}
-          cardIdOf={questionFaceOf}
+          cardIdOf={announcingQuestion ? questionFaceOf : faceOfInstance}
+          {...(announcingQuestion ? {} : { onFoldedMay: answerFoldedMay })}
         />
-      ) : (
-        pendingChoice &&
-        isChoiceForViewer(pendingChoice, viewer) && (
-          <ChoicePrompt
-            choice={pendingChoice}
-            names={names}
-            onAnswer={(answer) => run(() => session.answerChoice(answer))}
-            zoneOf={refIndex.zoneOf}
-            sourceDef={choiceSourceDef ?? null}
-            cardIdOf={faceOfInstance}
-            onFoldedMay={answerFoldedMay}
-          />
-        )
       )}
 
       {/* Which colour should this modal source make? (Birds of Paradise, a dual land.) */}
@@ -2009,22 +2178,27 @@ export function PlayBoard({
           SHARED with the online board — one loyalty UI, not two that drift. */}
       {abilitySource !== null && (
         <AbilityMenuPrompt
-          sourceName={session.nameOf(abilitySource)}
+          source={{ instanceId: abilitySource, name: session.nameOf(abilitySource) }}
           options={abilityMenu.get(abilitySource) ?? []}
+          faces={promptFaces}
           onChoose={onChooseAbility}
           onCancel={() => setAbilitySource(null)}
         />
       )}
 
-      {/* The chosen ability's targets — one button per engine-offered legal
-          target. The PICK goes into the proposal; the dispatch (with the payers,
-          and with or without the §3.129 auto-tap) is the proposal's to make. */}
+      {/* The chosen ability's targets — one CARD per engine-offered legal target
+          (UX-8). The PICK goes into the proposal; the dispatch (with the payers,
+          and with or without the §3.129 auto-tap) is the proposal's to make, and
+          the Cancel is the one shared control so the rewind-blocked sentence
+          shows here exactly as it does on every other pre-commit prompt. */}
       {proposedAbility && proposalQuestion?.kind === 'targets' && (
         <AbilityTargetPrompt
           ability={proposedAbility}
+          faces={promptFaces}
           onPick={chooseTarget}
           onCancel={backOut}
           annotateTarget={refIndex.noteOf}
+          cancelBlocked={cancelBlockedExplanation}
         />
       )}
 
@@ -2060,10 +2234,15 @@ export function PlayBoard({
                   {/* A payer set can name SEVERAL permanents ("sacrifice two
                       artifacts" is ONE answer naming two), so every face in it
                       is drawn. */}
+                  {/* `size="full"` — a sacrifice is a card leaving the board
+                      for good, so the player sees the whole card, not an art
+                      crop. `ability-prompts.css` gives each one an explicit
+                      width: a `tile` face is `height: 100%`, which resolves to
+                      `auto` inside this auto-height button. */}
                   {choice.instanceIds.map((id) => (
                     <CardHover key={id} cardId={faceOfInstance(id)}>
                       <CardFace
-                        size="tile"
+                        size="full"
                         cardId={faceOfInstance(id)}
                         name={session.nameOf(id)}
                         explanation={explainForFace(session.state, id)}
@@ -2212,38 +2391,6 @@ export function PlayBoard({
 }
 
 /**
- * §3.143 / UX-4 + UX-5 — THE ONE CANCEL CONTROL, WHICH EXPLAINS ITSELF.
- *
- * Every pre-commit prompt on this board ends with this, so "can I still back
- * out, and if not why not?" is answered the same way everywhere (rule 12). When
- * the rewind is gone the button does **not** silently vanish and is **not**
- * greyed out without a word: it is replaced by the proposal's own sentence from
- * `REWIND_BLOCK_EXPLANATIONS`, because Caleb's whole complaint is about not
- * understanding what is happening.
- */
-function ProposalCancelButton({
-  onCancel,
-  blocked,
-}: {
-  onCancel: () => void;
-  /** The honest refusal's sentence, or null while cancelling is still legal. */
-  blocked: string | null;
-}): ReactElement {
-  if (blocked !== null) {
-    return (
-      <span className="target-prompt__blocked" role="status">
-        {blocked}
-      </span>
-    );
-  }
-  return (
-    <button type="button" className="btn btn--ghost" onClick={onCancel}>
-      Cancel
-    </button>
-  );
-}
-
-/**
  * §3.143 / UX-16 — AN OPPONENT'S SPELL, HELD ON SCREEN.
  *
  * Caleb: *"when an opponent casts a sorcery or instant card, I need to be able
@@ -2280,7 +2427,19 @@ function SpellHoldCard({
   return (
     <div
       className="spell-hold"
-      role="dialog"
+      /*
+       * ⚠️ `status`, NOT `dialog` (§3.143 wave 3). This card ANNOUNCES — it tells
+       * you what the opponent just cast and lets you look at it — and it is
+       * dismissed by a timer. A `dialog` role promises modality and a focus trap
+       * that this has never had, and it told every "is a question on screen?"
+       * probe that one was: `verify-game-resume.mjs` matches `[role="dialog"]`
+       * to decide whether the game parked a choice, saw THIS, announced "stopped
+       * ON A PARKED CHOICE", reloaded, and failed because a 2.4-second
+       * announcement is not something a reload can bring back. A live region is
+       * what an announcement is, and it is announced once, on appearance.
+       */
+      role="status"
+      aria-live="polite"
       aria-label={`${opponentName} is casting ${name}`}
       onPointerEnter={() => onPointer?.(true)}
       onPointerLeave={() => onPointer?.(false)}

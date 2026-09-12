@@ -16,6 +16,8 @@ import type {
   InstanceId,
   PlayerId,
 } from '@jonny-boi/core';
+import type { MouseEvent as ReactMouseEvent } from 'react';
+import type { BoardPermanent } from '../../lib/play/view-model.js';
 import { isPlaneswalker, isPlayerTarget, PLAYER_IDS } from '@jonny-boi/core';
 import { stepLabel } from '../../lib/play/play-config.js';
 import { maskedViewToBoardView } from '../../lib/online/board-adapter.js';
@@ -41,7 +43,11 @@ import {
 import { answerChoiceAction, onlineChoiceView } from '../../lib/online/pending-choice.js';
 import { isModalTap, manaTapMenu, tappableIds, type ManaTapOption } from '../../lib/play/mana-tap.js';
 import { ChoicePrompt } from '../play/ChoicePrompt.js';
-import { AbilityMenuPrompt, AbilityTargetPrompt } from '../play/AbilityPrompts.js';
+import {
+  AbilityMenuPrompt,
+  AbilityTargetPrompt,
+  type AbilityPromptFaces,
+} from '../play/AbilityPrompts.js';
 import { GraveyardPanel } from '../play/GraveyardPanel.js';
 import { SeatPanel, type PermInteraction } from '../play/SeatPanel.js';
 import { StackPanel } from '../play/StackPanel.js';
@@ -49,7 +55,7 @@ import { stackEntries } from '../../lib/play/stack-view.js';
 import { PlayCard, CardBack } from '../play/PlayCard.js';
 import { CardFace } from '../play/CardFace.js';
 import { CardHover } from '../CardHover.js';
-import { CardZoomOverlay } from '../play/CardZoomOverlay.js';
+import { CardZoomOverlay, type ZoomedCard } from '../play/CardZoomOverlay.js';
 import '../play/action-bar.css';
 
 /**
@@ -90,6 +96,20 @@ import '../play/action-bar.css';
  * board must not invent attribution to fill the gap. See `board-adapter.ts`'s
  * `NO_MOD` note: the same limit, already stated once.
  */
+/**
+ * WHY A CARD ON THIS BOARD SHOWS NO PROVENANCE — said out loud, once.
+ *
+ * `CardFace` draws an empty breakdown as "nothing is modifying this", which is a
+ * DIFFERENT and false claim here: this client has a masked view, so it cannot
+ * know. Named rather than typed at each of the three mount sites that need it.
+ *
+ * ⚠️ The same sentence is spelled out in `lib/play/provenance-view.ts`'s
+ * `unavailable` bench sample and in two test files. This is the only PRODUCTION
+ * copy; the report for this lane asks lane-P's owner to export one constant from
+ * `provenance-view.ts` and have all four import it.
+ */
+const PROVENANCE_UNAVAILABLE_ONLINE = 'Live provenance is not carried by the multiplayer protocol yet.';
+
 export function OnlineBoard({
   frame,
   names,
@@ -231,8 +251,14 @@ export function OnlineBoard({
   const [pendingAbility, setPendingAbility] = useState<AbilityOption | null>(null);
   const [blockAssign, setBlockAssign] = useState<Map<InstanceId, InstanceId>>(new Map());
   const [activeBlockTarget, setActiveBlockTarget] = useState<InstanceId | null>(null);
-  /** The card being inspected full-size, if any (report 20260825_210026). */
-  const [zoomed, setZoomed] = useState<{ cardId: string; name: string } | null>(null);
+  /**
+   * The card being inspected full-size, if any (report 20260825_210026).
+   *
+   * {@link ZoomedCard}, not `{cardId, name}` — see §3.143 GAP-C. This board can
+   * never fill in the provenance half (below), but it CAN say so rather than
+   * showing a breakdown-shaped hole.
+   */
+  const [zoomed, setZoomed] = useState<ZoomedCard | null>(null);
   /** The viewer's graveyard panel (the flashback affordance's entry point). */
   const [graveyardOpen, setGraveyardOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -703,6 +729,70 @@ export function OnlineBoard({
     return makeRefIndex(refs, masked.viewer, names);
   }, [masked, names]);
 
+  /**
+   * §3.143 wave 3 / UX-8 — how the SHARED prompts turn a server ref into a
+   * drawable card on this board.
+   *
+   * `cardIdOf` widens `faceOfInstance` to the ref shape the prompts speak: a
+   * PlayerId is a seat, which has no card, and `null` is the honest answer the
+   * prompt draws a named plate for.
+   *
+   * There is deliberately NO `explanationOf`. `explainCharacteristics` needs the
+   * full `GameState` and the continuous-effect index, and an online client holds
+   * a masked view by design — so the faces here carry printed truth and say WHY
+   * there is no attribution instead of drawing an empty breakdown, which would
+   * read as "nothing is modifying this". Same limit `board-adapter.ts`'s `NO_MOD`
+   * note states once already.
+   */
+  const promptFaces: AbilityPromptFaces = useMemo(
+    () => ({
+      cardIdOf: (ref: InstanceId | PlayerId) => (typeof ref === 'number' ? faceOfInstance(ref) : null),
+      provenanceUnavailable: PROVENANCE_UNAVAILABLE_ONLINE,
+    }),
+    [faceOfInstance],
+  );
+
+  /**
+   * Every permanent on the table by id, from the SAME `BoardView` the seats are
+   * drawn from — so the zoom cannot disagree with the tile it was opened from.
+   */
+  const permById = useMemo(() => {
+    const map = new Map<InstanceId, BoardPermanent>();
+    for (const perm of [...view.self.permanents, ...view.opponent.permanents]) map.set(perm.instanceId, perm);
+    return map;
+  }, [view]);
+
+  /**
+   * §3.143 GAP-C — a way into the zoom from the BATTLEFIELD, the hotseat
+   * board's twin (see its own note for why the gestures split this way, and why
+   * this is delegated from the seat wrapper rather than added to the tile).
+   */
+  const inspectPermanentFrom = useCallback(
+    (event: ReactMouseEvent, requireInert: boolean): void => {
+      const from = event.target instanceof Element ? event.target : null;
+      if (from === null) return;
+      if (requireInert && from.closest('button') !== null) return;
+      const raw = from.closest('[data-perm-home]')?.getAttribute('data-perm-home');
+      if (raw === null || raw === undefined) return;
+      const perm = permById.get(Number(raw) as InstanceId);
+      if (perm === undefined) return;
+      event.preventDefault();
+      setZoomed({
+        cardId: perm.cardId,
+        name: perm.name,
+        isCreature: perm.isCreature,
+        unavailableReason: PROVENANCE_UNAVAILABLE_ONLINE,
+      });
+    },
+    [permById],
+  );
+
+  /** The two handlers every seat gets, spread onto its wrapper. */
+  const seatInspectProps = {
+    onContextMenu: (event: ReactMouseEvent) => inspectPermanentFrom(event, false),
+    onClick: (event: ReactMouseEvent) => inspectPermanentFrom(event, true),
+  };
+
   /** Which blocker→attacker lines to draw this frame (pure rule, tested). */
   const combatLines = blockerLinePairs({
     step,
@@ -738,7 +828,7 @@ export function OnlineBoard({
       </div>
 
       {/* Opponent (top) — hand hidden (count only). */}
-      <div className="play-board__opponent">
+      <div className="play-board__opponent" {...seatInspectProps}>
         <SeatPanel
           seat={view.opponent}
           isActive={view.activePlayer === view.opponent.id}
@@ -780,7 +870,7 @@ export function OnlineBoard({
       {/* Viewer (bottom) — own hand face-up. The seat panel doubles as the drag-to-
           play drop zone: it lights up while a card is in flight, and releasing a
           dragged card over it plays that card (same action as clicking it). */}
-      <div className="play-board__self">
+      <div className="play-board__self" {...seatInspectProps}>
         <div
           ref={dropRef}
           className={`drop-zone${drag ? ' drop-zone--active' : ''}${drag?.overDrop ? ' drop-zone--over' : ''}`}
@@ -876,9 +966,7 @@ export function OnlineBoard({
         </div>
       </div>
 
-      {zoomed && (
-        <CardZoomOverlay cardId={zoomed.cardId} name={zoomed.name} onClose={() => setZoomed(null)} />
-      )}
+      {zoomed && <CardZoomOverlay {...zoomed} onClose={() => setZoomed(null)} />}
 
       {/* Action bar. */}
       <div className="action-bar">
@@ -983,6 +1071,10 @@ export function OnlineBoard({
           names={names}
           onAnswer={(answer) => submit(answerChoiceAction(masked.viewer, ownChoice, answer))}
           zoneOf={refIndex.zoneOf}
+          /* UX-8 on THIS board too: `TargetOption` carries no card id, so
+             without this every target row here was a named placeholder while
+             the hotseat's were faces. Same public index the labels come from. */
+          cardIdOf={promptFaces.cardIdOf}
         />
       )}
 
@@ -991,8 +1083,9 @@ export function OnlineBoard({
           is simply absent rather than disabled. */}
       {abilitySource !== null && (
         <AbilityMenuPrompt
-          sourceName={nameOfInstance(abilitySource)}
+          source={{ instanceId: abilitySource, name: nameOfInstance(abilitySource) }}
           options={abilityMenu.get(abilitySource) ?? []}
+          faces={promptFaces}
           onChoose={onChooseAbility}
           onCancel={() => setAbilitySource(null)}
         />
@@ -1002,6 +1095,7 @@ export function OnlineBoard({
       {pendingAbility && pendingAbility.targets !== null && (
         <AbilityTargetPrompt
           ability={pendingAbility}
+          faces={promptFaces}
           annotateTarget={refIndex.noteOf}
           onPick={(target) =>
             submit({

@@ -7678,7 +7678,7 @@ reads.
 - **"Destroy all nontoken creatures"** (Hour of Reckoning) — `destroyAll` takes no `CardFilter` at all,
   so the token flag has nothing to narrow there; that is a `destroyAll` gap, not a token one.
 
-### 3.143 The MTGA-parity play surface — seventeen items, nine lanes — 🚧 in progress
+### 3.143 The MTGA-parity play surface — seventeen items, nine lanes — 🚧 fifteen done, two partial
 
 Raised 2026-09-11 as one request. **The scope lives in
 [docs/MTGA-UX-OVERHAUL.md](docs/MTGA-UX-OVERHAUL.md), the request verbatim plus seventeen numbered
@@ -7713,6 +7713,74 @@ ticket:**
    SESSION as a transaction: snapshot, propose, cancel-restores. That is sound only while no other
    seat has decided and nothing hidden has been revealed — an invariant that is enforced and tested,
    with the cancel affordance DISAPPEARING rather than lying when it fails.
+
+**STATUS after three waves, audited item by item against the code on 2026-09-11 — the row-level
+verdicts with their `file:line` evidence are in
+[§7.0 of the scope doc](docs/MTGA-UX-OVERHAUL.md#70-the-evidence-behind-each-row), and that file
+stays the checklist.** Fifteen of seventeen are done; **this entry does not flip to ✅ because two
+are not**, and the project's rule is that a marker is only correct once the work really is.
+
+- **UX-2 is partial.** The stack panel is right in every respect except one number: it pins itself to
+  `right: var(--space-2)` of `.play-board`, and since UX-9 moved the game log off the midline into a
+  17rem right-hand rail, that is where the log lives — so a non-empty stack paints over it. One line
+  (`right: calc(var(--play-log-rail-w) + var(--space-3))`, plus the sub-40rem reset where the rail
+  folds under the table) closes it.
+- **UX-10 is partial.** The hover funnel is one funnel and fifteen files mount it; **exile has no
+  viewer to hover.** A public exile zone renders as a count chip, and the only exiled cards a player
+  can look at are a jailed card under its jailer (§3.57) and a madness cast. Finishing it is an
+  exile list shaped like `GraveyardPanel`, not a change to the hover path.
+- Three carve-outs are deliberate and documented at the refusal site rather than left to be
+  discovered: a battlefield tile carries only the AFTERMARKET rules lines (a 96px tile has no room
+  for a text box, and the merged line is one hover away); the online board reports provenance
+  UNAVAILABLE rather than rendering an empty breakdown, because it has no continuous index; an
+  untabulated gate shape falls back to the engine's ordering instead of being guessed at.
+- Also open, and small: `verify-game-resume.mjs` still probes for a parked question with
+  `[role="dialog"]` — it passes 18/18 today only because the announcement that broke it was
+  re-roled, and it will misfire on the next non-modal overlay anyone adds; `.opp-feed` needs the same
+  one-line right offset as UX-2; and `play-config.test.ts:376` still pins the tilt with a
+  never-measured "past ~12° it stops being readable" comment that the measured table in
+  `BOARD_TILT_DEG` now contradicts.
+
+**Three findings on this branch were CLASS problems, and each one is worth more than the item it was
+found under:**
+
+1. **Built, tested, and unreachable — three times, in three waves.** UX-9 shipped `perspective:
+   1600px` with a green stylesheet test and a screenshot showing a flat vertical stack; the culprit
+   was the PERSPECTIVE, not the angle (against the 335px scene this board really renders, 1600px puts
+   the far edge at 97% of true width — an artefact; 700px puts it at 91% — depth). Wave 2 shipped
+   full-size card faces mounted with no `explanation` while the provenance model was fully tested,
+   two combat overlays aiming at a `life:<seat>` anchor no panel published (with a graceful fallback
+   that made it silent), and a glossary that reached `CardFace` but not the hand. **A test that
+   asserts a model computes the right value cannot see a mount that never passes it.** The guards
+   that caught these all share one shape: they enumerate MOUNT SITES out of the source and redden
+   when a new one appears without the prop (`full-face-provenance.test.ts`,
+   `anchor-adoption.test.ts`, `proposal-adoption.test.ts`).
+2. **A corner that used to be free.** `.opp-feed` and `.stack-panel--floating` both pin to the
+   board's right edge — free until the log rail moved there. One instance was found by opening a PNG;
+   the sibling was missed because nothing looked for siblings. The guard belongs in
+   `verify-board-fits.mjs` (assert no overlay's client rect intersects `.board-rail`'s), because a
+   CSS-property test cannot see an intersection.
+3. **A harness probe that matched more than it meant.** `[role="dialog"]` matched wave 2's timed
+   spell announcement, so the resume harness reported 17/18 and the finger pointed at the innocent
+   proposal transaction. Two lessons: probe by the component's own class, not by a role every future
+   overlay may carry; and `role="dialog"` on a non-modal announcement was itself a real defect (now
+   `role="status" aria-live="polite"`). **A red harness is a claim about the harness before it is a
+   claim about the code.**
+
+**Measured (rule 7 / rule 11).** Sim throughput: **branch median 236 games/sec vs `main` 239** over
+ten interleaved runs — ~1.3%, well inside this box's own 6–7% spread, with **A won 845/2000 identical
+on every run on both sides**, which is what proves the comparison is like-for-like rather than the
+clock. Attribution is opt-in and lazy (`explainCharacteristics` is a separate entry point), so the
+hot path is unmoved. Harnesses: `verify-game-resume.mjs` **18/18**; `verify-board-fits.mjs` and
+`verify-mana-choice.mjs` ran against this tree (their artifacts post-date the last source edit) but
+their tallies were never recorded, and §7.4 of the scope doc carries the blank rather than a guessed
+number — **re-run both and paste the lines before this section is marked ✅.**
+
+⚠️ **UX-1, UX-2, UX-11, UX-12, UX-13, UX-14 and UX-15 are claimed on SOURCE ONLY.** No screenshot on
+disk shows a non-empty stack or a declared combat, so every combat visual on this branch — the
+rotation, the advance, the clamp, the arcs, the damage sequence — is an unobserved claim. That is
+the largest hole in this record, and after what UX-9 taught, "the tests are green" is not the thing
+that closes it.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B

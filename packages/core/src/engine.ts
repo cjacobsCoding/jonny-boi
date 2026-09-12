@@ -30,9 +30,13 @@ import {
   hasCastableBackFace,
   isLand,
   isPermanentType,
+  effectiveManaExtrasOf,
+  effectiveManaModesOf,
+  manaAbilityFromActivated,
   manaActivationConditionMet,
   manaExtrasOf,
   manaModesOf,
+  manaSourceNeverTaps,
   spendPurposeIfRestricted,
   playableFaceOf,
 } from './card.js';
@@ -2756,22 +2760,51 @@ function nameOfInstance(state: GameState, instanceId: InstanceId): string | unde
  * of the action an AI scores rather than a hidden engine default. Summoning-sick
  * creature sources are excluded (rule 302.6 — see `canActivateManaAbility`).
  *
+ * GRANTED mana abilities are offered here too (DESIGN §3.143, GAP-G). Citanul
+ * Hierophants' "Creatures you control have '{T}: Add {G}'" arrives as an
+ * `ActivatedAbility` on a continuous modification, and until this read it was
+ * invisible to the whole mana system: the only way to make the mana was to put
+ * the ability on the STACK and pass priority, which is not what a mana ability
+ * does (CR 605.3a) and which the payment planner can never do at all. The mode
+ * list is `effectiveManaModesOf` — printed first, then granted — and every other
+ * reader of a `tapForMana` mode (the apply path, `planManaPayment`) reads the
+ * same one, because the mode is an INDEX and two readers with different lists
+ * tap for different colours.
+ *
  * Pushes into the caller's array rather than returning a new one: the caller in
  * the hot path is building an action list anyway, so this adds no allocation and
  * no closure to it.
+ *
+ * `cont` is the caller's continuous index when it already built one (this runs
+ * once per `generateLegalActions`, which builds exactly one). Omitting it makes
+ * this build its own behind the same cheap gate, so no caller can silently lose
+ * a granted source by forgetting to pass it.
  */
-function pushManaTapActions(state: GameState, player: PlayerId, out: GameAction[]): void {
+function pushManaTapActions(
+  state: GameState,
+  player: PlayerId,
+  out: GameAction[],
+  cont?: ReturnType<typeof indexContinuous>,
+): void {
   // Built only when a sick creature source actually raises the granted-haste
-  // question — the ordinary board never pays for it.
-  let manaCont: ReturnType<typeof indexContinuous> | undefined;
+  // question, or when the board carries any continuous modification at all — the
+  // ordinary board never pays for either.
+  let manaCont = cont ?? (anyContinuousModification(state) ? indexContinuous(state) : undefined);
   const battlefield = state.battlefield;
   for (let b = 0; b < battlefield.length; b++) {
     const perm = battlefield[b] as CardInstance;
     // A source whose printed cost has no {T} is offered even while tapped —
     // it never taps to pay, so being tapped cannot stop it (Skirk Prospector).
     if (perm.controller !== player) continue;
-    if (perm.tapped && !manaAbilityNeverTaps(perm.def)) continue;
-    const modes = manaModesOf(perm.def);
+    // `undefined` on every board with no continuous effect — and every read below
+    // then takes its PRINTED branch, which is the memoized answer by identity and
+    // no call at all. The branch is spelled out rather than left to the
+    // `effective*` readers' own fast paths for the same reason the `manaAbilities`
+    // test below is inlined: this is the engine's hottest loop, and two extra
+    // calls per permanent per action measured on the pilot bench.
+    const granted = manaCont === undefined ? undefined : manaCont.get(perm.instanceId)?.activated;
+    if (perm.tapped && !manaSourceNeverTaps(perm.def, granted)) continue;
+    const modes = granted === undefined ? manaModesOf(perm.def) : effectiveManaModesOf(perm.def, granted);
     if (modes.length === 0) continue;
     if (perm.summoningSick && isCreature(perm.def)) {
       manaCont ??= indexContinuous(state);
@@ -2782,7 +2815,12 @@ function pushManaTapActions(state: GameState, player: PlayerId, out: GameAction[
     // to `manaExtrasOf` so the ordinary board — where no source has one — pays a
     // single property read on an immutable definition and never a call, on the
     // engine's hottest loop.
-    const extras = perm.def.manaAbilities === undefined ? undefined : manaExtrasOf(perm.def);
+    const extras =
+      granted === undefined
+        ? perm.def.manaAbilities === undefined
+          ? undefined
+          : manaExtrasOf(perm.def)
+        : effectiveManaExtrasOf(perm.def, granted);
     for (let mode = 0; mode < modes.length; mode++) {
       if (extras !== undefined && manaModeBlockedReason(state, perm, extras[mode]) !== undefined) {
         continue;
@@ -3172,13 +3210,6 @@ function payManaCostFromBoard(
  * to cast a creature spell"); `undefined` for every ordinary source, in which
  * case the pool stays the plain six-colour record the hot path short-circuits on.
  */
-/** Whether EVERY mana ability this definition prints pays without tapping. */
-function manaAbilityNeverTaps(def: CardDefinition): boolean {
-  const abilities = def.manaAbilities;
-  if (abilities === undefined || abilities.length === 0) return false;
-  return abilities.every((ability) => ability.cost?.noTap === true);
-}
-
 function tapPermanentForMana(
   state: GameState,
   source: CardInstance,
@@ -3225,7 +3256,22 @@ function applyTapForMana(
   if (!source) return rejectWith(prevState, 'that permanent is not on the battlefield');
   if (source.controller !== action.player) return rejectWith(prevState, 'you do not control that permanent');
   if (source.tapped) return rejectWith(prevState, 'that permanent is already tapped');
-  const modes = manaModesOf(source.def);
+  // EFFECTIVE, not printed: the offer path enumerates granted mana abilities
+  // (GAP-G) after the printed ones, and `mode` indexes THAT list — an apply path
+  // reading a shorter list would reject a mode the engine had itself offered.
+  //
+  // ⚡ Resolved ONLY when the printed modes cannot explain the mode that was
+  // submitted, which is exactly when a grant is involved. Tapping for mana is the
+  // most frequent action in the game and `aggregateFor` walks the whole
+  // battlefield; asking it on every tap cost throughput for an answer the
+  // ordinary tap never reads. One integer comparison instead.
+  const mode = action.mode ?? DEFAULT_MANA_MODE;
+  const printedModes = manaModesOf(source.def);
+  const granted =
+    mode >= printedModes.length && anyContinuousModification(state)
+      ? aggregateFor(state, source.instanceId).activated
+      : undefined;
+  const modes = granted === undefined ? printedModes : effectiveManaModesOf(source.def, granted);
   if (modes.length === 0) return rejectWith(prevState, 'that permanent does not produce mana');
   // Short-circuit BEFORE indexing continuous effects: tapping for mana is the most
   // frequent action in the game, and only a summoning-sick creature source can
@@ -3233,13 +3279,19 @@ function applyTapForMana(
   if (source.summoningSick && isCreature(source.def) && !canActivateManaAbility(source, indexContinuous(state))) {
     return rejectWith(prevState, `${source.def.name} has summoning sickness`);
   }
-  const mode = action.mode ?? DEFAULT_MANA_MODE;
   const production = modes[mode];
   if (!production) return rejectWith(prevState, `${source.def.name} has no mana mode ${mode}`);
 
   // Everything a RICH mana ability prints beyond the colour bundle. `undefined`
   // for every plain land and rock, so the ordinary tap is untouched by all of it.
-  const extra = manaExtrasOf(source.def)?.[mode];
+  // Same branch as the modes above, for the same reason: no grant in play means
+  // the printed reader, with its one property read and no battlefield walk.
+  const extra =
+    granted === undefined
+      ? source.def.manaAbilities === undefined
+        ? undefined
+        : manaExtrasOf(source.def)?.[mode]
+      : effectiveManaExtrasOf(source.def, granted)?.[mode];
   if (extra) {
     // Same single answer the offer path used, so a mode the menu showed is a mode
     // this accepts — and one it hid is refused here too, even if a hostile client
@@ -4956,6 +5008,16 @@ function applyActivateAbility(
   // one (DESIGN §3.36's failure, in its most literal form).
   const ability = effectiveActivated(source, aggregateFor(state, source.instanceId))[action.abilityIndex];
   if (!ability) return rejectWith(prevState, 'that permanent has no such activated ability');
+  // A GRANTED mana ability is a `tapForMana`, never this path (CR 605.3a — a mana
+  // ability does not use the stack). The offer path already omits it; this refuses
+  // it for a client that submits one anyway, so the two paths cannot disagree
+  // about which one owns the ability.
+  if (
+    action.abilityIndex >= (source.def.activated?.length ?? 0) &&
+    manaAbilityFromActivated(ability) !== undefined
+  ) {
+    return rejectWith(prevState, `${source.def.name}'s granted mana ability is activated by tapping for mana`);
+  }
 
   // Timing: the rules default for an activated ability is instant speed; only
   // one that says "activate only as a sorcery" is restricted.
@@ -5465,7 +5527,14 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // the largest remaining source of per-action garbage once cloning is out of the
   // picture. Confined to this function and the mana helpers it calls, which are
   // the only places it has ever measured.
-  pushManaTapActions(state, me, actions);
+  // ONE continuous index for the whole pass, built only when the board carries
+  // any continuous effect at all — `anyContinuousModification` is the cheap gate
+  // that already exists for that question and short-circuits on the first
+  // modifying source. Hoisted ABOVE the mana offer because a granted mana ability
+  // (GAP-G) is read from it too, and building a second index for that would make
+  // the hottest function in the engine index the board twice.
+  const activatedIndex = anyContinuousModification(state) ? indexContinuous(state) : undefined;
+  pushManaTapActions(state, me, actions, activatedIndex);
   const battlefield = state.battlefield;
 
   const sorcerySpeedWindow = me === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
@@ -5815,20 +5884,26 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // rules above: timing is checked, the whole cost must be payable, and an
   // ability with a target restriction is offered once per LEGAL target (and not
   // at all when there is none), so this menu can only contain playable actions.
-  // ONE continuous index for the whole ability loop, built only when the board
-  // carries any continuous effect at all — `anyContinuousModification` is the
-  // cheap gate that already exists for that question and short-circuits on the
-  // first modifying source. Reading a granted ability through `aggregateFor`
-  // per permanent instead made this loop O(board²) per action, which the
-  // profiler showed as 5% of a whole gauntlet.
-  const activatedIndex = anyContinuousModification(state) ? indexContinuous(state) : undefined;
+  // `activatedIndex` is the ONE index built at the top of this function; reading a
+  // granted ability through `aggregateFor` per permanent instead made this loop
+  // O(board²) per action, which the profiler showed as 5% of a whole gauntlet.
   for (let b = 0; b < battlefield.length; b++) {
     const perm = battlefield[b] as CardInstance;
     if (perm.controller !== me) continue;
-    const abilities = effectiveActivated(perm, activatedIndex?.get(perm.instanceId) ?? NO_MOD);
+    const mod = activatedIndex?.get(perm.instanceId) ?? NO_MOD;
+    const abilities = effectiveActivated(perm, mod);
     if (abilities.length === 0) continue;
+    // A GRANTED ability that only adds mana is a MANA ability (CR 605.1a): it is
+    // offered by `pushManaTapActions` as a `tapForMana` and must not also be
+    // offered here, or the same ability would have two action kinds with two sets
+    // of rules — one of them using the stack, which a mana ability never does.
+    // Printed abilities keep this path: see `manaAbilityFromActivated`'s doc and
+    // the GAP-G notes for the measured printed population and why it did not move
+    // in the same edit.
+    const printedCount = perm.def.activated?.length ?? 0;
     for (let index = 0; index < abilities.length; index++) {
       const ability = abilities[index]!;
+      if (index >= printedCount && manaAbilityFromActivated(ability) !== undefined) continue;
       const timing = ability.timing ?? 'instant';
       if (timing === 'sorcery' && !sorcerySpeedWindow) continue;
       if (unpayableActivationReason(state, perm, ability)) continue;

@@ -41,17 +41,44 @@
  *    a child's counter-rotation is flattened into the parent's plane and then
  *    projected again, so it compounds the squash instead of cancelling it. The
  *    property is therefore deliberately left unset. At the shipped tilt the
- *    vertical squash is cos(8°) = 0.99, which is not a legibility problem.
+ *    vertical squash is cos(12°) = 0.978 — two percent, invisible on an art
+ *    crop and on a two-line name — which is not a legibility problem.
  *
  * 3. THE TILT ROTATES ABOUT THE SCENE'S BOTTOM EDGE (`transform-origin: 50%
  *    100%`). That is not a taste decision: it is what keeps the projected box
- *    INSIDE the layout box. Every point is then at z <= 0, so everything
+ *    INSIDE the layout box — and it is what let §3.143 wave 3 raise the tilt
+ *    from a stylesheet-only 8° to a visible 12° (over a much shorter
+ *    perspective) WITHOUT reserving a pixel of headroom. Rotating about the bottom edge puts every point at z ≤ 0, so the
+ *    projection can only shrink the box, never grow it; the tilt is therefore
+ *    free against rule 5 at any angle, and the thing that had to be fixed to
+ *    make the table visible was never the angle — it was the LAYOUT (the game
+ *    log sitting on the midline, board-fit.css rule 3b).
+ *
+ *    Every point is then at z <= 0, so everything
  *    recedes and shrinks toward the vanishing point and nothing can grow past
  *    an edge. Rotating about the centre would push the near half toward the
  *    viewer, enlarging it — and `.play-board` is `overflow-y: auto`, so that
  *    growth becomes SCROLLABLE OVERFLOW and the board starts scrolling itself,
  *    which is the one outcome board-fit.css rule 5 exists to forbid. It is also
  *    the right read: the player's own side is nearest and at true scale.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE TILT IS SMALL AND THE PERSPECTIVE IS SHORT — stated here because this
+ * is the file a person opens when the board looks wrong, and the reasoning is
+ * geometric:
+ *
+ *   the squash    cos(tilt) of vertical height — what a tilt COSTS.
+ *   the KEYSTONE  the far edge is pushed height·sin(tilt) away from the eye and
+ *                 reads at perspective/(perspective + that) of true width —
+ *                 what a tilt BUYS, and the signal the eye reads as "table".
+ *
+ * Over the 335px scene this board really renders (measured at 1280×800, nine
+ * permanents), wave 1's 8° at 1600px squashed by 1% and keystoned by 3%, which
+ * is why a real screenshot showed a flat vertical stack while every structural
+ * test passed — the transform WAS applied, it simply did nothing anyone could
+ * see. The shipped 12° at 700px squashes by 2% and keystones by 9%. The full
+ * table, including the 18° that was tried and dropped, is in
+ * `play-config.ts`'s `BOARD_TILT_DEG`; this file still contains no number.
  * ========================================================================= */
 
 /* --- the scene ------------------------------------------------------------- */
@@ -175,8 +202,21 @@
 .combat-stage__tile {
   position: fixed;
   /* Placed by its CENTRE — the pure model returns a centre, and translating by
-     half is a thing the browser can do exactly and a JS rounding pass cannot. */
-  transform: translate(-50%, -50%);
+     half is a thing the browser can do exactly and a JS rounding pass cannot.
+
+     ⚠️ AND IT LIES ON THE SAME PLANE AS THE TABLE. The stage layer is a
+     SIBLING of `.board-scene`, so nothing projects it; at 8° that did not
+     show, and at a tilt the player can actually see, an unrotated copy of a
+     tile would visibly stand up off the tabletop at the exact moment the
+     player is watching it move. The
+     rotation here is the table's own tilt about the tile's centre — an
+     orthographic squash, not a projection, because the copy's position is
+     already a MEASURED (and therefore already-projected) coordinate and
+     projecting it twice would move it. It matches the plane's average rather
+     than its exact local scale, which is the honest approximation available to
+     a layer that must not be a descendant of the scene (see the four clipping
+     boxes in lib/play/combat-stage.ts). */
+  transform: translate(-50%, -50%) rotateX(var(--board-tilt-deg));
   will-change: left, top;
 }
 

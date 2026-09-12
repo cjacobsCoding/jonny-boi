@@ -121,7 +121,7 @@ export function canBlock(
     }
     if (!allowed) return false;
   }
-  // LANDWALK (CR 702.18b): unblockable while the DEFENDING player — the
+  // LANDWALK (CR 702.14b): unblockable while the DEFENDING player — the
   // blocker's controller — controls a land the walk names. The only evasion
   // rule that reads something other than the two creatures, which is why
   // `battlefield` is a parameter; a caller that omits it is asserting the

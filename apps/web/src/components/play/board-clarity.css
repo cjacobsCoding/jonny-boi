@@ -304,9 +304,27 @@
 .play-board .seat__board-rows {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  /* `--space-1`, not `--space-2`: two rows of card-shaped tiles is the tightest
+     the §3.62 height budget closes at (board-fit.css rule 7), and 8px between
+     them is a card's worth of nothing. */
+  gap: var(--space-1);
   min-width: 0;
   flex: 1;
+}
+
+/* ⚠️ A ROW NEVER SHRINKS BELOW THE CARD IN IT (§3.143 wave 3). This is the bug
+   behind "battlefield cards are tiny art-crops": the rows are flex items with
+   the default `flex: 0 1 auto`, so when the strip was shorter than its two rows
+   the browser shrank BOTH of them — and `.seat__row` is `overflow-y: hidden`
+   (board-fit.css rule 2), so every tile was silently beheaded. Measured at
+   1280×800: a 94px card in a 58px row, its whole title bar cut off above the
+   clip. No test could see it, because the tile's own computed height was right.
+
+   `flex: 0 0 auto` makes the strip — which is already a scroller, and whose
+   `contain: size` keeps it out of intrinsic sizing — scroll instead. A row you
+   have to scroll to is recoverable; a card with its name cut off is not. */
+.play-board .seat__board-rows > .seat__row {
+  flex: 0 0 auto;
 }
 
 .play-board .seat__board-label,
@@ -370,12 +388,18 @@
 
 /* Out of the P/T box's corner and into the one the badge vacated. Overrides
    styles.css by class count (0,2,0 vs 0,1,0), never by import order — the trap
-   board-fit.css:188-202 documents. */
+   board-fit.css:188-202 documents.
+   ⚠️ And it is a GLYPH now, not a word (see BoardPermanentTile for why), so the
+   padding that framed six characters would make a one-character chip look like
+   a button. */
 .play-board .perm__tap-badge {
   left: auto;
   right: 2px;
   bottom: auto;
   top: 2px;
+  padding: 0 2px;
+  font-size: 0.6rem;
+  line-height: 1.2;
 }
 
 .perm__mark {
@@ -410,4 +434,77 @@
    this wear off?" is the whole question the chip exists to answer. */
 .perm__mark--effect {
   background: rgb(150 100 20 / 94%);
+}
+
+/* --- §3.143 wave 3: THE TILE IS A CARD, SO IT HAS A TITLE BAR ---------------
+ *
+ * Reported from a real screenshot of a real game: the battlefield showed art
+ * crops captioned "Youthful Kn…" and "Wall of Om…" while the hand beside them
+ * showed whole readable cards — the RESTING board could not be read, which put
+ * weight on UX-10's hover that a board should not need.
+ *
+ * board-fit.css rule 7 gives `.perm` a card's shape and lets the art take
+ * whatever is left; this is the strip it leaves at the top. The name goes THERE
+ * — where a printed card puts it — rather than in a footer under the art,
+ * because the top strip has the tile's whole width and may wrap to a second
+ * line instead of being cut off mid-word.
+ *
+ * ⚠️ `order: -1`, not a JSX move. `.perm__foot` also carries the loyalty, the
+ * defense and the online board's P/T fallback, all of which several tests and
+ * the replay surface read by class; re-parenting it to change where it PAINTS
+ * would have been a markup change for a layout decision.
+ */
+.board-scene .perm__foot,
+.combat-stage .perm__foot {
+  order: -1;
+  flex: 0 0 auto;
+  flex-direction: row;
+  /* NOT `baseline`: a two-line name aligns its FIRST baseline to the P/T beside
+     it, which pushes line one up out of the bar — the board then printed
+     "Lions" where the card says "Savannah Lions", which is worse than the
+     truncation this bar replaced. */
+  align-items: flex-start;
+  gap: 3px;
+  padding: 1px var(--space-1) 2px;
+  background: var(--color-surface-raised);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Two lines, then stop. A name that wraps is readable; a name cut at "Youthful
+   Kn…" is a card you have to hover to identify, which is the defect. */
+.board-scene .perm__name,
+.combat-stage .perm__name {
+  white-space: normal;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  font-size: 0.58rem;
+  line-height: 1.15;
+  text-overflow: clip;
+  min-width: 0;
+  flex: 1 1 auto;
+  /* A land tile is `--play-land-tile-scale` of a creature — narrower than the
+     word "Guildgate" — and without this the browser leaves the word whole and
+     clips it, printing "Selesny Guildga". Breaking mid-word is ugly; a name you
+     cannot read is worse, and this is the one place the tile has no other move. */
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+/* The printed keywords ride the bottom edge, inside the card, on one line: the
+   strip is the card's text box and a wrapping second row would come out of the
+   art. What does not fit is one hover away — the same trade lane P's tile
+   preset makes for the rules text. */
+.board-scene .perm__keywords,
+.combat-stage .perm__keywords {
+  order: 1;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  gap: 2px;
+  padding: 1px var(--space-1) 1px;
+  background: var(--color-surface-raised);
+  border-top: 1px solid var(--color-border);
 }

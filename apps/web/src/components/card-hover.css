@@ -7,7 +7,26 @@
 .card-hover-preview {
   position: fixed;
   z-index: 9999;
-  pointer-events: none; /* never steals the hover that opened it */
+  /*
+   * ⚠️ `auto`, NOT `none` (§3.143 wave 3 / GAP-E) — and the change is the whole
+   * fix, so do not "tidy" it back.
+   *
+   * Waves 1–2 set `pointer-events: none` here with the comment "never steals the
+   * hover that opened it". The consequence was not the stated one: a glossary
+   * pop opens from an `onMouseEnter` on a `PopTrigger` span, and a span inside a
+   * pointer-transparent panel never receives `mouseenter`, so the pops in this
+   * panel could not open AT ALL. This panel is also the only place a battlefield
+   * permanent's PRINTED rules text is shown (the tile renders
+   * `rules: 'aftermarketOnly'`), so "hover any ability, on any card" had no
+   * reachable surface in play.
+   *
+   * What kept the hover alive is now `hoverRegionContains` in `CardHover.tsx`:
+   * the anchor, this panel, and the gap between them all count as "still
+   * hovering", so accepting the pointer here no longer fights the hover that
+   * opened it. Flip this back to `none` and the glossary silently dies again
+   * with every test still green — which is exactly how it shipped twice.
+   */
+  pointer-events: auto;
   /* NO `overflow: hidden` (§3.143 GAP-6). The panel now holds a `CardFace`, and
      every ability word in that face carries an absolutely-positioned tooltip;
      a clip here would be a fourth clipping ancestor of the exact kind the
@@ -26,6 +45,18 @@
   box-shadow:
     0 18px 40px rgb(0 0 0 / 55%),
     0 0 0 1px rgb(0 0 0 / 35%);
+}
+
+/*
+ * READING SIZE (GAP-E). This panel is one of the two surfaces a player actually
+ * READS a card on, and every ability word in it is now a mouse target — at the
+ * face's default body size the words are under 10px tall, which is a tooltip
+ * nobody can hit. The value is `--card-face-read-text-size`, declared once in
+ * `card-face.css` and shared with `.card-face--zoomed`: two literals that must
+ * stay equal is the fork rule 12 forbids.
+ */
+.card-hover-preview__face .card-face__textbox {
+  font-size: var(--card-face-read-text-size);
 }
 
 @keyframes card-hover-preview-in {

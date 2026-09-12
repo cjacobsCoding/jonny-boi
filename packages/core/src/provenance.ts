@@ -258,7 +258,7 @@ export const CHARACTERISTIC_SUPPORT: { readonly [K in CharacteristicKind]: Chara
     modifiable: true,
     removable: false,
     layers: ['copy', 'face', 'ability'],
-    note: 'Activated abilities can be granted ("Enchanted creature has “{T}: …”"). Printed abilities always come first and a grant can never renumber or remove one. A modification carrying NOTHING but an activated ability is judged inert by `modificationIsInert` and never reaches any accessor, so nothing is reported for it — this walk agrees with the engine rather than promising an ability the board does not offer.',
+    note: 'Activated abilities can be granted ("Enchanted creature has “{T}: …”"). Printed abilities always come first and a grant can never renumber or remove one. A modification whose ONLY content is a granted ability is live and IS reported here (it was wrongly judged inert until §3.143 GAP-14, and this walk reads the same `modificationIsInert` / `staticIsInert` gate the engine does, so the two agree). One grant is reported and NOT offered as an activation: a granted ability that only adds mana is a mana ability (CR 605.1a), so the board offers it as a tap for mana rather than as an activation — see `manaAbilityFromActivated`.',
   },
   controller: {
     modifiable: true,

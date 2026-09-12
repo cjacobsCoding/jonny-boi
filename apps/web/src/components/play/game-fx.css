@@ -169,6 +169,11 @@
   --dmg-seat: #ff5252;
   --dmg-prevented: #9fb3c8;
   --dmg-ink: #1a0a02;
+  /* The halo a travelling hit carries. Named because the round tints below
+     have to be able to change it: it was an inline `rgb(255 106 43 / 70%)`
+     inside `.dmg-bolt__n`'s box-shadow, which is the one part of the palette a
+     first-strike volley could not repaint. */
+  --dmg-glow: rgb(255 106 43 / 70%);
 }
 
 .vfx-burst--damage .vfx-burst__p {
@@ -225,6 +230,12 @@
   --dmg-ring-size-seat: 128px;
   --dmg-chip-font: 1.05rem;
   --dmg-chip-font-seat: 1.5rem;
+
+  /* The round banner (GAP-F). Placed in the UPPER third rather than dead centre:
+     the middle of the board is where the combat it is describing is happening,
+     and a caption over the fight is a caption you read instead of the fight. */
+  --dmg-round-top: 16%;
+  --dmg-round-font: 1.05rem;
 }
 
 /* --- the hit in flight ------------------------------------------------------
@@ -254,7 +265,7 @@
   font-size: var(--dmg-chip-font);
   color: var(--dmg-ink);
   background: radial-gradient(circle at 40% 35%, var(--dmg-hot) 0%, var(--dmg-ember) 78%);
-  box-shadow: 0 0 12px rgb(255 106 43 / 70%);
+  box-shadow: 0 0 12px var(--dmg-glow);
 }
 
 @keyframes dmg-bolt-kf {
@@ -402,6 +413,110 @@
   outline: 2px solid currentcolor;
   outline-offset: 5px;
   color: var(--dmg-ember);
+}
+
+/* ===========================================================================
+ * WHICH ROUND IS THIS (§3.143 wave 3 / GAP-F)
+ *
+ * A first-strike combat draws TWO volleys, 220ms apart. Wave 2 spaced them and
+ * stopped there: core marks each hit with its combat-damage step, the fold
+ * carries the marker through as `DamageBeat.round`, and nothing on screen read
+ * it — so both volleys looked identical and the pause was the only clue that
+ * there had been two of them. Caleb's requirement is that he can "clearly see
+ * what is happening"; two indistinguishable volleys are the confusion itself.
+ *
+ * THREE signals, not one, and deliberately not colour alone (the discipline
+ * `card-face.css` states for its treatments):
+ *   1. WORDS — `.dmg-round` names the round over the board.
+ *   2. HUE — a first-strike volley is COLD (steel/ice); normal damage keeps the
+ *      ember palette it has always had, so nothing familiar moved.
+ *   3. SHAPE — a first-strike chip wears a hard rim. `outline`, not
+ *      `box-shadow`, on purpose: lethal/seat/prevented already own the chips'
+ *      `box-shadow` and `background`, and an outline composes with all three
+ *      instead of fighting them for source order. A lethal first-strike hit is
+ *      therefore still bone-on-red (lethality is the louder fact) and still
+ *      rimmed (the round is still legible).
+ *
+ * An UNTABULATED round (`dmg-round--round-unnamed`) gets words and NO hue: the
+ * layer refuses to borrow a named round's look for a round it cannot name.
+ * ======================================================================== */
+
+.dmg-round {
+  position: absolute;
+  top: var(--dmg-round-top);
+  left: 50%;
+  padding: 0.28em 1em;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  background: rgb(6 10 16 / 78%);
+  /* Neutral by default; every round below states its own hue, so a round with no
+     rule reads as plain text rather than borrowing the ember one's. */
+  color: var(--color-fg);
+  font-size: var(--dmg-round-font);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  animation-name: dmg-round-kf;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+/* Centring lives in the keyframes, not here: one `transform` per element, and
+   a declaration here would simply be replaced by the animation's. */
+@keyframes dmg-round-kf {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0.5em);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  82% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -0.4em);
+  }
+}
+
+/* --- the first-strike round reads COLD -------------------------------------
+   Set as PALETTE overrides rather than as new backgrounds: every chip, ring and
+   spark below already reads `--dmg-hot` / `--dmg-ember` / `--dmg-glow`, so one
+   declaration block repaints the whole volley and no rule has to be restated
+   (rule 12). */
+.dmg-round--round-first-strike,
+.dmg-bolt--round-first-strike,
+.dmg-impact--round-first-strike,
+.vfx-burst--round-first-strike {
+  --dmg-hot: #eaf4ff;
+  --dmg-ember: #5aa9ff;
+  --dmg-glow: rgb(90 169 255 / 70%);
+}
+
+/* Each NAMED round wears its own volley's colour. One rule for both, because
+   "the round's hue" is one idea: the palette override above is what makes the
+   first-strike one cold, so these repaint independently without being restated
+   (rule 12). Normal damage is unchanged from every wave before this one —
+   nothing familiar moved, and the CONTRAST is what names the other round. */
+.dmg-round--round-first-strike,
+.dmg-round--round-normal {
+  color: var(--dmg-ember);
+}
+
+/* The shape half of the signal — see the header for why this is an outline. */
+.dmg-bolt--round-first-strike .dmg-bolt__n,
+.dmg-impact--round-first-strike .dmg-impact__n {
+  outline: 2px solid var(--dmg-hot);
+  outline-offset: 2px;
+}
+
+/* An unnamed round says only what it can prove: which number round it is. */
+.dmg-round--round-unnamed {
+  color: var(--dmg-prevented);
 }
 
 /* ===========================================================================

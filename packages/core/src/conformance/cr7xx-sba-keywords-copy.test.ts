@@ -515,7 +515,7 @@ describe('CR 702 — the combat keyword family', () => {
     ).toMatch(/cannot block/);
   });
 
-  crTest('702.18b', 'a creature with islandwalk can’t be blocked while the defending player controls an Island', () => {
+  crTest('702.14b', 'a creature with islandwalk can’t be blocked while the defending player controls an Island', () => {
     const state = atMain();
     const bears = putOnBattlefield(state, 'A', ISLANDWALKER);
     const blocker = putOnBattlefield(state, 'B', BEAR);
@@ -560,7 +560,7 @@ describe('CR 702 — the combat keyword family', () => {
     expect(rejectionOf(toB, { kind: 'tapForMana', player: 'B', instanceId: theirLand.instanceId }, registry)).toBeUndefined();
   });
 
-  crTest('702.90a', 'exalted pumps the creature that attacks alone, once per instance of exalted', () => {
+  crTest('702.83a', 'exalted pumps the creature that attacks alone, once per instance of exalted', () => {
     const exalted: CardDefinition = {
       ...landDef('Cathedral of War', 'C'),
       triggers: [

@@ -44,10 +44,25 @@
   --play-card-w-max: 148px;
   --play-card-w: clamp(var(--play-card-w-min), 14dvh, var(--play-card-w-max));
 
-  /* Battlefield tiles are smaller than hand faces and scale with the same knob. */
-  --play-tile-w-min: 72px;
-  --play-tile-w-max: 96px;
-  --play-tile-w: clamp(var(--play-tile-w-min), 10dvh, var(--play-tile-w-max));
+  /* Battlefield tiles are smaller than hand faces and scale with the same knob.
+
+     ⚠️ §3.143 wave 3 — THIS IS THE NEAR SEAT'S CREATURE TILE, and it is now the
+     width of a CARD, not of an art crop: `.perm` below takes an explicit height
+     of `width × --perm-aspect`. Three tiles are derived from it and nothing
+     else on the battlefield sets its own size:
+
+       near creature   --play-tile-w
+       near land       × --play-land-tile-scale
+       far (opponent)  × --play-tile-far-scale, and the land scale again
+
+     The coefficient dropped from 10dvh to 9.2dvh even though the tiles got
+     BIGGER, because the tile is now 1.393× as tall as it is wide where it used
+     to be about 0.95×: two rows per seat of card-shaped tiles is what the
+     reclaimed log height buys, and 9.2dvh is what fits it at 800px with the
+     near/far split above. */
+  --play-tile-w-min: 64px;
+  --play-tile-w-max: 112px;
+  --play-tile-w: clamp(var(--play-tile-w-min), 8.0dvh, var(--play-tile-w-max));
 
   /* Rule 2 — how far a fanned card may be covered by its neighbour. The
      remaining sliver is what stays clickable, so this is a readability floor,
@@ -72,12 +87,21 @@
      one squeezed band. Two rows plus the gap is the honest minimum, and the
      slack comes from the log (see `--play-log-max-h` below) rather than from
      the hand or the action bar, which rule 5 forbids shrinking. */
-  --play-seat-rows-max: 17dvh;
+  /* ⚠️ RAISED AGAIN in §3.143 wave 3 (17 → 26dvh) — and this time the height was
+     not taken from anything. It is the log's old 171px, reclaimed by moving the
+     log off the midline into `.board-rail`, spent on the only region that was
+     ever short of it. A seat holds TWO rows of card-shaped tiles now; at 800px
+     26dvh is 208px, which is a near-seat creature row (1.393 × 74px ≈ 103) plus
+     a land row (0.62 of that ≈ 64) plus the gap, with the far seat taking
+     `--play-tile-far-scale` of the same. */
+  --play-seat-rows-max: 26dvh;
 
-  /* The least a battlefield strip may be squeezed to: one tile row (art plus
-     footer), so the battlefield never vanishes — anything beyond that scrolls
-     inside the strip. Derived from the tile token so it shrinks with the tiles. */
-  --play-seat-rows-min: var(--play-tile-w);
+  /* `--play-seat-rows-min` — the least a battlefield strip may be squeezed to —
+     is declared on `.play-board` below, NOT here: it is one whole tile, and a
+     tile is now card-SHAPED, so the floor has to multiply by `--perm-aspect`,
+     which `PlayBoard` sets on `.play-board` and which does not exist at
+     `:root`. A `var()` inside a custom property is substituted where the
+     property is DECLARED, so declaring it here would resolve to nothing. */
 
   /* The floor of a strip with nothing on it: two lines of empty text plus the
      gap between the creature and land rows. */
@@ -95,9 +119,14 @@
   --play-log-max-h: 22dvh;
 
 
-  /* The opponent's fan overlaps by a fixed amount — its cards carry no
-     information to read, so nothing has to stay visible except the count. */
-  --play-back-overlap: 2.2rem;
+  /* The opponent's fan overlaps by a FRACTION of a back, not the fixed 2.2rem
+     it used to — which was most of a back once §3.143 wave 3 shrank them to the
+     far side of the table, so eight cards collapsed into one dark blob. Their
+     faces carry no information to read, so a little more than half of each may
+     be covered. ⚠️ `--play-back-overlap` itself is resolved on the card below,
+     because `PlayCard` puts it in an INLINE margin (which no stylesheet can
+     outrank) and it has to be a length by the time that margin reads it. */
+  --play-back-overlap-fraction: 0.55;
 }
 
 /* --- Rule 3: the shell owns the height -------------------------------------- */
@@ -125,6 +154,16 @@
 }
 
 .app:has(.play-board) .play-board {
+  /* The battlefield's floor: ONE whole card, so a squeeze can hide a second row
+     but never clip the first. See the note beside `--play-tile-w` for why this
+     cannot live at `:root`. */
+  --play-seat-rows-min: calc(var(--play-tile-w) * var(--perm-aspect));
+  /* What a strip actually WANTS: both its rows, whole, plus the gap between
+     them. Stated once because two consumers need the same answer (rule 12) —
+     see the far seat's ceiling below. */
+  --play-seat-rows-need: calc(
+    var(--play-tile-w) * var(--perm-aspect) * (1 + var(--play-land-tile-scale)) + var(--space-1)
+  );
   flex: 1;
   min-height: 0;
   /* Last resort only: if even the seats cannot fit (a very short window), the
@@ -135,10 +174,95 @@
   overflow-x: hidden;
 }
 
-/* The log/stack column is the designated slack: the seats, the hand and the
-   action bar are sized by their content and stay whole, and this column takes
-   whatever is left over. Giving the slack to the seat rows instead scrolled the
-   player's own HAND out of view, which is worse than the page it replaces. */
+/* --- Rule 3b: THE TABLE AND THE RAIL BESIDE IT (§3.143 wave 3) ---------------
+ *
+ * The board's vertical budget had a 171px hole in it (measured at 1280×800 with
+ * nine permanents) and the hole was the GAME LOG, sitting in the column between
+ * the two battlefields. It cost the board more height than the hand does, it
+ * put a scrolling history on the one line a table reserves for combat, and it
+ * is why the board overflowed its own box — `needs 725 of 600` — the moment the
+ * 3D scene wrapper was added around it.
+ *
+ * A log is a column of short lines: it wants WIDTH, which this board has, not
+ * HEIGHT, which it does not. So the stage is a ROW — table, then rail — and the
+ * whole 171px goes back to the battlefields.
+ *
+ * ⚠️ The rail is OUTSIDE `.board-scene` on purpose: it is the one region made
+ * entirely of words, and words on a tilted plane is the legibility cost UX-9
+ * must not pay (the same reason the viewer's own hand left the scene). */
+.app:has(.play-board) .board-stage {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  /* `gap: inherit` rather than a second copy of the board's rhythm: one
+     decision, made below (rule 12). It carries down to `.board-scene`, which
+     inherits from THIS box now that the scene is no longer a board child. */
+  gap: inherit;
+  flex: 1 1 auto;
+  min-width: 0;
+  /* ⚠️ `0`, and the SCENE below is where the shortfall is absorbed. `min-content`
+     is the wrong tool on this box specifically: the stage is a ROW, and the
+     min-content HEIGHT of a row flex container is measured with its items at
+     their min-content WIDTH — every seat rail and every log line wrapped into a
+     column, which measured 763px of "minimum" for a table that lays out in 317
+     and made the board scroll at every window. */
+  min-height: 0;
+}
+
+/* ⚠️ AND THE TABLE SCROLLS INSIDE THE STAGE WHEN IT MUST — which is rule 5 one
+   level up, not an exception to it. The scene carries `min-height: min-content`
+   (board-scene.css) so that a window too short for two seats does not silently
+   crush them; without a scroller to absorb that, the scene simply overflowed
+   the stage's box and the seats were PAINTED OVER THE PLAYER'S OWN HAND —
+   measured at 900×560 (the window `verify-game-resume.mjs` uses on purpose):
+   the board reported "360 of 360, it fits" while the two bands ran 130px past
+   it. Silent overlap is strictly worse than a scrollbar, because only one of
+   them is recoverable — and the hand and the action bar, which rule 5 protects
+   above everything, never move either way. */
+.app:has(.play-board) .board-stage > .board-scene {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.app:has(.play-board) .board-rail {
+  flex: 0 0 var(--play-log-rail-w);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  /* The rail is as tall as the table beside it and the log scrolls INSIDE it —
+     which is what makes the rail free: a history that grows can no longer take
+     a pixel from a battlefield, whatever its length. */
+  overflow: hidden;
+}
+
+/* THE MIDLINE. Two pixels of table seam, and the element `PlayBoard` measures
+   UX-12's advance clamp from — which is the reason it has to be an element at
+   all rather than a border on a seat. */
+.play-board .board-midline {
+  flex: 0 0 var(--board-midline-h);
+  align-self: stretch;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-border-strong) 12%,
+    var(--color-border-strong) 88%,
+    transparent
+  );
+  opacity: 0.8;
+}
+
+/* ⚠️ THE RULES BELOW NOW PAINT THE ONLINE BOARD ONLY. `.play-board__center` is
+   the log/stack column in `components/online/OnlineBoard.tsx`, which still puts
+   both in a middle column; the hotseat board's log moved to the rail above and
+   its midline is `.board-midline`. Kept — not deleted — because the online
+   board is a different lane's surface and it still needs exactly this: a column
+   that is the designated slack, so the seats, the hand and the action bar stay
+   whole and this takes whatever is left over. */
 .app:has(.play-board) .play-board__center {
   /* Yields FIRST — the log is the one region whose content is a history rather
      than the position, and the only one that scrolls without losing anything.
@@ -216,13 +340,58 @@
   width: var(--play-tile-w);
 }
 
+/* ⚠️ THE FAR SEAT MAY NOT HOARD. Both bands are `flex: 1 1 auto`, so slack is
+   split evenly — and the opponent's strip, whose tiles are `--play-tile-far-scale`
+   of the near ones, was handed as much height as the near strip and left 24px of
+   it empty (measured at 1280×800) while the near strip scrolled its own land row.
+   Capping the far strip at exactly what its two far-sized rows need hands that
+   height to the side the player is making decisions on. It is also the honest
+   read of the picture: the far half of a table IS shallower. */
+.play-board .play-board__opponent .seat__board {
+  max-height: calc(var(--play-seat-rows-need) * var(--play-tile-far-scale));
+}
+
+
+/* THE FAR PLAYER'S HAND, at the far edge of the table.
+   Centred, the way the person opposite you holds theirs — a plain flex row put
+   it flush against the left rail, where it read as a stray widget.
+   And sized by the backs in it and nothing else: `.play-hand` carries
+   `min-height: 4rem` (styles.css), which is a sensible floor for the hand you
+   PLAY from and 64px of pure waste for a fan of counters at the far edge of the
+   table. Measured: 64px of a 600px board. */
+.play-board .play-board__opponent > .play-hand--hidden {
+  justify-content: center;
+  min-height: 0;
+  margin-top: 0;
+}
+
 /* The opponent's hand is a COUNT, not information — it earns the smallest
-   footprint of anything on the board. */
+   footprint of anything on the board. ONE width feeds the fan's size and its
+   overlap, so the two cannot drift (rule 12); `--play-back-overlap` is a LENGTH
+   because `PlayCard` reads it from an inline `margin-left` no stylesheet can
+   outrank, and the first back is given 0 there so the fan starts at its own
+   left edge.
+
+   ⚠️ This rule is the ONLINE board's too (`OnlineBoard.tsx` renders
+   `.play-board` and reuses `SeatPanel`/`PlayCard`), so it keeps the sizing that
+   board has always had; the tabletop's own numbers are the override below. */
 .play-board .play-card--back {
-  width: calc(var(--play-tile-w) * 0.6);
+  --play-back-w: calc(var(--play-tile-w) * 0.6);
+  width: var(--play-back-w);
   /* A count wants no height; this is the step that made the 800px budget close
      once the hand was drawn at its designed size again. */
   height: calc(var(--play-tile-w) * 0.7);
+  --play-back-overlap: calc(var(--play-back-w) * var(--play-back-overlap-fraction));
+}
+
+/* ⚠️ Sized off the FAR tile, not the near one: on the tabletop these are drawn
+   at the far edge, above the opponent's own battlefield, and a fan of backs
+   taller than the creatures behind it reads as the nearest thing on the board.
+   It comes AFTER the rule above at equal specificity, which is how it wins —
+   deliberately, and noted because this file has lost that contest before. */
+.board-scene .play-card--back {
+  --play-back-w: calc(var(--play-tile-w) * var(--play-tile-far-scale) * var(--play-backs-scale));
+  height: calc(var(--play-back-w) * var(--perm-aspect));
 }
 
 /* --- Rule 2: the hand fans --------------------------------------------------- */
@@ -296,7 +465,10 @@
     grid-template-rows: auto minmax(min-content, 1fr);
     column-gap: var(--space-3);
     align-items: start;
-    padding: var(--space-2);
+    /* Tight vertically, generous horizontally — the axis that is scarce and the
+       axis that is not. `--space-2` top and bottom was 16px per seat, 32px of a
+       600px board, spent on nothing anybody reads. */
+    padding: var(--space-1) var(--space-2);
     /* The grid may be squeezed down to the sum of its rows' minimums — the rail —
        and no further; `0` here let it shrink THROUGH the rail. */
     min-height: min-content;
@@ -331,15 +503,85 @@
   min-height: 0;
 }
 
-/* ⚠️ Battlefield tiles are `.perm`, NOT `.play-card` — two different components
-   with two different sizes, and aiming the scale knob at the wrong one costs
-   nothing visible until you count pixels and find the board unmoved. */
+/* --- Rule 7: A BATTLEFIELD TILE IS A CARD (§3.143 wave 3) --------------------
+ *
+ * It was an art crop with a truncated name under it ("Youthful Kn…", measured
+ * on a real screenshot at 1280×800) while the hand beside it showed whole
+ * readable cards. Two things follow from making it a card instead, and the
+ * second one is a BUG FIX rather than a preference:
+ *
+ *  - READABLE AT REST. The name moves into a title bar at the top of the tile
+ *    (board-clarity.css owns the bar's paint), where it has the tile's whole
+ *    width and may wrap instead of being cut mid-word. The art fills whatever
+ *    is left, which at a card's aspect is most of it.
+ *  - THE TURNED CARD FITS ITS OWN SLOT. `.perm-slot--tapped` reserves
+ *    `--perm-footprint` (= TAP_ROTATION_CONFIG.footprintRatio = a printed
+ *    card's 1.393) times the tile width. The tile's REAL aspect was ~0.95, so a
+ *    tapped card occupied two thirds of its reserved box and the remaining
+ *    third was a gap — the "sideways sliver" a real screenshot showed. Now the
+ *    box and the card are the same rectangle.
+ *
+ * ⚠️ Battlefield tiles are `.perm`, NOT `.play-card` — two different components
+ * with two different sizes, and aiming the scale knob at the wrong one costs
+ * nothing visible until you count pixels and find the board unmoved.
+ */
+/* ⚠️ SCOPED TO `.board-scene` / `.combat-stage`, NOT TO `.play-board`, AND THAT
+   IS NOT TIDINESS. `components/online/OnlineBoard.tsx` renders `.play-board`
+   and the very same `SeatPanel`/`BoardPermanentTile` — but it is a different
+   lane's surface and it sets none of `PlayBoard`'s inline custom properties.
+   `calc(… * var(--perm-aspect))` with `--perm-aspect` unset is invalid at
+   computed-value time, so `height` would fall back to `auto` while
+   `.perm__art` below had already been switched to `flex: 1 1 auto; height: auto`
+   — and `CardFace`'s `height: 100%` inside an auto-height box is ZERO. Every
+   online battlefield tile would have rendered with no art at all, and no test
+   in this repo computes CSS. The two selectors here are the two surfaces
+   `PlayBoard` owns: the tabletop, and the combat stage's advanced COPIES of the
+   same tiles, which must stay the same shape as the cards they stand in for.
+
+   The WIDTH rule below stays on `.play-board`: it predates this and the online
+   board depends on it, and with `--perm-w` unset it resolves to exactly the
+   `--play-tile-w` it always did. */
 .play-board .perm {
-  width: var(--play-tile-w);
+  width: var(--perm-w, var(--play-tile-w));
 }
 
-.play-board .perm__art {
-  height: calc(var(--play-tile-w) * 0.62);
+.board-scene .perm,
+.combat-stage .perm {
+  /* The card's own shape, from ONE number (`--perm-aspect`, set by PlayBoard
+     from TAP_ROTATION_CONFIG.footprintRatio). `height`, not `aspect-ratio`,
+     because the tile is a flex column whose children must be able to shrink
+     into it; `aspect-ratio` loses to a content-driven min-height and the tiles
+     in a row then stop being the same size. */
+  height: calc(var(--perm-w, var(--play-tile-w)) * var(--perm-aspect));
+  display: flex;
+  flex-direction: column;
+}
+
+/* The art takes everything the title bar and the keyword strip do not. */
+.board-scene .perm__art,
+.combat-stage .perm__art {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+}
+
+/* THE FOUR TILE SIZES, as three multiplications of one token. A row sets
+   `--perm-w` and every tile inside it — and every slot that reserves space for
+   one — reads it, so the size is stated once per row rather than per tile. */
+.board-scene .seat__row--lands {
+  --perm-w: calc(var(--play-tile-w) * var(--play-land-tile-scale));
+}
+
+/* The FAR side of the table. The opponent's half is further away — which the
+   tilt says geometrically and this says in pixels — and spending the height
+   budget unevenly is what lets the near side's cards be readable at all (see
+   BOARD_LAYOUT_CONFIG.farSeatTileScale for the measurement). */
+.board-scene .play-board__opponent .seat__row {
+  --perm-w: calc(var(--play-tile-w) * var(--play-tile-far-scale));
+}
+
+.board-scene .play-board__opponent .seat__row--lands {
+  --perm-w: calc(var(--play-tile-w) * var(--play-tile-far-scale) * var(--play-land-tile-scale));
 }
 
 /* Rule 2 again, on the battlefield: a wide board narrows its tiles rather than
@@ -349,6 +591,15 @@
   flex-wrap: nowrap;
   overflow-x: auto;
   overflow-y: hidden;
+  /* CENTRED ON THE TABLE (§3.143 wave 3). Left-packed, four permanents sat in
+     the corner of a 1100px-wide seat with the rest of the table empty, which
+     reads as a list rather than as a board — and it put the near and far rows
+     out of line with each other, so an attacker advancing toward the midline
+     had nothing opposite it.
+     ⚠️ `safe`, not bare `center`: a centred flex row whose content overflows
+     spills off BOTH ends, and the left overflow is unreachable in a scroller.
+     `safe` falls back to `flex-start` exactly when that would happen. */
+  justify-content: safe center;
 }
 
 /* ⚠️ THE FLEX CHILD IS `.perm-slot`, NOT `.perm` (§3.143 / UX-11). A tapped card
@@ -358,7 +609,7 @@
    the file that knows the turn); this rule stays as the row's own floor for the
    untapped case and is superseded there by the more specific `--tapped` rule. */
 .play-board .seat__row > .perm-slot {
-  flex: 0 1 var(--play-tile-w);
+  flex: 0 1 var(--perm-w, var(--play-tile-w));
   min-width: var(--play-tile-slice-min);
 }
 
@@ -369,7 +620,7 @@
    because the rule above would otherwise out-specify it and silently put every
    tapped card back on top of its neighbour. */
 .play-board .seat__row > .perm-slot--tapped {
-  flex-basis: calc(var(--play-tile-w) * var(--perm-footprint));
+  flex-basis: calc(var(--perm-w, var(--play-tile-w)) * var(--perm-footprint));
   min-width: calc(var(--play-tile-slice-min) * var(--perm-footprint));
 }
 
@@ -409,6 +660,23 @@
      must stay whole: the rail, one row of the strip (size-contained below), and
      the hand. Everything above that is negotiable; nothing below it is. */
   min-height: min-content;
+}
+
+/* THE FAR BAND GROWS MORE SLOWLY (§3.143 wave 3). The two bands split slack
+   50/50 — between a strip whose tiles are `--play-tile-far-scale` of the
+   other's, and a strip that was scrolling its own land row off the bottom
+   (measured: the near strip needed 141px and was given 134, the far one was
+   given 24 more than it could use). Growing in the same proportion the cards
+   are sized is the one answer that cannot drift from the tile table (rule 12),
+   and — unlike a hard min-height on the far strip — it adds NO floor, so rule
+   5's protection on a very short window is exactly as strong as it was.
+
+   ⚠️ IT MUST COME AFTER THE `flex` SHORTHAND ABOVE. Written earlier in the file
+   at equal specificity it was silently reset to 1 by that shorthand, and the
+   board measured exactly as it had before — the trap this file's own note at
+   rule 1 records, one rule further down. */
+.play-board .play-board__opponent {
+  flex-grow: var(--play-tile-far-scale);
 }
 
 /* The seat wrappers pass the constraint down: a block `.drop-zone` would size
@@ -484,6 +752,17 @@
   margin-top: 0;
 }
 
+/* THE STATUS LINE PAYS ITS SHARE (§3.143 wave 3). Measured at 1280×800: 55px
+   for one line of text and a Concede button, against a 600px board — nine
+   percent of the whole surface spent on padding. `--space-3` of horizontal
+   breathing room is kept (the line reads as a bar, not a sentence) and the
+   vertical is cut to `--space-1`, which is the same trade rule 6 already makes
+   for a phone, applied at every width because the measurement holds at every
+   width. */
+.play-board .play-board__status {
+  padding: var(--space-1) var(--space-3);
+}
+
 /* The board's own rhythm tightens with everything else — at these sizes a
    16px gutter between four stacked regions is a card's worth of nothing. */
 .app:has(.play-board) .play-board {
@@ -524,6 +803,32 @@
 
   .play-board .play-hand--hidden {
     display: none;
+  }
+
+  /* THE RAIL FOLDS. Below the seat rail's own breakpoint there is no width to
+     spend on a second column, so the stage stacks again and the log becomes a
+     bounded band under the table — floor and ceiling exactly as the column it
+     replaced had, because on this window it IS that column.
+
+     ⚠️ `.app:has(.play-board)`, matching the rules it overrides EXACTLY. Written
+     as `.play-board .board-stage` these lost 0,2,0 to 0,3,0 and did nothing at
+     all: a real screenshot at 375×812 showed a 272px log still sitting BESIDE
+     a 90px table and painted over both seats. A media query does not win a
+     specificity contest, and this file's rule-1 note says so already. */
+  .app:has(.play-board) .board-stage {
+    flex-direction: column;
+  }
+
+  /* The scene stops being the shortfall's scroller too: stacked, the band below
+     it is what yields (as it always did), so the table keeps its own height. */
+  .app:has(.play-board) .board-stage > .board-scene {
+    overflow-y: visible;
+  }
+
+  .app:has(.play-board) .board-rail {
+    flex: 0 4 auto;
+    min-height: var(--play-log-min-h);
+    max-height: var(--play-log-max-h);
   }
 
   /* Stacked seat (no rail below this width): make it a column whose battlefield

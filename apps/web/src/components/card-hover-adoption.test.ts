@@ -53,7 +53,11 @@ describe('the card browser / deck-builder grid is inside the funnel', () => {
     );
     // `CardHover` with no className renders a bare <span> around its children.
     // Matching it positionally is the point: drop the wrapper and this reddens.
-    expect(html).toMatch(/<span><button type="button" class="card-tile__art"/);
+    // The class is `card-tile__art-btn`, not `card-tile__art`: the button used to
+    // wear the art box’s class while an inline `all: unset` unset every one of
+    // its declarations, so the name said nothing. It now wears its own reset
+    // class and the art box stays on `CardArt`’s div — see `inline-style-reset.test.ts`.
+    expect(html).toMatch(/<span><button type="button" class="card-tile__art-btn"/);
   });
 
   it('the grid’s own art stays LAZY — the funnel must not cost the grid its budget', () => {

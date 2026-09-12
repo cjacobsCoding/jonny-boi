@@ -14,7 +14,15 @@
 
 import type { GameAction } from './actions.js';
 import type { CardDefinition } from './card.js';
-import { manaExtrasOf, manaModesOf, spendPurposeFor } from './card.js';
+import {
+  effectiveManaExtrasOf,
+  effectiveManaModesOf,
+  manaExtrasOf,
+  manaModesOf,
+  spendPurposeFor,
+} from './card.js';
+import { anyContinuousModification, indexContinuous } from './internal/continuous.js';
+import type { GameState } from './state.js';
 import type { ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
 import { addProduction, canPay, MANA_COLORS, payCost, usableMana } from './mana.js';
 import type { ManaSourcePreference } from './mana-source-preference.js';
@@ -32,6 +40,13 @@ import type { CardInstance, InstanceId, PlayerId } from './state.js';
  * only ever holds a redacted view of the game, and both that view and the full
  * `GameState` satisfy this shape structurally. Without it the online seat had no
  * way to tap mana at all, which meant it could never cast a spell.
+ *
+ * 📌 KNOWN REACH LIMIT, and it is a REFUSAL rather than a wrong answer: a GRANTED
+ * mana ability (DESIGN §3.143 GAP-G) is derived from the continuous layer, which a
+ * redacted view does not carry. The planner therefore resolves grants only when
+ * the view it was handed IS a full `GameState` — which every engine and pilot
+ * caller hands it — and a redacted online view simply plans without them, which
+ * can decline a payment but can never propose an illegal one.
  */
 export interface ManaPlanView {
   readonly battlefield: readonly CardInstance[];
@@ -342,7 +357,16 @@ export function planManaPayment(
   // one scan instead of one per mode.
   let lastSource: InstanceId | undefined;
   let lastModes: readonly ManaProduction[] | undefined;
-  let lastExtras: ReturnType<typeof manaExtrasOf>;
+  let lastExtras: ReturnType<typeof effectiveManaExtrasOf>;
+  // GRANTED mana abilities (GAP-G), resolved LAZILY and at most ONCE per call, and
+  // spelled out rather than wrapped in a helper closure: this is the hottest
+  // function in the engine profile and a closure here is one allocation per call,
+  // which is exactly what the notes above and below spend their words avoiding.
+  // A call that returns before the grouping loop pays nothing at all, and a board
+  // with no continuous effect pays one battlefield scan that short-circuits on its
+  // first modifying source and allocates nothing.
+  let grantIndex: ReturnType<typeof indexContinuous> | undefined;
+  let grantIndexResolved = false;
   // Both stay false on every board with no cost-carrying source — which is nearly
   // all of them — and keep the whole apparatus below out of the ranking loop.
   let anyTapCost = false;
@@ -367,13 +391,40 @@ export function planManaPayment(
       modes = lastModes;
     } else {
       const perm = findOnBattlefield(bf, action.instanceId);
-      modes = perm ? manaModesOf(perm.def) : undefined;
+      // EFFECTIVE modes, printed then granted — the SAME list `pushManaTapActions`
+      // enumerated and `applyTapForMana` applies, because `mode` is an index into
+      // it and a planner reading a shorter list drops the granted tap silently.
+      if (!grantIndexResolved) {
+        grantIndexResolved = true;
+        // A redacted online view carries no continuous layer; see `ManaPlanView`.
+        const full = view as Partial<GameState>;
+        grantIndex =
+          Array.isArray(full.continuous) && anyContinuousModification(view as GameState)
+            ? indexContinuous(view as GameState)
+            : undefined;
+      }
+      const granted =
+        grantIndex === undefined || perm === undefined
+          ? undefined
+          : grantIndex.get(perm.instanceId)?.activated;
+      // No grant in play ⇒ the printed readers, with the inlined `manaAbilities`
+      // property read that has always lived here: one read on an immutable
+      // definition, no call, on the hottest path in the sim.
+      modes = perm
+        ? granted === undefined
+          ? manaModesOf(perm.def)
+          : effectiveManaModesOf(perm.def, granted)
+        : undefined;
       lastDef = perm?.def;
       lastPerm = perm;
-      // Inlined `manaAbilities` test for the same reason `pushManaTapActions`
-      // inlines it: one property read, no call, on the hottest path in the sim.
       lastExtras =
-        perm && perm.def.manaAbilities !== undefined ? manaExtrasOf(perm.def) : undefined;
+        perm === undefined
+          ? undefined
+          : granted === undefined
+            ? perm.def.manaAbilities === undefined
+              ? undefined
+              : manaExtrasOf(perm.def)
+            : effectiveManaExtrasOf(perm.def, granted);
       lastSource = action.instanceId;
       lastModes = modes;
     }
@@ -755,7 +806,9 @@ function sourceIdentityKey(
  * without touching the extras list at all.
  */
 function manaSpendRestrictionOf(
-  extras: readonly { readonly ability: { readonly spendRestriction?: ManaSpendRestriction } }[] | undefined,
+  extras:
+    | readonly ({ readonly ability: { readonly spendRestriction?: ManaSpendRestriction } } | undefined)[]
+    | undefined,
   mode: number,
 ): ManaSpendRestriction | undefined {
   if (extras === undefined) return undefined;

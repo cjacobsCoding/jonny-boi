@@ -1,0 +1,330 @@
+/*
+ * §3.143 wave 3 — THE PROMPT CHROME THAT WAS NEVER STYLED.
+ *
+ * Three class names were emitted onto the play surface with **zero** matching
+ * selector anywhere in the app: `.cost-payer`, `.cost-payer__label` and
+ * `.target-prompt__blocked` — and `.target-prompt__title`, the heading of every
+ * prompt on both boards, was a fourth. A `.btn` full of card faces and no layout
+ * rule is not "unstyled", it is BROKEN: a `.card-face` with no width has nothing
+ * for its `aspect-ratio` to work from, and the `tile` preset those faces used is
+ * `height: 100%`, which resolves to `auto` inside an auto-height button. So the
+ * sacrifice-cost prompt — the fix for the 137 dead sacrifice-cost buttons — drew
+ * its cards at whatever size the button happened to be. That is the most likely
+ * visible breakage on this branch and it is why this file exists. (The faces are
+ * `size="full"` now: a sacrifice is a card leaving for good, so you see the card.)
+ *
+ * Its own file rather than an append to `styles.css`, following `action-bar.css`
+ * and `choice-prompt.css`: several agents work this repo in parallel and a
+ * shared stylesheet is the file they collide in. It is imported by
+ * `AbilityPrompts.tsx` (which both boards mount) and by `PlayBoard.tsx` (which
+ * emits the cost-payer prompt), so every surface that emits these classes loads
+ * the rules.
+ *
+ * The shell — `.target-prompt`, `.target-prompt__card`, `.target-prompt__options`
+ * — lives in `styles.css` and is shared with surfaces this lane does not own, so
+ * nothing here redefines it. Overrides are scoped under `.ability-prompt`, which
+ * wins on specificity without editing the shared file; that is the idiom
+ * `board-fit.css` and `choice-prompt.css` both document.
+ *
+ * ⚠️ `.mana-picker` is deliberately NOT styled here. The bare class is a
+ * SELECTOR HOOK for `apps/web/scripts/verify-mana-choice.mjs`
+ * (`.mana-picker button`), not an appearance, and `play-class-coverage.test.ts`
+ * carries that as a row with its reason rather than letting it read as a
+ * fourth oversight.
+ */
+
+/* -------------------------------------------------------------------------- */
+/* 0. ONE WIDTH FOR "A CARD INSIDE A PROMPT"                                  */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * MEASURED, not chosen. `CardFace` at `size="full"` draws a LIVE text box whose
+ * font-size is fixed (9.92px as shipped) rather than scaling with the card, so
+ * the share of the card the text covers is a function of the card's width:
+ *
+ *     84px  → 51–62% of the card is text box (the art is a sliver)
+ *     116px → 20%
+ *     140px → 17%
+ *     168px → 14%
+ *
+ * Those numbers came off a real browser, not off a reading of the stylesheet —
+ * the first draft of this file used 84px for a payer card and the screenshot is
+ * what said no. 116px is therefore the floor for a readable prompt card, and it
+ * is also exactly what `.choice-prompt__card` already uses, so the two prompts
+ * that ask the SAME question ("which of these cards?") show one card size.
+ *
+ * On `:root` because the three prompts that need it live under three different
+ * roots (`.ability-prompt`, `.choice-prompt`, and the board's own
+ * `.target-prompt`), in stylesheets owned by different lanes. `--prompt-*` is
+ * namespaced so it cannot collide. `play-class-coverage.test.ts` fails if these
+ * values ever diverge from `choice-prompt.css`'s.
+ */
+:root {
+  --prompt-card-w: 116px;
+  --prompt-source-card-w: 168px;
+}
+
+@media (max-width: 40rem) {
+  :root {
+    --prompt-card-w: 92px;
+    --prompt-source-card-w: 112px;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* 1. Chrome shared by every `.target-prompt` on both boards                   */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * The heading of every prompt. It was a bare `<div>`, so the question a player
+ * has to read sat at body weight in the middle of a modal — the one line in the
+ * dialog that must read as the question.
+ */
+.target-prompt__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--color-fg);
+  text-wrap: balance;
+}
+
+/*
+ * UX-5's honest refusal, shown INSTEAD of a Cancel button when the rewind is
+ * genuinely gone. It replaces a control, so it must not read as body copy that
+ * happens to be sitting where a button was: the dashed rule and the muted tone
+ * say "there is no button here, and this is why".
+ */
+.target-prompt__blocked {
+  display: block;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  text-wrap: balance;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 2. "What do you sacrifice?" — the cost-payer prompt (PlayBoard)             */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * ONE ANSWER CAN NAME SEVERAL PERMANENTS ("sacrifice two artifacts" is one
+ * answer naming two), so a row is a wrapping strip of FACES with its label
+ * underneath — not a line of text. `.btn.cost-payer` is two classes on purpose:
+ * it beats `.btn` on specificity, which is the rule `board-fit.css` learned the
+ * hard way (win by specificity, never by source order).
+ *
+ * The cards are the SHARED prompt-card width (section 0): a sacrifice is the
+ * same "which of these cards?" question a target prompt asks, so it gets the
+ * same card. An earlier draft made them smaller to fit more sets in a dialog and
+ * a browser measurement killed it — below ~116px the live text box covers most
+ * of the card.
+ */
+.btn.cost-payer {
+  --cost-payer-card-w: var(--prompt-card-w);
+
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-end;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3);
+  text-align: center;
+}
+
+/*
+ * ⚠️ THE COLLAPSE THIS RULE EXISTS TO PREVENT. A `.card-face` with no width
+ * inside an auto-height button has nothing for its `aspect-ratio` to work from,
+ * and a `tile` face is `height: 100%`, which resolves to `auto` in the same
+ * place. The explicit width is what makes a payer row a row of CARDS; the height
+ * comes from `.card-face--full`'s own aspect, so the printed shape is stated in
+ * exactly one file.
+ */
+.btn.cost-payer .card-face {
+  width: var(--cost-payer-card-w);
+}
+
+/*
+ * `CardHover` wraps each face in a `<span>`, which is inline — so without a box
+ * of its own the flex row measures an inline wrapper and every card collapses.
+ * The label is the one direct `<span>` that is NOT a card wrapper.
+ */
+.btn.cost-payer > span:not(.cost-payer__label) {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: var(--cost-payer-card-w);
+}
+
+.cost-payer__label {
+  flex: 1 0 100%;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-fg);
+  text-wrap: balance;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 3. The activated-ability prompts                                           */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * WIDTHS. `.target-prompt__card` is `max-width: 30rem` in styles.css, which was
+ * plenty for a column of words and is not plenty for a row of cards; this widens
+ * the ability prompt alone. The card sizes themselves come from section 0's
+ * shared tokens, so this prompt cannot drift away from the choice prompt.
+ */
+.ability-prompt .ability-prompt__card {
+  --ability-source-w: var(--prompt-source-card-w);
+  --ability-cand-w: var(--prompt-card-w);
+  max-width: 44rem;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.ability-prompt__head {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.ability-prompt__headtext {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0; /* let a long ability line wrap instead of stretching the row */
+  flex: 1 1 auto;
+}
+
+.ability-prompt__sub {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+}
+
+/* The engine offered nothing. Said in words, because a dialog holding only a
+   Cancel button reads as a bug rather than as an answer. */
+.ability-prompt__empty {
+  margin: var(--space-3) 0;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}
+
+/* One ability line. A `.btn` already, so this only makes a long printed line
+   readable: left-aligned and wrapping, rather than centred and clipped. */
+.ability-opt {
+  text-align: left;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+/* The candidates, as cards. Wraps, and scrolls inside the dialog rather than
+   pushing Cancel off the bottom of a phone. */
+.ability-prompt__cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: center;
+  margin: var(--space-3) 0;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+/* One candidate: the whole tile is the click target, so a player aims at the
+   card they are looking at rather than at a word beside it. */
+.ability-cand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ability-cand:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-strong);
+}
+
+.ability-cand:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.ability-cand__note {
+  max-width: var(--ability-cand-w);
+  font-size: var(--text-xs);
+  color: var(--color-fg-faint);
+  text-align: center;
+  text-wrap: balance;
+}
+
+/*
+ * THE FACE ITSELF. `CardHover` renders a `<span>`, which is inline — so without
+ * an explicit box the card inside measures as text and the `aspect-ratio` on
+ * `.card-face--full` has no width to work from.
+ */
+.ability-face {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.ability-face--source {
+  width: var(--ability-source-w);
+}
+
+.ability-face--candidate {
+  width: var(--ability-cand-w);
+}
+
+/*
+ * A ref with no card to draw — a SEAT ("target player"), a token, a Scryfall
+ * miss. It keeps the card's footprint so a list that mixes seats with
+ * permanents does not jump, and it says its name, because a blank rectangle is
+ * the one outcome worse than the name alone.
+ */
+.ability-face--nameonly {
+  aspect-ratio: 63 / 88;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.ability-face__placeholder {
+  font-family: var(--font-serif);
+  font-size: var(--text-sm);
+  text-align: center;
+  text-wrap: balance;
+  color: var(--color-fg-muted);
+}
+
+/* -------------------------------------------------------------------------- */
+/* 4. Narrow screens                                                          */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * The card widths shrink in section 0, on `:root`, so every prompt shrinks
+ * together. All that is left here is the dialog's own breathing room.
+ */
+@media (max-width: 40rem) {
+  .ability-prompt .ability-prompt__card {
+    max-width: 100%;
+  }
+
+  .ability-prompt__head {
+    gap: var(--space-2);
+  }
+}

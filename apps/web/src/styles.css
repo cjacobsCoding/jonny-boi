@@ -514,6 +514,21 @@ button {
   overflow: hidden;
 }
 
+.card-tile__art-btn {
+  /* The art click target strips the browser's button chrome. `all: unset` MUST
+     live in a stylesheet and never in a `style={{ ... }}` prop: an inline
+     `all` is expanded by the CSSOM into every CSS longhand, which serialises to
+     ~7.4 KB of attribute PER ELEMENT. On the card browser's 5,651-tile grid
+     that was 42 MB of DOM on the app's landing view, and rendering it took
+     ~40 s under an attached MutationObserver (3 s without) — which is what put
+     `verify-game-resume.mjs` over its 30 s post-reload budget. As a class rule
+     it costs nothing per element. `inline-style-reset.test.ts` is the guard.
+     `display` is restored because `all: unset` returns it to `inline`. */
+  all: unset;
+  cursor: pointer;
+  display: block;
+}
+
 .card-tile__img {
   width: 100%;
   height: 100%;

@@ -222,7 +222,7 @@ describe('exalted, end to end — "that creature" is the attacker, not the sourc
     expect(statsOf(after, two.instanceId)).toEqual({ power: 2, toughness: 2 });
   });
 
-  it('three exalted sources make a lone attacker +3/+3 — once per instance (CR 702.90b)', () => {
+  it('three exalted sources make a lone attacker +3/+3 — once per instance (CR 702.83b)', () => {
     const state = newGame({ registry });
     const bear = putOnBattlefield(state, 'A', BEAR);
     for (let i = 0; i < 3; i++) putOnBattlefield(state, 'A', CATHEDRAL_OF_WAR);

@@ -78,6 +78,16 @@
    * ballooning on a wide hover. */
   --card-face-text-size: clamp(0.5rem, calc(var(--card-face-body-scale, 1) * 0.62rem), 0.82rem);
   --card-face-pt-size: clamp(0.62rem, 1.6dvh, 1rem);
+  /*
+   * The size the text box is drawn at on a READING surface — the zoom overlay
+   * and the hover preview, the two places a player opens to read a card rather
+   * than to glance at it. Bigger than the glance size for a reason that is not
+   * taste: since GAP-E every ability word on those surfaces is a mouse target
+   * for its glossary pop, and a ~10px word is not a target anyone can hit.
+   * ONE declaration, read by `.card-face--zoomed` below and by
+   * `.card-hover-preview__face` in `card-hover.css`.
+   */
+  --card-face-read-text-size: clamp(0.72rem, 1.6dvh, 0.95rem);
 
   /* ---- scrims ---------------------------------------------------------- *
    * Opaque enough that printed text beneath cannot be mistaken for live text
@@ -610,10 +620,12 @@
   box-shadow: 0 10px 40px rgb(0 0 0 / 60%);
 }
 
-/* The zoom is a modal dialog with live pointer events, so this is the surface
- * where "hovering over any ability … should show a tooltip" is genuinely
- * reachable with a mouse — the hover preview is pointer-transparent by design.
- * Give the box room for the text it now carries. */
+/* The zoom is a modal dialog with live pointer events, so this is one of the two
+ * surfaces where "hovering over any ability … should show a tooltip" is genuinely
+ * reachable with a mouse. The other is the hover preview, which since §3.143
+ * wave 3 / GAP-E accepts the pointer too — it had to, because the zoom is only
+ * reachable from the graveyard/exile lists and a peeked prisoner, never from a
+ * creature in play. Both read the one size token declared on `.card-face`. */
 .card-face--zoomed .card-face__textbox {
-  font-size: clamp(0.72rem, 1.6dvh, 0.95rem);
+  font-size: var(--card-face-read-text-size);
 }

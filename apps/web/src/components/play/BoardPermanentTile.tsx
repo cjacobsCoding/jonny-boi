@@ -175,9 +175,22 @@ export function BoardPermanentTile({
   /** The board chrome drawn OVER the card face — counters, combat role, markers. */
   const chrome = (
     <>
+      {/*
+        ⚠️ THE GLYPH, NOT THE WORD — §3.143 wave 3, and this is a retraction of
+        half of §3.133 with its reason. §3.133 added "⟳ TAPPED" because a tapped
+        card did not LOOK tapped: the only visual was an 8° tilt at 0.85 opacity.
+        The card now genuinely turns 90° (UX-11), and at the tile sizes the
+        §3.62 height budget allows, the WORD is longer than the card is wide —
+        measured on a real screenshot, the badge covered most of a tapped land's
+        art and printed "APPED". Orientation is a stronger, non-colour signal
+        than a caption that does not fit, and the caption survives where it
+        costs nothing: `aria-label` here, and "· tapped" in the tile's `title`.
+        The replay board keeps the word (`components/match/PermanentTile.tsx`),
+        because its cards still only tilt 24° and there the word IS the signal.
+      */}
       {perm.tapped && (
-        <span className="perm__tap-badge" aria-label="Tapped">
-          ⟳ TAPPED
+        <span className="perm__tap-badge" aria-label="Tapped" title="Tapped">
+          ⟳
         </span>
       )}
       {/*

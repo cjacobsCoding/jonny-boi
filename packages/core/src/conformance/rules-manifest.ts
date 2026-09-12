@@ -1003,12 +1003,12 @@ export const RULES_MANIFEST: RulesManifest = {
       { rule: '702.164c', title: 'a player dealt combat damage by a toxic creature also gets N poison counters' },
       // The combat keyword family (DESIGN §3.107).
       { rule: '702.28b', title: 'a creature with shadow can be blocked only by a creature with shadow, and vice versa' },
-      { rule: '702.18b', title: 'a creature with islandwalk can’t be blocked while the defending player controls an Island' },
+      { rule: '702.14b', title: 'a creature with islandwalk can’t be blocked while the defending player controls an Island' },
       {
         rule: '702.61a',
         title: 'while a spell with split second is on the stack, players can’t cast spells or activate non-mana abilities',
       },
-      { rule: '702.90a', title: 'exalted pumps the creature that attacks alone, once per instance of exalted' },
+      { rule: '702.83a', title: 'exalted pumps the creature that attacks alone, once per instance of exalted' },
       { rule: '702.25a', title: 'flanking gives each blocking creature without flanking −1/−1' },
       // §3.106 — the core halves of the upkeep-cost family. The bills themselves
       // (echo's pay-or-sacrifice, cumulative upkeep's age-scaled cost, the
