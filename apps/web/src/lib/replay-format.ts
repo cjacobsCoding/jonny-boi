@@ -29,6 +29,21 @@ export function seatLabel(player: PlayerId): string {
   return player === 'A' ? 'A' : 'B';
 }
 
+/**
+ * What the feed says when a permanent LEAVES THE BATTLEFIELD for each zone.
+ *
+ * The independent twin of `play/play-format.ts`'s table of the same name, and
+ * added for the same report (20260911_194411): an exile is carried by a bare
+ * `zoneChange`, which formatted to `null`, so a viewer could watch a creature
+ * vanish from the board and never be told where it went. `graveyard` is absent
+ * because `creatureDied` already says it.
+ */
+const LEAVES_BATTLEFIELD_TEXT: Readonly<Record<string, (card: string) => string>> = Object.freeze({
+  exile: (card) => `${card} is exiled.`,
+  hand: (card) => `${card} returns to its owner's hand.`,
+  library: (card) => `${card} is put into its owner's library.`,
+});
+
 /** A target that is either a player or a permanent → readable text. */
 function targetName(target: number | PlayerId, name: NameResolver): string {
   return target === 'A' || target === 'B' ? `Player ${target}` : name(target);
@@ -46,6 +61,12 @@ export function describeEvent(event: GameEvent, name: NameResolver): LogLine | n
       return { text: `Turn ${event.turn} — Player ${event.activePlayer}.`, tone: 'turn' };
     case 'landPlayed':
       return { text: `Player ${event.player} plays ${name(event.instanceId)}.` };
+    case 'zoneChange': {
+      // See {@link LEAVES_BATTLEFIELD_TEXT} — the board change, not the plumbing.
+      if (event.from !== 'battlefield') return null;
+      const say = LEAVES_BATTLEFIELD_TEXT[event.to];
+      return say ? { text: say(name(event.instanceId)), tone: 'death' } : null;
+    }
     case 'spellCast':
       return { text: `Player ${event.player} casts ${event.name}.`, tone: 'cast' };
     case 'stackResolved':
@@ -97,6 +118,14 @@ export function describeEvent(event: GameEvent, name: NameResolver): LogLine | n
       return { text: `Player ${event.controller}'s token is a copy of ${event.name}.`, tone: 'cast' };
     case 'spellCopied':
       return { text: `Player ${event.controller} copies ${event.name}.`, tone: 'cast' };
+    case 'triggerCopied':
+      // Strionic Resonator (CR 707.10) — the other kind of stack object, and the
+      // half this feed had no sentence for. Report 20260911_194411.
+      return { text: `Player ${event.controller} copies ${event.label}.`, tone: 'trigger' };
+    case 'abilityActivated':
+      // The permanent the pilot CLICKED. Without it an activation reached the
+      // feed only as its own oracle text, later, under `stackResolved`.
+      return { text: `Player ${event.player} activates ${name(event.instanceId)}.`, tone: 'cast' };
     case 'spellCopyCeasedToExist':
       // CR 704.5e — and it is emitted INSTEAD of a `zoneChange`, so a reader
       // folding this log must not put the object in a graveyard.
@@ -113,8 +142,18 @@ export function describeEvent(event: GameEvent, name: NameResolver): LogLine | n
       return { text: `Delayed ability triggers: ${event.label}.`, tone: 'trigger' };
     case 'triggerPutOnStack':
       return { text: `Trigger: ${event.label}.`, tone: 'trigger' };
+    case 'triggerFizzled':
+      // CR 603.4's intervening "if", and CR 608.2b's all-targets-illegal. The
+      // ability left the stack having done nothing, and a feed that showed only
+      // the abilities that DID something would be reporting a different game.
+      return { text: `${event.label} — nothing happens (${event.reason}).`, tone: 'trigger' };
     case 'triggeredAbilityResolved':
       return { text: `${event.label} resolves.`, tone: 'trigger' };
+    case 'triggerRemovedFromStack':
+      // CR 603.3d — it never got a legal target. The same sentence the live
+      // game log has said since §3.55, and for the same reason: an ability that
+      // leaves the stack unannounced reads as a viewer bug.
+      return { text: `${event.label} — nothing happens (${event.reason}).`, tone: 'trigger' };
     case 'counterAdded':
       return {
         text: `${name(event.instanceId)} gets ${event.amount} ${event.kind} counter${
@@ -139,9 +178,80 @@ export function describeEvent(event: GameEvent, name: NameResolver): LogLine | n
         text: event.winner ? `Player ${event.winner} wins the game!` : 'The game is a draw.',
         tone: 'win',
       };
-    // Bookkeeping the feed omits (still folded for state): priority, mana, untap,
-    // step boundaries, effect/zone plumbing, continuous-effect expiry.
-    default:
+    // --- SILENT BY DESIGN, FOREVER -------------------------------------------
+    // Plumbing this feed exists to see PAST: priority, step boundaries, the mana
+    // machine, effect/replacement/grant bookkeeping, and a pilot's own parked
+    // questions — a replay that narrated every question an AI was asked would
+    // bury the game in them.
+    case 'stepBegin':
+    case 'priorityPassed':
+    case 'untapped':
+    case 'tapped':
+    case 'manaAdded':
+    case 'manaCostPaid':
+    case 'effectApplied':
+    case 'effectUnsupported':
+    case 'replacementApplied':
+    case 'replacementExpired':
+    case 'continuousEffectExpired':
+    case 'cardGrantAdded':
+    case 'cardGrantExpired':
+    case 'triggerModesChosen':
+    case 'triggerTargetsChosen':
+    case 'modesChosen':
+    case 'modeTargetChosen':
+    case 'drawCard':
+    case 'cardsMilled':
+    case 'cardsLookedAt':
+    case 'pileBottomed':
+    case 'actionRejected':
+    case 'choiceAsked':
+    case 'choiceAnswered':
+    case 'choiceAutoAnswered':
+    case 'choiceAbandoned':
       return null;
+
+    // --- SILENT, AND THAT IS A GAP -------------------------------------------
+    // Real events with no sentence yet. Listed EXPLICITLY rather than swept up
+    // by a `default`, because that `default` is exactly where `triggerCopied`
+    // and `abilityActivated` hid until report 20260911_194411. Naming them makes
+    // the debt countable and each one a ROW to fill in.
+    case 'cardCycled':
+    case 'madnessWindowOpened':
+    case 'madnessDeclined':
+    case 'cardSuspended':
+    case 'suspendWindowOpened':
+    case 'suspendDeclined':
+    case 'cardExiledToCastLater':
+    case 'cascadeWindowOpened':
+    case 'rippleWindowOpened':
+    case 'controlChanged':
+    case 'counterPrevented':
+    case 'loyaltyChanged':
+    case 'planeswalkerDied':
+    case 'defenseChanged':
+    case 'battleDefeated':
+    case 'legendRuleApplied':
+    case 'emblemCreated':
+    case 'becameRenowned':
+    case 'cardRevealed':
+    case 'regenerated':
+    case 'permanentAttached':
+    case 'permanentUnattached':
+    case 'attachmentFailed':
+    case 'attachmentPutIntoGraveyard':
+    case 'transformed':
+    case 'becameCopy':
+    case 'tokenCeasedToExist':
+      return null;
+
+    default: {
+      // EXHAUSTIVE, like the live log's. Adding a `GameEvent` type to core and
+      // not deciding here FAILS THE BUILD. The runtime `return null` is for a
+      // stored replay carrying an event this build no longer knows.
+      const unclassified: never = event;
+      void unclassified;
+      return null;
+    }
   }
 }

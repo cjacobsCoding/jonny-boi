@@ -221,7 +221,7 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
     case 'triggerFizzled':
       // CR 603.4 (the intervening "if" stopped holding) and CR 608.2b (every
       // target became illegal). Said out loud for exactly the reason
-      // `triggerRemovedFromStack` below is: on screen "nothing happened" reads
+      // `triggerRemovedFromStack` above is: on screen "nothing happened" reads
       // as a bug. This is the line the second half of a Strionic Resonator copy
       // needs when the first half already took the only legal creature.
       return { text: `${event.label} — nothing happens (${event.reason}).`, tone: 'trigger' };

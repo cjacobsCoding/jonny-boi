@@ -220,3 +220,60 @@ describe('Strionic Resonator says what it did (report 20260911_194411)', () => {
     expect(both.lines.join('\n')).not.toEqual(one.lines.join('\n'));
   });
 });
+
+/**
+ * THE SIBLING — spell copies (DESIGN §3.24). Measured, not assumed: `spellCopied`
+ * has had a log line since it shipped, so a COPIED SPELL is announced and the
+ * reported defect does not reach it. What it DID share is the other half of
+ * "a copy is illegible": a spell copy is not a card and ceases to exist the
+ * instant it resolves (CR 704.5e), so by the time the feed rendered, the damage
+ * it dealt read `#94 deals 3 to Grizzly Bears` — an id no player can match to
+ * anything.
+ */
+describe('a copied SPELL is legible too', () => {
+  it('names the copy that dealt the damage, after the copy has ceased to exist', () => {
+    const mountain = card('Mountain');
+    const created = createGame({
+      seed: 7,
+      decks: {
+        A: { cards: Array.from({ length: 40 }, () => mountain) },
+        B: { cards: Array.from({ length: 40 }, () => mountain) },
+      },
+      registry,
+    });
+    const st = created.state;
+    const bolt = instance(st, card('Lightning Bolt'), 'A', 'hand');
+    const twin = instance(st, card('Reverberate'), 'A', 'hand');
+    st.players.A.hand = [bolt, twin];
+    st.players.B.hand = [];
+    for (let i = 0; i < 8; i++) st.battlefield.push(instance(st, mountain, 'A', 'battlefield'));
+    const bear = instance(st, card('Grizzly Bears'), 'B', 'battlefield');
+    st.battlefield.push(bear);
+    let s = GameSession.fromCreated(created, registry, SEAT_NAMES);
+    let g = 0;
+    while (s.state.step !== 'precombatMain' && g++ < 20) s = s.passPriority().session;
+
+    s = s.castWithAutoTap(bolt.instanceId, [bear.instanceId]).session;
+    const from = s.events.length;
+    s = s.castWithAutoTap(twin.instanceId, [bolt.instanceId]).session;
+    let g2 = 0;
+    while (g2++ < 40 && (s.state.stack.length > 0 || s.pendingChoice)) {
+      if (s.pendingChoice) {
+        s = s.answerChoice({ kind: 'selectTargets', targets: [bear.instanceId] }).session;
+        continue;
+      }
+      s = s.passPriority().session;
+    }
+    const lines = describeEvents(s.events.slice(from), { name: s.nameOf, playerName: s.playerName }).map(
+      (l) => l.text,
+    );
+    expect(lines, 'the copy is announced — this half was never broken').toContain(
+      'Player 1 copies Lightning Bolt.',
+    );
+    expect(
+      lines.some((l) => /^#\d+ /.test(l)),
+      `no line may open with a bare instance id; got:\n${lines.join('\n')}`,
+    ).toBe(false);
+    expect(lines).toContain('Lightning Bolt deals 3 to Grizzly Bears.');
+  });
+});

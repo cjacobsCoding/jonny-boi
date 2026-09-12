@@ -342,6 +342,20 @@ export class GameSession {
     for (const obj of this.state.stack) {
       if (obj.kind === 'trigger' && obj.instanceId === id) return obj.label;
     }
+    // A COPY THAT NO LONGER EXISTS. A spell copy is not a card and ceases to
+    // exist the moment it finishes resolving (CR 707.10 / 704.5e), so by the
+    // time the feed is rendered it is in no zone and on no stack - and the log
+    // it just wrote said "#94 deals 3 to Grizzly Bears". The name IS recoverable:
+    // the events this session already keeps carry it (`spellCopied.name`,
+    // `triggerCopied.label`, `spellCast.name`, `tokenCreated.name`), so the last
+    // event that named this id answers. Searched BACKWARDS: the newest naming of
+    // an id is the truest one.
+    for (let i = this.events.length - 1; i >= 0; i--) {
+      const event = this.events[i] as { instanceId?: InstanceId; name?: string; label?: string };
+      if (event.instanceId !== id) continue;
+      const named = event.name ?? event.label;
+      if (named !== undefined) return named;
+    }
     return `#${id}`;
   };
 

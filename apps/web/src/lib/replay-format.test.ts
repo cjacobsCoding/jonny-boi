@@ -61,3 +61,59 @@ describe('describeEvent', () => {
     expect(describeEvent(e, resolve)?.text).toBe('#999 deals 1 to Player A.');
   });
 });
+
+/**
+ * THE COPY FAMILY, AND THE EXILE — report 20260911_194411's class, in the
+ * viewer that has the same hole. `spellCopied` has had a line since it shipped;
+ * its trigger twin, the activation that made it and the zone change that IS an
+ * exile had none, so a Strionic Resonator play was invisible here too.
+ */
+describe('a copied ability, and where a permanent went', () => {
+  it('announces a COPIED TRIGGER the way it announces a copied spell', () => {
+    const e: GameEvent = {
+      type: 'triggerCopied',
+      instanceId: 99,
+      copiedInstanceId: 50,
+      controller: 'A',
+      label: 'Enters: exile target creature',
+    };
+    expect(describeEvent(e, resolve)?.text).toBe('Player A copies Enters: exile target creature.');
+  });
+
+  it('names the permanent whose ability was activated', () => {
+    const e: GameEvent = { type: 'abilityActivated', player: 'B', instanceId: 20, label: '{T}: add G' };
+    expect(describeEvent(e, resolve)?.text).toBe('Player B activates Llanowar Elves.');
+  });
+
+  it('says an ability that did nothing did nothing, and why', () => {
+    const e: GameEvent = {
+      type: 'triggerFizzled',
+      sourceInstanceId: 11,
+      controller: 'A',
+      label: 'Enters: exile target creature',
+      reason: 'its target is no longer legal (a creature)',
+    };
+    expect(describeEvent(e, resolve)?.text).toBe(
+      'Enters: exile target creature — nothing happens (its target is no longer legal (a creature)).',
+    );
+  });
+
+  it('says where a permanent leaving the battlefield went — one row per zone', () => {
+    const leave = (to: 'exile' | 'hand' | 'library'): string | undefined =>
+      describeEvent({ type: 'zoneChange', instanceId: 11, from: 'battlefield', to }, resolve)?.text;
+    expect(leave('exile')).toBe('Grizzly Bears is exiled.');
+    expect(leave('hand')).toBe("Grizzly Bears returns to its owner's hand.");
+    expect(leave('library')).toBe("Grizzly Bears is put into its owner's library.");
+  });
+
+  it('leaves the graveyard move to `creatureDied`, and every other zone change silent', () => {
+    // Narrating battlefield→graveyard here would print every death twice.
+    expect(
+      describeEvent({ type: 'zoneChange', instanceId: 11, from: 'battlefield', to: 'graveyard' }, resolve),
+    ).toBeNull();
+    // A draw is not a board change, and this feed has `drawCard` for it.
+    expect(
+      describeEvent({ type: 'zoneChange', instanceId: 11, from: 'library', to: 'hand' }, resolve),
+    ).toBeNull();
+  });
+});
