@@ -35,6 +35,7 @@ import { createMctsPilot } from './mcts.js';
 import { FAST_MCTS_CONFIG } from './mcts-config.js';
 import { createHybridPilot } from './hybrid.js';
 import { FAST_HYBRID_CONFIG } from './hybrid-config.js';
+import { buildRegistry } from '@jonny-boi/cards';
 import { addPool, createTestRegistry, creatureDef, giveHand, landDef, putOnBattlefield } from './test-support.js';
 
 /** Burn that may only hit a player — Lava Spike. */
@@ -93,7 +94,15 @@ function mainPhase(seed = 5): GameState {
   return state;
 }
 
-const REGISTRY = createTestRegistry();
+/**
+ * THE REAL BODIES, because `restrictedGenericDef` mints `loseLife` and the fixture
+ * registry only ever owned `dealDamage`. The drain resolved 260 times across the
+ * liveness loop below and did nothing every time — so the "many real positions" the
+ * pilots were driven through were positions where life totals never moved (DESIGN
+ * §3.143). The target-legality assertions were still real (a rejection is decided at
+ * cast time, before resolution), but the positions they were checked over were not.
+ */
+const REGISTRY = createTestRegistry(buildRegistry());
 
 /** Ask the heuristic for a decision in this position. */
 function heuristicChoice(state: GameState): ReturnType<ReturnType<typeof createHeuristicPilot>['chooseAction']> {
