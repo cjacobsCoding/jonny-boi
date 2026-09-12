@@ -2994,8 +2994,19 @@ be life-paid, because sharing the budget between symbols is the payment search's
 under-filtering costs a scoring pass, over-filtering hides a castable card).
 
 **The human seats** get one entry per reading in the hand menu — the same "this card has more than
-one way to be played" menu a cycling land and a split card already use — with the auto-tap planning
-against the life amount the cast will actually pay.
+one way to be played" menu a cycling land and a split card already use, labelled with what each way
+costs (`{1}{B/P}{B/P}` / `{1}{B/P} + 2 life` / `{1} + 4 life`) — and the auto-tap plans against the
+life amount the cast will actually pay, because a picker raised for one reading and a cast that makes
+the other is the same offer/accept mismatch this seam exists to prevent. ONE `castReadings` funnel
+feeds the hand, graveyard, exile and permission lists, so they cannot disagree about what a card
+costs. Four latent defects turned up in that lane and are fixed: the web's `displayCost` dropped
+hybrid symbols entirely (a synthesized `{1}{B/P}{B/P}` rendered as `{1}`, mana value 1, colourless);
+the mana picker did not compile against the widened type and its readout still demanded the symbols
+the life had already bought; the ONLINE `castChoicesFrom` merged the per-reading offers, so a 4-life
+reading's targets rode a button submitting a cast the server never offered; and the online auto-tap
+rebuilt tap actions by hand, dropping `costInstanceId`. **The online seat takes the CHEAPEST reading
+rather than asking**, deliberately and documented: that seat has no menu at all (the same reason its
+mana picker does not exist), and life is not a resource to spend on a player's behalf.
 
 #### Measured
 
