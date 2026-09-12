@@ -1210,9 +1210,20 @@ export function restrictionOfEffects(
  * A trigger lifts the same flag onto its ability as
  * `TriggeredAbility.targetsExcludeSelf`, because a trigger is aimed as it goes
  * on the stack rather than as it is activated; both read this param.
+ *
+ * ⚠️ A PLAIN LOOP, not `.some(…)`, and that is measured rather than stylistic.
+ * `generateLegalActions` calls this once per activated ability per action, and
+ * the closure `.some` needs is allocated every time: the scavenge probe read
+ * **547 → 560 over 40 identical seeded games** (26,588 actions, byte-identical
+ * in both arms) with the callback version, against a ±2 floor. The loop puts it
+ * back at parity. `restrictionOfEffects` above is written the same way for the
+ * same reason.
  */
 export function excludesSelfOfEffects(effects: readonly EffectRef[]): boolean {
-  return effects.some((ref) => ref.params?.[TARGET_EXCLUDE_SELF_PARAM] === true);
+  for (const ref of effects) {
+    if (ref.params?.[TARGET_EXCLUDE_SELF_PARAM] === true) return true;
+  }
+  return false;
 }
 
 /**

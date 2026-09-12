@@ -32,7 +32,12 @@ import type {
   TargetRestriction,
   TriggeredAbility,
 } from '@jonny-boi/core';
-import { DEFAULT_TARGET_RESTRICTION, SUBJECT_OPT_IN_EVENTS, restrictionOfEffects } from '@jonny-boi/core';
+import {
+  DEFAULT_TARGET_RESTRICTION,
+  SUBJECT_OPT_IN_EVENTS,
+  excludesSelfOfEffects,
+  restrictionOfEffects,
+} from '@jonny-boi/core';
 import type {
   ClauseContribution,
   CompilableCard,
@@ -1511,7 +1516,12 @@ export function compileCard(card: CompilableCard): CompileResult {
         // is lifted onto the ABILITY here, because the ability is what gets
         // aimed — the aiming pass reads `targetsExcludeSelf` when it builds the
         // candidate menu, and a flag left on the ref alone would exclude nothing.
-        excludeSelf = partEffects.some((ref) => ref.params?.excludeSelf === true);
+        //
+        // Asked through CORE's accessor rather than a local `params.excludeSelf`
+        // read: the engine's activation menu and its rejection path ask the very
+        // same question of the very same param, and three readers of one question
+        // are three chances to disagree about what "another" means.
+        excludeSelf = excludesSelfOfEffects(partEffects);
         // A printed "UP TO N target …" rides the effect ref as `upToTargets`
         // and is lifted onto the ability the same way: the aiming pass reads
         // `targetCount` when it collects the chosen targets, and a number left

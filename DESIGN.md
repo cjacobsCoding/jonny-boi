@@ -3324,8 +3324,10 @@ tables"*, **21 cards**. Every SYSTEM under it was already shipped — §3.24's l
 X and modes carried. What was missing was the printed VOCABULARY around them, and this closes the
 part of it that the corpus can actually pay for.
 
-📊 **Measured, paired, same cached 2,100-card corpus, against the `origin/main` this branches from:
-722 → 725 playable, +3, 0 regressions** — the full playable SETS were diffed, not the counts.
+📊 **Measured, paired, same cached 2,100-card corpus, against the `origin/main` this MERGES:
+726 → 729 playable, +3, 0 regressions** — the full playable SETS were diffed, not the counts, and
+the pair was taken in ONE tree (main’s `packages/*/src` checked out over mine and rebuilt) so the two
+arms differ only by this change. The pre-merge pair read 722 → 725 — the same three names either way.
 **Orthion, Hero of Lavabrink**, **Reflections of Littjara**, **The Jolly Balloon Man**. Gauntlet
 unchanged and byte-identical (97/320 = 30.3%, rows 17·14·19·7·8·10·17·5) — the shipped pool is
 untouched, so a movement would have meant an accident.
@@ -3442,6 +3444,13 @@ the class, not the instance.
   blocked by a system outside this family, so the rows would buy 0 playable cards today. They are
   named in the hint so the next contributor picks them up when their siblings land.
 
+⚡ **Throughput measured, and the first draft REGRESSED it.** `generateLegalActions` calls
+`excludesSelfOfEffects` once per activated ability per action, and the obvious `.some(ref => …)`
+allocates its closure every time: the scavenge probe read **547 → 560 over 40 identical seeded games**
+against its documented ±2 floor — same 26,588 actions in both arms, so the games were byte-identical
+and the difference was pure allocation. Rewritten as a plain loop, the way `restrictionOfEffects`
+beside it already was: **542**, at parity. Wall clock was not used; it is worthless on this box.
+
 🧪 **18 sabotages run, 16 RED — and BOTH escapes were real holes in my own tests, reported rather
 than quietly fixed.** (1) "copies nothing when the original was countered" cannot see a
 `spellToCopy` that falls back to whatever is on the stack, because by the time that trigger resolves
@@ -3451,6 +3460,11 @@ unreadable word" used "flying and bushido 2", whose DIGIT fails the match one le
 list branch was never reached; rewritten with "banding" (alphabetic, a real printed keyword, no flag
 here) plus a positive control. That is the third and fourth time this family's sabotage pass has
 caught its own untested refusal.
+
+✅ **Gate, run AFTER the merge:** `npm run verify` exit 0 — lint + generated-data check + build +
+**21,909 passed / 0 failed** (407 files, 5 skipped). `npm run build` exit 0. And
+`git diff origin/main --stat -- packages/cards/data` is EMPTY: no generated data was touched, so the
+silent text-merge drop that family is prone to cannot have happened here.
 
 ### 3.141 An ability that gives back exactly what it takes — the pilot's repeatable no-op — ✅ done
 
