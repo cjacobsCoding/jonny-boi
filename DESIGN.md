@@ -3016,6 +3016,142 @@ saying which check was counting.
   - ⚠️ **Reverting only the pilot's count seam ALSO leaves it green** — because `legalizeBlocks`
     catches it. That is the ask-core gate being measured rather than asserted: it takes both the seam
     and the gate broken (the ninth sabotage) before the row fails.
+### 3.143 The copy family's last vocabulary — and three hints that named the wrong system — ✅ done
+
+The coverage audit's #1 row for weeks was *"a COPY-CREATING template outside the compiler's closed
+tables"*, **21 cards**. Every SYSTEM under it was already shipped — §3.24's layer-1 as-enters copy,
+§3.31's spell copy with the `ceaseToExist` stack exit, token copies, `copiableDefOf`, re-aiming,
+X and modes carried. What was missing was the printed VOCABULARY around them, and this closes the
+part of it that the corpus can actually pay for.
+
+📊 **Measured, paired, same cached 2,100-card corpus, against the `origin/main` this branches from:
+722 → 725 playable, +3, 0 regressions** — the full playable SETS were diffed, not the counts.
+**Orthion, Hero of Lavabrink**, **Reflections of Littjara**, **The Jolly Balloon Man**. Gauntlet
+unchanged and byte-identical (97/320 = 30.3%, rows 17·14·19·7·8·10·17·5) — the shipped pool is
+untouched, so a movement would have meant an accident.
+
+⚠️ **THE HEADLINE 21 WAS NEVER 21, AND THE SMALLER NUMBER IS THE HONEST ONE.** A card lands in an
+audit row if ANY of its unread clauses matches that row's hint pattern, so the row counted cards
+blocked four other ways as well — Spree, Bestow, Class levels, Station, a d20, Ascend, `{P}` modes.
+New committed probe `packages/cards/scripts/…` is not needed for this: the measurement is the set
+diff. Of the 21, **exactly 3 had a copy clause as their ONLY blocker and could be closed at all**;
+the rest report honestly and are named below with the system each is really waiting for.
+
+**"ANOTHER target creature you control" (Orthion, Jaxis, The Jolly Balloon Man).** The selector table
+refused it and its comment said why: the printed word excludes the ASKING INSTANCE, while core's
+target vocabulary is checked against a source DEFINITION (`isLegalTarget(state, restriction, ref,
+controller, sourceDef)`) that never learns which object is asking. That was true for an ACTIVATED
+ability and had already stopped being true for a TRIGGERED one — `excludeSelf` on the ref, lifted by
+the trigger-body compiler onto `TriggeredAbility.targetsExcludeSelf`, is how Extravagant Replication's
+sibling row has worked since §3.53. So the comment was sending a reader to rebuild something
+half-built.
+
+The activated half needed **the PAIR, not one side**: `generateLegalActions` filters the source out of
+the ability's menu, and `illegalTargetReasonForEffects` refuses it on the way in. One side alone
+leaves the engine accepting an action it never offered — the invariant the full-pool soak asserts, and
+a split this repo has shipped before. `excludesSelfOfEffects` is the single answer, beside
+`restrictionOfEffects`, read by both. It is deliberately NOT inside `isLegalTarget`: that is answered
+from a DEFINITION, and two Orthions on one battlefield share a definition and must still copy each
+other.
+
+**"Copy THAT spell" (Reflections of Littjara, Jin-Gitaxias, Sword of Wealth and Power).** §3.31
+reported this by hand as *"a trigger carries its triggering PLAYER but not the stack object that set
+it off"* — and half of that had stopped being true too: `triggeringInstances` has carried "that
+creature" since the counter-keyword family (§3.110). So the change is **one ROW** in
+`triggeringInstancesFor`: a `castSpell` condition that ASKS carries the cast spell's id, exactly as
+`permanentEnters` carries the entering permanent's. Same field, same opt-in word, same question — the
+only difference is that this object lives on the stack, and the id answers for both.
+
+It works at all because of CR 603.3b: a cast trigger goes on the stack ABOVE the spell that set it
+off, so it resolves while that spell is still an object. The primitive re-reads it off the STACK
+rather than trusting the id, because a counterspell in between removes it and minting a copy of an
+object the rules say is gone is worse than minting none.
+
+**THE SUBJECT LIFT IS THE PART WORTH READING.** A body that reads the subject only RECEIVES one if
+its CONDITION declares `carriesSubject`, and the two halves are written by different tables — the
+condition by a trigger rule, the body by the effect table beneath it. Rather than make every pairing
+rule remember the flag (and ship the one that forgot as a card that resolves to nothing), `absorb`
+sets it once, at the single point every compiled trigger passes through.
+
+⚠️ **The first draft of that lift broke forty pool cards, and the reason is the reusable lesson:** it
+flagged EVERY trigger whose body read the subject, including exalted's and flanking's — whose
+conditions supply the subject unconditionally and had never carried the field, so the new flag broke
+every byte-comparison the generated pool is pinned by. WHICH events make the subject opt-in is core's
+answer, so it is now core's exported `SUBJECT_OPT_IN_EVENTS`, read by the switch AND by the lift. A
+second list in the compiler is exactly what went wrong.
+
+**The "except" tail that says four things — and the splitter that broke on it.** The Jolly Balloon
+Man prints *"except it's a 1/1 red Balloon creature in addition to its other colors and types and it
+has flying and haste"*: a base P/T, an added colour, an added subtype, an added type and two keywords,
+in one sentence.
+
+⚠️ **The SPLITTER was the real bug, and it is a class.** `splitExceptClauses` cut on every " and ",
+which was safe only while no accepted clause contained one — and this tail contains two, inside "in
+addition to its other colors AND types" and "flying AND haste". The naive split tore it into fragments
+matching nothing, so the card reported a missing TEMPLATE when what was missing was the SPLIT. A
+separator is now only a separator where a clause actually BEGINS, against the closed
+`EXCEPT_CLAUSE_OPENERS` list taken from the openers the table accepts. "flying and haste" is then one
+clause granting two keywords, which is what it is; one unreadable word in that list still refuses the
+whole clause, because half a grant is a copy missing a printed ability.
+
+`CopyExceptions.addColors` is a new field and deliberately not a reuse of `colors`: embalm's token
+"is white" WHATEVER the card was (a replacement), while this one is red IN ADDITION (a union,
+deduplicated). Folding them would make one of the two cards wrong, and the board would look identical
+until something asked about the colour it lost — a protection, a filter, a fear.
+
+⚠️ **THREE HINTS NAMED THE WRONG SYSTEM, AND ONE OF THEM COST ME AN HOUR.** `explainUnsupported`
+returns the FIRST hint whose pattern matches the clause TEXT, and one printed sentence can sit inside
+several templates:
+- The DELAYED-removal hint claimed *"this engine has no delayed triggered abilities"* long after
+  `createDelayedTrigger` shipped and `createTokenCopy` began compiling that very sentence. Every
+  Orthion-shaped card therefore reported a missing SYSTEM while its actual blocker was a selector
+  three words away. Hints gain an optional **`when` guard** so one sentence can belong to different
+  rows depending on what else the clause says; the delayed row now excludes a clause that also creates
+  the copy, and says what is genuinely left (a delayed ability with no creating ref to ride — Whip of
+  Erebos's reanimation, Mimic Vat's exiled card).
+- **Kitsa, Otterball Elite**'s copy line is read in FULL; its only unread words are "Activate only if
+  ~'s power is 3 or greater". A new hint above the copy rows names that ACTIVATION CONDITION.
+  ("Activate only as a sorcery" is not there — `compileActivatedAbility` strips it into
+  `timing: 'sorcery'`, which the engine enforces.)
+- The quoted-ability hint required the quote to sit directly against "it has", so Electroduplicate
+  ("except it has haste AND \"…\"") and Jaxis (a follow-up grant, not an "except") both fell through
+  to the generic row. Both now report it — and the hint says WHY the two wordings are not
+  interchangeable: an "except" ability is copiable (CR 707.2), a granted one is layer 6.
+
+`compile/copy-effects.test.ts` gains a **TABLE of clause → the system its report must name**, so a
+hint that steals another's cards fails a test rather than someone's afternoon. That is the guard for
+the class, not the instance.
+
+📏 **DELIBERATELY NOT BUILT, each with the number that decided it.**
+- **"~ becomes a copy of target …" applied by an ACTIVATED ability** (Mirage Mirror, Thespian's Stage,
+  The Mycosynth Gardens, Likeness Looter, Shifting Woodland, Silent Hallcreeper, Saheeli) — §3.24
+  reported it by name, and it looks like the biggest row left at 7 cards. **It is worth ONE:** every
+  other six carries a second blocker the system would not touch — "except it has THIS ABILITY"
+  (Thespian's Stage, Likeness Looter), an X-scaled target (The Mycosynth Gardens), an activation
+  condition (Shifting Woodland), a "choose one that hasn't been chosen" modal (Silent Hallcreeper), a
+  planeswalker loyalty ability (Saheeli). Only **Mirage Mirror** would go complete, for a new layer-1
+  effect that also needs a DURATION ("until end of turn"), which is a genuinely new question: layer 1
+  is beneath everything, and nothing in the engine yet un-applies it at cleanup.
+- **An "except …" tail on a SPELL copy** (Fork) and **a copy COUNT conditional on the cast-from zone**
+  (Increasing Vengeance) — both named in §3.31's residual, and **neither card is in the 2,100-card
+  corpus**. Building them would be unmeasurable by this project's own instrument.
+- **An X token count** (For the Common Good), **a creature CARD in a graveyard** (The Scarab God),
+  **"that creature" meaning the attached one** (Springheart Nantuko), **"it" meaning the source that
+  died** (Vaultborn Tyrant), **the four-way spell/ability union** (Return the Favor) and **"from an
+  enchantment source"** (Weaver of Harmony) — each is one row, and each of those six cards is ALSO
+  blocked by a system outside this family, so the rows would buy 0 playable cards today. They are
+  named in the hint so the next contributor picks them up when their siblings land.
+
+🧪 **18 sabotages run, 16 RED — and BOTH escapes were real holes in my own tests, reported rather
+than quietly fixed.** (1) "copies nothing when the original was countered" cannot see a
+`spellToCopy` that falls back to whatever is on the stack, because by the time that trigger resolves
+the stack is EMPTY; a direct primitive test with a NON-empty stack and a dead id now pins it — and
+copying the WRONG spell is strictly worse than copying none. (2) "refuses a keyword list containing an
+unreadable word" used "flying and bushido 2", whose DIGIT fails the match one level earlier, so the
+list branch was never reached; rewritten with "banding" (alphabetic, a real printed keyword, no flag
+here) plus a positive control. That is the third and fourth time this family's sabotage pass has
+caught its own untested refusal.
+
 ### 3.141 An ability that gives back exactly what it takes — the pilot's repeatable no-op — ✅ done
 
 §3.140 un-blinded `gameCanEnd` and the first sweep with the door watched found **12 violations over
