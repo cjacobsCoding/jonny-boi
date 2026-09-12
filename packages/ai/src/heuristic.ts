@@ -86,6 +86,7 @@ import {
   planManaPayment,
   tapActionFor,
   restrictionOfEffects,
+  sorcerySpeedWindowFor,
   modalSpecOf,
   modeCountsFor,
   targetRestrictionOf,
@@ -2837,6 +2838,22 @@ function bestCycle(ctx: DecisionContext, weights: HeuristicWeights): CycleGoal |
   // "The turn is ending" is read off the step rather than guessed from the
   // absence of other plays: at the end step nothing else will use this mana.
   const turnEnding = view.step === 'end';
+  /*
+   * §3.147 — A CYCLING-SHAPED ABILITY MAY PRINT SORCERY TIMING, and this policy
+   * is one of the few places the pilot BUILDS an action instead of taking one
+   * off the menu (the engine offers a `cycleCard` only once the pool already
+   * covers its cost, so a pilot that had not planned its taps would never see
+   * cycling at all). That design is right and it carries one debt: everything
+   * the offer loop checks, this policy must check too.
+   *
+   * Plain cycling prints no timing restriction, so there was nothing to check —
+   * until transmute (CR 702.53a, "activate only as a sorcery") arrived as a
+   * cycling-shaped ability. The only case that scores for a non-land here is
+   * `turnEnding`, the END STEP, which is precisely when a sorcery-timed ability
+   * is illegal. Asked through core's one reader so this cannot drift from the
+   * engine's answer.
+   */
+  const sorceryOpen = sorcerySpeedWindowFor(view, me);
 
   let best: CycleGoal | undefined;
   for (const card of hand) {
@@ -2844,6 +2861,22 @@ function bestCycle(ctx: DecisionContext, weights: HeuristicWeights): CycleGoal |
     if (!abilities || abilities.length === 0) continue;
     for (let index = 0; index < abilities.length; index++) {
       const ability = abilities[index]!;
+      if ((ability.timing ?? 'instant') !== 'instant' && !sorceryOpen) continue;
+      /*
+       * …AND IT MAY REQUIRE A TARGET (§3.147). The same trap one question on: a
+       * cycling-shaped body that targets — a channel line, bloodrush's pump — is
+       * refused outright unless the action names exactly one legal target, and
+       * this policy builds a bare `cycleCard`. The soak's answer was "Channel —
+       * {R} targets exactly one a creature".
+       *
+       * SKIPPED rather than aimed, deliberately. This policy's two reasons are
+       * "the hand is flooded" and "the turn is ending with mana unspent", which
+       * are arguments for DISCARDING a card, not for pointing a pump at a
+       * creature; choosing that target well is the combat scorer's job, and the
+       * engine still offers these per legal target for the paths that reason
+       * about targets (`actionForGoal`, which does pass them).
+       */
+      if (restrictionOfEffects(ability.effects) !== undefined) continue;
       const surplusLand = flooded && isLand(card.def);
       const score = surplusLand
         ? weights.cycleFloodedScore
