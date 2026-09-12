@@ -38,6 +38,7 @@ import { loadCardPool } from '@jonny-boi/cards';
 
 import type { CardDefinition, GameState, InstanceId, PermanentModification } from './index.js';
 import {
+  aggregateFor,
   attachTo,
   createGame,
   effectiveActivated,
@@ -239,6 +240,72 @@ describe('a STATIC that grants only an ability (Darkheart Sliver)', () => {
     const bear = place(state, BEAR);
 
     expect(abilitiesOf(state, bear.instanceId)).toEqual([]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The two readers must agree                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ONE BOARD, TWO READERS, and the index that has to mean the same thing to both.
+ *
+ * `generateLegalActions` OFFERS abilities through the BULK index
+ * (`indexContinuous`); `applyAction` RESOLVES the chosen one through the
+ * SINGLE-INSTANCE path (`aggregateFor`) by the same integer `abilityIndex`. So the
+ * two readers disagreeing about how many abilities a permanent has is not a
+ * cosmetic gap — an ability is offered and then resolves to `undefined`.
+ *
+ * ⚠️ WHY THIS TEST EXISTS. The agreement had no guard, and a merge nearly dropped
+ * the single-instance fold precisely because of that: the deferral mechanism
+ * around it was rewritten on one branch, the one-line grant went with it, and
+ * nothing failed. The tests above use the bulk reader only, so they would all have
+ * stayed green with the resolve path silently broken.
+ *
+ * A ROW per granting source kind, so the next kind is a row rather than a third
+ * copy of the assertion.
+ */
+const GRANT_SOURCES: readonly {
+  readonly what: string;
+  /** Build a board and name the permanent that should RECEIVE the grant. */
+  readonly board: () => { readonly state: GameState; readonly receiver: InstanceId };
+}[] = [
+  {
+    what: 'an ATTACHMENT grants its host an ability (Presence of Gond)',
+    board: () => {
+      const state = emptyBoard();
+      const bear = place(state, BEAR);
+      const aura = place(state, poolCard('Presence of Gond'));
+      attachTo(state, aura, bear.instanceId, () => {});
+      return { state, receiver: bear.instanceId };
+    },
+  },
+  {
+    what: 'a STATIC grants every permanent its filter matches (Darkheart Sliver)',
+    board: () => {
+      const state = emptyBoard();
+      place(state, poolCard('Darkheart Sliver'));
+      const metallic = place(state, poolCard('Metallic Sliver'));
+      return { state, receiver: metallic.instanceId };
+    },
+  },
+];
+
+describe('the bulk index and the single-instance path grant the SAME abilities', () => {
+  it.each(GRANT_SOURCES)('$what', ({ board }) => {
+    const { state, receiver } = board();
+    const perm = state.battlefield.find((c) => c.instanceId === receiver) as CardInstance;
+
+    const bulk = effectiveActivated(perm, indexContinuous(state).get(receiver) ?? NO_MOD);
+    const single = effectiveActivated(perm, aggregateFor(state, receiver));
+
+    // Never vacuous: a fixture that stopped granting anything would make the
+    // agreement trivially true, which is how this class hid in the first place.
+    expect(
+      bulk.length,
+      'the witness must actually be granted something, or the agreement is vacuous',
+    ).toBeGreaterThan(perm.def.activated?.length ?? 0);
+    expect(single.map((ability) => ability.label)).toEqual(bulk.map((ability) => ability.label));
   });
 });
 

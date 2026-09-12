@@ -65,7 +65,7 @@ import { formatManaCost } from './mana.js';
 import type { CardInstance, GameState, InstanceId, ZoneName } from './state.js';
 import { PLAYER_IDS } from './state.js';
 import type { AggregatedMod, ContinuousEffect, ContinuousIndex } from './internal/continuous.js';
-import { indexContinuous, NO_MOD, readsEffectiveStats, withinEffectiveBounds } from './internal/continuous.js';
+import { indexContinuous, NO_MOD, readsSettledStats, withinEffectiveBounds } from './internal/continuous.js';
 import {
   effectiveActivated,
   effectiveKeywords,
@@ -844,13 +844,19 @@ function eachStaticSource(
 
 /**
  * One static's rows, honouring the ONE rule that makes the aggregation pass exact:
- * a static whose selector reads EFFECTIVE power/toughness is applied against the
- * SETTLED numbers and may grant KEYWORDS ONLY.
+ * a static that reads a SETTLED value — in its selector ("power 2 or less") or in
+ * the bound it grants (Champion of Lambholt's source-power block restriction) — is
+ * applied against the settled numbers and may grant KEYWORDS ONLY.
  *
  * Both halves are imported from `internal/continuous.ts` rather than restated, so
  * the bound and the keywords-only rule have one answer (rule 12). Restating them
  * here would make an anthem lift a creature out of the selector on the board and
  * not in the tooltip.
+ *
+ * A COMPUTED bound is deliberately not reconstructed here: its value is the SOURCE'S
+ * settled power, which this walk does not aggregate, so it falls through to the
+ * reconciliation and reports as an unattributed grant rather than as a guessed one
+ * (rule 2 — an honest refusal beats a silent approximation).
  */
 function pushStatic(
   ability: StaticAbility,
@@ -859,7 +865,7 @@ function pushStatic(
   source: ContributionSource,
   rows: CharacteristicContribution[],
 ): void {
-  if (!readsEffectiveStats(ability.affects)) {
+  if (!readsSettledStats(ability)) {
     pushModification(ability, source, rows);
     return;
   }

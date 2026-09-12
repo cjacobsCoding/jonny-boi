@@ -33,9 +33,20 @@
  * ({@link StaticAffects.hasCounterKind}) and the value the SOURCE named as it
  * entered ({@link StaticAffects.ofChosenSubtype} / `ofChosenColor`). That is a
  * deliberate constraint: it means one non-iterative pass over the battlefield is
- * exact, with no layer-dependency loop to resolve (MTG's CR 613.8). A filter that
- * could read modified P/T or granted keywords would need a fixpoint; if such a card
- * is ever needed, it must be designed then, not approximated now.
+ * exact, with no layer-dependency loop to resolve (MTG's CR 613.8).
+ *
+ * ## The ONE exception, and why it is still one pass
+ * Three fields DO read a value the layer system produces — the filter bounds
+ * {@link StaticAffects.maxEffectivePower} / `maxEffectivePowerOrToughness`
+ * (Tetsuko, Delney) and the grant bound {@link StaticAbility.blockBoundFromSourcePower}
+ * (Champion of Lambholt). They are answered in a SECOND, settled pass that runs
+ * after every P/T layer has folded, and every one of them may grant KEYWORDS
+ * ONLY. That restriction is the whole proof: the settled pass reads powers and
+ * writes keywords, and nothing that produces a power reads a keyword, so its
+ * output can never change its own input and one extra pass is already the
+ * fixpoint. A filter that could read GRANTED KEYWORDS would not have that
+ * property and would need a real CR 613.8 dependency ordering; if such a card is
+ * ever needed, it must be designed then, not approximated now.
  *
  * ## Stacking
  * Every matching static contributes additively (P/T deltas sum, keyword grants OR
@@ -191,6 +202,25 @@ export interface PermanentModification {
 }
 
 /**
+ * WHICH bound of a granted `BlockRestriction` is filled in from the STATIC
+ * SOURCE'S OWN settled power rather than from a printed number.
+ *
+ * A CLOSED table, named by the printings it serves, for the reason every other
+ * closed table here is closed: a comparison outside it is a selector core
+ * cannot read, and the card must keep REPORTING rather than compile into a
+ * restriction that means something narrower or wider than its printed line.
+ *   - `minBlockerPower` — "Creatures with power **less than** this creature's
+ *     power can't block creatures you control" (Champion of Lambholt). A legal
+ *     blocker needs power at least the source's, so the source's power IS the
+ *     minimum.
+ *   - `maxBlockerPower` — the mirror, "power **greater than** …". Carried as
+ *     its own row so a compiler reading the printed comparison names the
+ *     direction it read; one field with an inferred direction is how a rule
+ *     silently maps one wording onto the other's meaning.
+ */
+export type SourcePowerBlockBound = 'minBlockerPower' | 'maxBlockerPower';
+
+/**
  * One static ability on a card: what it affects, and how it modifies it.
  *
  * A card may declare several (a lord that pumps AND grants a keyword to a different
@@ -199,6 +229,28 @@ export interface PermanentModification {
 export interface StaticAbility extends PermanentModification {
   /** Which permanents this modifies. */
   readonly affects: StaticAffects;
+  /**
+   * §3.146 — the granted block restriction's bound is **this static's own
+   * source's EFFECTIVE POWER**, not a printed number: "Creatures with power
+   * less than this creature's power can't block creatures you control"
+   * (Champion of Lambholt, whose power climbs by a +1/+1 counter every time
+   * another creature enters).
+   *
+   * ⚠️ Like {@link StaticAffects.maxEffectivePower} this reads a value the
+   * layer system itself produces, and it carries the SAME hard rule, enforced
+   * in `indexContinuous` and pinned by a pool-wide guard: a static using it may
+   * grant KEYWORDS ONLY, never a P/T delta. The source's power is read in the
+   * settled-P/T pass, after every P/T layer has folded, and what that pass
+   * writes is a keyword — which nothing that produces a power reads. So the
+   * single non-iterative pass stays exact and there is no CR 613.8 dependency
+   * loop even when two such creatures read each other's power
+   * (`effective-pt-statics.test.ts` pins the fixpoint).
+   *
+   * The source's power is *derived*, never stored, exactly like every other
+   * static: destroy the Champion mid-combat and the very next index build no
+   * longer carries the restriction.
+   */
+  readonly blockBoundFromSourcePower?: SourcePowerBlockBound;
   /**
    * Optional human-readable label for the inspector / event log ("Anthem: creatures
    * you control get +1/+1"). Never read by the rules.
@@ -331,5 +383,11 @@ export function modificationIsInert(mod: PermanentModification): boolean {
 
 /** Whether a static ability changes anything. See {@link modificationIsInert}. */
 export function staticIsInert(ability: StaticAbility): boolean {
+  // A source-power bound IS a modification even with no keywords declared beside
+  // it: the restriction it grants is COMPUTED in the settled-P/T pass rather
+  // than printed here, so the generic inertness test cannot see it. Judging it
+  // inert would skip the ability before it was ever deferred — the card would
+  // compile 'complete' and do nothing, which is this project's signature failure.
+  if (ability.blockBoundFromSourcePower !== undefined) return false;
   return modificationIsInert(ability);
 }

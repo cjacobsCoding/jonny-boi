@@ -170,16 +170,27 @@ describe('the compiler understands the blocking restrictions', () => {
   });
 
   it('STILL reports the restrictions whose SELECTOR this engine cannot express', () => {
-    // What is left after the solver, named rather than approximated: a
-    // comparison against ANOTHER permanent's power (Champion of Lambholt).
-    //
-    // The EFFECTIVE-P/T selector left this list when core gained its settled-P/T
-    // static pass — Tetsuko and Delney compile now, and are asserted just below.
+    // What is left, named rather than approximated. ⚠️ THIS LIST SHRINKS, and a
+    // stale entry is worse than no entry — it claims a gap that closed, which is
+    // how a backlog sends the next agent to build something twice. Two shapes
+    // have already left it: the EFFECTIVE-P/T selector (Tetsuko, Delney, when
+    // core gained the settled-P/T pass) and the SOURCE-POWER bound (Champion of
+    // Lambholt, §3.146 — asserted in `block-selectors.test.ts`).
     for (const oracleText of [
-      "Creatures with power less than Champion's power can't block creatures you control.",
+      // A bound read off a DIFFERENT permanent than the static's own source.
+      "Creatures with power less than the strongest creature's power can't block creatures you control.",
+      // TOUGHNESS, which no bound in the table carries — and must never be read
+      // as the power one.
+      "Creatures with toughness less than Champion's toughness can't block creatures you control.",
+      // A COST to block (Archangel of Tithes), which is neither a restriction
+      // nor a requirement — CR 509.1 has no "unless you pay" in it.
+      "As long as Champion is attacking, creatures can't block unless their controller pays {1} for each of those creatures.",
+      // A per-combat TARGETED requirement (Fighter Class), which is combat state
+      // rather than a characteristic.
+      'Whenever a creature you control attacks, up to one target creature blocks it this combat if able.',
     ]) {
       const result = compileCard(record({ name: 'Champion', oracleText }));
-      expect(result.status).not.toBe('complete');
+      expect(result.status, oracleText).not.toBe('complete');
     }
   });
 
