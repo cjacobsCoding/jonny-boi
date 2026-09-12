@@ -108,6 +108,7 @@ import {
   describeRestriction,
   illegalTargetReason,
   illegalTargetReasonForEffects,
+  isLegalTarget,
   isPlayerTarget,
   legalTargetsFor,
   restrictionOfEffects,
@@ -954,6 +955,38 @@ function resolveTriggeredAbility(
     });
     checkStateBasedActions(state, emit);
     return;
+  }
+  // CR 608.2b — an ability every one of whose targets has become illegal does
+  // NOT resolve. Until this existed the ability resolved and each targeting
+  // primitive quietly no-opped on its own dead target, which reaches the same
+  // board by a route that cannot be narrated: `triggeredAbilityResolved` fired,
+  // so the log said "… resolves." for a half that did nothing, and a Strionic
+  // Resonator copy that had worked and one that had fizzled printed the same
+  // lines (report 20260911_194411). It is also a rules difference wherever the
+  // ability has an UNTARGETED effect beside the targeted one — that half was
+  // still happening after the ability should have stopped resolving.
+  //
+  // Only a trigger that actually aimed at something is checked: "up to three"
+  // chose none legitimately (CR 603.3d), and an untargeted ability has no
+  // restriction to fail.
+  if (obj.targets.length > 0) {
+    const restriction = restrictionOfEffects(obj.effects);
+    const sourceDef = (findOnBattlefield(state, obj.sourceInstanceId) ??
+      findInstanceAnywhere(state, obj.sourceInstanceId))?.def;
+    if (
+      restriction !== undefined &&
+      obj.targets.every((ref) => !isLegalTarget(state, restriction, ref, obj.controller, sourceDef))
+    ) {
+      emit({
+        type: 'triggerFizzled',
+        sourceInstanceId: obj.sourceInstanceId,
+        controller: obj.controller,
+        label: obj.label,
+        reason: `its target${obj.targets.length === 1 ? ' is' : 's are'} no longer legal (${describeRestriction(restriction)})`,
+      });
+      checkStateBasedActions(state, emit);
+      return;
+    }
   }
   runResolution(
     state,

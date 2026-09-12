@@ -31,6 +31,31 @@ export interface LogResolvers {
   readonly playerName: PlayerNameResolver;
 }
 
+/**
+ * What the log says when a permanent LEAVES THE BATTLEFIELD for each zone — the
+ * one board change the feed had no sentence for at all.
+ *
+ * Report 20260911_194411 asked for two enemy creatures to be exiled and the log
+ * named neither: the exile is carried by a bare `zoneChange`, and a bare
+ * `zoneChange` formatted to `null`. So a player could not tell a copy that
+ * exiled a second creature from one that did nothing.
+ *
+ * A TABLE rather than a chain, so the next destination is a row. `graveyard` is
+ * deliberately absent: `creatureDied` already says "X dies" for that move and a
+ * row here would print every death twice. (A NON-creature permanent going to a
+ * graveyard is therefore still silent — a real gap, but inventing a second death
+ * sentence for it from an event that cannot tell the two apart would be worse.)
+ *
+ * ⚠️ Only moves FROM the battlefield are narrated. Every other zone change is
+ * either already narrated by a richer event (a draw, a cycle, a mill, a cast) or
+ * is hidden information this shared hotseat log must not leak.
+ */
+const LEAVES_BATTLEFIELD_TEXT: Readonly<Record<string, (name: string) => string>> = Object.freeze({
+  exile: (name) => `${name} is exiled.`,
+  hand: (name) => `${name} returns to its owner's hand.`,
+  library: (name) => `${name} is put into its owner's library.`,
+});
+
 /** A target token (player or permanent) → readable text. */
 function targetText(target: InstanceId | PlayerId, r: LogResolvers): string {
   return target === 'A' || target === 'B' ? r.playerName(target) : r.name(target);
@@ -48,6 +73,12 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
       return { text: `Turn ${event.turn} — ${r.playerName(event.activePlayer)}'s turn.`, tone: 'turn' };
     case 'landPlayed':
       return { text: `${r.playerName(event.player)} plays ${r.name(event.instanceId)}.` };
+    case 'zoneChange': {
+      // See {@link LEAVES_BATTLEFIELD_TEXT} — the board change, not the plumbing.
+      if (event.from !== 'battlefield') return null;
+      const say = LEAVES_BATTLEFIELD_TEXT[event.to];
+      return say ? { text: say(r.name(event.instanceId)), tone: 'death' } : null;
+    }
     case 'spellCast':
       return { text: `${r.playerName(event.player)} casts ${event.name}.`, tone: 'cast' };
     case 'stackResolved':
@@ -108,6 +139,24 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
       };
     case 'spellCopied':
       return { text: `${r.playerName(event.controller)} copies ${event.name}.`, tone: 'cast' };
+    case 'triggerCopied':
+      // The OTHER half of the copy family (Strionic Resonator, CR 707.10), and
+      // silent until report 20260911_194411 — "used strionic resonator twice to
+      // exile enemy creatures and didnt copy properly". The copy was made
+      // correctly every time; nothing ever said so, so a copy that exiled a
+      // second creature and one that could only keep the original's aim (CR
+      // 707.10c, no second legal creature to move it to) printed the same log.
+      // Phrased like `spellCopied` above because it IS that sentence about the
+      // other kind of stack object.
+      return { text: `${r.playerName(event.controller)} copies ${event.label}.`, tone: 'trigger' };
+    case 'abilityActivated':
+      // Without this the log never named the card the player CLICKED. An
+      // activation's only trace was the ability's raw oracle text arriving later
+      // as a `stackResolved` label — lowercased, unpunctuated and naming no
+      // permanent ("{2}, {t}: copy target triggered ability you control…
+      // resolves."), which is not a sentence a player can match to the thing
+      // they just tapped.
+      return { text: `${r.playerName(event.player)} activates ${r.name(event.instanceId)}.`, tone: 'cast' };
     case 'delayedTriggerCreated':
       // CR 603.7 — an ability that now exists on NO object and fires later.
       // Printed rather than silent because it is the whole drawback of the token
@@ -169,6 +218,13 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
       return { text: `${event.label} — nothing happens (${event.reason}).`, tone: 'trigger' };
     case 'triggerPutOnStack':
       return { text: `Trigger: ${event.label}.`, tone: 'trigger' };
+    case 'triggerFizzled':
+      // CR 603.4 (the intervening "if" stopped holding) and CR 608.2b (every
+      // target became illegal). Said out loud for exactly the reason
+      // `triggerRemovedFromStack` below is: on screen "nothing happened" reads
+      // as a bug. This is the line the second half of a Strionic Resonator copy
+      // needs when the first half already took the only legal creature.
+      return { text: `${event.label} — nothing happens (${event.reason}).`, tone: 'trigger' };
     case 'triggeredAbilityResolved':
       return { text: `${event.label} resolves.`, tone: 'trigger' };
     case 'counterAdded':
@@ -211,8 +267,78 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
     case 'actionRejected':
       // Surfaced separately in the UI (a toast), not in the running narrative.
       return null;
-    default:
+
+    // --- SILENT BY DESIGN, FOREVER -------------------------------------------
+    // Plumbing a player neither sees nor can act on: priority, step boundaries,
+    // the mana machine, effect/replacement/grant bookkeeping, and the answers a
+    // parked question already announced through `choiceAsked`/`choiceAnswered`.
+    // A line for any of these would bury the ones above in noise.
+    case 'stepBegin':
+    case 'priorityPassed':
+    case 'untapped':
+    case 'tapped':
+    case 'manaAdded':
+    case 'manaPoolEmptied':
+    case 'manaCostPaid':
+    case 'effectApplied':
+    case 'effectUnsupported':
+    case 'replacementApplied':
+    case 'replacementExpired':
+    case 'continuousEffectExpired':
+    case 'cardGrantAdded':
+    case 'cardGrantExpired':
+    case 'triggerModesChosen':
+    case 'triggerTargetsChosen':
+    case 'modesChosen':
+    case 'modeTargetChosen':
+    case 'drawCard':
+    case 'cardsMilled':
+    case 'pileBottomed':
       return null;
+
+    // --- SILENT, AND THAT IS A GAP -------------------------------------------
+    // Real board changes with no sentence yet. Listed EXPLICITLY rather than
+    // swept up by a `default`, because that `default` is what let this whole
+    // class hide: `triggerCopied`, `abilityActivated` and the `zoneChange` that
+    // IS an exile sat in it for as long as they existed, and report
+    // 20260911_194411 is what it cost. Naming them makes the debt countable and
+    // makes each one a ROW to fill in rather than an absence to notice.
+    case 'cardCycled':
+    case 'madnessWindowOpened':
+    case 'madnessDeclined':
+    case 'cardSuspended':
+    case 'suspendWindowOpened':
+    case 'suspendDeclined':
+    case 'cardExiledToCastLater':
+    case 'cascadeWindowOpened':
+    case 'rippleWindowOpened':
+    case 'controlChanged':
+    case 'loyaltyChanged':
+    case 'planeswalkerDied':
+    case 'defenseChanged':
+    case 'battleDefeated':
+    case 'legendRuleApplied':
+    case 'emblemCreated':
+    case 'becameRenowned':
+    case 'regenerated':
+    case 'permanentAttached':
+    case 'permanentUnattached':
+    case 'attachmentFailed':
+    case 'attachmentPutIntoGraveyard':
+    case 'transformed':
+    case 'becameCopy':
+    case 'tokenCeasedToExist':
+      return null;
+
+    default: {
+      // EXHAUSTIVE. Every `GameEvent` type above is either narrated or named as
+      // silent, so adding one to core and not deciding here FAILS THE BUILD —
+      // the guard this report earned. The runtime `return null` is for a stale
+      // persisted log carrying an event this build no longer knows.
+      const unclassified: never = event;
+      void unclassified;
+      return null;
+    }
   }
 }
 
