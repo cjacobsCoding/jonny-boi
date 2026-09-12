@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { buildRegistry } from '@jonny-boi/cards';
+import { createTestRegistry } from './test-support.js';
 import { createHeuristicPilot } from './heuristic.js';
 import { createHybridPilot } from './hybrid.js';
 import { DEFAULT_HYBRID_CONFIG, TACTICAL_HYBRID_CONFIG } from './hybrid-config.js';
@@ -30,8 +32,18 @@ const pilots = [
   { label: 'hybrid (tactical)', make: () => createHybridPilot(TACTICAL_HYBRID_CONFIG) },
 ];
 
+/**
+ * THE REAL PRIMITIVE BODIES, and this is load-bearing rather than tidy.
+ *
+ * `runTacticalSuite` used to build its own `createTestRegistry()`, which knew only
+ * `dealDamage` — so `Murder`'s `destroyTarget` silently no-opped inside every
+ * look-ahead rollout and the whole `removal` category was scored against a game
+ * where removal does nothing (DESIGN §3.143). This file is a `*.test.ts`, which is
+ * the side of the package boundary that MAY import `@jonny-boi/cards`, so it hands
+ * the suite the bodies the shipped pool actually uses.
+ */
 const reports = new Map<string, TacticalSuiteReport>(
-  pilots.map((p) => [p.label, runTacticalSuite(p.make())] as const),
+  pilots.map((p) => [p.label, runTacticalSuite(p.make(), { registry: createTestRegistry(buildRegistry()) })] as const),
 );
 
 function report(label: string): TacticalSuiteReport {

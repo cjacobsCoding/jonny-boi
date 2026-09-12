@@ -28,11 +28,11 @@
  * of `dist` means the suite can grow freely without growing the public API.
  */
 
-import type { CardInstance, GameAction, GameState, InstanceId, PlayerId } from '@jonny-boi/core';
+import type { CardInstance, EffectRegistry, GameAction, GameState, InstanceId, PlayerId } from '@jonny-boi/core';
 import { createGame, generateLegalActions, type DeckList } from '@jonny-boi/core';
 import type { Pilot } from './pilot.js';
 import { createRng } from '@jonny-boi/core';
-import { createTestRegistry, creatureDef, destroyDef, giveHand, landDef, putOnBattlefield } from './test-support.js';
+import { creatureDef, destroyDef, giveHand, landDef, putOnBattlefield } from './test-support.js';
 
 /** The families the brief names. One puzzle may only belong to one, on purpose. */
 export type TacticalCategory =
@@ -631,6 +631,17 @@ export function runEvaluationSuite(
 
 // --- grading ----------------------------------------------------------------------
 
+/** Everything `runTacticalSuite` needs beyond the pilot, named rather than positional. */
+export interface TacticalSuiteOptions {
+  /**
+   * The effect bodies the look-ahead pilots roll out against. **Required, and that
+   * is the fix** — see the warning on {@link runTacticalSuite}.
+   */
+  readonly registry: EffectRegistry;
+  /** Which puzzles to grade. Defaults to the whole curated set. */
+  readonly puzzles?: readonly TacticalPuzzle[];
+}
+
 /**
  * Run every puzzle against a pilot and score it.
  *
@@ -639,12 +650,24 @@ export function runEvaluationSuite(
  * removal puzzle would be grading the pilot on a game where removal does nothing.
  * The RNG is rebuilt per puzzle from a fixed seed, so a report is reproducible and
  * two pilots are compared on identical randomness.
+ *
+ * ⚠️ **THAT PARAGRAPH WAS FALSE FOR AS LONG AS IT HAS BEEN WRITTEN, AND THIS
+ * SIGNATURE IS WHY IT CANNOT BE AGAIN.** The body built its own registry with
+ * `createTestRegistry()`, which knew `dealDamage` and nothing else — so `Murder`'s
+ * `destroyTarget` fell through to core's silent-unknown path on **every one of the
+ * 869 times** the search resolved it, and the removal category was graded against
+ * precisely the game the comment promised it was not. A comment claiming fidelity
+ * over a body that cannot deliver it is worse than no comment: it is a check
+ * reporting something other than "I didn't check" (DESIGN §3.143).
+ *
+ * So the registry is now a REQUIRED argument the caller must supply, and it arrives
+ * in an options object rather than as a third positional — `applyAction`'s
+ * `(state, action, config, registry)` has been mis-called with `{ registry }` in
+ * nine places for exactly the reason a bare positional invites. The caller is a
+ * `*.test.ts`, which MAY import `@jonny-boi/cards`, so it passes the real bodies.
  */
-export function runTacticalSuite(
-  pilot: Pilot,
-  puzzles: readonly TacticalPuzzle[] = TACTICAL_PUZZLES,
-): TacticalSuiteReport {
-  const registry = createTestRegistry();
+export function runTacticalSuite(pilot: Pilot, options: TacticalSuiteOptions): TacticalSuiteReport {
+  const { registry, puzzles = TACTICAL_PUZZLES } = options;
   const results: TacticalPuzzleResult[] = [];
   const byCategory = new Map<TacticalCategory, { solved: number; total: number }>();
 
