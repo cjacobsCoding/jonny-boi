@@ -78,6 +78,35 @@ function argOf(flag: string): string | undefined {
   return at === -1 ? undefined : process.argv[at + 1];
 }
 
+/**
+ * Scan an already-upright image and write the results beside it.
+ *
+ * Exported so `deck-photo-ingest.ts` runs the SAME scan the CLI does — a
+ * second copy of "decode, detect, OCR, write a decklist" is exactly the kind
+ * of duplicate answer that ends up disagreeing with the app.
+ */
+export async function scanPhotoToArchive(
+  image: { width: number; height: number; data: Uint8ClampedArray },
+  dir: string,
+): Promise<void> {
+  const { stacks } = detectStacks(image);
+  const engine = await createNodeOcrEngine();
+  try {
+    const scanned = await scanCards(image, stacks, engine, loadNameIndex());
+    const unsure = scanned.filter((card) => !card.confident);
+    writeFileSync(join(dir, 'scan.json'), `${JSON.stringify(scanned, null, 2)}
+`, 'utf8');
+    writeFileSync(join(dir, 'decklist.txt'), `${toDecklistText(scanned)}
+`, 'utf8');
+    console.log(
+      `  decklist.txt   ${toQuantities(scanned).length} names, ${totalCopies(scanned)} cards, ` +
+        `${unrecognizedCount(scanned)} unnamed, ${unsure.length} to CHECK`,
+    );
+  } finally {
+    await engine.terminate();
+  }
+}
+
 async function main(): Promise<void> {
   const photo = argOf('--photo');
   if (!photo) {
@@ -133,4 +162,8 @@ async function main(): Promise<void> {
   }
 }
 
-await main();
+// Only run the CLI when invoked directly — `deck-photo-ingest.ts` imports this
+// module for `scanPhotoToArchive` and must not trigger a second scan.
+if (process.argv[1] && process.argv[1].endsWith('scan-photo.ts')) {
+  await main();
+}
