@@ -124,7 +124,9 @@ describe('copyTargetValue — the ruler, on printed characteristics only', () =>
       ...SMALL,
       id: 'useful',
       triggers: [
-        { id: 't', label: 'draw', condition: { on: 'upkeep' }, effects: [{ primitive: 'drawCards', params: { count: 1 } }] },
+        // No `id` here: TriggeredAbility has no such field, so the key this once
+        // carried was inert — the label is the human-readable handle.
+        { label: 'draw', condition: { on: 'upkeep' }, effects: [{ primitive: 'drawCards', params: { count: 1 } }] },
       ],
     };
     expect(copyTargetValue(flier, DEFAULT_HEURISTIC_WEIGHTS)).toBeGreaterThan(copyTargetValue(bare, DEFAULT_HEURISTIC_WEIGHTS));
