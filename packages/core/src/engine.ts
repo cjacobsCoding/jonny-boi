@@ -5984,26 +5984,35 @@ function pushCastOffers(
     if (offered) {
       const purpose = spendPurposeIfRestricted(pool, def, 'cast');
       const candidates = phyrexianLifeOptions(offered, state.players[me].life);
-      const fundable: number[] = [];
-      for (let i = 0; i < candidates.length; i++) {
-        const life = candidates[i] as number;
-        if (canPay(pool, offered, purpose, life)) {
-          fundable.push(life);
-          continue;
+      // ONE READING is the answer for every card in the game but a handful, and
+      // that case is kept on the exact code this function ran before §3.143
+      // existed — no array, no second `canPay`, no allocation. This runs once
+      // per castable card per decision, so the common case must not pay for the
+      // uncommon one.
+      //
+      // CONVOKE / IMPROVISE / DELVE (§3.70) is asked ONLY on the branch that was
+      // about to refuse, so a board with no assist card pays nothing for the
+      // question — and it is answered by the same planner the pay path uses,
+      // because an offer the pay path then rejects is the bug that gate exists
+      // to stop. In the multi-reading branch it is asked only of the NO-LIFE
+      // reading: the assist planner charges a MANA cost, and no printed card
+      // carries both an assist keyword and a Phyrexian symbol — one that did
+      // would simply be offered its all-mana reading, never a wrong one.
+      if (candidates.length === 1) {
+        if (!canPay(pool, offered, purpose) && planCostAssist(state, me, def, offered, pool) === undefined) return;
+      } else {
+        const fundable: number[] = [];
+        for (let i = 0; i < candidates.length; i++) {
+          const life = candidates[i] as number;
+          if (canPay(pool, offered, purpose, life)) {
+            fundable.push(life);
+          } else if (life === 0 && planCostAssist(state, me, def, offered, pool) !== undefined) {
+            fundable.push(life);
+          }
         }
-        // CONVOKE / IMPROVISE / DELVE (§3.70): the pool alone does not cover this,
-        // but something other than mana may. Asked ONLY on the branch that was
-        // about to refuse, so a board with no assist card pays nothing for the
-        // question — and answered by the same planner the pay path uses, because
-        // an offer the pay path then rejects is the bug this gate exists to stop.
-        // Asked only for the no-life reading: the assist planner charges a MANA
-        // cost, and no printed card carries both an assist keyword and a
-        // Phyrexian symbol — a card that did would simply be offered its
-        // all-mana reading, never a wrong one.
-        if (life === 0 && planCostAssist(state, me, def, offered, pool) !== undefined) fundable.push(life);
+        if (fundable.length === 0) return;
+        lifeOffers = fundable;
       }
-      if (fundable.length === 0) return;
-      lifeOffers = fundable;
     }
   }
   // A modal spell with nothing it could legally announce cannot be cast — the
