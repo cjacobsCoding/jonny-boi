@@ -17,12 +17,12 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { colorsOfDefinition } from '@jonny-boi/core';
+import { colorsOfDefinition, convertedManaCost, formatManaCost, phyrexianLifeOptions } from '@jonny-boi/core';
 import type { CardDefinition } from '@jonny-boi/core';
 import { CARD_POOL } from '../../data/pool.js';
 import { STUBBED_MECHANICS } from '../index.js';
 import { CORE_PRIMITIVE_IDS } from '../primitives.js';
-import { compileCard, compileCards } from './compile.js';
+import { compileCard, compileCards, UNPAYABLE_MANA_SYMBOL_GAP } from './compile.js';
 import { explainUnsupported } from './rules.js';
 import type { CompilableCard } from './types.js';
 
@@ -518,7 +518,13 @@ describe('compileCard — templated cards outside the curated pool', () => {
     expect(result.definition.xCost).toBeUndefined();
   });
 
-  it('still reports a Phyrexian symbol, with the {X}-free wording', () => {
+  /**
+   * §3.143 — the two symbol families this probe used to pin as REFUSED now
+   * compile, so the probe was flipped rather than deleted: what it is really
+   * guarding is that the component table is CLOSED, and a flipped probe with no
+   * refusal left in it would stop guarding that the day the table widened.
+   */
+  it('compiles a Phyrexian symbol into a cost that can be paid with life', () => {
     const result = compileCard(
       makeCard({
         name: 'Phyrexian Thing',
@@ -531,10 +537,76 @@ describe('compileCard — templated cards outside the curated pool', () => {
       }),
     );
 
-    expect(result.status).toBe('incomplete');
-    expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(
-      'Phyrexian and monocolour hybrid mana costs',
+    expect(result.status).toBe('complete');
+    expect(formatManaCost(result.definition.cost ?? {})).toBe('{1}{W/P}');
+    // CR 202.3c — the Phyrexian symbol counts as the coloured one, so this is
+    // mana value 2 and a WHITE card however it ends up being paid.
+    expect(convertedManaCost(result.definition.cost ?? {})).toBe(2);
+    expect(colorsOfDefinition(result.definition)).toEqual(['W']);
+    expect(phyrexianLifeOptions(result.definition.cost ?? {}, 20)).toEqual([0, 2]);
+  });
+
+  it('compiles a monocolour hybrid symbol at its printed mana value (CR 202.3b)', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Hybrid Thing',
+        typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+        manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: ['2/R', '2/R'] },
+        power: null,
+        toughness: null,
+        oracleText: 'You gain 2 life.',
+        keywords: [],
+      }),
     );
+
+    expect(result.status).toBe('complete');
+    expect(formatManaCost(result.definition.cost ?? {})).toBe('{2/R}{2/R}');
+    // The GREATEST component, not one per symbol: {2/R}{2/R} is 4, not 2.
+    expect(convertedManaCost(result.definition.cost ?? {})).toBe(4);
+    expect(colorsOfDefinition(result.definition)).toEqual(['R']);
+  });
+
+  /**
+   * Two cards, not one, and that is the point: a single card printing BOTH a
+   * bare `{S}` and an `{S/W}` reports either way, so it would stay green with
+   * the component table wide open. Each unreadable SHAPE is pinned separately —
+   * the symbol with no slash (nothing to split), and the symbol whose SHAPE the
+   * hybrid regex accepts and whose PIECE the closed table refuses.
+   */
+  it('still reports a bare symbol outside the component table', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Snowy Thing',
+        typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+        manaCost: { generic: 1, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: ['S'] },
+        power: null,
+        toughness: null,
+        oracleText: 'You gain 2 life.',
+        keywords: [],
+      }),
+    );
+
+    expect(result.status).toBe('incomplete');
+    expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(UNPAYABLE_MANA_SYMBOL_GAP);
+  });
+
+  it('still reports a HYBRID symbol one of whose pieces is outside the table', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Snowy Hybrid',
+        typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+        manaCost: { generic: 1, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: ['S/W'] },
+        power: null,
+        toughness: null,
+        oracleText: 'You gain 2 life.',
+        keywords: [],
+      }),
+    );
+
+    expect(result.status).toBe('incomplete');
+    expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(UNPAYABLE_MANA_SYMBOL_GAP);
+    // The refusal names the symbol, so the next unreadable one is diagnosable.
+    expect(result.missing.map((gap) => gap.text)).toContain('{S/W}');
   });
 
   it('compiles kicker: the cost line, and a kicked rider that runs only when paid', () => {

@@ -51,6 +51,8 @@ export {
   formatViolations,
   formatManaCost,
   knownPipTotal,
+  maxSymbolManaValue,
+  maxOtherManaValue,
   type IndexViolation,
 } from './invariants.js';
 export {

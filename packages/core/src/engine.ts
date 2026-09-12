@@ -3639,14 +3639,14 @@ function applyCastSpell(
   // through the one pay-life funnel (CR 118.4 re-checks it against the live
   // total). Everything above is validated, so this cannot half-pay.
   //
-  // PAYING A COST CAN KILL YOU, exactly as the flashback life rider below can:
-  // Gut Shot at 2 life is a legal, and fatal, thing to do. The state-based
-  // actions have to run before anybody gets priority (CR 704.3), or the game
-  // carries on with a corpse holding it.
-  if (phyrexianLife > 0) {
-    payLifeCost(state, action.player, phyrexianLife, emit);
-    checkStateBasedActions(state, emit);
-  }
+  // PAYING A COST CAN KILL YOU — Dismember at exactly 4 life is a legal, and
+  // fatal, thing to do — and no state-based check is written here on purpose:
+  // this function ALREADY ends with one (CR 704.3, at the point the caster would
+  // next get priority), so a fourth copy of that rule would only be a place for
+  // the copies to disagree. A cast that parks a cast-time question instead skips
+  // that tail deliberately, because the announcement is not finished and nobody
+  // has priority yet (CR 601.2); the answer path checks.
+  if (phyrexianLife > 0) payLifeCost(state, action.player, phyrexianLife, emit);
   // The life half of the flashback cost, charged alongside the mana. Everything
   // above is validated, so this cannot half-pay.
   if (flashbackLife > 0) {
