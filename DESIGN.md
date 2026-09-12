@@ -3474,15 +3474,20 @@ mislead the reader who hits it; it hides a whole row from the instrument the roa
 `git diff origin/main --stat -- packages/cards/data` is EMPTY: no generated data was touched, so the
 silent text-merge drop that family is prone to cannot have happened here.
 
-⚠️ **AND A NOTE ON READING THAT GREEN, because a later re-run of the SAME tree went RED and the
-difference was the machine, not the code.** The gate above is the merge commit. Re-running `npm run
-verify` on the final tip exited 1 with a **tinypool `onUnexpectedExit`** — a worker process gone, no
-test assertion anywhere in the output. The box at that moment: **250 MB free RAM, 99% CPU, 25 node
-processes** from the other agents sharing it. That is an OOM-killed worker wearing the costume of a
-test failure, and the tell is the shape of the error: a FAILED ASSERTION names a test, a dead worker
-names a pool. Re-run with `--maxWorkers=2` so the suite fits in what the box actually had.
-Distinguishing the two matters more than the inconvenience: a crash read as a failure sends the next
-agent hunting a bug that does not exist, and a failure read as a crash ships one that does.
+⚠️ **AND A NOTE ON READING THAT GREEN, because a later re-run of the SAME tree exited 1 and the
+difference was the machine, not the code.** The gate above is the merge commit. Re-running on the
+final tip exited 1 with a **tinypool `onUnexpectedExit`**, and the box at that moment held **250 MB
+free RAM, 99% CPU and 25 node processes** from the other agents sharing it. Re-run with
+`--maxWorkers=2` so the suite fits what the box actually had, the tally is unambiguous:
+
+> `Test Files  403 passed | 1 skipped (404)` · `Tests  21821 passed | 5 skipped (21826)`
+
+— **not one failing test**, and the exit code is 1 solely because three worker PROCESSES were
+OOM-killed, logged AFTER every file had already passed. The tell generalises: **a failed assertion
+names a TEST, a dead worker names a POOL**, and a run whose per-file tally is all-green with a
+non-zero exit is the second thing. Reading them the same way is expensive in both directions — a
+crash read as a failure sends the next agent hunting a bug that does not exist, and a failure read as
+a crash ships one that does.
 
 ### 3.141 An ability that gives back exactly what it takes — the pilot's repeatable no-op — ✅ done
 
