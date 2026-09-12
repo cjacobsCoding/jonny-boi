@@ -20,7 +20,21 @@ export interface CastChoice {
    * must echo it back or the server looks for the card in the wrong zone.
    */
   readonly fromZone: CastZone;
+  /**
+   * Life this cast pays toward the cost's Phyrexian symbols (§3.143). Absent —
+   * never `0` — for the all-mana reading, which is every cast bar a handful.
+   *
+   * Echoed on the submitted action for exactly the reason `fromZone` is. The
+   * server offers one `castSpell` PER fundable life amount, so a cast that
+   * dropped the field would ask for a reading the server may never have
+   * offered: Dismember off a lone Wastes is offered at 4 life and at nothing
+   * else, and submitting it at 0 is an action the server itself refuses.
+   */
+  readonly phyrexianLife?: number;
 }
+
+/** The reading that pays a cost entirely in mana — every cast bar §3.143's few. */
+const ALL_MANA_READING = 0;
 
 /** The set of hand-card instance ids the viewer may play as a land. */
 export function playableLandIds(actions: readonly GameAction[]): ReadonlySet<InstanceId> {
@@ -40,7 +54,10 @@ function castChoicesFrom(
   actions: readonly GameAction[],
   zone: CastZone,
 ): ReadonlyMap<InstanceId, CastChoice> {
-  const byInstance = new Map<InstanceId, { sets: ReadonlyArray<InstanceId | PlayerId>[]; untargeted: boolean }>();
+  const byInstance = new Map<
+    InstanceId,
+    { phyrexianLife: number; sets: ReadonlyArray<InstanceId | PlayerId>[]; untargeted: boolean }
+  >();
   for (const a of actions) {
     if (a.kind !== 'castSpell') continue;
     if ((a.fromZone ?? 'hand') !== zone) continue;
@@ -54,15 +71,40 @@ function castChoicesFrom(
     // options carry a face) offers both. Widening this map's key to
     // `instanceId:face` is what lifts the restriction.
     if (a.face !== undefined) continue;
-    const entry = byInstance.get(a.instanceId) ?? { sets: [], untargeted: false };
+    // §3.143 — the server offers one cast PER fundable Phyrexian life amount,
+    // and this map holds ONE choice per instance, so the readings have to be
+    // reconciled rather than merged. Merging them was a WRONG action, not a
+    // missing one: the 4-life reading's legal targets would ride a button that
+    // submits the 0-life cast the server never offered.
+    //
+    // The CHEAPEST reading wins — the least life — because this board has no
+    // menu to ask on (see `auto-tap.ts`'s closing note) and life is not a
+    // resource to spend on a player's behalf. `0` whenever the all-mana reading
+    // is offered, which is every card in the game but a handful, so this is the
+    // choice the map has always made for them.
+    const phyrexianLife = a.phyrexianLife ?? ALL_MANA_READING;
+    let entry = byInstance.get(a.instanceId);
+    if (entry === undefined || phyrexianLife < entry.phyrexianLife) {
+      entry = { phyrexianLife, sets: [], untargeted: false };
+      byInstance.set(a.instanceId, entry);
+    } else if (phyrexianLife > entry.phyrexianLife) {
+      continue; // a dearer reading of a card whose cheap one is already held
+    }
     const targets = a.targets ?? [];
     if (targets.length === 0) entry.untargeted = true;
     else entry.sets.push(targets);
-    byInstance.set(a.instanceId, entry);
   }
   const out = new Map<InstanceId, CastChoice>();
-  for (const [instanceId, { sets, untargeted }] of byInstance) {
-    out.set(instanceId, { instanceId, targetSets: sets, canCastUntargeted: untargeted, fromZone: zone });
+  for (const [instanceId, { phyrexianLife, sets, untargeted }] of byInstance) {
+    out.set(instanceId, {
+      instanceId,
+      targetSets: sets,
+      canCastUntargeted: untargeted,
+      fromZone: zone,
+      // Written only when it is not the default, so a choice for a cast that
+      // pays no life is the object every consumer has always seen.
+      ...(phyrexianLife === ALL_MANA_READING ? {} : { phyrexianLife }),
+    });
   }
   return out;
 }

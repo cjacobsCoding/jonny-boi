@@ -232,6 +232,7 @@ export function OnlineBoard({
         instanceId: choice.instanceId,
         targets: [],
         ...(choice.fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
+        ...(choice.phyrexianLife === undefined ? {} : { phyrexianLife: choice.phyrexianLife }),
       });
     } else if (choice.targetSets.length > 0) {
       setPendingCast(choice);
@@ -248,6 +249,10 @@ export function OnlineBoard({
       // The zone rides the choice: a flashback cast must name its graveyard source
       // or the server looks for the card in the hand and cleanly rejects it.
       ...(pendingCast.fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
+      // So does the READING (§3.143): the server offers one cast per fundable
+      // Phyrexian life amount, and dropping the field asks for one it may never
+      // have offered.
+      ...(pendingCast.phyrexianLife === undefined ? {} : { phyrexianLife: pendingCast.phyrexianLife }),
     };
     submitSequence([...pendingTaps, cast]);
   };
@@ -269,12 +274,21 @@ export function OnlineBoard({
     const options = legalTargets(requirement, masked, names);
     if (options.length === 0) return; // no legal target → the cast would fizzle
     // Hold the taps, then reuse the existing target picker for the choice.
+    // `commitCast` REBUILDS the cast action once targets are known, so anything
+    // the planner decided about it has to survive the round trip through
+    // `pendingCast` — the READING its taps were planned for above all (§3.143),
+    // since taps for "{1} and 4 life" followed by a 0-life cast is a sequence
+    // the server stops halfway through.
+    const planned = sequence[sequence.length - 1];
+    const phyrexianLife =
+      planned !== undefined && planned.kind === 'castSpell' ? planned.phyrexianLife : undefined;
     setPendingTaps(sequence.slice(0, -1));
     setPendingCast({
       instanceId: card.instanceId,
       targetSets: options.map((o) => [optionToTarget(o)]),
       canCastUntargeted: false,
       fromZone,
+      ...(phyrexianLife === undefined ? {} : { phyrexianLife }),
     });
   };
 

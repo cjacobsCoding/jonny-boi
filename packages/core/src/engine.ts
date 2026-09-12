@@ -76,6 +76,7 @@ import {
   formatManaCost,
   MANA_COLORS,
   payCost,
+  phyrexianLifeOptions,
   poolTotal,
 } from './mana.js';
 import type { ManaTapPlan } from './mana-plan.js';
@@ -3601,6 +3602,18 @@ function applyCastSpell(
             ? madnessCost
             : (permission?.cost ?? castDef.cost),
   );
+  // §3.143 — the PHYREXIAN reading this cast announced: how much life goes
+  // toward the cost's `{B/P}`-style symbols (CR 107.4f). Judged against the SAME
+  // closed list of amounts `pushCastOffers` enumerated, so an answer the menu
+  // never offered — an odd number, more life than the symbols price, life for a
+  // cost with no Phyrexian symbol at all — is refused rather than approximated.
+  const phyrexianLife = action.phyrexianLife ?? 0;
+  if (phyrexianLife > 0) {
+    if (!cost) return rejectWith(prevState, 'this cast pays no mana cost, so it cannot pay life for one');
+    if (!phyrexianLifeOptions(cost, player.life).includes(phyrexianLife)) {
+      return rejectWith(prevState, `${phyrexianLife} life is not a way to pay ${formatManaCost(cost)}`);
+    }
+  }
   if (cost) {
     // WHAT the mana is being spent on, for any restricted mana in the pool. The
     // face being CAST is the object a restriction reads (a modal DFC's back face
@@ -3614,14 +3627,26 @@ function applyCastSpell(
     // the common case, and acting on it would tap creatures for nothing.
     const assist = planCostAssist(state, action.player, castDef, cost, player.manaPool);
     const owed = assist?.remaining ?? cost;
-    if (!canPay(player.manaPool, owed, purpose)) {
+    if (!canPay(player.manaPool, owed, purpose, phyrexianLife)) {
       return rejectWith(prevState, 'insufficient mana to cast this spell');
     }
     if (assist !== undefined) consumeCostAssist(state, assist, emit);
-    const result = payCost(player.manaPool, owed, purpose);
+    const result = payCost(player.manaPool, owed, purpose, phyrexianLife);
     if (!result.ok) return rejectWith(prevState, result.reason);
     player.manaPool = result.pool;
   }
+  // §3.143 — the LIFE half of the same cost, charged right after the mana and
+  // through the one pay-life funnel (CR 118.4 re-checks it against the live
+  // total). Everything above is validated, so this cannot half-pay.
+  //
+  // PAYING A COST CAN KILL YOU — Dismember at exactly 4 life is a legal, and
+  // fatal, thing to do — and no state-based check is written here on purpose:
+  // this function ALREADY ends with one (CR 704.3, at the point the caster would
+  // next get priority), so a fourth copy of that rule would only be a place for
+  // the copies to disagree. A cast that parks a cast-time question instead skips
+  // that tail deliberately, because the announcement is not finished and nobody
+  // has priority yet (CR 601.2); the answer path checks.
+  if (phyrexianLife > 0) payLifeCost(state, action.player, phyrexianLife, emit);
   // The life half of the flashback cost, charged alongside the mana. Everything
   // above is validated, so this cannot half-pay.
   if (flashbackLife > 0) {
@@ -5945,19 +5970,49 @@ function pushCastOffers(
   // reward, CR 310.4). Otherwise the face's own printed cost - which is also
   // exactly what an AFTERMATH half cast from the graveyard pays, and which any
   // restricted mana in the pool is only allowed to fund if this face qualifies.
+  // §3.143 — PHYREXIAN MANA. `{B/P}` is "{B}, or 2 life" (CR 107.4f), so a card
+  // printing one is not ONE offer but one PER FUNDABLE LIFE AMOUNT: Dismember is
+  // "{1}{B}{B}", "{1}{B} and 2 life", or "{1} and 4 life". A cost with no
+  // Phyrexian symbol yields exactly `[0]` and takes the branch it always did.
+  let lifeOffers: readonly number[] = NO_PHYREXIAN_LIFE;
   if (options?.free !== true) {
     // The cost judged here is the cost the cast path will CHARGE — reductions
     // included — or a Medallion would make a spell payable that the menu never
     // offers. An alternative or granted cost stands in for the printed one
     // (§3.112), and CR 601.2f reduces it exactly as it reduces the printed cost.
     const offered = castManaCostFor(state, me, def, options?.cost ?? def.cost, options?.reducers);
-    if (offered && !canPay(pool, offered, spendPurposeIfRestricted(pool, def, 'cast'))) {
-      // CONVOKE / IMPROVISE / DELVE (§3.70): the pool alone does not cover this,
-      // but something other than mana may. Asked ONLY on the branch that was
+    if (offered) {
+      const purpose = spendPurposeIfRestricted(pool, def, 'cast');
+      const candidates = phyrexianLifeOptions(offered, state.players[me].life);
+      // ONE READING is the answer for every card in the game but a handful, and
+      // that case is kept on the exact code this function ran before §3.143
+      // existed — no array, no second `canPay`, no allocation. This runs once
+      // per castable card per decision, so the common case must not pay for the
+      // uncommon one.
+      //
+      // CONVOKE / IMPROVISE / DELVE (§3.70) is asked ONLY on the branch that was
       // about to refuse, so a board with no assist card pays nothing for the
-      // question — and answered by the same planner the pay path uses, because
-      // an offer the pay path then rejects is the bug this gate exists to stop.
-      if (planCostAssist(state, me, def, offered, pool) === undefined) return;
+      // question — and it is answered by the same planner the pay path uses,
+      // because an offer the pay path then rejects is the bug that gate exists
+      // to stop. In the multi-reading branch it is asked only of the NO-LIFE
+      // reading: the assist planner charges a MANA cost, and no printed card
+      // carries both an assist keyword and a Phyrexian symbol — one that did
+      // would simply be offered its all-mana reading, never a wrong one.
+      if (candidates.length === 1) {
+        if (!canPay(pool, offered, purpose) && planCostAssist(state, me, def, offered, pool) === undefined) return;
+      } else {
+        const fundable: number[] = [];
+        for (let i = 0; i < candidates.length; i++) {
+          const life = candidates[i] as number;
+          if (canPay(pool, offered, purpose, life)) {
+            fundable.push(life);
+          } else if (life === 0 && planCostAssist(state, me, def, offered, pool) !== undefined) {
+            fundable.push(life);
+          }
+        }
+        if (fundable.length === 0) return;
+        lifeOffers = fundable;
+      }
     }
   }
   // A modal spell with nothing it could legally announce cannot be cast — the
@@ -5983,22 +6038,42 @@ function pushCastOffers(
   // §3.112 — written only for an alternative-cost offer, same rule as the two above.
   const altField = options?.alternative !== undefined ? ({ alternative: options.alternative } as const) : undefined;
   const restriction = modalSpecOf(def) ? undefined : targetRestrictionOf(def);
-  if (restriction === undefined) {
-    actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, ...faceField, ...zoneField, ...altField });
-    return;
-  }
-  for (const target of legalTargetsFor(state, restriction, me, def)) {
-    actions.push({
-      kind: 'castSpell',
-      player: me,
-      instanceId: card.instanceId,
-      targets: [target],
-      ...faceField,
-      ...zoneField,
-      ...altField,
-    });
+  const targets = restriction === undefined ? undefined : legalTargetsFor(state, restriction, me, def);
+  for (let i = 0; i < lifeOffers.length; i++) {
+    const life = lifeOffers[i] as number;
+    // Same rule as `faceField` and `zoneField`: written only when it is not the
+    // default, so a cast paying no life is byte-for-byte the object every
+    // consumer has always seen.
+    const lifeField = life > 0 ? ({ phyrexianLife: life } as const) : undefined;
+    if (targets === undefined) {
+      actions.push({
+        kind: 'castSpell',
+        player: me,
+        instanceId: card.instanceId,
+        ...faceField,
+        ...zoneField,
+        ...altField,
+        ...lifeField,
+      });
+      continue;
+    }
+    for (const target of targets) {
+      actions.push({
+        kind: 'castSpell',
+        player: me,
+        instanceId: card.instanceId,
+        targets: [target],
+        ...faceField,
+        ...zoneField,
+        ...altField,
+        ...lifeField,
+      });
+    }
   }
 }
+
+/** The "no Phyrexian symbol, so no life decision" offer list, shared so the common path allocates nothing. */
+const NO_PHYREXIAN_LIFE: readonly number[] = Object.freeze([0]);
 
 /**
  * How a cast offer differs from the ordinary one from hand: which zone the card
