@@ -967,11 +967,23 @@ function dispatchOpening(proposal: Proposal): SubmitResult {
       // picker has already paid, so it taps nothing and just casts — and it
       // rolls back its own taps if the engine refuses, which keeps a refused
       // confirm from stranding lands inside the proposal.
+      //
+      // EVERY fact that identifies WHICH cast this is rides the option, and all
+      // of them have to reach the engine: `fromZone` names a flashback's
+      // graveyard source (and pays the flashback cost), `face` names a split
+      // card's half, and `phyrexianLife` (§3.143) names the READING — "{1} and
+      // 4 life" is a different cast from "{1}{B}{B}", priced and funded
+      // differently. Dropping any one of them auto-taps for one price and casts
+      // at another; dropping the life silently un-ships Phyrexian casting on
+      // this seat, because the engine simply never hears about it. These are the
+      // same four facts `castOptionKey` keys an option on — if a fifth is ever
+      // added there, it belongs here too.
       return working.castWithAutoTap(
         opening.option.instanceId,
         proposal.targets,
         opening.option.fromZone ?? 'hand',
         opening.option.face,
+        opening.option.phyrexianLife,
       );
     case 'activate': {
       const payers = chosenPayers(proposal);

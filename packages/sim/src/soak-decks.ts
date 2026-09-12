@@ -25,8 +25,8 @@
  *    named mechanic is present in quantity so the soak can require it to fire.
  */
 
-import type { CardDefinition, ManaColor, ManaCost, Rng } from '@jonny-boi/core';
-import { createRng, MANA_COLORS } from '@jonny-boi/core';
+import type { CardDefinition, HybridComponent, ManaColor, ManaCost, Rng } from '@jonny-boi/core';
+import { convertedManaCost, createRng, isColorComponent, MANA_COLORS } from '@jonny-boi/core';
 import type { Deck, DeckEntry } from './deck.js';
 import { BASIC_LAND_NAMES, DEFAULT_DECK_RULES } from './config.js';
 import { SOAK_MECHANICS, serializeDefinition, type SoakMechanicId } from './soak-config.js';
@@ -117,18 +117,22 @@ const COLORED: readonly ManaColor[] = ['W', 'U', 'B', 'R', 'G'];
 // Card facts the generator needs. Pure functions of a definition.
 // ---------------------------------------------------------------------------
 
-/** Total mana value of a printed cost ({X} counts 0 — CR 107.3, as core does). */
+/**
+ * Total mana value of a printed cost ({X} counts 0 — CR 107.3, as core does).
+ *
+ * Delegates rather than counting: this used to add ONE per hybrid symbol, which
+ * is right for `{G/W}` and wrong for `{2/R}` (CR 202.3b — a hybrid symbol is
+ * worth its GREATEST component, so Flame Javelin is 6, not 3). Mana value has
+ * one owner, and a curve built from a second opinion would quietly deal the
+ * wrong deck.
+ */
 export function costManaValue(cost: ManaCost | undefined): number {
-  if (!cost) return 0;
-  let total = cost.generic ?? 0;
-  for (const color of MANA_COLORS) total += cost[color] ?? 0;
-  total += (cost.hybrid ?? []).length;
-  return total;
+  return cost ? convertedManaCost(cost) : 0;
 }
 
 /**
  * The colours a card's cost REQUIRES. A hybrid symbol requires none of them on
- * its own (any of its halves pays it), so it is reported separately by
+ * its own (any of its components pays it), so it is reported separately by
  * {@link hybridOptions}.
  */
 export function requiredColors(cost: ManaCost | undefined): ReadonlySet<ManaColor> {
@@ -139,7 +143,7 @@ export function requiredColors(cost: ManaCost | undefined): ReadonlySet<ManaColo
 }
 
 /** The per-symbol hybrid options of a cost (one entry per printed hybrid symbol). */
-export function hybridOptions(cost: ManaCost | undefined): readonly (readonly ManaColor[])[] {
+export function hybridOptions(cost: ManaCost | undefined): readonly (readonly HybridComponent[])[] {
   return cost?.hybrid ?? [];
 }
 
@@ -152,13 +156,20 @@ function isLand(card: CardDefinition): boolean {
  * Can a deck restricted to `colors` cast this spell?
  *
  * Every required colour must be available, and every hybrid symbol must have at
- * least one half available. Generic and `{C}` are ignored: generic is paid by
- * anything, and every mana base in the pool can make colourless.
+ * least one COMPONENT this deck can pay. Generic and `{C}` are ignored: generic
+ * is paid by anything, and every mana base in the pool can make colourless.
+ *
+ * §3.143 — a component that is not a colour is one every deck can pay: `{2/R}`
+ * is castable off Plains and `{B/P}` off nothing but a life total. Judging those
+ * by their colour half alone would have hidden them from every deck but one.
  */
 export function castableWith(card: CardDefinition, colors: ReadonlySet<ManaColor>): boolean {
   for (const color of requiredColors(card.cost)) if (!colors.has(color)) return false;
   for (const symbol of hybridOptions(card.cost)) {
-    if (!symbol.some((color) => colors.has(color as ManaColor))) return false;
+    const payable = symbol.some(
+      (component) => !isColorComponent(component) || colors.has(component),
+    );
+    if (!payable) return false;
   }
   return true;
 }

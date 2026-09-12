@@ -275,6 +275,14 @@ const scratch = {
  * pre-§3.60 ranking exactly, so every existing caller (both pilots, every
  * recorded sim baseline) is untouched by construction; the human cast paths opt
  * in to sparing the useful source.
+ *
+ * `lifeSpend` is the life the caster has ALREADY decided to put toward this
+ * cost's Phyrexian symbols (§3.143). It is threaded down to `canPay` — the one
+ * authority on "done" — rather than subtracted from the cost here, because
+ * WHICH Phyrexian symbol the life pays for can change which colours the mana
+ * must still cover, and only the payment search knows that. Zero for every cost
+ * with no Phyrexian symbol, where every line below is the code that was here
+ * before.
  */
 export function planManaPayment(
   view: ManaPlanView,
@@ -284,6 +292,7 @@ export function planManaPayment(
   spendFor?: CardDefinition,
   spendKind: ManaSpendKind = 'cast',
   preference: ManaSourcePreference = MANA_SOURCE_PREFERENCE_DEFAULT,
+  lifeSpend = 0,
 ): ManaTapPlan[] | undefined {
   // ⚠️ THE PURPOSE IS TAKEN AS A DEFINITION, NOT AS A BUILT `ManaSpendPurpose`,
   // AND IT IS RESOLVED LAZILY. Both halves matter.
@@ -322,7 +331,7 @@ export function planManaPayment(
   // `canPay` is the authority on "done"; the distance heuristic only orders taps.
   // Checked against the LIVE pool: `canPay` only reads, so the copy can wait until
   // we know we are going to mutate one.
-  if (canPay(current, cost, current.restricted === undefined ? undefined : resolvePurpose())) return [];
+  if (canPay(current, cost, current.restricted === undefined ? undefined : resolvePurpose(), lifeSpend)) return [];
 
   // Nothing to tap ⇒ nothing can change ⇒ unpayable. Returning here skips the
   // grouping pass entirely for nearly half of all calls. Indexed rather than
@@ -539,7 +548,7 @@ export function planManaPayment(
   // each be "affordable" on their own and lethal together.
   let lifeLeft = view.players[player].life;
 
-  while (!canPay(pool, cost, anyRestricted ? resolvePurpose() : undefined)) {
+  while (!canPay(pool, cost, anyRestricted ? resolvePurpose() : undefined, lifeSpend)) {
     // At least one pip is still owed (canPay said so). Flooring at 1 matters when
     // the heuristic can't see the shortfall — a hybrid symbol reads as satisfied
     // by either colour — so a useful tap is still accepted instead of the planner
@@ -732,6 +741,15 @@ export function planManaPayment(
  * sources on real boards), so it costs a handful of `planManaPayment` calls and
  * a few small arrays. Call it when a player is about to be asked something — on
  * a cast click — never once per castable card per frame.
+ *
+ * `lifeSpend` is the life the caster has ALREADY put toward this cost's
+ * Phyrexian symbols (§3.143), and it rides every plan below. It must be the same
+ * amount the cast will pay: "{1} and 4 life" for Dismember taps one land while
+ * "{1}{B}{B}" taps three, so a picker raised for one reading and a cast that
+ * makes the other is precisely the "affordable answered by one policy, taps
+ * chosen by another" mismatch this predicate exists to keep out. Zero for every
+ * cost with no Phyrexian symbol, where every line below is the code that was
+ * here before.
  */
 export function manaPaymentChoiceExists(
   view: ManaPlanView,
@@ -741,8 +759,9 @@ export function manaPaymentChoiceExists(
   spendFor?: CardDefinition,
   spendKind: ManaSpendKind = 'cast',
   preference: ManaSourcePreference = MANA_SOURCE_PREFERENCE_DEFAULT,
+  lifeSpend = 0,
 ): boolean {
-  const auto = planManaPayment(view, player, cost, legalActions, spendFor, spendKind, preference);
+  const auto = planManaPayment(view, player, cost, legalActions, spendFor, spendKind, preference, lifeSpend);
   // Unpayable ⇒ nothing to choose between. Empty ⇒ the floating pool already
   // covers it and no tap happens at all, so there is nothing to pick either.
   if (auto === undefined || auto.length === 0) return false;
@@ -770,7 +789,7 @@ export function manaPaymentChoiceExists(
         (action) =>
           !(action.kind === 'tapForMana' && action.player === player && isExcluded(action.instanceId)),
       );
-      const alternative = planManaPayment(view, player, cost, without, spendFor, spendKind, preference);
+      const alternative = planManaPayment(view, player, cost, without, spendFor, spendKind, preference, lifeSpend);
       if (alternative === undefined) continue; // those sources were load-bearing
       if (sourceIdentityKey(view.battlefield, alternative) !== autoKey) return true;
     }

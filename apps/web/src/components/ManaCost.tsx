@@ -8,8 +8,17 @@ const COLORED_PIPS = new Set(['W', 'U', 'B', 'R', 'G', 'C']);
 /**
  * Render a mana cost as round colored pips (DRY: the one place mana symbols are
  * drawn). Generic numbers render as a single grey numeric pip; colored symbols
- * use the named WUBRG identity tokens; hybrid/Phyrexian/X fall back to a labeled
- * "other" pip so no cost information is silently dropped.
+ * use the named WUBRG identity tokens; every COMPOUND symbol — `{G/W}`, `{2/W}`,
+ * `{B/P}`, `{S}`, `{X}` — falls back to a labeled "other" pip carrying the
+ * printed text, so no cost information is silently dropped.
+ *
+ * It reads the DISPLAY cost (`@jonny-boi/data-tools`), whose `other` is a list of
+ * STRINGS — the printed symbol without its braces — and never core's component
+ * objects. Both producers now agree on that dialect: the Scryfall parser records
+ * the symbol verbatim, and `cards/enginePool.ts` prints core's components through
+ * `formatManaCost` before handing them over (§3.143). Anything that ever fed an
+ * object in here would render as "[object Object]" with no type error to catch
+ * it, which is exactly why `cards.test.ts` pins the pip text.
  */
 export function ManaCost({ cost }: { cost: ManaCostType }): ReactElement | null {
   const pips = manaPips(cost);

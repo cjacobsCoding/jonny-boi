@@ -174,6 +174,28 @@ describe('legal-actions derivation', () => {
     expect([...playableLandIds(mdfc)]).toEqual([]);
   });
 
+  it('keeps the CHEAPEST Phyrexian reading rather than merging them (§3.143)', () => {
+    // The server offers one cast per fundable life amount, and this map holds one
+    // choice per instance. Merged, the 4-life reading's targets would ride a
+    // button that submits a 0-life cast — a WRONG action, the same shape the
+    // modal-DFC case above guards against.
+    const readings: GameAction[] = [
+      { kind: 'castSpell', player: 'A', instanceId: 50, targets: [99] },
+      { kind: 'castSpell', player: 'A', instanceId: 50, targets: [77], phyrexianLife: 2 },
+      { kind: 'castSpell', player: 'A', instanceId: 50, targets: [88], phyrexianLife: 4 },
+    ];
+    const cheapest = castChoices(readings).get(50)!;
+    expect(cheapest.phyrexianLife, 'the all-mana reading spends no life').toBeUndefined();
+    expect(cheapest.targetSets, 'and carries only its OWN targets').toEqual([[99]]);
+
+    // …and when the all-mana reading is not offered at all — Dismember off a lone
+    // Wastes — the life one is taken AND said, because a cast submitted without
+    // the field is one the server never offered.
+    const lifeOnly = castChoices([readings[2] as GameAction]).get(50)!;
+    expect(lifeOnly.phyrexianLife).toBe(4);
+    expect(lifeOnly.targetSets).toEqual([[88]]);
+  });
+
   it('finds the declare-attackers template and pass availability', () => {
     expect(declareAttackersAction(actions)?.attackers).toEqual([30, 31]);
     expect(canPass(actions)).toBe(true);

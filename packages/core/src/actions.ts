@@ -156,6 +156,21 @@ export interface CastSpellAction {
    * loop enumerated it from.
    */
   readonly graveyardCast?: import('./graveyard-casting.js').GraveyardCastKind;
+  /**
+   * §3.143 — how much LIFE this cast pays toward the cost's PHYREXIAN symbols
+   * (`{B/P}` = "{B}, or 2 life", CR 107.4f). Omitted means zero, which keeps
+   * every cast action ever built meaning exactly what it always meant.
+   *
+   * Part of the ACTION rather than a question parked once the spell is on the
+   * stack, because a Phyrexian symbol is part of the BASE cost and the base
+   * cost is charged while the cast is being applied — a question asked
+   * afterwards would be answering for mana that had already left the pool. The
+   * generator offers one cast per fundable life amount, which is the same seam
+   * the madness window uses (DESIGN §3.19): every seat — both pilots, hotseat
+   * and online — already enumerates actions and submits one, so the decision
+   * needs no new transport and no new choice kind.
+   */
+  readonly phyrexianLife?: number;
 }
 
 /**
