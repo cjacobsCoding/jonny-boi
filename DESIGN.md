@@ -2889,6 +2889,136 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.143 The fixture that could not fail — a test registry that swallowed every primitive but one — ✅ done
+
+`packages/ai/src/test-support.ts`'s `createTestRegistry` registered exactly one primitive,
+`dealDamage`, and handed back core's plain registry. Core's registry answers an unknown id with
+`undefined`, `applyEffectRef` turns that into an `effectUnsupported` event, and **nothing in a test
+is listening for that event.** So any fixture whose card resolved a different primitive got a silent
+no-op: the pilot is driven correctly, the ability resolves, nothing happens, and the assertion
+passes. That is this repo's most-recorded defect shape — a check that reports something other than
+"I didn't check".
+
+⚠️ **The engine is RIGHT to stay quiet and the fixture was wrong to copy it.** Core deliberately
+degrades an unimplemented primitive rather than crashing a game, because a pool that half-works must
+still be playable. A test fixture has the opposite duty: there is no player to protect, and the only
+thing a silent no-op can produce is a suite that has stopped measuring. Same mechanism, opposite
+correct behaviour — which is why "core does it this way" was the wrong argument to inherit.
+
+#### The blast radius, measured before anything was changed
+
+Not by reading the fixtures — by INSTRUMENTING them. `createTestRegistry`'s `get` was temporarily
+wrapped to append every unregistered lookup, with its test name, to a file, and the whole `ai` suite
+was run. **1,129 silent no-ops, across exactly 2 files and 4 tests, on 2 distinct primitives.**
+
+| primitive | lookups | where |
+| --- | --- | --- |
+| `destroyTarget` | 869 | `tactical-suite.ts` — `Murder`, resolved inside every look-ahead rollout |
+| `loseLife` | 260 | `targeting.test.ts` — the restricted drain in the 120-step liveness loop |
+
+The static count is much larger and much less interesting: the fixture MINTS five primitives it
+never registered (`destroyTarget`, `pumpUntilEndOfTurn`, `counterSpell`, `destroyAll`, and
+`shrinkDef`'s negative pump), and 21 files call `createTestRegistry`. Only two ever RESOLVED one.
+**The measurement shrank the estimate by an order of magnitude and the smaller number is the one
+reported** — most of those fixtures are only ever SCORED by a pilot, and scoring reads the
+definition, never the body.
+
+⚠️ **Zero tests were vacuous in the strict sense** — nothing asserted "the effect happened" and got
+away with it, because a test that did would have failed. What was there instead is subtler and,
+for one of them, worse:
+
+- **`tactical-suite.ts` carried a comment asserting the exact opposite of what its code did.**
+  `runTacticalSuite`'s docstring said the registry is threaded in *"so a look-ahead pilot rolls out
+  at full fidelity — without it `Murder` no-ops inside the search and the removal puzzle would be
+  grading the pilot on a game where removal does nothing."* The next line built
+  `createTestRegistry()`. The removal category was graded on precisely the game the comment promised
+  it was not, 869 times. **A false comment over a green test is worse than no comment: it is the
+  check reporting that it checked.**
+- **`targeting.test.ts` drove three pilots through 120 steps of "many real positions" in which life
+  totals never moved.** Its assertions were real — a rejection is decided at cast time, before
+  resolution — but the positions they ranged over were not the ones advertised.
+
+📊 **And the honest follow-up: fixing the tactical suite changed no score at all.** The scoreboard is
+identical before and after — heuristic 11/12, both hybrids 12/12, `removal 1/1` for all three —
+because the puzzle grades the chosen ACTION and the pilots chose right without fidelity. The suite
+was one puzzle away from its own comment mattering. What was fixed is that the claim can no longer
+quietly stop being true.
+
+#### The fix: refuse, don't imitate
+
+`createTestRegistry().get(id)` now **throws** on an id nobody registered, naming the primitive and
+both one-line escapes. `has`/`ids` stay honest; `get` is the only path `applyEffectRef` takes, which
+is why it is the one that refuses.
+
+⚠️ **Deliberately NOT "register the real bodies here", and the package rule is only half the reason.**
+`packages/ai/package.json` declares `@jonny-boi/core` alone, and `tsconfig.json` excludes both
+`test-support.ts` and `tactical-suite.ts` from the build — so neither is shipped source, and neither
+is exported from `index.ts`, which makes the stated carve-out ("only its TESTS may reach for
+`cards`") *arguably* cover them. It is still the wrong fix: **copying the bodies fixes one row,
+refusing the unknown fixes the shape.** A table of copies is only as current as the day it was
+written, so the next primitive a fixture mints would no-op silently all over again. `destroyTarget`
+alone reaches five `cards`-private helpers; an imitation of it would be a second answer to the same
+question with no way to tell which is right.
+
+So the boundary is crossed by the CALLER instead. `createTestRegistry(bodies?)` layers a supplied
+registry underneath its own, and a `*.test.ts` — which may import `cards`, and seven already do —
+writes `createTestRegistry(buildRegistry())`. `runTacticalSuite` now takes the registry as a
+**required field of an options object**, so the module cannot build a crippled one for itself, and
+the one place that used to decide this silently now cannot run without an answer.
+
+#### The neighbouring trap, and the root cause under both
+
+`applyAction(state, action, config, registry)` was being called as
+`applyAction(state, action, { registry })` in **nine places** — 3 in `copy-target-pilot.test.ts`, 6
+in `core/copy.test.ts`. The registry lands in the config slot, the real parameter stays `undefined`,
+and every primitive degrades to `effectUnsupported` while the test stays green. All nine are fixed
+and `applyAction` now **refuses a third argument with no `startingLife`**, naming the correct call.
+(Behaviour-neutral in fact: the six core sites passed an EMPTY registry, so nothing that mattered
+was dropped. The shape is the defect, not those six results.)
+
+Not on `applyActionInPlace`: that is the MCTS rollout path, ~20,000 calls per decision with no clone
+to hide a check behind, and both its callers are internal to the search. **Its cost was measured and
+the measurement is reported as inconclusive**: an interleaved A/B of two builds in ONE process
+(`process.cpuUsage`, 8 rounds × 20,000 calls) said +0.66 µs/call, and the CONTROL run with the order
+swapped flipped the sign to −0.39 µs/call. The delta follows the SLOT, not the guard. A pointer
+compare against a call that deep-clones two 30-card libraries is below this box's noise floor, so no
+cost is claimed either way.
+
+⚠️ **THE ROOT CAUSE IS THE SAME FOR BOTH, AND IT IS BIGGER THAN THIS BRANCH: `{ registry }` is a
+plain type error, and NO tsconfig in this repo compiles a `*.test.ts`.** Every package excludes
+them. Compiling all of them today reports **180 errors** — 83 `cards`, 41 `core`, 31 `ai`, 18 `sim`,
+3 `apps/server`, 2 `protocol`, 2 `apps/web` — and a sample of the `ai` ones are the same family of
+silent lie: a landwalk test spelling `"Island"` where the type is `"island"`, a lookahead fixture
+setting `step: "main1"` which is not a `Step`, `expect(result.rejected)` on an `EngineResult` that
+has no `rejected` field, two fixtures declaring a `targets` key `CardDefinition` does not have.
+**Deferred with its count rather than half-done** — it is a repo-wide cleanup that would collide
+with every branch in flight, and it needs its own brief.
+
+📊 **Gauntlet `"Mono-Red Aggro" --games 40 --seed 99`: 97/320 = 30.3%, byte-identical.** Confirmed
+rather than assumed, because a vacuous test that starts really running can reveal a live bug —
+here it did not, and the reason is measured too: nothing outside the `ai` test suite ever used this
+fixture, and the six core `{ registry }` sites were passing an empty registry anyway.
+
+**Sabotages: 18 run, 18 caught, 0 escaped** — through `scripts/sabotage-honest-test-fixtures.mjs`,
+a committed harness that breaks one protected thing per row, requires RED, **and requires the RED to
+come from the test that names it** (a row caught by a different test has not shown that test works).
+A row whose anchor text is missing is reported as NOT APPLIED and counted as an escape, because a
+harness that silently matches nothing is the same defect as the one it is checking for.
+
+⚠️ **Two sabotages ESCAPED on the first draft and the lesson is §3.28's, re-learned.** The drift
+guard originally drove `dealDamage` through `applyAction`, which meant the copied body's
+`amount <= 0` return and its fizzled-target return were reached by no case at all — breaking either
+left the suite green. **A sabotage that stays green is a claim about the test before it is a claim
+about the code.** Rewritten to drive the primitive through core's `applyEffectRef` directly, the
+guard reaches every branch it has, including the three whose entire contract is to do nothing — and
+a no-op branch that stops being a no-op is exactly the drift nobody notices.
+
+The `dealDamage` copy is the one body the fixture still owns, because `burnDef` is everywhere.
+Universal rule 3 allows a second copy only while something fails when it drifts, so seven cases
+compare it to `cards`' real body on **state AND events**, and a further guard requires every
+primitive a `*Def` helper mints to be one the real pool implements — the fixtures once said
+`destroy`, which no card registers.
+
 ### 3.142 Three soak violations, one shape — a rule answered somewhere other than by the rule — ✅ done
 
 The 2,000-game deep-tier sweep (§3.140) surfaced twelve violations. Eight were one pilot defect owned
