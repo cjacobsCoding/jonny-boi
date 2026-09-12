@@ -2889,6 +2889,153 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.143 A block bound the card does not print — Champion of Lambholt, and the second home of the settled-P/T pass — ✅ done
+
+The row said *"a block restriction whose SELECTOR compares creatures or reads effective P/T"* and named
+**16 cards**. The first honest finding is that the label is a **catch-all**: the coverage audit gives
+every unmatched clause mentioning blocking the same `system` string, so one bucket held sixteen
+different blockers. Probed one by one, only **Champion of Lambholt** is actually the shape the row
+names — and the row's headline blocker, the effective-P/T *selector*, had already shipped in
+`f03d7f8` (Tetsuko and Delney compile). What this branch found instead was that the shipped version of
+it was **wrong in its second home**, which is worth more than the card.
+
+#### The layer question, and the option taken
+
+`statics.ts` is printed-only by design, because asking a static about effective P/T is the CR 613.8
+dependency the repo has never had. Three answers were on the table: evaluate the selector at
+declare-blockers instead of as a static; implement a real dependency ordering; or a bounded fixpoint
+with a written-down cap. **None of them was needed, because a fourth is exact and already half-built:**
+`indexContinuous` folds every P/T layer, then runs a SECOND pass for statics that read the settled
+numbers, and every static in that pass may grant **KEYWORDS ONLY**.
+
+That restriction is the whole proof, and it is one sentence: **the settled pass reads POWERS and
+writes KEYWORDS, and nothing that produces a power reads a keyword.** So the pass's output can never
+be its own input, one extra pass IS the fixpoint, and two creatures whose bounds read each other
+terminate because there is nothing for a dependency ordering to order — not because a cap stopped
+them. A bounded fixpoint would have been a cap over a loop that does not exist.
+
+§3.143 extends that pass from a SELECTOR that reads settled P/T to a granted **BOUND** that does:
+`StaticAbility.blockBoundFromSourcePower` names which field of the granted `BlockRestriction` the
+source's own settled power fills. Champion of Lambholt's "creatures with power **less than this
+creature's power** can't block creatures you control" becomes `minBlockerPower = power(Champion)`,
+recomputed on every index build — so the +1/+1 counter its own trigger adds really does raise the bar,
+which is the entire card.
+
+⚠️ **`staticIsInert` had to learn the field.** A Champion-shaped static declares no keywords and no
+P/T delta, so the generic inertness test called it inert and skipped it **before it was ever
+deferred** — the card compiling `'complete'` and doing nothing, this project's signature failure. It
+is the first sabotage in the battery for that reason.
+
+#### THE PROOF IS EXECUTABLE, not a comment
+
+`effective-pt-statics.test.ts` builds the adversarial board — two source-power bounds reading powers
+the other's grant could plausibly have moved, under an anthem moving both — and then **runs iteration
+two by hand, off the index's own output**, demanding the same numbers. A pass that could feed itself
+would disagree on the second iteration. A second case crosses the two shapes: a Delney-style filter
+that reads the Champion's settled power to decide whether the Champion is even in its set, against the
+Champion's bound reading that same power. Both settle, and the settled power is unchanged by either
+grant.
+
+On the single-instance path the property is **structural rather than argued**: `aggregateFor` is now
+`aggregateWith(state, id, runSettledPass)`, and a source-power bound reads its source by calling back
+in with `runSettledPass` **false**. The number a bound reads can only come from a walk that runs no
+bounds, and the recursion is exactly one level deep by construction.
+
+#### ⚠️ THE SHIPPED DEFECT THIS FOUND, and it is the bigger half
+
+**`aggregateFor` ignored the settled-stats bounds entirely.** It is the single-instance twin of
+`indexContinuous` and a live production path — the engine's granted-ability lookup, `protection.ts`,
+`intervening.ts`, `triggers-runtime.ts`, the pilot's board reads, four primitives — and it folded such
+a static UNCONDITIONALLY, because `staticAppliesTo` does not read the effective bounds. So **Tetsuko
+Umezawa made a 4/4 unblockable** through that path while the index path got it right. Two answers to
+one question (rule 12), shipped, and the file's own comment three lines above warns about exactly this
+failure for emblems.
+
+The older `indexContinuous and aggregateFor give the same answer` test could not see it: **its board
+carried a plain anthem**, which has no bound to ignore. The replacement is a TABLE with one row per
+deferring field, so the next such field is a row rather than a shape nobody re-checked. `foldCommandStatics`
+(emblems) got the same treatment, since an emblem radiating a settled-stats static has to reach the
+same pass a battlefield source's does.
+
+#### The pilot asks; it does not mirror
+
+Nothing was added to the AI, deliberately. `chooseBlock` already ends by handing its blocks to core's
+`illegalBlockDeclaration`, and `canBlockByEvasion` is a one-line delegation to `canBlock` — so a bound
+that lands in `KeywordFlags.blockRestriction` is honoured by the pilot for free. That is the point of
+the sibling's deletion of the ~70-line copy: the sixth printing of "the pilot re-implements a core
+blocking rule and drops a clause" is not available to be written.
+
+#### 📊 Measured, as a SET diff
+
+**725 → 726 / 2100 playable — one name GAINED (Champion of Lambholt), ZERO lost.** The two full sets
+were dumped and diffed, not counted. It is one card, and the number is reported as one card: the
+sixteen in the bucket were sixteen different gaps, not sixteen instances of this one.
+
+#### 📏 Throughput — paired against a same-box `origin/main` worktree, `process.cpuUsage`, never wall clock
+
+`packages/core/bench/settled-static-cost.ts`, three arms interleaved in one process, best-of-5. The
+**CONTROL arm** is what makes it readable — an ordinary keyword-granting static, code `origin/main`
+has too — because a keyword grant allocates a flags object per affected permanent where an anthem only
+adds two numbers, so most of the distance between an anthem board and a Champion board is the price of
+granting a keyword at all.
+
+| 300k calls, 10 creatures + 1 anthem | `origin/main` | this branch |
+| --- | --- | --- |
+| `indexContinuous`, ordinary board | 940 ns | **780 ns** |
+| `indexContinuous`, + a keyword-granting static (same code both sides) | 6,197 ns | **6,250 ns** |
+| `indexContinuous`, + a Champion | *(inert — see below)* | **6,977 ns** |
+| `aggregateFor`, ordinary board | 103 ns | **103 ns** |
+| `aggregateFor`, + a keyword-granting static | 1,040 ns | **1,250 ns** |
+
+**The board every gauntlet game actually has is at parity** — `aggregateFor` exactly (103/103), and
+the two `indexContinuous` ordinary numbers straddle each other (940 vs 780 for *identical code*, which
+is the box variance this pairing exists to expose). The control arm agrees to 0.9%. The feature's own
+cost is **+12% over a keyword-granting static of the same reach** — one extra battlefield walk — and
+is paid only while such a card is on the battlefield.
+
+⚠️ **Running the Champion arm on `origin/main` measures NOTHING** and the bench says so: the field does
+not exist there, `staticIsInert` judges the ability inert, and the static is skipped. Arm A against
+arm A and arm B against arm B are the only cross-checkout comparisons, which is exactly the kind of
+"check that reports something other than *I did not check*" this repo keeps recording.
+
+**Gauntlet seed 99 is byte-identical**: 97/320 = 30.3%, rows 17·14·19·7·8·10·17·5. No gauntlet deck
+carries a settled-stats static, and the inert path did not move.
+
+#### 🔎 Sabotage: 10 run, 10 RED, 0 escapes — after the battery itself was caught lying
+
+Each mutation flips one thing and demands the suite go red: the bound never computed; the bound read
+off the PRINTED power; the bound off by one; `staticIsInert` forgetting the field; the deferral
+predicate forgetting it; `aggregateFor` un-deferring (the shipped defect, restored); `aggregateFor`
+skipping the effective bound; the compiled comparison inverted; the static made symmetric; the static
+given a phantom "other".
+
+⚠️ **THE FIRST RUN OF THAT BATTERY PROVED NOTHING, and the reason generalises.** The suite was
+*already red* — `indestructible-and-blocking.test.ts`'s "STILL reports the restrictions this engine
+cannot express" probe named Champion of Lambholt and had gone stale the moment it compiled — so every
+mutation reported RED and the pass reported 10/10 while checking nothing. A sabotage battery now
+**asks whether the baseline is green and refuses to run if it is not**. A stale refusal probe is worse
+than no probe: it claims a gap that closed, which is how a backlog sends the next agent to build
+something twice. It now names the shapes that are genuinely still refused.
+
+#### ⛔ Deliberately NOT built, each with the NUMBER that decided it
+
+The other fifteen cards in the bucket, probed individually. None of them is this shape.
+
+| still blocked | the real blocker | whole cards it would close |
+| --- | --- | --- |
+| Access Tunnel, Escape Tunnel | "target creature **with power N or less**" — a TARGET carrying a numeric bound. `TargetRestriction` is a flat string union with **92 `restriction ===` comparison sites in `targeting.ts` alone**; a member per N is not a row, and giving the union a shape is a different size of change. Its own type comment already names this boundary, and the second card that needs it has now landed. | **2** |
+| Secret Tunnel | TWO targets that must share a creature type — a multi-target aim with a relation between the slots. | 1 |
+| Void Winnower | the block half is a `CardFilter` parity field away, but the card's OTHER line is "your opponents can't **cast** spells with even mana values" — and core has **no cast-restriction static at all** (zero `cantCast`/`castRestriction` symbols). That is a spell-legality system, not a block selector. | 0 |
+| Archangel of Tithes | a **COST to block**, which neither a restriction nor a requirement can express — CR 509.1 has no "unless you pay" in it. Its attack half is the same shape. | 0 |
+| Fighter Class | a per-combat **TARGETED** requirement ("up to one target creature blocks it this combat if able") — combat state, not a characteristic. Also needs Class levels. | 0 |
+| Odric, Lunarch Marshal | not a block selector at all: a conditional mass keyword-sharing grant over twelve named keywords. | 1 |
+| Lord of the Accursed | "**All** Zombies gain menace until end of turn" — a mass UEOT grant with a SUBTYPE noun and a both-players scope; §3.25's "typal anthem nouns" deferral, and the compiler's subtype tables are closed on purpose. | 1 |
+| White Sun's Twilight, Skrelv's Hive, Song of Totentanz, Lord Skitter | a token created with a QUOTED ability, `"This token can't block."` **Prototyped and MEASURED: +0 cards.** The quoted-keyword read alone removes the token clause as a blocker for Lord Skitter and Skrelv's Hive, but both keep a second unrelated gap (a graveyard exile; the corrupted lifelink static), and Song of Totentanz additionally needs `splitSentences` to treat a quoted sentence's closing period as a boundary — a pool-wide change, with a sibling live on token copies. Reverted rather than landed for +0. | 0 |
+| Brotherhood Regalia, Sticky Fingers, There and Back Again | each has a second gap in another family (an "Equip legendary creature {1}" cost; a granted quoted TRIGGERED ability; two Saga chapters). | 0 |
+
+The honest headline for whoever picks this bucket up: **the biggest single item left in it is the
+filtered target (2 cards), and it is a `TargetRestriction` refactor, not a blocking feature.**
+
 ### 3.142 Three soak violations, one shape — a rule answered somewhere other than by the rule — ✅ done
 
 The 2,000-game deep-tier sweep (§3.140) surfaced twelve violations. Eight were one pilot defect owned
