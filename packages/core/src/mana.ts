@@ -590,6 +590,46 @@ export function phyrexianLifeOptions(cost: ManaCost, life: number): readonly num
 const NO_LIFE_SPEND: readonly number[] = Object.freeze([0]);
 
 /**
+ * The LEAST mana `cost` could possibly demand, given `life` life available to
+ * spend on its Phyrexian symbols — {@link convertedManaCost} for every cost
+ * without one, which is every cost but a handful.
+ *
+ * A LOWER BOUND, deliberately, and it is the only thing it may be used for: the
+ * pilot's cheap "could I conceivably afford this?" prefilter, which must not
+ * skip a card the planner would have funded. Two Phyrexian symbols and 2 life
+ * is scored here as if BOTH could be life-paid, because a bound that shares the
+ * budget between symbols would have to solve which symbols get it — and that is
+ * the payment search's job, not a filter's. Under-filtering costs a wasted
+ * scoring pass; over-filtering makes a castable card invisible, which is how a
+ * mechanic ends up inert.
+ */
+export function minimumManaValue(cost: ManaCost, life: number): number {
+  const hybrids = cost.hybrid;
+  if (hybrids === undefined) return convertedManaCost(cost);
+  let total =
+    (cost.generic ?? 0) +
+    (cost.W ?? 0) +
+    (cost.U ?? 0) +
+    (cost.B ?? 0) +
+    (cost.R ?? 0) +
+    (cost.G ?? 0) +
+    (cost.C ?? 0);
+  for (let i = 0; i < hybrids.length; i++) {
+    const symbol = hybrids[i] as readonly HybridComponent[];
+    let freeForLife = false;
+    for (let c = 0; c < symbol.length; c++) {
+      const component = symbol[c] as HybridComponent;
+      if (isLifeComponent(component) && component.life <= life) {
+        freeForLife = true;
+        break;
+      }
+    }
+    if (!freeForLife) total += hybridSymbolManaValue(symbol);
+  }
+  return total;
+}
+
+/**
  * The order generic mana is spent in: colourless first, then WUBRG. Fixed (and
  * hoisted to module scope, not rebuilt per payment) so sims reproduce exactly.
  *

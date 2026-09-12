@@ -52,6 +52,7 @@ export {
   poolTotal,
   convertedManaCost,
   formatManaCost,
+  minimumManaValue,
   hybridSymbolManaValue,
   isColorComponent,
   isGenericComponent,
