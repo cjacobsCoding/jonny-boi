@@ -678,3 +678,130 @@ describe('the printed word "another" on an activated token-copy ability', () => 
     return { state: s, reg, orthionId, bearId };
   }
 });
+
+// --- "copy THAT spell" — the printed noun the compiler could not read ---------------
+
+describe('copying the spell that TRIGGERED the ability', () => {
+  it("compiles Reflections of Littjara whole — the chosen type AND the copy", () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Reflections of Littjara',
+        typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
+        manaCost: { generic: 4, W: 0, U: 1, B: 0, R: 0, G: 0, C: 0, other: [] },
+        oracleText:
+          ['As this enchantment enters, choose a creature type.', 'Whenever you cast a spell of the chosen type, copy that spell.'].join('\n'),
+      }),
+    );
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    const trigger = result.definition.triggers?.[0];
+    expect(trigger?.condition.on).toBe('castSpell');
+    expect(trigger?.condition.spellSubtypeIsChosen).toBe(true);
+    // The lift: a BODY that reads the subject flags its CONDITION to carry one.
+    expect(trigger?.condition.carriesSubject).toBe(true);
+    expect(trigger?.effects[0]?.primitive).toBe('copySpell');
+    expect(trigger?.effects[0]?.params?.subject).toBe('triggering');
+    // NO target: the object is already determined, which is exactly what makes
+    // this body legal inside a trigger.
+    expect(trigger?.effects[0]?.params?.targets).toBeUndefined();
+  });
+
+  it("keeps the original's aim when the card does NOT print the re-aim permission", () => {
+    // Reflections of Littjara prints no "you may choose new targets", and
+    // saying so explicitly is what stops the default from granting a permission
+    // the card does not have — a copy that may be re-aimed is a better card.
+    const withoutPermission = compileCard(
+      makeCard({
+        name: 'Silent Mirror',
+        typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
+        oracleText: 'Whenever you cast an instant spell, copy that spell.',
+      }),
+    );
+    expect(withoutPermission.definition.triggers?.[0]?.effects[0]?.params?.mayRetarget).toBe(false);
+    const withPermission = compileCard(
+      makeCard({
+        name: 'Loud Mirror',
+        typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
+        oracleText:
+          'Whenever you cast an instant spell, copy that spell. You may choose new targets for the copy.',
+      }),
+    );
+    expect(withPermission.definition.triggers?.[0]?.effects[0]?.params?.mayRetarget).toBeUndefined();
+  });
+
+  it('the subject lift NEVER turns the flag off, and leaves a body that reads no subject alone', () => {
+    // A trigger whose body names nothing gets no field it will not read — the
+    // opt-in property `carriesSubject` was given in the first place.
+    const plain = compileCard(
+      makeCard({
+        name: 'Plain Mirror',
+        typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
+        oracleText: 'Whenever you cast an instant spell, draw a card.',
+      }),
+    );
+    expect(plain.status, JSON.stringify(plain.missing)).toBe('complete');
+    expect(plain.definition.triggers?.[0]?.condition.carriesSubject).toBeUndefined();
+  });
+
+  /**
+   * ⚠️ WRITTEN BECAUSE A SABOTAGE ESCAPED. The play test above counters the
+   * original and asserts no copy is made — but by the time that trigger
+   * resolves the stack is EMPTY, so a `spellToCopy` that fell back to "whatever
+   * is on the stack" passed it happily. The hole is only visible when the stack
+   * holds a DIFFERENT spell, which no end-to-end sequence reaches cleanly: the
+   * copy trigger fires on every cast, so any spell you add to the stack brings
+   * its own trigger with it.
+   *
+   * So this drives the primitive directly with an id that is not on the stack
+   * and a stack that is not empty. A copy of the wrong spell is the failure this
+   * pins, and it is strictly worse than no copy: the card would copy an opponent's
+   * counterspell, or its own controller's unrelated sorcery, at random.
+   */
+  it('copies NOTHING when the triggering id is gone, even with another spell on the stack', () => {
+    const registry = buildRegistry();
+    const primitive = registry.get('copySpell');
+    expect(primitive).toBeDefined();
+    const bystander = {
+      kind: 'spell' as const,
+      instanceId: 80,
+      controller: 'B' as PlayerId,
+      targets: [],
+      card: {
+        instanceId: 80,
+        controller: 'B',
+        owner: 'B',
+        zone: 'stack',
+        tapped: false,
+        summoningSick: false,
+        damageMarked: 0,
+        markedByDeathtouch: false,
+        counters: {},
+        def: { id: 'bystander', name: 'Unrelated Sorcery', types: ['sorcery'] },
+      },
+    };
+    const state = {
+      nextInstanceId: 200,
+      battlefield: [],
+      stack: [bystander],
+      players: {
+        A: { exile: [], hand: [], graveyard: [], library: [] },
+        B: { exile: [], hand: [], graveyard: [], library: [] },
+      },
+    } as unknown as GameState;
+    const emitted: string[] = [];
+    primitive!({
+      state,
+      source: { instanceId: 1, def: { id: 'src', name: 'Mirror', types: ['enchantment'] } },
+      controller: 'A' as PlayerId,
+      targets: [],
+      // The spell that set the trigger off has LEFT the stack (countered,
+      // or it resolved). Its id answers nothing now.
+      triggeringInstances: [999],
+      params: { subject: 'triggering' },
+      emit: (e: { type: string }) => emitted.push(e.type),
+      ask: () => undefined,
+    } as never);
+    expect(state.stack).toHaveLength(1);
+    expect(emitted).not.toContain('spellCopied');
+  });
+});
+

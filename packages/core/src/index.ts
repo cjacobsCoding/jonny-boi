@@ -224,7 +224,7 @@ export {
   unionLandConditions,
 } from './land-conditions.js';
 export { SPLIT_SECOND_REJECTION, splitSecondOnStack } from './split-second.js';
-export { triggeringInstancesFor } from './triggers.js';
+export { SUBJECT_OPT_IN_EVENTS, triggeringInstancesFor } from './triggers.js';
 export type { UncounterableSpellsAbility } from './countering.js';
 export { spellCanBeCountered } from './countering.js';
 

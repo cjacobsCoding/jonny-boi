@@ -27,6 +27,7 @@ import type {
   PlayerId,
 } from '@jonny-boi/core';
 import { applyAction, createGame, DEFAULT_RULES, defaultAnswerFor, generateLegalActions } from '@jonny-boi/core';
+import { compileCard } from './compile/compile.js';
 import { buildRegistry } from './pool.js';
 import { CARD_POOL } from '../data/pool.js';
 
@@ -347,5 +348,108 @@ describe('a TOKEN COPY of a permanent (CR 707.2 + CR 111)', () => {
     const bodies = s.battlefield.filter((c) => c.def.name === adephageDef.name);
     expect(bodies).toHaveLength(2);
     expect(bodies.filter((c) => c.def.isToken === true)).toHaveLength(1);
+  });
+});
+
+// --- "COPY THAT SPELL" — the copy names its own original ---------------------------
+//
+// Reflections of Littjara, Jin-Gitaxias and Sword of Wealth and Power print a
+// TRIGGER whose body copies the spell that set it off. Nothing aimed it and
+// nothing could: the object is already determined, so there is no target and no
+// aiming moment. The mechanism is the SAME `triggeringInstances` field "that
+// creature" rides — the only difference is that this object is on the stack.
+//
+// ⚠️ THE ASSERTION THAT MATTERS IS AGAIN THE CENSUS, and it matters MORE here
+// than for Reverberate: a Reverberate that misfires copies nothing and deals 3
+// damage, which is visible. A trigger that fires with NO subject copies nothing
+// and deals 3 damage too — and reads, from the outside, exactly like a correct
+// engine and an opponent who did not play an enchantment. Six damage is the only
+// thing that tells the two apart.
+
+describe('a TRIGGER that copies the spell that triggered it (CR 707.10)', () => {
+  /** "Whenever you cast an instant or sorcery spell, copy that spell." */
+  function mirrorEnchantment(): CardDefinition {
+    const result = compileCard({
+      id: 'test:mirror',
+      name: 'Cast Mirror',
+      manaCost: { generic: 4, W: 0, U: 1, B: 0, R: 0, G: 0, C: 0, other: [] },
+      typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
+      oracleText:
+        'Whenever you cast an instant or sorcery spell, copy that spell. You may choose new targets for the copy.',
+      power: null,
+      toughness: null,
+      keywords: [],
+    });
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    // The lift did its job: the BODY says it reads the subject, so the
+    // CONDITION was flagged to carry one. Without this the trigger resolves
+    // with `triggeringInstances` undefined and copies nothing — compiled,
+    // shipped, and completely inert.
+    expect(result.definition.triggers?.[0]?.condition.carriesSubject).toBe(true);
+    expect(result.definition.triggers?.[0]?.effects[0]?.params?.subject).toBe('triggering');
+    return result.definition;
+  }
+
+  it('PLAYED: a Bolt cast under it deals SIX, and the copy leaves no card behind', () => {
+    const { s: opened, reg } = openGame(3306);
+    let s = opened;
+    place(s, mirrorEnchantment(), 'A');
+    const boltId = giveHand(s, 'A', getByName('Lightning Bolt'));
+
+    const before = totalObjects(s);
+    const lifeBefore = s.players.B.life;
+
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: boltId, targets: ['B'] }, reg);
+    // The trigger goes on the stack ABOVE the Bolt (CR 603.3b) — which is the
+    // whole reason "that spell" is still an object when the body runs.
+    expect(s.stack).toHaveLength(2);
+    expect(s.stack[1]?.kind).toBe('trigger');
+    s = settle(s, reg, [{ kind: 'selectTargets', targets: ['B'] }]);
+
+    // SIX: the copy resolved as a real Bolt. Three would mean the trigger fired
+    // and copied nothing — the inert-but-green outcome this test exists for.
+    expect(lifeBefore - s.players.B.life).toBe(6);
+    // One card cast, one card in a graveyard. The copy was not a card.
+    expect(totalObjects(s)).toBe(before);
+    expect(s.players.A.graveyard.map((c) => c.def.name)).toEqual(['Lightning Bolt']);
+    const copied = seen.find((e) => e.type === 'spellCopied');
+    expect(copied && 'copiedInstanceId' in copied ? copied.copiedInstanceId : undefined).toBe(boltId);
+    expect(seen.some((e) => e.type === 'spellCopyCeasedToExist')).toBe(true);
+  });
+
+  it('does NOT fire on a creature spell — the printed scope is instant or sorcery', () => {
+    const { s: opened, reg } = openGame(3307);
+    let s = opened;
+    place(s, mirrorEnchantment(), 'A');
+    const bearId = giveHand(s, 'A', getByName('Grizzly Bears'));
+
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: bearId }, reg);
+    // Just the creature spell — no trigger above it.
+    expect(s.stack).toHaveLength(1);
+    s = settle(s, reg);
+    expect(seen.some((e) => e.type === 'spellCopied')).toBe(false);
+    expect(s.battlefield.filter((c) => c.def.name === 'Grizzly Bears')).toHaveLength(1);
+  });
+
+  it('copies nothing when the original has LEFT the stack — countered in response', () => {
+    const { s: opened, reg } = openGame(3308);
+    let s = opened;
+    place(s, mirrorEnchantment(), 'A');
+    const boltId = giveHand(s, 'A', getByName('Lightning Bolt'));
+    const counterId = giveHand(s, 'B', getByName('Counterspell'));
+
+    const lifeBefore = s.players.B.life;
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: boltId, targets: ['B'] }, reg);
+    // B answers the BOLT, under the copy trigger. The counter resolves first,
+    // so by the time the trigger runs "that spell" is gone. A passes priority
+    // first: the caster holds it, and B cannot respond until it is offered.
+    s = act(s, { kind: 'passPriority', player: 'A' }, reg);
+    s = act(s, { kind: 'castSpell', player: 'B', instanceId: counterId, targets: [boltId] }, reg);
+    s = settle(s, reg);
+
+    // No damage at all, and no copy was minted from an object the rules say is
+    // no longer there — the re-read from the stack, not the bare id.
+    expect(s.players.B.life).toBe(lifeBefore);
+    expect(seen.some((e) => e.type === 'spellCopied')).toBe(false);
   });
 });

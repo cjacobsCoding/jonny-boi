@@ -315,6 +315,16 @@ export interface TriggerCondition {
    * ability as `triggeringInstances` (evolve's "if that creature has greater
    * power or toughness than this creature", CR 702.100a).
    *
+   * For `castSpell`: the body reads "**that spell**" — "Whenever you cast a
+   * spell of the chosen type, **copy that spell**" (Reflections of Littjara,
+   * Jin-Gitaxias). The referent is the spell STILL ON THE STACK, and that is
+   * what makes the reading sound rather than lucky: a cast trigger goes on the
+   * stack ABOVE the spell that set it off, so it resolves while that spell is
+   * still an object (CR 603.3b). It is the SAME word, `carriesSubject`, and the
+   * same field, `triggeringInstances`, because it is the same question — "which
+   * object was the event about" — and a second name for it would be the
+   * parallel vocabulary rule 12 forbids.
+   *
    * OPT-IN rather than always on, so every board-watching trigger written
    * before this existed is pushed byte-for-byte as it always was; a Soul
    * Warden's stack object gains no field it never reads.
@@ -1057,11 +1067,35 @@ const FIRES_PER_TRIGGERING_INSTANCE: ReadonlySet<TriggerEvent> = new Set<Trigger
 ]);
 
 /**
+ * The trigger events whose subject is **opt-in** — they carry one only when the
+ * condition says `carriesSubject`, because their event fires constantly and a
+ * field on every Soul Warden's stack object would be paid for by every game.
+ *
+ * The combat-declaration events are NOT here: their whole reason for existing is
+ * the object they are about (exalted's lone attacker, flanking's blocker), so
+ * they always carry it and a condition never has to ask.
+ *
+ * ⚠️ EXPORTED, and read by the COMPILER's subject lift as well as by the switch
+ * below. The two need the same answer and are in different packages: a lift that
+ * flagged an always-carrying condition would write a field that changes nothing
+ * and break every byte-comparison the generated pool is pinned by — which is
+ * exactly what happened when this was a second list.
+ */
+export const SUBJECT_OPT_IN_EVENTS: ReadonlySet<TriggerEvent> = new Set<TriggerEvent>([
+  'permanentEnters',
+  'permanentDies',
+  'castSpell',
+]);
+
+/**
  * The objects a combat-declaration event is about, relative to the watched
  * creature — the referent of "that creature" / "the blocking creature":
  *   - `creatureAttacksAlone`: the lone attacker;
  *   - `blocks`: the creature(s) the watched creature blocked;
  *   - `becomesBlocked` / `becomesBlockedByCreature`: the creatures blocking it.
+ *
+ * Plus the three {@link SUBJECT_OPT_IN_EVENTS}, which answer only for a
+ * condition that ASKED.
  *
  * `undefined` for every other kind, which is what keeps those pushed exactly as
  * before. Pure and allocation-free on the no-match path: only called for a
@@ -1097,6 +1131,14 @@ export function triggeringInstancesFor(
       // "That creature" — only for a condition that ASKS (`carriesSubject`),
       // so every board-watching trigger written before this is unchanged.
       if (condition.carriesSubject !== true || event.type !== 'zoneChange') return undefined;
+      return [event.instanceId];
+    // "That SPELL" — "copy that spell" (Reflections of Littjara, Jin-Gitaxias).
+    // A ROW beside the two above rather than a mechanism of its own, because
+    // "which object was the triggering event about" is one question: the only
+    // difference is that this object lives on the stack rather than the
+    // battlefield, and the id answers for both.
+    case 'castSpell':
+      if (condition.carriesSubject !== true || event.type !== 'spellCast') return undefined;
       return [event.instanceId];
     default:
       return undefined;

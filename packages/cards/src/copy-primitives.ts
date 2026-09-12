@@ -60,6 +60,9 @@ import { intParam, restrictionParam, targetedSpellOnStack } from './effect-helpe
  *  - `targets`   — the target restriction, read by core at cast time. Present so
  *                  the ref declares it in the one reserved param name every other
  *                  targeting primitive uses.
+ *  - `subject`   — `'triggering'` for "copy **that spell**" (Reflections of
+ *                  Littjara, Jin-Gitaxias): the spell named is the one that SET
+ *                  THE TRIGGER OFF, not a target. See {@link spellToCopy}.
  *
  * The copies go on the stack ABOVE the original, so they resolve first — which
  * is what a copy does, and what makes Narset's Reversal work at all (the copy
@@ -67,11 +70,20 @@ import { intParam, restrictionParam, targetedSpellOnStack } from './effect-helpe
  * time it would have).
  */
 export const copySpell: EffectPrimitive = (ctx) => {
-  const original = targetedSpellOnStack(ctx);
+  const original = spellToCopy(ctx);
   // Illegal or already gone → fizzle, the same re-check every targeting
   // primitive in this package makes at resolution.
   if (!original) return;
-  if (!isLegalTarget(ctx.state, restrictionParam(ctx), original.instanceId, ctx.controller, ctx.source.def)) return;
+  // A targeted copy re-checks its restriction at resolution. "Copy that spell"
+  // declares none — it names an object rather than choosing one — so the check
+  // is skipped rather than run against the default, which would ask whether a
+  // SPELL is a legal "any target" and answer no.
+  if (
+    !isTriggeringSubject(ctx) &&
+    !isLegalTarget(ctx.state, restrictionParam(ctx), original.instanceId, ctx.controller, ctx.source.def)
+  ) {
+    return;
+  }
   const count = Math.max(0, intParam(ctx, 'count', 1));
   const mayRetarget = ctx.params.mayRetarget !== false;
 
@@ -103,6 +115,41 @@ export const copySpell: EffectPrimitive = (ctx) => {
     });
   }
 };
+
+/**
+ * Whether this ref names the TRIGGERING object rather than a chosen target —
+ * `params.subject: 'triggering'`, the very word and value `subjectCreatures`
+ * already uses for "that creature". One vocabulary for one question.
+ */
+function isTriggeringSubject(ctx: EffectContext): boolean {
+  return ctx.params.subject === 'triggering';
+}
+
+/**
+ * WHICH SPELL this ref copies — a chosen target, or the spell that set the
+ * trigger off.
+ *
+ * "Copy **that spell**" (Reflections of Littjara, Jin-Gitaxias, Sword of Wealth
+ * and Power) names no target at all, and that is what makes it legal inside a
+ * triggered ability: a trigger that needed a target would have to be aimed as it
+ * went on the stack, and there is nothing to aim — the object is already
+ * determined. It is the exact shape `createTokenCopy`'s `self` selector has, and
+ * it is read off the SAME field "that creature" is read off
+ * (`ctx.triggeringInstances`).
+ *
+ * Re-read from the STACK rather than trusted from the id alone: the trigger
+ * resolves above the spell that set it off (CR 603.3b), so it is normally still
+ * there — but a counterspell that resolved in between removed it, and copying a
+ * spell that is no longer on the stack would mint a copy of an object the rules
+ * say is gone.
+ */
+function spellToCopy(ctx: EffectContext): SpellStackObject | undefined {
+  if (!isTriggeringSubject(ctx)) return targetedSpellOnStack(ctx);
+  const id = ctx.triggeringInstances?.[0];
+  if (id === undefined) return undefined;
+  const object = ctx.state.stack.find((o) => o.instanceId === id);
+  return object !== undefined && object.kind === 'spell' ? object : undefined;
+}
 
 /**
  * "You may choose new targets for the copy" (CR 707.10), asked once per AIMED

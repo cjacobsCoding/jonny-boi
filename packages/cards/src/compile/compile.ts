@@ -32,7 +32,7 @@ import type {
   TargetRestriction,
   TriggeredAbility,
 } from '@jonny-boi/core';
-import { DEFAULT_TARGET_RESTRICTION, restrictionOfEffects } from '@jonny-boi/core';
+import { DEFAULT_TARGET_RESTRICTION, SUBJECT_OPT_IN_EVENTS, restrictionOfEffects } from '@jonny-boi/core';
 import type {
   ClauseContribution,
   CompilableCard,
@@ -590,10 +590,45 @@ function isCyclingKeyword(word: string): boolean {
   return word === 'cycling' || word.endsWith('cycling');
 }
 
+/**
+ * Does this body name the TRIGGERING object — `params.subject: 'triggering'`,
+ * which is what the printed words "that creature" / "that spell" compile to?
+ *
+ * The lift below is why the question is asked in exactly one place. A body that
+ * reads the subject only RECEIVES one if its CONDITION declares
+ * `carriesSubject`, and the two halves are written by different tables: the
+ * condition by a trigger rule, the body by the effect table underneath it. Every
+ * pairing rule would otherwise have to remember the flag, and the one that
+ * forgot would compile a card that resolves with no subject and silently does
+ * nothing — a compiled card that plays as a blank, which is the failure this
+ * compiler exists to make impossible.
+ */
+function bodyCarriesSubject(effects: readonly EffectRef[]): boolean {
+  return effects.some((ref) => ref.params?.subject === 'triggering');
+}
+
 /** Merge one clause contribution into the assembly. */
 function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: string): void {
   if (contribution.effects) assembly.effects.push(...contribution.effects);
-  if (contribution.triggers) assembly.triggers.push(...contribution.triggers);
+  if (contribution.triggers) {
+    // THE SUBJECT LIFT, at the one point every compiled trigger passes through.
+    // Only ever turns the flag ON: a condition that already declares it (evolve,
+    // the counter-keyword family) is handed through untouched.
+    assembly.triggers.push(
+      ...contribution.triggers.map((trigger) =>
+        trigger.condition.carriesSubject === true ||
+        // Only the events whose subject core makes OPT-IN. An always-carrying
+        // condition (exalted's lone attacker, flanking's blocker) needs no flag,
+        // and writing one would add a field to every such trigger that changes
+        // nothing but breaks every byte-comparison the generated pool is pinned
+        // by. The list is core's, read here rather than restated.
+        !SUBJECT_OPT_IN_EVENTS.has(trigger.condition.on) ||
+        !bodyCarriesSubject(trigger.effects)
+          ? trigger
+          : { ...trigger, condition: { ...trigger.condition, carriesSubject: true } },
+      ),
+    );
+  }
   if (contribution.produces) assembly.produces.push(...contribution.produces);
   if (contribution.producesOptions) assembly.producesOptions.push(...contribution.producesOptions);
   if (contribution.manaAbilities) assembly.manaAbilities.push(...contribution.manaAbilities);

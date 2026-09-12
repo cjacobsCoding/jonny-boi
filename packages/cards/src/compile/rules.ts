@@ -3023,6 +3023,35 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'copy-that-spell',
+    description:
+      '"Whenever you cast … , copy THAT spell[. You may choose new targets for the copy.]" (Reflections of Littjara, Jin-Gitaxias, Sword of Wealth and Power) — CR 707.10',
+    /**
+     * A TRIGGER BODY, and the printed word "that" is the whole difference from
+     * `copy-target-spell`: the object is already determined by the event, so
+     * there is nothing to aim and the ability takes no target at all. That is
+     * what makes it legal inside a trigger — a targeted body would have to be
+     * aimed as the ability went on the stack, and there is no choice to make.
+     *
+     * `subject: 'triggering'` is the word `subjectCreatures` already uses for
+     * "that creature"; `absorb` lifts it onto the condition as `carriesSubject`,
+     * so the SPELL the event was about reaches the resolution the same way the
+     * CREATURE does. One vocabulary, one lift, two printed nouns.
+     *
+     * The permission is part of this one line for the reason `copy-target-spell`
+     * gives at length: split off, the second sentence is a rule that does
+     * nothing. A card that does NOT print it keeps the original's aim, and
+     * `mayRetarget: false` says so rather than leaving the default to decide.
+     */
+    pattern: /^copy that spell(\. you may choose new targets for the copy)?$/,
+    build(match) {
+      return effects({
+        primitive: 'copySpell',
+        params: { subject: 'triggering', ...(match[1] === undefined ? { mayRetarget: false } : {}) },
+      });
+    },
+  },
+  {
     id: 'for-each-token-copy',
     description:
       `"For each token you control, create a token that's a copy of that permanent." (Second Harvest) — CR 707.2, one copy per original`,
@@ -9631,9 +9660,18 @@ export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContr
  * the to-do list for the next engine milestone.
  *
  * Order matters: the first matching hint wins, so put specific patterns first.
+ *
+ * `when` is an optional SECOND condition on the same row, for the case a regex
+ * alone reads the wrong blocker: one printed sentence can appear inside two
+ * different templates, and the hint that owns it is decided by what ELSE the
+ * clause says. It is a row on the table rather than a re-ordering, because the
+ * ordering answer ("put the copy hint above the delayed one") would silently
+ * re-explain every other clause the copy pattern happens to touch.
  */
 export const UNSUPPORTED_HINTS: ReadonlyArray<{
   readonly pattern: RegExp;
+  /** Extra requirement beyond `pattern`; absent means the pattern decides alone. */
+  readonly when?: (clause: string) => boolean;
   readonly missingEngineSystem: string;
 }> = Object.freeze([
   // --- mana abilities: four shapes SHIPPED, one still engine work -------------
@@ -9809,24 +9847,31 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
       'a copy that GRANTS AN ABILITY printed in quotes (copy effects and their "except" tail are implemented — an ability granted as text is not)',
   },
   {
-    // A DELAYED TRIGGERED ABILITY (CR 603.7) created by a resolving spell or
-    // ability: "Sacrifice it at the beginning of the next end step" (Kiki-Jiki,
-    // The Fire Crystal, Orthion, Jaxis, Molten Duplication), "Exile those tokens
-    // at the beginning of the next end step" (Twinflame). This is the single
-    // biggest remaining blocker in the TOKEN-COPY family, and it is NOT the
-    // copying: the token copy itself is implemented and plays, so a card that
-    // compiled while dropping this clause would be a permanent hasty copy with
-    // no drawback — strictly better than printed, which is the one outcome this
-    // compiler must never produce.
+    // ⚠️ THIS HINT USED TO CLAIM THE DELAYED ABILITY ITSELF WAS MISSING, AND IT
+    // IS NOT — `ctx.createDelayedTrigger` is a real seam and `createTokenCopy`
+    // reads a `delayedRemoval` param off the very sentence this pattern matches
+    // (Kiki-Jiki, Orthion, Molten Duplication, Twinflame all compile it). The
+    // stale wording cost real time: every card whose token-copy line carries the
+    // sentence reported "this engine has no delayed triggers" while the actual
+    // blocker was a selector or an "except" tail three words away, which is
+    // precisely the send-the-reader-to-rebuild-something failure the repo's
+    // stale-comment rule exists to stop.
     //
-    // What it needs, precisely: an ability that exists on NO object, created at
-    // resolution, which goes on the stack at a named future step and then never
-    // again. Every trigger this engine has hangs off a permanent's definition
-    // (`triggers.ts` collects them from the battlefield), so there is nowhere
-    // for one to live.
-    pattern: /\b(?:sacrifice|exile) (?:it|them|those tokens|this token) at the beginning of the (?:next end step|end step)\b/,
+    // So this is now the NARROW claim that is still true: the delayed removal is
+    // wired to the token-copy ref, and ONLY to it, because the ids it must name
+    // are the ones that ref just created and nothing else knows them. A printed
+    // "Exile it at the beginning of the next end step" on a REANIMATION (Whip of
+    // Erebos) or on a card exiled by another effect (Mimic Vat) has no such ref
+    // to ride, and dropping the clause would leave a permanent creature where
+    // the card prints a temporary one — strictly better than printed.
+    //
+    // The pattern therefore excludes a clause that also creates the token copy:
+    // that clause belongs to the copy hint below, which names the real blocker.
+    pattern:
+      /\b(?:sacrifice|exile) (?:it|them|those tokens|this token) at the beginning of the (?:next end step|end step)\b/,
+    when: (clause: string) => !/\bcop(?:y|ies) of\b/.test(clause),
     missingEngineSystem:
-      'a DELAYED triggered ability created at resolution ("sacrifice it at the beginning of the next end step" — CR 603.7); token copies themselves are implemented, and a copy compiled without this clause would be strictly better than the printed card',
+      'a DELAYED triggered ability (CR 603.7) attached to an effect that is NOT a token copy — "exile it at the beginning of the next end step" on a reanimation (Whip of Erebos) or on a card another effect exiled (Mimic Vat). Delayed triggers themselves are implemented (`createDelayedTrigger`), and `createTokenCopy` already compiles this sentence; what is missing is a ref for the clause to ride, because the delayed ability must NAME the objects and only the creating ref knows them',
   },
   {
     // What is LEFT of the copy-creating family now that the system is shipped.
@@ -10353,7 +10398,9 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
 /** Find the best explanation for an unimplementable clause. */
 export function explainUnsupported(clause: string): string {
   for (const hint of UNSUPPORTED_HINTS) {
-    if (hint.pattern.test(clause)) return hint.missingEngineSystem;
+    if (!hint.pattern.test(clause)) continue;
+    if (hint.when !== undefined && !hint.when(clause)) continue;
+    return hint.missingEngineSystem;
   }
   return 'a rules template the compiler does not recognize yet';
 }

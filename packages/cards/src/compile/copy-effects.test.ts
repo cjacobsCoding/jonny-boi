@@ -228,23 +228,44 @@ describe('the residuals are reported by NAME, never as "copying is missing"', ()
     expect(result.definition?.effects?.map((e) => e.primitive)).toEqual(['copySpell', 'returnSpellToHand']);
   });
 
-  it('a token copy whose SELECTOR is outside the closed table still reports', () => {
-    // "ANOTHER target creature you control" (Orthion, Jaxis, The Jolly Balloon
-    // Man). Deliberately still outside the table, and for a named reason: the
-    // printed word excludes the ASKING INSTANCE, while core's target vocabulary
-    // is checked against a source DEFINITION and never learns which object is
-    // asking — so compiling it as plain "target creature you control" would let
-    // the card copy itself, which is a card playing wider than printed.
-    //
-    // (This test used to use "nonlegendary", which the table now holds — and it
-    // had already stopped proving what it claimed, because a bare sentence
-    // printed on a CREATURE reports for an entirely different reason.)
+  /*
+   * ⚠️ THIS TEST USED TO ASSERT THE OPPOSITE — "'another target creature you
+   * control' is deliberately still outside the table" — and its reasoning was
+   * right at the time: the printed word excludes the ASKING INSTANCE, and core's
+   * target vocabulary is checked against a source DEFINITION that never learns
+   * which object is asking.
+   *
+   * The pair the engine was missing is now there (`excludesSelfOfEffects`, read
+   * by the activation menu and by the rejection path alike), so the selector is
+   * a ROW and the refusal would be a lie. What the test keeps is the half that
+   * still matters: the word must survive into the compiled card, never be
+   * quietly dropped.
+   */
+  it('"another target creature you control" compiles, carrying the exclusion as data', () => {
     const result = compiled({
       name: 'Orthion Test',
       types: ['Sorcery'],
       power: null,
       toughness: null,
       oracleText: "Create a token that's a copy of another target creature you control.",
+    });
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    const params = result.definition?.effects?.[0]?.params;
+    expect(params?.targets).toBe('creatureYouControl');
+    expect(params?.excludeSelf).toBe(true);
+  });
+
+  it('a token copy whose SELECTOR is outside the closed table still reports', () => {
+    // "target artifact or enchantment you control" (Adagia, Windswept Bastion).
+    // A real printed selector with no row — the table holds "artifact or
+    // creature" and not this one — and widening the nearest neighbour to reach
+    // it would let the card copy a creature it may not touch.
+    const result = compiled({
+      name: 'Adagia Test',
+      types: ['Sorcery'],
+      power: null,
+      toughness: null,
+      oracleText: "Create a token that's a copy of target artifact or enchantment you control.",
     });
     expect(result.status).toBe('incomplete');
     expect(result.missing[0]?.missingEngineSystem).toMatch(/COPY-CREATING template/);
