@@ -43,7 +43,15 @@ import {
   NO_BEATS_SPENT,
   type CombatHold,
 } from '../../lib/play/combat-hold.js';
-import { COMBAT_HOLD_CONFIG } from '../../lib/play/play-config.js';
+import {
+  BOARD_3D_CONFIG,
+  BOARD_LAYOUT_CONFIG,
+  COMBAT_HOLD_CONFIG,
+} from '../../lib/play/play-config.js';
+import { buildBoardView } from '../../lib/play/view-model.js';
+import { maskedViewToBoardView } from '../../lib/online/board-adapter.js';
+import { stageEntriesFor } from '../play/BoardScene.js';
+import type { StageEntry } from '../play/CombatStage.js';
 import { PlayBoard } from '../play/PlayBoard.js';
 import { AUTO_ADVANCING_HINT, OnlineBoard } from './OnlineBoard.js';
 
@@ -289,7 +297,11 @@ function firstCreature(hand: readonly CardInstance[], seat: PlayerId): CardInsta
  * other input is held equal, so the only thing the two frames disagree about is
  * whether a beat is owed.
  */
-function blockedCombatFrame({ blockersDeclared }: { blockersDeclared: boolean }): GameFrame {
+function blockedCombat({ blockersDeclared }: { blockersDeclared: boolean }): {
+  readonly state: GameState;
+  readonly attacker: CardInstance;
+  readonly blocker: CardInstance;
+} {
   const base = startedState();
   const attacker = firstCreature(base.players[ATTACKING_SEAT].hand, ATTACKING_SEAT);
   const blocker = firstCreature(base.players[BLOCKING_SEAT].hand, BLOCKING_SEAT);
@@ -299,7 +311,7 @@ function blockedCombatFrame({ blockersDeclared }: { blockersDeclared: boolean })
     attackersDeclared: true,
     blockersDeclared,
   };
-  const inCombat: GameState = {
+  const state: GameState = {
     ...base,
     activePlayer: ATTACKING_SEAT,
     priorityPlayer: BLOCKING_SEAT,
@@ -317,6 +329,11 @@ function blockedCombatFrame({ blockersDeclared }: { blockersDeclared: boolean })
       [BLOCKING_SEAT]: { ...base.players[BLOCKING_SEAT], hand: [] },
     },
   };
+  return { state, attacker, blocker };
+}
+
+function blockedCombatFrame({ blockersDeclared }: { blockersDeclared: boolean }): GameFrame {
+  const inCombat = blockedCombat({ blockersDeclared }).state;
   return {
     view: maskStateForSeat(inCombat, BLOCKING_SEAT),
     // Passing is the ONLY thing on offer — the auto-pass window, exactly the one
@@ -445,5 +462,183 @@ describe('the combat hold reaches BOTH boards, identically', () => {
     expect(online).toContain('combatHold !== null,');
     // …and there is no ungated path left for it to fall back to.
     expect(online).not.toMatch(/[^w]shouldAutoPass\(/);
+  });
+});
+
+/**
+ * THE SCENE IS ONE UNIT, AND THIS IS THE TEST THAT FAILS WHEN IT FORKS AGAIN.
+ *
+ * ## The defect class
+ *
+ * `PlayBoard` and `OnlineBoard` each answered "how do I draw a battlefield
+ * during combat?", and answered it differently. The LEAVES were never the
+ * problem — this board already imported eleven components from `play/`. What was
+ * never extracted was the SCENE COMPOSITION, and so UX-9 (the tilt), UX-12 (the
+ * advance and its midline clamp), UX-13 (the blocker advance) and UX-14 (the
+ * attack arcs) shipped to the hotseat board alone, four separate times, each one
+ * looking like a feature rather than like the fork it was.
+ *
+ * `BoardScene` is the one unit. These assertions are what makes a SECOND copy
+ * fail loudly instead of quietly: both boards are rendered from the SAME real
+ * blocked combat — the online one through `maskStateForSeat`, exactly what the
+ * wire carries — and their scene skeletons are compared element for element.
+ *
+ * ## ⚠️ WHAT STATIC MARKUP CAN AND CANNOT SETTLE (the same limit §10 records)
+ *
+ * `CombatStage` measures the DOM and returns `null` under `renderToStaticMarkup`
+ * — deliberately, and one test below pins that, because a stage that rendered
+ * server-side would be placing cards from rects it never measured. So the
+ * ADVANCE ITSELF cannot be observed in markup. What can: the pure rule that
+ * decides which cards walk out, asked with each board's own view model. If those
+ * two agree, the boards cannot disagree about the advance; if they ever stop
+ * agreeing, this is the line that reddens.
+ */
+describe('BOTH boards draw the same scene — the fork cannot come back quietly', () => {
+  /** The scene's skeleton: the classes that ARE the composition, in DOM order. */
+  const SCENE_SKELETON = [
+    'board-stage',
+    'board-scene',
+    'board-scene__table',
+    'play-board__opponent',
+    'play-hand--hidden',
+    'board-midline',
+    'play-board__self',
+    'drop-zone',
+    'board-rail',
+  ] as const;
+
+  /**
+   * Every skeleton class the markup emits, in the order it emits them.
+   *
+   * A WHITELIST, so the seats' different contents (different cards, different
+   * counts) cannot make two identical scenes look different — and so a missing
+   * midline or a rail that never rendered cannot hide inside a diff of card art.
+   */
+  function skeletonOf(html: string): string[] {
+    const found: string[] = [];
+    for (const match of html.matchAll(/class="([^"]*)"/g)) {
+      const tokens = (match[1] ?? '').split(/\s+/);
+      for (const want of SCENE_SKELETON) if (tokens.includes(want)) found.push(want);
+    }
+    return found;
+  }
+
+  /** The hotseat board, rendered on the SAME `GameState` the online frame masks. */
+  function hotseatMarkup(state: GameState): string {
+    const deck = SAMPLE_DECKS.find((d) => d.name.toLowerCase().includes('red')) ?? SAMPLE_DECKS[0]!;
+    const started = startHotseatGame({
+      choiceA: { source: 'sample', deck },
+      choiceB: { source: 'sample', deck },
+      seed: 12345,
+      startingPlayer: 'A',
+    });
+    if (!started.ok) throw new Error('the sample decks must be legal for this fixture');
+    return renderToStaticMarkup(
+      createElement(PlayBoard, {
+        session: GameSession.fromCreated(
+          { state, events: started.game.created.events },
+          started.game.registry,
+          NAMES,
+        ),
+        viewer: BLOCKING_SEAT,
+        onSubmit: () => {},
+        onConcede: () => {},
+        stops: { fullControl: false },
+        onStops: () => {},
+      } as never),
+    );
+  }
+
+  it('renders a BYTE-IDENTICAL scene skeleton from the same blocked combat', () => {
+    const { state } = blockedCombat({ blockersDeclared: true });
+    const online = skeletonOf(render(blockedCombatFrame({ blockersDeclared: true })));
+    const hotseat = skeletonOf(hotseatMarkup(state));
+    // Not "both contain a board-scene somewhere": the same elements, nested the
+    // same way, in the same order. Remove the scene from either board — or nest
+    // an overlay back inside it — and this is the line that goes red.
+    expect(online).toEqual([...SCENE_SKELETON]);
+    expect(online).toEqual(hotseat);
+  });
+
+  it('UX-9 — both boards hand the CSS the same tabletop numbers', () => {
+    const { state } = blockedCombat({ blockersDeclared: true });
+    // The properties are inline on `.play-board`, so a board that stopped
+    // spreading them shows up here as a missing tilt rather than as a board that
+    // merely looks flat in a screenshot nobody took.
+    for (const [name, html] of [
+      ['online', render(blockedCombatFrame({ blockersDeclared: true }))],
+      ['hotseat', hotseatMarkup(state)],
+    ] as const) {
+      expect(html, `${name} sets no tilt`).toContain(`--board-tilt-deg:${BOARD_3D_CONFIG.tiltDeg}deg`);
+      expect(html, `${name} sets no perspective`).toContain(
+        `--board-perspective-px:${BOARD_3D_CONFIG.perspectivePx}px`,
+      );
+      expect(html, `${name} sets no midline thickness`).toContain(
+        `--board-midline-h:${BOARD_LAYOUT_CONFIG.midlineThicknessPx}px`,
+      );
+    }
+  });
+
+  it('UX-12/UX-13 — the SAME blocker walks out, from either board’s view model', () => {
+    const { state, attacker, blocker } = blockedCombat({ blockersDeclared: true });
+    const online = stageEntriesFor(
+      maskedViewToBoardView(maskStateForSeat(state, BLOCKING_SEAT), NAMES),
+      BLOCKING_SEAT,
+    );
+    const hotseat = stageEntriesFor(buildBoardView(state, BLOCKING_SEAT, NAMES), BLOCKING_SEAT);
+
+    // The picture the beat exists to show: the attacker forward, and the blocker
+    // out to MEET it. `toward` is -1 for the viewer's own seat (up, toward the
+    // midline) and +1 for the far one.
+    const shape = (entries: readonly StageEntry[]): unknown =>
+      entries.map((e) => ({ id: e.perm.instanceId, role: e.role, toward: e.toward, meets: e.meets }));
+
+    expect(shape(online)).toEqual([
+      { id: attacker.instanceId, role: 'attacker', toward: 1, meets: undefined },
+      { id: blocker.instanceId, role: 'blocker', toward: -1, meets: attacker.instanceId },
+    ]);
+    // …and the hotseat board's view model must produce exactly the same advance.
+    // THE regression: before the extraction the online view model dropped
+    // `attackersDeclared` / `blockersDeclared`, so this side came back EMPTY
+    // while the hotseat side did not.
+    expect(shape(hotseat)).toEqual(shape(online));
+
+    // The CONTROL. One beat earlier nothing has been declared as blocked, so the
+    // blocker must stay home — otherwise "the blocker advances" would be
+    // satisfied by a rule that advances everything, always.
+    const earlier = blockedCombat({ blockersDeclared: false }).state;
+    expect(
+      stageEntriesFor(
+        maskedViewToBoardView(maskStateForSeat(earlier, BLOCKING_SEAT), NAMES),
+        BLOCKING_SEAT,
+      ).map((e) => e.role),
+    ).toEqual(['attacker']);
+  });
+
+  it('the stage stays DOM-measured: it renders nothing at all under SSR', () => {
+    // Not an incidental fact — an advanced copy is placed from measured rects,
+    // and a server-rendered one would be placed from rects that do not exist.
+    // Both boards must keep this true; `renderToStaticMarkup` IS the guard.
+    const { state } = blockedCombat({ blockersDeclared: true });
+    for (const [name, html] of [
+      ['online', render(blockedCombatFrame({ blockersDeclared: true }))],
+      ['hotseat', hotseatMarkup(state)],
+    ] as const) {
+      expect(html, `${name} rendered a combat stage without measuring`).not.toContain('combat-stage');
+    }
+  });
+
+  it('the scene never widened the mask — no hidden card reaches the online scene', () => {
+    // The anti-cheat line, re-asked of the SCENE specifically: the attacking
+    // seat's hand is hidden, and the scene draws the far seat's hand as BACKS
+    // with a count. A scene prop that forced the server to reveal a card would
+    // land here.
+    const { state } = blockedCombat({ blockersDeclared: true });
+    const html = render(blockedCombatFrame({ blockersDeclared: true }));
+    const visible = new Set<string>(state.battlefield.map((c) => c.def.name));
+    for (const card of state.players[ATTACKING_SEAT].hand) {
+      if (visible.has(card.def.name)) continue;
+      expect(html, `${card.def.name} is in ${ATTACKING_SEAT}'s hand`).not.toContain(card.def.name);
+    }
   });
 });
