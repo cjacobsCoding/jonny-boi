@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { GameAction } from '@jonny-boi/core';
-import { alreadyPassedFrame, shouldAutoPass, type PriorityWindow } from './auto-pass.js';
+import {
+  alreadyPassedFrame,
+  shouldAutoPass,
+  shouldAutoPassNow,
+  type PriorityWindow,
+} from './auto-pass.js';
 
 const PASS: GameAction = { kind: 'passPriority', player: 'A' };
 const PLAY_LAND: GameAction = { kind: 'playLand', player: 'A', instanceId: 7 };
@@ -70,6 +75,40 @@ describe('shouldAutoPass', () => {
 
   it('does nothing when no pass is offered at all', () => {
     expect(shouldAutoPass(emptyWindow({ legalActions: [] }))).toBe(false);
+  });
+});
+
+/**
+ * The composed decision the online board acts on (§10 of
+ * docs/MTGA-UX-OVERHAUL.md). The board never calls `shouldAutoPass` directly:
+ * the hold argument is required, so a caller that forgets the combat beat does
+ * not compile.
+ */
+describe('shouldAutoPassNow', () => {
+  it('is exactly shouldAutoPass when no beat is owed', () => {
+    expect(shouldAutoPassNow(emptyWindow(), false)).toBe(shouldAutoPass(emptyWindow()));
+    expect(shouldAutoPassNow(emptyWindow(), false)).toBe(true);
+  });
+
+  it('refuses to advance while combat is being held on screen', () => {
+    // THE §10 gate. Without it the board passes priority underneath the beat,
+    // the server resolves combat damage and end-of-combat, and the blocks the
+    // player just confirmed are gone before a frame is painted.
+    expect(shouldAutoPassNow(emptyWindow(), true)).toBe(false);
+  });
+
+  it('never turns a window the RULES refused into an advance', () => {
+    // The hold can only ever subtract: it is a presentation pause layered on
+    // top of a legality question, never a second answer to it.
+    for (const refused of [
+      emptyWindow({ yourTurn: false }),
+      emptyWindow({ stackSize: 1 }),
+      emptyWindow({ awaitingOwnChoice: true }),
+      emptyWindow({ tapCastableCount: 1 }),
+    ]) {
+      expect(shouldAutoPassNow(refused, false)).toBe(false);
+      expect(shouldAutoPassNow(refused, true)).toBe(false);
+    }
   });
 });
 

@@ -25,16 +25,27 @@
  * stack must never be paid for with hidden information, and "the UI needed a
  * face" is the exact excuse under which that leak would arrive.
  */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { maskStateForSeat, type MaskedGameView } from '@jonny-boi/protocol';
 import { SAMPLE_DECKS } from '@jonny-boi/sim';
-import type { CardInstance, PlayerId } from '@jonny-boi/core';
+import { isCreature, type CardInstance, type CombatState, type GameState, type PlayerId } from '@jonny-boi/core';
 import { startHotseatGame } from '../../lib/play/setup.js';
+import { GameSession } from '../../lib/play/session.js';
 import { cardImage, getCard } from '../../lib/cards.js';
 import type { GameFrame } from '../../lib/online/online-state.js';
-import { OnlineBoard } from './OnlineBoard.js';
+import {
+  combatHoldDecision,
+  COMBAT_HOLD_KINDS,
+  NO_BEATS_SPENT,
+  type CombatHold,
+} from '../../lib/play/combat-hold.js';
+import { COMBAT_HOLD_CONFIG } from '../../lib/play/play-config.js';
+import { PlayBoard } from '../play/PlayBoard.js';
+import { AUTO_ADVANCING_HINT, OnlineBoard } from './OnlineBoard.js';
 
 const NAMES: Readonly<Record<PlayerId, string>> = { A: 'Alice', B: 'Bob' };
 
@@ -48,11 +59,13 @@ const NAMES: Readonly<Record<PlayerId, string>> = { A: 'Alice', B: 'Bob' };
  * 'undefined' &&` in that hook, and it is filed as a contract for its owning
  * lane rather than reached across a lane boundary here.
  */
-vi.stubGlobal('window', { matchMedia: () => ({ matches: false }) });
+vi.stubGlobal('window', {
+  matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+});
 afterAll(() => vi.unstubAllGlobals());
 
-/** A real, legal game, masked for seat A exactly as the server would mask it. */
-function maskedForA(): MaskedGameView {
+/** A real, legal game — the unmasked truth every fixture below is built from. */
+function startedState(): GameState {
   const deck = SAMPLE_DECKS.find((d) => d.name.toLowerCase().includes('red')) ?? SAMPLE_DECKS[0]!;
   const started = startHotseatGame({
     choiceA: { source: 'sample', deck },
@@ -61,7 +74,12 @@ function maskedForA(): MaskedGameView {
     startingPlayer: 'A',
   });
   if (!started.ok) throw new Error('the sample decks must be legal for this fixture');
-  return maskStateForSeat(started.game.created.state, 'A');
+  return started.game.created.state;
+}
+
+/** A real, legal game, masked for seat A exactly as the server would mask it. */
+function maskedForA(): MaskedGameView {
+  return maskStateForSeat(startedState(), 'A');
 }
 
 /**
@@ -216,5 +234,216 @@ describe('the parity work never widened what a viewer may see', () => {
         card.def.name,
       );
     }
+  });
+});
+
+/**
+ * §10 — THE ONLINE BOARD HOLDS COMBAT ON SCREEN TOO.
+ *
+ * ## The defect these assertions remove
+ *
+ * The hotseat board measured it: 260 ms after "Confirm 1 block", sampled
+ * without passing priority, the board read `blocking=0 staged=0 arcs=0 | Turn 7
+ * · Main Phase 1`. Blocks, combat damage and end-of-combat had all resolved and
+ * the turn had advanced. The hotseat fix shipped and said out loud that the
+ * ONLINE board was not covered: it has its own advance path (`shouldAutoPass`
+ * plus the auto-pass effect) and got no hold, so the same combat was equally
+ * invisible to anyone playing online.
+ *
+ * ## Why the fixture is a real MASK and not a hand-built prop
+ *
+ * Same standard as the rest of this file: a real `GameState` driven into a real
+ * blocked combat, then `maskStateForSeat`, so the board is handed exactly what
+ * the wire carries. A board that "supports" a hold but never sees a combat
+ * state it recognises fails here as loudly as one that was never written.
+ *
+ * ## ⚠️ WHAT STATIC MARKUP CAN AND CANNOT SETTLE
+ *
+ * It cannot prove a state LASTED long enough to read — that is what
+ * `apps/web/scripts/verify-combat-visibility.mjs` is for on the hotseat side.
+ * What it CAN settle is the half that is a pure function of the frame: the
+ * board announces the beat, paints the block, and — the load-bearing one — does
+ * NOT claim to be advancing while the beat is owed. That last assertion is
+ * two-sided on purpose: the control frame (no blocks declared) must SAY
+ * "advancing…", or the held frame's silence would prove nothing, which is the
+ * exact trap §10 records ("the first version of that assertion passed without
+ * the fix").
+ */
+
+/** The seat letters this fixture uses: the OPPONENT attacks, the VIEWER blocks. */
+const ATTACKING_SEAT: PlayerId = 'B';
+const BLOCKING_SEAT: PlayerId = 'A';
+
+/** The first creature in a seat's opening hand — any creature, never a named one. */
+function firstCreature(hand: readonly CardInstance[], seat: PlayerId): CardInstance {
+  const found = hand.find((c) => isCreature(c.def));
+  if (found === undefined) throw new Error(`seat ${seat}'s opening hand must contain a creature`);
+  return found;
+}
+
+/**
+ * A real blocked combat, masked for the blocking seat.
+ *
+ * `blockersDeclared: false` gives the CONTROL: the identical window one beat
+ * earlier, where nothing is owed and the board is supposed to advance. Every
+ * other input is held equal, so the only thing the two frames disagree about is
+ * whether a beat is owed.
+ */
+function blockedCombatFrame({ blockersDeclared }: { blockersDeclared: boolean }): GameFrame {
+  const base = startedState();
+  const attacker = firstCreature(base.players[ATTACKING_SEAT].hand, ATTACKING_SEAT);
+  const blocker = firstCreature(base.players[BLOCKING_SEAT].hand, BLOCKING_SEAT);
+  const combat: CombatState = {
+    attackers: [attacker.instanceId],
+    blocks: blockersDeclared ? { [blocker.instanceId]: attacker.instanceId } : {},
+    attackersDeclared: true,
+    blockersDeclared,
+  };
+  const inCombat: GameState = {
+    ...base,
+    activePlayer: ATTACKING_SEAT,
+    priorityPlayer: BLOCKING_SEAT,
+    step: 'declareBlockers',
+    combat,
+    battlefield: [
+      { ...attacker, controller: ATTACKING_SEAT },
+      { ...blocker, controller: BLOCKING_SEAT },
+    ],
+    // The blocking seat's hand is emptied so NOTHING is castable or
+    // tap-castable: `shouldAutoPass` stops for either, and a window it would
+    // have stopped in anyway could not tell us whether the hold did the work.
+    players: {
+      ...base.players,
+      [BLOCKING_SEAT]: { ...base.players[BLOCKING_SEAT], hand: [] },
+    },
+  };
+  return {
+    view: maskStateForSeat(inCombat, BLOCKING_SEAT),
+    // Passing is the ONLY thing on offer — the auto-pass window, exactly the one
+    // that walked the §10 measurement into the next turn.
+    legalActions: [{ kind: 'passPriority', player: BLOCKING_SEAT }],
+    yourTurn: true,
+    log: [],
+  };
+}
+
+describe('§10 — the ONLINE board holds combat on screen', () => {
+  it('announces the beat, worded from the shared KIND table', () => {
+    const html = render(blockedCombatFrame({ blockersDeclared: true }));
+    const row = COMBAT_HOLD_KINDS.blocksDeclared;
+    expect(html).toContain('combat-hold combat-hold--blocksDeclared');
+    // From the ROW, not re-worded here — a banner that invented its own words
+    // would satisfy a hard-coded string and still be a second answer.
+    expect(html).toContain(row.label);
+    expect(html).toContain(row.shows);
+    // The way out. A beat nobody can skip is a tax on every combat.
+    expect(html).toContain('combat-hold__skip');
+  });
+
+  it('paints the blocker AS blocking — the picture the beat exists to show', () => {
+    const html = render(blockedCombatFrame({ blockersDeclared: true }));
+    expect(html).toContain('perm--blocking');
+    expect(html).toContain('aria-label="Blocking"');
+  });
+
+  it('STOPS this board advancing under the beat — and the control proves it', () => {
+    const held = render(blockedCombatFrame({ blockersDeclared: true }));
+    const walking = render(blockedCombatFrame({ blockersDeclared: false }));
+    // The control: the same seat, the same single legal action, no beat owed —
+    // so the board really is in an auto-pass window and really does say so.
+    expect(walking).toContain(AUTO_ADVANCING_HINT);
+    expect(walking).not.toContain('combat-hold--');
+    // …which makes THIS the gate and nothing else. Delete the `combatHold !==
+    // null` argument to `shouldAutoPassNow` in `OnlineBoard.tsx` and this line
+    // is the one that reddens.
+    expect(held).not.toContain(AUTO_ADVANCING_HINT);
+  });
+});
+
+/**
+ * THE TWO BOARDS MUST NOT DRIFT APART (CLAUDE.md rule 12).
+ *
+ * The hold DECISION is already one module both boards read. What a second copy
+ * could still drift in is the two things the decision does not own: the strip
+ * that announces the beat, and the fact that each board's own advance path
+ * actually asks. Those advance paths are genuinely different shapes — a
+ * synchronous local priority walk versus a server frame stream — so this is the
+ * "second copy is unavoidable: derive both from one source and add a test that
+ * fails when they diverge" case, and this is that test.
+ */
+describe('the combat hold reaches BOTH boards, identically', () => {
+  /** Read a source file newline-agnostically (CLAUDE.md's CRLF trap). */
+  function source(relativePath: string): string {
+    return readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), 'utf8').replace(
+      /\r\n/g,
+      '\n',
+    );
+  }
+
+  /** Just the announce strip, from either board's markup. */
+  function holdBanner(html: string): string {
+    const start = html.indexOf('<div class="combat-hold ');
+    expect(start, 'this board rendered no combat-hold banner at all').toBeGreaterThanOrEqual(0);
+    const end = html.indexOf('</div>', start);
+    return html.slice(start, end + '</div>'.length);
+  }
+
+  /** The beat both boards are asked to announce — from the ONE decision funnel. */
+  function beat(): CombatHold {
+    const decision = combatHoldDecision(
+      {
+        step: 'declareBlockers',
+        combat: { blockersDeclared: true, attackerCount: 1, blockCount: 1 },
+        spent: NO_BEATS_SPENT,
+        reducedMotion: false,
+        gameOver: false,
+      },
+      COMBAT_HOLD_CONFIG,
+    );
+    if (decision.kind !== 'hold') throw new Error(`a declared block must hold: ${decision.detail}`);
+    return decision.hold;
+  }
+
+  it('renders the SAME strip on the hotseat board and the online board', () => {
+    const deck = SAMPLE_DECKS[0]!;
+    const started = startHotseatGame({
+      choiceA: { source: 'sample', deck },
+      choiceB: { source: 'sample', deck },
+      seed: 4242,
+      startingPlayer: 'A',
+    });
+    if (!started.ok) throw new Error('the sample deck must be legal for this fixture');
+    const hotseat = renderToStaticMarkup(
+      createElement(PlayBoard, {
+        session: GameSession.fromCreated(started.game.created, started.game.registry, NAMES),
+        viewer: 'A',
+        onSubmit: () => {},
+        onConcede: () => {},
+        stops: { fullControl: false },
+        onStops: () => {},
+        combatHold: beat(),
+        onCombatHoldSkip: () => {},
+      } as never),
+    );
+    // Byte-identical: same component, same row, same Skip. A re-wording or a
+    // restyle on one board can no longer land without the other.
+    expect(holdBanner(render(blockedCombatFrame({ blockersDeclared: true })))).toBe(
+      holdBanner(hotseat),
+    );
+  });
+
+  it("each board's OWN advance path asks the hold before it moves", () => {
+    // The hotseat's walk is stopped from INSIDE its stop predicate, because
+    // `autoAdvancePriority` walks many windows in one call and a gate outside
+    // the loop cannot stop it partway (§10's measurement is that failure).
+    expect(source('../../views/PlayView.tsx')).toContain("combatHoldFor(candidate).kind === 'hold'");
+    // The online board's analogue is the composed funnel, whose second argument
+    // is required — so the board cannot ask the rules question without also
+    // answering the hold one.
+    const online = source('./OnlineBoard.tsx');
+    expect(online).toContain('shouldAutoPassNow(');
+    expect(online).toContain('combatHold !== null,');
+    // …and there is no ungated path left for it to fall back to.
+    expect(online).not.toMatch(/[^w]shouldAutoPass\(/);
   });
 });

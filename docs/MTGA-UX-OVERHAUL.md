@@ -631,3 +631,75 @@ Note what the disabled run PASSED: `dmgLayer=1 impacts=2` at **Main Phase 1 of t
 damage layer mounting proves nothing on its own, which is why the check is "damage lands while the
 board is still in combat" and not "the layer exists" — the first version of that assertion passed
 without the fix, and an assertion that passes either way proves nothing.
+
+### ✅ SHIPPED 2026-09-14 — the ONLINE board, the half that was left explicitly unfixed
+
+The hotseat fix above closed with a stated carve-out: *"The online board is not covered.
+`OnlineBoard.tsx` / `apps/server` have their own advance path and get no hold; … Same combat, same
+invisibility, if anyone plays online."* That is now closed, with **no second decision and no
+protocol change**.
+
+**One decision, two boards.** `combat-hold.ts` is reused UNCHANGED — the protocol carries `combat`
+as core's own `CombatState` (`packages/protocol/src/index.ts`, `MaskedGameView.combat`), so
+`combatWindowFactsOf` adapts the masked view with nothing to translate and no adapter was needed.
+`COMBAT_HOLD_KINDS`, `COMBAT_HOLD_CONFIG` and `NO_BEATS_SPENT` are read by both boards; the last of
+these moved from a private const in `PlayView.tsx` into `combat-hold.ts` so the two boards stopped
+writing their own empty set.
+
+**Where the online gate sits, and why there.** The online analogue of the hotseat's `shouldStop`
+predicate is the `autoPass` VALUE the auto-pass effect acts on, so the hold is composed into that
+value through `shouldAutoPassNow(window, heldForCombat)` (`lib/online/auto-pass.ts`) rather than as
+an early return around the effect. `shouldAutoPass` stays a rules-shaped predicate — *"is passing
+the only thing this seat may legally do?"* — exactly as `shouldStopForPriority` does on the hotseat
+side; the beat is ANDed in at the one place the answer is consumed. The second argument is
+**required**, so a board that asks the rules question without answering the hold one does not
+compile.
+
+**One gate is enough here, and the hotseat's second one has no online twin.** The hotseat needs a
+second gate because it runs the opponent (the AI seat) in the same component. Online there is no AI
+seat: the opponent is another client running *this same component with this same gate*. The server
+is authoritative and has **no auto-advance of its own** — `apps/server/src/index.ts` runs only a
+socket heartbeat and an empty-room sweep, and `Room.submitAction` moves the game only when a seat
+submits — so a client that declines to auto-pass genuinely holds the window rather than decorating
+one. Both seats hold the same beat concurrently, so the added latency is one beat, not two.
+
+**Nothing in the protocol moved.** A hold is presentation only: it delays one client's own
+`passPriority` by a named, tunable number of milliseconds, which is indistinguishable to the server
+from a human thinking. The wire format, the action log, the replay and what the server accepts are
+untouched, and `apps/server` was not edited.
+
+**The guard** is `apps/web/src/components/online/online-board-parity.test.ts`, extended with a real
+`maskStateForSeat` view of a real blocked combat. It asserts the board announces the beat (worded
+from the KIND row, not re-written), paints the blocker as blocking, and — the load-bearing one —
+does **not** claim to be advancing while a beat is owed. That assertion is **two-sided**: the
+control frame (`blockersDeclared: false`, everything else equal) must SAY `Nothing to do this step —
+advancing…`, so the held frame's silence cannot pass vacuously. Falsified by replacing the gate
+argument with `false`:
+
+```
+Tests  2 failed | 10 passed (12)
+  × STOPS this board advancing under the beat — and the control proves it
+    → expected '<div class="play-board">…' not to contain 'Nothing to do this step — advancing…'
+  × each board's OWN advance path asks the hold before it moves
+    → expected 'import { useCallback, …' to contain 'combatHold !== null,'
+```
+
+The other ten stayed green, which is the point: the banner still rendered with the gate gone, so the
+reddened assertion is about the ADVANCE and nothing else.
+
+**The parity assertion (rule 12).** Both boards now mount the same extracted `CombatHoldBanner`
+component, and the test compares the two boards' rendered banner markup **byte for byte** — a
+re-wording or a restyle can no longer land on one board and miss the other. A second assertion
+checks that each board's own advance path still asks the hold, since the two advance paths are
+genuinely different shapes (a synchronous local priority walk vs. a server frame stream) and that is
+the "second copy is unavoidable — add a test that fails when they diverge" case.
+
+#### ⚠️ What the online hold reveals is LESS than what the hotseat hold reveals
+
+Stated rather than buried, because the difference is easy to mistake for a bug. `OnlineBoard` has no
+`.board-scene`, no midline element, no `CombatStage` and no `DamageLayer` — UX-9/UX-12/UX-13/UX-15
+reached `PlayBoard` only. So the online beat holds up the **blocking/attacking bands, the
+blocker→attacker arcs, the life totals and the server's log line**; it does **not** hold up an
+advance or a damage sprite, because there is none on that board to hold. The hold is what makes
+those readable at all — before it they were cleared inside one auto-pass round-trip — but porting
+the stage and the damage layer to the online board is a separate work item and is NOT done here.

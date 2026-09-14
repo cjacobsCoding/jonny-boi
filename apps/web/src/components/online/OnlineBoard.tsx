@@ -19,10 +19,18 @@ import type {
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { BoardPermanent } from '../../lib/play/view-model.js';
 import { isPlaneswalker, isPlayerTarget, PLAYER_IDS } from '@jonny-boi/core';
-import { stepLabel } from '../../lib/play/play-config.js';
+import { COMBAT_HOLD_CONFIG, stepLabel } from '../../lib/play/play-config.js';
 import { maskedViewToBoardView } from '../../lib/online/board-adapter.js';
 import { castSequence, castableWithTaps, graveyardCastableWithTaps } from '../../lib/online/auto-tap.js';
-import { alreadyPassedFrame, shouldAutoPass } from '../../lib/online/auto-pass.js';
+import { alreadyPassedFrame, shouldAutoPassNow } from '../../lib/online/auto-pass.js';
+import {
+  combatHoldDecision,
+  combatWindowFactsOf,
+  NO_BEATS_SPENT,
+  type CombatHoldKind,
+} from '../../lib/play/combat-hold.js';
+import { CombatHoldBanner } from '../play/CombatHoldBanner.js';
+import { usePrefersReducedMotion } from '../play/AnimationLayer.js';
 import { DRAG_ID_ATTR, useDragToPlay } from '../../lib/play/useDragToPlay.js';
 import { idleTurnNote, reasonCardIsDisabled } from '../../lib/online/why-disabled.js';
 import { zonePanelView } from '../../lib/play/zone-panel.js';
@@ -110,6 +118,16 @@ import '../play/action-bar.css';
  * `provenance-view.ts` and have all four import it.
  */
 const PROVENANCE_UNAVAILABLE_ONLINE = 'Live provenance is not carried by the multiplayer protocol yet.';
+
+/**
+ * What the action bar says while the board is advancing a window FOR the player.
+ *
+ * Named and exported because two readers must agree on it: the bar that shows it
+ * and `online-board-parity.test.ts`, which uses its presence and its ABSENCE as
+ * the two-sided evidence that the §10 combat hold really stops the auto-passer.
+ * A hard-coded copy in the test would go vacuous the day the wording changed.
+ */
+export const AUTO_ADVANCING_HINT = 'Nothing to do this step — advancing…';
 
 export function OnlineBoard({
   frame,
@@ -320,6 +338,84 @@ export function OnlineBoard({
   };
 
   /**
+   * §10 — HOLDING COMBAT ON SCREEN, ON THIS BOARD TOO.
+   *
+   * The hotseat board measured the defect and fixed it; the online board has the
+   * same combat and had the same invisibility, because it has its OWN advance
+   * path (the auto-pass below) and got no hold. The decision itself is not
+   * re-made here: `combatHoldDecision` and its closed `COMBAT_HOLD_KINDS` table
+   * are the one answer both boards read, and `combatWindowFactsOf` adapts the
+   * state unchanged — the protocol carries `combat` as core's own
+   * `CombatState`, so there is nothing to translate.
+   *
+   * ⚠️ DERIVED DURING RENDER, not armed in an effect. The frame is pushed by the
+   * server and the hold is a pure function of it, so there is never a render in
+   * which the board has the frame but not yet the beat — which is the render the
+   * auto-pass effect would have spent a pass in. It is also what lets
+   * `online-board-parity.test.ts` see the banner at all: that suite renders to
+   * static markup, where effects never run.
+   */
+  const reducedMotion = usePrefersReducedMotion();
+  /**
+   * Beats this turn's combat has already spent, and WHOSE turn it was.
+   *
+   * ⚠️ Compared at READ time rather than cleared by a reset effect — the same
+   * rule `PlayView` records: a reset that lands between renders would book the
+   * NEXT turn's combat as already held, which is the invisible-combat bug again
+   * in a new hat. One combat phase per turn (`STEP_ORDER`), so the turn number
+   * is the combat's identity.
+   */
+  const [beatsSpent, setBeatsSpent] = useState<{
+    readonly turn: number;
+    readonly spent: ReadonlySet<CombatHoldKind>;
+  }>({ turn: 0, spent: NO_BEATS_SPENT });
+
+  const combatHoldDecisionNow = combatHoldDecision(
+    {
+      step,
+      combat: combatWindowFactsOf(masked.combat),
+      spent: beatsSpent.turn === masked.turnNumber ? beatsSpent.spent : NO_BEATS_SPENT,
+      reducedMotion,
+      // The server's own verdict, carried by the mask — not a guess, and not the
+      // `false` a board could get away with here because the online flow swaps
+      // to `EndScreen` on `gameOver`.
+      gameOver: masked.gameOver,
+    },
+    COMBAT_HOLD_CONFIG,
+  );
+  const combatHold = combatHoldDecisionNow.kind === 'hold' ? combatHoldDecisionNow.hold : null;
+
+  /**
+   * Book a beat, which is what ENDS it: the decision then refuses `alreadyHeld`
+   * and the board resumes. Expiring and pressing Skip are the same event, so
+   * there is one funnel for both (`PlayView`'s `releaseCombatHold` twin).
+   *
+   * Takes the turn as an ARGUMENT and updates functionally, so it closes over
+   * nothing and stays referentially stable — the beat's timer below is keyed on
+   * primitives precisely so a re-render cannot restart the beat it is timing.
+   */
+  const bookCombatBeat = useCallback((kind: CombatHoldKind, turn: number): void => {
+    setBeatsSpent((current) => {
+      const spent = new Set(current.turn === turn ? current.spent : []);
+      spent.add(kind);
+      return { turn, spent };
+    });
+  }, []);
+
+  const holdKind = combatHold?.kind ?? null;
+  const holdMs = combatHold?.ms ?? 0;
+  const holdTurn = masked.turnNumber;
+  useEffect(() => {
+    if (holdKind === null) return undefined;
+    const handle = window.setTimeout(() => bookCombatBeat(holdKind, holdTurn), holdMs);
+    return () => window.clearTimeout(handle);
+    // ⚠️ PRIMITIVES ONLY. `combatHold` is a fresh object every render, and a
+    // frame arriving mid-beat (the opponent passing, a log line) would clear and
+    // re-arm this timer forever — a beat that never ends is a hung game, not a
+    // long pause.
+  }, [holdKind, holdMs, holdTurn, bookCombatBeat]);
+
+  /**
    * Advance automatically through priority windows where passing is the ONLY legal
    * action. Without this a new game opens in `upkeep` and needs four `Pass / advance`
    * clicks (two per seat, through `upkeep` and `draw`) before the first land can be
@@ -328,21 +424,33 @@ export function OnlineBoard({
    * `passedFrame` rate-limits it to once per server-pushed frame: a re-render must
    * not spend a second pass, but a NEW frame in the same step legitimately may (see
    * `alreadyPassedFrame` for the declareBlockers case that rules out a step key).
+   *
+   * ⚠️ THE LOAD-BEARING GATE (§10) is the second argument to
+   * `shouldAutoPassNow`. This is the online analogue of the hotseat's
+   * `shouldStop` predicate — the value that decides "should I keep advancing?" —
+   * and the hold belongs INSIDE it rather than as an early return around the
+   * effect, so nothing else can read a stale "yes". It is enough on its own
+   * because the server is authoritative and has no auto-advance of its own: it
+   * moves only when a seat's client submits, and the opponent's client is this
+   * same component holding the same beat.
    */
   const passedFrame = useRef<GameFrame | null>(null);
   const autoPass =
     AUTO_PASS_EMPTY_PRIORITY &&
     !!pass &&
-    shouldAutoPass({
-      yourTurn,
-      legalActions,
-      stackSize: masked.stack.length,
-      awaitingOwnChoice: !!ownChoice,
-      // A flashback the seat could fund is a real play, exactly like a hand card —
-      // auto-passing over it would make the new affordance unreachable in the very
-      // windows the card is castable in.
-      tapCastableCount: tapCastable.size + graveyardTapCastable.size,
-    });
+    shouldAutoPassNow(
+      {
+        yourTurn,
+        legalActions,
+        stackSize: masked.stack.length,
+        awaitingOwnChoice: !!ownChoice,
+        // A flashback the seat could fund is a real play, exactly like a hand card —
+        // auto-passing over it would make the new affordance unreachable in the very
+        // windows the card is castable in.
+        tapCastableCount: tapCastable.size + graveyardTapCastable.size,
+      },
+      combatHold !== null,
+    );
 
   useEffect(() => {
     if (!autoPass || !pass) return;
@@ -1151,9 +1259,11 @@ export function OnlineBoard({
                   ? 'Answer the question above to continue.'
                   : // A seat that holds priority with nothing to do is the state that
                     // read as a frozen app — say so plainly instead of giving the
-                    // generic step hint next to a hand of dead cards.
+                    // generic step hint next to a hand of dead cards. It reads the
+                    // GATED decision, so a board holding on combat (§10) does not
+                    // claim to be advancing while it is deliberately standing still.
                     autoPass
-                    ? 'Nothing to do this step — advancing…'
+                    ? AUTO_ADVANCING_HINT
                     : (idleNote ??
                       actionBarHint(step, {
                         // The active player's own declare window, pre-declaration;
@@ -1312,6 +1422,17 @@ export function OnlineBoard({
 
       {/* Blocker→attacker lines (§3.57) — same overlay as the hotseat board. */}
       <CombatLines lines={combatLines} containerRef={boardRootRef} measureKey={frame} />
+
+      {/* §10 — the board is holding combat on screen so the blocks that were just
+          declared, and the damage that follows them, can actually be read. The
+          SAME strip the hotseat board mounts, so the two cannot be re-worded
+          apart; Skip ends the beat now, so it is never a tax every combat. */}
+      {combatHold && (
+        <CombatHoldBanner
+          hold={combatHold}
+          onSkip={() => bookCombatBeat(combatHold.kind, masked.turnNumber)}
+        />
+      )}
     </div>
   );
 }

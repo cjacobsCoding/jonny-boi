@@ -109,7 +109,8 @@ import { combatArcPairs } from '../../lib/play/combat-lines.js';
 import { CombatStage, type StageEntry } from './CombatStage.js';
 import { NO_STAGED_PERMANENTS, StagedPermanentsContext } from './combat-stage-context.js';
 import { STAGED_HOME_TILE_OPACITY } from '../../lib/play/combat-stage.js';
-import { COMBAT_HOLD_KINDS, type CombatHold } from '../../lib/play/combat-hold.js';
+import type { CombatHold } from '../../lib/play/combat-hold.js';
+import { CombatHoldBanner } from './CombatHoldBanner.js';
 import { CardFace } from './CardFace.js';
 import { HOLD_KINDS, type SpellHold } from '../../lib/play/spell-hold.js';
 import { groupJailedByJailer, jailSourcesOf } from '../../lib/play/jail-view.js';
@@ -2636,48 +2637,6 @@ function SpellHoldCard({
           Let it resolve
         </button>
       </div>
-    </div>
-  );
-}
-
-/**
- * §10 — THE COMBAT BEAT, ANNOUNCED.
- *
- * Caleb: *"Animations when block phase is over and damage is being distributed
- * … so you can clearly see what's happening."* The pause is the feature; this
- * strip is only what tells you it is deliberate and how to leave it.
- *
- * ⚠️ SMALL, AND PINNED TO THE TOP. Everything it exists to reveal happens at the
- * MIDLINE between the two seats, so a centred card like {@link SpellHoldCard}'s
- * would cover the very advance the beat is for.
- *
- * The wording comes from the KIND table — `label` and `shows` are facts about
- * the row, and re-writing them here would be a second answer to what the pause
- * is for.
- */
-function CombatHoldBanner({
-  hold,
-  onSkip,
-}: {
-  hold: CombatHold;
-  onSkip?: () => void;
-}): ReactElement {
-  const row = COMBAT_HOLD_KINDS[hold.kind];
-  return (
-    <div
-      className={`combat-hold combat-hold--${hold.kind}`}
-      /* `status`, NOT `dialog`, for the reason SpellHoldCard records: this
-         announces and is dismissed by a timer. It promises no modality and no
-         focus trap, and `verify-game-resume.mjs` reads `[role="dialog"]` to
-         decide whether the game parked a QUESTION — which this never is. */
-      role="status"
-      aria-live="polite"
-    >
-      <span className="combat-hold__label">{row.label}</span>
-      <span className="combat-hold__shows">{row.shows}</span>
-      <button type="button" className="btn btn--ghost combat-hold__skip" onClick={onSkip}>
-        Skip
-      </button>
     </div>
   );
 }

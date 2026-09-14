@@ -43,6 +43,7 @@ import {
 import {
   combatHoldDecision,
   combatWindowFactsOf,
+  NO_BEATS_SPENT,
   type CombatHold,
   type CombatHoldKind,
 } from '../lib/play/combat-hold.js';
@@ -88,13 +89,6 @@ function newGameId(): string {
     return `g${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   }
 }
-
-/**
- * No combat beat has been spent yet. Shared and frozen-by-convention, so the
- * common case (every turn that is not the one a beat was booked in) allocates
- * nothing on a path the priority walker runs hundreds of times.
- */
-const NO_BEATS_SPENT: ReadonlySet<CombatHoldKind> = new Set<CombatHoldKind>();
 
 /** The high-level phase the hotseat is in. */
 type Phase =

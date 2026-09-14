@@ -128,6 +128,19 @@ export const COMBAT_HOLD_KIND_ORDER: readonly CombatHoldKind[] = Object.freeze([
   'damage',
 ]);
 
+/**
+ * "This combat has spent nothing yet" — shared, so a board with no combat
+ * allocates nothing to say so and neither board writes its own empty set.
+ *
+ * Both boards need this literal answer before the first beat of every combat
+ * (`PlayView` for the hotseat, `OnlineBoard` for the networked seat), and two
+ * hand-rolled `new Set()`s are two answers to one question. Same shape
+ * `NO_STAGED_PERMANENTS` uses for the same reason.
+ */
+export const NO_BEATS_SPENT: ReadonlySet<CombatHoldKind> = Object.freeze(
+  new Set<CombatHoldKind>(),
+);
+
 /** Why a hold did not fire. CLOSED — each row carries the sentence the UI shows. */
 export const COMBAT_HOLD_REFUSALS = Object.freeze({
   gameOver: 'The game is over — there is no combat left to watch.',
