@@ -63,6 +63,7 @@ export function SeatPanel({
   hasPriority,
   interaction,
   onGraveyardClick,
+  onExileClick,
   jails,
   onInspectCard,
 }: {
@@ -76,6 +77,13 @@ export function SeatPanel({
    * before, so seats without a panel are unchanged.
    */
   onGraveyardClick?: () => void;
+  /**
+   * When present, the exile count becomes a button that opens the exile panel —
+   * the same treatment the graveyard gets, because exile was the one zone with
+   * something in it that a player could only ever read as a number (UX-10).
+   * Absent → plain count, so a seat without a panel is unchanged.
+   */
+  onExileClick?: () => void;
   /**
    * jailer instance id → the cards it exiled "until it leaves the battlefield"
    * (§3.57). Built by the board from the PUBLIC exile zones via the pure
@@ -194,12 +202,32 @@ export function SeatPanel({
             <span className="seat__zone-count">{seat.graveyardCount}</span>
           </span>
         )}
-        {seat.exileCount > 0 && (
-          <span className="seat__zone" title="Exile">
-            <span className="seat__zone-label">Exile</span>
-            <span className="seat__zone-count">{seat.exileCount}</span>
-          </span>
-        )}
+        {/* EXILE, openable exactly as the graveyard is (UX-10). Shown only once
+            something is in it — a permanent "Exile 0" beside every life total is
+            the noise the poison clock above is gated for the same reason.
+            `exileCount` INCLUDES the face-down cards whose identity is withheld:
+            the table can see that a foretold card was exiled, it just may not
+            look at it, so a count that hid them would be under-reporting a
+            public fact. */}
+        {seat.exileCount > 0 &&
+          (onExileClick ? (
+            <button
+              type="button"
+              className="seat__zone seat__zone-btn"
+              title="Open exile"
+              aria-label={`Open ${seat.name} exile (${seat.exileCount} cards)`}
+              data-anim-anchor={seatAnchor('exile', seat.id)}
+              onClick={onExileClick}
+            >
+              <span className="seat__zone-label">Exile</span>
+              <span className="seat__zone-count">{seat.exileCount}</span>
+            </button>
+          ) : (
+            <span className="seat__zone" title="Exile" data-anim-anchor={seatAnchor('exile', seat.id)}>
+              <span className="seat__zone-label">Exile</span>
+              <span className="seat__zone-count">{seat.exileCount}</span>
+            </span>
+          ))}
         {manaEntries.length > 0 && (
           <span
             className="seat__mana"

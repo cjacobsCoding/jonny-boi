@@ -135,7 +135,15 @@ function seatView(
     // The graveyard is a PUBLIC zone: the server sends its full contents for both
     // seats, so listing the cards here reveals nothing the table can't see.
     graveyard: visibleHand(player.graveyard),
-    exileCount: player.exile.length,
+    // ⚠️ `player.exile` is ALREADY MASKED: `maskStateForSeat` (§3.112) strips the
+    // opponent's face-down (foretold) cards out of it and reports them as
+    // `faceDownExileCount`. So the total is the two halves added back together —
+    // the existence of a face-down exiled card is public, only its face is not,
+    // and this used to count `exile.length` alone, which meant a foretold card
+    // of the opponent's did not exist online even as a number.
+    exileCount: player.exile.length + player.faceDownExileCount,
+    exile: visibleHand(player.exile),
+    exileHiddenCount: player.faceDownExileCount,
     manaPool: poolColorCounts(player.manaPool),
     restrictedMana: poolRestrictionLabels(player.manaPool),
     hasLost: player.hasLost,

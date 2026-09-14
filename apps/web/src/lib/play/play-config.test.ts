@@ -32,6 +32,7 @@ import {
   COMBAT_ADVANCE_CONFIG,
   COMBAT_ARC_COLORS,
   COMBAT_ARC_CONFIG,
+  COMBAT_HOLD_CONFIG,
   COPILOT_ADVICE_SEED,
   DAMAGE_ANIM_CONFIG,
   DRAG_START_THRESHOLD_PX,
@@ -174,6 +175,16 @@ const CONFIGS: readonly ConfigShape[] = [
     name: 'SPELL_HOLD_CONFIG',
     value: SPELL_HOLD_CONFIG,
     keys: ['holdMs', 'pointerHoldMs', 'extendMs', 'fadeMs', 'maxHoldsPerTurn'],
+  },
+  {
+    name: 'COMBAT_HOLD_CONFIG',
+    value: COMBAT_HOLD_CONFIG,
+    keys: [
+      'blocksDeclaredMs',
+      'reducedMotionBlocksDeclaredMs',
+      'damageMs',
+      'reducedMotionDamageMs',
+    ],
   },
   {
     name: 'PROPOSAL_CONFIG',
@@ -412,6 +423,40 @@ describe('cross-field invariants — the pairs that only work if they agree', ()
   it('a pointer on a held spell extends the hold, and the extension is still bounded', () => {
     expect(SPELL_HOLD_CONFIG.pointerHoldMs).toBeGreaterThan(SPELL_HOLD_CONFIG.holdMs);
     expect(SPELL_HOLD_CONFIG.pointerHoldMs).toBeLessThan(20_000);
+  });
+
+  it('the combat beats outlast the animations they exist to reveal', () => {
+    // §10: "a hold shorter than the animation it exists to reveal is
+    // pointless". The blocker advance must have FINISHED travelling — including
+    // the stagger tail of a maximum-width charge — before the beat ends, and
+    // one damage hit must have travelled AND bloomed.
+    const advanceEnds =
+      COMBAT_ADVANCE_CONFIG.advanceMs +
+      COMBAT_ADVANCE_CONFIG.staggerMs * (COMBAT_ADVANCE_CONFIG.maxStaggered - 1);
+    expect(COMBAT_HOLD_CONFIG.blocksDeclaredMs).toBeGreaterThan(advanceEnds);
+    expect(COMBAT_HOLD_CONFIG.damageMs).toBeGreaterThan(
+      DAMAGE_ANIM_CONFIG.travelMs + DAMAGE_ANIM_CONFIG.impactMs,
+    );
+  });
+
+  it('a combat beat never outlasts the damage sequence it could ever cover', () => {
+    // The other side of the same coin: a beat past the sequence's own provable
+    // ceiling would be the board sitting on a finished animation.
+    const sequenceCeiling =
+      DAMAGE_ANIM_CONFIG.maxTotalMs + DAMAGE_ANIM_CONFIG.impactMs + DAMAGE_ANIM_CONFIG.settleHoldMs;
+    expect(COMBAT_HOLD_CONFIG.damageMs).toBeLessThan(sequenceCeiling);
+  });
+
+  it('a reduced-motion beat is never LONGER than the full one', () => {
+    // The same invariant the tilt keeps (see `reducedMotionTiltDeg`): reducing
+    // motion may shorten or flatten, never add. Somebody who asked for less
+    // must not be made to wait for more.
+    expect(COMBAT_HOLD_CONFIG.reducedMotionBlocksDeclaredMs).toBeLessThanOrEqual(
+      COMBAT_HOLD_CONFIG.blocksDeclaredMs,
+    );
+    expect(COMBAT_HOLD_CONFIG.reducedMotionDamageMs).toBeLessThanOrEqual(
+      COMBAT_HOLD_CONFIG.damageMs,
+    );
   });
 
   it('a proposal cannot nest', () => {

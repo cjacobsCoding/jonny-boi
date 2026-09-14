@@ -59,7 +59,8 @@ describe('browser harness wait budgets', () => {
     expect(names).toContain('verify-game-resume.mjs');
     expect(names).toContain('verify-board-fits.mjs');
     expect(names).toContain('verify-bug-reporter.mjs');
-    expect(names.length).toBeGreaterThanOrEqual(4);
+    expect(names).toContain('verify-combat-visibility.mjs');
+    expect(names.length).toBeGreaterThanOrEqual(5);
   });
 
   it('no harness waits for a selector on an unnamed default timeout', () => {

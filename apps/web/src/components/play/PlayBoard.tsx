@@ -67,7 +67,7 @@ import { PlayCard, CardBack } from './PlayCard.js';
 import { DRAG_ID_ATTR, useDragToPlay } from '../../lib/play/useDragToPlay.js';
 import { CardZoomOverlay, type ZoomedCard } from './CardZoomOverlay.js';
 import { ChoicePrompt } from './ChoicePrompt.js';
-import { GraveyardPanel } from './GraveyardPanel.js';
+import { ZonePanel } from './ZonePanel.js';
 import {
   AbilityMenuPrompt,
   AbilityTargetPrompt,
@@ -75,7 +75,7 @@ import {
   type AbilityPromptFaces,
 } from './AbilityPrompts.js';
 import './ability-prompts.css';
-import { graveyardPanelView } from '../../lib/play/graveyard-cast.js';
+import { zonePanelView } from '../../lib/play/zone-panel.js';
 import { isChoiceForViewer, waitingForChoiceText } from '../../lib/play/choice-view.js';
 import { isModalTap, manaTapMenu, tappableIds, type ManaTapOption } from '../../lib/play/mana-tap.js';
 import {
@@ -109,6 +109,7 @@ import { combatArcPairs } from '../../lib/play/combat-lines.js';
 import { CombatStage, type StageEntry } from './CombatStage.js';
 import { NO_STAGED_PERMANENTS, StagedPermanentsContext } from './combat-stage-context.js';
 import { STAGED_HOME_TILE_OPACITY } from '../../lib/play/combat-stage.js';
+import { COMBAT_HOLD_KINDS, type CombatHold } from '../../lib/play/combat-hold.js';
 import { CardFace } from './CardFace.js';
 import { HOLD_KINDS, type SpellHold } from '../../lib/play/spell-hold.js';
 import { groupJailedByJailer, jailSourcesOf } from '../../lib/play/jail-view.js';
@@ -210,6 +211,8 @@ export function PlayBoard({
   onHoldPointer,
   onHoldExtend,
   onHoldRelease,
+  combatHold,
+  onCombatHoldSkip,
 }: {
   session: GameSession;
   viewer: PlayerId;
@@ -232,6 +235,16 @@ export function PlayBoard({
   onHoldExtend?: () => void;
   /** "Let it resolve" — end the hold now. */
   onHoldRelease?: () => void;
+  /**
+   * §10 — the COMBAT beat currently being held, or null.
+   *
+   * Owned by PlayView for the same reason the spell hold is: the beat's whole
+   * job is to gate `autoAdvancePriority` and the AI seat, and both live there.
+   * The board only says what is being held, and offers the way out of it.
+   */
+  combatHold?: CombatHold | null;
+  /** "Skip" — give the beat up now and let combat run on. */
+  onCombatHoldSkip?: () => void;
   /**
    * §3.119 — the priority stops, OWNED BY PlayView because it is the auto-pass
    * effect that has to obey them. The board renders their controls and reports
@@ -303,6 +316,15 @@ export function PlayBoard({
   const [pendingManaTap, setPendingManaTap] = useState<readonly ManaTapOption[] | null>(null);
   // The viewer's graveyard panel (the flashback affordance's entry point).
   const [graveyardOpen, setGraveyardOpen] = useState(false);
+  /**
+   * WHOSE exile is open, or null. A seat, not a boolean, because exile is the
+   * one openable zone where the OPPONENT's copy is worth looking at: a jailed
+   * card, a suspended card counting down and a foretold card all sit in the
+   * exile of whoever owns them, and before UX-10 every one of them was a number
+   * on the far side of the table. The viewer's own is where the cast affordance
+   * lives; the opponent's is inspect-only, minus anything face down.
+   */
+  const [exileOpen, setExileOpen] = useState<PlayerId | null>(null);
   // A hand card the player clicked that can be played in more than one way (a
   // cycling land is both a land drop and a cycling ability), awaiting the pick.
   const [handChoice, setHandChoice] = useState<InstanceId | null>(null);
@@ -525,10 +547,28 @@ export function PlayBoard({
   // that may already have one (a cycling land is also a land drop) — which is
   // why the hand click below can open a menu rather than always acting.
   const cycleOptions = isViewersPriority ? session.cycleOptions() : [];
-  // MADNESS: a card of the viewer's discarded to exile, still castable. The
-  // window is the only thing the engine will accept right now, so it is shown as
-  // a prompt rather than tucked into a panel the player might not open.
-  const madnessCasts = session.exileCastOptions().filter(() => session.priorityPlayer === viewer);
+  /**
+   * Casts OUT OF EXILE the engine is offering the viewer right now: a madness
+   * window's discarded card, a free suspend/cascade window, and the standing
+   * permissions a card in exile can carry (an adventure's creature half after
+   * its adventure resolved, a defeated Siege's reward). ONE list, because the
+   * engine answers "what may this seat cast from exile" once — the exile panel
+   * and the madness prompt below are two SURFACES onto it, never two derivations
+   * of it.
+   *
+   * ⚠️ Named for the ZONE, not for madness. It was `madnessCasts` while madness
+   * was the only thing in it and has carried permission casts since §3.113, and
+   * the stale name is why the prompt further down still greets EVERY entry with
+   * "was discarded and exiled … for its madness cost" — true of a madness
+   * window, false of an adventure's creature half. That wording is a live defect
+   * and it is reported rather than half-fixed here: the prompt is also the only
+   * thing that makes a permission cast discoverable on this board (there is no
+   * "flashback available" nudge in the hotseat action bar), so narrowing it
+   * without replacing the nudge would trade a wrong label for an unreachable
+   * cast. The exile panel below is now a second, correctly-labelled surface onto
+   * this same one list.
+   */
+  const exileCasts = session.exileCastOptions().filter(() => session.priorityPlayer === viewer);
 
   // --- manual mana tapping --------------------------------------------------------
   // Auto-tap covers casting; this covers everything else a player does with mana by
@@ -656,7 +696,7 @@ export function PlayBoard({
    */
   const manaPickerReady =
     proposedCast !== null &&
-    [...castOptions, ...graveyardCasts, ...madnessCasts].some(
+    [...castOptions, ...graveyardCasts, ...exileCasts].some(
       (option) => castOptionKey(option) === castOptionKey(proposedCast) && option.affordableNow,
     );
 
@@ -1149,17 +1189,75 @@ export function PlayBoard({
     if (opt) onCastClick(opt);
   };
 
+  /**
+   * Activate a card from the opened EXILE, through the same chokepoint. Only the
+   * viewer's own exile offers a cast, and only from {@link exileCasts} — the
+   * engine's own offers — so a card the engine did not name is inert here no
+   * matter what the panel drew.
+   */
+  const onExileCardClick = (id: InstanceId): void => {
+    const opt = exileCasts.find((o) => o.instanceId === id);
+    if (opt) onCastClick(opt);
+  };
+
   /** The panel's view of the viewer's graveyard, with the why-disabled treatment. */
-  const graveyardPanelCards = graveyardPanelView(
-    session.state.players[viewer].graveyard.map((inst) => ({
-      instanceId: inst.instanceId,
-      cardId: inst.def.id,
-      name: inst.def.name,
-      hasFlashback: inst.def.flashback !== undefined,
-    })),
+  const graveyardPanelCards = zonePanelView(
+    'graveyard',
+    {
+      cards: session.state.players[viewer].graveyard.map((inst) => ({
+        instanceId: inst.instanceId,
+        cardId: inst.def.id,
+        name: inst.def.name,
+        // The graveyard CAN answer the permanent question: no printed flashback
+        // cost means no cast from here, ever.
+        castableEver: inst.def.flashback !== undefined,
+      })),
+      // CR 404.2 — nothing in a graveyard is hidden from anybody.
+      hiddenCount: 0,
+    },
     new Set(graveyardCasts.map((o) => o.instanceId)),
-    { yourTurn: isViewersPriority, waitingOn: names[session.priorityPlayer], step },
+    { yours: true, yourTurn: isViewersPriority, waitingOn: names[session.priorityPlayer], step },
   );
+
+  /**
+   * The opened exile, for whichever seat's chip was clicked.
+   *
+   * ⚠️ Built from `view` — the MASKED board view — and never from
+   * `session.state`, which is the unmasked truth both seats' panels sit in front
+   * of. That is the whole hidden-information guarantee for this panel: the
+   * masking happened in `buildBoardView`, a face-down card of the opponent's is
+   * not in `seat.exile` at all, and this cannot render an identity it was never
+   * handed. Reaching into `session.state.players[seat].exile` here would undo
+   * it in one line, which is exactly why it is written down.
+   */
+  const exileSeat = exileOpen === null ? null : exileOpen === view.self.id ? view.self : view.opponent;
+  const exilePanelView =
+    exileSeat === null
+      ? null
+      : zonePanelView(
+          'exile',
+          {
+            cards: exileSeat.exile.map((c) => ({
+              instanceId: c.instanceId,
+              cardId: c.cardId,
+              name: c.name,
+              // Exile cannot answer the permanent question — see the ZONE_PANELS
+              // row. Only the engine knows whether a permission stands.
+              castableEver: null,
+            })),
+            hiddenCount: exileSeat.exileHiddenCount,
+          },
+          // Only the viewer's own exile offers casts; the opponent's is a
+          // reading surface, so the set is empty and every card is inspectable
+          // but inert.
+          exileSeat.id === viewer ? new Set(exileCasts.map((o) => o.instanceId)) : new Set(),
+          {
+            yours: exileSeat.id === viewer,
+            yourTurn: isViewersPriority,
+            waitingOn: names[session.priorityPlayer],
+            step,
+          },
+        );
 
   // --- combat: attacker selection -----------------------------------------------
   const eligibleAttackers = useMemo(() => {
@@ -1754,6 +1852,7 @@ export function PlayBoard({
           isActive={view.activePlayer === view.opponent.id}
           hasPriority={view.priorityPlayer === view.opponent.id}
           interaction={opponentInteraction}
+          onExileClick={() => setExileOpen((open) => (open === view.opponent.id ? null : view.opponent.id))}
           jails={jails}
           onInspectCard={setZoomed}
         />
@@ -1788,6 +1887,7 @@ export function PlayBoard({
             hasPriority={isViewersPriority}
             interaction={selfInteraction}
             onGraveyardClick={() => setGraveyardOpen((open) => !open)}
+            onExileClick={() => setExileOpen((open) => (open === view.self.id ? null : view.self.id))}
             jails={jails}
             onInspectCard={setZoomed}
           />
@@ -1796,11 +1896,26 @@ export function PlayBoard({
             hand was the only clickable zone, so they were unreachable — this is
             that affordance, routed through the same cast chokepoint. */}
         {graveyardOpen && (
-          <GraveyardPanel
+          <ZonePanel
+            zone="graveyard"
             ownerName={view.self.name}
-            cards={graveyardPanelCards}
+            view={graveyardPanelCards}
             onActivate={onGraveyardCardClick}
             onClose={() => setGraveyardOpen(false)}
+          />
+        )}
+        {/* The opened EXILE — the last zone on this board that a player could
+            only read as a number (UX-10). Either seat's, because a jailed or
+            suspended card sits in its owner's exile; the SAME panel component,
+            because "list a zone's cards, hoverable, some castable" is one
+            question (rule 12). */}
+        {exileSeat !== null && exilePanelView !== null && (
+          <ZonePanel
+            zone="exile"
+            ownerName={exileSeat.name}
+            view={exilePanelView}
+            onActivate={onExileCardClick}
+            onClose={() => setExileOpen(null)}
           />
         )}
       </div>
@@ -2182,7 +2297,7 @@ export function PlayBoard({
           engine already accepts — said out loud here, because a player who does
           not know the window is open would stall the game staring at a board
           that refuses every other move. */}
-      {madnessCasts.map((opt) => (
+      {exileCasts.map((opt) => (
         <div
           key={`madness:${opt.instanceId}`}
           className="target-prompt"
@@ -2433,6 +2548,15 @@ export function PlayBoard({
           {...(onHoldRelease ? { onRelease: onHoldRelease } : {})}
         />
       )}
+      {/* §10 — the board is holding combat on screen so UX-13's advance and
+          UX-15's damage can actually be read. Says WHAT is being held and gets
+          out of the way on request, so it is never a tax every combat. */}
+      {combatHold && (
+        <CombatHoldBanner
+          hold={combatHold}
+          {...(onCombatHoldSkip ? { onSkip: onCombatHoldSkip } : {})}
+        />
+      )}
       <OpponentActionFeed notes={opponentNotes} opponentName={names[otherOf(viewer)]} />
     </div>
   );
@@ -2512,6 +2636,48 @@ function SpellHoldCard({
           Let it resolve
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * §10 — THE COMBAT BEAT, ANNOUNCED.
+ *
+ * Caleb: *"Animations when block phase is over and damage is being distributed
+ * … so you can clearly see what's happening."* The pause is the feature; this
+ * strip is only what tells you it is deliberate and how to leave it.
+ *
+ * ⚠️ SMALL, AND PINNED TO THE TOP. Everything it exists to reveal happens at the
+ * MIDLINE between the two seats, so a centred card like {@link SpellHoldCard}'s
+ * would cover the very advance the beat is for.
+ *
+ * The wording comes from the KIND table — `label` and `shows` are facts about
+ * the row, and re-writing them here would be a second answer to what the pause
+ * is for.
+ */
+function CombatHoldBanner({
+  hold,
+  onSkip,
+}: {
+  hold: CombatHold;
+  onSkip?: () => void;
+}): ReactElement {
+  const row = COMBAT_HOLD_KINDS[hold.kind];
+  return (
+    <div
+      className={`combat-hold combat-hold--${hold.kind}`}
+      /* `status`, NOT `dialog`, for the reason SpellHoldCard records: this
+         announces and is dismissed by a timer. It promises no modality and no
+         focus trap, and `verify-game-resume.mjs` reads `[role="dialog"]` to
+         decide whether the game parked a QUESTION — which this never is. */
+      role="status"
+      aria-live="polite"
+    >
+      <span className="combat-hold__label">{row.label}</span>
+      <span className="combat-hold__shows">{row.shows}</span>
+      <button type="button" className="btn btn--ghost combat-hold__skip" onClick={onSkip}>
+        Skip
+      </button>
     </div>
   );
 }

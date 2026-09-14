@@ -25,7 +25,7 @@ import { castSequence, castableWithTaps, graveyardCastableWithTaps } from '../..
 import { alreadyPassedFrame, shouldAutoPass } from '../../lib/online/auto-pass.js';
 import { DRAG_ID_ATTR, useDragToPlay } from '../../lib/play/useDragToPlay.js';
 import { idleTurnNote, reasonCardIsDisabled } from '../../lib/online/why-disabled.js';
-import { graveyardPanelView } from '../../lib/play/graveyard-cast.js';
+import { zonePanelView } from '../../lib/play/zone-panel.js';
 import { AUTO_PASS_DELAY_MS, AUTO_PASS_EMPTY_PRIORITY } from '../../lib/online/online-config.js';
 import { legalTargets, optionToTarget, targetRequirement } from '../../lib/play/targeting.js';
 import { buildDeclareAttackersAction, type AbilityOption } from '../../lib/play/session.js';
@@ -35,6 +35,7 @@ import {
   castChoices,
   declareAttackersAction,
   declareBlockersAction,
+  exileCastChoices,
   graveyardCastChoices,
   passAction,
   playableLandIds,
@@ -48,7 +49,7 @@ import {
   AbilityTargetPrompt,
   type AbilityPromptFaces,
 } from '../play/AbilityPrompts.js';
-import { GraveyardPanel } from '../play/GraveyardPanel.js';
+import { ZonePanel } from '../play/ZonePanel.js';
 import { SeatPanel, type PermInteraction } from '../play/SeatPanel.js';
 import { StackPanel } from '../play/StackPanel.js';
 import { stackEntries } from '../../lib/play/stack-view.js';
@@ -66,7 +67,7 @@ import '../play/action-bar.css';
  * handoff: when it's not our turn we render a clear "Waiting for opponent…" state.
  *
  * It reuses `SeatPanel`/`StackPanel`/`PlayCard`/`CardBack`/`ChoicePrompt`/
- * `AbilityPrompts`/`GraveyardPanel` verbatim (DRY) — the adapter and the pure
+ * `AbilityPrompts`/`ZonePanel` verbatim (DRY) — the adapter and the pure
  * `legal-actions` derivations are the only new glue. Every affordance the hotseat
  * board has is present here too (walker attacks, loyalty abilities, flashback from
  * the graveyard), driven off the masked view instead of a local engine: a mechanic
@@ -189,6 +190,21 @@ export function OnlineBoard({
   const casts = useMemo(() => castChoices(legalActions), [legalActions]);
   /** Flashback casts the server is ALREADY offering (its pool covers the cost). */
   const graveyardCasts = useMemo(() => graveyardCastChoices(legalActions), [legalActions]);
+  /**
+   * Casts OUT OF EXILE the server is offering — a madness window, a free
+   * suspend/cascade window, an adventure's creature half, a defeated Siege's
+   * reward. The server's own offers and nothing else; this board re-derives no
+   * legality.
+   *
+   * ⚠️ NO tap-to-fund twin, unlike the graveyard's. `castableWithTaps` plans a
+   * payment against a PRINTED cost, and the cost of a cast from exile is the
+   * one the permission or the window names (a madness cost, or free) — which
+   * this board cannot read off the instance. So exile offers exactly what the
+   * server already offers, and a cast the viewer could only afford after tapping
+   * stays absent rather than being offered and rejected. Reported as a known
+   * narrowing, not approximated.
+   */
+  const exileCasts = useMemo(() => exileCastChoices(legalActions), [legalActions]);
   const attackTemplate = useMemo(() => declareAttackersAction(legalActions), [legalActions]);
   const blockTemplate = useMemo(() => declareBlockersAction(legalActions), [legalActions]);
   const pass = useMemo(() => passAction(legalActions), [legalActions]);
@@ -261,6 +277,13 @@ export function OnlineBoard({
   const [zoomed, setZoomed] = useState<ZoomedCard | null>(null);
   /** The viewer's graveyard panel (the flashback affordance's entry point). */
   const [graveyardOpen, setGraveyardOpen] = useState(false);
+  /**
+   * WHOSE exile is open, or null — the same seat-valued state the hotseat board
+   * keeps, because a jailed or suspended card sits in its OWNER's exile and
+   * either side is worth looking at. See `PlayBoard.tsx` for the reasoning; the
+   * two boards share the panel, so they must share the affordance too.
+   */
+  const [exileOpen, setExileOpen] = useState<PlayerId | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   /** A transient board message (the hotseat board's toast, same feel). */
@@ -337,6 +360,21 @@ export function OnlineBoard({
   }, [autoPass, pass, frame, onAction]);
 
   // --- casting -------------------------------------------------------------------
+  /**
+   * The `fromZone` field of a cast action, written only when the cast does NOT
+   * come from the hand (the engine's default, and omitting it is what every
+   * hand cast has always done).
+   *
+   * ONE helper rather than a `=== 'graveyard'` test at each of the two build
+   * sites, which is what both of them said: exile casts were legal online the
+   * day §3.113 landed, and either site would have submitted one with no zone —
+   * so the server would have looked for the card in the HAND and cleanly
+   * rejected a cast it had itself just offered. A zone added to `CastZone`
+   * tomorrow rides along with no edit here.
+   */
+  const zoneField = (zone: CastZone | undefined): { fromZone?: CastZone } =>
+    zone === undefined || zone === 'hand' ? {} : { fromZone: zone };
+
   const onCastClick = (choice: CastChoice): void => {
     if (choice.canCastUntargeted) {
       submit({
@@ -344,7 +382,7 @@ export function OnlineBoard({
         player: masked.viewer,
         instanceId: choice.instanceId,
         targets: [],
-        ...(choice.fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
+        ...zoneField(choice.fromZone),
         ...(choice.phyrexianLife === undefined ? {} : { phyrexianLife: choice.phyrexianLife }),
       });
     } else if (choice.targetSets.length > 0) {
@@ -359,9 +397,8 @@ export function OnlineBoard({
       player: masked.viewer,
       instanceId: pendingCast.instanceId,
       targets,
-      // The zone rides the choice: a flashback cast must name its graveyard source
-      // or the server looks for the card in the hand and cleanly rejects it.
-      ...(pendingCast.fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
+      // The zone rides the choice — see `zoneField`.
+      ...zoneField(pendingCast.fromZone),
       // So does the READING (§3.143): the server offers one cast per fundable
       // Phyrexian life amount, and dropping the field asks for one it may never
       // have offered.
@@ -427,6 +464,13 @@ export function OnlineBoard({
       }
       return;
     }
+    if (zone === 'exile') {
+      // The server's offer or nothing — see `exileCasts` for why there is no
+      // tap-to-fund fallback here.
+      const offered = exileCasts.get(id);
+      if (offered) onCastClick(offered);
+      return;
+    }
     if (lands.has(id)) {
       submit({ kind: 'playLand', player: masked.viewer, instanceId: id });
       return;
@@ -452,22 +496,68 @@ export function OnlineBoard({
   // --- the graveyard panel ---------------------------------------------------------
   /**
    * Every graveyard card as the panel renders it. The judging lives in the shared
-   * pure `graveyardPanelView` — the hotseat board calls the same function, so the
-   * two graveyards cannot drift.
+   * pure `zonePanelView` — the hotseat board calls the same function with the same
+   * zone row, so the two graveyards cannot drift.
    */
   const graveyardPanelCards = useMemo(
     () =>
-      graveyardPanelView(
-        ownGraveyard.map((c) => ({
-          instanceId: c.instanceId,
-          cardId: c.def.id,
-          name: c.def.name,
-          hasFlashback: c.def.flashback !== undefined,
-        })),
+      zonePanelView(
+        'graveyard',
+        {
+          cards: ownGraveyard.map((c) => ({
+            instanceId: c.instanceId,
+            cardId: c.def.id,
+            name: c.def.name,
+            castableEver: c.def.flashback !== undefined,
+          })),
+          // CR 404.2 — a graveyard hides nothing from anybody.
+          hiddenCount: 0,
+        },
         new Set([...graveyardCasts.keys(), ...graveyardTapCastable]),
-        { yourTurn, waitingOn: names[masked.priorityPlayer], step },
+        { yours: true, yourTurn, waitingOn: names[masked.priorityPlayer], step },
       ),
     [ownGraveyard, graveyardCasts, graveyardTapCastable, yourTurn, names, masked.priorityPlayer, step],
+  );
+
+  // --- the exile panel -------------------------------------------------------------
+  /**
+   * The opened exile, for whichever seat's chip was clicked.
+   *
+   * ⚠️ Built from `view` — the ADAPTED, already-masked board view — so a
+   * face-down (foretold) card of the opponent's is not in `seat.exile` at all
+   * and only its COUNT arrives. The server masked it (`maskStateForSeat`), the
+   * adapter carried the two halves through, and this panel cannot render an
+   * identity nobody handed it.
+   */
+  const exileSeat = exileOpen === null ? null : exileOpen === view.self.id ? view.self : view.opponent;
+  const exilePanelView = useMemo(
+    () =>
+      exileSeat === null
+        ? null
+        : zonePanelView(
+            'exile',
+            {
+              cards: exileSeat.exile.map((c) => ({
+                instanceId: c.instanceId,
+                cardId: c.cardId,
+                name: c.name,
+                // Only the server knows whether a permission stands — see the
+                // `exile` row of ZONE_PANELS.
+                castableEver: null,
+              })),
+              hiddenCount: exileSeat.exileHiddenCount,
+            },
+            // Only the viewer's own exile offers casts; the opponent's is a
+            // reading surface, so every card there is inspectable but inert.
+            exileSeat.id === masked.viewer ? new Set(exileCasts.keys()) : new Set<InstanceId>(),
+            {
+              yours: exileSeat.id === masked.viewer,
+              yourTurn,
+              waitingOn: names[masked.priorityPlayer],
+              step,
+            },
+          ),
+    [exileSeat, exileCasts, masked.viewer, yourTurn, names, masked.priorityPlayer, step],
   );
 
   // --- activated abilities (a planeswalker's loyalty lines) -------------------------
@@ -848,6 +938,7 @@ export function OnlineBoard({
           isActive={view.activePlayer === view.opponent.id}
           hasPriority={view.priorityPlayer === view.opponent.id}
           interaction={opponentInteraction}
+          onExileClick={() => setExileOpen((open) => (open === view.opponent.id ? null : view.opponent.id))}
           jails={jails}
           onInspectCard={setZoomed}
         />
@@ -895,6 +986,7 @@ export function OnlineBoard({
             hasPriority={view.priorityPlayer === view.self.id}
             interaction={selfInteraction}
             onGraveyardClick={() => setGraveyardOpen((open) => !open)}
+            onExileClick={() => setExileOpen((open) => (open === view.self.id ? null : view.self.id))}
             jails={jails}
             onInspectCard={setZoomed}
           />
@@ -903,11 +995,24 @@ export function OnlineBoard({
             hand was the only clickable zone, so they were unreachable online —
             this is that affordance, routed through the same `activateCard`. */}
         {graveyardOpen && (
-          <GraveyardPanel
+          <ZonePanel
+            zone="graveyard"
             ownerName={view.self.name}
-            cards={graveyardPanelCards}
+            view={graveyardPanelCards}
             onActivate={(id) => activateCard(id, 'graveyard')}
             onClose={() => setGraveyardOpen(false)}
+          />
+        )}
+        {/* The opened EXILE — the same panel, the same funnel, mounted on BOTH
+            boards because the graveyard's was and a surface that reaches only
+            one of the two is the drift §3.143 GAP-20 was written about. */}
+        {exileSeat !== null && exilePanelView !== null && (
+          <ZonePanel
+            zone="exile"
+            ownerName={exileSeat.name}
+            view={exilePanelView}
+            onActivate={(id) => activateCard(id, 'exile')}
+            onClose={() => setExileOpen(null)}
           />
         )}
         <div

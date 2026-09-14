@@ -177,19 +177,37 @@ export function PlayCard({
 const LIVE_FACE_STYLE: CSSProperties = Object.freeze({ overflow: 'visible' });
 
 /**
- * A face-down card back (the opponent's hidden hand), fanned so that a big hand
- * costs no more height than a small one. The overlap is a token rather than a
- * literal (§3.62) because the player's own hand now fans by the same rule, and
- * two hands drifting apart on the same board reads as a bug.
+ * A face-down card back — the ONE answer to "what does a card the viewer may
+ * not identify look like", used by the opponent's hidden hand and by the
+ * face-down half of an opened exile (CR 702.143a, a foretold card).
+ *
+ * Fanned by `index` so that a big hand costs no more height than a small one.
+ * The overlap is a token rather than a literal (§3.62) because the player's own
+ * hand now fans by the same rule, and two hands drifting apart on the same board
+ * reads as a bug. `index={0}` lays a back out on its own, which is what a zone
+ * list wants — there the backs are countable items, not a fan.
+ *
+ * ⚠️ NOTHING IDENTIFYING MAY BE PASSED HERE. `label` is prose about the
+ * SITUATION ("Face down in exile — only its owner may look at it"), never about
+ * the card; there is deliberately no `name` or `cardId` prop for one to arrive
+ * in. Without a label the back is decorative and hidden from assistive tech, as
+ * the hand's fan is; with one it is an item a screen reader can count, which is
+ * what a zone panel needs.
  */
-export function CardBack({ index }: { index: number }): ReactElement {
+export function CardBack({ index, label }: { index: number; label?: string }): ReactElement {
+  const identity =
+    label === undefined
+      ? ({ 'aria-hidden': true } as const)
+      : ({ role: 'img', 'aria-label': label, title: label } as const);
   return (
     <div
       className="play-card play-card--back"
-      aria-hidden="true"
+      {...identity}
       style={{ marginLeft: index === 0 ? 0 : 'calc(-1 * var(--play-back-overlap))' }}
     >
-      <span className="play-card__back-mark">⚙</span>
+      <span className="play-card__back-mark" aria-hidden="true">
+        ⚙
+      </span>
     </div>
   );
 }

@@ -131,6 +131,7 @@ describe('every fixed overlay is a SIBLING of the scene, not a descendant', () =
     '<DamageLayer',
     '<CombatStage',
     '<SpellHoldCard',
+    '<CombatHoldBanner',
     '<OpponentActionFeed',
     '<StackPanel',
   ] as const;

@@ -29,7 +29,7 @@ import {
 } from '../lib/play/seat.js';
 import { aiAction, aiMustAct, type AiSeatConfig } from '../lib/play/ai-seat.js';
 import { PilotPicker } from '../components/lab/PilotControls.js';
-import { HOTSEAT_CONFIG, SPELL_HOLD_CONFIG } from '../lib/play/play-config.js';
+import { COMBAT_HOLD_CONFIG, HOTSEAT_CONFIG, SPELL_HOLD_CONFIG } from '../lib/play/play-config.js';
 import { stackEntries } from '../lib/play/stack-view.js';
 import {
   extendPressure,
@@ -40,6 +40,13 @@ import {
   type HoldPressure,
   type SpellHold,
 } from '../lib/play/spell-hold.js';
+import {
+  combatHoldDecision,
+  combatWindowFactsOf,
+  type CombatHold,
+  type CombatHoldKind,
+} from '../lib/play/combat-hold.js';
+import { usePrefersReducedMotion } from '../components/play/AnimationLayer.js';
 import { buildBoardView } from '../lib/play/view-model.js';
 import { SetupScreen } from '../components/play/SetupScreen.js';
 import { MulliganScreen } from '../components/play/MulliganScreen.js';
@@ -81,6 +88,13 @@ function newGameId(): string {
     return `g${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   }
 }
+
+/**
+ * No combat beat has been spent yet. Shared and frozen-by-convention, so the
+ * common case (every turn that is not the one a beat was booked in) allocates
+ * nothing on a path the priority walker runs hundreds of times.
+ */
+const NO_BEATS_SPENT: ReadonlySet<CombatHoldKind> = new Set<CombatHoldKind>();
 
 /** The high-level phase the hotseat is in. */
 type Phase =
@@ -902,18 +916,122 @@ function LocalPlay({
     return () => window.clearTimeout(handle);
   }, [hold, holdPressure]);
 
+  /**
+   * §3.143 / §10 — HOLDING COMBAT ON SCREEN.
+   *
+   * The same shape as the spell hold above, and here for the same reason: the
+   * pause's entire job is to stop the auto-passer and the AI seat, so it is
+   * owned by the component that runs both.
+   *
+   * ⚠️ WHY THE GATE IS INSIDE `shouldStop` AND NOT ONLY AN EARLY RETURN.
+   * `autoAdvancePriority` walks MANY priority windows inside ONE effect — that
+   * is its whole job — so a gate outside the loop cannot stop it partway. §10's
+   * measurement is exactly that failure: 260 ms after "Confirm 1 block" the rig
+   * sampled `blocking=0 staged=0 arcs=0` at Main Phase 1 of the NEXT turn,
+   * because blocks, combat damage and end-of-combat had all been walked through
+   * before a frame was ever painted. The predicate below makes the walker STOP
+   * at the window a beat is owed to; the early return then keeps it stopped
+   * while the beat runs.
+   */
+  const reducedMotion = usePrefersReducedMotion();
+  /**
+   * The beat on screen, and WHICH TURN'S combat it belongs to. The turn travels
+   * with it so releasing can book the beat against the right combat without
+   * closing over the session (see {@link releaseCombatHold}).
+   */
+  const [combatHold, setCombatHold] = useState<{
+    readonly hold: CombatHold;
+    readonly turn: number;
+  } | null>(null);
+  /**
+   * Which beats a combat has already spent, and whose combat it was.
+   *
+   * ⚠️ RESOLVED AT READ TIME, never by a reset effect. `autoAdvancePriority`
+   * can walk across a turn boundary inside a single call, so a reset that
+   * happened between renders would arrive too late and the NEXT turn's combat
+   * would be skipped as "already held" — the same invisible-combat bug wearing
+   * a new hat. Comparing the stored turn to the candidate's is one read and
+   * cannot be out of date.
+   */
+  const combatHoldSpentRef = useRef<{ turn: number; spent: Set<CombatHoldKind> }>({
+    turn: 0,
+    spent: new Set(),
+  });
+
+  /**
+   * THE ONE PLACE the combat-hold rule is asked. Both the arming effect and the
+   * walker's own stop predicate call this, so the pause and the walker can never
+   * disagree about whether the game is moving (rule 12, and the rule §3.119 set
+   * for the priority stops).
+   */
+  const combatHoldFor = useCallback(
+    (candidate: GameSession): ReturnType<typeof combatHoldDecision> => {
+      const booked = combatHoldSpentRef.current;
+      const spent = booked.turn === candidate.state.turnNumber ? booked.spent : NO_BEATS_SPENT;
+      return combatHoldDecision(
+        {
+          step: candidate.state.step,
+          combat: combatWindowFactsOf(candidate.state.combat),
+          spent,
+          reducedMotion,
+          gameOver: candidate.gameOver,
+        },
+        COMBAT_HOLD_CONFIG,
+      );
+    },
+    [reducedMotion],
+  );
+
+  /**
+   * End the beat now — the equivalent of UX-16's "Let it resolve", so nobody is
+   * trapped behind a delay every combat. The timer calls it too: expiring and
+   * skipping are the same event, which is why there is one funnel for both.
+   */
+  const releaseCombatHold = useCallback((): void => {
+    if (!combatHold) return;
+    // Booked on RELEASE, never on ARM: while the beat is running the walker's
+    // predicate must still answer "stop here", because that predicate — not the
+    // effect's early return — is what holds the line INSIDE the walk.
+    if (combatHoldSpentRef.current.turn !== combatHold.turn) {
+      combatHoldSpentRef.current = { turn: combatHold.turn, spent: new Set() };
+    }
+    combatHoldSpentRef.current.spent.add(combatHold.hold.kind);
+    setCombatHold(null);
+  }, [combatHold]);
+
+  useEffect(() => {
+    if (phase.kind !== 'play' || !session) return;
+    if (combatHold) return; // one at a time; the timer below is what ends it
+    const decision = combatHoldFor(session);
+    if (decision.kind !== 'hold') return;
+    setCombatHold({ hold: decision.hold, turn: session.state.turnNumber });
+  }, [phase, session, combatHold, combatHoldFor]);
+
+  // The beat's timer. Its length came from the decision, so the beat the board
+  // announces and the beat actually waited out are the same number.
+  useEffect(() => {
+    if (!combatHold) return undefined;
+    const handle = window.setTimeout(releaseCombatHold, combatHold.hold.ms);
+    return () => window.clearTimeout(handle);
+  }, [combatHold, releaseCombatHold]);
+
   useEffect(() => {
     if (phase.kind !== 'play' || !session || session.gameOver) return;
-    // A hold is up: the board is showing the opponent's spell and the game must
-    // not walk out from under it.
-    if (hold) return;
+    // A hold is up: the board is showing the opponent's spell, or the combat
+    // that just happened, and the game must not walk out from under it.
+    if (hold || combatHold) return;
     const advanced = session.autoAdvancePriority(undefined, (candidate) =>
-      shouldStopForPriority(stopContextFor(candidate), stops),
+      shouldStopForPriority(stopContextFor(candidate), stops) ||
+      // ⚠️ THE LOAD-BEARING GATE. Without this the walk below runs from declared
+      // blockers to the next turn's main phase in one synchronous burst and
+      // there is no frame in which `state.combat.blockersDeclared` is true for
+      // the board to render from (§10).
+      combatHoldFor(candidate).kind === 'hold',
     );
     // Identity-equal when nothing was skipped, so React bails out and this cannot
     // become a render loop.
     if (advanced !== session) setSession(advanced);
-  }, [phase, session, stops, hold]);
+  }, [phase, session, stops, hold, combatHold, combatHoldFor]);
 
   // --- the computer's seat -------------------------------------------------------
   //
@@ -942,7 +1060,10 @@ function LocalPlay({
     // does not get to move either. Gating only the auto-passer would let the AI
     // pass priority underneath the announce card and resolve the very spell the
     // player is being shown, which is the bug wearing a new hat.
-    if (hold) return;
+    // …and the combat hold does the same job for the combat that just happened:
+    // the AI passing priority underneath the beat would resolve combat damage
+    // and end the step while the player is still looking at the blockers.
+    if (hold || combatHold) return;
     if (!aiMustAct(session, ai.seat)) return;
     const handle = window.setTimeout(() => {
       const action = aiAction(session, aiPilot, aiRng);
@@ -954,7 +1075,7 @@ function LocalPlay({
       setSession(result.rejected ? session.passPriority().session : result.session);
     }, HOTSEAT_CONFIG.aiThinkMs);
     return () => window.clearTimeout(handle);
-  }, [ai, aiPilot, aiRng, session, phase, hold]);
+  }, [ai, aiPilot, aiRng, session, phase, hold, combatHold]);
 
   // The computer keeps its opening hand. It has no mulligan policy of its own —
   // pilots decide in-game actions, not whether to ship a seven — so it always
@@ -1121,6 +1242,8 @@ function LocalPlay({
         onHoldPointer={(over) => setHoldPressure((p) => pointerPressure(p, over))}
         onHoldExtend={() => setHoldPressure(extendPressure)}
         onHoldRelease={() => setHold(null)}
+        combatHold={combatHold ? combatHold.hold : null}
+        onCombatHoldSkip={releaseCombatHold}
       />
     </div>
   );

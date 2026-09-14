@@ -54,6 +54,8 @@ const SEAT: SeatView = {
   graveyardCount: 0,
   graveyard: [],
   exileCount: 0,
+  exile: [],
+  exileHiddenCount: 0,
   manaPool: {},
   restrictedMana: [],
   hasLost: false,

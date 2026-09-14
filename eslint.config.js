@@ -88,12 +88,19 @@ export default tseslint.config(
     // BROWSER. Lint sees one file and flags every `document`/`Image`/`btoa` in
     // the inner half as undefined — 19 errors that are all false. Declaring the
     // browser globals here is what makes the real errors in this file visible.
-    files: [
-      '**/scripts/verify-bug-reporter.mjs',
-      '**/scripts/verify-game-resume.mjs',
-      '**/scripts/verify-mana-choice.mjs',
-      '**/scripts/verify-board-fits.mjs',
-    ],
+    //
+    // ⚠️ A GLOB, NOT A LIST. This was four hand-written paths, and the fifth
+    // harness (`verify-combat-visibility.mjs`) arrived with eighteen false
+    // `no-undef` errors purely because nobody had added its row — a list that
+    // has to be edited to keep working is a trap, not a table. `verify-*.mjs` is
+    // already the naming convention every harness follows and the one
+    // `harness-wait-budgets.test.ts` DISCOVERS them by, so one convention now
+    // answers both questions.
+    //
+    // Scoped to `apps/web/scripts/` rather than `**/scripts/`, because the
+    // repo-root `scripts/verify-deploy.mjs` is pure Node: handing it `document`
+    // would turn a real typo there into a silent pass.
+    files: ['apps/web/scripts/verify-*.mjs'],
     languageOptions: {
       globals: {
         document: 'readonly',

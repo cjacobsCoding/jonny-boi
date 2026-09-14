@@ -85,6 +85,11 @@ describe('the card browser / deck-builder grid is inside the funnel', () => {
 const CARD_MOUNT_SITES: readonly { readonly file: string; readonly element: string }[] = [
   { file: './CardTile.tsx', element: '<CardArt' },
   { file: './online/OnlineBoard.tsx', element: '<PlayCard' },
+  // The opened graveyard AND the opened exile, one component (UX-10): the zone
+  // panel is the surface that had no preview at all, and it is the one whose
+  // card list grows a zone at a time, so it is exactly where an unfunnelled
+  // renderer would arrive next.
+  { file: './play/ZonePanel.tsx', element: '<PlayCard' },
 ];
 
 /** Source with comments stripped — a tag named in prose is not a mount site. */

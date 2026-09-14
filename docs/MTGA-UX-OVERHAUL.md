@@ -76,7 +76,7 @@ branch — see §7.3.
 | **UX-7** | C — Prompts | Saying yes to a "may" is still reversible until commit | Answering the may and then backing out at the target step leaves nothing on the stack | ✅ |
 | **UX-8** | C — Prompts | Every target prompt shows the **source card's face** | The card provoking the choice renders as an image, not a name string; candidates render as card faces too | ✅ px |
 | **UX-9** | D — Board | 3D tabletop: perspective, tilted, from the player's seat | A real CSS 3D scene with a named, tunable perspective/tilt config — not a flat grid | ✅ px |
-| **UX-10** | D — Board | Hover any card, anywhere, → full clear card view | One hover funnel for hand, battlefield, stack, prompts, graveyard, exile, reveals | ◐ |
+| **UX-10** | D — Board | Hover any card, anywhere, → full clear card view | One hover funnel for hand, battlefield, stack, prompts, graveyard, exile, reveals | ✅ |
 | **UX-11** | D — Board | Tapped cards rotate 90° — **including while attacking** | Tap rotation is driven by `tapped`, composes with the attack transform instead of being overridden by it | ✅ |
 | **UX-12** | D — Board | Attackers advance toward the defender, never past the midline | Attack offset is a named fraction of the half-board, clamped at the midline | ✅ |
 | **UX-13** | D — Board | Blockers advance to meet the attacker they block | A blocker's tile moves toward its attacker's advanced position | ✅ |
@@ -313,18 +313,27 @@ nothing looked for siblings. The fix is the same one line on both:
 back to the plain offset, because below 40rem the rail folds under the table
 (`board-fit.css:818-832`) and the corner is free again.
 
-**UX-10 — one hover funnel, adopted everywhere there is something to hover, and exile has nothing.**
-The funnel is real and it is one funnel: `CardHover` raises a `CardFace` at `size="full"`
-(`CardHover.tsx:207`), and fifteen files mount it — the hand and the battlefield
-(`PlayBoard.tsx:1745`, `BoardPermanentTile.tsx:244`), the stack (`StackPanel.tsx:154-166`), every
-prompt (`ChoicePrompt.tsx:357,395`), the graveyard (`GraveyardPanel.tsx`), reveals
-(`RevealBanner.tsx`), the mulligan, the effects bench, the online board. **What remains is the zone,
-not the funnel: there is no exile viewer at all.** `SeatPanel.tsx:197-200` shows exile as a bare
-count chip; the only exiled cards a player can look at are the two special cases that already had
-their own surface — a card jailed under its jailer (`BoardPermanentTile.tsx:427`, §3.57) and a
-madness cast offered out of exile (`PlayBoard.tsx:2027-2052`). Everything else in a public exile zone
-is a number. Finishing UX-10 is a `GraveyardPanel`-shaped list for exile, not a change to the hover
-path.
+**UX-10 — CLOSED.** The funnel was always real and always one funnel: `CardHover` raises a `CardFace`
+at `size="full"`, and fifteen files mount it — the hand and the battlefield, the stack, every prompt,
+the graveyard, reveals, the mulligan, the effects bench, the online board. What was missing was never
+the funnel but a ZONE: `SeatPanel` showed exile as a bare count chip, and the only exiled cards a
+player could look at were the two special cases that already had a surface of their own — a card
+jailed under its jailer (`BoardPermanentTile.tsx`, §3.57) and a madness cast offered out of exile
+(`PlayBoard.tsx`).
+
+Exile is now openable on BOTH boards and for BOTH seats, through the same panel the graveyard uses:
+`GraveyardPanel` became `ZonePanel`, driven by the closed `ZONE_PANELS` table in
+`lib/play/zone-panel.ts` (a row per zone: label, icon, cast badge, whether the zone can hold hidden
+cards, and the sentences a disabled card is allowed to say). A third public zone later is a ROW.
+
+⚠️ **And exile is NOT the graveyard.** A foretold card is exiled FACE DOWN and only its owner may
+look at it (CR 702.143a, `CardInstance.faceDown`), so the masking is done at the VIEW MODEL:
+`SeatView.exile` carries only the cards the viewer is entitled to identify and `SeatView.exileHiddenCount`
+carries the rest as a number with nowhere for a name to travel. `maskStateForSeat` had already done
+this half of the job since §3.112 — but `faceDownExileCount` had no consumer, and the online adapter
+counted `exile.length` alone, so a foretold card of the opponent's did not exist online even as a
+number. Both are fixed, and `components/play/exile-viewer.test.ts` renders the real panel on a real
+masked view and fails if the hidden card's name or art reaches the markup.
 
 ### 7.2 The three carve-outs, stated rather than buried
 
@@ -480,3 +489,145 @@ So, before calling any play-surface work done:
    `proposal-adoption.test.ts`) all enumerate MOUNT SITES out of the source text and fail when a new
    one appears without the prop. A test that asserts a CSS property exists, or that a pure module
    computes the right value, cannot fail for the reason this surface actually breaks.
+
+## 9. The ZONES as physical piles — raised 2026-09-14, NOT YET STARTED
+
+> Raised by Caleb after the first fourteen items landed, with the explicit instruction to add it
+> durably rather than carry it in a session. **Verbatim, so no later summary can trim a clause:**
+
+> visually see all player's library of cards on their side of the table, as a physical stack of card -
+> with nice animations for drawing, shuffling, putting on the bottom, milling, ect. Same for all
+> player's graveyard and all player's exile. Graveyard should be face up pile next to library and
+> clicking on it should let you view all cards in that player's graveyard in a nice way, with slight
+> arcing/fanning to the horizontal line of cards, with a way to scroll back and forth across the
+> cards, with the centered card always being at a neutral/none angle. Same goes for exile pile wrt
+> viewing. But exile pile should render as face-down stack under the graveyard, but at a 90 degree
+> angle so it visually sticks out from under the graveyard. Hovering over the exile should just show
+> the top card of it as we do with many hover behaviors, with a hint that you can click on the pile
+> to see all of them.
+
+### 9.1 The work items
+
+| ID | Item | One-line acceptance |
+| --- | --- | --- |
+| **UX-18** | The library is a physical stack on its owner's side | A real pile whose visible depth tracks the card count, seated on the tabletop — not a count chip |
+| **UX-19** | Zone motion is animated | Draw, shuffle, put-on-bottom and mill each read as their own motion, distinguishable from one another |
+| **UX-20** | The graveyard is a FACE-UP pile beside the library | Its top card is legible at rest, and it is clearly a pile rather than a badge |
+| **UX-21** | The exile pile sits UNDER the graveyard, face-down, turned 90° | It sticks out from beneath the graveyard so both piles read at a glance; hovering shows its top card plus a hint that clicking opens it |
+| **UX-22** | One fanned browser serves graveyard AND exile | Cards laid on a horizontal arc, scrollable side to side, with the CENTRED card always at zero rotation |
+
+### 9.2 What is already in place, and what this supersedes
+
+§7.1's exile gap (UX-10) is a **subset** of UX-21/UX-22 and must not be built twice. The
+table-driven `ZonePanel` + `zone-panel.ts` added for that gap is the right substrate — it already
+serves graveyard and exile from one closed table of zones — but its presentation is a flat list, not
+the fanned arc asked for here. **Extend that panel; do not add a third zone viewer.**
+
+The masking rule from UX-10 carries over UNCHANGED and is the one hard constraint in this section:
+exile is NOT a fully public zone. `CardInstance.faceDown` exists for exactly this, so a face-down
+exiled card renders as a BACK with no identifying data reaching the client — masked in the
+view-model, never in the component. A fanned browser that reveals a face-down exiled card is a
+hidden-information leak, not a cosmetic bug.
+
+### 9.3 The trap this section will hit
+
+Every visual item in §1 that shipped green-but-invisible did so because a transform or an
+`overflow` ancestor ate it (§7.3). A stack of cards with depth, a 90°-turned pile and a fanned arc
+are all transforms inside the tilted scene, so they will hit the same wall. **Budget for it, and
+verify with a rendered frame rather than a passing test** — §8 says how.
+
+## 10. MEASURED 2026-09-14: UX-13 and UX-15 are computed correctly and last too briefly to see
+
+**This is the seventh instance of the branch's own failure shape — built, tested, unreachable — and
+the first one where the code is entirely correct.**
+
+### What was measured
+A rig drove a real game to a real blocked combat (Wall of Omens blocking Savannah Lions, confirmed
+in the game log along with `Savannah Lions deals 2 to Wall of Omens`). Immediately after clicking
+**Confirm 1 block**, sampled at **260 ms** with the rig deliberately NOT passing priority:
+
+```
+BLOCKS CONFIRMED | blocking=0 staged=0 arcs=0 | Turn 7 · Main Phase 1 · Player 1's turn
+```
+
+Blocks, combat damage and end-of-combat had all resolved and the turn had advanced — inside a
+quarter of a second, with no input. A subsequent 24-frame watch loop sampling every 45 ms never
+once saw `staged > 0` for a blocker.
+
+### Why the code is NOT at fault
+`stageEntries` (`PlayBoard.tsx:1505-1534`) gates the blocker advance on `combat.blockersDeclared`,
+which is correct per the rules and matches `combat-stage.ts`'s own design note. The entries ARE
+built. `state.combat` is simply cleared again before a human eye — or a 45 ms sampler — can catch
+them. Nothing here is a logic bug, which is exactly why 22,564 tests are green and the feature is
+nevertheless not delivered.
+
+### The requirement this fails
+Caleb, verbatim: *"Animations when block phase is over and damage is being distributed to players
+and creatures, just like MTGA does it, **so you can clearly see what's happening**."* An animation
+that is correct and invisible does not satisfy that sentence. MTGA holds combat for roughly a
+second precisely so the exchange can be read.
+
+### The fix, and the precedent for it
+**UX-16 already solved this exact problem and is proven working**: `spell-hold.ts` holds an
+opponent's spell on screen before it resolves, and — critically — it gates BOTH the auto-passer and
+the AI seat (`PlayView.tsx:909`, `:945`). That second gate is what makes it a real pause rather than
+a decorated feed, and it is the part a naive implementation omits.
+
+A combat hold is the same shape: after `blockersDeclared` becomes true, hold the board for a named,
+tunable beat so the advance renders and the damage sequence plays out, then release. Requirements:
+
+- **Named constants in `play-config.ts`** (a blocks-declared beat and a damage beat), never inline.
+- **It must gate the AI seat and the auto-passer**, or it is cosmetic — see the UX-16 precedent.
+- **It must not alter the rules or the action log**: a hold is a presentation delay, and the replay,
+  the sim and the headless harness must be completely unaffected. The sim runs thousands of games
+  and must never wait on it.
+- **The guard is a rig, not a unit test.** No unit test can catch "this state existed for 200 ms";
+  the check is the harness sampling `staged > 0` for a blocker after Confirm. That is the only
+  guard shape that would have caught this.
+
+### ✅ SHIPPED 2026-09-14 — what was built, and the numbers
+
+**The design.** `apps/web/src/lib/play/combat-hold.ts` — a pure, DOM-free decision in the image of
+`spell-hold.ts`: a closed `COMBAT_HOLD_KINDS` table with two rows (`blocksDeclared`, `damage`), a
+closed `COMBAT_HOLD_REFUSALS` set, and `combatHoldDecision`, unit-tested in `combat-hold.test.ts`.
+Nothing in `packages/` imports it or can.
+
+**The two gates, both in `PlayView.tsx`.**
+1. **The auto-passer, gated INSIDE its `shouldStop` predicate** — not only by an effect-level early
+   return. `autoAdvancePriority` walks many priority windows inside ONE effect, so a gate outside the
+   loop cannot stop it partway, which is exactly why the 260 ms sample landed on the next turn.
+2. **The AI seat** — `if (hold || combatHold) return;`, so the computer cannot pass priority
+   underneath the beat and resolve the combat the player is being shown.
+
+**The constants** (`play-config.ts`, `COMBAT_HOLD_CONFIG`) are DERIVED from the animations they
+exist to reveal, never hand-tuned: `blocksDeclaredMs` = the advance's travel + a full stagger tail +
+a board-reading beat (**1025 ms**); `damageMs` = one hit's travel + the stagger between three hits +
+the impact bloom + the settle (**1040 ms**, against `DAMAGE_ANIM_CONFIG.travelMs` of 340).
+`prefers-reduced-motion` selects the row's OTHER beat — a NUMBER, the convention
+`reducedMotionTiltDeg` set — rather than switching the hold off. A "Skip" affordance ends it now,
+the equivalent of UX-16's "Let it resolve".
+
+**The guard** is `apps/web/scripts/verify-combat-visibility.mjs`, which replaces the throwaway rig.
+Measured both ways on the same tree:
+
+```
+hold disabled (the shipped behaviour before this change) — 1/6 checks passed
+  FAIL  a BLOCKER IS STAGED after Confirm
+        best stagedBlockers=0 over 6000ms | staged=0 (blockers 0) declaredArcs=0 arcs=0
+        blocking=0 attacking=0 | Turn 7 · Main Phase 1 · Player 1's turn
+  FAIL  the confirmed block gets a DECLARED arc — declared arcs 2 → 0 (-2)
+  FAIL  the DAMAGE LANDS ON THE COMBAT BOARD — damage bloomed only after combat was gone
+
+hold enabled — 6/6 checks passed
+  PASS  a BLOCKER IS STAGED after Confirm
+        staged=3 (blockers 1) declaredArcs=3 arcs=6 blocking=2 attacking=4
+        | Turn 6 · Declare Blockers · Computer's turn
+  PASS  the confirmed block gets a DECLARED arc — declared arcs 2 → 3 (+1)
+  PASS  the DAMAGE LANDS ON THE COMBAT BOARD
+        dmgLayer=1 impacts=2 bolts=2 | Turn 6 · Combat Damage · Computer's turn
+```
+
+Note what the disabled run PASSED: `dmgLayer=1 impacts=2` at **Main Phase 1 of the next turn**. The
+damage layer mounting proves nothing on its own, which is why the check is "damage lands while the
+board is still in combat" and not "the layer exists" — the first version of that assertion passed
+without the fix, and an assertion that passes either way proves nothing.

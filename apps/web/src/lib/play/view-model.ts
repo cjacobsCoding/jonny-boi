@@ -70,7 +70,12 @@ export function poolRestrictionLabels(pool: ManaPool): readonly string[] {
 /** Shared empty list so the ordinary pool allocates nothing to describe none. */
 const EMPTY_RESTRICTIONS: readonly string[] = Object.freeze([]);
 
-/** A hand card the viewer is allowed to see (their own hand). */
+/**
+ * A card the viewer is allowed to SEE — their own hand, either graveyard, and
+ * the half of exile they are entitled to identify. Named for the hand because
+ * that is where it started; the shape is "an identified card in a list", and
+ * every zone that shows one uses it so no zone grows a renderer of its own.
+ */
 export interface VisibleHandCard {
   readonly instanceId: InstanceId;
   readonly cardId: string;
@@ -200,7 +205,31 @@ export interface SeatView {
    * UI open a graveyard and offer flashback casts from it, not a leak.
    */
   readonly graveyard: readonly VisibleHandCard[];
+  /**
+   * How many cards are in exile ALTOGETHER — including the face-down ones whose
+   * identity is withheld below. Their EXISTENCE is public (the table watched the
+   * card be exiled face down); only their faces are not, so a count that left
+   * them out would under-report a public fact.
+   */
   readonly exileCount: number;
+  /**
+   * Exile's cards, MINUS any the viewer is not entitled to identify.
+   *
+   * ⚠️ Exile is the one "public" zone that is not fully public: a card with
+   * foretell is exiled FACE DOWN and only its owner may look at it
+   * (CR 702.143a, `CardInstance.faceDown`). This list is the masked half — a
+   * face-down card of the OPPONENT's is never copied into it, so no consumer
+   * holds the secret and none can leak it. See {@link SeatView.exileHiddenCount}
+   * for the other half.
+   */
+  readonly exile: readonly VisibleHandCard[];
+  /**
+   * How many of this seat's exiled cards are withheld from the viewer. A count
+   * and nothing else, deliberately: there is no field here for a name or a card
+   * id to travel in, which is what makes the guarantee structural rather than a
+   * promise every renderer has to keep.
+   */
+  readonly exileHiddenCount: number;
   readonly manaPool: Readonly<Record<string, number>>;
   /**
    * The printed SPEND RESTRICTIONS on mana currently floating — "only to cast a
@@ -441,6 +470,12 @@ function seatView(
     graveyardCount: p.graveyard.length,
     graveyard: visibleHand(p.graveyard),
     exileCount: p.exile.length,
+    // THE MASK, and it is the same rule the online seam already applies
+    // (`maskStateForSeat`, §3.112): a face-down exiled card of a seat the viewer
+    // is not is withheld — identity never copied, only counted. `reveal` is the
+    // viewer's own seat, and your own foretold card is yours to look at.
+    exile: visibleHand(p.exile.filter((c) => reveal || c.faceDown !== true)),
+    exileHiddenCount: reveal ? 0 : p.exile.filter((c) => c.faceDown === true).length,
     manaPool: poolColorCounts(p.manaPool),
     restrictedMana: poolRestrictionLabels(p.manaPool),
     hasLost: p.hasLost,

@@ -52,6 +52,15 @@ export const SEAT_ANCHOR_NAMES = Object.freeze({
   handCount: 'hand-count',
   library: 'library',
   graveyard: 'graveyard',
+  /**
+   * The EXILE count chip. Published since UX-10 gave exile an openable panel of
+   * its own: exile is already a destination `deriveAnimations` names
+   * (battlefield → exile is a removal), and every other zone a card can move to
+   * publishes the element an overlay would measure. A row with a publisher and
+   * no reader yet is the honest half of the contract — a reader with no
+   * publisher is the bug this table exists to stop.
+   */
+  exile: 'exile',
   /** The creature row — where a permanent-flavoured effect blooms. */
   board: 'board',
   /** The rendered hand region, published by the board rather than the seat panel. */

@@ -127,6 +127,23 @@ export function graveyardCastChoices(
 }
 
 /**
+ * The legal EXILE casts, grouped per card — a madness window's discarded card, a
+ * free suspend/cascade window, an adventure's creature half after its adventure
+ * resolved, a defeated Siege's reward. Split out for the same reason flashback
+ * is: a cast out of exile must carry `fromZone: 'exile'` or the server looks for
+ * the card in the hand, and a map that mixed the zones would lose the zone the
+ * action has to name.
+ *
+ * Nothing here decides LEGALITY — these are the server's own offers, filtered by
+ * the zone they came out of.
+ */
+export function exileCastChoices(
+  actions: readonly GameAction[],
+): ReadonlyMap<InstanceId, CastChoice> {
+  return castChoicesFrom(actions, 'exile');
+}
+
+/**
  * The activatable abilities in the server's menu, grouped per source permanent —
  * the ONLINE twin of `GameSession.abilityOptions()` (same folding rule: one
  * offered action per legal target folds into one option carrying a target menu).
