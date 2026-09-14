@@ -30,9 +30,13 @@ import {
   hasCastableBackFace,
   isLand,
   isPermanentType,
+  effectiveManaExtrasOf,
+  effectiveManaModesOf,
+  manaAbilityFromActivated,
   manaActivationConditionMet,
   manaExtrasOf,
   manaModesOf,
+  manaSourceNeverTaps,
   spendPurposeIfRestricted,
   playableFaceOf,
 } from './card.js';
@@ -65,7 +69,7 @@ import type { RulesConfig } from './config.js';
 import { DEFAULT_RULES } from './config.js';
 import type { ChoiceChannel, EffectRegistry } from './effects.js';
 import { applyEffectRef, createEffectRegistry, shuffleLibraryInState } from './effects.js';
-import type { GameEvent } from './events.js';
+import type { CombatDamageRound, GameEvent } from './events.js';
 import { createRng, shuffle } from './rng.js';
 import type { ManaColor, ManaCost, ManaProduction } from './mana.js';
 import { repeatCost } from './mana.js';
@@ -76,6 +80,7 @@ import {
   formatManaCost,
   MANA_COLORS,
   payCost,
+  phyrexianLifeOptions,
   poolTotal,
 } from './mana.js';
 import type { ManaTapPlan } from './mana-plan.js';
@@ -755,15 +760,39 @@ function otherPlayer(p: PlayerId): PlayerId {
 
 // --- combat damage orchestration ----------------------------------------------
 
+/**
+ * Deal one combat-damage step's damage, with every damage event it emits marked
+ * with the step it belonged to (CR 510.4).
+ *
+ * THE ONE PLACE THAT KNOWS THE ROUND. The marker is stamped by decorating the
+ * emitter here rather than by threading a `round` argument down through
+ * `applyDamage` → `applyDamageResult` → every caller, because only this function
+ * runs the steps and so only this function can answer the question. Threading it
+ * would put the answer in a dozen signatures, half of which (a burn spell, a
+ * fight) have no round to pass and would have to pass `undefined` forever.
+ *
+ * Only the two damage events are rewritten; everything else (the life loss, the
+ * deaths, the lifelink gain) passes through untouched, so the decoration cannot
+ * change what any other consumer sees.
+ */
+function dealCombatDamageStep(state: GameState, emit: (e: GameEvent) => void, round: CombatDamageRound): void {
+  assignAndDealCombatDamage(
+    state,
+    (event) =>
+      emit(event.type === 'damageDealt' || event.type === 'damagePrevented' ? { ...event, round } : event),
+    round,
+  );
+}
+
 /** Run the first-strike step (if needed) + the normal step, with SBAs between. */
 function resolveCombatDamage(state: GameState, emit: (e: GameEvent) => void): void {
   if (!state.combat || state.combat.attackers.length === 0) return;
   if (hasAnyFirstStrike(state, state.combat)) {
-    assignAndDealCombatDamage(state, emit, 'firstStrike');
+    dealCombatDamageStep(state, emit, 'firstStrike');
     checkStateBasedActions(state, emit);
     if (state.gameOver) return;
   }
-  assignAndDealCombatDamage(state, emit, 'normal');
+  dealCombatDamageStep(state, emit, 'normal');
 }
 
 // --- priority + the stack ------------------------------------------------------
@@ -2732,22 +2761,51 @@ function nameOfInstance(state: GameState, instanceId: InstanceId): string | unde
  * of the action an AI scores rather than a hidden engine default. Summoning-sick
  * creature sources are excluded (rule 302.6 — see `canActivateManaAbility`).
  *
+ * GRANTED mana abilities are offered here too (DESIGN §3.143, GAP-G). Citanul
+ * Hierophants' "Creatures you control have '{T}: Add {G}'" arrives as an
+ * `ActivatedAbility` on a continuous modification, and until this read it was
+ * invisible to the whole mana system: the only way to make the mana was to put
+ * the ability on the STACK and pass priority, which is not what a mana ability
+ * does (CR 605.3a) and which the payment planner can never do at all. The mode
+ * list is `effectiveManaModesOf` — printed first, then granted — and every other
+ * reader of a `tapForMana` mode (the apply path, `planManaPayment`) reads the
+ * same one, because the mode is an INDEX and two readers with different lists
+ * tap for different colours.
+ *
  * Pushes into the caller's array rather than returning a new one: the caller in
  * the hot path is building an action list anyway, so this adds no allocation and
  * no closure to it.
+ *
+ * `cont` is the caller's continuous index when it already built one (this runs
+ * once per `generateLegalActions`, which builds exactly one). Omitting it makes
+ * this build its own behind the same cheap gate, so no caller can silently lose
+ * a granted source by forgetting to pass it.
  */
-function pushManaTapActions(state: GameState, player: PlayerId, out: GameAction[]): void {
+function pushManaTapActions(
+  state: GameState,
+  player: PlayerId,
+  out: GameAction[],
+  cont?: ReturnType<typeof indexContinuous>,
+): void {
   // Built only when a sick creature source actually raises the granted-haste
-  // question — the ordinary board never pays for it.
-  let manaCont: ReturnType<typeof indexContinuous> | undefined;
+  // question, or when the board carries any continuous modification at all — the
+  // ordinary board never pays for either.
+  let manaCont = cont ?? (anyContinuousModification(state) ? indexContinuous(state) : undefined);
   const battlefield = state.battlefield;
   for (let b = 0; b < battlefield.length; b++) {
     const perm = battlefield[b] as CardInstance;
     // A source whose printed cost has no {T} is offered even while tapped —
     // it never taps to pay, so being tapped cannot stop it (Skirk Prospector).
     if (perm.controller !== player) continue;
-    if (perm.tapped && !manaAbilityNeverTaps(perm.def)) continue;
-    const modes = manaModesOf(perm.def);
+    // `undefined` on every board with no continuous effect — and every read below
+    // then takes its PRINTED branch, which is the memoized answer by identity and
+    // no call at all. The branch is spelled out rather than left to the
+    // `effective*` readers' own fast paths for the same reason the `manaAbilities`
+    // test below is inlined: this is the engine's hottest loop, and two extra
+    // calls per permanent per action measured on the pilot bench.
+    const granted = manaCont === undefined ? undefined : manaCont.get(perm.instanceId)?.activated;
+    if (perm.tapped && !manaSourceNeverTaps(perm.def, granted)) continue;
+    const modes = granted === undefined ? manaModesOf(perm.def) : effectiveManaModesOf(perm.def, granted);
     if (modes.length === 0) continue;
     if (perm.summoningSick && isCreature(perm.def)) {
       manaCont ??= indexContinuous(state);
@@ -2758,7 +2816,12 @@ function pushManaTapActions(state: GameState, player: PlayerId, out: GameAction[
     // to `manaExtrasOf` so the ordinary board — where no source has one — pays a
     // single property read on an immutable definition and never a call, on the
     // engine's hottest loop.
-    const extras = perm.def.manaAbilities === undefined ? undefined : manaExtrasOf(perm.def);
+    const extras =
+      granted === undefined
+        ? perm.def.manaAbilities === undefined
+          ? undefined
+          : manaExtrasOf(perm.def)
+        : effectiveManaExtrasOf(perm.def, granted);
     for (let mode = 0; mode < modes.length; mode++) {
       if (extras !== undefined && manaModeBlockedReason(state, perm, extras[mode]) !== undefined) {
         continue;
@@ -3148,13 +3211,6 @@ function payManaCostFromBoard(
  * to cast a creature spell"); `undefined` for every ordinary source, in which
  * case the pool stays the plain six-colour record the hot path short-circuits on.
  */
-/** Whether EVERY mana ability this definition prints pays without tapping. */
-function manaAbilityNeverTaps(def: CardDefinition): boolean {
-  const abilities = def.manaAbilities;
-  if (abilities === undefined || abilities.length === 0) return false;
-  return abilities.every((ability) => ability.cost?.noTap === true);
-}
-
 function tapPermanentForMana(
   state: GameState,
   source: CardInstance,
@@ -3201,7 +3257,22 @@ function applyTapForMana(
   if (!source) return rejectWith(prevState, 'that permanent is not on the battlefield');
   if (source.controller !== action.player) return rejectWith(prevState, 'you do not control that permanent');
   if (source.tapped) return rejectWith(prevState, 'that permanent is already tapped');
-  const modes = manaModesOf(source.def);
+  // EFFECTIVE, not printed: the offer path enumerates granted mana abilities
+  // (GAP-G) after the printed ones, and `mode` indexes THAT list — an apply path
+  // reading a shorter list would reject a mode the engine had itself offered.
+  //
+  // ⚡ Resolved ONLY when the printed modes cannot explain the mode that was
+  // submitted, which is exactly when a grant is involved. Tapping for mana is the
+  // most frequent action in the game and `aggregateFor` walks the whole
+  // battlefield; asking it on every tap cost throughput for an answer the
+  // ordinary tap never reads. One integer comparison instead.
+  const mode = action.mode ?? DEFAULT_MANA_MODE;
+  const printedModes = manaModesOf(source.def);
+  const granted =
+    mode >= printedModes.length && anyContinuousModification(state)
+      ? aggregateFor(state, source.instanceId).activated
+      : undefined;
+  const modes = granted === undefined ? printedModes : effectiveManaModesOf(source.def, granted);
   if (modes.length === 0) return rejectWith(prevState, 'that permanent does not produce mana');
   // Short-circuit BEFORE indexing continuous effects: tapping for mana is the most
   // frequent action in the game, and only a summoning-sick creature source can
@@ -3209,13 +3280,19 @@ function applyTapForMana(
   if (source.summoningSick && isCreature(source.def) && !canActivateManaAbility(source, indexContinuous(state))) {
     return rejectWith(prevState, `${source.def.name} has summoning sickness`);
   }
-  const mode = action.mode ?? DEFAULT_MANA_MODE;
   const production = modes[mode];
   if (!production) return rejectWith(prevState, `${source.def.name} has no mana mode ${mode}`);
 
   // Everything a RICH mana ability prints beyond the colour bundle. `undefined`
   // for every plain land and rock, so the ordinary tap is untouched by all of it.
-  const extra = manaExtrasOf(source.def)?.[mode];
+  // Same branch as the modes above, for the same reason: no grant in play means
+  // the printed reader, with its one property read and no battlefield walk.
+  const extra =
+    granted === undefined
+      ? source.def.manaAbilities === undefined
+        ? undefined
+        : manaExtrasOf(source.def)?.[mode]
+      : effectiveManaExtrasOf(source.def, granted)?.[mode];
   if (extra) {
     // Same single answer the offer path used, so a mode the menu showed is a mode
     // this accepts — and one it hid is refused here too, even if a hostile client
@@ -3601,6 +3678,18 @@ function applyCastSpell(
             ? madnessCost
             : (permission?.cost ?? castDef.cost),
   );
+  // §3.143 — the PHYREXIAN reading this cast announced: how much life goes
+  // toward the cost's `{B/P}`-style symbols (CR 107.4f). Judged against the SAME
+  // closed list of amounts `pushCastOffers` enumerated, so an answer the menu
+  // never offered — an odd number, more life than the symbols price, life for a
+  // cost with no Phyrexian symbol at all — is refused rather than approximated.
+  const phyrexianLife = action.phyrexianLife ?? 0;
+  if (phyrexianLife > 0) {
+    if (!cost) return rejectWith(prevState, 'this cast pays no mana cost, so it cannot pay life for one');
+    if (!phyrexianLifeOptions(cost, player.life).includes(phyrexianLife)) {
+      return rejectWith(prevState, `${phyrexianLife} life is not a way to pay ${formatManaCost(cost)}`);
+    }
+  }
   if (cost) {
     // WHAT the mana is being spent on, for any restricted mana in the pool. The
     // face being CAST is the object a restriction reads (a modal DFC's back face
@@ -3614,14 +3703,26 @@ function applyCastSpell(
     // the common case, and acting on it would tap creatures for nothing.
     const assist = planCostAssist(state, action.player, castDef, cost, player.manaPool);
     const owed = assist?.remaining ?? cost;
-    if (!canPay(player.manaPool, owed, purpose)) {
+    if (!canPay(player.manaPool, owed, purpose, phyrexianLife)) {
       return rejectWith(prevState, 'insufficient mana to cast this spell');
     }
     if (assist !== undefined) consumeCostAssist(state, assist, emit);
-    const result = payCost(player.manaPool, owed, purpose);
+    const result = payCost(player.manaPool, owed, purpose, phyrexianLife);
     if (!result.ok) return rejectWith(prevState, result.reason);
     player.manaPool = result.pool;
   }
+  // §3.143 — the LIFE half of the same cost, charged right after the mana and
+  // through the one pay-life funnel (CR 118.4 re-checks it against the live
+  // total). Everything above is validated, so this cannot half-pay.
+  //
+  // PAYING A COST CAN KILL YOU — Dismember at exactly 4 life is a legal, and
+  // fatal, thing to do — and no state-based check is written here on purpose:
+  // this function ALREADY ends with one (CR 704.3, at the point the caster would
+  // next get priority), so a fourth copy of that rule would only be a place for
+  // the copies to disagree. A cast that parks a cast-time question instead skips
+  // that tail deliberately, because the announcement is not finished and nobody
+  // has priority yet (CR 601.2); the answer path checks.
+  if (phyrexianLife > 0) payLifeCost(state, action.player, phyrexianLife, emit);
   // The life half of the flashback cost, charged alongside the mana. Everything
   // above is validated, so this cannot half-pay.
   if (flashbackLife > 0) {
@@ -4932,6 +5033,16 @@ function applyActivateAbility(
   // one (DESIGN §3.36's failure, in its most literal form).
   const ability = effectiveActivated(source, aggregateFor(state, source.instanceId))[action.abilityIndex];
   if (!ability) return rejectWith(prevState, 'that permanent has no such activated ability');
+  // A GRANTED mana ability is a `tapForMana`, never this path (CR 605.3a — a mana
+  // ability does not use the stack). The offer path already omits it; this refuses
+  // it for a client that submits one anyway, so the two paths cannot disagree
+  // about which one owns the ability.
+  if (
+    action.abilityIndex >= (source.def.activated?.length ?? 0) &&
+    manaAbilityFromActivated(ability) !== undefined
+  ) {
+    return rejectWith(prevState, `${source.def.name}'s granted mana ability is activated by tapping for mana`);
+  }
 
   // Timing: the rules default for an activated ability is instant speed; only
   // one that says "activate only as a sorcery" is restricted.
@@ -5441,7 +5552,14 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // the largest remaining source of per-action garbage once cloning is out of the
   // picture. Confined to this function and the mana helpers it calls, which are
   // the only places it has ever measured.
-  pushManaTapActions(state, me, actions);
+  // ONE continuous index for the whole pass, built only when the board carries
+  // any continuous effect at all — `anyContinuousModification` is the cheap gate
+  // that already exists for that question and short-circuits on the first
+  // modifying source. Hoisted ABOVE the mana offer because a granted mana ability
+  // (GAP-G) is read from it too, and building a second index for that would make
+  // the hottest function in the engine index the board twice.
+  const activatedIndex = anyContinuousModification(state) ? indexContinuous(state) : undefined;
+  pushManaTapActions(state, me, actions, activatedIndex);
   const battlefield = state.battlefield;
 
   const sorcerySpeedWindow = me === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
@@ -5791,20 +5909,26 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // rules above: timing is checked, the whole cost must be payable, and an
   // ability with a target restriction is offered once per LEGAL target (and not
   // at all when there is none), so this menu can only contain playable actions.
-  // ONE continuous index for the whole ability loop, built only when the board
-  // carries any continuous effect at all — `anyContinuousModification` is the
-  // cheap gate that already exists for that question and short-circuits on the
-  // first modifying source. Reading a granted ability through `aggregateFor`
-  // per permanent instead made this loop O(board²) per action, which the
-  // profiler showed as 5% of a whole gauntlet.
-  const activatedIndex = anyContinuousModification(state) ? indexContinuous(state) : undefined;
+  // `activatedIndex` is the ONE index built at the top of this function; reading a
+  // granted ability through `aggregateFor` per permanent instead made this loop
+  // O(board²) per action, which the profiler showed as 5% of a whole gauntlet.
   for (let b = 0; b < battlefield.length; b++) {
     const perm = battlefield[b] as CardInstance;
     if (perm.controller !== me) continue;
-    const abilities = effectiveActivated(perm, activatedIndex?.get(perm.instanceId) ?? NO_MOD);
+    const mod = activatedIndex?.get(perm.instanceId) ?? NO_MOD;
+    const abilities = effectiveActivated(perm, mod);
     if (abilities.length === 0) continue;
+    // A GRANTED ability that only adds mana is a MANA ability (CR 605.1a): it is
+    // offered by `pushManaTapActions` as a `tapForMana` and must not also be
+    // offered here, or the same ability would have two action kinds with two sets
+    // of rules — one of them using the stack, which a mana ability never does.
+    // Printed abilities keep this path: see `manaAbilityFromActivated`'s doc and
+    // the GAP-G notes for the measured printed population and why it did not move
+    // in the same edit.
+    const printedCount = perm.def.activated?.length ?? 0;
     for (let index = 0; index < abilities.length; index++) {
       const ability = abilities[index]!;
+      if (index >= printedCount && manaAbilityFromActivated(ability) !== undefined) continue;
       const timing = ability.timing ?? 'instant';
       if (timing === 'sorcery' && !sorcerySpeedWindow) continue;
       if (unpayableActivationReason(state, perm, ability)) continue;
@@ -5945,19 +6069,49 @@ function pushCastOffers(
   // reward, CR 310.4). Otherwise the face's own printed cost - which is also
   // exactly what an AFTERMATH half cast from the graveyard pays, and which any
   // restricted mana in the pool is only allowed to fund if this face qualifies.
+  // §3.143 — PHYREXIAN MANA. `{B/P}` is "{B}, or 2 life" (CR 107.4f), so a card
+  // printing one is not ONE offer but one PER FUNDABLE LIFE AMOUNT: Dismember is
+  // "{1}{B}{B}", "{1}{B} and 2 life", or "{1} and 4 life". A cost with no
+  // Phyrexian symbol yields exactly `[0]` and takes the branch it always did.
+  let lifeOffers: readonly number[] = NO_PHYREXIAN_LIFE;
   if (options?.free !== true) {
     // The cost judged here is the cost the cast path will CHARGE — reductions
     // included — or a Medallion would make a spell payable that the menu never
     // offers. An alternative or granted cost stands in for the printed one
     // (§3.112), and CR 601.2f reduces it exactly as it reduces the printed cost.
     const offered = castManaCostFor(state, me, def, options?.cost ?? def.cost, options?.reducers);
-    if (offered && !canPay(pool, offered, spendPurposeIfRestricted(pool, def, 'cast'))) {
-      // CONVOKE / IMPROVISE / DELVE (§3.70): the pool alone does not cover this,
-      // but something other than mana may. Asked ONLY on the branch that was
+    if (offered) {
+      const purpose = spendPurposeIfRestricted(pool, def, 'cast');
+      const candidates = phyrexianLifeOptions(offered, state.players[me].life);
+      // ONE READING is the answer for every card in the game but a handful, and
+      // that case is kept on the exact code this function ran before §3.143
+      // existed — no array, no second `canPay`, no allocation. This runs once
+      // per castable card per decision, so the common case must not pay for the
+      // uncommon one.
+      //
+      // CONVOKE / IMPROVISE / DELVE (§3.70) is asked ONLY on the branch that was
       // about to refuse, so a board with no assist card pays nothing for the
-      // question — and answered by the same planner the pay path uses, because
-      // an offer the pay path then rejects is the bug this gate exists to stop.
-      if (planCostAssist(state, me, def, offered, pool) === undefined) return;
+      // question — and it is answered by the same planner the pay path uses,
+      // because an offer the pay path then rejects is the bug that gate exists
+      // to stop. In the multi-reading branch it is asked only of the NO-LIFE
+      // reading: the assist planner charges a MANA cost, and no printed card
+      // carries both an assist keyword and a Phyrexian symbol — one that did
+      // would simply be offered its all-mana reading, never a wrong one.
+      if (candidates.length === 1) {
+        if (!canPay(pool, offered, purpose) && planCostAssist(state, me, def, offered, pool) === undefined) return;
+      } else {
+        const fundable: number[] = [];
+        for (let i = 0; i < candidates.length; i++) {
+          const life = candidates[i] as number;
+          if (canPay(pool, offered, purpose, life)) {
+            fundable.push(life);
+          } else if (life === 0 && planCostAssist(state, me, def, offered, pool) !== undefined) {
+            fundable.push(life);
+          }
+        }
+        if (fundable.length === 0) return;
+        lifeOffers = fundable;
+      }
     }
   }
   // A modal spell with nothing it could legally announce cannot be cast — the
@@ -5983,22 +6137,42 @@ function pushCastOffers(
   // §3.112 — written only for an alternative-cost offer, same rule as the two above.
   const altField = options?.alternative !== undefined ? ({ alternative: options.alternative } as const) : undefined;
   const restriction = modalSpecOf(def) ? undefined : targetRestrictionOf(def);
-  if (restriction === undefined) {
-    actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, ...faceField, ...zoneField, ...altField });
-    return;
-  }
-  for (const target of legalTargetsFor(state, restriction, me, def)) {
-    actions.push({
-      kind: 'castSpell',
-      player: me,
-      instanceId: card.instanceId,
-      targets: [target],
-      ...faceField,
-      ...zoneField,
-      ...altField,
-    });
+  const targets = restriction === undefined ? undefined : legalTargetsFor(state, restriction, me, def);
+  for (let i = 0; i < lifeOffers.length; i++) {
+    const life = lifeOffers[i] as number;
+    // Same rule as `faceField` and `zoneField`: written only when it is not the
+    // default, so a cast paying no life is byte-for-byte the object every
+    // consumer has always seen.
+    const lifeField = life > 0 ? ({ phyrexianLife: life } as const) : undefined;
+    if (targets === undefined) {
+      actions.push({
+        kind: 'castSpell',
+        player: me,
+        instanceId: card.instanceId,
+        ...faceField,
+        ...zoneField,
+        ...altField,
+        ...lifeField,
+      });
+      continue;
+    }
+    for (const target of targets) {
+      actions.push({
+        kind: 'castSpell',
+        player: me,
+        instanceId: card.instanceId,
+        targets: [target],
+        ...faceField,
+        ...zoneField,
+        ...altField,
+        ...lifeField,
+      });
+    }
   }
 }
+
+/** The "no Phyrexian symbol, so no life decision" offer list, shared so the common path allocates nothing. */
+const NO_PHYREXIAN_LIFE: readonly number[] = Object.freeze([0]);
 
 /**
  * How a cast offer differs from the ordinary one from hand: which zone the card

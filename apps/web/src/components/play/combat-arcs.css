@@ -1,0 +1,102 @@
+/*
+ * FIERY COMBAT ARCS (§3.143 / UX-14) — the paint half of `combat-lines.ts`.
+ *
+ * Kept in its own file, imported by `CombatLines.tsx`, for the reason
+ * card-hover.css states: a feature owns its styles instead of appending to the
+ * shared styles.css, where nine in-flight lanes would collide.
+ *
+ * ⚠️ The retired straight-line overlay's rules (`.combat-lines`,
+ * styles.css) are now DEAD — this layer uses a new class BECAUSE the old rule
+ * sets `position: absolute`, which would fight the fixed, portalled layer that
+ * makes the overlay immune to UX-9's 3D scene. Deleting the old block is a
+ * one-line change for whoever owns styles.css; nothing here depends on it.
+ *
+ * EVERY number that affects feel comes from `play-config.ts`
+ * (`COMBAT_ARC_CONFIG`) and arrives as an inline custom property on the
+ * `<svg>` — the stylesheet holds no second copy of a tuned value. The three
+ * knobs declared here are the ones with no config row yet; they are named and
+ * commented rather than inlined, and the report asks for them to move.
+ */
+
+.combat-arcs {
+  /* Fixed + portalled to <body>: the ONE thing that keeps measurement honest.
+     `getBoundingClientRect()` reports a projected box under a 3D-transformed
+     ancestor, so the overlay draws in raw viewport coordinates — and a
+     `position: fixed` box is only viewport-relative while no ancestor is
+     transformed, which is exactly what leaving the board subtree guarantees. */
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Purely decorative: the overlay must never eat a click meant for a card. */
+  pointer-events: none;
+  /* The place the retired `.combat-lines` layer held in the root stacking
+     order: over the board and the hand, under the action bar (20), the
+     opponent feed (30), the VFX/animation layers (40/45) and every prompt. */
+  z-index: 5;
+  overflow: visible;
+
+  /* Glow strength of a DECLARED arc's halo. A committed pair burns; a draft
+     one does not (see `.combat-arcs__halo`). No config row yet — see the
+     module header. */
+  --combat-arc-glow-opacity: 0.55;
+  /* Opacity of the travelling embers riding over the arc. Under 1 so the ramp
+     still reads as the arc's colour rather than as a dotted white line. */
+  --combat-arc-ember-opacity: 0.85;
+}
+
+.combat-arcs path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/*
+ * The halo. A wide, soft copy of the same curve UNDER the arc — this is what
+ * makes a stroke read as fire rather than as ink.
+ *
+ * Rejected alternative: an SVG `<filter>` with `feGaussianBlur`. A filter's
+ * default region is 120% of the element's bounding box, which for a nearly
+ * straight path is a couple of pixels tall and clips the glow to nothing; the
+ * fix (a user-space region) makes every arc evaluate a viewport-sized filter,
+ * and an alpha strike can put twenty arcs on screen. A CSS `filter` on the
+ * GROUP blurs once, for all arcs, and the group holds only static geometry so
+ * the browser can cache the result between frames — the animated embers live
+ * in a different group on purpose.
+ */
+.combat-arcs__halo {
+  filter: blur(var(--combat-arc-glow-px));
+  opacity: var(--combat-arc-glow-opacity);
+}
+
+/* The embers: the ONLY animated thing in the layer. One dashed overlay stroke
+   per arc, offset-animated so the dashes travel toward the arrowhead. */
+.combat-arcs__ember {
+  stroke-dasharray: var(--combat-arc-ember-dash);
+  opacity: var(--combat-arc-ember-opacity);
+}
+
+/*
+ * Motion is gated the way game-fx.css gates combat motion: the ARC is
+ * information and always renders, the ember FLOW is decoration and only runs
+ * when nobody asked for less movement. `CombatLines.tsx` also drops the ember
+ * elements entirely via `usePrefersReducedMotion()`, so this is the second of
+ * two independent guards — the same belt-and-braces AnimationLayer uses.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .combat-arcs__ember {
+    animation: combat-arc-ember var(--combat-arc-ember-ms) linear infinite;
+  }
+}
+
+@keyframes combat-arc-ember {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    /* Negative: dashes travel FORWARD along the path, toward the arrowhead.
+       The distance is one full dash cycle (`dashCycleLength`), so the loop
+       lands back on itself with no visible seam. */
+    stroke-dashoffset: var(--combat-arc-ember-cycle);
+  }
+}

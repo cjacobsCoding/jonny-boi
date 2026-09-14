@@ -507,9 +507,10 @@ export const KEYWORD_FLAGS: Readonly<Record<string, string>> = Object.freeze({
   // Toxic carries a NUMBER and parses through `parsePayloadKeyword` instead.
   infect: 'infect',
   wither: 'wither',
-  // The combat keyword family (DESIGN §3.107): shadow is the symmetric block
-  // rule `canBlock` reads (CR 702.28b); split second is the timing lock the
-  // engine's offer pass reads (CR 702.61a), a flag exactly as flash is.
+  // The combat keyword family (DESIGN §3.107).
+  // Shadow (CR 702.28b) is the symmetric block rule `canBlock` reads.
+  // Split second (CR 702.61a) is the timing lock the offer pass reads.
+  // Each is a flag, exactly as flash is.
   shadow: 'shadow',
   'split second': 'splitSecond',
 });
@@ -9518,7 +9519,7 @@ export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContr
       keywords: { horsemanship: true, blockRestriction: { blockerMustHaveAnyOf: ['horsemanship' as const] } },
     }),
     // --- the combat keyword family (DESIGN §3.107) ------------------------------
-    // EXALTED (CR 702.90a) — "Whenever a creature you control attacks alone,
+    // EXALTED (CR 702.83a) — "Whenever a creature you control attacks alone,
     // that creature gets +1/+1 until end of turn." The trigger is NOT
     // self-referential (the source may be a land — Cathedral of War), and the
     // pumped creature is the ATTACKER: `subject: 'triggering'` reads the lone
@@ -9562,7 +9563,7 @@ export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContr
       keywords: { myriad: true },
       vacuous: { text: 'Myriad', reason: MYRIAD_VACUOUS_REASON },
     }),
-    // LANDWALK (CR 702.18b) — one builder per printed walk, all rows of the
+    // LANDWALK (CR 702.14b) — one builder per printed walk, all rows of the
     // closed `LandCondition` table core's `canBlock` reads. "Legendary
     // landwalk" and "nonbasic landwalk" are real printed lines and so real
     // rows; a walk outside the table has no builder and keeps reporting.

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CardOption, PendingChoice, PlayerId } from '@jonny-boi/core';
 import { validateChoiceAnswer } from '@jonny-boi/core';
 import {
+  candidateBlock,
   choicePromptView,
   clearDraft,
   draftStatus,
@@ -9,7 +10,10 @@ import {
   draftValues,
   emptyDraft,
   isChoiceForViewer,
+  optionBlockReason,
+  OPTION_BLOCK_KINDS,
   orderBadge,
+  payYesBlock,
   pickCount,
   setChooseNumber,
   setChosenValue,
@@ -528,5 +532,81 @@ describe('choice-view — choosing a number (a value for X)', () => {
     const view = choicePromptView(choice, NAMES);
     expect(view.optional).toBe(false); // no "choose none" button — 0 is a real answer
     expect(view.requirement).toContain('from 0 to 4');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §3.143 / UX-8 — a candidate that cannot be chosen explains WHY
+// ---------------------------------------------------------------------------
+
+describe('choice-view — why an option cannot be taken', () => {
+  it('is a CLOSED table: three rows, each with a sentence that names real numbers', () => {
+    expect(OPTION_BLOCK_KINDS).toEqual(['atMaximum', 'unaffordableMana', 'notEnoughLife']);
+    expect(optionBlockReason('atMaximum', selectCards({ min: 2, max: 2 }))).toContain('2 cards');
+    expect(optionBlockReason('unaffordableMana', payMana({ affordable: false }))).toContain('{3}');
+    expect(optionBlockReason('notEnoughLife', payLife({ affordable: false }))).toContain('2 life');
+  });
+
+  it('blocks an unpicked candidate only once a MULTI-pick draft is full', () => {
+    const choice = selectCards({ min: 2, max: 2 });
+    let draft = emptyDraft(choice);
+    expect(candidateBlock(choice, draft, 3)).toBeNull();
+    draft = toggleOption(choice, draft, 1);
+    expect(candidateBlock(choice, draft, 3)).toBeNull();
+    draft = toggleOption(choice, draft, 2);
+    // Now full: clicking 3 would silently do nothing, so the prompt says why.
+    expect(candidateBlock(choice, draft, 3)).toBe('atMaximum');
+    // ...but a PICKED card is always un-pickable-back, never blocked.
+    expect(candidateBlock(choice, draft, 1)).toBeNull();
+  });
+
+  it('never blocks a single-pick choice — clicking REPLACES, so nothing is dead', () => {
+    const choice = selectCards({ min: 1, max: 1 });
+    const draft = toggleOption(choice, emptyDraft(choice), 1);
+    expect(candidateBlock(choice, draft, 2)).toBeNull();
+  });
+
+  it('never blocks a repeated-modes choice below its maximum', () => {
+    const choice = {
+      ...BASE,
+      kind: 'chooseModes',
+      modes: [
+        { id: 'm1', label: 'Draw a card' },
+        { id: 'm2', label: 'Gain 3 life' },
+      ],
+      allowRepeats: true,
+      min: 2,
+      max: 2,
+    } as PendingChoice;
+    let draft = emptyDraft(choice);
+    draft = toggleOption(choice, draft, 'm1');
+    expect(candidateBlock(choice, draft, 'm2')).toBeNull();
+  });
+
+  it('mirrors toggleOption exactly — a block is never claimed where a click works', () => {
+    // The rule and the machinery must not drift: for every draft state of a
+    // 2-of-3 choice, "blocked" must mean "the click changes nothing".
+    const choice = selectCards({ min: 0, max: 2 });
+    const drafts = [
+      emptyDraft(choice),
+      toggleOption(choice, emptyDraft(choice), 1),
+      toggleOption(choice, toggleOption(choice, emptyDraft(choice), 1), 2),
+    ];
+    for (const draft of drafts) {
+      for (const value of [1, 2, 3]) {
+        const blocked = candidateBlock(choice, draft, value) !== null;
+        const changed = draftValues(toggleOption(choice, draft, value)).join() !== draftValues(draft).join();
+        expect(blocked, `value ${value} on draft ${draftValues(draft).join()}`).toBe(!changed);
+      }
+    }
+  });
+
+  it('explains a Pay button the board cannot honour, and stays silent when it can', () => {
+    expect(payYesBlock(payMana())).toBeNull();
+    expect(payYesBlock(payMana({ affordable: false }))).toBe('unaffordableMana');
+    expect(payYesBlock(payLife())).toBeNull();
+    expect(payYesBlock(payLife({ affordable: false }))).toBe('notEnoughLife');
+    // A kind with no payment half has no pay block at all.
+    expect(payYesBlock(selectCards())).toBeNull();
   });
 });

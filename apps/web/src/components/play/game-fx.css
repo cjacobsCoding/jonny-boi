@@ -21,26 +21,42 @@
   }
 }
 
-/* The attacker leans toward the fight. It rides OVER the tapped tilt during
-   combat on purpose: while a creature is attacking, that is the louder fact,
-   and a vigilance attacker is not tapped anyway. */
+/* The attacker leans toward the fight, and the blocker braces.
+ *
+ * ⚠️ A CSS ANIMATION OUTRANKS A NORMAL DECLARATION, so a keyframe that names
+ * `transform` REPLACES whatever transform the element otherwise carries — it
+ * cannot add to it. This file used to say that riding over the tapped tilt was
+ * fine "because a vigilance attacker is not tapped anyway", which is false for
+ * the common case: an attacker WITHOUT vigilance taps as it is declared, and is
+ * the exact creature you are watching. That was UX-11 (§3.143).
+ *
+ * Two ways to keep a rotation through the loop, and BOTH work with the rules
+ * below — pick one, do not do both:
+ *   1. Put the turn on a DIFFERENT element (a wrapper around `.perm`). These
+ *      keyframes then have nothing of anyone else's to erase. Preferred.
+ *   2. Hand the angle in on the SAME element through `--perm-attack-turn`; it
+ *      is composed here, before the lean. The fallback is 0deg, so a board that
+ *      never sets it behaves exactly as this file always has.
+ * The custom property is named for THIS animation on purpose: a generic name
+ * would be inherited from an ancestor that set it for route 1 and the tile would
+ * turn twice. */
 @keyframes perm-attack-lunge {
   0%,
   100% {
-    transform: translateY(0) scale(1);
+    transform: rotate(var(--perm-attack-turn, 0deg)) translateY(0) scale(1);
   }
   50% {
-    transform: translateY(-5px) scale(1.03);
+    transform: rotate(var(--perm-attack-turn, 0deg)) translateY(-5px) scale(1.03);
   }
 }
 
 @keyframes perm-block-brace {
   0%,
   100% {
-    transform: translateY(0) scale(1);
+    transform: rotate(var(--perm-attack-turn, 0deg)) translateY(0) scale(1);
   }
   50% {
-    transform: translateY(2px) scale(0.985);
+    transform: rotate(var(--perm-attack-turn, 0deg)) translateY(2px) scale(0.985);
   }
 }
 
@@ -140,8 +156,28 @@
   animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1);
   animation-fill-mode: forwards;
 }
+/* The damage palette, named once and shared by the particle spray and the
+   damage sequence's chips (§3.143/UX-15), so a hit and its sparks cannot drift
+   into two different oranges. */
+.vfx-burst--damage,
+.dmg-layer,
+.dmg-bench {
+  --dmg-hot: #ffd36b;
+  --dmg-ember: #ff6a2b;
+  --dmg-lethal: #ff3b30;
+  --dmg-lethal-deep: #4a0303;
+  --dmg-seat: #ff5252;
+  --dmg-prevented: #9fb3c8;
+  --dmg-ink: #1a0a02;
+  /* The halo a travelling hit carries. Named because the round tints below
+     have to be able to change it: it was an inline `rgb(255 106 43 / 70%)`
+     inside `.dmg-bolt__n`'s box-shadow, which is the one part of the palette a
+     first-strike volley could not repaint. */
+  --dmg-glow: rgb(255 106 43 / 70%);
+}
+
 .vfx-burst--damage .vfx-burst__p {
-  background: radial-gradient(circle, #ffd36b 0%, #ff6a2b 70%);
+  background: radial-gradient(circle, var(--dmg-hot) 0%, var(--dmg-ember) 70%);
 }
 .vfx-burst--death .vfx-burst__p {
   background: radial-gradient(circle, #d9c7ff 0%, #6b4fb0 70%);
@@ -158,4 +194,386 @@
     opacity: 0;
     transform: translate(var(--vfx-dx, 0), var(--vfx-dy, 0)) scale(0.4);
   }
+}
+
+/* ===========================================================================
+ * DAMAGE DISTRIBUTION (§3.143 / UX-15) — the DOM half of `damage-sequence.ts`.
+ * A hit flies from its source to its recipient carrying its number, then blooms
+ * where it lands. Lethal reads harder than survivable; a player's face reads
+ * bigger than a creature; prevented damage arrives and is struck out.
+ *
+ * EVERY element here is scheduled purely by `animation-delay` + `fill-mode:
+ * both` — invisible before its beat, settled after it. The plan already knows
+ * every millisecond (see `damage-sequence.ts`), so there is nothing here to
+ * synchronise and no frame-timing race to lose.
+ *
+ * ⚠️ NOT gated on `prefers-reduced-motion`, deliberately, unlike the combat
+ * loops above: the hook derives NOTHING when the preference is set, so not one
+ * of these elements is ever mounted in a game. Gating here as well would only
+ * blank the effects BENCH, which passes `reducedMotion: false` on purpose so a
+ * designer can still audition what they are tuning.
+ * ======================================================================== */
+
+.dmg-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  /* Above the zone-flight ghosts (45) so a lethal number is never buried under
+     the ghost of the creature it killed; below the prompts/modals (50+). */
+  z-index: 46;
+  overflow: hidden;
+
+  /* Sizes named once, here, rather than sprinkled through the rules below. */
+  --dmg-chip-size: 34px;
+  --dmg-chip-size-seat: 46px;
+  --dmg-ring-size: 72px;
+  --dmg-ring-size-seat: 128px;
+  --dmg-chip-font: 1.05rem;
+  --dmg-chip-font-seat: 1.5rem;
+
+  /* The round banner (GAP-F). Placed in the UPPER third rather than dead centre:
+     the middle of the board is where the combat it is describing is happening,
+     and a caption over the fight is a caption you read instead of the fight. */
+  --dmg-round-top: 16%;
+  --dmg-round-font: 1.05rem;
+}
+
+/* --- the hit in flight ------------------------------------------------------
+   A zero-size anchor at the SOURCE that translates to the recipient; the visible
+   chip inside it does its own centring, so the two transforms never fight. */
+.dmg-bolt {
+  position: fixed;
+  width: 0;
+  height: 0;
+  animation-name: dmg-bolt-kf;
+  animation-timing-function: cubic-bezier(0.35, 0.05, 0.3, 1);
+  animation-fill-mode: both;
+}
+
+.dmg-bolt__n {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  min-width: var(--dmg-chip-size);
+  height: var(--dmg-chip-size);
+  padding: 0 0.3em;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: var(--dmg-chip-font);
+  color: var(--dmg-ink);
+  background: radial-gradient(circle at 40% 35%, var(--dmg-hot) 0%, var(--dmg-ember) 78%);
+  box-shadow: 0 0 12px var(--dmg-glow);
+}
+
+@keyframes dmg-bolt-kf {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.6);
+  }
+  14% {
+    opacity: 1;
+    transform: translate(calc(var(--dmg-dx, 0px) * 0.14), calc(var(--dmg-dy, 0px) * 0.14)) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dmg-dx, 0px), var(--dmg-dy, 0px)) scale(1.15);
+  }
+}
+
+/* A lethal hit flies as a cinder, not a spark. */
+.dmg-bolt--lethal .dmg-bolt__n {
+  color: #fff;
+  background: radial-gradient(circle at 40% 35%, var(--dmg-lethal) 0%, var(--dmg-lethal-deep) 85%);
+  box-shadow: 0 0 16px rgb(255 59 48 / 80%);
+}
+
+/* Damage headed for a player's FACE is the one that ends games — bigger. */
+.dmg-bolt--seat .dmg-bolt__n {
+  min-width: var(--dmg-chip-size-seat);
+  height: var(--dmg-chip-size-seat);
+  font-size: var(--dmg-chip-font-seat);
+  color: #fff;
+  background: radial-gradient(circle at 40% 35%, var(--dmg-hot) 0%, var(--dmg-seat) 80%);
+}
+
+/* Prevented: it still travels (something was aimed at you) and arrives grey. */
+.dmg-bolt--prevented .dmg-bolt__n {
+  color: #06121d;
+  background: radial-gradient(circle at 40% 35%, #e8eff6 0%, var(--dmg-prevented) 80%);
+  box-shadow: none;
+}
+
+/* --- the impact ------------------------------------------------------------- */
+.dmg-impact {
+  position: fixed;
+  width: 0;
+  height: 0;
+  animation-name: dmg-impact-kf;
+  animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1);
+  animation-fill-mode: both;
+}
+
+.dmg-impact__ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--dmg-ring-size);
+  height: var(--dmg-ring-size);
+  margin: calc(var(--dmg-ring-size) / -2) 0 0 calc(var(--dmg-ring-size) / -2);
+  border-radius: 50%;
+  border: 2px solid var(--dmg-ember);
+  opacity: 0.75;
+}
+
+.dmg-impact__n {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  min-width: var(--dmg-chip-size);
+  height: var(--dmg-chip-size);
+  padding: 0 0.3em;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: var(--dmg-chip-font);
+  color: var(--dmg-ink);
+  background: radial-gradient(circle at 40% 35%, var(--dmg-hot) 0%, var(--dmg-ember) 78%);
+  text-shadow: 0 1px 0 rgb(255 255 255 / 35%);
+}
+
+@keyframes dmg-impact-kf {
+  0% {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  22% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* LETHAL — the number turns to bone on a deep red, and the ring is a shockwave
+   rather than a ripple. This is the "read differently from survivable" split. */
+.dmg-impact--lethal .dmg-impact__n {
+  color: #fff;
+  background: radial-gradient(circle at 40% 35%, var(--dmg-lethal) 0%, var(--dmg-lethal-deep) 85%);
+  text-shadow: 0 0 6px rgb(255 59 48 / 90%);
+}
+.dmg-impact--lethal .dmg-impact__ring {
+  border-width: 3px;
+  border-color: var(--dmg-lethal);
+  box-shadow: 0 0 22px rgb(255 59 48 / 65%);
+}
+
+/* A PLAYER taking damage: a wide shockwave at the life total, and the number
+   carries its minus sign — this is life lost, not damage marked on a creature. */
+.dmg-impact--seat .dmg-impact__n {
+  min-width: var(--dmg-chip-size-seat);
+  height: var(--dmg-chip-size-seat);
+  font-size: var(--dmg-chip-font-seat);
+  color: #fff;
+  background: radial-gradient(circle at 40% 35%, var(--dmg-hot) 0%, var(--dmg-seat) 80%);
+}
+.dmg-impact--seat .dmg-impact__ring {
+  width: var(--dmg-ring-size-seat);
+  height: var(--dmg-ring-size-seat);
+  margin: calc(var(--dmg-ring-size-seat) / -2) 0 0 calc(var(--dmg-ring-size-seat) / -2);
+  border-width: 3px;
+  border-color: var(--dmg-seat);
+  box-shadow: 0 0 28px rgb(255 82 82 / 55%);
+}
+
+/* PREVENTED — it arrived and did nothing, and that is a fact worth showing
+   (the same argument the engine's own `damagePrevented` event makes). */
+.dmg-impact--prevented .dmg-impact__n {
+  color: #06121d;
+  background: radial-gradient(circle at 40% 35%, #e8eff6 0%, var(--dmg-prevented) 80%);
+  text-decoration: line-through;
+  text-shadow: none;
+}
+.dmg-impact--prevented .dmg-impact__ring {
+  border-style: dashed;
+  border-color: var(--dmg-prevented);
+  box-shadow: none;
+}
+
+/* CONDENSED — one bloom carrying a recipient's TOTAL for a combat too big to
+   follow hit by hit. The doubled ring says "this is a sum", so a 9 here is not
+   mistaken for a single 9-point hit. */
+.dmg-impact--condensed .dmg-impact__ring {
+  outline: 2px solid currentcolor;
+  outline-offset: 5px;
+  color: var(--dmg-ember);
+}
+
+/* ===========================================================================
+ * WHICH ROUND IS THIS (§3.143 wave 3 / GAP-F)
+ *
+ * A first-strike combat draws TWO volleys, 220ms apart. Wave 2 spaced them and
+ * stopped there: core marks each hit with its combat-damage step, the fold
+ * carries the marker through as `DamageBeat.round`, and nothing on screen read
+ * it — so both volleys looked identical and the pause was the only clue that
+ * there had been two of them. Caleb's requirement is that he can "clearly see
+ * what is happening"; two indistinguishable volleys are the confusion itself.
+ *
+ * THREE signals, not one, and deliberately not colour alone (the discipline
+ * `card-face.css` states for its treatments):
+ *   1. WORDS — `.dmg-round` names the round over the board.
+ *   2. HUE — a first-strike volley is COLD (steel/ice); normal damage keeps the
+ *      ember palette it has always had, so nothing familiar moved.
+ *   3. SHAPE — a first-strike chip wears a hard rim. `outline`, not
+ *      `box-shadow`, on purpose: lethal/seat/prevented already own the chips'
+ *      `box-shadow` and `background`, and an outline composes with all three
+ *      instead of fighting them for source order. A lethal first-strike hit is
+ *      therefore still bone-on-red (lethality is the louder fact) and still
+ *      rimmed (the round is still legible).
+ *
+ * An UNTABULATED round (`dmg-round--round-unnamed`) gets words and NO hue: the
+ * layer refuses to borrow a named round's look for a round it cannot name.
+ * ======================================================================== */
+
+.dmg-round {
+  position: absolute;
+  top: var(--dmg-round-top);
+  left: 50%;
+  padding: 0.28em 1em;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  background: rgb(6 10 16 / 78%);
+  /* Neutral by default; every round below states its own hue, so a round with no
+     rule reads as plain text rather than borrowing the ember one's. */
+  color: var(--color-fg);
+  font-size: var(--dmg-round-font);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  animation-name: dmg-round-kf;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+/* Centring lives in the keyframes, not here: one `transform` per element, and
+   a declaration here would simply be replaced by the animation's. */
+@keyframes dmg-round-kf {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0.5em);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  82% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -0.4em);
+  }
+}
+
+/* --- the first-strike round reads COLD -------------------------------------
+   Set as PALETTE overrides rather than as new backgrounds: every chip, ring and
+   spark below already reads `--dmg-hot` / `--dmg-ember` / `--dmg-glow`, so one
+   declaration block repaints the whole volley and no rule has to be restated
+   (rule 12). */
+.dmg-round--round-first-strike,
+.dmg-bolt--round-first-strike,
+.dmg-impact--round-first-strike,
+.vfx-burst--round-first-strike {
+  --dmg-hot: #eaf4ff;
+  --dmg-ember: #5aa9ff;
+  --dmg-glow: rgb(90 169 255 / 70%);
+}
+
+/* Each NAMED round wears its own volley's colour. One rule for both, because
+   "the round's hue" is one idea: the palette override above is what makes the
+   first-strike one cold, so these repaint independently without being restated
+   (rule 12). Normal damage is unchanged from every wave before this one —
+   nothing familiar moved, and the CONTRAST is what names the other round. */
+.dmg-round--round-first-strike,
+.dmg-round--round-normal {
+  color: var(--dmg-ember);
+}
+
+/* The shape half of the signal — see the header for why this is an outline. */
+.dmg-bolt--round-first-strike .dmg-bolt__n,
+.dmg-impact--round-first-strike .dmg-impact__n {
+  outline: 2px solid var(--dmg-hot);
+  outline-offset: 2px;
+}
+
+/* An unnamed round says only what it can prove: which number round it is. */
+.dmg-round--round-unnamed {
+  color: var(--dmg-prevented);
+}
+
+/* ===========================================================================
+ * THE DAMAGE BENCH (rule 3) — the runtime driver for the sequence above, shown
+ * inside the effects preview. Self-contained so mounting it is one line.
+ * ======================================================================== */
+
+.dmg-bench {
+  margin-top: 1rem;
+}
+
+.dmg-bench__sub {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.dmg-bench__note {
+  margin: 0 0 0.6rem;
+  opacity: 0.8;
+  font-size: 0.85rem;
+}
+
+.dmg-bench__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.dmg-bench__btn {
+  font-size: 0.85rem;
+}
+
+.dmg-bench__stage {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding: 1.75rem 1rem;
+  border: 1px dashed currentcolor;
+  border-radius: 0.5rem;
+  opacity: 0.95;
+}
+
+.dmg-bench__tile,
+.dmg-bench__seat {
+  display: grid;
+  place-items: center;
+  min-width: 4.5rem;
+  padding: 1.25rem 0.5rem;
+  border: 1px solid currentcolor;
+  border-radius: 0.4rem;
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.dmg-bench__seat {
+  border-style: double;
+  border-width: 3px;
 }

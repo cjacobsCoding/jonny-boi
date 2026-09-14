@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { actionBarHint } from '../../lib/play/action-hints.js';
 import { blockerLinePairs } from '../../lib/play/combat-lines.js';
 import { groupJailedByJailer, jailSourcesOf } from '../../lib/play/jail-view.js';
@@ -16,7 +16,9 @@ import type {
   InstanceId,
   PlayerId,
 } from '@jonny-boi/core';
-import { isPlaneswalker } from '@jonny-boi/core';
+import type { MouseEvent as ReactMouseEvent } from 'react';
+import type { BoardPermanent } from '../../lib/play/view-model.js';
+import { isPlaneswalker, isPlayerTarget, PLAYER_IDS } from '@jonny-boi/core';
 import { stepLabel } from '../../lib/play/play-config.js';
 import { maskedViewToBoardView } from '../../lib/online/board-adapter.js';
 import { castSequence, castableWithTaps, graveyardCastableWithTaps } from '../../lib/online/auto-tap.js';
@@ -41,12 +43,19 @@ import {
 import { answerChoiceAction, onlineChoiceView } from '../../lib/online/pending-choice.js';
 import { isModalTap, manaTapMenu, tappableIds, type ManaTapOption } from '../../lib/play/mana-tap.js';
 import { ChoicePrompt } from '../play/ChoicePrompt.js';
-import { AbilityMenuPrompt, AbilityTargetPrompt } from '../play/AbilityPrompts.js';
+import {
+  AbilityMenuPrompt,
+  AbilityTargetPrompt,
+  type AbilityPromptFaces,
+} from '../play/AbilityPrompts.js';
 import { GraveyardPanel } from '../play/GraveyardPanel.js';
 import { SeatPanel, type PermInteraction } from '../play/SeatPanel.js';
 import { StackPanel } from '../play/StackPanel.js';
+import { stackEntries } from '../../lib/play/stack-view.js';
 import { PlayCard, CardBack } from '../play/PlayCard.js';
-import { CardZoomOverlay } from '../play/CardZoomOverlay.js';
+import { CardFace } from '../play/CardFace.js';
+import { CardHover } from '../CardHover.js';
+import { CardZoomOverlay, type ZoomedCard } from '../play/CardZoomOverlay.js';
 import '../play/action-bar.css';
 
 /**
@@ -62,7 +71,45 @@ import '../play/action-bar.css';
  * board has is present here too (walker attacks, loyalty abilities, flashback from
  * the graveyard), driven off the masked view instead of a local engine: a mechanic
  * that ships must not be invisible online. The game log uses the server's lines.
+ *
+ * ## §3.143 wave 2 — the online board gets the overhaul too
+ *
+ * Wave 1 built the stack of real card faces (UX-1), the hover funnel (UX-10) and
+ * the card face (UX-17) and wired them into `PlayBoard` ALONE, because the online
+ * board was nobody's lane. Reusing a component is not the same as reaching a
+ * screen: this file was still passing `nameOf={() => 'card'}` and no `faceOf`,
+ * so the online stack rendered a column of placeholders labelled "card", and the
+ * hand was the one hand in the app you could not hover. What reaches this board
+ * now is everything that needs no server change:
+ *
+ *  - **UX-1/UX-2** — `stackEntries` (the SHARED producer, not a third hand-rolled
+ *    `stackView`) over `masked.stack`, which the protocol sends unredacted and
+ *    documents as public ("Battlefield + stack are public"), so real faces here
+ *    reveal nothing the wire did not already carry;
+ *  - **UX-10** — the hand and every target row go through `CardHover`;
+ *  - **UX-8/UX-17** — the target prompt shows the SOURCE as a `CardFace`.
+ *
+ * ⚠️ WHAT DOES NOT REACH IT, AND WHY. `CardFace`'s provenance half (UX-17.1–3)
+ * needs core's `explainCharacteristics`, which needs the full `GameState` and the
+ * continuous-effect index. An online client has neither — it holds a masked view,
+ * by design — so the faces here carry printed truth plus the glossary, and the
+ * board must not invent attribution to fill the gap. See `board-adapter.ts`'s
+ * `NO_MOD` note: the same limit, already stated once.
  */
+/**
+ * WHY A CARD ON THIS BOARD SHOWS NO PROVENANCE — said out loud, once.
+ *
+ * `CardFace` draws an empty breakdown as "nothing is modifying this", which is a
+ * DIFFERENT and false claim here: this client has a masked view, so it cannot
+ * know. Named rather than typed at each of the three mount sites that need it.
+ *
+ * ⚠️ The same sentence is spelled out in `lib/play/provenance-view.ts`'s
+ * `unavailable` bench sample and in two test files. This is the only PRODUCTION
+ * copy; the report for this lane asks lane-P's owner to export one constant from
+ * `provenance-view.ts` and have all four import it.
+ */
+const PROVENANCE_UNAVAILABLE_ONLINE = 'Live provenance is not carried by the multiplayer protocol yet.';
+
 export function OnlineBoard({
   frame,
   names,
@@ -77,6 +124,66 @@ export function OnlineBoard({
   const { view: masked, legalActions, yourTurn, log } = frame;
   const view = useMemo(() => maskedViewToBoardView(masked, names), [masked, names]);
   const step = masked.step;
+
+  /**
+   * EVERY INSTANCE THIS SEAT IS ENTITLED TO SEE, by id — the one place this
+   * board answers *"what is #7 called?"* and *"which face does #7 show?"*.
+   *
+   * It is built ONLY from what the server already sent this viewer: the public
+   * battlefield, both public graveyards, the exiles the mask already filtered
+   * (a face-down foretold card is never in another seat's view), the public
+   * stack, and the viewer's OWN hand. There is deliberately no path here to an
+   * opponent's hand or library — the mask does not carry them, so no amount of
+   * UI wanting a prettier card can widen what a viewer sees. That is the whole
+   * reason this is a projection of `masked` rather than a lookup the board
+   * assembles from somewhere else.
+   *
+   * One map, two questions, because the callers ask them separately: `nameOf`
+   * is TOTAL (an unknown id degrades to a readable `#id`) and `faceOf` is
+   * PARTIAL by nature (a token has no pool card; `null` means "no face", never
+   * "guess one") — the exact contract `StackSources` documents.
+   */
+  const instanceIndex = useMemo(() => {
+    const index = new Map<InstanceId, CardInstance>();
+    const add = (cards: readonly CardInstance[]): void => {
+      for (const card of cards) index.set(card.instanceId, card);
+    };
+    add(masked.battlefield);
+    for (const pid of PLAYER_IDS) {
+      add(masked.players[pid].graveyard);
+      add(masked.players[pid].exile);
+    }
+    // A spell ON the stack is its own card instance (core builds the stack
+    // object with `instanceId: card.instanceId`), and it is in no zone list.
+    for (const obj of masked.stack) if (obj.kind === 'spell') index.set(obj.instanceId, obj.card);
+    add(masked.players[masked.viewer].hand ?? []);
+    return index;
+  }, [masked]);
+
+  const nameOfInstance = useCallback(
+    (id: InstanceId): string => instanceIndex.get(id)?.def.name ?? `#${id}`,
+    [instanceIndex],
+  );
+  const faceOfInstance = useCallback(
+    (id: InstanceId): string | null => instanceIndex.get(id)?.def.id ?? null,
+    [instanceIndex],
+  );
+
+  /**
+   * The stack, TOP-FIRST, with the face each object shows — from the SHARED
+   * producer, not from `view.stack`.
+   *
+   * `board-adapter.stackView()` predates UX-1 and carries neither a face nor a
+   * source name, which is why this board could only ever pass
+   * `nameOf={() => 'card'}`. Delegating to `stackEntries` is the two-line change
+   * `lib/play/stack-view.ts` asks both adapters for; doing it HERE rather than
+   * in the adapter keeps this wave inside one lane's files, and the adapter's
+   * `StackView` remains for the consumers that still read it.
+   */
+  const stackFacts = useMemo(
+    () => stackEntries(masked.stack, { nameOf: nameOfInstance, faceOf: faceOfInstance }),
+    [masked.stack, nameOfInstance, faceOfInstance],
+  );
 
   const lands = useMemo(() => playableLandIds(legalActions), [legalActions]);
   const casts = useMemo(() => castChoices(legalActions), [legalActions]);
@@ -144,8 +251,14 @@ export function OnlineBoard({
   const [pendingAbility, setPendingAbility] = useState<AbilityOption | null>(null);
   const [blockAssign, setBlockAssign] = useState<Map<InstanceId, InstanceId>>(new Map());
   const [activeBlockTarget, setActiveBlockTarget] = useState<InstanceId | null>(null);
-  /** The card being inspected full-size, if any (report 20260825_210026). */
-  const [zoomed, setZoomed] = useState<{ cardId: string; name: string } | null>(null);
+  /**
+   * The card being inspected full-size, if any (report 20260825_210026).
+   *
+   * {@link ZoomedCard}, not `{cardId, name}` — see §3.143 GAP-C. This board can
+   * never fill in the provenance half (below), but it CAN say so rather than
+   * showing a breakdown-shaped hole.
+   */
+  const [zoomed, setZoomed] = useState<ZoomedCard | null>(null);
   /** The viewer's graveyard panel (the flashback affordance's entry point). */
   const [graveyardOpen, setGraveyardOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -232,6 +345,7 @@ export function OnlineBoard({
         instanceId: choice.instanceId,
         targets: [],
         ...(choice.fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
+        ...(choice.phyrexianLife === undefined ? {} : { phyrexianLife: choice.phyrexianLife }),
       });
     } else if (choice.targetSets.length > 0) {
       setPendingCast(choice);
@@ -248,6 +362,10 @@ export function OnlineBoard({
       // The zone rides the choice: a flashback cast must name its graveyard source
       // or the server looks for the card in the hand and cleanly rejects it.
       ...(pendingCast.fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
+      // So does the READING (§3.143): the server offers one cast per fundable
+      // Phyrexian life amount, and dropping the field asks for one it may never
+      // have offered.
+      ...(pendingCast.phyrexianLife === undefined ? {} : { phyrexianLife: pendingCast.phyrexianLife }),
     };
     submitSequence([...pendingTaps, cast]);
   };
@@ -269,12 +387,21 @@ export function OnlineBoard({
     const options = legalTargets(requirement, masked, names);
     if (options.length === 0) return; // no legal target → the cast would fizzle
     // Hold the taps, then reuse the existing target picker for the choice.
+    // `commitCast` REBUILDS the cast action once targets are known, so anything
+    // the planner decided about it has to survive the round trip through
+    // `pendingCast` — the READING its taps were planned for above all (§3.143),
+    // since taps for "{1} and 4 life" followed by a 0-life cast is a sequence
+    // the server stops halfway through.
+    const planned = sequence[sequence.length - 1];
+    const phyrexianLife =
+      planned !== undefined && planned.kind === 'castSpell' ? planned.phyrexianLife : undefined;
     setPendingTaps(sequence.slice(0, -1));
     setPendingCast({
       instanceId: card.instanceId,
       targetSets: options.map((o) => [optionToTarget(o)]),
       canCastUntargeted: false,
       fromZone,
+      ...(phyrexianLife === undefined ? {} : { phyrexianLife }),
     });
   };
 
@@ -348,7 +475,7 @@ export function OnlineBoard({
   const defOf = (id: InstanceId): CardDefinition | undefined =>
     masked.battlefield.find((c) => c.instanceId === id)?.def;
   const nameOfTarget = (target: InstanceId | PlayerId): string =>
-    target === 'A' || target === 'B' ? `${names[target]} (player)` : nameOfPerm(view, target);
+    target === 'A' || target === 'B' ? `${names[target]} (player)` : nameOfInstance(target);
 
   /**
    * The activatable abilities, grouped per source permanent — derived from the
@@ -484,13 +611,13 @@ export function OnlineBoard({
       const markers = new Map<InstanceId, string>();
       for (const id of chosenAttackers) {
         const walker = walkerAssign.get(id);
-        markers.set(id, walker !== undefined ? `ATK → ${nameOfPerm(view, walker)}` : 'ATK');
+        markers.set(id, walker !== undefined ? `ATK → ${nameOfInstance(walker)}` : 'ATK');
       }
       return { selectableIds: eligibleAttackers, selectedIds: chosenAttackers, markers, onClick: toggleAttacker };
     }
     if (yourTurn && inBlockStep) {
       const markers = new Map<InstanceId, string>();
-      for (const [blocker, atk] of blockAssign) markers.set(blocker, `→ ${nameOfPerm(view, atk)}`);
+      for (const [blocker, atk] of blockAssign) markers.set(blocker, `→ ${nameOfInstance(atk)}`);
       return {
         selectableIds: eligibleBlockers,
         selectedIds: new Set(blockAssign.keys()),
@@ -597,7 +724,7 @@ export function OnlineBoard({
     for (const perm of masked.battlefield) {
       refs.push({ instanceId: perm.instanceId, name: perm.def.name, controller: perm.controller, zone: 'battlefield' });
     }
-    for (const pid of ['A', 'B'] as const) {
+    for (const pid of PLAYER_IDS) {
       for (const dead of masked.players[pid].graveyard) {
         refs.push({ instanceId: dead.instanceId, name: dead.def.name, controller: pid, zone: 'graveyard' });
       }
@@ -615,6 +742,70 @@ export function OnlineBoard({
     }
     return makeRefIndex(refs, masked.viewer, names);
   }, [masked, names]);
+
+  /**
+   * §3.143 wave 3 / UX-8 — how the SHARED prompts turn a server ref into a
+   * drawable card on this board.
+   *
+   * `cardIdOf` widens `faceOfInstance` to the ref shape the prompts speak: a
+   * PlayerId is a seat, which has no card, and `null` is the honest answer the
+   * prompt draws a named plate for.
+   *
+   * There is deliberately NO `explanationOf`. `explainCharacteristics` needs the
+   * full `GameState` and the continuous-effect index, and an online client holds
+   * a masked view by design — so the faces here carry printed truth and say WHY
+   * there is no attribution instead of drawing an empty breakdown, which would
+   * read as "nothing is modifying this". Same limit `board-adapter.ts`'s `NO_MOD`
+   * note states once already.
+   */
+  const promptFaces: AbilityPromptFaces = useMemo(
+    () => ({
+      cardIdOf: (ref: InstanceId | PlayerId) => (typeof ref === 'number' ? faceOfInstance(ref) : null),
+      provenanceUnavailable: PROVENANCE_UNAVAILABLE_ONLINE,
+    }),
+    [faceOfInstance],
+  );
+
+  /**
+   * Every permanent on the table by id, from the SAME `BoardView` the seats are
+   * drawn from — so the zoom cannot disagree with the tile it was opened from.
+   */
+  const permById = useMemo(() => {
+    const map = new Map<InstanceId, BoardPermanent>();
+    for (const perm of [...view.self.permanents, ...view.opponent.permanents]) map.set(perm.instanceId, perm);
+    return map;
+  }, [view]);
+
+  /**
+   * §3.143 GAP-C — a way into the zoom from the BATTLEFIELD, the hotseat
+   * board's twin (see its own note for why the gestures split this way, and why
+   * this is delegated from the seat wrapper rather than added to the tile).
+   */
+  const inspectPermanentFrom = useCallback(
+    (event: ReactMouseEvent, requireInert: boolean): void => {
+      const from = event.target instanceof Element ? event.target : null;
+      if (from === null) return;
+      if (requireInert && from.closest('button') !== null) return;
+      const raw = from.closest('[data-perm-home]')?.getAttribute('data-perm-home');
+      if (raw === null || raw === undefined) return;
+      const perm = permById.get(Number(raw) as InstanceId);
+      if (perm === undefined) return;
+      event.preventDefault();
+      setZoomed({
+        cardId: perm.cardId,
+        name: perm.name,
+        isCreature: perm.isCreature,
+        unavailableReason: PROVENANCE_UNAVAILABLE_ONLINE,
+      });
+    },
+    [permById],
+  );
+
+  /** The two handlers every seat gets, spread onto its wrapper. */
+  const seatInspectProps = {
+    onContextMenu: (event: ReactMouseEvent) => inspectPermanentFrom(event, false),
+    onClick: (event: ReactMouseEvent) => inspectPermanentFrom(event, true),
+  };
 
   /** Which blocker→attacker lines to draw this frame (pure rule, tested). */
   const combatLines = blockerLinePairs({
@@ -651,7 +842,7 @@ export function OnlineBoard({
       </div>
 
       {/* Opponent (top) — hand hidden (count only). */}
-      <div className="play-board__opponent">
+      <div className="play-board__opponent" {...seatInspectProps}>
         <SeatPanel
           seat={view.opponent}
           isActive={view.activePlayer === view.opponent.id}
@@ -668,16 +859,32 @@ export function OnlineBoard({
         </div>
       </div>
 
-      {/* Center: stack + server log. */}
+      {/* Center: stack + server log.
+
+          §3.143 / UX-1 + UX-2 — the stack shows real card faces and floats over
+          the board instead of sharing this column, exactly as on the hotseat
+          board. `board-fit.css` narrows the two-column grid to one when no
+          `.stack-panel--column` is inside, so the log takes the whole column and
+          the battlefield loses no height (report 20260901_204618, already paid
+          for once). `placement="floating"` is absolute against `.play-board`
+          (styles.css gives it `position: relative`), not against this grid cell.
+      */}
       <div className="play-board__center">
-        <StackPanel stack={view.stack} names={names} nameOf={() => 'card'} />
+        <StackPanel
+          stack={stackFacts}
+          names={names}
+          nameOf={nameOfInstance}
+          faceOf={faceOfInstance}
+          viewer={masked.viewer}
+          placement="floating"
+        />
         <ServerLog lines={log} />
       </div>
 
       {/* Viewer (bottom) — own hand face-up. The seat panel doubles as the drag-to-
           play drop zone: it lights up while a card is in flight, and releasing a
           dragged card over it plays that card (same action as clicking it). */}
-      <div className="play-board__self">
+      <div className="play-board__self" {...seatInspectProps}>
         <div
           ref={dropRef}
           className={`drop-zone${drag ? ' drop-zone--active' : ''}${drag?.overDrop ? ' drop-zone--over' : ''}`}
@@ -737,15 +944,26 @@ export function OnlineBoard({
                   setZoomed({ cardId: c.cardId, name: c.name });
                 }}
               >
-                <PlayCard
-                  cardId={c.cardId}
-                  name={c.name}
-                  face="full"
-                  badge={c.isLand ? 'Land' : cast ? 'castable' : tapCard ? 'tap mana' : undefined}
-                  disabled={!actionable}
-                  reason={actionable ? undefined : reasonCardIsDisabled(disabledContext, c)}
-                  onClick={actionable ? () => activateCard(c.instanceId, 'hand') : undefined}
-                />
+                {/*
+                  §3.143 / UX-10 — HOVER YOUR OWN HAND. The hotseat hand got
+                  this in §3.119 (report 20260901_205149, "I cant hover over my
+                  own in hand cards to see what they are") and the online hand
+                  was left on the old surface, so the SAME complaint was still
+                  live in the SAME app depending on which mode you opened. Same
+                  wrapper, same component, same funnel — a second hover
+                  mechanism here would itself be the bug.
+                */}
+                <CardHover cardId={c.cardId}>
+                  <PlayCard
+                    cardId={c.cardId}
+                    name={c.name}
+                    face="full"
+                    badge={c.isLand ? 'Land' : cast ? 'castable' : tapCard ? 'tap mana' : undefined}
+                    disabled={!actionable}
+                    reason={actionable ? undefined : reasonCardIsDisabled(disabledContext, c)}
+                    onClick={actionable ? () => activateCard(c.instanceId, 'hand') : undefined}
+                  />
+                </CardHover>
                 <button
                   type="button"
                   className="hand-card-slot__zoom"
@@ -762,9 +980,7 @@ export function OnlineBoard({
         </div>
       </div>
 
-      {zoomed && (
-        <CardZoomOverlay cardId={zoomed.cardId} name={zoomed.name} onClose={() => setZoomed(null)} />
-      )}
+      {zoomed && <CardZoomOverlay {...zoomed} onClose={() => setZoomed(null)} />}
 
       {/* Action bar. */}
       <div className="action-bar">
@@ -869,6 +1085,10 @@ export function OnlineBoard({
           names={names}
           onAnswer={(answer) => submit(answerChoiceAction(masked.viewer, ownChoice, answer))}
           zoneOf={refIndex.zoneOf}
+          /* UX-8 on THIS board too: `TargetOption` carries no card id, so
+             without this every target row here was a named placeholder while
+             the hotseat's were faces. Same public index the labels come from. */
+          cardIdOf={promptFaces.cardIdOf}
         />
       )}
 
@@ -877,8 +1097,9 @@ export function OnlineBoard({
           is simply absent rather than disabled. */}
       {abilitySource !== null && (
         <AbilityMenuPrompt
-          sourceName={nameOfPerm(view, abilitySource)}
+          source={{ instanceId: abilitySource, name: nameOfInstance(abilitySource) }}
           options={abilityMenu.get(abilitySource) ?? []}
+          faces={promptFaces}
           onChoose={onChooseAbility}
           onCancel={() => setAbilitySource(null)}
         />
@@ -888,6 +1109,7 @@ export function OnlineBoard({
       {pendingAbility && pendingAbility.targets !== null && (
         <AbilityTargetPrompt
           ability={pendingAbility}
+          faces={promptFaces}
           annotateTarget={refIndex.noteOf}
           onPick={(target) =>
             submit({
@@ -907,7 +1129,7 @@ export function OnlineBoard({
         <div className="target-prompt" role="dialog" aria-label="Choose which mana to add">
           <div className="target-prompt__card">
             <div className="target-prompt__title">
-              Add which mana from {nameOfPerm(view, pendingManaTap[0]?.instanceId ?? 0)}?
+              Add which mana from {nameOfInstance(pendingManaTap[0]?.instanceId ?? 0)}?
             </div>
             <div className="target-prompt__options">
               {pendingManaTap.map((opt) => (
@@ -935,21 +1157,39 @@ export function OnlineBoard({
         </div>
       )}
 
-      {/* Target prompt: choose among the server's enumerated legal target sets. */}
+      {/* Target prompt: choose among the server's enumerated legal target sets.
+
+          §3.143 / UX-8 — *"anytime a card is asking me to choose target(s), it
+          should be showing the actual card(s) that is provoking the choice - not
+          just the card name"*. The source renders as a real `CardFace` (so every
+          ability word on it is hoverable and explained) and each single-card
+          candidate goes through the hover funnel, matching `PlayBoard`'s prompt
+          line for line. */}
       {pendingCast && (
         <div className="target-prompt" role="dialog" aria-label="Choose a target">
           <div className="target-prompt__card">
-            <div className="target-prompt__title">Choose a target</div>
+            <div className="target-prompt__title">
+              Choose a target for {nameOfInstance(pendingCast.instanceId)}
+            </div>
+            <CardHover cardId={faceOfInstance(pendingCast.instanceId)}>
+              <CardFace
+                size="full"
+                cardId={faceOfInstance(pendingCast.instanceId)}
+                name={nameOfInstance(pendingCast.instanceId)}
+              />
+            </CardHover>
             <div className="target-prompt__options">
               {pendingCast.targetSets.length === 0 && (
                 <span className="seat__empty">No legal targets — cancel.</span>
               )}
               {pendingCast.targetSets.map((set, i) => (
-                <button key={i} type="button" className="btn" onClick={() => commitCast(set)}>
-                  {/* Owner + zone ride every row (§3.57) — resolved through the
-                      public-zone index, so a graveyard target names its yard. */}
-                  {describeTargetSetWithOwners(set, refIndex)}
-                </button>
+                <CardHover key={i} cardId={soleTargetFace(set, faceOfInstance)}>
+                  <button type="button" className="btn" onClick={() => commitCast(set)}>
+                    {/* Owner + zone ride every row (§3.57) — resolved through the
+                        public-zone index, so a graveyard target names its yard. */}
+                    {describeTargetSetWithOwners(set, refIndex)}
+                  </button>
+                </CardHover>
               ))}
             </div>
             <button type="button" className="btn btn--ghost" onClick={() => setPendingCast(null)}>
@@ -994,13 +1234,28 @@ function ServerLog({ lines }: { lines: readonly string[] }): ReactElement {
   );
 }
 
-/** Name a permanent on the board by instance id (falls back to the raw id). */
-function nameOfPerm(
-  view: ReturnType<typeof maskedViewToBoardView>,
-  id: InstanceId,
-): string {
-  const all = [...view.self.permanents, ...view.opponent.permanents];
-  return all.find((p) => p.instanceId === id)?.name ?? `#${id}`;
+/**
+ * The face to preview for one enumerated target SET, or `null` for none.
+ *
+ * A set naming exactly one permanent previews that permanent. A set naming
+ * several, or a player, previews NOTHING — a row that reads "Grizzly Bears and
+ * Llanowar Elves" cannot honestly magnify one of the two, and a preview that
+ * silently picks the first would make the player aim at the card they were
+ * shown. Refusing is the closed-table answer (rule 2): the row still carries
+ * every name in text.
+ *
+ * (`nameOfPerm` used to live here — a second answer to "what is instance N
+ * called" that only knew the battlefield, so an ability whose source had died
+ * printed `#12`. Every caller now goes through the seat's one instance index.)
+ */
+function soleTargetFace(
+  set: ReadonlyArray<InstanceId | PlayerId>,
+  faceOf: (id: InstanceId) => string | null,
+): string | null {
+  if (set.length !== 1) return null;
+  const only = set[0];
+  if (only === undefined || isPlayerTarget(only)) return null;
+  return faceOf(only);
 }
 
 // The per-step hint and the target-set labels both moved to shared, tested

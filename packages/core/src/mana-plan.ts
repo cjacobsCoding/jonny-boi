@@ -14,7 +14,15 @@
 
 import type { GameAction } from './actions.js';
 import type { CardDefinition } from './card.js';
-import { manaExtrasOf, manaModesOf, spendPurposeFor } from './card.js';
+import {
+  effectiveManaExtrasOf,
+  effectiveManaModesOf,
+  manaExtrasOf,
+  manaModesOf,
+  spendPurposeFor,
+} from './card.js';
+import { anyContinuousModification, indexContinuous } from './internal/continuous.js';
+import type { GameState } from './state.js';
 import type { ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
 import { addProduction, canPay, MANA_COLORS, payCost, usableMana } from './mana.js';
 import type { ManaSourcePreference } from './mana-source-preference.js';
@@ -32,6 +40,13 @@ import type { CardInstance, InstanceId, PlayerId } from './state.js';
  * only ever holds a redacted view of the game, and both that view and the full
  * `GameState` satisfy this shape structurally. Without it the online seat had no
  * way to tap mana at all, which meant it could never cast a spell.
+ *
+ * 📌 KNOWN REACH LIMIT, and it is a REFUSAL rather than a wrong answer: a GRANTED
+ * mana ability (DESIGN §3.143 GAP-G) is derived from the continuous layer, which a
+ * redacted view does not carry. The planner therefore resolves grants only when
+ * the view it was handed IS a full `GameState` — which every engine and pilot
+ * caller hands it — and a redacted online view simply plans without them, which
+ * can decline a payment but can never propose an illegal one.
  */
 export interface ManaPlanView {
   readonly battlefield: readonly CardInstance[];
@@ -260,6 +275,14 @@ const scratch = {
  * pre-§3.60 ranking exactly, so every existing caller (both pilots, every
  * recorded sim baseline) is untouched by construction; the human cast paths opt
  * in to sparing the useful source.
+ *
+ * `lifeSpend` is the life the caster has ALREADY decided to put toward this
+ * cost's Phyrexian symbols (§3.143). It is threaded down to `canPay` — the one
+ * authority on "done" — rather than subtracted from the cost here, because
+ * WHICH Phyrexian symbol the life pays for can change which colours the mana
+ * must still cover, and only the payment search knows that. Zero for every cost
+ * with no Phyrexian symbol, where every line below is the code that was here
+ * before.
  */
 export function planManaPayment(
   view: ManaPlanView,
@@ -269,6 +292,7 @@ export function planManaPayment(
   spendFor?: CardDefinition,
   spendKind: ManaSpendKind = 'cast',
   preference: ManaSourcePreference = MANA_SOURCE_PREFERENCE_DEFAULT,
+  lifeSpend = 0,
 ): ManaTapPlan[] | undefined {
   // ⚠️ THE PURPOSE IS TAKEN AS A DEFINITION, NOT AS A BUILT `ManaSpendPurpose`,
   // AND IT IS RESOLVED LAZILY. Both halves matter.
@@ -307,7 +331,7 @@ export function planManaPayment(
   // `canPay` is the authority on "done"; the distance heuristic only orders taps.
   // Checked against the LIVE pool: `canPay` only reads, so the copy can wait until
   // we know we are going to mutate one.
-  if (canPay(current, cost, current.restricted === undefined ? undefined : resolvePurpose())) return [];
+  if (canPay(current, cost, current.restricted === undefined ? undefined : resolvePurpose(), lifeSpend)) return [];
 
   // Nothing to tap ⇒ nothing can change ⇒ unpayable. Returning here skips the
   // grouping pass entirely for nearly half of all calls. Indexed rather than
@@ -342,7 +366,16 @@ export function planManaPayment(
   // one scan instead of one per mode.
   let lastSource: InstanceId | undefined;
   let lastModes: readonly ManaProduction[] | undefined;
-  let lastExtras: ReturnType<typeof manaExtrasOf>;
+  let lastExtras: ReturnType<typeof effectiveManaExtrasOf>;
+  // GRANTED mana abilities (GAP-G), resolved LAZILY and at most ONCE per call, and
+  // spelled out rather than wrapped in a helper closure: this is the hottest
+  // function in the engine profile and a closure here is one allocation per call,
+  // which is exactly what the notes above and below spend their words avoiding.
+  // A call that returns before the grouping loop pays nothing at all, and a board
+  // with no continuous effect pays one battlefield scan that short-circuits on its
+  // first modifying source and allocates nothing.
+  let grantIndex: ReturnType<typeof indexContinuous> | undefined;
+  let grantIndexResolved = false;
   // Both stay false on every board with no cost-carrying source — which is nearly
   // all of them — and keep the whole apparatus below out of the ranking loop.
   let anyTapCost = false;
@@ -367,13 +400,40 @@ export function planManaPayment(
       modes = lastModes;
     } else {
       const perm = findOnBattlefield(bf, action.instanceId);
-      modes = perm ? manaModesOf(perm.def) : undefined;
+      // EFFECTIVE modes, printed then granted — the SAME list `pushManaTapActions`
+      // enumerated and `applyTapForMana` applies, because `mode` is an index into
+      // it and a planner reading a shorter list drops the granted tap silently.
+      if (!grantIndexResolved) {
+        grantIndexResolved = true;
+        // A redacted online view carries no continuous layer; see `ManaPlanView`.
+        const full = view as Partial<GameState>;
+        grantIndex =
+          Array.isArray(full.continuous) && anyContinuousModification(view as GameState)
+            ? indexContinuous(view as GameState)
+            : undefined;
+      }
+      const granted =
+        grantIndex === undefined || perm === undefined
+          ? undefined
+          : grantIndex.get(perm.instanceId)?.activated;
+      // No grant in play ⇒ the printed readers, with the inlined `manaAbilities`
+      // property read that has always lived here: one read on an immutable
+      // definition, no call, on the hottest path in the sim.
+      modes = perm
+        ? granted === undefined
+          ? manaModesOf(perm.def)
+          : effectiveManaModesOf(perm.def, granted)
+        : undefined;
       lastDef = perm?.def;
       lastPerm = perm;
-      // Inlined `manaAbilities` test for the same reason `pushManaTapActions`
-      // inlines it: one property read, no call, on the hottest path in the sim.
       lastExtras =
-        perm && perm.def.manaAbilities !== undefined ? manaExtrasOf(perm.def) : undefined;
+        perm === undefined
+          ? undefined
+          : granted === undefined
+            ? perm.def.manaAbilities === undefined
+              ? undefined
+              : manaExtrasOf(perm.def)
+            : effectiveManaExtrasOf(perm.def, granted);
       lastSource = action.instanceId;
       lastModes = modes;
     }
@@ -488,7 +548,7 @@ export function planManaPayment(
   // each be "affordable" on their own and lethal together.
   let lifeLeft = view.players[player].life;
 
-  while (!canPay(pool, cost, anyRestricted ? resolvePurpose() : undefined)) {
+  while (!canPay(pool, cost, anyRestricted ? resolvePurpose() : undefined, lifeSpend)) {
     // At least one pip is still owed (canPay said so). Flooring at 1 matters when
     // the heuristic can't see the shortfall — a hybrid symbol reads as satisfied
     // by either colour — so a useful tap is still accepted instead of the planner
@@ -681,6 +741,15 @@ export function planManaPayment(
  * sources on real boards), so it costs a handful of `planManaPayment` calls and
  * a few small arrays. Call it when a player is about to be asked something — on
  * a cast click — never once per castable card per frame.
+ *
+ * `lifeSpend` is the life the caster has ALREADY put toward this cost's
+ * Phyrexian symbols (§3.143), and it rides every plan below. It must be the same
+ * amount the cast will pay: "{1} and 4 life" for Dismember taps one land while
+ * "{1}{B}{B}" taps three, so a picker raised for one reading and a cast that
+ * makes the other is precisely the "affordable answered by one policy, taps
+ * chosen by another" mismatch this predicate exists to keep out. Zero for every
+ * cost with no Phyrexian symbol, where every line below is the code that was
+ * here before.
  */
 export function manaPaymentChoiceExists(
   view: ManaPlanView,
@@ -690,8 +759,9 @@ export function manaPaymentChoiceExists(
   spendFor?: CardDefinition,
   spendKind: ManaSpendKind = 'cast',
   preference: ManaSourcePreference = MANA_SOURCE_PREFERENCE_DEFAULT,
+  lifeSpend = 0,
 ): boolean {
-  const auto = planManaPayment(view, player, cost, legalActions, spendFor, spendKind, preference);
+  const auto = planManaPayment(view, player, cost, legalActions, spendFor, spendKind, preference, lifeSpend);
   // Unpayable ⇒ nothing to choose between. Empty ⇒ the floating pool already
   // covers it and no tap happens at all, so there is nothing to pick either.
   if (auto === undefined || auto.length === 0) return false;
@@ -719,7 +789,7 @@ export function manaPaymentChoiceExists(
         (action) =>
           !(action.kind === 'tapForMana' && action.player === player && isExcluded(action.instanceId)),
       );
-      const alternative = planManaPayment(view, player, cost, without, spendFor, spendKind, preference);
+      const alternative = planManaPayment(view, player, cost, without, spendFor, spendKind, preference, lifeSpend);
       if (alternative === undefined) continue; // those sources were load-bearing
       if (sourceIdentityKey(view.battlefield, alternative) !== autoKey) return true;
     }
@@ -755,7 +825,9 @@ function sourceIdentityKey(
  * without touching the extras list at all.
  */
 function manaSpendRestrictionOf(
-  extras: readonly { readonly ability: { readonly spendRestriction?: ManaSpendRestriction } }[] | undefined,
+  extras:
+    | readonly ({ readonly ability: { readonly spendRestriction?: ManaSpendRestriction } } | undefined)[]
+    | undefined,
   mode: number,
 ): ManaSpendRestriction | undefined {
   if (extras === undefined) return undefined;

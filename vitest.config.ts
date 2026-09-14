@@ -40,6 +40,20 @@ export default defineConfig({
     alias: aliasToSrc,
   },
   test: {
-    include: ['{packages,apps}/*/src/**/*.test.ts'],
+    /**
+     * ⚠️ `{ts,tsx}`, NOT `ts` (§3.143 wave 2, GAP-17). This glob was
+     * `**\/*.test.ts` and no `.test.tsx` existed, so nothing was being skipped —
+     * but `.test.tsx` is the natural name for a React component test, and this
+     * overhaul added a screenful of React components. The next agent to write
+     * one would have got a file the runner never collected while the summary
+     * still read "0 failed": a FALSE GREEN, arriving through the config instead
+     * of through a dead worker, which is a failure mode this repo has already
+     * been bitten by.
+     *
+     * `conformance/test-collection.test.ts` reads THIS array and fails if any
+     * test file on disk is not matched by it, so a future narrowing cannot hide
+     * files either.
+     */
+    include: ['{packages,apps}/*/src/**/*.test.{ts,tsx}'],
   },
 });

@@ -1,11 +1,10 @@
 /**
-/**
  * Creature stat derivation. Effective power/toughness and keywords come from the
  * card definition's base, plus runtime modifiers, applied in this order:
- *   1a. CHARACTERISTIC-DEFINING base (CR 613.3 layer 7a) — a `*` P/T box whose
+ *   1a. CHARACTERISTIC-DEFINING base (CR 613.4 layer 7a) — a `*` P/T box whose
  *      value is a formula over the game state (Tarmogoyf). It REPLACES the
  *      printed numbers rather than adding to them, and it is applied FIRST,
- *      before counters and before every pump, which is exactly where CR 613.10
+ *      before counters and before every pump, which is exactly where CR 613.4a
  *      puts it. It reaches this function as `AggregatedMod.basePower` /
  *      `baseToughness`, computed by internal/continuous.ts — the layer that has
  *      the state a formula needs.

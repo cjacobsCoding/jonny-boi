@@ -1,5 +1,5 @@
 /**
- * CHARACTERISTIC-DEFINING P/T (CR 613.3 layer 7a) + TURN-SCOPED FACT MEMORY.
+ * CHARACTERISTIC-DEFINING P/T (CR 613.4 layer 7a) + TURN-SCOPED FACT MEMORY.
  *
  * The two claims worth proving are the ones that are easy to get subtly wrong:
  *

@@ -16,8 +16,8 @@
  */
 
 import type { CastZone } from './actions.js';
-import type { ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
-import { MANA_COLORS, convertedManaCost } from './mana.js';
+import type { HybridComponent, ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
+import { MANA_COLORS, convertedManaCost, isColorComponent } from './mana.js';
 import type { LandPlayZone } from './actions.js';
 // Type-only, so it is erased at build time and no runtime import cycle exists
 // (`copy.ts` imports this module's `unionProtection` for real).
@@ -367,7 +367,7 @@ export interface KeywordFlags {
    */
   readonly mustAttack?: boolean;
   /**
-   * **Landwalk** (CR 702.18b) — "can't be blocked as long as defending player
+   * **Landwalk** (CR 702.14b) — "can't be blocked as long as defending player
    * controls a [land of this kind]". A LIST because a creature may print
    * several ("islandwalk, swampwalk"), any one of which makes it unblockable;
    * grants UNION, like {@link protectionFrom}. The kinds are the closed
@@ -406,7 +406,7 @@ export interface KeywordFlags {
 }
 
 /**
- * A condition on the DEFENDING player's lands, read by landwalk (CR 702.18b)
+ * A condition on the DEFENDING player's lands, read by landwalk (CR 702.14b)
  * and by "can't attack unless defending player controls …" (CR 508.1c).
  *
  * A CLOSED union, and closed on purpose: each kind is something `land-conditions.ts`
@@ -645,7 +645,7 @@ export interface CardDefinition {
    *
    * Present ⇒ {@link power}/{@link toughness} are ABSENT: a card defines its P/T
    * by numbers or by formula, never both, and the compiler refuses a record that
-   * would claim both. The formula is applied in CR 613.3's layer 7a — BEFORE
+   * would claim both. The formula is applied in CR 613.4's layer 7a — BEFORE
    * +1/+1 counters and continuous pumps — which the stat pipeline honours by
    * treating the formula's value as the creature's base: base (7a) + counters +
    * modifications, exactly the order `internal/stats.ts` documents. The value is
@@ -1535,6 +1535,18 @@ const COLOR_PIPS: readonly ManaColor[] = ['W', 'U', 'B', 'R', 'G'];
  * consumer (protection, colored card filters, coloured anthems) inherits that
  * limit together, from this one reader.
  */
+/** Whether any hybrid symbol in a cost offers `color` as one of its components. */
+function costHybridOffers(hybrid: NonNullable<ManaCost['hybrid']>, color: ManaColor): boolean {
+  for (let i = 0; i < hybrid.length; i++) {
+    const symbol = hybrid[i] as readonly HybridComponent[];
+    for (let c = 0; c < symbol.length; c++) {
+      const component = symbol[c] as HybridComponent;
+      if (isColorComponent(component) && component === color) return true;
+    }
+  }
+  return false;
+}
+
 export function colorsOfDefinition(def: CardDefinition): readonly ManaColor[] {
   const memoized = COLORS_MEMO.get(def);
   if (memoized) return memoized;
@@ -1552,15 +1564,25 @@ export function colorsOfDefinition(def: CardDefinition): readonly ManaColor[] {
   } else {
     const cost = def.cost;
     if (cost) {
+      // ONE walk over the five pips, asking each colour whether the cost demands
+      // it — as a fixed pip or as one alternative of a hybrid symbol (CR 202.2b:
+      // a hybrid symbol is every colour it COULD be paid with). Walking the
+      // colours rather than the cost is what fixes the ORDER: before this, a
+      // {G/W} card answered ['G','W'] while a {W}{G} card answered ['W','G'],
+      // which is two answers to one question.
+      //
+      // A hybrid symbol's colours are a fact about the PRINTED cost, never about
+      // the payment: a card with {W/P} is white even when every copy of it is
+      // paid with life, and {2/W} is white even when it is paid with two
+      // Mountains. So only the COLOUR components count — generic and life are
+      // not colours, and {C} is not one either.
       for (const pip of COLOR_PIPS) {
-        if ((cost[pip] ?? 0) > 0) colors.push(pip);
-      }
-      if (cost.hybrid) {
-        for (const symbol of cost.hybrid) {
-          for (const option of symbol) {
-            if (option !== 'C' && !colors.includes(option)) colors.push(option);
-          }
+        if ((cost[pip] ?? 0) > 0) {
+          colors.push(pip);
+          continue;
         }
+        if (cost.hybrid === undefined) continue;
+        if (costHybridOffers(cost.hybrid, pip)) colors.push(pip);
       }
     }
   }
@@ -2314,6 +2336,211 @@ function flattenManaAbilities(def: CardDefinition): {
   });
   MANA_ABILITY_MEMO.set(def, flattened);
   return flattened;
+}
+
+/* -------------------------------------------------------------------------- */
+/* GRANTED mana abilities (DESIGN §3.143, GAP-G)                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The effect primitives that do nothing but ADD MANA — the CLOSED table that
+ * decides whether an activated ability is a MANA ability (CR 605.1a: an
+ * activated ability is a mana ability if it could add mana, does not target and
+ * is not a loyalty ability).
+ *
+ * ⚠️ CLOSED ON PURPOSE. An ability carrying any primitive that is not a row here
+ * is NOT converted; it keeps the ordinary activated-ability path. That is a
+ * REFUSAL rather than an approximation — a "mana ability" the engine invented out
+ * of an effect it does not model would resolve without ever using the stack and
+ * would silently drop whatever the other effect did. Adding a mana-only primitive
+ * is a ROW here, not a code change anywhere else.
+ */
+const MANA_EFFECT_PRIMITIVES: ReadonlySet<string> = new Set(['addMana']);
+
+/** The param a mana-adding primitive lists its colour symbols in (`['G','G']`). */
+const MANA_EFFECT_SYMBOLS_PARAM = 'mana';
+
+/**
+ * Memo for {@link manaAbilityFromActivated}. `ActivatedAbility` objects live on
+ * frozen card definitions and are shared by every instance, so one conversion per
+ * printed ability serves the whole process. `null` records "looked at it, it is
+ * not a mana ability", so a negative answer costs a WeakMap hit too.
+ */
+const GRANTED_MANA_ABILITY_MEMO = new WeakMap<ActivatedAbility, ManaAbility | null>();
+
+/**
+ * The {@link ManaAbility} an activated ability IS, or `undefined` when it is not
+ * one — the single place in the codebase that answers "is this a mana ability".
+ *
+ * ## Why this exists
+ * A continuous effect can GRANT an activated ability (Citanul Hierophants:
+ * "Creatures you control have '{T}: Add {G}'"). The grant arrives as an
+ * `ActivatedAbility`, because that is the only shape a modification can carry —
+ * `PermanentModification` has no `manaAbilities` field and adding one would give
+ * the grant a second vocabulary. But the MANA system reads {@link manaModesOf},
+ * so a granted mana ability was invisible to `tapForMana`, to the payment planner
+ * and to auto-tap: a pilot could make the mana only by putting the ability on the
+ * stack and passing priority, which is not what a mana ability does (CR 605.3a)
+ * and which `planManaPayment` can never do at all.
+ *
+ * ## What it refuses
+ * Everything it cannot represent EXACTLY. A `ManaAbility` has no timing field, no
+ * loyalty cost and no "sacrifice two"; and its `sacrificeAnother` always excludes
+ * the source, while an `ActivationCost`'s only does when the card printed the word
+ * "another". Each of those is a refusal, so the ability stays where it was rather
+ * than becoming a mana ability with subtly different rules.
+ */
+export function manaAbilityFromActivated(ability: ActivatedAbility): ManaAbility | undefined {
+  const memo = GRANTED_MANA_ABILITY_MEMO.get(ability);
+  if (memo !== undefined) return memo ?? undefined;
+  const built = buildManaAbilityFromActivated(ability) ?? null;
+  GRANTED_MANA_ABILITY_MEMO.set(ability, built);
+  return built ?? undefined;
+}
+
+function buildManaAbilityFromActivated(ability: ActivatedAbility): ManaAbility | undefined {
+  if (ability.effects.length === 0) return undefined;
+  // "Activate only as a sorcery" has no `ManaAbility` spelling, and a mana ability
+  // that quietly lost its timing restriction would be a strictly better card.
+  if (ability.timing !== undefined && ability.timing !== 'instant') return undefined;
+  const cost = ability.cost;
+  if (cost.loyalty !== undefined) return undefined; // CR 605.1a excludes loyalty abilities
+  // `ManaAbilityCost.sacrificeAnother` names ONE payer and always excludes the
+  // source; an `ActivationCost` says both of those separately.
+  if (cost.sacrificeCount !== undefined && cost.sacrificeCount !== 1) return undefined;
+  if (cost.sacrificeAnother !== undefined && cost.sacrificeExcludesSelf !== true) return undefined;
+
+  const production: Record<string, number> = {};
+  let pips = 0;
+  for (const effect of ability.effects) {
+    if (!MANA_EFFECT_PRIMITIVES.has(effect.primitive)) return undefined;
+    const symbols = effect.params?.[MANA_EFFECT_SYMBOLS_PARAM];
+    if (!Array.isArray(symbols)) return undefined;
+    for (const symbol of symbols) {
+      // A symbol outside the palette REPORTS rather than being dropped: an
+      // ability whose production this engine cannot state in full is not a mana
+      // ability it may offer.
+      if (typeof symbol !== 'string' || !(MANA_COLORS as readonly string[]).includes(symbol)) {
+        return undefined;
+      }
+      production[symbol] = (production[symbol] ?? 0) + 1;
+      pips++;
+    }
+  }
+  if (pips === 0) return undefined;
+
+  const manaCost: ManaAbilityCost = {
+    ...(cost.mana === undefined ? {} : { mana: cost.mana }),
+    ...(cost.life === undefined ? {} : { life: cost.life }),
+    ...(cost.sacrificeSelf === true ? { sacrificeSelf: true } : {}),
+    ...(cost.sacrificeAnother === undefined ? {} : { sacrificeAnother: cost.sacrificeAnother }),
+    // Every mana source taps by default (that is what a land does), so `noTap` is
+    // the OPT-OUT — see {@link ManaAbilityCost.noTap}.
+    ...(cost.tap === true ? {} : { noTap: true }),
+  };
+  return Object.freeze({
+    produces: Object.freeze([Object.freeze(production) as ManaProduction]),
+    cost: Object.freeze(manaCost),
+    label: ability.label,
+  });
+}
+
+/**
+ * The mana abilities among a set of GRANTED activated abilities, in order — or
+ * `undefined` when none of them is one, which is every board that has no grant at
+ * all and nearly every board that has one.
+ *
+ * The order is the grant order, and {@link effectiveManaModesOf},
+ * {@link effectiveManaExtrasOf} and {@link manaSourceNeverTaps} all build from
+ * this ONE list, which is what keeps the first two index-aligned:
+ * `TapForManaAction.mode` indexes both, and two builders with different ideas of
+ * what mode 3 is would tap for the wrong colour.
+ */
+function grantedManaAbilitiesOf(
+  granted: readonly ActivatedAbility[] | undefined,
+): readonly ManaAbility[] | undefined {
+  if (granted === undefined || granted.length === 0) return undefined;
+  let out: ManaAbility[] | undefined;
+  for (let i = 0; i < granted.length; i++) {
+    const converted = manaAbilityFromActivated(granted[i] as ActivatedAbility);
+    if (converted !== undefined) (out ??= []).push(converted);
+  }
+  return out;
+}
+
+/**
+ * The mana modes a PERMANENT has right now: its definition's printed modes
+ * followed by one mode per granted mana ability.
+ *
+ * PRINTED FIRST, then granted — the same ordering rule `effectiveActivated` uses,
+ * so a mode index a player is looking at does not shift when an unrelated grant
+ * appears.
+ *
+ * ⚠️ `granted === undefined` returns {@link manaModesOf}'s own memoized list by
+ * identity and allocates nothing. That is essentially every board: this runs for
+ * every permanent on every `generateLegalActions`, the engine's hottest read.
+ */
+export function effectiveManaModesOf(
+  def: CardDefinition,
+  granted: readonly ActivatedAbility[] | undefined,
+): readonly ManaProduction[] {
+  const printed = manaModesOf(def);
+  const grants = grantedManaAbilitiesOf(granted);
+  if (grants === undefined) return printed;
+  const out: ManaProduction[] = printed.slice();
+  for (const ability of grants) {
+    out.push((ability.produces as readonly ManaProduction[])[0] as ManaProduction);
+  }
+  return out;
+}
+
+/**
+ * The per-mode extras of a PERMANENT right now, index-aligned with
+ * {@link effectiveManaModesOf}.
+ *
+ * A PRINTED mode with no extras leaves a HOLE rather than shifting the granted
+ * entries down — the alignment is the contract, and `manaExtrasOf`'s "`undefined`
+ * means nothing rich here" answer is preserved per MODE instead of per source.
+ * That is the one case in which the array-of-`undefined`s `manaExtrasOf` forbids
+ * is correct, and it only ever happens on a board that actually carries a grant.
+ */
+export function effectiveManaExtrasOf(
+  def: CardDefinition,
+  granted: readonly ActivatedAbility[] | undefined,
+): readonly (ManaModeExtra | undefined)[] | undefined {
+  // Same one-property-read fast path `manaExtrasOf`'s doc insists on.
+  const printed = def.manaAbilities === undefined ? undefined : manaExtrasOf(def);
+  const grants = grantedManaAbilitiesOf(granted);
+  if (grants === undefined) return printed;
+  const out: (ManaModeExtra | undefined)[] = [];
+  const printedModes = manaModesOf(def).length;
+  for (let i = 0; i < printedModes; i++) out.push(printed?.[i]);
+  for (const ability of grants) out.push(Object.freeze({ ability }));
+  return out;
+}
+
+/**
+ * Whether EVERY mana ability this permanent has right now pays without tapping —
+ * the question the offer path asks before skipping a TAPPED source.
+ *
+ * Effective, not printed: a granted "Sacrifice this creature: Add {B}{B}" (Basal
+ * Sliver) is activatable while its host is tapped, exactly as a printed one is.
+ */
+export function manaSourceNeverTaps(
+  def: CardDefinition,
+  granted: readonly ActivatedAbility[] | undefined,
+): boolean {
+  const printed = def.manaAbilities;
+  const printedNeverTaps =
+    printed !== undefined && printed.length > 0 && printed.every((a) => a.cost?.noTap === true);
+  const grants = grantedManaAbilitiesOf(granted);
+  // Unchanged from the printed-only rule: a source with no rich mana ability at
+  // all (a plain land) taps, and so does one whose abilities do not all opt out.
+  if (grants === undefined) return printedNeverTaps;
+  // One TAPPING mode is enough to make a tapped source unusable, so a printed
+  // mode that is not itself a `noTap` ability settles it.
+  if (manaModesOf(def).length > 0 && !printedNeverTaps) return false;
+  return grants.every((ability) => ability.cost?.noTap === true);
 }
 
 /**

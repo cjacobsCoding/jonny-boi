@@ -58,6 +58,17 @@
  * Determinism: aggregation is sums and ORs over `state.battlefield` (stable order)
  * and `state.continuous` (insertion order), so the same state always yields the same
  * effective values — no map-iteration order or floating point is involved.
+ *
+ * ## ATTRIBUTION LIVES IN `../provenance.ts`, NOT HERE — deliberately
+ * The fold keeps the SUM and drops the story, and "which enchantment supplied that
+ * +1/+1?" is answered by a second, lazy walk over these same sources
+ * (`explainCharacteristics`). Nothing about attribution may move into this file: an
+ * extra optional key on {@link AggregatedMod} changes the hidden class of an object
+ * read from 20+ call sites several times per action, and an options parameter on
+ * {@link indexContinuous} would fork `ContinuousIndex` into two kinds, one of which
+ * silently lacks attribution. The two walks are held in agreement by a
+ * reconciliation inside `provenance.ts` and by `provenance.test.ts`, which is rule
+ * 12's sanctioned answer for an unavoidable second copy.
  */
 
 import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
@@ -125,7 +136,7 @@ export interface AggregatedMod {
    */
   readonly activated?: readonly ActivatedAbility[];
   /**
-   * CR 613.3 LAYER 7a — a characteristic-defining P/T, computed from the live
+   * CR 613.4 LAYER 7a — a characteristic-defining P/T, computed from the live
    * state for a permanent whose definition carries `characteristicPT`
    * (Tarmogoyf's star-power box). Present ONLY for such a permanent; absent means
    * "use the printed numbers".
@@ -690,6 +701,14 @@ function aggregateWith(state: GameState, instanceId: InstanceId, runSettledPass:
           agg.power += mod.power ?? 0;
           agg.toughness += mod.toughness ?? 0;
           grantInto(agg, mod.keywords);
+          // An Aura's QUOTED ability ("Enchanted creature has '{T}: Add {C}'") is
+          // part of the same modification, and omitting it here made this path
+          // disagree with `indexContinuous` about how many abilities a permanent
+          // has — which is a wrong ANSWER, not a missing feature: the engine
+          // OFFERS abilities through the bulk index and APPLIES the chosen one
+          // through this function by the same integer index, so a granted ability
+          // was offered and then resolved to `undefined`.
+          grantActivatedInto(agg, mod.activated);
         }
       }
       const declared = source.def.statics;
@@ -707,6 +726,13 @@ function aggregateWith(state: GameState, instanceId: InstanceId, runSettledPass:
         agg.power += ability.power ?? 0;
         agg.toughness += ability.toughness ?? 0;
         grantInto(agg, ability.keywords);
+        // The same grant the BULK path makes for a static ("All Slivers have
+        // '{T}: …'"), for the same reason it is made for an Aura above: the
+        // engine OFFERS abilities through `indexContinuous` and APPLIES the
+        // chosen one through this function by the same integer index, so a
+        // static-granted ability missing here was offered and then resolved to
+        // `undefined`.
+        grantActivatedInto(agg, ability.activated);
       }
     }
     // EMBLEMS radiate from the COMMAND zone, and this single-instance path has to
@@ -766,8 +792,12 @@ function aggregateWith(state: GameState, instanceId: InstanceId, runSettledPass:
 
 /**
  * Fold every static a command zone's objects (emblems) radiate onto ONE target's
- * accumulator. Returns whether anything applied. The single-instance twin of
- * {@link collectStaticSources}.
+ * accumulator. The single-instance twin of {@link collectStaticSources}.
+ *
+ * Returns BOTH halves of the answer: whether anything applied immediately, and the
+ * settled-stats statics held back for the caller's settled pass. The list — not a
+ * "something was deferred" flag — is what lets the pass re-run each one against its
+ * OWN bound, which is the defect `aggregateFor`'s note describes.
  */
 function foldCommandStatics(
   zone: readonly CardInstance[],
@@ -795,6 +825,10 @@ function foldCommandStatics(
       agg.power += ability.power ?? 0;
       agg.toughness += ability.toughness ?? 0;
       grantInto(agg, ability.keywords);
+      // An emblem may grant an ACTIVATED ability too, and the bulk path folds it —
+      // see the same call on the battlefield-static path above for why a missing
+      // one is a wrong answer rather than a missing feature.
+      grantActivatedInto(agg, ability.activated);
     }
   }
   return { applied, deferred };
@@ -971,8 +1005,13 @@ export function dropContinuousEffectsFor(state: GameState, instanceId: InstanceI
  * ONE predicate for both, deliberately: the deferral and the keyword-only rule
  * are the same rule, and a second predicate answering half the question is how a
  * later field gets added to the type and forgotten by the pass.
+ *
+ * EXPORTED for `../provenance.ts`, which walks these same sources a second time to
+ * attribute them. Restating the test there would give the "may grant keywords only,
+ * and only within the settled bound" rule two answers, and the tooltip would then
+ * show an anthem'd creature keeping an evasion the board had already taken away.
  */
-function readsSettledStats(ability: StaticAbility): boolean {
+export function readsSettledStats(ability: StaticAbility): boolean {
   const affects = ability.affects;
   return (
     affects.maxEffectivePower !== undefined ||
@@ -985,11 +1024,15 @@ function readsSettledStats(ability: StaticAbility): boolean {
  * Whether `candidate` is within the filter's effective-P/T bounds, read off
  * the SETTLED accumulator (`mod`) rather than the printed box — an anthem
  * lifts a creature out of "power 2 or less", exactly as it does in paper.
+ *
+ * Takes an `AggregatedMod` rather than the internal `MutableMod`: a `MutableMod`
+ * still satisfies it (mutable is assignable to readonly), and widening lets
+ * `../provenance.ts` pass the finished aggregate instead of copying this rule.
  */
-function withinEffectiveBounds(
+export function withinEffectiveBounds(
   affects: StaticAbility['affects'],
   candidate: CardInstance,
-  mod: MutableMod | undefined,
+  mod: AggregatedMod | undefined,
 ): boolean {
   const settled = mod ?? NO_MOD;
   const max = affects.maxEffectivePower;

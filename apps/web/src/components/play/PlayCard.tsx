@@ -1,6 +1,7 @@
-import { useState, type ReactElement } from 'react';
+import { useState, type CSSProperties, type ReactElement } from 'react';
 import { getCard, cardImage } from '../../lib/cards.js';
 import { ManaCost } from '../ManaCost.js';
+import { CardFace } from './CardFace.js';
 
 /**
  * A compact, reusable card chip for the hotseat hand/stack (DRY: hand + stack +
@@ -16,8 +17,32 @@ import { ManaCost } from '../ManaCost.js';
  * Chrome waiting for an intersection it only re-evaluated once a hover
  * repainted the slot. Lazy loading belongs to the long grids (the Cards
  * browser, `CardArt`), not to the twenty images a player is looking at.
- * `play-surface-images.test.ts` pins this structurally. A face that fails to
- * load (offline, a Scryfall miss) shows the name rather than a broken image.
+ * `play-surface-images.test.ts` pins this structurally — and it still holds,
+ * because `CardFace` marks its art eager for the same reason.
+ *
+ * ## The FULL face is a live {@link CardFace} (§3.143 / UX-17.4, wave 2)
+ *
+ * Caleb asked for a glossary tooltip *"on any card"*, and this component draws
+ * the hand (both boards), the mulligan grid, the stack faces and the choice
+ * prompt's source and candidates — five of the six surfaces a player ever reads
+ * a card on. It used to emit a bare `<img>`, so every one of those was a
+ * picture: hovering "vigilance" explained nothing, because there was no text
+ * node to hover. Delegating the full face to `CardFace` gives all five the ONE
+ * renderer lane P built (spec §2.4 — "one component with one props contract,
+ * adopted by every site — not a sixth renderer") rather than teaching each
+ * mount site its own trick. `play-card-live-face.test.ts` pins the adoption.
+ *
+ * With no `explanation` prop `CardFace` renders the plain printed card plus the
+ * glossary — which is the honest state here: a card in hand, on the stack or in
+ * a prompt has no continuous-effect index behind it to attribute anything to.
+ *
+ * ⚠️ ONE degradation moved rather than survived: the full face's `onError` →
+ * named-plate fallback lived on the `<img>` this file used to own, and
+ * `CardFace` owns that element now. A card with NO image at all still falls
+ * back here (`hasFullFace` below); a card whose image URL 404s at runtime shows
+ * `CardFace`'s art `alt` — the card's name — instead of the chip plate. Closing
+ * that last gap is one `onError` inside `CardFace`; it is in this lane's report
+ * as a contract for lane WB, not silently forgotten.
  */
 export function PlayCard({
   cardId,
@@ -52,12 +77,18 @@ export function PlayCard({
   onClick?: () => void;
 }): ReactElement {
   const card = getCard(cardId);
-  const fullFace = face === 'full' ? (card ? cardImage(card, 'normal') : undefined) : undefined;
+  // Whether a full face is DRAWABLE at all — a token, an uncompiled import or a
+  // Scryfall miss has no image, and those degrade to the chip's named layout
+  // exactly as before. `CardFace` re-resolves the image itself (it asks for
+  // `large`, the readable one); this only answers "is there a card to draw".
+  const hasFullFace = face === 'full' && card !== undefined && cardImage(card, 'normal') !== undefined;
   const art = card ? cardImage(card, 'art_crop') : undefined;
-  // A face whose image failed to load falls back to the chip's named layout —
-  // a blank rectangle is the one thing a card must never be.
+  // A CHIP whose art failed to load falls back to its named layout — a blank
+  // rectangle is the one thing a card must never be. (The full face's own
+  // error path moved into `CardFace` with the element it hangs off; see the
+  // module doc.)
   const [faceBroken, setFaceBroken] = useState(false);
-  const showFull = Boolean(fullFace) && !faceBroken;
+  const showFull = hasFullFace;
   // The name alone is useless on a card the player just tried and failed to use.
   const tooltip = reason ? `${name} — ${reason}` : name;
   const className = `play-card${showFull ? ' play-card--full' : ''}${
@@ -67,25 +98,22 @@ export function PlayCard({
   const inner = showFull ? (
     <>
       {/*
+        The live face. `className` hands it the box the <img> used to fill —
+        `.play-card__face` is `width/height: 100%`, so every mount site that
+        sizes `.play-card--full` (board-fit, stack-panel, choice-prompt) keeps
+        sizing the face with no change of its own.
+
         draggable={false} IS the land-play fix (bug reports 20260827_205353 +
-        205443). An <img> is natively draggable, and this one fills the whole
-        card — so pressing a card and moving a few pixels started a BROWSER
-        image-drag: it cancels the pointer stream (our drag machine never
-        commits) and swallows the mouseup (the click never fires). The reporter's
-        clip shows three mousedowns on a hand card with no mouseup ever recorded.
-        Synthetic-event tests cannot catch this: dispatched pointers never start
-        a native drag. Belt and braces live on the hand containers (onDragStart
-        preventDefault) and in CSS (user-drag: none).
+        205443), and it rides along: an <img> is natively draggable, and this one
+        fills the whole card — so pressing a card and moving a few pixels started
+        a BROWSER image-drag, which cancels the pointer stream (our drag machine
+        never commits) and swallows the mouseup (the click never fires). The
+        reporter's clip shows three mousedowns on a hand card with no mouseup
+        ever recorded. Synthetic-event tests cannot catch this: dispatched
+        pointers never start a native drag. `CardFace` sets the attribute for the
+        same documented reason; `no-native-drag.test.ts` pins it for both.
       */}
-      <img
-        className="play-card__face"
-        src={fullFace}
-        alt={name}
-        loading="eager"
-        decoding="async"
-        draggable={false}
-        onError={() => setFaceBroken(true)}
-      />
+      <CardFace size="full" cardId={cardId} name={name} className="play-card__face" />
       {badge && <span className="play-card__badge">{badge}</span>}
     </>
   ) : (
@@ -114,19 +142,39 @@ export function PlayCard({
     </>
   );
 
+  // The live face's tooltips are absolutely-positioned children, and
+  // `.play-card` is `overflow: hidden` (styles.css) — which CLIPS every one of
+  // them to the 148px card, so the pop a player hovers would exist and be
+  // invisible. `card-face.css` records the same constraint for its own box
+  // ("`overflow` on any ancestor CLIPS an absolutely-positioned pop"). Inline
+  // rather than a new rule because styles.css belongs to another lane, and a
+  // second `.play-card--full` block in a third stylesheet is one more thing for
+  // the cascade to decide by import order (board-fit.css §"Rule 1" is the scar).
+  const style: CSSProperties | undefined = showFull ? LIVE_FACE_STYLE : undefined;
+
   if (onClick) {
     return (
-      <button type="button" className={className} onClick={onClick} disabled={disabled} title={tooltip}>
+      <button
+        type="button"
+        className={className}
+        style={style}
+        onClick={onClick}
+        disabled={disabled}
+        title={tooltip}
+      >
         {inner}
       </button>
     );
   }
   return (
-    <div className={className} title={tooltip} aria-label={tooltip}>
+    <div className={className} style={style} title={tooltip} aria-label={tooltip}>
       {inner}
     </div>
   );
 }
+
+/** See the call site: un-clips {@link CardFace}'s glossary pops. */
+const LIVE_FACE_STYLE: CSSProperties = Object.freeze({ overflow: 'visible' });
 
 /**
  * A face-down card back (the opponent's hidden hand), fanned so that a big hand

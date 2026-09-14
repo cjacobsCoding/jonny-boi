@@ -35,6 +35,7 @@ import {
   effectiveToughness,
   generateLegalActions,
   indexContinuous,
+  isColorComponent,
   NO_MOD,
 } from '@jonny-boi/core';
 import { createHeuristicPilot } from '@jonny-boi/ai';
@@ -135,7 +136,11 @@ describe('the pool actually contains the cards the attachment seam needs', () =>
       for (const pip of ['W', 'U', 'B', 'R', 'G'] as const) {
         if ((cost[pip] ?? 0) > 0) colours.add(pip);
       }
-      for (const pair of cost.hybrid ?? []) for (const pip of pair) colours.add(pip);
+      // §3.143 — a hybrid symbol's components are not all colours ({2/W} has a
+      // generic half, {W/P} a life one), so only the colour ones count here.
+      for (const symbol of cost.hybrid ?? []) {
+        for (const component of symbol) if (isColorComponent(component)) colours.add(component);
+      }
       // A colourless Equipment is playable in EVERY deck, which is the widest
       // coverage there is.
       if (Object.keys(cost).every((key) => key === 'generic')) colours.add('colourless');

@@ -23,8 +23,19 @@
  * Sound is its own axis: `prefers-reduced-motion` silences MOTION, not audio,
  * so this reads `muted` (the persisted preference) rather than the motion flag.
  * Muted derives nothing at all, so no cue is ever scheduled.
+ *
+ * ## One hit, one clock (§3.143 GAP-11)
+ * Most cues fire on the batch's own stagger. DAMAGE does not: the hit is DRAWN
+ * travelling from its source to its recipient by {@link deriveDamageSequence},
+ * and a thump at t=0 for a bloom that lands `DAMAGE_ANIM_CONFIG.travelMs` later
+ * is two answers to "the damage landed" on two different clocks — the exact DRY
+ * failure that `vfx-cues.ts` retired on the visual axis. So the damage cue is
+ * derived from that SAME sequence and carries the impact moment with it, and
+ * every cue now states WHEN it plays ({@link SoundCueHit.delayMs}) instead of
+ * leaving the consumer to multiply an index by a stagger.
  */
 import type { GameEvent, PlayerId } from '@jonny-boi/core';
+import { deriveDamageSequence, type DamageBeat } from './damage-sequence.js';
 import { SOUND_CONFIG } from './play-config.js';
 
 /** The synthesizable cues. One per distinct sound the engine knows how to make. */
@@ -55,7 +66,24 @@ export interface SoundCueHit {
   /** Absolute event index — React/render identity, and a natural de-dup key. */
   readonly key: string;
   readonly cue: SoundCue;
-  /** How many hits precede this one in its batch (the play stagger slot). */
+  /**
+   * THE SCHEDULE: ms after this batch arrives that the cue should play. The one
+   * answer to "when", so a consumer never re-derives it.
+   *
+   * Table cues sit on the batch's stagger grid; a damage cue sits on the damage
+   * sequence's clock, at the moment its bloom lands.
+   */
+  readonly delayMs: number;
+  /**
+   * {@link delayMs} expressed as a whole stagger SLOT — `round(delayMs /
+   * SOUND_CONFIG.staggerMs)`.
+   *
+   * Derived, never a second source of truth: it exists so a consumer still
+   * scheduling by `order * staggerMs` (the shape this field had before it named
+   * a slot rather than a count) lands within half a stagger of the right moment
+   * instead of at t=0. Prefer {@link delayMs}. `sound-cues.test.ts` pins the two
+   * in step so they cannot drift.
+   */
   readonly order: number;
 }
 
@@ -100,7 +128,13 @@ const SOUND_CUE_FOR_EVENT: Partial<Record<GameEvent['type'], CueResolver>> = Obj
   tapped: always('tap'),
   attackersDeclared: always('attack'),
   blockersDeclared: always('block'),
-  damageDealt: always('damage'),
+  // ⚠️ NO `damageDealt` ROW — deliberately, and this comment is the reason.
+  // It used to be `always('damage')`, which fires at t=0, `travelMs` BEFORE the
+  // hit it is the sound of blooms on screen. The cue was RELOCATED, not deleted:
+  // `appendDamageCues` below emits the identical `damage` cue once per damage
+  // ROUND, at that round's first impact, from the same fold that draws the hit.
+  // One event, one timeline — and as a bonus the two rounds of a first-strike
+  // combat now thump twice, which is the audible half of GAP-12.
   creatureDied: always('death'),
   planeswalkerDied: always('death'),
   lifeChanged: (event) =>
@@ -120,25 +154,81 @@ const SOUND_CUE_FOR_EVENT: Partial<Record<GameEvent['type'], CueResolver>> = Obj
 /** Shared empty result so a muted or silent frame allocates nothing. */
 const NO_CUES: readonly SoundCueHit[] = Object.freeze([]);
 
+/** Is this the event that carries a hit? (The trigger for the damage cues.) */
+function isDamageEvent(event: GameEvent): boolean {
+  return event.type === 'damageDealt' || event.type === 'damagePrevented';
+}
+
+/**
+ * The stagger SLOT a delay falls in — see {@link SoundCueHit.order}. Rounded
+ * rather than floored so a delay lands on the nearer slot, which is what makes
+ * the fallback schedule within half a stagger of {@link SoundCueHit.delayMs}
+ * rather than up to a whole one early.
+ */
+function slotOf(delayMs: number): number {
+  return Math.round(delayMs / SOUND_CONFIG.staggerMs);
+}
+
+/** Mint a hit from the one number that decides when it plays. */
+function hitAt(key: string, cue: SoundCue, delayMs: number): SoundCueHit {
+  return { key, cue, delayMs, order: slotOf(delayMs) };
+}
+
+/**
+ * One `damage` cue per damage ROUND, each at that round's first IMPACT — the
+ * moment `DamageLayer` blooms, not the moment the event arrived.
+ *
+ * Per round rather than per hit for the reason the whole module coalesces: a
+ * board-wide combat is one impact, not fourteen. Per round rather than per BATCH
+ * because the rounds are the thing the player is meant to be able to tell apart
+ * (CR 510.4) — a first-strike combat should sound like two beats.
+ *
+ * The sequence is derived with `reducedMotion: false` on purpose: this asks
+ * *when the hits land*, which is a fact about the combat, not about whether the
+ * layer draws it. Sound is its own axis (see the module doc), so suppressing
+ * motion must not suppress — or re-time — the impact.
+ */
+function appendDamageCues(out: SoundCueHit[], events: readonly GameEvent[], opts: DeriveSoundOptions): void {
+  const beats = deriveDamageSequence(events, { reducedMotion: false, startIndex: opts.startIndex });
+  const firstOfRound = new Map<number, DamageBeat>();
+  for (const beat of beats) if (!firstOfRound.has(beat.roundIndex)) firstOfRound.set(beat.roundIndex, beat);
+  for (const beat of firstOfRound.values()) {
+    // `travelMs` is 0 on a condensed beat, which blooms where it starts.
+    out.push(hitAt(`dmg:${beat.key}`, 'damage', beat.startMs + beat.travelMs));
+  }
+}
+
 /**
  * Fold a batch of freshly-appended events into the sound cues they earn.
  * Identical cues coalesce to the first occurrence, then the batch is capped.
+ *
+ * The damage cues are spliced in at the FIRST damage event, so the returned list
+ * stays in event order and the cap keeps cutting from the tail — a combat's own
+ * impact is never the cue that a busy batch drops.
  */
 export function deriveSoundCues(events: readonly GameEvent[], opts: DeriveSoundOptions): readonly SoundCueHit[] {
   if (opts.muted) return NO_CUES;
   const seen = new Set<SoundCue>();
   const out: SoundCueHit[] = [];
+  let slot = 0;
+  let damageDone = false;
   for (let i = 0; i < events.length; i++) {
     const event = events[i] as GameEvent;
+    if (!damageDone && isDamageEvent(event)) {
+      damageDone = true;
+      appendDamageCues(out, events, opts);
+      if (out.length >= SOUND_CONFIG.maxPerBatch) break;
+    }
     const resolver = SOUND_CUE_FOR_EVENT[event.type];
     if (resolver === undefined) continue;
     const cue = resolver(event, opts.viewer);
     if (cue === undefined || seen.has(cue)) continue;
     seen.add(cue);
-    out.push({ key: `${opts.startIndex + i}`, cue, order: out.length });
+    out.push(hitAt(`${opts.startIndex + i}`, cue, slot * SOUND_CONFIG.staggerMs));
+    slot += 1;
     if (out.length >= SOUND_CONFIG.maxPerBatch) break;
   }
-  return out.length > 0 ? out : NO_CUES;
+  return out.length > 0 ? out.slice(0, SOUND_CONFIG.maxPerBatch) : NO_CUES;
 }
 
 /** Every cue the table can emit — for the debug preview and exhaustive tests. */

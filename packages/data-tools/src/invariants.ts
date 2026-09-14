@@ -70,6 +70,45 @@ export function knownPipTotal(cost: ManaCost): number {
   return cost.generic + cost.W + cost.U + cost.B + cost.R + cost.G + cost.C;
 }
 
+/**
+ * The MOST one unattributed symbol can add to a card's mana value.
+ *
+ * CR 202.3b: a hybrid symbol is worth its GREATEST component, so `{2/W}` is 2
+ * and not the "at most 1" every unattributed symbol used to be assumed to be —
+ * a monocolour hybrid card tripped this file's reconciliation before §3.143,
+ * because Flame Javelin's printed mana value of 6 sat outside a bracket that
+ * allowed 3. `{X}` is 0 in every zone but the stack (CR 107.3), and the
+ * Phyrexian `P` is not mana at all (CR 202.3c).
+ *
+ * ⚠️ This is the SECOND place that answers "what is a printed symbol worth?" —
+ * core's `hybridSymbolManaValue` is the first, and this package deliberately has
+ * no dependencies, so it cannot call it. `mana-value-parity.test.ts` in the
+ * cards package (which sees both) fails if the two ever disagree.
+ */
+export function maxSymbolManaValue(symbol: string): number {
+  const upper = symbol.replace(/[{}]/g, '').toUpperCase();
+  if (upper === 'X') return 0;
+  let greatest = 0;
+  for (const piece of upper.split('/')) {
+    // A numeric piece is worth its number; ANY other piece is one pip. That
+    // covers a colour, a snow `S`, and the Phyrexian `P` — whose true value is
+    // 0 (CR 202.3c) but which can never decide the MAX, because a Phyrexian
+    // symbol always prints a colour beside it and the compiler refuses one that
+    // does not. Spelling the 0 out here would be a branch that states a rule
+    // without ever changing an answer, and those rot.
+    const value = /^\d+$/.test(piece) ? Number.parseInt(piece, 10) : 1;
+    if (value > greatest) greatest = value;
+  }
+  return greatest;
+}
+
+/** The largest mana value the unattributed symbols of a cost could account for. */
+export function maxOtherManaValue(cost: ManaCost): number {
+  let total = 0;
+  for (const symbol of cost.other) total += maxSymbolManaValue(symbol);
+  return total;
+}
+
 /** Render a {@link ManaCost} back to Scryfall-ish notation, for messages. */
 export function formatManaCost(cost: ManaCost): string {
   const parts: string[] = [];
@@ -101,14 +140,16 @@ export function checkCard(card: NormalizedCard): IndexViolation[] {
 
   // --- cost ↔ mana value ---------------------------------------------------
   // Every unambiguous pip contributes exactly 1 to mana value (generic
-  // contributes its number). The symbols we could not attribute — hybrid, snow,
-  // Phyrexian — contribute at most 1 each, and {X} contributes 0, so the true
-  // mana value is bracketed by the known total and that total plus `other`.
+  // contributes its number). Each symbol we could not attribute contributes at
+  // most what `maxSymbolManaValue` says — 2 for a `{2/W}`, 1 for a hybrid or a
+  // snow pip, 0 for `{X}` — so the true mana value is bracketed by the known
+  // total and that total plus the unattributed ceiling.
   const known = knownPipTotal(card.manaCost);
-  if (card.cmc < known || card.cmc > known + card.manaCost.other.length) {
+  const ceiling = known + maxOtherManaValue(card.manaCost);
+  if (card.cmc < known || card.cmc > ceiling) {
     fail(
       'mana value is reconcilable with the printed pips',
-      `${formatManaCost(card.manaCost)} → pips ${known}..${known + card.manaCost.other.length}, but cmc is ${card.cmc}`,
+      `${formatManaCost(card.manaCost)} → pips ${known}..${ceiling}, but cmc is ${card.cmc}`,
     );
   }
   if (card.cmc < 0) fail('mana value is not negative', `cmc ${card.cmc}`);

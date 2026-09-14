@@ -514,6 +514,21 @@ button {
   overflow: hidden;
 }
 
+.card-tile__art-btn {
+  /* The art click target strips the browser's button chrome. `all: unset` MUST
+     live in a stylesheet and never in a `style={{ ... }}` prop: an inline
+     `all` is expanded by the CSSOM into every CSS longhand, which serialises to
+     ~7.4 KB of attribute PER ELEMENT. On the card browser's 5,651-tile grid
+     that was 42 MB of DOM on the app's landing view, and rendering it took
+     ~40 s under an attached MutationObserver (3 s without) — which is what put
+     `verify-game-resume.mjs` over its 30 s post-reload budget. As a class rule
+     it costs nothing per element. `inline-style-reset.test.ts` is the guard.
+     `display` is restored because `all: unset` returns it to `inline`. */
+  all: unset;
+  cursor: pointer;
+  display: block;
+}
+
 .card-tile__img {
   width: 100%;
   height: 100%;
@@ -1815,11 +1830,23 @@ button {
 /*
  * §3.133 — TAPPED HAS TO BE OBVIOUS. Reported as "cards that are tapped don't
  * LOOK tapped": an 8° tilt at 0.85 opacity is a difference you have to be
- * looking for. A tapped card is now turned hard, drained of colour and dimmed,
- * and wears the word (see `.perm__tap-badge`) — four signals instead of one,
- * none of them colour alone. The turn stops well short of a table's 90° because
- * `transform` does not reflow: a fully sideways card would overlap its
- * neighbours in the fixed board grid §3.62 fought for.
+ * looking for. A tapped card is turned, drained of colour and dimmed, and wears
+ * the word (see `.perm__tap-badge`) — four signals instead of one, none of them
+ * colour alone.
+ *
+ * ⚠️ THIS RULE NOW PAINTS THE REPLAY BOARD ONLY (§3.143 / UX-11). `.perm` is
+ * shared: `components/match/PermanentTile.tsx` (inside `.replay-board`) is the
+ * one component still styled by the 24° below, and `board-scene.css` retires it
+ * on the PLAY surface with `.play-board .perm.perm--tapped { transform: none }`
+ * — which wins by class count, not by import order. There the real 90° turn
+ * lives on a `.perm-turn` wrapper while `.perm-slot` reserves the footprint.
+ *
+ * 24°, not 90°, is still RIGHT HERE, and for the reason this comment always
+ * gave: `transform` does not reflow, and `.replay-board` is a bare wrapping
+ * flex strip with no slot reserving the turned card's width, so a fully
+ * sideways card would overlap its neighbours. Giving the replay board the real
+ * turn means giving it the slot first — it is not a one-line change, and it is
+ * not this rule's job to pretend otherwise.
  */
 .perm--tapped {
   transform: rotate(24deg);
@@ -2334,10 +2361,13 @@ button {
 /* Stack + log */
 .stack-panel, .game-log { border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); padding: var(--space-3); }
 .stack-panel__title, .game-log__title { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-fg-faint); margin-bottom: var(--space-2); }
-.stack-panel__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
-.stack-item { display: flex; flex-wrap: wrap; gap: var(--space-1); font-size: var(--text-sm); }
-.stack-item--top { color: var(--color-accent-soft); }
-.stack-item__kind { color: var(--color-fg-faint); font-size: var(--text-xs); }
+/* `.stack-panel__list` / `.stack-item*` lived here until §3.143 / UX-1 replaced
+   the four-text-span panel with a fan of real card faces. Nothing renders those
+   classes any more — the panel's rows are `.stack-panel__rows` / `.stack-row*`
+   in `components/play/stack-panel.css` — so they are gone rather than left to
+   be read as the panel's styling. `.stack-panel` and `.stack-panel__title`
+   above are STILL LIVE: the new panel reuses both, and `stack-panel.css`
+   deliberately out-specifies the line above rather than duplicating it. */
 .game-log__lines { max-height: 14rem; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: var(--text-sm); }
 .game-log__empty { color: var(--color-fg-faint); font-style: italic; }
 .game-log__line { color: var(--color-fg-muted); }
@@ -3337,14 +3367,12 @@ button {
 .anim-ghost__name { font-size: var(--text-xs); color: var(--color-fg-muted); padding: var(--space-1); }
 .anim-ghost--leaving { transform: scale(0.55) rotate(4deg); opacity: 0; filter: saturate(0.2); }
 
-/* --- blocker lines --------------------------------------------------------- */
-.combat-lines { position: absolute; inset: 0; pointer-events: none; z-index: 5; overflow: visible; }
-.combat-lines line { stroke-width: 2.5; stroke-linecap: round; }
-.combat-lines circle { stroke: none; }
-.combat-lines__declared line { stroke: var(--color-error); }
-.combat-lines__declared circle { fill: var(--color-error); }
-.combat-lines__draft line { stroke: var(--color-accent); stroke-dasharray: 6 5; }
-.combat-lines__draft circle { fill: var(--color-accent); }
+/* --- blocker lines ---------------------------------------------------------
+   The straight `.combat-lines` overlay lived here until §3.143 / UX-14 replaced
+   it with the fiery arcs. `CombatLines.tsx` now emits `.combat-arcs`, on both
+   boards, so no element can carry these classes; the successor's rules (and the
+   stacking slot this layer used to hold) are in
+   `components/play/combat-arcs.css`. */
 
 /* Reduced motion: the pure layer already derives nothing, and any sprite that
    slips through renders inert (no transition — it retires on its timer). */

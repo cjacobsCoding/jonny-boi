@@ -16,6 +16,83 @@ export type ManaColor = 'W' | 'U' | 'B' | 'R' | 'G' | 'C';
 export const MANA_COLORS: readonly ManaColor[] = ['W', 'U', 'B', 'R', 'G', 'C'];
 
 /**
+ * A `{2}`-style option inside a MONOCOLOUR hybrid symbol: `{2/W}` is "two
+ * generic mana, or one white" (CR 107.4e). An object rather than a bare number
+ * so a component is always discriminable from a `ManaColor` string.
+ */
+export interface GenericHybridComponent {
+  readonly generic: number;
+}
+
+/**
+ * The PHYREXIAN option inside a symbol: `{W/P}` is "one white, or 2 life"
+ * (CR 107.4f). The amount is data rather than a hard-coded 2 because it is the
+ * price this symbol prints, and the payment path charges what it says.
+ */
+export interface LifeHybridComponent {
+  readonly life: number;
+}
+
+/**
+ * ONE alternative inside a printed hybrid symbol — a colour, a generic amount,
+ * or a life price. Every hybrid family in Magic is a list of these:
+ *
+ * | printed  | components                  | CR      |
+ * |----------|-----------------------------|---------|
+ * | `{G/W}`  | `['G', 'W']`                | 107.4d  |
+ * | `{2/W}`  | `[{generic:2}, 'W']`        | 107.4e  |
+ * | `{W/P}`  | `['W', {life:2}]`           | 107.4f  |
+ * | `{G/U/P}`| `['G', 'U', {life:2}]`      | 107.4f  |
+ *
+ * Widening the ELEMENT of the existing list — rather than adding a second and a
+ * third parallel field — is what keeps ONE answer to each of the questions a
+ * symbol is asked: its mana value, its colours, how it prints, and how it is
+ * paid. A second structure would mean four readers each learning two shapes.
+ */
+export type HybridComponent = ManaColor | GenericHybridComponent | LifeHybridComponent;
+
+/** Whether a hybrid component is the plain colour option. */
+export function isColorComponent(component: HybridComponent): component is ManaColor {
+  return typeof component === 'string';
+}
+
+/** Whether a hybrid component is the `{2}`-style generic option of `{2/W}`. */
+export function isGenericComponent(component: HybridComponent): component is GenericHybridComponent {
+  return typeof component === 'object' && 'generic' in component;
+}
+
+/** Whether a hybrid component is the pay-life option of a Phyrexian symbol. */
+export function isLifeComponent(component: HybridComponent): component is LifeHybridComponent {
+  return typeof component === 'object' && 'life' in component;
+}
+
+/**
+ * What one component contributes to its symbol's MANA VALUE.
+ *
+ * CR 202.3b: a hybrid symbol's mana value is the GREATEST of its components'.
+ * CR 202.3c: a Phyrexian symbol counts as the coloured symbol — i.e. the life
+ * option contributes nothing, so `{W/P}` is 1 and `{2/W}` is 2. Reading the
+ * table is how every consumer of mana value (curve sorting, cost reduction,
+ * "mana value 3 or less", the card index's pip reconciliation) gets the same
+ * answer, and it is the answer regardless of how the symbol was actually PAID.
+ */
+function componentManaValue(component: HybridComponent): number {
+  if (isColorComponent(component)) return 1;
+  if (isGenericComponent(component)) return component.generic;
+  return 0; // life is not mana (CR 202.3c)
+}
+
+/** The mana value of one printed hybrid symbol — CR 202.3b, the greatest component. */
+export function hybridSymbolManaValue(symbol: readonly HybridComponent[]): number {
+  let greatest = 0;
+  for (let i = 0; i < symbol.length; i++) {
+    const value = componentManaValue(symbol[i] as HybridComponent);
+    if (value > greatest) greatest = value;
+  }
+  return greatest;
+}
+
+/**
  * A mana cost. `generic` is the {N} portion payable with any mana; the per-color
  * fields are specific symbol requirements. Omitted fields mean zero.
  */
@@ -29,17 +106,17 @@ export interface ManaCost {
   /** Colorless-specific {C} requirement (distinct from generic). */
   readonly C?: number;
   /**
-   * Hybrid symbols. Each entry is ONE printed symbol together with the colors
-   * that may pay it: `{G/W}{G/W}` is `[['G','W'], ['G','W']]`. A hybrid symbol
-   * counts 1 toward mana value, and the payer picks a different color per symbol
-   * if that is what makes the cost payable.
+   * Hybrid symbols. Each entry is ONE printed symbol together with the
+   * alternatives that may pay it: `{G/W}{G/W}` is `[['G','W'], ['G','W']]`,
+   * `{2/W}` is `[[{generic:2},'W']]`, `{B/P}` is `[['B',{life:2}]]`.
    *
-   * Only colour/colour hybrids are modelled. Monocolour hybrid (`{2/W}`) and
-   * Phyrexian (`{W/P}`, payable with life) are deliberately absent — they need
-   * an alternative-payment concept this cost shape does not have, so cards
-   * printing them stay unimplemented instead of being silently mis-costed.
+   * The payer picks a different alternative per symbol if that is what makes
+   * the cost payable — {@link payCost} searches them exhaustively. The LIFE
+   * alternative is the one exception: life is not in the pool, so how much of
+   * it this payment spends is decided by the caster BEFORE the payment (the
+   * `lifeSpend` argument), never by the search helping itself to a life total.
    */
-  readonly hybrid?: readonly (readonly ManaColor[])[];
+  readonly hybrid?: readonly (readonly HybridComponent[])[];
 }
 
 /**
@@ -197,19 +274,25 @@ export function addMana(pool: ManaPool, color: ManaColor, amount: number): ManaP
 
 /**
  * The converted mana cost (total pips) of a cost — used for sorting/curve.
- * Each hybrid symbol counts 1, matching the printed mana value.
+ *
+ * Each hybrid symbol contributes the GREATEST of its components (CR 202.3b), so
+ * `{G/W}` is 1, `{2/W}` is 2 and `{W/P}` is 1 — and, crucially, that is true
+ * however the symbol was actually paid (CR 202.3c). A Dismember paid entirely
+ * with life is still mana value 3.
  */
 export function convertedManaCost(cost: ManaCost): number {
-  return (
+  let total =
     (cost.generic ?? 0) +
     (cost.W ?? 0) +
     (cost.U ?? 0) +
     (cost.B ?? 0) +
     (cost.R ?? 0) +
     (cost.G ?? 0) +
-    (cost.C ?? 0) +
-    (cost.hybrid?.length ?? 0)
-  );
+    (cost.C ?? 0);
+  const hybrids = cost.hybrid;
+  if (hybrids === undefined) return total;
+  for (let i = 0; i < hybrids.length; i++) total += hybridSymbolManaValue(hybrids[i] as readonly HybridComponent[]);
+  return total;
 }
 
 /**
@@ -230,8 +313,27 @@ export function formatManaCost(cost: ManaCost): string {
   for (const color of MANA_COLORS) {
     for (let i = 0; i < (cost[color] ?? 0); i++) parts.push(`{${color}}`);
   }
-  for (const symbol of cost.hybrid ?? []) parts.push(`{${symbol.join('/')}}`);
+  for (const symbol of cost.hybrid ?? []) parts.push(`{${symbol.map(componentSymbolText).join('/')}}`);
   return parts.join('');
+}
+
+/**
+ * The life a PHYREXIAN symbol prints as its alternative (CR 107.4f). Named
+ * because two different things read it: the `P` in `{W/P}`, and the compiler
+ * that builds the component from that same printed letter.
+ */
+export const PHYREXIAN_LIFE_PRICE = 2;
+
+/**
+ * How one hybrid component prints inside its symbol's braces. The Phyrexian
+ * option prints as `P` at its canonical price and as the bare number otherwise,
+ * so a hand-built cost with an unprinted life price renders honestly instead of
+ * masquerading as a real Phyrexian symbol.
+ */
+function componentSymbolText(component: HybridComponent): string {
+  if (isColorComponent(component)) return component;
+  if (isGenericComponent(component)) return String(component.generic);
+  return component.life === PHYREXIAN_LIFE_PRICE ? 'P' : `${component.life}life`;
 }
 
 /** Outcome of attempting to pay a cost from a pool. */
@@ -249,13 +351,14 @@ export function payCost(
   pool: ManaPool,
   cost: ManaCost,
   purpose?: ManaSpendPurpose,
+  lifeSpend = 0,
 ): PaymentResult {
   // THE HOT PATH. No restricted mana anywhere in this pool ⇒ this is the exact
   // function it was before spend restrictions existed: one property read, then
   // the original algorithm on the original object.
-  if (pool.restricted !== undefined) return payWithRestrictions(pool, cost, purpose);
+  if (pool.restricted !== undefined) return payWithRestrictions(pool, cost, purpose, lifeSpend);
   const hybrids = cost.hybrid ?? [];
-  if (hybrids.length > 0) return payWithHybrids(pool, cost, hybrids, GENERIC_SPEND_ORDER);
+  if (hybrids.length > 0) return payWithHybrids(pool, cost, hybrids, GENERIC_SPEND_ORDER, lifeSpend);
   return payFixedCost(pool, cost, GENERIC_SPEND_ORDER);
 }
 
@@ -278,13 +381,14 @@ function payWithRestrictions(
   pool: ManaPool,
   cost: ManaCost,
   purpose: ManaSpendPurpose | undefined,
+  lifeSpend: number,
 ): PaymentResult {
   const usable = usablePool(pool, purpose);
   const order = restrictedFirstSpendOrder(pool, purpose);
   const hybrids = cost.hybrid ?? [];
   const paid =
     hybrids.length > 0
-      ? payWithHybrids(usable, cost, hybrids, order)
+      ? payWithHybrids(usable, cost, hybrids, order, lifeSpend)
       : payFixedCost(usable, cost, order);
   if (!paid.ok) return paid;
 
@@ -356,60 +460,173 @@ function restrictedFirstSpendOrder(
 }
 
 /**
- * Pay a cost containing hybrid symbols by trying every assignment of colors to
- * those symbols and taking the first that works.
+ * Pay a cost containing hybrid symbols by trying every assignment of components
+ * to those symbols and taking the first that works.
  *
  * Exhaustive search is the right tool here, not a heuristic: a greedy choice
  * ("always pay {G/W} with G") can fail a cost that is genuinely payable, which
  * would make the AI think it cannot cast a card it can. The space is tiny — a
- * printed card has at most a handful of hybrid symbols with 2 options each — and
- * the search short-circuits on the first success, so the common case is one pass.
+ * printed card has at most a handful of hybrid symbols with 2–3 options each —
+ * and the search short-circuits on the first success, so the common case is one
+ * pass.
+ *
+ * `lifeSpend` is how much life this payment has been TOLD to spend on Phyrexian
+ * components, and the search must land on exactly that much. Exactly, not "at
+ * most": a caster who chose to pay 4 life for Dismember did so to keep two mana
+ * up, and a search free to under-spend would quietly overrule them. It is also
+ * why life is an argument rather than something the search reads off the player
+ * — the engine asks before it pays (see `phyrexianLifeOptions`).
  *
  * Assignments are enumerated in a fixed order, so payment stays deterministic
- * and sims remain reproducible (DESIGN §2.1).
+ * and sims remain reproducible (DESIGN §2.1). WHICH of two same-priced symbols
+ * the life is spent on is therefore the engine's call, exactly as which land
+ * gets tapped and which colour pays a `{G/W}` already are.
  */
 function payWithHybrids(
   pool: ManaPool,
   cost: ManaCost,
-  hybrids: readonly (readonly ManaColor[])[],
+  hybrids: readonly (readonly HybridComponent[])[],
   genericOrder: readonly ManaColor[],
+  lifeSpend: number,
 ): PaymentResult {
-  const choice: ManaColor[] = [];
+  const folded: Record<string, number> = { generic: 0, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
 
-  const search = (index: number): PaymentResult | null => {
+  const search = (index: number, lifeLeft: number): PaymentResult | null => {
     if (index === hybrids.length) {
-      // Fold the chosen colors into the fixed colored requirements and pay.
-      const folded: Record<string, number> = {
-        generic: cost.generic ?? 0,
-        W: cost.W ?? 0,
-        U: cost.U ?? 0,
-        B: cost.B ?? 0,
-        R: cost.R ?? 0,
-        G: cost.G ?? 0,
-        C: cost.C ?? 0,
+      // Every life this payment promised to spend must have been spent, or the
+      // assignment is not the one the caster asked for.
+      if (lifeLeft !== 0) return null;
+      const total: Record<string, number> = {
+        generic: (cost.generic ?? 0) + (folded.generic as number),
+        W: (cost.W ?? 0) + (folded.W as number),
+        U: (cost.U ?? 0) + (folded.U as number),
+        B: (cost.B ?? 0) + (folded.B as number),
+        R: (cost.R ?? 0) + (folded.R as number),
+        G: (cost.G ?? 0) + (folded.G as number),
+        C: (cost.C ?? 0) + (folded.C as number),
       };
-      for (const color of choice) folded[color] = (folded[color] ?? 0) + 1;
-      const result = payFixedCost(pool, folded as ManaCost, genericOrder);
+      const result = payFixedCost(pool, total as ManaCost, genericOrder);
       return result.ok ? result : null;
     }
-    for (const color of hybrids[index] ?? []) {
-      choice.push(color);
-      const found = search(index + 1);
-      choice.pop();
+    for (const component of hybrids[index] ?? []) {
+      const key = foldKeyOf(component);
+      const amount = foldAmountOf(component);
+      const life = isLifeComponent(component) ? component.life : 0;
+      if (life > lifeLeft) continue; // more life than this payment was given
+      if (key !== undefined) folded[key] = (folded[key] as number) + amount;
+      const found = search(index + 1, lifeLeft - life);
+      if (key !== undefined) folded[key] = (folded[key] as number) - amount;
       if (found) return found;
     }
     return null;
   };
 
-  const paid = search(0);
+  const paid = search(0, lifeSpend);
   return (
     paid ?? {
       ok: false,
-      reason: `insufficient mana for hybrid cost (${hybrids
-        .map((options) => `{${options.join('/')}}`)
-        .join('')})`,
+      reason: `insufficient mana for hybrid cost (${formatManaCost({ hybrid: hybrids })})`,
     }
   );
+}
+
+/**
+ * Which slot of a folded cost a hybrid component adds to — its colour, the
+ * generic pile, or nothing at all (life is paid out of a life total, not a
+ * pool). ONE table, read by both the paying and the feasibility search, so the
+ * two cannot disagree about what choosing a component demands.
+ */
+function foldKeyOf(component: HybridComponent): string | undefined {
+  if (isColorComponent(component)) return component;
+  if (isGenericComponent(component)) return 'generic';
+  return undefined;
+}
+
+/** How much {@link foldKeyOf}'s slot grows by when this component is chosen. */
+function foldAmountOf(component: HybridComponent): number {
+  return isGenericComponent(component) ? component.generic : 1;
+}
+
+/**
+ * Every DISTINCT amount of life a caster could choose to spend on `cost`'s
+ * Phyrexian components, cheapest first, bounded by the life they have.
+ *
+ * `[0]` for every cost with no Phyrexian component — which is every cost in the
+ * game but a handful — so a caller loops once and the offer path it feeds is
+ * byte-identical to the one that existed before this system.
+ *
+ * CR 118.4 bounds it: life is a resource payable down to exactly zero, which is
+ * legal, the player's call, and promptly lethal via the state-based actions. So
+ * `life` itself is the cap, not `life - 1`.
+ */
+export function phyrexianLifeOptions(cost: ManaCost, life: number): readonly number[] {
+  const hybrids = cost.hybrid;
+  if (hybrids === undefined) return NO_LIFE_SPEND;
+  // Distinct TOTALS, not subsets: two {B/P} symbols priced at 2 life each offer
+  // 0, 2 and 4 — three decisions, not four assignments. Which symbol the life
+  // actually pays for is the payment search's, and unobservable while a printed
+  // card's Phyrexian symbols all print the same price.
+  let totals: number[] | undefined;
+  for (let i = 0; i < hybrids.length; i++) {
+    const symbol = hybrids[i] as readonly HybridComponent[];
+    for (let c = 0; c < symbol.length; c++) {
+      const component = symbol[c] as HybridComponent;
+      if (!isLifeComponent(component)) continue;
+      const price = component.life;
+      if (totals === undefined) totals = [0];
+      for (let t = totals.length - 1; t >= 0; t--) {
+        const sum = (totals[t] as number) + price;
+        if (sum <= life && !totals.includes(sum)) totals.push(sum);
+      }
+      break; // one symbol offers at most one life price
+    }
+  }
+  if (totals === undefined) return NO_LIFE_SPEND;
+  totals.sort((a, b) => a - b);
+  return totals;
+}
+
+/** The single "spend no life" answer, shared so the common path allocates nothing. */
+const NO_LIFE_SPEND: readonly number[] = Object.freeze([0]);
+
+/**
+ * The LEAST mana `cost` could possibly demand, given `life` life available to
+ * spend on its Phyrexian symbols — {@link convertedManaCost} for every cost
+ * without one, which is every cost but a handful.
+ *
+ * A LOWER BOUND, deliberately, and it is the only thing it may be used for: the
+ * pilot's cheap "could I conceivably afford this?" prefilter, which must not
+ * skip a card the planner would have funded. Two Phyrexian symbols and 2 life
+ * is scored here as if BOTH could be life-paid, because a bound that shares the
+ * budget between symbols would have to solve which symbols get it — and that is
+ * the payment search's job, not a filter's. Under-filtering costs a wasted
+ * scoring pass; over-filtering makes a castable card invisible, which is how a
+ * mechanic ends up inert.
+ */
+export function minimumManaValue(cost: ManaCost, life: number): number {
+  const hybrids = cost.hybrid;
+  if (hybrids === undefined) return convertedManaCost(cost);
+  let total =
+    (cost.generic ?? 0) +
+    (cost.W ?? 0) +
+    (cost.U ?? 0) +
+    (cost.B ?? 0) +
+    (cost.R ?? 0) +
+    (cost.G ?? 0) +
+    (cost.C ?? 0);
+  for (let i = 0; i < hybrids.length; i++) {
+    const symbol = hybrids[i] as readonly HybridComponent[];
+    let freeForLife = false;
+    for (let c = 0; c < symbol.length; c++) {
+      const component = symbol[c] as HybridComponent;
+      if (isLifeComponent(component) && component.life <= life) {
+        freeForLife = true;
+        break;
+      }
+    }
+    if (!freeForLife) total += hybridSymbolManaValue(symbol);
+  }
+  return total;
 }
 
 /**
@@ -501,19 +718,24 @@ export function repeatCost(cost: ManaCost, times: number): ManaCost {
     if (count) out[color] = count * n;
   }
   if (cost.hybrid && cost.hybrid.length > 0) {
-    const hybrid: (readonly ManaColor[])[] = [];
+    const hybrid: (readonly HybridComponent[])[] = [];
     for (let i = 0; i < n; i++) hybrid.push(...cost.hybrid);
     out.hybrid = hybrid;
   }
   return out as ManaCost;
 }
 
-export function canPay(pool: ManaPool, cost: ManaCost, purpose?: ManaSpendPurpose): boolean {
+export function canPay(
+  pool: ManaPool,
+  cost: ManaCost,
+  purpose?: ManaSpendPurpose,
+  lifeSpend = 0,
+): boolean {
   // THE HOT PATH — see `payCost`. One property read on a pool with no restricted
   // mana, and everything below is the code that was here before.
-  if (pool.restricted !== undefined) return canPayRestricted(pool, cost, purpose);
+  if (pool.restricted !== undefined) return canPayRestricted(pool, cost, purpose, lifeSpend);
   const hybrids = cost.hybrid;
-  if (hybrids !== undefined && hybrids.length > 0) return canPayWithHybrids(pool, cost, hybrids);
+  if (hybrids !== undefined && hybrids.length > 0) return canPayWithHybrids(pool, cost, hybrids, lifeSpend);
   return canPayFixed(pool, cost, undefined);
 }
 
@@ -529,10 +751,11 @@ function canPayRestricted(
   pool: ManaPool,
   cost: ManaCost,
   purpose: ManaSpendPurpose | undefined,
+  lifeSpend: number,
 ): boolean {
   const usable = usablePool(pool, purpose);
   const hybrids = cost.hybrid;
-  if (hybrids !== undefined && hybrids.length > 0) return canPayWithHybrids(usable, cost, hybrids);
+  if (hybrids !== undefined && hybrids.length > 0) return canPayWithHybrids(usable, cost, hybrids, lifeSpend);
   return canPayFixed(usable, cost, undefined);
 }
 
@@ -547,6 +770,7 @@ function canPayFixed(
   pool: ManaPool,
   cost: ManaCost,
   extra: Partial<Record<ManaColor, number>> | undefined,
+  extraGeneric = 0,
 ): boolean {
   let spare = 0;
   // Indexed rather than `for...of`: V8 does not always elide the array-iterator
@@ -559,34 +783,53 @@ function canPayFixed(
     if (have < need) return false;
     spare += have - need;
   }
-  return spare >= (cost.generic ?? 0);
+  return spare >= (cost.generic ?? 0) + extraGeneric;
 }
 
 /**
  * Feasibility for a cost containing hybrid symbols: is there ANY assignment of
- * colours to those symbols that the pool can cover?
+ * components to those symbols that the pool can cover, spending exactly
+ * `lifeSpend` life on the Phyrexian ones?
  *
  * Mirrors `payWithHybrids`' exhaustive, fixed-order search — a greedy choice can
- * fail a cost that is genuinely payable — but accumulates the chosen colours into
- * one reused counter object instead of folding a fresh cost per assignment.
+ * fail a cost that is genuinely payable — but accumulates the chosen components
+ * into one reused counter object instead of folding a fresh cost per assignment.
+ * The two must agree exactly: an offer this says yes to and the payment then
+ * refuses is a spell the menu shows and the engine rejects.
  */
 function canPayWithHybrids(
   pool: ManaPool,
   cost: ManaCost,
-  hybrids: readonly (readonly ManaColor[])[],
+  hybrids: readonly (readonly HybridComponent[])[],
+  lifeSpend: number,
 ): boolean {
   const chosen: Partial<Record<ManaColor, number>> = {};
+  let chosenGeneric = 0;
 
-  const search = (index: number): boolean => {
-    if (index === hybrids.length) return canPayFixed(pool, cost, chosen);
-    for (const color of hybrids[index] ?? []) {
-      chosen[color] = (chosen[color] ?? 0) + 1;
-      const found = search(index + 1);
-      chosen[color] = (chosen[color] ?? 1) - 1;
+  const search = (index: number, lifeLeft: number): boolean => {
+    if (index === hybrids.length) {
+      return lifeLeft === 0 && canPayFixed(pool, cost, chosen, chosenGeneric);
+    }
+    for (const component of hybrids[index] ?? []) {
+      if (isLifeComponent(component)) {
+        if (component.life > lifeLeft) continue;
+        if (search(index + 1, lifeLeft - component.life)) return true;
+        continue;
+      }
+      if (isGenericComponent(component)) {
+        chosenGeneric += component.generic;
+        const found = search(index + 1, lifeLeft);
+        chosenGeneric -= component.generic;
+        if (found) return true;
+        continue;
+      }
+      chosen[component] = (chosen[component] ?? 0) + 1;
+      const found = search(index + 1, lifeLeft);
+      chosen[component] = (chosen[component] ?? 1) - 1;
       if (found) return true;
     }
     return false;
   };
 
-  return search(0);
+  return search(0, lifeSpend);
 }

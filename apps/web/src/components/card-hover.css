@@ -7,19 +7,56 @@
 .card-hover-preview {
   position: fixed;
   z-index: 9999;
-  pointer-events: none; /* never steals the hover that opened it */
-  border-radius: 4.75% / 3.5%; /* matches a real card's corner radius */
-  overflow: hidden;
-  box-shadow:
-    0 18px 40px rgb(0 0 0 / 55%),
-    0 0 0 1px rgb(0 0 0 / 35%);
+  /*
+   * ⚠️ `auto`, NOT `none` (§3.143 wave 3 / GAP-E) — and the change is the whole
+   * fix, so do not "tidy" it back.
+   *
+   * Waves 1–2 set `pointer-events: none` here with the comment "never steals the
+   * hover that opened it". The consequence was not the stated one: a glossary
+   * pop opens from an `onMouseEnter` on a `PopTrigger` span, and a span inside a
+   * pointer-transparent panel never receives `mouseenter`, so the pops in this
+   * panel could not open AT ALL. This panel is also the only place a battlefield
+   * permanent's PRINTED rules text is shown (the tile renders
+   * `rules: 'aftermarketOnly'`), so "hover any ability, on any card" had no
+   * reachable surface in play.
+   *
+   * What kept the hover alive is now `hoverRegionContains` in `CardHover.tsx`:
+   * the anchor, this panel, and the gap between them all count as "still
+   * hovering", so accepting the pointer here no longer fights the hover that
+   * opened it. Flip this back to `none` and the glossary silently dies again
+   * with every test still green — which is exactly how it shipped twice.
+   */
+  pointer-events: auto;
+  /* NO `overflow: hidden` (§3.143 GAP-6). The panel now holds a `CardFace`, and
+     every ability word in that face carries an absolutely-positioned tooltip;
+     a clip here would be a fourth clipping ancestor of the exact kind the
+     portal exists to escape. The corner radius moved onto the face itself. */
   animation: card-hover-preview-in 90ms ease-out;
 }
 
-.card-hover-preview__img {
-  display: block;
-  width: 100%;
-  height: auto;
+/*
+ * The card inside the preview (§3.143 GAP-7). It replaced a bare printed <img>,
+ * which said 4/5 while the tile that opened it said 5/6. The face sizes itself
+ * from the panel's width and its own aspect ratio, so nothing here restates the
+ * card's shape.
+ */
+.card-hover-preview .card-hover-preview__face {
+  border-radius: 4.75% / 3.5%; /* matches a real card's corner radius */
+  box-shadow:
+    0 18px 40px rgb(0 0 0 / 55%),
+    0 0 0 1px rgb(0 0 0 / 35%);
+}
+
+/*
+ * READING SIZE (GAP-E). This panel is one of the two surfaces a player actually
+ * READS a card on, and every ability word in it is now a mouse target — at the
+ * face's default body size the words are under 10px tall, which is a tooltip
+ * nobody can hit. The value is `--card-face-read-text-size`, declared once in
+ * `card-face.css` and shared with `.card-face--zoomed`: two literals that must
+ * stay equal is the fork rule 12 forbids.
+ */
+.card-hover-preview__face .card-face__textbox {
+  font-size: var(--card-face-read-text-size);
 }
 
 @keyframes card-hover-preview-in {

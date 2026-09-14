@@ -11,6 +11,19 @@ import type { CardType } from './card.js';
 import type { ContinuousDuration } from './internal/continuous.js';
 import type { ChoiceAnswer, ChoiceKind } from './choices.js';
 
+/**
+ * WHICH combat-damage step dealt a hit (CR 510.4). A combat containing a
+ * first-striker or double-striker is TWO damage steps with state-based actions
+ * between them, and a log that does not say which step a hit belonged to cannot
+ * be folded back into two rounds — the board then shows one blur where the
+ * rules ran two beats.
+ *
+ * The same two-value table the engine already runs the steps from
+ * (`assignAndDealCombatDamage`'s `step`), named once so the marker on the event
+ * and the step that produced it cannot drift into two vocabularies.
+ */
+export type CombatDamageRound = 'firstStrike' | 'normal';
+
 /** Discriminated union of everything the engine reports. */
 export type GameEvent =
   | { readonly type: 'gameStart'; readonly seed: number; readonly startingPlayer: PlayerId }
@@ -280,6 +293,16 @@ export type GameEvent =
       readonly target: InstanceId | PlayerId;
       readonly amount: number;
       readonly combat: boolean;
+      /**
+       * Which combat-damage step this hit belonged to (see
+       * {@link CombatDamageRound}). Present for COMBAT damage only; a burn
+       * spell or a fight carries no round because it belongs to no step.
+       *
+       * Optional so that every fold of a log written before the marker existed
+       * still reads the event unchanged — the presentation layer falls back to
+       * inferring the boundary, as it had to before.
+       */
+      readonly round?: CombatDamageRound;
     }
   | {
       /**
@@ -294,6 +317,8 @@ export type GameEvent =
       readonly target: InstanceId | PlayerId;
       readonly amount: number;
       readonly combat: boolean;
+      /** Which combat-damage step it would have landed in — see `damageDealt.round`. */
+      readonly round?: CombatDamageRound;
     }
   | {
       /**

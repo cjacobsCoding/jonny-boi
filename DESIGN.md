@@ -3036,6 +3036,158 @@ The other fifteen cards in the bucket, probed individually. None of them is this
 
 The honest headline for whoever picks this bucket up: **the biggest single item left in it is the
 filtered target (2 cards), and it is a `TargetRestriction` refactor, not a blocking feature.**
+### 3.143 Phyrexian and monocolour hybrid mana — one symbol shape, three families — ✅ done
+
+Two printed cost symbols the engine refused by name — **`{2/W}`** ("two generic, or one white",
+CR 107.4e) and **`{W/P}`** ("one white, or **2 life**", CR 107.4f) — together with the colour/colour
+`{G/W}` that already worked. The refusal comment said they "need an alternative-payment concept this
+cost shape does not have". They do not. They need the SAME concept the cost shape already had, with
+the element widened.
+
+**The whole design is one type change.** A hybrid symbol was a list of COLOURS; it is now a list of
+**components**, each a colour, a generic amount, or a life price:
+
+| printed   | components              | CR      |
+|-----------|-------------------------|---------|
+| `{G/W}`   | `['G','W']`             | 107.4d  |
+| `{2/W}`   | `[{generic:2},'W']`     | 107.4e  |
+| `{W/P}`   | `['W',{life:2}]`        | 107.4f  |
+| `{G/U/P}` | `['G','U',{life:2}]`    | 107.4f  |
+
+Widening the ELEMENT rather than adding a second and a third field is what keeps ONE answer to each
+of the four questions a symbol is asked — its mana value, its colours, how it prints, and how it is
+paid. Three parallel fields would have meant four readers each learning three shapes, and a card
+compiled through one of them would have been wrong in the other three.
+
+**Mana value is the greatest component, and that is a rule with teeth (CR 202.3b/c).** `{2/W}` is 2,
+`{G/W}` is 1, and `{W/P}` is 1 **however it was paid** — a Dismember paid entirely with life is still
+mana value 3 and still black. Every consumer of mana value inherits it from one function: curve
+sorting, cost reduction, "mana value N or less" filters, and the card index's pip reconciliation. That
+last one is the trap: `data-tools`'s `checkCard` bracketed `cmc` as `known .. known + other.length`,
+i.e. **at most one pip per unattributed symbol** — so Flame Javelin's printed 6 sat outside a bracket
+that allowed 3, and the first monocolour hybrid card to reach the index would have failed an
+invariant several systems away from the mistake. The bracket now reads `maxSymbolManaValue`, which is
+a SECOND answer to "what is a printed symbol worth?" (that package deliberately has no dependencies
+and cannot call core), so `mana-value-parity.test.ts` fails when the two disagree — and both are
+checked against Scryfall's own `cmc` over the whole card index, because a table agreeing with itself
+proves nothing if both halves are wrong.
+
+**Colour identity is a fact about the PRINTED cost, never about the payment** (CR 202.2b). The
+generic and life components add no colour; the colour components do. Fixing that turned up a smaller
+defect of the same shape: `colorsOfDefinition` walked the five pips in WUBRG order for fixed pips and
+then appended hybrid colours in PRINTED order, so `{G/W}` answered `['G','W']` while `{W}{G}` answered
+`['W','G']` — two answers to one question. One walk over the five pips now, asking each colour
+whether the cost demands it in either form.
+
+#### The life is announced with the cast, not asked afterwards
+
+Phyrexian is a real decision with a real price, so both seats must make it. It is **not** an
+`awaitingCastChoice` question, and the reason is mechanical: a Phyrexian symbol is part of the BASE
+cost, and `applyCastSpell` charges the base cost *before* the spell reaches the stack and before
+`askNextCastChoice` runs. A question parked afterwards would be answering for mana that had already
+left the pool.
+
+So the answer rides the ACTION — `CastSpellAction.phyrexianLife`, omitted when zero, exactly as
+`face`, `fromZone` and `alternative` ride it — and `pushCastOffers` emits **one cast per fundable life
+amount**: Dismember on three Swamps is three offers ({1}{B}{B}, {1}{B} + 2 life, {1} + 4 life). This
+is the madness seam from §3.19, for the same reason it was right there: every seat — both pilots, the
+hotseat UI and the online server — already enumerates actions and submits one, so the decision needs
+no new transport, no new choice kind, and no new row in the four enforced tables a choice kind would
+have touched.
+
+Three rules make it exact rather than approximate:
+
+- **`phyrexianLifeOptions(cost, life)`** is the closed list of readings, ascending, capped by the
+  LIVE life total — CR 118.4 makes paying to exactly zero legal, the player's call, and promptly
+  lethal via the state-based actions, so the cap is `life`, not `life - 1`. It returns `[0]` for every
+  cost without a Phyrexian symbol, which is every cost in the game but a handful, so the offer loop
+  stays a single pass and every existing cast action is byte-identical.
+- **The payment spends EXACTLY the life it was told to.** `canPay`/`payCost` take a `lifeSpend`
+  argument (the `purpose` precedent: a fact about this payment, not a field on the cost) and the
+  exhaustive component search must land on that amount. Exactly, not "at most" — a caster who pays 4
+  life for Dismember does it to keep two black up, and a search free to under-spend would quietly
+  overrule them.
+- **`applyCastSpell` judges the announced amount against the same closed list.** An odd number, more
+  life than the symbols price, or life on a cost with no Phyrexian symbol is REFUSED, not clamped.
+
+What the engine still decides, deliberately: WHICH symbol the life pays for when a card prints two
+Phyrexian symbols of different colours. Nothing in Magic prints one, the readings are identical when
+they share a colour, and it is the same documented delegation as which land gets tapped and which
+colour pays a `{G/W}` — the decision the card prints is modelled in full; the sub-decision is the
+payment search's, in one place, for every seat.
+
+**No third copy of CR 704.3.** The first draft ran a state-based check after charging the life, the
+way the flashback life rider does. The sabotage pass showed it changed nothing: `applyCastSpell` ends
+with one and the action boundary runs another. It was deleted, with the reason recorded — a fourth
+copy of that rule would only be somewhere for the copies to disagree.
+
+#### Both seats
+
+**The pilot's policy is two rules, and always-pay and never-pay are opposite strength bugs.** One
+`planGoalPayment` helper funds every spell goal, so the heuristic and the search price a Phyrexian
+cast identically (a search exploring a price the pilot would not pay is exploring a different game).
+*Mana before life*: the options are ascending and the first fundable reading wins, so life is spent
+only when the board genuinely cannot produce the colour — a pilot that always took the discount would
+bleed for mana it was not going to spend. *Never below the danger line*: the remaining total must stay
+above `desperateLifeThreshold`, the SAME line `answerPayLife` holds a shockland to and the burn and
+combat math already treat as desperate, because "how low may I take myself by choice" gets one answer.
+Five tests pin it, including the boundary in both directions.
+
+One more wire was needed to keep the mechanic from being inert: the pilot's cheap affordability
+prefilter compared `convertedManaCost` against available mana, so Dismember's 3 against one untapped
+land made the card invisible **on exactly the boards its printed alternative exists for**. It now
+reads `minimumManaValue`, a deliberate LOWER bound (two symbols and 2 life is scored as if both could
+be life-paid, because sharing the budget between symbols is the payment search's job, not a filter's —
+under-filtering costs a scoring pass, over-filtering hides a castable card).
+
+**The human seats** get one entry per reading in the hand menu — the same "this card has more than
+one way to be played" menu a cycling land and a split card already use, labelled with what each way
+costs (`{1}{B/P}{B/P}` / `{1}{B/P} + 2 life` / `{1} + 4 life`) — and the auto-tap plans against the
+life amount the cast will actually pay, because a picker raised for one reading and a cast that makes
+the other is the same offer/accept mismatch this seam exists to prevent. ONE `castReadings` funnel
+feeds the hand, graveyard, exile and permission lists, so they cannot disagree about what a card
+costs. Four latent defects turned up in that lane and are fixed: the web's `displayCost` dropped
+hybrid symbols entirely (a synthesized `{1}{B/P}{B/P}` rendered as `{1}`, mana value 1, colourless);
+the mana picker did not compile against the widened type and its readout still demanded the symbols
+the life had already bought; the ONLINE `castChoicesFrom` merged the per-reading offers, so a 4-life
+reading's targets rode a button submitting a cast the server never offered; and the online auto-tap
+rebuilt tap actions by hand, dropping `costInstanceId`. **The online seat takes the CHEAPEST reading
+rather than asking**, deliberately and documented: that seat has no menu at all (the same reason its
+mana picker does not exist), and life is not a resource to spend on a player's behalf.
+
+#### Measured
+
+`playable-set.mjs` over the cached 2,100-card corpus: **722 → 725**, three names gained (**Dismember,
+Gut Shot, Phyrexian Metamorph**), **zero lost**.
+
+**The honest smaller number.** The row this branch was picked from said 8 cards. All 8 print
+Phyrexian; **none** of the 2,100 prints a monocolour hybrid at all. And of the 8, only 3 were blocked
+by the symbol ALONE — the other five each need another system, named: Noxious Revival a graveyard
+template, Tezzeret's Gambit a proliferate-tail template, K'rrik "for each {B} in a cost, you may pay 2
+life" (the general form of this very rule, applied to *another* card's costs), Vraska the Compleated
+keyword plus two loyalty templates, and Norn's Annex the attack tax that spends `{W/P}`. Monocolour
+hybrid is implemented anyway because it is the same three lines as the family beside it and because
+leaving half a printed symbol family refused while the other half works is the defect this repo keeps
+unwinding — but it unblocked **0 measured cards**, and that is the number.
+
+**Throughput, measured properly (rule 7).** The seed-99 gauntlet is byte-identical to the baseline —
+**97/320 = 30.3%**, rows 17·14·19·7·8·10·17·5 — and the allocation probe is at parity: 40 seeded
+self-play games produce **26,588 actions on both arms** (so the play is identical, not merely
+similar) at **534/535 scavenges against main's 532/533**, i.e. +2, the probe's documented floor.
+Wall clock is not quoted because on this box it is worthless.
+`payCost`/`canPay` take one extra defaulted argument that is only read inside the hybrid branch, and
+the hybrid branch only runs for a cost that HAS hybrid symbols, so every ordinary cost pays nothing.
+
+**Reported rather than approximated**, and the refusal was RENAMED: the old
+`'Phyrexian and monocolour hybrid mana costs'` promised two families it now delivers, so what remains
+is `UNPAYABLE_MANA_SYMBOL_GAP` — snow mana, and any symbol with a piece outside the closed component
+table. The compiler matches the hybrid SHAPE with one regex and decides what each piece MEANS with
+that table, so the next unreadable symbol reports by name instead of being widened to the nearest
+thing that happens to exist. Still refused elsewhere: `parseManaSymbols` (the clause-level cost parser
+behind activation, kicker, equip and upkeep costs) reads only plain pips, so a `{W/P}` or `{G/W}` in
+an ACTIVATION cost reports exactly as it did before this branch — and widening it was MEASURED before it was
+skipped: a spike that accepted every hybrid family there too left the corpus at **725 — zero cards
+gained, zero lost** — so the work is not worth its blast radius today, and the refusal names itself.
 
 ### 3.142 Three soak violations, one shape — a rule answered somewhere other than by the rule — ✅ done
 
@@ -5209,8 +5361,13 @@ The hotseat picker (`lib/play/mana-picker.ts` + `PlayBoard`) is a paused cast ho
 working `GameSession`**: taps fold into it, the board renders from it (so tapped lands, the pool
 readout and the live `Still needed: {1}{G}` line all come off the one derivation a committed tap
 uses), Confirm casts through `castWithAutoTap` — which taps nothing more, because the pool already
-covers the cost — and **Cancel is `setManaPicker(null)`**. Dropping the working session IS the
-rollback: it carries its own taps and its own §3.58 action-log entries away with it, so a cancelled
+covers the cost — and Cancel drops the working session. ⚠️ **§3.146 SUPERSEDED THE STATE THIS
+DESCRIBES, not the design.** The picker is no longer its own `manaPicker` React state: it is the
+`funding` STAGE of the cast proposal (`lib/play/proposal.ts`), so Confirm is `stepProposal` and
+Cancel is `cancelProposal`, and which session the board renders is decided by
+`BOARD_SESSION_BY_STAGE` rather than by `manaPicker?.working ?? committed`. The mechanism below is
+unchanged and is the reason the stage works at all; only the names moved. Dropping the working
+session IS the rollback: it carries its own taps and its own §3.58 action-log entries away with it, so a cancelled
 cast leaves no trace, no untap loop and no compensating action. Sources are clickable on the board or
 in the prompt's list, whose rows follow the §3.57 owner conventions (`Forest (yours) — G`); a modal
 source collapses to one "any colour" row that hands off to the existing which-colour prompt. Two ways
@@ -7825,6 +7982,110 @@ reads.
 - **A token count that is derived** ("create X 1/1 Goblins, where X is Krenko's power").
 - **"Destroy all nontoken creatures"** (Hour of Reckoning) — `destroyAll` takes no `CardFilter` at all,
   so the token flag has nothing to narrow there; that is a `destroyAll` gap, not a token one.
+
+### 3.143 The MTGA-parity play surface — seventeen items, nine lanes — 🚧 fifteen done, two partial
+
+Raised 2026-09-11 as one request. **The scope lives in
+[docs/MTGA-UX-OVERHAUL.md](docs/MTGA-UX-OVERHAUL.md), the request verbatim plus seventeen numbered
+items, and THAT file is the checklist** — this entry tracks status only, because a scope summarised
+twice is a scope that will be summarised differently the second time.
+
+§§3.130–3.133 gave the board sound, VFX, an effects bench and a post-hoc opponent feed. What is
+still missing is everything a player needs to *understand* a game rather than merely watch one: the
+stack is a list of NAMES, the battlefield is a flat grid, a cast is irrevocable the moment it starts,
+and a creature that is secretly a 5/6 still shows its printed 4/5.
+
+**Three of the seventeen are CLASS problems wearing UI clothes, and are why this is not a CSS
+ticket:**
+
+1. **Provenance (UX-17).** `indexContinuous` aggregates every continuous effect into one
+   `AggregatedMod` per instance and throws the ATTRIBUTION away; `view-model.ts` can therefore show a
+   bare `ptDelta` badge but can never say WHICH enchantment supplied it. "Show 5/6, and on hover say
+   where each point came from" cannot be built honestly on a sum, and a UI that re-derives the answer
+   is the two-places-one-question failure rule 12 forbids. The aggregation grows an OPT-IN
+   contribution list — opt-in because it sits in the sim hot path — and every surface reads that
+   one list.
+2. **The optional gate (UX-6).** `optional-trigger.ts` already fixed "may asked after targets", but
+   only for a TRIGGERED ability, on `def.triggers`, with `mayEffects` at the TOP level, and
+   `min > 0`. The complaint recurring ("I'm still getting a lot of situations") is the signature of a
+   one-off fix on a class-shaped bug. The fix is a CLOSED TABLE of gate shapes, scanned recursively
+   over the whole effect tree, applied to triggered, activated, spell and replacement sources alike,
+   with an untabulated shape REPORTING (falling back to today's ordering) rather than being guessed
+   at. **Measure the miss count against the real pool before writing it (rule 11).**
+3. **The two-phase cast (UX-3/4/5).** The engine mutates during `castSpell` — it pays costs and
+   moves the card to the stack — and only then parks the `selectTargets` question. Rewriting that
+   inside the engine is a large change to the hottest path, so the commit boundary lives in the
+   SESSION as a transaction: snapshot, propose, cancel-restores. That is sound only while no other
+   seat has decided and nothing hidden has been revealed — an invariant that is enforced and tested,
+   with the cancel affordance DISAPPEARING rather than lying when it fails.
+
+**STATUS after three waves, audited item by item against the code on 2026-09-11 — the row-level
+verdicts with their `file:line` evidence are in
+[§7.0 of the scope doc](docs/MTGA-UX-OVERHAUL.md#70-the-evidence-behind-each-row), and that file
+stays the checklist.** Fifteen of seventeen are done; **this entry does not flip to ✅ because two
+are not**, and the project's rule is that a marker is only correct once the work really is.
+
+- **UX-2 is partial.** The stack panel is right in every respect except one number: it pins itself to
+  `right: var(--space-2)` of `.play-board`, and since UX-9 moved the game log off the midline into a
+  17rem right-hand rail, that is where the log lives — so a non-empty stack paints over it. One line
+  (`right: calc(var(--play-log-rail-w) + var(--space-3))`, plus the sub-40rem reset where the rail
+  folds under the table) closes it.
+- **UX-10 is partial.** The hover funnel is one funnel and fifteen files mount it; **exile has no
+  viewer to hover.** A public exile zone renders as a count chip, and the only exiled cards a player
+  can look at are a jailed card under its jailer (§3.57) and a madness cast. Finishing it is an
+  exile list shaped like `GraveyardPanel`, not a change to the hover path.
+- Three carve-outs are deliberate and documented at the refusal site rather than left to be
+  discovered: a battlefield tile carries only the AFTERMARKET rules lines (a 96px tile has no room
+  for a text box, and the merged line is one hover away); the online board reports provenance
+  UNAVAILABLE rather than rendering an empty breakdown, because it has no continuous index; an
+  untabulated gate shape falls back to the engine's ordering instead of being guessed at.
+- Also open, and small: `verify-game-resume.mjs` still probes for a parked question with
+  `[role="dialog"]` — it passes 18/18 today only because the announcement that broke it was
+  re-roled, and it will misfire on the next non-modal overlay anyone adds; `.opp-feed` needs the same
+  one-line right offset as UX-2; and `play-config.test.ts:376` still pins the tilt with a
+  never-measured "past ~12° it stops being readable" comment that the measured table in
+  `BOARD_TILT_DEG` now contradicts.
+
+**Three findings on this branch were CLASS problems, and each one is worth more than the item it was
+found under:**
+
+1. **Built, tested, and unreachable — three times, in three waves.** UX-9 shipped `perspective:
+   1600px` with a green stylesheet test and a screenshot showing a flat vertical stack; the culprit
+   was the PERSPECTIVE, not the angle (against the 335px scene this board really renders, 1600px puts
+   the far edge at 97% of true width — an artefact; 700px puts it at 91% — depth). Wave 2 shipped
+   full-size card faces mounted with no `explanation` while the provenance model was fully tested,
+   two combat overlays aiming at a `life:<seat>` anchor no panel published (with a graceful fallback
+   that made it silent), and a glossary that reached `CardFace` but not the hand. **A test that
+   asserts a model computes the right value cannot see a mount that never passes it.** The guards
+   that caught these all share one shape: they enumerate MOUNT SITES out of the source and redden
+   when a new one appears without the prop (`full-face-provenance.test.ts`,
+   `anchor-adoption.test.ts`, `proposal-adoption.test.ts`).
+2. **A corner that used to be free.** `.opp-feed` and `.stack-panel--floating` both pin to the
+   board's right edge — free until the log rail moved there. One instance was found by opening a PNG;
+   the sibling was missed because nothing looked for siblings. The guard belongs in
+   `verify-board-fits.mjs` (assert no overlay's client rect intersects `.board-rail`'s), because a
+   CSS-property test cannot see an intersection.
+3. **A harness probe that matched more than it meant.** `[role="dialog"]` matched wave 2's timed
+   spell announcement, so the resume harness reported 17/18 and the finger pointed at the innocent
+   proposal transaction. Two lessons: probe by the component's own class, not by a role every future
+   overlay may carry; and `role="dialog"` on a non-modal announcement was itself a real defect (now
+   `role="status" aria-live="polite"`). **A red harness is a claim about the harness before it is a
+   claim about the code.**
+
+**Measured (rule 7 / rule 11).** Sim throughput: **branch median 236 games/sec vs `main` 239** over
+ten interleaved runs — ~1.3%, well inside this box's own 6–7% spread, with **A won 845/2000 identical
+on every run on both sides**, which is what proves the comparison is like-for-like rather than the
+clock. Attribution is opt-in and lazy (`explainCharacteristics` is a separate entry point), so the
+hot path is unmoved. Harnesses: `verify-game-resume.mjs` **18/18**; `verify-board-fits.mjs` and
+`verify-mana-choice.mjs` ran against this tree (their artifacts post-date the last source edit) but
+their tallies were never recorded, and §7.4 of the scope doc carries the blank rather than a guessed
+number — **re-run both and paste the lines before this section is marked ✅.**
+
+⚠️ **UX-1, UX-2, UX-11, UX-12, UX-13, UX-14 and UX-15 are claimed on SOURCE ONLY.** No screenshot on
+disk shows a non-empty stack or a declared combat, so every combat visual on this branch — the
+rotation, the advance, the clamp, the arcs, the damage sequence — is an unobserved claim. That is
+the largest hole in this record, and after what UX-9 taught, "the tests are green" is not the thing
+that closes it.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B

@@ -57,6 +57,8 @@ import {
   castPermissionFor,
   castTiming,
   convertedManaCost,
+  minimumManaValue,
+  phyrexianLifeOptions,
   DEFAULT_RULES,
   delayedRemovalTargets,
   landPlayZonesFor,
@@ -941,6 +943,13 @@ interface SpellGoal {
    * a `cycleCard`, funded as an activation, with the goal's targets.
    */
   readonly handAbilityIndex?: number;
+  /**
+   * §3.143 — the life this goal pays toward its cost's PHYREXIAN symbols. Set
+   * by {@link planGoalPayment}, which is the only thing that can know it: the
+   * price is only worth paying when the BOARD cannot produce the colour, and
+   * that is exactly what planning the taps answers.
+   */
+  readonly phyrexianLife?: number;
 }
 
 /**
@@ -1735,16 +1744,55 @@ function bestSpellGoal(
   // step, so it runs on ranked candidates and stops at the first payable one.
   const me = ctx.view.priorityPlayer;
   for (const goal of scored) {
+    const funded = planGoalPayment(ctx.view, me, goal, ctx.legalActions, weights);
+    if (funded) return funded;
+  }
+  return undefined;
+}
+
+/**
+ * Plan the taps that fund one goal, CHOOSING the Phyrexian life price along the
+ * way (§3.143) — one helper, because the pilot and the search must fund the same
+ * goal at the same price or the search would be exploring a game the pilot never
+ * plays.
+ *
+ * THE POLICY, in two rules:
+ *
+ *  1. **Mana before life.** `phyrexianLifeOptions` is ascending, so the first
+ *     fundable reading wins and life is spent only when the board genuinely
+ *     cannot produce the colour. That is what stops the pilot paying 2 life for
+ *     a saving it did not need — the failure mode a "always pay life" pilot has,
+ *     and a real strength bug, because the mana it saves goes unused anyway.
+ *  2. **Never below the danger line.** The remaining total must stay above
+ *     `desperateLifeThreshold`, which is the SAME line `answerPayLife` holds a
+ *     shockland to and the same one the combat and burn math treat as desperate.
+ *     One answer to "how low may I take myself by choice", not a second number
+ *     that could disagree with it. Options are ascending, so the first one that
+ *     crosses the line ends the search — every later one costs more life.
+ */
+function planGoalPayment(
+  view: PilotView,
+  me: PlayerId,
+  goal: SpellGoal,
+  legalActions: readonly GameAction[],
+  weights: HeuristicWeights,
+): FundedGoal | undefined {
+  const life = view.players[me].life;
+  const options = phyrexianLifeOptions(goal.cost, life);
+  for (let i = 0; i < options.length; i++) {
+    const spend = options[i] as number;
+    if (spend > 0 && life - spend <= weights.desperateLifeThreshold) break;
     const plan = planManaPayment(
-      ctx.view as GameState,
+      view as GameState,
       me,
       goal.cost,
-      ctx.legalActions,
+      legalActions,
       goal.card.def,
       spendPurposeOfGoal(goal),
       manaPreferenceOf(weights),
+      spend,
     );
-    if (plan) return { goal, plan };
+    if (plan) return { goal: spend > 0 ? { ...goal, phyrexianLife: spend } : goal, plan };
   }
   return undefined;
 }
@@ -1864,8 +1912,12 @@ function scoredSpellGoals(
       const timingOk = castTiming(def) === 'instant' ? true : sorcerySpeedOpen;
       if (!timingOk) continue;
       const cost = def.cost ?? {};
-      // Cheap upper-bound prefilter; `planManaTaps` below is the real test.
-      if (convertedManaCost(cost) > availableMana) continue;
+      // Cheap prefilter; `planManaTaps` below is the real test. §3.143 — the
+      // bound is the CHEAPEST reading of the cost, because a Phyrexian symbol
+      // paid with life needs no mana at all: comparing Dismember's mana value of
+      // 3 against one untapped land would have made it invisible on exactly the
+      // boards its printed alternative exists for.
+      if (minimumManaValue(cost, view.players[me].life) > availableMana) continue;
 
       let intent = classifySpell(def);
       // An X spell's damage is whatever this board can fund: project X as the
@@ -2039,7 +2091,7 @@ function scoredSpellGoals(
       // foretell cost: both read off the same permission core offers by.
       if ((castTiming(castDef) !== 'instant' || permission.asSorcery) && !sorcerySpeedOpen) continue;
       const cost = permission.free ? {} : (permission.cost ?? castDef.cost ?? {});
-      if (convertedManaCost(cost) > availableMana) continue;
+      if (minimumManaValue(cost, view.players[me].life) > availableMana) continue;
       const half = castDef === card.def ? card : { ...card, def: castDef };
       oppCreatures ??= creaturesControlledBy(view, opp);
       const goal = scoreSpell(view, opp, oppCreatures, half, classifySpell(castDef), weights, explain, index);
@@ -3268,6 +3320,9 @@ function castActionFor(me: PlayerId, goal: SpellGoal): GameAction {
     alternative: goal.alternative,
     // §3.111 — a retrace / jump-start / escape goal names its kind.
     ...(goal.graveyardCast !== undefined ? { graveyardCast: goal.graveyardCast } : {}),
+    // §3.143 — a goal that chose to pay life for a Phyrexian symbol names the
+    // amount, or the engine charges the all-mana reading the plan did not fund.
+    ...(goal.phyrexianLife !== undefined ? { phyrexianLife: goal.phyrexianLife } : {}),
   };
 }
 
@@ -5031,7 +5086,6 @@ function collectPriorityCandidates(
   out: PolicyCandidate[],
 ): void {
   const me = view.priorityPlayer;
-  const state = view as GameState;
 
   // Land drops. One candidate per DISTINCT land, because playing either of two
   // Mountains from hand is the same decision (brief §4 Level 1) — and ranked by
@@ -5068,17 +5122,12 @@ function collectPriorityCandidates(
   }
 
   // THE ATOMIC CASTS. Every legal, scored spell, each bundled with its funding.
-  for (const goal of scoredSpellGoals(view, weights, explain, index)) {
-    const plan = planManaPayment(
-      state,
-      me,
-      goal.cost,
-      legalActions,
-      goal.card.def,
-      spendPurposeOfGoal(goal),
-      manaPreferenceOf(weights),
-    );
-    if (!plan) continue; // cannot be funded from this board — not an option at all
+  for (const scoredGoal of scoredSpellGoals(view, weights, explain, index)) {
+    // §3.143 — the SAME funding helper the pilot uses, so the search explores
+    // the Phyrexian price the pilot would actually pay.
+    const funded = planGoalPayment(view, me, scoredGoal, legalActions, weights);
+    if (!funded) continue; // cannot be funded from this board — not an option at all
+    const { goal, plan } = funded;
     const plies: GameAction[] = [];
     for (const tap of plan) plies.push(tapActionFor(me, tap));
     // §3.112 — the SAME action builder the heuristic uses, so a second-half,

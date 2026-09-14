@@ -63,7 +63,7 @@ const ISLAND: CardDefinition = {
   produces: ['U'],
 };
 
-/** Glissa's Courier's shape — a 3/3 with islandwalk (CR 702.18b). */
+/** Glissa's Courier's shape — a 3/3 with islandwalk (CR 702.14b). */
 const ISLANDWALKER = creatureDef('Islandwalker', 3, 3, {
   keywords: { landwalk: [{ kind: 'subtype', subtype: 'Island' }] },
 });

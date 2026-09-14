@@ -111,7 +111,7 @@ describe('shadow — can block or be blocked by only creatures with shadow', () 
   });
 });
 
-// --- landwalk (CR 702.18b) -----------------------------------------------------------
+// --- landwalk (CR 702.14b) -----------------------------------------------------------
 
 describe('landwalk — unblockable while the DEFENDING player controls the named land', () => {
   function blockable(attackerDef: CardDefinition, lands: ReadonlyArray<readonly [CardDefinition, 'A' | 'B']>): boolean {

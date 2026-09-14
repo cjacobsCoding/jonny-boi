@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { getCard, cardImage } from '../../lib/cards.js';
+import { CardHover } from '../CardHover.js';
 import type { RevealView } from '../../lib/play/reveals.js';
 
 /**
@@ -12,13 +13,25 @@ import type { RevealView } from '../../lib/play/reveals.js';
  * whose library it came from and what became of it. It is `position: fixed`
  * above the board, dismissed by clicking it or by the next reveal, and it is
  * never the only record — the log keeps the line.
+ *
+ * ## The face is hoverable (§3.143 GAP-9 / UX-10)
+ * The banner's thumbnail is 84px wide — enough to recognise a card, nowhere near
+ * enough to READ one, and Caleb's ask is that hovering any ability on any card
+ * explains it. So the thumbnail goes through the app's single hover funnel,
+ * which raises the full `CardFace` with every ability word glossed. A revealed
+ * card is in a library or a graveyard rather than on the battlefield, so there is
+ * no continuous-effect breakdown to pass and none is invented.
  */
 export function RevealBanner({ reveal, onDismiss }: { reveal: RevealView; onDismiss: () => void }): ReactElement {
   const card = getCard(reveal.cardId);
   const image = card ? cardImage(card, 'normal') : undefined;
   return (
     <div className="reveal-banner" role="status" onClick={onDismiss}>
-      {image && <img className="reveal-banner__img" src={image} alt={reveal.name} decoding="async" draggable={false} />}
+      {image && (
+        <CardHover cardId={reveal.cardId} name={reveal.name}>
+          <img className="reveal-banner__img" src={image} alt={reveal.name} decoding="async" draggable={false} />
+        </CardHover>
+      )}
       <span className="reveal-banner__text">{reveal.text}</span>
     </div>
   );

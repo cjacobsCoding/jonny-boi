@@ -27,6 +27,7 @@ import {
   isFreeCastWindow,
   isLand,
   manaPaymentChoiceExists,
+  phyrexianLifeOptions,
   planManaPayment,
   playableFaceOf,
   spendPurposeIfRestricted,
@@ -79,14 +80,24 @@ export interface SubmitResult {
 }
 
 /**
- * The key a cast option is identified by — the instance AND the face, because a
- * split card offers TWO casts of one instance and they are afforded, targeted
- * and clicked independently. Instance id alone was enough until a card could be
- * cast two ways.
+ * The key a cast option is identified by — the instance, the face AND the life
+ * its Phyrexian symbols are paid with, because each of the three can split one
+ * card into several casts that are afforded, targeted and clicked
+ * independently. Instance id alone was enough until a card could be cast two
+ * ways; face was enough until §3.143 made "{1}{B}{B}" and "{1} and 4 life" two
+ * offers of one half (CR 107.4f).
+ *
+ * `phyrexianLife` 0 — every cast in the game bar a handful — keys exactly as it
+ * did before, so the offered-action sets these keys index are unchanged for
+ * every card that prints no Phyrexian symbol.
  */
-function castKey(instanceId: InstanceId, face?: 'back'): string {
-  return face === undefined ? `${instanceId}` : `${instanceId}:${face}`;
+function castKey(instanceId: InstanceId, face?: 'back', phyrexianLife = 0): string {
+  const faced = face === undefined ? `${instanceId}` : `${instanceId}:${face}`;
+  return phyrexianLife === 0 ? faced : `${faced}:${phyrexianLife}life`;
 }
+
+/** A shared empty cost, so asking about a costless cast allocates nothing. */
+const NO_COST: ManaCost = Object.freeze({});
 
 /** One castable half of a card in hand, with the face its action must name. */
 interface CastableHalf {
@@ -137,6 +148,36 @@ export interface CastOption {
    * casts the other one.
    */
   readonly face?: 'back';
+  /**
+   * How much LIFE this reading pays toward the cost's Phyrexian symbols (§3.143,
+   * CR 107.4f). Omitted — never `0` — for the all-mana reading, which is every
+   * cast in the game bar a handful, so an option for a card with no Phyrexian
+   * symbol is the object it has always been.
+   *
+   * One option per fundable amount rather than a number the player edits on a
+   * single option, because the amount is not a dial: it changes what the cast
+   * COSTS in mana, which sources the auto-tap spends, and therefore whether the
+   * cast is affordable at all. Dismember off two Swamps and a Wastes is three
+   * different decisions ("{1}{B}{B}", "{1}{B} and 2 life", "{1} and 4 life"),
+   * and only the board can say which of them it can actually fund.
+   */
+  readonly phyrexianLife?: number;
+}
+
+/**
+ * One way to PAY for a cast — the life it puts toward the cost's Phyrexian
+ * symbols, and whether this board can fund it that way now or after tapping.
+ * The intermediate `GameSession.castReadings` produces and every zone list
+ * turns into {@link CastOption}s; internal, because the boards only ever see
+ * the finished options.
+ */
+interface CastReading {
+  /** Life toward the Phyrexian symbols — `0` is the all-mana reading. */
+  readonly phyrexianLife: number;
+  /** The engine already offers this exact reading (the floating pool pays it). */
+  readonly affordableNow: boolean;
+  /** The auto-tap could fund this exact reading from what is still untapped. */
+  readonly affordableWithTap: boolean;
 }
 
 /**
@@ -164,6 +205,22 @@ export interface AbilityTargetChoice {
 }
 
 /**
+ * One legal way to pay an activated ability's "**Sacrifice a &lt;noun&gt;**" cost
+ * (CR 602.2b) — the permanents that would go to the graveyard, labeled for the
+ * prompt. Deliberately the same {target, label} shape as
+ * {@link AbilityTargetChoice}: "which do I aim at" and "which do I sacrifice"
+ * are two pre-stack questions the board asks with one control, so they are one
+ * vocabulary rather than two dialects.
+ *
+ * A LIST because the engine's action takes a list — "sacrifice two artifacts"
+ * is one answer naming two permanents, not two answers.
+ */
+export interface AbilityCostChoice {
+  readonly instanceIds: readonly InstanceId[];
+  readonly label: string;
+}
+
+/**
  * One activatable ability of a permanent the priority-holder controls, derived
  * ENTIRELY from the engine's legal-action menu — an ability the engine does not
  * offer (already used this turn, unpayable minus loyalty, wrong timing) simply
@@ -180,6 +237,19 @@ export interface AbilityOption {
   /** Legal target choices, or null when the ability takes no target. */
   readonly targets: readonly AbilityTargetChoice[] | null;
   /**
+   * §3.143 — the legal ways to pay a "**Sacrifice a &lt;noun&gt;**" cost, when the
+   * ability prints one; absent when it does not.
+   *
+   * ⚠️ THIS FIELD IS A BUG FIX, not a new feature. The engine offers ONE action
+   * per legal payer, carrying `costInstanceIds`, and `applyActivateAbility`
+   * REJECTS an activation that names none ("Atog's ability needs 1 legal
+   * permanent(s) to sacrifice"). Before this, `AbilityOption` had nowhere to
+   * keep the payer, so the board folded every offer into one option, submitted
+   * it with no `costInstanceIds`, and the click died on that rejection —
+   * **measured: 137 abilities on 134 pool cards were dead buttons.**
+   */
+  readonly costPayers?: readonly AbilityCostChoice[];
+  /**
    * §3.129 — funding, mirrored from {@link CastOption}. Set when the engine did
    * NOT already offer this ability and it is offerable only after auto-tapping
    * for its mana cost (an untapped Strionic Resonator with two lands to spare).
@@ -188,6 +258,39 @@ export interface AbilityOption {
    * online mana is floated by hand, so the server offer already covers the cost.
    */
   readonly affordableWithTap?: boolean;
+}
+
+/**
+ * One ability being assembled from the engine's offers. Mutable and private:
+ * the engine lists one action per legal target AND one per legal sacrifice
+ * payer, so both axes accumulate into sets before they become the frozen
+ * {@link AbilityOption} the board reads.
+ */
+interface AbilityAccumulator {
+  readonly instanceId: InstanceId;
+  readonly sourceName: string;
+  readonly abilityIndex: number;
+  readonly label: string;
+  /** Keyed by the target's id, so the cross product cannot repeat one. */
+  readonly targets: Map<string, AbilityTargetChoice>;
+  /** Keyed by the payer set's joined ids, for the same reason. */
+  readonly payers: Map<string, AbilityCostChoice>;
+  readonly affordableWithTap: boolean;
+}
+
+/** Freeze an accumulated ability into the option the board renders. */
+function finishAbilityOption(entry: AbilityAccumulator): AbilityOption {
+  return {
+    instanceId: entry.instanceId,
+    sourceName: entry.sourceName,
+    abilityIndex: entry.abilityIndex,
+    label: entry.label,
+    // `null`, not `[]`, means "this ability takes no target" — the distinction
+    // the board branches on, preserved from before the payer axis existed.
+    targets: entry.targets.size > 0 ? [...entry.targets.values()] : null,
+    ...(entry.payers.size > 0 ? { costPayers: [...entry.payers.values()] } : {}),
+    ...(entry.affordableWithTap ? { affordableWithTap: true } : {}),
+  };
 }
 
 /**
@@ -357,12 +460,20 @@ export class GameSession {
    *
    * Returns the rejection reason if any step fails (state then unchanged from the
    * caller's perspective — we thread the session forward only on full success).
+   *
+   * `phyrexianLife` is the READING being cast (§3.143): the life this payment
+   * puts toward the cost's Phyrexian symbols. It rides the same way `fromZone`
+   * and `face` do — planned for, then named on the action — because all three
+   * are facts about WHICH cast this is, and an auto-tap that planned one reading
+   * while the action asked for another would tap three lands for a cast the
+   * engine then pays with one.
    */
   castWithAutoTap(
     instanceId: InstanceId,
     targets: readonly (InstanceId | PlayerId)[],
     fromZone: CastZone = 'hand',
     face?: 'back',
+    phyrexianLife = 0,
   ): SubmitResult {
     const player = this.priorityPlayer;
     const zone =
@@ -420,17 +531,17 @@ export class GameSession {
       const purposeFor = (session: GameSession) =>
         spendPurposeIfRestricted(session.state.players[player].manaPool, card.def, 'cast');
       while (
-        !canPay(working.state.players[player].manaPool, cost, purposeFor(working)) &&
+        !canPay(working.state.players[player].manaPool, cost, purposeFor(working), phyrexianLife) &&
         taps < guard
       ) {
-        const next = working.nextTapToward(player, cost, card.def, 'cast');
+        const next = working.nextTapToward(player, cost, card.def, 'cast', phyrexianLife);
         if (!next) break;
         const tapped = working.tapForMana(next.instanceId, next.mode);
         if (tapped.rejected) break;
         working = tapped.session;
         taps += 1;
       }
-      if (!canPay(working.state.players[player].manaPool, cost, purposeFor(working))) {
+      if (!canPay(working.state.players[player].manaPool, cost, purposeFor(working), phyrexianLife)) {
         return { session: this, rejected: 'not enough mana available to cast this spell', events: [] };
       }
     }
@@ -442,6 +553,10 @@ export class GameSession {
       targets,
       ...(fromZone === 'hand' ? {} : { fromZone }),
       ...(face === undefined ? {} : { face }),
+      // Same rule as the two above (and as the engine's own offer loop): written
+      // only when it is not the default, so a cast paying no life submits the
+      // action object every consumer has always seen.
+      ...(phyrexianLife === 0 ? {} : { phyrexianLife }),
     });
     if (cast.rejected) {
       // Roll back to the pre-tap session so a failed cast doesn't strand tapped lands.
@@ -597,11 +712,52 @@ export class GameSession {
   }
 
   /**
+   * Every READING of one cast — one per distinct amount of life the cost's
+   * Phyrexian symbols could be paid with (§3.143, CR 107.4f) — each afforded on
+   * its own terms.
+   *
+   * THE ONE FUNNEL all four zone lists below read, because the readings of a
+   * cost are a property of the COST, not of the zone the card is sitting in: a
+   * Phyrexian symbol on a flashback cost means what it means on a printed one.
+   * Four hand-rolled loops is how the hand list and the graveyard list end up
+   * disagreeing about whether 4 life is on the menu.
+   *
+   * Exactly ONE reading (`phyrexianLife: 0`) for every cost in the game without
+   * a Phyrexian symbol — `phyrexianLifeOptions` guarantees it — so each caller
+   * pushes the option it has always pushed, unchanged, for every card but a
+   * handful.
+   *
+   * `offeredNow` asks the caller's own slice of the engine's action list. It
+   * takes the life amount because the engine emits one cast action PER fundable
+   * amount: "can I cast this right now?" is a question about a reading, and
+   * answering it per CARD would light up "{1}{B}{B}" as payable because
+   * "{1} and 4 life" is.
+   */
+  private castReadings(
+    player: PlayerId,
+    cost: ManaCost | undefined,
+    def: CardDefinition,
+    offeredNow: (phyrexianLife: number) => boolean,
+  ): readonly CastReading[] {
+    const lives = phyrexianLifeOptions(cost ?? NO_COST, this.state.players[player].life);
+    return lives.map((phyrexianLife) => ({
+      phyrexianLife,
+      affordableNow: offeredNow(phyrexianLife),
+      affordableWithTap: this.canAffordWithTaps(player, cost, def, 'cast', phyrexianLife),
+    }));
+  }
+
+  /**
    * The cast options for the priority-holder: every nonland in hand that is legal to
    * cast at the current timing AND that the player can pay for (now or after auto-
    * tapping). We compute affordability against the *potential* pool (current pool +
    * everything untapped could add) so an instant-speed trick during the opponent's
    * turn shows up even before mana is floated.
+   *
+   * §3.143 — a card printing a Phyrexian symbol contributes one option per
+   * fundable life amount, exactly as a split card contributes one per half: the
+   * two are different casts of one instance, priced differently, funded
+   * differently, and only the player may choose between them.
    */
   castOptions(): CastOption[] {
     return (this.memoCastOptions ??= this.computeCastOptions());
@@ -612,13 +768,14 @@ export class GameSession {
     const hand = this.state.players[player].hand;
     const legal = this.legalActions();
     // Cards the engine already says are castable RIGHT NOW (pool already pays).
-    // Keyed by instance AND face: a split card offers two casts of one instance
-    // and they are affordable independently.
+    // Keyed by instance, face AND Phyrexian life: a split card offers two casts
+    // of one instance and a Phyrexian cost offers one per life amount, and every
+    // one of them is affordable independently.
     const castableNow = new Set(
       legal
         .filter((a): a is Extract<GameAction, { kind: 'castSpell' }> => a.kind === 'castSpell')
         .filter((a) => a.fromZone === undefined)
-        .map((a) => castKey(a.instanceId, a.face === 'back' ? 'back' : undefined)),
+        .map((a) => castKey(a.instanceId, a.face === 'back' ? 'back' : undefined, a.phyrexianLife ?? 0)),
     );
     const options: CastOption[] = [];
     for (const handCard of hand) {
@@ -635,30 +792,39 @@ export class GameSession {
       // we require that the card is castable-now whenever its cost is already paid;
       // for tap-to-afford we rely on the engine rejecting a bad-timing cast cleanly.
       const cost = card.def.cost;
-      const affordableNow = castableNow.has(castKey(card.instanceId, half.face));
       // The FACE being cast is the object a spend restriction reads — a split
       // card's two halves are different spells with different types, so the half
       // is what decides whether restricted mana may fund this offer.
-      const affordableWithTap = this.canAffordWithTaps(player, cost, card.def, 'cast');
+      const readings = this.castReadings(player, cost, card.def, (life) =>
+        castableNow.has(castKey(card.instanceId, half.face, life)),
+      );
       // Only present a card whose timing the engine would currently allow. The engine
       // lists a card in `castSpell` only when timing is OK and the pool already pays;
       // when the pool doesn't yet pay we can't see timing directly, so we gate the
       // tap-to-afford offer on the card being instant-speed OR it being the active
       // player's main phase with an empty stack (the sorcery window).
-      const timingOk = affordableNow || this.timingAllows(card, player);
+      //
+      // Asked of the CARD, not of each reading: timing is a fact about the spell,
+      // so an engine offer of ANY reading proves the window is open for all of
+      // them — and the approximation below is only ever consulted when the engine
+      // offered none.
+      const timingOk = readings.some((r) => r.affordableNow) || this.timingAllows(card, player);
       if (!timingOk) continue;
-      if (!affordableNow && !affordableWithTap) continue;
-      options.push({
-        instanceId: card.instanceId,
-        cardId: card.def.id,
-        name: card.def.name,
-        cost,
-        needsTarget: needsTarget(card.def),
-        requirement: targetRequirement(card.def),
-        affordableNow,
-        affordableWithTap,
-        ...(half.face === undefined ? {} : { face: half.face }),
-      });
+      for (const reading of readings) {
+        if (!reading.affordableNow && !reading.affordableWithTap) continue;
+        options.push({
+          instanceId: card.instanceId,
+          cardId: card.def.id,
+          name: card.def.name,
+          cost,
+          needsTarget: needsTarget(card.def),
+          requirement: targetRequirement(card.def),
+          affordableNow: reading.affordableNow,
+          affordableWithTap: reading.affordableWithTap,
+          ...(half.face === undefined ? {} : { face: half.face }),
+          ...(reading.phyrexianLife === 0 ? {} : { phyrexianLife: reading.phyrexianLife }),
+        });
+      }
       }
     }
     return options;
@@ -680,15 +846,21 @@ export class GameSession {
   private computeGraveyardCastOptions(): CastOption[] {
     const player = this.priorityPlayer;
     const legal = this.legalActions();
-    // Flashback casts the engine already offers (the pool pays the flashback cost).
+    // Graveyard casts the engine already offers (the pool pays the cost). Keyed
+    // by instance, FACE and Phyrexian life through the same builder the hand
+    // list uses: one instance can offer an aftermath half AND a flashback cast,
+    // and a Phyrexian cost offers one per life amount. Keyed on the instance
+    // alone, a card whose aftermath half was offered also reported its flashback
+    // cast as already payable.
     const castableNow = new Set(
       legal
         .filter(
           (a): a is Extract<GameAction, { kind: 'castSpell' }> =>
             a.kind === 'castSpell' && a.fromZone === 'graveyard',
         )
-        .map((a) => a.instanceId),
+        .map((a) => castKey(a.instanceId, a.face === 'back' ? 'back' : undefined, a.phyrexianLife ?? 0)),
     );
+    const life = this.state.players[player].life;
     const options: CastOption[] = [];
     for (const card of this.state.players[player].graveyard) {
       // AFTERMATH: a right half printed "cast this spell only from your
@@ -697,17 +869,12 @@ export class GameSession {
       if (hasCastableBackFace(card.def) && backFaceCastZonesOf(card.def).includes('graveyard')) {
         const half = card.def.backFace as CardDefinition;
         const halfCost = half.cost;
-        const nowCastable = legal.some(
-          (a) =>
-            a.kind === 'castSpell' &&
-            a.fromZone === 'graveyard' &&
-            a.instanceId === card.instanceId &&
-            a.face === 'back',
-        );
         // The BACK FACE is the spell being cast, so it is the object any
         // restricted mana is asked about.
-        const withTap = this.canAffordWithTaps(player, halfCost, half, 'cast');
-        if (nowCastable || withTap) {
+        for (const reading of this.castReadings(player, halfCost, half, (spend) =>
+          castableNow.has(castKey(card.instanceId, 'back', spend)),
+        )) {
+          if (!reading.affordableNow && !reading.affordableWithTap) continue;
           options.push({
             instanceId: card.instanceId,
             cardId: half.id,
@@ -715,30 +882,36 @@ export class GameSession {
             cost: halfCost,
             needsTarget: needsTarget(half),
             requirement: targetRequirement(half),
-            affordableNow: nowCastable,
-            affordableWithTap: withTap,
+            affordableNow: reading.affordableNow,
+            affordableWithTap: reading.affordableWithTap,
             fromZone: 'graveyard',
             face: 'back',
+            ...(reading.phyrexianLife === 0 ? {} : { phyrexianLife: reading.phyrexianLife }),
           });
         }
       }
       const flashback = card.def.flashback;
       if (flashback === undefined || isLand(card.def)) continue;
-      const affordableNow = castableNow.has(card.instanceId);
-      if (!affordableNow && !this.timingAllows(card, player)) continue;
-      const affordableWithTap = this.canAffordWithTaps(player, flashback, card.def, 'cast');
-      if (!affordableNow && !affordableWithTap) continue;
-      options.push({
-        instanceId: card.instanceId,
-        cardId: card.def.id,
-        name: card.def.name,
-        cost: flashback,
-        needsTarget: needsTarget(card.def),
-        requirement: targetRequirement(card.def),
-        affordableNow,
-        affordableWithTap,
-        fromZone: 'graveyard',
-      });
+      const offeredNow = (spend: number) => castableNow.has(castKey(card.instanceId, undefined, spend));
+      // Timing is asked FIRST and from the engine's own offers, which plan
+      // nothing: a graveyard full of sorceries on the opponent's turn must not
+      // cost one payment plan per card just to be told the window is shut.
+      if (!phyrexianLifeOptions(flashback, life).some(offeredNow) && !this.timingAllows(card, player)) continue;
+      for (const reading of this.castReadings(player, flashback, card.def, offeredNow)) {
+        if (!reading.affordableNow && !reading.affordableWithTap) continue;
+        options.push({
+          instanceId: card.instanceId,
+          cardId: card.def.id,
+          name: card.def.name,
+          cost: flashback,
+          needsTarget: needsTarget(card.def),
+          requirement: targetRequirement(card.def),
+          affordableNow: reading.affordableNow,
+          affordableWithTap: reading.affordableWithTap,
+          fromZone: 'graveyard',
+          ...(reading.phyrexianLife === 0 ? {} : { phyrexianLife: reading.phyrexianLife }),
+        });
+      }
     }
     return options;
   }
@@ -771,21 +944,32 @@ export class GameSession {
     const free = isFreeCastWindow(window);
     const madness = free ? {} : card?.def.madness;
     if (!card || madness === undefined) return permissions;
-    const castableNow = this.legalActions().some(
-      (a) => a.kind === 'castSpell' && a.fromZone === 'exile' && a.instanceId === card.instanceId,
-    );
+    const offeredNow = (spend: number) =>
+      this.legalActions().some(
+        (a) =>
+          a.kind === 'castSpell' &&
+          a.fromZone === 'exile' &&
+          a.instanceId === card.instanceId &&
+          (a.phyrexianLife ?? 0) === spend,
+      );
+    // Every reading is offered, affordable or not: this is a WINDOW, and a
+    // player who cannot pay still has to be told what they are declining. For a
+    // madness cost with no Phyrexian symbol — which is every printed one — that
+    // is the single row this list has always returned.
+    const readings = this.castReadings(window.controller, madness, card.def, offeredNow);
     return [
-      {
+      ...readings.map((reading) => ({
         instanceId: card.instanceId,
         cardId: card.def.id,
         name: card.def.name,
         cost: madness,
         needsTarget: needsTarget(card.def),
         requirement: targetRequirement(card.def),
-        affordableNow: castableNow,
-        affordableWithTap: free || this.canAffordWithTaps(window.controller, madness, card.def, 'cast'),
-        fromZone: 'exile',
-      },
+        affordableNow: reading.affordableNow,
+        affordableWithTap: free || reading.affordableWithTap,
+        fromZone: 'exile' as const,
+        ...(reading.phyrexianLife === 0 ? {} : { phyrexianLife: reading.phyrexianLife }),
+      })),
       ...permissions,
     ];
   }
@@ -810,23 +994,30 @@ export class GameSession {
       const castDef = playableFaceOf(card.def, permission.face);
       if (castDef === undefined || isLand(castDef)) continue;
       const cost = permission.free ? undefined : castDef.cost;
-      const nowCastable = legal.some(
-        (a) => a.kind === 'castSpell' && a.fromZone === 'exile' && a.instanceId === card.instanceId,
-      );
-      const withTap = this.canAffordWithTaps(player, cost, castDef, 'cast');
-      if (!nowCastable && !withTap) continue;
-      options.push({
-        instanceId: card.instanceId,
-        cardId: castDef.id,
-        name: castDef.name,
-        cost,
-        needsTarget: needsTarget(castDef),
-        requirement: targetRequirement(castDef),
-        affordableNow: nowCastable,
-        affordableWithTap: withTap,
-        fromZone: 'exile',
-        ...(permission.face === 'back' ? { face: 'back' as const } : {}),
-      });
+      for (const reading of this.castReadings(player, cost, castDef, (spend) =>
+        legal.some(
+          (a) =>
+            a.kind === 'castSpell' &&
+            a.fromZone === 'exile' &&
+            a.instanceId === card.instanceId &&
+            (a.phyrexianLife ?? 0) === spend,
+        ),
+      )) {
+        if (!reading.affordableNow && !reading.affordableWithTap) continue;
+        options.push({
+          instanceId: card.instanceId,
+          cardId: castDef.id,
+          name: castDef.name,
+          cost,
+          needsTarget: needsTarget(castDef),
+          requirement: targetRequirement(castDef),
+          affordableNow: reading.affordableNow,
+          affordableWithTap: reading.affordableWithTap,
+          fromZone: 'exile',
+          ...(permission.face === 'back' ? { face: 'back' as const } : {}),
+          ...(reading.phyrexianLife === 0 ? {} : { phyrexianLife: reading.phyrexianLife }),
+        });
+      }
     }
     return options;
   }
@@ -954,44 +1145,68 @@ export class GameSession {
   }
 
   private computeAbilityOptions(): AbilityOption[] {
-    const byAbility = new Map<string, AbilityOption>();
+    const byAbility = new Map<string, AbilityAccumulator>();
     for (const action of this.legalActions()) {
       if (action.kind !== 'activateAbility') continue;
-      const key = `${action.instanceId}:${action.abilityIndex}`;
-      const source = this.findInstance(action.instanceId);
-      const printed = source?.def.activated?.[action.abilityIndex];
-      const existing = byAbility.get(key);
-      const offeredTarget = action.targets?.[0];
-      if (offeredTarget === undefined) {
-        // A bare offer: no target to choose.
-        if (!existing) {
-          byAbility.set(key, {
-            instanceId: action.instanceId,
-            sourceName: source?.def.name ?? `#${action.instanceId}`,
-            abilityIndex: action.abilityIndex,
-            label: printed?.label ?? `Ability ${action.abilityIndex + 1}`,
-            targets: null,
-          });
-        }
-        continue;
-      }
-      const choice: AbilityTargetChoice = {
+      this.foldAbilityOffer(byAbility, action);
+    }
+    this.appendTapToAffordAbilities(byAbility);
+    return [...byAbility.values()].map(finishAbilityOption);
+  }
+
+  /**
+   * Fold ONE engine offer into the option it belongs to — the single place the
+   * engine's per-target, per-payer action list becomes a menu.
+   *
+   * The engine enumerates the CROSS PRODUCT (one action per legal target × one
+   * per legal sacrifice payer), so both axes are gathered into sets keyed by
+   * their ids: without the de-duplication a two-payer, three-target ability
+   * would offer each target three times.
+   *
+   * Shared by the engine's own menu and the §3.129 tap-to-afford pass so
+   * "offered now" and "offered once mana is floated" cannot fold differently.
+   */
+  private foldAbilityOffer(
+    byAbility: Map<string, AbilityAccumulator>,
+    action: Extract<GameAction, { kind: 'activateAbility' }>,
+    affordableWithTap = false,
+  ): void {
+    const key = `${action.instanceId}:${action.abilityIndex}`;
+    const source = this.findInstance(action.instanceId);
+    const printed = source?.def.activated?.[action.abilityIndex];
+    let entry = byAbility.get(key);
+    if (!entry) {
+      entry = {
+        instanceId: action.instanceId,
+        sourceName: source?.def.name ?? `#${action.instanceId}`,
+        abilityIndex: action.abilityIndex,
+        label: printed?.label ?? `Ability ${action.abilityIndex + 1}`,
+        targets: new Map(),
+        payers: new Map(),
+        affordableWithTap,
+      };
+      byAbility.set(key, entry);
+    }
+    const offeredTarget = action.targets?.[0];
+    if (offeredTarget !== undefined && !entry.targets.has(String(offeredTarget))) {
+      entry.targets.set(String(offeredTarget), {
         target: offeredTarget,
         label:
           offeredTarget === 'A' || offeredTarget === 'B'
             ? `${this.names[offeredTarget]} (player)`
             : this.nameOf(offeredTarget),
-      };
-      byAbility.set(key, {
-        instanceId: action.instanceId,
-        sourceName: source?.def.name ?? `#${action.instanceId}`,
-        abilityIndex: action.abilityIndex,
-        label: printed?.label ?? `Ability ${action.abilityIndex + 1}`,
-        targets: [...(existing?.targets ?? []), choice],
       });
     }
-    this.appendTapToAffordAbilities(byAbility);
-    return [...byAbility.values()];
+    const payer = action.costInstanceIds;
+    if (payer !== undefined && payer.length > 0) {
+      const payerKey = payer.join(',');
+      if (!entry.payers.has(payerKey)) {
+        entry.payers.set(payerKey, {
+          instanceIds: [...payer],
+          label: payer.map((id) => this.nameOf(id)).join(' + '),
+        });
+      }
+    }
   }
 
   /**
@@ -1012,12 +1227,19 @@ export class GameSession {
    *
    * Gated hard for the hot path: it does nothing when there is no mana to tap,
    * and per permanent only for a PRINTED activated ability with a mana cost the
-   * engine did not already offer. Sacrifice- and loyalty-cost abilities are left
-   * out on purpose — the offer the engine builds for them carries a payer that
-   * {@link AbilityOption} has nowhere to keep, so auto-tapping one would submit
-   * an action the engine itself would reject.
+   * engine did not already offer. Loyalty abilities are still skipped — they
+   * carry no mana cost, so floating mana could never be what is missing.
+   *
+   * ⚠️ §3.143 — a SACRIFICE cost is no longer skipped. It used to be, because
+   * "the offer the engine builds for them carries a payer that `AbilityOption`
+   * has nowhere to keep, so auto-tapping one would submit an action the engine
+   * itself would reject" — true when it was written, and now fixed at the
+   * class level by {@link AbilityOption.costPayers}. Leaving the skip would
+   * have repaired one half of the bug (an already-affordable sacrifice ability)
+   * and left its sibling (one needing a tap first) broken, which rule 10 calls
+   * unfinished work.
    */
-  private appendTapToAffordAbilities(byAbility: Map<string, AbilityOption>): void {
+  private appendTapToAffordAbilities(byAbility: Map<string, AbilityAccumulator>): void {
     const player = this.priorityPlayer;
     if (!this.legalActions().some((a) => a.kind === 'tapForMana')) return; // nothing to float
     for (const perm of this.state.battlefield) {
@@ -1032,46 +1254,16 @@ export class GameSession {
         // No mana cost ⇒ any absence from the menu is a NON-mana gate (tapped,
         // summoning-sick, no target); floating mana would not change it.
         if (!manaCost) continue;
-        if (ability.cost.sacrificeAnother !== undefined || ability.cost.loyalty !== undefined) continue;
+        if (ability.cost.loyalty !== undefined) continue;
         if (!this.canAffordWithTaps(player, manaCost, perm.def, 'activate')) continue;
         const floated = this.trialFloatToward(manaCost, perm.def);
         if (!floated) continue;
         for (const offer of generateLegalActions(floated.state)) {
           if (offer.kind !== 'activateAbility') continue;
           if (offer.instanceId !== perm.instanceId || offer.abilityIndex !== index) continue;
-          const existing = byAbility.get(key);
-          const offeredTarget = offer.targets?.[0];
-          const label = ability.label ?? `Ability ${index + 1}`;
-          if (offeredTarget === undefined) {
-            if (!existing) {
-              byAbility.set(key, {
-                instanceId: perm.instanceId,
-                sourceName: perm.def.name,
-                abilityIndex: index,
-                label,
-                targets: null,
-                affordableWithTap: true,
-              });
-            }
-            continue;
-          }
-          // A target id names a stack object or a permanent that exists in the
-          // REAL state (floating mana never touched it), so `nameOf` labels it.
-          const choice: AbilityTargetChoice = {
-            target: offeredTarget,
-            label:
-              offeredTarget === 'A' || offeredTarget === 'B'
-                ? `${this.names[offeredTarget]} (player)`
-                : this.nameOf(offeredTarget),
-          };
-          byAbility.set(key, {
-            instanceId: perm.instanceId,
-            sourceName: perm.def.name,
-            abilityIndex: index,
-            label,
-            targets: [...(existing?.targets ?? []), choice],
-            affordableWithTap: true,
-          });
+          // Target and payer ids name objects that exist in the REAL state
+          // (floating mana never touched them), so `nameOf` labels them.
+          this.foldAbilityOffer(byAbility, offer, true);
         }
       }
     }
@@ -1106,11 +1298,18 @@ export class GameSession {
    * Activate a permanent's ability with the chosen targets (empty for a target-less
    * ability). Submits the SAME action shape the engine offered, so the engine —
    * not the client — remains the validator.
+   *
+   * `costInstanceIds` names the permanents paying a "Sacrifice a &lt;noun&gt;" cost
+   * (CR 602.2b), chosen from {@link AbilityOption.costPayers}. Omitting it for an
+   * ability that prints one is exactly the rejection §3.143 fixed; omitting it
+   * for an ability that prints none keeps the action byte-identical to what
+   * every existing caller already sends.
    */
   activateAbility(
     instanceId: InstanceId,
     abilityIndex: number,
     targets: readonly (InstanceId | PlayerId)[] = [],
+    costInstanceIds: readonly InstanceId[] = [],
   ): SubmitResult {
     return this.submit({
       kind: 'activateAbility',
@@ -1118,6 +1317,7 @@ export class GameSession {
       instanceId,
       abilityIndex,
       ...(targets.length > 0 ? { targets } : {}),
+      ...(costInstanceIds.length > 0 ? { costInstanceIds } : {}),
     });
   }
 
@@ -1133,6 +1333,7 @@ export class GameSession {
     instanceId: InstanceId,
     abilityIndex: number,
     targets: readonly (InstanceId | PlayerId)[] = [],
+    costInstanceIds: readonly InstanceId[] = [],
   ): SubmitResult {
     const player = this.priorityPlayer;
     const perm = this.state.battlefield.find((c) => c.instanceId === instanceId);
@@ -1155,6 +1356,7 @@ export class GameSession {
       instanceId,
       abilityIndex,
       ...(targets.length > 0 ? { targets } : {}),
+      ...(costInstanceIds.length > 0 ? { costInstanceIds } : {}),
     });
     // Roll back to the pre-tap session so a failed activation doesn't strand lands.
     if (activated.rejected) return { session: this, rejected: activated.rejected, events: activated.events };
@@ -1248,12 +1450,18 @@ export class GameSession {
    * the board cannot. Delegates to core's shared planner, which is also what the
    * AI pilots use — so auto-tap picks the right COLOURS and stops as soon as the
    * cost is met, instead of grabbing whatever permanent came first.
+   *
+   * `lifeSpend` is the reading being paid (§3.143). It is not optional in
+   * spirit: planning "{1}{B}{B}" for a cast that will submit "{1} and 4 life"
+   * taps two lands the player wanted to keep, and stops one short of the cost
+   * the engine will actually charge. Zero everywhere but a Phyrexian cast.
    */
   private nextTapToward(
     player: PlayerId,
     cost: ManaCost,
     def: CardDefinition,
     kind: ManaSpendKind,
+    lifeSpend = 0,
   ): ManaTapPlan | null {
     const plan = planManaPayment(
       this.state,
@@ -1263,6 +1471,7 @@ export class GameSession {
       def,
       kind,
       HUMAN_MANA_PREFERENCE,
+      lifeSpend,
     );
     return plan && plan.length > 0 ? (plan[0] as ManaTapPlan) : null;
   }
@@ -1292,6 +1501,11 @@ export class GameSession {
       def,
       'cast',
       HUMAN_MANA_PREFERENCE,
+      // The READING this option casts (§3.143). Asked of the same payment the
+      // cast will make, or the picker opens on the mana for a reading the player
+      // did not choose — and the "{1} and 4 life" reading of Dismember often has
+      // no choice to offer at all where "{1}{B}{B}" does.
+      option.phyrexianLife ?? 0,
     );
   }
 
@@ -1322,12 +1536,18 @@ export class GameSession {
    * colour you choose, and summing its modes claims five. Planning answers the
    * real question exactly, and respects summoning sickness because the candidate
    * taps come from the engine's own legal actions.
+   *
+   * `lifeSpend` makes this a question about a READING rather than about a card
+   * (§3.143): Dismember off one Swamp is unaffordable at 0 life and affordable
+   * at 4, and a flag that averaged the two would either hide a castable spell or
+   * light up one the auto-tap then fails to fund.
    */
   private canAffordWithTaps(
     player: PlayerId,
     cost: ManaCost | undefined,
     def: CardDefinition,
     kind: ManaSpendKind,
+    lifeSpend = 0,
   ): boolean {
     if (!cost) return true;
     return (
@@ -1342,6 +1562,7 @@ export class GameSession {
         // the exact bug this module's header warns about: "affordable" answered by
         // one policy and the taps chosen by another.
         HUMAN_MANA_PREFERENCE,
+        lifeSpend,
       ) !== undefined
     );
   }

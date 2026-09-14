@@ -80,7 +80,7 @@ export type TriggerEvent =
   /**
    * "Whenever this creature BLOCKS OR BECOMES BLOCKED" — the combat-declaration
    * trigger that bushido, flanking and rampage are each printed as (CR 702.45a,
-   * 702.24a, 702.23a). ONE event covers both halves because no printed card
+   * 702.25a, 702.23a). ONE event covers both halves because no printed card
    * separates them: an object either took part in a block or it did not.
    *
    * It fires ONCE per declaration however many creatures blocked, which falls
@@ -95,7 +95,7 @@ export type TriggerEvent =
    * than a widening of `blocksOrBecomesBlocked`:
    */
   /**
-   * "Whenever A CREATURE YOU CONTROL attacks alone" — exalted (CR 702.90a).
+   * "Whenever A CREATURE YOU CONTROL attacks alone" — exalted (CR 702.83a).
    * NOT self-referential: the source is any permanent (Cathedral of War is a
    * land), and the object the event is about is the lone attacker, which
    * rides to the body as `triggeringInstances` so "that creature gets +1/+1"

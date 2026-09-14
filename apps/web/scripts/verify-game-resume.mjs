@@ -29,6 +29,24 @@ const VIEWPORT = { width: 900, height: 560 }; // small on purpose: the board mus
 const AI_BEAT_MS = 700; // > HOTSEAT_CONFIG.aiThinkMs (450) so the pilot's move lands between steps
 const PASS_CLICK_BUDGET = 60; // hard ceiling on the drive loop
 const TARGET_TURN = 4; // "several turns"
+/**
+ * How long the app shell (`.app__nav`) may take to appear after a navigation.
+ *
+ * NOT a check — a precondition. It replaces puppeteer’s unnamed 30 s default,
+ * which nobody chose and which this harness had no headroom against: the view
+ * a reload lands on is the 5,651-tile card browser, and those tiles request
+ * card art from Scryfall over the INTERNET. Measured on the reference box,
+ * post-reload time-to-`.app__nav` is bimodal — ~7.8 s with the art warm in
+ * Chrome's cache, and 38.9 s / 40.6 s on the runs where it is not (the same
+ * runs whose `performance.getEntriesByType("resource")` shows hundreds of
+ * cross-origin `.jpg` fetches). Against the 30 s default that made the harness
+ * a coin flip that reported the app as broken when the network was slow.
+ *
+ * 90 s is the same budget `verify-bug-reporter.mjs` already gives
+ * `LAUNCHER_WAIT_MS`, and is ~2x the worst case measured here. Every one of the
+ * 18 checks is unchanged; only the wait for the shell to exist is named.
+ */
+const APP_SHELL_WAIT_MS = 90_000;
 
 const checks = [];
 function check(name, passed, detail = '') {
@@ -183,7 +201,7 @@ async function main() {
     // and times out on a cold cache. Every navigation here is followed by an
     // explicit wait for what the next assertion actually needs.
     await page.goto(preview.url, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('.app__nav');
+    await page.waitForSelector('.app__nav', { timeout: APP_SHELL_WAIT_MS });
     await page.evaluate(() => navigator.serviceWorker?.ready);
     await page.reload({ waitUntil: 'domcontentloaded' });
     const controlled = await page.evaluate(() => navigator.serviceWorker?.controller !== null);
@@ -258,7 +276,7 @@ async function main() {
 
     // ---- hard reload: manual navigation, so the MENU offers the resume ---------------
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('.app__nav');
+    await page.waitForSelector('.app__nav', { timeout: APP_SHELL_WAIT_MS });
     await shot(page, '02-after-hard-reload.png');
     await clickButton(page, /^Play$/);
     const bannerShown = await textPresent(page, /Game in progress/);
@@ -319,7 +337,7 @@ async function main() {
       page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60_000 }),
       clickButton(page, /← Play menu/),
     ]);
-    await page.waitForSelector('.app__nav');
+    await page.waitForSelector('.app__nav', { timeout: APP_SHELL_WAIT_MS });
     const afterUpdate = await page.evaluate(() => ({
       bundle: document.querySelector('script[type="module"]')?.getAttribute('src') ?? '',
       view: document.querySelector('.nav-link--active')?.textContent?.trim() ?? '',
