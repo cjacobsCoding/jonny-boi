@@ -26,6 +26,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { describeChromeSearch, findChrome } from './lib/find-chrome.mjs';
+import { harnessLaunchOptions } from './lib/harness-chrome.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = resolve(HERE, '..');
@@ -246,11 +247,7 @@ async function main() {
   const chrome = findChrome();
   if (!chrome) throw new Error(describeChromeSearch());
   const preview = await startPreview();
-  const browser = await puppeteer.launch({
-    executablePath: chrome,
-    headless: true,
-    args: ['--no-first-run', '--disable-features=Translate'],
-  });
+  const browser = await puppeteer.launch(harnessLaunchOptions({ chromePath: chrome }));
   try {
     const page = await browser.newPage();
     await page.setViewport(VIEWPORT);
