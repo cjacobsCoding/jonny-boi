@@ -376,6 +376,39 @@ function DeathGhost({
  * ======================================================================== */
 
 /**
+ * WHERE EACH TILE LAST STOOD, by instance id — the one place either board
+ * answers that, and the rect source every fixed overlay measures against.
+ *
+ * Refreshed after every render and NEVER evicted, because "last stood" has to
+ * survive the thing that needs it: a creature killed by the very hit being drawn
+ * has already left the DOM, and a death ghost or a damage bloom aimed at it must
+ * still land where the player last saw it. (A 2-deep window was measured losing
+ * the rect to the burst of auto-advance commits between the death event and the
+ * ghost's mount.) Memory is one `DOMRect` per instance that ever reached the
+ * battlefield — trivial beside the game itself; the walk is one board's worth of
+ * `getBoundingClientRect` calls per render, nothing beside the re-render.
+ *
+ * ⚠️ SHARED BY BOTH BOARDS ON PURPOSE (CLAUDE.md rule 12). It lived inline in
+ * `PlayBoard` while the online board had no damage channel at all; the day the
+ * online board got one, a second copy of this walk would have been a second
+ * answer to "where is tile #7", drifting the two boards' overlays apart.
+ */
+export function useTileRects(boardRootRef: RefObject<HTMLElement | null>): (id: InstanceId) => DOMRect | undefined {
+  const tileRectsRef = useRef(new Map<InstanceId, DOMRect>());
+  useEffect(() => {
+    const root = boardRootRef.current;
+    if (!root) return;
+    const rects = tileRectsRef.current;
+    for (const el of root.querySelectorAll('[data-perm-id]')) {
+      if (!(el instanceof HTMLElement)) continue;
+      const id = Number(el.dataset['permId']);
+      if (!Number.isNaN(id)) rects.set(id, el.getBoundingClientRect());
+    }
+  });
+  return useCallback((id: InstanceId): DOMRect | undefined => tileRectsRef.current.get(id), []);
+}
+
+/**
  * Fold the session's cumulative event log into live damage beats. Baselined at
  * mount, like both sibling hooks, so a board opened mid-game never replays the
  * combat that already happened.

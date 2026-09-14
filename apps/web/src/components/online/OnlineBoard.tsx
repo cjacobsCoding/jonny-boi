@@ -26,12 +26,12 @@ import {
   type CombatHoldKind,
 } from '../../lib/play/combat-hold.js';
 import { CombatHoldBanner } from '../play/CombatHoldBanner.js';
-import { usePrefersReducedMotion } from '../play/AnimationLayer.js';
+import { usePrefersReducedMotion, useTileRects } from '../play/AnimationLayer.js';
 import {
   BoardScene,
-  NO_DAMAGE_SOURCE,
   useBoardSceneVars,
   type CombatDraft,
+  type DamageSource,
 } from '../play/BoardScene.js';
 import { DRAG_ID_ATTR, useDragToPlay } from '../../lib/play/useDragToPlay.js';
 import { idleTurnNote, reasonCardIsDisabled } from '../../lib/online/why-disabled.js';
@@ -121,14 +121,13 @@ import '../play/action-bar.css';
  *    view, by design — so the faces here carry printed truth plus the glossary,
  *    and the board must not invent attribution to fill the gap. See
  *    `board-adapter.ts`'s `NO_MOD` note: the same limit, already stated once.
- * 2. UX-15 (damage travelling from source to recipient) needs the engine's
- *    `GameEvent` stream, and the server's `state` message carries a masked view
- *    plus pre-formatted log STRINGS — `Room.summarizeEvents` throws the structure
- *    away. This is NOT a masking limit (combat damage is public, and the server
- *    already narrates it to both seats); it is a missing channel. The scene takes
- *    `NO_DAMAGE_SOURCE` here rather than deriving a second answer from frame
- *    diffs, and when the protocol carries the events that prop is the whole
- *    change. See `BoardScene.tsx`'s `NO_DAMAGE_SOURCE` for the full note.
+ * 2. ~~UX-15 (damage travelling from source to recipient)~~ — CLOSED. It needed
+ *    the engine's `GameEvent` stream, which the `state` message did not carry;
+ *    the protocol now sends the PUBLIC half of it (`PUBLIC_EVENT_KINDS`,
+ *    filtered per seat by `maskEventsForSeat`) beside the prose log, and the
+ *    scene is fed from `frame.events` below. It was a missing channel and not a
+ *    masking limit, exactly as the note that stood here said — combat damage is
+ *    public by the rules, and the server was already narrating it to both seats.
  */
 /**
  * WHY A CARD ON THIS BOARD SHOWS NO PROVENANCE — said out loud, once.
@@ -927,6 +926,12 @@ export function OnlineBoard({
   /** The board container: the combat-lines canvas measures inside it. */
   const boardRootRef = useRef<HTMLDivElement>(null);
 
+  /**
+   * Where each tile last stood — the SHARED hook, so the damage blooms on this
+   * board are placed by the same walk that places the hotseat board's.
+   */
+  const tileRectOf = useTileRects(boardRootRef);
+
   /** Jailed cards tucked under their jailer — the exile zones are PUBLIC. */
   const jails = useMemo(
     () =>
@@ -1001,6 +1006,18 @@ export function OnlineBoard({
   };
 
   /**
+   * §3.143 / UX-15 — the same pair the hotseat board builds, out of the same two
+   * ingredients: the cumulative event stream and the last-known tile rects.
+   *
+   * `frame.events` is the PUBLIC half of the engine's log, filtered for THIS seat
+   * by `maskEventsForSeat` server-side and accumulated across frames by
+   * `onlineReducer`. There is deliberately no second derivation here — the board
+   * does not diff frames to guess what hit what (rule 12); it is either told or
+   * it animates nothing.
+   */
+  const damageSource: DamageSource = { events: frame.events, tileRectOf };
+
+  /**
    * The tabletop's own numbers, from the scene that reads them — spread on
    * `.play-board` because `board-fit.css` declares
    * `--play-board-right-overlay-inset` on this element out of
@@ -1055,11 +1072,7 @@ export function OnlineBoard({
         dropRef={dropRef}
         combatDraft={combatDraft}
         measureKey={frame}
-        /* ⚠️ UX-15 IS NOT REACHED HERE, AND THE CONSTANT SAYS WHY: the server's
-           `state` message carries a masked view plus pre-formatted log STRINGS,
-           never the `GameEvent` stream a damage sequence is derived from. When
-           the protocol carries one, this line is the whole change. */
-        damage={NO_DAMAGE_SOURCE}
+        damage={damageSource}
         rail={<ServerLog lines={log} />}
         selfZonePanels={
           <>

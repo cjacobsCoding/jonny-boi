@@ -139,7 +139,7 @@ function frameWithStackedSpell(controller: PlayerId): {
     ],
   };
   return {
-    frame: { view, legalActions: [], yourTurn: false, log: [] },
+    frame: { view, legalActions: [], yourTurn: false, log: [], events: [] },
     spell,
     target,
   };
@@ -235,7 +235,7 @@ describe('the parity work never widened what a viewer may see', () => {
       ...masked.players.A.graveyard.map((c) => c.def.name),
       ...masked.players.B.graveyard.map((c) => c.def.name),
     ]);
-    const html = render({ view: masked, legalActions: [], yourTurn: false, log: [] });
+    const html = render({ view: masked, legalActions: [], yourTurn: false, log: [], events: [] });
     for (const card of hidden) {
       if (visible.has(card.def.name)) continue;
       expect(html, `${card.def.name} is in B's hand and must not be on A's screen`).not.toContain(
@@ -341,6 +341,8 @@ function blockedCombatFrame({ blockersDeclared }: { blockersDeclared: boolean })
     legalActions: [{ kind: 'passPriority', player: BLOCKING_SEAT }],
     yourTurn: true,
     log: [],
+    // No damage has been dealt in this window yet — it is the BLOCK step.
+    events: [],
   };
 }
 
