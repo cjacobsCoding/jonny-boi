@@ -71,7 +71,7 @@ export function CombatLines({
   containerRef,
   measureKey,
 }: {
-  /** The arcs to draw, from `combatArcPairs` / `blockerLinePairs`. */
+  /** The arcs to draw, from `combatArcPairs` — the one funnel, via `BoardScene`. */
   lines: readonly CombatArc[];
   /**
    * The board container. Used to SCOPE the tile query and to clip the overlay

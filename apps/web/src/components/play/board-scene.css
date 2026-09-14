@@ -11,10 +11,11 @@
  * they are blocking"*.
  *
  * THERE IS NO NUMBER IN THIS FILE. Every angle, distance and duration arrives
- * as a custom property that `PlayBoard` sets from `lib/play/play-config.ts`
- * (BOARD_3D_CONFIG, TAP_ROTATION_CONFIG, COMBAT_ADVANCE_CONFIG,
- * SPELL_HOLD_CONFIG). A designer tunes the config; this file only says how the
- * board reads it. A `board-scene.test.ts` guard fails if a literal appears here.
+ * as a custom property that BOTH boards set from `lib/play/play-config.ts`
+ * through `BoardScene`'s `useBoardSceneVars` (BOARD_3D_CONFIG,
+ * TAP_ROTATION_CONFIG, COMBAT_ADVANCE_CONFIG, SPELL_HOLD_CONFIG). A designer
+ * tunes the config; this file only says how the board reads it. A
+ * `board-scene.test.ts` guard fails if a literal appears here.
  *
  * ---------------------------------------------------------------------------
  * WHY THE SCENE IS TWO ELEMENTS AND NOT ONE, AND WHY IT IS FLAT

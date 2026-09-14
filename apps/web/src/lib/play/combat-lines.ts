@@ -134,21 +134,13 @@ export function combatArcPairs(input: CombatArcInput): readonly CombatArc[] {
   return out;
 }
 
-/**
- * The block-only view of {@link combatArcPairs}, kept because two boards mount
- * the overlay and only one of them (the hotseat board) knows about attack
- * targets yet. It is an ADAPTER, not a second answer: it delegates, and
- * `combat-lines.test.ts` fails if the two ever disagree.
- */
-export function blockerLinePairs(args: {
-  readonly step: string;
-  readonly declaredBlocks:
-    | ReadonlyArray<{ readonly blocker: InstanceId; readonly attacker: InstanceId }>
-    | undefined;
-  readonly draftAssign: ReadonlyMap<InstanceId, InstanceId>;
-}): readonly CombatArc[] {
-  return combatArcPairs(args);
-}
+/* `blockerLinePairs` — the block-only adapter — is DELETED, not deprecated.
+   It existed for exactly one reason, written in its own doc comment: "two
+   boards mount the overlay and only one of them knows about attack targets
+   yet." Both boards now draw their arcs through `BoardScene`, which calls
+   {@link combatArcPairs} with the attack half supplied, so the sentence is
+   false and a function whose reason is false is a trap for the next reader
+   (rule 5). Its adapter test went with it. */
 
 function appendAttackArcs(out: CombatArc[], input: CombatArcInput): void {
   if (!ARC_STEPS.attack.has(input.step)) return;

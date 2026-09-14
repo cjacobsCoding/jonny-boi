@@ -2243,7 +2243,6 @@ button {
 .play-board__turn { color: var(--color-accent-soft); }
 .play-board__priority { color: var(--color-fg-muted); font-size: var(--text-sm); }
 .play-board__concede { margin-left: auto; }
-.play-board__center { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); align-items: start; }
 .play-hand { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); min-height: 4rem; }
 .play-hand--hidden { opacity: 0.9; }
 
@@ -2423,7 +2422,6 @@ button {
 
 /* ---------- Responsive: stack columns on phones ---------- */
 @media (max-width: 860px) {
-  .play-board__center { grid-template-columns: 1fr; }
   .play-mode__choices, .online-menu__actions, .play-setup__seats, .online-lobby__seats { grid-template-columns: 1fr; }
   /* On a phone the prompt fills the screen and its footer stacks, so the Confirm
      button never falls off the edge of a 375px viewport. */

@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { actionBarHint } from '../../lib/play/action-hints.js';
-import { blockerLinePairs } from '../../lib/play/combat-lines.js';
 import { groupJailedByJailer, jailSourcesOf } from '../../lib/play/jail-view.js';
 import {
   describeTargetSetWithOwners,
   makeRefIndex,
   type KnownRef,
 } from '../../lib/play/option-labels.js';
-import { CombatLines } from '../play/CombatLines.js';
 import type {
   CardDefinition,
   CardInstance,
@@ -16,8 +14,6 @@ import type {
   InstanceId,
   PlayerId,
 } from '@jonny-boi/core';
-import type { MouseEvent as ReactMouseEvent } from 'react';
-import type { BoardPermanent } from '../../lib/play/view-model.js';
 import { isPlaneswalker, isPlayerTarget, PLAYER_IDS } from '@jonny-boi/core';
 import { COMBAT_HOLD_CONFIG, stepLabel } from '../../lib/play/play-config.js';
 import { maskedViewToBoardView } from '../../lib/online/board-adapter.js';
@@ -31,6 +27,12 @@ import {
 } from '../../lib/play/combat-hold.js';
 import { CombatHoldBanner } from '../play/CombatHoldBanner.js';
 import { usePrefersReducedMotion } from '../play/AnimationLayer.js';
+import {
+  BoardScene,
+  NO_DAMAGE_SOURCE,
+  useBoardSceneVars,
+  type CombatDraft,
+} from '../play/BoardScene.js';
 import { DRAG_ID_ATTR, useDragToPlay } from '../../lib/play/useDragToPlay.js';
 import { idleTurnNote, reasonCardIsDisabled } from '../../lib/online/why-disabled.js';
 import { zonePanelView } from '../../lib/play/zone-panel.js';
@@ -58,10 +60,10 @@ import {
   type AbilityPromptFaces,
 } from '../play/AbilityPrompts.js';
 import { ZonePanel } from '../play/ZonePanel.js';
-import { SeatPanel, type PermInteraction } from '../play/SeatPanel.js';
+import { type PermInteraction } from '../play/SeatPanel.js';
 import { StackPanel } from '../play/StackPanel.js';
 import { stackEntries } from '../../lib/play/stack-view.js';
-import { PlayCard, CardBack } from '../play/PlayCard.js';
+import { PlayCard } from '../play/PlayCard.js';
 import { CardFace } from '../play/CardFace.js';
 import { CardHover } from '../CardHover.js';
 import { CardZoomOverlay, type ZoomedCard } from '../play/CardZoomOverlay.js';
@@ -965,52 +967,24 @@ export function OnlineBoard({
   );
 
   /**
-   * Every permanent on the table by id, from the SAME `BoardView` the seats are
-   * drawn from — so the zoom cannot disagree with the tile it was opened from.
+   * §3.143 / UX-12 + UX-14 — the selections the player is still CLICKING. Handed
+   * to the scene, which decides what a draft MEANS (a dashed arc, never an
+   * advance); this only says what has been ticked.
    */
-  const permById = useMemo(() => {
-    const map = new Map<InstanceId, BoardPermanent>();
-    for (const perm of [...view.self.permanents, ...view.opponent.permanents]) map.set(perm.instanceId, perm);
-    return map;
-  }, [view]);
-
-  /**
-   * §3.143 GAP-C — a way into the zoom from the BATTLEFIELD, the hotseat
-   * board's twin (see its own note for why the gestures split this way, and why
-   * this is delegated from the seat wrapper rather than added to the tile).
-   */
-  const inspectPermanentFrom = useCallback(
-    (event: ReactMouseEvent, requireInert: boolean): void => {
-      const from = event.target instanceof Element ? event.target : null;
-      if (from === null) return;
-      if (requireInert && from.closest('button') !== null) return;
-      const raw = from.closest('[data-perm-home]')?.getAttribute('data-perm-home');
-      if (raw === null || raw === undefined) return;
-      const perm = permById.get(Number(raw) as InstanceId);
-      if (perm === undefined) return;
-      event.preventDefault();
-      setZoomed({
-        cardId: perm.cardId,
-        name: perm.name,
-        isCreature: perm.isCreature,
-        unavailableReason: PROVENANCE_UNAVAILABLE_ONLINE,
-      });
-    },
-    [permById],
-  );
-
-  /** The two handlers every seat gets, spread onto its wrapper. */
-  const seatInspectProps = {
-    onContextMenu: (event: ReactMouseEvent) => inspectPermanentFrom(event, false),
-    onClick: (event: ReactMouseEvent) => inspectPermanentFrom(event, true),
+  const combatDraft: CombatDraft = {
+    attackers: chosenAttackers,
+    attackTargets: walkerAssign,
+    blocks: blockAssign,
   };
 
-  /** Which blocker→attacker lines to draw this frame (pure rule, tested). */
-  const combatLines = blockerLinePairs({
-    step,
-    declaredBlocks: view.combat?.blocks,
-    draftAssign: blockAssign,
-  });
+  /**
+   * The tabletop's own numbers, from the scene that reads them — spread on
+   * `.play-board` because `board-fit.css` declares
+   * `--play-board-right-overlay-inset` on this element out of
+   * `--play-log-rail-w`, and a custom property set on a descendant cannot feed
+   * an ancestor's declaration.
+   */
+  const sceneVars = useBoardSceneVars();
 
   /** Is there ANY move available — a card, a mana source, or a combat declaration? */
   const hasAnyPlay =
@@ -1028,7 +1002,7 @@ export function OnlineBoard({
   const flashbackCount = graveyardCasts.size + graveyardTapCastable.size;
 
   return (
-    <div className="play-board" ref={boardRootRef}>
+    <div className="play-board" ref={boardRootRef} style={sceneVars}>
       <div className="play-board__status">
         <span className="play-board__turn">{statusText}</span>
         <span className="play-board__priority">
@@ -1039,93 +1013,89 @@ export function OnlineBoard({
         </button>
       </div>
 
-      {/* Opponent (top) — hand hidden (count only). */}
-      <div className="play-board__opponent" {...seatInspectProps}>
-        <SeatPanel
-          seat={view.opponent}
-          isActive={view.activePlayer === view.opponent.id}
-          hasPriority={view.priorityPlayer === view.opponent.id}
-          interaction={opponentInteraction}
-          onExileClick={() => setExileOpen((open) => (open === view.opponent.id ? null : view.opponent.id))}
-          jails={jails}
-          onInspectCard={setZoomed}
-        />
-        <div className="play-hand play-hand--hidden" aria-label={`${view.opponent.name} hand (hidden)`}>
-          {Array.from({ length: view.opponent.handCount }).map((_, i) => (
-            <CardBack key={i} index={i} />
-          ))}
-          {view.opponent.handCount === 0 && <span className="seat__empty">Empty hand</span>}
-        </div>
-      </div>
+      <BoardScene
+        view={view}
+        viewer={masked.viewer}
+        boardRootRef={boardRootRef}
+        selfInteraction={selfInteraction}
+        opponentInteraction={opponentInteraction}
+        jails={jails}
+        onInspectCard={setZoomed}
+        /* This client holds a MASKED view and cannot know what is modifying a
+           permanent, and `CardFace` draws an empty breakdown as "nothing is" —
+           a different and false claim. So the absence is named, not rendered as
+           a zero. */
+        provenanceUnavailableReason={PROVENANCE_UNAVAILABLE_ONLINE}
+        onGraveyardClick={() => setGraveyardOpen((open) => !open)}
+        onExileClick={(seat) => setExileOpen((open) => (open === seat ? null : seat))}
+        drag={drag}
+        dropRef={dropRef}
+        combatDraft={combatDraft}
+        measureKey={frame}
+        /* ⚠️ UX-15 IS NOT REACHED HERE, AND THE CONSTANT SAYS WHY: the server's
+           `state` message carries a masked view plus pre-formatted log STRINGS,
+           never the `GameEvent` stream a damage sequence is derived from. When
+           the protocol carries one, this line is the whole change. */
+        damage={NO_DAMAGE_SOURCE}
+        rail={<ServerLog lines={log} />}
+        selfZonePanels={
+          <>
+            {/* The opened graveyard. Flashback casts arrive in `legalActions` but the
+                hand was the only clickable zone, so they were unreachable online —
+                this is that affordance, routed through the same `activateCard`. */}
+            {graveyardOpen && (
+              <ZonePanel
+                zone="graveyard"
+                ownerName={view.self.name}
+                view={graveyardPanelCards}
+                onActivate={(id) => activateCard(id, 'graveyard')}
+                onClose={() => setGraveyardOpen(false)}
+              />
+            )}
+            {/* The opened EXILE — the same panel, the same funnel, mounted on BOTH
+                boards because the graveyard's was and a surface that reaches only
+                one of the two is the drift §3.143 GAP-20 was written about. */}
+            {exileSeat !== null && exilePanelView !== null && (
+              <ZonePanel
+                zone="exile"
+                ownerName={exileSeat.name}
+                view={exilePanelView}
+                onActivate={(id) => activateCard(id, 'exile')}
+                onClose={() => setExileOpen(null)}
+              />
+            )}
+          </>
+        }
+      />
 
-      {/* Center: stack + server log.
-
-          §3.143 / UX-1 + UX-2 — the stack shows real card faces and floats over
-          the board instead of sharing this column, exactly as on the hotseat
-          board. `board-fit.css` narrows the two-column grid to one when no
-          `.stack-panel--column` is inside, so the log takes the whole column and
-          the battlefield loses no height (report 20260901_204618, already paid
-          for once). `placement="floating"` is absolute against `.play-board`
-          (styles.css gives it `position: relative`), not against this grid cell.
+      {/*
+        §3.143 / UX-1 + UX-2 — the stack shows real card faces and FLOATS over the
+        board instead of sharing a column with the log, exactly as on the hotseat
+        board. `placement="floating"` is absolute against `.play-board`
+        (styles.css gives it `position: relative`), and it is mounted OUTSIDE the
+        scene: an absolutely-positioned descendant of a transformed box is
+        positioned against that box and tilted with it.
       */}
-      <div className="play-board__center">
-        <StackPanel
-          stack={stackFacts}
-          names={names}
-          nameOf={nameOfInstance}
-          faceOf={faceOfInstance}
-          viewer={masked.viewer}
-          placement="floating"
-        />
-        <ServerLog lines={log} />
-      </div>
+      <StackPanel
+        stack={stackFacts}
+        names={names}
+        nameOf={nameOfInstance}
+        faceOf={faceOfInstance}
+        viewer={masked.viewer}
+        placement="floating"
+      />
 
-      {/* Viewer (bottom) — own hand face-up. The seat panel doubles as the drag-to-
-          play drop zone: it lights up while a card is in flight, and releasing a
-          dragged card over it plays that card (same action as clicking it). */}
-      <div className="play-board__self" {...seatInspectProps}>
-        <div
-          ref={dropRef}
-          className={`drop-zone${drag ? ' drop-zone--active' : ''}${drag?.overDrop ? ' drop-zone--over' : ''}`}
-        >
-          <SeatPanel
-            seat={view.self}
-            isActive={view.activePlayer === view.self.id}
-            hasPriority={view.priorityPlayer === view.self.id}
-            interaction={selfInteraction}
-            onGraveyardClick={() => setGraveyardOpen((open) => !open)}
-            onExileClick={() => setExileOpen((open) => (open === view.self.id ? null : view.self.id))}
-            jails={jails}
-            onInspectCard={setZoomed}
-          />
-        </div>
-        {/* The opened graveyard. Flashback casts arrive in `legalActions` but the
-            hand was the only clickable zone, so they were unreachable online —
-            this is that affordance, routed through the same `activateCard`. */}
-        {graveyardOpen && (
-          <ZonePanel
-            zone="graveyard"
-            ownerName={view.self.name}
-            view={graveyardPanelCards}
-            onActivate={(id) => activateCard(id, 'graveyard')}
-            onClose={() => setGraveyardOpen(false)}
-          />
-        )}
-        {/* The opened EXILE — the same panel, the same funnel, mounted on BOTH
-            boards because the graveyard's was and a surface that reaches only
-            one of the two is the drift §3.143 GAP-20 was written about. */}
-        {exileSeat !== null && exilePanelView !== null && (
-          <ZonePanel
-            zone="exile"
-            ownerName={exileSeat.name}
-            view={exilePanelView}
-            onActivate={(id) => activateCard(id, 'exile')}
-            onClose={() => setExileOpen(null)}
-          />
-        )}
+      {/*
+        YOUR HAND IS OUTSIDE THE SCENE (UX-9). A tilted hand is unreadable, and
+        under `transform-style: flat` — which is all this board can have, see
+        board-scene.css — there is no counter-rotation that undoes the parent's
+        projection. It used to sit INSIDE the viewer's seat region here, which is
+        the one place the tilt would have made it illegible.
+      */}
         <div
           className="play-hand"
           aria-label={`${view.self.name} hand`}
+          data-anim-anchor={`hand:${view.self.id}`}
           {...dragHandProps}
           onDragStart={(e) => e.preventDefault()}
         >
@@ -1191,7 +1161,6 @@ export function OnlineBoard({
           })}
           {(view.self.hand?.length ?? 0) === 0 && <span className="seat__empty">Empty hand</span>}
         </div>
-      </div>
 
       {zoomed && <CardZoomOverlay {...zoomed} onClose={() => setZoomed(null)} />}
 
@@ -1419,9 +1388,6 @@ export function OnlineBoard({
           {toast}
         </div>
       )}
-
-      {/* Blocker→attacker lines (§3.57) — same overlay as the hotseat board. */}
-      <CombatLines lines={combatLines} containerRef={boardRootRef} measureKey={frame} />
 
       {/* §10 — the board is holding combat on screen so the blocks that were just
           declared, and the damage that follows them, can actually be read. The

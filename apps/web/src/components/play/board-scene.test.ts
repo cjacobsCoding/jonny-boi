@@ -58,7 +58,41 @@ const sceneRules = cssRules(sceneCss);
 const boardFitCss = stylesheet('./board-fit.css');
 const clarityCss = stylesheet('./board-clarity.css');
 const gameFxCss = stylesheet('./game-fx.css');
-const playBoard = read('./PlayBoard.tsx');
+const boardScene = read('./BoardScene.tsx');
+
+/**
+ * The two files that MOUNT the scene. Both, always: the whole point of
+ * `BoardScene` is that a rule proved on one board is a rule on the other, and a
+ * guard that only ever reads `PlayBoard.tsx` is how the fork got here.
+ */
+const MOUNTING_BOARDS = [
+  ['PlayBoard.tsx', read('./PlayBoard.tsx')],
+  ['OnlineBoard.tsx', read('../online/OnlineBoard.tsx')],
+] as const;
+
+/**
+ * The `<BoardScene … />` element as WRITTEN, brace-matched from the tag name to
+ * its own `/>`.
+ *
+ * Positional (`indexOf(x) > indexOf(sceneEnd)`) was the old shape of this check
+ * and it cannot survive the extraction: the scene now takes JSX SLOTS (`rail`,
+ * `selfZonePanels`), so "appears later in the file" no longer means "is outside
+ * the scene". This reads the element itself, which is the thing the rule is
+ * actually about — anything inside these braces is a descendant of a
+ * transformed box.
+ */
+function sceneMount(source: string): string {
+  const open = source.indexOf('<BoardScene');
+  expect(open, 'this board does not mount the scene at all').toBeGreaterThan(0);
+  let depth = 0;
+  for (let i = open; i < source.length; i += 1) {
+    const ch = source[i];
+    if (ch === '{') depth += 1;
+    else if (ch === '}') depth -= 1;
+    else if (ch === '/' && source[i + 1] === '>' && depth === 0) return source.slice(open, i + 2);
+  }
+  throw new Error('the <BoardScene …> element is never closed');
+}
 
 function ruleFor(rules: CssRule[], selector: string): CssRule | undefined {
   return rules.find((r) => r.selector.split(',').some((s) => s.trim() === selector));
@@ -116,45 +150,81 @@ describe('every fixed overlay is a SIBLING of the scene, not a descendant', () =
   // Each of these is `position: fixed` (or absolute, for the arcs) and measures
   // in viewport coordinates. Inside a transformed ancestor, every one of them is
   // re-rooted and mis-placed — silently, with no error anywhere.
-  const OVERLAYS = [
-    '<CardZoomOverlay',
-    '<ChoicePrompt',
-    '<AbilityMenuPrompt',
-    '<AbilityTargetPrompt',
-    'className="target-prompt"',
-    'className="play-toast"',
-    '<RevealBanner',
-    '<StopsMenu',
-    '<CombatLines',
-    '<AnimationLayer',
-    '<VfxLayer',
-    '<DamageLayer',
-    '<CombatStage',
-    '<SpellHoldCard',
-    '<CombatHoldBanner',
-    '<OpponentActionFeed',
-    '<StackPanel',
-  ] as const;
 
-  const sceneEnd = playBoard.indexOf('</StagedPermanentsContext.Provider>');
+  /** The three the SCENE owns: they must sit after it closes, in its own file. */
+  const SCENE_OWNED = ['<CombatLines', '<DamageLayer', '<CombatStage'] as const;
 
-  it('the scene really is opened and closed in the board', () => {
-    expect(playBoard).toContain('<div className="board-scene">');
+  const sceneEnd = boardScene.indexOf('</StagedPermanentsContext.Provider>');
+
+  it('the scene really is opened and closed in `BoardScene`', () => {
+    expect(boardScene).toContain('<div className="board-scene">');
+    expect(boardScene).toContain('<div className="board-scene__table">');
     expect(sceneEnd).toBeGreaterThan(0);
   });
 
-  for (const overlay of OVERLAYS) {
-    it(`${overlay} is outside the scene`, () => {
-      const at = playBoard.indexOf(overlay);
+  for (const overlay of SCENE_OWNED) {
+    it(`${overlay} is mounted AFTER the scene closes`, () => {
+      const at = boardScene.indexOf(overlay);
       expect(at, `${overlay} is not mounted at all`).toBeGreaterThan(0);
       expect(at).toBeGreaterThan(sceneEnd);
     });
   }
 
-  it('the viewer’s OWN hand is outside the scene too — a tilted hand is unreadable', () => {
-    const hand = playBoard.indexOf('aria-label={`${view.self.name} hand`}');
-    expect(hand).toBeGreaterThan(sceneEnd);
-  });
+  /** What each board still mounts itself, and must never hand to the scene. */
+  const BOARD_OVERLAYS: Readonly<Record<string, readonly string[]>> = {
+    'PlayBoard.tsx': [
+      '<CardZoomOverlay',
+      '<ChoicePrompt',
+      '<AbilityMenuPrompt',
+      '<AbilityTargetPrompt',
+      'className="play-toast"',
+      '<RevealBanner',
+      '<StopsMenu',
+      '<AnimationLayer',
+      '<VfxLayer',
+      '<SpellHoldCard',
+      '<CombatHoldBanner',
+      '<OpponentActionFeed',
+      '<StackPanel',
+    ],
+    'OnlineBoard.tsx': [
+      '<CardZoomOverlay',
+      '<ChoicePrompt',
+      '<AbilityMenuPrompt',
+      '<AbilityTargetPrompt',
+      'className="target-prompt"',
+      'className="play-toast"',
+      '<CombatHoldBanner',
+      '<StackPanel',
+    ],
+  };
+
+  for (const [name, source] of MOUNTING_BOARDS) {
+    const mount = (): string => sceneMount(source);
+
+    it(`${name} keeps every one of its own overlays OUT of the scene element`, () => {
+      const inside = mount();
+      for (const overlay of BOARD_OVERLAYS[name] ?? []) {
+        expect(source.indexOf(overlay), `${name}: ${overlay} is not mounted at all`).toBeGreaterThan(0);
+        expect(inside, `${name}: ${overlay} was passed INTO the scene`).not.toContain(overlay);
+      }
+    });
+
+    it(`${name}: the viewer’s OWN hand is outside the scene — a tilted hand is unreadable`, () => {
+      const hand = 'aria-label={`${view.self.name} hand`}';
+      expect(source, `${name} does not render the viewer's hand`).toContain(hand);
+      expect(mount(), `${name} put the hand inside the tilted scene`).not.toContain(hand);
+    });
+
+    it(`${name} spreads the scene's own custom properties on \`.play-board\``, () => {
+      // They cannot live on `.board-scene`: board-fit.css declares
+      // `--play-board-right-overlay-inset` on `.play-board` out of
+      // `--play-log-rail-w`, and a custom property set on a DESCENDANT cannot
+      // feed an ancestor's declaration.
+      expect(source).toContain('useBoardSceneVars()');
+      expect(source).toMatch(/className="play-board"[^>]*style=\{sceneVars\}/);
+    });
+  }
 });
 
 describe('board-scene.css contains no literal that affects behaviour or feel', () => {
