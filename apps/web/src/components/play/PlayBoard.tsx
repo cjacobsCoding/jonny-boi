@@ -1,14 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type MouseEvent as ReactMouseEvent,
-  type ReactElement,
-} from 'react';
-import { createRng, opponentOf } from '@jonny-boi/core';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { createRng } from '@jonny-boi/core';
 import { createDefaultAiRegistry, DEFAULT_PILOT_ID } from '@jonny-boi/ai';
 import type {
   CardDefinition,
@@ -28,7 +19,7 @@ import type {
   CycleOption,
   SubmitResult,
 } from '../../lib/play/session.js';
-import { buildBoardView, explainForFace, type BoardPermanent } from '../../lib/play/view-model.js';
+import { buildBoardView, explainForFace } from '../../lib/play/view-model.js';
 /**
  * §3.143 / UX-3..UX-5 + the commit half of UX-7 — THE CAST TRANSACTION.
  *
@@ -53,17 +44,12 @@ import {
   stepLabel,
   TOAST_MS,
   COPILOT_ADVICE_SEED,
-  BOARD_3D_CONFIG,
-  BOARD_LAYOUT_CONFIG,
-  COMBAT_ADVANCE_CONFIG,
   PROPOSAL_CONFIG,
-  SPELL_HOLD_CONFIG,
-  TAP_ROTATION_CONFIG,
 } from '../../lib/play/play-config.js';
-import { SeatPanel, type PermInteraction } from './SeatPanel.js';
+import { type PermInteraction } from './SeatPanel.js';
 import { StackPanel } from './StackPanel.js';
 import { GameLog } from './GameLog.js';
-import { PlayCard, CardBack } from './PlayCard.js';
+import { PlayCard } from './PlayCard.js';
 import { DRAG_ID_ATTR, useDragToPlay } from '../../lib/play/useDragToPlay.js';
 import { CardZoomOverlay, type ZoomedCard } from './CardZoomOverlay.js';
 import { ChoicePrompt } from './ChoicePrompt.js';
@@ -104,11 +90,12 @@ import {
 } from '../../lib/play/optional-trigger.js';
 import { StopsMenu } from './StopsMenu.js';
 import './board-clarity.css';
-import './board-scene.css';
-import { combatArcPairs } from '../../lib/play/combat-lines.js';
-import { CombatStage, type StageEntry } from './CombatStage.js';
-import { NO_STAGED_PERMANENTS, StagedPermanentsContext } from './combat-stage-context.js';
-import { STAGED_HOME_TILE_OPACITY } from '../../lib/play/combat-stage.js';
+import {
+  BoardScene,
+  useBoardSceneVars,
+  type CombatDraft,
+  type DamageSource,
+} from './BoardScene.js';
 import type { CombatHold } from '../../lib/play/combat-hold.js';
 import { CombatHoldBanner } from './CombatHoldBanner.js';
 import { CardFace } from './CardFace.js';
@@ -121,16 +108,9 @@ import {
   type KnownRef,
 } from '../../lib/play/option-labels.js';
 import type { AnimationCardInfo } from '../../lib/play/animations.js';
-import {
-  AnimationLayer,
-  DamageLayer,
-  useDamageSequence,
-  usePrefersReducedMotion,
-  useZoneAnimations,
-} from './AnimationLayer.js';
+import { AnimationLayer, useZoneAnimations } from './AnimationLayer.js';
 import { VfxLayer, useGameVfx } from './VfxLayer.js';
 import { OpponentActionFeed, useOpponentFeed } from './OpponentActionFeed.js';
-import { CombatLines } from './CombatLines.js';
 import { SoundEngine } from '../../lib/play/sound-engine.js';
 import { useGameSounds } from '../../lib/play/useGameSounds.js';
 import { loadSoundPrefs, saveSoundPrefs, type SoundPrefs } from '../../lib/play/sound-prefs.js';
@@ -993,68 +973,6 @@ export function PlayBoard({
    */
   const [zoomed, setZoomed] = useState<ZoomedCard | null>(null);
 
-  /**
-   * Every permanent on the table by id — the board's answer to "what is #7, as
-   * the player can currently see it?". Built from the SAME `BoardView` the seats
-   * are drawn from, so the zoom cannot disagree with the tile it was opened
-   * from; a second lookup would be a second answer (rule 12).
-   */
-  const permById = useMemo(() => {
-    const map = new Map<InstanceId, BoardPermanent>();
-    for (const perm of [...view.self.permanents, ...view.opponent.permanents]) {
-      map.set(perm.instanceId, perm);
-    }
-    return map;
-  }, [view]);
-
-  /**
-   * §3.143 wave 3 / GAP-C — A WAY IN FROM THE BATTLEFIELD.
-   *
-   * The zoom had exactly two doors — a hand card and the jail peek — so the
-   * cards a whole game is played with were the ones a player could never open
-   * full-size with a pointer. (`CardHover`'s preview is deliberately
-   * `pointer-events: none`, so its glossary pops are visible and not hoverable;
-   * this overlay is the only place UX-17.4 is genuinely reachable with a mouse.)
-   *
-   * DELEGATED from the seat wrapper rather than added to the tile, because
-   * `SeatPanel` and `BoardPermanentTile` belong to another lane — `data-perm-home`
-   * is the anchor those files already publish and it is enough.
-   *
-   * TWO gestures, and the split is deliberate:
-   *  - RIGHT-CLICK anywhere on a tile, matching the hand card's own context
-   *    menu, so one gesture inspects a card wherever it sits;
-   *  - a PLAIN CLICK only when the click did not land on a control. A tile is a
-   *    `<button>` exactly when it is selectable (an attacker, a block, a land to
-   *    tap), and hijacking that click would cost the player a real move — while
-   *    a click on a NON-interactive permanent does nothing at all today, which
-   *    is the affordance a touch device can reach.
-   */
-  const inspectPermanentFrom = useCallback(
-    (event: ReactMouseEvent, requireInert: boolean): void => {
-      const from = event.target instanceof Element ? event.target : null;
-      if (from === null) return;
-      if (requireInert && from.closest('button') !== null) return;
-      const tile = from.closest('[data-perm-home]');
-      const raw = tile?.getAttribute('data-perm-home');
-      if (raw === null || raw === undefined) return;
-      const perm = permById.get(Number(raw) as InstanceId);
-      if (perm === undefined) return;
-      event.preventDefault();
-      setZoomed({
-        cardId: perm.cardId,
-        name: perm.name,
-        isCreature: perm.isCreature,
-        ...(perm.explanation !== undefined ? { explanation: perm.explanation } : {}),
-      });
-    },
-    [permById],
-  );
-
-  /** The two handlers every seat gets, spread onto its wrapper. */
-  const seatInspectProps = {
-    onContextMenu: (event: ReactMouseEvent) => inspectPermanentFrom(event, false),
-    onClick: (event: ReactMouseEvent) => inspectPermanentFrom(event, true),
-  };
 
   // --- §3.57 clarity systems -------------------------------------------------------
   /** The board container: the combat-lines canvas and the animation anchors' root. */
@@ -1488,115 +1406,31 @@ export function PlayBoard({
   const statusText = `Turn ${view.turnNumber} · ${stepLabel(step)} · ${names[view.activePlayer]}'s turn`;
 
   /**
-   * §3.143 / UX-14 — the fiery arcs, both directions. `combatArcPairs` is the
-   * funnel: blocker→attacker as before, PLUS attacker→(player | planeswalker),
-   * which the board could never draw because `blockerLinePairs` knew only one
-   * pair kind. `defendingSeat` is required for an attack on a PLAYER to draw
-   * anything — who defends is a rules question (CR 506.2) core owns, and the
-   * arc module deliberately refuses to re-answer it.
+   * §3.143 / UX-12 + UX-14 — the selections the player is still CLICKING, handed
+   * to the scene so it can draw them dashed. The scene decides what a draft MEANS
+   * (an arc, never an advance); this only says what has been ticked.
    */
-  const combatLines = combatArcPairs({
-    step,
-    declaredBlocks: view.combat?.blocks,
-    draftAssign: blockAssign,
-    declaredAttackers: session.state.combat?.attackers,
-    ...(session.state.combat?.attackTargets !== undefined
-      ? { attackTargets: session.state.combat.attackTargets }
-      : {}),
-    defendingSeat: opponentOf(session.state.activePlayer),
-    draftAttackers: chosenAttackers,
-    draftAttackTargets: walkerAssign,
-  });
+  const combatDraft: CombatDraft = {
+    attackers: chosenAttackers,
+    attackTargets: walkerAssign,
+    blocks: blockAssign,
+  };
 
   /**
-   * §3.143 / UX-12 + UX-13 — WHICH CARDS WALK OUT.
-   *
-   * Declared attackers and declared blockers only. A DRAFT selection does not
-   * advance: while the player is still clicking, the cards must stay where they
-   * are so the next click lands on the tile they aimed at — the arcs already
-   * show the draft, dashed, which is the right channel for "not yet decided".
+   * §3.143 / UX-15 — the hotseat board runs the engine, so it HAS the event
+   * stream the damage sequence is derived from, and the last-known tile rects to
+   * fly the numbers between. (`NO_DAMAGE_SOURCE` is what a client without an
+   * event stream passes instead — see `BoardScene.tsx`.)
    */
-  const stageEntries = useMemo((): readonly StageEntry[] => {
-    const combat = session.state.combat;
-    if (!combat || !combat.attackersDeclared) return [];
-    const permById = new Map<InstanceId, (typeof view.self.permanents)[number]>();
-    for (const seat of [view.self, view.opponent]) {
-      for (const perm of seat.permanents) permById.set(perm.instanceId, perm);
-    }
-    // The attacker's seat is the ACTIVE player's; everyone advances toward the
-    // midline, so the sign is "am I the viewer's seat or the far one".
-    const towardFor = (controller: PlayerId): 1 | -1 => (controller === viewer ? -1 : 1);
-    const entries: StageEntry[] = [];
-    for (const id of combat.attackers) {
-      const perm = permById.get(id);
-      if (perm) entries.push({ perm, role: 'attacker', toward: towardFor(perm.controller) });
-    }
-    if (combat.blockersDeclared) {
-      for (const [blockerId, attackerId] of Object.entries(combat.blocks)) {
-        const perm = permById.get(Number(blockerId));
-        if (perm) {
-          entries.push({
-            perm,
-            role: 'blocker',
-            toward: towardFor(perm.controller),
-            meets: attackerId,
-          });
-        }
-      }
-    }
-    return entries;
-  }, [session, view, viewer]);
+  const damageSource: DamageSource = { events: session.events, tileRectOf };
 
   /**
-   * Which cards are OUT, so their home tiles hand `data-perm-id` over to the
-   * copy the player is actually looking at. Delivered through a CONTEXT rather
-   * than a prop because `SeatPanel` renders every tile and belongs to no lane —
-   * see `combat-stage-context.ts`.
+   * The tabletop's own numbers. Built by the SCENE and spread on `.play-board`
+   * here, because `board-fit.css` declares `--play-board-right-overlay-inset` on
+   * this element out of `--play-log-rail-w`: a custom property set on a
+   * descendant cannot feed an ancestor's declaration.
    */
-  const [stagedIds, setStagedIds] = useState<ReadonlySet<InstanceId>>(NO_STAGED_PERMANENTS);
-
-  /** The element between the two seats: its vertical centre IS the midline. */
-  const midlineRef = useRef<HTMLDivElement>(null);
-
-  /** §3.143 / UX-15 — damage travels from source to recipient (lane H). */
-  const { beats: damageBeats, retire: retireDamage } = useDamageSequence(session.events);
-
-  /**
-   * §3.143 / UX-9 — the tabletop's own numbers, handed to the CSS as custom
-   * properties so `board-scene.css` contains no literal at all. A player who
-   * asked for reduced motion gets `reducedMotionTiltDeg` — a NUMBER, not a
-   * boolean, so a designer can pick a gentler tilt without a code change. A
-   * static perspective is not literally motion, but `prefers-reduced-motion` is
-   * the only signal browsers give for vestibular discomfort, and a tilted plane
-   * with tiles sliding across it is exactly that trigger.
-   */
-  const reducedMotion = usePrefersReducedMotion();
-  const sceneVars = {
-    '--board-perspective-px': `${BOARD_3D_CONFIG.perspectivePx}px`,
-    '--board-tilt-deg': `${reducedMotion ? BOARD_3D_CONFIG.reducedMotionTiltDeg : BOARD_3D_CONFIG.tiltDeg}deg`,
-    '--board-origin-x': `${BOARD_3D_CONFIG.perspectiveOriginXFraction * 100}%`,
-    '--board-origin-y': `${BOARD_3D_CONFIG.perspectiveOriginYFraction * 100}%`,
-    '--board-scene-ms': `${BOARD_3D_CONFIG.sceneTransitionMs}ms`,
-    '--perm-turn-ms': `${TAP_ROTATION_CONFIG.turnMs}ms`,
-    '--perm-tapped-opacity': String(TAP_ROTATION_CONFIG.tappedOpacity),
-    '--perm-tapped-grayscale': String(TAP_ROTATION_CONFIG.tappedGrayscaleFraction),
-    '--perm-staged-opacity': String(STAGED_HOME_TILE_OPACITY),
-    '--combat-advance-ms': `${COMBAT_ADVANCE_CONFIG.advanceMs}ms`,
-    '--spell-hold-fade-ms': `${SPELL_HOLD_CONFIG.fadeMs}ms`,
-    // §3.143 wave 3 — the ARRANGEMENT's own numbers (BOARD_LAYOUT_CONFIG). The
-    // same rule as the tilt's: board-fit.css says how the board reads them and
-    // contains none of them.
-    '--play-log-rail-w': `${BOARD_LAYOUT_CONFIG.logRailWidthRem}rem`,
-    '--board-midline-h': `${BOARD_LAYOUT_CONFIG.midlineThicknessPx}px`,
-    '--play-tile-far-scale': String(BOARD_LAYOUT_CONFIG.farSeatTileScale),
-    '--play-land-tile-scale': String(BOARD_LAYOUT_CONFIG.landTileScale),
-    '--play-backs-scale': String(BOARD_LAYOUT_CONFIG.opponentBacksScale),
-    // The tile's own SHAPE. Distinct from the per-tile `--perm-footprint`
-    // (which is 1 or the ratio depending on whether THAT card is tapped): this
-    // one is the card's aspect unconditionally, because an untapped tile is a
-    // card standing up and a tapped one is the same card lying down.
-    '--perm-aspect': String(TAP_ROTATION_CONFIG.footprintRatio),
-  } as CSSProperties;
+  const sceneVars = useBoardSceneVars();
 
   // The §3.57 hint rule: the copy must describe the buttons that exist. The
   // attack window is the ACTIVE player's own declare step, pre-declaration;
@@ -1810,129 +1644,58 @@ export function PlayBoard({
         </button>
       </div>
 
-      {/*
-        THE TABLETOP (UX-9). Only the two seats and the centre column are tilted
-        — every modal, every overlay and the viewer's own hand are SIBLINGS of
-        this box, so none of them is projected, re-rooted or mis-measured.
-        The staged-permanent context wraps it because `SeatPanel` renders the
-        tiles and cannot be given a prop.
-      */}
-      <StagedPermanentsContext.Provider value={stagedIds}>
-      {/*
-        THE STAGE: the table, and the rail beside it. A ROW, which is the whole
-        of wave 3's layout fix — the game log used to sit in the COLUMN between
-        the two battlefields, where it cost 171px of a 600px board (measured at
-        1280×800, nine permanents), owned the height that made every tile tiny,
-        and put a scrolling history on the one line a table reserves for combat.
-        Moved sideways it costs the table no height at all, and the midline
-        below is a seam again. Below `railFoldsBelowPx` the stage folds back to
-        a column — a phone has no width to spend (board-fit.css rule 6).
-      */}
-      <div className="board-stage">
-      <div className="board-scene">
-      <div className="board-scene__table">
-      {/*
-        THE FAR EDGE OF THE TABLE. The opponent's fanned backs are drawn ABOVE
-        their battlefield, not below it: on a real table the player opposite
-        holds their hand at their own edge, and the old order put their hand
-        between their creatures and the midline — the one place nothing belongs.
-      */}
-      <div className="play-board__opponent" {...seatInspectProps}>
-        <div
-          className="play-hand play-hand--hidden"
-          aria-label={`${view.opponent.name} hand (hidden)`}
-          data-anim-anchor={`hand:${view.opponent.id}`}
-        >
-          {Array.from({ length: view.opponent.handCount }).map((_, i) => (
-            <CardBack key={i} index={i} />
-          ))}
-          {view.opponent.handCount === 0 && <span className="seat__empty">Empty hand</span>}
-        </div>
-        <SeatPanel
-          seat={view.opponent}
-          isActive={view.activePlayer === view.opponent.id}
-          hasPriority={view.priorityPlayer === view.opponent.id}
-          interaction={opponentInteraction}
-          onExileClick={() => setExileOpen((open) => (open === view.opponent.id ? null : view.opponent.id))}
-          jails={jails}
-          onInspectCard={setZoomed}
-        />
-      </div>
-
-      {/*
-        THE MIDLINE — a seam on the table, and the element `PlayBoard` measures
-        UX-12's midline clamp from. It is measured rather than recomputed from
-        seat heights, which is the one answer that stays true when board-fit.css
-        squeezes a seat.
-
-        ⚠️ It is NOT `.play-board__center` any more. That class still names the
-        log/stack column on the ONLINE board (`OnlineBoard.tsx`), which board-fit
-        .css sizes as the designated first-to-yield; reusing it for a 2px seam
-        would have one selector answering two questions (rule 12). Decorative,
-        so it is hidden from assistive tech: a screen reader reads the two seats
-        in order and a line between them says nothing.
-      */}
-      <div className="board-midline" ref={midlineRef} aria-hidden="true" />
-
-      {/* Viewer (bottom) — own hand face-up. */}
-      <div className="play-board__self" {...seatInspectProps}>
-        {/* The seat panel doubles as the drag-to-play drop zone, exactly as on
-            the online board: dashed while a card is in flight, solid when over. */}
-        <div
-          ref={dropRef}
-          className={`drop-zone${drag ? ' drop-zone--active' : ''}${drag?.overDrop ? ' drop-zone--over' : ''}`}
-        >
-          <SeatPanel
-            seat={view.self}
-            isActive={view.activePlayer === view.self.id}
-            hasPriority={isViewersPriority}
-            interaction={selfInteraction}
-            onGraveyardClick={() => setGraveyardOpen((open) => !open)}
-            onExileClick={() => setExileOpen((open) => (open === view.self.id ? null : view.self.id))}
-            jails={jails}
-            onInspectCard={setZoomed}
+      <BoardScene
+        view={view}
+        viewer={viewer}
+        boardRootRef={boardRootRef}
+        selfInteraction={selfInteraction}
+        opponentInteraction={opponentInteraction}
+        jails={jails}
+        onInspectCard={setZoomed}
+        onGraveyardClick={() => setGraveyardOpen((open) => !open)}
+        onExileClick={(seat) => setExileOpen((open) => (open === seat ? null : seat))}
+        drag={drag}
+        dropRef={dropRef}
+        combatDraft={combatDraft}
+        measureKey={session}
+        damage={damageSource}
+        rail={
+          <GameLog
+            events={session.events}
+            resolvers={{ name: session.nameOf, playerName: session.playerName }}
           />
-        </div>
-        {/* The opened graveyard. Flashback casts live in `legalActions` but the
-            hand was the only clickable zone, so they were unreachable — this is
-            that affordance, routed through the same cast chokepoint. */}
-        {graveyardOpen && (
-          <ZonePanel
-            zone="graveyard"
-            ownerName={view.self.name}
-            view={graveyardPanelCards}
-            onActivate={onGraveyardCardClick}
-            onClose={() => setGraveyardOpen(false)}
-          />
-        )}
-        {/* The opened EXILE — the last zone on this board that a player could
-            only read as a number (UX-10). Either seat's, because a jailed or
-            suspended card sits in its owner's exile; the SAME panel component,
-            because "list a zone's cards, hoverable, some castable" is one
-            question (rule 12). */}
-        {exileSeat !== null && exilePanelView !== null && (
-          <ZonePanel
-            zone="exile"
-            ownerName={exileSeat.name}
-            view={exilePanelView}
-            onActivate={onExileCardClick}
-            onClose={() => setExileOpen(null)}
-          />
-        )}
-      </div>
-      </div>{/* .board-scene__table */}
-      </div>{/* .board-scene */}
-      {/*
-        THE LOG'S RAIL. Outside `.board-scene`, so the history is never tilted:
-        it is the one region on this surface made entirely of words, and words
-        on a slant is exactly the legibility cost UX-9 must not pay. It is a
-        `<aside>` because that is what it is — the table is the article.
-      */}
-      <aside className="board-rail" aria-label="Game log">
-        <GameLog events={session.events} resolvers={{ name: session.nameOf, playerName: session.playerName }} />
-      </aside>
-      </div>{/* .board-stage */}
-      </StagedPermanentsContext.Provider>
+        }
+        selfZonePanels={
+          <>
+            {/* The opened graveyard. Flashback casts live in `legalActions` but the
+                hand was the only clickable zone, so they were unreachable — this is
+                that affordance, routed through the same cast chokepoint. */}
+            {graveyardOpen && (
+              <ZonePanel
+                zone="graveyard"
+                ownerName={view.self.name}
+                view={graveyardPanelCards}
+                onActivate={onGraveyardCardClick}
+                onClose={() => setGraveyardOpen(false)}
+              />
+            )}
+            {/* The opened EXILE — the last zone on this board that a player could
+                only read as a number (UX-10). Either seat's, because a jailed or
+                suspended card sits in its owner's exile; the SAME panel component,
+                because "list a zone's cards, hoverable, some castable" is one
+                question (rule 12). */}
+            {exileSeat !== null && exilePanelView !== null && (
+              <ZonePanel
+                zone="exile"
+                ownerName={exileSeat.name}
+                view={exilePanelView}
+                onActivate={onExileCardClick}
+                onClose={() => setExileOpen(null)}
+              />
+            )}
+          </>
+        }
+      />
 
       {/*
         YOUR HAND IS OUTSIDE THE SCENE (UX-9). A tilted hand is unreadable, and
@@ -2496,9 +2259,6 @@ export function PlayBoard({
         />
       )}
 
-      {/* Blocker→attacker lines (§3.57) — decorative overlay, tested pairing rule. */}
-      <CombatLines lines={combatLines} containerRef={boardRootRef} measureKey={session} />
-
       {/* Transient zone-change sprites (§3.57) — draw/mill/discard/death. */}
       <AnimationLayer
         sprites={sprites}
@@ -2511,25 +2271,6 @@ export function PlayBoard({
         boardRootRef={boardRootRef}
         tileRectOf={tileRectOf}
         onDone={retireVfx}
-      />
-      {/* §3.143 / UX-15 — damage TRAVELS from source to recipient, sequenced so
-          first-strike reads as two rounds rather than one blur (lane H). */}
-      <DamageLayer
-        beats={damageBeats}
-        boardRootRef={boardRootRef}
-        tileRectOf={tileRectOf}
-        onDone={retireDamage}
-      />
-      {/* §3.143 / UX-12 + UX-13 — the advanced attackers and blockers. An
-          UNCLIPPED sibling of the scene, because a transform on the tile is
-          clipped by its own row (lib/play/combat-stage.ts names the four
-          clipping boxes and why none of them can be relaxed). */}
-      <CombatStage
-        entries={stageEntries}
-        boardRootRef={boardRootRef}
-        midlineRef={midlineRef}
-        measureKey={session}
-        onPlaced={setStagedIds}
       />
       {/* §3.143 / UX-16 — the opponent's spell, held and inspectable BEFORE it
           resolves. The post-hoc feed below still reports what happened; this is

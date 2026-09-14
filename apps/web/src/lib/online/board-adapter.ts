@@ -39,7 +39,12 @@ import type {
   StackView,
   VisibleHandCard,
 } from '../play/view-model.js';
-import { permanentMarks, poolColorCounts, poolRestrictionLabels } from '../play/view-model.js';
+import {
+  boardCombatView,
+  permanentMarks,
+  poolColorCounts,
+  poolRestrictionLabels,
+} from '../play/view-model.js';
 
 /** The opposite seat. */
 function otherSeat(p: PlayerId): PlayerId {
@@ -184,15 +189,6 @@ export function maskedViewToBoardView(
 ): BoardView {
   const viewer = view.viewer;
   const oppId = otherSeat(viewer);
-  const combat = view.combat
-    ? {
-        attackers: [...view.combat.attackers],
-        blocks: Object.entries(view.combat.blocks).map(([blocker, attacker]) => ({
-          blocker: Number(blocker),
-          attacker,
-        })),
-      }
-    : null;
   return {
     viewer,
     turnNumber: view.turnNumber,
@@ -200,7 +196,7 @@ export function maskedViewToBoardView(
     priorityPlayer: view.priorityPlayer,
     step: view.step,
     stack: stackView(view.stack),
-    combat,
+    combat: boardCombatView(view.combat),
     self: seatView(view.players[viewer], names[viewer], view.battlefield, view.combat),
     opponent: seatView(view.players[oppId], names[oppId], view.battlefield, view.combat),
     gameOver: view.gameOver,
