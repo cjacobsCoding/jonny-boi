@@ -416,3 +416,109 @@ describe('StartingPlayerChoice (§3.125)', () => {
     expect(STARTING_PLAYER_CHOICES).toContain(DEFAULT_STARTING_PLAYER_CHOICE);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The PUBLIC EVENT STREAM — the closed table and the per-seat filter.
+// ---------------------------------------------------------------------------
+
+import {
+  isPublicEventKind,
+  maskEventsForSeat,
+  PUBLIC_EVENT_KINDS,
+  type PublicGameEvent,
+  type SeatEventWindow,
+} from './index.js';
+import type { GameEvent } from '@jonny-boi/core';
+
+/** The window a seat's filter runs in, built from the fixture state. */
+function windowFor(seat: PlayerId): SeatEventWindow {
+  const view = maskStateForSeat(makeState(), seat);
+  return { before: view, after: view };
+}
+
+describe('PUBLIC_EVENT_KINDS — the closed table', () => {
+  it('is frozen, and every row carries the REASON that kind is public', () => {
+    expect(Object.isFrozen(PUBLIC_EVENT_KINDS)).toBe(true);
+    for (const [kind, why] of Object.entries(PUBLIC_EVENT_KINDS)) {
+      expect(typeof why, `${kind} has no stated reason`).toBe('string');
+      expect(why.length, `${kind}'s reason is empty`).toBeGreaterThan(20);
+    }
+  });
+
+  it('REFUSES a kind that is not a row — it does not widen to "looks harmless"', () => {
+    // The three shapes the engine uses to name a card a seat may not have seen:
+    // what was drawn, where a card moved to, and what a card was revealed as.
+    for (const kind of ['drawCard', 'zoneChange', 'cardRevealed', 'cardsLookedAt', 'gameStart'] as const) {
+      expect(isPublicEventKind(kind), `${kind} must not be public`).toBe(false);
+      expect(PUBLIC_EVENT_KINDS).not.toHaveProperty(kind);
+    }
+    expect(isPublicEventKind('damageDealt')).toBe(true);
+  });
+});
+
+describe('maskEventsForSeat — the masking chokepoint’s sibling', () => {
+  it('carries a real combat exchange through, unchanged', () => {
+    const hits: GameEvent[] = [
+      { type: 'stepBegin', step: 'combatDamage', activePlayer: 'A' },
+      { type: 'damageDealt', source: 500, target: 'B', amount: 2, combat: true, round: 'normal' },
+      { type: 'lifeChanged', player: 'B', delta: -2, to: 18 },
+    ];
+    const out = maskEventsForSeat(hits, windowFor('A'));
+    expect(out).toEqual(hits);
+    // …and the OPPONENT sees the identical exchange: combat damage is public to
+    // both seats, so a filter that only fed the attacker would be a new fork.
+    expect(maskEventsForSeat(hits, windowFor('B'))).toEqual(hits);
+  });
+
+  it('DROPS a drawCard — the kind gate, and the leak it exists for', () => {
+    // 901 is in B's hand. A `drawCard` naming it is the exact event that would
+    // tell seat A which card seat B just drew.
+    const drawn: GameEvent[] = [{ type: 'drawCard', player: 'B', instanceId: 901 }];
+    expect(maskEventsForSeat(drawn, windowFor('A'))).toEqual([]);
+    // Not even to the drawing seat's OWN stream: the table is about the KIND,
+    // and a per-seat exception is how a table stops being closed.
+    expect(maskEventsForSeat(drawn, windowFor('B'))).toEqual([]);
+  });
+
+  it('DROPS a PUBLIC kind that names a card this seat cannot see — the id gate', () => {
+    // A counter placed on a card in a hidden zone: `counterAdded` IS a public
+    // kind (counters on a battlefield permanent are public), and this particular
+    // one names 901, which is in B's hand. The kind gate lets it through; only
+    // the id gate stops it, so this reddens alone if the id walk is removed.
+    const sneaky: GameEvent[] = [{ type: 'counterAdded', instanceId: 901, kind: 'time', amount: 1 }];
+    expect(maskEventsForSeat(sneaky, windowFor('A'))).toEqual([]);
+    // The control: the SAME kind naming the public battlefield permanent (500)
+    // travels — otherwise "the id gate works" would be satisfied by a gate that
+    // simply dropped everything.
+    const fine: GameEvent[] = [{ type: 'counterAdded', instanceId: 500, kind: '+1/+1', amount: 1 }];
+    expect(maskEventsForSeat(fine, windowFor('A'))).toEqual(fine);
+  });
+
+  it('remembers what the BEFORE frame showed — a card that has since left every zone', () => {
+    // A token that blocked and died is gone from `after`. Its hits must still
+    // animate, because the seat watched it fight; `before` is the only frame
+    // that still names it.
+    const gone: GameEvent[] = [
+      { type: 'damageDealt', source: 500, target: 'B', amount: 2, combat: true, round: 'normal' },
+    ];
+    const after = maskStateForSeat({ ...makeState(), battlefield: [] }, 'A');
+    const before = maskStateForSeat(makeState(), 'A');
+    expect(maskEventsForSeat(gone, { before, after })).toEqual(gone);
+    // …and with no `before` to remember it by, the honest answer is to drop it.
+    expect(maskEventsForSeat(gone, { before: null, after })).toEqual([]);
+  });
+
+  it('a filtered stream only ever narrows — every survivor is an input, by identity', () => {
+    const mixed: GameEvent[] = [
+      { type: 'drawCard', player: 'B', instanceId: 901 },
+      { type: 'damageDealt', source: 500, target: 'A', amount: 3, combat: true, round: 'normal' },
+      { type: 'zoneChange', instanceId: 901, from: 'library', to: 'hand' },
+      { type: 'creatureDied', instanceId: 500, name: 'Bear' },
+    ];
+    const out: readonly PublicGameEvent[] = maskEventsForSeat(mixed, windowFor('A'));
+    expect(out).toHaveLength(2);
+    // By IDENTITY, not by value: the filter must never mint a new object, which
+    // is the only way it could quietly re-shape what it forwards.
+    for (const event of out) expect(mixed).toContain(event);
+  });
+});
