@@ -100,7 +100,17 @@ export default tseslint.config(
     // Scoped to `apps/web/scripts/` rather than `**/scripts/`, because the
     // repo-root `scripts/verify-deploy.mjs` is pure Node: handing it `document`
     // would turn a real typo there into a silent pass.
-    files: ['apps/web/scripts/verify-*.mjs'],
+    // ⚠️ TWO PREFIXES, BECAUSE THE CONVENTION ANSWERS TWO QUESTIONS AND THEY ARE
+    // NOT THE SAME QUESTION. `verify-*` means "a GATE": it asserts a contract,
+    // exits non-zero when the contract slips, and `harness-wait-budgets.test.ts`
+    // DISCOVERS it by that prefix. `see-*` means "a Puppeteer harness that
+    // LOOKS": it drives the app and prints what it saw, asserting nothing —
+    // `see-online-board.mjs` photographs a real two-seat online game, which
+    // cannot be a gate until someone gives it a contract and falsifies it.
+    // Calling it `verify-*` to get these globals would have enrolled it in the
+    // budget gate under false pretences; leaving it out would have handed it the
+    // same eighteen false `no-undef` errors this comment was written about.
+    files: ['apps/web/scripts/verify-*.mjs', 'apps/web/scripts/see-*.mjs'],
     languageOptions: {
       globals: {
         document: 'readonly',
