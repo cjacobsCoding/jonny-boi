@@ -1,0 +1,631 @@
+/*
+ * THE AFTERMARKET CARD FACE (§3.143 / UX-17) — styling for `CardFace.tsx`.
+ *
+ * ## Every tunable is a named custom property, at the top, with its reason
+ * Frame geometry (where a text box and a P/T box sit on a real Magic card),
+ * treatment weights and the pop's timing all live in `.card-face`'s own block so
+ * a designer changes one value in one place — DESIGN §1.3, and the same
+ * discipline `board-fit.css` applies to the board's scale knobs.
+ *
+ * Values that CROSS lanes (the card's aspect ratio) are not defined here at all:
+ * they arrive as `--card-face-aspect`, set by the component from lane F's
+ * `CARD_ASPECT_HEIGHT_OVER_WIDTH`, because two literals that must stay equal is
+ * the fork rule 12 forbids.
+ *
+ * ## Never colour alone
+ * Item 5 of the brief: "an added ability and a removed one have to be
+ * distinguishable without colour vision". So every treatment carries a shape as
+ * well as a hue — a glyph emitted by the component, plus here a WEIGHT, an
+ * UNDERLINE STYLE and, for a removal, a line-through. Read in greyscale, on a
+ * 96px tile, the four treatments are still four different things.
+ *
+ * ## The pop is dimmed, never `display: none`
+ * `aria-describedby` points at it. A `display: none` target is dropped from the
+ * accessibility tree by most screen readers, which would make the whole feature
+ * sighted-only; `opacity: 0` + `pointer-events: none` keeps it readable to
+ * assistive tech and inert to the mouse.
+ *
+ * ## ⚠️ AN OPEN POP IS PORTALED, SO IT IS STYLED FROM `:root`, NOT FROM `.card-face`
+ * §3.143 wave 2 / GAP-6: the inline pop could never be SEEN on the battlefield —
+ * `.perm` clips (`overflow: hidden`), `.seat__row` clips, and `.perm-turn`'s tap
+ * `transform` re-roots even a `position: fixed` descendant back into that clip.
+ * `CardFace.tsx` therefore `createPortal`s an OPEN pop to `document.body`, where
+ * it is no longer a descendant of `.card-face` — and a portaled element inherits
+ * custom properties from `<body>`, NOT from its React parent. So every tunable
+ * the pop reads is declared at `:root` below: one definition, read identically by
+ * the inline copy and the floating one (rule 12).
+ *
+ * The pop's own `overflow` reasoning is unchanged and still load-bearing INSIDE
+ * the face: the text box stays `overflow: visible` and is anchored by its BOTTOM
+ * edge, so a wordy card's text grows upward over its own art rather than off the
+ * end of the card. (A scroller there would clip the closed pop out of the layout
+ * it is measured in, which is what the floating placement reads.)
+ */
+
+/* The pop's tunables — at the ROOT because an open pop is portaled out of
+ * `.card-face` entirely. See the header. */
+:root {
+  --card-face-pop-w: min(22rem, 80vw);
+  --card-face-pop-ms: 90ms;
+  /* The INLINE (closed, invisible) copy's stacking slot, kept deliberately far
+   * below the play surface's fixed overlays (z40–z70, styles.css). */
+  --card-face-pop-z: 30;
+  /* The FLOATING copy's. It is a child of <body>, so it is a sibling of every
+   * overlay rather than nested under one, and a tooltip a player is actively
+   * pointing at must be on top of whatever it was opened from — including the
+   * zoom overlay (z60) and `CardHover`'s preview panel (z9999, card-hover.css),
+   * which is the surface a card's rules text is read on. */
+  --card-face-pop-float-z: 10000;
+}
+
+.card-face {
+  /* ---- frame geometry -------------------------------------------------- *
+   * Percentages of the CARD, not pixels, because the same component draws at
+   * a 96px tile and a 340px hover. Measured against a modern Magic frame: the
+   * text box occupies roughly the lower third, inset from the border by the
+   * frame's own margin, and the P/T box sits in the bottom-right corner.
+   * They are approximations of a printed frame ON PURPOSE — a scrim under the
+   * live text makes a few percent of drift invisible, where pinning to one
+   * frame generation would break every old-border and full-art card. */
+  --card-face-text-inset: 6%;
+  --card-face-text-bottom: 9%;
+  --card-face-pt-right: 4.5%;
+  --card-face-pt-bottom: 3%;
+
+  /* ---- type ------------------------------------------------------------ *
+   * The live text box is sized from the CARD's width so it scales with the
+   * face at every mount site. `clamp` keeps it readable on a tile and stops it
+   * ballooning on a wide hover. */
+  --card-face-text-size: clamp(0.5rem, calc(var(--card-face-body-scale, 1) * 0.62rem), 0.82rem);
+  --card-face-pt-size: clamp(0.62rem, 1.6dvh, 1rem);
+  /*
+   * The size the text box is drawn at on a READING surface — the zoom overlay
+   * and the hover preview, the two places a player opens to read a card rather
+   * than to glance at it. Bigger than the glance size for a reason that is not
+   * taste: since GAP-E every ability word on those surfaces is a mouse target
+   * for its glossary pop, and a ~10px word is not a target anyone can hit.
+   * ONE declaration, read by `.card-face--zoomed` below and by
+   * `.card-hover-preview__face` in `card-hover.css`.
+   */
+  --card-face-read-text-size: clamp(0.72rem, 1.6dvh, 0.95rem);
+
+  /* ---- scrims ---------------------------------------------------------- *
+   * Opaque enough that printed text beneath cannot be mistaken for live text
+   * (the whole point is that what you read IS the current truth), translucent
+   * enough that the card's art still says which card this is. */
+  --card-face-scrim: rgba(9, 13, 18, 0.86);
+  --card-face-scrim-strong: rgba(9, 13, 18, 0.95);
+
+  /* ---- treatments ------------------------------------------------------ *
+   * Colour is the LAST of three signals here, after the glyph the component
+   * emits and the weight/decoration below. */
+  --card-face-granted: var(--color-accent-soft);
+  --card-face-altered: var(--color-accent-soft);
+  --card-face-removed: var(--color-fg-faint);
+  --card-face-unknown: var(--color-warning);
+
+  /* ---- the 3D scene hook (UX-9) ---------------------------------------- *
+   * When this face is mounted INSIDE the tilted tabletop (lane D's
+   * `.board-scene`), text-bearing chrome has to be counter-rotated or the
+   * numbers a player is reading sit on a slant. Lane D sets this on an ancestor
+   * from `BOARD_3D_CONFIG.counterTiltDeg` — the number stays in lane F's config
+   * and never appears here, because two literals that must stay equal and
+   * opposite is the fork rule 12 forbids.
+   *
+   * 0deg by default, so the hover/zoom face — which is a SIBLING of the scene,
+   * not a descendant — is untouched. */
+  --card-face-counter-tilt-deg: 0deg;
+
+  position: relative;
+  display: block;
+  width: 100%;
+  overflow: visible;
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+}
+
+/* The hover/zoom face is a whole card, so it keeps the card's shape. The ratio
+ * comes in from the component — see the header. */
+.card-face--full {
+  aspect-ratio: 1 / var(--card-face-aspect, 1.3934);
+  --card-face-body-scale: 1;
+}
+
+/* A battlefield tile is already sized and cropped by its own layout; the face
+ * fills it rather than imposing a card shape on an art crop. */
+.card-face--tile {
+  height: 100%;
+  --card-face-body-scale: 0.85;
+}
+
+.card-face__art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.card-face__fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-2);
+  border-radius: inherit;
+  background: var(--color-surface-raised);
+  color: var(--color-fg-muted);
+  font-size: var(--card-face-text-size);
+  text-align: center;
+}
+
+/* ---------- the "this is not the printed card" seal ---------- */
+
+/*
+ * The at-a-glance signal (item 5). A corner seal rather than a border tint,
+ * because a board full of tinted borders reads as decoration while one marked
+ * corner reads as a flag — and it survives at tile size, where a 1px border
+ * change does not.
+ */
+.card-face--altered {
+  box-shadow: inset 0 0 0 2px var(--card-face-altered);
+}
+
+.card-face__seal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  padding: 0 0.28em;
+  border-bottom-right-radius: var(--radius-sm);
+  background: var(--card-face-altered);
+  color: var(--color-accent-contrast);
+  font-size: var(--card-face-pt-size);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+/* An incomplete breakdown is a different, louder claim than an altered card. */
+.card-face--partial {
+  box-shadow: inset 0 0 0 2px var(--card-face-unknown);
+}
+
+.card-face__gap {
+  margin: var(--space-1) 0 0;
+  padding: 0.2em 0.4em;
+  border-radius: var(--radius-sm);
+  background: var(--card-face-scrim-strong);
+  color: var(--card-face-unknown);
+  font-size: var(--card-face-text-size);
+  line-height: 1.35;
+}
+
+/* ---------- the live text box ---------- */
+
+.card-face__textbox {
+  position: absolute;
+  right: var(--card-face-text-inset);
+  bottom: var(--card-face-text-bottom);
+  left: var(--card-face-text-inset);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28em;
+  padding: 0.35em 0.45em;
+  border-radius: var(--radius-sm);
+  background: var(--card-face-scrim);
+  color: var(--color-fg);
+  font-family: var(--font-serif);
+  font-size: var(--card-face-text-size);
+  line-height: 1.32;
+  /* See the header: a scroller here would clip every glossary pop. */
+  overflow: visible;
+}
+
+/*
+ * The tile variant holds ONLY aftermarket words, so it sits at the TOP of the
+ * crop: the bottom of a battlefield tile is already spoken for by the name and
+ * P/T footer `BoardPermanentTile` draws.
+ */
+.card-face--tile .card-face__textbox {
+  top: 0;
+  right: 0;
+  bottom: auto;
+  left: 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--card-face-scrim-strong);
+}
+
+.card-face__line {
+  margin: 0;
+}
+
+/* A whole line this view added, rather than one the card printed. */
+.card-face__line--aftermarket {
+  font-style: italic;
+}
+
+/* ---------- tokens ---------- */
+
+.card-face__tok {
+  position: relative;
+  border-radius: 2px;
+}
+
+.card-face__tok:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+/* A printed word the glossary can explain: a dotted underline is the web's
+ * oldest "there is a definition here" signal and costs no colour. */
+.card-face__tok--printed {
+  text-decoration: underline dotted currentcolor 1px;
+  text-underline-offset: 2px;
+  cursor: help;
+}
+
+/* GRANTED — bold, a solid underline and a colour. Three signals, so greyscale
+ * still separates it from the printed words around it. */
+.card-face__tok--granted {
+  color: var(--card-face-granted);
+  font-weight: 700;
+  text-decoration: underline solid currentcolor 1px;
+  text-underline-offset: 2px;
+  cursor: help;
+}
+
+/* ALTERED — a value that is no longer the printed one, in running text. */
+.card-face__tok--altered {
+  color: var(--card-face-altered);
+  font-weight: 700;
+  cursor: help;
+}
+
+/* REMOVED — struck through, dimmed, NOT bold, so it reads as subtracted even
+ * with no colour at all. */
+.card-face__tok--removed {
+  color: var(--card-face-removed);
+  text-decoration: line-through solid currentcolor 1px;
+  cursor: help;
+}
+
+/* An alteration whose source core could not name. Wavy, because it is the one
+ * state a player should treat as "and nobody knows why". */
+.card-face__tok--unknown-source {
+  text-decoration: underline wavy var(--card-face-unknown) 1px;
+  text-underline-offset: 2px;
+}
+
+.card-face__glyph {
+  padding: 0 0.12em;
+  font-family: var(--font-sans);
+  font-size: 0.85em;
+  font-weight: 700;
+  font-style: normal;
+  line-height: 1;
+}
+
+/* ---------- the P/T box ---------- */
+
+.card-face__pt {
+  position: absolute;
+  right: var(--card-face-pt-right);
+  bottom: var(--card-face-pt-bottom);
+  z-index: 2;
+  border-radius: var(--radius-sm);
+  background: var(--card-face-scrim-strong);
+  font-family: var(--font-sans);
+  font-size: var(--card-face-pt-size);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.card-face__pt-value {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1em 0.4em;
+  border-radius: inherit;
+  cursor: help;
+  /* Upright on a tilted table — see `--card-face-counter-tilt-deg`. A no-op
+   * (rotateX(0deg)) everywhere the scene is not in play. */
+  transform: rotateX(var(--card-face-counter-tilt-deg));
+}
+
+.card-face__pt-value:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+/* Printed numbers stay plain — decorating them would make every creature on the
+ * board look modified, which is the opposite of the signal this feature adds. */
+.card-face__pt--printed .card-face__pt-value {
+  color: var(--color-fg);
+}
+
+/* The headline case: 4/5 has become 5/6. Ringed AND recoloured AND glyphed. */
+.card-face__pt--altered .card-face__pt-value {
+  box-shadow: inset 0 0 0 2px var(--card-face-altered);
+  color: var(--card-face-altered);
+}
+
+.card-face__pt--unknown-source .card-face__pt-value {
+  box-shadow: inset 0 0 0 2px var(--card-face-unknown);
+  color: var(--card-face-unknown);
+}
+
+/* ---------- change chips ---------- */
+
+.card-face__chips {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  max-width: 70%;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15em;
+  padding: 0.2em;
+}
+
+.card-face__chip {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25em;
+  max-width: 100%;
+  padding: 0.1em 0.35em;
+  border-radius: var(--radius-sm);
+  background: var(--card-face-scrim-strong);
+  color: var(--card-face-altered);
+  font-family: var(--font-sans);
+  font-size: var(--card-face-text-size);
+  cursor: help;
+}
+
+.card-face__chip:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.card-face__chip--removed {
+  color: var(--card-face-removed);
+  text-decoration: line-through;
+}
+
+.card-face__chip-label {
+  color: var(--color-fg-muted);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.card-face__chip-value {
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- the pop ---------- */
+
+.card-face__pop {
+  position: absolute;
+  bottom: calc(100% + 0.35em);
+  left: 50%;
+  z-index: var(--card-face-pop-z);
+  display: flex;
+  width: max-content;
+  max-width: var(--card-face-pop-w);
+  flex-direction: column;
+  gap: 0.25em;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-pop);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+  text-decoration: none;
+  /* The centring shift, plus the scene counter-tilt (0deg off the board) — one
+   * `transform`, because a second declaration would replace the first. */
+  transform: translateX(-50%) rotateX(var(--card-face-counter-tilt-deg));
+  /* Dimmed, not display:none — see the header, this is an aria-describedby
+   * target and screen readers drop a display:none one. */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--card-face-pop-ms) ease;
+}
+
+/*
+ * THE OPEN POP (GAP-6). It is the SAME element, moved to `document.body` by
+ * `createPortal`, so it escapes every clipping and transformed ancestor on the
+ * battlefield — which is the only way the breakdown Caleb asked for can be seen
+ * at all. `inset: auto` is required, not decorative: the base rule anchors the
+ * inline copy by `bottom`/`left`, and a fixed box with both `top` and `bottom`
+ * set and `height: auto` is stretched between them. The component supplies
+ * `left`/`top` inline from `popPlacement`.
+ *
+ * There is deliberately NO `:hover` rule left in this file: opening is JS now,
+ * because only JS can measure where the trigger actually is. A CSS-only pop
+ * cannot leave its clip, which is precisely how wave 1 shipped a tooltip that no
+ * player could ever see.
+ */
+.card-face__pop--floating {
+  position: fixed;
+  inset: auto;
+  z-index: var(--card-face-pop-float-z);
+  /* No centring shift and no scene counter-tilt: the pop is placed in viewport
+   * coordinates and is no longer inside the tilted table. */
+  transform: none;
+  opacity: 1;
+}
+
+.card-face__pop--pt {
+  min-width: 14rem;
+}
+
+.card-face__pop-head {
+  color: var(--color-accent-soft);
+  font-weight: 700;
+}
+
+.card-face__pop-kind {
+  color: var(--color-fg-faint);
+  font-weight: 400;
+  font-style: italic;
+}
+
+.card-face__pop-body {
+  color: var(--color-fg);
+}
+
+.card-face__pop-rule {
+  color: var(--color-fg-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.card-face__pop-source {
+  padding-top: 0.2em;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-fg-muted);
+}
+
+/* ---------- the breakdown inside the P/T pop ---------- */
+
+.card-face__break {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1em;
+}
+
+.card-face__break + .card-face__break {
+  padding-top: 0.35em;
+  border-top: 1px solid var(--color-border);
+}
+
+.card-face__break-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.card-face__break-row--total {
+  padding-top: 0.2em;
+  border-top: 1px solid var(--color-border-strong);
+  font-weight: 700;
+}
+
+/* A restated printed box (a copy, a transformed face) is context, not a term of
+ * the sum, and is indented so it cannot be read as one. */
+.card-face__break-row--restated {
+  padding-left: 0.6em;
+  color: var(--color-fg-muted);
+  font-style: italic;
+}
+
+.card-face__break-row--gap {
+  color: var(--card-face-unknown);
+}
+
+.card-face__break-label {
+  color: var(--color-fg-muted);
+}
+
+.card-face__break-src {
+  color: var(--color-fg-faint);
+}
+
+.card-face__break-value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.card-face__break-value--altered {
+  color: var(--card-face-altered);
+  font-weight: 700;
+}
+
+.card-face__break-value--granted {
+  color: var(--card-face-granted);
+  font-weight: 700;
+}
+
+.card-face__break-value--removed {
+  color: var(--card-face-removed);
+  text-decoration: line-through;
+}
+
+/* ---------- motion ---------- */
+
+/*
+ * The pop's fade is the only motion here, and it is information appearing —
+ * not decoration — so with motion reduced it still appears, instantly.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .card-face__pop {
+    transition: none;
+  }
+}
+
+/*
+ * FORCED COLOURS (Windows high-contrast). Every treatment keeps its non-colour
+ * half — the glyph, the weight, the strike, the underline style — and the
+ * system palette supplies the rest. This is the mode that proves item 5's "must
+ * not rely on colour alone" rather than merely claiming it.
+ */
+@media (forced-colors: active) {
+  .card-face--altered,
+  .card-face--partial {
+    box-shadow: none;
+    outline: 2px solid CanvasText;
+  }
+
+  .card-face__pt--altered .card-face__pt-value,
+  .card-face__pt--unknown-source .card-face__pt-value {
+    box-shadow: none;
+    outline: 2px solid CanvasText;
+  }
+
+  .card-face__pop {
+    border-color: CanvasText;
+  }
+}
+
+/* ---------- mount sites (GAP-7): the face IS the zoom ---------- */
+
+/*
+ * The full-card overlay (`CardZoomOverlay`) used to show a bare printed <img>,
+ * so a tile reading 5/6 was inspected with a picture reading 4/5 — the two
+ * answers rule 12 forbids, on the one surface a player opens to READ a card.
+ *
+ * Sized by HEIGHT from styles.css's own `--card-zoom-max-h`, the same token the
+ * <img> it replaces used, so the overlay keeps its size in one place. The width
+ * follows from the card aspect the component sets, so nothing here restates the
+ * card's shape.
+ */
+.card-face--zoomed {
+  width: auto;
+  height: var(--card-zoom-max-h);
+  max-width: 92vw;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgb(0 0 0 / 60%);
+}
+
+/* The zoom is a modal dialog with live pointer events, so this is one of the two
+ * surfaces where "hovering over any ability … should show a tooltip" is genuinely
+ * reachable with a mouse. The other is the hover preview, which since §3.143
+ * wave 3 / GAP-E accepts the pointer too — it had to, because the zoom is only
+ * reachable from the graveyard/exile lists and a peeked prisoner, never from a
+ * creature in play. Both read the one size token declared on `.card-face`. */
+.card-face--zoomed .card-face__textbox {
+  font-size: var(--card-face-read-text-size);
+}

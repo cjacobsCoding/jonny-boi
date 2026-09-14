@@ -3,7 +3,7 @@
  *
  * ONE reader for the closed `LandCondition` table (card.ts), shared by the two
  * rules that print the phrase:
- *   - landwalk (CR 702.18b): "can't be blocked as long as defending player
+ *   - landwalk (CR 702.14b): "can't be blocked as long as defending player
  *     controls a [land of this kind]";
  *   - the attack restriction (CR 508.1c): "can't attack unless defending
  *     player controls an Island".

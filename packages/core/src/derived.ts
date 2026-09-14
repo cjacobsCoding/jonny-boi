@@ -10,7 +10,7 @@
  *      resolves those descriptors through {@link evaluateDerivedCount}.
  *   2. **Characteristic-defining P/T** — Tarmogoyf's star-power box. The continuous
  *      layer (`internal/continuous.ts`) folds {@link characteristicValue} in as
- *      the creature's base, CR 613.3 layer 7a.
+ *      the creature's base, CR 613.4 layer 7a.
  *
  * Both re-derive from the CURRENT state on every read — nothing is stored, so
  * nothing can go stale: a graveyard filling MID-combat changes a Tarmogoyf's

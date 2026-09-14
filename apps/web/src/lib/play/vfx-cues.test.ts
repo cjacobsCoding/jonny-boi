@@ -1,11 +1,14 @@
 /**
  * §3.131 — the pure event→visual-effect table. Pins the viewer-relative life
- * flash, the tile-vs-face split for damage, and the coalescing that keeps a
- * board wipe from strobing while still showing a poof per creature.
+ * flash, the coalescing that keeps a board wipe from strobing while still
+ * showing a poof per creature, and — since §3.143's UX-15 — the DELIBERATE
+ * ABSENCE of a damage row: damage blooms from `damage-sequence.ts` at the
+ * moment the hit lands, and exactly one module may answer that question.
  */
 import { describe, expect, it } from 'vitest';
 import type { GameEvent, PlayerId } from '@jonny-boi/core';
 import { burstParticleOffsets, deriveVfxCues, type VfxCue } from './vfx-cues.js';
+import { deriveDamageSequence } from './damage-sequence.js';
 
 const VIEWER: PlayerId = 'A';
 
@@ -37,11 +40,22 @@ describe('deriveVfxCues — the table', () => {
     ]);
   });
 
-  it('damage to a CREATURE bursts on the tile; damage to a face does not (the life flash covers it)', () => {
-    expect(vfx([{ type: 'damageDealt', source: 1, target: 9, amount: 3, combat: true }])).toMatchObject([
-      { kind: 'burst', tone: 'damage', at: { where: 'tile', instanceId: 9 } },
+  it('UX-15: damage blooms from the SEQUENCE, not from this table (one answer, one bloom)', () => {
+    // The `damageDealt` row was retired when the damage sequence shipped: it
+    // bloomed at t=0 while the sequence's identical burst blooms when the hit
+    // actually lands, and two modules answering "damage landed here" drift.
+    // THIS TEST IS THE GUARD — putting the row back turns it red.
+    const toCreature: GameEvent[] = [{ type: 'damageDealt', source: 1, target: 9, amount: 3, combat: true }];
+    const toFace: GameEvent[] = [{ type: 'damageDealt', source: 1, target: 'B', amount: 3, combat: false }];
+    expect(vfx(toCreature)).toEqual([]);
+    expect(vfx(toFace)).toEqual([]);
+    // ...and the sequence is the one that answers, for BOTH ends of the board.
+    expect(deriveDamageSequence(toCreature, { reducedMotion: false, startIndex: 0 })).toMatchObject([
+      { to: { where: 'tile', instanceId: 9 }, amount: 3 },
     ]);
-    expect(vfx([{ type: 'damageDealt', source: 1, target: 'B', amount: 3, combat: false }])).toEqual([]);
+    expect(deriveDamageSequence(toFace, { reducedMotion: false, startIndex: 0 })).toMatchObject([
+      { to: { where: 'seat', seat: 'B' }, amount: 3 },
+    ]);
   });
 
   it('a death bursts where the creature stood', () => {

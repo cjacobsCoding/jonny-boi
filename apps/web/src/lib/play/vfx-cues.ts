@@ -9,9 +9,11 @@
  * - `flash`  — a full-screen tint. Life changes for the VIEWER only: a
  *   whole-screen green/red is about YOUR life, not a readout of everyone's.
  * - `flare`  — a glow at a SEAT's board (a spell being cast, a token entering).
- * - `burst`  — a particle spray at a TILE (damage on a creature, a death). The
- *   layer reuses the same last-known tile rect the death ghost does, so a burst
- *   still lands where a creature stood the instant it dies.
+ * - `burst`  — a particle spray at a TILE. A DEATH bursts from this table; a
+ *   DAMAGE burst is drawn by the damage sequence (UX-15, §3.143) at the moment
+ *   its hit lands, not here — see the note on the missing `damageDealt` row.
+ *   Both reuse the same last-known tile rect, so a burst still lands where a
+ *   creature stood the instant it dies.
  *
  * ## Coalescing (why a wrath is not a strobe)
  * Screen flashes collapse to one per batch (position is constant); tile bursts
@@ -81,12 +83,15 @@ const VFX_FOR_EVENT: Partial<Record<GameEvent['type'], VfxResolver>> = Object.fr
     event.type === 'tokenCreated'
       ? { kind: 'flare', tone: 'token', at: { where: 'board', seat: event.controller } }
       : undefined,
-  // Damage to a CREATURE bursts on that tile; damage to a player's face is told
-  // by the defender's life flash instead (no tile to burst on).
-  damageDealt: (event) =>
-    event.type === 'damageDealt' && typeof event.target === 'number'
-      ? { kind: 'burst', tone: 'damage', at: { where: 'tile', instanceId: event.target } }
-      : undefined,
+  // ⚠️ NO `damageDealt` ROW — deliberately, and this comment is the reason.
+  // It used to burst on the damaged tile the instant the event arrived. UX-15
+  // (§3.143) gives damage a SEQUENCE: each hit travels from its source and
+  // blooms at its recipient, staggered, rounds apart. Two modules blooming at one
+  // tile for one hit — one at t=0, one at t=travelMs — is the "two places
+  // answering one question" rule 12 forbids, and they would visibly drift.
+  // The burst was RELOCATED, not deleted: `DamageLayer` draws the identical
+  // `.vfx-burst--damage` spray from `burstParticleOffsets` at impact time, so
+  // the look is unchanged and the timing is now right.
   // A creature dying bursts where it stood (last-known tile rect).
   creatureDied: (event) =>
     event.type === 'creatureDied' ? { kind: 'burst', tone: 'death', at: { where: 'tile', instanceId: event.instanceId } } : undefined,

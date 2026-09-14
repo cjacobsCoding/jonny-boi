@@ -181,6 +181,8 @@ describe('infect (CR 702.90) — damage lands as counters, not marks', () => {
       target: 'B',
       amount: 1,
       combat: true,
+      // Combat damage names the step that dealt it (CR 510.4, §3.143 GAP-12).
+      round: 'normal',
     });
     expect(events.some((e) => e.type === 'lifeChanged' && e.player === 'B')).toBe(false);
   });

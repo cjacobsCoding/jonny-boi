@@ -1,0 +1,69 @@
+/* ===========================================================================
+ * §3.143 — LAYOUT FOR THE THREE NEW BENCH SECTIONS (CLAUDE.md rule 3).
+ *
+ * Its own file rather than more lines in `effects-preview.css`, which is owned
+ * by no lane in this run: a new section's chrome does not need to edit the
+ * file the §3.132 bench already ships.
+ *
+ * Nothing here decides anything. The scene bench deliberately wears the REAL
+ * `.play-board` / `.board-scene` / `.perm-slot` / `.perm-turn` / `.perm`
+ * classes, so board-scene.css and board-fit.css style it exactly as they style
+ * the game — a bench with its own copy of the geometry can look right while the
+ * board looks wrong.
+ * ========================================================================= */
+
+.effects-preview__knobs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+
+/* A bounded stand-in for the board. `.play-board` on the wrapper is what makes
+   the board's own scoped rules apply; the height cap keeps the bench a bench. */
+.effects-preview .effects-preview__scene {
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  overflow: hidden;
+}
+
+.effects-preview__row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  min-height: 4rem;
+}
+
+.effects-preview__row-label {
+  font-size: var(--text-xs);
+  color: var(--color-fg-faint);
+  writing-mode: vertical-rl;
+}
+
+/* The bench tiles carry no art: what is being judged is the projection and the
+   turn, and a Scryfall image here would only make the page slower. */
+.effects-preview__scene .perm__art {
+  background: var(--color-surface-raised);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.effects-preview__arcs {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.effects-preview__arcs .perm {
+  width: var(--play-tile-w-max);
+  height: calc(var(--play-tile-w-max) * 0.62);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+}

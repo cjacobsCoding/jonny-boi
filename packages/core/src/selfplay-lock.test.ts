@@ -58,32 +58,42 @@ import type { GameState } from './state.js';
  * refactor: the engine now plays a different, correct game. Bug report
  * 20260901_205742 is the case it fixes — a defender asked to declare blocks
  * against nothing at all.
+ *
+ * ⚠️ REGENERATED AGAIN for §3.143 GAP-12 — the combat-damage ROUND marker. The
+ * SHAPE of this move is the evidence that it is not a rules change: every seed
+ * keeps its winner, its over/cut, its turn count, its action count, its EVENT
+ * COUNT and its final-state hash, and ONLY the event-log hash moves. That is the
+ * signature of one field added inside existing events and nothing else — here,
+ * `round: 'firstStrike' | 'normal'` on `damageDealt`/`damagePrevented` (CR
+ * 510.4), stamped by `dealCombatDamageStep` so the play surface can show two
+ * combat-damage steps as two rounds instead of one blur. No decision, no
+ * ordering and no quantity changed; the log simply says one more true thing.
  */
 const GOLDEN: readonly string[] = [
-  '1|B|over|32|740|1594|cbe23a40|4ed4228a',
-  '2|A|over|25|606|1302|57b5e41a|3d0d7df0',
-  '3|A|over|23|559|1244|3fb6dd6c|ce5d9822',
-  '4|B|over|24|612|1333|15aed8c4|d1ad51df',
-  '5|A|over|31|760|1635|d4967d4f|a03232e9',
-  '6|B|over|26|618|1330|4047dfb0|a03aae7c',
-  '7|B|over|24|628|1379|57a5c740|a4052d1d',
-  '8|A|over|27|680|1505|e3e830d9|746eb034',
-  '9|A|over|21|510|1093|fed604bb|0a185605',
-  '10|A|over|29|704|1533|5d589c02|d07b73d5',
-  '11|B|over|36|881|1947|163a89a5|11cee777',
-  '12|B|over|26|643|1431|a3738974|b0945532',
-  '13|B|over|26|629|1347|ff30e308|680a9b75',
-  '14|B|over|28|679|1463|32b64c22|335edffe',
-  '15|B|over|34|864|1910|ed29ad3f|5ef6b887',
-  '16|A|over|29|711|1579|076a2743|1b144d0b',
-  '17|B|over|32|764|1662|7be3b582|319dce48',
-  '18|A|over|31|773|1684|4a6d9f90|7709a894',
-  '19|B|over|36|922|2040|4cc289ea|45c545ae',
-  '20|A|over|29|709|1531|7d704651|cd4fe67a',
-  '21|A|over|27|679|1447|b243176f|b6c0d04a',
-  '22|B|over|24|589|1303|ac9b0171|beee33fd',
-  '23|B|over|34|848|1898|8512e144|7a0cf66c',
-  '24|B|over|34|850|1873|bc046a83|68e94f6d',
+  '1|B|over|32|740|1594|7c9711d1|4ed4228a',
+  '2|A|over|25|606|1302|e76ae7ca|3d0d7df0',
+  '3|A|over|23|559|1244|b7f8bb72|ce5d9822',
+  '4|B|over|24|612|1333|b46d0145|d1ad51df',
+  '5|A|over|31|760|1635|fed8bf91|a03232e9',
+  '6|B|over|26|618|1330|23f528ad|a03aae7c',
+  '7|B|over|24|628|1379|d8994cd8|a4052d1d',
+  '8|A|over|27|680|1505|1300bedd|746eb034',
+  '9|A|over|21|510|1093|3a8355eb|0a185605',
+  '10|A|over|29|704|1533|4dcb4849|d07b73d5',
+  '11|B|over|36|881|1947|33217a8f|11cee777',
+  '12|B|over|26|643|1431|31486666|b0945532',
+  '13|B|over|26|629|1347|d7686a82|680a9b75',
+  '14|B|over|28|679|1463|85f071af|335edffe',
+  '15|B|over|34|864|1910|7c0a31b8|5ef6b887',
+  '16|A|over|29|711|1579|55c2474e|1b144d0b',
+  '17|B|over|32|764|1662|08934da7|319dce48',
+  '18|A|over|31|773|1684|cae9644d|7709a894',
+  '19|B|over|36|922|2040|105a3f0b|45c545ae',
+  '20|A|over|29|709|1531|0cb92266|cd4fe67a',
+  '21|A|over|27|679|1447|e406ca23|b6c0d04a',
+  '22|B|over|24|589|1303|1ae36de2|beee33fd',
+  '23|B|over|34|848|1898|c8c527d7|7a0cf66c',
+  '24|B|over|34|850|1873|aa4a1146|68e94f6d',
 ];
 
 describe('self-play behaviour lock', () => {

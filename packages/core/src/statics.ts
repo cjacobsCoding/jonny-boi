@@ -307,15 +307,72 @@ export function staticAppliesTo(ability: StaticAbility, source: CardInstance, ca
 }
 
 /**
+ * ONE ROW PER FIELD of {@link PermanentModification}: a modification that is
+ * live *because of that field and nothing else*.
+ *
+ * ## The bug this exists to make impossible
+ * {@link modificationIsInert} consulted `power`, `toughness` and `keywords` —
+ * but not `activated`, which arrived later with the granted-ability work. A
+ * modification whose ENTIRE content is a granted ability ("Enchanted creature
+ * has \"{T}: …\"" — Presence of Gond, Viridian Longbow; "All Slivers have
+ * \"…\"" — Darkheart Sliver) was therefore judged inert and thrown away before
+ * `indexContinuous` ever folded it. Twenty-eight cards in the shipped pool
+ * granted NOTHING, on every board, in every sim, and nothing could see it:
+ * every test that existed used a fixture that ALSO moved a number.
+ *
+ * ## Why it cannot happen again
+ * Two halves, and neither works alone:
+ *
+ *  - The mapped type over `Required<PermanentModification>` means a FIFTH FIELD
+ *    on that interface makes this object literal fail to type-check until it is
+ *    given a row. It lives in shipped source, not in a test, for the same reason
+ *    `conformance/rules-manifest.ts`'s `MODIFICATION_IS_PURELY_ADDITIVE` does:
+ *    `packages/core/tsconfig.json` excludes `*.test.ts` and Vitest strips types
+ *    without checking them, so a proof written in a test would be evaluated by
+ *    nothing.
+ *  - `statics-granted-activated.test.ts` asserts that `modificationIsInert`
+ *    calls EVERY row here LIVE. A row added to satisfy the compiler but never
+ *    consulted by the function reddens the suite.
+ *
+ * ## Why the table is not the implementation
+ * The obvious design — a table of per-field predicates that the function loops
+ * over — was written first and measured **3.6x slower** on identical input
+ * (in-process A/B, 3M calls: 80ms median → 286ms), because four different
+ * closures behind one call site is megamorphic. This function runs per candidate
+ * per static ability inside `indexContinuous`, which rule 7 puts squarely on the
+ * hot path. So the table carries the PROOF and the function stays straight-line.
+ */
+export const MODIFICATION_LIVE_EXAMPLES: {
+  readonly [K in keyof Required<PermanentModification>]: PermanentModification;
+} = Object.freeze({
+  power: Object.freeze({ power: 1 }),
+  toughness: Object.freeze({ toughness: 1 }),
+  keywords: Object.freeze({ keywords: { flying: true } }),
+  // A shape witness, not a playable ability: inertness reads the list's LENGTH
+  // and never what is in it, so the emptiest well-formed ability is the honest
+  // row — anything richer would suggest the content mattered.
+  activated: Object.freeze({ activated: [{ cost: {}, effects: [], label: 'a granted ability' }] }),
+});
+
+/**
  * Whether a modification actually changes anything — a declaration of `{}` (no
- * delta, no keywords) is inert and can be skipped without changing behavior.
+ * delta, no keywords, no granted ability) is inert and can be skipped without
+ * changing behavior.
  *
  * Shared by statics and by attachments, which is the point: an aura that grants
  * nothing and an anthem that grants nothing cost the layering pass the same
  * nothing.
+ *
+ * ⚠️ EVERY field of {@link PermanentModification} must be consulted here, and
+ * {@link MODIFICATION_LIVE_EXAMPLES} is what makes that enforceable rather than
+ * remembered — read its doc before adding a field. The ORDER below is a cost
+ * decision only: the P/T deltas that the overwhelming majority of modifications
+ * carry are tested first, and the only branch that walks an object is last.
  */
 export function modificationIsInert(mod: PermanentModification): boolean {
   if ((mod.power ?? 0) !== 0 || (mod.toughness ?? 0) !== 0) return false;
+  const granted = mod.activated;
+  if (granted !== undefined && granted.length > 0) return false;
   const kw = mod.keywords;
   if (!kw) return true;
   for (const key in kw) {

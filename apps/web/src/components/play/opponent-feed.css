@@ -17,7 +17,8 @@
    */
   --opp-feed-status-clearance: 3.9rem;
   top: var(--opp-feed-status-clearance);
-  right: var(--space-2, 8px);
+  /* Clears the log rail — see `--play-board-right-overlay-inset` in board-fit.css. */
+  right: var(--play-board-right-overlay-inset, var(--space-2, 8px));
   z-index: 30;
   display: flex;
   flex-direction: column;

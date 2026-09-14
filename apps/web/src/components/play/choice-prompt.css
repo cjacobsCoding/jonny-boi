@@ -1,0 +1,188 @@
+/*
+ * §3.143 / UX-8 — the choice prompt shows CARDS.
+ *
+ * Only the NEW elements are styled here. The prompt's shell (`.choice-prompt`,
+ * `.choice-prompt__card`, `.choice-option`, `.choice-card-opt`) lives in
+ * `styles.css` and is shared with surfaces this lane does not own, so nothing
+ * here redefines those rules — it adds modifiers and scopes overrides under
+ * `.choice-prompt`, which wins on specificity without editing the shared file.
+ * That is the same idiom `board-fit.css` documents for the play board.
+ */
+
+/* ---- the source card, at the top of every prompt --------------------------- */
+
+/*
+ * The prompt's head is a column in `styles.css`; with a face it becomes a row so
+ * the card sits beside the question instead of pushing it below the fold.
+ */
+.choice-prompt .choice-prompt__head--faced {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.choice-prompt__headtext {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0; /* let long prompt text wrap instead of stretching the row */
+  flex: 1 1 auto;
+}
+
+.choice-source {
+  flex: 0 0 auto;
+  display: block;
+}
+
+/*
+ * The source face is the biggest card in the prompt on purpose: it is the thing
+ * the player is being asked ABOUT, and the complaint was that it was a name.
+ * `--play-card-full-w` is the shared knob `PlayCard face="full"` reads, so this
+ * is a scoped re-point of the existing variable rather than a second width.
+ */
+.choice-source .play-card--full {
+  --play-card-full-w: var(--choice-source-w);
+}
+
+.choice-prompt__card {
+  --choice-source-w: 168px;
+  --choice-candidate-w: 116px;
+}
+
+/* A source with no resolvable card still occupies the card's footprint, so the
+   header does not jump between a card-bearing and a nameless prompt. */
+.choice-source--nameonly {
+  width: var(--choice-source-w);
+  aspect-ratio: 63 / 88;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  padding: var(--space-2);
+}
+
+.choice-source__placeholder {
+  font-family: var(--font-serif);
+  font-size: var(--text-sm);
+  text-align: center;
+  color: var(--color-fg-muted);
+}
+
+/* ---- candidates as cards ---------------------------------------------------- */
+
+.choice-prompt .choice-card-opt .play-card--full {
+  --play-card-full-w: var(--choice-candidate-w);
+}
+
+/*
+ * "the current selection unmistakable" — the shared `.play-card--selected`
+ * outline is a hairline, which is not enough on a wall of faces. A chosen
+ * candidate gets a ring, a lift and a tick.
+ */
+.choice-card-opt--selected .play-card,
+.choice-card-opt__placeholder--selected {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 1px var(--color-bg), 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+.choice-card-opt--selected {
+  position: relative;
+}
+
+.choice-card-opt--selected::after {
+  content: '✓';
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-size: 0.7rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/*
+ * A blocked candidate is dimmed but NOT disabled — see the note on
+ * `CandidateCard`: a `disabled` button emits no pointer events, which would take
+ * the hover preview away from precisely the card the player needs to inspect.
+ */
+.choice-card-opt--blocked .play-card,
+.choice-card-opt--blocked .choice-card-opt__placeholder {
+  opacity: 0.45;
+  filter: grayscale(0.5);
+}
+
+.choice-card-opt__why {
+  max-width: var(--choice-candidate-w);
+  font-size: var(--text-xs);
+  color: var(--color-fg-faint);
+  text-align: center;
+  text-wrap: balance;
+}
+
+/* A candidate with no art — a token, a Scryfall miss, or a SEAT, which has no
+   card at all — keeps the card's footprint and says its name. */
+.choice-card-opt__placeholder {
+  width: var(--choice-candidate-w);
+  aspect-ratio: 63 / 88;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.choice-card-opt__placeholder:hover {
+  background: var(--color-surface-hover);
+}
+
+.choice-card-opt__placeholder:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.choice-card-opt__placeholder-name {
+  font-size: var(--text-sm);
+  text-align: center;
+  text-wrap: balance;
+}
+
+.choice-card-opt__placeholder-badge {
+  font-size: 0.6rem;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-radius: var(--radius-sm);
+  padding: 0 3px;
+}
+
+/* ---- blocked list options (modes, seats, a payment's Pay button) ------------- */
+
+.choice-option--blocked {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---- narrow screens --------------------------------------------------------- */
+
+@media (max-width: 40rem) {
+  .choice-prompt__card {
+    --choice-source-w: 112px;
+    --choice-candidate-w: 92px;
+  }
+}

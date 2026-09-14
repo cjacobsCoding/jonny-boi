@@ -1,26 +1,80 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { createRng, defaultAnswerFor } from '@jonny-boi/core';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type ReactElement,
+} from 'react';
+import { createRng, opponentOf } from '@jonny-boi/core';
 import { createDefaultAiRegistry, DEFAULT_PILOT_ID } from '@jonny-boi/ai';
-import type { InstanceId, ManaCost, PlayerId } from '@jonny-boi/core';
 import type {
+  CardDefinition,
+  CharacteristicExplanation,
+  ChoiceAnswer,
+  GameState,
+  InstanceId,
+  ManaCost,
+  PendingChoice,
+  PlayerId,
+} from '@jonny-boi/core';
+import type {
+  AbilityCostChoice,
   AbilityOption,
   GameSession,
   CastOption,
   CycleOption,
   SubmitResult,
 } from '../../lib/play/session.js';
-import { buildBoardView } from '../../lib/play/view-model.js';
+import { buildBoardView, explainForFace, type BoardPermanent } from '../../lib/play/view-model.js';
+/**
+ * §3.143 / UX-3..UX-5 + the commit half of UX-7 — THE CAST TRANSACTION.
+ *
+ * ⚠️ ADOPTION, NOT DECORATION. `lib/play/proposal.ts` shipped in wave 1 with
+ * 1,111 tested lines and **no importer at all**, which is why 137
+ * sacrifice-cost abilities stayed dead buttons and why cancelling a cast still
+ * had no single funnel. Every cast, activation and cycling ability on this
+ * board now opens a proposal and commits or cancels through it;
+ * `proposal-adoption.test.ts` fails if that stops being true.
+ */
+import {
+  cancelProposal,
+  openProposal,
+  proposalView,
+  stepProposal,
+  type Proposal,
+  type ProposalOpening,
+  type ProposalStep,
+} from '../../lib/play/proposal.js';
 import { isBoardTargetOption, optionToTarget, type TargetOption } from '../../lib/play/targeting.js';
-import { stepLabel, TOAST_MS, COPILOT_ADVICE_SEED } from '../../lib/play/play-config.js';
+import {
+  stepLabel,
+  TOAST_MS,
+  COPILOT_ADVICE_SEED,
+  BOARD_3D_CONFIG,
+  BOARD_LAYOUT_CONFIG,
+  COMBAT_ADVANCE_CONFIG,
+  PROPOSAL_CONFIG,
+  SPELL_HOLD_CONFIG,
+  TAP_ROTATION_CONFIG,
+} from '../../lib/play/play-config.js';
 import { SeatPanel, type PermInteraction } from './SeatPanel.js';
 import { StackPanel } from './StackPanel.js';
 import { GameLog } from './GameLog.js';
 import { PlayCard, CardBack } from './PlayCard.js';
 import { DRAG_ID_ATTR, useDragToPlay } from '../../lib/play/useDragToPlay.js';
-import { CardZoomOverlay } from './CardZoomOverlay.js';
+import { CardZoomOverlay, type ZoomedCard } from './CardZoomOverlay.js';
 import { ChoicePrompt } from './ChoicePrompt.js';
 import { GraveyardPanel } from './GraveyardPanel.js';
-import { AbilityMenuPrompt, AbilityTargetPrompt } from './AbilityPrompts.js';
+import {
+  AbilityMenuPrompt,
+  AbilityTargetPrompt,
+  ProposalCancelButton,
+  type AbilityPromptFaces,
+} from './AbilityPrompts.js';
+import './ability-prompts.css';
 import { graveyardPanelView } from '../../lib/play/graveyard-cast.js';
 import { isChoiceForViewer, waitingForChoiceText } from '../../lib/play/choice-view.js';
 import { isModalTap, manaTapMenu, tappableIds, type ManaTapOption } from '../../lib/play/mana-tap.js';
@@ -40,10 +94,23 @@ import { withStepStop, type PriorityStops } from '../../lib/play/priority-stops.
 import { CardHover } from '../CardHover.js';
 import { RevealBanner } from './RevealBanner.js';
 import { latestReveal } from '../../lib/play/reveals.js';
-import { isDeclinedMayQuestion, optionalTargetDecline } from '../../lib/play/optional-trigger.js';
+import {
+  consumeDeferredMay,
+  EMPTY_MAY_LEDGER,
+  expireDeferredMay,
+  matchDeferredMay,
+  recordDeferredMay,
+  type DeferredMayLedger,
+} from '../../lib/play/optional-trigger.js';
 import { StopsMenu } from './StopsMenu.js';
 import './board-clarity.css';
-import { blockerLinePairs } from '../../lib/play/combat-lines.js';
+import './board-scene.css';
+import { combatArcPairs } from '../../lib/play/combat-lines.js';
+import { CombatStage, type StageEntry } from './CombatStage.js';
+import { NO_STAGED_PERMANENTS, StagedPermanentsContext } from './combat-stage-context.js';
+import { STAGED_HOME_TILE_OPACITY } from '../../lib/play/combat-stage.js';
+import { CardFace } from './CardFace.js';
+import { HOLD_KINDS, type SpellHold } from '../../lib/play/spell-hold.js';
 import { groupJailedByJailer, jailSourcesOf } from '../../lib/play/jail-view.js';
 import {
   castWayLabel,
@@ -52,7 +119,13 @@ import {
   type KnownRef,
 } from '../../lib/play/option-labels.js';
 import type { AnimationCardInfo } from '../../lib/play/animations.js';
-import { AnimationLayer, useZoneAnimations } from './AnimationLayer.js';
+import {
+  AnimationLayer,
+  DamageLayer,
+  useDamageSequence,
+  usePrefersReducedMotion,
+  useZoneAnimations,
+} from './AnimationLayer.js';
 import { VfxLayer, useGameVfx } from './VfxLayer.js';
 import { OpponentActionFeed, useOpponentFeed } from './OpponentActionFeed.js';
 import { CombatLines } from './CombatLines.js';
@@ -116,30 +189,6 @@ function manaChoiceCast(
 }
 
 /**
- * A cast paused so the player can say WHICH sources pay for it (§3.60).
- *
- * The `working` session is the whole rollback story: taps are folded into it and
- * nothing reaches `onSubmit` until Confirm, so Cancel is `setManaPicker(null)`
- * and the game is exactly where it was — no untap loop, no compensating action,
- * no half-tapped board.
- */
-interface ManaPickerState {
-  /** The cast that is waiting, with the cost it will actually be charged. */
-  readonly cast: CastOption;
-  /** Targets already chosen for it (the target prompt runs first). */
-  readonly targets: readonly (InstanceId | PlayerId)[];
-  /** The session with this payment's taps folded in so far. */
-  readonly working: GameSession;
-  /**
-   * The sources that were tappable when the picker opened, snapshotted so rows
-   * stay put as they are spent (see `manaPickerRows`).
-   */
-  readonly sources: readonly ManaPickerSource[];
-  /** Which of them this payment has already spent. */
-  readonly spent: ReadonlySet<InstanceId>;
-}
-
-/**
  * The in-game board for the player who currently holds priority (the `viewer`). It
  * renders their masked board view (own hand face-up, opponent's hidden), the stack,
  * the log, and an action bar wired to the `GameSession`. Every interactive control
@@ -157,12 +206,32 @@ export function PlayBoard({
   onConcede,
   stops,
   onStops,
+  hold,
+  onHoldPointer,
+  onHoldExtend,
+  onHoldRelease,
 }: {
   session: GameSession;
   viewer: PlayerId;
   /** Apply a session-producing action; PlayView stores the new session. */
   onSubmit: (run: () => SubmitResult) => void;
   onConcede: () => void;
+  /**
+   * §3.143 / UX-16 — the opponent's spell currently HELD on screen, or null.
+   *
+   * Owned by PlayView, not here, because the hold's whole job is to stop the
+   * auto-advance effect and the AI-seat effect, and both of those live there.
+   * The board only renders it and reports the player's attention back up: one
+   * value, so the pause and the walker cannot disagree about whether the game
+   * is moving — the same rule §3.119 set for the priority stops.
+   */
+  hold?: SpellHold | null;
+  /** The pointer moved onto / off the held card (it extends the hold). */
+  onHoldPointer?: (over: boolean) => void;
+  /** "Keep looking" — one explicit `extendMs`. */
+  onHoldExtend?: () => void;
+  /** "Let it resolve" — end the hold now. */
+  onHoldRelease?: () => void;
   /**
    * §3.119 — the priority stops, OWNED BY PlayView because it is the auto-pass
    * effect that has to obey them. The board renders their controls and reports
@@ -173,30 +242,52 @@ export function PlayBoard({
   onStops: (next: PriorityStops) => void;
 }): ReactElement {
   /**
-   * A cast whose mana the player is placing by hand (§3.60). While it stands, it
-   * holds a WORKING session — a private fold of `tapForMana` submits that the
-   * board renders from and that is committed on Confirm. Cancel simply drops it,
-   * and the discarded session carries its own taps and its own action-log
-   * entries away with it (§3.58), so a cancelled cast leaves no trace at all.
+   * THE LIVE PROPOSAL — a cast, an activation or a cycling ability that has been
+   * started and not yet committed (§3.143 / UX-3..UX-5). It owns the rewind
+   * target, the working fold, the outstanding question and the honest refusal;
+   * this component only renders it and hands intents back.
    */
-  const [manaPicker, setManaPicker] = useState<ManaPickerState | null>(null);
+  const [proposal, setProposal] = useState<Proposal | null>(null);
   /**
-   * THE BOARD'S SOURCE OF TRUTH. Everything below reads `session`, so the
-   * picker's uncommitted taps light up the board, empty the pool readout, and
-   * feed the "still needed" line through exactly the same derivations a
-   * committed tap does — one code path, not a preview that can disagree.
+   * The sources that were tappable when the §3.60 mana picker opened,
+   * snapshotted so rows stay put as they are spent (see `manaPickerRows`).
+   *
+   * Non-null IS "the picker is open": a proposal only reaches stage `funding`
+   * after the FIRST tap, and the picker has to be on screen before that.
    */
-  const session = manaPicker?.working ?? committedSession;
+  const [fundingSources, setFundingSources] = useState<readonly ManaPickerSource[] | null>(null);
+  /** The ⛁ chip opened this cast — remembered across its target question. */
+  const [castRequestedMana, setCastRequestedMana] = useState(false);
+  /**
+   * Monotonic proposal id (`Proposal.id`). A ref, not state: it must advance
+   * exactly once per opening and must never itself cause a render.
+   */
+  const proposalSeq = useRef(0);
+
+  /**
+   * Everything the view needs about the proposal, derived ONCE per proposal
+   * object (it is immutable, so the memo can never serve a stale question).
+   */
+  const proposalPreview = useMemo(() => (proposal ? proposalView(proposal) : null), [proposal]);
+
+  /**
+   * THE BOARD'S SOURCE OF TRUTH — chosen by the proposal's own
+   * `BOARD_SESSION_BY_STAGE` row (read through `ProposalView.boardSession`), so
+   * "which session does the board render?" has exactly one answer.
+   *
+   * That row is why the §3.60 picker's uncommitted taps still light up the
+   * board, empty the pool readout and feed the "still needed" line through
+   * exactly the same derivations a committed tap does (stage `funding` →
+   * `working`), while a half-announced spell is NOT shown on the stack
+   * (stage `announcing` → `committed`, because Caleb asked for exactly that:
+   * *"at that point, the item should not have entered the stack anyways"*).
+   */
+  const session = proposalPreview ? proposalPreview.boardSession : committedSession;
   const names = session.names;
   const view = useMemo(() => buildBoardView(session.state, viewer, names), [session, viewer, names]);
   const step = session.state.step;
 
   // --- transient interaction state ---------------------------------------------
-  // A pending cast awaiting a target selection.
-  const [pendingCast, setPendingCast] = useState<CastOption | null>(null);
-  // Whether THAT cast asked for the mana picker (the per-cast way in), carried
-  // across the target prompt so the request survives choosing a target.
-  const [pendingCastAsks, setPendingCastAsks] = useState(false);
   // Attacker selection (active player, declareAttackers).
   const [chosenAttackers, setChosenAttackers] = useState<Set<InstanceId>>(new Set());
   // Per-attacker walker assignment: attacker -> the defending planeswalker it
@@ -204,8 +295,6 @@ export function PlayBoard({
   const [walkerAssign, setWalkerAssign] = useState<Map<InstanceId, InstanceId>>(new Map());
   // A permanent whose activated-ability menu is open (click a walker → its abilities).
   const [abilitySource, setAbilitySource] = useState<InstanceId | null>(null);
-  // An ability chosen from that menu, awaiting its target choice.
-  const [pendingAbility, setPendingAbility] = useState<AbilityOption | null>(null);
   // Blocker assignment (defender, declareBlockers): blocker -> attacker.
   const [blockAssign, setBlockAssign] = useState<Map<InstanceId, InstanceId>>(new Map());
   // The attacker currently being assigned a blocker (click attacker, then blocker).
@@ -287,43 +376,150 @@ export function PlayBoard({
       : null;
   const suggestBar = suggestion !== null && suggestedCard === null;
 
-  const resetTransient = (): void => {
-    setPendingCast(null);
-    setPendingCastAsks(false);
+  /**
+   * THE ONE CANCEL (§3.143 / UX-4), **PROPOSAL SCOPE**. Clears every
+   * half-decided pre-commit state the board holds *about the thing being cast or
+   * activated*, and dispatches nothing at all — which is what makes it
+   * idempotent and free: a dropped `proposal` carries its own working session
+   * (and its own action-log entries, §3.58) away with it, so a cancelled cast
+   * leaves no trace, and every other state here is a local choice the engine has
+   * never been told about.
+   *
+   * ⚠️ **IT MUST NOT TOUCH THE COMBAT DRAFT.** It used to, and that was a live
+   * defect: pressing Escape to back out of an instant during declare-blockers
+   * threw away every block the player had drafted. UX-4's acceptance line is
+   * "returns to the pre-proposal board WITH NO SIDE EFFECTS", and destroying a
+   * combat draft is the most expensive side effect on this surface. The draft is
+   * {@link clearCombatDraft}'s, and the two scopes are disjoint — which is what
+   * `cancel-funnel.test.ts` now asserts, because a regex over `pending…` names
+   * could never see the four combat setters that were hiding in here.
+   *
+   * ⚠️ ADD YOUR NEW PRE-COMMIT STATE HERE, and to `preCommitOpen`. The shape
+   * this replaces is "five independent half-decided states, each with its own
+   * ad-hoc cancel" — a sixth with a seventh cancel is how it comes back.
+   */
+  const resetProposal = (): void => {
+    setProposal(null);
+    setFundingSources(null);
+    setCastRequestedMana(false);
+    setPendingManaTap(null);
+    setAbilitySource(null);
+    setHandChoice(null);
+  };
+
+  /**
+   * THE COMBAT DRAFT scope — attackers and blockers the player has clicked but
+   * not yet declared. Cleared by the two actions that CONSUME it, and by leaving
+   * the declare step it belongs to (the effect below). By nothing else: a cast,
+   * a land tap or a cancel in the middle of drafting blocks must leave the draft
+   * exactly where it was.
+   */
+  const clearCombatDraft = (): void => {
     setChosenAttackers(new Set());
     setWalkerAssign(new Map());
     setBlockAssign(new Map());
     setActiveBlockTarget(null);
-    setPendingManaTap(null);
-    setAbilitySource(null);
-    setPendingAbility(null);
-    setHandChoice(null);
-    setManaPicker(null);
   };
+
+  /**
+   * A combat draft belongs to ONE declare step, so LEAVING that step is what
+   * makes it stale — nothing else is. Clearing it here instead of inside every
+   * commit path is what lets an instant cast mid-draft (or a cancelled one)
+   * leave the draft alone. The updaters return the current value unchanged when
+   * there is nothing to clear, so React bails out and this costs an idle board
+   * no render at all.
+   */
+  useEffect(() => {
+    if (step !== 'declareAttackers') {
+      setChosenAttackers((cur) => (cur.size === 0 ? cur : new Set()));
+      setWalkerAssign((cur) => (cur.size === 0 ? cur : new Map()));
+    }
+    if (step !== 'declareBlockers') {
+      setBlockAssign((cur) => (cur.size === 0 ? cur : new Map()));
+      setActiveBlockTarget((cur) => (cur === null ? cur : null));
+    }
+  }, [step]);
 
   const notify = (message: string): void => {
     setToast(message);
     window.setTimeout(() => setToast(null), TOAST_MS);
   };
 
-  const run = (fn: () => SubmitResult): void => {
+  /**
+   * Submit one action that is NOT a proposal (a land drop, a pass, a declaration,
+   * a free-hand mana tap, an answer to a resolving spell's question).
+   *
+   * `alsoClearCombatDraft` is set by exactly the two declarations that consume
+   * the draft — and only on success, so a refused declaration keeps the clicks
+   * the player made.
+   */
+  const run = (fn: () => SubmitResult, alsoClearCombatDraft = false): void => {
     const result = fn();
     if (result.rejected) {
       notify(result.rejected);
       return;
     }
-    resetTransient();
+    resetProposal();
+    if (alsoClearCombatDraft) clearCombatDraft();
     onSubmit(() => result);
   };
+
+  // --- the proposal, unpacked ------------------------------------------------------
+  /** The one question the proposal is asking right now, or null. */
+  const proposalQuestion = proposalPreview?.question ?? null;
+  /** The cast this proposal is about, or null when it is not a cast. */
+  const proposedCast: CastOption | null =
+    proposal && proposal.opening.kind === 'cast' ? proposal.opening.option : null;
+  /** The activated ability this proposal is about, or null. */
+  const proposedAbility: AbilityOption | null =
+    proposal && proposal.opening.kind === 'activate' ? proposal.opening.option : null;
+  /** The §3.60 mana picker is on screen (see {@link fundingSources}). */
+  const fundingOpen = fundingSources !== null;
+  /**
+   * An ENGINE-parked cast-time question (kicker, X, modes, an additional cost)
+   * belongs to a proposal whose spell is already on the WORKING stack while the
+   * board still renders the COMMITTED one (`BOARD_SESSION_BY_STAGE.announcing`).
+   * The committed session therefore looks completely idle — so without this the
+   * hand would stay clickable underneath a half-announced spell.
+   */
+  const announcingQuestion = proposalQuestion?.kind === 'engine' ? proposalQuestion : null;
+  /**
+   * The state a question's source card must be looked up in. A parked cast-time
+   * question names a spell that exists only on the working stack.
+   */
+  const questionState = announcingQuestion && proposal ? proposal.working.state : session.state;
 
   // A parked question preempts everything: while it stands the engine offers no
   // other action, so the board's own controls must go quiet until it is answered.
   const pendingChoice = session.pendingChoice;
-  const isViewersPriority = session.priorityPlayer === viewer && !pendingChoice;
+  /**
+   * §3.143 wave 3 — THE QUESTION COMES FROM STATE. THE PROPOSAL IS A ROUTE FOR
+   * THE ANSWER, NOT THE REASON THE QUESTION IS ON SCREEN.
+   *
+   * Wave 2 rendered the engine-parked cast-time question (kicker, X, modes, an
+   * additional cost) ONLY inside `announcingQuestion && proposal`, with the
+   * session's own `pendingChoice` as the `else` arm of a ternary. A `Proposal`
+   * is transient React state; a parked choice lives in `GameState` and survives
+   * a reload, a resume and a rebuild. Gating the rendering on the transient half
+   * means that the day the two disagree — a proposal dropped by the
+   * stale-snapshot effect, a resume, a remount — the board shows NO question for
+   * a game that is waiting on one, and nothing else is offered either (see
+   * `isViewersPriority` just above, which goes quiet while a question stands).
+   * That is a stranded game.
+   *
+   * So: the question is whichever state has one, the proposal only decides
+   * where the answer is sent, and NOTHING about the rendering is conditional on
+   * a proposal existing. `play-board-mount.test.ts` fails if that inverts again.
+   */
+  const parkedQuestion: PendingChoice | null =
+    announcingQuestion?.choice ??
+    (pendingChoice && isChoiceForViewer(pendingChoice, viewer) ? pendingChoice : null);
+  const isViewersPriority =
+    session.priorityPlayer === viewer && !pendingChoice && announcingQuestion === null;
   const playableLands = isViewersPriority ? session.playableLands() : [];
   const castOptions = isViewersPriority ? session.castOptions() : [];
   // Flashback: cards castable OUT OF the viewer's graveyard, same option shape as
-  // the hand so the whole cast flow below (target pick → castWithAutoTap) is shared.
+  // the hand so the whole cast flow below (target pick → proposal → dispatch) is shared.
   const graveyardCasts = isViewersPriority ? session.graveyardCastOptions() : [];
   // Cycling: an ability of a card in HAND, so it is a second way to play a card
   // that may already have one (a cycling land is also a land drop) — which is
@@ -362,19 +558,23 @@ export function PlayBoard({
     return map;
   }, [session, isViewersPriority]);
 
+  /**
+   * Activate an ability. **Everything** — the targets, the "Sacrifice another
+   * …" payers, the §3.129 tap-to-afford float — goes through the proposal, which
+   * already knows which of those are real questions and which have exactly one
+   * legal answer (`ASK_WHEN_ONLY_ONE_ANSWER`), and which submit shape to use.
+   *
+   * ⚠️ THIS IS THE 137-DEAD-BUTTONS FIX. The board used to call
+   * `session.activateAbility(id, idx)` — with NO `costInstanceIds` — and
+   * `applyActivateAbility` rejects that outright for any ability that prints a
+   * sacrifice cost. `AbilityOption.costPayers` existed; nothing on a screen read
+   * it. `proposal-adoption.test.ts` drives a real pool card (Atog) through this
+   * same funnel and fails if the engine refuses — and separately fails if any
+   * activation on this board stops going through the proposal at all.
+   */
   const onChooseAbility = (opt: AbilityOption): void => {
     setAbilitySource(null);
-    if (opt.targets === null) {
-      // §3.129 — a tap-to-afford ability (an untapped Strionic Resonator with
-      // lands to spare) floats its mana first; one already payable does not.
-      run(() =>
-        opt.affordableWithTap
-          ? session.activateWithAutoTap(opt.instanceId, opt.abilityIndex)
-          : session.activateAbility(opt.instanceId, opt.abilityIndex),
-      );
-    } else {
-      setPendingAbility(opt);
-    }
+    propose({ kind: 'activate', option: opt });
   };
 
   const onTapForMana = (id: InstanceId): void => {
@@ -391,24 +591,22 @@ export function PlayBoard({
 
   /**
    * Tap one source — the ONE path both the free-hand board tap and the picker's
-   * rows take. While a picker stands the tap folds into its private working
-   * session; otherwise it commits as it always has. Splitting these would be two
-   * answers to "what does clicking a land do".
+   * rows take. While the picker stands the tap folds into the PROPOSAL's private
+   * working session; otherwise it commits as it always has. Splitting these
+   * would be two answers to "what does clicking a land do".
    */
   const tapSource = (instanceId: InstanceId, mode: number | undefined): void => {
     setPendingManaTap(null);
-    if (!manaPicker) {
-      run(() => session.tapForMana(instanceId, mode));
+    if (fundingOpen && proposal) {
+      // `applyStep`, never `driveProposal`: a tap answers no question, so
+      // driving forward here would confirm the cast the moment the pool covered
+      // it — before the player had said they were done paying.
+      applyStep(
+        stepProposal(proposal, { kind: 'tapSource', instanceId, ...(mode !== undefined ? { mode } : {}) }),
+      );
       return;
     }
-    const tapped = manaPicker.working.tapForMana(instanceId, mode);
-    if (tapped.rejected) {
-      notify(tapped.rejected);
-      return;
-    }
-    const spent = new Set(manaPicker.spent);
-    spent.add(instanceId);
-    setManaPicker({ ...manaPicker, working: tapped.session, spent });
+    run(() => session.tapForMana(instanceId, mode));
   };
 
   // --- the §3.60 mana picker --------------------------------------------------------
@@ -436,16 +634,19 @@ export function PlayBoard({
 
   /**
    * The live "still needed: {1}{G}" readout, against the WORKING pool — and
-   * against the READING the paused cast is paying (§3.143), so the Phyrexian
+   * against the READING the proposal is paying (§3.143), so the Phyrexian
    * symbols its life already bought are not still being demanded in mana.
+   * `proposedCast` IS `proposal.opening.option`, so the reading the readout
+   * prices and the reading the confirm dispatches are one fact, not two.
    */
-  const manaOwed = manaPicker
-    ? manaStillNeeded(
-        session.state.players[session.priorityPlayer].manaPool,
-        manaPicker.cast.cost ?? EMPTY_COST,
-        manaPicker.cast.phyrexianLife ?? 0,
-      )
-    : EMPTY_COST;
+  const manaOwed =
+    fundingOpen && proposedCast
+      ? manaStillNeeded(
+          session.state.players[session.priorityPlayer].manaPool,
+          proposedCast.cost ?? EMPTY_COST,
+          proposedCast.phyrexianLife ?? 0,
+        )
+      : EMPTY_COST;
 
   /**
    * Whether Confirm may fire. Read off the ENGINE'S own offer — the paused cast
@@ -454,122 +655,257 @@ export function PlayBoard({
    * this is the decision, and the two must not be the same opinion twice.
    */
   const manaPickerReady =
-    manaPicker !== null &&
+    proposedCast !== null &&
     [...castOptions, ...graveyardCasts, ...madnessCasts].some(
-      (option) =>
-        castOptionKey(option) === castOptionKey(manaPicker.cast) && option.affordableNow,
+      (option) => castOptionKey(option) === castOptionKey(proposedCast) && option.affordableNow,
     );
 
-  /** Open the picker for a cast whose targets are already settled. */
-  const openManaPicker = (cast: CastOption, targets: readonly (InstanceId | PlayerId)[]): void => {
+  /** The tappable sources as picker rows, snapshotted when funding opens. */
+  const fundingSourcesNow = (): readonly ManaPickerSource[] => {
     const sources: ManaPickerSource[] = [];
     for (const [instanceId, options] of tapMenu) {
       const perm = session.state.battlefield.find((p) => p.instanceId === instanceId);
       if (!perm || perm.controller !== viewer) continue;
       sources.push({ instanceId, name: perm.def.name, controller: perm.controller, options });
     }
-    resetTransient();
-    setManaPicker({ cast, targets, working: committedSession, sources, spent: new Set() });
+    return sources;
   };
 
-  /**
-   * Commit the picked payment. The pool already covers the cost (Confirm is
-   * disabled until it does), so `castWithAutoTap` taps NOTHING more — it just
-   * casts, and its own rollback still guards a cast the engine refuses.
-   */
-  const confirmManaPicker = (): void => {
-    const picker = manaPicker;
-    if (!picker) return;
-    const result = picker.working.castWithAutoTap(
-      picker.cast.instanceId,
-      picker.targets,
-      picker.cast.fromZone ?? 'hand',
-      picker.cast.face,
-      picker.cast.phyrexianLife,
-    );
-    if (result.rejected) {
-      notify(result.rejected);
-      return;
-    }
-    setManaPicker(null);
-    resetTransient();
-    onSubmit(() => result);
-  };
-
-  /** Abandon the payment. Dropping the working session IS the rollback. */
-  const cancelManaPicker = (): void => {
-    setManaPicker(null);
-    setPendingManaTap(null);
-  };
+  /** Which sources this payment has already spent — the PROPOSAL's own record. */
+  const fundingSpent = useMemo(
+    () => new Set<InstanceId>(proposal?.spentManaSources ?? []),
+    [proposal],
+  );
 
   const setAlwaysChoose = (always: boolean): void => {
     setAlwaysChooseMana(always);
     saveManaChoicePref(always);
   };
 
-  // --- targeting -----------------------------------------------------------------
-  // Asked of the SESSION with the cast option itself (§3.119), so core's own
-  // enumerator answers with the caster and the card in hand: the set the engine
-  // will accept, and nothing wider. Bug report 20260901_211035 was the opposite
-  // — the board's private table did not know `blinkTarget` targeted anything,
-  // so Cloudshift was cast with no target and refused.
-  const targetOptions: readonly TargetOption[] = pendingCast ? session.castTargets(pendingCast) : [];
+  /**
+   * A PUBLIC instance's card face, so a target — on the stack panel, in a
+   * prompt — is hoverable rather than a bare name (UX-1 / UX-8 / UX-10).
+   * `null` for anything with no pool card or no public home, which the
+   * consumers render as a named plate rather than guessing at art.
+   */
+  const faceOfInstance = useCallback(
+    (ref: InstanceId | PlayerId): string | null =>
+      typeof ref === 'number' ? (findInstanceAnywhere(session.state, ref)?.def.id ?? null) : null,
+    [session],
+  );
 
   /**
-   * Finish a cast whose targets are settled: either hand the payment to the
-   * player (§3.60) or auto-tap it exactly as before.
+   * The same lookup against the state a PARKED CAST-TIME question lives in. The
+   * spell being announced is on the working stack and nowhere else, so the
+   * board's own `faceOfInstance` (which reads the committed session while a
+   * proposal is `announcing`) cannot see it.
+   */
+  const questionFaceOf = useCallback(
+    (ref: InstanceId | PlayerId): string | null =>
+      typeof ref === 'number' ? (findInstanceAnywhere(questionState, ref)?.def.id ?? null) : null,
+    [questionState],
+  );
+
+  /**
+   * §3.143 wave 3 / UX-8 — how the SHARED ability prompts turn an engine ref
+   * into a drawable card. Wired once here and handed to both prompts, so
+   * "which face does #7 show, and what is modifying it?" has one answer on this
+   * board (rule 12) rather than one per dialog.
    *
-   * `requested` is the per-cast way in — the hand card's "choose mana" chip —
-   * and it is still subject to the same "is there a real choice?" gate as the
+   * A PlayerId ref resolves to no card and no explanation, which is the honest
+   * answer — a seat is not a card — and the prompt draws a named plate for it.
+   */
+  const promptFaces: AbilityPromptFaces = useMemo(
+    () => ({
+      cardIdOf: faceOfInstance,
+      explanationOf: (ref: InstanceId | PlayerId) =>
+        typeof ref === 'number' ? explainForFace(session.state, ref) : undefined,
+    }),
+    [faceOfInstance, session],
+  );
+
+  /**
+   * The face of the hand card whose "how do you want to play this?" menu is
+   * open. The viewer's OWN hand is the one hidden zone they may see, so the
+   * lookup is theirs alone.
+   */
+  const handChoiceFaceId =
+    handChoice === null ? null : ((view.self.hand ?? []).find((c) => c.instanceId === handChoice)?.cardId ?? null);
+
+  /**
+   * The player-facing sentence to show INSTEAD of a cancel control, or null
+   * while backing out is still honest. Straight off `ProposalView` — the
+   * vocabulary (`REWIND_BLOCK_EXPLANATIONS`) lives with the rule it belongs to,
+   * so this surface invents no copy of its own.
+   */
+  const cancelBlockedExplanation = proposalPreview?.cancelBlockedExplanation ?? null;
+
+  // --- the cast transaction ---------------------------------------------------------
+  /**
+   * Fold ONE proposal step into the board. THE single place a step is applied,
+   * so "what happens when the transaction moves" has one answer (rule 12) — and
+   * so the I6 obligation holds by construction: the only session that ever
+   * reaches `onSubmit` comes off a `committed` step.
+   */
+  const applyStep = (next: ProposalStep): void => {
+    switch (next.kind) {
+      // Cancelling a proposal that is already gone is a no-op, not an error.
+      case 'noop':
+        return;
+      case 'open':
+        setProposal(next.proposal);
+        return;
+      case 'refused':
+        // The engine's words, or the honest refusal's sentence. The proposal
+        // survives unchanged so the player can retry or finish it.
+        notify(next.reason);
+        if (next.proposal) setProposal(next.proposal);
+        return;
+      case 'cancelled':
+        resetProposal();
+        return;
+      case 'committed': {
+        const result: SubmitResult = { session: next.session, rejected: null, events: next.events };
+        resetProposal();
+        onSubmit(() => result);
+        return;
+      }
+    }
+  };
+
+  /**
+   * Whether THIS cast earns the §3.60 picker. The per-cast way in (the hand
+   * card's ⛁ chip) is subject to the same "is there a real choice?" gate as the
    * persisted setting, so neither route can raise a picker with one button in it.
    */
-  const startCast = (
-    cast: CastOption,
-    targets: readonly (InstanceId | PlayerId)[],
-    requested = false,
-  ): void => {
-    const ask = shouldAskForMana({
+  const wantsManaPicker = (cast: CastOption, requested: boolean): boolean =>
+    shouldAskForMana({
       always: alwaysChooseMana,
       requested,
       choiceExists: castsWithManaChoice.has(castOptionKey(cast)),
     });
-    if (ask) {
-      openManaPicker(cast, targets);
+
+  /**
+   * Drive a proposal to the next thing the PLAYER has to decide, and CONFIRM it
+   * when nothing is outstanding — which is what keeps a target-less, cost-less
+   * ability a single click, exactly as it was before the transaction existed.
+   *
+   * The mana picker is asked LAST, once the aim is settled: it is the final
+   * question before the dispatch, and asking it earlier would make the player
+   * place mana for a spell they had not finished pointing.
+   */
+  const driveProposal = (next: ProposalStep, askForMana: boolean): void => {
+    if (next.kind !== 'open') {
+      applyStep(next);
       return;
     }
-    // `fromZone` rides the option: a flashback cast names its graveyard source
-    // (and pays the flashback cost inside castWithAutoTap); hand casts omit it.
-    // So does `phyrexianLife` — the option IS the reading the player picked, and
-    // dropping it here would auto-tap for one price and cast at another.
-    run(() =>
-      session.castWithAutoTap(
-        cast.instanceId,
-        targets,
-        cast.fromZone ?? 'hand',
-        cast.face,
-        cast.phyrexianLife,
-      ),
+    const open = next.proposal;
+    if (proposalView(open).question !== null) {
+      setProposal(open);
+      return;
+    }
+    if (askForMana && fundingSources === null) {
+      setFundingSources(fundingSourcesNow());
+      setProposal(open);
+      return;
+    }
+    // No cast action is submitted here any more: `confirm` hands the opening to
+    // `dispatchOpening`, which is where `fromZone`, `face` and `phyrexianLife`
+    // now ride the option to the engine.
+    applyStep(stepProposal(open, { kind: 'confirm' }));
+  };
+
+  /**
+   * Open a proposal. THE single door into the transaction: a cast from hand, a
+   * flashback out of the graveyard, a madness cast from exile, an activated
+   * ability and a cycling ability all come through here, so none of them can
+   * acquire a cancel of its own — which is the CLASS this replaces.
+   *
+   * The rewind target is always `committedSession`, never the rendered one: a
+   * proposal opened against a working session would restore to a half-paid board.
+   *
+   * The open COUNT is handed over so `PROPOSAL_CONFIG.maxOpenProposals` is a
+   * live gate rather than a dead config field: clicking a second card while a
+   * target prompt stands is REFUSED in words ("finish or cancel the current
+   * spell first"), not silently allowed to replace the first proposal — which
+   * would drop a half-made decision with no explanation at all.
+   */
+  const propose = (opening: ProposalOpening, askForMana = false): void => {
+    proposalSeq.current += 1;
+    driveProposal(
+      openProposal(committedSession, opening, viewer, proposalSeq.current, proposal ? 1 : 0),
+      askForMana,
     );
   };
 
-  const commitCast = (targets: readonly (InstanceId | PlayerId)[]): void => {
-    const cast = pendingCast;
-    if (!cast) return;
-    startCast(cast, targets, pendingCastAsks);
+  /**
+   * The face of the card being cast, for the target prompt (UX-8). `CastOption`
+   * carries a name and not a card id, so it is resolved from the VIEWER'S OWN
+   * hand first (the one hidden zone this viewer may see) and from the public
+   * zones after — a flashback cast comes from a graveyard, a madness cast from
+   * exile. `null` for anything unresolvable, which draws a named plate.
+   */
+  const castFaceId = proposedCast
+    ? ((view.self.hand ?? []).find((c) => c.instanceId === proposedCast.instanceId)?.cardId ??
+      faceOfInstance(proposedCast.instanceId))
+    : null;
+
+  /** The cast's TARGETS question, when that is what is outstanding. */
+  const castTargetQuestion =
+    proposedCast && proposalQuestion?.kind === 'targets' ? proposalQuestion : null;
+
+  /**
+   * Board-clickable target candidates. The proposal asked core's own enumerator
+   * (`session.castTargets`) and kept each enumerated `TargetOption`, so the board
+   * re-derives nothing: bug report 20260901_211035 was exactly the opposite —
+   * the board's private table did not know `blinkTarget` targeted anything, so
+   * Cloudshift was cast with no target and refused.
+   */
+  const targetOptions: readonly TargetOption[] = castTargetQuestion
+    ? castTargetQuestion.candidates.flatMap((choice) => (choice.option ? [choice.option] : []))
+    : [];
+
+  /**
+   * Answer the outstanding TARGETS question with one more target. APPENDS,
+   * because a requirement of two targets is one question answered by two clicks
+   * and `targetQuestion` closes itself once enough have been named.
+   */
+  const chooseTarget = (target: InstanceId | PlayerId): void => {
+    if (!proposal) return;
+    driveProposal(
+      stepProposal(proposal, { kind: 'setTargets', targets: [...proposal.targets, target] }),
+      proposedCast !== null && wantsManaPicker(proposedCast, castRequestedMana),
+    );
+  };
+
+  /** Answer the outstanding "what do you sacrifice?" question (CR 602.2b). */
+  const choosePayers = (payer: AbilityCostChoice): void => {
+    if (!proposal) return;
+    driveProposal(stepProposal(proposal, { kind: 'setCostPayers', instanceIds: payer.instanceIds }), false);
+  };
+
+  /**
+   * Back out, from ANY pre-commit step, repeatedly (UX-4). A live proposal is
+   * cancelled THROUGH the transaction, so a rewind that is no longer honest is
+   * REFUSED with its reason rather than silently un-showing something a player
+   * saw; everything else here is a menu the engine was never told about.
+   */
+  const backOut = (): void => {
+    if (proposal) {
+      applyStep(cancelProposal(proposal));
+      return;
+    }
+    resetProposal();
   };
 
   const onCastClick = (opt: CastOption, requested = false): void => {
-    if (opt.needsTarget) {
-      setPendingCast(opt);
-      setPendingCastAsks(requested);
-    } else {
-      startCast(opt, [], requested);
-    }
+    setCastRequestedMana(requested);
+    propose({ kind: 'cast', option: opt }, wantsManaPicker(opt, requested));
   };
 
   const onCycleClick = (opt: CycleOption): void => {
     setHandChoice(null);
-    run(() => session.cycleWithAutoTap(opt.instanceId, opt.abilityIndex));
+    propose({ kind: 'cycle', option: opt });
   };
 
   /**
@@ -607,8 +943,77 @@ export function PlayBoard({
   // diverge from what clicking the card would have done (menus for multi-way
   // cards included). The re-lookup on drop is deliberate: the frame may have
   // changed mid-gesture, and stale affordances must not fire.
-  /** The card being inspected full-size, if any (report 20260825_210026). */
-  const [zoomed, setZoomed] = useState<{ cardId: string; name: string } | null>(null);
+  /**
+   * The card being inspected full-size, if any (report 20260825_210026).
+   *
+   * {@link ZoomedCard}, not `{cardId, name}`: a battlefield permanent carries
+   * its live P/T, its granted keywords and their sources, and the zoom is the
+   * one surface where a player can actually hover those words (§3.143 GAP-C).
+   */
+  const [zoomed, setZoomed] = useState<ZoomedCard | null>(null);
+
+  /**
+   * Every permanent on the table by id — the board's answer to "what is #7, as
+   * the player can currently see it?". Built from the SAME `BoardView` the seats
+   * are drawn from, so the zoom cannot disagree with the tile it was opened
+   * from; a second lookup would be a second answer (rule 12).
+   */
+  const permById = useMemo(() => {
+    const map = new Map<InstanceId, BoardPermanent>();
+    for (const perm of [...view.self.permanents, ...view.opponent.permanents]) {
+      map.set(perm.instanceId, perm);
+    }
+    return map;
+  }, [view]);
+
+  /**
+   * §3.143 wave 3 / GAP-C — A WAY IN FROM THE BATTLEFIELD.
+   *
+   * The zoom had exactly two doors — a hand card and the jail peek — so the
+   * cards a whole game is played with were the ones a player could never open
+   * full-size with a pointer. (`CardHover`'s preview is deliberately
+   * `pointer-events: none`, so its glossary pops are visible and not hoverable;
+   * this overlay is the only place UX-17.4 is genuinely reachable with a mouse.)
+   *
+   * DELEGATED from the seat wrapper rather than added to the tile, because
+   * `SeatPanel` and `BoardPermanentTile` belong to another lane — `data-perm-home`
+   * is the anchor those files already publish and it is enough.
+   *
+   * TWO gestures, and the split is deliberate:
+   *  - RIGHT-CLICK anywhere on a tile, matching the hand card's own context
+   *    menu, so one gesture inspects a card wherever it sits;
+   *  - a PLAIN CLICK only when the click did not land on a control. A tile is a
+   *    `<button>` exactly when it is selectable (an attacker, a block, a land to
+   *    tap), and hijacking that click would cost the player a real move — while
+   *    a click on a NON-interactive permanent does nothing at all today, which
+   *    is the affordance a touch device can reach.
+   */
+  const inspectPermanentFrom = useCallback(
+    (event: ReactMouseEvent, requireInert: boolean): void => {
+      const from = event.target instanceof Element ? event.target : null;
+      if (from === null) return;
+      if (requireInert && from.closest('button') !== null) return;
+      const tile = from.closest('[data-perm-home]');
+      const raw = tile?.getAttribute('data-perm-home');
+      if (raw === null || raw === undefined) return;
+      const perm = permById.get(Number(raw) as InstanceId);
+      if (perm === undefined) return;
+      event.preventDefault();
+      setZoomed({
+        cardId: perm.cardId,
+        name: perm.name,
+        isCreature: perm.isCreature,
+        ...(perm.explanation !== undefined ? { explanation: perm.explanation } : {}),
+      });
+    },
+    [permById],
+  );
+
+  /** The two handlers every seat gets, spread onto its wrapper. */
+  const seatInspectProps = {
+    onContextMenu: (event: ReactMouseEvent) => inspectPermanentFrom(event, false),
+    onClick: (event: ReactMouseEvent) => inspectPermanentFrom(event, true),
+  };
 
   // --- §3.57 clarity systems -------------------------------------------------------
   /** The board container: the combat-lines canvas and the animation anchors' root. */
@@ -716,6 +1121,7 @@ export function PlayBoard({
     }
   });
   const tileRectOf = useCallback((id: InstanceId): DOMRect | undefined => tileRectsRef.current.get(id), []);
+
 
   const { drag, dropRef, handProps: dragHandProps } = useDragToPlay((id) => {
     const land = playableLands.includes(id);
@@ -855,16 +1261,16 @@ export function PlayBoard({
     // THE PICKER OWNS THE BOARD while it stands: the only thing to do is choose
     // sources, so nothing else may steal a click. Spent sources stay marked so
     // the player can see the payment they are assembling.
-    if (manaPicker) {
+    if (fundingOpen) {
       const markers = new Map<InstanceId, string>();
-      for (const id of manaPicker.spent) markers.set(id, 'paying');
+      for (const id of fundingSpent) markers.set(id, 'paying');
       for (const id of tappable) {
         const options = tapMenu.get(id) ?? [];
         markers.set(id, isModalTap(options) ? 'pay: any' : `pay: ${options[0]?.label ?? ''}`);
       }
       return {
         selectableIds: tappable,
-        selectedIds: new Set(manaPicker.spent),
+        selectedIds: fundingSpent,
         markers,
         onClick: onTapForMana,
       };
@@ -895,7 +1301,7 @@ export function PlayBoard({
       };
     }
     // Spell targeting: allow clicking own creatures as targets.
-    if (pendingCast) return targetInteraction(view.self.permanents.map((p) => p.instanceId));
+    if (castTargetQuestion) return targetInteraction(view.self.permanents.map((p) => p.instanceId));
     // Otherwise your untapped mana sources are tappable by hand, and permanents
     // with an engine-offered activated ability (a planeswalker's loyalty lines)
     // open their ability menu. Last in the chain so neither steals a click from
@@ -953,12 +1359,12 @@ export function PlayBoard({
         onClick: onBlockBoardClick,
       };
     }
-    if (pendingCast) return targetInteraction(view.opponent.permanents.map((p) => p.instanceId));
+    if (castTargetQuestion) return targetInteraction(view.opponent.permanents.map((p) => p.instanceId));
     return undefined;
   }
 
   function targetInteraction(ownedIds: readonly InstanceId[]): PermInteraction | undefined {
-    if (!pendingCast) return undefined;
+    if (!castTargetQuestion) return undefined;
     // Board-clickable targets: anything of the engine's offers that is ON THE
     // BATTLEFIELD (creature, planeswalker or any other permanent — Naturalize
     // aims at an artifact, and a tile is a tile). Players and stack objects
@@ -975,19 +1381,123 @@ export function PlayBoard({
       // The same set, marked so it PULSES: "which creature can this go on?" is
       // answered by looking (§3.119, report 20260901_211035).
       targetableIds: permanentTargets,
-      onClick: (id) => commitCast([id]),
+      onClick: (id) => chooseTarget(id),
     };
   }
 
   // --- render --------------------------------------------------------------------
   const statusText = `Turn ${view.turnNumber} · ${stepLabel(step)} · ${names[view.activePlayer]}'s turn`;
 
-  // Which blocker→attacker lines to draw this frame (pure rule, tested).
-  const combatLines = blockerLinePairs({
+  /**
+   * §3.143 / UX-14 — the fiery arcs, both directions. `combatArcPairs` is the
+   * funnel: blocker→attacker as before, PLUS attacker→(player | planeswalker),
+   * which the board could never draw because `blockerLinePairs` knew only one
+   * pair kind. `defendingSeat` is required for an attack on a PLAYER to draw
+   * anything — who defends is a rules question (CR 506.2) core owns, and the
+   * arc module deliberately refuses to re-answer it.
+   */
+  const combatLines = combatArcPairs({
     step,
     declaredBlocks: view.combat?.blocks,
     draftAssign: blockAssign,
+    declaredAttackers: session.state.combat?.attackers,
+    ...(session.state.combat?.attackTargets !== undefined
+      ? { attackTargets: session.state.combat.attackTargets }
+      : {}),
+    defendingSeat: opponentOf(session.state.activePlayer),
+    draftAttackers: chosenAttackers,
+    draftAttackTargets: walkerAssign,
   });
+
+  /**
+   * §3.143 / UX-12 + UX-13 — WHICH CARDS WALK OUT.
+   *
+   * Declared attackers and declared blockers only. A DRAFT selection does not
+   * advance: while the player is still clicking, the cards must stay where they
+   * are so the next click lands on the tile they aimed at — the arcs already
+   * show the draft, dashed, which is the right channel for "not yet decided".
+   */
+  const stageEntries = useMemo((): readonly StageEntry[] => {
+    const combat = session.state.combat;
+    if (!combat || !combat.attackersDeclared) return [];
+    const permById = new Map<InstanceId, (typeof view.self.permanents)[number]>();
+    for (const seat of [view.self, view.opponent]) {
+      for (const perm of seat.permanents) permById.set(perm.instanceId, perm);
+    }
+    // The attacker's seat is the ACTIVE player's; everyone advances toward the
+    // midline, so the sign is "am I the viewer's seat or the far one".
+    const towardFor = (controller: PlayerId): 1 | -1 => (controller === viewer ? -1 : 1);
+    const entries: StageEntry[] = [];
+    for (const id of combat.attackers) {
+      const perm = permById.get(id);
+      if (perm) entries.push({ perm, role: 'attacker', toward: towardFor(perm.controller) });
+    }
+    if (combat.blockersDeclared) {
+      for (const [blockerId, attackerId] of Object.entries(combat.blocks)) {
+        const perm = permById.get(Number(blockerId));
+        if (perm) {
+          entries.push({
+            perm,
+            role: 'blocker',
+            toward: towardFor(perm.controller),
+            meets: attackerId,
+          });
+        }
+      }
+    }
+    return entries;
+  }, [session, view, viewer]);
+
+  /**
+   * Which cards are OUT, so their home tiles hand `data-perm-id` over to the
+   * copy the player is actually looking at. Delivered through a CONTEXT rather
+   * than a prop because `SeatPanel` renders every tile and belongs to no lane —
+   * see `combat-stage-context.ts`.
+   */
+  const [stagedIds, setStagedIds] = useState<ReadonlySet<InstanceId>>(NO_STAGED_PERMANENTS);
+
+  /** The element between the two seats: its vertical centre IS the midline. */
+  const midlineRef = useRef<HTMLDivElement>(null);
+
+  /** §3.143 / UX-15 — damage travels from source to recipient (lane H). */
+  const { beats: damageBeats, retire: retireDamage } = useDamageSequence(session.events);
+
+  /**
+   * §3.143 / UX-9 — the tabletop's own numbers, handed to the CSS as custom
+   * properties so `board-scene.css` contains no literal at all. A player who
+   * asked for reduced motion gets `reducedMotionTiltDeg` — a NUMBER, not a
+   * boolean, so a designer can pick a gentler tilt without a code change. A
+   * static perspective is not literally motion, but `prefers-reduced-motion` is
+   * the only signal browsers give for vestibular discomfort, and a tilted plane
+   * with tiles sliding across it is exactly that trigger.
+   */
+  const reducedMotion = usePrefersReducedMotion();
+  const sceneVars = {
+    '--board-perspective-px': `${BOARD_3D_CONFIG.perspectivePx}px`,
+    '--board-tilt-deg': `${reducedMotion ? BOARD_3D_CONFIG.reducedMotionTiltDeg : BOARD_3D_CONFIG.tiltDeg}deg`,
+    '--board-origin-x': `${BOARD_3D_CONFIG.perspectiveOriginXFraction * 100}%`,
+    '--board-origin-y': `${BOARD_3D_CONFIG.perspectiveOriginYFraction * 100}%`,
+    '--board-scene-ms': `${BOARD_3D_CONFIG.sceneTransitionMs}ms`,
+    '--perm-turn-ms': `${TAP_ROTATION_CONFIG.turnMs}ms`,
+    '--perm-tapped-opacity': String(TAP_ROTATION_CONFIG.tappedOpacity),
+    '--perm-tapped-grayscale': String(TAP_ROTATION_CONFIG.tappedGrayscaleFraction),
+    '--perm-staged-opacity': String(STAGED_HOME_TILE_OPACITY),
+    '--combat-advance-ms': `${COMBAT_ADVANCE_CONFIG.advanceMs}ms`,
+    '--spell-hold-fade-ms': `${SPELL_HOLD_CONFIG.fadeMs}ms`,
+    // §3.143 wave 3 — the ARRANGEMENT's own numbers (BOARD_LAYOUT_CONFIG). The
+    // same rule as the tilt's: board-fit.css says how the board reads them and
+    // contains none of them.
+    '--play-log-rail-w': `${BOARD_LAYOUT_CONFIG.logRailWidthRem}rem`,
+    '--board-midline-h': `${BOARD_LAYOUT_CONFIG.midlineThicknessPx}px`,
+    '--play-tile-far-scale': String(BOARD_LAYOUT_CONFIG.farSeatTileScale),
+    '--play-land-tile-scale': String(BOARD_LAYOUT_CONFIG.landTileScale),
+    '--play-backs-scale': String(BOARD_LAYOUT_CONFIG.opponentBacksScale),
+    // The tile's own SHAPE. Distinct from the per-tile `--perm-footprint`
+    // (which is 1 or the ratio depending on whether THAT card is tapped): this
+    // one is the card's aspect unconditionally, because an untapped tile is a
+    // card standing up and a tapped one is the same card lying down.
+    '--perm-aspect': String(TAP_ROTATION_CONFIG.footprintRatio),
+  } as CSSProperties;
 
   // The §3.57 hint rule: the copy must describe the buttons that exist. The
   // attack window is the ACTIVE player's own declare step, pre-declaration;
@@ -1029,41 +1539,127 @@ export function PlayBoard({
   );
 
   /**
-   * §3.119 — THE FOLDED "YOU MAY … TARGET …" (report 20260901_205339). The
-   * engine asks a mandatory target question on the way to the stack and the
-   * "may" at resolution, in that order, correctly. The board offers the decline
-   * on the FIRST prompt: taking it answers the target with the engine's own
-   * default and remembers the asking permanent, so the "may" that follows is
-   * answered NO without a second modal. Both questions are still asked and
-   * answered; the player is asked once.
-   */
-  const choiceSourceDef = pendingChoice
-    ? session.state.battlefield.find((p) => p.instanceId === pendingChoice.sourceInstanceId)?.def
-    : undefined;
-  const declineLabel = pendingChoice ? optionalTargetDecline(pendingChoice, choiceSourceDef) : null;
-
-  /**
-   * Answer BOTH of the trigger's questions in one gesture.
+   * §3.143 / UX-6 — "MAY" IS ASKED BEFORE TARGETS, and the answer is REMEMBERED.
    *
-   * The session is immutable and `answerChoice` returns the next one
-   * SYNCHRONOUSLY, so the "may" question the engine parks after the target is
-   * already on that returned session — no remembered flag, no effect, and no
-   * frame in which the second modal could flash. The engine still asks both, in
-   * the order the rules require; the player answered once.
+   * ⚠️ THE OLD FOLD DID NOT WORK, AND ITS DOC COMMENT WAS THE REASON. It
+   * answered the target and then read `aimed.session.pendingChoice`
+   * synchronously, on a comment asserting that the "may" was already parked on
+   * that session. Lane C measured it: it is `null` — the trigger is on the
+   * stack and needs a full priority round before it resolves and asks. So
+   * "Don't use Conjurer's Closet" chose a target FOR the player (via
+   * `defaultAnswerFor`) and then showed the may modal anyway, on all 24 cards
+   * of the class. The answer is now carried across that round in a LEDGER and
+   * spent by the effect below.
+   *
+   * ⚠️ AND THE SOURCE LOOKUP WAS BATTLEFIELD-ONLY. Every modal spell's per-mode
+   * target question carries the SPELL's instance id (it is on the stack, not the
+   * battlefield), so the prompt fell back to a named placeholder — 110 modal
+   * modes on 60 pool cards, measured by lane C. `findDefAnywhere` is what makes
+   * UX-8 ("show the actual card that is provoking the choice") true for them.
    */
-  const declineOptionalTrigger = (): void => {
+  const [mayLedger, setMayLedger] = useState<DeferredMayLedger>(EMPTY_MAY_LEDGER);
+  const choiceSourceDef = pendingChoice
+    ? findDefAnywhere(session.state, pendingChoice.sourceInstanceId)
+    : undefined;
+
+  const answerFoldedMay = (yes: boolean, answer: ChoiceAnswer): void => {
     const choice = pendingChoice;
     if (!choice) return;
+    const targets = answer.kind === 'selectTargets' ? [...answer.targets] : [];
     run(() => {
-      const aimed = session.answerChoice(defaultAnswerFor(choice));
-      if (aimed.rejected) return aimed;
-      const followUp = aimed.session.pendingChoice;
-      if (followUp && isDeclinedMayQuestion(followUp, choice.sourceInstanceId)) {
-        return aimed.session.answerChoice({ kind: 'confirm', yes: false });
+      const res = session.answerChoice(answer);
+      if (res.rejected === null) {
+        const turnNumber = res.session.state.turnNumber;
+        setMayLedger((ledger) =>
+          recordDeferredMay(expireDeferredMay(ledger, turnNumber), {
+            sourceInstanceId: choice.sourceInstanceId,
+            targets,
+            yes,
+            turnNumber,
+          }),
+        );
       }
-      return aimed;
+      return res;
     });
   };
+
+  // Spend a remembered "no" the moment the trigger finally asks. It fires a
+  // full priority round after the target was answered, which is exactly why the
+  // synchronous version above could never have worked.
+  useEffect(() => {
+    const choice = session.pendingChoice;
+    if (!choice || mayLedger.length === 0) return;
+    const hit = matchDeferredMay(mayLedger, choice, session.state.resolution);
+    if (!hit) return;
+    setMayLedger((ledger) => consumeDeferredMay(ledger, hit.index));
+    const res = session.answerChoice({ kind: 'confirm', yes: hit.yes });
+    if (!res.rejected) onSubmit(() => res);
+  }, [session, mayLedger, onSubmit]);
+
+  /**
+   * §3.143 / UX-4 — IS ANYTHING PRE-COMMIT OPEN RIGHT NOW?
+   *
+   * Caleb: *"Anytime I activate an ability or anything that targets cards, until
+   * I've actually chosen the targets, I should be able to back out of the
+   * spell/ability as long as nothing has mutated game state yet."*
+   *
+   * `proposal` covers BOTH of lane B's tiers now that the transaction is wired:
+   * the 97.3% whose answer rides the action and never dispatched at all, and the
+   * 177 pool cards that park a cast-time question after the object is on the
+   * stack. For the second group the proposal still refuses HONESTLY when the
+   * announcement is genuinely over (`ProposalView.cancelBlockedExplanation`)
+   * instead of offering a cancel it cannot deliver.
+   *
+   * The other three are menus the engine has never been told about, so dropping
+   * one is free. `fundingSources` and `castRequestedMana` ride `proposal` and
+   * are not separately openable.
+   */
+  const preCommitOpen =
+    proposal !== null ||
+    abilitySource !== null ||
+    handChoice !== null ||
+    pendingManaTap !== null;
+
+  /**
+   * THE WORLD MOVED UNDER AN OPEN PROPOSAL — drop it, and SAY SO.
+   *
+   * A proposal snapshots the session it opened against, and that snapshot is
+   * what the board renders while the rewind is honest. `PlayView` owns the AI
+   * seat and the auto-passer, so it can hand down a different committed session
+   * at any time; when it does, the proposal's rewind target no longer describes
+   * the game and confirming it would apply the player's action to a board that
+   * has moved. Dropping it with a toast is the honest answer (rule 6) — a silent
+   * freeze on a stale board is the failure mode this replaces.
+   *
+   * It cannot fire on our own commits: `applyStep` clears the proposal in the
+   * same update that submits the new session.
+   */
+  useEffect(() => {
+    if (proposal === null || proposal.committed === committedSession) return;
+    resetProposal();
+    notify('The game moved on — that was not cast.');
+  }, [committedSession, proposal]);
+
+  /**
+   * Escape backs out, from ANY pre-commit step, repeatedly. The key is
+   * `PROPOSAL_CONFIG.cancelKey` rather than a fourth copy of the string
+   * `'Escape'` — the handler, the hint and the test all read the one value.
+   *
+   * The listener is re-bound whenever the proposal changes because `backOut`
+   * closes over it: a stale closure would cancel a proposal that is two answers
+   * old, which is exactly the class `Proposal.id` exists to refuse.
+   */
+  useEffect(() => {
+    if (!preCommitOpen) return undefined;
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== PROPOSAL_CONFIG.cancelKey) return;
+      event.preventDefault();
+      backOut();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preCommitOpen, proposal]);
 
   /** The reveal to announce on the board, if any and not yet dismissed (§3.119). */
   const reveal = useMemo(
@@ -1089,7 +1685,18 @@ export function PlayBoard({
   const showReveal = reveal !== null && reveal.at !== dismissedReveal;
 
   return (
-    <div className="play-board" ref={boardRootRef}>
+    /*
+     * ⚠️ `.play-board` ITSELF CARRIES NO `transform` / `perspective` / `filter`
+     * / `contain: paint`, AND MUST NOT. Twelve `position: fixed` overlays are
+     * rendered as its descendants (the prompts, the toast, the reveal, the
+     * stops menu, the animation/VFX/damage/stage layers), and any of those four
+     * properties on an ancestor makes that ancestor their containing block —
+     * silently re-rooting every one of them and moving every measured
+     * coordinate. The tilt goes on `.board-scene`, which contains only the two
+     * seats and the log. `board-scene.test.ts` is the guard; the first person
+     * who wants a screen shake will need to read it.
+     */
+    <div className="play-board" ref={boardRootRef} style={sceneVars}>
       {suggestionHint && (
         <div className="copilot-hint" role="status">
           <span className="copilot-hint__label">Co-pilot</span>
@@ -1104,16 +1711,34 @@ export function PlayBoard({
         </button>
       </div>
 
-      {/* Opponent (top) — hand hidden. */}
-      <div className="play-board__opponent">
-        <SeatPanel
-          seat={view.opponent}
-          isActive={view.activePlayer === view.opponent.id}
-          hasPriority={view.priorityPlayer === view.opponent.id}
-          interaction={opponentInteraction}
-          jails={jails}
-          onInspectCard={setZoomed}
-        />
+      {/*
+        THE TABLETOP (UX-9). Only the two seats and the centre column are tilted
+        — every modal, every overlay and the viewer's own hand are SIBLINGS of
+        this box, so none of them is projected, re-rooted or mis-measured.
+        The staged-permanent context wraps it because `SeatPanel` renders the
+        tiles and cannot be given a prop.
+      */}
+      <StagedPermanentsContext.Provider value={stagedIds}>
+      {/*
+        THE STAGE: the table, and the rail beside it. A ROW, which is the whole
+        of wave 3's layout fix — the game log used to sit in the COLUMN between
+        the two battlefields, where it cost 171px of a 600px board (measured at
+        1280×800, nine permanents), owned the height that made every tile tiny,
+        and put a scrolling history on the one line a table reserves for combat.
+        Moved sideways it costs the table no height at all, and the midline
+        below is a seam again. Below `railFoldsBelowPx` the stage folds back to
+        a column — a phone has no width to spend (board-fit.css rule 6).
+      */}
+      <div className="board-stage">
+      <div className="board-scene">
+      <div className="board-scene__table">
+      {/*
+        THE FAR EDGE OF THE TABLE. The opponent's fanned backs are drawn ABOVE
+        their battlefield, not below it: on a real table the player opposite
+        holds their hand at their own edge, and the old order put their hand
+        between their creatures and the midline — the one place nothing belongs.
+      */}
+      <div className="play-board__opponent" {...seatInspectProps}>
         <div
           className="play-hand play-hand--hidden"
           aria-label={`${view.opponent.name} hand (hidden)`}
@@ -1124,16 +1749,33 @@ export function PlayBoard({
           ))}
           {view.opponent.handCount === 0 && <span className="seat__empty">Empty hand</span>}
         </div>
+        <SeatPanel
+          seat={view.opponent}
+          isActive={view.activePlayer === view.opponent.id}
+          hasPriority={view.priorityPlayer === view.opponent.id}
+          interaction={opponentInteraction}
+          jails={jails}
+          onInspectCard={setZoomed}
+        />
       </div>
 
-      {/* Center column: stack + log. */}
-      <div className="play-board__center">
-        <StackPanel stack={view.stack} names={names} nameOf={session.nameOf} />
-        <GameLog events={session.events} resolvers={{ name: session.nameOf, playerName: session.playerName }} />
-      </div>
+      {/*
+        THE MIDLINE — a seam on the table, and the element `PlayBoard` measures
+        UX-12's midline clamp from. It is measured rather than recomputed from
+        seat heights, which is the one answer that stays true when board-fit.css
+        squeezes a seat.
+
+        ⚠️ It is NOT `.play-board__center` any more. That class still names the
+        log/stack column on the ONLINE board (`OnlineBoard.tsx`), which board-fit
+        .css sizes as the designated first-to-yield; reusing it for a 2px seam
+        would have one selector answering two questions (rule 12). Decorative,
+        so it is hidden from assistive tech: a screen reader reads the two seats
+        in order and a line between them says nothing.
+      */}
+      <div className="board-midline" ref={midlineRef} aria-hidden="true" />
 
       {/* Viewer (bottom) — own hand face-up. */}
-      <div className="play-board__self">
+      <div className="play-board__self" {...seatInspectProps}>
         {/* The seat panel doubles as the drag-to-play drop zone, exactly as on
             the online board: dashed while a card is in flight, solid when over. */}
         <div
@@ -1161,6 +1803,29 @@ export function PlayBoard({
             onClose={() => setGraveyardOpen(false)}
           />
         )}
+      </div>
+      </div>{/* .board-scene__table */}
+      </div>{/* .board-scene */}
+      {/*
+        THE LOG'S RAIL. Outside `.board-scene`, so the history is never tilted:
+        it is the one region on this surface made entirely of words, and words
+        on a slant is exactly the legibility cost UX-9 must not pay. It is a
+        `<aside>` because that is what it is — the table is the article.
+      */}
+      <aside className="board-rail" aria-label="Game log">
+        <GameLog events={session.events} resolvers={{ name: session.nameOf, playerName: session.playerName }} />
+      </aside>
+      </div>{/* .board-stage */}
+      </StagedPermanentsContext.Provider>
+
+      {/*
+        YOUR HAND IS OUTSIDE THE SCENE (UX-9). A tilted hand is unreadable, and
+        under `transform-style: flat` — which is all this board can have, see
+        board-scene.css — there is no counter-rotation that undoes the parent's
+        projection. board-fit.css rule 5 is unchanged and in fact stronger: the
+        hand is now `flex: 0 0 auto` against the whole board rather than against
+        a seat band that could be squeezed.
+      */}
         <div
           className="play-hand"
           aria-label={`${view.self.name} hand`}
@@ -1262,11 +1927,31 @@ export function PlayBoard({
           })}
           {(view.self.hand?.length ?? 0) === 0 && <span className="seat__empty">Empty hand</span>}
         </div>
-      </div>
 
-      {zoomed && (
-        <CardZoomOverlay cardId={zoomed.cardId} name={zoomed.name} onClose={() => setZoomed(null)} />
-      )}
+      {/*
+        §3.143 / UX-2 — THE STACK IS ALWAYS VISIBLE. It floats over the board
+        (`placement="floating"`, `position: absolute` inside the already-relative
+        `.play-board`) instead of sharing the centre column with the log, so it
+        costs the battlefield NO height — which matters because that column is
+        `flex: 0 4 auto`, the designated first-to-yield, and report
+        20260901_204618 ("Battleground is super crunched") was already paid once.
+        Mounted OUTSIDE `.board-scene`: an absolutely-positioned descendant of a
+        transformed box is positioned against that box and tilted with it.
+      */}
+      <StackPanel
+        stack={view.stack}
+        names={names}
+        nameOf={session.nameOf}
+        faceOf={faceOfInstance}
+        viewer={viewer}
+        placement="floating"
+      />
+
+      {/* §3.143 GAP-C — the zoom carries whatever the surface that opened it
+          knows. A hand card knows its name and face; a battlefield permanent
+          also knows its live P/T and every card granting it a keyword, and this
+          overlay is the only surface where those words are hoverable. */}
+      {zoomed && <CardZoomOverlay {...zoomed} onClose={() => setZoomed(null)} />}
 
       {/* Action bar. */}
       <ActionBar
@@ -1301,10 +1986,13 @@ export function PlayBoard({
         onToggleSound={onToggleSound}
         onAlwaysChooseMana={setAlwaysChoose}
         onPass={() => run(() => session.passPriority())}
+        /* The two actions that CONSUME the combat draft — and the only two that
+           clear it. Cleared on SUCCESS only, so a refused declaration keeps the
+           clicks the player made. */
         onDeclareAttackers={(ids) =>
-          run(() => session.declareAttackers(ids, Object.fromEntries(walkerAssign)))
+          run(() => session.declareAttackers(ids, Object.fromEntries(walkerAssign)), true)
         }
-        onDeclareBlockers={(blocks) => run(() => session.declareBlockers(blocks))}
+        onDeclareBlockers={(blocks) => run(() => session.declareBlockers(blocks), true)}
       />
 
       {/*
@@ -1314,14 +2002,32 @@ export function PlayBoard({
         hotseat handoff already gates the device on the engine moving priority to
         the chooser, so in practice the viewer IS the chooser here.
       */}
-      {pendingChoice && isChoiceForViewer(pendingChoice, viewer) && (
+      {/*
+        ONE question site, fed by `parkedQuestion` — see its definition for why
+        the state is the authority and the proposal is only a route.
+
+        §3.143 / UX-7's commit half rides the same element: when a CAST-TIME
+        question was parked on a spell that is on the WORKING stack only (kicker,
+        X, modes, an additional cost), the answer goes THROUGH the proposal, so
+        backing out really does leave nothing behind. Without a proposal the same
+        question is answered straight against the session — which is what a
+        resumed game does, and what it could not do before.
+        The source is looked up in `questionState` because an announcing spell
+        exists in no other one.
+      */}
+      {parkedQuestion && (
         <ChoicePrompt
-          choice={pendingChoice}
+          choice={parkedQuestion}
           names={names}
-          onAnswer={(answer) => run(() => session.answerChoice(answer))}
+          onAnswer={
+            announcingQuestion && proposal
+              ? (answer) => applyStep(stepProposal(proposal, { kind: 'answer', answer }))
+              : (answer) => run(() => session.answerChoice(answer))
+          }
           zoneOf={refIndex.zoneOf}
-          declineLabel={declineLabel}
-          onDecline={declineOptionalTrigger}
+          sourceDef={choiceSourceDef ?? null}
+          cardIdOf={announcingQuestion ? questionFaceOf : faceOfInstance}
+          {...(announcingQuestion ? {} : { onFoldedMay: answerFoldedMay })}
         />
       )}
 
@@ -1355,15 +2061,15 @@ export function PlayBoard({
           this list; the readout counts the cost down live. Confirm casts with
           exactly what is tapped, Cancel drops the whole working session and the
           board is back where it started. */}
-      {manaPicker && !pendingManaTap && (
+      {fundingOpen && proposedCast && !pendingManaTap && (
         <div className="target-prompt mana-picker" role="dialog" aria-label="Choose which mana pays">
           <div className="target-prompt__card">
-            <div className="target-prompt__title">Pay for {manaPicker.cast.name}</div>
+            <div className="target-prompt__title">Pay for {proposedCast.name}</div>
             <div className="mana-picker__owed" role="status">
               {stillNeededText(manaOwed)}
             </div>
             <div className="target-prompt__options mana-picker__sources">
-              {manaPickerRows(manaPicker.sources, manaPicker.spent, viewer, names).map((row) => (
+              {manaPickerRows(fundingSources ?? [], fundingSpent, viewer, names).map((row) => (
                 <button
                   key={row.instanceId}
                   type="button"
@@ -1388,13 +2094,11 @@ export function PlayBoard({
                 type="button"
                 className="btn"
                 disabled={!manaPickerReady}
-                onClick={confirmManaPicker}
+                onClick={() => proposal && applyStep(stepProposal(proposal, { kind: 'confirm' }))}
               >
                 Confirm &amp; cast
               </button>
-              <button type="button" className="btn btn--ghost" onClick={cancelManaPicker}>
-                Cancel
-              </button>
+              <ProposalCancelButton onCancel={backOut} blocked={cancelBlockedExplanation} />
             </div>
           </div>
         </div>
@@ -1407,6 +2111,15 @@ export function PlayBoard({
         <div className="target-prompt" role="dialog" aria-label="Choose how to play this card">
           <div className="target-prompt__card">
             <div className="target-prompt__title">How do you want to play {session.nameOf(handChoice)}?</div>
+            {/* UX-8/UX-10 — the card provoking the choice, not just its name. */}
+            <CardHover cardId={handChoiceFaceId}>
+              <CardFace
+                size="full"
+                cardId={handChoiceFaceId}
+                name={session.nameOf(handChoice)}
+                explanation={explainForFace(session.state, handChoice)}
+              />
+            </CardHover>
             <div className="target-prompt__options">
               {playableLands.includes(handChoice) && (
                 <button
@@ -1480,6 +2193,16 @@ export function PlayBoard({
             <div className="target-prompt__title">
               {opt.name} was discarded and exiled. Cast it for its madness cost?
             </div>
+            {/* UX-8/UX-10 — the exiled card itself. Exile is public, so the face
+                resolves off the board's own public lookup. */}
+            <CardHover cardId={faceOfInstance(opt.instanceId)}>
+              <CardFace
+                size="full"
+                cardId={faceOfInstance(opt.instanceId)}
+                name={opt.name}
+                explanation={explainForFace(session.state, opt.instanceId)}
+              />
+            </CardHover>
             <div className="target-prompt__options">
               <button
                 type="button"
@@ -1503,51 +2226,125 @@ export function PlayBoard({
           SHARED with the online board — one loyalty UI, not two that drift. */}
       {abilitySource !== null && (
         <AbilityMenuPrompt
-          sourceName={session.nameOf(abilitySource)}
+          source={{ instanceId: abilitySource, name: session.nameOf(abilitySource) }}
           options={abilityMenu.get(abilitySource) ?? []}
+          faces={promptFaces}
           onChoose={onChooseAbility}
           onCancel={() => setAbilitySource(null)}
         />
       )}
 
-      {/* The chosen ability targets — one button per engine-offered legal target. */}
-      {pendingAbility && pendingAbility.targets !== null && (
+      {/* The chosen ability's targets — one CARD per engine-offered legal target
+          (UX-8). The PICK goes into the proposal; the dispatch (with the payers,
+          and with or without the §3.129 auto-tap) is the proposal's to make, and
+          the Cancel is the one shared control so the rewind-blocked sentence
+          shows here exactly as it does on every other pre-commit prompt. */}
+      {proposedAbility && proposalQuestion?.kind === 'targets' && (
         <AbilityTargetPrompt
-          ability={pendingAbility}
-          onPick={(target) =>
-            run(() =>
-              pendingAbility.affordableWithTap
-                ? session.activateWithAutoTap(pendingAbility.instanceId, pendingAbility.abilityIndex, [target])
-                : session.activateAbility(pendingAbility.instanceId, pendingAbility.abilityIndex, [target]),
-            )
-          }
-          onCancel={() => setPendingAbility(null)}
+          ability={proposedAbility}
+          faces={promptFaces}
+          onPick={chooseTarget}
+          onCancel={backOut}
           annotateTarget={refIndex.noteOf}
+          cancelBlocked={cancelBlockedExplanation}
         />
       )}
 
-      {/* Targeting prompt (for player/spell targets; creature targets are clicked on the board). */}
-      {pendingCast && (
-        <div className="target-prompt" role="dialog" aria-label="Choose a target">
+      {/*
+        §3.143 — WHICH PERMANENT PAYS THE SACRIFICE COST (CR 602.2b).
+
+        THE 137-DEAD-BUTTONS PROMPT. `AbilityOption.costPayers` shipped in wave 1
+        and no screen ever read it, so every "Sacrifice another creature:" ability
+        — 137 of them, on 134 pool cards — submitted an activation with no
+        `costInstanceIds` and died on the engine's own rejection. A cost is a
+        choice exactly as a target is, so it gets what UX-8 demands of a target:
+        the ACTUAL CARD FACES, not a list of names.
+
+        Asked only when there is more than one legal payer set —
+        `ASK_WHEN_ONLY_ONE_ANSWER.costPayers` is false, matching the engine's own
+        rule that a question with a single legal answer is settled rather than
+        put to the player.
+      */}
+      {proposedAbility && proposalQuestion?.kind === 'costPayers' && (
+        <div className="target-prompt" role="dialog" aria-label="Choose what to sacrifice">
           <div className="target-prompt__card">
-            <div className="target-prompt__title">Choose a target for {pendingCast.name}</div>
+            <div className="target-prompt__title">
+              {proposedAbility.sourceName} — {proposedAbility.label} Choose what to sacrifice.
+            </div>
             <div className="target-prompt__options">
-              {targetOptions.length === 0 && <span className="seat__empty">No legal targets — cancel.</span>}
-              {targetOptions.map((opt) => (
+              {proposalQuestion.candidates.map((choice) => (
                 <button
-                  key={opt.kind === 'player' ? `p:${opt.player}` : `i:${opt.instanceId}`}
+                  key={choice.instanceIds.join(',')}
                   type="button"
-                  className="btn"
-                  onClick={() => commitCast([optionToTarget(opt)])}
+                  className="btn cost-payer"
+                  onClick={() => choosePayers(choice)}
                 >
-                  {/* Owner rides every row (§3.57): "Wall (yours)" vs "Wall (Computer’s)". */}
-                  {describeCastTarget(opt, viewer, names)}
+                  {/* A payer set can name SEVERAL permanents ("sacrifice two
+                      artifacts" is ONE answer naming two), so every face in it
+                      is drawn. */}
+                  {/* `size="full"` — a sacrifice is a card leaving the board
+                      for good, so the player sees the whole card, not an art
+                      crop. `ability-prompts.css` gives each one an explicit
+                      width: a `tile` face is `height: 100%`, which resolves to
+                      `auto` inside this auto-height button. */}
+                  {choice.instanceIds.map((id) => (
+                    <CardHover key={id} cardId={faceOfInstance(id)}>
+                      <CardFace
+                        size="full"
+                        cardId={faceOfInstance(id)}
+                        name={session.nameOf(id)}
+                        explanation={explainForFace(session.state, id)}
+                      />
+                    </CardHover>
+                  ))}
+                  <span className="cost-payer__label">{choice.label}</span>
                 </button>
               ))}
             </div>
-            <button type="button" className="btn btn--ghost" onClick={() => setPendingCast(null)}>
-              Cancel
-            </button>
+            <ProposalCancelButton onCancel={backOut} blocked={cancelBlockedExplanation} />
+          </div>
+        </div>
+      )}
+
+      {/* Targeting prompt (for player/spell targets; creature targets are clicked on the board).
+          §3.143 / UX-8 + UX-10: the SOURCE renders as a real face — lane P's
+          `CardFace`, so a granted keyword is visible on the card you are about
+          to aim — and every candidate that is a card is wrapped in the ONE hover
+          funnel. Both were bare strings; the complaint was "it should be showing
+          the actual card(s) that is provoking the choice - not just the card
+          name". */}
+      {proposedCast && castTargetQuestion && (
+        <div className="target-prompt" role="dialog" aria-label="Choose a target">
+          <div className="target-prompt__card">
+            <div className="target-prompt__title">Choose a target for {proposedCast.name}</div>
+            <CardHover cardId={castFaceId}>
+              {/* UX-17 — the face carries its PROVENANCE, so a granted keyword or
+                  an altered P/T is visible on the very card you are aiming. */}
+              <CardFace
+                size="full"
+                cardId={castFaceId}
+                name={proposedCast.name}
+                explanation={explainForFace(session.state, proposedCast.instanceId)}
+              />
+            </CardHover>
+            <div className="target-prompt__options">
+              {targetOptions.map((opt) => (
+                <CardHover
+                  key={opt.kind === 'player' ? `p:${opt.player}` : `i:${opt.instanceId}`}
+                  cardId={opt.kind === 'player' ? null : faceOfInstance(opt.instanceId)}
+                >
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => chooseTarget(optionToTarget(opt))}
+                  >
+                    {/* Owner rides every row (§3.57): "Wall (yours)" vs "Wall (Computer’s)". */}
+                    {describeCastTarget(opt, viewer, names)}
+                  </button>
+                </CardHover>
+              ))}
+            </div>
+            <ProposalCancelButton onCancel={backOut} blocked={cancelBlockedExplanation} />
           </div>
         </div>
       )}
@@ -1555,6 +2352,16 @@ export function PlayBoard({
       {toast && (
         <div className="play-toast" role="status">
           {toast}
+        </div>
+      )}
+
+      {/* §3.143 / UX-4 — the cancel affordance SAYS it is there, and when the
+          rewind is genuinely gone it says THAT instead (UX-5's "unless the rules
+          genuinely allow one"). A control that silently vanishes reads as a bug;
+          `REWIND_BLOCK_EXPLANATIONS` is the vocabulary, owned beside the rule. */}
+      {preCommitOpen && (
+        <div className="play-cancel-hint" role="status">
+          {cancelBlockedExplanation ?? `${PROPOSAL_CONFIG.cancelKey} backs out — nothing has happened yet.`}
         </div>
       )}
 
@@ -1589,7 +2396,122 @@ export function PlayBoard({
         tileRectOf={tileRectOf}
         onDone={retireVfx}
       />
+      {/* §3.143 / UX-15 — damage TRAVELS from source to recipient, sequenced so
+          first-strike reads as two rounds rather than one blur (lane H). */}
+      <DamageLayer
+        beats={damageBeats}
+        boardRootRef={boardRootRef}
+        tileRectOf={tileRectOf}
+        onDone={retireDamage}
+      />
+      {/* §3.143 / UX-12 + UX-13 — the advanced attackers and blockers. An
+          UNCLIPPED sibling of the scene, because a transform on the tile is
+          clipped by its own row (lib/play/combat-stage.ts names the four
+          clipping boxes and why none of them can be relaxed). */}
+      <CombatStage
+        entries={stageEntries}
+        boardRootRef={boardRootRef}
+        midlineRef={midlineRef}
+        measureKey={session}
+        onPlaced={setStagedIds}
+      />
+      {/* §3.143 / UX-16 — the opponent's spell, held and inspectable BEFORE it
+          resolves. The post-hoc feed below still reports what happened; this is
+          the part that was missing. */}
+      {hold && (
+        <SpellHoldCard
+          hold={hold}
+          name={session.nameOf(hold.instanceId)}
+          cardId={faceOfInstance(hold.instanceId)}
+          /* UX-17 — the held spell wears its PROVENANCE too. A stack object is
+             public, so explaining it leaks nothing the viewer cannot already
+             read off the stack panel. */
+          explanation={explainForFace(session.state, hold.instanceId)}
+          opponentName={names[hold.controller]}
+          {...(onHoldPointer ? { onPointer: onHoldPointer } : {})}
+          {...(onHoldExtend ? { onExtend: onHoldExtend } : {})}
+          {...(onHoldRelease ? { onRelease: onHoldRelease } : {})}
+        />
+      )}
       <OpponentActionFeed notes={opponentNotes} opponentName={names[otherOf(viewer)]} />
+    </div>
+  );
+}
+
+/**
+ * §3.143 / UX-16 — AN OPPONENT'S SPELL, HELD ON SCREEN.
+ *
+ * Caleb: *"when an opponent casts a sorcery or instant card, I need to be able
+ * to see it and inspect the card before it goes off - even if I have no
+ * instant-speed things I could do in response … Right now, they just happen
+ * invisibly and I have no idea why things are happening."*
+ *
+ * The card is drawn by lane P's `CardFace` at full size and wrapped in the ONE
+ * hover funnel, so the held card is inspected exactly the way every other card
+ * on this surface is. Moving the pointer onto it extends the hold (bounded by
+ * `pointerHoldMs`); "Keep looking" adds one `extendMs`; "Let it resolve" ends
+ * it now — so it is never a click-through tax on a player who does not want it.
+ */
+function SpellHoldCard({
+  hold,
+  name,
+  cardId,
+  explanation,
+  opponentName,
+  onPointer,
+  onExtend,
+  onRelease,
+}: {
+  hold: SpellHold;
+  name: string;
+  cardId: string | null;
+  /** Core's characteristic breakdown for the held spell (§3.143 / UX-17). */
+  explanation: CharacteristicExplanation | undefined;
+  opponentName: string;
+  onPointer?: (over: boolean) => void;
+  onExtend?: () => void;
+  onRelease?: () => void;
+}): ReactElement {
+  return (
+    <div
+      className="spell-hold"
+      /*
+       * ⚠️ `status`, NOT `dialog` (§3.143 wave 3). This card ANNOUNCES — it tells
+       * you what the opponent just cast and lets you look at it — and it is
+       * dismissed by a timer. A `dialog` role promises modality and a focus trap
+       * that this has never had, and it told every "is a question on screen?"
+       * probe that one was: `verify-game-resume.mjs` matches `[role="dialog"]`
+       * to decide whether the game parked a choice, saw THIS, announced "stopped
+       * ON A PARKED CHOICE", reloaded, and failed because a 2.4-second
+       * announcement is not something a reload can bring back. A live region is
+       * what an announcement is, and it is announced once, on appearance.
+       */
+      role="status"
+      aria-live="polite"
+      aria-label={`${opponentName} is casting ${name}`}
+      onPointerEnter={() => onPointer?.(true)}
+      onPointerLeave={() => onPointer?.(false)}
+    >
+      {/* The verb comes from the KIND table, not from an `if`: "is casting" and
+          "is activating" are different facts and a third kind is a row. */}
+      <span className="spell-hold__who">
+        {opponentName} {HOLD_KINDS[hold.kind].announce}:
+      </span>
+      <CardHover cardId={cardId}>
+        <CardFace size="full" cardId={cardId} name={name} explanation={explanation} />
+      </CardHover>
+      <span className="spell-hold__name">{name}</span>
+      <span className="spell-hold__hint">
+        Hover the card to keep reading it — it resolves on its own when you stop.
+      </span>
+      <div className="spell-hold__actions">
+        <button type="button" className="btn" onClick={onExtend}>
+          Keep looking
+        </button>
+        <button type="button" className="btn btn--ghost" onClick={onRelease}>
+          Let it resolve
+        </button>
+      </div>
     </div>
   );
 }
@@ -1755,4 +2677,36 @@ function ActionBar({
 
 function otherOf(p: PlayerId): PlayerId {
   return p === 'A' ? 'B' : 'A';
+}
+
+/**
+ * Find an instance in any PUBLIC zone, plus the stack.
+ *
+ * ⚠️ The battlefield alone is not enough, which is what made UX-8 miss every
+ * modal spell: a per-mode target question carries the SPELL's instance id, and
+ * a spell is on the STACK. Lane C measured the cost of that omission at 110
+ * modal modes across 60 pool cards, each of which showed a named placeholder
+ * where the card should have been.
+ *
+ * Public zones only — a hand is hidden information and this result is used to
+ * DRAW A CARD FACE.
+ */
+function findInstanceAnywhere(state: GameState, id: InstanceId): { def: CardDefinition } | undefined {
+  for (const perm of state.battlefield) if (perm.instanceId === id) return perm;
+  for (const pid of ['A', 'B'] as const) {
+    const player = state.players[pid];
+    for (const zone of [player.graveyard, player.exile]) {
+      const hit = zone.find((c) => c.instanceId === id);
+      if (hit) return hit;
+    }
+  }
+  for (const obj of state.stack) {
+    if (obj.kind === 'spell' && obj.instanceId === id) return obj.card;
+  }
+  return undefined;
+}
+
+/** The definition of whatever asked a question — see {@link findInstanceAnywhere}. */
+function findDefAnywhere(state: GameState, id: InstanceId): CardDefinition | undefined {
+  return findInstanceAnywhere(state, id)?.def;
 }

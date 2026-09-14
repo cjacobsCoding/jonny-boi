@@ -265,6 +265,94 @@ export function orderBadge(choice: PendingChoice, draft: ChoiceDraft, value: Cho
   return at < 0 ? undefined : at + 1;
 }
 
+// --- why an option can't be taken right now ----------------------------------------
+
+/**
+ * §3.143 / UX-8 — *"a candidate that cannot be chosen explains WHY rather than
+ * just being greyed out"*.
+ *
+ * A CLOSED table: three rows, which is every dead affordance this prompt can
+ * render. Everything else the engine offers is genuinely takeable, because the
+ * candidate lists are built by the engine from legal options only — so a fourth
+ * reason would be a new engine behaviour, and it must arrive as a ROW here
+ * rather than as a greyed control with no explanation.
+ */
+export type OptionBlockKind = 'atMaximum' | 'unaffordableMana' | 'notEnoughLife';
+
+/** The closed vocabulary, exported so a consumer can iterate/assert on it. */
+export const OPTION_BLOCK_KINDS: readonly OptionBlockKind[] = Object.freeze([
+  'atMaximum',
+  'unaffordableMana',
+  'notEnoughLife',
+]);
+
+/**
+ * One sentence per row, derived from the choice so the copy names the real
+ * numbers ("you have already chosen 2 targets", "you cannot produce {2}{U}")
+ * rather than being generic.
+ */
+const OPTION_BLOCK_REASONS: Readonly<Record<OptionBlockKind, (choice: PendingChoice) => string>> = Object.freeze({
+  atMaximum: (choice) =>
+    `You have already chosen ${countNoun(choice.kind, choice.max)} — deselect one first.`,
+  unaffordableMana: (choice) =>
+    choice.kind === 'payMana'
+      ? `You cannot produce ${formatManaCost(choice.cost)} right now, so the only answer is to decline.`
+      : UNKNOWN_BLOCK_REASON,
+  notEnoughLife: (choice) =>
+    choice.kind === 'payLife'
+      ? `You do not have ${choice.amount} life to pay.`
+      : UNKNOWN_BLOCK_REASON,
+});
+
+/**
+ * The floor when a reason row is asked about a choice kind it cannot describe.
+ * It should be unreachable — {@link payYesBlock} only ever raises the payment
+ * rows for payment kinds — but a blocked control with NO explanation is exactly
+ * the thing this table exists to abolish, so the fallback still says something
+ * true rather than rendering an empty tooltip.
+ */
+const UNKNOWN_BLOCK_REASON = 'This answer is not available right now.';
+
+/** Render one block reason. */
+export function optionBlockReason(kind: OptionBlockKind, choice: PendingChoice): string {
+  return OPTION_BLOCK_REASONS[kind](choice);
+}
+
+/**
+ * Why clicking this candidate would do nothing, or `null` when it is takeable.
+ *
+ * The rule mirrors {@link toggleOption} exactly rather than re-deriving it: a
+ * value already picked can always be un-picked; a SINGLE-pick choice replaces
+ * its selection so nothing is ever blocked; a repeated-modes choice below its
+ * maximum always accepts another copy. Only a multi-pick draft sitting at `max`
+ * refuses an unpicked option — and a player staring at that has no way to know
+ * why without being told.
+ */
+export function candidateBlock(
+  choice: PendingChoice,
+  draft: ChoiceDraft,
+  value: ChoiceOptionValue,
+): OptionBlockKind | null {
+  if (isScalarKind(draft.kind)) return null;
+  if (pickCount(draft, value) > 0) return null;
+  if (choice.max <= SINGLE_PICK) return null;
+  if (allowsRepeats(choice)) return null;
+  return draftValues(draft).length >= choice.max ? 'atMaximum' : null;
+}
+
+/**
+ * Why the "pay" half of a payment question is unavailable, or `null`.
+ *
+ * The engine only ever parks an unaffordable payment from a hand-built state,
+ * but a dead Pay button that does not say why is indistinguishable from a bug —
+ * which is the report this table answers.
+ */
+export function payYesBlock(choice: PendingChoice): OptionBlockKind | null {
+  if (choice.kind === 'payMana') return choice.affordable ? null : 'unaffordableMana';
+  if (choice.kind === 'payLife') return choice.affordable ? null : 'notEnoughLife';
+  return null;
+}
+
 // --- submission -------------------------------------------------------------------
 
 /** The finished answer a draft represents, or `null` while it is still undecided. */

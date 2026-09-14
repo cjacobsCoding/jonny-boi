@@ -1,6 +1,8 @@
 import { useEffect, type ReactElement } from 'react';
 import { getCard, cardImage } from '../../lib/cards.js';
 import { ManaCost } from '../ManaCost.js';
+import { CardFace } from './CardFace.js';
+import type { CharacteristicExplanation } from '@jonny-boi/core';
 
 /**
  * THE CARD ZOOM — one full-size card overlay for every play surface.
@@ -11,16 +13,69 @@ import { ManaCost } from '../ManaCost.js';
  * one. Every zoomable surface funnels here (hand, mulligan, battlefield, both
  * boards) so the answer to "show me this card" is one component, not four.
  *
+ * ## ⚠️ IT SHOWS THE CARD'S CURRENT TRUTH, NOT ITS PRINTED SCAN (§3.143 GAP-7)
+ * This overlay used to render a bare Scryfall `<img>`, so a creature the board
+ * showed as 5/6 was inspected at 4/5 — two answers to one question (rule 12), on
+ * the one surface a player opens specifically to read a card. It now renders
+ * lane P's `CardFace`, carrying whatever `explanation` the surface it was opened
+ * from carries.
+ *
+ * It is also the surface where UX-17.4 is genuinely reachable with a mouse: a
+ * modal dialog has live pointer events, so every ability word here — printed or
+ * granted — opens its glossary tooltip. (`CardHover`'s preview is deliberately
+ * `pointer-events: none`, so its pops are visible but not hoverable.)
+ *
  * Dismissal is deliberately promiscuous — click anywhere, Escape, the ✕ — since
  * an overlay a player struggles to close is worse than none.
+ *
+ * ## ⚠️ THE PROP THAT NOBODY PASSED (§3.143 wave 3, GAP-C)
+ * `explanation` shipped in wave 2 and **every call site passed only
+ * `{cardId, name}`** — the zoomed state was literally typed that narrowly — so
+ * the one surface with live pointer events over a full card, the surface where
+ * the glossary is genuinely reachable with a mouse, showed a card with no
+ * provenance at all. {@link ZoomedCard} is that state, widened once and shared
+ * by every surface that opens this overlay, so a new caller cannot quietly
+ * re-narrow it.
  */
+
+/**
+ * What a surface must remember about the card a player asked to inspect.
+ *
+ * One record for all four openers (both boards' hands, the battlefield, the
+ * mulligan grid, the jail peek) — `cardId` and `name` are what a hand card can
+ * say, and everything else is what a BATTLEFIELD object can say on top. Each
+ * optional member absent is a real state, not a gap: a card in hand is not on
+ * the battlefield, so nothing is modifying it.
+ */
+export interface ZoomedCard {
+  readonly cardId: string;
+  readonly name: string;
+  /** Core's breakdown, on a surface that has one. */
+  readonly explanation?: CharacteristicExplanation | undefined;
+  readonly isCreature?: boolean;
+  /** Why provenance is unavailable here (the online board carries none). */
+  readonly unavailableReason?: string;
+}
+
 export function CardZoomOverlay({
   cardId,
   name,
+  explanation,
+  isCreature,
+  unavailableReason,
   onClose,
 }: {
   cardId: string;
   name: string;
+  /**
+   * Core's breakdown for the object being zoomed, when the surface opening the
+   * zoom has one. Absent renders the plain printed card with its glossary
+   * intact, which is the right answer for a card in hand or in a graveyard.
+   */
+  readonly explanation?: CharacteristicExplanation | undefined;
+  readonly isCreature?: boolean;
+  /** Why provenance is unavailable here, when the surface cannot supply it. */
+  readonly unavailableReason?: string;
   onClose: () => void;
 }): ReactElement {
   const card = getCard(cardId);
@@ -38,10 +93,19 @@ export function CardZoomOverlay({
     <div className="card-zoom" role="dialog" aria-label={`${name}, full card`} onClick={onClose}>
       <div className="card-zoom__body">
         {image ? (
-          <img className="card-zoom__img" src={image} alt={name} decoding="async" />
+          <CardFace
+            className="card-face--zoomed"
+            size="full"
+            cardId={cardId}
+            name={name}
+            {...(explanation !== undefined ? { explanation } : {})}
+            {...(isCreature !== undefined ? { isCreature } : {})}
+            {...(unavailableReason !== undefined ? { unavailableReason } : {})}
+          />
         ) : (
           // No image (a token, an art-less import): a readable text face beats
           // a broken frame. Name, cost and type line are what a player needs.
+          // `CardFace` would degrade to a bare name plate here, which says less.
           <div className="card-zoom__fallback">
             <div className="card-zoom__fallback-name">{name}</div>
             {card && <ManaCost cost={card.manaCost} />}

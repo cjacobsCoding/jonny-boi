@@ -16,9 +16,10 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createEffectRegistry, createGame, type CardDefinition, type CardInstance, type PlayerId } from '@jonny-boi/core';
-import { GameSession } from './session.js';
+import { GameSession, type CastOption } from './session.js';
 import { castPriceText, castWayLabel } from './option-labels.js';
 import { manaStillNeeded, stillNeededText } from './mana-picker.js';
+import { openProposal, stepProposal, type Proposal, type ProposalStep } from './proposal.js';
 
 const SEAT_NAMES: Readonly<Record<PlayerId, string>> = { A: 'Alice', B: 'Bob' };
 
@@ -224,5 +225,100 @@ describe('the mana picker readout, on a reading that pays life', () => {
     expect(stillNeededText(manaStillNeeded(pool, cost, 4))).toBe('Fully paid — confirm to cast.');
     // …and with none committed it still owes both black symbols.
     expect(manaStillNeeded(pool, cost, 0).hybrid).toHaveLength(2);
+  });
+});
+
+// --- the path the human seat actually takes ----------------------------------------
+/**
+ * THE CAST TRANSACTION carries the reading too (§3.143 × the §3.143 proposal).
+ *
+ * The tests above call `castWithAutoTap` directly — which is not how the board
+ * casts anything any more. Every human cast now opens a PROPOSAL and confirms
+ * it, and `dispatchOpening` is the single place that turns the chosen
+ * `CastOption` back into an engine action. That makes it the one seam where the
+ * reading can be silently lost: drop `phyrexianLife` there and every test above
+ * stays green, the compiler stays quiet, and Phyrexian casting is simply gone
+ * from the only seat a person plays on — "built, tested, unreachable".
+ *
+ * So these drive the proposal, not the session. They are the guard on that
+ * argument, and each one reddens if it is dropped.
+ */
+describe('a Phyrexian reading cast through the proposal', () => {
+  /** Open a proposal on `option`, aim it at Bob, and confirm — as the board does. */
+  function castThroughProposal(session: GameSession, option: CastOption): ProposalStep {
+    const opened = openProposal(session, { kind: 'cast', option }, 'A', 1);
+    if (opened.kind !== 'open') throw new Error(`could not open a proposal: "${opened.kind}"`);
+    const aimed = stepProposal(opened.proposal, { kind: 'setTargets', targets: ['B'] });
+    if (aimed.kind !== 'open') throw new Error(`could not aim the proposal: "${aimed.kind}"`);
+    return stepProposal(aimed.proposal as Proposal, { kind: 'confirm' });
+  }
+
+  it('casts the life reading off a board with NO black mana at all', () => {
+    // Two Mountains and Dismember: "{1}{B}{B}" and "{1}{B} and 2 life" are both
+    // unfundable here, so the 4-life reading is the ONLY way this card is
+    // castable. A dispatch that forgets the life asks the engine for a black
+    // cost this board cannot pay, and the confirm comes back REFUSED — the
+    // player clicks Cast and is told they are short of mana they never needed.
+    const state = buildState(MOUNTAIN, 2);
+    const id = toHand(state, DISMEMBER);
+    const session = sessionOver(state);
+    const option = session.castOptions().find((o) => o.instanceId === id);
+    expect(option?.phyrexianLife).toBe(4);
+    const before = session.state.players.A.life;
+
+    const step = castThroughProposal(session, option as CastOption);
+
+    expect(step.kind).toBe('committed');
+    if (step.kind !== 'committed') return;
+    const after = step.session.state;
+    expect(after.players.A.life).toBe(before - 4);
+    expect(after.stack).toHaveLength(1);
+    // One Mountain paid the {1}; the life paid the rest.
+    expect(after.battlefield.filter((c) => c.tapped)).toHaveLength(1);
+  });
+
+  it('casts the reading the player CHOSE when the board could pay either way', () => {
+    // Three Swamps fund all three readings, so a dropped `phyrexianLife` does not
+    // fail loudly here — it succeeds at the WRONG price, taking three lands
+    // instead of one land and four life. That is the worse half of the bug: the
+    // spell resolves, so nothing looks broken, and the player paid something
+    // they did not agree to. Both halves of the price are asserted.
+    const state = buildState(SWAMP, 3);
+    const id = toHand(state, DISMEMBER);
+    const session = sessionOver(state);
+    const option = session.castOptions().find((o) => (o.phyrexianLife ?? 0) === 4 && o.instanceId === id);
+    expect(option, 'the 4-life reading should be on the menu off three Swamps').toBeDefined();
+    const before = session.state.players.A.life;
+
+    const step = castThroughProposal(session, option as CastOption);
+
+    expect(step.kind).toBe('committed');
+    if (step.kind !== 'committed') return;
+    const after = step.session.state;
+    expect(after.players.A.life).toBe(before - 4);
+    // ONE Swamp, not three: the other two are still untapped, which is the whole
+    // reason a player picks this reading.
+    expect(after.battlefield.filter((c) => c.tapped)).toHaveLength(1);
+  });
+
+  it('still casts the all-mana reading for no life, through the same seam', () => {
+    // The control. `phyrexianLife` is absent on this option (not zero), so this
+    // is also the check that threading it does not hand the engine `undefined`
+    // where it expects a number — every cast in the game but a handful comes
+    // through here with no field at all.
+    const state = buildState(SWAMP, 3);
+    const id = toHand(state, DISMEMBER);
+    const session = sessionOver(state);
+    const option = session.castOptions().find((o) => o.instanceId === id && o.phyrexianLife === undefined);
+    expect(option, 'the all-mana reading should be on the menu off three Swamps').toBeDefined();
+    const before = session.state.players.A.life;
+
+    const step = castThroughProposal(session, option as CastOption);
+
+    expect(step.kind).toBe('committed');
+    if (step.kind !== 'committed') return;
+    const after = step.session.state;
+    expect(after.players.A.life).toBe(before);
+    expect(after.battlefield.filter((c) => c.tapped)).toHaveLength(3);
   });
 });

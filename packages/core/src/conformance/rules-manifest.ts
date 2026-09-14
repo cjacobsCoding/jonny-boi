@@ -1003,12 +1003,12 @@ export const RULES_MANIFEST: RulesManifest = {
       { rule: '702.164c', title: 'a player dealt combat damage by a toxic creature also gets N poison counters' },
       // The combat keyword family (DESIGN §3.107).
       { rule: '702.28b', title: 'a creature with shadow can be blocked only by a creature with shadow, and vice versa' },
-      { rule: '702.18b', title: 'a creature with islandwalk can’t be blocked while the defending player controls an Island' },
+      { rule: '702.14b', title: 'a creature with islandwalk can’t be blocked while the defending player controls an Island' },
       {
         rule: '702.61a',
         title: 'while a spell with split second is on the stack, players can’t cast spells or activate non-mana abilities',
       },
-      { rule: '702.90a', title: 'exalted pumps the creature that attacks alone, once per instance of exalted' },
+      { rule: '702.83a', title: 'exalted pumps the creature that attacks alone, once per instance of exalted' },
       { rule: '702.25a', title: 'flanking gives each blocking creature without flanking −1/−1' },
       // §3.106 — the core halves of the upkeep-cost family. The bills themselves
       // (echo's pay-or-sacrifice, cumulative upkeep's age-scaled cost, the
@@ -1327,7 +1327,15 @@ export const KEYWORD_RULES: KeywordRules = {
   flanking: '702.25',
   splitSecond: '702.61',
   myriad: '702.116',
-  landwalk: '702.18',
+  // 702.14, NOT 702.18 — that is SHROUD, which this table already (correctly)
+  // indexes above. The collision shipped through the combat-keyword family and
+  // survived because nothing checked: two keywords pointing at one 702 section
+  // is exactly the "confidently wrong index" this file exists to prevent, so
+  // `rules-citations.test.ts` now fails on any repeat inside CR 702.
+  // Neighbours confirm the numbering: indestructible 702.12, lifelink 702.15,
+  // protection 702.16, reach 702.17 — landwalk sits between intimidate (702.13)
+  // and lifelink.
+  landwalk: '702.14',
   // Attack REQUIREMENTS and RESTRICTIONS are the attacker-side half of the
   // declaration rules, exactly as `mustBeBlocked` / `unblockable` are the
   // blocker-side half — so they index to CR 508.1d / 508.1c, not to 702.

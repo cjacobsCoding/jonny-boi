@@ -142,8 +142,8 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
   // both halves are ids, which is exactly the shape a key-name scan misses.
   attackersDeclared: { attackers: 'idList', attackTargets: 'idKeyedMap' },
   blockersDeclared: { blocks: 'idPairList' },
-  damageDealt: { source: 'id', target: 'id', amount: 'none', combat: 'none' },
-  damagePrevented: { source: 'id', target: 'id', amount: 'none', combat: 'none' },
+  damageDealt: { source: 'id', target: 'id', amount: 'none', combat: 'none', round: 'none' },
+  damagePrevented: { source: 'id', target: 'id', amount: 'none', combat: 'none', round: 'none' },
   counterPrevented: { instanceId: 'id', name: 'none', controller: 'none' },
   replacementApplied: { source: 'id', event: 'none', from: 'none', to: 'none', prevented: 'none', label: 'none' },
   // `id` here is the FLOATING EFFECT's id, not a card's — a number that looks
