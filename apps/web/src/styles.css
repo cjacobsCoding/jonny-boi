@@ -2243,7 +2243,6 @@ button {
 .play-board__turn { color: var(--color-accent-soft); }
 .play-board__priority { color: var(--color-fg-muted); font-size: var(--text-sm); }
 .play-board__concede { margin-left: auto; }
-.play-board__center { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); align-items: start; }
 .play-hand { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); min-height: 4rem; }
 .play-hand--hidden { opacity: 0.9; }
 
@@ -2423,7 +2422,6 @@ button {
 
 /* ---------- Responsive: stack columns on phones ---------- */
 @media (max-width: 860px) {
-  .play-board__center { grid-template-columns: 1fr; }
   .play-mode__choices, .online-menu__actions, .play-setup__seats, .online-lobby__seats { grid-template-columns: 1fr; }
   /* On a phone the prompt fills the screen and its footer stacks, so the Confirm
      button never falls off the edge of a 375px viewport. */
@@ -3241,14 +3239,17 @@ button {
   }
 }
 
-/* Graveyard panel (shared by hotseat + online) — the flashback affordance.
-   Appended, like the drag/drop-zone rules, to keep merge conflicts small. */
+/* Opened-zone panel (shared by hotseat + online, graveyard + exile) — the
+   flashback / cast-from-exile affordance. Appended, like the drag/drop-zone
+   rules, to keep merge conflicts small.
+   ⚠️ Was `.graveyard-panel` until UX-10 gave exile the same panel; one component
+   driven by a zone TABLE means one block of rules, not two that drift. */
 .seat__zone-btn { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: inherit; font: inherit; padding: 0 var(--space-2); cursor: pointer; }
 .seat__zone-btn:hover { border-color: var(--color-accent); color: var(--color-accent-soft); }
-.graveyard-panel { border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-surface); padding: var(--space-3); margin: var(--space-2) 0; }
-.graveyard-panel__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
-.graveyard-panel__title { font-size: var(--text-sm); color: var(--color-fg-muted); }
-.graveyard-panel__cards { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.zone-panel { border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-surface); padding: var(--space-3); margin: var(--space-2) 0; }
+.zone-panel__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
+.zone-panel__title { font-size: var(--text-sm); color: var(--color-fg-muted); }
+.zone-panel__cards { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
 /* ============================================================================
    §3.57 play-clarity — picker owner/zone labels, jailed-card stacks, zone

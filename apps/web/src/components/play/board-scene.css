@@ -11,10 +11,11 @@
  * they are blocking"*.
  *
  * THERE IS NO NUMBER IN THIS FILE. Every angle, distance and duration arrives
- * as a custom property that `PlayBoard` sets from `lib/play/play-config.ts`
- * (BOARD_3D_CONFIG, TAP_ROTATION_CONFIG, COMBAT_ADVANCE_CONFIG,
- * SPELL_HOLD_CONFIG). A designer tunes the config; this file only says how the
- * board reads it. A `board-scene.test.ts` guard fails if a literal appears here.
+ * as a custom property that BOTH boards set from `lib/play/play-config.ts`
+ * through `BoardScene`'s `useBoardSceneVars` (BOARD_3D_CONFIG,
+ * TAP_ROTATION_CONFIG, COMBAT_ADVANCE_CONFIG, SPELL_HOLD_CONFIG). A designer
+ * tunes the config; this file only says how the board reads it. A
+ * `board-scene.test.ts` guard fails if a literal appears here.
  *
  * ---------------------------------------------------------------------------
  * WHY THE SCENE IS TWO ELEMENTS AND NOT ONE, AND WHY IT IS FLAT
@@ -299,6 +300,57 @@
 .spell-hold__actions {
   display: flex;
   gap: var(--space-2);
+}
+
+/* --- §10: the combat beat, announced --------------------------------------
+ *
+ * The board is holding declared blockers (UX-13) or the damage sequence
+ * (UX-15) on screen long enough to read. Everything it exists to reveal happens
+ * at the MIDLINE between the two seats, so this sits at the TOP and stays small:
+ * a centred card like `.spell-hold` would cover the advance it announces.
+ *
+ * No transition and no animation, deliberately. A beat that fades in spends part
+ * of itself arriving, and this one is already the shortest thing on screen that
+ * has a job to do.
+ */
+
+.combat-hold {
+  position: fixed;
+  left: 50%;
+  /* Clears the board's status row — the same one-line clearance the opponent
+     feed names in opponent-feed.css, kept as a property here so the two are
+     obviously the same measurement if that row ever grows. */
+  --combat-hold-status-clearance: 3.9rem;
+  top: var(--combat-hold-status-clearance);
+  transform: translateX(-50%);
+  z-index: 52;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 40%);
+  max-width: min(92vw, 34rem);
+}
+
+.combat-hold__label {
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.combat-hold__shows {
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+}
+
+.combat-hold__skip {
+  /* The way out, and deliberately the quietest thing in the strip. A beat a
+     player has to dismiss every combat is worse than no beat at all — but a beat
+     that shouts its own exit is telling them to leave before they have looked. */
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
 }
 
 /* --- UX-4: the cancel affordance says it is there -------------------------- */

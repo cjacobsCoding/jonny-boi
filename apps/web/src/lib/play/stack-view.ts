@@ -480,11 +480,13 @@ export const STACK_PLACEMENT_TABLE: Readonly<Record<StackPlacement, StackPlaceme
     column: Object.freeze({
       className: 'stack-panel--column',
       why:
-        'In the flow of `.play-board__center`, beside the game log, where the panel has ' +
-        'lived since it was written. Measured room (play-config.ts): minmax(12rem, 22rem) ' +
-        'wide by 22dvh tall — 176px at an 800px window — on the column declared ' +
-        '`flex: 0 4 auto`, i.e. the designated first-to-yield. One face fits; a fan of ' +
-        'several does not. UX-2 ("always visible, no panel hunt") is NOT met here.',
+        'In the flow of its mount site, beside whatever else shares the column — where ' +
+        'the panel lived from the day it was written until UX-2. Measured room ' +
+        '(play-config.ts): minmax(12rem, 22rem) wide by 22dvh tall — 176px at an 800px ' +
+        'window. One face fits; a fan of several does not, and UX-2 ("always visible, no ' +
+        'panel hunt") is NOT met here. NEITHER BOARD USES IT any more: both float, and ' +
+        'the `.play-board__center` column it named is gone. It stays because the effects ' +
+        'bench still mounts it, and because a placement table with one row is not a table.',
     }),
     floating: Object.freeze({
       className: 'stack-panel--floating',

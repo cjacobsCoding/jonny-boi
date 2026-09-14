@@ -24,7 +24,6 @@ import {
   arcSegment,
   arcSegments,
   arcStroke,
-  blockerLinePairs,
   combatArcPairs,
   dashCycleLength,
   measurementSignature,
@@ -237,13 +236,13 @@ describe('combatArcPairs — attack arcs', () => {
   });
 });
 
-describe('blockerLinePairs is an ADAPTER, not a second answer', () => {
-  // The online board still calls the block-only entry point. If it ever stops
-  // delegating, the two will drift and the bug will be attributed to neither.
-  //
-  // Driven off the ENGINE's own step list rather than a hand-picked few: a step
-  // added to core is covered here the day it is added, which is the only way a
-  // fork at an unlisted step cannot hide.
+describe('the block-only shape still draws only blocks, at every engine step', () => {
+  // `blockerLinePairs` used to be a separate block-only entry point the online
+  // board called; it is gone (see combat-lines.ts). What it was really asserting
+  // is worth keeping: an input with NO attack half must produce block arcs and
+  // nothing else, at every step core knows about — so a step added to the engine
+  // is covered here the day it is added, and a fork at an unlisted step cannot
+  // hide.
   const shapes = [
     { declaredBlocks: [{ blocker: 21, attacker: 31 }], draftAssign: new Map([[22, 32]]) },
     { declaredBlocks: [{ blocker: 1, attacker: 2 }], draftAssign: NO_DRAFT },
@@ -251,10 +250,13 @@ describe('blockerLinePairs is an ADAPTER, not a second answer', () => {
     { declaredBlocks: [], draftAssign: NO_DRAFT },
   ] as const;
   for (const step of STEP_ORDER) {
-    it(`agrees with combatArcPairs at ${step}`, () => {
+    it(`emits no attack arc at ${step} when no attacker was supplied`, () => {
       for (const shape of shapes) {
-        const input = { ...shape, step };
-        expect(blockerLinePairs(input), step).toEqual(combatArcPairs(input));
+        const arcs = combatArcPairs({ ...shape, step });
+        expect(
+          arcs.filter((a) => a.kind === 'attack'),
+          step,
+        ).toEqual([]);
       }
     });
   }

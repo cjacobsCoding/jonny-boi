@@ -13,7 +13,7 @@
  * `land-playability.test.ts`) — two seated clients, a real engine, real per-seat
  * masking — and then asks the ACTUAL CLIENT CODE what the board would show and
  * submit. Every affordance below is computed by the very functions
- * `OnlineBoard.tsx` calls (`graveyardPanelView`, `graveyardCastChoices`,
+ * `OnlineBoard.tsx` calls (`zonePanelView`, `graveyardCastChoices`,
  * `graveyardCastableWithTaps`, `abilityChoices`, `maskedViewToBoardView`,
  * `buildDeclareAttackersAction`, `castSequence`, `onlineChoiceView`,
  * `answerChoiceAction`), so a test that passes here cannot pass while the board is
@@ -55,7 +55,7 @@ import {
 import { castSequence, graveyardCastableWithTaps } from '../../web/src/lib/online/auto-tap.js';
 import { maskedViewToBoardView } from '../../web/src/lib/online/board-adapter.js';
 import { answerChoiceAction, onlineChoiceView } from '../../web/src/lib/online/pending-choice.js';
-import { graveyardPanelView } from '../../web/src/lib/play/graveyard-cast.js';
+import { zonePanelView } from '../../web/src/lib/play/zone-panel.js';
 import { buildDeclareAttackersAction } from '../../web/src/lib/play/session.js';
 
 // --- fixtures ---------------------------------------------------------------------
@@ -413,16 +413,20 @@ describe('online: a seated player can flashback a spell out of their graveyard',
       ...graveyardCastChoices(frame.legalActions).keys(),
       ...graveyardCastableWithTaps(frame.view, 'A', frame.view.players.A.graveyard, frame.legalActions, true),
     ]);
-    const panel = graveyardPanelView(
-      frame.view.players.A.graveyard.map((c) => ({
-        instanceId: c.instanceId,
-        cardId: c.def.id,
-        name: c.def.name,
-        hasFlashback: c.def.flashback !== undefined,
-      })),
+    const panel = zonePanelView(
+      'graveyard',
+      {
+        cards: frame.view.players.A.graveyard.map((c) => ({
+          instanceId: c.instanceId,
+          cardId: c.def.id,
+          name: c.def.name,
+          castableEver: c.def.flashback !== undefined,
+        })),
+        hiddenCount: 0,
+      },
       castable,
-      { yourTurn: frame.yourTurn, waitingOn: NAMES[frame.view.priorityPlayer], step: frame.view.step },
-    );
+      { yours: true, yourTurn: frame.yourTurn, waitingOn: NAMES[frame.view.priorityPlayer], step: frame.view.step },
+    ).cards;
     const chip = panel.find((p) => p.instanceId === card.instanceId);
     expect(chip?.actionable, 'the graveyard card is not clickable — the affordance is inert').toBe(true);
     expect(chip?.badge).toBe('flashback');

@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { actionBarHint } from '../../lib/play/action-hints.js';
-import { blockerLinePairs } from '../../lib/play/combat-lines.js';
 import { groupJailedByJailer, jailSourcesOf } from '../../lib/play/jail-view.js';
 import {
   describeTargetSetWithOwners,
   makeRefIndex,
   type KnownRef,
 } from '../../lib/play/option-labels.js';
-import { CombatLines } from '../play/CombatLines.js';
 import type {
   CardDefinition,
   CardInstance,
@@ -16,16 +14,28 @@ import type {
   InstanceId,
   PlayerId,
 } from '@jonny-boi/core';
-import type { MouseEvent as ReactMouseEvent } from 'react';
-import type { BoardPermanent } from '../../lib/play/view-model.js';
 import { isPlaneswalker, isPlayerTarget, PLAYER_IDS } from '@jonny-boi/core';
-import { stepLabel } from '../../lib/play/play-config.js';
+import { COMBAT_HOLD_CONFIG, stepLabel } from '../../lib/play/play-config.js';
 import { maskedViewToBoardView } from '../../lib/online/board-adapter.js';
 import { castSequence, castableWithTaps, graveyardCastableWithTaps } from '../../lib/online/auto-tap.js';
-import { alreadyPassedFrame, shouldAutoPass } from '../../lib/online/auto-pass.js';
+import { alreadyPassedFrame, shouldAutoPassNow } from '../../lib/online/auto-pass.js';
+import {
+  combatHoldDecision,
+  combatWindowFactsOf,
+  NO_BEATS_SPENT,
+  type CombatHoldKind,
+} from '../../lib/play/combat-hold.js';
+import { CombatHoldBanner } from '../play/CombatHoldBanner.js';
+import { usePrefersReducedMotion } from '../play/AnimationLayer.js';
+import {
+  BoardScene,
+  NO_DAMAGE_SOURCE,
+  useBoardSceneVars,
+  type CombatDraft,
+} from '../play/BoardScene.js';
 import { DRAG_ID_ATTR, useDragToPlay } from '../../lib/play/useDragToPlay.js';
 import { idleTurnNote, reasonCardIsDisabled } from '../../lib/online/why-disabled.js';
-import { graveyardPanelView } from '../../lib/play/graveyard-cast.js';
+import { zonePanelView } from '../../lib/play/zone-panel.js';
 import { AUTO_PASS_DELAY_MS, AUTO_PASS_EMPTY_PRIORITY } from '../../lib/online/online-config.js';
 import { legalTargets, optionToTarget, targetRequirement } from '../../lib/play/targeting.js';
 import { buildDeclareAttackersAction, type AbilityOption } from '../../lib/play/session.js';
@@ -35,6 +45,7 @@ import {
   castChoices,
   declareAttackersAction,
   declareBlockersAction,
+  exileCastChoices,
   graveyardCastChoices,
   passAction,
   playableLandIds,
@@ -48,11 +59,11 @@ import {
   AbilityTargetPrompt,
   type AbilityPromptFaces,
 } from '../play/AbilityPrompts.js';
-import { GraveyardPanel } from '../play/GraveyardPanel.js';
-import { SeatPanel, type PermInteraction } from '../play/SeatPanel.js';
+import { ZonePanel } from '../play/ZonePanel.js';
+import { type PermInteraction } from '../play/SeatPanel.js';
 import { StackPanel } from '../play/StackPanel.js';
 import { stackEntries } from '../../lib/play/stack-view.js';
-import { PlayCard, CardBack } from '../play/PlayCard.js';
+import { PlayCard } from '../play/PlayCard.js';
 import { CardFace } from '../play/CardFace.js';
 import { CardHover } from '../CardHover.js';
 import { CardZoomOverlay, type ZoomedCard } from '../play/CardZoomOverlay.js';
@@ -65,12 +76,15 @@ import '../play/action-bar.css';
  * which the hook serializes to `submitAction`. Unlike hotseat there is NO device
  * handoff: when it's not our turn we render a clear "Waiting for opponent…" state.
  *
- * It reuses `SeatPanel`/`StackPanel`/`PlayCard`/`CardBack`/`ChoicePrompt`/
- * `AbilityPrompts`/`GraveyardPanel` verbatim (DRY) — the adapter and the pure
- * `legal-actions` derivations are the only new glue. Every affordance the hotseat
- * board has is present here too (walker attacks, loyalty abilities, flashback from
- * the graveyard), driven off the masked view instead of a local engine: a mechanic
- * that ships must not be invisible online. The game log uses the server's lines.
+ * The BATTLEFIELD ITSELF is `BoardScene` — the same component `PlayBoard` mounts,
+ * not a second arrangement of the same leaves. Everything else it reuses
+ * (`StackPanel`, `PlayCard`, `ChoicePrompt`, `AbilityPrompts`, `ZonePanel`,
+ * `CardFace`, `CardZoomOverlay`, `CombatHoldBanner`) it reuses verbatim; the
+ * adapter and the pure `legal-actions` derivations are the only new glue. Every
+ * affordance the hotseat board has is present here too (walker attacks, loyalty
+ * abilities, flashback from the graveyard), driven off the masked view instead of
+ * a local engine: a mechanic that ships must not be invisible online. The game
+ * log uses the server's lines, handed to the scene as its rail.
  *
  * ## §3.143 wave 2 — the online board gets the overhaul too
  *
@@ -89,12 +103,32 @@ import '../play/action-bar.css';
  *  - **UX-10** — the hand and every target row go through `CardHover`;
  *  - **UX-8/UX-17** — the target prompt shows the SOURCE as a `CardFace`.
  *
- * ⚠️ WHAT DOES NOT REACH IT, AND WHY. `CardFace`'s provenance half (UX-17.1–3)
- * needs core's `explainCharacteristics`, which needs the full `GameState` and the
- * continuous-effect index. An online client has neither — it holds a masked view,
- * by design — so the faces here carry printed truth plus the glossary, and the
- * board must not invent attribution to fill the gap. See `board-adapter.ts`'s
- * `NO_MOD` note: the same limit, already stated once.
+ * ## THE SCENE — UX-9, UX-12, UX-13 and UX-14, and NOT as four ports
+ *
+ * Those four reached the hotseat board alone and would have been ported here one
+ * at a time forever, because there was no unit to mount: the tilt wrapper, the
+ * midline the advance clamp measures against, the staged copies and the arcs all
+ * lived inline in `PlayBoard`'s JSX. `BoardScene` is that unit, and this board
+ * mounting it is the whole of how they arrive. `online-board-parity.test.ts`
+ * compares the two boards' scene skeletons element for element, so a fifth
+ * feature cannot ship to one of them again.
+ *
+ * ⚠️ WHAT DOES NOT REACH IT, AND WHY — two limits, both real, neither papered over.
+ *
+ * 1. `CardFace`'s provenance half (UX-17.1–3) needs core's
+ *    `explainCharacteristics`, which needs the full `GameState` and the
+ *    continuous-effect index. An online client has neither — it holds a masked
+ *    view, by design — so the faces here carry printed truth plus the glossary,
+ *    and the board must not invent attribution to fill the gap. See
+ *    `board-adapter.ts`'s `NO_MOD` note: the same limit, already stated once.
+ * 2. UX-15 (damage travelling from source to recipient) needs the engine's
+ *    `GameEvent` stream, and the server's `state` message carries a masked view
+ *    plus pre-formatted log STRINGS — `Room.summarizeEvents` throws the structure
+ *    away. This is NOT a masking limit (combat damage is public, and the server
+ *    already narrates it to both seats); it is a missing channel. The scene takes
+ *    `NO_DAMAGE_SOURCE` here rather than deriving a second answer from frame
+ *    diffs, and when the protocol carries the events that prop is the whole
+ *    change. See `BoardScene.tsx`'s `NO_DAMAGE_SOURCE` for the full note.
  */
 /**
  * WHY A CARD ON THIS BOARD SHOWS NO PROVENANCE — said out loud, once.
@@ -109,6 +143,16 @@ import '../play/action-bar.css';
  * `provenance-view.ts` and have all four import it.
  */
 const PROVENANCE_UNAVAILABLE_ONLINE = 'Live provenance is not carried by the multiplayer protocol yet.';
+
+/**
+ * What the action bar says while the board is advancing a window FOR the player.
+ *
+ * Named and exported because two readers must agree on it: the bar that shows it
+ * and `online-board-parity.test.ts`, which uses its presence and its ABSENCE as
+ * the two-sided evidence that the §10 combat hold really stops the auto-passer.
+ * A hard-coded copy in the test would go vacuous the day the wording changed.
+ */
+export const AUTO_ADVANCING_HINT = 'Nothing to do this step — advancing…';
 
 export function OnlineBoard({
   frame,
@@ -189,6 +233,21 @@ export function OnlineBoard({
   const casts = useMemo(() => castChoices(legalActions), [legalActions]);
   /** Flashback casts the server is ALREADY offering (its pool covers the cost). */
   const graveyardCasts = useMemo(() => graveyardCastChoices(legalActions), [legalActions]);
+  /**
+   * Casts OUT OF EXILE the server is offering — a madness window, a free
+   * suspend/cascade window, an adventure's creature half, a defeated Siege's
+   * reward. The server's own offers and nothing else; this board re-derives no
+   * legality.
+   *
+   * ⚠️ NO tap-to-fund twin, unlike the graveyard's. `castableWithTaps` plans a
+   * payment against a PRINTED cost, and the cost of a cast from exile is the
+   * one the permission or the window names (a madness cost, or free) — which
+   * this board cannot read off the instance. So exile offers exactly what the
+   * server already offers, and a cast the viewer could only afford after tapping
+   * stays absent rather than being offered and rejected. Reported as a known
+   * narrowing, not approximated.
+   */
+  const exileCasts = useMemo(() => exileCastChoices(legalActions), [legalActions]);
   const attackTemplate = useMemo(() => declareAttackersAction(legalActions), [legalActions]);
   const blockTemplate = useMemo(() => declareBlockersAction(legalActions), [legalActions]);
   const pass = useMemo(() => passAction(legalActions), [legalActions]);
@@ -261,6 +320,13 @@ export function OnlineBoard({
   const [zoomed, setZoomed] = useState<ZoomedCard | null>(null);
   /** The viewer's graveyard panel (the flashback affordance's entry point). */
   const [graveyardOpen, setGraveyardOpen] = useState(false);
+  /**
+   * WHOSE exile is open, or null — the same seat-valued state the hotseat board
+   * keeps, because a jailed or suspended card sits in its OWNER's exile and
+   * either side is worth looking at. See `PlayBoard.tsx` for the reasoning; the
+   * two boards share the panel, so they must share the affordance too.
+   */
+  const [exileOpen, setExileOpen] = useState<PlayerId | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   /** A transient board message (the hotseat board's toast, same feel). */
@@ -297,6 +363,84 @@ export function OnlineBoard({
   };
 
   /**
+   * §10 — HOLDING COMBAT ON SCREEN, ON THIS BOARD TOO.
+   *
+   * The hotseat board measured the defect and fixed it; the online board has the
+   * same combat and had the same invisibility, because it has its OWN advance
+   * path (the auto-pass below) and got no hold. The decision itself is not
+   * re-made here: `combatHoldDecision` and its closed `COMBAT_HOLD_KINDS` table
+   * are the one answer both boards read, and `combatWindowFactsOf` adapts the
+   * state unchanged — the protocol carries `combat` as core's own
+   * `CombatState`, so there is nothing to translate.
+   *
+   * ⚠️ DERIVED DURING RENDER, not armed in an effect. The frame is pushed by the
+   * server and the hold is a pure function of it, so there is never a render in
+   * which the board has the frame but not yet the beat — which is the render the
+   * auto-pass effect would have spent a pass in. It is also what lets
+   * `online-board-parity.test.ts` see the banner at all: that suite renders to
+   * static markup, where effects never run.
+   */
+  const reducedMotion = usePrefersReducedMotion();
+  /**
+   * Beats this turn's combat has already spent, and WHOSE turn it was.
+   *
+   * ⚠️ Compared at READ time rather than cleared by a reset effect — the same
+   * rule `PlayView` records: a reset that lands between renders would book the
+   * NEXT turn's combat as already held, which is the invisible-combat bug again
+   * in a new hat. One combat phase per turn (`STEP_ORDER`), so the turn number
+   * is the combat's identity.
+   */
+  const [beatsSpent, setBeatsSpent] = useState<{
+    readonly turn: number;
+    readonly spent: ReadonlySet<CombatHoldKind>;
+  }>({ turn: 0, spent: NO_BEATS_SPENT });
+
+  const combatHoldDecisionNow = combatHoldDecision(
+    {
+      step,
+      combat: combatWindowFactsOf(masked.combat),
+      spent: beatsSpent.turn === masked.turnNumber ? beatsSpent.spent : NO_BEATS_SPENT,
+      reducedMotion,
+      // The server's own verdict, carried by the mask — not a guess, and not the
+      // `false` a board could get away with here because the online flow swaps
+      // to `EndScreen` on `gameOver`.
+      gameOver: masked.gameOver,
+    },
+    COMBAT_HOLD_CONFIG,
+  );
+  const combatHold = combatHoldDecisionNow.kind === 'hold' ? combatHoldDecisionNow.hold : null;
+
+  /**
+   * Book a beat, which is what ENDS it: the decision then refuses `alreadyHeld`
+   * and the board resumes. Expiring and pressing Skip are the same event, so
+   * there is one funnel for both (`PlayView`'s `releaseCombatHold` twin).
+   *
+   * Takes the turn as an ARGUMENT and updates functionally, so it closes over
+   * nothing and stays referentially stable — the beat's timer below is keyed on
+   * primitives precisely so a re-render cannot restart the beat it is timing.
+   */
+  const bookCombatBeat = useCallback((kind: CombatHoldKind, turn: number): void => {
+    setBeatsSpent((current) => {
+      const spent = new Set(current.turn === turn ? current.spent : []);
+      spent.add(kind);
+      return { turn, spent };
+    });
+  }, []);
+
+  const holdKind = combatHold?.kind ?? null;
+  const holdMs = combatHold?.ms ?? 0;
+  const holdTurn = masked.turnNumber;
+  useEffect(() => {
+    if (holdKind === null) return undefined;
+    const handle = window.setTimeout(() => bookCombatBeat(holdKind, holdTurn), holdMs);
+    return () => window.clearTimeout(handle);
+    // ⚠️ PRIMITIVES ONLY. `combatHold` is a fresh object every render, and a
+    // frame arriving mid-beat (the opponent passing, a log line) would clear and
+    // re-arm this timer forever — a beat that never ends is a hung game, not a
+    // long pause.
+  }, [holdKind, holdMs, holdTurn, bookCombatBeat]);
+
+  /**
    * Advance automatically through priority windows where passing is the ONLY legal
    * action. Without this a new game opens in `upkeep` and needs four `Pass / advance`
    * clicks (two per seat, through `upkeep` and `draw`) before the first land can be
@@ -305,21 +449,33 @@ export function OnlineBoard({
    * `passedFrame` rate-limits it to once per server-pushed frame: a re-render must
    * not spend a second pass, but a NEW frame in the same step legitimately may (see
    * `alreadyPassedFrame` for the declareBlockers case that rules out a step key).
+   *
+   * ⚠️ THE LOAD-BEARING GATE (§10) is the second argument to
+   * `shouldAutoPassNow`. This is the online analogue of the hotseat's
+   * `shouldStop` predicate — the value that decides "should I keep advancing?" —
+   * and the hold belongs INSIDE it rather than as an early return around the
+   * effect, so nothing else can read a stale "yes". It is enough on its own
+   * because the server is authoritative and has no auto-advance of its own: it
+   * moves only when a seat's client submits, and the opponent's client is this
+   * same component holding the same beat.
    */
   const passedFrame = useRef<GameFrame | null>(null);
   const autoPass =
     AUTO_PASS_EMPTY_PRIORITY &&
     !!pass &&
-    shouldAutoPass({
-      yourTurn,
-      legalActions,
-      stackSize: masked.stack.length,
-      awaitingOwnChoice: !!ownChoice,
-      // A flashback the seat could fund is a real play, exactly like a hand card —
-      // auto-passing over it would make the new affordance unreachable in the very
-      // windows the card is castable in.
-      tapCastableCount: tapCastable.size + graveyardTapCastable.size,
-    });
+    shouldAutoPassNow(
+      {
+        yourTurn,
+        legalActions,
+        stackSize: masked.stack.length,
+        awaitingOwnChoice: !!ownChoice,
+        // A flashback the seat could fund is a real play, exactly like a hand card —
+        // auto-passing over it would make the new affordance unreachable in the very
+        // windows the card is castable in.
+        tapCastableCount: tapCastable.size + graveyardTapCastable.size,
+      },
+      combatHold !== null,
+    );
 
   useEffect(() => {
     if (!autoPass || !pass) return;
@@ -337,6 +493,21 @@ export function OnlineBoard({
   }, [autoPass, pass, frame, onAction]);
 
   // --- casting -------------------------------------------------------------------
+  /**
+   * The `fromZone` field of a cast action, written only when the cast does NOT
+   * come from the hand (the engine's default, and omitting it is what every
+   * hand cast has always done).
+   *
+   * ONE helper rather than a `=== 'graveyard'` test at each of the two build
+   * sites, which is what both of them said: exile casts were legal online the
+   * day §3.113 landed, and either site would have submitted one with no zone —
+   * so the server would have looked for the card in the HAND and cleanly
+   * rejected a cast it had itself just offered. A zone added to `CastZone`
+   * tomorrow rides along with no edit here.
+   */
+  const zoneField = (zone: CastZone | undefined): { fromZone?: CastZone } =>
+    zone === undefined || zone === 'hand' ? {} : { fromZone: zone };
+
   const onCastClick = (choice: CastChoice): void => {
     if (choice.canCastUntargeted) {
       submit({
@@ -344,7 +515,7 @@ export function OnlineBoard({
         player: masked.viewer,
         instanceId: choice.instanceId,
         targets: [],
-        ...(choice.fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
+        ...zoneField(choice.fromZone),
         ...(choice.phyrexianLife === undefined ? {} : { phyrexianLife: choice.phyrexianLife }),
       });
     } else if (choice.targetSets.length > 0) {
@@ -359,9 +530,8 @@ export function OnlineBoard({
       player: masked.viewer,
       instanceId: pendingCast.instanceId,
       targets,
-      // The zone rides the choice: a flashback cast must name its graveyard source
-      // or the server looks for the card in the hand and cleanly rejects it.
-      ...(pendingCast.fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
+      // The zone rides the choice — see `zoneField`.
+      ...zoneField(pendingCast.fromZone),
       // So does the READING (§3.143): the server offers one cast per fundable
       // Phyrexian life amount, and dropping the field asks for one it may never
       // have offered.
@@ -427,6 +597,13 @@ export function OnlineBoard({
       }
       return;
     }
+    if (zone === 'exile') {
+      // The server's offer or nothing — see `exileCasts` for why there is no
+      // tap-to-fund fallback here.
+      const offered = exileCasts.get(id);
+      if (offered) onCastClick(offered);
+      return;
+    }
     if (lands.has(id)) {
       submit({ kind: 'playLand', player: masked.viewer, instanceId: id });
       return;
@@ -452,22 +629,68 @@ export function OnlineBoard({
   // --- the graveyard panel ---------------------------------------------------------
   /**
    * Every graveyard card as the panel renders it. The judging lives in the shared
-   * pure `graveyardPanelView` — the hotseat board calls the same function, so the
-   * two graveyards cannot drift.
+   * pure `zonePanelView` — the hotseat board calls the same function with the same
+   * zone row, so the two graveyards cannot drift.
    */
   const graveyardPanelCards = useMemo(
     () =>
-      graveyardPanelView(
-        ownGraveyard.map((c) => ({
-          instanceId: c.instanceId,
-          cardId: c.def.id,
-          name: c.def.name,
-          hasFlashback: c.def.flashback !== undefined,
-        })),
+      zonePanelView(
+        'graveyard',
+        {
+          cards: ownGraveyard.map((c) => ({
+            instanceId: c.instanceId,
+            cardId: c.def.id,
+            name: c.def.name,
+            castableEver: c.def.flashback !== undefined,
+          })),
+          // CR 404.2 — a graveyard hides nothing from anybody.
+          hiddenCount: 0,
+        },
         new Set([...graveyardCasts.keys(), ...graveyardTapCastable]),
-        { yourTurn, waitingOn: names[masked.priorityPlayer], step },
+        { yours: true, yourTurn, waitingOn: names[masked.priorityPlayer], step },
       ),
     [ownGraveyard, graveyardCasts, graveyardTapCastable, yourTurn, names, masked.priorityPlayer, step],
+  );
+
+  // --- the exile panel -------------------------------------------------------------
+  /**
+   * The opened exile, for whichever seat's chip was clicked.
+   *
+   * ⚠️ Built from `view` — the ADAPTED, already-masked board view — so a
+   * face-down (foretold) card of the opponent's is not in `seat.exile` at all
+   * and only its COUNT arrives. The server masked it (`maskStateForSeat`), the
+   * adapter carried the two halves through, and this panel cannot render an
+   * identity nobody handed it.
+   */
+  const exileSeat = exileOpen === null ? null : exileOpen === view.self.id ? view.self : view.opponent;
+  const exilePanelView = useMemo(
+    () =>
+      exileSeat === null
+        ? null
+        : zonePanelView(
+            'exile',
+            {
+              cards: exileSeat.exile.map((c) => ({
+                instanceId: c.instanceId,
+                cardId: c.cardId,
+                name: c.name,
+                // Only the server knows whether a permission stands — see the
+                // `exile` row of ZONE_PANELS.
+                castableEver: null,
+              })),
+              hiddenCount: exileSeat.exileHiddenCount,
+            },
+            // Only the viewer's own exile offers casts; the opponent's is a
+            // reading surface, so every card there is inspectable but inert.
+            exileSeat.id === masked.viewer ? new Set(exileCasts.keys()) : new Set<InstanceId>(),
+            {
+              yours: exileSeat.id === masked.viewer,
+              yourTurn,
+              waitingOn: names[masked.priorityPlayer],
+              step,
+            },
+          ),
+    [exileSeat, exileCasts, masked.viewer, yourTurn, names, masked.priorityPlayer, step],
   );
 
   // --- activated abilities (a planeswalker's loyalty lines) -------------------------
@@ -767,52 +990,24 @@ export function OnlineBoard({
   );
 
   /**
-   * Every permanent on the table by id, from the SAME `BoardView` the seats are
-   * drawn from — so the zoom cannot disagree with the tile it was opened from.
+   * §3.143 / UX-12 + UX-14 — the selections the player is still CLICKING. Handed
+   * to the scene, which decides what a draft MEANS (a dashed arc, never an
+   * advance); this only says what has been ticked.
    */
-  const permById = useMemo(() => {
-    const map = new Map<InstanceId, BoardPermanent>();
-    for (const perm of [...view.self.permanents, ...view.opponent.permanents]) map.set(perm.instanceId, perm);
-    return map;
-  }, [view]);
-
-  /**
-   * §3.143 GAP-C — a way into the zoom from the BATTLEFIELD, the hotseat
-   * board's twin (see its own note for why the gestures split this way, and why
-   * this is delegated from the seat wrapper rather than added to the tile).
-   */
-  const inspectPermanentFrom = useCallback(
-    (event: ReactMouseEvent, requireInert: boolean): void => {
-      const from = event.target instanceof Element ? event.target : null;
-      if (from === null) return;
-      if (requireInert && from.closest('button') !== null) return;
-      const raw = from.closest('[data-perm-home]')?.getAttribute('data-perm-home');
-      if (raw === null || raw === undefined) return;
-      const perm = permById.get(Number(raw) as InstanceId);
-      if (perm === undefined) return;
-      event.preventDefault();
-      setZoomed({
-        cardId: perm.cardId,
-        name: perm.name,
-        isCreature: perm.isCreature,
-        unavailableReason: PROVENANCE_UNAVAILABLE_ONLINE,
-      });
-    },
-    [permById],
-  );
-
-  /** The two handlers every seat gets, spread onto its wrapper. */
-  const seatInspectProps = {
-    onContextMenu: (event: ReactMouseEvent) => inspectPermanentFrom(event, false),
-    onClick: (event: ReactMouseEvent) => inspectPermanentFrom(event, true),
+  const combatDraft: CombatDraft = {
+    attackers: chosenAttackers,
+    attackTargets: walkerAssign,
+    blocks: blockAssign,
   };
 
-  /** Which blocker→attacker lines to draw this frame (pure rule, tested). */
-  const combatLines = blockerLinePairs({
-    step,
-    declaredBlocks: view.combat?.blocks,
-    draftAssign: blockAssign,
-  });
+  /**
+   * The tabletop's own numbers, from the scene that reads them — spread on
+   * `.play-board` because `board-fit.css` declares
+   * `--play-board-right-overlay-inset` on this element out of
+   * `--play-log-rail-w`, and a custom property set on a descendant cannot feed
+   * an ancestor's declaration.
+   */
+  const sceneVars = useBoardSceneVars();
 
   /** Is there ANY move available — a card, a mana source, or a combat declaration? */
   const hasAnyPlay =
@@ -830,7 +1025,7 @@ export function OnlineBoard({
   const flashbackCount = graveyardCasts.size + graveyardTapCastable.size;
 
   return (
-    <div className="play-board" ref={boardRootRef}>
+    <div className="play-board" ref={boardRootRef} style={sceneVars}>
       <div className="play-board__status">
         <span className="play-board__turn">{statusText}</span>
         <span className="play-board__priority">
@@ -841,78 +1036,89 @@ export function OnlineBoard({
         </button>
       </div>
 
-      {/* Opponent (top) — hand hidden (count only). */}
-      <div className="play-board__opponent" {...seatInspectProps}>
-        <SeatPanel
-          seat={view.opponent}
-          isActive={view.activePlayer === view.opponent.id}
-          hasPriority={view.priorityPlayer === view.opponent.id}
-          interaction={opponentInteraction}
-          jails={jails}
-          onInspectCard={setZoomed}
-        />
-        <div className="play-hand play-hand--hidden" aria-label={`${view.opponent.name} hand (hidden)`}>
-          {Array.from({ length: view.opponent.handCount }).map((_, i) => (
-            <CardBack key={i} index={i} />
-          ))}
-          {view.opponent.handCount === 0 && <span className="seat__empty">Empty hand</span>}
-        </div>
-      </div>
+      <BoardScene
+        view={view}
+        viewer={masked.viewer}
+        boardRootRef={boardRootRef}
+        selfInteraction={selfInteraction}
+        opponentInteraction={opponentInteraction}
+        jails={jails}
+        onInspectCard={setZoomed}
+        /* This client holds a MASKED view and cannot know what is modifying a
+           permanent, and `CardFace` draws an empty breakdown as "nothing is" —
+           a different and false claim. So the absence is named, not rendered as
+           a zero. */
+        provenanceUnavailableReason={PROVENANCE_UNAVAILABLE_ONLINE}
+        onGraveyardClick={() => setGraveyardOpen((open) => !open)}
+        onExileClick={(seat) => setExileOpen((open) => (open === seat ? null : seat))}
+        drag={drag}
+        dropRef={dropRef}
+        combatDraft={combatDraft}
+        measureKey={frame}
+        /* ⚠️ UX-15 IS NOT REACHED HERE, AND THE CONSTANT SAYS WHY: the server's
+           `state` message carries a masked view plus pre-formatted log STRINGS,
+           never the `GameEvent` stream a damage sequence is derived from. When
+           the protocol carries one, this line is the whole change. */
+        damage={NO_DAMAGE_SOURCE}
+        rail={<ServerLog lines={log} />}
+        selfZonePanels={
+          <>
+            {/* The opened graveyard. Flashback casts arrive in `legalActions` but the
+                hand was the only clickable zone, so they were unreachable online —
+                this is that affordance, routed through the same `activateCard`. */}
+            {graveyardOpen && (
+              <ZonePanel
+                zone="graveyard"
+                ownerName={view.self.name}
+                view={graveyardPanelCards}
+                onActivate={(id) => activateCard(id, 'graveyard')}
+                onClose={() => setGraveyardOpen(false)}
+              />
+            )}
+            {/* The opened EXILE — the same panel, the same funnel, mounted on BOTH
+                boards because the graveyard's was and a surface that reaches only
+                one of the two is the drift §3.143 GAP-20 was written about. */}
+            {exileSeat !== null && exilePanelView !== null && (
+              <ZonePanel
+                zone="exile"
+                ownerName={exileSeat.name}
+                view={exilePanelView}
+                onActivate={(id) => activateCard(id, 'exile')}
+                onClose={() => setExileOpen(null)}
+              />
+            )}
+          </>
+        }
+      />
 
-      {/* Center: stack + server log.
-
-          §3.143 / UX-1 + UX-2 — the stack shows real card faces and floats over
-          the board instead of sharing this column, exactly as on the hotseat
-          board. `board-fit.css` narrows the two-column grid to one when no
-          `.stack-panel--column` is inside, so the log takes the whole column and
-          the battlefield loses no height (report 20260901_204618, already paid
-          for once). `placement="floating"` is absolute against `.play-board`
-          (styles.css gives it `position: relative`), not against this grid cell.
+      {/*
+        §3.143 / UX-1 + UX-2 — the stack shows real card faces and FLOATS over the
+        board instead of sharing a column with the log, exactly as on the hotseat
+        board. `placement="floating"` is absolute against `.play-board`
+        (styles.css gives it `position: relative`), and it is mounted OUTSIDE the
+        scene: an absolutely-positioned descendant of a transformed box is
+        positioned against that box and tilted with it.
       */}
-      <div className="play-board__center">
-        <StackPanel
-          stack={stackFacts}
-          names={names}
-          nameOf={nameOfInstance}
-          faceOf={faceOfInstance}
-          viewer={masked.viewer}
-          placement="floating"
-        />
-        <ServerLog lines={log} />
-      </div>
+      <StackPanel
+        stack={stackFacts}
+        names={names}
+        nameOf={nameOfInstance}
+        faceOf={faceOfInstance}
+        viewer={masked.viewer}
+        placement="floating"
+      />
 
-      {/* Viewer (bottom) — own hand face-up. The seat panel doubles as the drag-to-
-          play drop zone: it lights up while a card is in flight, and releasing a
-          dragged card over it plays that card (same action as clicking it). */}
-      <div className="play-board__self" {...seatInspectProps}>
-        <div
-          ref={dropRef}
-          className={`drop-zone${drag ? ' drop-zone--active' : ''}${drag?.overDrop ? ' drop-zone--over' : ''}`}
-        >
-          <SeatPanel
-            seat={view.self}
-            isActive={view.activePlayer === view.self.id}
-            hasPriority={view.priorityPlayer === view.self.id}
-            interaction={selfInteraction}
-            onGraveyardClick={() => setGraveyardOpen((open) => !open)}
-            jails={jails}
-            onInspectCard={setZoomed}
-          />
-        </div>
-        {/* The opened graveyard. Flashback casts arrive in `legalActions` but the
-            hand was the only clickable zone, so they were unreachable online —
-            this is that affordance, routed through the same `activateCard`. */}
-        {graveyardOpen && (
-          <GraveyardPanel
-            ownerName={view.self.name}
-            cards={graveyardPanelCards}
-            onActivate={(id) => activateCard(id, 'graveyard')}
-            onClose={() => setGraveyardOpen(false)}
-          />
-        )}
+      {/*
+        YOUR HAND IS OUTSIDE THE SCENE (UX-9). A tilted hand is unreadable, and
+        under `transform-style: flat` — which is all this board can have, see
+        board-scene.css — there is no counter-rotation that undoes the parent's
+        projection. It used to sit INSIDE the viewer's seat region here, which is
+        the one place the tilt would have made it illegible.
+      */}
         <div
           className="play-hand"
           aria-label={`${view.self.name} hand`}
+          data-anim-anchor={`hand:${view.self.id}`}
           {...dragHandProps}
           onDragStart={(e) => e.preventDefault()}
         >
@@ -978,7 +1184,6 @@ export function OnlineBoard({
           })}
           {(view.self.hand?.length ?? 0) === 0 && <span className="seat__empty">Empty hand</span>}
         </div>
-      </div>
 
       {zoomed && <CardZoomOverlay {...zoomed} onClose={() => setZoomed(null)} />}
 
@@ -1046,9 +1251,11 @@ export function OnlineBoard({
                   ? 'Answer the question above to continue.'
                   : // A seat that holds priority with nothing to do is the state that
                     // read as a frozen app — say so plainly instead of giving the
-                    // generic step hint next to a hand of dead cards.
+                    // generic step hint next to a hand of dead cards. It reads the
+                    // GATED decision, so a board holding on combat (§10) does not
+                    // claim to be advancing while it is deliberately standing still.
                     autoPass
-                    ? 'Nothing to do this step — advancing…'
+                    ? AUTO_ADVANCING_HINT
                     : (idleNote ??
                       actionBarHint(step, {
                         // The active player's own declare window, pre-declaration;
@@ -1205,8 +1412,16 @@ export function OnlineBoard({
         </div>
       )}
 
-      {/* Blocker→attacker lines (§3.57) — same overlay as the hotseat board. */}
-      <CombatLines lines={combatLines} containerRef={boardRootRef} measureKey={frame} />
+      {/* §10 — the board is holding combat on screen so the blocks that were just
+          declared, and the damage that follows them, can actually be read. The
+          SAME strip the hotseat board mounts, so the two cannot be re-worded
+          apart; Skip ends the beat now, so it is never a tax every combat. */}
+      {combatHold && (
+        <CombatHoldBanner
+          hold={combatHold}
+          onSkip={() => bookCombatBeat(combatHold.kind, masked.turnNumber)}
+        />
+      )}
     </div>
   );
 }

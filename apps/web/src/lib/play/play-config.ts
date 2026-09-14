@@ -782,6 +782,116 @@ export const SPELL_HOLD_CONFIG: SpellHoldConfig = Object.freeze({
 });
 
 /**
+ * THE BOARD-READING BEAT — how long a NEW, STATIC picture of the board has to
+ * stay on screen before a player has actually read it.
+ *
+ * Derived from {@link HotseatConfig.aiThinkMs} rather than re-guessed, because
+ * that is this app's only number that already answers exactly this question: it
+ * exists so "the human sees the board teleport … with a wall of new log lines
+ * and no idea what happened" cannot happen, which is the same sentence §10 files
+ * against combat. One answer to one question (rule 12) — and a player who tunes
+ * the computer's pace down to a sprint gets a board that keeps up with them.
+ *
+ * It is the WHOLE beat when nothing animates (reduced motion) and the TAIL of
+ * the beat when something does: an animation the player has watched finish still
+ * leaves a picture to read.
+ */
+const BOARD_READ_BEAT_MS = HOTSEAT_CONFIG.aiThinkMs;
+
+/**
+ * Holding COMBAT on screen long enough to see it (§10 of
+ * docs/MTGA-UX-OVERHAUL.md).
+ *
+ * ⚠️ MEASURED, NOT GUESSED AT. A rig sampled `blocking=0 staged=0 arcs=0` two
+ * hundred and sixty milliseconds after "Confirm 1 block" — blocks, combat damage
+ * and end-of-combat had all resolved and the turn had advanced, with no input.
+ * UX-13 and UX-15 were computed correctly and had never been seen by anybody.
+ *
+ * ⚠️ AND A HOLD IS NOT A STOP, exactly as {@link SpellHoldConfig} says: these
+ * are presentational delays the BOARD spends before calling `passPriority`. The
+ * engine, the sim and the replay never see them (`packages/sim` runs thousands
+ * of games and must never wait on a UI beat), which is why they live here rather
+ * than anywhere near the rules.
+ *
+ * Both beats are DERIVED from the animations they exist to reveal, so a change
+ * to the damage sequence's own timings carries the hold with it instead of
+ * leaving a hand-tuned number behind that is now too short — see
+ * {@link COMBAT_HOLD_CONFIG} for the arithmetic.
+ */
+export interface CombatHoldConfig {
+  /**
+   * The beat after blockers are declared, ms — UX-13's blocker walking out to
+   * meet its attacker, and the blue arc that pairs them.
+   *
+   * Sized as: the advance's own travel, plus a full stagger tail (the last tile
+   * of a maximum-width charge starts last), plus {@link BOARD_READ_BEAT_MS} to
+   * look at the picture the movement produced. Anything shorter ends while the
+   * cards are still moving, which is a hold that hides the thing it is for.
+   */
+  readonly blocksDeclaredMs: number;
+  /**
+   * The same beat for a viewer who asked for reduced motion.
+   *
+   * A NUMBER, not a switch — the convention {@link Board3dConfig.reducedMotionTiltDeg}
+   * set, where reduced motion flattens an ANGLE rather than flipping a boolean,
+   * so a designer can choose a gentler version instead of none without a code
+   * change. Shorter rather than zero because the advance still HAPPENS under
+   * reduced motion: `board-scene.css` drops the transition, so the blocker
+   * arrives instantly and there is a picture to read but no travel to wait for.
+   */
+  readonly reducedMotionBlocksDeclaredMs: number;
+  /**
+   * The beat while combat damage is distributed, ms — UX-15.
+   *
+   * Sized against {@link DamageAnimConfig}'s own clock: one hit's travel, plus
+   * the stagger between {@link DAMAGE_BEAT_HITS_SHOWN} hits, plus the impact
+   * bloom and the settle. A hold shorter than the animation it exists to reveal
+   * is pointless, and `travelMs` (340) alone is nearly double the 260 ms that
+   * measured zero.
+   */
+  readonly damageMs: number;
+  /**
+   * The same beat for a viewer who asked for reduced motion.
+   *
+   * ⚠️ There is nothing travelling to watch here at all: `deriveDamageSequence`
+   * honours reduced motion AT THE SOURCE and derives no beats, so not one
+   * element is mounted. The pause is still not zero, because the board it leaves
+   * behind — new life totals, marked damage, creatures gone — is exactly what a
+   * player who turned the motion off still has to read, and the next step is
+   * otherwise one synchronous burst away.
+   */
+  readonly reducedMotionDamageMs: number;
+}
+
+/**
+ * How many staggered hits the damage beat is sized to show.
+ *
+ * THREE, not {@link DamageAnimConfig.maxPerBatch} (10): the common blocked
+ * combat is two hits (the attacker and its blocker trading) and three covers a
+ * double block, while ten would hold every combat for the full
+ * {@link DamageAnimConfig.maxTotalMs} budget and turn a game into a slideshow.
+ * A bigger combat is not cut off — its beats keep playing on their own timers
+ * after the board walks on; what the hold guarantees is that the sequence STARTS
+ * where the player is looking.
+ */
+const DAMAGE_BEAT_HITS_SHOWN = 3;
+
+/** The default combat-hold configuration (see {@link CombatHoldConfig}). */
+export const COMBAT_HOLD_CONFIG: CombatHoldConfig = Object.freeze({
+  blocksDeclaredMs:
+    COMBAT_ADVANCE_CONFIG.advanceMs +
+    COMBAT_ADVANCE_CONFIG.staggerMs * (COMBAT_ADVANCE_CONFIG.maxStaggered - 1) +
+    BOARD_READ_BEAT_MS,
+  reducedMotionBlocksDeclaredMs: BOARD_READ_BEAT_MS,
+  damageMs:
+    DAMAGE_ANIM_CONFIG.travelMs +
+    DAMAGE_ANIM_CONFIG.staggerMs * (DAMAGE_BEAT_HITS_SHOWN - 1) +
+    DAMAGE_ANIM_CONFIG.impactMs +
+    DAMAGE_ANIM_CONFIG.settleHoldMs,
+  reducedMotionDamageMs: BOARD_READ_BEAT_MS,
+});
+
+/**
  * The two-phase cast/activate transaction (UX-3/4/5).
  *
  * The commit boundary itself is `lib/play/proposal.ts` + the session snapshot

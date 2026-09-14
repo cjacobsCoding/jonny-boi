@@ -99,7 +99,8 @@
   /* `--play-seat-rows-min` — the least a battlefield strip may be squeezed to —
      is declared on `.play-board` below, NOT here: it is one whole tile, and a
      tile is now card-SHAPED, so the floor has to multiply by `--perm-aspect`,
-     which `PlayBoard` sets on `.play-board` and which does not exist at
+     which BOTH boards set on `.play-board` (`useBoardSceneVars`, BoardScene.tsx)
+     and which does not exist at
      `:root`. A `var()` inside a custom property is substituted where the
      property is DECLARED, so declaring it here would resolve to nothing. */
 
@@ -234,7 +235,8 @@
    harness screenshots, and the floating stack panel shares the same inset.
    That is a CLASS, not two bugs, so the inset is ONE token read by both rather
    than a number copied into each (rule 12). `--play-log-rail-w` is set inline on
-   this element by `PlayBoard`, so it resolves here.
+   this element by both boards, from `BoardScene`'s `useBoardSceneVars`, so it
+   resolves here.
    `right-overlay-inset.test.ts` fails if a new right-pinned overlay skips it. */
 .app:has(.play-board) .play-board {
   --play-board-right-overlay-inset: calc(var(--play-log-rail-w) + var(--space-2, 8px) * 2);
@@ -252,7 +254,7 @@
   overflow: hidden;
 }
 
-/* THE MIDLINE. Two pixels of table seam, and the element `PlayBoard` measures
+/* THE MIDLINE. Two pixels of table seam, and the element `CombatStage` measures
    UX-12's advance clamp from — which is the reason it has to be an element at
    all rather than a border on a seat. */
 .play-board .board-midline {
@@ -269,26 +271,15 @@
   opacity: 0.8;
 }
 
-/* ⚠️ THE RULES BELOW NOW PAINT THE ONLINE BOARD ONLY. `.play-board__center` is
-   the log/stack column in `components/online/OnlineBoard.tsx`, which still puts
-   both in a middle column; the hotseat board's log moved to the rail above and
-   its midline is `.board-midline`. Kept — not deleted — because the online
-   board is a different lane's surface and it still needs exactly this: a column
-   that is the designated slack, so the seats, the hand and the action bar stay
-   whole and this takes whatever is left over. */
-.app:has(.play-board) .play-board__center {
-  /* Yields FIRST — the log is the one region whose content is a history rather
-     than the position, and the only one that scrolls without losing anything.
-     Flex shrinks every item in proportion to its size, so "first" has to be
-     said: a shrink factor several times the seats' means the log gives up its
-     slack before a battlefield strip loses a pixel.
-     Bounded at both ends in §3.119: without a ceiling it grew with the history
-     and crunched the battlefield (report 20260901_204618). */
-  flex: 0 4 auto;
-  min-height: var(--play-log-min-h);
-  max-height: var(--play-log-max-h);
-  overflow-y: hidden;
-}
+/* ⚠️ `.play-board__center` IS GONE FROM BOTH BOARDS, AND ITS RULES WITH IT.
+   It was the log/stack column that sat BETWEEN the two battlefields. The hotseat
+   board left it in §3.143 wave 3 (the log moved sideways into `.board-rail`, the
+   seam between the seats became `.board-midline`); the online board left it when
+   both boards started mounting the one `BoardScene`, which is the whole point of
+   that component. A rule that paints nothing is worse than no rule — the next
+   person reads it as a live layout and lays work on top of it. The log's own
+   sizing tokens (`--play-log-min-h` / `--play-log-max-h`) stay: `.board-rail`
+   and the phone fold below still read them. */
 
 /* The log scrolls INSIDE its own box rather than making the column scroll:
    two nested scrollers meant `scrollIntoView` could satisfy itself by moving
@@ -307,25 +298,6 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-}
-
-/* An empty stack used to waste half the centre column's width (the grid was a
-   fixed `1fr 1fr`). The stack panel renders nothing when the stack is empty,
-   so the log takes the whole width until there is a stack to show. */
-.play-board .play-board__center {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-/* ⚠️ NARROWED TO THE COLUMN PLACEMENT (§3.143 / UX-2). The stack now floats
-   over the board (`placement="floating"`, StackPanel), which means it is
-   `position: absolute` and out of this grid's flow — but `:has()` still matches
-   a descendant that has left the flow, so the unnarrowed selector went on
-   reserving 12–22rem of the centre column for a panel that is not in it. That
-   column is `flex: 0 4 auto`, the designated first-to-yield, and the reserved
-   width came straight out of the game log. `--column` is the class the panel
-   sets only when it really is in the grid. */
-.play-board .play-board__center:has(.stack-panel--column) {
-  grid-template-columns: minmax(12rem, 22rem) minmax(0, 1fr);
 }
 
 /* --- Rule 1: every card reads the knob -------------------------------------- */
@@ -385,9 +357,9 @@
    outrank, and the first back is given 0 there so the fan starts at its own
    left edge.
 
-   ⚠️ This rule is the ONLINE board's too (`OnlineBoard.tsx` renders
-   `.play-board` and reuses `SeatPanel`/`PlayCard`), so it keeps the sizing that
-   board has always had; the tabletop's own numbers are the override below. */
+   ⚠️ This rule is the ONLINE board's too — both boards render `.play-board`
+   and mount the same `BoardScene` — so it keeps the sizing the surface has
+   always had; the tabletop's own numbers are the override below. */
 .play-board .play-card--back {
   --play-back-w: calc(var(--play-tile-w) * 0.6);
   width: var(--play-back-w);
@@ -539,29 +511,31 @@
  * nothing visible until you count pixels and find the board unmoved.
  */
 /* ⚠️ SCOPED TO `.board-scene` / `.combat-stage`, NOT TO `.play-board`, AND THAT
-   IS NOT TIDINESS. `components/online/OnlineBoard.tsx` renders `.play-board`
-   and the very same `SeatPanel`/`BoardPermanentTile` — but it is a different
-   lane's surface and it sets none of `PlayBoard`'s inline custom properties.
-   `calc(… * var(--perm-aspect))` with `--perm-aspect` unset is invalid at
-   computed-value time, so `height` would fall back to `auto` while
-   `.perm__art` below had already been switched to `flex: 1 1 auto; height: auto`
-   — and `CardFace`'s `height: 100%` inside an auto-height box is ZERO. Every
-   online battlefield tile would have rendered with no art at all, and no test
-   in this repo computes CSS. The two selectors here are the two surfaces
-   `PlayBoard` owns: the tabletop, and the combat stage's advanced COPIES of the
-   same tiles, which must stay the same shape as the cards they stand in for.
+   IS NOT TIDINESS — though the reason has CHANGED and is worth stating plainly.
+   It used to be a lane boundary: the online board rendered `.play-board` and the
+   same `SeatPanel`/`BoardPermanentTile` while setting none of the tabletop's
+   custom properties, and `calc(… * var(--perm-aspect))` with `--perm-aspect`
+   unset is invalid at computed-value time — `height` falls back to `auto`, and
+   `CardFace`'s `height: 100%` inside an auto-height box is ZERO. Every online
+   tile would have rendered with no art, and no test in this repo computes CSS.
+   Both boards now mount `BoardScene` and set the properties from one hook, so
+   that particular trap is closed at the source. The SCOPE stays exactly as it
+   is, because these two selectors name the two surfaces the properties are
+   guaranteed on — the tabletop, and the combat stage's advanced COPIES of the
+   same tiles, which must stay the same shape as the cards they stand in for —
+   and a third surface that mounts a `.perm` without the scene (the effects
+   bench, a test harness) must keep getting the un-shaped tile it gets today.
 
-   The WIDTH rule below stays on `.play-board`: it predates this and the online
-   board depends on it, and with `--perm-w` unset it resolves to exactly the
-   `--play-tile-w` it always did. */
+   The WIDTH rule below stays on `.play-board`: it predates this, and with
+   `--perm-w` unset it resolves to exactly the `--play-tile-w` it always did. */
 .play-board .perm {
   width: var(--perm-w, var(--play-tile-w));
 }
 
 .board-scene .perm,
 .combat-stage .perm {
-  /* The card's own shape, from ONE number (`--perm-aspect`, set by PlayBoard
-     from TAP_ROTATION_CONFIG.footprintRatio). `height`, not `aspect-ratio`,
+  /* The card's own shape, from ONE number (`--perm-aspect`, set by both boards
+     from TAP_ROTATION_CONFIG.footprintRatio — `BoardScene`'s `useBoardSceneVars`). `height`, not `aspect-ratio`,
      because the tile is a flex column whose children must be able to shrink
      into it; `aspect-ratio` loses to a content-driven min-height and the tiles
      in a row then stop being the same size. */

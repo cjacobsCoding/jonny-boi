@@ -34,6 +34,7 @@ import {
   DEFENSE_COUNTER,
   type CardInstance,
   type CharacteristicExplanation,
+  type CombatState,
   type ContinuousIndex,
   type GameState,
   type InstanceId,
@@ -70,7 +71,12 @@ export function poolRestrictionLabels(pool: ManaPool): readonly string[] {
 /** Shared empty list so the ordinary pool allocates nothing to describe none. */
 const EMPTY_RESTRICTIONS: readonly string[] = Object.freeze([]);
 
-/** A hand card the viewer is allowed to see (their own hand). */
+/**
+ * A card the viewer is allowed to SEE — their own hand, either graveyard, and
+ * the half of exile they are entitled to identify. Named for the hand because
+ * that is where it started; the shape is "an identified card in a list", and
+ * every zone that shows one uses it so no zone grows a renderer of its own.
+ */
 export interface VisibleHandCard {
   readonly instanceId: InstanceId;
   readonly cardId: string;
@@ -200,7 +206,31 @@ export interface SeatView {
    * UI open a graveyard and offer flashback casts from it, not a leak.
    */
   readonly graveyard: readonly VisibleHandCard[];
+  /**
+   * How many cards are in exile ALTOGETHER — including the face-down ones whose
+   * identity is withheld below. Their EXISTENCE is public (the table watched the
+   * card be exiled face down); only their faces are not, so a count that left
+   * them out would under-report a public fact.
+   */
   readonly exileCount: number;
+  /**
+   * Exile's cards, MINUS any the viewer is not entitled to identify.
+   *
+   * ⚠️ Exile is the one "public" zone that is not fully public: a card with
+   * foretell is exiled FACE DOWN and only its owner may look at it
+   * (CR 702.143a, `CardInstance.faceDown`). This list is the masked half — a
+   * face-down card of the OPPONENT's is never copied into it, so no consumer
+   * holds the secret and none can leak it. See {@link SeatView.exileHiddenCount}
+   * for the other half.
+   */
+  readonly exile: readonly VisibleHandCard[];
+  /**
+   * How many of this seat's exiled cards are withheld from the viewer. A count
+   * and nothing else, deliberately: there is no field here for a name or a card
+   * id to travel in, which is what makes the guarantee structural rather than a
+   * promise every renderer has to keep.
+   */
+  readonly exileHiddenCount: number;
   readonly manaPool: Readonly<Record<string, number>>;
   /**
    * The printed SPEND RESTRICTIONS on mana currently floating — "only to cast a
@@ -217,6 +247,62 @@ export interface SeatView {
   readonly permanents: readonly BoardPermanent[];
 }
 
+/**
+ * WHAT COMBAT IS DOING, for whichever board is drawing it.
+ *
+ * ⚠️ THE DECLARED FLAGS ARE LOAD-BEARING AND WERE MISSING. `BoardScene` advances
+ * a creature to the midline (UX-12 / UX-13) only once its step has HAPPENED, and
+ * emptiness cannot stand in for that: declaring no attackers is a legal, common
+ * choice (`CombatState` in core says the same thing at length). Without these two
+ * flags the hotseat board had to reach past this view model into `session.state`
+ * to know — which is exactly why the online board, which HAS no session, could
+ * never advance anything. Both builders fill them from their own `CombatState`;
+ * `maskStateForSeat` already sends combat unredacted, so nothing here asks the
+ * server for a fact it was withholding.
+ */
+export interface BoardCombatView {
+  readonly attackers: readonly InstanceId[];
+  readonly blocks: readonly { readonly blocker: InstanceId; readonly attacker: InstanceId }[];
+  /** Whether the declare-attackers step has happened (NOT "are there any"). */
+  readonly attackersDeclared: boolean;
+  /** Whether the declare-blockers step has happened (NOT "are there any"). */
+  readonly blockersDeclared: boolean;
+  /**
+   * What each attacker was declared attacking when it is NOT the defending
+   * player — a planeswalker or a battle. Absent for the overwhelmingly common
+   * case, exactly as core's `CombatState` leaves it absent (UX-14's arcs need it
+   * to aim; an attacker with no entry attacks the defending player).
+   */
+  readonly attackTargets?: Readonly<Record<InstanceId, InstanceId | PlayerId>>;
+}
+
+/**
+ * THE ONE ADAPTER from core's `CombatState` to the board's combat view.
+ *
+ * Read by BOTH builders — `buildBoardView` here (hotseat, from the authoritative
+ * `GameState`) and `lib/online/board-adapter.ts` (online, from the server's
+ * `MaskedGameView`, whose `combat` IS a `CombatState`). It used to be two copies
+ * of the same `Object.entries` walk that had already drifted: one of them dropped
+ * the declared flags and the attack targets, and that omission is the whole
+ * reason the online board could not advance a blocker.
+ *
+ * Nothing is widened or approximated: a field core does not set is left absent
+ * rather than defaulted to a plausible value (rule 2).
+ */
+export function boardCombatView(combat: CombatState | null): BoardCombatView | null {
+  if (combat === null) return null;
+  return {
+    attackers: [...combat.attackers],
+    blocks: Object.entries(combat.blocks).map(([blocker, attacker]) => ({
+      blocker: Number(blocker),
+      attacker,
+    })),
+    attackersDeclared: combat.attackersDeclared,
+    blockersDeclared: combat.blockersDeclared,
+    ...(combat.attackTargets !== undefined ? { attackTargets: combat.attackTargets } : {}),
+  };
+}
+
 /** The full masked board snapshot for one viewer. */
 export interface BoardView {
   readonly viewer: PlayerId;
@@ -225,10 +311,7 @@ export interface BoardView {
   readonly priorityPlayer: PlayerId;
   readonly step: string;
   readonly stack: readonly StackView[];
-  readonly combat: {
-    readonly attackers: readonly InstanceId[];
-    readonly blocks: readonly { readonly blocker: InstanceId; readonly attacker: InstanceId }[];
-  } | null;
+  readonly combat: BoardCombatView | null;
   readonly self: SeatView;
   readonly opponent: SeatView;
   readonly gameOver: boolean;
@@ -441,6 +524,12 @@ function seatView(
     graveyardCount: p.graveyard.length,
     graveyard: visibleHand(p.graveyard),
     exileCount: p.exile.length,
+    // THE MASK, and it is the same rule the online seam already applies
+    // (`maskStateForSeat`, §3.112): a face-down exiled card of a seat the viewer
+    // is not is withheld — identity never copied, only counted. `reveal` is the
+    // viewer's own seat, and your own foretold card is yours to look at.
+    exile: visibleHand(p.exile.filter((c) => reveal || c.faceDown !== true)),
+    exileHiddenCount: reveal ? 0 : p.exile.filter((c) => c.faceDown === true).length,
     manaPool: poolColorCounts(p.manaPool),
     restrictedMana: poolRestrictionLabels(p.manaPool),
     hasLost: p.hasLost,
@@ -502,15 +591,6 @@ export function buildBoardView(
   const cont = indexContinuous(state);
   // ONE provenance cache for the whole pass, read through both seats' tiles.
   const explain = explainerFor(state, cont, new Map());
-  const combat = state.combat
-    ? {
-        attackers: [...state.combat.attackers],
-        blocks: Object.entries(state.combat.blocks).map(([blocker, attacker]) => ({
-          blocker: Number(blocker),
-          attacker,
-        })),
-      }
-    : null;
   return {
     viewer,
     turnNumber: state.turnNumber,
@@ -518,7 +598,7 @@ export function buildBoardView(
     priorityPlayer: state.priorityPlayer,
     step: state.step,
     stack: stackView(state),
-    combat,
+    combat: boardCombatView(state.combat),
     self: seatView(state, viewer, names[viewer], true, cont, explain),
     opponent: seatView(state, opponentId, names[opponentId], false, cont, explain),
     gameOver: state.gameOver,

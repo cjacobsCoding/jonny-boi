@@ -8081,11 +8081,18 @@ hot path is unmoved. Harnesses: `verify-game-resume.mjs` **18/18**; `verify-boar
 their tallies were never recorded, and §7.4 of the scope doc carries the blank rather than a guessed
 number — **re-run both and paste the lines before this section is marked ✅.**
 
-⚠️ **UX-1, UX-2, UX-11, UX-12, UX-13, UX-14 and UX-15 are claimed on SOURCE ONLY.** No screenshot on
-disk shows a non-empty stack or a declared combat, so every combat visual on this branch — the
-rotation, the advance, the clamp, the arcs, the damage sequence — is an unobserved claim. That is
-the largest hole in this record, and after what UX-9 taught, "the tests are green" is not the thing
-that closes it.
+⚠️ **UX-1, UX-2 and UX-11 are still claimed on SOURCE ONLY.** No screenshot on disk shows a
+non-empty stack, so those remain unobserved claims. After what UX-9 taught, "the tests are green" is
+not the thing that closes them.
+
+✅ **UX-12, UX-13, UX-14 and UX-15 are now OBSERVED** (2026-09-14, §10 of the scope doc).
+`apps/web/scripts/verify-combat-visibility.mjs` drives a real game to a confirmed block and samples
+the board without passing priority: attackers and a blocker staged at the midline, the committed
+block's arc painted, and the damage sequence blooming while the status line still reads *Combat
+Damage* — with screenshots in `apps/web/verify-out/combat-visibility/`. It took a COMBAT HOLD to get
+there: the drawing code was correct all along and the state it renders from lasted a few
+milliseconds. The harness scores **1/6 with the hold disabled and 6/6 with it**, and reproduces the
+original measurement exactly (`staged=0 arcs=0 | Turn 7 · Main Phase 1`) when it fails.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B

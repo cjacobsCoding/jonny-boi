@@ -34,6 +34,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { describeChromeSearch, findChrome } from './lib/find-chrome.mjs';
+import { harnessLaunchOptions } from './lib/harness-chrome.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = resolve(HERE, '..');
@@ -200,12 +201,9 @@ async function main() {
   console.log(`App: ${url}`);
   mkdirSync(OUT_DIR, { recursive: true });
 
-  const browser = await puppeteer.launch({
-    executablePath: chromePath,
-    headless: headful ? false : 'new',
-    defaultViewport: VIEWPORT,
-    args: ['--no-sandbox', '--disable-dev-shm-usage'],
-  });
+  const browser = await puppeteer.launch(
+    harnessLaunchOptions({ chromePath, headful, viewport: VIEWPORT }),
+  );
 
   let extractedReplay = null;
   try {

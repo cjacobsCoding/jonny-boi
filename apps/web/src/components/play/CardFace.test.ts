@@ -259,8 +259,8 @@ const CARD_SURFACES: readonly CardSurface[] = Object.freeze([
       'the JAILED PEEK’s tucked thumbnail — a few pixels of a card held prisoner, itself wrapped in CardHover for the readable face',
   }),
   Object.freeze({
-    file: './GraveyardPanel.tsx',
-    what: 'the opened graveyard',
+    file: './ZonePanel.tsx',
+    what: 'an opened zone — the graveyard and, since UX-10, exile',
     mounts: '<CardHover',
     rawScanAllowed: null,
   }),

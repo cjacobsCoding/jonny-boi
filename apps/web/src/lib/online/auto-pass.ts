@@ -74,6 +74,41 @@ export function shouldAutoPass(w: PriorityWindow): boolean {
 }
 
 /**
+ * THE DECISION THE BOARD ACTUALLY ACTS ON: the rules window above, minus any
+ * PRESENTATION hold sitting on top of it (§10 of docs/MTGA-UX-OVERHAUL.md).
+ *
+ * ## Why the gate is composed here and not inside {@link shouldAutoPass}
+ *
+ * `shouldAutoPass` answers a rules-shaped question — *"is passing the only thing
+ * this seat may legally do?"* — and must stay one. Widening it with "…unless
+ * combat just happened" would put a presentation question inside a legality
+ * predicate, the exact mistake `combat-hold.ts` records for
+ * `shouldStopForPriority`. So the hold is ANDed in at the one place the answer
+ * is consumed, the same shape the hotseat board uses when it composes
+ * `shouldStopForPriority(…) || combatHoldFor(candidate).kind === 'hold'`.
+ *
+ * ## Why it is a FUNCTION rather than an `&&` in the component
+ *
+ * The board must not be able to ask the rules question without also answering
+ * the hold one: `heldForCombat` is required, so a caller that forgets the beat
+ * does not compile. That is the whole failure this exists to prevent — the §10
+ * measurement is a board that walked from declared blockers to the next turn's
+ * main phase before a single frame of combat was painted.
+ *
+ * ## Why one boolean is enough here, unlike the hotseat's predicate
+ *
+ * The hotseat's `autoAdvancePriority` walks MANY priority windows inside ONE
+ * synchronous call, so its gate has to be a predicate the walker re-asks at
+ * every window. Online, ONE pass goes to the authoritative server and the next
+ * decision is made against the next frame the server pushes — there is no loop
+ * to stop partway, so the board's own current hold is the whole answer.
+ */
+export function shouldAutoPassNow(w: PriorityWindow, heldForCombat: boolean): boolean {
+  if (heldForCombat) return false;
+  return shouldAutoPass(w);
+}
+
+/**
  * Rate limit: fire AT MOST ONCE per frame the server pushed.
  *
  * The caller holds the last frame it auto-passed for and skips a repeat. Frame

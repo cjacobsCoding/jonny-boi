@@ -76,7 +76,7 @@ branch — see §7.3.
 | **UX-7** | C — Prompts | Saying yes to a "may" is still reversible until commit | Answering the may and then backing out at the target step leaves nothing on the stack | ✅ |
 | **UX-8** | C — Prompts | Every target prompt shows the **source card's face** | The card provoking the choice renders as an image, not a name string; candidates render as card faces too | ✅ px |
 | **UX-9** | D — Board | 3D tabletop: perspective, tilted, from the player's seat | A real CSS 3D scene with a named, tunable perspective/tilt config — not a flat grid | ✅ px |
-| **UX-10** | D — Board | Hover any card, anywhere, → full clear card view | One hover funnel for hand, battlefield, stack, prompts, graveyard, exile, reveals | ◐ |
+| **UX-10** | D — Board | Hover any card, anywhere, → full clear card view | One hover funnel for hand, battlefield, stack, prompts, graveyard, exile, reveals | ✅ |
 | **UX-11** | D — Board | Tapped cards rotate 90° — **including while attacking** | Tap rotation is driven by `tapped`, composes with the attack transform instead of being overridden by it | ✅ |
 | **UX-12** | D — Board | Attackers advance toward the defender, never past the midline | Attack offset is a named fraction of the half-board, clamped at the midline | ✅ |
 | **UX-13** | D — Board | Blockers advance to meet the attacker they block | A blocker's tile moves toward its attacker's advanced position | ✅ |
@@ -313,18 +313,27 @@ nothing looked for siblings. The fix is the same one line on both:
 back to the plain offset, because below 40rem the rail folds under the table
 (`board-fit.css:818-832`) and the corner is free again.
 
-**UX-10 — one hover funnel, adopted everywhere there is something to hover, and exile has nothing.**
-The funnel is real and it is one funnel: `CardHover` raises a `CardFace` at `size="full"`
-(`CardHover.tsx:207`), and fifteen files mount it — the hand and the battlefield
-(`PlayBoard.tsx:1745`, `BoardPermanentTile.tsx:244`), the stack (`StackPanel.tsx:154-166`), every
-prompt (`ChoicePrompt.tsx:357,395`), the graveyard (`GraveyardPanel.tsx`), reveals
-(`RevealBanner.tsx`), the mulligan, the effects bench, the online board. **What remains is the zone,
-not the funnel: there is no exile viewer at all.** `SeatPanel.tsx:197-200` shows exile as a bare
-count chip; the only exiled cards a player can look at are the two special cases that already had
-their own surface — a card jailed under its jailer (`BoardPermanentTile.tsx:427`, §3.57) and a
-madness cast offered out of exile (`PlayBoard.tsx:2027-2052`). Everything else in a public exile zone
-is a number. Finishing UX-10 is a `GraveyardPanel`-shaped list for exile, not a change to the hover
-path.
+**UX-10 — CLOSED.** The funnel was always real and always one funnel: `CardHover` raises a `CardFace`
+at `size="full"`, and fifteen files mount it — the hand and the battlefield, the stack, every prompt,
+the graveyard, reveals, the mulligan, the effects bench, the online board. What was missing was never
+the funnel but a ZONE: `SeatPanel` showed exile as a bare count chip, and the only exiled cards a
+player could look at were the two special cases that already had a surface of their own — a card
+jailed under its jailer (`BoardPermanentTile.tsx`, §3.57) and a madness cast offered out of exile
+(`PlayBoard.tsx`).
+
+Exile is now openable on BOTH boards and for BOTH seats, through the same panel the graveyard uses:
+`GraveyardPanel` became `ZonePanel`, driven by the closed `ZONE_PANELS` table in
+`lib/play/zone-panel.ts` (a row per zone: label, icon, cast badge, whether the zone can hold hidden
+cards, and the sentences a disabled card is allowed to say). A third public zone later is a ROW.
+
+⚠️ **And exile is NOT the graveyard.** A foretold card is exiled FACE DOWN and only its owner may
+look at it (CR 702.143a, `CardInstance.faceDown`), so the masking is done at the VIEW MODEL:
+`SeatView.exile` carries only the cards the viewer is entitled to identify and `SeatView.exileHiddenCount`
+carries the rest as a number with nowhere for a name to travel. `maskStateForSeat` had already done
+this half of the job since §3.112 — but `faceDownExileCount` had no consumer, and the online adapter
+counted `exile.length` alone, so a foretold card of the opponent's did not exist online even as a
+number. Both are fixed, and `components/play/exile-viewer.test.ts` renders the real panel on a real
+masked view and fails if the hidden card's name or art reaches the markup.
 
 ### 7.2 The three carve-outs, stated rather than buried
 
@@ -480,3 +489,372 @@ So, before calling any play-surface work done:
    `proposal-adoption.test.ts`) all enumerate MOUNT SITES out of the source text and fail when a new
    one appears without the prop. A test that asserts a CSS property exists, or that a pure module
    computes the right value, cannot fail for the reason this surface actually breaks.
+
+## 9. The ZONES as physical piles — raised 2026-09-14, NOT YET STARTED
+
+> Raised by Caleb after the first fourteen items landed, with the explicit instruction to add it
+> durably rather than carry it in a session. **Verbatim, so no later summary can trim a clause:**
+
+> visually see all player's library of cards on their side of the table, as a physical stack of card -
+> with nice animations for drawing, shuffling, putting on the bottom, milling, ect. Same for all
+> player's graveyard and all player's exile. Graveyard should be face up pile next to library and
+> clicking on it should let you view all cards in that player's graveyard in a nice way, with slight
+> arcing/fanning to the horizontal line of cards, with a way to scroll back and forth across the
+> cards, with the centered card always being at a neutral/none angle. Same goes for exile pile wrt
+> viewing. But exile pile should render as face-down stack under the graveyard, but at a 90 degree
+> angle so it visually sticks out from under the graveyard. Hovering over the exile should just show
+> the top card of it as we do with many hover behaviors, with a hint that you can click on the pile
+> to see all of them.
+
+### 9.1 The work items
+
+| ID | Item | One-line acceptance |
+| --- | --- | --- |
+| **UX-18** | The library is a physical stack on its owner's side | A real pile whose visible depth tracks the card count, seated on the tabletop — not a count chip |
+| **UX-19** | Zone motion is animated | Draw, shuffle, put-on-bottom and mill each read as their own motion, distinguishable from one another |
+| **UX-20** | The graveyard is a FACE-UP pile beside the library | Its top card is legible at rest, and it is clearly a pile rather than a badge |
+| **UX-21** | The exile pile sits UNDER the graveyard, face-down, turned 90° | It sticks out from beneath the graveyard so both piles read at a glance; hovering shows its top card plus a hint that clicking opens it |
+| **UX-22** | One fanned browser serves graveyard AND exile | Cards laid on a horizontal arc, scrollable side to side, with the CENTRED card always at zero rotation |
+
+### 9.2 What is already in place, and what this supersedes
+
+§7.1's exile gap (UX-10) is a **subset** of UX-21/UX-22 and must not be built twice. The
+table-driven `ZonePanel` + `zone-panel.ts` added for that gap is the right substrate — it already
+serves graveyard and exile from one closed table of zones — but its presentation is a flat list, not
+the fanned arc asked for here. **Extend that panel; do not add a third zone viewer.**
+
+The masking rule from UX-10 carries over UNCHANGED and is the one hard constraint in this section:
+exile is NOT a fully public zone. `CardInstance.faceDown` exists for exactly this, so a face-down
+exiled card renders as a BACK with no identifying data reaching the client — masked in the
+view-model, never in the component. A fanned browser that reveals a face-down exiled card is a
+hidden-information leak, not a cosmetic bug.
+
+### 9.3 The trap this section will hit
+
+Every visual item in §1 that shipped green-but-invisible did so because a transform or an
+`overflow` ancestor ate it (§7.3). A stack of cards with depth, a 90°-turned pile and a fanned arc
+are all transforms inside the tilted scene, so they will hit the same wall. **Budget for it, and
+verify with a rendered frame rather than a passing test** — §8 says how.
+
+## 10. MEASURED 2026-09-14: UX-13 and UX-15 are computed correctly and last too briefly to see
+
+**This is the seventh instance of the branch's own failure shape — built, tested, unreachable — and
+the first one where the code is entirely correct.**
+
+### What was measured
+A rig drove a real game to a real blocked combat (Wall of Omens blocking Savannah Lions, confirmed
+in the game log along with `Savannah Lions deals 2 to Wall of Omens`). Immediately after clicking
+**Confirm 1 block**, sampled at **260 ms** with the rig deliberately NOT passing priority:
+
+```
+BLOCKS CONFIRMED | blocking=0 staged=0 arcs=0 | Turn 7 · Main Phase 1 · Player 1's turn
+```
+
+Blocks, combat damage and end-of-combat had all resolved and the turn had advanced — inside a
+quarter of a second, with no input. A subsequent 24-frame watch loop sampling every 45 ms never
+once saw `staged > 0` for a blocker.
+
+### Why the code is NOT at fault
+`stageEntries` (`PlayBoard.tsx:1505-1534`) gates the blocker advance on `combat.blockersDeclared`,
+which is correct per the rules and matches `combat-stage.ts`'s own design note. The entries ARE
+built. `state.combat` is simply cleared again before a human eye — or a 45 ms sampler — can catch
+them. Nothing here is a logic bug, which is exactly why 22,564 tests are green and the feature is
+nevertheless not delivered.
+
+### The requirement this fails
+Caleb, verbatim: *"Animations when block phase is over and damage is being distributed to players
+and creatures, just like MTGA does it, **so you can clearly see what's happening**."* An animation
+that is correct and invisible does not satisfy that sentence. MTGA holds combat for roughly a
+second precisely so the exchange can be read.
+
+### The fix, and the precedent for it
+**UX-16 already solved this exact problem and is proven working**: `spell-hold.ts` holds an
+opponent's spell on screen before it resolves, and — critically — it gates BOTH the auto-passer and
+the AI seat (`PlayView.tsx:909`, `:945`). That second gate is what makes it a real pause rather than
+a decorated feed, and it is the part a naive implementation omits.
+
+A combat hold is the same shape: after `blockersDeclared` becomes true, hold the board for a named,
+tunable beat so the advance renders and the damage sequence plays out, then release. Requirements:
+
+- **Named constants in `play-config.ts`** (a blocks-declared beat and a damage beat), never inline.
+- **It must gate the AI seat and the auto-passer**, or it is cosmetic — see the UX-16 precedent.
+- **It must not alter the rules or the action log**: a hold is a presentation delay, and the replay,
+  the sim and the headless harness must be completely unaffected. The sim runs thousands of games
+  and must never wait on it.
+- **The guard is a rig, not a unit test.** No unit test can catch "this state existed for 200 ms";
+  the check is the harness sampling `staged > 0` for a blocker after Confirm. That is the only
+  guard shape that would have caught this.
+
+### ✅ SHIPPED 2026-09-14 — what was built, and the numbers
+
+**The design.** `apps/web/src/lib/play/combat-hold.ts` — a pure, DOM-free decision in the image of
+`spell-hold.ts`: a closed `COMBAT_HOLD_KINDS` table with two rows (`blocksDeclared`, `damage`), a
+closed `COMBAT_HOLD_REFUSALS` set, and `combatHoldDecision`, unit-tested in `combat-hold.test.ts`.
+Nothing in `packages/` imports it or can.
+
+**The two gates, both in `PlayView.tsx`.**
+1. **The auto-passer, gated INSIDE its `shouldStop` predicate** — not only by an effect-level early
+   return. `autoAdvancePriority` walks many priority windows inside ONE effect, so a gate outside the
+   loop cannot stop it partway, which is exactly why the 260 ms sample landed on the next turn.
+2. **The AI seat** — `if (hold || combatHold) return;`, so the computer cannot pass priority
+   underneath the beat and resolve the combat the player is being shown.
+
+**The constants** (`play-config.ts`, `COMBAT_HOLD_CONFIG`) are DERIVED from the animations they
+exist to reveal, never hand-tuned: `blocksDeclaredMs` = the advance's travel + a full stagger tail +
+a board-reading beat (**1025 ms**); `damageMs` = one hit's travel + the stagger between three hits +
+the impact bloom + the settle (**1040 ms**, against `DAMAGE_ANIM_CONFIG.travelMs` of 340).
+`prefers-reduced-motion` selects the row's OTHER beat — a NUMBER, the convention
+`reducedMotionTiltDeg` set — rather than switching the hold off. A "Skip" affordance ends it now,
+the equivalent of UX-16's "Let it resolve".
+
+**The guard** is `apps/web/scripts/verify-combat-visibility.mjs`, which replaces the throwaway rig.
+Measured both ways on the same tree:
+
+```
+hold disabled (the shipped behaviour before this change) — 1/6 checks passed
+  FAIL  a BLOCKER IS STAGED after Confirm
+        best stagedBlockers=0 over 6000ms | staged=0 (blockers 0) declaredArcs=0 arcs=0
+        blocking=0 attacking=0 | Turn 7 · Main Phase 1 · Player 1's turn
+  FAIL  the confirmed block gets a DECLARED arc — declared arcs 2 → 0 (-2)
+  FAIL  the DAMAGE LANDS ON THE COMBAT BOARD — damage bloomed only after combat was gone
+
+hold enabled — 6/6 checks passed
+  PASS  a BLOCKER IS STAGED after Confirm
+        staged=3 (blockers 1) declaredArcs=3 arcs=6 blocking=2 attacking=4
+        | Turn 6 · Declare Blockers · Computer's turn
+  PASS  the confirmed block gets a DECLARED arc — declared arcs 2 → 3 (+1)
+  PASS  the DAMAGE LANDS ON THE COMBAT BOARD
+        dmgLayer=1 impacts=2 bolts=2 | Turn 6 · Combat Damage · Computer's turn
+```
+
+Note what the disabled run PASSED: `dmgLayer=1 impacts=2` at **Main Phase 1 of the next turn**. The
+damage layer mounting proves nothing on its own, which is why the check is "damage lands while the
+board is still in combat" and not "the layer exists" — the first version of that assertion passed
+without the fix, and an assertion that passes either way proves nothing.
+
+### ✅ SHIPPED 2026-09-14 — the ONLINE board, the half that was left explicitly unfixed
+
+The hotseat fix above closed with a stated carve-out: *"The online board is not covered.
+`OnlineBoard.tsx` / `apps/server` have their own advance path and get no hold; … Same combat, same
+invisibility, if anyone plays online."* That is now closed, with **no second decision and no
+protocol change**.
+
+**One decision, two boards.** `combat-hold.ts` is reused UNCHANGED — the protocol carries `combat`
+as core's own `CombatState` (`packages/protocol/src/index.ts`, `MaskedGameView.combat`), so
+`combatWindowFactsOf` adapts the masked view with nothing to translate and no adapter was needed.
+`COMBAT_HOLD_KINDS`, `COMBAT_HOLD_CONFIG` and `NO_BEATS_SPENT` are read by both boards; the last of
+these moved from a private const in `PlayView.tsx` into `combat-hold.ts` so the two boards stopped
+writing their own empty set.
+
+**Where the online gate sits, and why there.** The online analogue of the hotseat's `shouldStop`
+predicate is the `autoPass` VALUE the auto-pass effect acts on, so the hold is composed into that
+value through `shouldAutoPassNow(window, heldForCombat)` (`lib/online/auto-pass.ts`) rather than as
+an early return around the effect. `shouldAutoPass` stays a rules-shaped predicate — *"is passing
+the only thing this seat may legally do?"* — exactly as `shouldStopForPriority` does on the hotseat
+side; the beat is ANDed in at the one place the answer is consumed. The second argument is
+**required**, so a board that asks the rules question without answering the hold one does not
+compile.
+
+**One gate is enough here, and the hotseat's second one has no online twin.** The hotseat needs a
+second gate because it runs the opponent (the AI seat) in the same component. Online there is no AI
+seat: the opponent is another client running *this same component with this same gate*. The server
+is authoritative and has **no auto-advance of its own** — `apps/server/src/index.ts` runs only a
+socket heartbeat and an empty-room sweep, and `Room.submitAction` moves the game only when a seat
+submits — so a client that declines to auto-pass genuinely holds the window rather than decorating
+one. Both seats hold the same beat concurrently, so the added latency is one beat, not two.
+
+**Nothing in the protocol moved.** A hold is presentation only: it delays one client's own
+`passPriority` by a named, tunable number of milliseconds, which is indistinguishable to the server
+from a human thinking. The wire format, the action log, the replay and what the server accepts are
+untouched, and `apps/server` was not edited.
+
+**The guard** is `apps/web/src/components/online/online-board-parity.test.ts`, extended with a real
+`maskStateForSeat` view of a real blocked combat. It asserts the board announces the beat (worded
+from the KIND row, not re-written), paints the blocker as blocking, and — the load-bearing one —
+does **not** claim to be advancing while a beat is owed. That assertion is **two-sided**: the
+control frame (`blockersDeclared: false`, everything else equal) must SAY `Nothing to do this step —
+advancing…`, so the held frame's silence cannot pass vacuously. Falsified by replacing the gate
+argument with `false`:
+
+```
+Tests  2 failed | 10 passed (12)
+  × STOPS this board advancing under the beat — and the control proves it
+    → expected '<div class="play-board">…' not to contain 'Nothing to do this step — advancing…'
+  × each board's OWN advance path asks the hold before it moves
+    → expected 'import { useCallback, …' to contain 'combatHold !== null,'
+```
+
+The other ten stayed green, which is the point: the banner still rendered with the gate gone, so the
+reddened assertion is about the ADVANCE and nothing else.
+
+**The parity assertion (rule 12).** Both boards now mount the same extracted `CombatHoldBanner`
+component, and the test compares the two boards' rendered banner markup **byte for byte** — a
+re-wording or a restyle can no longer land on one board and miss the other. A second assertion
+checks that each board's own advance path still asks the hold, since the two advance paths are
+genuinely different shapes (a synchronous local priority walk vs. a server frame stream) and that is
+the "second copy is unavoidable — add a test that fails when they diverge" case.
+
+#### ⚠️ What the online hold revealed was LESS than what the hotseat hold revealed — SUPERSEDED by §11
+
+As shipped on 2026-09-14 this paragraph read: *"`OnlineBoard` has no `.board-scene`, no midline
+element, no `CombatStage` and no `DamageLayer` — UX-9/UX-12/UX-13/UX-15 reached `PlayBoard` only …
+porting the stage and the damage layer to the online board is a separate work item and is NOT done
+here."* It is kept, struck through, because the sentence names the defect §11 removed: **the work
+item was never four ports, it was one extraction.** Both boards now mount the same `BoardScene`, so
+the online beat holds up the advance and the arcs as well as the bands, the life totals and the
+log line. The one half that is still genuinely absent is the damage sprite, and §11 says exactly
+why (the protocol carries no event stream) and exactly what would fix it.
+
+---
+
+## 11. SHIPPED 2026-09-14 — the two boards stopped being two boards
+
+### The measurement this started from
+
+`OnlineBoard.tsx` already imported **eleven** components from `components/play/`: `SeatPanel`,
+`StackPanel`, `PlayCard`, `ChoicePrompt`, `AbilityPrompts`, `CardFace`, `CardZoomOverlay`,
+`CombatHoldBanner`, `CombatLines`, `ZonePanel`, and `usePrefersReducedMotion`. **The leaves were
+never the fork.** What had never been extracted was the SCENE COMPOSITION, which lived inline in
+`PlayBoard.tsx`'s JSX:
+
+- the `.board-scene` / `.board-scene__table` wrapper carrying UX-9's tilt;
+- the `--board-*` custom properties fed from `BOARD_3D_CONFIG` / `BOARD_LAYOUT_CONFIG` /
+  `TAP_ROTATION_CONFIG` / `COMBAT_ADVANCE_CONFIG`;
+- the `.board-midline` element UX-12's advance clamp MEASURES against;
+- `CombatStage` and the `StageEntry[]` it advances;
+- the combat arcs and the damage layer.
+
+So §10's closing paragraph — *"`OnlineBoard` has no `.board-scene`, no midline element, no
+`CombatStage` and no `DamageLayer` … porting the stage and the damage layer to the online board is a
+separate work item"* — named the symptom. **Porting features one at a time across two boards forever
+IS the bug.** `apps/web/src/components/play/BoardScene.tsx` is the one unit both boards now mount.
+
+### The seam — what is a PROP, and what was UNIFIED
+
+A prop is what GENUINELY differs: the view model's source (a local engine vs. a server-masked
+frame), the interaction handlers, the viewer seat, the rail's contents, the measure key, and the
+damage source. Everything else that differed, differed only because nobody had unified it, and is
+now decided once inside the scene:
+
+| was two answers | is one |
+|---|---|
+| the opponent's fanned backs drawn ABOVE their battlefield (hotseat) vs. BELOW it, between their creatures and the midline (online) | the far edge of the table, always — where a player opposite you holds their hand |
+| the viewer's hand OUTSIDE the scene (hotseat) vs. inside the seat region (online) | outside — a tilted hand is unreadable, and under `transform-style: flat` there is no counter-rotation that undoes it |
+| the game log in a side RAIL (hotseat) vs. a centre COLUMN between the battlefields (online) | the rail; the column cost the online table the same 171px it cost the hotseat one |
+| `combatArcPairs` (attacks + blocks) vs. `blockerLinePairs` (blocks only) | `combatArcPairs`, so the online board draws attacker→player and attacker→planeswalker arcs too |
+| `stageEntries` derived from `session.state.combat` — which the online board does not have | `stageEntriesFor(view, viewer)`, derived from the SHARED `BoardView.combat` |
+| two copies of the battlefield inspect gesture, two `permById` indexes, two drop-zone class lists | one each |
+
+**`BoardView.combat` grew the fields it always should have carried.** `attackersDeclared`,
+`blockersDeclared` and `attackTargets` were dropped by both builders; the hotseat board worked around
+it by reaching past the view model into `session.state`, which is precisely why the online board —
+which has no session — could not derive an advance at all. One `boardCombatView()` funnel in
+`view-model.ts` now fills them for both. **The mask was not widened to do it:** `maskStateForSeat`
+already sends `combat: state.combat` unredacted, and combat is public by the rules.
+
+### What the online board GENUINELY renders now, and what it does not
+
+| | reaches the online board | how it is known |
+|---|---|---|
+| **UX-9** tilt | ✅ | `--board-tilt-deg:12deg` / `--board-perspective-px:700px` are in the rendered `.play-board` style attribute on BOTH boards, asserted from `BOARD_3D_CONFIG` rather than re-spelled |
+| **UX-12** advance + midline clamp | ✅ | both boards render `.board-midline` (the element `CombatStage` measures), and `stageEntriesFor` returns the same attacker advance from either board's view model |
+| **UX-13** blocker advance | ✅ | from one real blocked combat, both view models yield `{blocker, role:'blocker', toward:-1, meets:attacker}`; the control one beat earlier yields `['attacker']` only |
+| **UX-14** attack arcs | ✅ | the scene calls `combatArcPairs` with the attack half supplied; `blockerLinePairs` is deleted |
+| **UX-15** damage | ❌ **NOT REACHED — and it is a missing CHANNEL, not a masking limit** | see below |
+
+**⚠️ UX-15, stated honestly rather than claimed.** `deriveDamageSequence` needs the engine's
+`GameEvent` stream. The server's `state` message carries `MaskedGameView` + `legalActions` +
+`yourTurn` + `log`, and `Room.summarizeEvents` (`apps/server/src/room.ts`) folds the events down to
+**five kinds of pre-formatted English string**, throwing the structure away. An online client cannot
+derive the sequence from that, and deriving one from frame diffs would be a second answer to "what
+damage happened" (rule 12). The scene therefore takes `NO_DAMAGE_SOURCE`, a named constant whose doc
+comment carries this paragraph. **This is not a hidden-information problem** — combat damage is
+public by the rules and the server already narrates it to both seats in prose. The fix is a field on
+the `state` message carrying a CLOSED list of public event kinds; the call site is then one prop.
+
+### The guard, and its falsification
+
+`online-board-parity.test.ts` already mounted the REAL online board on a REAL `maskStateForSeat`
+view and compared the two boards' `CombatHoldBanner` markup byte for byte. It now does the same for
+the scene: one real blocked combat, both boards rendered from it, and their scene SKELETONS compared
+in DOM order —
+
+```
+board-stage > board-scene > board-scene__table >
+  play-board__opponent > play-hand--hidden, board-midline, play-board__self > drop-zone
+then board-rail
+```
+
+a whitelist, so the seats' different cards cannot make two identical scenes look different, and a
+missing midline cannot hide inside a diff of card art. Four more assertions: the tabletop numbers
+reach both roots; the same blocker walks out from either view model (with the one-beat-earlier
+control); `CombatStage` still renders **nothing** under `renderToStaticMarkup` on both boards, since
+an advanced copy is placed from measured rects and a server-rendered one would be placed from rects
+that do not exist; and the scene widened no mask.
+
+**Falsified by deleting the `<BoardScene … />` element from `OnlineBoard.tsx`:**
+
+```
+Tests  4 failed | 32 passed (36)
+  × BOTH boards draw the same scene … > renders a BYTE-IDENTICAL scene skeleton from the same blocked combat
+    → expected [] to deeply equal [ 'board-stage', 'board-scene', …(7) ]
+  × §10 … > paints the blocker AS blocking — the picture the beat exists to show
+  × board-scene.test.ts > OnlineBoard.tsx keeps every one of its own overlays OUT of the scene element
+  × board-scene.test.ts > OnlineBoard.tsx: the viewer's OWN hand is outside the scene
+```
+
+Restored: `Tests  36 passed (36)`. Note which assertions did **not** move — the tabletop-numbers one
+stayed green, because `useBoardSceneVars()` is spread on `.play-board` independently of the scene
+element. That is the separation working, not a hole: one guard is about the properties and the other
+is about the composition.
+
+### The online board, PHOTOGRAPHED (2026-09-14)
+
+Everything above about the online board would otherwise rest on `renderToStaticMarkup`, and this
+repo has shipped seven items that were green and unreachable (§7.3, §10). So
+`apps/web/scripts/see-online-board.mjs` drives a **real two-seat online game** — two isolated
+browser contexts against a real `apps/server` over a real socket — and photographs it into
+`apps/web/verify-out/online/`.
+
+At the opening board, read off the live DOM of the HOST seat:
+
+```
+SCENE {"boardScene":1,"table":1,"midline":1,"tiltVar":"12deg","seats":2,"stack":0}
+```
+
+and at the first real combat:
+
+```
+ONLINE COMBAT (host) | attacking=2 staged=1 arcs=3
+ONLINE ADVANCE best: staged=1 arcs=3 midline=1 on host
+```
+
+`03-online-advance-host.png` shows, on the ONLINE board: both seat boxes drawn as keystoned
+trapezoids (the far seat narrowing toward the top — the UX-9 projection, not a border effect); the
+Guest's attacking Goblin Guide **lifted out of its home row and advanced down toward the midline**
+(the `.combat-stage__tile`, placed against the `.board-midline` this board now renders); and a
+**dashed fiery arc from that attacker to the Host's life total** — an attacker→PLAYER arc, which is
+precisely the arc kind the online board could never draw while it called the block-only
+`blockerLinePairs`. The game log sits in the right-hand rail and the viewer's hand is flat and
+full-size below the table.
+
+`attacking=2` beside `staged=1` is not a discrepancy: a staged card leaves its home tile in place as
+a faint place-holder, and the home tile keeps `perm--attacking` — one creature, two elements. Only
+`data-perm-id` moves to the copy.
+
+**UX-13 is the one still unphotographed online.** That combat was unblocked (the defender had an
+empty battlefield), so no blocker had anything to advance to. Its evidence is
+`online-board-parity.test.ts`: from one real blocked combat, `stageEntriesFor` returns the identical
+`{blocker, role:'blocker', toward:-1, meets:attacker}` from the MASKED online view model and from
+the hotseat one, with the one-beat-earlier control returning `['attacker']` alone. That is a strong
+pure-function equality and it is not a photograph; stated as such.
+
+### What went with the fork (rule 5)
+
+- `.play-board__center` and every rule that painted it (`board-fit.css`, `styles.css`) — no board
+  renders that class now, and a rule that paints nothing is read as a live layout by the next person;
+- `blockerLinePairs`, whose own doc comment said it existed because *"only one of the two boards
+  knows about attack targets yet"*. Its adapter test is repurposed to the claim that outlives it: no
+  attacker in, no attack arc out, at every step `STEP_ORDER` knows;
+- six stylesheet/source comments describing the old split, including `board-fit.css`'s note that the
+  online board *"sets none of `PlayBoard`'s inline custom properties"* — it sets all of them now.
