@@ -1,4 +1,16 @@
-- 2026-09-11 supervisor: ✅ **PUSHED: `feat/mtga-ux-3143` — eight commits, fifteen of seventeen items done, two partial.**
+- 2026-09-13 supervisor: ✅ **MERGED to `main` (PR #17, `d1c3b23`) — `feat/mtga-ux-3143`, thirteen commits, fifteen of seventeen items done, two partial.**
+  📊 Gate on the MERGED tree: **22,564 passed / 442 files, 0 failed**, lint 0 errors, card-index up to date, and all four
+  browser harnesses at contract (board-fits 32/32, mana-choice 19/19, game-resume 18/18, bug-reporter 31/31).
+  ⚠️ **TWO MERGES WITH `main` EACH HID A SILENT LOSS, and neither would have failed a test — worth knowing before the next
+  four-way collision.** (1) In `internal/continuous.ts`, git's OWN auto-merge — the part that reported no conflict — ate three
+  lines of main's `foldCommandStatics` body by aligning `applied = true;` as a common line; emblem anthems would have applied
+  nothing. (2) In `PlayBoard.tsx`, main's new Phyrexian `phyrexianLife` argument was passed by the exact call site this branch
+  deleted, so `dispatchOpening` called `castWithAutoTap` with four arguments instead of five: **the merge compiled cleanly with
+  casting-for-life dead.** Both were found by tracing a value to the engine, not by trusting the build. When a branch REPLACES a
+  mechanism that upstream has since EXTENDED, diff the argument lists by hand.
+  ℹ️ Both branches had also independently invented `readsEffectiveStats` / `readsSettledStats` for one question. Main's kept,
+  mine deleted — one vocabulary, per rule 12.
+  Original push entry: ** `feat/mtga-ux-3143` — eight commits, fifteen of seventeen items done, two partial.**
   Scope + the per-item checklist: **[docs/MTGA-UX-OVERHAUL.md](docs/MTGA-UX-OVERHAUL.md)**; status in DESIGN §3.143.
   📊 **Gate: build clean, 22,467 passed / 435 files, lint 0 errors, card-index up to date, and all four browser
   harnesses AT CONTRACT — board-fits 32/32, mana-choice 19/19, game-resume 18/18, bug-reporter 31/31.** Sim
