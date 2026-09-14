@@ -36,6 +36,31 @@ const TURN_BUDGET = 40; // hard ceiling on the drive loop
 /** The deck's mana creatures — the alternative to a Forest that makes a choice real. */
 const MANA_CREATURES = /Elvish Mystic|Llanowar Elves|Birds of Paradise/;
 
+/**
+ * How long to wait for the app SHELL to exist after a navigation.
+ *
+ * ⚠️ NOT a magic number, and NOT a check: puppeteer's unnamed default is 30 s, and
+ * the landing view is the 5,651-tile card browser, which pulls hundreds of
+ * cross-origin Scryfall images. §3.146's gate MEASURED time-to-`.app__nav` as
+ * BIMODAL — ~7.8 s when those fetches are cached, ~38.9 s when they are not — so
+ * against the 30 s default this harness was a coin flip that reported the APP as
+ * broken when the NETWORK was slow. It failed exactly that way on a fresh
+ * worktree, which is how this was found.
+ *
+ * That gate named the budget in `verify-game-resume.mjs` and stopped there, so
+ * the fix repaired one instance and left its sibling — the class-not-instance
+ * failure rule 10 exists for. 90 s is the same budget `verify-bug-reporter.mjs`
+ * gives `LAUNCHER_WAIT_MS`. All 19 checks are unchanged; only the wait is named.
+ */
+const APP_SHELL_WAIT_MS = 90_000;
+
+/**
+ * Waits for an IN-APP transition once the shell is already up. Deliberately
+ * separate from {@link APP_SHELL_WAIT_MS}: these do not touch the network, so a
+ * 90 s budget here would only turn a real hang into a slow one.
+ */
+const UI_TRANSITION_WAIT_MS = 20_000;
+
 const checks = [];
 function check(name, passed, detail = '') {
   checks.push({ name, passed });
@@ -234,7 +259,7 @@ async function main() {
     // `domcontentloaded`, never `networkidle2`: the landing view pulls hundreds
     // of Scryfall images, so "the network went quiet" depends on an external host.
     await page.goto(preview.url, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('.app__nav');
+    await page.waitForSelector('.app__nav', { timeout: APP_SHELL_WAIT_MS });
 
     // ---- a Mono-Green Ramp solo game (the deck with the mana creatures) --------
     await clickButton(page, /^Play$/);
@@ -253,7 +278,7 @@ async function main() {
     check('mulligan screen shown', await textPresent(page, /Keep \(/));
     await clickButton(page, /^Keep \(/);
     await clickButton(page, /^Confirm bottom/, { timeoutMs: 1500 });
-    await page.waitForSelector('.action-bar', { timeout: 20_000 });
+    await page.waitForSelector('.action-bar', { timeout: UI_TRANSITION_WAIT_MS });
     await installProbes(page);
 
     // ---- the persisted setting is reachable from the action bar -----------------

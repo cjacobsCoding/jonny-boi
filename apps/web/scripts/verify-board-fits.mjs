@@ -55,6 +55,31 @@ const AI_BEAT_MS = 700; // > HOTSEAT_CONFIG.aiThinkMs (450)
 const DRIVE_STEPS = 260; // enough to reach a crowded board; the loop stops early when it does
 const CROWDED_ENOUGH = 8; // permanents that count as "a real board" rather than turn one
 
+/**
+ * How long to wait for the app SHELL after a navigation — and why it is not 20 s.
+ *
+ * ⚠️ This harness shipped with 20 s, which is BELOW the worst case anyone has
+ * measured. §3.146's gate instrumented time-to-shell and found it BIMODAL: ~7.8 s
+ * when the landing view's Scryfall art is cached, ~38.9 s when it is not (the
+ * landing view is the card browser, which fetches hundreds of cross-origin
+ * images). So on a cold cache this harness reported the APP as broken when the
+ * NETWORK was slow — and 20 s is a TIGHTER coin flip than puppeteer's own 30 s
+ * default, which is how it went unnoticed while its sibling was being fixed.
+ *
+ * 90 s matches `LAUNCHER_WAIT_MS` in `verify-bug-reporter.mjs` and
+ * `APP_SHELL_WAIT_MS` in the other two harnesses — one budget for one question.
+ * None of the 32 checks changed; only the wait for the shell to exist.
+ */
+const APP_SHELL_WAIT_MS = 90_000;
+
+/**
+ * Waits for an IN-APP transition (a menu opening, the board mounting) once the
+ * shell is already up. Kept separate from {@link APP_SHELL_WAIT_MS} on purpose:
+ * these do not touch the network, so a long budget here would only turn a real
+ * hang into a slow one. 20 s is the value this harness has always used.
+ */
+const UI_TRANSITION_WAIT_MS = 20_000;
+
 const checks = [];
 function check(name, passed, detail = '') {
   checks.push({ name, passed });
@@ -215,7 +240,7 @@ function assertFits(label, m) {
 /** Start a Solo game on a fixed deck and keep the opening hand. */
 async function startSoloGame(page, url) {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('button.nav-link', { timeout: 20_000 });
+  await page.waitForSelector('button.nav-link', { timeout: APP_SHELL_WAIT_MS });
   await page.evaluate(() => {
     // A saved game would open the resume banner instead of the setup screen.
     try {
@@ -225,10 +250,10 @@ async function startSoloGame(page, url) {
     }
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('button.nav-link', { timeout: 20_000 });
+  await page.waitForSelector('button.nav-link', { timeout: APP_SHELL_WAIT_MS });
   await clickButton(page, /^Play$/);
   await clickButton(page, /Solo \(vs the computer\)/);
-  await page.waitForSelector('select', { timeout: 20_000 });
+  await page.waitForSelector('select', { timeout: UI_TRANSITION_WAIT_MS });
   await page.evaluate(() => {
     const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
     const select = document.querySelectorAll('select')[0];
@@ -237,7 +262,7 @@ async function startSoloGame(page, url) {
   });
   await clickButton(page, /^Start game$/);
   await clickButton(page, /^Keep \(/, { timeoutMs: 20_000 });
-  await page.waitForSelector('.play-board', { timeout: 20_000 });
+  await page.waitForSelector('.play-board', { timeout: UI_TRANSITION_WAIT_MS });
   await sleep(AI_BEAT_MS);
 }
 
