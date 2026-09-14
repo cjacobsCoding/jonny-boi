@@ -283,25 +283,45 @@ describe('exile is an openable zone wherever the graveyard is', () => {
 
   /**
    * A MOUNT-DERIVATION guard, the only shape that has ever caught this branch's
-   * real defects (§7.3): it reads the board sources and fails when one of them
-   * stops mounting the panel. A panel that reaches one board and not the other
-   * is exactly GAP-20, and no test that renders a component in isolation can see
-   * it.
+   * real defects (§7.3): it reads the sources and fails when a board stops
+   * mounting the panel, or when the SCENE stops offering one of the two seats an
+   * opener. A panel that reaches one board and not the other is exactly GAP-20,
+   * and no test that renders a component in isolation can see it.
+   *
+   * ⚠️ It used to count `onExileClick=` TWICE PER BOARD, because each board wired
+   * its two seats itself. Both boards now mount the one `BoardScene`, which wires
+   * both seats from a single `onExileClick(seat)` — so counting to two per board
+   * would fail on code that is strictly better, and counting to ONE would pass on
+   * a scene that had quietly dropped the opponent's. The question has not changed
+   * ("can a player open EITHER seat's exile, on EITHER board?"); the place that
+   * answers it has, and so this asks it there.
    */
-  it('both board sources mount the exile panel and hand a seat the opener', () => {
-    for (const file of ['./PlayBoard.tsx', '../online/OnlineBoard.tsx']) {
-      const source = readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8')
+  it('both boards mount the panel, and the scene offers BOTH seats the opener', () => {
+    const read = (file: string): string =>
+      readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8')
         .replace(/\r\n/g, '\n')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/^[ \t]*\/\/.*$/gm, '');
+
+    for (const file of ['./PlayBoard.tsx', '../online/OnlineBoard.tsx']) {
+      const source = read(file);
       expect(source, `${file} mounts no exile ZonePanel`).toContain('zone="exile"');
-      // Two: the viewer's own seat and the opponent's. A board that wired only
-      // its own would leave the opponent's exile a number again.
-      expect(
-        (source.match(/onExileClick=/g) ?? []).length,
-        `${file} must offer BOTH seats' exile`,
-      ).toBe(2);
+      // The board hands the scene an opener that takes a SEAT. A board that
+      // hard-coded its own seat here would leave the opponent's exile a number.
+      expect(source, `${file} hands the scene no seat-taking exile opener`).toMatch(
+        /onExileClick=\{\(seat\)\s*=>/,
+      );
     }
+
+    // …and the scene really does call it for BOTH seats — the far one named
+    // first, because that is the one a board wiring only its own would drop.
+    const scene = read('./BoardScene.tsx');
+    expect(scene, 'the scene never offers the OPPONENT an exile opener').toContain(
+      'onExileClick={() => onExileClick(view.opponent.id)}',
+    );
+    expect(scene, 'the scene never offers the VIEWER an exile opener').toContain(
+      'onExileClick={() => onExileClick(view.self.id)}',
+    );
   });
 });
 

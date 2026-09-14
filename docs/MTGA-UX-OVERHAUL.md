@@ -694,12 +694,167 @@ checks that each board's own advance path still asks the hold, since the two adv
 genuinely different shapes (a synchronous local priority walk vs. a server frame stream) and that is
 the "second copy is unavoidable — add a test that fails when they diverge" case.
 
-#### ⚠️ What the online hold reveals is LESS than what the hotseat hold reveals
+#### ⚠️ What the online hold revealed was LESS than what the hotseat hold revealed — SUPERSEDED by §11
 
-Stated rather than buried, because the difference is easy to mistake for a bug. `OnlineBoard` has no
-`.board-scene`, no midline element, no `CombatStage` and no `DamageLayer` — UX-9/UX-12/UX-13/UX-15
-reached `PlayBoard` only. So the online beat holds up the **blocking/attacking bands, the
-blocker→attacker arcs, the life totals and the server's log line**; it does **not** hold up an
-advance or a damage sprite, because there is none on that board to hold. The hold is what makes
-those readable at all — before it they were cleared inside one auto-pass round-trip — but porting
-the stage and the damage layer to the online board is a separate work item and is NOT done here.
+As shipped on 2026-09-14 this paragraph read: *"`OnlineBoard` has no `.board-scene`, no midline
+element, no `CombatStage` and no `DamageLayer` — UX-9/UX-12/UX-13/UX-15 reached `PlayBoard` only …
+porting the stage and the damage layer to the online board is a separate work item and is NOT done
+here."* It is kept, struck through, because the sentence names the defect §11 removed: **the work
+item was never four ports, it was one extraction.** Both boards now mount the same `BoardScene`, so
+the online beat holds up the advance and the arcs as well as the bands, the life totals and the
+log line. The one half that is still genuinely absent is the damage sprite, and §11 says exactly
+why (the protocol carries no event stream) and exactly what would fix it.
+
+---
+
+## 11. SHIPPED 2026-09-14 — the two boards stopped being two boards
+
+### The measurement this started from
+
+`OnlineBoard.tsx` already imported **eleven** components from `components/play/`: `SeatPanel`,
+`StackPanel`, `PlayCard`, `ChoicePrompt`, `AbilityPrompts`, `CardFace`, `CardZoomOverlay`,
+`CombatHoldBanner`, `CombatLines`, `ZonePanel`, and `usePrefersReducedMotion`. **The leaves were
+never the fork.** What had never been extracted was the SCENE COMPOSITION, which lived inline in
+`PlayBoard.tsx`'s JSX:
+
+- the `.board-scene` / `.board-scene__table` wrapper carrying UX-9's tilt;
+- the `--board-*` custom properties fed from `BOARD_3D_CONFIG` / `BOARD_LAYOUT_CONFIG` /
+  `TAP_ROTATION_CONFIG` / `COMBAT_ADVANCE_CONFIG`;
+- the `.board-midline` element UX-12's advance clamp MEASURES against;
+- `CombatStage` and the `StageEntry[]` it advances;
+- the combat arcs and the damage layer.
+
+So §10's closing paragraph — *"`OnlineBoard` has no `.board-scene`, no midline element, no
+`CombatStage` and no `DamageLayer` … porting the stage and the damage layer to the online board is a
+separate work item"* — named the symptom. **Porting features one at a time across two boards forever
+IS the bug.** `apps/web/src/components/play/BoardScene.tsx` is the one unit both boards now mount.
+
+### The seam — what is a PROP, and what was UNIFIED
+
+A prop is what GENUINELY differs: the view model's source (a local engine vs. a server-masked
+frame), the interaction handlers, the viewer seat, the rail's contents, the measure key, and the
+damage source. Everything else that differed, differed only because nobody had unified it, and is
+now decided once inside the scene:
+
+| was two answers | is one |
+|---|---|
+| the opponent's fanned backs drawn ABOVE their battlefield (hotseat) vs. BELOW it, between their creatures and the midline (online) | the far edge of the table, always — where a player opposite you holds their hand |
+| the viewer's hand OUTSIDE the scene (hotseat) vs. inside the seat region (online) | outside — a tilted hand is unreadable, and under `transform-style: flat` there is no counter-rotation that undoes it |
+| the game log in a side RAIL (hotseat) vs. a centre COLUMN between the battlefields (online) | the rail; the column cost the online table the same 171px it cost the hotseat one |
+| `combatArcPairs` (attacks + blocks) vs. `blockerLinePairs` (blocks only) | `combatArcPairs`, so the online board draws attacker→player and attacker→planeswalker arcs too |
+| `stageEntries` derived from `session.state.combat` — which the online board does not have | `stageEntriesFor(view, viewer)`, derived from the SHARED `BoardView.combat` |
+| two copies of the battlefield inspect gesture, two `permById` indexes, two drop-zone class lists | one each |
+
+**`BoardView.combat` grew the fields it always should have carried.** `attackersDeclared`,
+`blockersDeclared` and `attackTargets` were dropped by both builders; the hotseat board worked around
+it by reaching past the view model into `session.state`, which is precisely why the online board —
+which has no session — could not derive an advance at all. One `boardCombatView()` funnel in
+`view-model.ts` now fills them for both. **The mask was not widened to do it:** `maskStateForSeat`
+already sends `combat: state.combat` unredacted, and combat is public by the rules.
+
+### What the online board GENUINELY renders now, and what it does not
+
+| | reaches the online board | how it is known |
+|---|---|---|
+| **UX-9** tilt | ✅ | `--board-tilt-deg:12deg` / `--board-perspective-px:700px` are in the rendered `.play-board` style attribute on BOTH boards, asserted from `BOARD_3D_CONFIG` rather than re-spelled |
+| **UX-12** advance + midline clamp | ✅ | both boards render `.board-midline` (the element `CombatStage` measures), and `stageEntriesFor` returns the same attacker advance from either board's view model |
+| **UX-13** blocker advance | ✅ | from one real blocked combat, both view models yield `{blocker, role:'blocker', toward:-1, meets:attacker}`; the control one beat earlier yields `['attacker']` only |
+| **UX-14** attack arcs | ✅ | the scene calls `combatArcPairs` with the attack half supplied; `blockerLinePairs` is deleted |
+| **UX-15** damage | ❌ **NOT REACHED — and it is a missing CHANNEL, not a masking limit** | see below |
+
+**⚠️ UX-15, stated honestly rather than claimed.** `deriveDamageSequence` needs the engine's
+`GameEvent` stream. The server's `state` message carries `MaskedGameView` + `legalActions` +
+`yourTurn` + `log`, and `Room.summarizeEvents` (`apps/server/src/room.ts`) folds the events down to
+**five kinds of pre-formatted English string**, throwing the structure away. An online client cannot
+derive the sequence from that, and deriving one from frame diffs would be a second answer to "what
+damage happened" (rule 12). The scene therefore takes `NO_DAMAGE_SOURCE`, a named constant whose doc
+comment carries this paragraph. **This is not a hidden-information problem** — combat damage is
+public by the rules and the server already narrates it to both seats in prose. The fix is a field on
+the `state` message carrying a CLOSED list of public event kinds; the call site is then one prop.
+
+### The guard, and its falsification
+
+`online-board-parity.test.ts` already mounted the REAL online board on a REAL `maskStateForSeat`
+view and compared the two boards' `CombatHoldBanner` markup byte for byte. It now does the same for
+the scene: one real blocked combat, both boards rendered from it, and their scene SKELETONS compared
+in DOM order —
+
+```
+board-stage > board-scene > board-scene__table >
+  play-board__opponent > play-hand--hidden, board-midline, play-board__self > drop-zone
+then board-rail
+```
+
+a whitelist, so the seats' different cards cannot make two identical scenes look different, and a
+missing midline cannot hide inside a diff of card art. Four more assertions: the tabletop numbers
+reach both roots; the same blocker walks out from either view model (with the one-beat-earlier
+control); `CombatStage` still renders **nothing** under `renderToStaticMarkup` on both boards, since
+an advanced copy is placed from measured rects and a server-rendered one would be placed from rects
+that do not exist; and the scene widened no mask.
+
+**Falsified by deleting the `<BoardScene … />` element from `OnlineBoard.tsx`:**
+
+```
+Tests  4 failed | 32 passed (36)
+  × BOTH boards draw the same scene … > renders a BYTE-IDENTICAL scene skeleton from the same blocked combat
+    → expected [] to deeply equal [ 'board-stage', 'board-scene', …(7) ]
+  × §10 … > paints the blocker AS blocking — the picture the beat exists to show
+  × board-scene.test.ts > OnlineBoard.tsx keeps every one of its own overlays OUT of the scene element
+  × board-scene.test.ts > OnlineBoard.tsx: the viewer's OWN hand is outside the scene
+```
+
+Restored: `Tests  36 passed (36)`. Note which assertions did **not** move — the tabletop-numbers one
+stayed green, because `useBoardSceneVars()` is spread on `.play-board` independently of the scene
+element. That is the separation working, not a hole: one guard is about the properties and the other
+is about the composition.
+
+### The online board, PHOTOGRAPHED (2026-09-14)
+
+Everything above about the online board would otherwise rest on `renderToStaticMarkup`, and this
+repo has shipped seven items that were green and unreachable (§7.3, §10). So
+`apps/web/scripts/see-online-board.mjs` drives a **real two-seat online game** — two isolated
+browser contexts against a real `apps/server` over a real socket — and photographs it into
+`apps/web/verify-out/online/`.
+
+At the opening board, read off the live DOM of the HOST seat:
+
+```
+SCENE {"boardScene":1,"table":1,"midline":1,"tiltVar":"12deg","seats":2,"stack":0}
+```
+
+and at the first real combat:
+
+```
+ONLINE COMBAT (host) | attacking=2 staged=1 arcs=3
+ONLINE ADVANCE best: staged=1 arcs=3 midline=1 on host
+```
+
+`03-online-advance-host.png` shows, on the ONLINE board: both seat boxes drawn as keystoned
+trapezoids (the far seat narrowing toward the top — the UX-9 projection, not a border effect); the
+Guest's attacking Goblin Guide **lifted out of its home row and advanced down toward the midline**
+(the `.combat-stage__tile`, placed against the `.board-midline` this board now renders); and a
+**dashed fiery arc from that attacker to the Host's life total** — an attacker→PLAYER arc, which is
+precisely the arc kind the online board could never draw while it called the block-only
+`blockerLinePairs`. The game log sits in the right-hand rail and the viewer's hand is flat and
+full-size below the table.
+
+`attacking=2` beside `staged=1` is not a discrepancy: a staged card leaves its home tile in place as
+a faint place-holder, and the home tile keeps `perm--attacking` — one creature, two elements. Only
+`data-perm-id` moves to the copy.
+
+**UX-13 is the one still unphotographed online.** That combat was unblocked (the defender had an
+empty battlefield), so no blocker had anything to advance to. Its evidence is
+`online-board-parity.test.ts`: from one real blocked combat, `stageEntriesFor` returns the identical
+`{blocker, role:'blocker', toward:-1, meets:attacker}` from the MASKED online view model and from
+the hotseat one, with the one-beat-earlier control returning `['attacker']` alone. That is a strong
+pure-function equality and it is not a photograph; stated as such.
+
+### What went with the fork (rule 5)
+
+- `.play-board__center` and every rule that painted it (`board-fit.css`, `styles.css`) — no board
+  renders that class now, and a rule that paints nothing is read as a live layout by the next person;
+- `blockerLinePairs`, whose own doc comment said it existed because *"only one of the two boards
+  knows about attack targets yet"*. Its adapter test is repurposed to the claim that outlives it: no
+  attacker in, no attack arc out, at every step `STEP_ORDER` knows;
+- six stylesheet/source comments describing the old split, including `board-fit.css`'s note that the
+  online board *"sets none of `PlayBoard`'s inline custom properties"* — it sets all of them now.

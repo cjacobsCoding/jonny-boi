@@ -76,12 +76,15 @@ import '../play/action-bar.css';
  * which the hook serializes to `submitAction`. Unlike hotseat there is NO device
  * handoff: when it's not our turn we render a clear "Waiting for opponent…" state.
  *
- * It reuses `SeatPanel`/`StackPanel`/`PlayCard`/`CardBack`/`ChoicePrompt`/
- * `AbilityPrompts`/`ZonePanel` verbatim (DRY) — the adapter and the pure
- * `legal-actions` derivations are the only new glue. Every affordance the hotseat
- * board has is present here too (walker attacks, loyalty abilities, flashback from
- * the graveyard), driven off the masked view instead of a local engine: a mechanic
- * that ships must not be invisible online. The game log uses the server's lines.
+ * The BATTLEFIELD ITSELF is `BoardScene` — the same component `PlayBoard` mounts,
+ * not a second arrangement of the same leaves. Everything else it reuses
+ * (`StackPanel`, `PlayCard`, `ChoicePrompt`, `AbilityPrompts`, `ZonePanel`,
+ * `CardFace`, `CardZoomOverlay`, `CombatHoldBanner`) it reuses verbatim; the
+ * adapter and the pure `legal-actions` derivations are the only new glue. Every
+ * affordance the hotseat board has is present here too (walker attacks, loyalty
+ * abilities, flashback from the graveyard), driven off the masked view instead of
+ * a local engine: a mechanic that ships must not be invisible online. The game
+ * log uses the server's lines, handed to the scene as its rail.
  *
  * ## §3.143 wave 2 — the online board gets the overhaul too
  *
@@ -100,12 +103,32 @@ import '../play/action-bar.css';
  *  - **UX-10** — the hand and every target row go through `CardHover`;
  *  - **UX-8/UX-17** — the target prompt shows the SOURCE as a `CardFace`.
  *
- * ⚠️ WHAT DOES NOT REACH IT, AND WHY. `CardFace`'s provenance half (UX-17.1–3)
- * needs core's `explainCharacteristics`, which needs the full `GameState` and the
- * continuous-effect index. An online client has neither — it holds a masked view,
- * by design — so the faces here carry printed truth plus the glossary, and the
- * board must not invent attribution to fill the gap. See `board-adapter.ts`'s
- * `NO_MOD` note: the same limit, already stated once.
+ * ## THE SCENE — UX-9, UX-12, UX-13 and UX-14, and NOT as four ports
+ *
+ * Those four reached the hotseat board alone and would have been ported here one
+ * at a time forever, because there was no unit to mount: the tilt wrapper, the
+ * midline the advance clamp measures against, the staged copies and the arcs all
+ * lived inline in `PlayBoard`'s JSX. `BoardScene` is that unit, and this board
+ * mounting it is the whole of how they arrive. `online-board-parity.test.ts`
+ * compares the two boards' scene skeletons element for element, so a fifth
+ * feature cannot ship to one of them again.
+ *
+ * ⚠️ WHAT DOES NOT REACH IT, AND WHY — two limits, both real, neither papered over.
+ *
+ * 1. `CardFace`'s provenance half (UX-17.1–3) needs core's
+ *    `explainCharacteristics`, which needs the full `GameState` and the
+ *    continuous-effect index. An online client has neither — it holds a masked
+ *    view, by design — so the faces here carry printed truth plus the glossary,
+ *    and the board must not invent attribution to fill the gap. See
+ *    `board-adapter.ts`'s `NO_MOD` note: the same limit, already stated once.
+ * 2. UX-15 (damage travelling from source to recipient) needs the engine's
+ *    `GameEvent` stream, and the server's `state` message carries a masked view
+ *    plus pre-formatted log STRINGS — `Room.summarizeEvents` throws the structure
+ *    away. This is NOT a masking limit (combat damage is public, and the server
+ *    already narrates it to both seats); it is a missing channel. The scene takes
+ *    `NO_DAMAGE_SOURCE` here rather than deriving a second answer from frame
+ *    diffs, and when the protocol carries the events that prop is the whole
+ *    change. See `BoardScene.tsx`'s `NO_DAMAGE_SOURCE` for the full note.
  */
 /**
  * WHY A CARD ON THIS BOARD SHOWS NO PROVENANCE — said out loud, once.

@@ -1810,12 +1810,13 @@ export function PlayBoard({
       {/*
         §3.143 / UX-2 — THE STACK IS ALWAYS VISIBLE. It floats over the board
         (`placement="floating"`, `position: absolute` inside the already-relative
-        `.play-board`) instead of sharing the centre column with the log, so it
-        costs the battlefield NO height — which matters because that column is
-        `flex: 0 4 auto`, the designated first-to-yield, and report
-        20260901_204618 ("Battleground is super crunched") was already paid once.
-        Mounted OUTSIDE `.board-scene`: an absolutely-positioned descendant of a
-        transformed box is positioned against that box and tilted with it.
+        `.play-board`) instead of sharing a column with the log, so it costs the
+        battlefield NO height — report 20260901_204618 ("Battleground is super
+        crunched") was already paid for once, and the column that used to be the
+        designated first-to-yield is gone from both boards now that the log lives
+        in the scene's rail. Mounted OUTSIDE `.board-scene`: an
+        absolutely-positioned descendant of a transformed box is positioned
+        against that box and tilted with it.
       */}
       <StackPanel
         stack={view.stack}
