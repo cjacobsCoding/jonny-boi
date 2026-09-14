@@ -1,9 +1,22 @@
 # jonny-boi — agent guide
 
-> The engineering rules below are **committed here on purpose** so they travel to every clone on
-> every machine. Do **not** rely on a per-machine `~/.claude/CLAUDE.md` to carry shared standards —
-> it is not shared and may be absent. The repo is the only thing every contributor (human or agent)
-> sees. Read this file and `DESIGN.md` at the start of every session.
+> **The universal engineering rules are not restated here.** They live in Caleb's canon
+> (`~/.claude/rules/`, from the private repo `cjacobsCoding/claude-canon`), which is
+> version-controlled, synced to every machine, and auto-loads in every session *before*
+> this file.
+>
+> This file carries **only what those rules mean in this repo** — the MTG-specific
+> instantiation, the scripts, the seams, the budgets.
+>
+> That split is deliberate. When the universal rules were copied in full into this file,
+> it forked: **29 copies in 4 versions** across the worktrees, 14 of them missing rules
+> that had since been promoted. A project `CLAUDE.md` loads *after* the canon and wins on
+> conflict, so a stale copy does not reinforce a rule — it silently overrides it.
+>
+> If a machine lacks the canon, install it once:
+> `gh repo clone cjacobsCoding/claude-canon "$env:TEMP/canon-boot" -- -q; pwsh -File "$env:TEMP/canon-boot/bootstrap/install.ps1"`
+>
+> Read this file and `DESIGN.md` at the start of every session.
 
 **jonny-boi** — A Magic: The Gathering deck-tuning lab. Build a deck, let AI pilots play it hundreds
 of games against the meta gauntlet, swap a single card, and get a **statistically definitive** verdict
@@ -16,68 +29,71 @@ pool + `ai` pilots + `sim` harness + `data-tools` (Scryfall fetch/cache) + a Rea
 architecture seams (§2), the roadmap (§3), and the parallel-development rules (§6). Integrate through
 the seams; do not edit the core engine loop or shared scaffolding to bolt a feature on.
 
-## Engineering rules (non-negotiable — every contributor, every machine)
+## What the canon's rules mean here
 
-1. **Clean, self-documenting code — no magic numbers.** Names explain intent; comments explain
-   *why*, not *what*. Any constant that affects behavior or feel is named/derived from config,
-   never an inline literal. (Card costs, life totals, sim counts → data, not literals.)
-2. **Data-driven & designer-tunable — never hard-coded.** Cards, decks, AI weights, and sim
-   parameters live in data (JSON/TS data modules) with safe defaults. Adding a card or a meta deck
-   is a **data edit, not an engine change**. Behaviour that varies by case belongs in a TABLE, not
-   in a chain of branches or a regex alternation: adding the next case must be a ROW. Tables stay
-   CLOSED — a value outside the table REPORTS honestly rather than being widened to the nearest
-   thing that happens to exist, because silent approximation is worse than a clear refusal.
-3. **Ship debug tooling with every new system — in the debug/inspector panel.** A system isn't done
-   until you can observe and drive it at runtime: a game-state inspector, a step-through-priority
-   control, forced draws/mulligans, a sim-log viewer. Expose controls through the shared **debug
-   inspector** (data-driven: a registry entry + a context seam + a toggle/stepper). **Do NOT add
-   standalone debug key bindings per feature.** (Normal app inputs are fine; this is about
-   debug/cheat controls.)
-4. **Composition over inheritance.** A card is **data** that references small, composable effect
-   primitives — never a subclass per card. AI strategies, sim reporters, and effects are assembled
-   from small focused modules, not a class tree.
-5. **Leave the codebase better than you found it.** Fix the small thing you touch; don't add mess.
-6. **Code extensibly and robustly.** Graceful fallbacks (missing card data, an unimplemented
-   mechanic, a Scryfall miss → safe defaults + a clear "unsupported" signal, never a silent crash).
-7. **Watch performance — no regressions.** The sim runs **thousands of games**; the engine hot path
-   must stay allocation-light and fast. Instrument sim throughput (games/sec). A change that
-   regresses it must be optimized back to at-least-parity BEFORE moving on. The core must run both
-   in Node and in a browser Web Worker.
-8. **Don't collide with other agents.** Multiple agents (possibly on different machines) work this
-   repo. Own a **disjoint set of files / a disjoint package** (DESIGN.md §6), and **claim work on the
-   coordination board ([COORDINATION.md](COORDINATION.md)) before starting.** Workers push
-   `feat/<slug>` branches and do not merge to `main`; the integrator merges and ships.
-9. **Always deliver a build to test.** Whenever a feature is added or a bug is fixed, produce a
-   runnable build (the web app and/or a CLI sim command) for the user to try — "tests pass" is not
-   "done."
-10. **Systemic, never one-off.** Fix the CLASS, not the instance: when a bug or a gap turns up, ask
-    what SHAPE it has and what else has that shape, then fix the shape. A patch that repairs one
-    symptom and leaves its siblings broken is unfinished — the siblings are never cheaper to fix
-    than while the context is loaded. Ship the GUARD with the fix: a test that fails if the class
-    comes back (`compile/rule-coverage.test.ts` and `scripts/dead-rule-sweep.mjs` are the model —
-    they exist because a rule written from a remembered wording matched no real card and no test
-    could see it).
-11. **Measure before building; report the honest number.** Pick work from DATA, not intuition —
-    `scripts/near-miss-report.mjs` ranks the cards that are ONE clause from playable by the shape of
-    the clause blocking them, and `scripts/coverage-audit.mjs` ranks systems by cards unblocked.
-    Measure a candidate family BEFORE writing it; if the measurement disagrees with the plan, follow
-    the measurement and say so. If a closer second measurement SHRINKS the estimate, report the
-    smaller number rather than the headline that motivated the work. Prefer a committed script over
-    a one-off count, so the next decision is made from data too.
-12. **DRY — one answer to one question.** Two places that answer the same question will eventually
-    answer it differently, and the bug will be attributed to neither. One funnel per operation (one
-    zone-change path, one replacement site, one legality check); one TABLE read by every consumer
-    that needs it, so a row added for one verb is understood by all of them in the same edit
-    (`TARGET_NOUN_RESTRICTIONS`, `MANA_COST_NOUNS`). Where a second copy is unavoidable, derive both
-    from one source and add a test that fails when they diverge.
+Each heading names the canon rule; the text is the jonny-boi-specific part, which the canon
+does not and should not know about.
 
-Plus two cross-cutting disciplines:
-- **Pure-core + mandatory tests.** All rules/AI/sim/stats logic lives in pure, dependency-free units
-  (no DOM, no network, no `fetch` at call time) and is unit-tested. A change that breaks an existing
-  test is a regression and must be fixed before merge.
-- **Integrate through seams.** Features self-register and plug into defined seams (the effect-primitive
-  registry, the AI-strategy registry, the sim-reporter registry, data registries, the event log).
-  They never edit the core engine loop to integrate.
+**No magic numbers** (`50-engineering.md` §2, §5) — card costs, life totals and sim counts are
+data, never inline literals.
+
+**Data-driven & designer-tunable** (`50-engineering.md` §2) — cards, decks, AI weights and sim
+parameters live in data (JSON/TS data modules) with safe defaults. Adding a card or a meta deck
+is a **data edit, not an engine change**. The canon's closed-table rule is load-bearing here:
+`TARGET_NOUN_RESTRICTIONS` and `MANA_COST_NOUNS` are closed, and a value outside them must
+report honestly rather than be widened to the nearest existing entry.
+
+**Debug tooling in the debug menu** (`60-project-defaults.md`) — here that menu is the **debug
+inspector**: a game-state inspector, step-through-priority, forced draws/mulligans, a sim-log
+viewer. Register through the inspector's registry + context seam. No per-feature key bindings.
+
+**Composition over inheritance** (`60-project-defaults.md`) — a card is **data** referencing small
+composable effect primitives, never a subclass per card. AI strategies, sim reporters and effects
+are assembled from small focused modules, not a class tree.
+
+**Robust fallbacks, never silent** (`60-project-defaults.md`) — a missing card, an unimplemented
+mechanic, or a Scryfall miss degrades to a safe default **plus a clear "unsupported" signal**.
+
+**No performance regressions** (`60-project-defaults.md`) — the sim runs **thousands of games**, so
+the engine hot path stays allocation-light. Instrument sim throughput (games/sec) and restore
+at-least-parity before moving on. The core must run in **both** Node and a browser Web Worker.
+
+**Pure core + mandatory tests** (`60-project-defaults.md`) — all rules/AI/sim/stats logic lives in
+pure, dependency-free units: no DOM, no network, no `fetch` at call time.
+
+**Integrate through seams** (`60-project-defaults.md`) — features self-register into the
+effect-primitive registry, the AI-strategy registry, the sim-reporter registry, the data
+registries, or the event log. They never edit the core engine loop to integrate.
+
+**Systemic, never one-off** (`50-engineering.md` §1) — the guard shipped with the fix is the
+point. `compile/rule-coverage.test.ts` and `scripts/dead-rule-sweep.mjs` are the model: they
+exist because a rule written from a *remembered* wording matched no real card, and no test
+could see it.
+
+**Measure before building** (`50-engineering.md` §4) — `scripts/near-miss-report.mjs` ranks the
+cards that are ONE clause from playable by the shape of the clause blocking them;
+`scripts/coverage-audit.mjs` ranks systems by cards unblocked. Measure a candidate family
+**before** writing it.
+
+**DRY — one answer to one question** (`50-engineering.md` §3) — one funnel per operation: one
+zone-change path, one replacement site, one legality check. One table read by every consumer,
+so a row added for one verb is understood by all of them in the same edit.
+
+**Don't collide with other agents** (`40-orchestration.md`) — own a disjoint **package** where
+possible (DESIGN.md §6) and claim work on [COORDINATION.md](COORDINATION.md) before starting.
+Workers push `feat/<slug>` branches and never merge to `main`; the integrator merges and ships.
+
+**Always deliver a build** (`30-delivery.md`) — the web app and/or a CLI sim command, runnable.
+
+## Project-specific rules
+
+<!-- Constraints true of jonny-boi ONLY - things the canon does not cover. -->
+
+- **Every bug fixed ships a test that would have caught it.** A standing owner rule for this
+  repo, and stricter than the canon: `50-engineering.md` §1 asks for a guard when you fix a
+  *class*; here it is required for **every** fix, including a one-off.
+
+(The generated-data and CRLF rules are below, with the build commands they belong to.)
 
 ## Build & test
 
