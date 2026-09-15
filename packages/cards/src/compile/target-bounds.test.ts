@@ -214,6 +214,57 @@ describe('§3.150 — the bound is ENFORCED, not merely recorded', () => {
   });
 });
 
+/**
+ * THE OFFER/ACCEPT AGREEMENT UNDER A CONTINUOUS EFFECT — the bug this file's
+ * first draft could not see.
+ *
+ * `legalTargetsFor` builds a continuous index for the whole menu and passes it
+ * down; `isLegalTarget` passes nothing. While `targetMeetsBound` defaulted a
+ * missing index to "no modifications", those two read DIFFERENT power: the menu
+ * offered a pumped 2/2 for "power 5 or greater" and the cast was then refused.
+ *
+ * Every test above ran on a board with no continuous effect at all, so all of
+ * them passed while the disagreement was live. That is a check that cannot
+ * fail, and this is the discriminator it was missing.
+ */
+describe('§3.150 — a bound reads LAYERED stats, and both readers agree', () => {
+  it('a pumped creature is legal to BOTH the menu and the legality check', () => {
+    const { state, small } = boardWithBigAndSmall();
+    // +4/+4 until end of turn: the 1/1 becomes a 5/5 and enters the bound.
+    state.continuous.push({
+      id: 1,
+      targetInstanceId: small,
+      sourceInstanceId: 0,
+      duration: 'endOfTurn',
+      power: 4,
+      toughness: 4,
+    } as never);
+    const spell = compiled('Probe', 'Exile target creature with power 5 or greater.').definition!;
+    const spec = specOf(spell)!;
+    // THE DISCRIMINATOR: without the layered read this is `false` while the
+    // menu below still lists it — offer and accept disagreeing (DESIGN §3.36).
+    expect(isLegalTarget(state, spec, small, 'A', spell)).toBe(true);
+    expect([...legalTargetsFor(state, spec, 'A', spell)]).toContain(small);
+  });
+
+  it('a SHRUNK creature leaves the bound for both readers too', () => {
+    const { state, big } = boardWithBigAndSmall();
+    // -3/-0: the 5/5 becomes a 2/5 and falls out of "power 5 or greater".
+    state.continuous.push({
+      id: 1,
+      targetInstanceId: big,
+      sourceInstanceId: 0,
+      duration: 'endOfTurn',
+      power: -3,
+      toughness: 0,
+    } as never);
+    const spell = compiled('Probe', 'Exile target creature with power 5 or greater.').definition!;
+    const spec = specOf(spell)!;
+    expect(isLegalTarget(state, spec, big, 'A', spell)).toBe(false);
+    expect([...legalTargetsFor(state, spec, 'A', spell)]).not.toContain(big);
+  });
+});
+
 describe('§3.150 — the closed tables REFUSE rather than widen', () => {
   it.each([
     ['a keyword the engine does not model', 'Destroy target creature with shadow.'],

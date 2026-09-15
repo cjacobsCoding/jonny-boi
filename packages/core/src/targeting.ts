@@ -644,6 +644,7 @@ function numericPropertyOf(
   index: ContinuousIndex | null,
 ): number {
   if (property === 'manaValue') return permanent.def.cost ? convertedManaCost(permanent.def.cost) : 0;
+  // Layered P/T (CR 613) — the same numbers combat and state-based actions read.
   const mod = index?.get(permanent.instanceId) ?? NO_MOD;
   return property === 'power' ? effectivePower(permanent, mod) : effectiveToughness(permanent, mod);
 }
@@ -664,9 +665,22 @@ export function targetMeetsBound(
   state: GameState,
   bound: TargetBound,
   target: InstanceId | PlayerId,
-  index: ContinuousIndex | null = null,
+  /**
+   * The continuous index to judge layered P/T and granted keywords against.
+   *
+   * ⚠️ THREE-WAY DISTINCTION, and collapsing it was a real bug caught before
+   * merge. `undefined` means "nobody has built one — build it now"; `null`
+   * means "this board provably has no continuous modification at all". An
+   * earlier draft defaulted to `null`, so `isLegalTarget` — which passes
+   * nothing — read BASE power while `legalTargetsFor` read LAYERED power, and
+   * the offer and the accept disagreed on exactly the boards an anthem exists
+   * for: a pumped 2/2 was on the menu for "power 5 or greater" and then refused
+   * when the cast was submitted. Same rule, same shape, as `isTargetableBy`.
+   */
+  index?: ContinuousIndex | null,
 ): boolean {
   if (isPlayerTarget(target)) return false;
+  const mods = index === undefined ? keywordIndexFor(state) : index;
   const permanent = permanentById(state, target);
   if (permanent === undefined) {
     // A spell on the stack: only the card-level bounds can be asked of it,
@@ -678,14 +692,14 @@ export function targetMeetsBound(
     }
     return false;
   }
-  if (bound.atLeast !== undefined && numericPropertyOf(permanent, bound.atLeast.property, index) < bound.atLeast.value) {
+  if (bound.atLeast !== undefined && numericPropertyOf(permanent, bound.atLeast.property, mods) < bound.atLeast.value) {
     return false;
   }
-  if (bound.atMost !== undefined && numericPropertyOf(permanent, bound.atMost.property, index) > bound.atMost.value) {
+  if (bound.atMost !== undefined && numericPropertyOf(permanent, bound.atMost.property, mods) > bound.atMost.value) {
     return false;
   }
   if (bound.withKeyword !== undefined || bound.withoutKeyword !== undefined) {
-    const mod = index?.get(permanent.instanceId) ?? NO_MOD;
+    const mod = mods?.get(permanent.instanceId) ?? NO_MOD;
     const keywords = effectiveKeywords(permanent, mod);
     if (bound.withKeyword !== undefined && keywords[bound.withKeyword] !== true) return false;
     if (bound.withoutKeyword !== undefined && keywords[bound.withoutKeyword] === true) return false;
