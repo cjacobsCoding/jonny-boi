@@ -464,7 +464,12 @@ export function GauntletDecks({ decks }: { decks: DecksApi }): ReactElement {
  */
 export function SavedDecks({ decks }: { decks: DecksApi }): ReactElement {
   return (
-    <div>
+    // Named so the region — heading INCLUDED — can be addressed as one thing.
+    // `verify-deck-identity.mjs` scrolls to it to frame your decks against the
+    // built-in ones; anchoring on `.saved-decks` alone left the heading one line
+    // above the fold on a phone, which is the difference between a screenshot
+    // that shows the comparison and one that shows half of it.
+    <div className="saved-decks-region">
       <div className="section-label">Your decks</div>
       <div className="saved-decks">
         {decks.decks.map((deck) => {
