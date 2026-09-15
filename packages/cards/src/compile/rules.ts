@@ -1875,6 +1875,63 @@ const PREVENTION_FIXED_PHRASE = Object.keys(PREVENTION_FIXED_RECIPIENTS)
   .sort((a, b) => b.length - a.length)
   .join('|');
 
+// =============================================================================
+// §3.149 — THE NAMED-COUNTER VOCABULARY
+// =============================================================================
+
+/**
+ * The counter kinds a card may PUT ON and this engine may store as plain
+ * instance state — a CLOSED table, and the closure is the whole safety argument.
+ *
+ * `counters-blame.mjs` measured the "counters template" backlog row and found
+ * that it is the §3.120 aggregation artifact a third time (2,598 clauses across
+ * 2,303 distinct shapes — 1.13 clauses per shape), with ONE real seam inside it:
+ * 207 clauses compile the moment the counter KIND is one the engine can hold,
+ * and their templates already exist. This table is that seam, restricted to the
+ * kinds where holding the counter is the FULL meaning of the printed line.
+ *
+ * ⚠️ WHAT IS DELIBERATELY ABSENT, and why each absence is load-bearing. CR 122.1
+ * attaches behaviour to some counters, and a card whose counter is stored but
+ * whose rule is not honoured plays WEAKER than printed — which biases an A/B
+ * verdict exactly as badly as one playing stronger:
+ *   - `shield` — CR 122.1c: removes itself instead of the permanent being
+ *     destroyed or dealt damage. 25 clauses want it; all of them keep reporting.
+ *   - `stun`   — CR 122.1d: removes itself instead of the permanent untapping.
+ *     71 clauses want it; all of them keep reporting.
+ *   - `time` / `fade` / `age` — suspend, fading and cumulative upkeep drive
+ *     these, and §3.106 already implements those keywords. A bare "put a time
+ *     counter on ~" outside that machinery is NOT the same thing, so it reports.
+ *   - `loyalty` / `defense` / `level` / `lore` — whole card types (planeswalkers,
+ *     battles, levelers, Sagas) read these; none is inert.
+ *   - `poison` / `energy` / `experience` — PLAYER counters, not permanent state.
+ *   - `keyword` counters (CR 122.1e) — a flying counter GRANTS flying. Storing
+ *     one silently would drop the grant.
+ *
+ * A kind outside this table has no rule, so its card reports by name rather than
+ * being widened into the nearest row that happens to exist.
+ */
+const INERT_COUNTER_KINDS: readonly string[] = Object.freeze([
+  'blood', 'bounty', 'brick', 'charge', 'depletion', 'divinity', 'flood',
+  'gold', 'growth', 'hatchling', 'healing', 'hoofprint', 'ice', 'intervention',
+  'ki', 'lodestone', 'luck', 'matrix', 'music', 'net', 'oil', 'page', 'plague',
+  'pressure', 'quest', 'rust', 'scream', 'slime', 'soul', 'spore', 'storage',
+  'study', 'tide', 'training', 'verse', 'wish',
+]);
+
+/** The alternation, built FROM the table so the two cannot drift apart. */
+const INERT_COUNTER_KIND_TOKEN = INERT_COUNTER_KINDS.join('|');
+
+/**
+ * The counter kind a printed word names, or `null` when the word is outside
+ * {@link INERT_COUNTER_KINDS}. The lookup exists so every rule reading a counter
+ * word asks ONE question in ONE place — a second `includes` somewhere else is
+ * how a kind ends up inert in one rule and reported in another.
+ */
+function inertCounterKind(word: string): string | null {
+  const kind = word.trim().toLowerCase();
+  return INERT_COUNTER_KINDS.includes(kind) ? kind : null;
+}
+
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     /**
@@ -4729,6 +4786,41 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       });
     },
   },
+  // ===========================================================================
+  // §3.149 — THE NAMED-COUNTER RULES. Kept as one contiguous region at the tail
+  // of this table because three lanes edited this file at once; nothing above
+  // is reformatted, and the whole family moves or merges as a block.
+  // ===========================================================================
+  {
+    /**
+     * "Put a **charge** counter on ~" / "Put two **quest** counters on ~" — a
+     * counter of a kind the rules attach no behaviour to (§3.149).
+     *
+     * Only the kinds in {@link INERT_COUNTER_KINDS} reach this rule, and that
+     * table is the whole safety argument: an inert counter's ONLY meaning comes
+     * from the card's own other printed lines, so storing it is exactly what the
+     * card says. A shield or stun counter — where CR 122.1 attaches behaviour to
+     * the counter itself — would be a card playing WEAKER than printed if it
+     * were stored and nothing honoured it, so those kinds are absent from the
+     * table and their cards keep reporting.
+     *
+     * The card is NOT thereby made playable on its own: a line that READS the
+     * counter ("Remove three charge counters from ~: …") still has to compile,
+     * or the card stays `incomplete` and never enters the pool. This rule closes
+     * the write half of the family; the read half reports until it is built.
+     */
+    id: 'put-named-counter-on-self',
+    description: '"Put N <inert-kind> counters on ~" — a counter the rules attach no behaviour to',
+    pattern: new RegExp(
+      `^put (?:an?|${COUNT_TOKEN}) (${INERT_COUNTER_KIND_TOKEN}) counters? on (?:~|it|this creature)$`,
+    ),
+    build(match) {
+      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
+      const kind = inertCounterKind(match[2] ?? '');
+      if (amount === null || amount <= 0 || kind === null) return null;
+      return effects({ primitive: 'addCounters', params: { amount, kind, self: true } });
+    },
+  },
 ]);
 
 /**
@@ -6871,6 +6963,31 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     build(_match, ctx) {
       if (!cardHasXCost(ctx)) return null;
       return { effects: [{ primitive: 'addCounters', params: { amount: CHOSEN_X_PARAM, self: true } }] };
+    },
+  },
+  {
+    // §3.149 — "~ enters with three CHARGE counters on it" (Trigon of
+    // Corruption, Blast Zone, Surge Node), "with three WISH counters" (Ring of
+    // Three Wishes). The +1/+1 sibling above with the kind read from the closed
+    // {@link INERT_COUNTER_KINDS} table; CR 614.1c puts these on as the
+    // permanent enters, which `addCounters`' self path already handles for a
+    // card still resolving into play.
+    //
+    // ⚠️ The counters are REAL but INERT: this rule alone does not make the card
+    // playable, because the line that spends them ("{T}, Remove three charge
+    // counters from ~: …") still has to compile. That is the intended outcome —
+    // the card reports until both halves exist, and never enters the pool with
+    // half its text.
+    id: 'enters-with-named-counters',
+    description: '"~ enters with N <inert-kind> counters on it"',
+    pattern: new RegExp(
+      `^~ enters(?: the battlefield)? with (?:an?|${COUNT_TOKEN}) (${INERT_COUNTER_KIND_TOKEN}) counters? on it\\.?$`,
+    ),
+    build(match) {
+      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
+      const kind = inertCounterKind(match[2] ?? '');
+      if (amount === null || amount <= 0 || kind === null) return null;
+      return { effects: [{ primitive: 'addCounters', params: { amount, kind, self: true } }] };
     },
   },
   {

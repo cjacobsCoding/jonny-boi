@@ -1278,6 +1278,32 @@ export const addCounters: EffectPrimitive = (ctx) => {
   const amount = intParam(ctx, 'amount', 0);
   if (amount === 0) return;
 
+  // A NAMED counter kind — "put a charge counter on ~", "put a quest counter on
+  // ~" (§3.149). The kind rides as a param rather than as a second primitive
+  // because the game action is identical: `addCountersOfKind` is already the one
+  // CR 614 site and already takes the kind, which is how proliferate scales a
+  // charge counter. Only two things differ from the +1/+1 path, and both follow
+  // from what the kind MEANS:
+  //   - the sign is not a kind selector (a named counter is never negative), so
+  //     the amount is used as printed;
+  //   - the target need not be a CREATURE. Charge counters go on artifacts,
+  //     storage counters on lands, quest counters on enchantments; the
+  //     creature gate below exists only because a +1/+1 counter on a
+  //     non-creature changes nothing, which is not true of these.
+  const kind = strParam(ctx, 'kind');
+  if (kind !== undefined) {
+    if (boolParam(ctx, 'each', false)) {
+      for (const permanent of eachCounterTarget(ctx)) addCountersOfKind(ctx, permanent, kind, amount);
+      return;
+    }
+    const named = boolParam(ctx, 'self', false)
+      ? enteringOrResidentSelfPermanent(ctx)
+      : (firstPermanentTarget(ctx) ?? enteringOrResidentSelfPermanent(ctx));
+    if (!named) return;
+    addCountersOfKind(ctx, named, kind, amount);
+    return;
+  }
+
   // The GROUP form — "put a +1/+1 counter on **each** creature you control".
   // One primitive rather than a second one because the printed templates differ
   // only in WHICH creatures are counted, and that is data: a controller scope
@@ -1311,6 +1337,21 @@ function enteringOrResidentSelf(ctx: EffectContext): CardInstance | undefined {
   if (resident) return resident;
   const source = ctx.source;
   return isCreature(source.def) ? source : undefined;
+}
+
+/**
+ * {@link enteringOrResidentSelf} without the creature test — the source as ANY
+ * permanent, for the named-counter kinds (§3.149).
+ *
+ * The same two-step for the same reason: "~ enters with three charge counters on
+ * it" (Trigon of Corruption, Blast Zone) is CR 614.1c and resolves while the
+ * permanent's own spell is still resolving, so the battlefield lookup finds
+ * nothing and the resolving instance is the right answer. Written as a sibling
+ * rather than a `creatureOnly` flag on the original so neither caller can pass
+ * the wrong one by leaving an argument off.
+ */
+function enteringOrResidentSelfPermanent(ctx: EffectContext): CardInstance | undefined {
+  return permanentById(ctx.state, ctx.source.instanceId) ?? ctx.source;
 }
 
 /**
