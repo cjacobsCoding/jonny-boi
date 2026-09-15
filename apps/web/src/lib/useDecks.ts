@@ -14,6 +14,7 @@ import {
 import { DEFAULT_DECK_NAME } from './config.js';
 import {
   loadDecks,
+  mayPersistDecks,
   saveDecks,
   loadActiveDeckId,
   saveActiveDeckId,
@@ -86,8 +87,7 @@ export function useDecks(): DecksApi {
   // its own failure to the user through the persistence notice registry, which
   // the app shell renders — this effect deliberately does not swallow anything.
   useEffect(() => {
-    if (readCorrupt) return;
-    if (decks.length > 0) saveDecks(decks);
+    if (mayPersistDecks({ readCorrupt, deckCount: decks.length })) saveDecks(decks);
   }, [decks, readCorrupt]);
   useEffect(() => {
     if (readCorrupt) return;

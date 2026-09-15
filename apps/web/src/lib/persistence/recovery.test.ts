@@ -111,6 +111,44 @@ describe('recovery offers only what is genuinely still stored', () => {
   });
 
   /**
+   * The other half of the same property, and the reason it is a separate test:
+   * "same deck is not offered" passes trivially for ANY identity function that
+   * happens to collide — including one that only compares how many entries a
+   * deck has. Falsifying the first test by degrading the key to `cards.length`
+   * left it green, which is a check that cannot fail. This one goes red: two
+   * decks of the SAME SHAPE but different cards must be told apart.
+   */
+  it('tells two same-sized decks apart — a deck you do not have IS offered', () => {
+    install({ [PLAY_RESUME_STORAGE_KEY]: JSON.stringify(playRecord(MINE, SAMPLE_DECKS[0])) });
+    const differentDeckSameShape: Deck = {
+      id: 'd1',
+      name: 'Blue Skies',
+      cards: [
+        { cardId: 'card-counterspell', count: 4 },
+        { cardId: 'card-island', count: 20 },
+      ],
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const found = recoverableDecks([differentDeckSameShape]);
+    expect(found).toHaveLength(1);
+    expect(found[0]!.name).toBe('Caleb Burn');
+  });
+
+  it('tells apart two decks with the same cards in different COUNTS', () => {
+    install({ [PLAY_RESUME_STORAGE_KEY]: JSON.stringify(playRecord(MINE, SAMPLE_DECKS[0])) });
+    const sameCardsDifferentCounts: Deck = {
+      id: 'd1',
+      name: 'Caleb Burn (trimmed)',
+      cards: [
+        { cardId: 'card-bolt', count: 3 },
+        { cardId: 'card-mountain', count: 20 },
+      ],
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    expect(recoverableDecks([sameCardsDifferentCounts])).toHaveLength(1);
+  });
+
+  /**
    * Without this, every game ever played would offer its opponent back, and the
    * one row that matters would be buried under gauntlet decks the user never
    * made. The discriminator is their name, which is fixed data in the sim.

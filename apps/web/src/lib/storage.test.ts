@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DECKS_STORAGE_KEY } from './config.js';
 import type { Deck } from './deck.js';
-import { loadDecks, saveDecks } from './storage.js';
+import { loadDecks, mayPersistDecks, saveDecks } from './storage.js';
 import { entryPrintingOf, type EntryPrinting } from './printings/entryPrinting.js';
 import { clearStorageNotices, describeNotice, storageNotices } from './persistence/failures.js';
 
@@ -221,5 +221,34 @@ describe('a write that cannot land is never reported as saved', () => {
     installStorage();
     expect(loadDecks()).toEqual({ decks: [], corrupt: false });
     expect(storageNotices()).toEqual([]);
+  });
+});
+
+
+/**
+ * THE SECOND WAY TO LOSE THE SAME DECKS.
+ *
+ * `loadDecks` returning `[]` for a corrupt blob looks identical to `[]` for an
+ * empty one — and the hook's response to empty is to mint a starter deck, which
+ * would then be written straight over whatever was really in storage. The first
+ * loss (a failed write) at least leaves the old decks on disk; this one erases
+ * them. The rule is a named predicate precisely so a test can hold it.
+ */
+describe('a deck blob that would not parse is never written over', () => {
+  it('refuses to persist while the stored decks are unreadable', () => {
+    expect(mayPersistDecks({ readCorrupt: true, deckCount: 1 })).toBe(false);
+    // Not even a full collection — the point is that the blob on disk is the
+    // only copy of something, and we do not know what.
+    expect(mayPersistDecks({ readCorrupt: true, deckCount: 12 })).toBe(false);
+  });
+
+  it('persists normally when the read was clean', () => {
+    expect(mayPersistDecks({ readCorrupt: false, deckCount: 1 })).toBe(true);
+  });
+
+  it('does not write an empty collection over a real one', () => {
+    // Before the initial load resolves the hook holds zero decks; writing then
+    // would blank the stored list between mount and first paint.
+    expect(mayPersistDecks({ readCorrupt: false, deckCount: 0 })).toBe(false);
   });
 });

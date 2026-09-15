@@ -82,6 +82,28 @@ export function saveDecks(decks: Deck[]): StorageWriteResult {
   return writeStorage('decks', DECKS_STORAGE_KEY, JSON.stringify(decks));
 }
 
+/**
+ * May the app write the deck list back to storage right now?
+ *
+ * A named predicate rather than a condition inside a `useEffect`, for two
+ * reasons. It is a RULE, and the rule is not obvious from the expression: when
+ * the stored blob exists but would not parse, writing anything over it is a
+ * second and unrecoverable way to lose the same decks — the hook's next move
+ * after an empty read is to mint a starter deck, which would land straight on
+ * top of whatever was really in there. And a rule that only exists inside a
+ * React effect cannot be tested in this suite, which runs without a DOM; a rule
+ * nothing can test is a rule that comes back.
+ */
+export function mayPersistDecks(state: {
+  /** `DeckReadResult.corrupt` from the load that seeded this session. */
+  readonly readCorrupt: boolean;
+  /** How many decks are in hand. Zero means "nothing worth writing yet". */
+  readonly deckCount: number;
+}): boolean {
+  if (state.readCorrupt) return false;
+  return state.deckCount > 0;
+}
+
 /** Read the id of the last-active deck, or null if none/unavailable. */
 export function loadActiveDeckId(): string | null {
   try {
