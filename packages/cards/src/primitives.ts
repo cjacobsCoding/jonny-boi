@@ -1741,6 +1741,9 @@ export const mayEffects: EffectPrimitive = (ctx) => {
  *   - `targeted` — bind the shield to `ctx.targets[0]`, the chosen creature or
  *     player. Without it the effect guards every object the rest of the filter
  *     admits.
+ *   - `selfShield` — bind the shield to the ability's OWN SOURCE ("…dealt to ~
+ *     this turn"). Distinct from `targeted`: the printed line names no target,
+ *     so it neither aims nor fizzles.
  *   - `label` — the printed line, for the log.
  */
 export const preventDamage: EffectPrimitive = (ctx) => {
@@ -1748,7 +1751,13 @@ export const preventDamage: EffectPrimitive = (ctx) => {
   const scope = strParam(ctx, 'scope');
   const recipientKind = strParam(ctx, 'recipientKind');
   const targeted = boolParam(ctx, 'targeted', false);
-  const target = targeted ? ctx.targets[0] : undefined;
+  // "…that would be dealt to ~ this turn" (Rock Hydra, Opal-Eye) — the shield
+  // guards the ability's OWN SOURCE and names no target, so it cannot fizzle.
+  // A separate param from `targeted` because the two answer different printed
+  // words, and collapsing them would give the self form a targeting gate (and a
+  // fizzle) the printed line does not have.
+  const selfShield = boolParam(ctx, 'selfShield', false);
+  const target = selfShield ? ctx.source.instanceId : targeted ? ctx.targets[0] : undefined;
   // "prevent the next N damage that would be dealt to TARGET creature" with no
   // legal target left is a fizzle, not a blanket fog — refusing here is the
   // direction that can never play better than printed.
