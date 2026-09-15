@@ -48,38 +48,52 @@ near-misses — the best cards-per-unit-work in the table, and the campaign shou
 | --- | --- | --- |
 | 730 | block restriction whose selector compares creatures / reads effective P/T | the CR 509.1c/d requirement solver itself is built |
 | 531 | "at the beginning of..." trigger BODY | the trigger itself — every printed scope, the "you may" form, the intervening "if" — is implemented |
-| 299 | copy-creating templates outside the closed tables | the copy system, token copies and delayed sacrifice tails are ALL implemented; three named selectors remain |
+| ~~299~~ | ~~copy-creating templates outside the closed tables~~ | ⚠️ **WORKED, AND THE ANNOTATION WAS WRONG** — see below |
 | 231 | "the chosen ..." READER | the named value IS stored on the permanent; this printed line has no rule that reads it |
 | 215 | additional-cost wording on a mana ability | life and mana costs themselves are implemented |
 
-That is roughly **2,000 cards sitting behind work that is mostly done**.
+That was the estimate. It is roughly **1,700 cards sitting behind work that is mostly done** — with
+one row struck out, for a reason worth keeping rather than quietly deleting.
+
+⚠️ **The copy row's annotation said "three named selectors remain". The lane that worked it measured
+6% selectors and 74% sentences with no rule at all** — 377 clauses over 373 distinct shapes, nothing
+like three named anythings. **An annotation claiming the hard half is built is a hypothesis, not a
+measurement**, and this one was written before anyone probed the row. Treat every remaining row in
+this table the same way: it says where to *look*, never what you will *find*. The lane still
+delivered — Populate turned out to be a genuine near-miss needing **zero** `packages/core` changes —
+but on machinery the annotation never mentioned, and in a row that did not contain a single populate
+card (§8a item 3).
 
 ## 4. The ranked families (top 20 of 103)
 
 | cards | cumulative | family |
 | --- | --- | --- |
 | 10,801 | 31.3% | a rules template — **aggregation artifact, see §2** |
-| 5,640 | 47.6% | "you may / choose" template |
-| 2,480 | 54.8% | counters template |
+| 5,640 | 47.6% | "you may / choose" template — holds **Jace’s ultimate** and, misfiled, **every modal TRIGGER** |
+| 2,480 | 54.8% | counters template — ✅ **worked, PR #33 (+25)**; the seam was the counter KIND, not any template |
 | 1,927 | 60.4% | graveyard template |
 | 1,506 | 64.7% | sacrifice template |
-| 1,449 | 68.9% | activated-ability template — **in flight** |
-| 953 | 71.7% | {X} or derived-value template |
-| 888 | 74.2% | targeted-trigger template |
+| 1,449 | 68.9% | activated-ability template — ✅ **worked, PR #31 (+106)**. ⚠️ also misfiles: Populate and Axebane Guardian both land here on the `{T}:` prefix |
+| 953 | 71.7% | {X} or derived-value template — ✅ **worked, PR #34 (+57)**. 70% of it is a sentence with no rule, filed here for the words "equal to" |
+| 888 | 74.2% | targeted-trigger template — ✅ **worked, PR #32 (+122)**, a near-miss on built machinery |
 | 788 | 76.5% | static-buff template |
 | 730 | 78.6% | block-restriction selector — **near-miss, §3** |
 | 556 | 80.2% | aura/equipment template |
 | 531 | 81.8% | "at the beginning of..." body — **near-miss, §3** |
 | 446 | 83.1% | filtered-targeting template |
-| 432 | 84.3% | modal template |
+| 432 | 84.3% | modal template — ✅ **worked, PR #41 (+175)**. ⚠️ **MODE-ONLY measured ZERO** — the modal system has no gaps; the row is bodies and headers |
 | 431 | 85.6% | library-search template |
 | 421 | 86.8% | library-look/reorder template |
 | 312 | 87.7% | group-damage template |
-| 300 | 88.6% | loyalty-ability template |
-| 299 | 89.4% | copy-creating selectors — **near-miss, §3** |
+| 300 | 88.6% | loyalty-ability template — ✅ **worked, PR #39 (+43)**. ⚠️ **COST-unknown measured ZERO** — loyalty is finished; the row is ability bodies |
+| 299 | 89.4% | copy-creating selectors — ✅ **worked, PR #42 (+34)**. ⚠️ **1.00 cards per shape**, and it contained no populate card at all |
 | 244 | 90.1% | transform/double-faced template |
 
 The tail is long: 103 families, and past roughly 90% the rows are tens of cards each.
+
+✅ marks a row a lane has actually worked, with what it really bought. **Seven worked rows, and in
+five of them the row NAME pointed at the wrong half of the problem** — twice at a half that does not
+exist. Read this table as a map of where to look. It has never once described what was found.
 
 ## 4a. THE MANDATED ORDER (2026-09-14) — this overrides picking by family size
 
@@ -91,15 +105,18 @@ Caleb, setting the sequence explicitly:
 
 So the campaign runs in three phases, in this order:
 
-**Phase 1 — the card browser must be fast first.** A pool heading toward 32,276 cards is unusable
-in a grid that renders every tile; fixing the browser is a PREREQUISITE, not a parallel nicety. See
-`DECKBUILDER-AND-ART.md`. (In flight.)
+**Phase 1 — the card browser must be fast first. ✅ SHIPPED.** A pool heading toward 32,276 cards is
+unusable in a grid that renders every tile, so this was a PREREQUISITE, not a parallel nicety. The
+landing page carried a **42 MB DOM** — 7.4 KB of expanded inline style per tile × 5,651 tiles — and
+load went 40.6s → 8.5s; the browser itself went **86,780 → 519 DOM nodes, 13.9s → 1.2s, and 316ms →
+17.7ms per scrolled frame.** See `DECKBUILDER-AND-ART.md`.
 
-**Phase 2 — Caleb's own two decks, completely.** 17 distinct blocked cards across 9 families
-(`docs/decks/`). This is deliberately NOT the cheapest work — it spans nine families to deliver two
-decks — and it is the right call anyway: a lab that cannot play the owner's own deck is not yet a
-lab. Every card listed in `docs/decks/*.txt` with a ✗ must compile, or the residue must be named
-card by card.
+**Phase 2 — Caleb's own two decks, completely. IN FLIGHT — 8 of 16 compile.** 16 distinct blocked
+cards across 9 families (`docs/decks/`; the earlier "17" double-counted Arbor Elf, which is in both
+lists). This is deliberately NOT the cheapest work — it spans nine families to deliver two decks —
+and it is the right call anyway: a lab that cannot play the owner's own deck is not yet a lab. Every
+card listed in `docs/decks/*.txt` with a ✗ must compile, or the residue must be named card by card.
+§7a is the live board; §8c is the set-verified count.
 
 **Phase 3 — the whole corpus, NEWEST SET FIRST, working backwards.** Not by family size.
 
