@@ -139,19 +139,89 @@ so rather than assuming.
 
 ## 7. Caleb's own decks are the first acceptance case
 
-`docs/decks/` holds two real decks transcribed from photos. Between them, 17 distinct cards are
+`docs/decks/` holds two real decks transcribed from photos. Between them, **16 distinct cards** are
 blocked across 9 families — so they are a good end-to-end test of whether the campaign is reaching
 cards people actually own, rather than only the cards that happen to be easy.
 
+(The earlier "17" was a miscount: `Arbor Elf` appears in both lists and was counted twice. The 16
+names are the `// ✗` lines in `docs/decks/*.txt`, deduplicated.)
+
+### 7a. The acceptance board — one row per blocked card
+
+Each ✅ is the acceptance test its own lane ran and pinned; the consolidated set-verified recount
+waits on the pool refresh (§8 note). A card is ✅ only when **every** printed ability compiles.
+
+| card | family | state |
+| --- | --- | --- |
+| Arbor Elf | activated ability | ✅ §3.147 |
+| Doorkeeper | activated ability | ✅ §3.147 |
+| Oblivion Ring | targeted trigger | ✅ §3.148 — was a near-miss on built machinery |
+| Scavenging Ooze | counters | ✅ §3.149a |
+| Luminarch Ascension | counters | ✅ §3.149a |
+| Kessig Wolf Run | {X} / derived value | ✅ §3.149 |
+| Selesnya Charm | modal | 🔧 in flight — `feat/modal-templates` |
+| Trostani, Selesnya's Voice | copy selector (Populate) | 🔧 in flight — `feat/copy-selectors` |
+| Jace, Architect of Thought | planeswalker loyalty | 🔧 in flight — `feat/loyalty-emblem` |
+| Tamiyo, the Moon Sage | loyalty + emblem | 🔧 in flight — `feat/loyalty-emblem` |
+| Axebane Guardian | variable mana production | ⬜ `ManaAbility.produces` is a fixed mode list and `TapForManaAction.mode` an index — a count that varies with the board has nowhere to live |
+| Primal Surge | "you may / choose" template | ⬜ 5,640-card row; expect §2 |
+| Rhox Faithmender | life-change replacement | ⬜ needs a life-change event on the replacement layer |
+| Fog Bank | unrecognised rules text | ⬜ not yet blamed to a shape |
+| Craterhoof Behemoth | unrecognised rules text | ⬜ not yet blamed to a shape |
+| Fiendslayer Paladin | unrecognised rules text | ⬜ not yet blamed to a shape |
+
+**6 of 16 lane-verified, 4 in flight, 6 unstarted.**
+
 ## 8. Progress log
 
-| date | accepted | delta | what landed |
+**Read the DELTA column, not an absolute.** Each lane measures its own delta by compiling one fixed
+corpus twice with its sources reverted in between, and set-diffs the result. Absolute pool sizes from
+different days are **not comparable** — the corpus itself was refreshed (32,276 → 32,341 candidates)
+and the shipped pool lags the compiler. Any absolute below is annotated with the corpus it came from.
+
+| date | delta | lane | what landed |
 | --- | --- | --- | --- |
-| 2026-09-14 | 5,619 | — | baseline at mandate |
-| 2026-09-15 | 6,500 | +57 | the {X}/derived-value amount vocabulary (DESIGN §3.149) — measured on the 32,341-card corpus against fork point `51919f7`, set-diffed (0 lost). **Kessig Wolf Run compiles; Trostani still needs Populate.** |
+| 2026-09-14 | — | — | baseline at mandate: **accepted 5,619 of 32,276 candidates** |
+| 2026-09-15 | **+106** | activated ability (PR #31) | DESIGN §3.147 — Arbor Elf ✅, Doorkeeper ✅ |
+| 2026-09-15 | **+122** | targeted trigger (PR #32) | DESIGN §3.148 — Oblivion Ring ✅, a near-miss on machinery that was already built |
+| 2026-09-15 | **+25** | counters (PR #33) | DESIGN §3.149a — Scavenging Ooze ✅, Luminarch Ascension ✅ |
+| 2026-09-15 | **+57** | {X} / derived value (PR #34) | DESIGN §3.149 — measured on the 32,341-card corpus against fork point `51919f7`, set-diffed (0 lost). **Kessig Wolf Run ✅** |
+
+**Phase-2 total: +310 cards, 6 of Caleb's 16 blocked deck cards.**
+
+### 8a. What four consecutive lanes proved — do not re-derive this
+
+1. **Every family measured so far was an aggregation artifact** — 1.20, 1.18, 1.13 and 1.08 cards per
+   distinct shape. §2 is not a caveat about one row; it is the shape of the whole table. Measure into
+   shapes first, and **report the smaller honest number** when it shrinks.
+2. **In three of four, the row's own NAME pointed at the wrong half of the problem.** That is why
+   each lane now ships a committed `*-blame.mjs` — `activated-blame`, `targeted-blame`,
+   `counters-blame`, `xvalue-blame`. A row headline cannot tell you which half fails.
+3. ⚠️ **`UNSUPPORTED_HINTS` is FIRST-MATCH.** A family boundary is therefore hint **order**, not
+   meaning: cards of one shape are routinely filed under another row. Check before trusting a count.
+4. ⚠️ **Verify a delta as a SET, not a count** (`scripts/playable-set.mjs`). The {X} lane read "+55"
+   while eight cards had silently left the pool, with every test green.
+5. ⚠️ **`DERIVED_COUNTS` spread order is load-bearing** — `...FILTERED_DERIVED_COUNTS` then
+   `...NAMED_DERIVED_COUNTS`, named last so it wins. `rules.ts` auto-merges **without a conflict**
+   while reversing it, which costs 8 cards silently. Pinned by `xvalue-templates.test.ts:348`.
 
 > ⚠️ **The 953-card row was the §2 trap for the third time: 954 cards, 880 shapes, 1.08 cards per
 > shape.** And its NAME points at the wrong half — `xvalue-blame.mjs` shows **70% of it is a SENTENCE
 > with no rule**, in this row only because its text contains the words "equal to". The amount
 > vocabulary, which is what the row is actually about, is ~132 winnable cards. Run the two committed
 > scripts before taking a headline from the table above.
+
+### 8b. In flight (wave 5, dispatched 2026-09-15)
+
+Three concurrent lanes — the box OOMs above three heavy builds, so three is the cap, not a
+preference. All three edit `packages/cards/src/compile/rules.ts` in separate regions and expect a
+real merge.
+
+| worktree | branch | family | acceptance card |
+| --- | --- | --- | --- |
+| `jb-modal` | `feat/modal-templates` | modal (432) | Selesnya Charm |
+| `jb-walker` | `feat/loyalty-emblem` | planeswalker loyalty (~300) + emblem | Jace, Architect of Thought · Tamiyo |
+| `jb-copysel` | `feat/copy-selectors` | copy selector / Populate (299) | Trostani, Selesnya's Voice |
+
+None of them may commit a regenerated pool: the local corpus trips a masking defect owned by the
+live `fix/pool-refresh-3147` lane. They measure, report, and leave generated files alone.
