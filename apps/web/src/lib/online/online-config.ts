@@ -5,6 +5,8 @@
  * Nothing in this module reads the DOM or opens a socket; it only declares the knobs
  * the connection layer and the online UI consume.
  */
+import { SERVER_URL_STORAGE_KEY } from '../config.js';
+import { writeStorage } from '../persistence/write.js';
 
 /**
  * The authoritative game server's WebSocket URL.
@@ -27,7 +29,7 @@ export const DEFAULT_DEV_SERVER_URL = 'ws://localhost:8787';
  * baking `VITE_SERVER_URL` at build time. Named (no magic strings).
  */
 export const SERVER_URL_QUERY_PARAM = 'server';
-export const SERVER_URL_STORAGE_KEY = 'jb_server_url';
+export { SERVER_URL_STORAGE_KEY };
 
 /** Accept only a ws:// or wss:// URL as an override; ignore anything else (robust). */
 export function validWsUrl(u: string | null | undefined): string | null {
@@ -48,7 +50,9 @@ export function resolveServerUrl(): string {
         new URLSearchParams(window.location.search).get(SERVER_URL_QUERY_PARAM),
       );
       if (fromQuery) {
-        window.localStorage.setItem(SERVER_URL_STORAGE_KEY, fromQuery);
+        // `quiet`: the URL just given in the query string is used either way, so
+        // a failure to remember it costs the user nothing this visit.
+        writeStorage('online-server-url', SERVER_URL_STORAGE_KEY, fromQuery, { quiet: true });
         return fromQuery;
       }
       const fromStorage = validWsUrl(window.localStorage.getItem(SERVER_URL_STORAGE_KEY));

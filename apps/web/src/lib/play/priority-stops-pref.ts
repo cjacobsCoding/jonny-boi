@@ -5,6 +5,7 @@
  * blob degrades to the defaults rather than to a white screen.
  */
 import { PRIORITY_STOPS_STORAGE_KEY } from '../config.js';
+import { writeStorage } from '../persistence/write.js';
 import {
   DEFAULT_PRIORITY_STOPS,
   STEP_STOPS,
@@ -51,11 +52,9 @@ export function loadPriorityStops(): PriorityStops {
   }
 }
 
-/** Persist the stops. Never throws; a full/blocked store just warns. */
+/** Persist the stops. `quiet`: losing a setting costs the user one click. */
 export function savePriorityStops(stops: PriorityStops): void {
-  try {
-    localStorage.setItem(PRIORITY_STOPS_STORAGE_KEY, JSON.stringify(stops));
-  } catch (error) {
-    console.warn('Could not persist the priority stops.', error);
-  }
+  writeStorage('pref-priority-stops', PRIORITY_STOPS_STORAGE_KEY, JSON.stringify(stops), {
+    quiet: true,
+  });
 }

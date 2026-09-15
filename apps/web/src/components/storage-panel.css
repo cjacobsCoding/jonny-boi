@@ -1,0 +1,196 @@
+/*
+ * The storage readout on the About page. Its own file rather than an append to
+ * about.css, so a concurrent branch editing the mechanics sections and this one
+ * do not collide (COORDINATION.md).
+ */
+.storage-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.storage-panel__intro h3 {
+  margin: 0 0 var(--space-2);
+}
+
+.storage-panel__intro p {
+  margin: 0;
+  color: var(--color-fg-muted);
+  line-height: 1.55;
+}
+
+.storage-panel__total {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.storage-panel__bar {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--color-bg);
+  overflow: hidden;
+}
+
+.storage-panel__bar-fill {
+  height: 100%;
+  background: var(--color-success);
+  transition: width 200ms ease-out;
+}
+
+/* Past 85% the next save is a coin flip — say so in the colour, not only in text. */
+.storage-panel__bar-fill--hot {
+  background: var(--color-error);
+}
+
+.storage-panel__total-text {
+  margin: 0;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.storage-panel__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm, 0.875rem);
+}
+
+.storage-panel__caption {
+  margin-bottom: var(--space-2);
+  color: var(--color-fg-faint);
+  font-size: var(--text-xs, 0.75rem);
+  text-align: left;
+}
+
+.storage-panel__table th,
+.storage-panel__table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.storage-panel__table thead th {
+  color: var(--color-fg-faint);
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.storage-panel__table tbody th {
+  font-weight: 400;
+}
+
+.storage-panel__num {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.storage-panel__label {
+  display: block;
+  color: var(--color-fg);
+  font-weight: 600;
+}
+
+.storage-panel__why {
+  display: block;
+  color: var(--color-fg-faint);
+  font-size: var(--text-xs, 0.75rem);
+  line-height: 1.4;
+}
+
+.storage-panel__empty {
+  color: var(--color-fg-faint);
+}
+
+.storage-panel__keys {
+  color: var(--color-fg-faint);
+}
+
+.storage-panel__clear {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-fg);
+  font: inherit;
+  font-size: var(--text-xs, 0.75rem);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.storage-panel__clear:hover {
+  background: var(--color-surface-hover);
+}
+
+.storage-panel__unattributed {
+  margin: 0;
+  color: var(--color-fg-muted);
+  font-size: var(--text-xs, 0.75rem);
+  line-height: 1.5;
+}
+
+.storage-panel__recovery h4 {
+  margin: 0 0 var(--space-2);
+}
+
+.storage-panel__recovery p {
+  margin: 0;
+}
+
+.storage-panel__recover-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.storage-panel__recover-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+}
+
+.storage-panel__recover-list li > .storage-panel__why {
+  flex: 1 1 auto;
+}
+
+.storage-panel__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The table cannot fit four columns on a phone; let it scroll inside its own box. */
+@media (max-width: 560px) {
+  .storage-panel {
+    padding: var(--space-4) var(--space-3);
+  }
+
+  .storage-panel__table {
+    display: block;
+    overflow-x: auto;
+  }
+
+  .storage-panel__recover-list li {
+    flex-wrap: wrap;
+  }
+}

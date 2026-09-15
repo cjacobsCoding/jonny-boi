@@ -19,6 +19,31 @@ export const ACTIVE_DECK_STORAGE_KEY = 'jonny-boi.activeDeckId.v1';
 /** Default name for a freshly-created deck. */
 export const DEFAULT_DECK_NAME = 'New Deck';
 
+/*
+ * ── Web-Storage keys owned here on purpose ───────────────────────────────────
+ * The four keys below used to be module-private constants next to the code that
+ * wrote them. They moved here so `lib/persistence/budget.ts` — the one module
+ * that knows how the origin's storage budget divides — can name every area
+ * without importing the modules that do the writing, which would make the
+ * budget and the write funnel import each other. Their owners import them back
+ * from here, so there is still exactly one spelling of each key.
+ */
+
+/** localStorage key for cards imported from Scryfall beyond the bundled pool. */
+export const IMPORTED_CARDS_STORAGE_KEY = 'jonny-boi:imported-cards:v1';
+
+/** localStorage key for the per-browser queue of engine gaps the user has hit. */
+export const UNSUPPORTED_MECHANICS_STORAGE_KEY = 'jonny-boi:unsupported-mechanics:v1';
+
+/**
+ * localStorage key PREFIX for the Lab's per-deck, per-pilot tuning memory. A
+ * prefix rather than a key: one entry exists per (deck fingerprint, pilot).
+ */
+export const SUGGESTION_HISTORY_KEY_PREFIX = 'jonny-boi.suggest-history';
+
+/** localStorage key for the online play server address. */
+export const SERVER_URL_STORAGE_KEY = 'jb_server_url';
+
 /**
  * localStorage key under which the ONE in-progress local/solo game is persisted
  * (see `lib/play/persist.ts`). Versioned in the key so a future incompatible
@@ -90,8 +115,14 @@ export const SW_UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
  * Refuse to LOAD a persisted game record larger than this many characters.
  * A record this size is not a game this app produced (a full game's action log
  * is tens of KB); treating it as corrupt keeps a poisoned or bloated blob from
- * stalling boot with a multi-second parse+replay. Writes are capped by the same
- * limit so we can never store what we would then refuse to read.
+ * stalling boot with a multi-second parse+replay.
+ *
+ * ⚠️ This is the READ ceiling ONLY. The WRITE cap is this area's share of the
+ * origin budget in `lib/persistence/budget.ts`, and it is much smaller. The two
+ * are deliberately different: a read ceiling lowered to the write budget would
+ * make the first load after a budget cut report already-stored data as corrupt
+ * and throw it away, which is the exact failure the budget exists to prevent.
+ * Writes shed down to the budget; reads accept what is already on disk.
  */
 export const PLAY_PERSIST_MAX_CHARS = 2_000_000;
 
@@ -108,14 +139,23 @@ export const PLAY_HISTORY_STORAGE_KEY = 'jonny-boi.play.history.v1';
  * How many games the library keeps. Pruning drops the oldest FINISHED games
  * only — an unfinished game is one you could still return to, and the library
  * must not decide to forget that for you.
+ *
+ * ⚠️ MOVED. This is now DERIVED from the storage budget by
+ * `lib/persistence/budget.ts#historyGameLimit`, because a hard-coded 50 here and
+ * a character cap over there were two places answering one question — and they
+ * disagreed by a factor of four. Import the function, not a literal.
  */
-export const PLAY_HISTORY_LIMIT = 50;
 
 /**
- * The library's own size cap, larger than one record's because it holds many.
- * Same discipline as {@link PLAY_PERSIST_MAX_CHARS}: reads refuse a blob this
- * big, and writes shed old finished games rather than storing what a read would
- * then refuse.
+ * The library's READ ceiling — refuse to decode a blob larger than this.
+ *
+ * ⚠️ This is no longer the write cap, and the comment that said it was is the
+ * reason it is spelled out at length here. Four million characters exceeds the
+ * ENTIRE localStorage quota on Safari and several mobile WebViews, so the game
+ * library was permitted to starve the saved decks, the in-progress game and the
+ * printing caches it shares an origin with — and it did. The write cap is now
+ * this area's share of one owned budget in `lib/persistence/budget.ts`. The
+ * ceiling stays large so a library written before that change still loads.
  */
 export const PLAY_HISTORY_MAX_CHARS = 4_000_000;
 

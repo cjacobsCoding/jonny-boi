@@ -60,10 +60,16 @@ import {
   type SuggestionHistory,
 } from '@jonny-boi/sim';
 import { SELECTABLE_PILOT_IDS } from '@jonny-boi/ai';
+import { SUGGESTION_HISTORY_KEY_PREFIX } from '../config.js';
+import { removeStorage, writeStorage } from '../persistence/write.js';
 import { DEFAULT_PILOT_ID } from './pilots.js';
 
-/** Namespace for every stored tuning record. The pilot + fingerprint follow it. */
-export const SUGGESTION_HISTORY_KEY_PREFIX = 'jonny-boi.suggest-history';
+/**
+ * Namespace for every stored tuning record. The pilot + fingerprint follow it.
+ * Re-exported from `lib/config.ts`, which owns every Web-Storage key so the
+ * storage-budget table can name this area without importing this module.
+ */
+export { SUGGESTION_HISTORY_KEY_PREFIX };
 
 /**
  * A SHORT digest of a deck fingerprint, for use in a storage KEY (§3.119).
@@ -213,19 +219,22 @@ export function writeSuggestionHistory(
   writeRecord(storage, { pilotId, history });
 }
 
-/** Store one envelope; `false` when storage refused (quota, private browsing). */
+/**
+ * Store one envelope; `false` when storage refused (quota, private browsing).
+ *
+ * NOT quiet. A quota failure here loses the memory of a run the user waited
+ * minutes for, and the Lab then re-derives the same shortlist next time with no
+ * explanation — which is the complaint that produced this module in the first
+ * place ("it just started comparing to Eternal Witness AGAIN"). Telling them the
+ * origin is full is the difference between a bug and a known limit.
+ */
 function writeRecord(storage: HistoryStorage, record: StoredHistoryRecord): boolean {
-  try {
-    storage.setItem(
-      suggestionHistoryKey(record.history.deckFingerprint, record.pilotId),
-      JSON.stringify(record),
-    );
-    return true;
-  } catch (error) {
-    // A quota failure loses the memory of one run, not the run's result.
-    console.warn('Could not save the tuning history for this deck.', error);
-    return false;
-  }
+  return writeStorage(
+    'suggestion-history',
+    suggestionHistoryKey(record.history.deckFingerprint, record.pilotId),
+    JSON.stringify(record),
+    { storage },
+  ).ok;
 }
 
 /**
@@ -243,11 +252,11 @@ export function clearSuggestionHistory(
 ): void {
   if (!storage) return;
   const fingerprint = deckFingerprint(deck);
-  try {
-    storage.removeItem(suggestionHistoryKey(fingerprint, pilotId));
-    if (pilotId === DEFAULT_PILOT_ID) storage.removeItem(legacySuggestionHistoryKey(fingerprint));
-  } catch (error) {
-    console.warn('Could not clear the tuning history for this deck.', error);
+  // A failed remove is harmless: every read re-validates, so a record that
+  // refused to disappear is re-read and re-rejected rather than reused.
+  removeStorage('suggestion-history', suggestionHistoryKey(fingerprint, pilotId), { storage });
+  if (pilotId === DEFAULT_PILOT_ID) {
+    removeStorage('suggestion-history', legacySuggestionHistoryKey(fingerprint), { storage });
   }
 }
 

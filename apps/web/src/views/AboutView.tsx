@@ -15,10 +15,19 @@ import {
 } from '../lib/cards/unsupportedRegistry.js';
 import { copyText } from '../lib/clipboard.js';
 import { EffectsPreview } from '../components/play/EffectsPreview.js';
+import { StoragePanel } from '../components/StoragePanel.js';
+import type { DecksApi } from '../lib/useDecks.js';
 import './about.css';
 
 /** How long the copy button's success/failure notice stays up. */
 const COPY_NOTICE_MILLIS = 2500;
+
+/**
+ * The dom id the app-shell storage alert scrolls to. Named here, next to the
+ * element that carries it, and imported by the shell — so the two cannot drift
+ * into a link that points at nothing.
+ */
+export const STORAGE_READOUT_ANCHOR_ID = 'storage-readout';
 
 /**
  * The About view: a live reading of which MTG mechanics the engine plays today
@@ -31,7 +40,7 @@ const COPY_NOTICE_MILLIS = 2500;
  * the same per-browser queue the Cards view fills. Land a mechanic and this
  * page already says so.
  */
-export function AboutView(): ReactElement {
+export function AboutView({ decks }: { readonly decks: DecksApi }): ReactElement {
   // Re-render whenever the per-browser unsupported queue changes (a card added
   // in the Cards view while this page is open shows up here immediately).
   const [queueVersion, bumpQueueVersion] = useReducer((v: number) => v + 1, 0);
@@ -251,6 +260,17 @@ export function AboutView(): ReactElement {
       </article>
 
       <EffectsPreview />
+
+      {/*
+        The storage readout. It lives HERE, on the page that already answers
+        "what is this app actually doing", and it carries a stable dom id because
+        the app-shell storage alert scrolls to it by name — a banner that says
+        "see what is using storage" and then drops you at the top of a long page
+        is the same unreachability the alert exists to fix.
+      */}
+      <div id={STORAGE_READOUT_ANCHOR_ID}>
+        <StoragePanel decks={decks.decks} onRecoverDeck={decks.importDeck} />
+      </div>
     </section>
   );
 }

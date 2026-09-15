@@ -26,6 +26,7 @@
  */
 import { UPDATE_RESUME_FLAG_KEY } from '../config.js';
 import { decideUpdate, type LiveGameScreen } from './update-decision.js';
+import { writeStorage } from '../persistence/write.js';
 
 /** The slice of Web Storage the flag uses — injectable for tests. */
 export interface FlagStorage {
@@ -61,17 +62,21 @@ function defaultFlagStorage(): FlagStorage | null {
   }
 }
 
-/** Write the flag. Best-effort: a failed write only costs the auto-restore. */
+/**
+ * Write the flag.
+ *
+ * `quiet`: a failed write degrades to the manual "Resume game" offer, which the
+ * user sees anyway — and this is sessionStorage, a separate quota from the
+ * localStorage budget, so its failure says nothing about the origin being full.
+ */
 export function writeUpdateResumeFlag(
   flag: UpdateResumeFlag,
   storage: FlagStorage | null = defaultFlagStorage(),
 ): void {
-  if (!storage) return;
-  try {
-    storage.setItem(UPDATE_RESUME_FLAG_KEY, JSON.stringify(flag));
-  } catch {
-    // Degrade to the manual "Resume game" offer — never block the update.
-  }
+  writeStorage('update-resume', UPDATE_RESUME_FLAG_KEY, JSON.stringify(flag), {
+    storage,
+    quiet: true,
+  });
 }
 
 /** Read AND REMOVE the flag. Null when absent or malformed. Never throws. */

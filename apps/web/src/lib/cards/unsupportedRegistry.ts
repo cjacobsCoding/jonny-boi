@@ -19,6 +19,8 @@
  */
 
 import type { UnsupportedClause } from '@jonny-boi/cards';
+import { UNSUPPORTED_MECHANICS_STORAGE_KEY } from '../config.js';
+import { writeStorage } from '../persistence/write.js';
 
 /** One engine system that real cards are waiting on. */
 export interface UnsupportedMechanic {
@@ -33,7 +35,7 @@ export interface UnsupportedMechanic {
 }
 
 /** localStorage key holding the registry. */
-const STORAGE_KEY = 'jonny-boi:unsupported-mechanics:v1';
+const STORAGE_KEY = UNSUPPORTED_MECHANICS_STORAGE_KEY;
 
 /**
  * Cap on card names kept per system. The list is a work queue, not an archive —
@@ -71,11 +73,12 @@ function ensureLoaded(): void {
 }
 
 function persist(): void {
-  try {
-    globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify([...registry.values()]));
-  } catch {
-    // Quota/disabled storage: the in-memory registry still serves the session.
-  }
+  // `quiet`: this queue is a convenience list of engine gaps the user has hit.
+  // Losing it costs nothing they authored, and the in-memory registry still
+  // serves the session — so it must not push the deck-save banner off screen.
+  writeStorage('unsupported-mechanics', STORAGE_KEY, JSON.stringify([...registry.values()]), {
+    quiet: true,
+  });
 }
 
 function emitChange(): void {

@@ -17,6 +17,7 @@
  * warning, and neither can white-screen a game in progress.
  */
 import { MANA_CHOICE_STORAGE_KEY } from '../config.js';
+import { writeStorage } from '../persistence/write.js';
 
 /** The default: auto-tap, exactly as the board behaved before §3.60. */
 export const MANA_CHOICE_DEFAULT = false;
@@ -32,13 +33,11 @@ export function loadManaChoicePref(): boolean {
   }
 }
 
-/** Persist the preference. Never throws; a full/blocked store just warns. */
+/** Persist the preference. `quiet`: losing a checkbox costs the user one click. */
 export function saveManaChoicePref(always: boolean): void {
-  try {
-    localStorage.setItem(MANA_CHOICE_STORAGE_KEY, always ? 'true' : 'false');
-  } catch (error) {
-    console.warn('Could not persist the mana-choice preference.', error);
-  }
+  writeStorage('pref-mana-choice', MANA_CHOICE_STORAGE_KEY, always ? 'true' : 'false', {
+    quiet: true,
+  });
 }
 
 /** What the board knows when it is deciding whether to open the picker. */

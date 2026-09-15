@@ -1,9 +1,25 @@
 # The game library, and the storage budget it eats (§HIST)
 
-> **Status: durable reference. NOT STARTED.** Raised by Caleb on **2026-09-14**, alongside a
-> separate report that two imported decks had vanished. **Those two are probably the same bug**, and
-> that is the main finding in this file.
+> **Status: durable reference. §1 SHIPPED (`fix/storage-honesty`). §2 and §3 NOT STARTED.**
+> Raised by Caleb on **2026-09-14**, alongside a separate report that two imported decks had
+> vanished. **Those two are probably the same bug**, and that is the main finding in this file.
 > Single source of truth for this scope. **Do not re-scope from memory.**
+>
+> What §1 landed, so nobody re-derives it: one write funnel (`lib/persistence/write.ts`) every
+> Web-Storage write goes through, returning a result instead of `void` and raising the user-facing
+> notice itself; one budget table (`lib/persistence/budget.ts`) that owns the origin's allowance and
+> divides it, with `PLAY_HISTORY_LIMIT` now DERIVED from it rather than being a second, disagreeing
+> answer; a storage readout on the About page; and an app-shell banner that says a save failed at
+> the moment it fails. The 4,000,000-character history cap is now a READ ceiling only — see the
+> warning in `config.ts` for why lowering it would have destroyed the libraries already on disk.
+>
+> The budget shares came from measurement, not intuition:
+> `node apps/web/scripts/measure-storage-budget.mjs` plays real games and encodes them exactly as
+> `persist.ts` does. One record is **27,710 characters mean, 47,341 max**, so a 50-game library is
+> ~1,385,500 — 55% of the whole origin. Re-run it before moving any share.
+>
+> §2 (HIST-1, the library must not push the page down) and §3 (HIST-2, filter and search) are
+> untouched and still describe work to do.
 
 ## 0. The request, verbatim
 
