@@ -252,15 +252,32 @@ describe('Trostani, Selesnya\'s Voice — what is left, exactly', () => {
       "{1}{G}{W}, {T}: Populate. (Create a token that's a copy of a creature token you control.)",
   } as never);
 
-  it('has exactly ONE blocker left, and it is POPULATE — not an amount', () => {
-    const missing = compileCard(TROSTANI).missing ?? [];
-    expect(missing).toHaveLength(1);
-    // `createTokenCopy` takes `self`, `equipped` or a TARGET. Populate is a
-    // resolution-time CHOICE among your own creature tokens — the copy-selector
-    // family, not this one. Approximating it (copy the first token, or target
-    // one) hands Trostani a populate the card does not print.
-    expect(missing[0]!.text).toContain('Populate');
-    expect(missing[0]!.missingEngineSystem).toContain('activated-ability template');
+  /**
+   * ⚠️ **THE TRIPWIRE FIRED, AS IT WAS WRITTEN TO.** This assertion used to read
+   * "has exactly ONE blocker left, and it is POPULATE", and its own note said it
+   * would go red *"the day populate lands (which is the moment this card should
+   * enter the pool)"*. That day is the copy-selector lane: populate is now a
+   * resolution-time CHOICE selector on `createTokenCopy` (`populateSourceFor`),
+   * so the residue this described is gone.
+   *
+   * The test is KEPT rather than deleted, pointed at the same card, because what
+   * it is really for is that Trostani — the owner's own card, from
+   * `docs/decks/acidic-angels.txt` — is pinned by name from the lane that made
+   * its {X} half work. The claim it makes now is the stronger one: nothing is
+   * left at all. Its sibling below, which proves the amount half compiles on its
+   * own, is untouched and is still this lane's discriminator.
+   */
+  it('has NO blockers left — the {X} half and populate are both in', () => {
+    const result = compileCard(TROSTANI);
+    expect(result.missing ?? [], JSON.stringify(result.missing)).toEqual([]);
+    expect(result.status).toBe('complete');
+    // The populate is the ACTIVATED ability's body and it aims at NOTHING —
+    // populate says "choose", not "target", so the ability goes on the stack
+    // with nothing to aim and a hexproof token is a legal populate.
+    const ability = result.definition.activated?.[0];
+    expect(ability?.effects[0]?.primitive).toBe('createTokenCopy');
+    expect(ability?.effects[0]?.params?.chooseCreatureTokenYouControl).toBe(true);
+    expect(ability?.effects[0]?.params?.targets).toBeUndefined();
   });
 
   it('and the amount half of it is genuinely done', () => {
