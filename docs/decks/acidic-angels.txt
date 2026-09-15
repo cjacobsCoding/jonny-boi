@@ -1,0 +1,28 @@
+// Acidic Angels — Selesnya lifegain into angels
+// Transcribed from photo, 2026-09-14. Counts inferred from sleeve depth.
+// ✗ = not in jonny-boi's card pool (5,651 cards) as of 2026-09-14.
+
+4 Avacyn's Pilgrim
+4 Arbor Elf                    // ✗ not in pool
+4 Soul Warden
+3 Cathedral Sanctifier
+3 Healer of the Pride
+3 Fiendslayer Paladin          // ✗ not in pool
+3 Rhox Faithmender             // ✗ not in pool
+2 Scavenging Ooze              // ✗ not in pool
+2 Trostani, Selesnya's Voice   // ✗ not in pool
+2 Archangel of Thune
+1 Avacyn, Angel of Hope
+
+3 Selesnya Charm               // ✗ not in pool
+2 Giant Growth
+2 Oblivion Ring                // ✗ not in pool
+2 Luminarch Ascension          // ✗ not in pool
+2 Cathars' Crusade
+1 Collective Blessing
+1 Akroma's Memorial
+
+4 Sunpetal Grove
+4 Temple Garden
+7 Forest
+6 Plains
