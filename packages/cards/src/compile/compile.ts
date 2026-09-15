@@ -29,7 +29,7 @@ import type {
   ManaCost,
   ManaProduction,
   PermanentModification,
-  TargetRestriction,
+  TargetSpec,
   TriggeredAbility,
 } from '@jonny-boi/core';
 import { DEFAULT_TARGET_RESTRICTION, restrictionOfEffects } from '@jonny-boi/core';
@@ -1556,7 +1556,7 @@ export function compileCard(card: CompilableCard): CompileResult {
       if (!parts) return null;
 
       const refs: EffectRef[] = [];
-      let restriction: TargetRestriction | undefined;
+      let restriction: TargetSpec | undefined;
       let excludeSelf = false;
       let upToCount: number | undefined;
       let targetingParts = 0;
