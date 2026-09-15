@@ -58,9 +58,18 @@ export function useDecks(): DecksApi {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
 
+  /**
+   * Set when the stored deck blob exists but would not parse. While it is true
+   * the hook NEVER writes: overwriting an unreadable blob with the starter deck
+   * this hook is about to create is a second way to lose the same decks, and it
+   * is unrecoverable. `loadDecks` has already told the user what happened.
+   */
+  const [readCorrupt, setReadCorrupt] = useState(false);
+
   // Initial load — recover gracefully if storage is empty/corrupt.
   useEffect(() => {
-    const loaded = loadDecks();
+    const { decks: loaded, corrupt } = loadDecks();
+    setReadCorrupt(corrupt);
     if (loaded.length === 0) {
       const starter = createDeck(DEFAULT_DECK_NAME);
       setDecks([starter]);
@@ -73,13 +82,17 @@ export function useDecks(): DecksApi {
     setActiveId(exists ? storedActive : loaded[0]!.id);
   }, []);
 
-  // Persist whenever decks or the active selection change.
+  // Persist whenever decks or the active selection change. `saveDecks` reports
+  // its own failure to the user through the persistence notice registry, which
+  // the app shell renders — this effect deliberately does not swallow anything.
   useEffect(() => {
+    if (readCorrupt) return;
     if (decks.length > 0) saveDecks(decks);
-  }, [decks]);
+  }, [decks, readCorrupt]);
   useEffect(() => {
+    if (readCorrupt) return;
     saveActiveDeckId(activeId);
-  }, [activeId]);
+  }, [activeId, readCorrupt]);
 
   const activeDeck = decks.find((deck) => deck.id === activeId) ?? null;
 

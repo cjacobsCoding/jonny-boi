@@ -13,6 +13,7 @@
  */
 
 import { CARD_NAMES_CATALOG_URL, CATALOG_MAX_AGE_MS, CATALOG_STORAGE_KEY } from './config.js';
+import { writeStorage } from '../persistence/write.js';
 
 /** The `fetch` surface this module needs (a bare GET). */
 export type CatalogFetch = (url: string, init: { headers: Record<string, string> }) => Promise<{
@@ -43,14 +44,16 @@ export function readCachedCatalog(now: number = Date.now()): {
   }
 }
 
-/** Persist a freshly fetched catalog; a storage failure is not fatal. */
+/**
+ * Persist a freshly fetched catalog.
+ *
+ * `quiet`: this is a pure cache of Scryfall card NAMES. A failure costs one
+ * refetch on the next scan and nothing the user made, so it must not compete
+ * for the banner with a write that lost their work.
+ */
 function writeCachedCatalog(names: readonly string[], now: number): void {
-  try {
-    const payload: CachedCatalog = { fetchedAt: now, names };
-    globalThis.localStorage?.setItem(CATALOG_STORAGE_KEY, JSON.stringify(payload));
-  } catch {
-    // Quota exceeded or storage disabled — the in-memory names still work.
-  }
+  const payload: CachedCatalog = { fetchedAt: now, names };
+  writeStorage('card-name-catalog', CATALOG_STORAGE_KEY, JSON.stringify(payload), { quiet: true });
 }
 
 /**

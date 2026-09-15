@@ -30,6 +30,12 @@
 import type { PlayRecord } from './persist.js';
 import { decodeRecord, encodeRecord, type PlayStorage } from './persist.js';
 import { PLAY_HISTORY_STORAGE_KEY, PLAY_HISTORY_LIMIT, PLAY_HISTORY_MAX_CHARS } from '../config.js';
+import { writeBudgetChars } from '../persistence/budget.js';
+import {
+  reportStorageShed,
+  writeStorage,
+  type StorageWriteResult,
+} from '../persistence/write.js';
 
 /** Schema version for the library as a whole (entries carry the record's own). */
 export const HISTORY_VERSION = 1;
@@ -274,29 +280,49 @@ export function readHistory(storage: PlayStorage | null = defaultStorage()): rea
 }
 
 /**
- * Write the library. Best-effort, and never writes what {@link decodeHistory}
- * would refuse: if the payload is over the cap, the OLDEST FINISHED games are
- * dropped until it fits, so a long history degrades by forgetting old finished
- * games rather than by silently saving nothing.
+ * Write the library, shedding to fit and SAYING SO when it does.
+ *
+ * Two changes from the version that helped lose two imported decks:
+ *
+ *  - **The cap comes from `persistence/budget.ts`**, which owns the origin's
+ *    storage budget and divides it once. This module used to carry its own
+ *    4,000,000-character literal — more than the whole quota on the most
+ *    conservative browsers — while the decks, the in-progress game and the
+ *    printing caches shared the same pot. A 50-game library of full action logs
+ *    is a research tool; it must not be able to cost a user their decks.
+ *  - **Shedding is reported.** Dropping the oldest finished games to fit is the
+ *    right degradation, but a fallback that fires silently is how a broken
+ *    pipeline looks healthy for a week. The user is told what was dropped.
+ *
+ * Reads are deliberately NOT capped at the same number — see
+ * {@link decodeHistory} and the budget module's doc: lowering the read ceiling
+ * to the new write budget would make the first load after this change report an
+ * already-stored library as empty, destroying exactly what this is protecting.
  */
 export function writeHistory(
   entries: readonly HistoryEntry[],
   storage: PlayStorage | null = defaultStorage(),
-): void {
-  if (!storage) return;
+): StorageWriteResult {
+  const budget = writeBudgetChars('play-history');
   let candidate = sortByRecency(entries);
-  try {
-    while (candidate.length > 0 && encodeHistory(candidate).length > PLAY_HISTORY_MAX_CHARS) {
-      const oldestFinished = [...candidate].reverse().find((e) => !isUnfinished(e));
-      if (!oldestFinished) break;
-      candidate = deleteEntry(candidate, oldestFinished.id);
-    }
-    const encoded = encodeHistory(candidate);
-    if (encoded.length > PLAY_HISTORY_MAX_CHARS) return;
-    storage.setItem(PLAY_HISTORY_STORAGE_KEY, encoded);
-  } catch {
-    // Quota / privacy mode: the library is a convenience, the game is not.
+  let dropped = 0;
+  while (candidate.length > 0 && encodeHistory(candidate).length > budget) {
+    const oldestFinished = [...candidate].reverse().find((e) => !isUnfinished(e));
+    // An unfinished game is one you could still return to: the library must not
+    // decide to forget that for you, even to make room.
+    if (!oldestFinished) break;
+    candidate = deleteEntry(candidate, oldestFinished.id);
+    dropped += 1;
   }
+  if (dropped > 0) {
+    reportStorageShed(
+      'play-history',
+      `${dropped} finished ${dropped === 1 ? 'game was' : 'games were'} dropped`,
+    );
+  }
+  return writeStorage('play-history', PLAY_HISTORY_STORAGE_KEY, encodeHistory(candidate), {
+    storage,
+  });
 }
 
 /** Read, apply a pure change, write back. The one funnel every mutation uses. */

@@ -26,6 +26,7 @@ import type { GameAction, PlayerId, Rng } from '@jonny-boi/core';
 import type { Pilot } from '@jonny-boi/ai';
 import type { GameSession } from './session.js';
 import { COPILOT_STORAGE_KEY } from '../config.js';
+import { writeStorage } from '../persistence/write.js';
 
 /** What the co-pilot would do, and why it says it would. */
 export interface CopilotSuggestion {
@@ -178,11 +179,7 @@ export function loadCopilotPref(): boolean {
   }
 }
 
-/** Persist it. Best-effort, exactly like the mana preference next door. */
+/** Persist it. `quiet` like every other checkbox: losing it costs one click. */
 export function saveCopilotPref(on: boolean): void {
-  try {
-    localStorage.setItem(COPILOT_STORAGE_KEY, on ? 'true' : 'false');
-  } catch (error) {
-    console.warn('Could not persist the co-pilot preference.', error);
-  }
+  writeStorage('pref-copilot', COPILOT_STORAGE_KEY, on ? 'true' : 'false', { quiet: true });
 }

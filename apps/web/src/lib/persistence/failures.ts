@@ -33,7 +33,15 @@ export type StorageNoticeReason =
   /** The write reached the funnel under a key no budget row claims — a wiring bug. */
   | 'unbudgeted-key'
   /** The write landed, but only after older content in the area was dropped. */
-  | 'shed';
+  | 'shed'
+  /**
+   * What was already stored could not be READ back — corrupt or truncated.
+   *
+   * Reads are normally allowed to degrade quietly (see `write.ts`), but not this
+   * one: an unreadable blob that the app then overwrites with a fresh empty
+   * value is a second way to lose the same decks, so it has to be said out loud.
+   */
+  | 'unreadable';
 
 /** How loudly the UI should say it. */
 export type StorageNoticeSeverity = 'error' | 'notice';
@@ -61,6 +69,7 @@ const SEVERITY_BY_REASON: Readonly<Record<StorageNoticeReason, StorageNoticeSeve
   refused: 'error',
   'unbudgeted-key': 'error',
   shed: 'notice',
+  unreadable: 'error',
 };
 
 /** The severity this reason carries. Exported so the funnel never invents one. */
@@ -88,6 +97,8 @@ export function describeNotice(notice: StorageNotice): string {
       return `${notice.label} was written to storage that has no budget entry, so its size is not being tracked. This is a bug in jonny-boi, not something you did.`;
     case 'shed':
       return `${notice.label} filled its share of storage, so the oldest entries were dropped to make room${notice.detail ? ` (${notice.detail})` : ''}.`;
+    case 'unreadable':
+      return `${notice.label} is stored but could not be read back — the saved data is corrupt. It has NOT been overwritten, so nothing further has been lost.`;
   }
 }
 

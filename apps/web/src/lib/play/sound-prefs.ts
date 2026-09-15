@@ -6,6 +6,7 @@
  */
 import { SOUND_STORAGE_KEY } from '../config.js';
 import { SOUND_CONFIG } from './play-config.js';
+import { writeStorage } from '../persistence/write.js';
 
 /** The player's audio settings, as persisted and as the board reads them. */
 export interface SoundPrefs {
@@ -43,11 +44,7 @@ export function loadSoundPrefs(): SoundPrefs {
   }
 }
 
-/** Persist the prefs. Never throws; a full/blocked store just warns. */
+/** Persist the prefs. `quiet`: losing a setting costs the user one click. */
 export function saveSoundPrefs(prefs: SoundPrefs): void {
-  try {
-    localStorage.setItem(SOUND_STORAGE_KEY, JSON.stringify(prefs));
-  } catch (error) {
-    console.warn('Could not persist the sound preference.', error);
-  }
+  writeStorage('pref-sound', SOUND_STORAGE_KEY, JSON.stringify(prefs), { quiet: true });
 }

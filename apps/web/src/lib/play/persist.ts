@@ -43,6 +43,11 @@ import {
   PLAY_PERSIST_MAX_CHARS,
   PLAY_RESUME_STORAGE_KEY,
 } from '../config.js';
+import {
+  removeStorage,
+  writeStorage,
+  type StorageWriteResult,
+} from '../persistence/write.js';
 import { GameSession } from './session.js';
 import { startHotseatGame, toSimDeck, type DeckChoice } from './setup.js';
 
@@ -369,30 +374,32 @@ export function readSavedGame(storage: PlayStorage | null = defaultStorage()): P
 }
 
 /**
- * Write the saved game. Best-effort: quota failures and absent storage are
- * silently ignored (the game keeps playing; persistence is a convenience, not
- * a prerequisite). A record that would exceed the size cap is not written at
- * all — better no save than a save {@link decodeRecord} would then refuse.
+ * Write the saved game.
+ *
+ * NO LONGER SILENT. This used to swallow quota failures on the reasoning that
+ * "persistence is a convenience, not a prerequisite" — true of the game you are
+ * looking at, and false of the user's belief that it will still be there
+ * tomorrow. The same swallow in `storage.ts` is what lost two imported decks, so
+ * the whole class routes through one funnel now: the result comes back, and the
+ * funnel raises the banner.
+ *
+ * The size cap comes from `persistence/budget.ts` rather than from this
+ * module's own literal — four features each sizing themselves against the whole
+ * origin is the root cause, not a detail.
  */
-export function writeSavedGame(record: PlayRecord, storage: PlayStorage | null = defaultStorage()): void {
-  if (!storage) return;
-  try {
-    const encoded = encodeRecord(record);
-    if (encoded.length > PLAY_PERSIST_MAX_CHARS) return;
-    storage.setItem(PLAY_RESUME_STORAGE_KEY, encoded);
-  } catch {
-    // Quota / privacy mode: degrade silently (imported-cards store's rule).
-  }
+export function writeSavedGame(
+  record: PlayRecord,
+  storage: PlayStorage | null = defaultStorage(),
+): StorageWriteResult {
+  return writeStorage('play-in-progress', PLAY_RESUME_STORAGE_KEY, encodeRecord(record), {
+    storage,
+  });
 }
 
 /** Remove the saved game (game over, concede, discard, new game). */
 export function clearSavedGame(storage: PlayStorage | null = defaultStorage()): void {
-  if (!storage) return;
-  try {
-    storage.removeItem(PLAY_RESUME_STORAGE_KEY);
-  } catch {
-    // Nothing to do — a failed remove leaves a record that decode still guards.
-  }
+  // A failed remove is genuinely harmless: decode still guards what is left.
+  removeStorage('play-in-progress', PLAY_RESUME_STORAGE_KEY, { storage });
 }
 
 // --- the debounced saver -------------------------------------------------------------
