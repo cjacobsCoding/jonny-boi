@@ -1,10 +1,11 @@
 // Defender Ramp — blue/green, Axebane Guardian into Primal Surge
 // Transcribed from photo, 2026-09-14. Counts inferred from sleeve depth.
-// ✗ = not in jonny-boi's card pool (5,651 cards) as of 2026-09-14.
+// ✗ = still blocked — the compiler does not implement one of its printed abilities yet.
+// ✅ = unblocked by the ALL-CARDS campaign; the lane that did it is named. See docs/ALL-CARDS-CAMPAIGN.md §7a.
 
-4 Arbor Elf                    // ✗ not in pool
+4 Arbor Elf                    // ✅ compiles — §3.147
 4 Axebane Guardian             // ✗ not in pool
-3 Doorkeeper                   // ✗ not in pool
+3 Doorkeeper                   // ✅ compiles — §3.147
 2 Avacyn's Pilgrim
 2 Fog Bank                     // ✗ not in pool
 2 Gatecreeper Vine
@@ -19,5 +20,5 @@
 10 Forest
 4 Hinterland Harbor
 3 Island
-1 Kessig Wolf Run              // ✗ not in pool
+1 Kessig Wolf Run              // ✅ compiles — §3.149
 1 Izzet Guildgate
