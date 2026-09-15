@@ -1,0 +1,48 @@
+/* =========================================================================
+   The VIRTUALISED card grid (Cards browser + Deck Builder pool).
+
+   Co-located with `CardGrid.tsx` rather than added to `styles.css`, matching
+   the pattern the app already uses for a component that owns its own rules
+   (`card-hover.css`, `add-card-dialog.css`, `update-pill.css`).
+
+   ⚠️ THE COLUMN TRACKS ARE NOT REDEFINED HERE, ON PURPOSE. `.card-grid` in
+   `styles.css` still owns `grid-template-columns: repeat(auto-fill, minmax(…))`
+   and the phone media query that narrows it, and the virtualiser MEASURES what
+   the browser resolved rather than keeping a second copy of those numbers in
+   TypeScript (rule 12). A column width restated here would be a third copy.
+   ========================================================================= */
+
+.card-grid--virtual {
+  /*
+    The grid claims the height of the WHOLE result list — set inline from
+    `planRender`, because it depends on the row count and the measured row
+    height — while only the rows near the viewport actually exist as elements.
+    That is what keeps the scrollbar telling the truth about the pool: a page
+    whose scrollbar only knows about the rendered window jumps under the hand.
+  */
+  align-content: start;
+  /*
+    Rows the virtualiser skipped still occupy their track, so a cell placed at
+    row 900 lands 900 rows down. `grid-auto-rows` is set inline to the MEASURED
+    tile height for the same reason the height is.
+  */
+  position: relative;
+}
+
+.card-grid__cell {
+  /*
+    A grid item defaults to `min-width: auto`, which refuses to shrink below its
+    content — and the tile's name and type line rely on shrinking to get their
+    ellipsis. The tile used to be the grid item itself and inherited this same
+    need; the cell now stands where it stood.
+  */
+  min-width: 0;
+  /*
+    Deliberately NOT `height: 100%` on the tile inside. The virtualiser measures
+    a tile's NATURAL height to decide the row track height; stretch the tile to
+    the track and the measurement returns the value it was given, which is a
+    check that cannot fail. The tile keeps its own height, the track is pinned
+    to it, and a wrong track corrects itself on the next layout pass.
+  */
+  display: block;
+}
