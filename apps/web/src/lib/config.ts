@@ -19,6 +19,31 @@ export const ACTIVE_DECK_STORAGE_KEY = 'jonny-boi.activeDeckId.v1';
 /** Default name for a freshly-created deck. */
 export const DEFAULT_DECK_NAME = 'New Deck';
 
+/*
+ * ── Web-Storage keys owned here on purpose ───────────────────────────────────
+ * The four keys below used to be module-private constants next to the code that
+ * wrote them. They moved here so `lib/persistence/budget.ts` — the one module
+ * that knows how the origin's storage budget divides — can name every area
+ * without importing the modules that do the writing, which would make the
+ * budget and the write funnel import each other. Their owners import them back
+ * from here, so there is still exactly one spelling of each key.
+ */
+
+/** localStorage key for cards imported from Scryfall beyond the bundled pool. */
+export const IMPORTED_CARDS_STORAGE_KEY = 'jonny-boi:imported-cards:v1';
+
+/** localStorage key for the per-browser queue of engine gaps the user has hit. */
+export const UNSUPPORTED_MECHANICS_STORAGE_KEY = 'jonny-boi:unsupported-mechanics:v1';
+
+/**
+ * localStorage key PREFIX for the Lab's per-deck, per-pilot tuning memory. A
+ * prefix rather than a key: one entry exists per (deck fingerprint, pilot).
+ */
+export const SUGGESTION_HISTORY_KEY_PREFIX = 'jonny-boi.suggest-history';
+
+/** localStorage key for the online play server address. */
+export const SERVER_URL_STORAGE_KEY = 'jb_server_url';
+
 /**
  * localStorage key under which the ONE in-progress local/solo game is persisted
  * (see `lib/play/persist.ts`). Versioned in the key so a future incompatible
