@@ -149,6 +149,15 @@ cards people actually own, rather than only the cards that happen to be easy.
 | --- | --- | --- | --- |
 | 2026-09-14 | 5,619 | — | baseline at mandate |
 | 2026-09-15 | 6,500 | +57 | the {X}/derived-value amount vocabulary (DESIGN §3.149) — measured on the 32,341-card corpus against fork point `51919f7`, set-diffed (0 lost). **Kessig Wolf Run compiles; Trostani still needs Populate.** |
+| 2026-09-15 | 6,838 | +175 | the printed TARGET BOUND (DESIGN §3.150) — measured on a fresh 32,414-card corpus against fork point `fd1ca31`, set-diffed (0 lost). **Selesnya Charm compiles.** ⚠️ Only **28** of the +175 are modal: the row was fixed as a CLASS, not an instance. |
+
+> ⚠️ **The 432-card MODAL row was the §2 trap for the FIFTH time — 531 cards, 504 shapes, 1.05 per
+> shape, the thinnest ratio yet.** And its name is wrong ABSOLUTELY: `modal-blame.mjs` reports
+> **MODE-ONLY = 0**. Core's modal system has no gaps at all; every card in that row is held by a mode
+> BODY (408 clauses, other families) or a HEADER (166). ⚠️ Its boundary is also hint ORDER, not
+> meaning — the modal hint is anchored `^choose`, so **every modal TRIGGER** falls through to the
+> "you may / choose" row: 518 blocked cards print a modal header while the row claims 531.
+> **Assume every row in §4 is a bucket; the burden of proof is on anyone claiming otherwise.**
 
 > ⚠️ **The 953-card row was the §2 trap for the third time: 954 cards, 880 shapes, 1.08 cards per
 > shape.** And its NAME points at the wrong half — `xvalue-blame.mjs` shows **70% of it is a SENTENCE
