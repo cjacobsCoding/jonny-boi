@@ -717,7 +717,7 @@ export function expireFloatingReplacements(
  * needs no bookkeeping at all.
  */
 
-// --- the three façades ----------------------------------------------------------
+// --- the five façades -----------------------------------------------------------
 
 /**
  * The ONE question every damage site asks: how much damage is actually dealt?
