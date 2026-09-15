@@ -323,6 +323,28 @@ async function measureSearchLatency(page, term) {
  * of the grid at the edge of the first screenful.
  */
 async function measureKeyboard(page) {
+  // ONE definition of "which tile has focus", installed in the page, so the
+  // before and after builds are read the same way.
+  //
+  // `data-card-index` is an attribute the VIRTUALISED grid adds. Reading only
+  // that made the un-virtualised build report "no tile focused" for all 45 Tab
+  // stops — an instrument artifact that looks exactly like a real failure, on
+  // the side of the comparison that is supposed to be the baseline. The
+  // ordinal fallback answers the same question ("which tile did focus land
+  // on?") for a grid that has no such attribute.
+  await page.evaluate(() => {
+    window.__focusedTileIndex = () => {
+      const grid = document.querySelector('.card-grid');
+      const active = document.activeElement;
+      if (!grid || !active || !grid.contains(active)) return null;
+      const cell = active.closest ? active.closest('[data-card-index]') : null;
+      if (cell) return Number(cell.getAttribute('data-card-index'));
+      const tile = active.closest ? active.closest('.card-tile') : null;
+      if (!tile) return null;
+      return [...grid.querySelectorAll('.card-tile')].indexOf(tile);
+    };
+  });
+
   const entered = await page.evaluate(() => {
     const first = document.querySelector('.card-grid .card-tile__art-btn');
     if (!first) return false;
@@ -339,8 +361,7 @@ async function measureKeyboard(page) {
       const grid = document.querySelector('.card-grid');
       const active = document.activeElement;
       const inGrid = Boolean(grid && active && grid.contains(active));
-      const cell = active && active.closest ? active.closest('[data-card-index]') : null;
-      return { inGrid, index: cell ? Number(cell.getAttribute('data-card-index')) : null };
+      return { inGrid, index: window.__focusedTileIndex() };
     });
     if (!state.inGrid) leftGrid++;
     if (state.index !== null) seen.push(state.index);
@@ -353,10 +374,9 @@ async function measureKeyboard(page) {
   const afterScroll = await page.evaluate(() => {
     const grid = document.querySelector('.card-grid');
     const active = document.activeElement;
-    const cell = active && active.closest ? active.closest('[data-card-index]') : null;
     return {
       stillInGrid: Boolean(grid && active && grid.contains(active)),
-      index: cell ? Number(cell.getAttribute('data-card-index')) : null,
+      index: window.__focusedTileIndex(),
       fellToBody: active === document.body,
     };
   });

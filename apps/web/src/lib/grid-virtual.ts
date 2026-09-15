@@ -273,17 +273,35 @@ export function planRender(input: PlanInput): RenderPlan {
     };
   }
 
-  // Before a layout exists there is no scroll position to honour and no
-  // viewport height to fill: render a fixed, pool-independent first screenful
-  // and let the layout effect correct it in the same frame.
   const unmeasured = !metrics.measured || viewportPx <= 0;
-  const firstRow = unmeasured ? 0 : Math.floor(Math.max(0, scrollTopPx) / pitch);
-  const lastRow = unmeasured
-    ? CARD_GRID_INITIAL_ROWS - 1
-    : Math.floor((Math.max(0, scrollTopPx) + Math.max(0, viewportPx)) / pitch);
 
-  const startRow = clampRow(firstRow - overscanRows, rowCount);
-  const endRow = clampRow(lastRow + 1 + overscanRows, rowCount);
+  let startRow: number;
+  let endRow: number;
+  if (unmeasured) {
+    // Before a layout exists there is no scroll position to honour and no
+    // viewport height to fill: render a fixed, pool-independent first screenful
+    // and let the layout effect correct it in the same frame.
+    //
+    // Overscan is deliberately NOT added here. `CARD_GRID_INITIAL_ROWS` IS the
+    // first paint's budget; adding a margin on top would make the constant mean
+    // eight rows while saying six, and the node-count guard reads the constant.
+    startRow = 0;
+    endRow = clampRow(CARD_GRID_INITIAL_ROWS, rowCount);
+  } else {
+    const firstRow = Math.floor(Math.max(0, scrollTopPx) / pitch);
+    const lastRow = Math.floor((Math.max(0, scrollTopPx) + Math.max(0, viewportPx)) / pitch);
+    // ⚠️ NEVER LEAVE THE GRID EMPTY. Clamping both edges to `rowCount` — which
+    // is what this did — renders ZERO rows for any scroll offset past the end of
+    // the list, and the result is a blank grid under a full-height runway: the
+    // page looks hung, with a scrollbar promising content that is not drawn.
+    // It is reachable in the app, not only in a test: a result set shrinking
+    // under an active scroll (type into the search box while scrolled down), a
+    // restored scroll position from before a filter, and touch momentum all put
+    // the offset past the new end for at least a frame. So the window is pinned
+    // to at least the final row instead.
+    startRow = Math.min(clampRow(firstRow - overscanRows, rowCount), Math.max(0, rowCount - 1));
+    endRow = Math.max(clampRow(lastRow + 1 + overscanRows, rowCount), startRow + 1);
+  }
 
   const segments: IndexSegment[] = [];
   const visible = rowsToSegment(startRow, endRow, columns, itemCount);
