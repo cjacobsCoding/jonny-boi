@@ -2889,6 +2889,97 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.149 The counters row is the §3.120 artifact a THIRD time — and the seam inside it is the KIND, not the template — ✅ done
+
+The backlog entry *"a counters template the compiler does not recognize yet"* named **2,480 cards**, the
+third-largest row, and it holds two cards from the owner's own deck (`docs/decks/acidic-angels.txt`).
+Measured against a freshly fetched **32,414-card** corpus (2026-09-15) with NEW
+`packages/cards/scripts/counters-blame.mjs`:
+
+```
+2,468 cards blocked (1,361 by this row ALONE) · 2,805 clauses
+template gaps: 2,598 clauses across 2,303 distinct shapes  →  1.13 clauses per shape
+largest single shape: 12 clauses ("Whenever you draw your second card each turn, put a +1/+1 counter on ~")
+```
+
+**So it is the §3.120 artifact again, and worse than §3.147's** — 1.13 clauses per shape against the
+activated row's 1.2, and the biggest lever inside it is worth about a dozen cards. A brief written from
+the 2,480 headline builds whichever shape it guessed. *Report the small number; it is the finding.*
+
+**The ONE seam that is not an artifact is the counter KIND.** §3.147 established that a row's NAME can
+point at the wrong half of its problem, so `counters-blame.mjs` asks the same question here in two ways:
+a closed VERB table (put / enters-with / remove / proliferate / the readers), and a probe that rewrites
+every named kind to `+1/+1` and recompiles. **207 clauses compile the moment the kind is one the engine
+can hold** — their templates already existed and only the vocabulary was missing.
+
+⚠️ **But only 142 of those 207 may be implemented honestly, and the split is the whole design.**
+`INERT_COUNTER_KINDS` is closed, and what is ABSENT is load-bearing: CR 122.1 attaches behaviour to some
+counters, and storing one whose rule nothing honours is a card playing **weaker** than printed — which
+biases an A/B verdict exactly as badly as one playing stronger. Shield (122.1c, eats a destruction) and
+stun (122.1d, eats an untap) are the two biggest kinds in the blocked set after `+1/+1` and `-1/-1`, and
+**both keep reporting**; so do time/fade/age (§3.106 owns those through suspend, vanishing and cumulative
+upkeep), loyalty/defense/level/lore (whole card types read them), the player counters, and keyword
+counters (122.1e, which GRANT a keyword).
+
+**What shipped**, each a table or a seam rather than a card:
+- `addCounters` takes a `kind`, and the target need not be a creature — charge counters go on artifacts,
+  storage on lands, quest on enchantments. Two rules read it (the put-on-self body, the "enters with N
+  `<kind>` counters" line), firing on **136** and **49** real corpus cards.
+- `ActivatedAbility.activateOnly` — the printed **"Activate only if ~ has four or more quest counters on
+  it"** (CR 602.5a). A RESTRICTION, not a cost: the counters are checked and never spent, so a cost would
+  be a strictly worse card and a `timing` would lose it. Enforced in `unpayableActivationReason`, the one
+  funnel both the legality check and the action-offer menu read, so it can never be offered-but-refused.
+  **3 corpus cards print this shape** — not the 8 a looser regex first suggested, because the other 5 are
+  "Activate only if **an opponent** has …", a different condition that keeps reporting.
+- `TargetRestriction.cardInAnyGraveyard` — **"Exile target card from a graveyard"**, 62 printed cards and
+  no existing aim that could express it (both graveyard restrictions are scoped to YOUR graveyard and
+  narrowed to a card type). The rider **"If it WAS a creature card, …"** lives in the same primitive as
+  the exile because the tense is load-bearing: by the time the condition is asked the card is in exile, so
+  the type is read before the move and remembered.
+- The `youLostLife` turn fact + the `didNotLoseLifeThisTurn` intervening "if", fed from the negative
+  `lifeChanged` delta so **damage counts** — which is what Luminarch Ascension's own reminder text demands.
+  Exactly **1 card in 32,414** prints that phrase; it is built because §4a phase 2 is Caleb's own decks,
+  not because the family is large.
+
+📊 **Accepted-count delta: 6,450 → 6,475 = +25, zero regressions**, one fixed corpus compiled twice with
+this lane's nine source files reverted in between (`accepted-count.mjs --names`, the two name lists
+diffed so the gain is a SET, not a subtraction).
+
+🐛 **A bare "it" is not a self-reference — and the same defect is already shipped on main.** Found by
+DIFFING the two accepted-card lists, not by a test. Free from Flesh — *"Target creature gets +2/+2 until
+end of turn. Put two oil counters on **it**."* — first compiled here as an INSTANT with `self: true`, so
+its oil counters went nowhere: the splitter hands the second half over alone, and "it" is whatever the
+PREVIOUS sentence named. The gate is the card's own type — counters live on permanents (CR 122.1), so no
+self form is implementable on a spell — and a pre-existing assertion in `counters.test.ts` ("Put a charge
+counter on **~**" on an Instant must report) showed `~` needs the same refusal as "it".
+
+⚠️ **The +1/+1 SIBLING HAS THE IDENTICAL BUG AND IS DELIBERATELY LEFT UNFIXED, pinned by a test.** A corpus
+sweep for every instant/sorcery compiling complete with a `self: true` addCounters found exactly two, both
+in the **shipped pool**, both putting their counter nowhere: **Big Play** and **Miraculous Recovery**.
+Applying the one-line gate to `put-counters-on-self` drops them, and `pool-mechanics.test.ts`'s round-trip
+guard is absolute by design — *"a card dropped from the pool to make a test pass is the failure mode this
+guards"*. The fix can only land WITH a pool regeneration, and `fix/pool-refresh-3147` owns that generated
+file. So `named-counters.test.ts` pins the wrong behaviour on purpose, in the style §3.147 used for
+Axebane Guardian: it names the one-line fix, and it goes RED the day somebody lands it, which is the
+signal to delete it and regenerate. Expect the count to fall by exactly 2, and that fall is a correction.
+
+✅ **Both deck cards compile.** Scavenging Ooze ✅ and Luminarch Ascension ✅. Crypt Creeper, Withered
+Wretch, Soul-Guide Lantern, Tablet of Compleation and 21 more came with them.
+
+📉 **No throughput regression.** `packages/sim/bench/pilot-bench.mjs --games 1200`, three runs a side
+against the same nine files reverted: **186 / 179 / 206 games/sec on this branch against 186 / 186 / 190**
+— medians identical at 186, and this box's own spread (179–206) is wider than the difference. The win
+counts are byte-identical on both sides at the same seeds (491 / 483 / 492), which is the like-for-like
+proof that nothing about gameplay moved.
+
+⚠️ **Still REPORTED, by name, rather than approximated:** shield and stun counters (25 + 71 clauses);
+time/fade/age outside §3.106's keywords; loyalty, defense, level and lore; keyword counters; the
+"Activate only if AN OPPONENT has …" form (5 cards); counter REMOVAL as an activation cost
+(`ActivationCost` still has no counter component, which is why Grindclock, Surge Node and the whole
+mana-battery family place their charge counters now and still do not enter the pool); proliferate's
+chooser; "double the number of counters"; and every rider on the graveyard exile that is not
+"creature card".
+
 ### 3.147 The activated-ability row is the §3.120 artifact again — but one shape inside it concentrates — ✅ done
 
 The backlog entry *"an activated-ability template the compiler does not recognize yet"* named **1,449

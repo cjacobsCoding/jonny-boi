@@ -1,3 +1,64 @@
+- 2026-09-15 `feat/counters-templates-v2` — ✅ **pushed-ready, NOT merged** (worker; integrator merges).
+  **§3.149 — the counters backlog row measured; it is the §3.120 artifact a THIRD time, and the seam
+  inside it is the counter KIND rather than any template.** The row named 2,480 cards. Measured against a
+  freshly fetched 32,414-card corpus with NEW `packages/cards/scripts/counters-blame.mjs`: **2,598 template
+  clauses across 2,303 distinct shapes — 1.13 clauses per shape**, biggest single shape 12 clauses. Worse
+  than §3.147's 1.2. The script splits the row two ways (a closed VERB table, and a probe that rewrites the
+  counter kind to `+1/+1` and recompiles); the kind probe is what found the real seam — **207 clauses
+  compile the moment the kind is one the engine can hold, of which only 142 may be held HONESTLY.**
+  ⚠️ **The refusals are the design.** `INERT_COUNTER_KINDS` is closed: shield (CR 122.1c) and stun (122.1d)
+  are the two biggest kinds in the blocked set after ±1/±1 and BOTH keep reporting, because storing a
+  counter whose CR rule nothing honours is a card playing weaker than printed.
+  Shipped: a `kind` param on `addCounters` (target need not be a creature); `ActivatedAbility.activateOnly`
+  (CR 602.5a — a RESTRICTION, never a cost, enforced in `unpayableActivationReason`, the one funnel both
+  the legality check and the offer menu read); `TargetRestriction.cardInAnyGraveyard`; the `youLostLife`
+  turn fact + `didNotLoseLifeThisTurn`.
+  ✅ **Both of Caleb's blocked deck cards compile — Scavenging Ooze and Luminarch Ascension** (§4a phase 2).
+  📈 **Accepted-count delta +25, ZERO regressions (6,450 → 6,475)** on ONE fixed corpus compiled twice with
+  this lane's nine source files reverted in between; the two name lists are DIFFED, so the gain is a set.
+  🐛 **a bare "it" is not a self-reference, and the bug is already shipped on main.** Found by DIFFING the
+  two accepted-card lists, not by a test. Free from Flesh ("Target creature gets +2/+2 … Put two oil
+  counters on **it**.") first compiled complete as an INSTANT with `self: true`, counters going nowhere.
+  ⚠️ **A corpus sweep for the SHAPE found the +1/+1 sibling carrying it on TWO CARDS IN THE SHIPPED POOL —
+  Big Play and Miraculous Recovery — and that half is DELIBERATELY LEFT UNFIXED AND PINNED BY A TEST.**
+  Applying the one-line gate to `put-counters-on-self` drops both, and `pool-mechanics.test.ts`'s guard is
+  absolute by design ("a card dropped from the pool to make a test pass is the failure mode this guards").
+  It can only land WITH a pool regeneration — **integrator/pool-refresh lane: add
+  `if (!sourceCanHoldCounters(ctx)) return null;` to `put-counters-on-self`, delete the pinning test in
+  `named-counters.test.ts`, regenerate; the count falls by exactly 2 and that fall is a correction.**
+  📊 `npm run build` **exit 0** · `npx vitest run packages/cards packages/core --minWorkers=1 --maxWorkers=1`
+  **19,700 passed, 0 failed / 202 files** (202 collected == 202 `*.test.ts` on disk, 0 skipped,
+  no worker exits; exit 0) · `dead-rule-sweep` + a positive corpus count — every new rule FIRES on real cards
+  (put-named-counter-on-self **136**, enters-with-named-counters **49**, exile-target-card-from-graveyard
+  **49**, activateOnly on exactly the **3** cards that print the shape).
+  🔎 **Red-then-green on three rules:** admit `shield` to the inert table → the 2 refusal tests go red AND
+  the card compiles `'complete'` (the exact defect the closed table prevents); scope the graveyard exile to
+  "your graveyard" → 3 red incl. both deck cards; make the activation restriction never refuse → the
+  legality test AND the offer-menu test both go red. Restored, 30 → 33 green.
+  📉 **No throughput regression:** `pilot-bench --games 1200`, three runs a side against the same nine files
+  reverted — **186/179/206 games/sec vs 186/186/190** (medians identical at 186; this box's spread is
+  wider than the difference), and win counts byte-identical at the same seeds (491/483/492) both sides.
+  ⚠️ **THE REGENERATED POOL IS NOT IN THIS BRANCH — ON PURPOSE**, for the reason §3.147 gives:
+  `fix/pool-refresh-3147` owns it. The +23 is the COMPILER's delta on one fixed corpus, measured twice.
+  ⚠️ **SEMANTIC-CONFLICT WARNING for the integrator:**
+  (1) `packages/core/src/targeting.ts` gains ONE member (`cardInAnyGraveyard`) at all five homes a
+  restriction word has (union, guard alternation, `TARGET_RESTRICTION_MEMBERS`, `isLegalTarget`, the
+  enumerator, `describeRestriction`). The activated-ability lane added five members to the same union, so
+  expect a textual conflict there — which is the GOOD case; `targeting-completeness.test.ts` fails until
+  every home knows the word, and it is green here.
+  (2) `packages/core/src/turn-facts.ts` takes bit `1 << 6` — the one the existing comment reserved. A
+  second lane landing a fact must take `1 << 7`, or surge/bloodthirst-style cross-talk returns.
+  (3) `packages/cards/src/compile/rules.ts` — new rules are ONE contiguous region at the tail of
+  `EFFECT_RULES` plus one row in `STATIC_RULES` and one in `INTERVENING_IF_RULES`; nothing above is
+  reformatted. The one EXISTING rule touched is `put-counters-on-self` (the bare-"it" gate above).
+  ⚠️ **§3.149 chosen after scanning every remote head** — §3.147 is triple-claimed and §3.148 is taken by
+  `fix/strionic-ability-copy`; nothing claims §3.149.
+  ⛔ **Left REPORTED, not approximated:** shield/stun counters; time/fade/age outside §3.106; loyalty,
+  defense, level, lore; keyword counters; "Activate only if AN OPPONENT has …" (5 cards); **counter
+  REMOVAL as an activation cost** — `ActivationCost` still has no counter component, which is why
+  Grindclock, Surge Node and the whole mana-battery family now PLACE their charge counters and still do
+  not enter the pool; proliferate's chooser; "double the number of counters"; every graveyard-exile rider
+  that is not "creature card".
 - 2026-09-14 `feat/activated-ability-templates` — ✅ **pushed-ready, NOT merged** (worker; integrator merges).
   **§3.147 — the activated-ability backlog row measured, then the one shape inside it that concentrates.**
   The row named 1,449 cards and is the §3.120 artifact again (1,273 distinct shapes, 1.2 cards each); NEW
