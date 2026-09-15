@@ -163,6 +163,64 @@ columns):
   a remembered wording once matched no real card and no test could see it. Every new template is
   proven against the corpus or it does not ship.
 
+## 5a. THE DELIVERY STEP — a compiled card is not a playable card
+
+⚠️ **Nothing this campaign compiles reaches the app until the pool is REGENERATED.** The pool is
+generated data; the compiler gaining a family changes nothing a player can see. That gap is this
+project's signature failure — *built, tested, green and unreachable*, nine times — and the campaign
+manufactures it by design, because every lane is told not to commit generated files (so that lanes
+do not fight over one enormous file). **The regeneration is therefore a scheduled step, not a
+side effect, and it is the only step Caleb can actually feel.**
+
+### The whole pipeline is OFFLINE — verified by reading the scripts, not assumed
+
+```
+npx tsx packages/cards/scripts/build-expansion.ts --corpus <corpus.json>   # fills the scratch index
+npx tsx packages/cards/scripts/build-expansion.ts                          # writes the three outputs
+npm run fetch -w @jonny-boi/data-tools -- --corpus <corpus.json> --no-art  # refreshes card-index.json
+```
+
+Writes `packages/cards/data/expanded-pool.ts`, `packages/cards/data/expansion-report.json`,
+`packages/data-tools/data/starter-cards.json`, then `packages/data-tools/data/card-index.json` — and
+`apps/web/src/data/card-index.json` is DERIVED from that last one by
+`apps/web/scripts/build-card-index.mjs`, with a test that re-derives it and fails on drift.
+
+⚠️ **`npm run verify -w @jonny-boi/data-tools` is NETWORK** and must never run in a test or CI. The
+`--corpus` form above is the offline one. They are one word apart and do very different things.
+
+**All three artifacts move together or the app lies.** A pool ahead of the index renders bare ids and
+blank art; an index ahead of the pool offers cards the engine will not play.
+
+### State of the refresh (2026-09-15)
+
+| ref | pool | canonical index | web index |
+| --- | ---: | ---: | ---: |
+| `origin/main` | 5,651 | 5,651 | 5,651 |
+| `origin/fix/pool-refresh-3147` | **6,323** | **6,323** | **6,323** |
+
+The second is a **complete and internally consistent** regeneration — all three artifacts in step —
+plus four soak-defect fixes that took a wider pool from **754 violations to 4**. The session that
+made it **ended before pushing**, so it existed only on one disk; it is now on the remote.
+
+`origin/salvage/pool-refresh-3147` carries that session's **uncommitted** last change — the
+diagnosis *and* fix for those final 4 violations. Whoever finishes the refresh starts from the
+diagnosis instead of rediscovering it. Its reasoning is worth reading: a milled card is public the
+instant it lands face up, but Sudden Reclamation mills three and returns one to **hand** inside one
+resolution, so the card is public and hidden again with no decision boundary in between, and an audit
+that can only compare settled states reads the engine's own `zoneChange` as a leak.
+
+### Two corrections the refresh must carry
+
+1. **The counters lane left an instruction that can only land WITH a regeneration**: add
+   `if (!sourceCanHoldCounters(ctx)) return null;` to `put-counters-on-self` and delete the pinning
+   test in `named-counters.test.ts`. **The accepted count falls by exactly 2** — Big Play and
+   Miraculous Recovery, both rules-defective in the shipped pool — **and that fall is a correction.**
+   `pool-mechanics.test.ts` is absolute by design: *a card dropped from the pool to make a test pass
+   is the failure mode this guards*, which is why the fix cannot land alone.
+2. Acceptance is **a card the app can find**, not a number in a report. Launch it, search the browser
+   for the deck cards §7a marks ✅, and look. Every one of this project's nine unreachable-feature
+   failures was caught by a harness or a screenshot, and none of them by a test.
+
 ## 6. Joke sets
 
 Excluded per the mandate — Unglued, Unhinged, Unstable, Unsanctioned and kin. **Verify how the
