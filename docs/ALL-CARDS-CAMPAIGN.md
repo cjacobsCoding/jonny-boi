@@ -191,18 +191,44 @@ waits on the pool refresh (§8 note). A card is ✅ only when **every** printed 
 | Scavenging Ooze | counters | ✅ §3.149a |
 | Luminarch Ascension | counters | ✅ §3.149a |
 | Kessig Wolf Run | {X} / derived value | ✅ §3.149 |
-| Selesnya Charm | modal | 🔧 in flight — `feat/modal-templates` |
-| Trostani, Selesnya's Voice | copy selector (Populate) | 🔧 in flight — `feat/copy-selectors` |
-| Jace, Architect of Thought | planeswalker loyalty | 🔧 in flight — `feat/loyalty-emblem` |
-| Tamiyo, the Moon Sage | loyalty + emblem | 🔧 in flight — `feat/loyalty-emblem` |
-| Axebane Guardian | variable mana production | ⬜ `ManaAbility.produces` is a fixed mode list and `TapForManaAction.mode` an index — a count that varies with the board has nowhere to live |
-| Primal Surge | "you may / choose" template | ⬜ 5,640-card row; expect §2 |
-| Rhox Faithmender | life-change replacement | ⬜ needs a life-change event on the replacement layer |
-| Fog Bank | unrecognised rules text | ⬜ not yet blamed to a shape |
-| Craterhoof Behemoth | unrecognised rules text | ⬜ not yet blamed to a shape |
-| Fiendslayer Paladin | unrecognised rules text | ⬜ not yet blamed to a shape |
+| Selesnya Charm | modal | 🔧 in flight — `feat/modal-templates`. One clause: `Choose one — • +2/+2 and trample • Exile target creature with power 5 or greater • Create a 2/2 Knight token`. |
+| Trostani, Selesnya's Voice | **two** clauses | 🔧 in flight — `feat/copy-selectors`. `{1}{G}{W}, {T}: Populate` is the residue; *"gain life equal to that creature's toughness"* is the family §3.149 already landed, so **re-blame before assuming this lane owns it**. |
+| Jace, Architect of Thought | **three** clauses, two families | 🔧 `feat/loyalty-emblem` owns the `+1` and the `−2`; the **`−8` is the Primal Surge family**, so this card may be unreachable in that lane alone. The `−2` also needs a choice made by an **opponent** mid-resolution (pile separation) — a prompt seam, not a loyalty seam. |
+| Tamiyo, the Moon Sage | loyalty + emblem | 🔧 in flight — `feat/loyalty-emblem`. ⚠️ **the emblem carries TWO abilities needing two seams**: *"no maximum hand size"* is exactly what `player-statics.ts` was built for, but *"whenever a card is put into your graveyard from anywhere…"* is a **player-level TRIGGERED ability granted by an emblem**, and `player-statics.ts` is statics only. |
+| Axebane Guardian | variable mana production | ⬜ `{T}: Add X mana in any combination of colors, where X is the number of creatures you control with defender.` **Two problems, not one**: a variable AMOUNT (`ManaAbility.produces` is a fixed mode list, `TapForManaAction.mode` an index) **and** *"in any combination of colors"*, which is a player choice at resolution. |
+| Primal Surge | ⚠️ **misfiled** | ⬜ `Exile the top card of your library. If it's a permanent card, you may put it onto the battlefield. If you do, repeat this process.` The row calls it *"you may / choose"*; **the actual blocker is `repeat this process`** — an unbounded iteration. The "you may" half is ordinary. |
+| Rhox Faithmender | life-change replacement | ⬜ `If you would gain life, you gain twice that much life instead.` The replacement layer watches damage, counters and draws; **life gain/loss is one more event kind** on a layer that already exists. |
+| Fog Bank | damage prevention | ⬜ `Prevent all combat damage that would be dealt to and dealt by ~.` A two-directional prevention shield. |
+| Craterhoof Behemoth | mass pump + keyword grant | ⬜ `When ~ enters, creatures you control gain trample and get +X/+X until end of turn, where X is the number of creatures you control.` The derived count is the family §3.149 landed — **re-blame; the residue may be only the mass keyword grant.** |
+| Fiendslayer Paladin | targeting restriction | ⬜ `~ can't be the target of black or red spells your opponents control.` Hexproof-from-a-quality, by colour and by controller. |
 
 **6 of 16 lane-verified, 4 in flight, 6 unstarted.**
+
+### 7b. What blaming the residue clause by clause showed (2026-09-15)
+
+Each row above now carries **the printed clause the compiler actually refused**, read from
+`expansion-report.json` rather than inferred from the family name. Doing that for ten cards produced
+four findings that change how the next wave is picked — and none of them were visible from the
+family column:
+
+1. ⚠️ **`UNSUPPORTED_HINTS` first-match misfiles cards, and it is not rare.** `Populate` and
+   `Axebane Guardian` are both filed under *"an activated-ability template"* — matched on the
+   `{1}{G}{W}, {T}:` and `{T}:` prefixes, not on anything about the effect. The activated-ability
+   lane merged (§3.147) and unblocked neither. **A row is a bag of cards whose text matched a regex
+   first, not a family.** Cross-check a family by TEXT as well as by hint, or you measure the wrong
+   population in both directions.
+2. ⚠️ **The row name pointed at the wrong half a fourth and fifth time** — Primal Surge is filed as
+   *"you may / choose"* when the blocker is `repeat this process`, and Axebane Guardian is filed as
+   an activated ability when the blocker is a variable mana amount. §8a item 2 is not an anecdote
+   about three lanes; it is the normal case.
+3. ✅ **Two cards may be cheaper than their row says, because §3.149 already landed.** Trostani's
+   lifegain clause and Craterhoof's `+X/+X` are both derived-value amounts. **Re-blame before
+   scoping** — the honest number may have shrunk while nobody was looking.
+4. ⚠️ **A multi-clause card is only as reachable as its hardest clause.** Jace needs three families
+   and one of them is the 5,640-card row; Tamiyo's single emblem needs two different seams. A lane
+   that takes such a card as its acceptance test should be told up front that a **well-evidenced
+   NO-GO naming the residue is a successful outcome**, or it will be tempted to widen a template to
+   swallow the clause it cannot do — which is the one thing the pool rule forbids.
 
 ## 8. Progress log
 
