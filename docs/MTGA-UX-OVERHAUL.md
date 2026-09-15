@@ -858,3 +858,173 @@ pure-function equality and it is not a photograph; stated as such.
   attacker in, no attack arc out, at every step `STEP_ORDER` knows;
 - six stylesheet/source comments describing the old split, including `board-fit.css`'s note that the
   online board *"sets none of `PlayBoard`'s inline custom properties"* — it sets all of them now.
+
+## 11. Prompt polish — raised 2026-09-14, NOT STARTED
+
+### UX-23 — a library search shows each unique card ONCE
+
+> When Gate Creeper Vine's trigger goes off and you are choosing a land/gate, it should show all
+> unique options once instead of showing all options, even duplicates. It can show a multipler
+> symbol instead to indicate how many you have left - bonus points if we can show a nice intuitive
+> pie chart of the remaining options - but no need to show identical cards more than once.
+
+**Why it happens.** A library search compiles to a `selectCards` over library CANDIDATES, and every
+copy is a distinct `CardInstance` — correctly, because the answer must name one instance id. So a
+deck with twelve Forests offers twelve identical-looking options. The model is right; the
+presentation is not.
+
+**Where it belongs: the view-model, not the component.** `lib/play/choice-view.ts` is the pure,
+unit-tested place that already decides what a prompt offers, and it already has the vocabulary —
+`pickCount` returns a multiplicity that the UI renders as “×2” for cards a player has PICKED
+(`choice-view.ts:218-221`). This is the same idea one step earlier: collapse identical candidates
+into one row carrying how many REMAIN. Reuse that vocabulary rather than inventing a second one.
+
+**The one correctness rule.** Grouping is presentation only: the submitted answer must still be a
+real instance id from the group (any member — they are genuinely interchangeable), and the engine
+must see exactly what it sees today. A test should pin that the answer produced from a grouped row
+is accepted by `validateChoiceAnswer` unchanged.
+
+**Group by what the player can SEE**, not by card id alone: two copies with different chosen art
+(§DB-1) still read as the same card, and a grouped row must not silently drop a distinction a
+player would notice. If a group is ever not interchangeable, it must NOT be grouped — report
+rather than approximate (rule 2).
+
+**The pie chart** (“bonus points”) is a real idea, not decoration: it answers “what is LEFT in my
+library” at a glance during a search. Treat it as optional and build the grouping first — the
+grouping is the fix, the chart is the flourish.
+
+### UX-24 — a target candidate shows the state that changes the decision
+
+> When choosing a creature to exile with Conjurer's closet, I want to see what special things my
+> creature choices have going on. Like if there's a Banisher Priest as an option, I want to see what
+> creature that Banisher Priest is already holding banished.
+
+**This is the right example to design from, because the hidden state INVERTS the decision.**
+Blinking a Banisher Priest makes it leave the battlefield, which returns the creature it was
+exiling — so "blink my Priest" can hand an opponent their bomb back. A player choosing blind is not
+making a choice, they are guessing.
+
+**MEASURED: every part of this already exists except the reach.**
+- The link is core data: `CardInstance.exiledUntilLeavesBy` names the jailer (a field since §3.56).
+- `lib/play/jail-view.ts` already GROUPS exiled cards per jailer, pure and unit-tested.
+- `BoardPermanentTile` already DRAWS the prisoner tucked under its jailer (§3.57).
+- `ChoicePrompt` / `choice-view.ts` use none of it — `grep -n jail` over both returns nothing.
+
+So this is the branch's signature failure once more: built, correct, and absent from the one
+surface where the decision is actually made.
+
+**FIX THE CLASS, NOT THE CARD (rule 1).** A jailer is one example of “state a candidate carries
+that would change which candidate you pick”. The others are already modelled too, and a fix that
+special-cases Banisher Priest leaves every sibling broken:
+
+| state | already modelled in |
+| --- | --- |
+| what it holds exiled | `jail-view.ts` |
+| auras / equipment attached | `attachments.ts` |
+| +1/+1 and other counters | `CardInstance.counters` |
+| granted or removed abilities, modified P/T | the §3.143 provenance layer |
+| tapped / summoning-sick / attacking / blocking | `BoardPermanent` in the view model |
+
+**THE DRY ANSWER, and it is nearly free:** a prompt candidate should render the SAME `CardFace`
+the battlefield tile renders — with its provenance and its jail — instead of a bare art crop. Every
+row of that table then appears in the prompt because it already appears on the tile, and a future
+row is understood by both in one edit. Writing a second “what is notable about this creature”
+summary for prompts is the parallel-vocabulary failure rule 3 forbids.
+
+⚠️ **Hidden information:** prompts render from the masked view online. A jailed card is public
+(exile zones are carried in full in both views — `jail-view.ts` says so explicitly), but anything
+the mask withholds must degrade honestly and never be reached for.
+
+**Guard:** a real Banisher Priest exiling a real creature, offered as a Conjurer's Closet target —
+the rendered prompt must name the prisoner. Falsify it by unlinking the prisoner and confirming
+exactly that assertion reddens.
+
+### UX-24a — tapped state, visible on a target candidate
+
+> when choosing targets for like Serenity Angel for example, I want to see if the card options are
+> tapped or not easily.
+
+**Not a separate item — this is UX-24's first acceptance case**, and recording it separately would
+invite a separate fix. `tapped` is already on `BoardPermanent` and the battlefield tile already
+shows it (the 90° turn, UX-11). A prompt candidate that renders the same `CardFace` the tile
+renders gets it for free, along with counters, auras, jailed prisoners and granted abilities. If a
+fix makes tapped visible and leaves the rest invisible, UX-24 was not done.
+
+### UX-25 — an artless card is still CARD-SHAPED
+
+> when choosing targets for like Serenity Angel for example, any creature Tokens render at a
+> different size - should be the same
+
+**Cause, found in `CardFace.tsx:218-224`:** with art it renders
+`<img className="card-face__art">`; without art it renders `<span class="card-face__fallback">`.
+An `<img>` carries an INTRINSIC ASPECT RATIO and fills its box; a `<span>` of text has no intrinsic
+size at all, so it collapses to the height of its words. A token — which has no pool entry and
+therefore no art — is the common way to hit that, which is why tokens are what Caleb noticed.
+
+**Fix the shape, not the token:** the face's BOX must be the same whether or not art loaded. Put
+the card aspect ratio on the container rather than relying on the image to supply it. That also
+covers the case nobody has reported yet but which happens offline and on a Scryfall miss — a real
+card whose image failed to load, today collapsing exactly like a token. One fix, both causes.
+
+**Guard:** render a face with art and a face without, and assert the two boxes have the same
+dimensions. That test fails today.
+
+### UX-26 — tokens deserve real art
+
+> token cards need cool mtg art
+
+Tokens currently render as a name on a plain plate, because the bundled card index carries no token
+entries at all (`build-card-index.mjs` has no notion of them) and a token has no pool card to look
+art up from.
+
+**This is buildable rather than aspirational:** Scryfall publishes tokens as first-class printings
+with their own art, so the art exists and is reachable by the same pipeline every other card uses.
+
+⚠️ **MEASURE THE COST FIRST (rule 4), because the index is already the app's heaviest asset.** The
+`card-index-*.js` chunk is ~6 MB and the card browser is already the slowest screen in the app
+(§7.4 records a 42 MB DOM found there). So: include ONLY the tokens the pool actually creates, not
+Scryfall's whole token corpus — enumerate them from the `createToken` calls in the compiled pool and
+report that count before fetching anything. A token the pool never makes must not cost a byte.
+
+⚠️ **And it interacts with DIST-1 (run fully offline):** token art fetched on demand is art that is
+absent on a plane. Whatever is chosen must degrade to UX-25's card-shaped plate and SAY it is
+unavailable, never render blank.
+
+### UX-27 — a target candidate must say WHICH ZONE it is in  — **live defect**
+
+> Its possible I was targeting creatures in the enemy graveyard by accident with serenity angel -
+> the UI should be much more clear about this
+
+Reported first as *"Serenity Angel ... did not seem to actually remove my opponents creatures"*, and
+this is the explanation. **The engine is innocent** — `angel-of-serenity.test.ts` drives it directly
+and its five cases pass, including *"exiles three across both zones"*. Exiling a creature CARD from a
+graveyard removes nothing from the battlefield, so the Angel did exactly what it was told.
+
+**THE DEFECT IS IN CORE'S TARGET OPTION, and it is small.** `targetOptionFor`
+(`packages/core/src/engine.ts:2720-2739`) returns `{ ref, name, controller }` — **and no zone**. It
+searches the battlefield, then the stack, then `findInstanceAnywhere`, so it KNOWS where it found
+the card and throws that away. A graveyard creature card and a battlefield creature therefore reach
+the prompt as the same shape with the same name and the same controller: the UI cannot distinguish
+them because the data does not.
+
+Angel of Serenity is the card that exposes it (“from the battlefield **and/or** creature cards from
+graveyards” — one combined list), but it is not the only one: every restriction spanning zones has
+the same hole.
+
+**The fix:**
+- Add the zone to `TargetOption` in core, populated where the card is actually found — one funnel,
+  so every consumer (prompt, AI target scorer, replay) gets it at once. The AI reads these options
+  too, and a pilot that cannot tell a graveyard card from a blocker is making the same mistake.
+- Render it. `choice-view.ts` already has `ZONE_LABELS` and `zoneLabel()` for `selectCards`'
+  `fromZone` — reuse that vocabulary, do not invent a second one (rule 3).
+- Group or visually separate the zones in the prompt when a list spans more than one. A flat list
+  of nine names where three are in a graveyard is a trap even when each is labelled.
+
+**Guard:** a real Angel of Serenity offered a battlefield creature and a graveyard creature card —
+the rendered prompt must distinguish them. Falsify by dropping the zone and confirming exactly that
+assertion reddens.
+
+⚠️ Related and already fixed in the same pass: the prompt's option list could not scroll
+(`.choice-prompt__options` lacked `min-height: 0`), so a long list pushed Confirm off screen — see
+`choice-prompt-scroll.test.ts`. That was Cloudshift's clipping, and it may also have contributed
+here.

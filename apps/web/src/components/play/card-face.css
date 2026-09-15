@@ -69,6 +69,21 @@
    * frame generation would break every old-border and full-art card. */
   --card-face-text-inset: 6%;
   --card-face-text-bottom: 9%;
+  /*
+   * THE BOX NEEDS A TOP, and the lack of one was a shipped defect: anchored
+   * only at the bottom and sized by its CONTENT, the live text box grew
+   * UPWARD OVER THE ART on a wordy card (Angel of Serenity covered its whole
+   * illustration) and, on a short one, stopped short of the printed box so
+   * the card's own text showed above the scrim — Elvish Visionary read
+   * "When this creature enters, draw a card." TWICE. A printed text box is a
+   * FIXED RECTANGLE; anchoring one edge and letting the other float cannot
+   * match it, and mismatches in both directions at once.
+   * 63% sits just BELOW the type line — deliberately, so "Creature — Elf
+   * Shaman" stays readable rather than being scrimmed away with the text it
+   * is not part of. Measured off a real 488×680 face at the mulligan grid's
+   * size, not recalled from frame proportions.
+   */
+  --card-face-text-top: 63%;
   --card-face-pt-right: 4.5%;
   --card-face-pt-bottom: 3%;
 
@@ -205,9 +220,16 @@
 
 .card-face__textbox {
   position: absolute;
+  top: var(--card-face-text-top);
   right: var(--card-face-text-inset);
   bottom: var(--card-face-text-bottom);
   left: var(--card-face-text-inset);
+  /* The rectangle is now fixed, so text that does not fit SCROLLS inside it
+     rather than escaping over the art. A card whose live text outgrows its
+     own printed box is real (granted keywords add lines), and the box is the
+     one place it may be. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
   z-index: 1;
   display: flex;
   flex-direction: column;
