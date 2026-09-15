@@ -338,7 +338,7 @@ const OPPONENT_TARGET: TargetRestriction = 'opponent';
  * because a derived value the engine only half-understands would silently make
  * a card stronger or weaker than printed.
  */
-const DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = Object.freeze({
+const NAMED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = Object.freeze({
   'creatures you control': 'creaturesYouControl',
   'creatures your opponents control': 'creaturesOpponentControls',
   'creatures your opponent controls': 'creaturesOpponentControls',
@@ -361,15 +361,21 @@ const DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = Object.
   // Guardian, Doorkeeper). In the SHARED table for the usual reason: the day a
   // pump or a damage line prints the same phrase it already means this number.
   'creatures you control with defender': 'creaturesYouControlWithDefender',
-  // --- FILTERED rows (DESIGN §3.148) -----------------------------------------
-  // Everything above names a set core wrote by hand; everything below carries
-  // its set AS DATA, so the next printed noun is one more line here instead of
-  // an enum row plus a `case` in core's evaluator. Both halves are read through
-  // {@link derivedValue} and land on the same descriptor shape, so a consumer
-  // cannot tell them apart and none had to change.
-  //
-  // Each row is a real printed phrase from the corpus — `dead-rule-sweep.mjs`
-  // and `rule-coverage.test.ts` are what stop a remembered wording getting in.
+});
+
+/**
+ * FILTERED rows (DESIGN §3.148) — the other half of the same vocabulary.
+ *
+ * {@link NAMED_DERIVED_COUNTS} names sets core wrote by hand; these carry their
+ * set AS DATA, so the next printed noun is one more line here instead of an enum
+ * row plus a `case` in core's evaluator. Both halves are read through
+ * {@link derivedValue} and land on the same descriptor shape, so a consumer
+ * cannot tell them apart and none had to change.
+ *
+ * Each row is a real printed phrase from the corpus — `dead-rule-sweep.mjs` and
+ * `rule-coverage.test.ts` are what stop a remembered wording getting in.
+ */
+const FILTERED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = Object.freeze({
   ...subtypeCounts('mountain', 'Mountain'),
   ...subtypeCounts('swamp', 'Swamp'),
   ...subtypeCounts('forest', 'Forest'),
@@ -383,6 +389,26 @@ const DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = Object.
   ...typeCounts('artifact', 'artifact'),
   ...typeCounts('enchantment', 'enchantment'),
   ...typeCounts('land', 'land'),
+});
+
+/**
+ * The whole vocabulary, one table, read by every consumer.
+ *
+ * ⚠️ **NAMED ROWS WIN, and that precedence is load-bearing.** The generated rows
+ * include "lands you control", which the named half already answers as
+ * `landsYouControl` — and `landsYouControl` is the row core's
+ * CHARACTERISTIC-DEFINING P/T evaluator knows. Spreading the generated half last
+ * silently replaced it with a filtered descriptor, and eight `*`/`*` creatures —
+ * Molimo, Maro-Sorcerer and its family — dropped out of the pool with nothing
+ * failing: `namedDerivedValue` correctly refused a filtered count in a star box,
+ * so the cards reported instead of compiling. The two counts mean the same
+ * number; only one of them is spellable in a P/T box. `xvalue-templates.test.ts`
+ * pins the precedence, and `playable-set.mjs` is what caught it — a +55 that was
+ * really a +47 with eight silent losses.
+ */
+const DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = Object.freeze({
+  ...FILTERED_DERIVED_COUNTS,
+  ...NAMED_DERIVED_COUNTS,
 });
 
 /** What a phrase in {@link DERIVED_COUNTS} means: a named core row, or a set carried as data. */
