@@ -77,6 +77,19 @@ const DRIVE_BUDGET_MS = 240_000;
 const WATCH_BUDGET_MS = 8_000;
 const WATCH_SAMPLE_MS = 60;
 
+/**
+ * Let an announcement FINISH ARRIVING before measuring or photographing it.
+ *
+ * MEASURED: the first capture of the spell hold caught it mid-fade — every
+ * element translucent, the card art not yet decoded, and a `getBoundingClientRect`
+ * still mid-transform. A picture of a thing arriving is not a picture of the
+ * thing, and "the rect fits" measured during a transform is not a measurement of
+ * anything. Comfortably longer than `SPELL_HOLD_CONFIG.fadeMs` (220) and
+ * `FORCED_CHOICE_CONFIG.fadeMs` (which derives from it), and well inside both
+ * holds, so it never eats the state it came to see.
+ */
+const SETTLE_MS = 500;
+
 /** Card ids, from the pool. Named so a pool re-id fails loudly here. */
 const PLAINS = 'bc71ebf6-2056-41f7-be35-b2e5c34afa99';
 const SWAMP = '56719f6a-1a6c-4c0a-8d21-18f7d7350b68';
@@ -325,7 +338,7 @@ async function startArrangedSoloGame(page, url, arrangement) {
   const kept = await clickButton(page, /^Keep \(/, { timeoutMs: UI_TRANSITION_WAIT_MS });
   try {
     await page.waitForSelector('.play-board', { timeout: UI_TRANSITION_WAIT_MS });
-  } catch (error) {
+  } catch {
     // A rig that dies with "selector not found" is a rig that tells you nothing.
     // Say what the screen ACTUALLY shows — three earlier harnesses in this repo
     // reported the APP as broken when the RIG was lost.
@@ -433,8 +446,10 @@ async function watchForTheAnnouncement(page) {
       best.forced = Math.max(best.forced, s.forced);
       best.faces = Math.max(best.faces, s.forcedFaces);
       if (!first) first = s;
-      // Stay on it: the screenshot must catch it, not a frame after it.
-      return { seen: true, first, best, sample: s };
+      // Stay on it: the screenshot must catch it, not a frame after it — but
+      // let it finish ARRIVING first (see SETTLE_MS).
+      await sleep(SETTLE_MS);
+      return { seen: true, first, best, sample: await sample(page) };
     }
     // The priest is a creature spell and needs priority passed to resolve. Only
     // "pass" is pressed here, never "Got it" — dismissing the announcement is
@@ -520,7 +535,10 @@ async function reachAHeldSpell(page) {
     if (before.hold > 0) {
       spent.holdFrames += 1;
       if (!firstHold) firstHold = before;
-      if (before.holdTargets.length > 0) return { reached: true, spent, at: before };
+      if (before.holdTargets.length > 0) {
+        await sleep(SETTLE_MS);
+        return { reached: true, spent, at: await sample(page) };
+      }
       // A held spell with NO target is a real, correct state (a cantrip), and
       // the rig must not mistake it for the answer. Wait for a targeted one.
     }

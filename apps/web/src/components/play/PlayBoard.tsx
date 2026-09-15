@@ -2468,16 +2468,22 @@ function SpellHoldCard({
           which is also how a table reads it. `wrap` returns them to a column on
           a narrow window, where there is height to spare. */}
       <div className="spell-hold__body">
-        <CardHover cardId={cardId}>
-          <CardFace size="full" cardId={cardId} name={name} explanation={explanation} />
-        </CardHover>
+        {/* The spell and its own name stay together. Photographed once with the
+            name below the WHOLE body, the panel read "… Grizzly Bears / Doom
+            Blade", which invites exactly the misreading the announcement exists
+            to prevent. */}
+        <div className="spell-hold__subject">
+          <CardHover cardId={cardId}>
+            <CardFace size="full" cardId={cardId} name={name} explanation={explanation} />
+          </CardHover>
+          <span className="spell-hold__name">{name}</span>
+        </div>
         {/* Shown as CARD FACES, not a name string: §0 is explicit that a target
             must be "the actual card(s)". The list renders nothing when the spell
             targets nothing, and names a PLAYER target in words because a seat is
             not a card (`STACK_TARGET_KINDS_TABLE.player.hasFace`). */}
         <CardReferenceList targets={targets} presentation="face" label="Targeting" />
       </div>
-      <span className="spell-hold__name">{name}</span>
       <span className="spell-hold__hint">
         Hover the card to keep reading it — it resolves on its own when you stop.
       </span>

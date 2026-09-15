@@ -7990,6 +7990,13 @@ Raised 2026-09-11 as one request. **The scope lives in
 items, and THAT file is the checklist** — this entry tracks status only, because a scope summarised
 twice is a scope that will be summarised differently the second time.
 
+> **✅ 2026-09-14 — §12 of that file: "the game decided FOR you, and said nothing".** A choice the
+> engine settles because it had exactly one legal answer is now ANNOUNCED, naming the card it chose
+> (`lib/play/forced-choice.ts`, a closed table mapped over core's own `ChoiceKind`), and UX-16's
+> hold now shows the held spell's TARGETS — which also turned up a real defect: the hold was
+> announcing spells that had already resolved. Photographed both ways;
+> `verify-forced-choice.mjs` 12/12. The online board gets the log line only, stated in §12.
+
 §§3.130–3.133 gave the board sound, VFX, an effects bench and a post-hoc opponent feed. What is
 still missing is everything a player needs to *understand* a game rather than merely watch one: the
 stack is a list of NAMES, the battlefield is a flat grid, a cast is irrevocable the moment it starts,

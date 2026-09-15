@@ -1,3 +1,24 @@
+- 2026-09-14 `fix/announce-forced-choice` — ✅ **pushed-ready, NOT merged** (worker; integrator merges).
+  **Two reports, one mechanism** (§12 of `docs/MTGA-UX-OVERHAUL.md`): a choice the engine settles
+  because it had exactly one legal answer is now ANNOUNCED naming the card it chose, and UX-16's
+  opponent-spell hold now shows the held spell's TARGETS.
+  📊 `npm run build` **exit 0** · `npx vitest run apps/web packages/core` **3283 passed, 0 failed / 242 files**
+  · harnesses `verify-combat-visibility` **6/6**, `verify-board-fits` **32/32**, new `verify-forced-choice` **12/12**
+  (both reports photographed; PNGs in `apps/web/verify-out/forced-choice/`).
+  ⚠️ **SEMANTIC-CONFLICT WARNING FOR THE INTEGRATOR — four shared files carry additive changes:**
+  (1) `packages/core/src/events.ts` — `choiceAutoAnswered` gains `sourceInstanceId` + `sourceName`, and all
+  SEVEN emit sites in `engine.ts`/`effects.ts` set them. A lane that ADDS an eighth emit site will fail to
+  compile until it does too — which is the point, not a conflict.
+  (2) `packages/core/src/instance-ids.ts` — one row extended (compile-enforced, so a bad merge cannot be silent).
+  (3) `packages/core/src/choices.ts` — `CHOICE_KINDS` + a completeness witness added; no behaviour touched.
+  (4) `apps/web/src/lib/play/proposal.ts` — `ASK_WHEN_ONLY_ONE_ANSWER` is now `AUTO_SETTLE_POLICY`, a
+  discriminated union. A lane holding the old name will conflict TEXTUALLY, which is the good case.
+  ℹ️ Also: `StackTargetRow` moved out of `StackPanel.tsx` into the new `CardReferences.tsx`, and its CSS moved
+  out of `stack-panel.css` into `card-references.css` (unscoped, same class names). A lane touching either file
+  should take BOTH sides.
+  ℹ️ **Not done, deliberately:** the ONLINE board gets the log line only. `@jonny-boi/protocol` carries masked
+  state, not `GameEvent`s, so `OnlineBoard` cannot see a `choiceAutoAnswered`; the banner and the decision are
+  board-agnostic and ready for whatever `feat/online-event-stream` lands.
 - 2026-09-13 supervisor: ✅ **MERGED to `main` (PR #17, `d1c3b23`) — `feat/mtga-ux-3143`, thirteen commits, fifteen of seventeen items done, two partial.**
   📊 Gate on the MERGED tree: **22,564 passed / 442 files, 0 failed**, lint 0 errors, card-index up to date, and all four
   browser harnesses at contract (board-fits 32/32, mana-choice 19/19, game-resume 18/18, bug-reporter 31/31).

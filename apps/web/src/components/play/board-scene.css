@@ -301,8 +301,21 @@
   min-width: 0;
 }
 
+.spell-hold__subject {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
 .spell-hold__body .card-face--full {
-  max-height: min(56vh, 460px);
+  /* Named, because it is the measurement that decides whether the target below
+     it is on screen at all. The viewport fraction is the one that matters; the
+     pixel ceiling only stops the card growing absurdly on a very tall window. */
+  --spell-hold-face-max-h: 460px;
+
+  max-height: min(56vh, var(--spell-hold-face-max-h));
 }
 
 .spell-hold__who {
@@ -436,7 +449,7 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .forced-choice {
-    animation: forced-choice-in var(--forced-choice-fade-ms, 220ms) ease-out both;
+    animation: forced-choice-in var(--forced-choice-fade-ms) ease-out both;
   }
 }
 
@@ -476,6 +489,12 @@
   font-size: var(--text-sm);
   font-weight: 700;
   color: var(--color-accent-soft);
+}
+
+/* The chosen cards. Bounded so a multi-target answer widens the row rather than
+   the banner, which is pinned to the same slot the combat strip uses. */
+.forced-choice__refs {
+  max-width: 100%;
 }
 
 .forced-choice__foot {
