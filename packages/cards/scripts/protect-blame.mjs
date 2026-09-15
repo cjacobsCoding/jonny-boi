@@ -140,10 +140,18 @@ const REWRITES = Object.freeze([
   },
 ]);
 
-const base = (raw, oracleText) => {
-  const normalized = normalizeCard(raw);
-  return { ...normalized, oracleText };
-};
+/**
+ * ⚠️ **The probe must clear Scryfall's `keywords` array, and that is the trap
+ * this comment exists for.** The compiler reads the printed oracle LINE *and*
+ * Scryfall's bare keyword list, and the bare list is just the word: a card
+ * whose list says `["Protection"]` or `["Ward"]` reports `the "Protection"
+ * keyword ability` **with empty oracle text**. Leaving it on failed the control
+ * probe for 334 of the 487 blocked cards — every card in the family, because
+ * the family is exactly the cards Scryfall stamps those keywords on — and would
+ * have reported the whole population as untestable. Both probes clear it, so
+ * the ONLY variable between control and line is the line.
+ */
+const base = (raw, oracleText) => ({ ...normalizeCard(raw), oracleText, keywords: [] });
 
 const compiles = (raw, oracleText) => {
   try {
@@ -168,6 +176,8 @@ function linesOf(raw) {
 // ---------------------------------------------------------------------------
 const byText = [];
 const byRow = [];
+/** Which rows the TEXT population is actually filed under — the leakage, named. */
+const rowCensus = new Map();
 let complete = 0;
 let threw = 0;
 
@@ -185,7 +195,13 @@ for (const raw of corpus) {
     if (textHit) complete += 1;
     continue;
   }
-  const rowHit = (result.unsupported ?? []).some((u) => u.missingEngineSystem === ROW);
+  // ⚠️ The field is `missing`, not `unsupported` (`CompileResult.missing`).
+  // Reading the wrong name is a check that cannot fail: it reported the row as
+  // EMPTY — 0 cards — which is exactly the shape of a real §3.120 finding and
+  // would have been believed.
+  const reasons = result.missing ?? [];
+  const rowHit = reasons.some((u) => u.missingEngineSystem === ROW);
+  for (const u of reasons) rowCensus.set(u.missingEngineSystem, (rowCensus.get(u.missingEngineSystem) ?? 0) + (textHit ? 1 : 0));
   if (textHit) byText.push(raw);
   if (rowHit) byRow.push(raw);
 }
@@ -204,6 +220,12 @@ console.log(`blocked, by the ROW hint                 ${rowNames.size}`);
 console.log(`  TEXT but filed elsewhere (leak in)     ${onlyText.length}`);
 console.log(`  ROW but no family text (leak out)      ${onlyRow.length}`);
 if (onlyRow.length > 0) console.log(`  e.g. ${onlyRow.slice(0, 6).join(' · ')}`);
+
+console.log('');
+console.log('--- where the family TEXT population is actually filed (clause counts) ---');
+for (const [row, n] of [...rowCensus.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12)) {
+  console.log(`  ${String(n).padStart(5)}  ${row}`);
+}
 
 // ---------------------------------------------------------------------------
 // 2. Blame each blocked TEXT card, line by line.
