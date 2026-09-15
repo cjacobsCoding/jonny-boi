@@ -59,8 +59,18 @@ describe('the forced-choice announcement REACHES a screen', () => {
     expect(playBoard, 'the banner is rendered, not merely imported').toMatch(/<ForcedChoiceBanner\b/);
     // Both props: a banner with no `chosen` is the name-string-only version the
     // report explicitly rejects.
-    expect(playBoard).toMatch(/<ForcedChoiceBanner[\s\S]{0,200}forced=\{forcedChoice\}/);
+    // It is drawn from the ANNOUNCEMENT BODY — the queue's own entry — rather
+    // than from a `forcedChoice` prop, because four independent announcers were
+    // painting over each other and now go through one surface.
+    expect(playBoard).toMatch(/<ForcedChoiceBanner[\s\S]{0,200}forced=\{body\.forced\}/);
     expect(playBoard).toMatch(/<ForcedChoiceBanner[\s\S]{0,200}chosen=\{forcedChoiceTargets\}/);
+    // …and it reaches the screen through the ONE surface, never on its own.
+    expect(playBoard, 'the banner is a renderer of the surface').toMatch(
+      /announcementRenderers[\s\S]{0,2400}forcedChoice: \(body\) => \([\s\S]{0,60}<ForcedChoiceBanner/,
+    );
+    expect(playBoard).toMatch(
+      /<AnnouncementSurface[\s\S]{0,160}renderers=\{announcementRenderers\}/,
+    );
   });
 
   it('the cards it picked are resolved through the SHARED funnel, not a local one', () => {
@@ -73,9 +83,12 @@ describe('the forced-choice announcement REACHES a screen', () => {
     expect(playView).toContain('forcedChoiceOf(');
     expect(playView).toContain('forcedChoiceDecision(');
     expect(playView).toContain('setForcedChoice(candidate)');
+    // It is handed down INSIDE the queue now — one prop carrying every
+    // announcement, so the board cannot be given one and not another.
     expect(playView, 'and it is handed back down to the board').toMatch(
-      /forcedChoice=\{forcedChoice\}/,
+      /announcements=\{announcements\}/,
     );
+    expect(playView, 'as a body of the queue').toMatch(/kind: 'forcedChoice', forced: forcedChoice/);
   });
 
   /**
@@ -84,9 +97,20 @@ describe('the forced-choice announcement REACHES a screen', () => {
    * until it gated BOTH movers. An announcement about a trigger that resolves in
    * the next priority window has exactly that shape.
    */
+  /**
+   * ⚠️ THE GATE MOVED, AND IT MOVED TO ONE PLACE. It used to be the literal
+   * `hold || combatHold || forcedChoice`, written out twice. It is now
+   * `announcements.holdsGame` — the queue's own `some(row.holds)` — so the thing
+   * stopping the game and the thing on screen are read off ONE value (rule 12).
+   * Three kinds still hold, exactly as before; `announcements.test.ts` pins that
+   * from the table, and this pins that both movers ask.
+   */
   it('it GATES the auto-passer and the AI seat, or it is a caption on a board that moved', () => {
-    const gates = [...playView.matchAll(/if \(hold \|\| combatHold \|\| forcedChoice\) return;/g)];
+    const gates = [...playView.matchAll(/if \(announcements\.holdsGame\) return;/g)];
     expect(gates, 'both movers are gated on the announcement').toHaveLength(2);
+    expect(playView, 'and no hand-rolled gate is left beside it').not.toMatch(
+      /if \(hold \|\| combatHold \|\| forcedChoice\)/,
+    );
   });
 
   it('it ANNOUNCES — it must never become a prompt', () => {
@@ -102,12 +126,19 @@ describe('the forced-choice announcement REACHES a screen', () => {
 // ---------------------------------------------------------------------------
 describe('the opponent’s held spell shows what it is aimed at', () => {
   it('SpellHoldCard takes targets and renders them as CARD FACES', () => {
-    expect(playBoard).toMatch(/function SpellHoldCard\([\s\S]{0,1600}targets,/);
-    expect(playBoard, 'rendered through the shared list, at face size').toMatch(
+    // It is its OWN module now — the contract `EffectsPreview.tsx` filed when the
+    // spell-hold bench could not draw the real announce card, and the thing that
+    // lets BOTH boards hand a spell-hold renderer to the one surface.
+    const card = code(here('SpellHoldCard.tsx'));
+    expect(card).toMatch(/export function SpellHoldCard\([\s\S]{0,1600}targets,/);
+    expect(card, 'rendered through the shared list, at face size').toMatch(
       /<CardReferenceList targets=\{targets\} presentation="face"/,
     );
     expect(playBoard, 'and the mount really passes them').toMatch(
-      /<SpellHoldCard[\s\S]{0,600}targets=\{holdTargets\}/,
+      /<SpellHoldCard[\s\S]{0,800}targets=\{holdTargets\}/,
+    );
+    expect(playBoard, 'through the one surface').toMatch(
+      /announcementRenderers[\s\S]{0,1200}spellHold: \(body\) => \([\s\S]{0,40}<SpellHoldCard/,
     );
   });
 
@@ -118,7 +149,14 @@ describe('the opponent’s held spell shows what it is aimed at', () => {
   });
 
   it('it keeps role="status" — the harness reads role="dialog" as a parked question', () => {
-    expect(playBoard).toMatch(/className="spell-hold"[\s\S]{0,1600}role="status"/);
+    const card = code(here('SpellHoldCard.tsx'));
+    expect(card).toMatch(/className="spell-hold"[\s\S]{0,1600}role="status"/);
+    expect(card, 'a timed announcement is not a dialog').not.toContain('role="dialog"');
+    // And the surface that now wraps it must not add one either — nor a live
+    // region, because a live region inside a live region says it twice.
+    const surface = code(here('AnnouncementSurface.tsx'));
+    expect(surface).not.toContain('role="dialog"');
+    expect(surface, 'the wrapper carries no role of its own').not.toMatch(/\srole="/);
   });
 
   /**
@@ -175,7 +213,7 @@ describe('ONE renderer for "what is this pointing at" — the class assertion', 
   });
 
   it('and the surfaces that DO show references all mount it', () => {
-    for (const file of ['StackPanel.tsx', 'ForcedChoiceBanner.tsx', 'PlayBoard.tsx']) {
+    for (const file of ['StackPanel.tsx', 'ForcedChoiceBanner.tsx', 'SpellHoldCard.tsx']) {
       expect(code(here(file)), `${file} mounts the shared list`).toContain('<CardReferenceList');
     }
   });
