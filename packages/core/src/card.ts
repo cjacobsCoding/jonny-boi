@@ -300,6 +300,32 @@ export interface KeywordFlags {
    */
   readonly protectionFrom?: readonly ProtectionQuality[];
   /**
+   * **Hexproof from [quality]** (CR 702.11e) — "this permanent can't be the
+   * target of [quality] spells your opponents control or abilities your
+   * opponents control from [quality] sources."
+   *
+   * ⚠️ **It is NOT protection with three quarters missing, and reading it that
+   * way is the classic wrong implementation in both directions.** Protection
+   * (CR 702.16) is four rules — can't be targeted, damaged, enchanted/equipped
+   * or blocked — and it binds against EVERY source including its controller's.
+   * Hexproof-from is one rule, the targeting one, and only against an
+   * OPPONENT's. So it is strictly weaker than protection from the same quality,
+   * and compiling `hexproof from black` into {@link protectionFrom} would put a
+   * card into the pool playing STRONGER than printed — the mirror of the
+   * failure the pool rule exists to prevent.
+   *
+   * The QUALITY vocabulary is shared with protection on purpose: "which sources
+   * count as black / as artifacts / as Dragons" is one question with one answer
+   * (`sourceHasQuality`), asked from two places. What differs is only the scope,
+   * and the scope is exactly {@link hexproof}'s — which is why the enforcement
+   * is one clause in `isTargetableBy` beside hexproof's, not a second funnel.
+   *
+   * A list, and merged by UNION, for the same reason as `protectionFrom`:
+   * Nevinyrral prints "hexproof from artifacts, creatures, and enchantments" as
+   * one ability naming three qualities.
+   */
+  readonly hexproofFrom?: readonly ProtectionQuality[];
+  /**
    * Ward {N} — whenever this permanent becomes the target of a spell or ability
    * an OPPONENT controls, counter it unless that player pays {N}. The value is
    * the printed generic cost; only the plain `Ward {N}` form is modelled (a

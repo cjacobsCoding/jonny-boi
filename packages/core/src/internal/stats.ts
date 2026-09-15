@@ -238,11 +238,12 @@ export function effectiveKeywords(inst: CardInstance, mod: AggregatedMod = NO_MO
 
 /**
  * Fold a keyword GRANT onto a base keyword set. Boolean flags OR together (a
- * grant can set a flag, never clear one). The three non-boolean keywords carry
+ * grant can set a flag, never clear one). The non-boolean keywords carry
  * payloads and merge by their own rules, defined once here and reused by the
  * continuous layer's aggregation:
  *   - `protectionFrom` lists UNION (protection from red plus a granted
  *     protection from white is protection from both);
+ *   - `hexproofFrom` lists UNION, by the same argument (CR 702.11e);
  *   - `ward` costs ADD (two ward abilities charge the sum — paying both);
  *   - `minBlockers` takes the MAXIMUM. Two blocking requirements are both in
  *     force at once, so the one that is harder to satisfy is the one that
@@ -257,6 +258,14 @@ export function mergeKeywordGrant(base: KeywordFlags, granted: KeywordFlags): Ke
     const value = (granted as Record<string, unknown>)[key];
     if (key === 'protectionFrom') {
       const merged = unionProtection(base.protectionFrom, value as KeywordFlags['protectionFrom']);
+      if (merged !== undefined) out[key] = merged;
+    } else if (key === 'hexproofFrom') {
+      // CR 702.11e — a LIST payload, so it unions exactly like `protectionFrom`
+      // and for the same reason. ⚠️ Without this row it would fall through to
+      // the `value === true` arm below and a granted list would be written as
+      // the literal `true`, which every reader would then treat as "no
+      // qualities" — a grant that silently does nothing.
+      const merged = unionProtection(base.hexproofFrom, value as KeywordFlags['hexproofFrom']);
       if (merged !== undefined) out[key] = merged;
     } else if (key === 'ward') {
       const grantedWard = typeof value === 'number' && value > 0 ? value : 0;

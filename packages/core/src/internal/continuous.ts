@@ -216,8 +216,9 @@ const KEYWORD_KEYS = [
 ] as const;
 
 /**
- * The boolean-valued keys of `KeywordFlags`. The FOUR payload keywords
- * (`protectionFrom`, `ward`, `minBlockers`, `blockRestriction`) are excluded BY
+ * The boolean-valued keys of `KeywordFlags`. The FIVE payload keywords
+ * (`protectionFrom`, `hexproofFrom`, `ward`, `minBlockers`, `blockRestriction`)
+ * are excluded BY
  * TYPE rather than by memory: they are folded by their own merge rules in
  * {@link grantInto}, since "set it to true" is not what granting one of them
  * means.
@@ -285,12 +286,20 @@ function grantInto(agg: MutableMod, grant: KeywordFlags | undefined): void {
     if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
     (agg.keywords as Record<string, boolean>)[key] = true;
   }
-  // The two payload keywords, merged by the same rules `effectiveKeywords`
-  // applies when the aggregate meets the printed set: protections UNION, wards ADD.
+  // The payload keywords, merged by the same rules `effectiveKeywords` applies
+  // when the aggregate meets the printed set: protections UNION, wards ADD.
   if (grant.protectionFrom !== undefined && grant.protectionFrom.length > 0) {
     if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
     (agg.keywords as { protectionFrom?: KeywordFlags['protectionFrom'] }).protectionFrom =
       unionProtection(agg.keywords.protectionFrom, grant.protectionFrom);
+  }
+  // CR 702.11e — the same UNION, because it is the same kind of payload. A grant
+  // of "hexproof from blue" onto a creature printing "hexproof from black" is
+  // hexproof from both (Veil of Summer onto Garruk's Harbinger).
+  if (grant.hexproofFrom !== undefined && grant.hexproofFrom.length > 0) {
+    if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
+    (agg.keywords as { hexproofFrom?: KeywordFlags['hexproofFrom'] }).hexproofFrom =
+      unionProtection(agg.keywords.hexproofFrom, grant.hexproofFrom);
   }
   if (typeof grant.ward === 'number' && grant.ward > 0) {
     if (agg.keywords === NO_KEYWORDS) agg.keywords = {};

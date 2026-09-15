@@ -289,6 +289,14 @@ const ENTRIES = {
     text: 'Against sources with the named quality, four things stop working: it cannot be Damaged, Enchanted or equipped, Blocked, or Targeted by them. Everything else from that source — a sacrifice effect, "destroy", -X/-X — still applies.',
     aliases: ['protection'],
   },
+  hexproofFrom: {
+    term: 'Hexproof from',
+    kind: 'keyword',
+    rule: '702.11',
+    flag: 'hexproofFrom',
+    text: 'Your opponents cannot target it with spells or abilities of the named quality. Only ONE of protection’s four rules, and only against opponents: their black removal cannot aim at a creature with hexproof from black, but their black board wipe still kills it, their black creature can still block it, and you can still target it yourself.',
+    aliases: ['hexproof from'],
+  },
   ward: {
     term: 'Ward',
     kind: 'keyword',
@@ -669,6 +677,7 @@ export const KEYWORD_FLAG_GLOSSARY: { readonly [K in keyof KeywordFlags]-?: Glos
     indestructible: 'indestructible',
     horsemanship: 'horsemanship',
     protectionFrom: 'protectionFrom',
+    hexproofFrom: 'hexproofFrom',
     ward: 'ward',
     infect: 'infect',
     wither: 'wither',

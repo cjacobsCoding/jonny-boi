@@ -262,8 +262,9 @@ function addTypesTo(base: readonly CardType[], extra: readonly CardType[] | unde
 }
 
 /**
- * Merge granted keywords onto a copied set. Booleans OR, protections UNION and
- * wards ADD — the same three merge rules the continuous layer's `grantInto`
+ * Merge granted keywords onto a copied set. Booleans OR, protection and
+ * hexproof-from lists UNION and wards ADD — the same merge rules the
+ * continuous layer's `grantInto`
  * uses, because "except it has flying" grants a keyword in exactly the sense a
  * pump does and two different answers would be a bug waiting to happen.
  */
@@ -275,10 +276,16 @@ function addKeywordsTo(
   if (base === undefined) return extra;
   const merged: KeywordFlags = { ...base, ...extra };
   const protection = unionProtection(base.protectionFrom, extra.protectionFrom);
+  // CR 702.11e — a list payload like `protectionFrom`, so it unions here too.
+  // ⚠️ The spread above would otherwise let `extra`'s list REPLACE `base`'s
+  // rather than join it, silently losing the copied card's own printed
+  // qualities.
+  const hexproofFrom = unionProtection(base.hexproofFrom, extra.hexproofFrom);
   const ward = (base.ward ?? 0) + (extra.ward ?? 0);
   return {
     ...merged,
     ...(protection !== undefined ? { protectionFrom: protection } : {}),
+    ...(hexproofFrom !== undefined ? { hexproofFrom } : {}),
     ...(ward > 0 ? { ward } : {}),
   };
 }

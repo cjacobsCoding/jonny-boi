@@ -17,6 +17,16 @@
  * this source have?" and "does any of them fall under this protection list?" —
  * so the four halves cannot drift apart.
  *
+ * ## Hexproof from [quality] is NOT this, and shares only the vocabulary
+ * `KeywordFlags.hexproofFrom` (CR 702.11e) is rule 1 alone, and only against an
+ * OPPONENT's spell — strictly weaker than protection from the same quality,
+ * which binds against its own controller too. It reuses
+ * {@link sourceHasQuality} and {@link protectionBlocksSource} because "does
+ * this source count as black?" is one question with one answer; it does NOT
+ * reuse {@link effectiveProtectionOf}, and a compiler that folded
+ * `hexproof from black` into `protectionFrom` would put the card into the pool
+ * playing stronger than printed. The one enforcement site is `isTargetableBy`.
+ *
  * ## What a source's COLOR is
  * The colors of its mana cost's colored pips, hybrid symbols included — exactly
  * the information a `CardDefinition` carries. The engine has no color

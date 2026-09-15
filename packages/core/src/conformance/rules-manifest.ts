@@ -1299,6 +1299,9 @@ export const KEYWORD_RULES: KeywordRules = {
   menace: '702.111',
   indestructible: '702.12',
   protectionFrom: '702.16',
+  // 702.11e is the hexproof rule's own subsection, NOT a rule of its own: the
+  // Comprehensive Rules define "hexproof from [quality]" inside 702.11.
+  hexproofFrom: '702.11',
   ward: '702.21',
   // poison family (§3.105). Toxic is 702.164 — NOT 702.181, which is Mobilize;
   // checked against the 2026-08-19 Comprehensive Rules text.

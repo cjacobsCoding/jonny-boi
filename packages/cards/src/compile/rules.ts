@@ -1341,6 +1341,70 @@ const WARD_PATTERN = /^ward \{(\d+)\}$/;
 /** `Protection from X[ and from Y...]` - the capturing form of the printed line. */
 const PROTECTION_PATTERN = /^protection from (.+)$/;
 
+// --- BEGIN targeting-protection family (DESIGN §3.151) -------------------------
+// Owned by `feat/targeting-protection`. Everything between this marker and its
+// END marker is the hexproof-from family; neighbours are untouched on purpose so
+// the concurrent lanes in this file merge textually.
+
+/**
+ * `Hexproof from X[, Y, and Z]` (CR 702.11e) — the MODERN printing of the
+ * targeting quarter, and the capturing form of the printed keyword line.
+ *
+ * It reads the SAME quality list as {@link PROTECTION_PATTERN}, through the same
+ * {@link parseProtectionQualities}, because "which sources count as black" is
+ * one question. What differs is the FIELD it lands in, and that difference is
+ * the whole point: see `KeywordFlags.hexproofFrom`.
+ */
+const HEXPROOF_FROM_PATTERN = /^hexproof from (.+)$/;
+
+/**
+ * Fiendslayer Paladin's printing — the same ability spelled as a sentence,
+ * before `hexproof from` existed as a keyword (2013 vs 2018).
+ *
+ * `~ can't be the target of black or red spells your opponents control.`
+ *
+ * ⚠️ **The "your opponents control" tail is load-bearing and is REQUIRED by
+ * this pattern, not optional.** The older wording without it — "can't be the
+ * target of red spells **or abilities from red sources**" (Suq'Ata Firewalker,
+ * Mercenary Informer, Rebel Informer, Raiding Party) — binds against the
+ * controller's own spells too, which is shroud's scope, not hexproof's. Making
+ * the tail optional would compile four cards into a keyword that lets their
+ * controller target them, i.e. playing them differently from printed. Those
+ * cards keep REPORTING; see DESIGN §3.151's residue table.
+ */
+const CANT_BE_TARGETED_SENTENCE =
+  /^(?:~|this (?:creature|permanent|enchantment|artifact|land)) can't be the target of (.+?) spells your opponents control\.?$/;
+
+/**
+ * How that sentence separates its qualities — "black or red", "black, red, or
+ * green". A different separator from {@link PROTECTION_SEPARATOR} because the
+ * sentence form spells the list in English ("or") while the keyword form repeats
+ * the preposition ("and from"); both are normalised into the same word list, so
+ * the closed quality table stays the single answer to which words are real.
+ */
+const SENTENCE_QUALITY_SEPARATOR = /,? or |, /;
+
+/**
+ * Compile the sentence printing into the same qualities the keyword printing
+ * yields, or `null` when any word is outside the closed table.
+ */
+function parseCantBeTargetedSentence(text: string): KeywordFlags | null {
+  const match = CANT_BE_TARGETED_SENTENCE.exec(text);
+  if (!match) return null;
+  const words = (match[1] ?? '')
+    .split(SENTENCE_QUALITY_SEPARATOR)
+    .map((word) => word.trim())
+    .filter((word) => word.length > 0);
+  if (words.length === 0) return null;
+  // Rejoin into the keyword form's own separator so ONE parser owns the closed
+  // quality vocabulary. A second copy of that table is the DRY failure this
+  // repo's rule 12 names.
+  const qualities = parseProtectionQualities(words.join(' and from '));
+  return qualities === null ? null : { hexproofFrom: qualities };
+}
+
+// --- END targeting-protection family ------------------------------------------
+
 /**
  * Parse a printed protection quality list ("red", "black and from green") into
  * core qualities, or `null` when ANY word is outside the closed table - a
@@ -1393,7 +1457,14 @@ export function parseProtectionOrWard(word: string): KeywordFlags | null {
     const qualities = parseProtectionQualities(protection[1] ?? '');
     return qualities === null ? null : { protectionFrom: qualities };
   }
-  return null;
+  // §3.151 — the targeting quarter, in its two printings. Both land in
+  // `hexproofFrom`, never in `protectionFrom`: see the field's own note.
+  const hexproofFrom = HEXPROOF_FROM_PATTERN.exec(text);
+  if (hexproofFrom) {
+    const qualities = parseProtectionQualities(hexproofFrom[1] ?? '');
+    return qualities === null ? null : { hexproofFrom: qualities };
+  }
+  return parseCantBeTargetedSentence(text);
 }
 
 // --- poison family (§3.105) -----------------------------------------------------
@@ -9553,7 +9624,7 @@ export function joinPayloadKeywords(words: readonly string[]): string[] {
   const joined: string[] = [];
   for (const word of words) {
     const previous = joined[joined.length - 1];
-    if (previous !== undefined && PROTECTION_CONTINUATION.test(word) && previous.startsWith('protection from ')) {
+    if (previous !== undefined && QUALITY_PHRASE_PREFIX.test(previous) && isQualityContinuation(word)) {
       joined[joined.length - 1] = `${previous} and ${word.replace(/^and /, '')}`;
       continue;
     }
@@ -9564,6 +9635,40 @@ export function joinPayloadKeywords(words: readonly string[]): string[] {
 
 /** A trailing "from …" fragment of a multi-quality protection line. */
 const PROTECTION_CONTINUATION = /^(?:and )?from /;
+
+/**
+ * §3.151 — the two printed phrases whose tail is a QUALITY LIST. Both spell the
+ * list the same way, so both need the same re-join.
+ */
+const QUALITY_PHRASE_PREFIX = /^(?:protection|hexproof) from /;
+
+/**
+ * Whether a split fragment continues the quality list before it.
+ *
+ * Two shapes, because Oracle prints two. The protection line repeats the
+ * preposition ("black and FROM green"), which is unambiguous. The hexproof-from
+ * line does NOT — Nevinyrral prints "Hexproof from artifacts, creatures, and
+ * enchantments", so the fragments arrive as bare words and there is nothing
+ * grammatical to recognise them by.
+ *
+ * ⚠️ So a bare fragment is admitted ONLY when the CLOSED quality tables already
+ * name it. That is what keeps this from swallowing a real second keyword: "and
+ * lifelink" is not a quality word, so it stays its own conjunct and the line
+ * compiles as two abilities, which is what it is. Widening this to "any bare
+ * word after a protection phrase" is the silent-approximation failure rule 2
+ * names — it would read "protection from black and vigilance" as protection
+ * from a quality called vigilance and quietly drop the keyword.
+ */
+function isQualityContinuation(word: string): boolean {
+  if (PROTECTION_CONTINUATION.test(word)) return true;
+  const bare = word.replace(/^and /, '').trim();
+  if (bare.length === 0) return false;
+  return (
+    bare === PROTECTION_EACH_COLOR ||
+    PROTECTION_QUALITY_WORDS[bare] !== undefined ||
+    PROTECTION_SUBTYPE_WORDS[bare] !== undefined
+  );
+}
 
 /**
  * A printed conjunction repeats the verb ("can't be blocked AND HAS shroud"), so
