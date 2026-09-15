@@ -41790,7 +41790,7 @@ const POOL_4: readonly CardDefinition[] = [
     triggers: [
       {
         condition: { on: 'etb' },
-        effects: [{ primitive: 'exileTarget', params: { targets: 'creature' } }],
+        effects: [{ primitive: 'exileUntilLeaves', params: { targets: 'creature', max: 1 } }],
         label: 'Enters: exile target creature',
         targets: 'creature',
       },
@@ -57485,7 +57485,7 @@ const POOL_6: readonly CardDefinition[] = [
     triggers: [
       {
         condition: { on: 'etb' },
-        effects: [{ primitive: 'exileTarget', params: { targets: 'land' } }],
+        effects: [{ primitive: 'exileUntilLeaves', params: { targets: 'land', max: 1 } }],
         label: 'Enters: exile target land',
         targets: 'land',
       },

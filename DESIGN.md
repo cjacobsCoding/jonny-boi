@@ -2979,6 +2979,108 @@ time/fade/age outside §3.106's keywords; loyalty, defense, level and lore; keyw
 mana-battery family place their charge counters now and still do not enter the pool); proliferate's
 chooser; "double the number of counters"; and every rider on the graveyard exile that is not
 "creature card".
+### 3.148 The targeted-trigger row splits three ways, and one of the three was a card already in the pool — ✅ done
+
+> ⚠️ **Section number claimed off a contended range.** `main` already carries TWO §3.147 sections at
+> fork, and three lanes are live in `rules.ts`. If an integrator finds a second §3.148, renumber this
+> one — it references no other section by number except as prose.
+
+The backlog entry *"a targeted-trigger template the compiler does not recognize yet"* named **888
+cards**, and it holds Oblivion Ring from `docs/decks/acidic-angels.txt`. `gap-clauses.mjs` gave the
+§3.120 answer immediately: **884 cards, 890 clauses, 748 distinct shapes — 1.18 cards per shape,
+largest single shape 19.** Another bucket, not another system, exactly as §3.120 and §3.147 found
+before it.
+
+**The new question this row forced.** §3.147 showed that a row's NAME can point at the wrong half —
+its "activated-ability" row was 95% BODY, not cost. This row's name blames the TRIGGER, and a clause
+`When <EVENT>, <BODY>` can fail in **three** places. NEW
+`packages/cards/scripts/targeted-blame.mjs <corpus>` probes the halves black-box through
+`compileCard` (`<EVENT>, draw a card` and `when ~ enters, <BODY>`) and answers the third by asking
+the compiler's own closed noun table whether it can even aim at the printed noun:
+
+| where the blame sits | clauses | shapes | cards | cards this row blocks ALONE |
+|---|---:|---:|---:|---:|
+| the TRIGGER condition | 97 | 60 | 96 | 52 |
+| the TARGET selector | 137 | 99 | 137 | 95 |
+| **the BODY template** | **396** | **254** | **396** | **280** |
+| both halves | 256 | 247 | 253 | 107 |
+| neither (the whole sentence has no rule) | 4 | 4 | 4 | 3 |
+
+So unlike §3.147 the row does **not** collapse into one half — it is genuinely three problems under
+one label, and a brief written from the row's name would have spent itself on trigger conditions
+worth 52 cards while the body half held 280.
+
+**⚠️ The row BOUNDARY is decided by hint order, not by meaning.** `UNSUPPORTED_HINTS` is a first-match
+table and `/leaves the battlefield/` sits above the targeted-trigger entry, so every *"exile target
+X **until this leaves the battlefield**"* card — the modern O-Ring, 68 printed lines — is filed under
+a different row while being the same shape. Worth knowing before the next agent trusts a row size.
+
+**Three shapes shipped, each a closed table:**
+
+1. **The body's leading PRONOUN.** *"When this creature enters, **it** deals 2 damage to any target"*
+   is the single largest one-clause shape in the row (15 cards) and the effect rule for it already
+   existed — `damage-any-target` reads `~ deals N damage to <RECIPIENT>` over the whole
+   `DAMAGE_TARGET_RESTRICTIONS` table. What was missing was only that the body says "it" where the
+   rule says "~". Resolved in `triggerFrom`/`optionalTriggerFrom` over `SOURCE_SUBJECT_EVENTS`, a
+   CLOSED set of the events whose printed subject IS the source. ⚠️ **The discriminator is that the
+   same pronoun means a different object elsewhere**: on `permanentDies` it is the creature that
+   died, and on an Equipment's `watches: 'attachedHost'` it is the equipped creature (Extra Arms).
+   Widening the set, or dropping the `watches` check, compiles a card whose damage comes from the
+   wrong object — and `'complete'` says nothing about it. Two tests pin exactly that.
+
+2. **"creature an opponent controls" — one printed narrowing, four closed tables.** Core has said
+   `creatureAnOpponentControls` since Banisher Priest; four separate noun tables had never been
+   given the row. One row each in `TARGET_NOUN_RESTRICTIONS`, `PUMP_TARGET_NOUNS`,
+   `UNTAP_TARGET_NOUNS` and `DAMAGE_TARGET_RESTRICTIONS` and the shrink, the tap, the burn and the
+   removal verbs gain it in the same edit. It is never widened to `creature`: a shrink or a tap that
+   may be aimed at your own board is a strictly worse play offered as though it were legal.
+   **And a DRY defect the row exposed:** bounce was reading a PRIVATE `(creature|permanent)`
+   alternation instead of the shared table, so a noun added for destroy and exile reached two verbs
+   of three. `return-target-permanent-to-hand` reads the table now, which also hands it every noun
+   the table already had (`nonland permanent` among them) for free.
+
+3. **⚠️ A CARD ALREADY IN THE POOL, PLAYING BETTER THAN PRINTED.** The O-Ring is three printed
+   sentences and one machine: the ETB exile, the leaves-return, and the **LINK** between them
+   (`exileUntilLeaves` stamps `CardInstance.exiledUntilLeavesBy`; `returnExiledByThis` returns only
+   what that link names). `exile target creature` compiled through the generic `trigger-etb` into a
+   bare `exileTarget`, which records no link — so **Journey to Nowhere and Petravark shipped in
+   `expanded-pool.ts` as one-way exiles whose own printed second line gave back nothing**: removal
+   with no drawback, which is exactly the bias the pool exists to keep out, and which every
+   compile-level check in the repo called `'complete'`.
+   New `trigger-etb-exile-target-noun-linked` exiles through the linked funnel over the shared noun
+   table, **gated on the card actually printing the return line** — Galactus prints the same sentence
+   with no return and must keep compiling to a plain exile, so the same words are two different
+   cards and only the card knows which. Oblivion Ring ✅ and Faceless Butcher ✅ fall out of the same
+   rule, and the word "another" rides the ability as `targetsExcludeSelf` for Fiend Hunter's reason
+   (a Ring that could exile itself would leave, return itself and trigger again, for ever).
+   `oring-linked-play.test.ts` plays both cards through the real action loop — cast, aim, destroy the
+   enchantment with a Demystify from the pool, and look at where the prisoner ended up — because a
+   compile-level assertion is precisely the check that missed this for as long as it shipped.
+
+**Measured delta: 6,450 → 6,572 accepted, +122, and 0 cards lost**, on ONE fixed 32,414-card corpus
+compiled twice with this branch's `rules.ts` reverted in between, so the number is the compiler's and
+not a corpus refresh's. Oblivion Ring ✅ and Faceless Butcher ✅ compile. The row itself went
+**884 → 780 cards / 748 → 715 shapes**, and its former largest shape — "it deals N damage to any
+target", 19 clauses — is gone from the report entirely. The re-run blame shows where the remaining
+work moved: BODY 396 → 303 clauses, SELECTOR 137 → 127, TRIGGER 97 → 129 (it RISES, because a card
+whose body now compiles stops hiding its trigger — the same honest arithmetic §3.147's
+"cost/body/both" table produced).
+
+**Left REPORTED on purpose, each with its number and its reason:**
+- **The modern O-Ring, `exile target <NOUN> an opponent controls until ~ leaves the battlefield`** —
+  measured at **21 lines for `nonland permanent an opponent controls`, 6 for `artifact or creature`,
+  3 for `tapped creature`, 3 for `creature or planeswalker`**, all "an opponent controls". The
+  machinery is entirely built and the rule is one line; what is missing is core's vocabulary — each
+  needs a new `TargetRestriction` member at the five homes a restriction word has (§3.40), and this
+  lane deliberately did not open core's union while three lanes were live in `rules.ts`. That is the
+  cheapest remaining work in this family and it is a CORE task, not a compiler one.
+- **`tap target X. That creature doesn't untap during its controller's next untap step`** (Frost
+  Lynx, 8 clauses) — two sentences where the second says "THAT creature", and
+  `compileTriggerBody` refuses a body needing two aims rather than quietly pointing both at one
+  object. The "that creature" back-reference is the missing piece, not the untap delay.
+- **The TRIGGER-condition half at large** — 60 distinct shapes over 97 clauses, top shape
+  `when ~ is turned face up` at 14. That is the §3.120 shape again inside the row's own third, so it
+  was measured and left rather than written one condition at a time.
 
 ### 3.147 The activated-ability row is the §3.120 artifact again — but one shape inside it concentrates — ✅ done
 

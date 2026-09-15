@@ -59,6 +59,71 @@
   Grindclock, Surge Node and the whole mana-battery family now PLACE their charge counters and still do
   not enter the pool; proliferate's chooser; "double the number of counters"; every graveyard-exile rider
   that is not "creature card".
+- 2026-09-15 `feat/targeted-trigger-templates` — ✅ **pushed-ready, NOT merged** (worker; integrator merges).
+  **§3.148 — the targeted-trigger row measured, split THREE ways, and a card already in the pool that
+  played better than printed.** The row named 888 cards and is the §3.120 artifact again (884 cards,
+  748 shapes, 1.18 cards each). NEW `targeted-blame.mjs` splits it by WHICH OF THREE halves fails —
+  and unlike §3.147's row it does **not** collapse into one: **BODY 396 clauses / 254 shapes,
+  SELECTOR 137 / 99, TRIGGER 97 / 60.** Three closed-table shapes shipped: the body's leading PRONOUN
+  ("it deals N damage to …", the row's largest one-clause shape at 15 cards), "creature an opponent
+  controls" as a row in four noun tables, and the O-Ring's LINK.
+  📊 `npm run build` **exit 0** (unpiped) · `npx vitest run packages/cards packages/core
+  --minWorkers=1 --maxWorkers=1` ****19,682 passed, 0 failed / 202 files**** (202 files collected == 202 `*.test.ts` on disk,
+  0 skipped, no "Worker exited unexpectedly") ·
+  every rule this branch added or widened FIRES on real corpus cards:
+  `trigger-etb-exile-target-noun-linked` 4 (Journey to Nowhere, Faceless Butcher, Petravark, Oblivion
+  Ring), `damage-any-target` 245, `pump-until-eot` 255, `tap-target-noun` 20,
+  `return-target-permanent-to-hand` 78 ·
+  **red-then-green ×3**, each sabotage reddening exactly the intended test: drop the `watches` check
+  in `resolveSourcePronoun` → the equipped-creature card compiles (1 red); drop `(another )?` from the
+  linked-exile pattern → Oblivion Ring stops compiling (2 files red); drop `printsLinkedReturn` →
+  Galactus's plain exile becomes a linked one (1 red).
+  📈 **Compiler delta +122 accepted (6,450 → 6,572), 0 lost, on one fixed 32,414-card corpus** — the
+  same corpus compiled twice with this branch's `rules.ts` reverted in between (`git show
+  origin/main:…` + a file copy; **never `git stash`**), so the number is the compiler's and not a
+  corpus refresh's. **Oblivion Ring ✅ and Faceless Butcher ✅ compile** — `docs/decks/acidic-angels.txt`
+  loses one ✗. The row went 884 → 780 cards.
+  ⚠️ **A DEFECT IN THE SHIPPED POOL, NOT A NEW FEATURE.** `exile target creature` compiled to a bare
+  `exileTarget`, which records no link, beside a `returnExiledByThis` that returns only what the link
+  names — so **Journey to Nowhere and Petravark shipped in `expanded-pool.ts` as one-way exiles whose
+  own printed second line gave back nothing**: removal with no drawback. `compile.test.ts` and
+  `fidelity.test.ts` went red on exactly those two cards, correctly. **`data/expanded-pool.ts` carries
+  a TWO-LINE splice** (the two stale `effects:` lines), values written by a script from the compiler's
+  own output — those two ground-truth tests are the check that the splice is right. The integrator
+  still owes a full `build-expansion.ts` regeneration; this is the minimum that keeps the branch green
+  without committing another lane's corpus refresh.
+  ⚠️ **SEMANTIC-CONFLICT WARNING — `packages/cards/src/compile/rules.ts` only** (no `packages/core`
+  change, no `apps/web` change, so the counters and {X} lanes should merge cleanly around it):
+  (1) four closed tables each gain ONE row — `TARGET_NOUN_RESTRICTIONS`, `PUMP_TARGET_NOUNS`,
+  `UNTAP_TARGET_NOUNS`, `DAMAGE_TARGET_RESTRICTIONS` (`'creature an opponent controls'`);
+  (2) `return-target-permanent-to-hand` swaps its private `(creature|permanent)` alternation for
+  `TARGET_NOUN_PHRASE` — a lane that added a noun row gets it on bounce for free, which is the point;
+  (3) NEW contiguous region before `EFFECT_RULES` (`RETURN_EXILED_TO_BATTLEFIELD`,
+  `RETURN_EXILED_TO_HAND`, `LEAVES_TRIGGER_PREFIX`, `printsLinkedReturn`) and the two
+  `return-exiled-by-this-*` rules now name those constants instead of inlining their patterns;
+  (4) NEW contiguous region before `triggerFrom` (`SOURCE_SUBJECT_EVENTS`, `resolveSourcePronoun`),
+  one changed line inside `triggerFrom` and two inside `optionalTriggerFrom`;
+  (5) NEW rule `trigger-etb-exile-target-noun-linked`, immediately above `trigger-etb`. **ORDER IS
+  LOAD-BEARING** — below `trigger-etb` it never matches and Oblivion Ring silently regresses to a
+  drawback-free exile.
+  ℹ️ **Two findings worth carrying, both about how a row is READ:**
+  (a) **`UNSUPPORTED_HINTS` is FIRST-MATCH, so a row's boundary is hint ORDER, not meaning.**
+  `/leaves the battlefield/` sits above the targeted-trigger entry, so all 68 printed *"exile target X
+  until this leaves the battlefield"* lines are filed under a different row while being this shape.
+  (b) **A "REFUSES …" assertion can be a check that cannot fail.** The first version of the
+  host-watch test used an Equipment with no `Equip {N}` line: the compiler refused it for THAT reason
+  and the assertion passed under every sabotage. Fixed by printing the Equip line and asserting the
+  REASON, not just the verdict. The board-watching sibling assertion is now labelled honestly as a
+  card regression guard rather than a table falsification — `trigger-permanent-enters-or-dies` calls
+  `ctx.compileTriggerBody` directly and never asks `triggerFrom` what "it" means.
+  ℹ️ **Left REPORTED, each with its number:** the modern O-Ring `exile target <NOUN> an opponent
+  controls until ~ leaves the battlefield` — **21 lines `nonland permanent`, 6 `artifact or creature`,
+  3 `tapped creature`, 3 `creature or planeswalker`**, all needing a NEW `TargetRestriction` member at
+  the five homes a restriction word has (§3.40); this lane deliberately did not open core's union with
+  three lanes live in `rules.ts`, and that is the cheapest remaining work in this family. Also Frost
+  Lynx's `tap target X. THAT creature doesn't untap…` (8 clauses — a two-aim body
+  `compileTriggerBody` refuses on purpose), and the trigger-condition third at large (79 shapes over
+  129 clauses after this branch, top shape `when ~ is turned face up` at 14 — the §3.120 shape again).
 - 2026-09-14 `feat/activated-ability-templates` — ✅ **pushed-ready, NOT merged** (worker; integrator merges).
   **§3.147 — the activated-ability backlog row measured, then the one shape inside it that concentrates.**
   The row named 1,449 cards and is the §3.120 artifact again (1,273 distinct shapes, 1.2 cards each); NEW
