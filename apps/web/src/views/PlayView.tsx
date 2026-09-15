@@ -1049,8 +1049,45 @@ function LocalPlay({
    */
   const [forcedChoice, setForcedChoice] = useState<ForcedChoice | null>(null);
   const forcedSeenRef = useRef<number>(0);
-  const forcedAnnouncedRef = useRef<ReadonlySet<number>>(new Set());
+  const forcedAnnouncedRef = useRef<ReadonlySet<string>>(new Set());
   const forcedTurnRef = useRef<{ turn: number; spent: number }>({ turn: 0, spent: 0 });
+
+  /**
+   * THE ONE PLACE a settled choice becomes a banner — asked by BOTH producers.
+   *
+   * The engine's `choiceAutoAnswered` arrives through the effect below; the
+   * board's own pre-cast settle (`AUTO_SETTLE_POLICY.costPayers`) arrives
+   * through `PlayBoard`'s `onForcedChoice`. They share the decision, the
+   * per-turn budget and the announced-once set, because "is this worth
+   * interrupting for?" is one question (rule 12) and two answers would drift.
+   *
+   * Returns whether it announced, so a caller walking a batch can stop.
+   */
+  const announceForcedChoice = useCallback(
+    (candidate: ForcedChoice): boolean => {
+      if (!session || viewerSeat === null) return false;
+      const turnNumber = session.state.turnNumber;
+      if (forcedTurnRef.current.turn !== turnNumber) {
+        forcedTurnRef.current = { turn: turnNumber, spent: 0 };
+      }
+      const decision = forcedChoiceDecision(
+        candidate,
+        {
+          viewer: viewerSeat,
+          announced: forcedAnnouncedRef.current,
+          announcedThisTurn: forcedTurnRef.current.spent,
+          gameOver: session.gameOver,
+        },
+        FORCED_CHOICE_CONFIG,
+      );
+      if (decision.kind !== 'announce') return false;
+      forcedAnnouncedRef.current = new Set([...forcedAnnouncedRef.current, candidate.id]);
+      forcedTurnRef.current = { turn: turnNumber, spent: forcedTurnRef.current.spent + 1 };
+      setForcedChoice(candidate);
+      return true;
+    },
+    [session, viewerSeat],
+  );
 
   useEffect(() => {
     if (phase.kind !== 'play' || !session) return;
@@ -1065,33 +1102,16 @@ function LocalPlay({
     if (events.length === forcedSeenRef.current) return;
     const fresh = events.slice(forcedSeenRef.current);
     forcedSeenRef.current = events.length;
-    if (viewerSeat === null) return;
-    const turnNumber = session.state.turnNumber;
-    if (forcedTurnRef.current.turn !== turnNumber) forcedTurnRef.current = { turn: turnNumber, spent: 0 };
+    const names = {
+      nameOf: session.nameOf,
+      playerName: session.playerName,
+      defOf: session.defOf,
+    };
     for (const event of fresh) {
-      const candidate = forcedChoiceOf(event, {
-        nameOf: session.nameOf,
-        playerName: (p) => session.names[p],
-        defOf: session.defOf,
-      });
-      if (!candidate) continue;
-      const decision = forcedChoiceDecision(
-        candidate,
-        {
-          viewer: viewerSeat,
-          announced: forcedAnnouncedRef.current,
-          announcedThisTurn: forcedTurnRef.current.spent,
-          gameOver: session.gameOver,
-        },
-        FORCED_CHOICE_CONFIG,
-      );
-      if (decision.kind !== 'announce') continue;
-      forcedAnnouncedRef.current = new Set([...forcedAnnouncedRef.current, candidate.choiceId]);
-      forcedTurnRef.current = { turn: turnNumber, spent: forcedTurnRef.current.spent + 1 };
-      setForcedChoice(candidate);
-      return;
+      const candidate = forcedChoiceOf(event, names);
+      if (candidate && announceForcedChoice(candidate)) return;
     }
-  }, [phase, session, viewerSeat, forcedChoice]);
+  }, [phase, session, forcedChoice, announceForcedChoice]);
 
   // The announcement's timer. Reduced motion picks the row's OTHER beat — a
   // NUMBER, never a switch — because the WORDS still have to be read.
@@ -1343,6 +1363,7 @@ function LocalPlay({
         onCombatHoldSkip={releaseCombatHold}
         forcedChoice={forcedChoice}
         onForcedChoiceDismiss={() => setForcedChoice(null)}
+        onForcedChoice={announceForcedChoice}
       />
     </div>
   );

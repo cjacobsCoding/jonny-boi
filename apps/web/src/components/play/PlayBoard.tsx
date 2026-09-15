@@ -200,6 +200,7 @@ export function PlayBoard({
   onCombatHoldSkip,
   forcedChoice,
   onForcedChoiceDismiss,
+  onForcedChoice,
 }: {
   session: GameSession;
   viewer: PlayerId;
@@ -244,6 +245,17 @@ export function PlayBoard({
   forcedChoice?: ForcedChoice | null;
   /** "Got it" — end the announcement now. */
   onForcedChoiceDismiss?: () => void;
+  /**
+   * The board settled a pre-cast question itself (`AUTO_SETTLE_POLICY` — today
+   * only the one-legal-payer sacrifice cost) and is handing it up to be
+   * announced.
+   *
+   * ⚠️ Raised HERE rather than announced here, so both producers — the engine's
+   * `choiceAutoAnswered` and this one — go through PlayView's single decision,
+   * budget and timer. A second announcer on this board would be a second answer
+   * to "is this worth interrupting for?" and the two would drift.
+   */
+  onForcedChoice?: (forced: ForcedChoice) => void;
   /**
    * §3.119 — the priority stops, OWNED BY PlayView because it is the auto-pass
    * effect that has to obey them. The board renders their controls and reports
@@ -601,7 +613,7 @@ export function PlayBoard({
    * Activate an ability. **Everything** — the targets, the "Sacrifice another
    * …" payers, the §3.129 tap-to-afford float — goes through the proposal, which
    * already knows which of those are real questions and which have exactly one
-   * legal answer (`ASK_WHEN_ONLY_ONE_ANSWER`), and which submit shape to use.
+   * legal answer (`AUTO_SETTLE_POLICY`), and which submit shape to use.
    *
    * ⚠️ THIS IS THE 137-DEAD-BUTTONS FIX. The board used to call
    * `session.activateAbility(id, idx)` — with NO `costInstanceIds` — and
@@ -844,6 +856,10 @@ export function PlayBoard({
         const result: SubmitResult = { session: next.session, rejected: null, events: next.events };
         resetProposal();
         onSubmit(() => result);
+        // What the transaction answered on the player's behalf, said out loud.
+        // After `onSubmit`, so the announcement describes a board that has
+        // already moved — the same order the engine's own settles arrive in.
+        for (const forced of next.settled) onForcedChoice?.(forced);
         return;
       }
     }
@@ -2196,7 +2212,7 @@ export function PlayBoard({
         the ACTUAL CARD FACES, not a list of names.
 
         Asked only when there is more than one legal payer set —
-        `ASK_WHEN_ONLY_ONE_ANSWER.costPayers` is false, matching the engine's own
+        `AUTO_SETTLE_POLICY.costPayers.ask` is false, matching the engine's own
         rule that a question with a single legal answer is settled rather than
         put to the player.
       */}

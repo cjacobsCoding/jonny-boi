@@ -243,7 +243,16 @@ export interface ForcedChoiceNames {
 
 /** One settled question, fully decided. Nothing is left for a renderer to infer. */
 export interface ForcedChoice {
-  readonly choiceId: number;
+  /**
+   * The dedupe key — announced ONCE, whichever producer raised it.
+   *
+   * A STRING because there are two producers and they mint identity
+   * differently: the engine's questions carry a numeric `choiceId`, while the
+   * board's own pre-cast settles (`proposal.ts`) have no question object at all
+   * and are identified by the proposal they belong to. One key type, one
+   * `announced` set, no second dedupe rule to get subtly wrong.
+   */
+  readonly id: string;
   readonly kind: ChoiceKind;
   readonly chooser: PlayerId;
   readonly sourceInstanceId: InstanceId;
@@ -376,7 +385,7 @@ export function forcedChoiceOf(event: GameEvent, names: ForcedChoiceNames): Forc
   if (!row) return null;
   const { refs, words } = answerContents(event.answer, event.sourceInstanceId, names);
   return {
-    choiceId: event.choiceId,
+    id: `engine:${event.choiceId}`,
     kind: event.choiceKind,
     chooser: event.chooser,
     sourceInstanceId: event.sourceInstanceId,
@@ -400,7 +409,7 @@ export interface ForcedChoiceContext {
   /** Whose screen this is. Only the VIEWER's own settled questions interrupt. */
   readonly viewer: PlayerId;
   /** Questions already announced this game — a banner fires ONCE per question. */
-  readonly announced: ReadonlySet<number>;
+  readonly announced: ReadonlySet<string>;
   /** How many banners this turn has already spent (see `maxPerTurn`). */
   readonly announcedThisTurn: number;
   readonly gameOver: boolean;
@@ -431,7 +440,7 @@ export function forcedChoiceDecision(
   // already narrates what they did.
   if (forced.chooser !== ctx.viewer) return refuse('notYourChoice');
   if (forced.volume !== 'banner') return refuse('logOnlyKind');
-  if (ctx.announced.has(forced.choiceId)) return refuse('alreadyAnnounced');
+  if (ctx.announced.has(forced.id)) return refuse('alreadyAnnounced');
   if (ctx.announcedThisTurn >= cfg.maxPerTurn) return refuse('turnBudgetSpent');
   return { kind: 'announce', forced };
 }
