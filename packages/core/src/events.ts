@@ -9,6 +9,7 @@ import type { InstanceId, PlayerId, Step, ZoneName } from './state.js';
 import type { ManaColor, ManaCost } from './mana.js';
 import type { CardType } from './card.js';
 import type { ContinuousDuration } from './internal/continuous.js';
+import type { ReplacementEventKind } from './replacement.js';
 import type { ChoiceAnswer, ChoiceKind } from './choices.js';
 
 /**
@@ -354,12 +355,19 @@ export type GameEvent =
       /** The permanent (or resolving spell) the replacement effect comes from. */
       readonly source: InstanceId;
       /**
-       * Which event family was replaced. Spelled out rather than importing
-       * `ReplacementEventKind` so `events.ts` stays free of engine imports;
-       * `replacement.test.ts` pins the two lists identical, which is what stops
-       * a fifth kind reaching the log as an unlisted string.
+       * Which event family was replaced — {@link ReplacementEventKind} itself,
+       * not a second copy of its members.
+       *
+       * ⚠️ It WAS a copy, spelled out with a comment claiming `events.ts` had to
+       * stay free of engine imports and that a test pinned the two lists
+       * identical. Neither was true by the time §3.151 added the fifth kind:
+       * this file already imports `ContinuousDuration` from `internal/`, and no
+       * such pinning test existed. The copy was found by the COMPILER, which is
+       * the only reason it did not ship as a log that silently omitted a kind.
+       * Referencing the type is the fix that cannot rot — there is no second
+       * list left to disagree (rule 12), and no test needed to watch it.
        */
-      readonly event: 'damage' | 'counters' | 'draw' | 'tokens';
+      readonly event: ReplacementEventKind;
       readonly from: number;
       readonly to: number;
       /** How much of `from` this effect PREVENTED (0 for a pure multiplier). */

@@ -489,7 +489,7 @@ export interface RuleContext {
 export interface TriggerBodyResult {
   readonly effects: readonly import('@jonny-boi/core').EffectRef[];
   /** What the ability targets, or `undefined` when it targets nothing. */
-  readonly targets?: import('@jonny-boi/core').TargetRestriction;
+  readonly targets?: import('@jonny-boi/core').TargetSpec;
   /** A printed "ANOTHER target …" — the ability's own source is excluded. */
   readonly targetsExcludeSelf?: boolean;
   /**

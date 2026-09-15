@@ -289,6 +289,9 @@ export {
 // as data on the effect ref (`params.targets`) and enforced when actions are
 // offered, when a cast is applied, and again when the effect resolves.
 export type { TargetRestriction } from './targeting.js';
+// §3.150 - the printed BOUND on a target selector ("target creature with power
+// 5 or greater"). A spec is either the bare noun or the noun plus its bound.
+export type { TargetBound, TargetNumericProperty, BoundedTarget, TargetSpec } from './targeting.js';
 export {
   TARGET_RESTRICTION_PARAM,
   DEFAULT_TARGET_RESTRICTION,
@@ -301,6 +304,12 @@ export {
   restrictionOfEffects,
   describeRestriction,
   triggerTargetPrompt,
+  baseRestrictionOf,
+  boundOf,
+  isBoundedTarget,
+  isTargetSpec,
+  targetMeetsBound,
+  describeBound,
 } from './targeting.js';
 
 // Protection from [quality] + ward (protection.ts): the source-aware half of
@@ -486,11 +495,13 @@ export {
 // index once and threads it, exactly as it does with `indexContinuous`.
 export type {
   ReplacementAbility,
+  ReplacementAnchor,
   ReplacementApplies,
   ReplacementEventKind,
   ReplacementOutcome,
 } from './replacement.js';
 export {
+  REPLACEMENT_ANCHORS,
   REPLACEMENT_EVENT_KINDS,
   affectedPlayerPrefersMore,
   replacementIsInert,
@@ -516,8 +527,14 @@ export {
   replaceCounters,
   replaceDamage,
   replaceDraw,
+  replaceLifeGain,
   runReplacements,
 } from './internal/replacement.js';
+
+// LIFE GAIN's one question — the funnel BOTH gain mechanisms ask (a resolving
+// effect in the cards package, and LIFELINK on core's own combat-damage path).
+// The `untap.ts` model: two mechanisms, one question.
+export { gainLifeAmount } from './life.js';
 
 // Delayed triggered abilities (CR 603.7) — an ability created DURING a
 // resolution that fires once at a named later moment. It lives on the STATE

@@ -22,7 +22,7 @@ import type { CardFilter } from './choices.js';
 import { matchesCardFilter } from './choices.js';
 import { isCreature, permanentHasSubtype } from './card.js';
 import type { CardInstance, InstanceId, PlayerId, Step } from './state.js';
-import type { TargetRestriction } from './targeting.js';
+import type { TargetSpec } from './targeting.js';
 import type { InterveningIf } from './intervening.js';
 
 /**
@@ -361,7 +361,7 @@ export interface TriggeredAbility {
    * names one target, and a multi-target trigger would need its own rule rather
    * than a silently-widened one here.
    */
-  readonly targets?: TargetRestriction;
+  readonly targets?: TargetSpec;
   /**
    * "ANOTHER target creature" — the ability's own source is not a legal target.
    *

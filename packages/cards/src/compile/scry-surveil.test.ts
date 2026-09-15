@@ -177,15 +177,38 @@ describe('scry & surveil — the neighbouring wordings still refuse honestly', (
     expect(result.status).toBe('incomplete');
   });
 
-  it('REFUSES a scry rider whose tail needs its own chosen target', () => {
-    const result = compileCard(
-      makeCard({
-        name: 'Test Scry Bolt',
-        typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
-        oracleText: 'Scry 1, then Test Scry Bolt deals 3 damage to any target.',
-      }),
+  /**
+   * ⚠️ **This test used to assert the opposite, and the assertion was false.**
+   * It read "REFUSES a scry rider whose tail needs its own chosen target" and
+   * passed only because `", then "` was not yet a clause separator — the SAME
+   * card written as two sentences, or joined with " and ", has compiled to
+   * these exact two refs since the scry family shipped. So the refusal was a
+   * property of one SPELLING, not of the compiler, and pinning it would have
+   * made `", then "` look like a regression when it is the §3.60 fix: one
+   * joined sentence means one thing however it is punctuated.
+   *
+   * What replaces it is the claim actually worth pinning — the three spellings
+   * AGREE. If any one of them ever drifts, this goes red and names which.
+   */
+  it('a scry rider with a targeted tail compiles the SAME however it is punctuated', () => {
+    const spellings = [
+      'Scry 1.\nTest Scry Bolt deals 3 damage to any target.',
+      'Scry 1 and Test Scry Bolt deals 3 damage to any target.',
+      'Scry 1, then Test Scry Bolt deals 3 damage to any target.',
+    ];
+    const compiled = spellings.map((oracleText) =>
+      compileCard(
+        makeCard({ name: 'Test Scry Bolt', typeLine: { supertypes: [], types: ['Instant'], subtypes: [] }, oracleText }),
+      ),
     );
-    expect(result.status).toBe('incomplete');
+    for (const [index, result] of compiled.entries()) {
+      expect(result.status, `${spellings[index]} → ${JSON.stringify(result.missing)}`).toBe('complete');
+    }
+    // Byte-for-byte the same effect list, not merely "all three complete": two
+    // spellings that compiled to different refs would be the drift this pins.
+    const [sentences, and, then] = compiled.map((r) => JSON.stringify(r.definition.effects));
+    expect(and).toBe(sentences);
+    expect(then).toBe(sentences);
   });
 
   it('REFUSES "counter unless its controller pays {X}" on a card with no printed {X} cost', () => {

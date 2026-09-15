@@ -37,8 +37,11 @@ import type { CardInstance, GameState, InstanceId, PlayerId, SpellStackObject, S
 import { PLAYER_IDS } from './state.js';
 import type { ContinuousIndex } from './internal/continuous.js';
 import { anyContinuousModification, indexContinuous, NO_MOD } from './internal/continuous.js';
-import { effectiveKeywords } from './internal/stats.js';
+import { effectiveKeywords, effectivePower, effectiveToughness } from './internal/stats.js';
 import { protectionBlocksSource } from './protection.js';
+// §3.150 - a bound's mana value is read through the ONE function that answers
+// "what is this cost worth" (CR 202.3b hybrid included), never a second sum.
+import { convertedManaCost } from './mana.js';
 // §3.112 — "target attacking creature" reads the live combat record.
 import { attackingCreatureIds } from './combat-removal.js';
 
@@ -514,6 +517,238 @@ export const ALL_TARGET_RESTRICTIONS: readonly TargetRestriction[] = Object.free
   Object.keys(TARGET_RESTRICTION_MEMBERS) as TargetRestriction[],
 );
 
+// ===========================================================================
+// §3.150 — TARGET BOUNDS: the printed NARROWING on a target selector.
+//
+// "Exile target creature **with power 5 or greater**" (Selesnya Charm),
+// "Destroy target creature **with flying**" (Crushing Canopy), "Counter target
+// spell **with mana value 4 or greater**" (Disdainful Stroke).
+//
+// ## Why this is not more members of {@link TargetRestriction}
+// The bound carries a NUMBER. `creatureWithPower5OrGreater` would need a member
+// per noun × per property × per direction × per value — and every one of them
+// would have to be taught to all FIVE homes a restriction word has. Adding the
+// next printed bound has to be a ROW, not an enum member (engineering rule 2),
+// so the bound is DATA that rides alongside the base noun instead of being
+// spelled into it.
+//
+// ## Why it rides WITH the restriction rather than in a second param
+// `isLegalTarget` and `legalTargetsFor` are called from ~14 sites across the
+// engine, the primitives and both pilots. A second positional argument would
+// have to be threaded through every one, and a site that forgot it would police
+// the noun and silently ignore the bound — a card playing WIDER than printed,
+// which is the exact infidelity this module exists to prevent. So a spec is
+// EITHER the bare noun (every existing call unchanged) or `{ base, bound }`,
+// unwrapped once at the top of each checker. A caller cannot hold one half.
+//
+// ## The table is CLOSED, and refusing is the point
+// A property this cannot read is not approximated to the nearest one it can:
+// the compiler refuses the card and it stays REPORTED with its number. A
+// "target creature with power 5 or greater" compiled as "target creature" is a
+// strictly better card, and one of those in the pool biases every A/B verdict
+// the lab produces.
+// ===========================================================================
+
+/**
+ * A numeric property of a permanent a printed bound may compare.
+ *
+ * `power` and `toughness` are read as EFFECTIVE values (CR 613 — the same
+ * layered numbers combat and state-based actions read), so a bound checks what
+ * the creature IS right now, not what its card was printed with. A +3/+3 pump
+ * really does make a 2/2 a legal "power 5 or greater" target, and really does
+ * make it an illegal "power 2 or less" one.
+ *
+ * `manaValue` is read off the CARD (CR 202.3): a permanent's mana value does
+ * not change on the battlefield, which is why no modifier is consulted for it.
+ */
+export type TargetNumericProperty = 'power' | 'toughness' | 'manaValue';
+
+/**
+ * The printed narrowing on a target selector. Every field is optional and they
+ * AND together, because a card printing two bounds ("target creature with
+ * flying and power 3 or less") means both.
+ */
+export interface TargetBound {
+  /** "with <property> N or greater" — inclusive, as the printed word is. */
+  readonly atLeast?: { readonly property: TargetNumericProperty; readonly value: number };
+  /** "with <property> N or less" — inclusive. */
+  readonly atMost?: { readonly property: TargetNumericProperty; readonly value: number };
+  /** "with <keyword>" — read as an EFFECTIVE keyword, so a granted one counts. */
+  readonly withKeyword?: keyof KeywordFlags;
+  /** "without <keyword>" — the printed negation, never "not in the card's own flags". */
+  readonly withoutKeyword?: keyof KeywordFlags;
+  /**
+   * "target <colour> permanent" — one of MTG's five, matched against the card's
+   * printed colours.
+   *
+   * ⚠️ PRINTED, because `ContinuousEffect` has no colour field: this engine has
+   * no colour-changing layer at all, so `def.colors` is its only answer to
+   * "what colour is this permanent". That is faithful to what the engine can
+   * represent TODAY and unfaithful the moment a colour layer lands — so
+   * whoever builds one must route this read through it, exactly as
+   * `atLeast`/`atMost` and `withKeyword` already route through the continuous
+   * index.
+   */
+  readonly colour?: 'W' | 'U' | 'B' | 'R' | 'G';
+}
+
+/**
+ * A base noun plus its printed bound — what a bounded selector compiles to.
+ * Never constructed when the bound is empty: a spec with nothing to narrow is
+ * the bare noun, so there is one representation of "target creature".
+ */
+export interface BoundedTarget {
+  readonly base: TargetRestriction;
+  readonly bound: TargetBound;
+}
+
+/**
+ * What a targeted effect may point at: the bare noun, or the noun plus a bound.
+ *
+ * Every public checker takes this, so a caller that has only ever handled the
+ * string keeps working unchanged and a caller handed a bounded spec cannot
+ * accidentally enforce only half of it.
+ */
+export type TargetSpec = TargetRestriction | BoundedTarget;
+
+/** The noun half of a spec. */
+export function baseRestrictionOf(spec: TargetSpec): TargetRestriction {
+  return typeof spec === 'string' ? spec : spec.base;
+}
+
+/** The bound half of a spec, or `undefined` when it is a bare noun. */
+export function boundOf(spec: TargetSpec): TargetBound | undefined {
+  return typeof spec === 'string' ? undefined : spec.bound;
+}
+
+/** Whether `value` is a well-formed {@link BoundedTarget} — the validator half of §3.40's lesson. */
+export function isBoundedTarget(value: unknown): value is BoundedTarget {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as { base?: unknown; bound?: unknown };
+  if (!isTargetRestriction(candidate.base)) return false;
+  return typeof candidate.bound === 'object' && candidate.bound !== null;
+}
+
+/** Whether `value` is a target spec at all — either half. */
+export function isTargetSpec(value: unknown): value is TargetSpec {
+  return isTargetRestriction(value) || isBoundedTarget(value);
+}
+
+/**
+ * The permanent an instance id names, or `undefined`. A bound is only ever
+ * asked of a permanent: a bound on a player, a spell or a graveyard card has no
+ * printed form this table reads, and answering "true" for one would widen the
+ * card. The absent case therefore refuses (below), it does not pass.
+ */
+function permanentById(state: GameState, id: InstanceId): CardInstance | undefined {
+  for (let i = 0; i < state.battlefield.length; i++) {
+    const permanent = state.battlefield[i] as CardInstance;
+    if (permanent.instanceId === id) return permanent;
+  }
+  return undefined;
+}
+
+/** The numeric property a bound compares, read the way the rules read it. */
+function numericPropertyOf(
+  permanent: CardInstance,
+  property: TargetNumericProperty,
+  index: ContinuousIndex | null,
+): number {
+  if (property === 'manaValue') return permanent.def.cost ? convertedManaCost(permanent.def.cost) : 0;
+  // Layered P/T (CR 613) — the same numbers combat and state-based actions read.
+  const mod = index?.get(permanent.instanceId) ?? NO_MOD;
+  return property === 'power' ? effectivePower(permanent, mod) : effectiveToughness(permanent, mod);
+}
+
+/**
+ * Whether the object `target` names satisfies `bound`.
+ *
+ * Refuses anything that is not a permanent on the battlefield, INCLUDING a
+ * player: every bound this table can express is a property of a permanent, so a
+ * bound aimed anywhere else has no honest answer and the safe direction is
+ * "not a legal target".
+ *
+ * The one exception is a bound on a SPELL, which reads the card on the stack —
+ * "counter target spell with mana value 4 or greater" (Disdainful Stroke) is a
+ * real printed line and its object never touches the battlefield.
+ */
+export function targetMeetsBound(
+  state: GameState,
+  bound: TargetBound,
+  target: InstanceId | PlayerId,
+  /**
+   * The continuous index to judge layered P/T and granted keywords against.
+   *
+   * ⚠️ THREE-WAY DISTINCTION, and collapsing it was a real bug caught before
+   * merge. `undefined` means "nobody has built one — build it now"; `null`
+   * means "this board provably has no continuous modification at all". An
+   * earlier draft defaulted to `null`, so `isLegalTarget` — which passes
+   * nothing — read BASE power while `legalTargetsFor` read LAYERED power, and
+   * the offer and the accept disagreed on exactly the boards an anthem exists
+   * for: a pumped 2/2 was on the menu for "power 5 or greater" and then refused
+   * when the cast was submitted. Same rule, same shape, as `isTargetableBy`.
+   */
+  index?: ContinuousIndex | null,
+): boolean {
+  if (isPlayerTarget(target)) return false;
+  const mods = index === undefined ? keywordIndexFor(state) : index;
+  const permanent = permanentById(state, target);
+  if (permanent === undefined) {
+    // A spell on the stack: only the card-level bounds can be asked of it,
+    // because it has no battlefield presence to read layered P/T from.
+    for (let i = 0; i < state.stack.length; i++) {
+      const object = state.stack[i] as StackObject;
+      if (object.kind !== 'spell' || object.instanceId !== target) continue;
+      return spellMeetsBound(object, bound);
+    }
+    return false;
+  }
+  if (bound.atLeast !== undefined && numericPropertyOf(permanent, bound.atLeast.property, mods) < bound.atLeast.value) {
+    return false;
+  }
+  if (bound.atMost !== undefined && numericPropertyOf(permanent, bound.atMost.property, mods) > bound.atMost.value) {
+    return false;
+  }
+  if (bound.withKeyword !== undefined || bound.withoutKeyword !== undefined) {
+    const mod = mods?.get(permanent.instanceId) ?? NO_MOD;
+    const keywords = effectiveKeywords(permanent, mod);
+    if (bound.withKeyword !== undefined && keywords[bound.withKeyword] !== true) return false;
+    if (bound.withoutKeyword !== undefined && keywords[bound.withoutKeyword] === true) return false;
+  }
+  if (bound.colour !== undefined && !(permanent.def.colors ?? []).includes(bound.colour)) return false;
+  return true;
+}
+
+/**
+ * The card-level half of a bound, asked of a spell on the stack. A P/T or
+ * keyword bound on a spell is refused rather than read off the printed card:
+ * no printed line asks it, and inventing an answer is how a closed table stops
+ * being closed.
+ */
+function spellMeetsBound(spell: SpellStackObject, bound: TargetBound): boolean {
+  if (bound.withKeyword !== undefined || bound.withoutKeyword !== undefined) return false;
+  if (bound.atLeast !== undefined && bound.atLeast.property !== 'manaValue') return false;
+  if (bound.atMost !== undefined && bound.atMost.property !== 'manaValue') return false;
+  const manaValue = spell.card.def.cost ? convertedManaCost(spell.card.def.cost) : 0;
+  if (bound.atLeast !== undefined && manaValue < bound.atLeast.value) return false;
+  if (bound.atMost !== undefined && manaValue > bound.atMost.value) return false;
+  if (bound.colour !== undefined && !(spell.card.def.colors ?? []).includes(bound.colour)) return false;
+  return true;
+}
+
+/** Plain-English tail for a bound, appended to the noun in rejection messages and UI. */
+export function describeBound(bound: TargetBound): string {
+  const parts: string[] = [];
+  if (bound.withKeyword !== undefined) parts.push(`with ${bound.withKeyword}`);
+  if (bound.withoutKeyword !== undefined) parts.push(`without ${bound.withoutKeyword}`);
+  if (bound.atLeast !== undefined) parts.push(`with ${bound.atLeast.property} ${bound.atLeast.value} or greater`);
+  if (bound.atMost !== undefined) parts.push(`with ${bound.atMost.property} ${bound.atMost.value} or less`);
+  if (bound.colour !== undefined) parts.push(`that is ${bound.colour}`);
+  return parts.join(' and ');
+}
+
+// ============================ end §3.150 ==================================
+
 /**
  * Memo for {@link targetRestrictionOf}. Card definitions are immutable and shared
  * (the pool is frozen; every instance points at the same object), and this is read
@@ -530,7 +765,7 @@ export const ALL_TARGET_RESTRICTIONS: readonly TargetRestriction[] = Object.free
  */
 const NO_TARGETS: readonly (InstanceId | PlayerId)[] = Object.freeze([]);
 
-const RESTRICTION_MEMO = new WeakMap<CardDefinition, TargetRestriction | null>();
+const RESTRICTION_MEMO = new WeakMap<CardDefinition, TargetSpec | null>();
 
 /**
  * The target restriction core ENFORCES for a definition, or `undefined` when
@@ -554,7 +789,7 @@ const RESTRICTION_MEMO = new WeakMap<CardDefinition, TargetRestriction | null>()
  * So an already-authored unrestricted card behaves exactly as it always has, and
  * only a card whose printed text is genuinely NARROWER than "any target" changes.
  */
-export function targetRestrictionOf(def: CardDefinition): TargetRestriction | undefined {
+export function targetRestrictionOf(def: CardDefinition): TargetSpec | undefined {
   const memoized = RESTRICTION_MEMO.get(def);
   if (memoized !== undefined) return memoized ?? undefined;
   // Only a restriction NARROWER than the default is enforceable, so an explicit
@@ -576,11 +811,33 @@ export function isPlayerTarget(target: InstanceId | PlayerId): target is PlayerI
  */
 export function isLegalTarget(
   state: GameState,
-  restriction: TargetRestriction,
+  spec: TargetSpec,
   target: InstanceId | PlayerId,
   controller?: PlayerId,
   source?: CardDefinition,
   /** See {@link legalTargetsFor} — the instance "another" excludes. */
+  excludeInstanceId?: InstanceId,
+): boolean {
+  // §3.150 — the NOUN is judged by the chain below exactly as it always was,
+  // then the printed BOUND narrows it. Unwrapped once here so no branch of that
+  // chain can answer for a bounded spec while forgetting its bound.
+  const bound = boundOf(spec);
+  if (bound !== undefined) {
+    return (
+      baseTargetIsLegal(state, baseRestrictionOf(spec), target, controller, source, excludeInstanceId) &&
+      targetMeetsBound(state, bound, target)
+    );
+  }
+  return baseTargetIsLegal(state, baseRestrictionOf(spec), target, controller, source, excludeInstanceId);
+}
+
+/** The NOUN half of {@link isLegalTarget} — every restriction word, no bound. */
+function baseTargetIsLegal(
+  state: GameState,
+  restriction: TargetRestriction,
+  target: InstanceId | PlayerId,
+  controller?: PlayerId,
+  source?: CardDefinition,
   excludeInstanceId?: InstanceId,
 ): boolean {
   // Checked first and for every restriction: "another" is orthogonal to type,
@@ -890,7 +1147,7 @@ function keywordIndexFor(state: GameState): ContinuousIndex | null {
  */
 export function legalTargetsFor(
   state: GameState,
-  restriction: TargetRestriction,
+  spec: TargetSpec,
   controller?: PlayerId,
   source?: CardDefinition,
   /**
@@ -900,11 +1157,22 @@ export function legalTargetsFor(
    */
   excludeInstanceId?: InstanceId,
 ): readonly (InstanceId | PlayerId)[] {
-  const all = enumerateTargets(state, restriction, controller, source);
+  const all = enumerateTargets(state, baseRestrictionOf(spec), controller, source);
   // Applied to whatever the branches produced, so "another" works with EVERY
   // restriction rather than needing a case in each. Same rule `isLegalTarget`
   // applies, which is what keeps the offer and the apply in agreement.
-  return excludeInstanceId === undefined ? all : all.filter((ref) => ref !== excludeInstanceId);
+  const kept = excludeInstanceId === undefined ? all : all.filter((ref) => ref !== excludeInstanceId);
+  // §3.150 — the printed bound, applied to the MENU by the same predicate the
+  // legality check uses. Offer and accept must name the same set (DESIGN §3.36):
+  // a bound enforced only on accept would leave a pilot choosing a cast it is
+  // then refused, and one enforced only on offer would let a hand-built action
+  // through.
+  const bound = boundOf(spec);
+  if (bound === undefined || kept.length === 0) return kept;
+  // The continuous index is built ONCE for the whole menu rather than per
+  // candidate — the same costing rule `isTargetableBy`'s enumeration follows.
+  const index = keywordIndexFor(state);
+  return kept.filter((ref) => targetMeetsBound(state, bound, ref, index));
 }
 
 /** Every legal target for `restriction`, before any "another" exclusion. */
@@ -1283,9 +1551,13 @@ export function illegalTargetReasonForEffects(
 /** First narrower-than-default restriction declared by any of these effects. */
 export function restrictionOfEffects(
   effects: readonly EffectRef[],
-): TargetRestriction | undefined {
+): TargetSpec | undefined {
   for (const ref of effects) {
     const declared = ref.params?.[TARGET_RESTRICTION_PARAM];
+    // §3.150 - a BOUNDED spec is narrower than its noun by construction, so it
+    // is always enforceable, including `{ base: 'any', bound: ... }`. Only the
+    // BARE default is the unpoliced case.
+    if (isBoundedTarget(declared)) return declared;
     if (!isTargetRestriction(declared) || declared === DEFAULT_TARGET_RESTRICTION) continue;
     return declared;
   }
@@ -1300,12 +1572,19 @@ export function restrictionOfEffects(
  * target and then whether to use it; the board folds the two into one prompt,
  * and to do that it has to match this question to the trigger that asked it.
  */
-export function triggerTargetPrompt(restriction: TargetRestriction, triggerLabel: string): string {
+export function triggerTargetPrompt(restriction: TargetSpec, triggerLabel: string): string {
   return `Choose ${describeRestriction(restriction)} for ${triggerLabel}`;
 }
 
 /** Plain-English name of a restriction, for rejection messages and UI. */
-export function describeRestriction(restriction: TargetRestriction): string {
+export function describeRestriction(spec: TargetSpec): string {
+  // §3.150 - the noun, then its printed bound, so a rejection message names the
+  // WHOLE printed selector rather than the half that happens to be a word.
+  const bound = boundOf(spec);
+  if (bound !== undefined) {
+    return `${describeRestriction(baseRestrictionOf(spec))} ${describeBound(bound)}`.trim();
+  }
+  const restriction = baseRestrictionOf(spec);
   switch (restriction) {
     case 'creature':
       return 'a creature';

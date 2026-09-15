@@ -286,8 +286,12 @@ export const gainLife: EffectPrimitive = (ctx) => {
   if (amount <= 0) return;
   const useTarget = ctx.params.targetPlayer === true;
   const player = useTarget ? firstPlayerTarget(ctx) ?? ctx.controller : ctx.controller;
-  changeLife(ctx, player, amount);
-  ctx.emit({ type: 'gainLife', player, amount });
+  // The AMOUNT the player really gained, not the amount printed: a life-gain
+  // replacement may have doubled it (Rhox Faithmender) or zeroed it (Sulfuric
+  // Vortex), and "whenever you gain life" must see the true number or no event
+  // at all (CR 118.5).
+  const gained = changeLife(ctx, player, amount);
+  if (gained > 0) ctx.emit({ type: 'gainLife', player, amount: gained });
 };
 
 /**
@@ -771,8 +775,10 @@ export const exileTarget: EffectPrimitive = (ctx) => {
     // zero without the layer-7a value the aggregation supplies.
     const power = effectivePower(target, aggregateFor(ctx.state, target.instanceId));
     if (power > 0) {
-      changeLife(ctx, target.controller, power);
-      ctx.emit({ type: 'gainLife', player: target.controller, amount: power });
+      // As in `gainLife`: the emitted amount is what was actually gained after
+      // replacement, and a gain of zero emits nothing (CR 118.5).
+      const gained = changeLife(ctx, target.controller, power);
+      if (gained > 0) ctx.emit({ type: 'gainLife', player: target.controller, amount: gained });
     }
   }
   movePermanentTo(ctx, target, 'exile');

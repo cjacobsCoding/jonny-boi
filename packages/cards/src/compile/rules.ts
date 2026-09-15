@@ -33,12 +33,16 @@ import type {
   ManaSpendRestriction,
   ProtectionQuality,
   ReplacementApplies,
+  ReplacementOutcome,
   SourcePowerBlockBound,
   SpellMode,
   StaticAbility,
   StaticAffects,
   StaticControllerScope,
   TargetRestriction,
+  // §3.150 - the printed bound on a target selector.
+  TargetBound,
+  TargetNumericProperty,
   InterveningIf,
   TriggerCondition,
   TriggeredAbility,
@@ -52,6 +56,10 @@ import {
   PROTECTION_SUBTYPE_PREFIX,
   formatManaCost,
   MANA_COLORS,
+  // §3.150 - read and narrow the reserved target param through core's own
+  // name and validator, never a second spelling of either.
+  TARGET_RESTRICTION_PARAM,
+  isTargetRestriction,
 } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
 import {
@@ -1638,6 +1646,144 @@ const REPLACEMENT_COUNTER_SUBJECTS: Readonly<Record<string, CardFilter | null>> 
 
 /** The alternation of the multiplier words, longest first. */
 const REPLACEMENT_MULTIPLIER_TOKEN = `(${Object.keys(REPLACEMENT_MULTIPLIERS)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/**
+ * §3.151 — THE STATIC PREVENTION SHIELD, as a table of SUBJECTS read by BOTH
+ * sides of the sentence.
+ *
+ * A printed static shield says which damage it stops in three printed
+ * directions — "dealt **to** X", "dealt **by** X", and "dealt to **and dealt
+ * by** X" (Fog Bank, Gaseous Form, Heart of Light). The subject X is the same
+ * noun phrase in all three, so it is ONE table and the direction chooses which
+ * projection of a row to read. Two tables — one for recipients and one for
+ * dealers — is how "enchanted creature" ends up meaning two different creatures
+ * in the same sentence (rule 12).
+ *
+ * `dealer: null` is a REFUSAL, not an omission: it says this subject has no
+ * printed "…dealt by" form the engine can express, so a card printing one
+ * reports instead of compiling into a shield that guards the wrong side. A
+ * player deals no damage, and "attacking creatures you control" has no printed
+ * by-form in the corpus — a projection that fires on no real card is exactly
+ * what `dead-rule-sweep.mjs` exists to catch.
+ *
+ * Every row is a real printed card, named. Adding a subject is a ROW.
+ */
+const PREVENTION_STATIC_SUBJECTS: Readonly<
+  Record<string, { readonly recipient: ReplacementApplies; readonly dealer: ReplacementApplies | null }>
+> = Object.freeze({
+  // "~" — the ability's own permanent. Fog Bank, Cho-Manno Revolutionary, Dawn
+  // Elemental, Guard Gomazoa, Seraph of the Sword, Everdawn Champion.
+  '~': { recipient: { recipientAnchor: 'source' }, dealer: { dealerAnchor: 'source' } },
+  // The permanent an Aura or Equipment is attached to. Gaseous Form, Sandskin,
+  // Ghostly Possession, Heart of Light, Inviolability (to); Muzzle, Defang,
+  // Temporal Isolation, Candletrap, Demonic Torment (by).
+  'enchanted creature': { recipient: { recipientAnchor: 'attached' }, dealer: { dealerAnchor: 'attached' } },
+  // General's Kabuto. Same anchor, different printed word — `attachedTo` does
+  // not care which kind of attachment it is, and neither does the card.
+  'equipped creature': { recipient: { recipientAnchor: 'attached' }, dealer: { dealerAnchor: 'attached' } },
+  // Crystal Barricade and kin. A PLAYER is never a damage source, so there is
+  // no dealer projection to write.
+  you: { recipient: { recipientController: 'you', recipientKind: 'player' }, dealer: null },
+  // Statecraft is the only printed card that uses this subject on BOTH sides,
+  // and it is why the dealer projection exists at all.
+  'creatures you control': {
+    recipient: {
+      recipientController: 'you',
+      recipientKind: 'permanent',
+      recipientFilter: { anyOfTypes: ['creature' as CardType] },
+    },
+    dealer: { sourceController: 'you', sourceFilter: { anyOfTypes: ['creature' as CardType] } },
+  },
+  // Vigor's shape — the printed word "other" (Crystal Barricade).
+  'other creatures you control': {
+    recipient: {
+      recipientController: 'you',
+      recipientKind: 'permanent',
+      recipientFilter: { anyOfTypes: ['creature' as CardType] },
+      excludeSource: true,
+    },
+    dealer: null,
+  },
+  // Dolmen Gate, Iroas.
+  'attacking creatures you control': {
+    recipient: {
+      recipientController: 'you',
+      recipientKind: 'permanent',
+      recipientFilter: { anyOfTypes: ['creature' as CardType] },
+      recipientAttacking: true,
+    },
+    dealer: null,
+  },
+  // Emmara Tandris.
+  'creature tokens you control': {
+    recipient: {
+      recipientController: 'you',
+      recipientKind: 'permanent',
+      recipientFilter: { anyOfTypes: ['creature' as CardType], isToken: true },
+    },
+    dealer: null,
+  },
+  // Bubble Matrix — symmetric, both players' creatures.
+  creatures: {
+    recipient: { recipientKind: 'permanent', recipientFilter: { anyOfTypes: ['creature' as CardType] } },
+    dealer: null,
+  },
+});
+
+/** The alternation of every prevention subject, longest first so none is truncated. */
+const PREVENTION_STATIC_SUBJECT_TOKEN = `(${Object.keys(PREVENTION_STATIC_SUBJECTS)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/**
+ * §3.151 — the optional printed tail narrowing WHICH SOURCES a static shield
+ * stops: "prevent all damage that would be dealt to ~ **by creatures**"
+ * (Champion Lancer, Uncle Istvan, Istvan Butcher of Eln), "**by artifact
+ * sources**" (Argothian Treefolk), "**by sources you control**" (Light of
+ * Sanction).
+ *
+ * CLOSED, and deliberately short. The tails left OUT are the ones core cannot
+ * express faithfully, and each is REPORTED rather than widened (§3.151):
+ *   - "by artifact creatures" — a CONJUNCTION of two types, and `anyOfTypes` is
+ *     a disjunction. Compiling it as `['artifact','creature']` would stop damage
+ *     from every creature, which is a strictly better card.
+ *   - "by creatures with first strike" — `CardFilter` has no keyword field.
+ *   - "by creatures it's blocking" / "by enchanted creatures" — a RELATION
+ *     between two permanents, which no filter can state.
+ */
+const PREVENTION_SOURCE_CLASSES: Readonly<Record<string, ReplacementApplies>> = Object.freeze({
+  creatures: { sourceFilter: { anyOfTypes: ['creature' as CardType] } },
+  'artifact sources': { sourceFilter: { anyOfTypes: ['artifact' as CardType] } },
+  'sources you control': { sourceController: 'you' },
+});
+
+/** The alternation of every source-class tail, longest first. */
+const PREVENTION_SOURCE_CLASS_TOKEN = `(${Object.keys(PREVENTION_SOURCE_CLASSES)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/**
+ * §3.151 — WHO a printed life-gain replacement watches. "If **you** would gain
+ * life" (Rhox Faithmender, Boon Reflection, Alhammarret's Archive, The Wind
+ * Crystal, Knight of Dawn's Light) and "if **a player** would gain life"
+ * (Sulfuric Vortex), which is the symmetric card.
+ *
+ * "An opponent" is deliberately ABSENT. It is printed — Tainted Remedy, Plague
+ * Drone — but only ever with the outcome "that player **loses** that much life
+ * instead", which turns a gain into a LOSS: a different event, not a scaled
+ * quantity, and one core's layer does not watch. A row here would be a branch
+ * that fires on no card the outcome table can finish, which is precisely the
+ * dead rule `dead-rule-sweep.mjs` exists to catch.
+ */
+const LIFEGAIN_SUBJECTS: Readonly<Record<string, StaticControllerScope>> = Object.freeze({
+  you: 'you',
+  'a player': 'any',
+});
+
+/** The alternation of every life-gain subject, longest first. */
+const LIFEGAIN_SUBJECT_TOKEN = `(${Object.keys(LIFEGAIN_SUBJECTS)
   .sort((a, b) => b.length - a.length)
   .join('|')})`;
 
@@ -4442,6 +4588,95 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^proliferate$/,
     build() {
       return effects({ primitive: 'proliferate' });
+    },
+  },
+  // =========================================================================
+  // POPULATE (CR 701.32) — the copy-selector family's one keyword action.
+  // Written as ONE bounded block beside its sibling keyword actions; nothing
+  // around it is re-ordered. See `populateSourceFor` in `../copy-primitives.ts`
+  // for why populate is a SELECTOR on `createTokenCopy` and not a primitive.
+  // =========================================================================
+  {
+    id: 'populate',
+    description:
+      '"Populate" (CR 701.32a) — choose a creature token you control and create a token that\'s a copy of it (Trostani, Selesnya\'s Voice; Wake the Reflections; Growing Ranks; Vitu-Ghazi Guildmage; Song of the Worldsoul)',
+    /**
+     * The bare keyword, which is the whole printed clause on every card that
+     * prints it alone — the reminder text that spells it out is removed by
+     * `stripReminderText` before any rule is tried, so what reaches the table is
+     * the single word.
+     *
+     * ⚠️ **This is the ONLY home for populate's selector, and deliberately not a
+     * row in `TOKEN_COPY_SELECTORS`.** That table maps printed SELECTOR TEXT to
+     * a lookup, and no card in the corpus prints "a creature token you control"
+     * outside reminder text (measured: 0). A row there would be a rule that can
+     * never fire — the Gatecreeper Vine class `dead-rule-sweep.mjs` exists to
+     * catch — so the selector is named where the printed word that means it is.
+     */
+    pattern: /^populate$/,
+    build() {
+      return effects({ primitive: 'createTokenCopy', params: { chooseCreatureTokenYouControl: true, count: 1 } });
+    },
+  },
+  {
+    id: 'populate-with-token-tail',
+    description:
+      '"Populate. The token enters tapped and attacking." (Ghired, Conclave Exile) · "Populate. The token created this way gains haste. Sacrifice it at the beginning of the next end step." (Determined Iteration) — CR 701.32a plus the printed sentences ABOUT the token it made',
+    /**
+     * The same keyword action, followed by sentences that talk about the object
+     * it just created. Separate from the bare rule above only because the bare
+     * one is anchored — one rule with an optional tail would match "populate X
+     * times" with the tail empty and quietly drop the "X times".
+     *
+     * ⚠️ Every tail here is read through the vocabulary the TOKEN-COPY family
+     * already owns — `TOKEN_COPY_DELAYED_REMOVAL`, `TOKEN_COPY_GRANT_SENTENCE`
+     * and `tokenEntryWords` — and NOT through a private copy. These sentences
+     * mean the same thing on Kiki-Jiki and on Determined Iteration; two readings
+     * would drift the day one of them learns a new wording (rule 12). The params
+     * they produce are the ones `createTokenCopy` already honours, so populate
+     * gets the haste grant, the delayed sacrifice and the entry words for free.
+     *
+     * ⚠️ The GRANT stays a layer-6 grant and is NOT folded into the copy — a
+     * second copy taken of Determined Iteration's token must not inherit the
+     * haste. That distinction is `grantToCreated`'s, and reusing it is how
+     * populate inherits it rather than re-deciding it.
+     */
+    pattern: /^populate\. (.+)$/,
+    build(match) {
+      let body = `. ${(match[1] ?? '').trim()}`;
+      const params: Record<string, unknown> = { chooseCreatureTokenYouControl: true, count: 1 };
+
+      // Parsed from the END, longest-anchored first, in the SAME order
+      // `buildTokenCopy` parses them — the delayed removal is the last printed
+      // sentence, the grant the one before it.
+      const delayed = body.match(TOKEN_COPY_DELAYED_REMOVAL);
+      if (delayed) {
+        params.delayedRemoval = delayed[1] === 'exile' ? 'exile' : 'sacrifice';
+        body = body.slice(0, body.length - (delayed[0] ?? '').length);
+      }
+      const grant = body.match(TOKEN_COPY_GRANT_SENTENCE);
+      if (grant) {
+        const flag = KEYWORD_FLAGS[(grant[1] ?? '').trim()];
+        if (flag === undefined) return null;
+        params.grantKeywords = { [flag]: true };
+        if (grant[2] !== undefined) params.grantUntilEndOfTurn = true;
+        body = body.slice(0, body.length - (grant[0] ?? '').length);
+      }
+      // "The token enters tapped and attacking." (Ghired) — the same closed set
+      // of entry words a "create a TAPPED token" clause prints before the noun,
+      // read by the same function, so a wording nobody has read is REPORTED
+      // rather than silently making an untapped token.
+      const entry = body.match(TOKEN_COPY_ENTRY_SENTENCE);
+      if (entry) {
+        const words = tokenEntryWords(entry[1]);
+        if (words === null) return null;
+        if (words.tapped) params.tapped = true;
+        if (words.attacking) params.attacking = true;
+        body = body.slice(0, body.length - (entry[0] ?? '').length);
+      }
+      // Anything the closed tails did not consume is a sentence with no rule.
+      if (body.trim().length > 0) return null;
+      return effects({ primitive: 'createTokenCopy', params });
     },
   },
   {
@@ -7808,27 +8043,115 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
      */
     id: 'replacement-prevent-all-static',
     description:
-      '"Prevent all [combat] damage that would be dealt to [attacking|other] creatures you control / to you" on a permanent (Dolmen Gate, Iroas)',
-    pattern:
-      /^prevent all (combat |noncombat )?damage that would be dealt to (attacking creatures you control|other creatures you control|creatures you control|you)$/,
+      '"Prevent all [combat|noncombat] damage that would be dealt TO / BY / TO AND DEALT BY <subject> [by <source class>]" on a permanent — every row of PREVENTION_STATIC_SUBJECTS (Fog Bank, Gaseous Form, Dolmen Gate, Cho-Manno, Muzzle, General\'s Kabuto, Champion Lancer)',
+    pattern: new RegExp(
+      `^prevent all (combat |noncombat )?damage that would be dealt (to and dealt by|to|by) ${PREVENTION_STATIC_SUBJECT_TOKEN}` +
+        `(?: by ${PREVENTION_SOURCE_CLASS_TOKEN})?$`,
+    ),
     build(match, ctx) {
       if (!cardIsPermanent(ctx)) return null;
       const combatWord = match[1]?.trim();
-      const who = match[2] ?? '';
-      const applies: ReplacementApplies = {
-        ...(combatWord === 'combat' ? { combat: true } : {}),
-        ...(combatWord === 'noncombat' ? { combat: false } : {}),
-        recipientController: 'you',
-        ...(who === 'you'
-          ? { recipientKind: 'player' as const }
-          : {
-              recipientKind: 'permanent' as const,
-              recipientFilter: { anyOfTypes: ['creature' as CardType] },
-              ...(who === 'attacking creatures you control' ? { recipientAttacking: true } : {}),
-              ...(who === 'other creatures you control' ? { excludeSource: true } : {}),
-            }),
+      const direction = match[2] ?? '';
+      const subject = PREVENTION_STATIC_SUBJECTS[match[3] ?? ''];
+      if (subject === undefined) return null;
+      // "…by artifact creatures" and kin are OUTSIDE the closed table; the
+      // optional group simply does not match them, so the whole clause reports.
+      const sourceClass = match[4] === undefined ? undefined : PREVENTION_SOURCE_CLASSES[match[4]];
+      if (match[4] !== undefined && sourceClass === undefined) return null;
+      const combat: ReplacementApplies =
+        combatWord === 'combat' ? { combat: true } : combatWord === 'noncombat' ? { combat: false } : {};
+
+      // "TO AND DEALT BY" is TWO replacement effects, not one with two filters,
+      // and that is the faithful reading: CR 615 lets each be applied to its own
+      // event independently, and a single entry would have to admit an event
+      // matching EITHER side, which is a conjunction the filter cannot state.
+      // Fog Bank is exactly this card, and each half is an ordinary row.
+      const sides: ReplacementApplies[] = [];
+      if (direction === 'to' || direction === 'to and dealt by') {
+        sides.push({ ...combat, ...subject.recipient, ...(sourceClass ?? {}) });
+      }
+      if (direction === 'by' || direction === 'to and dealt by') {
+        // A subject with no dealer projection has no printed by-form the engine
+        // can express — refuse the clause rather than guess which side it meant.
+        if (subject.dealer === null) return null;
+        // "…dealt BY X by <source class>" is not a printed sentence — the tail
+        // narrows the DEALER, and the dealer is already pinned. Refuse rather
+        // than silently dropping one of the two narrowings.
+        if (sourceClass !== undefined) return null;
+        sides.push({ ...combat, ...subject.dealer });
+      }
+      if (sides.length === 0) return null;
+      return {
+        replacements: sides.map((applies) => ({
+          event: 'damage' as const,
+          applies,
+          outcome: { preventAll: true },
+          label: match[0],
+        })),
       };
-      return { replacements: [{ event: 'damage', applies, outcome: { preventAll: true }, label: match[0] }] };
+    },
+  },
+  {
+    /**
+     * §3.151 — "If you would gain life, you gain twice that much life instead"
+     * (Rhox Faithmender, Boon Reflection, Alhammarret's Archive, The Wind
+     * Crystal), "…that much life plus N instead" (Knight of Dawn's Light), and
+     * "if a player would gain life, that player gains no life instead"
+     * (Sulfuric Vortex).
+     *
+     * A fifth EVENT KIND on a layer that already existed — it scales a quantity
+     * exactly as the counter and token doublers do, so it adds no field to
+     * `ReplacementApplies` and no branch to the engine loop.
+     *
+     * ⚠️ "No life instead" compiles to `times: 0`, and that is exact rather than
+     * approximate: `fold` multiplies, the amount becomes zero, and core's life
+     * funnel emits NOTHING for a gain of zero (CR 118.5) — so "whenever you gain
+     * life" correctly does not fire. A `preventAll` would have been the wrong
+     * verb: prevention is CR 615 and applies to damage, and it would have
+     * reported a `prevented` quantity in the log for an event that deals none.
+     *
+     * What this rule deliberately does NOT match, each REPORTED with its count
+     * in §3.151 rather than widened to fit:
+     *   - "…draw that many cards instead" — a different ACTION, not a scaled
+     *     quantity (the vocabulary `replacement.ts`'s header excludes).
+     *   - "…that player loses that much life instead" (Tainted Remedy, Plague
+     *     Drone) — turns a gain into a LOSS, a different event.
+     *   - "…while you have N or less life" — a life-total condition the filter
+     *     has no field for.
+     */
+    id: 'replacement-lifegain',
+    description:
+      '"If you / a player would gain life, … twice that much / that much plus N / no life instead" (Rhox Faithmender, Knight of Dawn\'s Light, Sulfuric Vortex)',
+    pattern: new RegExp(
+      `^if ${LIFEGAIN_SUBJECT_TOKEN} would gain life, (?:you|that player) gains? ` +
+        `(?:${REPLACEMENT_MULTIPLIER_TOKEN} that much life|that much life plus ${COUNT_TOKEN}|no life) instead$`,
+    ),
+    build(match, ctx) {
+      if (!cardIsPermanent(ctx)) return null;
+      const scope = LIFEGAIN_SUBJECTS[match[1] ?? ''];
+      if (scope === undefined) return null;
+      const multiplierWord = match[2];
+      const plusWord = match[3];
+      // Exactly one of the three printed outcomes. "No life" is the form that
+      // matched neither capture group.
+      const outcome: ReplacementOutcome =
+        multiplierWord !== undefined
+          ? { times: REPLACEMENT_MULTIPLIERS[multiplierWord] as number }
+          : plusWord !== undefined
+            ? { plus: parseCount(plusWord) as number }
+            : { times: 0 };
+      if (outcome.times !== undefined && Number.isNaN(outcome.times)) return null;
+      if (outcome.plus !== undefined && (outcome.plus === null || outcome.plus <= 0)) return null;
+      return {
+        replacements: [
+          {
+            event: 'lifegain',
+            applies: scope === 'any' ? {} : { recipientController: scope },
+            outcome,
+            label: match[0],
+          },
+        ],
+      };
     },
   },
   {
@@ -10115,7 +10438,20 @@ const TOKEN_COPY_DELAYED_REMOVAL =
  * the previous one created, anchored to the END of what remains.
  */
 const TOKEN_COPY_GRANT_SENTENCE =
-  /\. (?:it|they|that token|those tokens) gains? ([a-z' ]+?)( until end of turn)?$/;
+  /\. (?:it|they|that token|those tokens|the token created this way|the tokens created this way) gains? ([a-z' ]+?)( until end of turn)?$/;
+
+/**
+ * "**The token enters tapped and attacking.**" (Ghired, Conclave Exile) — the
+ * entry words printed as a trailing SENTENCE about the token that was just made,
+ * rather than as adjectives in front of the noun ("create a **tapped** token").
+ *
+ * The captured phrase goes through {@link tokenEntryWords}, the very function
+ * the in-front-of-the-noun form uses, so "tapped and attacking" means one thing
+ * in this codebase and a phrase outside that closed set is REPORTED from both
+ * spellings alike — never quietly turned into an ordinary untapped token, which
+ * would be a card playing better than printed.
+ */
+const TOKEN_COPY_ENTRY_SENTENCE = /\. (?:the|that) tokens? enters? ([a-z ]+?)$/;
 
 /** The printed words a "create … token" clause may put in front of "token". */
 interface TokenEntryWords {
@@ -11889,3 +12225,194 @@ export function explainUnsupported(clause: string): string {
   }
   return 'a rules template the compiler does not recognize yet';
 }
+
+// ===========================================================================
+// §3.150 — THE PRINTED TARGET BOUND. One pre-pass, not a rule per verb.
+//
+// Measured on a 32,414-card corpus: 233 blocked cards are held out by a bound
+// on a target selector alone, and the printed vocabulary is SMALL — four bound
+// families across six verbs (destroy 75, return 23, "deals N damage to" 19,
+// exile 17, counter 9, gain control of 4).
+//
+// A rule per verb would have re-spelled the whole noun vocabulary six times and
+// left the seventh verb still broken, which is the "two places answer one
+// question" failure rule 12 names. So this is ONE pre-pass in `applyRules`,
+// exactly where §3.149 put the "where X is …" binding and for the same reason:
+// the SENTENCES were never missing. "Destroy target creature." already
+// compiles; it refuses only because the printed words "with flying" follow the
+// noun. Strip the bound, let the ordinary rule compile the clause it always
+// could, then narrow the restriction that rule declared.
+//
+// So every verb — present and future — gains bounded targets in one edit, and
+// adding the next printed bound is a ROW in the tables below.
+// ===========================================================================
+
+/** The printed comparison words, as the {@link TargetBound} field each means. */
+const TARGET_BOUND_DIRECTIONS: Readonly<Record<string, 'atLeast' | 'atMost'>> = Object.freeze({
+  'or greater': 'atLeast',
+  'or more': 'atLeast',
+  'or less': 'atMost',
+  'or fewer': 'atMost',
+});
+
+/** The printed numeric properties a bound may compare, as core's own property names. */
+const TARGET_BOUND_PROPERTIES: Readonly<Record<string, TargetNumericProperty>> = Object.freeze({
+  power: 'power',
+  toughness: 'toughness',
+  'mana value': 'manaValue',
+  // Pre-2021 Oracle wording for the same number (CR 202.3). Both spellings are
+  // in the corpus, so both are rows — never one spelling matched and the other
+  // left to look like a different family.
+  'converted mana cost': 'manaValue',
+});
+
+/**
+ * The printed keywords a "with …"/"without …" bound may name, mapped to the
+ * core keyword flag each one is.
+ *
+ * CLOSED, and the refusals matter: a keyword the engine does not model is NOT
+ * quietly dropped from the selector, because "destroy target creature with
+ * shadow" compiled as "destroy target creature" is a strictly better card. A
+ * keyword outside this table makes the whole clause report.
+ */
+const TARGET_BOUND_KEYWORDS: Readonly<Record<string, keyof KeywordFlags>> = Object.freeze({
+  flying: 'flying',
+  trample: 'trample',
+  vigilance: 'vigilance',
+  haste: 'haste',
+  'first strike': 'firstStrike',
+  'double strike': 'doubleStrike',
+  deathtouch: 'deathtouch',
+  lifelink: 'lifelink',
+  defender: 'defender',
+  reach: 'reach',
+  menace: 'menace',
+  hexproof: 'hexproof',
+  indestructible: 'indestructible',
+  flash: 'flash',
+});
+
+/** The printed colour words a "target <colour> …" selector may name. */
+const TARGET_BOUND_COLOURS: Readonly<Record<string, 'W' | 'U' | 'B' | 'R' | 'G'>> = Object.freeze({
+  white: 'W',
+  blue: 'U',
+  black: 'B',
+  red: 'R',
+  green: 'G',
+});
+
+const TARGET_BOUND_KEYWORD_PHRASE = Object.keys(TARGET_BOUND_KEYWORDS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+const TARGET_BOUND_PROPERTY_PHRASE = Object.keys(TARGET_BOUND_PROPERTIES)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+const TARGET_BOUND_DIRECTION_PHRASE = Object.keys(TARGET_BOUND_DIRECTIONS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+
+/**
+ * The printed bound TAIL, anchored to the word "target" so only a TARGET
+ * selector is narrowed.
+ *
+ * ⚠️ Anchored deliberately: the same words follow a GROUP selector ("destroy
+ * each creature with mana value 3 or less"), and that is a different consumer
+ * with a different filter. Narrowing a group selector through the targeting
+ * seam would police a target that does not exist and leave the group
+ * unfiltered — a card playing wider than printed, in the half nobody looked at.
+ */
+const BOUND_TAIL = new RegExp(
+  `\\b(target [a-z][a-z ]*?)\\s+((?:with|without) (?:${TARGET_BOUND_KEYWORD_PHRASE})|with (?:${TARGET_BOUND_PROPERTY_PHRASE}) \\d+ (?:${TARGET_BOUND_DIRECTION_PHRASE}))\\b`,
+  'gi',
+);
+
+/** The printed COLOUR form, which sits before the noun rather than after it. */
+const BOUND_COLOUR = new RegExp(`\\btarget (${Object.keys(TARGET_BOUND_COLOURS).join('|')}) (?=[a-z])`, 'gi');
+
+/**
+ * Read one printed bound phrase into a {@link TargetBound}, or `null`.
+ *
+ * CLOSED (engineering rule 2): a phrase no row understands returns null and the
+ * clause reports with its real number, rather than being widened to the nearest
+ * bound that happens to exist.
+ */
+function parseBoundPhrase(phrase: string): TargetBound | null {
+  const keyword = new RegExp(`^(with|without) (${TARGET_BOUND_KEYWORD_PHRASE})$`, 'i').exec(phrase);
+  if (keyword) {
+    const flag = TARGET_BOUND_KEYWORDS[(keyword[2] ?? '').toLowerCase()];
+    if (flag === undefined) return null;
+    return (keyword[1] ?? '').toLowerCase() === 'with' ? { withKeyword: flag } : { withoutKeyword: flag };
+  }
+  const numeric = new RegExp(
+    `^with (${TARGET_BOUND_PROPERTY_PHRASE}) (\\d+) (${TARGET_BOUND_DIRECTION_PHRASE})$`,
+    'i',
+  ).exec(phrase);
+  if (numeric) {
+    const property = TARGET_BOUND_PROPERTIES[(numeric[1] ?? '').toLowerCase()];
+    const direction = TARGET_BOUND_DIRECTIONS[(numeric[3] ?? '').toLowerCase()];
+    if (property === undefined || direction === undefined) return null;
+    const value = Number(numeric[2]);
+    if (!Number.isInteger(value)) return null;
+    return direction === 'atLeast' ? { atLeast: { property, value } } : { atMost: { property, value } };
+  }
+  return null;
+}
+
+/** What {@link stripTargetBound} found: the clause without its bound, and the bound. */
+export interface StrippedTargetBound {
+  readonly clause: string;
+  readonly bound: TargetBound;
+}
+
+/**
+ * Take the printed bound off a clause's target selector, so the ordinary rules
+ * can compile the sentence they always could.
+ *
+ * Refuses (returns null) when the clause carries MORE THAN ONE bounded
+ * selector: a clause with two aims has no single restriction to narrow, and
+ * guessing which one the bound belongs to is how a closed table stops being
+ * closed. Those cards keep reporting, with their number.
+ */
+export function stripTargetBound(clause: string): StrippedTargetBound | null {
+  const tails = [...clause.matchAll(BOUND_TAIL)];
+  const colours = [...clause.matchAll(BOUND_COLOUR)];
+  if (tails.length + colours.length !== 1) return null;
+  if (tails.length === 1) {
+    const hit = tails[0] as RegExpMatchArray;
+    const bound = parseBoundPhrase((hit[2] ?? '').trim());
+    if (bound === null) return null;
+    return { clause: clause.replace(hit[0], hit[1] ?? ''), bound };
+  }
+  const hit = colours[0] as RegExpMatchArray;
+  const colour = TARGET_BOUND_COLOURS[(hit[1] ?? '').toLowerCase()];
+  if (colour === undefined) return null;
+  return { clause: clause.replace(hit[0], 'target '), bound: { colour } };
+}
+
+/**
+ * Narrow every target restriction a compiled clause declared by `bound`.
+ *
+ * Returns null — refusing the whole clause — when the compiled effects declare
+ * NO restriction, or declare more than one distinct one, or declare one that is
+ * already bounded. All three mean the printed bound has no single unambiguous
+ * home, and attaching it to a guess would produce a card that targets something
+ * its printed text does not allow. Refusing keeps the card REPORTED with its
+ * number, which is the project's whole acceptance rule.
+ */
+export function applyTargetBound(effects: readonly EffectRef[], bound: TargetBound): EffectRef[] | null {
+  const declared = new Set<string>();
+  for (const ref of effects) {
+    const value = ref.params?.[TARGET_RESTRICTION_PARAM];
+    if (value === undefined) continue;
+    if (!isTargetRestriction(value)) return null; // already bounded, or not a restriction at all
+    declared.add(value);
+  }
+  if (declared.size !== 1) return null;
+  const base = [...declared][0] as TargetRestriction;
+  return effects.map((ref) =>
+    ref.params?.[TARGET_RESTRICTION_PARAM] === undefined
+      ? ref
+      : { ...ref, params: { ...ref.params, [TARGET_RESTRICTION_PARAM]: { base, bound } } },
+  );
+}
+// ============================ end §3.150 ==================================
