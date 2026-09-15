@@ -1028,3 +1028,60 @@ assertion reddens.
 (`.choice-prompt__options` lacked `min-height: 0`), so a long list pushed Confirm off screen — see
 `choice-prompt-scroll.test.ts`. That was Cloudshift's clipping, and it may also have contributed
 here.
+
+### UX-28 — backing out extends to CHOICES, not just casts
+
+> when anything gives you a choice and its something you initiated, you should be able to back out
+> of it if you havent chosen yet. For example, Temple Garden asking you if you want to enter tapped
+> or pay life - and none should be the wiser - tis not considered played until you choose and
+> confirm
+
+**This is UX-3/UX-4's rule applied one layer down, and the machinery already exists.**
+`lib/play/proposal.ts` already makes a CAST or an ACTIVATION reversible until commit — propose,
+answer the questions, confirm, and `cancelProposal` restores the pre-proposal state byte for byte.
+What it does not yet cover is a **land play whose as-enters choice is the first decision**.
+
+Temple Garden is the clean example: playing it is one action, and “pay 2 life or enter tapped” is
+an `asEnters` choice resolved as part of it. Caleb's framing is the right one — until that answer
+is given, the player has not finished the action, and backing out should leave **no trace**: the
+land back in hand, the land drop unspent, the log silent.
+
+**Design notes:**
+- Extend the proposal's OPENING kinds with the land play (`{kind: 'playLand'}` beside `cast`,
+  `activate`, `cycle`), so the same transaction, the same cancel affordance and the same
+  `REWIND_BLOCK_EXPLANATIONS` serve it. **Do not write a second rewind** (rule 3).
+- The honest-refusal rule carries over unchanged: `rewindVerdict` already decides when a rewind is
+  gone and renders the SENTENCE saying why instead of a dead button. An as-enters choice that has
+  already revealed something, or that another seat has acted after, must refuse rather than lie.
+- ⚠️ **Not every choice qualifies, and the table must say so.** “Something you initiated” is the
+  test: a choice forced on you by an OPPONENT'S spell is not backable, and neither is one whose
+  earlier half already changed the game. A closed table of which openings are rewindable, with a
+  reason per row, rather than a predicate that grows branches.
+
+**Guard:** play Temple Garden, back out at the tapped/pay-life question, and assert the land is in
+hand, the land drop is unspent, and the action log has no entry. Falsify by removing the rewind and
+confirming exactly that test reddens.
+
+### UX-29 — animations, still wanted
+
+> Also, I do really still want animations... Similar to what MTGA has or better
+
+Raised AFTER the combat hold shipped, so it is not a restatement of §10 — it is the broader ask the
+hold only began to answer. What exists today: the damage sequence, the fiery combat arcs, the
+attacker/blocker advance, and the holds that give them time to be seen. What that leaves untouched
+is most of a game: **drawing, playing a land, casting, resolving, dying, drawing the last card,
+gaining and losing life, tokens arriving, counters landing.**
+
+⚠️ **This item must be MEASURED before it is built** (rule 4), and the measurement is not a survey
+of MTGA — it is a list of the moments in a real game of THIS app where something changes with no
+motion at all. Drive a game with the existing rigs, capture the frames either side of each state
+change, and rank by how often each moment occurs. Build the top of that list. “Similar to MTGA or
+better” briefed straight into code produces a scattering of effects; the ranked list produces the
+three that make the game feel alive.
+
+⚠️ **Every animation obeys §10's lesson**: an animation that does not HOLD is invisible, and one
+that cannot be SKIPPED is infuriating in an app built to play hundreds of games. Durations are named
+constants in `play-config.ts`, judged against the existing beats, and honour reduced motion by
+scaling a number rather than flipping a boolean — the convention `BOARD_3D_CONFIG` already sets.
+
+See also [END-OF-GAME.md](END-OF-GAME.md), which is the same ask pointed at the last moment of a game.

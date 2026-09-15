@@ -2403,24 +2403,7 @@ button {
 .choice-prompt__title { font-family: var(--font-serif); font-size: var(--text-lg); margin: 0; color: var(--color-fg); }
 .choice-prompt__source { margin: 0; font-size: var(--text-sm); color: var(--color-fg-muted); }
 .choice-prompt__requirement { margin: 0; font-size: var(--text-sm); color: var(--color-fg-faint); }
-/*
- * ⚠️ `min-height: 0` IS THE SCROLL. Without it this flex item keeps the default
- * `min-height: auto`, which refuses to shrink below its content — so `overflow-y:
- * auto` never engages, the option list grows straight past its parent's
- * `max-height: 90vh`, and `.choice-prompt__foot` (which holds Confirm) is pushed
- * off the bottom of the screen.
- *
- * Two reports, one cause: Cloudshift's option list "doesnt scroll and just clips
- * offscreen", and an Angel of Serenity whose three picked creatures were never
- * exiled — because the prompt is `min: 0` ("up to three"), so dismissing it
- * without reaching Confirm is a LEGAL answer meaning "exile nothing".
- *
- * `board-fit.css` already carries this same lesson for the play board: "Without
- * this a flex item refuses to shrink below its content, which is exactly how a
- * 'fixed height' column still ends up scrolling the page." Same rule, second
- * surface — which is why `choice-prompt-scroll.test.ts` now sweeps for it.
- */
-.choice-prompt__options { min-height: 0; overflow-y: auto; padding: var(--space-1) 0; }
+.choice-prompt__options { overflow-y: auto; padding: var(--space-1) 0; }
 .choice-prompt__cards { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .choice-prompt__list { display: flex; flex-direction: column; gap: var(--space-2); }
 .choice-prompt__list--inline { flex-direction: row; }
