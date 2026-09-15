@@ -63,8 +63,21 @@ const VIEWPORTS = Object.freeze({
 const APP_SHELL_WAIT_MS = 90_000;
 /** An in-app transition once the shell is up; touches no network. */
 const UI_TRANSITION_WAIT_MS = 20_000;
-/** How long a tile may take to appear once a view is mounted. */
-const FIRST_TILE_WAIT_MS = 90_000;
+/**
+ * How long a tile may take to appear once a view is mounted.
+ *
+ * 240 s, and the number is this large because of what it MEASURED. Mounting the
+ * pre-virtualisation Deck Builder pool — 5,651 tiles carrying add/remove
+ * steppers, 6.7 MB of DOM — was timed at 49.6 s on one run and 92.3 s on
+ * another, and a third run blew straight past a 90 s budget and reported the
+ * harness as unable to run. A budget that a healthy-but-pathological page
+ * crosses at random turns a MEASUREMENT into a coin flip, which is the same
+ * trap `harness-wait-budgets.test.ts` was written for.
+ *
+ * It is a ceiling, not a wait: once virtualised this view mounts in well under
+ * a second, and nothing here slows down because the ceiling is high.
+ */
+const FIRST_TILE_WAIT_MS = 240_000;
 
 /** Frames longer than this are what a person perceives as a stutter. */
 const LONG_FRAME_MS = 50;
@@ -74,6 +87,10 @@ const SCROLL_STEP_PX = 900;
 const SCROLL_STEPS = 12;
 /** Milliseconds to let a scroll settle before measuring coverage. */
 const SETTLE_MS = 450;
+/** How many Tab presses the keyboard walk takes. More than one screenful of
+ *  tiles, so the window is forced to extend rather than merely hold. */
+const KEYBOARD_TAB_STOPS = 45;
+
 /** A visible vertical band with no tile in it, taller than this, is a HOLE. */
 const MAX_BLANK_BAND_PX = 260;
 
@@ -99,6 +116,8 @@ function check(name, passed, detail = '') {
   console.log(`  ${passed ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** Let the page settle for a couple of frames without leaving the harness. */
+const sleepInPage = (page) => page.evaluate(() => new Promise((r) => setTimeout(r, 400)));
 
 /**
  * Flush the report to disk after every phase, not once at the end.
@@ -290,6 +309,70 @@ async function measureSearchLatency(page, term) {
 }
 
 /**
+ * Can the grid still be used from the keyboard, and does scrolling keep your
+ * place?
+ *
+ * The specific failure a virtualiser invites: wheel-scroll away from a focused
+ * tile, the tile unmounts, the browser hands focus back to `<body>`, and the
+ * next Tab restarts at the top of the document. A grid that loses your place is
+ * worse than a slow one, so this is a CHECK and not a number.
+ *
+ * Tabbing is also how the window is proved to EXTEND: focusing an element
+ * scrolls it into view, which moves the scroll position, which re-plans the
+ * window — so a run of Tabs must keep finding real tiles rather than falling out
+ * of the grid at the edge of the first screenful.
+ */
+async function measureKeyboard(page) {
+  const entered = await page.evaluate(() => {
+    const first = document.querySelector('.card-grid .card-tile__art-btn');
+    if (!first) return false;
+    first.focus();
+    return document.activeElement === first;
+  });
+  if (!entered) return { entered: false };
+
+  const seen = [];
+  let leftGrid = 0;
+  for (let i = 0; i < KEYBOARD_TAB_STOPS; i++) {
+    await page.keyboard.press('Tab');
+    const state = await page.evaluate(() => {
+      const grid = document.querySelector('.card-grid');
+      const active = document.activeElement;
+      const inGrid = Boolean(grid && active && grid.contains(active));
+      const cell = active && active.closest ? active.closest('[data-card-index]') : null;
+      return { inGrid, index: cell ? Number(cell.getAttribute('data-card-index')) : null };
+    });
+    if (!state.inGrid) leftGrid++;
+    if (state.index !== null) seen.push(state.index);
+  }
+
+  // Now the part a virtualiser breaks: keep focus, and scroll a long way away.
+  const focusedIndex = seen.length > 0 ? seen[seen.length - 1] : null;
+  await page.evaluate(() => window.scrollBy(0, 12_000));
+  await sleepInPage(page);
+  const afterScroll = await page.evaluate(() => {
+    const grid = document.querySelector('.card-grid');
+    const active = document.activeElement;
+    const cell = active && active.closest ? active.closest('[data-card-index]') : null;
+    return {
+      stillInGrid: Boolean(grid && active && grid.contains(active)),
+      index: cell ? Number(cell.getAttribute('data-card-index')) : null,
+      fellToBody: active === document.body,
+    };
+  });
+
+  return {
+    entered: true,
+    tabStops: KEYBOARD_TAB_STOPS,
+    leftGrid,
+    tilesReached: new Set(seen).size,
+    furthestIndex: seen.length > 0 ? Math.max(...seen) : null,
+    focusedBeforeScroll: focusedIndex,
+    afterScroll,
+  };
+}
+
+/**
  * Empty the search box and wait for the grid to answer.
  *
  * Called after every latency measurement, because the NEXT measurement must see
@@ -378,6 +461,34 @@ async function main() {
     const cardsCoverage = await measureCoverage(page);
     await page.evaluate(() => window.scrollTo(0, 0));
     await sleep(SETTLE_MS);
+    const keyboard = await measureKeyboard(page);
+    console.log(
+      `
+  keyboard: entered=${keyboard.entered} tabs=${keyboard.tabStops ?? 0} ` +
+        `left-grid=${keyboard.leftGrid ?? '-'} distinct-tiles=${keyboard.tilesReached ?? '-'} ` +
+        `furthest-index=${keyboard.furthestIndex ?? '-'}`,
+    );
+    console.log(
+      `  after scrolling 12,000px away: focus still in grid=${keyboard.afterScroll?.stillInGrid} ` +
+        `index=${keyboard.afterScroll?.index} fell-to-body=${keyboard.afterScroll?.fellToBody}`,
+    );
+    check(
+      'Tab walks the grid without falling out of it',
+      keyboard.entered === true && keyboard.leftGrid === 0,
+      `${keyboard.leftGrid ?? '?'} of ${keyboard.tabStops ?? 0} stops left the grid`,
+    );
+    check(
+      'Tab reaches tiles beyond the first screenful — the window extends',
+      (keyboard.furthestIndex ?? -1) > 0,
+      `furthest index ${keyboard.furthestIndex}`,
+    );
+    check(
+      'scrolling far away does NOT drop focus to <body>',
+      keyboard.afterScroll?.fellToBody === false && keyboard.afterScroll?.stillInGrid === true,
+      `index ${keyboard.afterScroll?.index}`,
+    );
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await sleep(SETTLE_MS);
     const cardsSearch = await measureSearchLatency(page, 'goblin');
     const cardsSearchDom = await measureDom(page);
     // Clear the search so the next view starts from the full pool.
@@ -397,6 +508,7 @@ async function main() {
       scroll: cardsScroll,
       coverage: cardsCoverage,
       search: cardsSearch,
+      keyboard,
       domWhileSearching: cardsSearchDom,
       screenshot: cardsShot,
     };
@@ -425,8 +537,22 @@ async function main() {
     check('searching answered', (cardsSearch?.ms ?? -1) >= 0, `${cardsSearch?.ms} ms`);
 
     // ---- Deck Builder ------------------------------------------------------
+    // Non-fatal on purpose: a phase that is too slow to finish must not take the
+    // phases that already succeeded with it, and "this view would not mount in
+    // four minutes" is itself the most important thing a run can report.
     const deckStart = Date.now();
-    await gotoView(page, 'Deck Builder');
+    let deckMounted = true;
+    try {
+      await gotoView(page, 'Deck Builder');
+    } catch (error) {
+      const why = error instanceof Error ? error.message : String(error);
+      deckMounted = false;
+      check('the Deck Builder pool mounted at all', false, why);
+      report.deck = { mounted: false, why, mountMs: Date.now() - deckStart };
+      flush(report);
+    }
+
+    if (deckMounted) {
     const deckMountMs = Date.now() - deckStart;
     const deckDom = await measureDom(page);
     const deckShot = await shot(page, `${label}-deck-1280.png`);
@@ -465,7 +591,6 @@ async function main() {
       `tallest blank ${deckCoverage.tallestBlankPx}px`,
     );
 
-    // ---- The phone, which DECKBUILDER-AND-ART.md §2 says has no layout ------
     // THE POOL, not what a leftover search left behind — see clearSearch.
     const deckRestored = await clearSearch(page);
     check(
@@ -473,11 +598,20 @@ async function main() {
       (deckRestored ?? -1) > 1000,
       `${deckRestored} cards`,
     );
+    }
+
+    // ---- The phone, which DECKBUILDER-AND-ART.md §2 says has no layout ------
     await page.setViewport(VIEWPORTS.phone);
     await sleep(SETTLE_MS * 2);
-    const deckPhoneDom = await measureDom(page);
-    const deckPhoneShot = await shot(page, `${label}-deck-375.png`);
-    const deckPhoneCoverage = await measureCoverage(page);
+    // Only if the Deck Builder actually mounted — measuring whatever view
+    // happens to be on screen and FILING IT UNDER "deck builder" is exactly the
+    // substitution that makes a number true by construction.
+    const deckPhoneDom = deckMounted ? await measureDom(page) : null;
+    const deckPhoneShot = deckMounted ? await shot(page, `${label}-deck-375.png`) : null;
+    const deckPhoneCoverage = deckMounted ? await measureCoverage(page) : null;
+    if (!deckMounted) {
+      check('the Deck Builder was measured at 375px', false, 'the view never mounted at 1280px');
+    }
     await gotoView(page, 'Cards');
     await sleep(SETTLE_MS);
     const cardsPhoneDom = await measureDom(page);
@@ -495,7 +629,11 @@ async function main() {
       },
     };
     console.log(`\n375x812 (phone)`);
-    console.log(`  Deck Builder: ${deckPhoneDom.nodes} nodes, ${deckPhoneDom.tiles} tiles, blank ${deckPhoneCoverage.tallestBlankPx}px`);
+    console.log(
+      deckPhoneDom
+        ? `  Deck Builder: ${deckPhoneDom.nodes} nodes, ${deckPhoneDom.tiles} tiles, blank ${deckPhoneCoverage.tallestBlankPx}px`
+        : '  Deck Builder: NOT CHECKED — the view never mounted at 1280x800',
+    );
     console.log(`  Cards:        ${cardsPhoneDom.nodes} nodes, ${cardsPhoneDom.tiles} tiles, blank ${cardsPhoneCoverage.tallestBlankPx}px`);
     console.log(
       `  Cards scroll: median ${cardsPhoneScroll.medianMs} ms · p95 ${cardsPhoneScroll.p95Ms} ms · worst ${cardsPhoneScroll.worstMs} ms`,
