@@ -526,6 +526,35 @@ export type ChoiceRequest =
 /** The kinds, as a discriminator. */
 export type ChoiceKind = ChoiceRequest['kind'];
 
+/**
+ * The same kinds as VALUES, so a consumer can ENUMERATE them — a bench listing
+ * every question shape, a UI table asserting it has words for all of them.
+ *
+ * ⚠️ Kept honest by {@link CHOICE_KINDS_ARE_COMPLETE} below, not by discipline: a
+ * kind added to {@link ChoiceRequest} and not added here fails to compile. The
+ * array cannot silently fall behind the union, which is the only thing that
+ * would make enumerating it worse than not having it.
+ */
+export const CHOICE_KINDS = [
+  'selectCards',
+  'selectPlayers',
+  'chooseModes',
+  'confirm',
+  'payMana',
+  'payLife',
+  'chooseNumber',
+  'chooseValue',
+  'selectTargets',
+] as const satisfies readonly ChoiceKind[];
+
+/** `true` only while {@link CHOICE_KINDS} lists every member of {@link ChoiceKind}. */
+type ChoiceKindsAreComplete = [Exclude<ChoiceKind, (typeof CHOICE_KINDS)[number]>] extends [never]
+  ? true
+  : never;
+
+/** The witness. If a kind is missing from the array, this initialiser fails. */
+export const CHOICE_KINDS_ARE_COMPLETE: ChoiceKindsAreComplete = true;
+
 // --- the pending choice (what lives in GameState) ---------------------------------
 
 /** Identity + provenance every parked choice carries. */
