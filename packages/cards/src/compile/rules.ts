@@ -41,10 +41,12 @@ import type {
   InterveningIf,
   TriggerCondition,
   TriggeredAbility,
+  TriggerEvent,
   TriggerWho,
 } from '@jonny-boi/core';
 import {
   DEFAULT_TARGET_RESTRICTION,
+  DEFAULT_TRIGGER_WATCHES,
   PLUS_ONE_COUNTER,
   PROTECTION_SUBTYPE_PREFIX,
   formatManaCost,
@@ -58,6 +60,7 @@ import {
   parseCount,
   parseManaSymbols,
   parseSignedInt,
+  prepareOracle,
   selfReference,
   splitCostSymbols,
   stripReminderText,
@@ -130,6 +133,11 @@ const DAMAGE_TARGET_RESTRICTIONS: Readonly<Record<string, TargetRestriction>> = 
   'target creature or player': 'any',
   'target player or planeswalker': 'playerOrPlaneswalker',
   'target creature or planeswalker': 'creatureOrPlaneswalker',
+  // §3.148 — "When ~ enters, it deals 2 damage to target creature AN OPPONENT
+  // CONTROLS" (Oath of Chandra and kin). Its own row, not a flavour of
+  // 'creature': a burn trigger that may be pointed at your own board is a
+  // strictly worse play offered as though it were legal.
+  'target creature an opponent controls': 'creatureAnOpponentControls',
   'target creature, player, or planeswalker': 'any',
   'target creature, player or planeswalker': 'any',
 });
@@ -1554,6 +1562,10 @@ export const TARGET_NOUN_RESTRICTIONS: Readonly<Record<string, TargetRestriction
   'nonland permanent': 'nonlandPermanent',
   // §3.112 — bloodrush's aim (read off the live combat record by core).
   'attacking creature': 'attackingCreature',
+  // §3.148 — the most-printed narrowing in the targeted-trigger backlog, and
+  // the one core could already say (`creatureAnOpponentControls`, added for
+  // Banisher Priest). One row, and destroy/exile/bounce gain it together.
+  'creature an opponent controls': 'creatureAnOpponentControls',
   // ⚠️ "artifact, enchantment, or land" is deliberately NOT here: Oracle prints
   // it with and without the serial comma, and `destroy-target-artifact-
   // enchantment-or-land` owns both spellings. A row here would take one
@@ -1574,6 +1586,12 @@ export const TARGET_NOUN_RESTRICTIONS: Readonly<Record<string, TargetRestriction
 const PUMP_TARGET_NOUNS: Readonly<Record<string, TargetRestriction>> = Object.freeze({
   creature: CREATURE_TARGET,
   'attacking creature': ATTACKING_CREATURE_TARGET,
+  // §3.148 — "When ~ enters, target creature AN OPPONENT CONTROLS gets -2/-0
+  // until end of turn" is a whole printed family (Eyeblight Assassin and kin),
+  // and the shrink is only ever aimed at the other side. Widening it to
+  // `creature` would offer a pilot its own board as a legal target for a
+  // penalty, which is a card playing differently from its text.
+  'creature an opponent controls': CREATURE_AN_OPPONENT_CONTROLS_TARGET,
 });
 
 /** The pump nouns as an alternation, longest first so "creature" cannot truncate the pair. */
@@ -1607,7 +1625,9 @@ const TARGET_NOUN_PHRASE = Object.keys(TARGET_NOUN_RESTRICTIONS)
  * snow/legendary/colour narrowings ("untap target legendary permanent",
  * "untap another target snow permanent"). Each needs a restriction core cannot
  * say yet, and a closed table REPORTS rather than widening to the nearest thing
- * that happens to exist.
+ * that happens to exist. The CONTROLLER narrowing core CAN say is the row
+ * below — the test for membership is whether `TargetRestriction` carries the
+ * word, never whether the nearest thing would be close enough.
  */
 const UNTAP_TARGET_NOUNS: Readonly<Record<string, TargetRestriction>> = Object.freeze({
   creature: 'creature',
@@ -1619,6 +1639,10 @@ const UNTAP_TARGET_NOUNS: Readonly<Record<string, TargetRestriction>> = Object.f
   swamp: 'swamp',
   mountain: 'mountain',
   forest: 'forest',
+  // §3.148 — "When ~ enters, TAP target creature an opponent controls" (Frost
+  // Lynx and the whole freeze family). Printed on the tap verb only, and a row
+  // here rather than a rule of its own precisely so the pair cannot drift.
+  'creature an opponent controls': CREATURE_AN_OPPONENT_CONTROLS_TARGET,
 });
 
 /** The untap nouns as an alternation, longest first so none is truncated. */
@@ -1874,6 +1898,53 @@ const PREVENTION_FIXED_RECIPIENTS: Readonly<
 const PREVENTION_FIXED_PHRASE = Object.keys(PREVENTION_FIXED_RECIPIENTS)
   .sort((a, b) => b.length - a.length)
   .join('|');
+
+// --- §3.148, the O-Ring pair: an exile that must LINK, and the guard that says so ---
+
+/**
+ * The printed line that gives an O-Ring's exiled card back.
+ *
+ * ONE pattern, TWO readers: the effect rule that compiles the line, and
+ * {@link printsLinkedReturn}, which asks whether the card prints it at all. A
+ * second copy for the second question is the drift rule 12 names — the day the
+ * wording gains a spelling, only one copy would learn it and the disagreement
+ * would look like a card bug.
+ */
+const RETURN_EXILED_TO_BATTLEFIELD =
+  /^return (?:the exiled cards?|that exiled card) to the battlefield under (?:its|their) owners?['\u2019]?s? control$/;
+
+/** Angel of Serenity's destination — the same line, the same two readers. */
+const RETURN_EXILED_TO_HAND = /^return the exiled cards? to (?:its|their) owners?['\u2019]?s? hands?$/;
+
+/** The leaves-trigger prefix the return line is always printed under. */
+const LEAVES_TRIGGER_PREFIX = /^when ~ leaves the battlefield, (.+)$/;
+
+/**
+ * Does this card print the OTHER half of an O-Ring — a "when ~ leaves the
+ * battlefield, return the exiled card…" line?
+ *
+ * ⚠️ A GUARD, NOT A CONVENIENCE, and a shipped card is why it exists.
+ * "Exile target creature" compiles to a plain `exileTarget`, which records NO
+ * link back to the exiler, while `returnExiledByThis` returns only what the
+ * source's own link names (`CardInstance.exiledUntilLeavesBy`). Journey to
+ * Nowhere prints exactly those two sentences and compiled to that unlinked
+ * pair: the creature was exiled for ever and destroying the enchantment gave
+ * back nothing — removal with no drawback, a strictly BETTER card than the one
+ * printed, which is precisely the bias the pool exists to keep out.
+ *
+ * The exile half cannot see the pair from inside its own sentence, so it asks
+ * the card. Reads the SAME `prepareOracle` + `normalizeClause` the compiler
+ * reads the card with, so "this enchantment", "this creature" and the card's own
+ * name are already `~` and a printing wording cannot make the guard miss.
+ */
+function printsLinkedReturn(ctx: RuleContext): boolean {
+  for (const line of prepareOracle(ctx.card.oracleText, ctx.card.name)) {
+    const body = LEAVES_TRIGGER_PREFIX.exec(normalizeClause(line))?.[1];
+    if (body === undefined) continue;
+    if (RETURN_EXILED_TO_BATTLEFIELD.test(body) || RETURN_EXILED_TO_HAND.test(body)) return true;
+  }
+  return false;
+}
 
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
@@ -2821,19 +2892,25 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'return-target-permanent-to-hand',
-    description: '"Return target creature/permanent to its owner\'s hand" (bounce)',
-    pattern: /^return target (creature|permanent) to (?:its|their) owner'?s hand$/,
+    description:
+      '"Return target <NOUN> to its owner\'s hand" (bounce) for every noun in TARGET_NOUN_RESTRICTIONS (Unsummon, Boomerang, Stingscourger)',
+    pattern: new RegExp(`^return target (${TARGET_NOUN_PHRASE}) to (?:its|their) owner'?s hand$`),
     needsChosenTarget: true,
     build(match) {
       // `returnToHand` has existed in the primitive library the whole time with
       // no rule able to reach it — bounce was reported unsupported purely for
       // want of this pattern.
       //
-      // "Target PERMANENT" is its own restriction and is NOT flattened to
-      // "creature": Cryptic Command bounces a land, and a bounce that could not
-      // would be a strictly weaker card than printed. (It used to flatten,
-      // because core had no `'permanent'` restriction to compile into.)
-      const restriction = match[1] === 'permanent' ? PERMANENT_TARGET : CREATURE_TARGET;
+      // §3.148 — the noun comes from the SHARED table now, not from a private
+      // `(creature|permanent)` alternation. Bounce is a removal verb like
+      // destroy and exile, it prints the same noun vocabulary, and keeping a
+      // second list meant "target creature an opponent controls" was understood
+      // by two verbs and refused by the third: one answer, one question (rule
+      // 12). "Target PERMANENT" is still its own restriction and is NOT
+      // flattened to "creature" — Cryptic Command bounces a land, and a bounce
+      // that could not would be a strictly weaker card than printed.
+      const restriction = TARGET_NOUN_RESTRICTIONS[match[1] ?? ''];
+      if (restriction === undefined) return null;
       return effects({ primitive: 'returnToHand', params: { targets: restriction } });
     },
   },
@@ -2977,8 +3054,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
      * whatever THIS permanent exiled, which the exile half recorded. Accepts the
      * singular and plural printings so Angel of Serenity's "cards" reads too.
      */
-    pattern:
-      /^return (?:the exiled cards?|that exiled card) to the battlefield under (?:its|their) owners?['\u2019]?s? control$/,
+    pattern: RETURN_EXILED_TO_BATTLEFIELD,
     build() {
       return effects({ primitive: 'returnExiledByThis', params: { to: 'battlefield' } });
     },
@@ -2986,7 +3062,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'return-exiled-by-this-to-hand',
     description: 'Return the exiled cards to their owners’ hands (Angel of Serenity)',
-    pattern: /^return the exiled cards? to (?:its|their) owners?['\u2019]?s? hands?$/,
+    pattern: RETURN_EXILED_TO_HAND,
     build() {
       return effects({ primitive: 'returnExiledByThis', params: { to: 'hand' } });
     },
@@ -4772,6 +4848,56 @@ function emblemTriggers(body: string, ctx: RuleContext): readonly TriggeredAbili
 // rules above. If the body has no faithful implementation the whole trigger is
 // rejected (returns null) — never a trigger that fires and does nothing.
 
+// --- §3.148, the targeted-trigger row: the body's leading pronoun ---------------
+
+/**
+ * The trigger EVENTS whose printed SUBJECT is the source itself, so a body that
+ * opens with the pronoun "it" is talking about `~`.
+ *
+ * "When this creature enters, **it** deals 2 damage to any target" (Skeleton
+ * Archer) is the single largest one-clause shape in the targeted-trigger
+ * backlog. The effect rule for it already exists — `damage-any-target` reads
+ * "~ deals N damage to <RECIPIENT>" over the whole {@link DAMAGE_TARGET_RESTRICTIONS}
+ * table — so what was missing is only that the body says "it" where the rule
+ * says "~".
+ *
+ * A CLOSED TABLE rather than a blanket rewrite, because "it" means a DIFFERENT
+ * object on the events left out and getting that wrong is silent:
+ *  - `permanentEnters` / `permanentDies` are about some OTHER permanent
+ *    ("whenever a creature you control dies, it deals…") — resolving "it" to the
+ *    source would make the wrong object deal the damage;
+ *  - `castSpell`, the step triggers and the life events have no subject at all.
+ * A `watches` other than the default is the same problem wearing a flag: an
+ * Equipment's "whenever equipped creature attacks, **it** deals…" is about the
+ * equipped creature, never the Equipment.
+ */
+const SOURCE_SUBJECT_EVENTS: ReadonlySet<TriggerEvent> = new Set<TriggerEvent>([
+  'etb',
+  'attacks',
+  'blocks',
+  'becomesBlocked',
+  'blocksOrBecomesBlocked',
+  'becomesBlockedByCreature',
+  'dies',
+  'leaves',
+  'putIntoGraveyardFromBattlefield',
+  'combatDamageToPlayer',
+]);
+
+/**
+ * Rewrite a trigger body's LEADING "it" to `~`, and only where the trigger's
+ * subject IS the source.
+ *
+ * Leading only, deliberately: a later "it" in the same body is about whatever
+ * the earlier sentence just named ("exile target creature. return **it**…"), and
+ * that pronoun is the sentence's business, not this one's.
+ */
+function resolveSourcePronoun(condition: TriggeredAbility['condition'], bodyText: string): string {
+  if ((condition.watches ?? DEFAULT_TRIGGER_WATCHES) !== DEFAULT_TRIGGER_WATCHES) return bodyText;
+  if (!SOURCE_SUBJECT_EVENTS.has(condition.on)) return bodyText;
+  return bodyText.replace(/^it\b/i, '~');
+}
+
 /**
  * Build a one-condition trigger whose body is compiled from `bodyText`.
  *
@@ -4792,7 +4918,7 @@ function triggerFrom(
   bodyText: string,
   label: string,
 ): ClauseContribution | null {
-  const body = ctx.compileTriggerBody(bodyText);
+  const body = ctx.compileTriggerBody(resolveSourcePronoun(condition, bodyText));
   // A MODAL body has empty effects on purpose — the chosen modes' effects
   // replace them as the ability goes on the stack.
   if (body === null || (body.effects.length === 0 && body.modal === undefined)) return null;
@@ -4879,9 +5005,13 @@ function optionalTriggerFrom(
   innerBody: string,
   label: string,
 ): ClauseContribution | null {
-  const compiled = ctx.compileTriggerBody(innerBody);
+  // The same pronoun resolution the forced funnel does, for the reason DRY
+  // exists: two funnels that answer "what does 'it' mean here?" separately will
+  // eventually answer it differently, and only one of them will be right.
+  const body = resolveSourcePronoun(condition, innerBody);
+  const compiled = ctx.compileTriggerBody(body);
   if (compiled === null) return null;
-  const effects = mayEffectsFrom(innerBody, compiled.effects);
+  const effects = mayEffectsFrom(body, compiled.effects);
   if (effects === null || effects.length === 0) return null;
   return {
     triggers: [
@@ -5157,6 +5287,55 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
             condition: { on: 'leaves' },
             effects: [{ primitive: 'returnExiledByThis', params: { to: 'battlefield' } }],
             label: 'Leaves: return the exiled card',
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'trigger-etb-exile-target-noun-linked',
+    description:
+      '"When ~ enters, exile [another] target <NOUN>" on a card that ALSO prints the return line — every noun in TARGET_NOUN_RESTRICTIONS (Oblivion Ring, Journey to Nowhere, Faceless Butcher)',
+    /*
+     * §3.148. The OLDEST O-Ring wording, and the one the compiler read wrong.
+     *
+     * Three printed sentences make one machine: the ETB exile, the leaves-return,
+     * and the LINK between them (`exileUntilLeaves` stamps
+     * `CardInstance.exiledUntilLeavesBy`; `returnExiledByThis` reads it). Without
+     * this rule the sentence fell through to `trigger-etb` and compiled to a bare
+     * `exileTarget` — no link — so the card's own return half gave back nothing.
+     * Journey to Nowhere shipped in the pool that way.
+     *
+     * Ordered before `trigger-etb` for the reason the Banisher Priest rule is:
+     * the generic enters rule matches this sentence too, and what it builds is a
+     * strictly better card than the one printed.
+     *
+     * The PAIR is the condition, not the noun. A card that prints this sentence
+     * with NO return line ("Galactus, Devourer of Worlds") is a plain exile and
+     * must keep compiling to one, so the rule declines and lets `trigger-etb`
+     * have it — the same sentence means two different cards, and only the card
+     * knows which.
+     *
+     * "ANOTHER" is load-bearing exactly as it is on Fiend Hunter: an Oblivion
+     * Ring that could name itself would exile itself, leave, return itself and
+     * trigger again for ever (DESIGN §3.33's mirror). It rides the ability as
+     * `targetsExcludeSelf`, which the aiming pass reads when it builds the menu.
+     */
+    pattern: new RegExp(`^when ~ enters(?: the battlefield)?, exile (another )?target (${TARGET_NOUN_PHRASE})$`),
+    needsChosenTarget: true,
+    build(match, ctx) {
+      if (!printsLinkedReturn(ctx)) return null;
+      const restriction = TARGET_NOUN_RESTRICTIONS[match[2] ?? ''];
+      if (restriction === undefined) return null;
+      const excludeSelf = match[1] !== undefined;
+      return {
+        triggers: [
+          {
+            condition: { on: 'etb' },
+            effects: [{ primitive: 'exileUntilLeaves', params: { targets: restriction, max: 1 } }],
+            label: `Enters: exile ${excludeSelf ? 'another ' : ''}target ${match[2] ?? ''}`,
+            targets: restriction,
+            ...(excludeSelf ? { targetsExcludeSelf: true } : {}),
           },
         ],
       };
