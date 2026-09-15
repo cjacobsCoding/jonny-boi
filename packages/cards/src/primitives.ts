@@ -45,6 +45,9 @@ import type {
 import {
   MANA_COLORS,
   addCardGrant,
+  // §3.150 — the one-shot half of the does-not-untap family; the untap step is
+  // the only thing that spends what this adds.
+  addUntapSkips,
   MINUS_ONE_COUNTER,
   PLUS_ONE_COUNTER,
   aggregateFor,
@@ -589,7 +592,14 @@ function tokenEntryParam(ctx: EffectContext): TokenEntryOptions | undefined {
 export const createEmblem: EffectPrimitive = (ctx) => {
   const statics = staticsParam(ctx);
   const triggers = triggersParam(ctx);
-  if (statics.length === 0 && triggers.length === 0) return;
+  // §3.150 — the THIRD channel: an emblem ability that is a flag on the
+  // definition rather than a static or a trigger ("You have no maximum hand
+  // size", the case `player-statics.ts` reads from the command zone). Filtered
+  // against a CLOSED allow-list here as well as at compile time, because this
+  // primitive's params can also arrive from generated pool data.
+  const definitionFields = emblemDefinitionFieldsParam(ctx);
+  const fieldCount = Object.keys(definitionFields).length;
+  if (statics.length === 0 && triggers.length === 0 && fieldCount === 0) return;
   const name = strParam(ctx, 'name') ?? `${ctx.source.def.name} emblem`;
   const def: CardDefinition = {
     id: `emblem:${name}`,
@@ -600,9 +610,32 @@ export const createEmblem: EffectPrimitive = (ctx) => {
     isEmblem: true,
     ...(statics.length > 0 ? { statics } : {}),
     ...(triggers.length > 0 ? { triggers } : {}),
+    ...definitionFields,
   };
   ctx.createEmblem(def);
 };
+
+/**
+ * The CLOSED set of `CardDefinition` flags an emblem may carry directly. The
+ * runtime twin of the compiler's `EMBLEM_DEFINITION_FIELDS`, and it is a second
+ * copy on purpose: params reaching this primitive are DATA (generated pool
+ * modules, a saved game) and a permissive spread here would let a field the
+ * compiler would have refused arrive anyway, on an object nothing can remove.
+ * `compile/loyalty-emblem-family.test.ts` fails if the two lists diverge — the
+ * only thing holding a deliberate second copy honest.
+ */
+export const EMBLEM_DEFINITION_FIELD_NAMES: readonly string[] = Object.freeze(['noMaximumHandSize']);
+
+/** The `definitionFields` param, narrowed to the allow-list and to `true` values. */
+function emblemDefinitionFieldsParam(ctx: EffectContext): Record<string, true> {
+  const raw = ctx.params.definitionFields;
+  if (typeof raw !== 'object' || raw === null) return {};
+  const out: Record<string, true> = {};
+  for (const key of EMBLEM_DEFINITION_FIELD_NAMES) {
+    if ((raw as Record<string, unknown>)[key] === true) out[key] = true;
+  }
+  return out;
+}
 
 /**
  * The `statics` param as a `StaticAbility` list, validated shallowly: an entry
@@ -906,6 +939,29 @@ export const untapTarget: EffectPrimitive = (ctx) => {
   if (!target || !target.tapped) return;
   target.tapped = false;
   ctx.emit({ type: 'untapped', instanceId: target.instanceId, player: target.controller });
+};
+
+/**
+ * §3.150 — `freezeTarget`: the target permanent "doesn't untap during its
+ * controller's NEXT untap step" (Frost Trickster, Tamiyo's +1), or its next
+ * `count` untap steps (Telekinesis prints two).
+ *
+ * Its own primitive rather than a rider on {@link tapTarget}, because the two
+ * are printed independently and really are independent: "Tap target creature. It
+ * doesn't untap…" taps AND freezes, while Skyline Cascade's "target creature an
+ * opponent controls doesn't untap during its controller's next untap step" only
+ * freezes — and a creature that was already tapped is frozen just the same. A
+ * rider would have made the freeze conditional on the tap succeeding, which is
+ * not what any of these cards say.
+ *
+ * An ALREADY-TAPPED or already-frozen target is not a no-op the way tapping is:
+ * skips ACCUMULATE (see `addUntapSkips`). No valid target → safe no-op.
+ */
+export const freezeTarget: EffectPrimitive = (ctx) => {
+  const target = firstPermanentTarget(ctx);
+  if (!target) return;
+  const raw = ctx.params.count;
+  addUntapSkips(target, typeof raw === 'number' && Number.isFinite(raw) ? raw : 1);
 };
 
 /**
@@ -1958,6 +2014,8 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   tapTarget,
   untapTarget,
   untapSelf,
+  // §3.150 — the does-not-untap family's ONE-SHOT half.
+  freezeTarget,
   mill,
   fight,
   dealDamageToEach,

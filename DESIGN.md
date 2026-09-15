@@ -3032,6 +3032,159 @@ it is replaced by an assertion that the compiled card carries `{ base: 'creature
   and `modal-blame.mjs` ranks it BY the family that owns it so it can be sent where it lives: a rules
   template 162, filtered-targeting 34, entwine 26, static-buff 25, graveyard 21, counters 15. The
   filtered-targeting figure nearly halved (62 → 34) because this lane took that half of it.
+### 3.150 The loyalty row is the §3.120 artifact a FIFTH time — and the machinery it names is COMPLETE — ✅ done
+
+> ⚠️ **Section number claimed off a contended range.** `main` already carries TWO §3.147 sections and
+> TWO §3.149 sections at fork, and five lanes are live in `rules.ts`. §3.150 was the lowest free
+> number when this branch forked. If an integrator finds a second §3.150, renumber this one.
+
+The backlog entry *"a loyalty-ability template the compiler does not recognize yet"* named **~300
+cards**, plus the **emblem** shape, and between them they hold Jace, Architect of Thought and Tamiyo,
+the Moon Sage from `docs/decks/defender-ramp.txt`.
+
+**NEW `packages/cards/scripts/loyalty-blame.mjs`** — the fifth blame tool, after `activated-blame`,
+`targeted-blame`, `counters-blame` and `xvalue-blame`. It splits each blocked loyalty line into its
+signed COST and its BODY and probes each half alone, on a **planeswalker probe with printed loyalty**
+(the trap: `compileLoyaltyAbility` refuses a `+1:` line on anything else, so probing on a creature the
+way `activated-blame` does reports every loyalty line as a cost gap — the exact wrong answer). On the
+fixed 32,341-card corpus:
+
+| half | clauses | distinct shapes |
+|---|---:|---:|
+| **COST unknown** (the signed cost itself) | **0** | 0 |
+| LOYALTY-PATH gap (body compiles elsewhere, not behind a loyalty cost) | 3 | 3 |
+| **BODY gap** (no effect rule anywhere) | **668** | **641** |
+| not a loyalty line at all (a static/trigger printed on a walker) | 204 | 139 |
+
+**So the row's NAME points at machinery that is already finished.** Loyalty is a system here: walkers
+enter with printed loyalty, `[+N]/[−N]` compile to signed-cost sorcery-speed activated abilities, the
+once-per-turn rule is keyed on the cost kind, walkers are attackable, and zero loyalty is death by
+state-based action. A brief written from the row would have spent itself on `parseActivationCost`.
+The three LOYALTY-PATH clauses are all *mana abilities on walkers* and unrelated to loyalty. And
+**641 shapes for 668 clauses is 1.04 cards per shape — the flattest §3.120 artifact measured yet**
+(1.20, 1.18, 1.13, 1.08 before it). Largest single shape: 4.
+
+**Two things the row cannot say about itself, and both matter more than its size.**
+1. **27 of its 296 cards are not planeswalkers at all** — the hint matches the word "loyalty"
+   anywhere, including "put a loyalty counter on".
+2. **47 blocked walkers have NO clause in the row.** `UNSUPPORTED_HINTS` is FIRST-MATCH and ~20 hints
+   sit above the loyalty one, so a loyalty line whose body says "you may", "search your library",
+   "scry" or "emblem" is filed elsewhere. **Jace is the worked example: two of his three abilities
+   land in the loyalty row and his ultimate lands in "you may / choose".** Sweeping the corpus by
+   TYPE LINE is the only way to see a walker whole; `loyalty-blame.mjs` prints both populations side
+   by side so neither can be quoted as the other.
+
+#### The emblem half is §3.148's shape again — the seam was built, two specific things were missing
+
+The emblem SUBSYSTEM has been complete since §3.15: emblems live in the command zone, nothing can
+remove them *by construction*, and `indexContinuous` / `aggregateFor` / the trigger collector all
+discover command-zone sources. A probe confirms an emblem's TRIGGER already fires from there. So the
+question was never the seam. It was: **76 cards in the emblem row, 69 blocked emblem lines, and the
+emblem is the SOLE blocker on FOUR of them** — 74 quoted bodies across 72 distinct shapes, 1.03 per
+shape. The artifact a second time, inside the same lane. The ceiling on perfect emblem-body work is
+four cards (You Compleat Me, Wrenn and Six, Jace Unraveler of Secrets, Elspeth Knight-Errant), each
+needing a different body, and **that smaller number is reported rather than the 76**.
+
+What was actually broken, and neither is the seam:
+1. **The pattern's greedy `(.+)` swallowed the join.** `You get an emblem with "A" and "B"` handed the
+   tables one unparseable run, so EVERY multi-ability emblem reported — five printings, Tamiyo's
+   included. The split reads the QUOTES, never the prose, because an emblem body routinely contains
+   "and", commas and full stops of its own. **Every quoted ability must compile or the whole line
+   reports**: an emblem is unremovable, so a half-right one is wrong for the rest of the game with
+   nothing to destroy.
+2. **`emblemStatics` read only `.statics`.** "You have no maximum hand size" compiles to
+   `CardDefinition.noMaximumHandSize` — not a `StaticAbility` — so the compiler read the body
+   correctly, produced the right contribution, and **dropped it on the floor**. That field is exactly
+   what `player-statics.ts` reads from the command zone, and its own header says an emblem is the case
+   it exists for. `EMBLEM_DEFINITION_FIELDS` is the closed table, mirrored in the primitive because
+   params can also arrive as generated pool data having never passed the compiler; a test asserts the
+   two lists are equal (rule 12 — the copy is unavoidable, so the guard is the whole of its honesty).
+
+#### The lever was a family the row never mentions: 246 cards that DON'T UNTAP
+
+Measured before building (rule 11). **246 corpus cards print "doesn't untap during", every one of
+them is blocked, and 99 are blocked SOLELY by such a clause.** Unlike the row that led here, these
+shapes CONCENTRATE — the top five cover 108 clauses. It is also Tamiyo's +1, which is how the lane
+found it.
+
+**Two mechanisms, because the printed text has two lifetimes**, and conflating them is the defect:
+
+- **`KeywordFlags.doesNotUntap`** — the CONTINUOUS form (Basalt Monolith; Waterknot; Cement Shoes). A
+  plain boolean, so the continuous layer already ORs it and destroying the Aura ends it **with
+  nothing to clean up**. Storing "is frozen" on the permanent would have needed a second mechanism to
+  take it back off.
+- **`CardInstance.untapSkips`** — the ONE-SHOT form ("next untap step"; Telekinesis' "next TWO"). It
+  OUTLIVES its source and expires by being SPENT, so it is a stored count, cleared at the zone-change
+  chokepoint beside `loyaltyActivatedTurn` (CR 400.7 — bounce the frozen creature and it unfreezes).
+
+Two mechanisms is the honest model; **two ANSWERS would not be**, so `core/src/untap.ts` asks the
+question once and `beginTurn` is its only caller. ⚠️ The skip is spent by the STEP HAPPENING, not by
+an untap being refused — a decrement inside the `tapped` branch leaves an already-untapped frozen
+permanent carrying its freeze forever, and one untap step cannot see it. Its own test.
+
+On the cards side the CONTINUOUS half is **ONE ROW in `KEYWORD_PHRASES`**, which is what makes the
+Aura, the Equipment and the "gets +4/+2 AND doesn't untap" printings all work without a rule each —
+`attachment-modification` already routes them through that parser. Its "and" tail lost its mandatory
+grant verb for the same reason its third alternative is verbless. The one-shot half reads
+`UNTAP_TARGET_NOUNS`, the table the tap and untap verbs already share (§3.148 put `creature an
+opponent controls` in it for this very family), so the next noun is a ROW.
+
+⚠️ **A REAL DEFECT CAUGHT MID-WRITE, now pinned:** in a template literal a lone `\.` is a non-escape
+that collapses to `.`, so the sentence break in `tap target X\. it doesn't untap…` silently matched
+ANY character. Only `\\.` is a literal dot. A test compiles the comma form and demands a refusal.
+
+#### 📊 Measured delta, as a SET
+
+**6,653 -> 6,696 accepted, +43 gained, 0 LOST**, on one fixed 32,341-card corpus compiled twice with
+this branch's compiler sources reverted to `origin/main` in between (`playable-set.mjs`, diffed both
+ways — the {X} lane read "+55" while eight cards had silently left the pool). The AFTER set was
+re-derived after restoring and is byte-identical. Build exit **0**, unpiped, both times.
+
+**Where the 43 come from, attributed:** **36** carry a does-not-untap clause (the family went 246
+blocked -> 210, sole-blocked 99 -> 63); **7** are the ONE-LINE `attachment-modification` fix that
+made the grant verb after "and" optional, which also unblocked "gets +2/+2 **and can't block**"
+(Maniacal Rage, Copper Carapace, Undying Rage and kin) — a DRY fix paying out on a family it was
+not written for. **0 unattributed.** The loyalty row itself moved only 668 -> 665 clauses, which is
+the honest shape of a 1.04-per-shape bucket and worth stating as plainly as the +43.
+
+#### The two acceptance cards, honestly
+
+**Tamiyo, the Moon Sage — NOT reachable in this lane; her +1 now compiles and TWO abilities report.**
+- `+1: Tap target permanent. It doesn't untap…` ✅ — this lane's family.
+- `−2: Draw a card for each tapped creature **target player** controls` — REPORTED.
+  `DerivedCountName` is a closed 12-row vocabulary with no tapped-creature row and, the harder half,
+  **no SUBJECT-PLAYER axis at all**: every row counts for "you" or globally. Widening to
+  `creaturesOpponentControls` makes a printed "target player" mean "the opponent", which is a
+  different card whenever Tamiyo's controller aims at themselves. Measured: "for each tapped creature"
+  is **8 corpus cards** — the smaller number, and it is not worth a new axis on its own.
+- `−8:` the emblem's SECOND ability — REPORTED. The split ✅ and the no-maximum-hand-size channel ✅
+  both landed; what is missing is a trigger on *"a card is put into your graveyard **from anywhere**"*
+  — every zone at once, with a body pointing back at the card that moved. **23 corpus cards print the
+  trigger; ONE prints this body.**
+
+**Jace, Architect of Thought — a well-evidenced NO-GO. Three abilities, three unrelated systems,
+none of them loyalty.**
+- `+1:` a DELAYED, duration-scoped trigger installed by a loyalty ability — "until your next turn" is
+  a lifetime no `TriggeredAbility` carries.
+- `−2:` **pile separation** — a choice made by an OPPONENT during resolution over a revealed set. A
+  prompt-seam question.
+- `−8:` the 5,640-card **"you may / choose"** row, which is a different lane entirely.
+
+A test pins both residues BY NAME and asserts the exact counts (2 and 3), so a card that quietly
+starts compiling one of them fails too.
+
+**Also left REPORTED on purpose, with the reason each:**
+- **"…for as long as you control ~"** (Dungeon Geists, Icefall Regent, Ty Lee) — a THIRD lifetime:
+  continuous, but radiating onto another permanent chosen once, which needs a static whose `affects`
+  names a remembered instance. As the one-shot it unfreezes a turn early; as the flag it never
+  unfreezes. Both wrong, neither reports.
+- **The conditional freeze** ("…if it has a depletion counter on it" — Veldt, Lava Tubes).
+  `KeywordFlags` is unconditional; dropping the condition makes a land that never untaps.
+- **`Whenever ~ blocks a creature, …`** (Wall of Frost, Labyrinth Minotaur) and
+  **`Whenever ~ attacks, it doesn't untap…`** (Lead Golem) — the trigger SCOPES do not exist; probed,
+  and `Whenever ~ blocks a creature, draw a card` fails too, so this is not a freeze gap.
+- **`~ doesn't untap during your NEXT untap step` as a mana-ability rider** (10 clauses, the
+  Rootwater Depths lands) — the rider belongs to the mana family, not to this one.
 
 ### 3.149 The counters row is the §3.120 artifact a THIRD time — and the seam inside it is the KIND, not the template — ✅ done
 

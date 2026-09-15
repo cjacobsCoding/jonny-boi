@@ -104,6 +104,27 @@
   as one).
   ⚠️ **§3.150 chosen after scanning EVERY remote head** — §3.149 is already double-claimed on `main`
   (counters and {X} both write `### 3.149`); nothing anywhere claims §3.150.
+- 2026-09-15 **WAVE 5 CLAIM + THE COLLISION MAP FOR `compile/rules.ts`** (integrator).
+  Three lanes dispatched on the families still blocking Caleb's own decks (ALL-CARDS §4a phase 2,
+  §7a is the per-card board): `feat/modal-templates` in `D:/Cool Stuff/Claude/jb-modal` (modal, 432,
+  **Selesnya Charm**) · `feat/loyalty-emblem` in `D:/Cool Stuff/Claude/jb-walker` (planeswalker
+  loyalty ~300 + emblem, **Jace, Architect of Thought** and **Tamiyo**) · `feat/copy-selectors` in
+  `D:/Cool Stuff/Claude/jb-copysel` (copy selector / Populate, 299, **Trostani**). All three forked
+  from `fd1ca31`. Three is the cap because this box OOMs above three heavy builds — not a preference.
+  ⚠️ **`packages/cards/src/compile/rules.ts` has FIVE live contenders, not three.** Two of them are
+  unmerged branches owned by other sessions and are invisible from a worktree cut off `main`:
+  | branch | head | `rules.ts` | what else it moves that a card lane needs |
+  | --- | --- | --- | --- |
+  | `feat/copy-templates` | `c1e2320` | +314 | `copy-primitives.ts`, `core/copy.ts`, `targeting.ts`, `triggers.ts`, `engine.ts` — **the whole copy subsystem `feat/copy-selectors` builds on** |
+  | `feat/trigger-body-templates` | `b1ea6c2` | +275 | **`choice-primitives.ts` (new, +115)** — modal mode-selection; **`core/player-statics.ts` (+63)** — the documented EMBLEM seam, which it already reads from the command zone; `card.ts`, `state.ts`, `serialize.ts`, `clone.ts` |
+  Both lanes were warned in-flight to diff those branches read-only BEFORE designing, to build on the
+  seam rather than a parallel one (rule 12), and to name any shared declaration as a semantic conflict
+  rather than resolving it themselves. **A clean textual merge here would not be a working merge** —
+  this repo has already had one auto-merge eat three lines of `foldCommandStatics` and another compile
+  cleanly with Phyrexian casting dead.
+  ⚠️ **Inventory remote heads, not just your own worktrees.** `git branch -r --no-merged origin/main`
+  is the check; the two collisions above are both invisible to `git worktree list`.
+
 - 2026-09-15 `feat/counters-templates-v2` — ✅ **pushed-ready, NOT merged** (worker; integrator merges).
   **§3.149 — the counters backlog row measured; it is the §3.120 artifact a THIRD time, and the seam
   inside it is the counter KIND rather than any template.** The row named 2,480 cards. Measured against a
@@ -680,6 +701,7 @@ throughput (games/sec) from regressing.
 | fix/report-sweep | worker | apps/web ONLY, all NON-Play surfaces. **Type chips:** `lib/filter.ts` + `filter.test.ts`. **Transport icons:** `lib/replay-config.ts` + `components/match/PlaybackControls.tsx` + NEW `lib/replay-transport.test.ts`. **Per-deck-entry printings:** NEW `lib/printings/entryPrinting.ts` + `entryPrinting.test.ts`, `lib/deck.ts`, `lib/storage.ts` + NEW `storage.test.ts`, `lib/useDecks.ts`, NEW `components/DeckEntryPrinting.tsx`, `views/DeckBuilderView.tsx`, `views/ProxiesView.tsx` (the deck→sheet art bridge, inside `loadDeck` only), `styles.css` (own `report-sweep` section appended at EOF). **Deck entries remember their card name** (`DeckEntry.name`, the `unknown card "<uuid>"` report): `lib/deck.ts`, `lib/storage.ts`, `lib/decklist/buildDeck.ts` + `gauntletDecks.ts` + `applySwapToDeck.ts` (one entry-construction line each), NEW `lib/deck-entry-names.test.ts`. DESIGN §3.61, COORDINATION. ⚠️ **Touches NOTHING under views/PlayView.tsx, components/play/**, components/online/**, lib/play/**, lib/online/** or packages/core/src/mana-plan.ts** — the concurrent mana/cast agent owns those. | ✅ MERGED + DEPLOYED |
 
 | feat/mana-choice | worker | packages/core (NEW mana-source-preference.ts + test; mana-plan.ts + mana-plan.test.ts; index.ts exports), packages/ai (NEW mana-preference.ts; weights.ts one flag, heuristic.ts + land-sequencing.ts call sites, index.ts export), apps/web (NEW lib/play/mana-picker.ts + mana-choice-pref.ts + mana-picker.test.ts + components/play/mana-picker.css; lib/play/session.ts + mana-sources.test.ts + play-config.ts, lib/online/auto-tap.ts, components/play/PlayBoard.tsx, lib/config.ts), DESIGN §3.60, COORDINATION. **Does NOT touch packages/sim, apps/server, styles.css, or lib/play/persist.ts.** ⚠️ PILOT UNCHANGED BY CONSTRUCTION — the preference is a defaulted parameter and the pilot default is OFF; seed-99 baselines re-measured BYTE-IDENTICAL (257/615/377/552 per 800). | ✅ MERGED + DEPLOYED |
+| feat/loyalty-emblem | worker | **packages/core** (NEW `untap.ts` + `untap.test.ts`; `card.ts` ONE `KeywordFlags` field; `state.ts` ONE `CardInstance` field; `engine.ts` the untap loop + one local helper; `index.ts` one export line; `internal/clone.ts`, `internal/zones.ts`, `internal/continuous.ts` KEYWORD_KEYS, `conformance/rules-manifest.ts` — ONE LINE EACH, each demanded by a compile-time exhaustiveness gate), **packages/cards** (NEW `scripts/loyalty-blame.mjs`; NEW `compile/loyalty-emblem-family.test.ts`; `compile/rules.ts` ONE bounded §3.150 region in EFFECT_RULES + ONE rule beside `cant-block` in STATIC_RULES + ONE row in `KEYWORD_PHRASES` + `EMBLEM_DEFINITION_FIELDS`/`splitQuotedEmblemAbilities`/`foldEmblemAbility` beside `emblemStatics`; `primitives.ts` NEW `freezeTarget` + `createEmblem` definitionFields), DESIGN §3.150, COORDINATION. ⚠️ **apps/web: TWO ROWS ONLY** (`keyword-glossary.ts`, `provenance-view.ts`) — both are mapped types over `keyof KeywordFlags` that REFUSE TO BUILD without them. No behaviour change. ⚠️ **SEMANTIC CONFLICTS FOR THE INTEGRATOR, none textual:** (1) `rules.ts` has five lanes live; this one edits ONE existing rule — `attachment-modification`'s pattern, making the grant verb after "and" optional — and nothing else outside its own region. (2) `origin/feat/trigger-body-templates` APPENDS to `player-statics.ts`; this lane only READS `hasNoMaximumHandSize` and changes that file not at all. (3) `internal/continuous.ts` gains one string in `KEYWORD_KEYS`; a merge that drops it makes every GRANT of the flag silently do nothing, and the file's own compile-time proof catches exactly that. 📊 **+43 gained, 0 LOST** as a set diff (6,653 → 6,696) on one fixed 32,341-card corpus compiled twice with this branch's compiler reverted in between. `npm run build` exit 0; `vitest packages/cards packages/core` 19,769 passed / 0 failed; soak seed 4242 violations 0; gauntlet seed 99 byte-identical (98/320). **POOL DELIBERATELY NOT REGENERATED.** | 🚧 PUSHED, not merged |
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 

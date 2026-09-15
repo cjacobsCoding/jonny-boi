@@ -77,6 +77,10 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // loyalty ability has been activated ever carries this, and an unconditional
   // extra property on every clone measurably costs sim throughput.
   if (inst.loyaltyActivatedTurn !== undefined) copy.loyaltyActivatedTurn = inst.loyaltyActivatedTurn;
+  // Same conditional-copy rule as `attachedTo` (§3.150): only a permanent
+  // something has actually frozen carries a skip count, and dropping it here
+  // would untap a Frost Trickster's victim at the very next action boundary.
+  if (inst.untapSkips !== undefined) copy.untapSkips = inst.untapSkips;
   // Same conditional-copy rule as `attachedTo`, and the same stakes as a
   // dropped stack-object field: `def` is the ACTIVE face (a transformed DFC
   // points at its nested back face), and `printedDef` is the only way back to

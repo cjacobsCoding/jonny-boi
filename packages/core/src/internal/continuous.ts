@@ -193,6 +193,12 @@ const KEYWORD_KEYS = [
   'menace',
   'unblockable',
   'cantBlock',
+  // §3.150 — the CONTINUOUS half of the does-not-untap family (CR 302.6). A
+  // plain flag, so it needs nothing in `grantInto`: a self-static and an Aura's
+  // "enchanted creature doesn't untap…" both OR into the same aggregate here,
+  // and the Aura leaving the battlefield takes the flag with it on the next
+  // index build, with nothing to clean up.
+  'doesNotUntap',
   'indestructible',
   'mustBeBlocked',
   'blockedByAllAble',

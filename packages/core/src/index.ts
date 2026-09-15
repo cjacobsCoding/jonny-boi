@@ -192,6 +192,8 @@ export {
  * on every read, so its lifetime ends with its source and nothing has to expire.
  */
 export { hasNoMaximumHandSize, landPlayZonesFor } from './player-statics.js';
+// §3.150 — the untap step's ONE question, and the two writers of its one-shot half.
+export { addUntapSkips, spendUntapSkip, untapsDuringUntapStep } from './untap.js';
 
 /**
  * BLOCK REQUIREMENTS (CR 509.1c/d). `forcedBlockAssignment` is the seam an AI uses
