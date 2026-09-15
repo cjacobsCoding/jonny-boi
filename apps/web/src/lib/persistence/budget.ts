@@ -67,6 +67,22 @@ import { CATALOG_STORAGE_KEY } from '../scan/config.js';
 export const ORIGIN_STORAGE_BUDGET_CHARS = 2_500_000;
 
 /**
+ * What ONE saved game actually costs, measured — not guessed.
+ *
+ * `apps/web/scripts/measure-storage-budget.mjs` plays real games with the real
+ * engine and encodes each exactly as `lib/play/persist.ts` does. Over 12 games
+ * on the sample decks (458-1,048 actions each):
+ *
+ *     min 20,000 · median 25,244 · p90 35,529 · max 47,341 · mean 27,710
+ *
+ * That measurement is what killed the old numbers. A 50-game library at this
+ * mean is 1,385,500 characters — 55% of the entire origin — so the library was
+ * never affordable at the size it advertised, whatever cap was written next to
+ * it. Re-run the script before moving any share here.
+ */
+export const TYPICAL_GAME_RECORD_CHARS = 27_710;
+
+/**
  * The share of the origin deliberately left unallocated.
  *
  * A budget whose rows sum to 100% is not a budget: the last consumer to write
@@ -141,7 +157,7 @@ export const STORAGE_AREAS = [
     match: { kind: 'exact', key: DECKS_STORAGE_KEY },
     scope: 'local',
     kind: 'user-data',
-    share: 0.2,
+    share: 0.15,
     clearable: false,
     why: 'Every deck you have built or imported. This is the one thing here that cannot be rebuilt.',
   },
@@ -161,7 +177,7 @@ export const STORAGE_AREAS = [
     match: { kind: 'exact', key: PLAY_RESUME_STORAGE_KEY },
     scope: 'local',
     kind: 'in-progress',
-    share: 0.1,
+    share: 0.08,
     clearable: true,
     why: 'The one game you can resume. Clearing it abandons that game; your decks are untouched.',
   },
@@ -171,7 +187,7 @@ export const STORAGE_AREAS = [
     match: { kind: 'exact', key: PLAY_HISTORY_STORAGE_KEY },
     scope: 'local',
     kind: 'library',
-    share: 0.16,
+    share: 0.2,
     clearable: true,
     why: 'Games you have finished, kept for review and forking. Old finished games are dropped automatically when this fills.',
   },
@@ -181,7 +197,7 @@ export const STORAGE_AREAS = [
     match: { kind: 'exact', key: IMPORTED_CARDS_STORAGE_KEY },
     scope: 'local',
     kind: 'user-data',
-    share: 0.1,
+    share: 0.16,
     clearable: true,
     why: 'Cards you pulled in from Scryfall that are not in the bundled pool. Clearing means re-importing them.',
   },
@@ -191,7 +207,7 @@ export const STORAGE_AREAS = [
     match: { kind: 'exact', key: PROXY_CACHE_STORAGE_KEY },
     scope: 'local',
     kind: 'cache',
-    share: 0.05,
+    share: 0.035,
     clearable: true,
     why: 'Print-quality images already fetched. Safe to clear — they come back from Scryfall.',
   },
@@ -201,7 +217,7 @@ export const STORAGE_AREAS = [
     match: { kind: 'exact', key: PROXY_PRINTS_CACHE_STORAGE_KEY },
     scope: 'local',
     kind: 'cache',
-    share: 0.05,
+    share: 0.035,
     clearable: true,
     why: 'The alternate-art lists behind the printing picker. Safe to clear — refetched on demand.',
   },
@@ -221,7 +237,7 @@ export const STORAGE_AREAS = [
     match: { kind: 'exact', key: CATALOG_STORAGE_KEY },
     scope: 'local',
     kind: 'cache',
-    share: 0.06,
+    share: 0.04,
     clearable: true,
     why: 'The name list the decklist scanner matches against. Safe to clear — rebuilt on the next scan.',
   },
@@ -231,7 +247,7 @@ export const STORAGE_AREAS = [
     match: { kind: 'prefix', prefix: SUGGESTION_HISTORY_KEY_PREFIX },
     scope: 'local',
     kind: 'library',
-    share: 0.06,
+    share: 0.04,
     clearable: true,
     why: 'What the Lab has already learned about each deck. Clearing makes the next run start its search over.',
   },
@@ -241,7 +257,7 @@ export const STORAGE_AREAS = [
     match: { kind: 'exact', key: UNSUPPORTED_MECHANICS_STORAGE_KEY },
     scope: 'local',
     kind: 'library',
-    share: 0.02,
+    share: 0.01,
     clearable: true,
     why: 'The engine gaps you have run into, listed on the About page. Safe to clear.',
   },
@@ -347,6 +363,22 @@ export function areaForKey(key: string): StorageArea | null {
     }
   }
   return best;
+}
+
+/**
+ * How many games the library can actually keep, DERIVED from its budget.
+ *
+ * This exists because the alternative was two numbers answering one question.
+ * `PLAY_HISTORY_LIMIT` said fifty; the character cap allowed about eighteen;
+ * nothing reconciled them, and the user was promised a library four times the
+ * size of the one they had. Deriving the count from the budget and the measured
+ * record size means a change to either is a change to both (rule 12).
+ *
+ * It is still only an estimate — a long game is nearly twice the mean — which is
+ * why `writeHistory` sheds by MEASURED size as well, and reports when it does.
+ */
+export function historyGameLimit(): number {
+  return Math.max(1, Math.floor(writeBudgetChars('play-history') / TYPICAL_GAME_RECORD_CHARS));
 }
 
 /** Total share claimed by localStorage rows — the number the budget test pins. */

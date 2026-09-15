@@ -1,0 +1,121 @@
+/*
+ * The storage alert — the app-shell banner that says a save did not land.
+ *
+ * Deliberately NOT a toast. A toast that fades is worth exactly as much as the
+ * console.warn it replaces: the thing it reports (your deck is not on disk) is
+ * still true five seconds later, so it stays until the user dismisses it.
+ *
+ * Pinned to the TOP, under the sticky header, rather than to the bottom where
+ * the update pill lives — the pill is a status light that must not cover the
+ * board's action rows, and this is a message that must be read. They are at
+ * opposite edges so neither can hide the other.
+ */
+.storage-alert {
+  position: sticky;
+  top: 0;
+  z-index: 80; /* above the update pill (70); it is the more urgent message */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+}
+
+.storage-alert__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-fg);
+  font-size: var(--text-sm, 0.875rem);
+  line-height: 1.45;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 35%);
+}
+
+.storage-alert__item--error {
+  border-left-color: var(--color-error);
+}
+
+.storage-alert__item--notice {
+  border-left-color: var(--color-warning);
+}
+
+.storage-alert__mark {
+  flex: none;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.storage-alert__item--error .storage-alert__mark {
+  color: var(--color-error);
+}
+
+.storage-alert__item--notice .storage-alert__mark {
+  color: var(--color-warning);
+}
+
+.storage-alert__text {
+  flex: 1 1 auto;
+  margin: 0;
+  min-width: 0;
+}
+
+.storage-alert__actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.storage-alert__link {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font: inherit;
+  font-size: var(--text-xs, 0.75rem);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.storage-alert__link:hover {
+  background: var(--color-surface-hover);
+}
+
+.storage-alert__dismiss {
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--color-fg-faint);
+  font: inherit;
+  cursor: pointer;
+}
+
+.storage-alert__dismiss:hover {
+  color: var(--color-fg);
+}
+
+/*
+ * On a phone the two action buttons and the message cannot share a row without
+ * squeezing the message into a column of single words — the exact failure the
+ * nav overflow fix (TMB-JB-0002) was filed for. Stack instead.
+ */
+@media (max-width: 560px) {
+  .storage-alert__item {
+    flex-wrap: wrap;
+  }
+
+  .storage-alert__text {
+    flex-basis: 100%;
+    order: 2;
+  }
+
+  .storage-alert__actions {
+    order: 3;
+    margin-left: auto;
+  }
+}

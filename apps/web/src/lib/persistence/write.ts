@@ -137,8 +137,13 @@ function fail(
       ...(detail === undefined ? {} : { detail }),
     });
   }
-  // Still logged even when quiet: the console is for us, the banner is for the user.
-  console.warn(`[storage] ${areaId}: write failed (${reason}), ${chars} chars`);
+  // Still logged even when quiet: the console is for us, the banner is for the
+  // user. Skipped entirely outside a browser, where "no storage" is the normal
+  // condition of every Node test run rather than anything a developer wants to
+  // read — a log line that fires thousands of times is a log line nobody reads.
+  if (typeof globalThis.window !== 'undefined') {
+    console.warn(`[storage] ${areaId}: write failed (${reason}), ${chars} chars`);
+  }
   return { ok: false, reason, chars };
 }
 

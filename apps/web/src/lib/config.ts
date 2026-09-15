@@ -139,8 +139,12 @@ export const PLAY_HISTORY_STORAGE_KEY = 'jonny-boi.play.history.v1';
  * How many games the library keeps. Pruning drops the oldest FINISHED games
  * only — an unfinished game is one you could still return to, and the library
  * must not decide to forget that for you.
+ *
+ * ⚠️ MOVED. This is now DERIVED from the storage budget by
+ * `lib/persistence/budget.ts#historyGameLimit`, because a hard-coded 50 here and
+ * a character cap over there were two places answering one question — and they
+ * disagreed by a factor of four. Import the function, not a literal.
  */
-export const PLAY_HISTORY_LIMIT = 50;
 
 /**
  * The library's READ ceiling — refuse to decode a blob larger than this.

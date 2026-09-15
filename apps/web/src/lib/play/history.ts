@@ -29,8 +29,8 @@
  */
 import type { PlayRecord } from './persist.js';
 import { decodeRecord, encodeRecord, type PlayStorage } from './persist.js';
-import { PLAY_HISTORY_STORAGE_KEY, PLAY_HISTORY_LIMIT, PLAY_HISTORY_MAX_CHARS } from '../config.js';
-import { writeBudgetChars } from '../persistence/budget.js';
+import { PLAY_HISTORY_STORAGE_KEY, PLAY_HISTORY_MAX_CHARS } from '../config.js';
+import { historyGameLimit, writeBudgetChars } from '../persistence/budget.js';
 import {
   reportStorageShed,
   writeStorage,
@@ -166,7 +166,7 @@ export function sortByRecency(entries: readonly HistoryEntry[]): readonly Histor
 export function upsertEntry(
   entries: readonly HistoryEntry[],
   entry: HistoryEntry,
-  limit: number = PLAY_HISTORY_LIMIT,
+  limit: number = historyGameLimit(),
 ): readonly HistoryEntry[] {
   const without = entries.filter((e) => e.id !== entry.id);
   const merged = sortByRecency([entry, ...without]);
