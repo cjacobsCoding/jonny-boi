@@ -2992,10 +2992,17 @@ ANY character. Only `\\.` is a literal dot. A test compiles the comma form and d
 
 #### 📊 Measured delta, as a SET
 
-**6,653 → 6,696 accepted, +43 gained, 0 LOST**, on one fixed 32,341-card corpus compiled twice with
+**6,653 -> 6,696 accepted, +43 gained, 0 LOST**, on one fixed 32,341-card corpus compiled twice with
 this branch's compiler sources reverted to `origin/main` in between (`playable-set.mjs`, diffed both
 ways — the {X} lane read "+55" while eight cards had silently left the pool). The AFTER set was
 re-derived after restoring and is byte-identical. Build exit **0**, unpiped, both times.
+
+**Where the 43 come from, attributed:** **36** carry a does-not-untap clause (the family went 246
+blocked -> 210, sole-blocked 99 -> 63); **7** are the ONE-LINE `attachment-modification` fix that
+made the grant verb after "and" optional, which also unblocked "gets +2/+2 **and can't block**"
+(Maniacal Rage, Copper Carapace, Undying Rage and kin) — a DRY fix paying out on a family it was
+not written for. **0 unattributed.** The loyalty row itself moved only 668 -> 665 clauses, which is
+the honest shape of a 1.04-per-shape bucket and worth stating as plainly as the +43.
 
 #### The two acceptance cards, honestly
 
