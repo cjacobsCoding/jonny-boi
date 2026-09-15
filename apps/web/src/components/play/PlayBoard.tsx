@@ -19,7 +19,12 @@ import type {
   CycleOption,
   SubmitResult,
 } from '../../lib/play/session.js';
-import { buildBoardView, explainForFace } from '../../lib/play/view-model.js';
+import {
+  buildBoardView,
+  eligibleBlockerIds,
+  explainForFace,
+  NO_ELIGIBLE_BLOCKERS,
+} from '../../lib/play/view-model.js';
 /**
  * §3.143 / UX-3..UX-5 + the commit half of UX-7 — THE CAST TRANSACTION.
  *
@@ -1234,12 +1239,12 @@ export function PlayBoard({
   const inBlockStep = step === 'declareBlockers' && isViewersPriority && viewer === defender;
   const attackerIds = session.state.combat?.attackers ?? [];
 
-  // Eligible blockers: my untapped creatures (the engine validates legality on submit).
-  const eligibleBlockers = useMemo(() => {
-    if (!inBlockStep) return new Set<InstanceId>();
-    const ids = view.self.permanents.filter((p) => p.isCreature && !p.tapped).map((p) => p.instanceId);
-    return new Set(ids);
-  }, [inBlockStep, view]);
+  // Eligible blockers: the SHARED rule, so this board and the online one offer
+  // the same creatures (the engine validates legality on submit).
+  const eligibleBlockers = useMemo(
+    () => (inBlockStep ? eligibleBlockerIds(view) : NO_ELIGIBLE_BLOCKERS),
+    [inBlockStep, view],
+  );
 
   const onBlockBoardClick = (id: InstanceId): void => {
     // Click an attacker to "arm" it, then click your creature to assign as blocker.

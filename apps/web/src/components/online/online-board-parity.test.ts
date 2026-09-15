@@ -817,3 +817,76 @@ describe('UX-15 — the ONLINE board derives the SAME damage sequence as the hot
     expect(source).toContain('damage={damageSource}');
   });
 });
+
+// ---------------------------------------------------------------------------
+// AN ONLINE PLAYER CAN ACTUALLY DECLARE A BLOCK.
+// ---------------------------------------------------------------------------
+
+import { eligibleBlockerIds } from '../../lib/play/view-model.js';
+
+/**
+ * The frame a defending seat is really sent in the block window: the server's
+ * `declareBlockers` offer, which is core's BASELINE and carries an empty
+ * `blocks` array (`generateLegalActions`: *"offer the empty (no-block)
+ * declaration as a baseline; the AI constructs specific assignments"*).
+ *
+ * Spelled with `blocks: []` deliberately and not as a convenience — the empty
+ * array IS the defect's whole cause, and a fixture that pre-populated it would
+ * be testing a message the server never sends.
+ */
+function blockWindowFrame(): GameFrame {
+  const { state } = blockedCombat({ blockersDeclared: false });
+  return {
+    view: maskStateForSeat(state, BLOCKING_SEAT),
+    legalActions: [
+      { kind: 'declareBlockers', player: BLOCKING_SEAT, blocks: [] },
+      { kind: 'passPriority', player: BLOCKING_SEAT },
+    ],
+    yourTurn: true,
+    log: [],
+    events: [],
+  };
+}
+
+describe('the ONLINE board can DECLARE A BLOCK — not just draw one', () => {
+  it('offers the viewer’s untapped creatures, from the board and not from the server’s baseline', () => {
+    const { state, blocker } = blockedCombat({ blockersDeclared: false });
+    const online = maskedViewToBoardView(maskStateForSeat(state, BLOCKING_SEAT), NAMES);
+
+    // ⚠️ THE DISCRIMINATOR, and it is the whole finding. This is what the board
+    // used to derive its candidates from: the server's template. It is empty in
+    // every real block window, so the set was always empty and an online player
+    // could never assign a blocker at all.
+    const serverTemplate = blockWindowFrame().legalActions.find((a) => a.kind === 'declareBlockers');
+    expect(serverTemplate, 'the block window must offer a declareBlockers action').toBeDefined();
+    expect(
+      serverTemplate?.kind === 'declareBlockers' ? serverTemplate.blocks : ['not a template'],
+      'core sends the empty baseline — a board that reads candidates out of it offers none',
+    ).toEqual([]);
+
+    // …and this is what it derives them from now.
+    expect([...eligibleBlockerIds(online)]).toContain(blocker.instanceId);
+  });
+
+  it('the two boards offer the SAME creatures from the same combat', () => {
+    const { state } = blockedCombat({ blockersDeclared: false });
+    const online = eligibleBlockerIds(maskedViewToBoardView(maskStateForSeat(state, BLOCKING_SEAT), NAMES));
+    const hotseat = eligibleBlockerIds(buildBoardView(state, BLOCKING_SEAT, NAMES));
+    expect([...online].sort()).toEqual([...hotseat].sort());
+    expect(online.size, 'the fixture must offer at least one blocker').toBeGreaterThan(0);
+  });
+
+  it('REACH — the blocker tile is actually selectable on the rendered online board', () => {
+    // The pure set above is worth nothing if the tile never becomes clickable:
+    // this branch has shipped eight things that were green and unreachable.
+    const html = render(blockWindowFrame());
+    const selfStart = html.indexOf('play-board__self');
+    expect(selfStart, 'the online board rendered no self seat').toBeGreaterThanOrEqual(0);
+    const self = html.slice(selfStart);
+    expect(self, 'no tile on the viewer’s own seat is selectable in the block window').toContain(
+      'perm--selectable',
+    );
+    // …and the commit affordance is there to press once one is picked.
+    expect(html).toContain('No blocks');
+  });
+});

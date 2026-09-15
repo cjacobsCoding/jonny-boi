@@ -17,6 +17,7 @@ import type {
 import { isPlaneswalker, isPlayerTarget, PLAYER_IDS } from '@jonny-boi/core';
 import { COMBAT_HOLD_CONFIG, stepLabel } from '../../lib/play/play-config.js';
 import { maskedViewToBoardView } from '../../lib/online/board-adapter.js';
+import { eligibleBlockerIds, NO_ELIGIBLE_BLOCKERS } from '../../lib/play/view-model.js';
 import { castSequence, castableWithTaps, graveyardCastableWithTaps } from '../../lib/online/auto-tap.js';
 import { alreadyPassedFrame, shouldAutoPassNow } from '../../lib/online/auto-pass.js';
 import {
@@ -752,10 +753,20 @@ export function OnlineBoard({
   );
   const attackerIds = masked.combat?.attackers ?? [];
   const inBlockStep = !!blockTemplate;
-  const eligibleBlockers = useMemo(() => {
-    if (!blockTemplate) return new Set<InstanceId>();
-    return new Set<InstanceId>(blockTemplate.blocks.map((b) => b.blocker));
-  }, [blockTemplate]);
+  /**
+   * ⚠️ READ FROM THE BOARD, NOT FROM THE SERVER'S TEMPLATE — and that is a FIX,
+   * not a shortcut. `blockTemplate.blocks` is core's *baseline* no-block
+   * declaration (`generateLegalActions`: "offer the empty (no-block)
+   * declaration as a baseline; the AI constructs specific assignments"), so it
+   * is ALWAYS empty. Deriving candidates from it made this set always empty too,
+   * and an online player could never declare a block at all — the only button a
+   * defending seat ever saw was "No blocks". `eligibleBlockerIds` is the rule the
+   * hotseat board has always used, now shared by both (rule 12).
+   */
+  const eligibleBlockers = useMemo(
+    () => (blockTemplate ? eligibleBlockerIds(view) : NO_ELIGIBLE_BLOCKERS),
+    [blockTemplate, view],
+  );
 
   const toggleAttacker = (id: InstanceId): void => {
     const deselecting = chosenAttackers.has(id);
