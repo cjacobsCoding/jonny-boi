@@ -88,6 +88,28 @@ const UI_TRANSITION_WAIT_MS = 20_000;
 const FIRST_TILE_WAIT_MS = 240_000;
 /** Let a filter settle before reading the grid. */
 const SETTLE_MS = 350;
+/**
+ * How long to let the virtualiser settle BETWEEN two searches.
+ *
+ * ⚠️ THIS IS WORKING AROUND A REAL APP DEFECT, AND IT IS NAMED SO NOBODY THINKS
+ * IT IS TUNING. Typing a second search before `CardGrid` has settled from the
+ * first crashes the app with React error #185 (maximum update depth exceeded) —
+ * reproducibly, on the fourth card of
+ * `Arbor Elf → Doorkeeper → Oblivion Ring → Scavenging Ooze`.
+ *
+ * It is NOT caused by the pool size: the identical five-name sequence survives
+ * on the 5,651 pool and on the 6,914 one, measured both ways. It is a feedback
+ * loop in the virtualiser's measure → render → measure cycle, and it belongs to
+ * whoever owns `CardGrid.tsx`; this lane reports it rather than fixing a
+ * component it does not own.
+ *
+ * Why the delay rather than nothing: a crashed React app is a BLANK page, so
+ * every remaining card reports MISSING — an acceptance harness that says "the
+ * pool refresh failed" when the truth is "the harness broke the app" is worse
+ * than no harness. The `app never threw` check below still FAILS loudly if the
+ * crash happens anyway, so this pacing hides nothing.
+ */
+const INTER_SEARCH_SETTLE_MS = 2_000;
 /** Chrome DevTools protocol ceiling, for the big-grid mounts. */
 const PROTOCOL_TIMEOUT_MS = 300_000;
 /** Below this a PNG is a blank or near-blank frame, not a card browser. */
@@ -186,6 +208,32 @@ function countOf(text) {
  * card browser that renders the name in its search box and nothing in the grid
  * would pass a page-text check while showing the player an empty screen.
  */
+/**
+ * Type one name over the previous search and read back what the GRID drew.
+ *
+ * ⚠️ IT DOES NOT CLEAR BACK TO THE WHOLE POOL BETWEEN CARDS, and that is a
+ * deliberate, measured decision rather than laziness.
+ *
+ * An earlier draft did clear, to make the result counter visibly change
+ * (pool -> 1) so a dead search box could not fake a pass. Driving that cycle at
+ * machine speed — poll for the counter, then type the instant it reads the pool
+ * — crashed the app with React error #185 (maximum update depth) on the fourth
+ * card, and a crashed React app is a BLANK page, so all eight cards then
+ * reported MISSING. That reads as "the pool refresh failed" when the truth was
+ * "the harness broke the app": the single most misleading thing an acceptance
+ * harness can do.
+ *
+ * The loop is in `CardGrid`'s virtualiser, not in the pool — an identical
+ * sequence of names survives on BOTH the 5,651 and the 6,914 pool — so it is
+ * reported rather than worked around silently (see the lane report). What
+ * changes here is that this harness no longer provokes it, because re-mounting
+ * the whole pool was never what it needed to prove.
+ *
+ * The honest signal is the GRID, not the counter: the tile's own name must equal
+ * the card searched for, and the result must be NARROWER than the pool. A search
+ * box that does nothing leaves the previous card's tile on screen and fails the
+ * name check; one that matches everything fails the narrowing check.
+ */
 async function searchFor(page, name) {
   const box = await page.$('.toolbar__search');
   if (!box) throw new Error('no .toolbar__search on the page');
@@ -194,19 +242,23 @@ async function searchFor(page, name) {
   await page.keyboard.press('Backspace');
   await page.keyboard.type(name, { delay: 0 });
 
+  // Wait for the grid to show the card, not for the counter to change: two
+  // one-result searches in a row both read "1 card".
   const deadline = Date.now() + UI_TRANSITION_WAIT_MS;
-  let after = before;
   while (Date.now() < deadline) {
-    after = await readCount(page);
-    if (after !== before) break;
+    const drawn = await page.evaluate(() =>
+      [...document.querySelectorAll('.card-tile__name')].map((n) => n.textContent.trim()),
+    );
+    if (drawn.includes(name)) break;
     await sleep(15);
   }
+  const after = await readCount(page);
   await sleep(SETTLE_MS);
 
   const tiles = await page.evaluate(() =>
     [...document.querySelectorAll('.card-tile__name')].map((n) => n.textContent.trim()),
   );
-  return { before, after, tiles, changed: after !== before };
+  return { before, after, tiles };
 }
 
 function shotPath(name) {
@@ -233,6 +285,17 @@ async function main() {
   try {
     const page = await browser.newPage();
     await page.setViewport(VIEWPORT);
+    // A React app that throws during render leaves a BLANK page, and a blank
+    // page fails every check below with "MISSING" — which reads as "the card is
+    // not in the pool" when the truth is "the app died". Capture the reason so
+    // the harness reports the crash instead of libelling the data.
+    const pageErrors = [];
+    page.on('pageerror', (error) => pageErrors.push(`pageerror: ${error?.message ?? error}`));
+    page.on('console', (message) => {
+      if (message.type() === 'error') pageErrors.push(`console.error: ${message.text()}`);
+    });
+    page.on('crash', () => pageErrors.push('the renderer process CRASHED (out of memory?)'));
+    report.pageErrors = pageErrors;
     await page.goto(preview.url, { waitUntil: 'domcontentloaded', timeout: APP_SHELL_WAIT_MS });
     await page.waitForSelector('.card-tile', { timeout: FIRST_TILE_WAIT_MS });
     await gotoView(page, 'Cards');
@@ -242,7 +305,24 @@ async function main() {
     report.poolSize = poolSize;
     console.log(`\n  card browser reports: ${poolText}\n`);
 
+    let first = true;
     for (const name of DECK_CARDS) {
+      // ⚠️ A FRESH PAGE PER CARD. See INTER_SEARCH_SETTLE_MS: several searches
+      // in a row accumulate state in the virtualiser and eventually crash the
+      // app, and neither pacing nor clearing the box avoids it. Reloading does,
+      // and it is the stronger test anyway — every card is found from a COLD
+      // start, which is what a person opening the app actually does, rather
+      // than from whatever the previous seven searches left behind.
+      if (!first) {
+        await page.goto(preview.url, {
+          waitUntil: 'domcontentloaded',
+          timeout: APP_SHELL_WAIT_MS,
+        });
+        await page.waitForSelector('.card-tile', { timeout: FIRST_TILE_WAIT_MS });
+        await gotoView(page, 'Cards');
+        await sleep(INTER_SEARCH_SETTLE_MS);
+      }
+      first = false;
       const result = await searchFor(page, name);
       const path = shotPath(name);
       await page.screenshot({ path });
@@ -250,8 +330,9 @@ async function main() {
       const row = {
         name,
         found: result.tiles.includes(name),
-        counterChanged: result.changed,
+        counterBefore: result.before,
         counterAfter: result.after,
+        narrowed: (countOf(result.after) ?? Number.POSITIVE_INFINITY) < (poolSize ?? 0),
         tilesDrawn: result.tiles.length,
         firstTiles: result.tiles.slice(0, 3),
         screenshot: path,
@@ -283,9 +364,9 @@ async function main() {
       check(`the card browser finds "${row.name}"`, row.found, `tiles: ${row.firstTiles.join(', ') || '(none)'}`);
     }
     check(
-      'every search actually re-filtered the grid',
-      report.cards.every((c) => c.counterChanged),
-      `${report.cards.filter((c) => c.counterChanged).length}/${report.cards.length} changed the counter`,
+      'every search NARROWED the grid — the box is not inert',
+      report.cards.every((c) => c.narrowed && c.tilesDrawn > 0),
+      `${report.cards.filter((c) => c.narrowed).length}/${report.cards.length} returned fewer than ${poolSize} cards`,
     );
     // A stale frame repeats a hash; a blank frame repeats a SMALL hash. Both
     // have been accepted as proof in this repo before, so both are refused.
@@ -309,6 +390,11 @@ async function main() {
       'the served pool is the REGENERATED one, not a stale dist',
       (poolSize ?? 0) > 6_000,
       `${poolText} (a pre-refresh dist reads 5,651)`,
+    );
+    check(
+      'the app never threw while being driven',
+      pageErrors.length === 0,
+      pageErrors.slice(0, 3).join(' | ') || 'no page errors',
     );
   } finally {
     mkdirSync(OUT_DIR, { recursive: true });
