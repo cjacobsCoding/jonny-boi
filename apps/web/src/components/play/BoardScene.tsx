@@ -168,6 +168,9 @@ export function useBoardSceneVars(): CSSProperties {
     // `ANNOUNCEMENT_CONFIG.fadeMs` still DERIVES from `SPELL_HOLD_CONFIG.fadeMs`,
     // so the hold's pacing is what tunes it.
     '--announce-fade-ms': `${ANNOUNCEMENT_CONFIG.fadeMs}ms`,
+    // Where the ONE surface's top slot sits — measured against the board's own
+    // status row, which a tall announcement was standing on top of.
+    '--announce-top-clearance': `${ANNOUNCEMENT_CONFIG.topSlotClearanceRem}rem`,
     // §3.143 wave 3 — the ARRANGEMENT's own numbers (BOARD_LAYOUT_CONFIG). The
     // same rule as the tilt's: board-fit.css says how the board reads them and
     // contains none of them.

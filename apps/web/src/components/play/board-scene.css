@@ -505,15 +505,18 @@
 
 /* The `top` slot — a strip under the board's status row.
  *
- * ⚠️ The clearance is declared HERE, once. It was previously declared on
- * `.combat-hold` and read by `.forced-choice` through
- * `var(--combat-hold-status-clearance, 3.9rem)`, which cannot work: a custom
- * property is inherited by descendants, not by siblings, so the second rule
- * silently used the literal fallback. Same one-line clearance the opponent feed
- * names in opponent-feed.css. */
+ * ⚠️ THE CLEARANCE IS PUBLISHED BY THE BOARD, from
+ * `ANNOUNCEMENT_CONFIG.topSlotClearanceRem`, and it CLEARS THE STATUS ROW rather
+ * than merely the app header. The old 3.9rem was declared on `.combat-hold` and
+ * read by `.forced-choice` through `var(--combat-hold-status-clearance, 3.9rem)`
+ * — which cannot work at all, since a custom property is inherited by
+ * descendants and never by a sibling, so that rule always used its literal
+ * fallback. And 3.9rem only ever worked for a SHORT strip: a capture of the
+ * settled-choice banner shows it standing on "Turn 33 · Main Phase 1", which is
+ * this same defect one layer down. The local fallback exists for a board that
+ * mounts the surface without the scene's vars. */
 .announce--top {
-  --announce-status-clearance: 3.9rem;
-  top: var(--announce-status-clearance);
+  top: var(--announce-top-clearance, 11rem);
   transform: translateX(-50%);
 }
 

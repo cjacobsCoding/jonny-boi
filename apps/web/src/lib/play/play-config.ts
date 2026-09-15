@@ -995,6 +995,24 @@ export interface AnnouncementConfig {
    * separately published custom properties; the surface publishes one.
    */
   readonly fadeMs: number;
+  /**
+   * How far below the top of the viewport the `top` slot sits, in rem.
+   *
+   * ⚠️ MEASURED FROM A CAPTURE, not chosen. The old `.combat-hold` clearance was
+   * 3.9rem, which clears the app header and nothing else — and a SHORT strip got
+   * away with it. A TALL body in the same slot did not: a real 1440x1100 capture
+   * of the settled-choice banner (`verify-out/forced-choice/forced-choice-announced.png`)
+   * shows it standing over "Turn 33 · Main Phase 1 · Player 1's turn", and the
+   * reveal banner does the same the moment it shares that slot. An announcement
+   * that covers the board's own status line is the reported defect wearing a
+   * different hat.
+   *
+   * The board's status row measured 130px→168px at that window; 11rem (176px)
+   * clears its bottom edge with a small gap. `verify-announcement-queue.mjs`
+   * asserts the surface's rect never intersects the status row's, so this number
+   * is guarded rather than trusted.
+   */
+  readonly topSlotClearanceRem: number;
 }
 
 /** The default announcement-surface config (see {@link AnnouncementConfig}). */
@@ -1002,6 +1020,7 @@ export const ANNOUNCEMENT_CONFIG: AnnouncementConfig = Object.freeze({
   revealMs: FORCED_CHOICE_CONFIG.holdMs,
   reducedMotionRevealMs: FORCED_CHOICE_CONFIG.reducedMotionHoldMs,
   fadeMs: SPELL_HOLD_CONFIG.fadeMs,
+  topSlotClearanceRem: 11,
 });
 
 /**
