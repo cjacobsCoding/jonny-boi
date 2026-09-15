@@ -1,4 +1,18 @@
-- 2026-09-15 `feat/replacement-prevention` — ✅ **pushed-ready, NOT merged** (worker; integrator merges).
+- 2026-09-15 `feat/replacement-prevention` — ⚠️ **ANOTHER SESSION COMMITTED INTO THIS WORKTREE
+  MID-LANE**, and the re-verification it forced is the entry worth reading.
+  After this lane's gate went green at `f3288a5`, two commits appeared on the branch that this lane
+  did not make: `f14642b` (a merge of `origin/main`, bringing the modal and copy-selector lanes —
+  **`rules.ts` +302, `core/targeting.ts` +299, `compile.ts` +103**) and `8b0f973` (a docs commit).
+  **A green measured before a merge is not a green after it** — this repo has had a clean textual
+  merge produce 269 compile errors. Everything below was therefore re-run on the merged tree:
+  `npm run build` **exit 0**, the playable set re-measured (**all 29 of this lane's cards still
+  compile, nothing lost versus the pre-merge measurement**; the absolute rose to 6,945 because the
+  other two lanes landed ~210 of their own), and the full `packages/cards packages/core` gate re-run.
+  The merge was clean semantically as well as textually — but that is a MEASUREMENT, not an
+  assumption, and it is the only reason it can be said.
+  ⚠️ The same merge left **§8a of `ALL-CARDS-CAMPAIGN.md` carrying one finding twice** and three of
+  this lane's items orphaned after the blockquote. De-duplicated in `0603c06`; §8a is a single 1-10
+  again. **Auto-merge does not renumber a list, and nothing fails when it doesn't.**
   Worktree `D:/Cool Stuff/Claude/jb-replace`, forked from `origin/main` `162f143`.
   **DESIGN §3.151 — REPLACEMENT AND PREVENTION. Rhox Faithmender ✅ and Fog Bank ✅. +29 cards, 0 lost,
   set-verified** (6,706 → 6,735 on a fixed 32,414-card corpus, this lane's nine sources reverted with
