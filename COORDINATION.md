@@ -1,3 +1,24 @@
+- 2026-09-15 **WAVE 5 CLAIM + THE COLLISION MAP FOR `compile/rules.ts`** (integrator).
+  Three lanes dispatched on the families still blocking Caleb's own decks (ALL-CARDS §4a phase 2,
+  §7a is the per-card board): `feat/modal-templates` in `D:/Cool Stuff/Claude/jb-modal` (modal, 432,
+  **Selesnya Charm**) · `feat/loyalty-emblem` in `D:/Cool Stuff/Claude/jb-walker` (planeswalker
+  loyalty ~300 + emblem, **Jace, Architect of Thought** and **Tamiyo**) · `feat/copy-selectors` in
+  `D:/Cool Stuff/Claude/jb-copysel` (copy selector / Populate, 299, **Trostani**). All three forked
+  from `fd1ca31`. Three is the cap because this box OOMs above three heavy builds — not a preference.
+  ⚠️ **`packages/cards/src/compile/rules.ts` has FIVE live contenders, not three.** Two of them are
+  unmerged branches owned by other sessions and are invisible from a worktree cut off `main`:
+  | branch | head | `rules.ts` | what else it moves that a card lane needs |
+  | --- | --- | --- | --- |
+  | `feat/copy-templates` | `c1e2320` | +314 | `copy-primitives.ts`, `core/copy.ts`, `targeting.ts`, `triggers.ts`, `engine.ts` — **the whole copy subsystem `feat/copy-selectors` builds on** |
+  | `feat/trigger-body-templates` | `b1ea6c2` | +275 | **`choice-primitives.ts` (new, +115)** — modal mode-selection; **`core/player-statics.ts` (+63)** — the documented EMBLEM seam, which it already reads from the command zone; `card.ts`, `state.ts`, `serialize.ts`, `clone.ts` |
+  Both lanes were warned in-flight to diff those branches read-only BEFORE designing, to build on the
+  seam rather than a parallel one (rule 12), and to name any shared declaration as a semantic conflict
+  rather than resolving it themselves. **A clean textual merge here would not be a working merge** —
+  this repo has already had one auto-merge eat three lines of `foldCommandStatics` and another compile
+  cleanly with Phyrexian casting dead.
+  ⚠️ **Inventory remote heads, not just your own worktrees.** `git branch -r --no-merged origin/main`
+  is the check; the two collisions above are both invisible to `git worktree list`.
+
 - 2026-09-15 `feat/counters-templates-v2` — ✅ **pushed-ready, NOT merged** (worker; integrator merges).
   **§3.149 — the counters backlog row measured; it is the §3.120 artifact a THIRD time, and the seam
   inside it is the counter KIND rather than any template.** The row named 2,480 cards. Measured against a
