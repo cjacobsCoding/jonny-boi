@@ -189,10 +189,16 @@ function splitModal(text) {
   };
 }
 
-/** Rebuild a modal line from its parts — the harness a bullet is probed inside. */
+/**
+ * Rebuild a modal line from its parts — the harness a bullet is probed inside.
+ *
+ * ALWAYS "Choose one —", never the card's own printed count. The question here
+ * is whether a BULLET compiles as a mode; re-using a printed "Choose three"
+ * beside two bullets would fail on the COUNT instead, and blame the header for
+ * a body's gap — which is the exact confusion this script exists to undo.
+ */
 const harness = (parts, bullets) => {
-  const head = `Choose ${bullets.length > 1 ? 'one' : 'one'} —`;
-  const line = `${head}\n${bullets.map((b) => `• ${b}`).join('\n')}`;
+  const line = `Choose one —\n${bullets.map((b) => `• ${b}`).join('\n')}`;
   return parts.prefix.length > 0 ? `${parts.prefix} ${line}` : line;
 };
 
