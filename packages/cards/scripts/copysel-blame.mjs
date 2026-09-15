@@ -85,41 +85,52 @@ const shapeOf = (t) =>
     .trim();
 
 /**
- * The printed COPY VERBS, each with the substitute SELECTOR the compiler's own
+ * The printed COPY VERBS, each with the substitute SELECTORS the compiler's own
  * closed table is known to carry for that verb. A CLOSED table: a copy verb no
  * row names is `NOT-REWRITABLE`, never approximated onto a neighbouring verb,
  * because "copy target creature" and "copy target spell" are answered by two
  * different rules and swapping one for the other reports the wrong half.
  *
- * `re` captures the selector and everything after it; `known` is the selector
- * substituted in. Each `known` is verified against the live compiler by
- * `assertKnownSelectorsCompile` below — a substitute the compiler has since
- * stopped accepting would file every clause as a SENTENCE gap, silently.
+ * `re` captures the selector and everything after it; each entry of `known` is
+ * a selector substituted in, and the clause counts as a SELECTION gap if ANY of
+ * them compiles.
+ *
+ * ⚠️ **A LIST rather than one substitute, and the reason is a bias the
+ * SELF-CHECK below caught in this script's own first draft.** A clause can be a
+ * whole spell ("Create a token that's a copy of target creature") or the BODY of
+ * a trigger ("whenever …, create a token that's a copy of that creature"), and a
+ * body may not grow a target it did not print — a trigger is aimed as it goes on
+ * the stack. So substituting a TARGETED selector into a trigger body fails for a
+ * reason the printed card does not have, and every such clause would have been
+ * filed as a SENTENCE gap. Each verb therefore carries a targetless substitute
+ * (`~`, "that spell") beside the targeted one, and the probe asks whether the
+ * compiler accepts the sentence with ANY selector it already knows.
  */
 const COPY_VERBS = [
   {
     name: 'create-token-copy',
     re: /\b((?:creates?|create) (?:a|an|one|two|three|four|five) (?:tapped |tapped and attacking )?(?:tokens? that'?s a copy|tokens that are copies) of )(.+)$/i,
-    known: 'target creature',
-    probe: "Create a token that's a copy of target creature.",
+    // `~` is `{ self: true }` — no target, so it is legal inside a trigger body.
+    known: ['~', 'target creature', 'target creature you control'],
   },
   {
     name: 'enter-as-copy',
     re: /\b((?:you may have )?~ enters?(?: tapped)? as a copy of )(.+)$/i,
-    known: 'any creature on the battlefield',
-    probe: 'You may have ~ enter as a copy of any creature on the battlefield.',
+    known: ['any creature on the battlefield'],
   },
   {
     name: 'becomes-a-copy',
     re: /\b(.+ becomes? a copy of )(.+)$/i,
-    known: 'target creature',
-    probe: null, // no rule exists for this verb at all; see BECOMES_A_COPY below
+    // Deliberately EMPTY: the compiler has no rule for this verb at all, so
+    // there is no selector that would make one of these compile. Reporting an
+    // empty substitute list is how the script says "this whole verb is missing"
+    // instead of quietly filing 72 clauses as selector gaps.
+    known: [],
   },
   {
     name: 'copy-spell',
     re: /\b(copy )((?:target|that) .+)$/i,
-    known: 'target instant or sorcery spell',
-    probe: 'Copy target instant or sorcery spell. You may choose new targets for the copy.',
+    known: ['target instant or sorcery spell', 'target instant or sorcery spell you control'],
   },
 ];
 
@@ -238,16 +249,15 @@ for (const raw of corpus) {
     const bareSelector = stripTails(parsed.selector).out.toLowerCase();
     bump(selectorVocab, bareSelector, sole, raw.name);
 
-    // Probe 1 — SELECTOR-NEUTRAL: known selector, tails kept.
-    const selectorNeutral = `${parsed.head}${parsed.selector.replace(stripTails(parsed.selector).out, parsed.verb.known)}`;
-    const okSelector = compiles(raw, selectorNeutral, typeKey);
-    // Probe 2 — TAIL-NEUTRAL: printed selector, tails stripped.
     const stripped = stripTails(parsed.selector);
-    const tailNeutral = `${parsed.head}${stripped.out}`;
-    const okTail = stripped.fired.length > 0 && compiles(raw, tailNeutral, typeKey);
-    // Probe 3 — BOTH-NEUTRAL: known selector AND no tails.
-    const bothNeutral = `${parsed.head}${parsed.verb.known}`;
-    const okBoth = compiles(raw, bothNeutral, typeKey);
+    // Probe 1 — SELECTOR-NEUTRAL: a selector the compiler knows, tails KEPT.
+    const okSelector = parsed.verb.known.some((known) =>
+      compiles(raw, `${parsed.head}${parsed.selector.replace(stripped.out, known)}`, typeKey),
+    );
+    // Probe 2 — TAIL-NEUTRAL: the PRINTED selector, tails stripped.
+    const okTail = stripped.fired.length > 0 && compiles(raw, `${parsed.head}${stripped.out}`, typeKey);
+    // Probe 3 — BOTH-NEUTRAL: a known selector AND no tails.
+    const okBoth = parsed.verb.known.some((known) => compiles(raw, `${parsed.head}${known}`, typeKey));
 
     if (okSelector) {
       bump(selectorGap, shapeOf(text), sole, raw.name);
@@ -271,18 +281,27 @@ for (const raw of corpus) {
  * table that has drifted says so instead of filing every clause as a SENTENCE
  * gap — the failure mode `10-verification.md` calls a check that cannot fail.
  */
-const vanilla = corpus.find((c) => c.name === 'Grizzly Bears') ?? corpus.find((c) => (c.type_line ?? '').startsWith('Creature'));
-const instant = corpus.find((c) => (c.type_line ?? '').startsWith('Instant'));
-console.log('SUBSTITUTE-SELECTOR SELF-CHECK (a probe the compiler refuses would file every clause as a SENTENCE gap)');
+const HOSTS = [
+  corpus.find((c) => c.name === 'Grizzly Bears') ?? corpus.find((c) => (c.type_line ?? '') === 'Creature — Bear'),
+  corpus.find((c) => c.name === 'Shock') ?? corpus.find((c) => (c.type_line ?? '').startsWith('Instant')),
+  corpus.find((c) => (c.type_line ?? '').startsWith('Artifact')),
+].filter(Boolean);
+console.log('SUBSTITUTE-SELECTOR SELF-CHECK — each substitute must compile on SOME host,');
+console.log('or every clause of that verb would be filed a SENTENCE gap for the script\'s own reason.');
+let selfCheckFailed = false;
 for (const verb of COPY_VERBS) {
-  if (verb.probe === null) {
-    console.log(`  ${verb.name.padEnd(20)} (no probe — no rule exists for this verb at all)`);
+  if (verb.known.length === 0) {
+    console.log(`  ${verb.name.padEnd(20)} (no substitutes — the compiler has NO rule for this verb; every clause is a SENTENCE gap by construction)`);
     continue;
   }
-  const host = verb.name === 'copy-spell' ? instant : vanilla;
-  const ok = host ? compiles(host, verb.probe, host.type_line ?? '') : false;
-  console.log(`  ${verb.name.padEnd(20)} ${ok ? 'OK  ' : 'FAIL'}  ${verb.probe}`);
+  for (const known of verb.known) {
+    const sentence = `${verb.name === 'enter-as-copy' ? 'You may have ~ enter as a copy of ' : verb.name === 'copy-spell' ? 'Copy ' : "Create a token that's a copy of "}${known}.`;
+    const ok = HOSTS.some((h) => compiles(h, sentence, h.type_line ?? ''));
+    if (!ok) selfCheckFailed = true;
+    console.log(`  ${verb.name.padEnd(20)} ${ok ? 'OK  ' : 'FAIL'}  ${sentence}`);
+  }
 }
+if (selfCheckFailed) console.log('  ⚠️ A FAIL above means the numbers below understate SELECTION and overstate SENTENCE.');
 
 const total = (m) => [...m.values()].reduce((a, e) => a + e.sole + e.also, 0);
 const soleTotal = (m) => [...m.values()].reduce((a, e) => a + e.sole, 0);
