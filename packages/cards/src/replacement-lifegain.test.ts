@@ -37,6 +37,7 @@ import {
   type PlayerId,
 } from '@jonny-boi/core';
 import { buildRegistry } from './pool.js';
+import { gainLife } from './primitives.js';
 import { compileCard } from './compile/compile.js';
 import type { CompilableCard } from './compile/types.js';
 
@@ -327,6 +328,64 @@ describe('the shipped definitions really change a board', () => {
     expect(gainLifeAmount(state, 'A', 1, collector().emit, index)).toBe(2);
     // The opponent is untouched: "if YOU would gain life".
     expect(gainLifeAmount(state, 'B', 3, collector().emit, index)).toBe(3);
+  });
+
+  /**
+   * THE FUNNEL ITSELF, through the real `gainLife` PRIMITIVE.
+   *
+   * ⚠️ This test was added because a deliberate sabotage found it missing. The
+   * rest of this file calls `gainLifeAmount` directly, which is core's side of
+   * the question — so gutting `effect-helpers.changeLife` back to a bare
+   * `p.life += delta` left every other test in the file GREEN while a resolving
+   * "you gain N life" silently stopped being doubled. That is precisely the
+   * shape of bug the funnel exists to prevent, and nothing was watching the
+   * cards-side caller.
+   */
+  it('the gainLife PRIMITIVE goes through the funnel — life total and event both doubled', () => {
+    const state = freshState();
+    const rhox = put(state, playable(RHOX_FAITHMENDER), 'A');
+    const before = state.players.A.life;
+    const log = collector();
+    const ctx = {
+      state,
+      source: rhox,
+      controller: 'A' as PlayerId,
+      targets: [],
+      params: { amount: 3 },
+      emit: log.emit,
+    } as unknown as Parameters<typeof gainLife>[0];
+
+    gainLife(ctx);
+
+    // The LIFE TOTAL really moved by the doubled amount...
+    expect(state.players.A.life).toBe(before + 6);
+    // ...and the emitted event reports the TRUE number, not the printed 3.
+    // "Whenever you gain life" counts what was gained (CR 118.5).
+    const gains = log.events.filter((e) => e.type === 'gainLife');
+    expect(gains).toHaveLength(1);
+    expect((gains[0] as { amount: number }).amount).toBe(6);
+  });
+
+  it('a gain zeroed by Sulfuric Vortex emits NO gainLife event at all (CR 118.5)', () => {
+    const state = freshState();
+    const vortex = put(state, playable(SULFURIC_VORTEX), 'B');
+    const before = state.players.A.life;
+    const log = collector();
+    gainLife({
+      state,
+      source: vortex,
+      controller: 'A' as PlayerId,
+      targets: [],
+      params: { amount: 5 },
+      emit: log.emit,
+    } as unknown as Parameters<typeof gainLife>[0]);
+
+    expect(state.players.A.life).toBe(before);
+    // Neither event. A `gainLife` of 0 would make "whenever you gain life" fire
+    // on a gain that did not happen; a `lifeChanged` of 0 would be a log entry
+    // for nothing moving.
+    expect(log.events.filter((e) => e.type === 'gainLife')).toHaveLength(0);
+    expect(log.events.filter((e) => e.type === 'lifeChanged')).toHaveLength(0);
   });
 
   it('Boon Reflection and Rhox Faithmender together is x4 (CR 614.5, once each)', () => {
