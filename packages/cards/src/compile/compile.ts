@@ -202,13 +202,13 @@ const PAYLOAD_KEYWORD_EVIDENCE: Readonly<Record<string, keyof KeywordFlags>> = O
   ward: 'ward',
   protection: 'protectionFrom',
   toxic: 'toxic',
-  // §3.151 — Scryfall spells this one "Hexproof from" (with the preposition and
+  // §3.152 — Scryfall spells this one "Hexproof from" (with the preposition and
   // no quality), beside a bare "Hexproof" on the same card.
   'hexproof from': 'hexproofFrom',
 });
 
 /**
- * §3.151 — Scryfall keywords whose bare word names a BROADER ability than the
+ * §3.152 — Scryfall keywords whose bare word names a BROADER ability than the
  * card actually prints, where the narrower one is a keyword field of its own.
  *
  * ⚠️ **This table exists because the sweep would otherwise put a card into the
@@ -1670,7 +1670,7 @@ export function compileCard(card: CompilableCard): CompileResult {
   const primitivesCompiled = compiledPrimitives(assembly);
   for (const keyword of card.keywords) {
     const word = keyword.toLowerCase();
-    // §3.151 — BEFORE the flag branch: a bare Scryfall word whose narrowed
+    // §3.152 — BEFORE the flag branch: a bare Scryfall word whose narrowed
     // payload this card actually compiled must NOT also set the broad flag.
     // See KEYWORD_NARROWED_BY_PAYLOAD for why the order is the whole fix.
     const narrowedBy = KEYWORD_NARROWED_BY_PAYLOAD[word];

@@ -2889,12 +2889,13 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
-### 3.151 The targeting-protection row names a half that was FINISHED — the gap was one keyword, and the row cannot see it — ✅ done
+### 3.152 The targeting-protection row names a half that was FINISHED — the gap was one keyword, and the row cannot see it — ✅ done
 
 > ⚠️ **Section number claimed off a contended range.** `main` carries TWO §3.147 sections and TWO
 > §3.149 sections at fork, `feat/modal-templates` carries an unpushed §3.150 of its own beside
-> main's, and several lanes are live in `rules.ts`. §3.151 was the lowest free number on
-> `origin/main` when this branch forked. If an integrator finds a second §3.151, renumber this one.
+> main's, and several lanes are live in `rules.ts`. This lane claimed §3.151 off `origin/main` at
+> fork; **`feat/replacement-prevention` had claimed the same number in parallel**, so the integrator
+> renumbered this one to §3.152 at merge — which is the collision the warning above predicted.
 
 The acceptance card was **Fiendslayer Paladin** — `~ can't be the target of black or red spells your
 opponents control.` — filed on the §7a board under *"targeting restriction"*, pointing at the backlog

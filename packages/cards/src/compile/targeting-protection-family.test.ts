@@ -5,7 +5,7 @@
  * Measured before it was written (`packages/cards/scripts/protect-blame.mjs`
  * over a 32,341-card corpus): of 487 blocked cards whose text matches this
  * family, only 22 are blocked by the family's SHAPE, and only ONE — Fiendslayer
- * Paladin — has nothing else wrong with it. DESIGN §3.151 carries the numbers.
+ * Paladin — has nothing else wrong with it. DESIGN §3.152 carries the numbers.
  *
  * ## The defect this file exists to guard, and it cuts BOTH ways
  * Every other family in this repo guards against a card playing WEAKER than

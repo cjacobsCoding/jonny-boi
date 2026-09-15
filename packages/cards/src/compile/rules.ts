@@ -1341,7 +1341,7 @@ const WARD_PATTERN = /^ward \{(\d+)\}$/;
 /** `Protection from X[ and from Y...]` - the capturing form of the printed line. */
 const PROTECTION_PATTERN = /^protection from (.+)$/;
 
-// --- BEGIN targeting-protection family (DESIGN §3.151) -------------------------
+// --- BEGIN targeting-protection family (DESIGN §3.152) -------------------------
 // Owned by `feat/targeting-protection`. Everything between this marker and its
 // END marker is the hexproof-from family; neighbours are untouched on purpose so
 // the concurrent lanes in this file merge textually.
@@ -1370,7 +1370,7 @@ const HEXPROOF_FROM_PATTERN = /^hexproof from (.+)$/;
  * controller's own spells too, which is shroud's scope, not hexproof's. Making
  * the tail optional would compile four cards into a keyword that lets their
  * controller target them, i.e. playing them differently from printed. Those
- * cards keep REPORTING; see DESIGN §3.151's residue table.
+ * cards keep REPORTING; see DESIGN §3.152's residue table.
  */
 const CANT_BE_TARGETED_SENTENCE =
   /^(?:~|this (?:creature|permanent|enchantment|artifact|land)) can't be the target of (.+?) spells your opponents control\.?$/;
@@ -1457,7 +1457,7 @@ export function parseProtectionOrWard(word: string): KeywordFlags | null {
     const qualities = parseProtectionQualities(protection[1] ?? '');
     return qualities === null ? null : { protectionFrom: qualities };
   }
-  // §3.151 — the targeting quarter, in its two printings. Both land in
+  // §3.152 — the targeting quarter, in its two printings. Both land in
   // `hexproofFrom`, never in `protectionFrom`: see the field's own note.
   const hexproofFrom = HEXPROOF_FROM_PATTERN.exec(text);
   if (hexproofFrom) {
@@ -9637,7 +9637,7 @@ export function joinPayloadKeywords(words: readonly string[]): string[] {
 const PROTECTION_CONTINUATION = /^(?:and )?from /;
 
 /**
- * §3.151 — the two printed phrases whose tail is a QUALITY LIST. Both spell the
+ * §3.152 — the two printed phrases whose tail is a QUALITY LIST. Both spell the
  * list the same way, so both need the same re-join.
  */
 const QUALITY_PHRASE_PREFIX = /^(?:protection|hexproof) from /;
