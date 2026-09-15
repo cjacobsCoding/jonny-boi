@@ -436,27 +436,22 @@ Selesnya Charm, Trostani. Checked against the set itself, not taken from any lan
    iterated nothing. It was caught only by printing the count, and the committed test now asserts the
    denominator is non-zero *before* it asserts anything else. Any check shaped *"for each X, assert…"*
    passes vacuously when X is empty, and that shape is everywhere in this campaign's tooling.
+9. ⚠️ **A row that names a SEAM can be pointing at a seam that is already wide enough.** §3.151's row
+   names an *"event kind"*; adding one cost **one row in five places** — no new field, no new branch,
+   and nothing in the CR 614.5 or CR 616.1 machinery. The family's real mass was **412 clauses / 303
+   sole-blocked cards whose event kind the layer ALREADY watched**; the gap was the printed WORDING.
+   *"What would one more X cost?"* is a question to answer by reading the layer **before** scoping,
+   and answering it took ten minutes.
+10. ⚠️ **A duplicated type will be caught by the compiler or by nobody.** `events.ts` restated
+    `ReplacementEventKind` behind a comment claiming (a) the file had to stay free of engine imports
+    and (b) a test pinned the two lists identical — **neither was true**. Prefer deleting the second
+    copy to adding a test that watches it — §3.151.
 
 > ⚠️ **The 953-card row was the §2 trap for the third time: 954 cards, 880 shapes, 1.08 cards per
 > shape.** And its NAME points at the wrong half — `xvalue-blame.mjs` shows **70% of it is a SENTENCE
 > with no rule**, in this row only because its text contains the words "equal to". The amount
 > vocabulary, which is what the row is actually about, is ~132 winnable cards. Run the two committed
 > scripts before taking a headline from the table above.
-
-6. ⚠️ **A row that names a SEAM can be pointing at a seam that is already wide enough.** §3.151's row
-   names an *"event kind"*; adding one cost **one row in five places** and no new field, no new
-   branch, and nothing in the CR 614.5 or CR 616.1 machinery. The family's real mass was **412 clauses
-   / 303 sole-blocked cards whose event kind the layer ALREADY watched** — the gap was the printed
-   WORDING. *"What would one more X cost?"* is a question to answer by reading the layer **before**
-   scoping, and it took ten minutes.
-7. ⚠️ **Sabotage the cards-side caller, not only the core-side answer.** §3.151's second falsification
-   gutted `effect-helpers.changeLife` and **21 tests stayed green** while the feature silently stopped
-   working, because every test called core's function directly. A funnel is two ends; a suite that
-   only watches one end cannot see the other come loose. Falsify at the seam the USER's code path
-   crosses.
-8. ⚠️ **A duplicated type will be found by the compiler or by nobody.** `events.ts` restated
-   `ReplacementEventKind` behind a comment claiming a pinning test that did not exist. Prefer deleting
-   the second copy to adding a test that watches it — §3.151.
 
 ### 8b. In flight (wave 5, dispatched 2026-09-15)
 
