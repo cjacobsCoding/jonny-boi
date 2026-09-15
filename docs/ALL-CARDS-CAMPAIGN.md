@@ -164,6 +164,30 @@ is an aggregation artifact, and a family restricted to one set is a genuinely sm
 ⚠️ **Do not order sets by set code, collector number, or the order Scryfall returns them.** None of
 those is chronological, and all three look chronological on a sample.
 
+## 4c. THE NEXT PICKS — measured by the lanes, not by §4
+
+§4 is a map of where to look and has never once described what was found (see its footnote). This
+section is the opposite: every row here is a **number a finished lane measured on its way past**, so
+it says what would actually be bought. **Pick from here first.** Re-measure before scoping — these
+were true on the corpus and compiler of the day they were taken.
+
+| sole-blocked | family | measured by | note |
+| ---: | --- | --- | --- |
+| **130** | **replacement-effect ZONE-CHANGE destinations** — `dies` 63, `zoneToGraveyard` 42, `leavesBattlefield` 13, `entersBattlefield` 12 | §3.151, the replacement lane | ⭐ **the best lever anyone has measured — four times the delta of the lane that found it**, on a layer whose fifth event kind cost one row in five places |
+| 383 | replacement on the **`damage`** kind | §3.151 | the largest single kind, and it has been watched since the layer was written — so the gap is bodies, not plumbing |
+| 217 | the copy row's **SENTENCE** third — clauses whose verb has no rule at all | §3.150a, the copy lane | 373 distinct shapes over 377 clauses; this is §2 in miniature and should be expected to yield ~1 card per template |
+| 72 | the verb **"becomes a copy of"** — a layer-1 copy applied to a permanent already on the battlefield | §3.150a | real `packages/core` work; deliberately left while `feat/copy-templates` was live in that file |
+| 47 | blocked planeswalkers with **no clause in the loyalty row at all** | §3.150, the loyalty lane | they are filed elsewhere entirely — a worked example of §8a item 3 |
+| 38 | the **combat/tap state axis** on a target bound | §3.150, the modal lane | ⚠️ `attackingCreature` already exists; a second answer to the same question is the DRY failure, not a feature |
+
+### Caleb's own remaining deck cards, for sequencing against the above
+
+`Axebane Guardian` (variable mana amount **and** a colour choice at resolution) · `Primal Surge`
+(`repeat this process` — unbounded iteration, **not** the "you may" its row is named for) ·
+`Craterhoof Behemoth` (mass keyword grant; the derived count already landed, so **re-blame first**).
+Plus the two evidenced NO-GOs, `Jace` and `Tamiyo`, whose residues are named in §7a and pinned by
+tests — neither needs a lane of its own, both need the families that actually hold them.
+
 ## 5. How the campaign runs
 
 Established practice on this repo (DESIGN §6, and the keyword-family waves that closed whole
