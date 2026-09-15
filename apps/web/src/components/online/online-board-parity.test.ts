@@ -139,7 +139,7 @@ function frameWithStackedSpell(controller: PlayerId): {
     ],
   };
   return {
-    frame: { view, legalActions: [], yourTurn: false, log: [] },
+    frame: { view, legalActions: [], yourTurn: false, log: [], events: [] },
     spell,
     target,
   };
@@ -235,7 +235,7 @@ describe('the parity work never widened what a viewer may see', () => {
       ...masked.players.A.graveyard.map((c) => c.def.name),
       ...masked.players.B.graveyard.map((c) => c.def.name),
     ]);
-    const html = render({ view: masked, legalActions: [], yourTurn: false, log: [] });
+    const html = render({ view: masked, legalActions: [], yourTurn: false, log: [], events: [] });
     for (const card of hidden) {
       if (visible.has(card.def.name)) continue;
       expect(html, `${card.def.name} is in B's hand and must not be on A's screen`).not.toContain(
@@ -341,6 +341,8 @@ function blockedCombatFrame({ blockersDeclared }: { blockersDeclared: boolean })
     legalActions: [{ kind: 'passPriority', player: BLOCKING_SEAT }],
     yourTurn: true,
     log: [],
+    // No damage has been dealt in this window yet — it is the BLOCK step.
+    events: [],
   };
 }
 
@@ -640,5 +642,251 @@ describe('BOTH boards draw the same scene — the fork cannot come back quietly'
       if (visible.has(card.def.name)) continue;
       expect(html, `${card.def.name} is in ${ATTACKING_SEAT}'s hand`).not.toContain(card.def.name);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// UX-15 — THE DAMAGE SEQUENCE, DERIVED FROM BOTH BOARDS' STREAMS AND COMPARED.
+// ---------------------------------------------------------------------------
+
+import { applyAction, type EffectRegistry, type GameEvent } from '@jonny-boi/core';
+import { maskEventsForSeat } from '@jonny-boi/protocol';
+import { deriveDamageSequence, type DamageBeat } from '../../lib/play/damage-sequence.js';
+
+/** A real, legal game AND the registry needed to drive it forward. */
+function startedGame(): { readonly state: GameState; readonly registry: EffectRegistry } {
+  const deck = SAMPLE_DECKS.find((d) => d.name.toLowerCase().includes('red')) ?? SAMPLE_DECKS[0]!;
+  const started = startHotseatGame({
+    choiceA: { source: 'sample', deck },
+    choiceB: { source: 'sample', deck },
+    seed: 12345,
+    startingPlayer: 'A',
+  });
+  if (!started.ok) throw new Error('the sample decks must be legal for this fixture');
+  return { state: started.game.created.state, registry: started.game.registry };
+}
+
+/** A creature moved out of a hand and onto the battlefield, ready to fight. */
+function onBattlefield(card: CardInstance, controller: PlayerId): CardInstance {
+  return { ...card, controller, zone: 'battlefield', tapped: false, summoningSick: false };
+}
+
+/**
+ * ONE ACTION'S worth of the engine: what the state was, what it emitted, what it
+ * became. Exactly the triple `Room.submitAction` holds when it broadcasts, which
+ * is why the online side of the parity claim can be built from it with nothing
+ * invented.
+ */
+interface EngineStep {
+  readonly before: GameState;
+  readonly events: readonly GameEvent[];
+  readonly after: GameState;
+}
+
+/**
+ * A REAL blocked combat, run by the REAL engine, stopped at the action that
+ * actually dealt the damage.
+ *
+ * Not the hand-built `CombatState` the §10/§11 fixtures use: those pin what the
+ * board DRAWS from a given combat, and a drawing is not a damage log. A damage
+ * sequence can only be compared against another damage sequence if both come
+ * from events the engine genuinely emitted — deaths and round markers included.
+ */
+function combatDamageStep(): EngineStep & { readonly attacker: CardInstance; readonly blocker: CardInstance } {
+  const { state: base, registry } = startedGame();
+  const attackerCard = firstCreature(base.players[ATTACKING_SEAT].hand, ATTACKING_SEAT);
+  const blockerCard = firstCreature(base.players[BLOCKING_SEAT].hand, BLOCKING_SEAT);
+  const attacker = onBattlefield(attackerCard, ATTACKING_SEAT);
+  const blocker = onBattlefield(blockerCard, BLOCKING_SEAT);
+  let state: GameState = {
+    ...base,
+    activePlayer: ATTACKING_SEAT,
+    priorityPlayer: BLOCKING_SEAT,
+    step: 'declareBlockers',
+    combat: { attackers: [attacker.instanceId], blocks: {}, attackersDeclared: true, blockersDeclared: false },
+    battlefield: [attacker, blocker],
+    players: {
+      ...base.players,
+      [ATTACKING_SEAT]: {
+        ...base.players[ATTACKING_SEAT],
+        hand: base.players[ATTACKING_SEAT].hand.filter((c) => c.instanceId !== attacker.instanceId),
+      },
+      [BLOCKING_SEAT]: {
+        ...base.players[BLOCKING_SEAT],
+        hand: base.players[BLOCKING_SEAT].hand.filter((c) => c.instanceId !== blocker.instanceId),
+      },
+    },
+  };
+
+  // Declare the block for real, then pass priority until the engine deals the
+  // combat damage. The action that CONTAINS the damage is the one both boards
+  // must agree about; a batch that merely precedes it proves nothing.
+  state = applyAction(
+    state,
+    {
+      kind: 'declareBlockers',
+      player: BLOCKING_SEAT,
+      blocks: [{ blocker: blocker.instanceId, attacker: attacker.instanceId }],
+    } as never,
+    undefined,
+    registry,
+  ).state;
+  for (let i = 0; i < 40; i++) {
+    const before = state;
+    const result = applyAction(
+      state,
+      { kind: 'passPriority', player: state.priorityPlayer } as never,
+      undefined,
+      registry,
+    );
+    state = result.state;
+    if (result.events.some((e) => e.type === 'damageDealt')) {
+      return { before, events: result.events, after: state, attacker, blocker };
+    }
+  }
+  throw new Error('the engine never dealt combat damage in this fixture');
+}
+
+/** A beat minus its React key — see the parity test for why the key is excluded. */
+function beatContent(beat: DamageBeat): Omit<DamageBeat, 'key'> {
+  const { key: _key, ...rest } = beat;
+  return rest;
+}
+
+describe('UX-15 — the ONLINE board derives the SAME damage sequence as the hotseat board', () => {
+  it('from one real blocked combat, beat for beat', () => {
+    const step = combatDamageStep();
+
+    // THE HOTSEAT SIDE: that board runs the engine, so its stream IS the batch.
+    const hotseat = deriveDamageSequence(step.events, { reducedMotion: false, startIndex: 0 });
+
+    // THE ONLINE SIDE: the batch as the server would hand it to the blocking
+    // seat — through `maskEventsForSeat`, with nothing added back.
+    const wire = maskEventsForSeat(step.events, {
+      before: maskStateForSeat(step.before, BLOCKING_SEAT),
+      after: maskStateForSeat(step.after, BLOCKING_SEAT),
+    });
+    const online = deriveDamageSequence(wire, { reducedMotion: false, startIndex: 0 });
+
+    // Not merely non-empty: a real blocked combat is at least the attacker
+    // hitting the blocker and the blocker hitting back.
+    expect(hotseat.length, 'the engine dealt no damage worth animating').toBeGreaterThanOrEqual(2);
+
+    // ⚠️ THE DISCRIMINATOR. An empty stream is exactly what an online seat had
+    // before the protocol carried events — the old `NO_DAMAGE_SOURCE`. If that
+    // were still what it got, the equality below could not hold.
+    expect(deriveDamageSequence([], { reducedMotion: false, startIndex: 0 })).toEqual([]);
+
+    // EQUAL, beat for beat: the same hits, in the same rounds, with the same
+    // amounts, lethality and timings.
+    //
+    // `key` is excluded deliberately, and it is NOT a weakening: a beat's key is
+    // minted from its index in the CLIENT'S OWN log, and the two clients hold
+    // different logs (the hotseat one carries every event of the game, the
+    // online one only the public ones). Asserting key equality would be
+    // asserting that the two logs are the same log, which they are not and must
+    // not be. Everything that decides what the player SEES is compared.
+    expect(online.map(beatContent)).toEqual(hotseat.map(beatContent));
+    // …and the keys are still unique within their own stream, which is all a key
+    // is for.
+    expect(new Set(online.map((b) => b.key)).size).toBe(online.length);
+  });
+
+  it('BOTH seats derive it — combat damage is public, so the attacker sees it too', () => {
+    const step = combatDamageStep();
+    const hotseat = deriveDamageSequence(step.events, { reducedMotion: false, startIndex: 0 });
+    for (const seat of [BLOCKING_SEAT, ATTACKING_SEAT] as const) {
+      const wire = maskEventsForSeat(step.events, {
+        before: maskStateForSeat(step.before, seat),
+        after: maskStateForSeat(step.after, seat),
+      });
+      const derived = deriveDamageSequence(wire, { reducedMotion: false, startIndex: 0 });
+      expect(derived.map(beatContent), `seat ${seat} sees a different combat`).toEqual(hotseat.map(beatContent));
+    }
+  });
+
+  it('the scene is FED from the frame — the board passes on the stream it was sent', () => {
+    // REACH, not shape — the claim this whole file exists for. A filtered stream
+    // reaching `GameFrame.events` is worth nothing if the board drops it on the
+    // floor, which is precisely what `NO_DAMAGE_SOURCE` used to do.
+    const source = readFileSync(fileURLToPath(new URL('./OnlineBoard.tsx', import.meta.url)), 'utf8');
+    expect(source, 'the online board no longer feeds the scene its own events').toContain(
+      'events: frame.events',
+    );
+    expect(source, 'the dead no-channel constant is back').not.toContain('NO_DAMAGE_SOURCE');
+    expect(source).toContain('damage={damageSource}');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AN ONLINE PLAYER CAN ACTUALLY DECLARE A BLOCK.
+// ---------------------------------------------------------------------------
+
+import { eligibleBlockerIds } from '../../lib/play/view-model.js';
+
+/**
+ * The frame a defending seat is really sent in the block window: the server's
+ * `declareBlockers` offer, which is core's BASELINE and carries an empty
+ * `blocks` array (`generateLegalActions`: *"offer the empty (no-block)
+ * declaration as a baseline; the AI constructs specific assignments"*).
+ *
+ * Spelled with `blocks: []` deliberately and not as a convenience — the empty
+ * array IS the defect's whole cause, and a fixture that pre-populated it would
+ * be testing a message the server never sends.
+ */
+function blockWindowFrame(): GameFrame {
+  const { state } = blockedCombat({ blockersDeclared: false });
+  return {
+    view: maskStateForSeat(state, BLOCKING_SEAT),
+    legalActions: [
+      { kind: 'declareBlockers', player: BLOCKING_SEAT, blocks: [] },
+      { kind: 'passPriority', player: BLOCKING_SEAT },
+    ],
+    yourTurn: true,
+    log: [],
+    events: [],
+  };
+}
+
+describe('the ONLINE board can DECLARE A BLOCK — not just draw one', () => {
+  it('offers the viewer’s untapped creatures, from the board and not from the server’s baseline', () => {
+    const { state, blocker } = blockedCombat({ blockersDeclared: false });
+    const online = maskedViewToBoardView(maskStateForSeat(state, BLOCKING_SEAT), NAMES);
+
+    // ⚠️ THE DISCRIMINATOR, and it is the whole finding. This is what the board
+    // used to derive its candidates from: the server's template. It is empty in
+    // every real block window, so the set was always empty and an online player
+    // could never assign a blocker at all.
+    const serverTemplate = blockWindowFrame().legalActions.find((a) => a.kind === 'declareBlockers');
+    expect(serverTemplate, 'the block window must offer a declareBlockers action').toBeDefined();
+    expect(
+      serverTemplate?.kind === 'declareBlockers' ? serverTemplate.blocks : ['not a template'],
+      'core sends the empty baseline — a board that reads candidates out of it offers none',
+    ).toEqual([]);
+
+    // …and this is what it derives them from now.
+    expect([...eligibleBlockerIds(online)]).toContain(blocker.instanceId);
+  });
+
+  it('the two boards offer the SAME creatures from the same combat', () => {
+    const { state } = blockedCombat({ blockersDeclared: false });
+    const online = eligibleBlockerIds(maskedViewToBoardView(maskStateForSeat(state, BLOCKING_SEAT), NAMES));
+    const hotseat = eligibleBlockerIds(buildBoardView(state, BLOCKING_SEAT, NAMES));
+    expect([...online].sort()).toEqual([...hotseat].sort());
+    expect(online.size, 'the fixture must offer at least one blocker').toBeGreaterThan(0);
+  });
+
+  it('REACH — the blocker tile is actually selectable on the rendered online board', () => {
+    // The pure set above is worth nothing if the tile never becomes clickable:
+    // this branch has shipped eight things that were green and unreachable.
+    const html = render(blockWindowFrame());
+    const selfStart = html.indexOf('play-board__self');
+    expect(selfStart, 'the online board rendered no self seat').toBeGreaterThanOrEqual(0);
+    const self = html.slice(selfStart);
+    expect(self, 'no tile on the viewer’s own seat is selectable in the block window').toContain(
+      'perm--selectable',
+    );
+    // …and the commit affordance is there to press once one is picked.
+    expect(html).toContain('No blocks');
   });
 });

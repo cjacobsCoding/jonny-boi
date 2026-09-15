@@ -19,7 +19,12 @@ import type {
   CycleOption,
   SubmitResult,
 } from '../../lib/play/session.js';
-import { buildBoardView, explainForFace } from '../../lib/play/view-model.js';
+import {
+  buildBoardView,
+  eligibleBlockerIds,
+  explainForFace,
+  NO_ELIGIBLE_BLOCKERS,
+} from '../../lib/play/view-model.js';
 /**
  * §3.143 / UX-3..UX-5 + the commit half of UX-7 — THE CAST TRANSACTION.
  *
@@ -108,7 +113,7 @@ import {
   type KnownRef,
 } from '../../lib/play/option-labels.js';
 import type { AnimationCardInfo } from '../../lib/play/animations.js';
-import { AnimationLayer, useZoneAnimations } from './AnimationLayer.js';
+import { AnimationLayer, useTileRects, useZoneAnimations } from './AnimationLayer.js';
 import { VfxLayer, useGameVfx } from './VfxLayer.js';
 import { OpponentActionFeed, useOpponentFeed } from './OpponentActionFeed.js';
 import { SoundEngine } from '../../lib/play/sound-engine.js';
@@ -1052,26 +1057,18 @@ export function PlayBoard({
   const opponentNotes = useOpponentFeed(session.actions, viewer, labelTarget);
 
   /**
-   * LAST-KNOWN tile rect per instance, refreshed after every commit and never
-   * evicted: the death ghost positions itself where the tile last stood, and
-   * "last stood" must survive the burst of auto-advance commits between the
-   * death event and the ghost's mount (a 2-deep window was measured losing the
-   * rect to exactly that burst). Memory: one DOMRect per instance that ever
-   * hit the battlefield — trivially small next to the game itself. The walk is
-   * a board's worth of getBoundingClientRect calls per commit, nothing next to
-   * a re-render.
+   * LAST-KNOWN tile rect per instance — the SHARED hook, so this board and the
+   * online one answer "where did tile #7 last stand" from one walk rather than
+   * from two that can drift. See `useTileRects` for why rects are never evicted.
    */
-  const tileRectsRef = useRef(new Map<InstanceId, DOMRect>());
+  const tileRectOf = useTileRects(boardRootRef);
+  /**
+   * Public identities beside the rects: a death ghost has to name a token that
+   * has already ceased to exist, and the battlefield is the last place that said
+   * what it was. Its own effect, because only this board keeps this map — the
+   * online board has no session to fall back on.
+   */
   useEffect(() => {
-    const root = boardRootRef.current;
-    if (!root) return;
-    const rects = tileRectsRef.current;
-    for (const el of root.querySelectorAll('[data-perm-id]')) {
-      if (!(el instanceof HTMLElement)) continue;
-      const id = Number(el.dataset['permId']);
-      if (!Number.isNaN(id)) rects.set(id, el.getBoundingClientRect());
-    }
-    // Record public identities beside the rects (same walk over the view).
     const identities = boardIdentityRef.current;
     for (const seat of [view.self, view.opponent]) {
       for (const perm of seat.permanents) {
@@ -1079,7 +1076,6 @@ export function PlayBoard({
       }
     }
   });
-  const tileRectOf = useCallback((id: InstanceId): DOMRect | undefined => tileRectsRef.current.get(id), []);
 
 
   const { drag, dropRef, handProps: dragHandProps } = useDragToPlay((id) => {
@@ -1243,12 +1239,12 @@ export function PlayBoard({
   const inBlockStep = step === 'declareBlockers' && isViewersPriority && viewer === defender;
   const attackerIds = session.state.combat?.attackers ?? [];
 
-  // Eligible blockers: my untapped creatures (the engine validates legality on submit).
-  const eligibleBlockers = useMemo(() => {
-    if (!inBlockStep) return new Set<InstanceId>();
-    const ids = view.self.permanents.filter((p) => p.isCreature && !p.tapped).map((p) => p.instanceId);
-    return new Set(ids);
-  }, [inBlockStep, view]);
+  // Eligible blockers: the SHARED rule, so this board and the online one offer
+  // the same creatures (the engine validates legality on submit).
+  const eligibleBlockers = useMemo(
+    () => (inBlockStep ? eligibleBlockerIds(view) : NO_ELIGIBLE_BLOCKERS),
+    [inBlockStep, view],
+  );
 
   const onBlockBoardClick = (id: InstanceId): void => {
     // Click an attacker to "arm" it, then click your creature to assign as blocker.
@@ -1419,8 +1415,9 @@ export function PlayBoard({
   /**
    * §3.143 / UX-15 — the hotseat board runs the engine, so it HAS the event
    * stream the damage sequence is derived from, and the last-known tile rects to
-   * fly the numbers between. (`NO_DAMAGE_SOURCE` is what a client without an
-   * event stream passes instead — see `BoardScene.tsx`.)
+   * fly the numbers between. The online board builds the identical pair out of
+   * the protocol's public event stream (`OnlineBoard.tsx`), which is what makes
+   * the two boards' damage one feature rather than two.
    */
   const damageSource: DamageSource = { events: session.events, tileRectOf };
 

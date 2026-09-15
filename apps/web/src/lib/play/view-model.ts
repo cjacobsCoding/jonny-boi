@@ -605,3 +605,41 @@ export function buildBoardView(
     winner: state.winner,
   };
 }
+
+/**
+ * WHICH OF THE VIEWER'S CREATURES MAY BE ASSIGNED AS BLOCKERS — one answer, read
+ * by both boards (CLAUDE.md rule 12).
+ *
+ * The rule is deliberately the permissive one — *my untapped creatures* — and the
+ * ENGINE is the authority: `applyDeclareBlockers` validates the whole assignment
+ * and rejects it entire if any pair is illegal (menace, flying, a blocking
+ * restriction). Re-deriving evasion here would be a second answer to a question
+ * core already owns, and a wrong one, because a client holding a MASKED view
+ * cannot see every continuous effect that decides it.
+ *
+ * ## ⚠️ WHY THIS IS SHARED, AND THE DEFECT THAT PUT IT HERE
+ *
+ * The hotseat board computed exactly this expression inline. The online board
+ * did not: it read its candidates from the SERVER's `declareBlockers` template,
+ * whose `blocks` array is — by core's own design note in `generateLegalActions`
+ * — *"the empty (no-block) declaration as a baseline; the AI constructs specific
+ * assignments and passes them to applyAction"*. It is a baseline, never an
+ * enumeration, so the online board's eligible-blocker set was ALWAYS empty and
+ * **an online player could never declare a block at all** — the only button a
+ * defending seat ever saw was "No blocks".
+ *
+ * Nothing failed: `online-board-parity.test.ts` proved both boards advance the
+ * same blocker from a hand-built `CombatState` whose `blocks` were already
+ * populated, which is a claim about drawing a block, not about making one. It
+ * took a rig driving a real two-seat game to find it — the eighth instance of
+ * this branch's own failure shape (docs/MTGA-UX-OVERHAUL.md §7.3, §10).
+ */
+export const NO_ELIGIBLE_BLOCKERS: ReadonlySet<InstanceId> = Object.freeze(new Set<InstanceId>());
+
+export function eligibleBlockerIds(view: BoardView): ReadonlySet<InstanceId> {
+  const ids = new Set<InstanceId>();
+  for (const perm of view.self.permanents) {
+    if (perm.isCreature && !perm.tapped) ids.add(perm.instanceId);
+  }
+  return ids;
+}

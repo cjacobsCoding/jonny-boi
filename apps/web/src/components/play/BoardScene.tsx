@@ -52,8 +52,10 @@
  * `maskStateForSeat` is the hidden-information chokepoint and stays one. Every
  * input below is either public by the rules (the battlefield, the combat state,
  * both graveyards) or the viewer's own. Nothing here would make a server reveal
- * a card it withholds — see {@link NO_DAMAGE_SOURCE} for the one input the
- * online protocol genuinely does not carry, and what it would take to carry it.
+ * a card it withholds — including {@link DamageSource}, whose events reach an
+ * online seat through `maskEventsForSeat`, the chokepoint's sibling, which sends
+ * only a CLOSED table of public kinds and only ones that name cards that seat
+ * can already see.
  *
  * ## THE FIXED OVERLAYS ARE SIBLINGS OF THE SCENE, NEVER DESCENDANTS
  *
@@ -127,31 +129,6 @@ export interface DamageSource {
   readonly events: readonly GameEvent[];
   readonly tileRectOf: (id: InstanceId) => DOMRect | undefined;
 }
-
-/**
- * ⚠️ THE ONE INPUT THE ONLINE PROTOCOL DOES NOT CARRY — a FINDING, stated here
- * rather than papered over.
- *
- * `deriveDamageSequence` needs the engine's `GameEvent` stream: which source hit
- * which recipient, for how much, in which combat-damage round. The server's
- * `state` message (`packages/protocol`, `MaskedGameView` + `legalActions` +
- * `yourTurn` + `log`) carries none of it — `Room.summarizeEvents` folds the
- * events down to five kinds of pre-formatted ENGLISH STRING and throws the
- * structure away. An online client therefore cannot derive the sequence, and
- * this constant says so instead of the board inventing one from frame diffs,
- * which would be a second answer to "what damage happened" (rule 12).
- *
- * This is NOT a masking limit: combat damage is public by the rules, and the
- * server already broadcasts a prose account of it to both seats. The fix is a
- * field on the `state` message carrying a CLOSED list of public event kinds, and
- * the single call site is `OnlineBoard`'s `damage={...}` — not a feature port.
- * Refusing honestly is the closed-table answer (rule 2); a silent zero would
- * make a board with no damage channel look like a combat that dealt none.
- */
-export const NO_DAMAGE_SOURCE: DamageSource = Object.freeze({
-  events: Object.freeze([]) as readonly GameEvent[],
-  tileRectOf: () => undefined,
-});
 
 /**
  * The tabletop's own numbers, handed to the CSS as custom properties so
@@ -278,7 +255,12 @@ export interface BoardSceneProps {
   readonly combatDraft?: CombatDraft;
   /** Anything that changes when tiles may have moved (a commit, a server frame). */
   readonly measureKey: unknown;
-  /** UX-15's input, or {@link NO_DAMAGE_SOURCE} where the client has no event stream. */
+  /**
+   * UX-15's input. REQUIRED, and deliberately so: both boards have an event
+   * stream now, so a board that mounted the scene without one would be a board
+   * whose combat silently deals no visible damage — the exact defect this prop
+   * replaced a named "no channel" constant to close.
+   */
   readonly damage: DamageSource;
 }
 

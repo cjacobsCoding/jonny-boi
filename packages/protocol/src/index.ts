@@ -10,9 +10,10 @@
  * server-side, before sending. `maskStateForSeat` is the single chokepoint.
  */
 
-import { INSTANCE_ID_FIELD_NAMES, PLAYER_IDS, poisonOf } from '@jonny-boi/core';
+import { INSTANCE_ID_FIELD_NAMES, instanceIdsNamedBy, PLAYER_IDS, poisonOf } from '@jonny-boi/core';
 import type {
   GameState,
+  GameEvent,
   PlayerState,
   PlayerId,
   CardInstance,
@@ -30,8 +31,13 @@ import type {
  * 2 — `MaskedGameView.pendingChoice`: the server now tells a seat what question a
  * resolving card asked it. Before this, an online client saw its legal menu
  * collapse to opaque `answerChoice` actions with no prompt, which is a dead end.
+ *
+ * 3 — the `state` message's `events`: the PUBLIC half of the engine's event
+ * stream, beside the prose `log` it has always carried. Before this an online
+ * client could not animate combat damage at all, because the only account of it
+ * on the wire was five kinds of English sentence.
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /**
  * The oldest version a current client can still hold a useful game on.
@@ -47,6 +53,11 @@ export const PROTOCOL_VERSION = 2;
  * — rooms, lobby, mulligans, casting, combat, reconnect — is unchanged, so a v2
  * client can play a v1 server for any game that never asks a player to choose.
  * The client negotiates down to this floor and says so, rather than failing shut.
+ *
+ * v2 → v3 added the `state` message's `events`, and it is additive in exactly the
+ * same way: a v2 server omits the field, a v3 client reads the absence as "this
+ * server carries no event stream" and simply animates no damage — which is what
+ * every client did before v3. Nothing else on the wire moved.
  */
 export const MIN_COMPATIBLE_PROTOCOL_VERSION = 1;
 
@@ -318,6 +329,165 @@ export function maskStateForSpectator(state: GameState): MaskedGameView {
 }
 
 // ---------------------------------------------------------------------------
+// The PUBLIC EVENT STREAM — `maskStateForSeat`'s sibling.
+//
+// The `state` message has always carried the board plus `Room.summarizeEvents`'s
+// five kinds of pre-formatted English sentence. A sentence cannot be animated, so
+// the online board could not draw combat damage while the hotseat board could —
+// the same fork, one layer down. This carries the EVENTS the sentences were made
+// from, beside them, so `log` keeps working unchanged.
+// ---------------------------------------------------------------------------
+
+/**
+ * THE CLOSED TABLE — the only `GameEvent` kinds that may travel to a client, each
+ * row stating WHY that kind is public. **A kind absent from this table is not
+ * sent**, whatever it is and however harmless it looks: silently widening the
+ * wire to "things that seem fine" is how a hidden-information channel opens, and
+ * an event nobody classified is an event nobody checked. Adding a kind is a ROW.
+ *
+ * Two independent things had to be true of every row here, and the second is the
+ * one that keeps the table honest as core grows:
+ *
+ *  1. it is public BY THE RULES — a fact every player at a paper table watches
+ *     happen — and in most rows the server was already broadcasting a prose
+ *     account of it to both seats, so the structured form discloses nothing the
+ *     shipped `log` did not;
+ *  2. `packages/sim`'s `OBSERVATION_POLICY` — the OTHER hidden-information table
+ *     in this repo, which decides what an AI pilot may observe — also classifies
+ *     it `'public'`, i.e. passes it through unredacted. The two tables answer
+ *     genuinely different questions (a pilot is one spectator holding no cards; a
+ *     seat sees its own hand as well), so neither can be derived from the other —
+ *     but a kind the pilot feed must redact can never be one a seat may receive
+ *     verbatim, and `apps/server/src/event-stream.test.ts` pins that containment
+ *     so the two cannot drift apart unnoticed.
+ *
+ * ⚠️ THE TABLE IS ONLY HALF THE GATE. A kind can be public and an individual
+ * event of that kind can still name a card this seat may not see — a counter put
+ * on a face-down foretold card in the opponent's exile is a `counterAdded`. So
+ * {@link maskEventsForSeat} also checks, per event and per seat, that every card
+ * the event names is one that seat's own masked view already carries. Both gates
+ * must pass.
+ */
+export const PUBLIC_EVENT_KINDS = Object.freeze({
+  // --- combat damage and the events dealt inside one assignment --------------
+  damageDealt: 'CR 510.2 — combat damage is dealt in the open, and this is UX-15’s whole input.',
+  damagePrevented: 'A shield or a fog firing is watched by the table exactly as the damage would have been.',
+  lifeChanged: 'Life totals are public (CR 118.1) and already travel on every `PublicPlayerView`.',
+  gainLife: 'The lifelink half of the same public life change.',
+  poisonChanged: 'CR 122.1f — poison counters are public, and `PublicPlayerView.poison` already carries the total.',
+  loyaltyChanged: 'Loyalty is a public counter on a battlefield permanent.',
+  defenseChanged: 'Defense is a public counter on a battlefield permanent.',
+  counterAdded: 'Counters on a permanent are public; the id gate refuses the ones placed on a card this seat cannot see.',
+  replacementApplied: 'A damage doubler or prevention shield firing mid-hit — the permanent that did it is on the battlefield.',
+  // --- what ends a damage round: death is a state-based action ---------------
+  creatureDied: 'CR 704.5g — the creature and its name were on the battlefield, and it is now in a public graveyard.',
+  planeswalkerDied: 'CR 704.5i — as `creatureDied`.',
+  battleDefeated: 'CR 704.5x — as `creatureDied`.',
+  playerLost: 'Losing the game is not something a player can keep to themselves.',
+  gameOver: 'The result, which the `gameOver` message already announces to every connection.',
+  // --- the five kinds `Room.summarizeEvents` ALREADY narrates to both seats ---
+  landPlayed: 'Already broadcast as “A land was played.” — the structured form discloses nothing new.',
+  spellCast: 'Already broadcast as “A spell was cast: <name>.”; casting is a public announcement (CR 601.2a).',
+  attackersDeclared: 'Already broadcast, and the attackers are in the public `CombatState` the view carries.',
+  blockersDeclared: 'Already broadcast, and the blocks are in the public `CombatState` the view carries.',
+  stepBegin: 'Already broadcast, and `MaskedGameView.step` carries the same fact.',
+  // --- the remaining public boundaries a damage fold reads -------------------
+  // Damage rounds are separated by the events BETWEEN them (`damage-sequence.ts`),
+  // so the boundaries have to travel too or two rounds arrive as one blur.
+  turnBegin: 'Whose turn it is and which turn number — `MaskedGameView` carries both.',
+  stackResolved: 'The object resolved from the public stack, which the view sends unredacted.',
+} as const) satisfies Readonly<Partial<Record<GameEvent['type'], string>>>;
+
+/** One row of {@link PUBLIC_EVENT_KINDS} — derived, never a second list. */
+export type PublicEventKind = keyof typeof PUBLIC_EVENT_KINDS;
+
+/**
+ * A `GameEvent` narrowed to the kinds the wire carries. DERIVED from the table,
+ * so a new row widens the type (and every consumer's switch) for free, and a
+ * consumer cannot name a kind the table refuses to send.
+ */
+export type PublicGameEvent = Extract<GameEvent, { readonly type: PublicEventKind }>;
+
+/** Whether a kind is in the closed table. The negative branch is "do not send". */
+export function isPublicEventKind(type: GameEvent['type']): type is PublicEventKind {
+  return Object.prototype.hasOwnProperty.call(PUBLIC_EVENT_KINDS, type);
+}
+
+/** Shared empty result, so the overwhelmingly common quiet frame allocates nothing. */
+const NO_PUBLIC_EVENTS: readonly PublicGameEvent[] = Object.freeze([]);
+
+/**
+ * The two views that bound what one seat may be told about an action: the view it
+ * held before the action and the view it is about to be sent.
+ *
+ * ⚠️ **MASKED VIEWS, NOT `GameState`s — that is the whole design.** This is a
+ * hidden-information boundary, and the way to make one provable is to hand the
+ * filter nothing it must be trusted not to publish. `maskEventsForSeat` therefore
+ * cannot see a hand it is meant to withhold, because it is never given one.
+ *
+ * `before` is `null` only when there is no previous frame for this seat (the
+ * first send of a game). Both frames are needed, not just `after`: a TOKEN that
+ * blocked and died is gone from every zone by the time `after` is built, and a
+ * filter that only knew `after` would drop its `damageDealt` and lose that half
+ * of the combat. A card visible in either frame is a card this seat was already
+ * entitled to see, so the union widens the filter's knowledge by exactly nothing.
+ */
+export interface SeatEventWindow {
+  readonly before: MaskedGameView | null;
+  readonly after: MaskedGameView;
+}
+
+/**
+ * The events from one action that `window`'s seat may be told about.
+ *
+ * BOTH gates, in order: the kind must be in {@link PUBLIC_EVENT_KINDS}, and every
+ * card the event names — via core's exact, type-derived `instanceIdsNamedBy`,
+ * never a key-name guess — must appear in one of the seat's own two views. An
+ * event that fails either gate is DROPPED WHOLE rather than trimmed: a
+ * half-redacted event is a shape no consumer asked for, and "report, don't
+ * widen" is the closed-table rule (CLAUDE.md rule 2).
+ *
+ * What that costs, said out loud: a token creature that dies in the same combat
+ * it fought in has left every zone by `after` and was never in `before` if it was
+ * also created by that action, so its hits do not animate on the online board.
+ * That is an honest omission — the life totals, the log and the board still carry
+ * the outcome — and it is the only direction this filter is allowed to be wrong in.
+ */
+export function maskEventsForSeat(
+  events: readonly GameEvent[],
+  window: SeatEventWindow,
+): readonly PublicGameEvent[] {
+  if (events.length === 0) return NO_PUBLIC_EVENTS;
+  // The cheap gate first: most batches contain no public event at all, and the
+  // id walk over two whole views is the expensive half.
+  let anyPublic = false;
+  for (const event of events) {
+    if (isPublicEventKind(event.type)) {
+      anyPublic = true;
+      break;
+    }
+  }
+  if (!anyPublic) return NO_PUBLIC_EVENTS;
+
+  const visible = collectInstanceIds(window.after);
+  if (window.before !== null) for (const id of collectInstanceIds(window.before)) visible.add(id);
+
+  const out: PublicGameEvent[] = [];
+  for (const event of events) {
+    if (!isPublicEventKind(event.type)) continue;
+    let mayTell = true;
+    for (const id of instanceIdsNamedBy(event)) {
+      if (!visible.has(id)) {
+        mayTell = false;
+        break;
+      }
+    }
+    if (mayTell) out.push(event as PublicGameEvent);
+  }
+  return out.length > 0 ? out : NO_PUBLIC_EVENTS;
+}
+
+// ---------------------------------------------------------------------------
 // Anti-cheat assertion tooling.
 // ---------------------------------------------------------------------------
 
@@ -536,6 +706,19 @@ export type ServerMessage =
       readonly legalActions: readonly GameAction[];
       readonly yourTurn: boolean;
       readonly log: readonly string[];
+      /**
+       * The PUBLIC events this frame was produced by, filtered for THIS seat by
+       * {@link maskEventsForSeat} — the structure `log`'s sentences were folded
+       * out of, carried BESIDE them rather than instead of them (the prose log
+       * is a separate consumer and does not regress).
+       *
+       * Optional and additive: a v2 server omits it, and a client reads the
+       * absence as "this server carries no event stream" — which is exactly the
+       * behaviour every client had before v3. Omitted, rather than sent empty,
+       * whenever an action produced nothing public: a field that is always
+       * present makes "no damage happened" and "no channel" the same message.
+       */
+      readonly events?: readonly PublicGameEvent[];
     }
   | { readonly t: 'gameOver'; readonly winner: PlayerId | null; readonly reason: string }
   | { readonly t: 'opponentDisconnected' }

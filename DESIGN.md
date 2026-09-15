@@ -8094,6 +8094,20 @@ there: the drawing code was correct all along and the state it renders from last
 milliseconds. The harness scores **1/6 with the hold disabled and 6/6 with it**, and reproduces the
 original measurement exactly (`staged=0 arcs=0 | Turn 7 · Main Phase 1`) when it fails.
 
+✅ **UX-15 now reaches the ONLINE board too** (2026-09-14, §12 of the scope doc). The `state` message
+carries a CLOSED table of public `GameEvent` kinds (`PUBLIC_EVENT_KINDS`, 21 of core's 85), filtered
+PER SEAT by `maskEventsForSeat` — `maskStateForSeat`'s sibling, handed masked views only — beside the
+prose log it has always carried. `PROTOCOL_VERSION` 2 → 3, additive both ways.
+
+⚠️ **And it took the rig to find that an online player could never declare a block at all.** The
+online board read its eligible blockers out of the server's `declareBlockers` template, which is
+core's empty baseline by design, so a defending seat's only button was ever *"No blocks"* — the
+eighth "green and unreachable" item on this branch, with the §11 parity test green throughout because
+it tested DRAWING a block rather than making one. Fixed by sharing the hotseat's own
+`eligibleBlockerIds`. `apps/web/scripts/see-online-board.mjs` now drives a real two-seat game to a
+real BLOCKED combat and photographs the damage blooming on the online board while the status still
+reads *Combat Damage*.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

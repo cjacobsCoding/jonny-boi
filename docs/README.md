@@ -9,7 +9,7 @@ a session scratchpad does not survive the session. That is the whole reason this
 
 | file | covers | status |
 | --- | --- | --- |
-| [MTGA-UX-OVERHAUL.md](MTGA-UX-OVERHAUL.md) | the play surface — UX-1…UX-29, §9 zones-as-piles, §10 the combat hold, §11 prompt polish | 17 shipped, UX-18…29 open |
+| [MTGA-UX-OVERHAUL.md](MTGA-UX-OVERHAUL.md) | the play surface — UX-1…UX-29, §9 zones-as-piles, §10 the combat hold, §13 prompt polish | 17 shipped, UX-18…29 open |
 | [WATCH-A-GAME.md](WATCH-A-GAME.md) | the watch tab, its layout and perspectives, the seed, overlapping overlays, and how a human's better line becomes a pilot improvement | open (WATCH-2 fixed, unmerged) |
 | [SUGGEST-THEMES.md](SUGGEST-THEMES.md) | Lab → Suggest: deck themes, building out from a 2-card seed, mana bases | open |
 | [DECKBUILDER-AND-ART.md](DECKBUILDER-AND-ART.md) | preferred card art with a per-deck override, mobile deck building, the builder's UX | open |
