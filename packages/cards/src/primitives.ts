@@ -621,9 +621,10 @@ export const createEmblem: EffectPrimitive = (ctx) => {
  * copy on purpose: params reaching this primitive are DATA (generated pool
  * modules, a saved game) and a permissive spread here would let a field the
  * compiler would have refused arrive anyway, on an object nothing can remove.
- * `emblem-definition-fields.test.ts` fails if the two lists diverge.
+ * `compile/loyalty-emblem-family.test.ts` fails if the two lists diverge — the
+ * only thing holding a deliberate second copy honest.
  */
-const EMBLEM_DEFINITION_FIELD_NAMES: readonly string[] = Object.freeze(['noMaximumHandSize']);
+export const EMBLEM_DEFINITION_FIELD_NAMES: readonly string[] = Object.freeze(['noMaximumHandSize']);
 
 /** The `definitionFields` param, narrowed to the allow-list and to `true` values. */
 function emblemDefinitionFieldsParam(ctx: EffectContext): Record<string, true> {
