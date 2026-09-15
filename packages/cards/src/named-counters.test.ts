@@ -156,6 +156,70 @@ describe('§3.149 — inert named counters compile; counters with RULES do not',
     expect(compileCard(surgeNode).status).toBe('incomplete');
   });
 
+  it('a bare "it" on a SPELL is not a self-reference — Free from Flesh', () => {
+    // THE DEFECT THIS GUARD EXISTS FOR, found by diffing the accepted-card lists
+    // rather than by a test: "Target creature gets +2/+2 until end of turn. Put
+    // two oil counters on it." The sentence splitter hands the second half over
+    // alone, "it" was read as the source, and this INSTANT compiled 'complete'
+    // while its oil counters went nowhere — a card in the pool playing weaker
+    // than printed. Real printed text, corpus 2026-09-15.
+    const freeFromFlesh = card(
+      'Free from Flesh',
+      'Target creature gets +2/+2 until end of turn. Put two oil counters on it.',
+      { typeLine: { supertypes: [], types: ['Instant'], subtypes: [] } },
+    );
+    const result = compileCard(freeFromFlesh);
+    expect(result.status, 'a spell cannot hold counters, so the clause reports').toBe(
+      'incomplete',
+    );
+    expect(result.matchedRules).not.toContain('put-named-counter-on-self');
+  });
+
+  it('the SAME gate covers the +1/+1 sibling — Big Play, Miraculous Recovery', () => {
+    // Rule 10: fix the CLASS, not the instance. A corpus sweep for every
+    // instant/sorcery compiling 'complete' with a self:true addCounters found
+    // exactly these two, both shipped in the pool on main with their counter
+    // going nowhere. Real printed text, corpus 2026-09-15.
+    const cases: readonly (readonly [string, string])[] = [
+      [
+        'Big Play',
+        'Target creature gets +2/+2 and gains reach until end of turn. Put a +1/+1 counter on it.',
+      ],
+      [
+        'Miraculous Recovery',
+        'Return target creature card from your graveyard to the battlefield. Put a +1/+1 counter on it.',
+      ],
+    ];
+    for (const [name, text] of cases) {
+      const spell = card(name, text, {
+        typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+      });
+      const result = compileCard(spell);
+      expect(result.matchedRules, `${name} must not bind "it" to the spell`).not.toContain(
+        'put-counters-on-self',
+      );
+      expect(result.status, `${name} reports rather than playing weaker than printed`).toBe(
+        'incomplete',
+      );
+    }
+  });
+
+  it('but a bare "it" on a PERMANENT does mean the source', () => {
+    // The other side of the same gate: on a creature, "put an oil counter on it"
+    // inside its own trigger body is the source, and must still compile — a fix
+    // that refused both readings would trade one wrong card for many.
+    const drake = card(
+      'Trawler Drake',
+      'Whenever you cast a noncreature spell, put an oil counter on it.',
+      {
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Drake'] },
+        power: 0,
+        toughness: 0,
+      },
+    );
+    expect(compileCard(drake).matchedRules).toContain('put-named-counter-on-self');
+  });
+
   const REFUSED: readonly (readonly [string, string])[] = [
     // CR 122.1c — a shield counter is removed INSTEAD of a destruction/damage.
     ['a shield counter', 'Put a shield counter on this artifact.'],

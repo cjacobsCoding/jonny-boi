@@ -1934,6 +1934,23 @@ function inertCounterKind(word: string): string | null {
   return INERT_COUNTER_KINDS.includes(kind) ? kind : null;
 }
 
+/**
+ * Whether the card being compiled is something a counter can sit ON.
+ *
+ * Counters live on PERMANENTS (CR 122.1 — and on players, which is a different
+ * system). An instant or sorcery is on the stack and then in a graveyard; it is
+ * never a permanent, so a clause that would put counters "on it" cannot be
+ * talking about the spell itself. Used to refuse a bare "it" whose referent is
+ * the previous sentence's target rather than the source — see the rule that
+ * calls it for the card that proved the difference.
+ */
+function sourceCanHoldCounters(ctx: RuleContext): boolean {
+  return ctx.card.typeLine.types.some((printed) => {
+    const type = printed.toLowerCase();
+    return type !== 'instant' && type !== 'sorcery';
+  });
+}
+
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     /**
@@ -2765,11 +2782,26 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     id: 'put-counters-on-self',
     description: '"Put N +1/+1 counters on ~" (no target)',
     pattern: new RegExp(
-      `^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on (?:~|it|this creature)$`,
+      `^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on (~|it|this creature)$`,
     ),
-    build(match) {
+    build(match, ctx) {
       const amount = match[1] === undefined ? 1 : parseCount(match[1]);
       if (amount === null) return null;
+      // §3.149 — the same bare-"it" gate the named-counter rule carries, applied
+      // to the CLASS rather than to the instance that found it (rule 10).
+      //
+      // The sweep that found it: every INSTANT/SORCERY in the corpus compiling
+      // 'complete' with a `self: true` addCounters. Two were real — Big Play
+      // ("Target creature gets +2/+2 and gains reach … Put a +1/+1 counter on
+      // it.") and Miraculous Recovery ("Return target creature card from your
+      // graveyard to the battlefield. Put a +1/+1 counter on it.") — and in both
+      // the counter belongs to the creature the previous sentence named, not to
+      // the spell. Both sat in the shipped pool putting their counter nowhere.
+      //
+      // Refusing the clause REMOVES those two from the pool, which is the point:
+      // a card that is absent is honest, a card that is present and plays weaker
+      // than printed silently biases every A/B verdict it appears in.
+      if ((match[2] ?? '') === 'it' && !sourceCanHoldCounters(ctx)) return null;
       return effects({ primitive: 'addCounters', params: { amount, self: true } });
     },
   },
@@ -4814,12 +4846,29 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     id: 'put-named-counter-on-self',
     description: '"Put N <inert-kind> counters on ~" — a counter the rules attach no behaviour to',
     pattern: new RegExp(
-      `^put (?:an?|${COUNT_TOKEN}) (${INERT_COUNTER_KIND_TOKEN}) counters? on (?:~|it|this creature)$`,
+      `^put (?:an?|${COUNT_TOKEN}) (${INERT_COUNTER_KIND_TOKEN}) counters? on (~|it|this creature)$`,
     ),
-    build(match) {
+    build(match, ctx) {
       const amount = match[1] === undefined ? 1 : parseCount(match[1]);
       const kind = inertCounterKind(match[2] ?? '');
       if (amount === null || amount <= 0 || kind === null) return null;
+      // ⚠️ BARE "IT" IS NOT A SELF-REFERENCE — it is whatever the PREVIOUS
+      // sentence named, and this rule only ever sees one clause.
+      //
+      // Free from Flesh is the card that proved it: "Target creature gets +2/+2
+      // until end of turn. Put two oil counters on **it**." The sentence
+      // splitter hands the second half over alone, "it" was read as the source,
+      // and an INSTANT compiled 'complete' while putting its oil counters
+      // nowhere — a card in the pool playing weaker than printed, which biases
+      // an A/B verdict exactly as badly as one playing stronger.
+      //
+      // The discriminator is the card's own type: a spell is not a permanent and
+      // can hold no counters, so on an instant or sorcery a bare "it" CANNOT
+      // mean the source and the clause reports instead. On a permanent it can
+      // ("Whenever ~ attacks, put a +1/+1 counter on it"), and does.
+      // match[1] is COUNT_TOKEN's group, match[2] the kind, match[3] the subject.
+      const saysIt = (match[3] ?? '') === 'it';
+      if (saysIt && !sourceCanHoldCounters(ctx)) return null;
       return effects({ primitive: 'addCounters', params: { amount, kind, self: true } });
     },
   },
