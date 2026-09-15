@@ -1,3 +1,28 @@
+- 2026-09-15 **CORRECTION to my own wave-5 collision note, and a verdict on the two stranded lanes** (integrator).
+  I told two in-flight lanes to study `origin/feat/trigger-body-templates` as a live collision. **That
+  was wrong in a way worth recording, because the method that produced it looks reliable and is not.**
+  I read `git diff --stat origin/main...origin/feat/trigger-body-templates`, saw `choice-primitives.ts`
+  as +115 with no deletions, and concluded it was a NEW file. **An all-additions diffstat does not mean
+  a new file** — it means that branch only added lines to it. The `jb-modal` lane checked and told me
+  so: `choice-primitives.ts` already exists on `main`. Use `git diff --name-status` or
+  `git log --diff-filter=A`, never a line count, to answer "is this new".
+  ⚠️ **And the branch is superseded, not stranded.** `feat/trigger-body-templates-v2` (`2b8303a`) is
+  already contained in `origin/main`, which is why a dry-run merge of v1 reports an **add/add conflict
+  on `trigger-body-templates.test.ts`** — both sides create a file main already has. Merging v1 now
+  would re-land a superseded implementation. **Verdict: CLOSE `feat/trigger-body-templates`.** The
+  dry-run cost one command: `git merge-tree --write-tree --name-only origin/main origin/<branch>`
+  reports the conflict surface without touching a worktree, and it is how this was caught.
+  ✅ **`feat/copy-templates` (`c1e2320`) is genuinely stranded and genuinely mergeable.** Its own entry
+  above says SHIPPED with a gate: +3 as a set diff, 0 lost, gauntlet byte-identical, and it documents
+  that the audit row's "21 cards" headline was really 3. Against today's `main` it dry-runs to just
+  **two conflicts** — `COORDINATION.md` (additive) and `packages/core/src/engine.ts`. Its gate predates
+  seven compiler families, so it needs a real build+test after merging, not a textual merge and a
+  green memory. `feat/copy-selectors` already diffed it read-only and found **no hunk overlap** (that
+  branch changes `copySpell`; copy-selectors changed `createTokenCopy`). **Verdict: MERGE it.**
+  ⚠️ **Inventory remote heads AND check for a `-v2`.** `git branch -r --no-merged origin/main` finds
+  the stranded ones; `git branch -r --contains <branch>` tells you whether a successor already landed.
+  Neither is visible from `git worktree list`.
+
 - 2026-09-15 `feat/modal-templates` — ✅ **committed, NOT pushed / NOT merged** (worker; integrator merges).
   **§3.150 — the MODAL row contains no modal work at all, and the row's name is wrong ABSOLUTELY.**
   The row named 432 cards and blocks Selesnya Charm. Measured against a freshly fetched 32,414-card
