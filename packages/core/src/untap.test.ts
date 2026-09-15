@@ -104,10 +104,10 @@ function find(state: GameState, id: InstanceId): CardInstance {
  * one-off) and `indexContinuous` (the bulk) are twins, one of them silently
  * stopped reading a field the other read, and it made Tetsuko's creatures
  * unblockable through only one of the two paths. The untap step takes the
- * INDEXED path and every other caller takes the one-off, so a divergence here
- * would mean a permanent that untaps in a real game and reports frozen to the
- * inspector — or the reverse. Free to check, and it can only ever be checked
- * here.
+ * INDEXED path; the one-off form is the exported API and today has no caller
+ * outside this file, which is exactly when a divergence goes unnoticed — the
+ * first inspector or pilot to ask about one land would get an answer the game
+ * disagrees with. Free to check, and it can only ever be checked here.
  *
  * ⚠️ A deliberate duplication of the loop, and it is the smaller evil: the
  * alternative is driving whole turns through `applyAction`, which needs a legal
