@@ -631,6 +631,7 @@ export {
   PLAYER_IDS,
   STEP_ORDER,
   MAIN_STEPS,
+  sorcerySpeedWindowFor,
   NO_COUNTERS,
   createPlayer,
   playerZone,

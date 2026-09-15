@@ -378,7 +378,7 @@ function checkActionLegality(
 }
 
 /** Which mechanic (if any) this ACTION proves, given the definitions in play. */
-function mechanicOfAction(
+export function mechanicOfAction(
   state: GameState,
   action: GameAction,
   defOf: (id: InstanceId) => CardDefinition | undefined,
@@ -389,7 +389,16 @@ function mechanicOfAction(
       // cast, a madness cast and a split card's second half all emit the same
       // `spellCast` event, and only the action says which happened.
       if (action.face === 'back') return 'second-castable-face';
-      if (action.fromZone === 'graveyard') return 'flashback-cast';
+      // §3.147 — WHICH graveyard keyword paid for this cast is carried by the
+      // ACTION, and only by the action: a retrace, a jump-start and an escape
+      // emit the same `spellCast` from the same zone as a flashback. Reading the
+      // zone alone credited every one of them to `flashback-cast`, which made
+      // `graveyard-cast` unreachable — a required mechanic row that no code path
+      // could ever tick, reported INERT for a family the engine has had since
+      // §3.111. The discriminator was on the action the whole time.
+      if (action.fromZone === 'graveyard') {
+        return action.graveyardCast === undefined ? 'flashback-cast' : 'graveyard-cast';
+      }
       // §3.106 — the free cast out of a SUSPEND window shares the exile zone and
       // the window record with madness; the window's kind says which happened.
       if (action.fromZone === 'exile') return state.madnessWindow?.kind === 'suspend' ? 'suspend' : 'madness';

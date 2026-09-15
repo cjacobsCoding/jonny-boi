@@ -941,6 +941,34 @@ export function millTopCards(ctx: EffectContext, who: PlayerId, amount: number):
   for (let i = 0; i < count; i++) {
     const card = player.library[0];
     if (!card) break;
+    /*
+     * §3.147 — SAY THAT THIS CARD BECAME PUBLIC, at the one mill funnel.
+     *
+     * A milled card lands face up in a graveyard, so it is public from that
+     * instant — but it need not still be there when anyone next looks. Sudden
+     * Reclamation mills three and returns one to HAND inside a single
+     * resolution, so that card is public and then hidden again with no decision
+     * boundary in between, and the observation audit — which can only compare
+     * settled states — saw its own `zoneChange` naming a card it still held as
+     * never-seen and called it a leak.
+     *
+     * Exactly the cascade/ripple shape, and it takes the same remedy for the
+     * same reason (§3.119): a reveal is how the engine says "this became
+     * public" when no observable zone change survives to prove it.
+     * `cardRevealed` fires no triggers, so this adds a fact to the log and
+     * changes no game outcome. Emitted BEFORE the move, because the scanner
+     * reads a flush in emission order.
+     *
+     * It lives HERE rather than in the two mill primitives because this is the
+     * one funnel both go through — a second copy would eventually disagree.
+     */
+    ctx.emit({
+      type: 'cardRevealed',
+      player: who,
+      instanceId: card.instanceId,
+      name: card.def.name,
+      fromZone: 'library',
+    });
     moveOwnedCard(ctx, who, card.instanceId, 'library', 'graveyard');
     milled.push(card.instanceId);
   }
