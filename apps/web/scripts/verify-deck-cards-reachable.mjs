@@ -57,10 +57,21 @@ const EXIT_FAILED = 1;
 const EXIT_CANNOT_RUN = 2;
 
 /**
- * The eight cards from `docs/decks/*.txt` that the wave-5 compiler families
+ * The cards from `docs/decks/*.txt` that the wave-5 compiler families
  * unblocked. They are the acceptance case BECAUSE they are Caleb's own — a
  * campaign that only reaches cards which happen to be easy is measuring itself.
  * Names are the printed Oracle names, which is the join key the index uses.
+ *
+ * The last three arrived after the first regeneration of this lane —
+ * `feat/replacement-prevention` (Rhox Faithmender, Fog Bank) and
+ * `feat/targeting-protection` (Fiendslayer Paladin) — and they are listed HERE,
+ * in the check, on purpose. Three absent becoming three present is a
+ * DISCRIMINATOR: it says what this harness would have reported had the final
+ * regeneration not run. A total that merely went up says nothing.
+ *
+ * With Rhox Faithmender and Fiendslayer Paladin in, all 22 names in
+ * `acidic-angels.txt` compile — the first of Caleb's decks that can come back
+ * whole.
  */
 const DECK_CARDS = Object.freeze([
   'Arbor Elf',
@@ -71,6 +82,9 @@ const DECK_CARDS = Object.freeze([
   'Kessig Wolf Run',
   'Selesnya Charm',
   "Trostani, Selesnya's Voice",
+  'Rhox Faithmender',
+  'Fog Bank',
+  'Fiendslayer Paladin',
 ]);
 
 /** The desktop window the card browser is reviewed at. */
