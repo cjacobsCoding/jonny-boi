@@ -115,6 +115,38 @@ reported per set (“Dominaria United: 271 of 281 playable”). That is a change
 `scripts/build-expansion.ts` and the report shape, and it is the first task of phase 3 — measure the
 axis before sweeping along it (rule 11).
 
+## 4b. The phase-3 axis, measured (2026-09-15) — there is no date in the data
+
+Measured before designing, per rule 11. **A newest-first sweep cannot be ordered today, and the
+reason is one missing field rather than a missing report.**
+
+| file | carries | verdict |
+| --- | --- | --- |
+| `packages/cards/data/expansion-report.json` | `{ name, missing[] }` per rejected card — **26,625 records, no set, no date** | cannot order |
+| `packages/data-tools/data/card-index.json` | `set`, `collectorNumber`, `rarity` — but only for the **5,651 ACCEPTED** cards | wrong population: it is the cards already done |
+| the fetched corpus (`fetch-full-corpus.mjs`) | `set`, `set_name`, `collector_number`, `rarity` — and **not `released_at`** | has the set, not the date |
+
+So the join that phase 3 needs runs **corpus → set code → release date**, and only the last hop is
+missing. Two ways to get it, and they are not equally good:
+
+1. ❌ **Add `released_at` to the corpus projection.** One line in `fetch-full-corpus.mjs` — but the
+   field it adds is the release date of *whichever printing Scryfall picked for that Oracle name*,
+   and the header of that same file already records what that choice cost: for Black Knight, Capsize
+   and Weakness it picks an MTGO-only reprint. A per-printing date would therefore file Alpha cards
+   under a modern set, silently, which is the same defect wearing a different hat.
+2. ✅ **A closed SET → RELEASE-DATE table**, fetched once from Scryfall's `/sets` endpoint (~1,000
+   rows, small) and committed. Joining on `set` makes "newest first" a **sort over a table**, adding
+   a set is a **row**, and a set code that is not in the table **reports** instead of being bucketed
+   into the nearest thing that exists (rule 2). It also survives a corpus refetch unchanged.
+
+**Phase 3, task 1 is therefore: commit the set table, join it in `build-expansion.ts`, and emit a
+per-set section — `released`, `candidates`, `accepted`, `playable %`, and the top blocking families
+*within that set*.** The last part is what makes the sweep pickable: §2 says a global family headline
+is an aggregation artifact, and a family restricted to one set is a genuinely smaller, honest number.
+
+⚠️ **Do not order sets by set code, collector number, or the order Scryfall returns them.** None of
+those is chronological, and all three look chronological on a sample.
+
 ## 5. How the campaign runs
 
 Established practice on this repo (DESIGN §6, and the keyword-family waves that closed whole
