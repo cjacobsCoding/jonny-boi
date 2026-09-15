@@ -1,3 +1,109 @@
+- 2026-09-15 `feat/modal-templates` — ✅ **committed, NOT pushed / NOT merged** (worker; integrator merges).
+  **§3.150 — the MODAL row contains no modal work at all, and the row's name is wrong ABSOLUTELY.**
+  The row named 432 cards and blocks Selesnya Charm. Measured against a freshly fetched 32,414-card
+  corpus with NEW `packages/cards/scripts/modal-blame.mjs`: **531 clauses across 504 distinct shapes —
+  1.05 per shape**, the §3.120 artifact for the FIFTH row running and the thinnest ratio yet
+  (1.20 → 1.18 → 1.13 → 1.08 → **1.05**). The script re-probes each bullet IN A MODAL HARNESS on the
+  card's own type line and prefix, splitting the row three ways: **MODE-ONLY = 0**, BODY = 408 clauses
+  (392 sole), HEADER = 166 (29 sole), NOT-PROBEABLE = 135 (reported, never bucketed).
+  ⚠️ **MODE-ONLY IS ZERO — core's `modal.ts` and the cast-time mode/target pipeline have NO gaps.** A
+  lane that took this row at its name would have rebuilt a finished system. Every card in it is held
+  by a mode BODY belonging to another family, or by a header shape.
+  ⚠️ **THE HINT-ORDER TRAP IS REAL AND LARGE, and the next agent should not trust any row's count.**
+  `UNSUPPORTED_HINTS` is first-match and the modal hint is anchored `^choose …`, so **every modal
+  TRIGGER** cannot reach it: 518 blocked cards print a modal header while the row claims 531, with 145
+  clauses filed under *"a you may / choose template"* and 8 more under five other rows because a
+  bullet contained an earlier hint's word.
+  **Shipped instead: the printed BOUND on a target selector** — the largest concentrated shape in the
+  BODY bucket, measured corpus-wide BEFORE building (rule 11) at 233 cards on the targeting seam of
+  which only 32 are modal. So it was built as the CLASS, not the instance.
+  `TargetBound` rides WITH the restriction (`TargetSpec = TargetRestriction | { base, bound }`),
+  because a bound carries a NUMBER and a second positional argument through the ~14 call sites of
+  `isLegalTarget`/`legalTargetsFor` fails the moment one site forgets it — that site would police the
+  noun and silently ignore the bound, a card playing WIDER than printed. Enforced at all three points
+  (offer / accept / resolve). Mana value reads through `convertedManaCost`, never a second sum.
+  The compiler side is **ONE PRE-PASS in `applyRules`**, beside the `where X is …` binding §3.149 put
+  there and for the same reason: the SENTENCES were never missing. Destroy (75 corpus clauses), return
+  (23), "deals N damage to" (19), exile (17), counter (9) and gain-control-of (4) gain the whole
+  vocabulary in one edit instead of six copies of the noun table.
+  📈 **Accepted-count delta +175, ZERO lost (6,663 → 6,838)** on ONE fixed corpus compiled twice with
+  this lane's sixteen source files reverted in between via `git show <fork>:<path>` (no stash, no
+  checkout, no reset), the two name lists DIFFED with `playable-set.mjs` so the gain is a SET.
+  📏 **THE HONEST SMALLER NUMBERS, three of them:** the row said 432 and contains **no modal work**;
+  the bound family estimated 233 and delivered **175**; and **only 28 of the 175 are modal cards**.
+  ✅ **Selesnya Charm compiles** (§4a phase 2) — two of its three modes always did; only "Exile target
+  creature with power 5 or greater" refused. Also Crushing Canopy, Disdainful Stroke, Valorous Stance,
+  Red Elemental Blast, Roast, Abrupt Decay, Despark, Silverquill Charm, Witherbloom Charm.
+  🐛 **A shipped refusal was superseded, and is pinned POSITIVELY rather than deleted.**
+  `untap-family.test.ts` pinned Norritt as REPORTED for *"a colour narrowing core's restriction union
+  cannot express."* Core can express it now. Deleting the pin would leave nothing to fail if the bound
+  later stopped being carried, so it is replaced by an assertion that the card compiles carrying
+  `{ base: 'creature', bound: { colour: 'U' } }`.
+  ⚠️ **A GUARD THE OBVIOUS SOURCE COULD NOT GIVE, and the first draft passed vacuously.** The pre-pass
+  is not a row in `EFFECT_RULES`, so `rule-coverage.test.ts` and `dead-rule-sweep.mjs` cannot see it —
+  both quantify over the rule table. And `card-index.json` is the SHIPPED POOL, i.e. the cards that
+  already compiled, so it contains **ZERO** cards printing four of the five bound families by
+  construction: a guard sourced from it goes green while proving nothing. The lines are now
+  transcribed verbatim from the corpus with the card that prints each, and the one family the pool CAN
+  attest is still checked against the live index so one arm moves when the pool does.
+  🐛 **A REAL BUG FOUND BY RE-READING THE CODE, NOT BY A TEST — and the first 29 tests could not see
+  it.** `legalTargetsFor` builds a continuous index for the whole menu and passes it down;
+  `isLegalTarget` passes nothing. `targetMeetsBound` defaulted a missing index to "no modifications",
+  so the two read DIFFERENT power: the menu offered a pumped 2/2 for "power 5 or greater" and the
+  cast was then refused — precisely the §3.36 offer/accept disagreement this family's own test claims
+  to prevent. **Every test in the file ran on a board with no continuous effect, so all 29 passed
+  while the disagreement was live: a check that could not fail.** The parameter now carries the same
+  THREE-way distinction `isTargetableBy` uses (undefined = build one; null = this board provably has
+  none; an index = use it), with two discriminating tests — a pump entering the bound, a shrink
+  leaving it — that both go RED when the fix is reverted.
+  🔎 **Red-then-green on FOUR sabotages, all RED:** widen `shadow → flying` in the keyword table (the
+  refusal test goes red AND the card compiles — the exact defect the closed table prevents, 1 failed);
+  drop the `'or greater'` row from the direction table (**7** failed, Selesnya Charm among them); drop
+  the `target` anchor from the bound tail so it also strips GROUP selectors (1 failed);
+  restore the layered-stats default (**2** failed, in BOTH directions — a pump that should enter the
+  bound and a shrink that should leave it). Restored, 45 green across the two touched files.
+  ⚠️ **SEMANTIC-CONFLICT WARNING for the integrator:**
+  (1) `packages/core/src/targeting.ts` — the `TargetRestriction` union and **all five of its homes are
+  UNTOUCHED** (no new members), so the §3.49 completeness invariant is unaffected and lanes adding
+  members (the counters lane added `cardInAnyGraveyard`) do not conflict with this. What changes is
+  additive: one contiguous `§3.150` region after `ALL_TARGET_RESTRICTIONS`, plus `isLegalTarget` and
+  `legalTargetsFor` gaining a one-line unwrap. The old `isLegalTarget` body is unchanged — it was
+  renamed to `baseTargetIsLegal`, so a lane editing that if-chain merges textually.
+  (2) **A TYPE WIDENING crosses package lines**: `TargetRestriction` → `TargetSpec` on
+  `SpellMode.targets`, `TriggeredAbility.targets`, `StackObject.awaitingTargets`, two `choices.ts`
+  `restriction` fields, `restrictionOfEffects`/`targetRestrictionOf`/`describeRestriction`/
+  `triggerTargetPrompt`/`spellCopyAimRestriction`, `ai/effect-value.ts` `ModeEffects.targets` and one
+  `heuristic.ts` parameter. Any lane that annotates a variable `TargetRestriction` where core now
+  returns `TargetSpec` will get a type error, fixed by changing the annotation.
+  (3) `packages/cards/src/compile/rules.ts` — the new code is ONE contiguous region at the **tail of
+  the file, after `explainUnsupported`**, plus two lines added to each of the two import blocks.
+  **No existing rule was edited and nothing above was reformatted**, so the three other live lanes in
+  this file should merge cleanly.
+  (4) `packages/cards/src/compile/compile.ts` — `applyRules` gains a 6th parameter (`boundApplied`)
+  and a ~15-line pre-pass immediately before its final `return null`, directly under §3.149's
+  where-X pre-pass. A lane touching that function will conflict there.
+  (5) ⚠️ **`apps/web` WAS touched — 6 TYPE-ONLY annotations** in `lib/play/optional-trigger.ts` and
+  `lib/play/targeting.ts`. The brief said not to touch `apps/web`; the alternative was a red build,
+  and a bounded selector must reach the UI intact or the board offers targets the engine then refuses.
+  No behaviour, markup or styling changed.
+  ⚠️ **POOL NOT REGENERATED — ON PURPOSE**, per the brief: the local corpus trips a masking defect
+  owned by `fix/pool-refresh-3147`. The +175 is the COMPILER's delta on one fixed corpus, measured
+  twice. The 175 names are not in `expansion-candidates.json` either.
+  ⛔ **Left REPORTED, not approximated, with numbers:** the combat/tap STATE axis (**38 cards** —
+  `attackingCreature` is already a union member and a second answer to "is it attacking" is the DRY
+  failure rule 12 names); keywords the engine does not model (shadow, horsemanship, fear, intimidate);
+  a clause carrying TWO bounded selectors; a P/T or keyword bound on a SPELL (only the card-level
+  bounds are read off a stack object); and the rest of the modal row, RE-MEASURED after this lane
+  landed: **503 cards, still 1.05 per shape, still MODE-ONLY = 0** (367 BODY + 166 HEADER clauses).
+  `modal-blame.mjs` ranks it BY the family that owns it — a rules template 162, filtered-targeting 34
+  (nearly halved from 62; this lane took that half), entwine 26, static-buff 25, graveyard 21,
+  counters 15.
+  ⚠️ **NOT DONE:** no push (worker), no merge, no pool regeneration, no throughput benchmark (the
+  change adds one predicate to a menu already filtered, and the continuous index is built once per
+  menu rather than per candidate — but that is an argument, not a measurement, and it is not claimed
+  as one).
+  ⚠️ **§3.150 chosen after scanning EVERY remote head** — §3.149 is already double-claimed on `main`
+  (counters and {X} both write `### 3.149`); nothing anywhere claims §3.150.
 - 2026-09-15 **WAVE 5 CLAIM + THE COLLISION MAP FOR `compile/rules.ts`** (integrator).
   Three lanes dispatched on the families still blocking Caleb's own decks (ALL-CARDS §4a phase 2,
   §7a is the per-card board): `feat/modal-templates` in `D:/Cool Stuff/Claude/jb-modal` (modal, 432,

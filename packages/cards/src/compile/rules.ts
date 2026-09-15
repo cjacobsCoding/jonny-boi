@@ -39,6 +39,9 @@ import type {
   StaticAffects,
   StaticControllerScope,
   TargetRestriction,
+  // §3.150 - the printed bound on a target selector.
+  TargetBound,
+  TargetNumericProperty,
   InterveningIf,
   TriggerCondition,
   TriggeredAbility,
@@ -52,6 +55,10 @@ import {
   PROTECTION_SUBTYPE_PREFIX,
   formatManaCost,
   MANA_COLORS,
+  // §3.150 - read and narrow the reserved target param through core's own
+  // name and validator, never a second spelling of either.
+  TARGET_RESTRICTION_PARAM,
+  isTargetRestriction,
 } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
 import {
@@ -11784,3 +11791,194 @@ export function explainUnsupported(clause: string): string {
   }
   return 'a rules template the compiler does not recognize yet';
 }
+
+// ===========================================================================
+// §3.150 — THE PRINTED TARGET BOUND. One pre-pass, not a rule per verb.
+//
+// Measured on a 32,414-card corpus: 233 blocked cards are held out by a bound
+// on a target selector alone, and the printed vocabulary is SMALL — four bound
+// families across six verbs (destroy 75, return 23, "deals N damage to" 19,
+// exile 17, counter 9, gain control of 4).
+//
+// A rule per verb would have re-spelled the whole noun vocabulary six times and
+// left the seventh verb still broken, which is the "two places answer one
+// question" failure rule 12 names. So this is ONE pre-pass in `applyRules`,
+// exactly where §3.149 put the "where X is …" binding and for the same reason:
+// the SENTENCES were never missing. "Destroy target creature." already
+// compiles; it refuses only because the printed words "with flying" follow the
+// noun. Strip the bound, let the ordinary rule compile the clause it always
+// could, then narrow the restriction that rule declared.
+//
+// So every verb — present and future — gains bounded targets in one edit, and
+// adding the next printed bound is a ROW in the tables below.
+// ===========================================================================
+
+/** The printed comparison words, as the {@link TargetBound} field each means. */
+const TARGET_BOUND_DIRECTIONS: Readonly<Record<string, 'atLeast' | 'atMost'>> = Object.freeze({
+  'or greater': 'atLeast',
+  'or more': 'atLeast',
+  'or less': 'atMost',
+  'or fewer': 'atMost',
+});
+
+/** The printed numeric properties a bound may compare, as core's own property names. */
+const TARGET_BOUND_PROPERTIES: Readonly<Record<string, TargetNumericProperty>> = Object.freeze({
+  power: 'power',
+  toughness: 'toughness',
+  'mana value': 'manaValue',
+  // Pre-2021 Oracle wording for the same number (CR 202.3). Both spellings are
+  // in the corpus, so both are rows — never one spelling matched and the other
+  // left to look like a different family.
+  'converted mana cost': 'manaValue',
+});
+
+/**
+ * The printed keywords a "with …"/"without …" bound may name, mapped to the
+ * core keyword flag each one is.
+ *
+ * CLOSED, and the refusals matter: a keyword the engine does not model is NOT
+ * quietly dropped from the selector, because "destroy target creature with
+ * shadow" compiled as "destroy target creature" is a strictly better card. A
+ * keyword outside this table makes the whole clause report.
+ */
+const TARGET_BOUND_KEYWORDS: Readonly<Record<string, keyof KeywordFlags>> = Object.freeze({
+  flying: 'flying',
+  trample: 'trample',
+  vigilance: 'vigilance',
+  haste: 'haste',
+  'first strike': 'firstStrike',
+  'double strike': 'doubleStrike',
+  deathtouch: 'deathtouch',
+  lifelink: 'lifelink',
+  defender: 'defender',
+  reach: 'reach',
+  menace: 'menace',
+  hexproof: 'hexproof',
+  indestructible: 'indestructible',
+  flash: 'flash',
+});
+
+/** The printed colour words a "target <colour> …" selector may name. */
+const TARGET_BOUND_COLOURS: Readonly<Record<string, 'W' | 'U' | 'B' | 'R' | 'G'>> = Object.freeze({
+  white: 'W',
+  blue: 'U',
+  black: 'B',
+  red: 'R',
+  green: 'G',
+});
+
+const TARGET_BOUND_KEYWORD_PHRASE = Object.keys(TARGET_BOUND_KEYWORDS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+const TARGET_BOUND_PROPERTY_PHRASE = Object.keys(TARGET_BOUND_PROPERTIES)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+const TARGET_BOUND_DIRECTION_PHRASE = Object.keys(TARGET_BOUND_DIRECTIONS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+
+/**
+ * The printed bound TAIL, anchored to the word "target" so only a TARGET
+ * selector is narrowed.
+ *
+ * ⚠️ Anchored deliberately: the same words follow a GROUP selector ("destroy
+ * each creature with mana value 3 or less"), and that is a different consumer
+ * with a different filter. Narrowing a group selector through the targeting
+ * seam would police a target that does not exist and leave the group
+ * unfiltered — a card playing wider than printed, in the half nobody looked at.
+ */
+const BOUND_TAIL = new RegExp(
+  `\\b(target [a-z][a-z ]*?)\\s+((?:with|without) (?:${TARGET_BOUND_KEYWORD_PHRASE})|with (?:${TARGET_BOUND_PROPERTY_PHRASE}) \\d+ (?:${TARGET_BOUND_DIRECTION_PHRASE}))\\b`,
+  'gi',
+);
+
+/** The printed COLOUR form, which sits before the noun rather than after it. */
+const BOUND_COLOUR = new RegExp(`\\btarget (${Object.keys(TARGET_BOUND_COLOURS).join('|')}) (?=[a-z])`, 'gi');
+
+/**
+ * Read one printed bound phrase into a {@link TargetBound}, or `null`.
+ *
+ * CLOSED (engineering rule 2): a phrase no row understands returns null and the
+ * clause reports with its real number, rather than being widened to the nearest
+ * bound that happens to exist.
+ */
+function parseBoundPhrase(phrase: string): TargetBound | null {
+  const keyword = new RegExp(`^(with|without) (${TARGET_BOUND_KEYWORD_PHRASE})$`, 'i').exec(phrase);
+  if (keyword) {
+    const flag = TARGET_BOUND_KEYWORDS[(keyword[2] ?? '').toLowerCase()];
+    if (flag === undefined) return null;
+    return (keyword[1] ?? '').toLowerCase() === 'with' ? { withKeyword: flag } : { withoutKeyword: flag };
+  }
+  const numeric = new RegExp(
+    `^with (${TARGET_BOUND_PROPERTY_PHRASE}) (\\d+) (${TARGET_BOUND_DIRECTION_PHRASE})$`,
+    'i',
+  ).exec(phrase);
+  if (numeric) {
+    const property = TARGET_BOUND_PROPERTIES[(numeric[1] ?? '').toLowerCase()];
+    const direction = TARGET_BOUND_DIRECTIONS[(numeric[3] ?? '').toLowerCase()];
+    if (property === undefined || direction === undefined) return null;
+    const value = Number(numeric[2]);
+    if (!Number.isInteger(value)) return null;
+    return direction === 'atLeast' ? { atLeast: { property, value } } : { atMost: { property, value } };
+  }
+  return null;
+}
+
+/** What {@link stripTargetBound} found: the clause without its bound, and the bound. */
+export interface StrippedTargetBound {
+  readonly clause: string;
+  readonly bound: TargetBound;
+}
+
+/**
+ * Take the printed bound off a clause's target selector, so the ordinary rules
+ * can compile the sentence they always could.
+ *
+ * Refuses (returns null) when the clause carries MORE THAN ONE bounded
+ * selector: a clause with two aims has no single restriction to narrow, and
+ * guessing which one the bound belongs to is how a closed table stops being
+ * closed. Those cards keep reporting, with their number.
+ */
+export function stripTargetBound(clause: string): StrippedTargetBound | null {
+  const tails = [...clause.matchAll(BOUND_TAIL)];
+  const colours = [...clause.matchAll(BOUND_COLOUR)];
+  if (tails.length + colours.length !== 1) return null;
+  if (tails.length === 1) {
+    const hit = tails[0] as RegExpMatchArray;
+    const bound = parseBoundPhrase((hit[2] ?? '').trim());
+    if (bound === null) return null;
+    return { clause: clause.replace(hit[0], hit[1] ?? ''), bound };
+  }
+  const hit = colours[0] as RegExpMatchArray;
+  const colour = TARGET_BOUND_COLOURS[(hit[1] ?? '').toLowerCase()];
+  if (colour === undefined) return null;
+  return { clause: clause.replace(hit[0], 'target '), bound: { colour } };
+}
+
+/**
+ * Narrow every target restriction a compiled clause declared by `bound`.
+ *
+ * Returns null — refusing the whole clause — when the compiled effects declare
+ * NO restriction, or declare more than one distinct one, or declare one that is
+ * already bounded. All three mean the printed bound has no single unambiguous
+ * home, and attaching it to a guess would produce a card that targets something
+ * its printed text does not allow. Refusing keeps the card REPORTED with its
+ * number, which is the project's whole acceptance rule.
+ */
+export function applyTargetBound(effects: readonly EffectRef[], bound: TargetBound): EffectRef[] | null {
+  const declared = new Set<string>();
+  for (const ref of effects) {
+    const value = ref.params?.[TARGET_RESTRICTION_PARAM];
+    if (value === undefined) continue;
+    if (!isTargetRestriction(value)) return null; // already bounded, or not a restriction at all
+    declared.add(value);
+  }
+  if (declared.size !== 1) return null;
+  const base = [...declared][0] as TargetRestriction;
+  return effects.map((ref) =>
+    ref.params?.[TARGET_RESTRICTION_PARAM] === undefined
+      ? ref
+      : { ...ref, params: { ...ref.params, [TARGET_RESTRICTION_PARAM]: { base, bound } } },
+  );
+}
+// ============================ end §3.150 ==================================

@@ -59,7 +59,7 @@
 import type { CardType, EffectRef } from './card.js';
 import { matchesCardFilter } from './card.js';
 import type { ManaColor, ManaCost } from './mana.js';
-import type { TargetRestriction } from './targeting.js';
+import type { TargetSpec } from './targeting.js';
 import { formatManaCost } from './mana.js';
 import type { CardInstance, GameState, InstanceId, PlayerId, ZoneName } from './state.js';
 import { PLAYER_IDS, playerZone } from './state.js';
@@ -439,7 +439,7 @@ export interface SelectTargetsRequest extends ChoiceRequestBase, ChoiceCountRequ
   readonly kind: 'selectTargets';
   readonly candidates: readonly TargetOption[];
   /** What may be chosen — carried so a UI can say "a creature" and an AI can reason. */
-  readonly restriction: TargetRestriction;
+  readonly restriction: TargetSpec;
 }
 
 export interface PayManaRequest extends ChoiceRequestBase {
@@ -654,7 +654,7 @@ export interface ConfirmChoice extends PendingChoiceBase {
 export interface SelectTargetsChoice extends PendingChoiceBase {
   readonly kind: 'selectTargets';
   readonly candidates: readonly TargetOption[];
-  readonly restriction: TargetRestriction;
+  readonly restriction: TargetSpec;
 }
 
 export interface PayManaChoice extends PendingChoiceBase {

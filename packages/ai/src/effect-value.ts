@@ -41,7 +41,7 @@ import type {
   InterveningIf,
   ManaCost,
   PlayerId,
-  TargetRestriction,
+  TargetSpec,
 } from '@jonny-boi/core';
 import {
   canAffordManaCost,
@@ -1729,7 +1729,7 @@ export interface ModeEffects {
   readonly id: string;
   readonly effects: readonly EffectRef[];
   /** What choosing this mode will then be asked to target, when it targets. */
-  readonly targets?: TargetRestriction;
+  readonly targets?: TargetSpec;
 }
 
 /**

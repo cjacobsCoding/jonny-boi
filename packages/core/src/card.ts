@@ -1422,7 +1422,7 @@ export interface SpellMode {
    * absent means the mode is target-free. `'any'` is meaningful here, because
    * whether a mode is CHOOSABLE at all depends on a legal target existing.
    */
-  readonly targets?: import('./targeting.js').TargetRestriction;
+  readonly targets?: import('./targeting.js').TargetSpec;
 }
 
 /**

@@ -2889,6 +2889,149 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.150 The modal row has NO modal work in it — the bound on a target selector — ✅ done
+
+> ⚠️ **Section number claimed off a contended range.** §3.149 was the highest anywhere when this
+> work finished, and it is DOUBLE-claimed on `main` already (two `### 3.149` headings, one for the
+> counters row and one for the {X} row). Nothing on any remote head claims §3.150 — checked with the
+> board's re-runnable remote scan across every branch. If an integrator finds a second §3.150,
+> renumber this one by grepping the number, never by editing the heading.
+
+The backlog entry *"a modal template the compiler does not recognize yet"* named **432 cards** and
+blocks **Selesnya Charm** from `docs/decks/acidic-angels.txt`. On a freshly fetched 32,414-card
+corpus the row is **531 cards / 531 clauses across 504 distinct shapes — 1.05 clauses per shape**.
+
+**That is the §3.120 aggregation artifact for the FIFTH consecutive row, and the thinnest ratio yet
+measured**: 1.20 (§3.147), 1.18 (§3.148), 1.13 (§3.149-counters), 1.08 (§3.149-{X}), now **1.05**.
+The finding is no longer news; what should now be assumed is that *every* row in that table is a
+bucket, and the burden of proof is on anyone claiming otherwise.
+
+#### The row's name is wrong, and this time it is wrong ABSOLUTELY
+
+§3.147 established that a row's NAME can point at the wrong half. NEW
+`packages/cards/scripts/modal-blame.mjs` asks that question for modal, because a modal card is two
+things — a HEADER ("how many modes?") and the BODIES (each bullet, compiled by `compileTriggerBody`)
+— and `modal-choose` files the whole card under this row the moment either half fails.
+
+Each blocked bullet is re-probed IN A MODAL HARNESS, beside a filler bullet known to compile, on the
+card's **own type line and own prefix**. Three buckets:
+
+| bucket | clauses | what it is |
+| --- | --- | --- |
+| **MODE-ONLY** — compiles as a LINE but not as a MODE | **0** | the only bucket that is modal machinery |
+| BODY — the bullet has no rule anywhere | 408 (392 sole) | another family wearing this row's name |
+| HEADER — every bullet compiles, the header is refused | 166 (29 sole) | count phrases and memory tails |
+| NOT-PROBEABLE — the harness itself failed; never guessed | 135 | reported, not bucketed |
+
+**MODE-ONLY is ZERO.** Core's `modal.ts` and the cast-time mode/target pipeline (CR 601.2b/c) have
+no gaps at all — every printed header shape the table knows, the choosability clamp, printed-order
+resolution, per-mode targets, per-pick re-legality. **Nothing in this 432-card row is modal work.**
+A lane that took the row at its name would have rebuilt a system that was already finished.
+
+⚠️ **And the row's BOUNDARY is hint order, not meaning.** `UNSUPPORTED_HINTS` is first-match and the
+modal hint is anchored `^choose …`, so a modal card whose header is not at the start of its line —
+**every modal trigger** — cannot reach it. Measured: **518 blocked cards print a modal header**;
+145 clauses of them are filed under *"a you may / choose template"*, and a further 8 under five
+other rows (enters-tapped, battle, copy, spend-restriction, additional-cost) because a bullet
+happened to contain an earlier hint's word. The 432 is neither a floor nor a ceiling.
+
+#### What was actually built: the printed BOUND on a target selector
+
+The largest concentrated shape in the BODY bucket is a bound: *"Exile target creature **with power 5
+or greater**"*. Measured corpus-wide before building (rule 11), by rewriting the bound away and
+recompiling the whole card — a card that then compiles was blocked by the bound alone:
+
+| cards | axis |
+| --- | --- |
+| 64 | `with power/toughness N or greater/less` |
+| 49 | `target <colour> …` |
+| 42 | `with <keyword>` |
+| 38 | `target tapped/untapped/attacking/blocking …` |
+| 25 | `with mana value N or less/greater` |
+| 10 | `without <keyword>` |
+
+**233 distinct cards on the targeting seam, of which only 32 are modal.** So the work was done as
+the CLASS, not the instance (rule 10) — and the honest delivered number is smaller than that
+estimate, below.
+
+**`TargetBound` rides WITH the restriction, not in a second parameter.** A bound carries a NUMBER, so
+`creatureWithPower5OrGreater` would need a member per noun × property × direction × value, each
+taught to all five homes a restriction word has. Instead a spec is EITHER the bare noun (every
+existing call unchanged) or `{ base, bound }`, unwrapped once at the top of each checker. The
+alternative — a second argument through the ~14 call sites of `isLegalTarget`/`legalTargetsFor` —
+fails the moment one site forgets it: that site polices the noun and silently ignores the bound,
+which is a card playing WIDER than printed. **The five homes of the `TargetRestriction` union are
+untouched**, so the §3.49 completeness invariant is unaffected and lanes adding union members do not
+conflict here.
+
+**The compiler side is ONE PRE-PASS, not a rule per verb** — in `applyRules`, immediately beside the
+`where X is …` binding §3.149 put there, and for the same reason: *the sentences were never missing*.
+"Destroy target creature." compiles today and refuses "Destroy target creature with flying." only
+because of two printed words after the noun. Strip the bound, let the ordinary rule compile the
+clause it always could, then narrow the restriction that rule declared. So destroy (75 corpus
+clauses), return (23), "deals N damage to" (19), exile (17), counter (9) and gain-control-of (4) all
+gain the whole vocabulary in one edit — where a rule per verb would have been six copies of the noun
+table that disagree the first time one grows a row (rule 12).
+
+⚠️ **The bound tail is anchored to the word "target" on purpose.** The same words follow a GROUP
+selector ("destroy each creature with mana value 3 or less"), which is a different consumer with a
+different filter. Narrowing a group selector through the targeting seam would police a target that
+does not exist and leave the group unfiltered — wider than printed, in the half nobody looks at.
+`applyTargetBound` likewise refuses when a clause declares no single restriction to narrow, so a
+bound is never attached to a guess.
+
+#### The measured delta
+
+📊 **6,663 → 6,838 accepted: +175 gained, ZERO lost**, on ONE fixed 32,414-card corpus compiled
+twice with this lane's sixteen source files reverted in between (`git show <fork>:<path>`, never a
+stash or a checkout), the two name lists DIFFED with `playable-set.mjs` so the gain is a SET.
+
+📏 **The honest smaller number, twice over.** The row said 432; the measurement says the row contains
+**no modal work at all**. The bound family estimated 233 cards; the delivered set is **175**, because
+the combat/tap-state axis was deliberately not built (below). And **of the 175, only 28 are modal** —
+the modal row's real yield from this lane is 28 cards, and the other 147 are elsewhere in the corpus
+because the class was fixed rather than the instance.
+
+✅ **Selesnya Charm compiles** (§4a phase 2). Two of its three modes always compiled; only "Exile
+target creature with power 5 or greater" refused. Also Crushing Canopy, Disdainful Stroke, Valorous
+Stance, Red Elemental Blast, Roast, Abrupt Decay, Despark, Silverquill Charm, Witherbloom Charm.
+
+🐛 **A bug the family's own 29 tests could not see, found by re-reading the code.**
+`legalTargetsFor` builds a continuous index for the whole menu and passes it down; `isLegalTarget`
+passes nothing. `targetMeetsBound` defaulted a missing index to "no modifications", so the two read
+DIFFERENT power — the menu offered a pumped 2/2 for "power 5 or greater" and the cast was then
+refused. That is exactly the §3.36 offer/accept disagreement this family exists to prevent, and
+**every test in the file ran on a board with no continuous effect, so all 29 passed while it was
+live.** The parameter now carries the same three-way distinction `isTargetableBy` uses — `undefined`
+means "build one", `null` means "this board provably has none" — and two discriminating tests (a pump
+entering the bound, a shrink leaving it) go RED when the fix is reverted. **Collapsing "nobody built
+one" into "there is none" is the shape to watch for: it silently downgrades a layered read to a base
+read at whichever call site forgot to thread the index.**
+
+🐛 **One shipped refusal was superseded and is now pinned POSITIVELY.** `untap-family.test.ts` pinned
+Norritt ("{2}, {T}: Untap target blue creature") as REPORTED, with the reason *"a colour narrowing
+core's restriction union cannot express."* Core can express it now. The entry was not merely deleted
+from the refusal list — a dropped pin leaves nothing to fail if the bound later stops being carried —
+it is replaced by an assertion that the compiled card carries `{ base: 'creature', bound: { colour:
+'U' } }`, so "untap target creature" cannot quietly return.
+
+⛔ **Left REPORTED, not approximated, with numbers:**
+- **the combat/tap STATE axis — 38 cards** (`target tapped/untapped/attacking/blocking creature`).
+  `attackingCreature` is already a `TargetRestriction` member, so building a second answer to "is it
+  attacking" is the DRY failure rule 12 names; reconciling the existing member with a state bound is
+  a design decision this lane did not own.
+- **keywords the engine does not model** — shadow, horsemanship, fear, intimidate. Widening them to
+  the nearest modelled keyword is a strictly better card.
+- **a clause carrying TWO bounded selectors** ("target creature with flying fights target creature
+  with trample") — there is no single restriction to narrow and guessing is how a closed table stops
+  being closed.
+- **a P/T or keyword bound on a SPELL** — only the card-level bounds (mana value, colour) are read
+  off a stack object, because no printed line asks the others and inventing an answer opens the table.
+- **the rest of the row, re-measured AFTER this lane landed: 503 cards, still 1.05 clauses per
+  shape, still MODE-ONLY = 0** — 367 BODY clauses and 166 HEADER clauses. None of it is modal work,
+  and `modal-blame.mjs` ranks it BY the family that owns it so it can be sent where it lives: a rules
+  template 162, filtered-targeting 34, entwine 26, static-buff 25, graveyard 21, counters 15. The
+  filtered-targeting figure nearly halved (62 → 34) because this lane took that half of it.
 ### 3.150 The loyalty row is the §3.120 artifact a FIFTH time — and the machinery it names is COMPLETE — ✅ done
 
 > ⚠️ **Section number claimed off a contended range.** `main` already carries TWO §3.147 sections and

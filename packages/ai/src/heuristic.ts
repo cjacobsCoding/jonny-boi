@@ -98,7 +98,7 @@ import {
   isFreeCastWindow,
   spellsCastThisTurn,
 } from '@jonny-boi/core';
-import type { TargetRestriction, TriggeredAbility } from '@jonny-boi/core';
+import type { TargetRestriction, TargetSpec, TriggeredAbility } from '@jonny-boi/core';
 // §3.111 — the graveyard-casting family: every way a card in the graveyard can
 // be cast (flashback and its siblings, through ONE accessor) and the abilities
 // that activate from there.
@@ -2201,7 +2201,7 @@ function withLegalTargets(
 function defaultLegalTarget(
   view: PilotView,
   opp: PlayerId,
-  restriction: TargetRestriction,
+  restriction: TargetSpec,
   index: ContinuousIndex,
   weights: HeuristicWeights,
   source?: CardDefinition,

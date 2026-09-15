@@ -29,7 +29,7 @@ import type {
   ManaCost,
   ManaProduction,
   PermanentModification,
-  TargetRestriction,
+  TargetSpec,
   TriggeredAbility,
 } from '@jonny-boi/core';
 import { DEFAULT_TARGET_RESTRICTION, restrictionOfEffects } from '@jonny-boi/core';
@@ -45,6 +45,8 @@ import type {
 } from './types.js';
 import {
   EFFECT_RULES,
+  stripTargetBound,
+  applyTargetBound,
   KEYWORD_ABILITY_BUILDERS,
   joinPayloadKeywords,
   KEYWORD_FLAGS,
@@ -526,6 +528,13 @@ function applyRules(
   clause: string,
   ctx: RuleContext,
   targetFree = false,
+  /**
+   * §3.150 — set on the RECURSIVE call the target-bound pre-pass makes, so a
+   * clause whose bound has already been stripped cannot strip a second one and
+   * recurse. A flag rather than a context field because it is scoped to this
+   * one descent, not to the clause's compilation.
+   */
+  boundApplied = false,
 ): { contribution: ClauseContribution; ruleId: string } | null {
   for (const rule of rules) {
     if (targetFree && rule.needsChosenTarget) continue;
@@ -554,6 +563,33 @@ function applyRules(
     const binding = bound ? whereXBinding(bound[2] ?? '') : null;
     if (bound && binding) {
       return applyRules(rules, (bound[1] ?? '').trim(), { ...ctx, xDerivedBinding: binding }, targetFree);
+    }
+  }
+  // §3.150 — THE PRINTED TARGET BOUND, tried only after every rule has
+  // declined, exactly like the binding above and for the same reason: a clause
+  // that already compiles is untouched.
+  //
+  // The SENTENCES were never missing. "Destroy target creature." compiles
+  // today; "Destroy target creature with flying." refuses only because of the
+  // two printed words after the noun. So the bound is stripped, the ordinary
+  // rule compiles the clause it always could, and the restriction that rule
+  // declared is then NARROWED by the bound. One pre-pass gives every verb —
+  // destroy, exile, bounce, burn, counter, and whatever is written next — the
+  // whole bound vocabulary in one edit, instead of six copies of the noun
+  // table that would disagree the first time one of them grew a row.
+  //
+  // `applyTargetBound` refuses when the compiled clause declares no single
+  // restriction to narrow, so a bound is never attached to a guess: those
+  // cards keep reporting.
+  if (!boundApplied) {
+    const stripped = stripTargetBound(clause);
+    if (stripped) {
+      const inner = applyRules(rules, stripped.clause, ctx, targetFree, true);
+      const narrowed =
+        inner === null ? null : applyTargetBound(inner.contribution.effects ?? [], stripped.bound);
+      if (inner && narrowed) {
+        return { contribution: { ...inner.contribution, effects: narrowed }, ruleId: inner.ruleId };
+      }
     }
   }
   return null;
@@ -1556,7 +1592,7 @@ export function compileCard(card: CompilableCard): CompileResult {
       if (!parts) return null;
 
       const refs: EffectRef[] = [];
-      let restriction: TargetRestriction | undefined;
+      let restriction: TargetSpec | undefined;
       let excludeSelf = false;
       let upToCount: number | undefined;
       let targetingParts = 0;

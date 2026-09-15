@@ -29,7 +29,7 @@ import type {
   GameState,
   InstanceId,
   PlayerId,
-  TargetRestriction,
+  TargetSpec,
 } from '@jonny-boi/core';
 import {
   isCreature,
@@ -44,7 +44,7 @@ import {
  * cannot know a word the engine does not, nor lack one the engine has. `'any'`
  * is MTG's "any target": a creature, a player, a planeswalker or a battle.
  */
-export type TargetKind = TargetRestriction;
+export type TargetKind = TargetSpec;
 
 /**
  * The targeting requirement of a card: how many targets, of what kind. `count` 0
