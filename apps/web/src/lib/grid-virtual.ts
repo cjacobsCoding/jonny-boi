@@ -156,27 +156,44 @@ export function gridMetricsFrom(raw: {
 }
 
 /**
- * Count the column tracks in a computed `grid-template-columns`, or return null
- * if the browser handed back something that is not a resolved track list.
+ * How many columns fit, derived from what the browser actually laid out.
  *
- * `getComputedStyle` normally returns the USED value — `"186.4px 186.4px …"` —
- * but for an element that is not being laid out (`display: none`, or detached)
- * it returns the SPECIFIED value instead, and this app's specified value is
- * `repeat(auto-fill, minmax(180px, 1fr))`. Split that on spaces and you get
- * three "columns": a number that is wrong, plausible, and would silently make
- * the grid render the wrong window. Refusing to answer is the honest response
- * (rule 2 — a value outside the table reports rather than being widened).
+ * ## ⚠️ Why this is NOT read from `grid-template-columns`
+ *
+ * It was, and that was a trap that could not recover from itself. The
+ * virtualiser groups items into rows by this count and lets the grid's own
+ * auto-placement choose the column. Place one item too many in a row and CSS
+ * Grid invents an IMPLICIT column for the surplus — and `getComputedStyle`
+ * reports implicit tracks in `grid-template-columns` alongside the declared
+ * ones. So the count fed the layout, the layout fed the count, and a six-column
+ * reading survived a resize to a 375px phone that declares two: two real cards
+ * beside four collapsed slivers, on every row, permanently.
+ *
+ * Measuring instead breaks the loop, because a tile's WIDTH comes from the
+ * explicit `1fr` track it sits in and not from the count we guessed: the two
+ * real tiles stay ~165px wide while the surplus collapse to nothing, so the
+ * widest tile still says how wide a column is, and the next frame corrects.
+ *
+ * Pure, so the arithmetic is testable without a browser.
+ *
+ * @param contentWidthPx the grid's content box width
+ * @param tileWidthPx    the widest tile currently rendered
+ * @param columnGapPx    the grid's column gap
  */
-export function parseGridColumns(computed: string): number | null {
-  const value = computed.trim();
-  if (value.length === 0 || value === 'none') return null;
-  // Any un-resolved function form means this element was never laid out.
-  if (/repeat\(|minmax\(|auto-fill|auto-fit|fit-content\(/.test(value)) return null;
-  const tracks = value.split(/\s+/).filter((token) => token.length > 0);
-  // A used value is a list of lengths. `[name]` line names can appear between
-  // them in general CSS; they are not lengths and must not be counted.
-  const lengths = tracks.filter((token) => !token.startsWith('['));
-  return lengths.length > 0 ? lengths.length : null;
+export function deriveColumnCount(
+  contentWidthPx: number,
+  tileWidthPx: number,
+  columnGapPx: number,
+): number | null {
+  if (!Number.isFinite(contentWidthPx) || !Number.isFinite(tileWidthPx)) return null;
+  if (contentWidthPx <= 0 || tileWidthPx <= 0) return null;
+  const gap = Number.isFinite(columnGapPx) && columnGapPx > 0 ? columnGapPx : 0;
+  // A grid of N columns is N tiles plus N-1 gaps, so adding one gap to both
+  // sides makes the division exact rather than off-by-one at the last column.
+  // Rounded before flooring: sub-pixel track widths make the exact quotient
+  // land a hair under the whole number it should be (6.0 arrives as 5.998).
+  const exact = (contentWidthPx + gap) / (tileWidthPx + gap);
+  return Math.max(1, Math.floor(Math.round(exact * 1000) / 1000));
 }
 
 /** How many rows `itemCount` items occupy at this column count. */

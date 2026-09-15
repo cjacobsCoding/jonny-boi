@@ -13,7 +13,7 @@ import {
   FALLBACK_GRID_METRICS,
   cardGridMetricsAreMeasured,
   gridMetricsFrom,
-  parseGridColumns,
+  deriveColumnCount,
   planIndices,
   planRender,
   rowCountFor,
@@ -69,25 +69,47 @@ describe('the measurement gate is CLOSED — an unbelievable metric reports, nev
   });
 });
 
-describe('parsing the browser’s column tracks', () => {
-  it('counts a resolved used value', () => {
-    expect(parseGridColumns('186.4px 186.4px 186.4px 186.4px')).toBe(4);
-    expect(parseGridColumns('  140px 140px  ')).toBe(2);
+describe('deriving the column count from what was laid out', () => {
+  it('counts the columns that fit a real desktop grid', () => {
+    // 1233px of content, 192px tiles, 16px gap -> exactly 6.
+    expect(deriveColumnCount(1233, 192, 16)).toBe(6);
   });
 
-  it('REFUSES the specified value a non-laid-out element reports', () => {
-    // This is the whole reason the function exists. `getComputedStyle` on a
-    // `display: none` or detached grid hands back the SPECIFIED value, and this
-    // app's specified value splits into three tokens — a wrong column count
-    // that is entirely plausible and would silently render the wrong window.
-    expect(parseGridColumns('repeat(auto-fill, minmax(180px, 1fr))')).toBeNull();
-    expect(parseGridColumns('repeat(auto-fill, minmax(140px, 1fr))')).toBeNull();
-    expect(parseGridColumns('none')).toBeNull();
-    expect(parseGridColumns('')).toBeNull();
+  it('counts the columns that fit a real phone grid', () => {
+    // 343px of content, 165.5px tiles, 12px gap -> 2.
+    expect(deriveColumnCount(343, 165.5, 12)).toBe(2);
   });
 
-  it('does not count line names as columns', () => {
-    expect(parseGridColumns('[start] 100px 100px [end]')).toBe(2);
+  it('RECOVERS from a grid that is currently laid out with too many columns', () => {
+    // The trap this replaced `parseGridColumns` for. Six items were placed in a
+    // row on a phone that declares two, so CSS Grid invented four implicit
+    // columns — and `getComputedStyle` reports implicit tracks as though they
+    // were declared, so reading the count back gave six again, forever.
+    // A tile's WIDTH comes from the explicit 1fr track it sits in, so the two
+    // real tiles still measure ~165px while the surplus collapse to nothing,
+    // and the widest tile still says how wide a column really is.
+    const widestRealTile = 165.5;
+    expect(deriveColumnCount(343, widestRealTile, 12)).toBe(2);
+  });
+
+  it('never returns zero, so a row can always hold something', () => {
+    // A container narrower than one tile still has one column; `auto-fill` with
+    // a `minmax(180px, …)` floor overflows rather than producing none.
+    expect(deriveColumnCount(100, 192, 16)).toBe(1);
+  });
+
+  it('refuses to answer when there is nothing real to measure', () => {
+    expect(deriveColumnCount(0, 192, 16)).toBeNull();
+    expect(deriveColumnCount(1233, 0, 16)).toBeNull();
+    expect(deriveColumnCount(Number.NaN, 192, 16)).toBeNull();
+    expect(deriveColumnCount(1233, Number.NaN, 16)).toBeNull();
+  });
+
+  it('survives sub-pixel track widths rather than losing a column to them', () => {
+    // Fractional device ratios make the exact quotient land a hair under the
+    // whole number it should be; flooring that raw would drop a whole column
+    // and leave a visibly empty strip down the right of the grid.
+    expect(deriveColumnCount(1232.99, 192.0006, 16)).toBe(6);
   });
 });
 

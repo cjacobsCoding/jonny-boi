@@ -91,6 +91,23 @@ const SETTLE_MS = 450;
  *  tiles, so the window is forced to extend rather than merely hold. */
 const KEYBOARD_TAB_STOPS = 45;
 
+/**
+ * How far the pinned row track may sit from the tile it holds, in px.
+ *
+ * A couple of pixels covers sub-pixel layout and a fractional device ratio.
+ * The defect this bounds was off by 265px, so the tolerance is nowhere near
+ * the interesting scale and does not need to be argued about.
+ */
+const ROW_GEOMETRY_TOLERANCE_PX = 2;
+
+/**
+ * The narrowest rendered tile, as a fraction of the widest, below which a grid
+ * is drawing collapsed sliver columns rather than cards. Real columns are `1fr`
+ * and therefore equal; a sliver measures a hairline, so anything above a coin
+ * flip separates the two cleanly.
+ */
+const MIN_TILE_WIDTH_RATIO = 0.5;
+
 /** A visible vertical band with no tile in it, taller than this, is a HOLE. */
 const MAX_BLANK_BAND_PX = 260;
 
@@ -309,6 +326,117 @@ async function measureSearchLatency(page, term) {
 }
 
 /**
+ * Does the grid's PINNED geometry agree with the tiles it is drawing?
+ *
+ * ## The defect this exists for
+ *
+ * The virtualiser pins `grid-auto-rows` to a MEASURED tile height. The first
+ * layout pass after mount measured 94px — the tile body alone, with the art box
+ * contributing nothing — and the grid then never looked again. Tiles are 359px
+ * tall, so every row overlapped the two above it: art clipped to a third of a
+ * card, names and mana costs hidden behind the next row.
+ *
+ * ⚠️ AND EVERY OTHER CHECK IN THIS HARNESS PASSED. The node count was right,
+ * scrolling was smooth, the search was fast, and `measureCoverage` reported a
+ * 16px tallest blank band — because overlapping tiles leave NO GAP. A grid can
+ * be entirely wrong and still have no holes in it, which is why "no blank band"
+ * was never enough on its own.
+ *
+ * So this asks the two questions that actually fail when the geometry is wrong:
+ * is the row track the height of a tile, and do rows overlap each other?
+ */
+async function measureRowGeometry(page) {
+  return page.evaluate(() => {
+    const grid = document.querySelector('.card-grid');
+    if (!grid) return { hasGrid: false };
+    const pinned = Number.parseFloat(getComputedStyle(grid).gridAutoRows);
+    const tiles = [...grid.querySelectorAll('.card-tile')];
+    if (tiles.length === 0) return { hasGrid: true, tiles: 0 };
+    const rects = tiles.map((t) => t.getBoundingClientRect());
+    const tallestTile = Math.max(...rects.map((r) => r.height));
+
+    // Group tiles into rows by their top edge, then ask whether any row's
+    // bottom crosses into the row below it.
+    const rows = new Map();
+    for (const r of rects) {
+      const key = Math.round(r.top);
+      const row = rows.get(key) ?? { top: r.top, bottom: r.bottom };
+      row.bottom = Math.max(row.bottom, r.bottom);
+      rows.set(key, row);
+    }
+    const ordered = [...rows.values()].sort((a, b) => a.top - b.top);
+    let worstOverlapPx = 0;
+    for (let i = 1; i < ordered.length; i++) {
+      worstOverlapPx = Math.max(worstOverlapPx, ordered[i - 1].bottom - ordered[i].top);
+    }
+    // COLUMNS, the other half of the same question. The virtualiser groups items
+    // into rows by a measured column count but leaves the COLUMN to the grid's
+    // own auto-placement, so a count that is too high pushes the surplus into an
+    // implicit track that collapses to a sliver — two real cards beside four
+    // hairlines, on every row.
+    //
+    // ⚠️ NOT compared against `grid-template-columns`. That check was written
+    // first and was VACUOUS: the computed value reports implicit tracks
+    // alongside declared ones, so a grid with four invented columns cheerfully
+    // reported "6 of 6 declared" and passed while the slivers were on screen.
+    // The honest symptom is the slivers themselves — a rendered tile far
+    // narrower than its neighbours.
+    const widths = rects.map((r) => r.width);
+    const widestTilePx = Math.max(...widths);
+    const narrowestTilePx = Math.min(...widths);
+    const occupiedColumns = new Set(rects.map((r) => Math.round(r.left))).size;
+
+    return {
+      hasGrid: true,
+      tiles: tiles.length,
+      rows: ordered.length,
+      pinnedRowPx: Number.isFinite(pinned) ? Math.round(pinned * 100) / 100 : null,
+      tallestTilePx: Math.round(tallestTile * 100) / 100,
+      // How far the pinned row track is from the tile it is supposed to hold.
+      rowVsTilePx: Number.isFinite(pinned) ? Math.round((pinned - tallestTile) * 100) / 100 : null,
+      worstOverlapPx: Math.round(worstOverlapPx * 100) / 100,
+      occupiedColumns,
+      widestTilePx: Math.round(widestTilePx * 100) / 100,
+      narrowestTilePx: Math.round(narrowestTilePx * 100) / 100,
+      narrowestRatio: widestTilePx > 0 ? Math.round((narrowestTilePx / widestTilePx) * 1000) / 1000 : 0,
+      overflowsHorizontally: grid.scrollWidth > grid.clientWidth + 1,
+    };
+  });
+}
+
+/** Assert the geometry at one label, so the three surfaces share one funnel. */
+function assertRowGeometry(label, geo) {
+  if (!geo || geo.hasGrid !== true || !geo.tiles) {
+    check(`${label}: there was a grid with tiles to measure`, false, JSON.stringify(geo));
+    return;
+  }
+  console.log(
+    `  ${label} geometry: row track ${geo.pinnedRowPx}px vs tallest tile ${geo.tallestTilePx}px ` +
+      `(off by ${geo.rowVsTilePx}px), worst row overlap ${geo.worstOverlapPx}px across ${geo.rows} rows, ` +
+      `${geo.occupiedColumns} columns, narrowest tile ${geo.narrowestTilePx}px of ${geo.widestTilePx}px`,
+  );
+  check(
+    `${label}: the pinned row track is the height of a tile`,
+    geo.rowVsTilePx !== null && Math.abs(geo.rowVsTilePx) <= ROW_GEOMETRY_TOLERANCE_PX,
+    `off by ${geo.rowVsTilePx}px`,
+  );
+  check(
+    `${label}: no row overlaps the one below it`,
+    geo.worstOverlapPx <= ROW_GEOMETRY_TOLERANCE_PX,
+    `worst overlap ${geo.worstOverlapPx}px`,
+  );
+  check(
+    `${label}: every rendered tile is a real column wide, not a collapsed sliver`,
+    geo.narrowestRatio >= MIN_TILE_WIDTH_RATIO,
+    `narrowest ${geo.narrowestTilePx}px vs widest ${geo.widestTilePx}px across ${geo.occupiedColumns} columns`,
+  );
+  check(
+    `${label}: the grid does not overflow sideways`,
+    geo.overflowsHorizontally === false,
+  );
+}
+
+/**
  * Can the grid still be used from the keyboard, and does scrolling keep your
  * place?
  *
@@ -464,7 +592,17 @@ async function main() {
       if (/scryfall/i.test(req.url()) && req.resourceType() === 'image') cardImageRequests++;
     });
     const pageErrors = [];
-    page.on('pageerror', (e) => pageErrors.push(String(e)));
+    // Printed the moment they happen, not only in the summary. A run where the
+    // React tree threw and came down looked, in the summary, like a page whose
+    // nav buttons had simply gone missing — which sent the diagnosis off in
+    // entirely the wrong direction until the error was read.
+    page.on('pageerror', (e) => {
+      pageErrors.push(String(e));
+      console.log('  PAGE ERROR: ' + String(e).slice(0, 200));
+    });
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') console.log(`  CONSOLE ERROR: ${msg.text().slice(0, 200)}`);
+    });
 
     // ---- Cards (the landing view) -----------------------------------------
     const navStart = Date.now();
@@ -476,6 +614,11 @@ async function main() {
     await sleep(SETTLE_MS);
 
     const cardsDom = await measureDom(page);
+    // BEFORE any scrolling: the defect this catches is a first-frame
+    // measurement that a single scroll event silently repairs, so a check that
+    // scrolls first would never see it.
+    const cardsGeometry = await measureRowGeometry(page);
+    assertRowGeometry('Cards @1280, at load', cardsGeometry);
     const cardsShot = await shot(page, `${label}-cards-1280.png`);
     const cardsScroll = await measureScroll(page);
     const cardsCoverage = await measureCoverage(page);
@@ -527,6 +670,7 @@ async function main() {
       dom: cardsDom,
       scroll: cardsScroll,
       coverage: cardsCoverage,
+      geometry: cardsGeometry,
       search: cardsSearch,
       keyboard,
       domWhileSearching: cardsSearchDom,
@@ -575,6 +719,8 @@ async function main() {
     if (deckMounted) {
     const deckMountMs = Date.now() - deckStart;
     const deckDom = await measureDom(page);
+    const deckGeometry = await measureRowGeometry(page);
+    assertRowGeometry('Deck Builder @1280, at load', deckGeometry);
     const deckShot = await shot(page, `${label}-deck-1280.png`);
     const deckScroll = await measureScroll(page);
     const deckCoverage = await measureCoverage(page);
@@ -587,6 +733,7 @@ async function main() {
       dom: deckDom,
       scroll: deckScroll,
       coverage: deckCoverage,
+      geometry: deckGeometry,
       search: deckSearch,
       screenshot: deckShot,
     };
@@ -636,6 +783,8 @@ async function main() {
     await sleep(SETTLE_MS);
     const cardsPhoneDom = await measureDom(page);
     const cardsPhoneShot = await shot(page, `${label}-cards-375.png`);
+    const cardsPhoneGeometry = await measureRowGeometry(page);
+    assertRowGeometry('Cards @375, at load', cardsPhoneGeometry);
     const cardsPhoneScroll = await measureScroll(page);
     const cardsPhoneCoverage = await measureCoverage(page);
 
@@ -645,6 +794,7 @@ async function main() {
         dom: cardsPhoneDom,
         scroll: cardsPhoneScroll,
         coverage: cardsPhoneCoverage,
+        geometry: cardsPhoneGeometry,
         screenshot: cardsPhoneShot,
       },
     };

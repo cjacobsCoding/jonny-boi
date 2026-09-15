@@ -13,7 +13,7 @@ import {
   FALLBACK_GRID_METRICS,
   cardGridMetricsAreMeasured,
   gridMetricsFrom,
-  parseGridColumns,
+  deriveColumnCount,
   planIndices,
   planRender,
   rowPitchPx,
@@ -21,7 +21,6 @@ import {
   type GridMetrics,
   type RenderPlan,
 } from '../lib/grid-virtual.js';
-import { CARD_GRID_MEASURE_SAMPLE } from '../lib/card-grid-config.js';
 import './card-grid.css';
 
 /**
@@ -117,6 +116,12 @@ export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): Reac
   // on every query change.
   const countRef = useRef(cards.length);
   countRef.current = cards.length;
+  // The ResizeObserver, and the tile it is currently watching. See the effect
+  // below for why a TILE is watched and not only the grid.
+  const observerRef = useRef<ResizeObserver | null>(null);
+  // Guards `sync` against re-entering itself. See the focus listeners below.
+  const syncingRef = useRef(false);
+  const watchedTilesRef = useRef<Set<Element>>(new Set());
   // What the state dump reports. A ref so the registered section closure always
   // sees the current frame rather than the one it was created in.
   const debugRef = useRef({ plan, metrics, scrollTopPx: 0, viewportPx: 0, focusIndex: null as number | null });
@@ -129,19 +134,43 @@ export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): Reac
   const sync = useCallback(() => {
     const grid = gridRef.current;
     if (!grid || typeof window === 'undefined') return;
+    // ⚠️ RE-ENTRANCY GUARD, and it is load-bearing.
+    //
+    // `sync` sets state, which re-renders, which unmounts the tiles that left
+    // the window — and unmounting the focused element fires `focusout`
+    // SYNCHRONOUSLY, inside React's commit. A focus listener that called `sync`
+    // straight back therefore re-entered it mid-commit; the app threw, the tree
+    // came down, and the harness found a page with no nav buttons and 94px
+    // tiles. One frame of recursion is enough to do that.
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    try {
+      syncInner(grid);
+    } finally {
+      syncingRef.current = false;
+    }
+  }, []);
+
+  const syncInner = useCallback((grid: HTMLDivElement) => {
+    if (typeof window === 'undefined') return;
 
     const style = window.getComputedStyle(grid);
-    const columns = parseGridColumns(style.gridTemplateColumns);
     const rowGapPx = Number.parseFloat(style.rowGap);
-    // The MAX of a sample, not the first tile: one tile that happens to be a
-    // pixel taller than the track would spill into the row below it, and the
-    // symptom (tiles overlapping at one scroll position) is exactly the kind of
-    // thing that is dismissed as a rendering glitch.
+    const columnGapPx = Number.parseFloat(style.columnGap);
+    // The MAX over EVERY rendered tile, not a sample. A sample of eight pinned
+    // the row track 3px under the tallest of the thirty on screen, and a track
+    // shorter than the tile it holds is how rows start overlapping. There are
+    // only ever a screenful of tiles here — that is the entire point of this
+    // component — so measuring all of them costs nothing worth saving.
     const tiles = grid.querySelectorAll('.card-tile');
     let rowHeightPx = 0;
-    for (let i = 0; i < Math.min(tiles.length, CARD_GRID_MEASURE_SAMPLE); i++) {
-      rowHeightPx = Math.max(rowHeightPx, tiles[i]!.getBoundingClientRect().height);
+    let tileWidthPx = 0;
+    for (const tile of tiles) {
+      const rect = tile.getBoundingClientRect();
+      rowHeightPx = Math.max(rowHeightPx, rect.height);
+      tileWidthPx = Math.max(tileWidthPx, rect.width);
     }
+    const columns = deriveColumnCount(grid.clientWidth, tileWidthPx, columnGapPx);
     const nextMetrics =
       columns === null
         ? FALLBACK_GRID_METRICS
@@ -176,6 +205,51 @@ export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): Reac
       viewportPx,
       focusIndex,
     });
+
+    // ⚠️ RE-MEASURE WHEN THE MEASURED THING CHANGES SIZE.
+    //
+    // The first layout pass after mount reported a tile height of 94px — the
+    // body alone, with the art box contributing nothing — and the grid then
+    // pinned `grid-auto-rows: 94px` and never looked again, because the metrics
+    // had "converged". Tiles are 359px tall, so every row overlapped the two
+    // above it: art clipped to a third, names and mana costs hidden. Measured in
+    // Chrome: `grid-auto-rows` read 94px at load and 358.75px after a single
+    // scroll event, which is exactly the shape of a one-shot measurement taken
+    // a frame too early.
+    //
+    // Watching the TILE closes that hole at the source: whatever makes the first
+    // frame's tile short — an art box before its aspect-ratio box is resolved, a
+    // font, a decoded image — ends with the tile changing size, and that is the
+    // signal to measure again. The grid's own observer cannot see it: the grid's
+    // size is dominated by the padding this component sets, so it changes for
+    // reasons that have nothing to do with how tall a tile is.
+    //
+    // No loop: a tile's height is its own content, never the row track we pin
+    // from it, so re-measuring cannot move what is being measured.
+    // EVERY rendered tile, not just the first one. The row track is pinned to
+    // the TALLEST tile on screen, so watching one of them answers a different
+    // question than the one being asked: a later tile growing by 3px left the
+    // track 3px under the tile it was holding, with nothing to trigger a
+    // re-measure. Reconciled rather than re-observed wholesale — observing an
+    // element fires an immediate callback, so disconnecting and re-attaching
+    // every frame would spin a permanent animation-frame loop.
+    const observer = observerRef.current;
+    if (observer) {
+      const watched = watchedTilesRef.current;
+      const present = new Set<Element>(tiles);
+      for (const gone of watched) {
+        if (!present.has(gone)) {
+          observer.unobserve(gone);
+          watched.delete(gone);
+        }
+      }
+      for (const tile of present) {
+        if (!watched.has(tile)) {
+          observer.observe(tile);
+          watched.add(tile);
+        }
+      }
+    }
 
     debugRef.current = { plan: nextPlan, metrics: nextMetrics, scrollTopPx, viewportPx, focusIndex };
     setMetrics((prev) =>
@@ -217,22 +291,50 @@ export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): Reac
     };
     window.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', schedule);
-    // Focus moving in or out changes which rows must stay mounted.
+    // Focus moving in or out changes which rows must stay mounted — and this one
+    // is NOT rAF-coalesced.
+    //
+    // Tabbing to the last tile in the window has to extend the window before the
+    // next Tab, or focus walks straight out of the grid and the rest of the pool
+    // is unreachable from the keyboard. Measured: 16 of 45 Tab presses left the
+    // grid while this went through `schedule`. Focus changes are user-paced and
+    // rare, so doing the layout read on the spot costs nothing.
     const grid = gridRef.current;
-    grid?.addEventListener('focusin', schedule);
+    // focusIN is immediate, focusOUT is not, and the asymmetry is the point.
+    //
+    // Tabbing onto the last tile in the window has to extend the window before
+    // the next Tab, or focus walks out of the grid and the rest of the pool is
+    // unreachable from the keyboard (measured: 16 of 45 Tab presses left the
+    // grid when this went through `schedule`). But focusOUT fires during
+    // React's own commit as tiles unmount, so answering it immediately re-enters
+    // the render — which took the whole app down once. It can wait a frame:
+    // nothing about losing focus needs to be acted on before the next paint.
+    const syncOnFocusIn = (): void => sync();
+    grid?.addEventListener('focusin', syncOnFocusIn);
     grid?.addEventListener('focusout', schedule);
-    // The grid's own width changes without a window resize — the deck panel, a
-    // scrollbar appearing, a rotation — and the column count changes with it.
+    // Watches TWO things: the grid, whose width decides the column count (the
+    // deck panel, a scrollbar appearing, a rotation — none of which fire a
+    // window resize), and the first rendered TILE, whose height decides the row
+    // track. `sync` re-targets the tile side as the rendered set changes.
     const observer =
       typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
+    observerRef.current = observer;
     if (observer && grid) observer.observe(grid);
+    // One more pass on the next frame. The layout effect measures as early as it
+    // is possible to measure, which turned out to be a frame too early; this
+    // costs one extra measurement per mount and removes the dependence on that
+    // first frame being representative.
+    const settle = window.requestAnimationFrame(() => sync());
     return () => {
       if (frame !== 0) window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(settle);
       window.removeEventListener('scroll', schedule);
       window.removeEventListener('resize', schedule);
-      grid?.removeEventListener('focusin', schedule);
+      grid?.removeEventListener('focusin', syncOnFocusIn);
       grid?.removeEventListener('focusout', schedule);
       observer?.disconnect();
+      observerRef.current = null;
+      watchedTilesRef.current = new Set();
     };
   }, [sync]);
 

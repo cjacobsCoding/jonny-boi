@@ -79,18 +79,6 @@ export const CARD_GRID_FALLBACK_COLUMNS = 6;
 export const CARD_GRID_FALLBACK_ROW_PITCH_PX = 336;
 
 /**
- * How many rendered tiles are measured to decide the row track height.
- *
- * The MAX of a sample rather than the first tile's height: every tile in one
- * grid is built from the same template, but a tile a pixel taller than the
- * pinned track spills into the row beneath it, and "some cards overlap at one
- * scroll position" is the kind of symptom that gets written off as a rendering
- * glitch. Eight is more than a row on any viewport this app runs at, and the
- * measurement happens once per layout pass, not per frame.
- */
-export const CARD_GRID_MEASURE_SAMPLE = 8;
-
-/**
  * A measured row pitch below this is not believable — a collapsed, hidden or
  * not-yet-laid-out tile reports single-digit heights, and dividing a scroll
  * offset by one of those asks the grid to render tens of thousands of rows.
