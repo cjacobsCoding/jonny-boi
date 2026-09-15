@@ -885,6 +885,39 @@ export const tapTarget: EffectPrimitive = (ctx) => {
   ctx.emit({ type: 'tapped', instanceId: target.instanceId });
 };
 
+/**
+ * `untapTarget` — untap the target permanent. The mirror of {@link tapTarget},
+ * and the body of every printed "Untap target …" line (Arbor Elf, Voltaic Key,
+ * Kiora's Follower).
+ *
+ * WHICH permanents may be aimed at is NOT decided here: it is the ability's
+ * `targets` restriction, so "untap target Forest" and "untap target creature"
+ * are the same primitive with different data — and a noun the restriction
+ * vocabulary cannot say reports at compile time rather than being widened here.
+ * An already-untapped or illegal target is a safe no-op, exactly as tapping is.
+ */
+export const untapTarget: EffectPrimitive = (ctx) => {
+  const target = firstPermanentTarget(ctx);
+  if (!target || !target.tapped) return;
+  target.tapped = false;
+  ctx.emit({ type: 'untapped', instanceId: target.instanceId, player: target.controller });
+};
+
+/**
+ * `untapSelf` — untap the ability's own source ("{1}: Untap Morphling").
+ *
+ * Its own primitive rather than `untapTarget` with a self-target: the printed
+ * line names no target at all, so it cannot fizzle and it is not subject to
+ * hexproof/shroud/protection. Routing it through the targeted primitive would
+ * have given it a targeting gate the printed ability does not have.
+ */
+export const untapSelf: EffectPrimitive = (ctx) => {
+  const source = permanentById(ctx.state, ctx.source.instanceId);
+  if (!source || !source.tapped) return;
+  source.tapped = false;
+  ctx.emit({ type: 'untapped', instanceId: source.instanceId, player: source.controller });
+};
+
 // --- shared internals ----------------------------------------------------------
 
 /**
@@ -1708,6 +1741,9 @@ export const mayEffects: EffectPrimitive = (ctx) => {
  *   - `targeted` — bind the shield to `ctx.targets[0]`, the chosen creature or
  *     player. Without it the effect guards every object the rest of the filter
  *     admits.
+ *   - `selfShield` — bind the shield to the ability's OWN SOURCE ("…dealt to ~
+ *     this turn"). Distinct from `targeted`: the printed line names no target,
+ *     so it neither aims nor fizzles.
  *   - `label` — the printed line, for the log.
  */
 export const preventDamage: EffectPrimitive = (ctx) => {
@@ -1715,7 +1751,13 @@ export const preventDamage: EffectPrimitive = (ctx) => {
   const scope = strParam(ctx, 'scope');
   const recipientKind = strParam(ctx, 'recipientKind');
   const targeted = boolParam(ctx, 'targeted', false);
-  const target = targeted ? ctx.targets[0] : undefined;
+  // "…that would be dealt to ~ this turn" (Rock Hydra, Opal-Eye) — the shield
+  // guards the ability's OWN SOURCE and names no target, so it cannot fizzle.
+  // A separate param from `targeted` because the two answer different printed
+  // words, and collapsing them would give the self form a targeting gate (and a
+  // fizzle) the printed line does not have.
+  const selfShield = boolParam(ctx, 'selfShield', false);
+  const target = selfShield ? ctx.source.instanceId : targeted ? ctx.targets[0] : undefined;
   // "prevent the next N damage that would be dealt to TARGET creature" with no
   // legal target left is a fizzle, not a blanket fog — refusing here is the
   // direction that can never play better than printed.
@@ -1825,6 +1867,8 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   sacrificeNamed,
   exileNamed,
   tapTarget,
+  untapTarget,
+  untapSelf,
   mill,
   fight,
   dealDamageToEach,

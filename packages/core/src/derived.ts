@@ -132,6 +132,20 @@ export function evaluateDerivedCount(state: GameState, countOf: DerivedCountName
       }
       return count;
     }
+    case 'creaturesYouControlWithDefender': {
+      // Axebane Guardian, Doorkeeper, Assault Formation — the wall-tribal count.
+      // The keyword is read off the permanent's current definition, the same
+      // source `isCreature` above reads; see the type's note for why this module
+      // cannot ask the continuous layer.
+      let count = 0;
+      for (let i = 0; i < battlefield.length; i++) {
+        const perm = battlefield[i]!;
+        if (perm.controller === you && isCreature(perm.def) && perm.def.keywords?.defender === true) {
+          count += 1;
+        }
+      }
+      return count;
+    }
     case 'cardsInYourHand':
       return state.players[you].hand.length;
     case 'cardsInYourGraveyard':

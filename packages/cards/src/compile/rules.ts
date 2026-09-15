@@ -352,6 +352,10 @@ const DERIVED_COUNTS: Readonly<Record<string, string>> = Object.freeze({
   // graveyard" counts the identical set, and one table is what guarantees it.
   'card types among cards in all graveyards': 'cardTypesInAllGraveyards',
   'creature cards in your graveyard': 'creaturesInYourGraveyard',
+  // The wall-tribal count both halves of that archetype print (Axebane
+  // Guardian, Doorkeeper). In the SHARED table for the usual reason: the day a
+  // pump or a damage line prints the same phrase it already means this number.
+  'creatures you control with defender': 'creaturesYouControlWithDefender',
 });
 
 /**
@@ -1583,6 +1587,46 @@ const TARGET_NOUN_PHRASE = Object.keys(TARGET_NOUN_RESTRICTIONS)
   .join('|');
 
 /**
+ * The nouns an UNTAP (or a bare TAP) may name, as a closed table.
+ *
+ * Separate from {@link TARGET_NOUN_RESTRICTIONS} for the reason
+ * {@link PUMP_TARGET_NOUNS} is separate: that table is what a REMOVAL verb may
+ * point at, and "destroy target Forest" is not a printed sentence while "untap
+ * target Forest" is (Arbor Elf). These two verbs share one vocabulary — the
+ * things a permanent-state change can be aimed at — so a row added here is
+ * understood by `untap-target-noun`, `untap-another-target-noun` and
+ * `tap-target-noun` in the same edit, and the three cannot drift into
+ * disagreeing about which nouns are real.
+ *
+ * ⚠️ The five BASIC LAND TYPES are rows rather than one `land`: Arbor Elf may
+ * untap a Forest and may not untap an Island, and widening the printed word to
+ * "land" is a card playing wider than printed. Core's restriction union carries
+ * them for exactly this reason.
+ *
+ * Deliberately NOT here: "creature you control", "permanent you control" and the
+ * snow/legendary/colour narrowings ("untap target legendary permanent",
+ * "untap another target snow permanent"). Each needs a restriction core cannot
+ * say yet, and a closed table REPORTS rather than widening to the nearest thing
+ * that happens to exist.
+ */
+const UNTAP_TARGET_NOUNS: Readonly<Record<string, TargetRestriction>> = Object.freeze({
+  creature: 'creature',
+  land: 'land',
+  artifact: 'artifact',
+  permanent: 'permanent',
+  plains: 'plains',
+  island: 'island',
+  swamp: 'swamp',
+  mountain: 'mountain',
+  forest: 'forest',
+});
+
+/** The untap nouns as an alternation, longest first so none is truncated. */
+const UNTAP_TARGET_NOUN_PHRASE = Object.keys(UNTAP_TARGET_NOUNS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+
+/**
  * The printed SPELL nouns a counter line may name. Separate from the permanent
  * table because the objects live in different zones and no printed line mixes
  * them; same closed-table discipline.
@@ -1776,7 +1820,132 @@ const DOUBLE_ALL_DAMAGE_SOURCES: Readonly<
   'creatures you control': { sourceController: 'you', sourceFilter: { anyOfTypes: ['creature'] } },
 });
 
+/**
+ * THE SHIELD FAMILY — the recipient phrases a printed "**prevent the next N
+ * damage that would be dealt to ___ this turn**" line may name.
+ *
+ * Measured, not guessed: this shape is the single largest printed BODY in the
+ * activated-ability backlog (`activated-blame.mjs`) — 114 clauses across the
+ * corpus, 78 of them on cards whose ONLY unread sentence is this one, and the
+ * six rows below are every phrase that appears more than once. The primitive
+ * already existed (`preventDamage` with a `preventUpTo` ceiling); what was
+ * missing was the sentence.
+ *
+ * TWO tables rather than one, split by whether the printed phrase AIMS:
+ * a rule's `needsChosenTarget` is a static flag, and "dealt to you" must stay
+ * usable inside a trigger body while "dealt to target creature" must not.
+ *
+ * Both are CLOSED. The narrowings this cannot say — "target cleric or wizard
+ * creature", "target creature and each other creature that shares a color with
+ * it", "a source of your choice" — REPORT rather than being widened to the
+ * nearest restriction that happens to exist: a shield that guards more than the
+ * printed one is a card playing better than printed.
+ */
+const PREVENTION_TARGET_RECIPIENTS: Readonly<Record<string, TargetRestriction>> = Object.freeze({
+  // Read off the SHARED damage-target vocabulary's members, because a printed
+  // "dealt to any target" guards exactly the set "deals damage to any target"
+  // reaches (Heal, Barrenton Medic, Master Apothecary).
+  'any target': 'any',
+  'target creature': 'creature',
+  // Noble Vestige, Wandering Mage.
+  'target player or planeswalker': 'playerOrPlaneswalker',
+  // Argivian Blacksmith, Abuna Acolyte.
+  'target artifact creature': 'artifactCreature',
+});
+
+/** The aiming recipients as an alternation, longest first so none is truncated. */
+const PREVENTION_TARGET_PHRASE = Object.keys(PREVENTION_TARGET_RECIPIENTS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+
+/**
+ * The recipients that name NO target — the shield's guard is fixed by the
+ * printed word. `self` binds it to the ability's own source (Rock Hydra,
+ * Opal-Eye); the other row is the controller's face (Conservator, Shield of the
+ * Ages).
+ */
+const PREVENTION_FIXED_RECIPIENTS: Readonly<
+  Record<string, { readonly self?: true; readonly scope?: 'you'; readonly recipientKind?: 'player' }>
+> = Object.freeze({
+  '~': { self: true },
+  you: { scope: 'you', recipientKind: 'player' },
+});
+
+const PREVENTION_FIXED_PHRASE = Object.keys(PREVENTION_FIXED_RECIPIENTS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
+  {
+    /**
+     * THE SHIELD, aimed. "Prevent the next N damage that would be dealt to any
+     * target this turn" (Heal, Barrenton Medic), "…to target creature this
+     * turn" (Sacred Boon, Test of Faith), "…to target artifact creature…"
+     * (Argivian Blacksmith).
+     *
+     * A CEILING, not a fog: `preventUpTo: N` absorbs at most N and then stops,
+     * which is the whole difference between Heal and Holy Day. Compiling it as
+     * a blanket prevention would make every one of these 78 cards strictly
+     * better than printed.
+     */
+    id: 'prevent-next-damage-targeted',
+    description:
+      '"Prevent the next N damage that would be dealt to <TARGET> this turn" for every row in PREVENTION_TARGET_RECIPIENTS (Heal, Sacred Boon, Noble Vestige, Argivian Blacksmith)',
+    pattern: new RegExp(
+      `^prevent the next ${COUNT_TOKEN} (combat )?damage that would be dealt to (${PREVENTION_TARGET_PHRASE}) this turn$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const amount = parseCount(match[1]);
+      if (amount === null) return null;
+      const restriction = PREVENTION_TARGET_RECIPIENTS[match[3] ?? ''];
+      if (restriction === undefined) return null;
+      return effects({
+        primitive: 'preventDamage',
+        params: {
+          amount,
+          targeted: true,
+          targets: restriction,
+          ...(match[2] !== undefined ? { combat: true } : {}),
+          label: match[0],
+        },
+      });
+    },
+  },
+  {
+    /**
+     * THE SHIELD, unaimed. "Prevent the next N damage that would be dealt to
+     * you this turn" (Conservator, Esper Battlemage) and "…to ~ this turn"
+     * (Rock Hydra, Ursine Fylgja, Opal-Eye).
+     *
+     * Its own rule rather than a row of the aimed one because it must NOT be
+     * `needsChosenTarget`: these lines name no target, so they are legal inside
+     * a trigger body and must never fizzle for want of one.
+     */
+    id: 'prevent-next-damage-fixed-recipient',
+    description:
+      '"Prevent the next N damage that would be dealt to you / to ~ this turn" (Conservator, Decorated Griffin, Rock Hydra, Opal-Eye, Konda\'s Yojimbo)',
+    pattern: new RegExp(
+      `^prevent the next ${COUNT_TOKEN} (combat )?damage that would be dealt to (${PREVENTION_FIXED_PHRASE}) this turn$`,
+    ),
+    build(match) {
+      const amount = parseCount(match[1]);
+      if (amount === null) return null;
+      const who = PREVENTION_FIXED_RECIPIENTS[match[3] ?? ''];
+      if (who === undefined) return null;
+      return effects({
+        primitive: 'preventDamage',
+        params: {
+          amount,
+          ...(who.self ? { selfShield: true } : {}),
+          ...(who.scope ? { scope: who.scope } : {}),
+          ...(who.recipientKind ? { recipientKind: who.recipientKind } : {}),
+          ...(match[2] !== undefined ? { combat: true } : {}),
+          label: match[0],
+        },
+      });
+    },
+  },
   {
     /**
      * THE FOG. "Prevent all combat damage that would be dealt this turn" (Fog,
@@ -2689,6 +2858,33 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    /**
+     * "Target player mills X cards, **where X is the number of …**" (Doorkeeper,
+     * Phenax's granted ability).
+     *
+     * The OTHER printed spelling of a derived amount — `damage-equal-to-count`
+     * and `draw-equal-to-count` read "equal to the number of", and these are the
+     * same quantity said the other way round. Both go through
+     * {@link derivedValue} and therefore through the one {@link DERIVED_COUNTS}
+     * table, so the two spellings cannot drift into different numbers.
+     *
+     * ⚠️ Deliberately NOT gated on {@link cardHasXCost}: this X is DEFINED by
+     * the where-clause, not chosen at cast time, which is precisely the case
+     * that gate exists to keep the cast-time X rules away from.
+     */
+    id: 'target-player-mills-where-x',
+    description: '"Target player mills X cards, where X is the number of <COUNT>" (Doorkeeper)',
+    pattern: new RegExp(
+      `^target (player|opponent) mills x cards?, where x is the number of ${DERIVED_PHRASE}$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const count = derivedValue(match[2]!);
+      if (!count) return null;
+      return effects({ primitive: 'mill', params: { amount: count, targets: PLAYER_TARGET } });
+    },
+  },
+  {
     id: 'self-mill',
     description: '"You mill N cards" / "Mill N cards"',
     pattern: new RegExp(`^(?:you )?mills? ${COUNT_TOKEN} cards?$`),
@@ -3316,6 +3512,51 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       return effects({ primitive: 'tapTarget', params: { targets: CREATURE_TARGET } });
     },
   },
+  {
+    id: 'tap-target-noun',
+    description:
+      `"Tap target <NOUN>" for every noun in UNTAP_TARGET_NOUNS (Auriok Transfixer, Relic Barrier, Icy Manipulator)`,
+    // The tap half of the untap family, off the SAME noun table: a printed
+    // ability that can tap an artifact and one that can untap it name the same
+    // set of things, so one row serves both verbs (DESIGN §1.12).
+    pattern: new RegExp(`^tap target (${UNTAP_TARGET_NOUN_PHRASE})$`),
+    needsChosenTarget: true,
+    build(match) {
+      const kind = UNTAP_TARGET_NOUNS[match[1] ?? ''];
+      return kind === undefined ? null : effects({ primitive: 'tapTarget', params: { targets: kind } });
+    },
+  },
+  {
+    id: 'untap-self',
+    description: '"Untap ~" (Morphling, Grim Monolith, Staff of Compleation)',
+    // No target is named, so this is not `needsChosenTarget`: it works inside a
+    // trigger body and inside a granted ability exactly as printed.
+    pattern: /^untap ~$/,
+    build() {
+      return effects({ primitive: 'untapSelf', params: {} });
+    },
+  },
+  {
+    id: 'untap-target-noun',
+    description:
+      `"Untap target <NOUN>" for every noun in UNTAP_TARGET_NOUNS (Arbor Elf, Voltaic Key, Blossom Dryad, Jandor's Saddlebags, Kiora's Follower)`,
+    // ONE rule over the noun table, the shape `destroy-target-simple-permanent`
+    // established: the printed word is the whole of what may be aimed at, and
+    // the next noun is a ROW rather than a new rule.
+    pattern: new RegExp(`^untap target (${UNTAP_TARGET_NOUN_PHRASE})$`),
+    needsChosenTarget: true,
+    build(match) {
+      const kind = UNTAP_TARGET_NOUNS[match[1] ?? ''];
+      return kind === undefined ? null : effects({ primitive: 'untapTarget', params: { targets: kind } });
+    },
+  },
+  // ⚠️ "Untap ANOTHER target permanent" (Kiora's Follower, Manifold Key) stays
+  // REPORTED. Core carries the exclusion for a TRIGGER's aim
+  // (`TriggerBodyResult.targetsExcludeSelf`) but an ACTIVATED ability has no
+  // field for it, so the only rule that could be written here is one that drops
+  // the word "another" — a Kiora's Follower that may untap itself for an
+  // arbitrarily large mana loop, which is a card playing wider than printed.
+  // The honest move is the empty one until `ActivatedAbility` can say it.
   {
     /**
      * **"Create N X/Y COLOR [SUBTYPES] [artifact] creature token(s) [with

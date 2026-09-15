@@ -1447,6 +1447,24 @@ export type DerivedCountName =
   | 'cardsInYourGraveyard'
   /** Creature CARDS in your graveyard (Boneyard Wurm). */
   | 'creaturesInYourGraveyard'
+  /**
+   * "the number of creatures you control **with defender**" — the wall-tribal
+   * count both halves of that archetype print (Axebane Guardian, Doorkeeper,
+   * Assault Formation's pump).
+   *
+   * Its own row rather than a `creaturesYouControl` narrowed by an arbitrary
+   * filter, for the reason the whole vocabulary is a closed table: one row, one
+   * definition, read identically by every consumer.
+   *
+   * ⚠️ Counted off each permanent's CURRENT DEFINITION, exactly as every other
+   * row here counts (`creaturesYouControl` asks `isCreature(perm.def)`), so a
+   * copy effect is seen and a continuous keyword GRANT is not. That is this
+   * evaluator's existing contract and not a new gap — it sits below the
+   * continuous layer, which folds this function in, so it cannot ask it without
+   * a cycle. A card whose count must see granted defender would need the
+   * layer-aware reader and is not compiled today.
+   */
+  | 'creaturesYouControlWithDefender'
   /** Distinct card types among cards in ALL graveyards (Tarmogoyf). */
   | 'cardTypesInAllGraveyards'
   /**

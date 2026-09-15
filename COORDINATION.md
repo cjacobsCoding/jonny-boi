@@ -1,3 +1,53 @@
+- 2026-09-14 `feat/activated-ability-templates` — ✅ **pushed-ready, NOT merged** (worker; integrator merges).
+  **§3.147 — the activated-ability backlog row measured, then the one shape inside it that concentrates.**
+  The row named 1,449 cards and is the §3.120 artifact again (1,273 distinct shapes, 1.2 cards each); NEW
+  `activated-blame.mjs` splits it by WHICH HALF fails and shows the cost vocabulary was never the
+  bottleneck — **BODY 1,134 clauses / 912 shapes against COST 71 / 48.** NEW `activated-families.mjs`
+  ranks the survivors by cards unblocked. Three closed tables shipped: the damage SHIELD (114 clauses,
+  the largest printed body in the row), the UNTAP family (+ five basic-land-type restrictions in core),
+  and the wall-tribal derived count.
+  📊 `npm run build` **exit 0** · `npx vitest run packages/cards packages/core --minWorkers=1 --maxWorkers=1`
+  ****19,667 passed, 0 failed / 200 files**** (200 files collected == 200 `*.test.ts` on disk, 0 skipped, no worker exits) ·
+  card-index `--check` up to date · `dead-rule-sweep` — every new rule FIRES on real corpus cards
+  (untap-self 54, untap-target-noun 38, tap-target-noun 20, prevent-next-damage-targeted 60,
+  prevent-next-damage-fixed-recipient 10, target-player-mills-where-x 3) ·
+  red-then-green on both families (widen `'forest'` to `isLand()` → 3 red incl. the targeting-completeness
+  offer/legality sweep; drop the shield's `amount` → 4 red).
+  📉 **No throughput regression:** `sim match "Mono-Red Aggro" "Boros Aggro" --games 150 --seed 909
+  --workers 1` — 141/145/151 games/sec on this branch against 143/151/144 with the five source files
+  reverted (means 146 vs 146, this box's own spread is wider), and `Mono-Red Aggro 53/150` is identical
+  on both, which is the like-for-like proof.
+  📈 **Compiler delta +106 accepted (6,305 → 6,411) on one fixed 32,341-card corpus**, the same corpus
+  compiled twice with this branch's five source files reverted in between, so the number is the
+  compiler's and not a corpus refresh's. Arbor Elf ✅ and Doorkeeper ✅ compile; **Axebane Guardian does
+  not** and a test pins why (`ManaAbility.produces` is a fixed mode list indexed by `TapForManaAction.mode`;
+  "X mana in any combination of colors" is a multiset choice whose size moves with the board).
+  ⚠️ **THE REGENERATED POOL IS NOT IN THIS BRANCH — ON PURPOSE. `fix/pool-refresh-3147` OWNS IT.** The only
+  corpus here is 65 cards newer than the one the committed pool came from and is worth **+686 on its own,
+  before this compiler touches anything**. Measured soak (`soak --games 120 --seed 4242 --workers 1`):
+  main pool + main compiler **0 violations**; refreshed pool + **main** compiler **244**; refreshed pool +
+  this compiler **304** — all 304 on ONE check ("no card in a hidden zone leaks into an observation") with
+  the same six leaking matchups either way, i.e. the pre-existing masking defect that lane already took
+  from 754 to 4, reached more often by a bigger pool. **Integrator: merge the pool-refresh lane FIRST,
+  then re-run `npx tsx packages/cards/scripts/build-expansion.ts` + `npm run fetch -w @jonny-boi/data-tools
+  -- --corpus <corpus> --no-art` + `node apps/web/scripts/build-card-index.mjs` — offline and idempotent.
+  Until that runs the +106 is correct, tested, and NOT on a screen.**
+  ⚠️ **SEMANTIC-CONFLICT WARNING — three shared files carry additive changes:**
+  (1) `packages/core/src/targeting.ts` — `TargetRestriction` gains five members (`plains`…`forest`) driven off
+  one new `BASIC_LAND_TYPE_SUBTYPE` table at all five homes a restriction word has. A lane adding a member
+  will conflict TEXTUALLY in the union, the validator, `isLegalTarget`, the enumerator, `describeRestriction`
+  and `TARGET_RESTRICTION_MEMBERS` — which is the good case; `targeting-completeness.test.ts` fails until
+  every home knows the word, and its zoo gained an all-five-types land to feed the new members.
+  (2) `packages/core/src/card.ts` + `derived.ts` — `DerivedCountName` gains
+  `creaturesYouControlWithDefender` plus its evaluator case.
+  (3) `packages/cards/src/primitives.ts` — two new primitives (`untapTarget`, `untapSelf`) in the registry
+  list, and `preventDamage` gains a `selfShield` param.
+  ℹ️ **Left REPORTED, each with its reason in §3.147:** "untap ANOTHER target permanent" (an
+  `ActivatedAbility` cannot carry the exclusion — the only writable rule drops the word and hands Kiora's
+  Follower an untap loop); the whole `Activate only …` wrapper (47 cards whose bodies already compile, but
+  27 of its 29 spellings are board CONDITIONS this engine cannot check, and the two real windows need a
+  third timing value `CastTiming` cannot carry); the general `where X is …` binding (measured FIRST — 83
+  cards over 74 distinct bodies, top body 4 cards, so only the one body carrying Doorkeeper was written).
 - 2026-09-14 `fix/builtin-deck-identity` — ✅ **pushed-ready, NOT merged** (worker; integrator merges).
   **A built-in gauntlet deck must not look like one of yours** (DESIGN §3.147). The report was *"I renamed
   the Selesnya Blink deck to Acidic Angels, which apparently just DUPLICATED the deck"* — nothing duplicated;

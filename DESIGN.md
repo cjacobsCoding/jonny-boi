@@ -2889,6 +2889,118 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.147 The activated-ability row is the §3.120 artifact again — but one shape inside it concentrates — ✅ done
+
+The backlog entry *"an activated-ability template the compiler does not recognize yet"* named **1,449
+cards**, and it holds three cards from the owner's own physical deck. `gap-clauses.mjs` gave the §3.120
+answer straight away: **1,448 cards, 1,501 clauses, 1,273 distinct shapes — 1.2 cards per shape, largest
+single shape 22.** Another bucket, not another system.
+
+**The new question, and the tool that asks it.** §3.120 stopped at "the row is a thousand sentences".
+That is true and still leaves you nowhere, because an activated ability is *two* halves — a printed
+`COST: EFFECT` — and the row cannot tell you which half fails. NEW
+`packages/cards/scripts/activated-blame.mjs <corpus>` probes each half on its own through `compileCard`
+alone (`<COST>: Draw a card.` and `{T}: <BODY>`), and NEW `activated-families.mjs <corpus>` ranks the
+survivors by **cards unblocked**, not clauses:
+
+| half | clauses | distinct shapes |
+|---|---:|---:|
+| COST unknown, body fine | 71 | 48 |
+| **BODY unknown, cost fine** | **1,134** | **912** |
+| both unknown | 202 | 186 |
+| neither (the card fails elsewhere) | 94 | 69 |
+
+**So the cost vocabulary was never the bottleneck — 95% of the row is the effect table missing sentences
+that happen to sit after a colon.** That is worth writing down because the row's NAME says the opposite,
+and a brief written from the name would have spent itself widening `parseActivationCost`.
+
+**What the audit is still right about (§3.120's own caveat): finding a row whose shapes CONCENTRATE.**
+One did. Ranking the 912 body shapes by leading verb turned up a real family hiding inside the long tail:
+
+| printed shape | clauses | on cards blocked by NOTHING else |
+|---|---:|---:|
+| `Prevent the next N damage that would be dealt to <RECIPIENT> this turn` | **114** | **78** |
+| the UNTAP bodies (`untap ~`, `untap target <NOUN>`) | ~85 | ~33 |
+| `Activate only …` / `Any player may activate` — a WRAPPER on a body that already compiles | — | 47 |
+
+Three things shipped, and each is a closed table rather than a rule per card:
+
+1. **The shield.** `preventDamage` already carried a `preventUpTo` ceiling from the fog family; what was
+   missing was the sentence. Two recipient tables — one that AIMS (`any target`, `target creature`,
+   `target player or planeswalker`, `target artifact creature`), one that does not (`you`, `~`) — split
+   that way because `needsChosenTarget` is a static flag and "dealt to you" must stay legal inside a
+   trigger body. `preventDamage` gained `selfShield` so the `~` row keeps no fizzle and no targeting gate
+   the printed line does not have. ⚠️ **The defect the tests pin is a SHIELD compiled as a FOG**: drop the
+   ceiling and Barrenton Medic absorbs a Wrath instead of one point, and `'complete'` says nothing at all
+   about it. Sabotaging `amount` fails four tests.
+2. **The untap family.** `untapTarget` + `untapSelf`, over one noun table also read by the tap verb —
+   because the things an ability may untap and the things it may tap are one vocabulary, and two tables
+   would eventually disagree. Core gained the five **basic land types** as restrictions (`'forest'` and
+   siblings), driven off one table at all five homes a restriction word has (§3.40): **Arbor Elf may untap
+   a Forest and a Stomping Ground and may NOT untap an Island**, and widening the printed word to `land`
+   is a card playing wider than printed. That discriminator is the test; so is the offer/legality
+   agreement sweep, which the widening also reddens.
+3. **The wall-tribal count.** `DerivedCountName` gained `creaturesYouControlWithDefender` (one row, read
+   by every consumer of the shared vocabulary), plus the OTHER printed spelling of a derived amount —
+   `…X cards, where X is the number of …` alongside the existing `equal to the number of`, both routed
+   through the one `DERIVED_COUNTS` table so the two spellings cannot drift into different numbers.
+
+**The three acceptance cards, honestly.** Arbor Elf ✅ and Doorkeeper ✅ now compile. **Axebane Guardian
+does not, and will not until core can say it:** `ManaAbility.produces` is a fixed list of
+`ManaProduction` records and `TapForManaAction.mode` is an INDEX into that list — core's own comment
+says a list whose length moved with the game would make the same action number mean different colours to
+the action generator, the payment planner and the apply path. "Add X mana **in any combination of
+colors**" is a multiset choice of size X over five colours and X moves with the board: both the length
+and the contents vary per activation. Approximating it ("any ONE color", or five fixed pips) hands a wall
+deck a mana ability the card does not have, so it keeps reporting. A test pins the reason.
+
+**Measured delta: 6,305 → 6,411 accepted, +106, on one fixed 32,341-card corpus** (the same corpus run
+twice, once with this branch's compiler reverted, so the number is attributable to the compiler and not
+to a corpus refresh). The row itself went 1,448 → 1,381; the shield shape went 114 clauses → 52.
+
+⚠️ **THE REGENERATED POOL IS DELIBERATELY NOT IN THIS BRANCH, and the measurement is why.** The only
+corpus on this machine is 65 cards newer than the one the committed pool was built from, and running
+the generator against it is worth **+686 cards on its own, before this branch's compiler touches
+anything** — a corpus refresh `fix/pool-refresh-3147` already owns and has soak-fixed. Committing it
+here would hand the integrator a conflicting second copy of another lane's in-flight work with 86% of
+its delta belonging to them.
+
+It would also land a pool the soak reports as broken, and the discriminator says whose:
+
+| tree | soak `violations` (120 games, seed 4242) |
+|---|---:|
+| `main` pool + `main` compiler | **0** |
+| refreshed-corpus pool + **`main`** compiler | **244** |
+| refreshed-corpus pool + this branch's compiler | **304** |
+
+Every one of the 304 is the SAME check — *"no card in a hidden zone leaks into an observation"* — and the
+leaking matchups are the same six either way (the soak builds its decks randomly from the pool, so a
+different pool draws different seeds). So the class is a pre-existing observation-masking defect that a
+bigger pool merely reaches more often, not anything this branch introduced; it is exactly the class
+`fix/pool-refresh-3147` took from 754 to 4. **Order of operations for the integrator: merge that lane
+first, then re-run `npx tsx packages/cards/scripts/build-expansion.ts` (offline, idempotent) and the two
+index builds — that is what makes the +106 reachable from a deck builder.** Until then the compiler work
+here is correct and tested but NOT yet on a screen, and this paragraph exists so nobody reads it as done.
+
+**Left REPORTED on purpose, with the reason each:**
+- **"Untap ANOTHER target permanent"** (Kiora's Follower, Manifold Key). Core carries the exclusion for a
+  TRIGGER's aim (`TriggerBodyResult.targetsExcludeSelf`) and an `ActivatedAbility` has no field for it.
+  The only rule writable today drops the word "another" — a Kiora's Follower that may untap itself, for
+  an arbitrarily large mana loop.
+- **The `Activate only …` wrapper — 47 cards whose bodies already compile.** Only two of its 29 spellings
+  are windows this engine could actually enforce ("during your turn, before attackers are declared" — 10
+  cards — and "during your turn"), and both need a third `ActivatedAbility` timing value that `CastTiming`
+  cannot carry without touching every cast path. The other 27 are board CONDITIONS ("only if you've cast
+  two or more spells this turn"). An ability whose restriction was dropped is activatable in windows the
+  printed one is not, so all 47 keep reporting.
+- **The `where X is …` family at large.** Measured before building: **83 blocked cards carry it over a
+  count `DERIVED_COUNTS` already knows, across 74 distinct bodies** — top body 4 cards. That is the
+  §3.120 shape again, so only the row and the one body that carries Doorkeeper were written, and the
+  general X-binding was NOT built. Reporting the smaller number is rule 11 working.
+- Narrowings core's restriction union cannot say: "target legendary permanent", "target blue creature",
+  "another target snow permanent", "target permanent you control"; and on the shield, "target cleric or
+  wizard creature", "a source of your choice", "divided as you choose".
+
 ### 3.146 A block bound the card does not print — Champion of Lambholt, and the second home of the settled-P/T pass — ✅ done
 
 The row said *"a block restriction whose SELECTOR compares creatures or reads effective P/T"* and named
