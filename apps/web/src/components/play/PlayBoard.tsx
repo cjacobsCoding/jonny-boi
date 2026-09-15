@@ -100,6 +100,10 @@ import type { CombatHold } from '../../lib/play/combat-hold.js';
 import { CombatHoldBanner } from './CombatHoldBanner.js';
 import { CardFace } from './CardFace.js';
 import { HOLD_KINDS, type SpellHold } from '../../lib/play/spell-hold.js';
+import { targetView, type StackTargetView } from '../../lib/play/stack-view.js';
+import { CardReferenceList } from './CardReferences.js';
+import { ForcedChoiceBanner } from './ForcedChoiceBanner.js';
+import type { ForcedChoice } from '../../lib/play/forced-choice.js';
 import { groupJailedByJailer, jailSourcesOf } from '../../lib/play/jail-view.js';
 import {
   castWayLabel,
@@ -194,6 +198,8 @@ export function PlayBoard({
   onHoldRelease,
   combatHold,
   onCombatHoldSkip,
+  forcedChoice,
+  onForcedChoiceDismiss,
 }: {
   session: GameSession;
   viewer: PlayerId;
@@ -226,6 +232,18 @@ export function PlayBoard({
   combatHold?: CombatHold | null;
   /** "Skip" — give the beat up now and let combat run on. */
   onCombatHoldSkip?: () => void;
+  /**
+   * A choice the ENGINE settled without asking, currently announced, or null.
+   *
+   * Caleb, on a Banisher Priest with one legal target: *"it should show that
+   * choice being made so the player understands what has happened."* Owned by
+   * PlayView for the same reason the two holds are — the announcement gates the
+   * auto-passer and the AI seat so it is not gone before it can be read, which
+   * is the whole lesson of §10.
+   */
+  forcedChoice?: ForcedChoice | null;
+  /** "Got it" — end the announcement now. */
+  onForcedChoiceDismiss?: () => void;
   /**
    * §3.119 — the priority stops, OWNED BY PlayView because it is the auto-pass
    * effect that has to obey them. The board renders their controls and reports
@@ -713,6 +731,43 @@ export function PlayBoard({
     (ref: InstanceId | PlayerId): string | null =>
       typeof ref === 'number' ? (findInstanceAnywhere(session.state, ref)?.def.id ?? null) : null,
     [session],
+  );
+
+  /**
+   * HOW A REFERENCED GAME OBJECT IS DRAWN, wired once for every surface on this
+   * board that has to say "…and it is pointing at THAT".
+   *
+   * `targetView` is `stack-view.ts`'s own funnel — the single place that decides
+   * seat-vs-permanent and picks the face — and the stack panel builds its target
+   * rows from it too. One answer to one question (rule 12): the panel, the
+   * opponent-spell hold and the forced-choice banner cannot drift apart because
+   * there is only one of them.
+   */
+  const referenceCtx = useMemo(
+    () => ({ playerNames: names, nameOf: session.nameOf, faceOf: faceOfInstance }),
+    [names, session, faceOfInstance],
+  );
+
+  /**
+   * WHAT THE HELD SPELL IS AIMED AT (Caleb, 2026-09-14: a Doom Blade that
+   * announces itself without saying what it kills).
+   *
+   * Taken from the SAME `stackEntries` facts the stack panel renders — the hold
+   * is a second view of one stack object, never a second derivation of it. A
+   * hold whose object has already left the stack resolves to no targets rather
+   * than to a guess.
+   */
+  const holdTargets = useMemo((): readonly StackTargetView[] => {
+    if (!hold) return [];
+    const entry = view.stack.find((e) => e.instanceId === hold.instanceId);
+    return entry ? entry.targets.map((ref) => targetView(ref, referenceCtx)) : [];
+  }, [hold, view.stack, referenceCtx]);
+
+  /** The cards a forced choice picked, drawn by the same renderer as a target. */
+  const forcedChoiceTargets = useMemo(
+    (): readonly StackTargetView[] =>
+      forcedChoice ? forcedChoice.refs.map((ref) => targetView(ref, referenceCtx)) : [],
+    [forcedChoice, referenceCtx],
   );
 
   /**
@@ -2285,10 +2340,22 @@ export function PlayBoard({
              public, so explaining it leaks nothing the viewer cannot already
              read off the stack panel. */
           explanation={explainForFace(session.state, hold.instanceId)}
+          targets={holdTargets}
           opponentName={names[hold.controller]}
           {...(onHoldPointer ? { onPointer: onHoldPointer } : {})}
           {...(onHoldExtend ? { onExtend: onHoldExtend } : {})}
           {...(onHoldRelease ? { onRelease: onHoldRelease } : {})}
+        />
+      )}
+      {/* The engine settled a question that had exactly one legal answer. It was
+          RIGHT to (the sim and the pilots depend on it) — but it happened in
+          silence, which is the reported defect. This says what it chose, names
+          the card, and asks for nothing. */}
+      {forcedChoice && (
+        <ForcedChoiceBanner
+          forced={forcedChoice}
+          chosen={forcedChoiceTargets}
+          {...(onForcedChoiceDismiss ? { onDismiss: onForcedChoiceDismiss } : {})}
         />
       )}
       {/* §10 — the board is holding combat on screen so UX-13's advance and
@@ -2324,6 +2391,7 @@ function SpellHoldCard({
   name,
   cardId,
   explanation,
+  targets,
   opponentName,
   onPointer,
   onExtend,
@@ -2334,6 +2402,19 @@ function SpellHoldCard({
   cardId: string | null;
   /** Core's characteristic breakdown for the held spell (§3.143 / UX-17). */
   explanation: CharacteristicExplanation | undefined;
+  /**
+   * WHAT IT IS AIMED AT. Caleb, 2026-09-14: *"When the computer plays Doom Blade
+   * when Im playing them, it does not show me clearly what the target is when it
+   * displays on screen - it should show their target(s) for things along with
+   * the card they are casting."*
+   *
+   * Resolved by the board from the SAME `stackEntries` facts the stack panel
+   * reads, through `stack-view.targetView` — so "what is this pointing at?" has
+   * one answer here, in the panel, and in the forced-choice banner. Empty for a
+   * spell that targets nothing, which renders nothing at all
+   * (`CardReferenceList` owns that decision for all three mounts).
+   */
+  targets: readonly StackTargetView[];
   opponentName: string;
   onPointer?: (over: boolean) => void;
   onExtend?: () => void;
@@ -2368,6 +2449,11 @@ function SpellHoldCard({
         <CardFace size="full" cardId={cardId} name={name} explanation={explanation} />
       </CardHover>
       <span className="spell-hold__name">{name}</span>
+      {/* Shown as CARD FACES, not a name string: §0 is explicit that a target
+          must be "the actual card(s)". The list renders nothing when the spell
+          targets nothing, and names a PLAYER target in words because a seat is
+          not a card (`STACK_TARGET_KINDS_TABLE.player.hasFace`). */}
+      <CardReferenceList targets={targets} presentation="face" label="Targeting" />
       <span className="spell-hold__hint">
         Hover the card to keep reading it — it resolves on its own when you stop.
       </span>

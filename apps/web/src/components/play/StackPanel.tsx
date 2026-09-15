@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactElement, ReactNode } from 'react';
+import type { CSSProperties, ReactElement } from 'react';
 import type { InstanceId, PlayerId } from '@jonny-boi/core';
 import { CardHover } from '../CardHover.js';
 import { PlayCard } from './PlayCard.js';
@@ -7,15 +7,13 @@ import { STACK_PANEL_CONFIG } from '../../lib/play/play-config.js';
 import {
   DEFAULT_STACK_PLACEMENT,
   STACK_PLACEMENT_TABLE,
-  STACK_TARGET_KINDS_TABLE,
-  TARGET_ARROW,
   stackFaceGeometry,
   stackRows,
   type StackEntry,
   type StackPlacement,
   type StackRow,
-  type StackTargetView,
 } from '../../lib/play/stack-view.js';
+import { CardReferenceList } from './CardReferences.js';
 import './stack-panel.css';
 
 /**
@@ -179,48 +177,12 @@ function StackRowView({ row }: { readonly row: StackRow }): ReactElement {
         */}
         {row.isOpponents && <div className="stack-row__whose">Opponent&rsquo;s</div>}
         {row.detail !== null && <div className="stack-row__detail">{row.detail}</div>}
-        {row.targets.length > 0 && (
-          <ul className="stack-row__targets">
-            {row.targets.map((target, i) => (
-              <StackTargetRow key={`${target.kind}:${String(target.ref)}:${i}`} target={target} />
-            ))}
-          </ul>
-        )}
+        {/* The empty case is the LIST's decision, not this panel's — see
+            `CardReferenceList`, which the hold and the forced-choice banner also
+            mount, so all three fall silent identically. */}
+        <CardReferenceList targets={row.targets} presentation="inline" className="stack-row__targets" />
       </div>
     </li>
   );
 }
 
-/**
- * ONE target, as a relationship.
- *
- * Deliberately one line per target with a direction glyph, replacing the old
- * `" → a, b, c"` comma-joined string: *"Targets are shown as a visible
- * relationship, not a comma-joined string of names."* A permanent target is
- * wrapped in the hover funnel so the player can look at the thing being aimed
- * at; a player target is not a card and is not (see
- * `STACK_TARGET_KINDS_TABLE.player.hasFace`).
- */
-function StackTargetRow({ target }: { readonly target: StackTargetView }): ReactElement {
-  const kindRow = STACK_TARGET_KINDS_TABLE[target.kind];
-  const label: ReactNode = (
-    <>
-      <span className="stack-target__arrow" aria-hidden="true">
-        {TARGET_ARROW}
-      </span>
-      <span className="stack-target__name">{target.name}</span>
-    </>
-  );
-  return (
-    <li className={`stack-target stack-target--${target.kind}`}>
-      <span className="stack-target__sr">{kindRow.screenReaderLabel}</span>
-      {kindRow.hasFace ? (
-        <CardHover cardId={target.cardId} className="stack-target__hover">
-          {label}
-        </CardHover>
-      ) : (
-        label
-      )}
-    </li>
-  );
-}

@@ -373,7 +373,14 @@ function oracleTextFor(faceCardId: string | null, ctx: StackRowContext): string 
   return text === null || text.length === 0 ? null : text;
 }
 
-function targetView(ref: InstanceId | PlayerId, ctx: StackRowContext): StackTargetView {
+/**
+ * ONE reference → one renderable view. EXPORTED because it is the single funnel
+ * for "is this a seat or a permanent, and what does it look like?", and three
+ * surfaces now ask it: the stack panel's rows, the opponent-spell hold's
+ * targets, and the forced-choice banner's chosen cards. A second copy in any of
+ * them is the parallel-vocabulary bug rule 3 forbids.
+ */
+export function targetView(ref: InstanceId | PlayerId, ctx: StackRowContext): StackTargetView {
   // `isPlayerTarget` is core's own funnel for this question — the UI must not
   // grow a second copy of "is 'A' a seat or an instance id" (rule 12).
   if (isPlayerTarget(ref)) {

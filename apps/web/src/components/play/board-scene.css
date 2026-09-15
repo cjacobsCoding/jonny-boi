@@ -371,3 +371,100 @@
   color: var(--color-fg-muted);
   font-size: var(--text-xs);
 }
+
+/* --- A CHOICE THE GAME SETTLED WITHOUT ASKING -------------------------------
+ *
+ * Caleb, on Banisher Priest: *"it should show that choice being made so the
+ * player understands what has happened."*
+ *
+ * Pinned to the TOP beside `.combat-hold`, and for the same reason: what it
+ * describes happened on the battlefield, and a centred card like `.spell-hold`
+ * would cover it. It is TALLER than the combat strip because it carries the
+ * chosen card's face — the reports are explicit that a name string is not
+ * enough — and it is the only thing on screen while it stands.
+ *
+ * ⚠️ The fade is the SPELL HOLD's, read from the same custom property, so the
+ * three announcements on this surface arrive the same way. `--forced-choice-
+ * fade-ms` is published by the board from `FORCED_CHOICE_CONFIG`.
+ */
+
+.forced-choice {
+  position: fixed;
+  left: 50%;
+  /* The same clearance `.combat-hold` names, for the same status row. The two
+     never stand at once (a forced choice is settled at resolution, a combat
+     hold during combat), so they share the slot rather than stacking. */
+  top: var(--combat-hold-status-clearance, 3.9rem);
+  transform: translateX(-50%);
+  z-index: 52;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-accent-soft);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  box-shadow: 0 10px 32px rgb(0 0 0 / 50%);
+  max-width: min(92vw, 30rem);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .forced-choice {
+    animation: forced-choice-in var(--forced-choice-fade-ms, 220ms) ease-out both;
+  }
+}
+
+@keyframes forced-choice-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+}
+
+.forced-choice__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 var(--space-1);
+  text-align: center;
+}
+
+.forced-choice__source {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-fg);
+}
+
+.forced-choice__verb {
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+}
+
+.forced-choice__words {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-accent-soft);
+}
+
+.forced-choice__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.forced-choice__why {
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+}
+
+.forced-choice__skip {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+}

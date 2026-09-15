@@ -29,7 +29,17 @@ import {
 } from '../lib/play/seat.js';
 import { aiAction, aiMustAct, type AiSeatConfig } from '../lib/play/ai-seat.js';
 import { PilotPicker } from '../components/lab/PilotControls.js';
-import { COMBAT_HOLD_CONFIG, HOTSEAT_CONFIG, SPELL_HOLD_CONFIG } from '../lib/play/play-config.js';
+import {
+  COMBAT_HOLD_CONFIG,
+  FORCED_CHOICE_CONFIG,
+  HOTSEAT_CONFIG,
+  SPELL_HOLD_CONFIG,
+} from '../lib/play/play-config.js';
+import {
+  forcedChoiceDecision,
+  forcedChoiceOf,
+  type ForcedChoice,
+} from '../lib/play/forced-choice.js';
 import { stackEntries } from '../lib/play/stack-view.js';
 import {
   extendPressure,
@@ -1009,11 +1019,99 @@ function LocalPlay({
     return () => window.clearTimeout(handle);
   }, [combatHold, releaseCombatHold]);
 
+  /**
+   * WHOSE SCREEN THIS IS — hoisted above the effects because the forced-choice
+   * announcement needs it, and the render below reads THIS rather than deriving
+   * it a second time (rule 12: two places answering "who is looking?" will
+   * eventually disagree, and on a hotseat board that means showing one human the
+   * other one's decision).
+   *
+   * `null` only before a game exists; the play phase always resolves it.
+   */
+  const viewerSeat: PlayerId | null = revealed ?? session?.priorityPlayer ?? null;
+
+  /**
+   * A CHOICE THE ENGINE SETTLED WITHOUT ASKING, held on screen long enough to
+   * read (`lib/play/forced-choice.ts`).
+   *
+   * Caleb, on a Banisher Priest that exiled the only legal creature: *"it should
+   * show that choice being made so the player understands what has happened."*
+   *
+   * ⚠️ HERE, not in the board, and gating the SAME two things the other two
+   * announcements gate. §10 measured what happens when a correct thing is not
+   * gated: blocks, damage and end-of-combat all resolved inside 260 ms and a
+   * 45 ms sampler never saw them. A settled choice resolves its trigger the same
+   * way, so an ungated banner would be a caption on a board that had already
+   * moved on.
+   *
+   * It is still NOT a prompt: nothing waits for an answer, and the timer ends it
+   * whether or not anybody looked.
+   */
+  const [forcedChoice, setForcedChoice] = useState<ForcedChoice | null>(null);
+  const forcedSeenRef = useRef<number>(0);
+  const forcedAnnouncedRef = useRef<ReadonlySet<number>>(new Set());
+  const forcedTurnRef = useRef<{ turn: number; spent: number }>({ turn: 0, spent: 0 });
+
+  useEffect(() => {
+    if (phase.kind !== 'play' || !session) return;
+    // One at a time. Checked BEFORE the log is consumed, so a second settled
+    // choice arriving under a live banner is announced when this effect re-runs
+    // (`forcedChoice` is a dependency) rather than silently swallowed.
+    if (forcedChoice) return;
+    const events = session.events;
+    // A rematch or a resume hands back a SHORTER log: re-baseline rather than
+    // replaying the whole game's settled choices as a burst of banners.
+    if (events.length < forcedSeenRef.current) forcedSeenRef.current = 0;
+    if (events.length === forcedSeenRef.current) return;
+    const fresh = events.slice(forcedSeenRef.current);
+    forcedSeenRef.current = events.length;
+    if (viewerSeat === null) return;
+    const turnNumber = session.state.turnNumber;
+    if (forcedTurnRef.current.turn !== turnNumber) forcedTurnRef.current = { turn: turnNumber, spent: 0 };
+    for (const event of fresh) {
+      const candidate = forcedChoiceOf(event, {
+        nameOf: session.nameOf,
+        playerName: (p) => session.names[p],
+        defOf: session.defOf,
+      });
+      if (!candidate) continue;
+      const decision = forcedChoiceDecision(
+        candidate,
+        {
+          viewer: viewerSeat,
+          announced: forcedAnnouncedRef.current,
+          announcedThisTurn: forcedTurnRef.current.spent,
+          gameOver: session.gameOver,
+        },
+        FORCED_CHOICE_CONFIG,
+      );
+      if (decision.kind !== 'announce') continue;
+      forcedAnnouncedRef.current = new Set([...forcedAnnouncedRef.current, candidate.choiceId]);
+      forcedTurnRef.current = { turn: turnNumber, spent: forcedTurnRef.current.spent + 1 };
+      setForcedChoice(candidate);
+      return;
+    }
+  }, [phase, session, viewerSeat, forcedChoice]);
+
+  // The announcement's timer. Reduced motion picks the row's OTHER beat — a
+  // NUMBER, never a switch — because the WORDS still have to be read.
+  useEffect(() => {
+    if (!forcedChoice) return undefined;
+    const ms = reducedMotion
+      ? FORCED_CHOICE_CONFIG.reducedMotionHoldMs
+      : FORCED_CHOICE_CONFIG.holdMs;
+    const handle = window.setTimeout(() => setForcedChoice(null), ms);
+    return () => window.clearTimeout(handle);
+  }, [forcedChoice, reducedMotion]);
+
   useEffect(() => {
     if (phase.kind !== 'play' || !session || session.gameOver) return;
     // A hold is up: the board is showing the opponent's spell, or the combat
     // that just happened, and the game must not walk out from under it.
-    if (hold || combatHold) return;
+    // …and so must a settled-choice announcement: the trigger it describes
+    // resolves in the very next priority window, so a walker that kept going
+    // would leave the banner captioning a board that had moved on.
+    if (hold || combatHold || forcedChoice) return;
     const advanced = session.autoAdvancePriority(undefined, (candidate) =>
       shouldStopForPriority(stopContextFor(candidate), stops) ||
       // ⚠️ THE LOAD-BEARING GATE. Without this the walk below runs from declared
@@ -1025,7 +1123,7 @@ function LocalPlay({
     // Identity-equal when nothing was skipped, so React bails out and this cannot
     // become a render loop.
     if (advanced !== session) setSession(advanced);
-  }, [phase, session, stops, hold, combatHold, combatHoldFor]);
+  }, [phase, session, stops, hold, combatHold, forcedChoice, combatHoldFor]);
 
   // --- the computer's seat -------------------------------------------------------
   //
@@ -1057,7 +1155,9 @@ function LocalPlay({
     // …and the combat hold does the same job for the combat that just happened:
     // the AI passing priority underneath the beat would resolve combat damage
     // and end the step while the player is still looking at the blockers.
-    if (hold || combatHold) return;
+    // …and the same for a settled choice being announced: the computer passing
+    // priority underneath it would resolve the trigger the player is reading.
+    if (hold || combatHold || forcedChoice) return;
     if (!aiMustAct(session, ai.seat)) return;
     const handle = window.setTimeout(() => {
       const action = aiAction(session, aiPilot, aiRng);
@@ -1069,7 +1169,7 @@ function LocalPlay({
       setSession(result.rejected ? session.passPriority().session : result.session);
     }, HOTSEAT_CONFIG.aiThinkMs);
     return () => window.clearTimeout(handle);
-  }, [ai, aiPilot, aiRng, session, phase, hold, combatHold]);
+  }, [ai, aiPilot, aiRng, session, phase, hold, combatHold, forcedChoice]);
 
   // The computer keeps its opening hand. It has no mulligan policy of its own —
   // pilots decide in-game actions, not whether to ship a seven — so it always
@@ -1211,8 +1311,11 @@ function LocalPlay({
     );
   }
 
-  // Ensure someone is revealed (first entry into play).
-  const viewer: PlayerId = revealed ?? priority;
+  // Ensure someone is revealed (first entry into play). `viewerSeat` is the ONE
+  // derivation (see above); the `?? priority` only satisfies the non-null type,
+  // and cannot differ — `viewerSeat` is `revealed ?? session.priorityPlayer` and
+  // `session` is non-null here.
+  const viewer: PlayerId = viewerSeat ?? priority;
 
   return (
     <div className="play-view">
@@ -1238,6 +1341,8 @@ function LocalPlay({
         onHoldRelease={() => setHold(null)}
         combatHold={combatHold ? combatHold.hold : null}
         onCombatHoldSkip={releaseCombatHold}
+        forcedChoice={forcedChoice}
+        onForcedChoiceDismiss={() => setForcedChoice(null)}
       />
     </div>
   );

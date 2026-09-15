@@ -12,6 +12,7 @@
  * the feed skips it; the session still keeps every event for the inspector.
  */
 import type { GameEvent, InstanceId, PlayerId } from '@jonny-boi/core';
+import { forcedChoiceLogLine, forcedChoiceOf } from './forced-choice.js';
 
 /** Resolve an instanceId to a display name (with a graceful fallback). */
 export type NameResolver = (instanceId: InstanceId) => string;
@@ -202,10 +203,25 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
       const said = event.answer.kind === 'confirm' ? ` — ${event.answer.yes ? 'yes' : 'no'}` : '';
       return { text: `${r.playerName(event.chooser)} answers${said}.`, tone: 'trigger' };
     }
-    case 'choiceAutoAnswered':
-      // Only surfaced when the engine had to step in for a reason the players can
-      // act on; a single-legal-answer auto-answer is bookkeeping, not narrative.
-      return null;
+    case 'choiceAutoAnswered': {
+      /*
+       * ⚠️ THIS USED TO RETURN `null`, and the comment that justified it —
+       * "a single-legal-answer auto-answer is bookkeeping, not narrative" — was
+       * the whole bug. Caleb, on a Banisher Priest that exiled the only legal
+       * creature with no prompt: *"it should show that choice being made so the
+       * player understands what has happened."* The log is where a player looks
+       * to ask "what just happened?", and a line here costs nothing.
+       *
+       * The redaction above still holds and is not weakened: which kinds may
+       * name their answer in a log BOTH hotseat players read is
+       * `FORCED_CHOICE_KINDS[kind].namesInSharedLog`, one row per kind, and
+       * `forcedChoiceLogLine` is the only place that consults it. The BANNER
+       * reads the same `ForcedChoice` through `forcedChoiceSentence` — one
+       * answer to "what did the game decide?", worded for two audiences.
+       */
+      const forced = forcedChoiceOf(event, { nameOf: r.name, playerName: r.playerName });
+      return forced === null ? null : { text: forcedChoiceLogLine(forced), tone: 'trigger' };
+    }
     case 'choiceAbandoned':
       return { text: `${r.name(event.sourceInstanceId)} could not finish — ${event.reason}.`, tone: 'trigger' };
     case 'actionRejected':
