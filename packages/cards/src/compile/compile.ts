@@ -65,7 +65,8 @@ import type { CastZone, KeywordFlags } from '@jonny-boi/core';
 // §3.112 — the cast-alternative family's closed kind list, for the keyword sweep.
 import { ALTERNATIVE_COST_KINDS } from '@jonny-boi/core';
 import type { AlternativeCostKind } from '@jonny-boi/core';
-import { frontFaceName, normalizeClause, parseManaSymbols, prepareOracle, splitSentences } from './text.js';
+import { frontFaceName, normalizeClause, parseCount, parseManaSymbols, prepareOracle, splitSentences } from './text.js';
+import type { ActivationRestriction } from '@jonny-boi/core';
 import { AS_ENTERS_PRIMITIVE } from '../choice-primitives.js';
 
 /**
@@ -834,7 +835,28 @@ function compileActivatedAbility(clause: string, assembly: Assembly, ctx: RuleCo
   // this engine cannot check, and they stay reported: an ability whose
   // restriction was dropped is activatable in windows the printed one is not.
   const sorceryOnly = SORCERY_SPEED_ONLY.exec(split.effect);
-  const effectText = sorceryOnly ? split.effect.slice(0, sorceryOnly.index).trim() : split.effect;
+  let effectText = sorceryOnly ? split.effect.slice(0, sorceryOnly.index).trim() : split.effect;
+
+  // §3.149 — "**Activate only if ~ has four or more quest counters on it**"
+  // (Luminarch Ascension, Glistening Sphere, Cryptex). Read from the same
+  // trailing-sentence position the sorcery restriction occupies, and turned into
+  // core's `ActivatedAbility.activateOnly`.
+  //
+  // ⚠️ A `null` here is NOT "no restriction". The regex only matches lines that
+  // DO print this shape, so a match whose count word is unreadable means the
+  // card prints a restriction we could not transcribe — and the whole line is
+  // refused, exactly as an unreadable intervening "if" refuses its trigger.
+  // Returning the ability without the restriction would make it activatable in
+  // states the printed one is not.
+  let activateOnly: ActivationRestriction | undefined;
+  const counterGate = ACTIVATE_ONLY_IF_COUNTERS.exec(effectText);
+  if (counterGate) {
+    const min = parseCount(counterGate[1]);
+    const counter = counterGate[2];
+    if (min === null || min <= 0 || counter === undefined) return false;
+    activateOnly = { kind: 'sourceHasCounters', counter, min };
+    effectText = effectText.slice(0, counterGate.index).trim();
+  }
 
   const effects = ctx.compileEffectClause(effectText);
   if (!effects || effects.length === 0) return false;
@@ -845,11 +867,31 @@ function compileActivatedAbility(clause: string, assembly: Assembly, ctx: RuleCo
     // Printed activated abilities are instant-speed unless they say otherwise —
     // and the one wording that says otherwise is stripped above.
     ...(sorceryOnly ? { timing: 'sorcery' as const } : {}),
+    ...(activateOnly ? { activateOnly } : {}),
     label: capitalizeFirst(split.raw),
   });
   assembly.matchedRules.push('activated-ability');
   return true;
 }
+
+/**
+ * "Activate only if ~ has N or more KIND counters on it", as the trailing
+ * sentence of an activated ability's effect half.
+ *
+ * Anchored to the end so it cannot swallow a body, and narrow on purpose: only
+ * the "**or more**" FLOOR on the ability's OWN source. "Activate only if an
+ * opponent controls …", "…only during your turn", "…only once each turn" are
+ * different conditions with no field to hold them, and they keep reporting —
+ * 226 cards print an "Activate only if" of some shape and this is the 8 that
+ * print this one.
+ *
+ * The counter KIND is deliberately unrestricted, unlike `INERT_COUNTER_KINDS`
+ * in the rule table: READING a count is faithful for every kind, and a card
+ * whose counters nothing can place still reports, because the line that places
+ * them has to compile too before the card enters the pool.
+ */
+const ACTIVATE_ONLY_IF_COUNTERS =
+  /\.\s*activate only if (?:~|this \w+) has ([a-z0-9]+) or more ([a-z+/0-9-]+) counters? on it\.?$/;
 
 /**
  * "Activate only as a sorcery", as the trailing sentence of an activated
