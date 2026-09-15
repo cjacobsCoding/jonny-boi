@@ -169,6 +169,23 @@ describe('the triggering object\'s characteristic', () => {
     });
   });
 
+  it('resolves "its" on a SELF trigger too — the third provable seam', () => {
+    // Gregor, Shrewd Magistrate. The trigger names `~` and nothing else, and `~`
+    // is on the battlefield (it just dealt combat damage). Before this seam the
+    // `object-characteristic-draw` rule matched no card in a 32,341-card corpus —
+    // `dead-rule-sweep.mjs` is what said so.
+    const gregor = card({
+      name: 'Gregor, Shrewd Magistrate',
+      oracleText: 'Whenever ~ deals combat damage to a player, draw cards equal to its power.',
+    });
+    const result = compileCard(gregor);
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(result.definition.triggers![0]!.effects[0]!.params!.count).toEqual({
+      readOf: 'source',
+      characteristic: 'power',
+    });
+  });
+
   // --- the refusals, each with its reason -----------------------------------
 
   it('REFUSES a DIES trigger reading the dead creature — CR 608.2h, no LKI store', () => {

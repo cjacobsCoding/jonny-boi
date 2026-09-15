@@ -6605,13 +6605,19 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'trigger-combat-damage-to-player',
-    description: '"Whenever ~ deals combat damage to a player, BODY"',
+    description: '"Whenever ~ deals combat damage to a player, BODY" (Gregor, Shrewd Magistrate)',
     pattern: /^whenever ~ deals combat damage to a player, (.+)$/,
     build(match, ctx) {
+      // §3.148 — the THIRD seam where the bare word "its" is provable: this
+      // trigger names `~` as its subject and nothing else, and `~` is on the
+      // battlefield (it just dealt combat damage). "…, draw cards equal to its
+      // power" is Gregor. `resolveItsReferent` still declines any body that
+      // names a second object, so nothing here is a guess.
+      const body = resolveItsReferent(match[1] ?? '', "~'s");
       return triggerFrom(
         ctx,
         { on: 'combatDamageToPlayer' },
-        match[1] ?? '',
+        body,
         `Combat damage to a player: ${match[1] ?? ''}`,
       );
     },
