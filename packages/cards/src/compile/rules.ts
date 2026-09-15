@@ -4182,6 +4182,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   // field for it, so the only rule that could be written here is one that drops
   // the word "another" — a Kiora's Follower that may untap itself for an
   // arbitrarily large mana loop, which is a card playing wider than printed.
+  // The honest move is the empty one until `ActivatedAbility` can say it.
+  //
   // ===========================================================================
   // §3.150 — THE DOES-NOT-UNTAP FAMILY, one-shot half (`freezeTarget`).
   //
