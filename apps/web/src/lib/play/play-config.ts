@@ -948,6 +948,63 @@ export const FORCED_CHOICE_CONFIG: ForcedChoiceConfig = Object.freeze({
 });
 
 /**
+ * THE ONE ANNOUNCEMENT SURFACE (`lib/play/announcements.ts`).
+ *
+ * Caleb: *"we are getting some overriding overlays in app that look bad … those
+ * should reconcile somehow"*. Four `position: fixed` announcers were painting
+ * over each other — two of them (`.combat-hold` and `.forced-choice`) into the
+ * literally identical slot at the identical z-index.
+ *
+ * ⚠️ THREE OF THE FOUR BEATS ARE NOT HERE, ON PURPOSE. The combat beat belongs
+ * to {@link CombatHoldConfig}, the spell hold's to {@link SpellHoldConfig} and
+ * the settled choice's to {@link ForcedChoiceConfig}; the queue READS them
+ * through `ANNOUNCEMENT_KINDS` rather than restating them, so tuning a beat
+ * still happens in exactly one place (rule 12). What is new here is the ONE
+ * announcement that never had a beat at all.
+ */
+export interface AnnouncementConfig {
+  /**
+   * How long a revealed card stands, ms.
+   *
+   * ⚠️ IT USED TO HAVE NO BEAT, and that is half of the reported defect. The
+   * reveal banner was dismissed only by a click or by the NEXT reveal, so a
+   * Goblin Guide on turn three left a strip on screen for the rest of the game
+   * — a permanent obstacle for every later announcement to collide with. A
+   * notice that outlives what it is about is what made "overriding overlays"
+   * inevitable rather than occasional.
+   *
+   * DERIVED from {@link ForcedChoiceConfig.holdMs} rather than invented, because
+   * the two carry the same reading load: one sentence and one card face. A
+   * reveal is not a bigger event than a choice the game made for you.
+   */
+  readonly revealMs: number;
+  /**
+   * The same beat for a viewer who asked for reduced motion.
+   *
+   * A NUMBER, not a switch — the convention {@link Board3dConfig.reducedMotionTiltDeg}
+   * set and both holds follow. There is no travel to wait out, but the sentence
+   * and the card still have to be read, so it shortens rather than vanishing.
+   */
+  readonly reducedMotionRevealMs: number;
+  /**
+   * Fade of the surface as one announcement replaces another, ms.
+   *
+   * ONE fade for the whole surface, taken from the spell hold's, because the
+   * point of a single surface is that every announcement arrives the same way.
+   * `.spell-hold` and `.forced-choice` already read this same number through two
+   * separately published custom properties; the surface publishes one.
+   */
+  readonly fadeMs: number;
+}
+
+/** The default announcement-surface config (see {@link AnnouncementConfig}). */
+export const ANNOUNCEMENT_CONFIG: AnnouncementConfig = Object.freeze({
+  revealMs: FORCED_CHOICE_CONFIG.holdMs,
+  reducedMotionRevealMs: FORCED_CHOICE_CONFIG.reducedMotionHoldMs,
+  fadeMs: SPELL_HOLD_CONFIG.fadeMs,
+});
+
+/**
  * The two-phase cast/activate transaction (UX-3/4/5).
  *
  * The commit boundary itself is `lib/play/proposal.ts` + the session snapshot
