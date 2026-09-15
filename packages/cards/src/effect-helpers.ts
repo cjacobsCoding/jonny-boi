@@ -71,7 +71,7 @@ export type DerivedCount = DerivedCountName | typeof PERMANENTS_MATCHING;
 
 /**
  * The one count name that carries its own SET as data instead of naming a
- * hand-written one (DESIGN §3.148) — "the number of **Mountains you control**",
+ * hand-written one (DESIGN §3.149) — "the number of **Mountains you control**",
  * "**artifacts they control**", "**Clerics on the battlefield**".
  *
  * Every other row of the vocabulary is a set written into core by hand, and the
@@ -161,7 +161,7 @@ function isChosenX(value: unknown): value is ChosenXValue {
   return typeof value === 'object' && value !== null && (value as { chosenX?: unknown }).chosenX === true;
 }
 
-// --- object-characteristic amounts (DESIGN §3.148) ------------------------------
+// --- object-characteristic amounts (DESIGN §3.149) ------------------------------
 //
 // The THIRD way a printed card spells a variable number, beside `{X}` and
 // "equal to the number of …": a characteristic read off ONE OBJECT.
@@ -345,7 +345,7 @@ function countOfDerived(ctx: EffectContext, value: DerivedValue): number {
     return ctx.kickCount ?? (ctx.kicked === true ? 1 : (ctx.source.timesKicked ?? 0));
   }
   if (value.countOf === PERMANENTS_MATCHING) {
-    // The set is DATA on the descriptor (§3.148). A ref with no filter would be
+    // The set is DATA on the descriptor (§3.149). A ref with no filter would be
     // "every permanent", which no printed card means, so it counts nothing
     // rather than everything — the direction that cannot play better than
     // printed. The compiler never emits one.

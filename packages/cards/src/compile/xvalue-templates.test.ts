@@ -1,5 +1,5 @@
 /**
- * THE {X} / DERIVED-VALUE FAMILY (DESIGN §3.148) — the three printed ways a card
+ * THE {X} / DERIVED-VALUE FAMILY (DESIGN §3.149) — the three printed ways a card
  * spells a variable amount, and the families deliberately left REPORTED.
  *
  * The backlog row named 953 cards. `gap-clauses.mjs` says 880 distinct shapes
@@ -226,6 +226,52 @@ describe('the triggering object\'s characteristic', () => {
         "Target creature you control deals damage equal to its power to target creature you don't control.",
     } as never);
     expect(blockers(twoObjects)).toHaveLength(1);
+  });
+});
+
+// ===========================================================================
+// 2b. THE RESIDUE ON THE OWNER'S OWN CARD — named, not hand-waved
+// ===========================================================================
+
+describe('Trostani, Selesnya\'s Voice — what is left, exactly', () => {
+  /**
+   * The whole printed card. Its {X}/derived-value half is DONE — the trigger
+   * above compiles — and the card still does not, for a reason that belongs to
+   * a different family. Pinned here so the next contributor reads the blocker
+   * instead of re-deriving it, and so this test goes RED the day populate lands
+   * (which is the moment this card should enter the pool).
+   */
+  const TROSTANI = card({
+    name: "Trostani, Selesnya's Voice",
+    typeLine: { supertypes: ['Legendary'], types: ['Creature'], subtypes: ['Dryad'] },
+    manaCost: { generic: 0, W: 2, U: 0, B: 0, R: 0, G: 2, C: 0, other: [] },
+    power: 2,
+    toughness: 5,
+    oracleText:
+      "Whenever another creature you control enters, you gain life equal to that creature's toughness.\n" +
+      "{1}{G}{W}, {T}: Populate. (Create a token that's a copy of a creature token you control.)",
+  } as never);
+
+  it('has exactly ONE blocker left, and it is POPULATE — not an amount', () => {
+    const missing = compileCard(TROSTANI).missing ?? [];
+    expect(missing).toHaveLength(1);
+    // `createTokenCopy` takes `self`, `equipped` or a TARGET. Populate is a
+    // resolution-time CHOICE among your own creature tokens — the copy-selector
+    // family, not this one. Approximating it (copy the first token, or target
+    // one) hands Trostani a populate the card does not print.
+    expect(missing[0]!.text).toContain('Populate');
+    expect(missing[0]!.missingEngineSystem).toContain('activated-ability template');
+  });
+
+  it('and the amount half of it is genuinely done', () => {
+    // The discriminator for the claim above: the SAME card with the populate
+    // line removed compiles completely.
+    const triggerOnly = card({
+      name: "Trostani, Selesnya's Voice",
+      oracleText:
+        "Whenever another creature you control enters, you gain life equal to that creature's toughness.",
+    });
+    expect(compileCard(triggerOnly).status).toBe('complete');
   });
 });
 

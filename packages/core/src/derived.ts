@@ -173,7 +173,7 @@ export function evaluateDerivedCount(state: GameState, countOf: DerivedCountName
 export type DerivedCountScope = 'you' | 'opponents' | 'any';
 
 /**
- * Count the permanents matching a {@link CardFilter} (DESIGN §3.148).
+ * Count the permanents matching a {@link CardFilter} (DESIGN §3.149).
  *
  * **This is the row that stops the count vocabulary being a row per noun.**
  * Every entry in {@link DerivedCountName} above names one hand-written set, and

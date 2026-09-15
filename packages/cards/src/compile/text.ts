@@ -47,7 +47,7 @@ const NUMBER_WORDS: Readonly<Record<string, number>> = Object.freeze({
 export const COUNT_TOKEN = `(${Object.keys(NUMBER_WORDS).join('|')}|\\d+)`;
 
 /**
- * A printed amount that may also be the letter **X** (DESIGN §3.148) — "~ deals
+ * A printed amount that may also be the letter **X** (DESIGN §3.149) — "~ deals
  * X damage to each creature, where X is the number of …" (Chain Reaction),
  * "{X}, {T}: Target player mills X cards" (Sands of Delirium).
  *

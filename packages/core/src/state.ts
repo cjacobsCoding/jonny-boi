@@ -770,7 +770,7 @@ export interface TriggeredStackObject {
    */
   readonly origin?: 'activated';
   /**
-   * The value chosen for an ACTIVATED ability's `{X}` cost (DESIGN §3.148),
+   * The value chosen for an ACTIVATED ability's `{X}` cost (DESIGN §3.149),
    * recorded as the cost was paid — "{X}{R}{G}, {T}: Target creature gets
    * +X/+0…" (Kessig Wolf Run).
    *

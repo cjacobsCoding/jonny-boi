@@ -534,7 +534,7 @@ function applyRules(
     // returns null — keep looking, then fall through to `missing`.
     if (contribution) return { contribution, ruleId: rule.id };
   }
-  // §3.148 — THE "WHERE X IS …" BINDING, tried only after every rule has
+  // §3.149 — THE "WHERE X IS …" BINDING, tried only after every rule has
   // declined, so a sentence that already compiles is untouched.
   //
   // This is ONE pre-pass rather than a rule per body, and that is the whole
@@ -865,7 +865,7 @@ function compileActivatedAbility(clause: string, assembly: Assembly, ctx: RuleCo
   // restriction was dropped is activatable in windows the printed one is not.
   const sorceryOnly = SORCERY_SPEED_ONLY.exec(split.effect);
   const withRestriction = sorceryOnly ? split.effect.slice(0, sorceryOnly.index).trim() : split.effect;
-  // §3.148 — "~ deals damage equal to ITS power to any target" (Spikeshot
+  // §3.149 — "~ deals damage equal to ITS power to any target" (Spikeshot
   // Goblin). Inside an activated ability's body the source is the only object
   // "its" can name, and it was on the battlefield a moment ago to be activated,
   // so the referent is provable here and is spelled out for the effect table.
@@ -1015,7 +1015,7 @@ function parseActivationCost(text: string, ctx: RuleContext): ActivationCost | n
       continue;
     }
     if (MANA_SYMBOLS.test(part)) {
-      // §3.148 — `{X}` in an ACTIVATION cost ("{X}{R}{G}, {T}: …" — Kessig Wolf
+      // §3.149 — `{X}` in an ACTIVATION cost ("{X}{R}{G}, {T}: …" — Kessig Wolf
       // Run). The X symbols are partitioned off before the rest is parsed, for
       // exactly the reason the CAST path does it (`partitionOtherSymbols`): X is
       // 0 everywhere but on the stack, so the base cost every payability reader
@@ -1411,7 +1411,7 @@ export function compileCard(card: CompilableCard): CompileResult {
   // `outerCtx` is the card's own context; `ctx` is the name every call site
   // below uses. They are the same object — the two names exist so
   // `compileEffectClause` can shadow `ctx` with a DERIVED context for one call
-  // (§3.148's `xBound`) while still reaching the base one.
+  // (§3.149's `xBound`) while still reaching the base one.
   const outerCtx: RuleContext = {
     card,
     compileEffectClause(
@@ -1419,7 +1419,7 @@ export function compileCard(card: CompilableCard): CompileResult {
       options?: { readonly targetFree?: boolean; readonly xBound?: boolean },
     ): readonly EffectRef[] | null {
       const targetFree = options?.targetFree === true;
-      // §3.148 — a derived context for this call only, so "X is bound here" is
+      // §3.149 — a derived context for this call only, so "X is bound here" is
       // visible to the rules that read X without becoming a fact about the card.
       // The nested compiles a rule may start from its `build` still see the
       // unbound context, which is the safe direction: a deeper clause that meant

@@ -1656,7 +1656,7 @@ export interface ActivationCost {
   /**
    * How many `{X}` symbols the printed ACTIVATION cost carries — "**{X}{R}{G}**,
    * {T}: Target creature gets +X/+0…" (Kessig Wolf Run), "{X}, {T}: Target
-   * player mills X cards" (Sands of Delirium). DESIGN §3.148.
+   * player mills X cards" (Sands of Delirium). DESIGN §3.149.
    *
    * Exactly {@link CardDefinition.xCost}'s shape and meaning, one level down: the
    * X portion is NOT part of {@link mana}, so every existing reader of an

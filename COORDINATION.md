@@ -1,3 +1,55 @@
+- 2026-09-15 `feat/xvalue-templates` — ✅ **pushed-ready, NOT merged** (worker; integrator merges).
+  **§3.149 — the {X}/derived-value row measured, and its NAME points at the wrong half.**
+  The row named 953 cards and is the §3.120 artifact a THIRD time: **954 cards, 973 clauses, 880 shapes —
+  1.08 cards per shape**, thinner than §3.147's 1.2. NEW `xvalue-blame.mjs` splits it by WHICH HALF has no
+  rule and shows the amount vocabulary was never most of it: **SENTENCE gap 683 clauses / 574 shapes against
+  AMOUNT-only 170 / 155** — 70% of the row is an effect the table cannot build, filed here only because its
+  text contains "equal to". NEW `xvalue-families.mjs` ranks the amount half by CARDS unblocked. Four closed
+  tables shipped: `{X}` in an ACTIVATION cost (`ActivationCost.xCost`, value on the action, offer path
+  enumerates one per affordable value), object-characteristic amounts at the one `intParam` seam, the
+  GENERAL "where X is …" binding as one pre-pass in `applyRules`, and a FILTERED count row
+  (`countPermanentsMatching`) so the next printed noun is a table row instead of a core enum row.
+  📊 **6,443 → 6,500 accepted, +57 gained / 0 LOST**, one fixed 32,341-card corpus compiled twice with this
+  branch's sources reverted to fork point `51919f7` in between. Row 954 → 921 cards, 880 → 850 shapes.
+  ⚠️ **THE FIRST SET DIFF WAS +55 WITH 8 SILENT LOSSES** — generated count rows were spread after the named
+  ones, so "lands you control" stopped being the row core's CDA evaluator knows and Molimo, Maro-Sorcerer
+  plus seven siblings left the pool with every test green. `playable-set.mjs` is what caught it; a bare
+  count would have reported it as a win. Named rows now win and a test pins the precedence.
+  📊 `npm run build` **exit 0** (unpiped) · `npx vitest run packages/cards packages/core --minWorkers=1
+  --maxWorkers=1` — see the run line in the report · `dead-rule-sweep` **154 rules · 332 fired · 3 never**,
+  all three dead on `main` before this branch; `object-characteristic-draw` was dead when written and the
+  sweep caught it, so the third "its"-seam was opened and Gregor, Shrewd Magistrate compiles.
+  🔎 **Falsified two new rules, red pasted in the report**: removing the `xIsBound` gate reddens exactly 1
+  test (X accepted where nothing bound one); never setting `carriesSubject` reddens exactly 2 (Trostani
+  reads nothing, AND the dies-trigger lock stops firing) — the silent-zero defect, which is the failure
+  mode of an amount vocabulary.
+  📏 **Throughput paired on one box**, `pilot-bench --games 1200 --seed 4242`, 5 reps before / 9 after:
+  **median 195 vs 207 games/sec**, ranges 170–199 and 179–221, overlapping. All 14 runs played identical
+  games (`A won 504/1200`), and `derived.ts`'s diff is purely additive — `evaluateDerivedCount`'s switch
+  and `characteristicValue` are byte-identical to `main`, so the stat-read hot path cannot have moved.
+  ✅ **Kessig Wolf Run compiles.** ❌ **Trostani, Selesnya's Voice does NOT, and not for this family's
+  reason**: its trigger compiles; `{1}{G}{W}, {T}: Populate.` blocks it — `createTokenCopy` has `self`,
+  `equipped` and TARGET selectors and populate is a resolution-time CHOICE among your creature tokens.
+  **That belongs to the copy-selector family (§3's 299-card near-miss row), and a test pins the residue.**
+  ❌ **Axebane Guardian NOT made reachable and not attempted** — §3.147's reason stands and nothing here
+  touches the mana system. Its easier sibling ("Add an amount of {G} equal to ~'s power" — Marwyn,
+  Viridian Joiner) is left REPORTED for the same reason.
+  ⛔ **Generated files deliberately untouched** (pool, expansion report, card indexes) per §3.147's finding.
+  ⚠️ **§3.149 claimed off a contended range** — §3.148 is in `main` AND on `fix/strionic-ability-copy`.
+  Nothing claims §3.149 (remote scan). The number is a CROSS-FILE identifier: **35 references across 11
+  source files**. Renumber by grepping the number, not by editing the heading.
+  ⚠️ **Semantic-conflict warning for the integrator:** this branch edits `compile/rules.ts`,
+  `compile/compile.ts`, `compile/text.ts`, `compile/types.ts` and `effect-helpers.ts` alongside the
+  counters and targeted-trigger lanes. The riskiest hunks are **`applyRules`** (a new binding pre-pass at
+  the end), **`DERIVED_COUNTS`** (split into a NAMED and a FILTERED half whose spread ORDER is
+  load-bearing), and **`RuleContext`** (two new optional fields). A clean textual merge of
+  `DERIVED_COUNTS` that reorders the two spreads silently costs 8 cards — re-run `playable-set.mjs` as a
+  SET DIFF after merging, not a count.
+  ⚠️ **A DRY duplicate left in place on purpose:** `damage-any-target` and `x-damage` are one sentence
+  written twice. Merging them deletes `x-damage`, which `apps/web/src/lib/about/mechanics.ts` names as the
+  {X} mechanic's WITNESS with a test that fails when a witness stops resolving — a two-file fix this lane
+  does not own. Both rules carry a note. Also untouched: `each-opponent-loses-life` is declared TWICE in
+  `EFFECT_RULES` with the same `id` (pre-existing), so coverage tooling cannot tell the two apart.
 - 2026-09-14 `feat/activated-ability-templates` — ✅ **pushed-ready, NOT merged** (worker; integrator merges).
   **§3.147 — the activated-ability backlog row measured, then the one shape inside it that concentrates.**
   The row named 1,449 cards and is the §3.120 artifact again (1,273 distinct shapes, 1.2 cards each); NEW

@@ -415,7 +415,7 @@ export interface CompileRule {
 export interface RuleContext {
   readonly card: CompilableCard;
   /**
-   * DESIGN §3.148 — set while compiling the BODY of an activated ability whose
+   * DESIGN §3.149 — set while compiling the BODY of an activated ability whose
    * ACTIVATION cost prints `{X}` ("{X}{R}{G}, {T}: Target creature gets
    * +X/+0…" — Kessig Wolf Run).
    *
@@ -427,7 +427,7 @@ export interface RuleContext {
    */
   readonly xFromActivationCost?: boolean;
   /**
-   * DESIGN §3.148 — what a printed `X` MEANS in this clause, when the sentence
+   * DESIGN §3.149 — what a printed `X` MEANS in this clause, when the sentence
    * DEFINED it: "~ deals X damage to each creature, **where X is the number of
    * creatures on the battlefield**" (Chain Reaction).
    *

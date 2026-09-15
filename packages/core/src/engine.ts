@@ -1003,7 +1003,7 @@ function resolveTriggeredAbility(
       ...(obj.triggeringAmount !== undefined ? { triggeringAmount: obj.triggeringAmount } : {}),
       // "That creature" (DESIGN §3.107) rides the frame for the same reason.
       ...(obj.triggeringInstances !== undefined ? { triggeringInstances: obj.triggeringInstances } : {}),
-      // An ACTIVATED ability's `{X}` (DESIGN §3.148) — the same reason again:
+      // An ACTIVATED ability's `{X}` (DESIGN §3.149) — the same reason again:
       // the value was chosen and charged before the ability reached the stack,
       // and "gets +X/+0" is read during a resolution that outlives both.
       ...(obj.xValue !== undefined ? { xValue: obj.xValue } : {}),
@@ -5092,7 +5092,7 @@ function applyActivateAbility(
   // --- pay the cost, in full, before anything reaches the stack ---
   const player = state.players[action.player];
   const cost = ability.cost;
-  // §3.148 — the `{X}` in an ACTIVATION cost. The value is part of the ACTION
+  // §3.149 — the `{X}` in an ACTIVATION cost. The value is part of the ACTION
   // (CR 602.2b: costs are paid before the ability is on the stack), and the
   // whole cost — base plus `xValue × xCost` generic — is charged in ONE
   // `payCost` so the planner sees it as the single payment it is; charging the
@@ -5178,7 +5178,7 @@ function applyActivateAbility(
     label: ability.label,
     // An activated ability, loyalty included — see `origin` on the type.
     origin: 'activated',
-    // The X that was actually paid for rides to the resolution (§3.148), so the
+    // The X that was actually paid for rides to the resolution (§3.149), so the
     // body's "gets +X/+0" reads the number rather than a default.
     ...(xCount > 0 ? { xValue } : {}),
   });
@@ -5243,7 +5243,7 @@ function sacrificeCostCandidates(
 
 /**
  * The mana an activation actually owes: the printed base cost plus the generic
- * the chosen X buys (§3.148). ONE answer, read by the payability gate, by the
+ * the chosen X buys (§3.149). ONE answer, read by the payability gate, by the
  * offer path's affordability search and by the payment itself, so "offered" and
  * "accepted" cannot disagree about the price of an X.
  *
@@ -5258,7 +5258,7 @@ function activationManaDue(cost: ActivationCost, xValue: number): ManaCost | und
 }
 
 /**
- * The largest X this ability's controller could pay for RIGHT NOW (§3.148).
+ * The largest X this ability's controller could pay for RIGHT NOW (§3.149).
  *
  * Asked of the same `canPay` the gate and the payment use, walking upward one
  * value at a time — the exact analogue of {@link maxAffordableX}, against the
@@ -5285,7 +5285,7 @@ function maxAffordableActivationX(
   return max;
 }
 
-/** `[from … to]`, inclusive — the X values an activation offers (§3.148). */
+/** `[from … to]`, inclusive — the X values an activation offers (§3.149). */
 function rangeInclusive(from: number, to: number): number[] {
   const out: number[] = [];
   for (let n = from; n <= to; n++) out.push(n);
@@ -6028,7 +6028,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
       const payers = ability.cost.sacrificeAnother === undefined
         ? [undefined]
         : sacrificeCostCandidates(state, perm, ability.cost).map((c) => [c.instanceId] as const);
-      // §3.148 — an `{X}` in the activation cost is enumerated like a payer: one
+      // §3.149 — an `{X}` in the activation cost is enumerated like a payer: one
       // action per value the FLOATING pool can fund (CR 602.2b, the cost is paid
       // as the ability is activated). Zero is always on offer, and is the whole
       // list for every ability that prints no X, so nothing else here changed.

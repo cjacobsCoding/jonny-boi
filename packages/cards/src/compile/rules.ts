@@ -67,7 +67,7 @@ import {
 import { BASIC_LAND_NAMES } from '../../data/pool.js';
 import { ITS_MANA_COST } from '../primitives.js';
 // The one name for the filtered-count row, imported rather than re-spelled, so
-// the compiler and the reader cannot disagree about what it is called (§3.148).
+// the compiler and the reader cannot disagree about what it is called (§3.149).
 import { PERMANENTS_MATCHING } from '../effect-helpers.js';
 
 /**
@@ -364,7 +364,7 @@ const NAMED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = O
 });
 
 /**
- * FILTERED rows (DESIGN §3.148) — the other half of the same vocabulary.
+ * FILTERED rows (DESIGN §3.149) — the other half of the same vocabulary.
  *
  * {@link NAMED_DERIVED_COUNTS} names sets core wrote by hand; these carry their
  * set AS DATA, so the next printed noun is one more line here instead of an enum
@@ -1618,7 +1618,7 @@ function sacrificeNounFilter(noun: string, nontoken: boolean): { filter?: CardFi
  */
 const CHOSEN_X_PARAM = Object.freeze({ chosenX: true });
 
-// --- object-characteristic amounts (DESIGN §3.148) -------------------------------
+// --- object-characteristic amounts (DESIGN §3.149) -------------------------------
 //
 // The printed ways a card names ONE OBJECT whose power/toughness/mana value is
 // the amount, and the CLOSED table mapping each to the subject the engine reads.
@@ -1735,7 +1735,7 @@ function cardHasXCost(ctx: RuleContext): boolean {
  * Whether a printed `X` in THIS clause has a value the engine actually charged
  * for — the one question every X-reading rule asks.
  *
- * Two sources, one reader (§3.148): the card's own `{X}` mana cost (a cast-time
+ * Two sources, one reader (§3.149): the card's own `{X}` mana cost (a cast-time
  * choice), and an `{X}` in the ACTIVATION cost of the ability whose body this
  * clause is (`RuleContext.xFromActivationCost`). Before the second existed,
  * Kessig Wolf Run's "+X/+0" was refused by a rule looking at the wrong cost, and
@@ -1751,7 +1751,7 @@ function xIsBound(ctx: RuleContext): boolean {
  * WHAT `X` MEANS IN THIS CLAUSE — the one answer, read by every X rule.
  *
  * Three sources, in priority order, and each is a different printed thing:
- *  1. a `where X is …` clause that DEFINED it (§3.148) — a derived count;
+ *  1. a `where X is …` clause that DEFINED it (§3.149) — a derived count;
  *  2. the card's own `{X}` mana cost — the value chosen and charged at cast;
  *  3. the `{X}` in the ACTIVATION cost that put this body on the stack.
  * `null` when nothing bound one, which is the refusal that keeps "deals X
@@ -2369,7 +2369,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // same sentence with the same recipient table and two parsers — but that
     // deletes `x-damage`, and `apps/web/src/lib/about/mechanics.ts` names that
     // id as the {X} mechanic's WITNESS with a test that fails when a witness
-    // stops resolving. It is a two-file fix for whoever owns both; §3.148 did
+    // stops resolving. It is a two-file fix for whoever owns both; §3.149 did
     // not own `apps/web` and left the duplicate rather than break that page.
     pattern: new RegExp(`^~ deals ${COUNT_TOKEN} damage to ${DAMAGE_TARGET_PHRASE}$`),
     needsChosenTarget: true,
@@ -2391,7 +2391,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     build(match, ctx) {
       // The pattern has two alternations ("… and you gain" / "…. You gain"), each
       // carrying three groups (count, target phrase, life), so read whichever
-      // triple actually matched. §3.148 — both halves are AMOUNT slots, because
+      // triple actually matched. §3.149 — both halves are AMOUNT slots, because
       // Tendrils of Corruption prints "deals X damage … and you gain X life".
       const damage = parseAmount(match[1] ?? match[4], ctx);
       const restriction = damageRestriction(match[2] ?? match[5] ?? '');
@@ -2496,7 +2496,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     /**
      * "~ deals **X** damage to <TARGET>" — the X spelling of `damage-any-target`
      * above. The two are one sentence written twice, and the right fix is one
-     * rule over the shared AMOUNT token; see that rule's note for why §3.148
+     * rule over the shared AMOUNT token; see that rule's note for why §3.149
      * did not make it (the id is a witness in `apps/web`, which this lane does
      * not own). The AMOUNT it reads is {@link xParamValue}'s, so all three
      * sources of an X — cast cost, activation cost, `where X is …` — reach it.
@@ -2536,7 +2536,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   // ===========================================================================
-  // === OBJECT-CHARACTERISTIC AMOUNTS (DESIGN §3.148) =========================
+  // === OBJECT-CHARACTERISTIC AMOUNTS (DESIGN §3.149) =========================
   // ===========================================================================
   //
   // "…equal to THAT CREATURE'S toughness" / "…equal to ~'S POWER" — the third
@@ -3322,7 +3322,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
      * "Target player mills **X** cards", with or without a where-clause — the X of the
      * card's own `{X}` cost (Traumatize's cousins) or of the ACTIVATION cost
      * that put this body on the stack, "{X}, {T}: Target player mills X cards"
-     * (Sands of Delirium, Whetwheel). §3.148.
+     * (Sands of Delirium, Whetwheel). §3.149.
      *
      * Its own rule rather than an `x` row inside {@link COUNT_TOKEN}, because
      * the two need different gates: a plain number is always readable and an X
@@ -6351,7 +6351,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       const event = match[10] === 'enters' ? 'permanentEnters' : 'permanentDies';
       const body = match[11] ?? '';
       const optional = body.startsWith('you may ');
-      // "…you gain life equal to ITS toughness" (§3.148). On an ENTERS trigger
+      // "…you gain life equal to ITS toughness" (§3.149). On an ENTERS trigger
       // the only object the body names is the permanent that just arrived, and
       // it is still on the battlefield when the ability resolves — so "its" is
       // provable here and is spelled out for the effect table. On a DIES trigger
@@ -6608,7 +6608,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     description: '"Whenever ~ deals combat damage to a player, BODY" (Gregor, Shrewd Magistrate)',
     pattern: /^whenever ~ deals combat damage to a player, (.+)$/,
     build(match, ctx) {
-      // §3.148 — the THIRD seam where the bare word "its" is provable: this
+      // §3.149 — the THIRD seam where the bare word "its" is provable: this
       // trigger names `~` as its subject and nothing else, and `~` is on the
       // battlefield (it just dealt combat damage). "…, draw cards equal to its
       // power" is Gregor. `resolveItsReferent` still declines any body that

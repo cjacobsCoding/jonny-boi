@@ -272,7 +272,7 @@ export interface ActivateAbilityAction {
    */
   readonly costInstanceIds?: readonly InstanceId[];
   /**
-   * The value chosen for an `{X}` in the ACTIVATION cost (DESIGN §3.148) —
+   * The value chosen for an `{X}` in the ACTIVATION cost (DESIGN §3.149) —
    * "{X}{R}{G}, {T}: Target creature gets +X/+0…" (Kessig Wolf Run).
    *
    * On the action for the same reason `costInstanceIds` is: the cost is paid as

@@ -148,3 +148,10 @@ cards people actually own, rather than only the cards that happen to be easy.
 | date | accepted | delta | what landed |
 | --- | --- | --- | --- |
 | 2026-09-14 | 5,619 | — | baseline at mandate |
+| 2026-09-15 | 6,500 | +57 | the {X}/derived-value amount vocabulary (DESIGN §3.149) — measured on the 32,341-card corpus against fork point `51919f7`, set-diffed (0 lost). **Kessig Wolf Run compiles; Trostani still needs Populate.** |
+
+> ⚠️ **The 953-card row was the §2 trap for the third time: 954 cards, 880 shapes, 1.08 cards per
+> shape.** And its NAME points at the wrong half — `xvalue-blame.mjs` shows **70% of it is a SENTENCE
+> with no rule**, in this row only because its text contains the words "equal to". The amount
+> vocabulary, which is what the row is actually about, is ~132 winnable cards. Run the two committed
+> scripts before taking a headline from the table above.
