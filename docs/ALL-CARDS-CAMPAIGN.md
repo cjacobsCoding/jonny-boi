@@ -322,11 +322,35 @@ and the shipped pool lags the compiler. Any absolute below is annotated with the
 > trusting any row size: by text this shape is **691 cards, not 498**.
 
 ⚠️ **These deltas do not add up, and must not be added.** Each was measured against its own fork
-point on its own corpus, so the arithmetic sum (+528) is an upper bound, not a count. **The campaign
-total is a set diff of the final `main` against the mandate baseline, run once after the wave lands**
-— and if it is smaller than the sum, the smaller number is the one that goes in this table (rule 11).
+point on its own corpus, so the arithmetic sum is an upper bound, not a count. **The campaign total is
+a set diff of the final `main` against one fixed corpus** — and if it is smaller than the sum, the
+smaller number is the one that goes in this table (rule 11).
 
-### 8a. What five consecutive lanes proved — do not re-derive this
+### 8c. WAVE 5, MEASURED WHOLE (2026-09-15) — +251, not +252
+
+Run once after all three lanes were on `main`, on the corpus every lane shared
+(`corpus-fixed.json`, **32,341 cards**, md5 `718eae40bfdbfa5ae3db5adbc1590c88`), against the same
+BEFORE set two of the three lanes measured from:
+
+```
+BEFORE  compiler at fd1ca31   6,653 complete / 32,341
+AFTER   main @ 3f239a5        6,904 complete / 32,341
+GAINED  251        LOST  0
+```
+
+**The three lanes reported +43, +175 and +34 — an arithmetic +252. The measured whole is +251.** One
+card is not additive, because the lanes overlap where a clause has two blockers and because modal
+measured on a different corpus (32,414). The smaller number is the one that counts. **Nothing was
+lost: the LOST list is empty, so no lane's work erased another's** — which is the failure this whole
+practice exists to catch, and it has fired here before.
+
+**Eight of Caleb's sixteen blocked deck cards are verified present BY NAME in the compiled set** —
+Arbor Elf, Doorkeeper, Oblivion Ring, Scavenging Ooze, Luminarch Ascension, Kessig Wolf Run,
+Selesnya Charm, Trostani. Checked against the set itself, not taken from any lane's report.
+
+⚠️ **This is a COMPILER number, not a shipped-pool number.** See §5a: the app still ships 5,651.
+
+### 8a. What seven consecutive lanes proved — do not re-derive this
 
 1. **Every family measured so far was an aggregation artifact** — **1.20, 1.18, 1.13, 1.08, 1.05 and
    1.04** cards per distinct shape, and one row measured at **1.00: every card in it prints a sentence
