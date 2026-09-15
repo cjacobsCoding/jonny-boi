@@ -97,6 +97,7 @@
  */
 import type {
   ChoiceAnswer,
+  ChoiceKind,
   GameEvent,
   GameState,
   InstanceId,
@@ -107,6 +108,7 @@ import type {
 } from '@jonny-boi/core';
 import { isPublicZone } from '@jonny-boi/ai';
 import { PROPOSAL_CONFIG } from './play-config.js';
+import { FORCED_CHOICE_KINDS, type ForcedChoice } from './forced-choice.js';
 import type {
   AbilityCostChoice,
   AbilityOption,
@@ -259,23 +261,82 @@ export type ProposalQuestion =
     };
 
 /**
- * Whether a question with exactly ONE legal answer is still put to the player.
+ * WHETHER A QUESTION WITH EXACTLY ONE LEGAL ANSWER IS STILL PUT TO THE PLAYER —
+ * and, when it is not, HOW THE BOARD SAYS WHAT IT PICKED.
+ *
+ * ⚠️ THE PHRASING IS NOT OPTIONAL, AND THE TYPE IS WHAT ENFORCES THAT. Caleb, on
+ * a Banisher Priest that exiled the only legal creature with no prompt: *"it
+ * should show that choice being made so the player understands what has
+ * happened."* A row that SETTLES must carry the words for what it settled;
+ * writing `{ ask: false, settles: true }` with no `verb` does not compile. That
+ * is the honest refusal of rule 2 expressed as a type: a future question kind
+ * cannot become invisible by omission, because the only way to add a row with no
+ * words is to make it ASK.
+ *
  * A ROW per question kind; adding a kind is a row, and each row says why.
  */
-const ASK_WHEN_ONLY_ONE_ANSWER: Readonly<Record<ProposalQuestion['kind'], boolean>> = Object.freeze({
-  // Caleb asked for exactly this beat: "consider/inspect the potential targets,
-  // then decide not to". A single legal target is still a target worth seeing
-  // before committing, and skipping it removes the pause the proposal is for.
-  targets: true,
-  // The engine's own rule for a forced answer (`askNextCastChoice`: "a question
-  // with a single legal answer is settled here instead of stopping the game to
-  // collect the inevitable"). One legal sacrifice is not a decision.
-  costPayers: false,
-  // Funding is opened by the board's picker, never raised by a missing answer.
-  mana: false,
-  // The engine already settles its own trivial answers before parking one.
-  engine: true,
-});
+type AutoSettlePolicy =
+  | { readonly ask: true; readonly why: string }
+  | {
+      /** Never raised on this path at all — there is nothing to settle or say. */
+      readonly ask: false;
+      readonly settles: false;
+      readonly why: string;
+    }
+  | {
+      /** Settled here, silently until now. The announcement ends the silence. */
+      readonly ask: false;
+      readonly settles: true;
+      /**
+       * WHICH `ChoiceKind`'S WORDS this settle borrows.
+       *
+       * A kind, not a verb, and that is the whole point: `FORCED_CHOICE_KINDS`
+       * is TOTAL over `ChoiceKind`, so naming one is a promise the phrasing
+       * exists — and the engine's own auto-answer of the same question is
+       * announced with the SAME words. Two verbs for one event is the
+       * parallel-vocabulary bug rule 12 forbids, and a sacrifice cost settled by
+       * the board and one settled by the engine are one event.
+       */
+      readonly announcesAs: ChoiceKind;
+      /** The player-facing reason, in the engine's own register ("only one …"). */
+      readonly reason: string;
+      readonly why: string;
+    };
+
+const AUTO_SETTLE_POLICY: Readonly<Record<ProposalQuestion['kind'], AutoSettlePolicy>> =
+  Object.freeze({
+    // Caleb asked for exactly this beat: "consider/inspect the potential targets,
+    // then decide not to". A single legal target is still a target worth seeing
+    // before committing, and skipping it removes the pause the proposal is for.
+    targets: Object.freeze({
+      ask: true,
+      why: 'The proposal EXISTS to give the player a look at what they are aiming at before it becomes irreversible (UX-3/UX-4). One candidate is still a look.',
+    }),
+    // The engine's own rule for a forced answer (`askNextCastChoice`: "a question
+    // with a single legal answer is settled here instead of stopping the game to
+    // collect the inevitable"). One legal sacrifice is not a decision.
+    costPayers: Object.freeze({
+      ask: false,
+      settles: true,
+      // The engine settles the very same question at `engine.ts`'s additional-cost
+      // site and emits `choiceAutoAnswered { choiceKind: 'selectCards' }`; this is
+      // that question, settled one layer up.
+      announcesAs: 'selectCards',
+      reason: 'only one legal way to pay this cost',
+      why: 'One legal way to pay a sacrifice cost is not a decision — but a creature leaving the battlefield unasked is exactly the reported complaint, so the settle is ANNOUNCED instead of silent.',
+    }),
+    // Funding is opened by the board's picker, never raised by a missing answer.
+    mana: Object.freeze({
+      ask: false,
+      settles: false,
+      why: 'Funding is opened by the board’s mana picker on request; this path never raises it, so there is nothing here to settle and nothing to announce.',
+    }),
+    // The engine already settles its own trivial answers before parking one.
+    engine: Object.freeze({
+      ask: true,
+      why: 'A question the ENGINE parked is one it already refused to settle itself (`isTrivialChoice`); by the time it reaches here it is a real decision.',
+    }),
+  });
 
 // --- the soundness invariant ------------------------------------------------------
 
@@ -640,7 +701,22 @@ export type ProposalStep =
    * tap, the opening action and every answered cast-time question land in a
    * single React update, exactly as `confirmManaPicker` already does today.
    */
-  | { readonly kind: 'committed'; readonly session: GameSession; readonly events: readonly GameEvent[] }
+  | {
+      readonly kind: 'committed';
+      readonly session: GameSession;
+      readonly events: readonly GameEvent[];
+      /**
+       * WHAT THIS PROPOSAL SETTLED WITHOUT ASKING (`AUTO_SETTLE_POLICY`), ready
+       * for the board's announcement. Empty for the overwhelming majority of
+       * commits — a cast with no sacrifice cost settles nothing.
+       *
+       * It rides the STEP rather than being re-derived by the board, because the
+       * proposal is gone by the time the board folds the step in: deriving it
+       * there would mean keeping a second copy of the answer alive for one
+       * render, which is the shape that goes stale.
+       */
+      readonly settled: readonly ForcedChoice[];
+    }
   /**
    * Backed out. `session` is `proposal.committed` BY REFERENCE, so a caller may
    * `setSession` it (React bails out on an identical reference) or simply drop
@@ -952,7 +1028,12 @@ function confirm(proposal: Proposal): ProposalStep {
   // The guard stays because the alternative — falling through — would dispatch
   // the opening action a SECOND time and cast the spell twice.
   if (proposal.dispatched) {
-    return { kind: 'committed', session: proposal.working, events: proposal.events };
+    return {
+      kind: 'committed',
+      session: proposal.working,
+      events: proposal.events,
+      settled: settledWithoutAsking(proposal),
+    };
   }
   return advance(proposal, dispatchOpening(proposal));
 }
@@ -1031,7 +1112,7 @@ function advance(proposal: Proposal, result: SubmitResult): ProposalStep {
   // means the object is cast (CR 601.2i) and there is nothing left to ask.
   // An ACTIVATED ability never parks one, so an activation commits here.
   return outstandingQuestion(next) === null
-    ? { kind: 'committed', session: next.working, events }
+    ? { kind: 'committed', session: next.working, events, settled: settledWithoutAsking(next) }
     : { kind: 'open', proposal: next };
 }
 
@@ -1039,8 +1120,59 @@ function advance(proposal: Proposal, result: SubmitResult): ProposalStep {
 function chosenPayers(proposal: Proposal): readonly InstanceId[] {
   if (proposal.costPayers.length > 0) return proposal.costPayers;
   const candidates = payerCandidates(proposal);
-  // Exactly one legal answer is not a decision (`ASK_WHEN_ONLY_ONE_ANSWER`).
+  // Exactly one legal answer is not a decision (`AUTO_SETTLE_POLICY`), but it IS
+  // announced — see `settledWithoutAsking`.
   return candidates.length === 1 ? (candidates[0] as AbilityCostChoice).instanceIds : [];
+}
+
+/**
+ * EVERYTHING THIS PROPOSAL ANSWERED ON THE PLAYER'S BEHALF, as announcements.
+ *
+ * One entry per SETTLING row of {@link AUTO_SETTLE_POLICY} that actually fired.
+ * The words come from `FORCED_CHOICE_KINDS[row.announcesAs]`, so a settle the
+ * board makes and the identical settle the ENGINE makes are announced with the
+ * same verb — see the `announcesAs` doc.
+ *
+ * Pure and total: a proposal that settled nothing returns the shared empty
+ * array and allocates nothing.
+ */
+export function settledWithoutAsking(proposal: Proposal): readonly ForcedChoice[] {
+  const row = AUTO_SETTLE_POLICY.costPayers;
+  if (row.ask || !row.settles) return NOTHING_SETTLED;
+  // The player picked for themselves: not a settle, and not an announcement.
+  if (proposal.costPayers.length > 0) return NOTHING_SETTLED;
+  const candidates = payerCandidates(proposal);
+  if (candidates.length !== 1) return NOTHING_SETTLED;
+  const only = candidates[0] as AbilityCostChoice;
+  const kindRow = FORCED_CHOICE_KINDS[row.announcesAs];
+  const source = sourceOfOpening(proposal);
+  return [
+    {
+      id: `proposal:${proposal.id}:costPayers`,
+      kind: row.announcesAs,
+      chooser: proposal.proposer,
+      sourceInstanceId: source.instanceId,
+      sourceName: source.name,
+      verb: kindRow.verb,
+      refs: only.instanceIds,
+      // The LABEL the engine already built for this payer set ("Bear + Lion"),
+      // not a second join of the same ids.
+      words: only.instanceIds.length > 0 ? [only.label] : [kindRow.nothing],
+      why: row.reason,
+      volume: kindRow.volume,
+    },
+  ];
+}
+
+/** Shared, so the common "settled nothing" answer allocates nothing (rule 7). */
+const NOTHING_SETTLED: readonly ForcedChoice[] = Object.freeze([]);
+
+/** The card the opening action belongs to — the subject of any announcement. */
+function sourceOfOpening(proposal: Proposal): { instanceId: InstanceId; name: string } {
+  const opening = proposal.opening;
+  return opening.kind === 'cast'
+    ? { instanceId: opening.option.instanceId, name: opening.option.name }
+    : { instanceId: opening.option.instanceId, name: proposal.working.nameOf(opening.option.instanceId) };
 }
 
 /** The legal sacrifice-cost payer sets the ENGINE offered, or none. */
@@ -1061,7 +1193,7 @@ function targetQuestion(proposal: Proposal): ProposalQuestion | null {
     // a silent crash).
     return null;
   }
-  if (candidates.length === 1 && !ASK_WHEN_ONLY_ONE_ANSWER.targets) return null;
+  if (candidates.length === 1 && !AUTO_SETTLE_POLICY.targets.ask) return null;
   return {
     kind: 'targets',
     requirement: targetRequirementOf(proposal),
@@ -1075,7 +1207,7 @@ function costPayerQuestion(proposal: Proposal): ProposalQuestion | null {
   const candidates = payerCandidates(proposal);
   if (candidates.length === 0) return null;
   if (proposal.costPayers.length > 0) return null;
-  if (candidates.length === 1 && !ASK_WHEN_ONLY_ONE_ANSWER.costPayers) return null;
+  if (candidates.length === 1 && !AUTO_SETTLE_POLICY.costPayers.ask) return null;
   return { kind: 'costPayers', candidates, chosen: proposal.costPayers };
 }
 

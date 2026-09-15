@@ -29,7 +29,17 @@ import {
 } from '../lib/play/seat.js';
 import { aiAction, aiMustAct, type AiSeatConfig } from '../lib/play/ai-seat.js';
 import { PilotPicker } from '../components/lab/PilotControls.js';
-import { COMBAT_HOLD_CONFIG, HOTSEAT_CONFIG, SPELL_HOLD_CONFIG } from '../lib/play/play-config.js';
+import {
+  COMBAT_HOLD_CONFIG,
+  FORCED_CHOICE_CONFIG,
+  HOTSEAT_CONFIG,
+  SPELL_HOLD_CONFIG,
+} from '../lib/play/play-config.js';
+import {
+  forcedChoiceDecision,
+  forcedChoiceOf,
+  type ForcedChoice,
+} from '../lib/play/forced-choice.js';
 import { stackEntries } from '../lib/play/stack-view.js';
 import {
   extendPressure,
@@ -868,47 +878,96 @@ function LocalPlay({
   const announcedRef = useRef<Set<InstanceId>>(new Set());
   const holdTurnRef = useRef<{ turn: number; spent: number }>({ turn: 0, spent: 0 });
 
+  /**
+   * THE ONE PLACE the spell-hold rule is asked — the arming effect below AND the
+   * walker's own stop predicate.
+   *
+   * ⚠️ MEASURED 2026-09-14, and it is why this became a callback. A rig drove a
+   * real game to a real opponent Doom Blade and sampled the hold. The card was
+   * on screen — and the GAME LOG above it already read:
+   *
+   * ```
+   * Computer casts Doom Blade. / Doom Blade resolves. / Grizzly Bears dies.
+   * ```
+   *
+   * The hold was announcing a spell that had ALREADY RESOLVED, so it had no
+   * stack object left to read a target off, which is exactly the reported
+   * symptom ("it does not show me clearly what the target is"). The cause is
+   * §10's, verbatim: the effect-level `if (hold …) return;` reads the PREVIOUS
+   * render's `hold`, and `autoAdvancePriority` walks many priority windows
+   * inside ONE effect — so a gate outside the loop cannot stop it partway. The
+   * combat hold already learned this and gates inside `shouldStop`; UX-16 never
+   * did, and the defect stayed invisible because the announce CARD survives on
+   * its own state even after the object is gone.
+   */
+  const spellHoldFor = useCallback(
+    (candidate: GameSession): ReturnType<typeof spellHoldDecision> => {
+      const booked = holdTurnRef.current;
+      const spent = booked.turn === candidate.state.turnNumber ? booked.spent : 0;
+      // The TOP of the stack, through lane A's own producer — so "is this an
+      // activated ability or a trigger?" is answered in exactly one place, the
+      // place the stack panel answers it (rule 12). The resolvers are trivial
+      // because this path needs the kind and the controller, not the words.
+      const top =
+        stackEntries(candidate.state.stack, { nameOf: () => '', faceOf: () => null })[0] ?? null;
+      return spellHoldDecision(
+        {
+          viewer: revealed ?? candidate.state.priorityPlayer,
+          stackTop: top,
+          viewerWillStop: shouldStopForPriority(stopContextFor(candidate), stops),
+          announced: announcedRef.current,
+          holdsThisTurn: spent,
+          gameOver: candidate.gameOver,
+        },
+        SPELL_HOLD_CONFIG,
+      );
+    },
+    [revealed, stops],
+  );
+
   useEffect(() => {
     if (phase.kind !== 'play' || !session) return;
     if (hold) return; // one at a time; the timer below is what ends it
-    const turnNumber = session.state.turnNumber;
-    // The per-turn budget resets with the turn, not with the game.
-    if (holdTurnRef.current.turn !== turnNumber) holdTurnRef.current = { turn: turnNumber, spent: 0 };
-    // The TOP of the stack, through lane A's own producer — so "is this an
-    // activated ability or a trigger?" is answered in exactly one place, the
-    // place the stack panel answers it (rule 12). The resolvers are trivial
-    // because this path needs the kind and the controller, not the words.
-    const top =
-      stackEntries(session.state.stack, { nameOf: () => '', faceOf: () => null })[0] ?? null;
-    const decision = spellHoldDecision(
-      {
-        viewer: revealed ?? session.state.priorityPlayer,
-        stackTop: top,
-        viewerWillStop: shouldStopForPriority(stopContextFor(session), stops),
-        announced: announcedRef.current,
-        holdsThisTurn: holdTurnRef.current.spent,
-        gameOver: session.gameOver,
-      },
-      SPELL_HOLD_CONFIG,
-    );
+    const decision = spellHoldFor(session);
     if (decision.kind !== 'hold') return;
-    announcedRef.current.add(decision.hold.instanceId);
-    holdTurnRef.current = { turn: turnNumber, spent: holdTurnRef.current.spent + 1 };
     setHoldPressure(NO_HOLD_PRESSURE);
     setHold(decision.hold);
-  }, [phase, session, stops, hold, revealed]);
+  }, [phase, session, hold, spellHoldFor]);
+
+  /**
+   * End the hold — the timer, "Let it resolve", and nothing else.
+   *
+   * ⚠️ THE BOOKING HAPPENS HERE, ON RELEASE, NEVER ON ARM, and that is the whole
+   * repair. `releaseCombatHold` already records the reason in its own words:
+   * *"while the beat is running the walker's predicate must still answer 'stop
+   * here', because that predicate — not the effect's early return — is what
+   * holds the line INSIDE the walk."*
+   *
+   * MEASURED: booking `announced` at ARM made the arming effect DEFEAT ITS OWN
+   * GATE. Both effects run in one commit; the arming effect mutated the ref, and
+   * the auto-passer's predicate — which asks the same rule — then got
+   * `alreadyAnnounced` and walked straight on. The rig's evidence was a hold
+   * card sitting above a log that already read "Doom Blade resolves / Grizzly
+   * Bears dies", with no stack object left to name a target from.
+   */
+  const releaseHold = useCallback((): void => {
+    if (!hold) return;
+    const turnNumber = session?.state.turnNumber ?? holdTurnRef.current.turn;
+    // The per-turn budget resets with the turn, not with the game.
+    if (holdTurnRef.current.turn !== turnNumber) holdTurnRef.current = { turn: turnNumber, spent: 0 };
+    announcedRef.current.add(hold.instanceId);
+    holdTurnRef.current = { turn: turnNumber, spent: holdTurnRef.current.spent + 1 };
+    setHold(null);
+  }, [hold, session]);
 
   // The timer. Re-armed whenever the pressure changes, so moving the pointer
   // onto the card lengthens the hold that is already running rather than
   // needing a second one.
   useEffect(() => {
     if (!hold) return undefined;
-    const handle = window.setTimeout(
-      () => setHold(null),
-      holdDurationMs(holdPressure, SPELL_HOLD_CONFIG),
-    );
+    const handle = window.setTimeout(releaseHold, holdDurationMs(holdPressure, SPELL_HOLD_CONFIG));
     return () => window.clearTimeout(handle);
-  }, [hold, holdPressure]);
+  }, [hold, holdPressure, releaseHold]);
 
   /**
    * §3.143 / §10 — HOLDING COMBAT ON SCREEN.
@@ -1009,23 +1068,136 @@ function LocalPlay({
     return () => window.clearTimeout(handle);
   }, [combatHold, releaseCombatHold]);
 
+  /**
+   * WHOSE SCREEN THIS IS — hoisted above the effects because the forced-choice
+   * announcement needs it, and the render below reads THIS rather than deriving
+   * it a second time (rule 12: two places answering "who is looking?" will
+   * eventually disagree, and on a hotseat board that means showing one human the
+   * other one's decision).
+   *
+   * `null` only before a game exists; the play phase always resolves it.
+   */
+  const viewerSeat: PlayerId | null = revealed ?? session?.priorityPlayer ?? null;
+
+  /**
+   * A CHOICE THE ENGINE SETTLED WITHOUT ASKING, held on screen long enough to
+   * read (`lib/play/forced-choice.ts`).
+   *
+   * Caleb, on a Banisher Priest that exiled the only legal creature: *"it should
+   * show that choice being made so the player understands what has happened."*
+   *
+   * ⚠️ HERE, not in the board, and gating the SAME two things the other two
+   * announcements gate. §10 measured what happens when a correct thing is not
+   * gated: blocks, damage and end-of-combat all resolved inside 260 ms and a
+   * 45 ms sampler never saw them. A settled choice resolves its trigger the same
+   * way, so an ungated banner would be a caption on a board that had already
+   * moved on.
+   *
+   * It is still NOT a prompt: nothing waits for an answer, and the timer ends it
+   * whether or not anybody looked.
+   */
+  const [forcedChoice, setForcedChoice] = useState<ForcedChoice | null>(null);
+  const forcedSeenRef = useRef<number>(0);
+  const forcedAnnouncedRef = useRef<ReadonlySet<string>>(new Set());
+  const forcedTurnRef = useRef<{ turn: number; spent: number }>({ turn: 0, spent: 0 });
+
+  /**
+   * THE ONE PLACE a settled choice becomes a banner — asked by BOTH producers.
+   *
+   * The engine's `choiceAutoAnswered` arrives through the effect below; the
+   * board's own pre-cast settle (`AUTO_SETTLE_POLICY.costPayers`) arrives
+   * through `PlayBoard`'s `onForcedChoice`. They share the decision, the
+   * per-turn budget and the announced-once set, because "is this worth
+   * interrupting for?" is one question (rule 12) and two answers would drift.
+   *
+   * Returns whether it announced, so a caller walking a batch can stop.
+   */
+  const announceForcedChoice = useCallback(
+    (candidate: ForcedChoice): boolean => {
+      if (!session || viewerSeat === null) return false;
+      const turnNumber = session.state.turnNumber;
+      if (forcedTurnRef.current.turn !== turnNumber) {
+        forcedTurnRef.current = { turn: turnNumber, spent: 0 };
+      }
+      const decision = forcedChoiceDecision(
+        candidate,
+        {
+          viewer: viewerSeat,
+          announced: forcedAnnouncedRef.current,
+          announcedThisTurn: forcedTurnRef.current.spent,
+          gameOver: session.gameOver,
+        },
+        FORCED_CHOICE_CONFIG,
+      );
+      if (decision.kind !== 'announce') return false;
+      forcedAnnouncedRef.current = new Set([...forcedAnnouncedRef.current, candidate.id]);
+      forcedTurnRef.current = { turn: turnNumber, spent: forcedTurnRef.current.spent + 1 };
+      setForcedChoice(candidate);
+      return true;
+    },
+    [session, viewerSeat],
+  );
+
+  useEffect(() => {
+    if (phase.kind !== 'play' || !session) return;
+    // One at a time. Checked BEFORE the log is consumed, so a second settled
+    // choice arriving under a live banner is announced when this effect re-runs
+    // (`forcedChoice` is a dependency) rather than silently swallowed.
+    if (forcedChoice) return;
+    const events = session.events;
+    // A rematch or a resume hands back a SHORTER log: re-baseline rather than
+    // replaying the whole game's settled choices as a burst of banners.
+    if (events.length < forcedSeenRef.current) forcedSeenRef.current = 0;
+    if (events.length === forcedSeenRef.current) return;
+    const fresh = events.slice(forcedSeenRef.current);
+    forcedSeenRef.current = events.length;
+    const names = {
+      nameOf: session.nameOf,
+      playerName: session.playerName,
+      defOf: session.defOf,
+    };
+    for (const event of fresh) {
+      const candidate = forcedChoiceOf(event, names);
+      if (candidate && announceForcedChoice(candidate)) return;
+    }
+  }, [phase, session, forcedChoice, announceForcedChoice]);
+
+  // The announcement's timer. Reduced motion picks the row's OTHER beat — a
+  // NUMBER, never a switch — because the WORDS still have to be read.
+  useEffect(() => {
+    if (!forcedChoice) return undefined;
+    const ms = reducedMotion
+      ? FORCED_CHOICE_CONFIG.reducedMotionHoldMs
+      : FORCED_CHOICE_CONFIG.holdMs;
+    const handle = window.setTimeout(() => setForcedChoice(null), ms);
+    return () => window.clearTimeout(handle);
+  }, [forcedChoice, reducedMotion]);
+
   useEffect(() => {
     if (phase.kind !== 'play' || !session || session.gameOver) return;
     // A hold is up: the board is showing the opponent's spell, or the combat
     // that just happened, and the game must not walk out from under it.
-    if (hold || combatHold) return;
+    // …and so must a settled-choice announcement: the trigger it describes
+    // resolves in the very next priority window, so a walker that kept going
+    // would leave the banner captioning a board that had moved on.
+    if (hold || combatHold || forcedChoice) return;
     const advanced = session.autoAdvancePriority(undefined, (candidate) =>
       shouldStopForPriority(stopContextFor(candidate), stops) ||
       // ⚠️ THE LOAD-BEARING GATE. Without this the walk below runs from declared
       // blockers to the next turn's main phase in one synchronous burst and
       // there is no frame in which `state.combat.blockersDeclared` is true for
       // the board to render from (§10).
-      combatHoldFor(candidate).kind === 'hold',
+      combatHoldFor(candidate).kind === 'hold' ||
+      // …and the SAME gate for UX-16, which never had one. Measured: the hold
+      // was announcing a Doom Blade whose log already said "resolves" and whose
+      // victim already said "dies", so it had no stack object left to name a
+      // target from — see `spellHoldFor`.
+      spellHoldFor(candidate).kind === 'hold',
     );
     // Identity-equal when nothing was skipped, so React bails out and this cannot
     // become a render loop.
     if (advanced !== session) setSession(advanced);
-  }, [phase, session, stops, hold, combatHold, combatHoldFor]);
+  }, [phase, session, stops, hold, combatHold, forcedChoice, combatHoldFor, spellHoldFor]);
 
   // --- the computer's seat -------------------------------------------------------
   //
@@ -1057,7 +1229,9 @@ function LocalPlay({
     // …and the combat hold does the same job for the combat that just happened:
     // the AI passing priority underneath the beat would resolve combat damage
     // and end the step while the player is still looking at the blockers.
-    if (hold || combatHold) return;
+    // …and the same for a settled choice being announced: the computer passing
+    // priority underneath it would resolve the trigger the player is reading.
+    if (hold || combatHold || forcedChoice) return;
     if (!aiMustAct(session, ai.seat)) return;
     const handle = window.setTimeout(() => {
       const action = aiAction(session, aiPilot, aiRng);
@@ -1069,7 +1243,7 @@ function LocalPlay({
       setSession(result.rejected ? session.passPriority().session : result.session);
     }, HOTSEAT_CONFIG.aiThinkMs);
     return () => window.clearTimeout(handle);
-  }, [ai, aiPilot, aiRng, session, phase, hold, combatHold]);
+  }, [ai, aiPilot, aiRng, session, phase, hold, combatHold, forcedChoice]);
 
   // The computer keeps its opening hand. It has no mulligan policy of its own —
   // pilots decide in-game actions, not whether to ship a seven — so it always
@@ -1211,8 +1385,11 @@ function LocalPlay({
     );
   }
 
-  // Ensure someone is revealed (first entry into play).
-  const viewer: PlayerId = revealed ?? priority;
+  // Ensure someone is revealed (first entry into play). `viewerSeat` is the ONE
+  // derivation (see above); the `?? priority` only satisfies the non-null type,
+  // and cannot differ — `viewerSeat` is `revealed ?? session.priorityPlayer` and
+  // `session` is non-null here.
+  const viewer: PlayerId = viewerSeat ?? priority;
 
   return (
     <div className="play-view">
@@ -1235,9 +1412,12 @@ function LocalPlay({
         hold={hold}
         onHoldPointer={(over) => setHoldPressure((p) => pointerPressure(p, over))}
         onHoldExtend={() => setHoldPressure(extendPressure)}
-        onHoldRelease={() => setHold(null)}
+        onHoldRelease={releaseHold}
         combatHold={combatHold ? combatHold.hold : null}
         onCombatHoldSkip={releaseCombatHold}
+        forcedChoice={forcedChoice}
+        onForcedChoiceDismiss={() => setForcedChoice(null)}
+        onForcedChoice={announceForcedChoice}
       />
     </div>
   );

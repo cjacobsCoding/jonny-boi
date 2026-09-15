@@ -194,6 +194,11 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
     chooser: e.chooser,
     choiceKind: e.choiceKind,
   }),
+  // ⚠️ `sourceInstanceId`/`sourceName` are deliberately NOT forwarded, and their
+  // absence is a decision rather than an oversight: this redaction is an
+  // ALLOWLIST, and the two fields exist for the human play surface (naming the
+  // card that settled a forced choice on screen). A pilot is handed the board
+  // consequences as public events and has never needed them.
   choiceAutoAnswered: (e) => ({
     type: 'choiceAutoAnswered',
     choiceId: e.choiceId,

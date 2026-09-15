@@ -756,6 +756,8 @@ export {
   MAX_CHOICES_PER_RESOLUTION,
   MAX_ENUMERATED_CHOICE_ANSWERS,
   NOTHING_CHOSEN,
+  CHOICE_KINDS,
+  CHOICE_KINDS_ARE_COMPLETE,
 } from './choices.js';
 
 // Mana payment planning — shared by the AI pilots and the hotseat/online auto-tap

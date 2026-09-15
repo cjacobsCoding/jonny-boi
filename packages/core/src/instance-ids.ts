@@ -234,7 +234,18 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
     optionCount: 'none',
   },
   choiceAnswered: { choiceId: 'none', chooser: 'none', choiceKind: 'none', answer: 'answer', summary: 'none' },
-  choiceAutoAnswered: { choiceId: 'none', chooser: 'none', choiceKind: 'none', answer: 'answer', reason: 'none' },
+  choiceAutoAnswered: {
+    choiceId: 'none',
+    chooser: 'none',
+    choiceKind: 'none',
+    answer: 'answer',
+    reason: 'none',
+    // Same card, same classification as `choiceAsked` above — including the
+    // cleanup discard's `NO_ASKING_OBJECT`, which every remapper already passes
+    // through untouched because it matches no real instance.
+    sourceInstanceId: 'id',
+    sourceName: 'none',
+  },
   choiceAbandoned: { sourceInstanceId: 'id', reason: 'none' },
 };
 
