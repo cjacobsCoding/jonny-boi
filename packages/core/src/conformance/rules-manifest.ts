@@ -1312,6 +1312,10 @@ export const KEYWORD_RULES: KeywordRules = {
   unblockable: '509.1b',
   cantBlock: '509.1b',
   minBlockers: '509.1b',
+  // §3.150 — "doesn't untap during its controller's untap step" is not a keyword
+  // ability either: it is a continuous effect that modifies what the UNTAP STEP
+  // does, so it indexes to the step's own rule rather than to the 702 chapter.
+  doesNotUntap: '502.1',
   // Block REQUIREMENTS are the other half of the same rule, and they index to
   // 509.1c (the requirements themselves) rather than to 509.1b (the
   // restrictions) — the distinction is the whole reason they need a solver: CR

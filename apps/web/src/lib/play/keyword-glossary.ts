@@ -352,6 +352,13 @@ const ENTRIES = {
     flag: 'cantBlock',
     text: 'It may never be declared as a blocker, whatever it would be blocking.',
   },
+  doesNotUntap: {
+    term: "Doesn't untap",
+    kind: 'restriction',
+    rule: '502.1',
+    flag: 'doesNotUntap',
+    text: 'It stays tapped through its next untap step for as long as this lasts. Not a keyword ability — a continuous effect on what the untap step does.',
+  },
   minBlockers: {
     term: "Can't be blocked except by N or more creatures",
     kind: 'restriction',
@@ -654,6 +661,7 @@ export const KEYWORD_FLAG_GLOSSARY: { readonly [K in keyof KeywordFlags]-?: Glos
     menace: 'menace',
     unblockable: 'unblockable',
     cantBlock: 'cantBlock',
+    doesNotUntap: 'doesNotUntap',
     minBlockers: 'minBlockers',
     mustBeBlocked: 'mustBeBlocked',
     blockedByAllAble: 'blockedByAllAble',

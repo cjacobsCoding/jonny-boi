@@ -441,6 +441,8 @@ export const KEYWORD_VALUE_DISPLAY: {
   menace: 'none',
   unblockable: 'none',
   cantBlock: 'none',
+  // §3.150 — a plain flag, so there is no value to place beside the term.
+  doesNotUntap: 'none',
   mustBeBlocked: 'none',
   blockedByAllAble: 'none',
   indestructible: 'none',

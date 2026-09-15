@@ -198,6 +198,28 @@ export interface CardInstance {
    */
   loyaltyActivatedTurn?: number;
   /**
+   * §3.150 — how many of this permanent's controller's UPCOMING untap steps it
+   * will sit out: "it doesn't untap during its controller's **next** untap step"
+   * (Frost Trickster, Tamiyo's +1), and Telekinesis' "next **two** untap steps".
+   *
+   * A COUNTER rather than a boolean because the printed text counts, and a
+   * stored field rather than a keyword flag because this half of the family has
+   * a different lifetime from {@link KeywordFlags.doesNotUntap}: it outlives its
+   * source (bounce the Frost Trickster and the creature still misses its untap
+   * step) and it EXPIRES BY BEING SPENT, so nothing else could take it back off.
+   * Decremented by the untap step itself, which is the only writer that reduces
+   * it — one funnel, in `untap.ts`.
+   *
+   * Cleared when the permanent leaves the battlefield, because a permanent that
+   * left and came back is a new object (CR 400.7) and must not remember a
+   * freeze aimed at the thing it used to be.
+   *
+   * OPTIONAL and written only when something actually freezes it, for the same
+   * object-shape/throughput reason as {@link attachedTo}. Anyone adding a field
+   * here must also edit `internal/clone.ts`.
+   */
+  untapSkips?: number;
+  /**
    * How many times this permanent's spell was kicked as it was cast — written
    * when a kicked (or multikicked) PERMANENT spell resolves to the battlefield,
    * so an enters-the-battlefield trigger ("create a token for each time it was
