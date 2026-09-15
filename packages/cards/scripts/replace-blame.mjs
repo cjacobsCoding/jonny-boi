@@ -11,11 +11,13 @@
  * Core's replacement layer (`core/src/replacement.ts`) is two closed
  * vocabularies bolted together, and a printed clause can fail on either:
  *
- *   1. **the EVENT KIND** — `ReplacementEventKind` is `damage | counters | draw
- *      | tokens`. A clause about anything else ("if you would GAIN LIFE", "if a
- *      creature would DIE", "if you would DISCARD") names an event the layer
- *      cannot watch. Adding one is a row in `REPLACEMENT_EVENT_KINDS`, a call
- *      site, and an answer in `affectedPlayerPrefersMore`.
+ *   1. **the EVENT KIND** — `ReplacementEventKind`, a closed list. A clause
+ *      about an event outside it ("if a creature would DIE", "if you would
+ *      DISCARD") names something the layer cannot watch. Adding one is a row in
+ *      `REPLACEMENT_EVENT_KINDS`, a call site, and an answer in
+ *      `affectedPlayerPrefersMore` — §3.151 measured that cost and it is small.
+ *      The list itself is READ FROM CORE at runtime rather than restated here,
+ *      so this tool cannot drift from the layer it is measuring.
  *   2. **the OUTCOME BODY** — `ReplacementOutcome` is `plus | times |
  *      preventAll | preventUpTo | preventHalfRoundedUp | winGame`. A clause
  *      that substitutes a DIFFERENT action or a DIFFERENT destination ("exile
@@ -308,7 +310,7 @@ console.log('');
 console.log('=== THE SPLIT: event KINDS the layer cannot watch vs outcome BODIES it cannot do ===');
 console.log(`  core watches: ${[...SUPPORTED_KINDS].join(', ')}`);
 console.log(
-  `  KIND gap  (event outside the closed 4) : ${total(buckets.kindGap)} clauses / ${buckets.kindGap.size} kinds · ${soleTotal(buckets.kindGap)} sole`,
+  `  KIND gap  (event outside the closed ${SUPPORTED_KINDS.size}) : ${total(buckets.kindGap)} clauses / ${buckets.kindGap.size} kinds · ${soleTotal(buckets.kindGap)} sole`,
 );
 console.log(
   `  BODY gap  (kind ok, outcome not expressible) : ${total(buckets.bodyGap)} clauses / ${buckets.bodyGap.size} shapes · ${soleTotal(buckets.bodyGap)} sole`,
