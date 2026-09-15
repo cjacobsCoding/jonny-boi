@@ -256,6 +256,26 @@ set-diff exists to prove.
 The only absences are the eight §7a already documents as blocked — two evidenced NO-GOs and six
 unstarted. No card went missing that the board did not already predict.
 
+**What shipping 1,265 never-before-shipped cards actually exposed.** They went under
+`pool-mechanics` and `expanded-pool` for the first time, and every failure was a CHECK or a TABLE
+lagging the engine — not one was a card defect, and not one was fixed by shrinking the pool:
+
+| where | what | outcome |
+| --- | --- | --- |
+| `fidelity.test.ts` | asked `isTargetRestriction` (the string half) after core grew `TargetSpec`; Abrupt Decay's bounded target was the first in the pool to prove it | fixed — asks `isTargetSpec` |
+| `zone-leave-invariants.test.ts` | picks rig pieces from a NAME-SORTED pool, so the regeneration re-rolled all four; the aura became `Aether Tunnel`, which grants **unblockable**, and the rig then asserted a block against its own attacker | fixed — pieces picked for INERTNESS, with a guard that names the card |
+| soak `untapAtTurnStart` | fired 50× on CORRECT behaviour: `doesNotUntap` cards (Grim Monolith, Famished Paladin) and House Guildmage's one-shot freeze, which is spent by the untap step happening | fixed — the freeze is snapshotted before the turn flips |
+| `paired-arms`, `effect-value-parity` | four primitives from recent lanes unclassified/unpriced | 1 priced (`exileTargetCardFromGraveyard` — **Scavenging Ooze's payoff was invisible to the pilot**), 3 ledgered with reasons |
+| soak runaway ×12 | **all 12** contain Basalt Monolith cycling `{T}: Add {C}{C}{C}` against `{3}: Untap` for zero net mana | REPORTED — `fix/pilot-repeatable-noop` owns it |
+| card browser | React #185 (max update depth) after several searches in a row | REPORTED — reproduces on the 5,651 pool too, so not the refresh |
+
+**Soak violations: 64 → 12.** The 12 are the Basalt Monolith loop, named above.
+
+⚠️ **§1a's other direction is now guarded.** `stronger-than-printed.test.ts` asserts every keyword
+flag a pool card carries appears in its own printed text — **6,914 of 6,914 checked, 0 not checked,
+0 overreaching**. Watched going red on real data (giving the real Grizzly Bears `flying` fails it).
+Its evidence table is CLOSED, which immediately found eight keyword flags nothing had ever checked.
+
 ### Two corrections the refresh must carry
 
 1. **The counters lane left an instruction that can only land WITH a regeneration**: add
