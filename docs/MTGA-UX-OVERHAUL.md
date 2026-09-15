@@ -760,17 +760,16 @@ already sends `combat: state.combat` unredacted, and combat is public by the rul
 | **UX-12** advance + midline clamp | ✅ | both boards render `.board-midline` (the element `CombatStage` measures), and `stageEntriesFor` returns the same attacker advance from either board's view model |
 | **UX-13** blocker advance | ✅ | from one real blocked combat, both view models yield `{blocker, role:'blocker', toward:-1, meets:attacker}`; the control one beat earlier yields `['attacker']` only |
 | **UX-14** attack arcs | ✅ | the scene calls `combatArcPairs` with the attack half supplied; `blockerLinePairs` is deleted |
-| **UX-15** damage | ❌ **NOT REACHED — and it is a missing CHANNEL, not a masking limit** | see below |
+| **UX-15** damage | ✅ **REACHED — §12 built the channel** | the `state` message carries `PUBLIC_EVENT_KINDS`, filtered per seat by `maskEventsForSeat`; `05-online-damage-guest.png` shows a damage bloom on the ONLINE board in the combat-damage step |
 
-**⚠️ UX-15, stated honestly rather than claimed.** `deriveDamageSequence` needs the engine's
-`GameEvent` stream. The server's `state` message carries `MaskedGameView` + `legalActions` +
-`yourTurn` + `log`, and `Room.summarizeEvents` (`apps/server/src/room.ts`) folds the events down to
-**five kinds of pre-formatted English string**, throwing the structure away. An online client cannot
-derive the sequence from that, and deriving one from frame diffs would be a second answer to "what
-damage happened" (rule 12). The scene therefore takes `NO_DAMAGE_SOURCE`, a named constant whose doc
-comment carries this paragraph. **This is not a hidden-information problem** — combat damage is
-public by the rules and the server already narrates it to both seats in prose. The fix is a field on
-the `state` message carrying a CLOSED list of public event kinds; the call site is then one prop.
+**⚠️ UX-15 — the finding this section filed, and §12 closed.** As written here it read:
+*"`deriveDamageSequence` needs the engine's `GameEvent` stream. The server's `state` message carries
+`MaskedGameView` + `legalActions` + `yourTurn` + `log`, and `Room.summarizeEvents` folds the events
+down to five kinds of pre-formatted English string, throwing the structure away … This is not a
+hidden-information problem — combat damage is public by the rules and the server already narrates it
+to both seats in prose. The fix is a field on the `state` message carrying a CLOSED list of public
+event kinds; the call site is then one prop."* That diagnosis was exactly right, and §12 is that
+field. `NO_DAMAGE_SOURCE` and every comment describing the gap are deleted (rule 5).
 
 ### The guard, and its falsification
 
@@ -858,3 +857,155 @@ pure-function equality and it is not a photograph; stated as such.
   attacker in, no attack arc out, at every step `STEP_ORDER` knows;
 - six stylesheet/source comments describing the old split, including `board-fit.css`'s note that the
   online board *"sets none of `PlayBoard`'s inline custom properties"* — it sets all of them now.
+
+---
+
+## 12. SHIPPED 2026-09-14 — the wire carries EVENTS, and the online board animates damage
+
+### The gap, as §11 filed it
+
+> UX-15 **NOT REACHED**. `deriveDamageSequence` needs the `GameEvent` stream; the `state` message
+> carries a masked view plus pre-formatted log **strings** — `Room.summarizeEvents` folds events into
+> five kinds of English sentence and throws the structure away. **This is a missing channel, not a
+> masking limit.**
+
+So the hotseat board animated damage and the online board could not — the same fork §11 had just
+removed, one layer down. The client already had `deriveDamageSequence`, `DamageLayer` and the shared
+`BoardScene`; only the data was missing.
+
+### The closed table, and where it lives
+
+`packages/protocol/src/index.ts` — `PUBLIC_EVENT_KINDS`, **21 rows**, each a `kind: 'why it is
+public'` pair, frozen, with `PublicEventKind` and `PublicGameEvent` DERIVED from it so adding a kind
+is a ROW and every consumer's type widens for free. **A kind not in the table is not sent**,
+whatever it is. The rows are three groups:
+
+- **combat damage and what is emitted inside one assignment** — `damageDealt`, `damagePrevented`,
+  `lifeChanged`, `gainLife`, `poisonChanged`, `loyaltyChanged`, `defenseChanged`, `counterAdded`,
+  `replacementApplied` (`damage-sequence.ts`'s own companion table, which is what makes two damage
+  rounds read as two);
+- **what ends a round** — `creatureDied`, `planeswalkerDied`, `battleDefeated`, `playerLost`,
+  `gameOver` (deaths are state-based actions, and they are what attributes LETHALITY to a hit);
+- **the five kinds `summarizeEvents` already narrates to both seats in prose** — `landPlayed`,
+  `spellCast`, `attackersDeclared`, `blockersDeclared`, `stepBegin` — plus the two remaining public
+  boundaries a damage fold reads, `turnBegin` and `stackResolved`. For this group the structured form
+  discloses nothing the shipped English log did not.
+
+### The hidden-information boundary, and how per-seat filtering works
+
+`maskEventsForSeat` is `maskStateForSeat`'s sibling and sits beside it. **Two gates, both must pass:**
+
+1. the KIND is a row of the closed table;
+2. every card the event names — through core's exact, type-derived `instanceIdsNamedBy`, never a
+   key-name guess — appears in a view **that seat is already entitled to**.
+
+The second gate is why a public KIND is not enough: a counter placed on a face-down foretold card in
+the opponent's exile is a `counterAdded`, and the table alone would wave it through. An event failing
+either gate is dropped WHOLE, never trimmed.
+
+**The function is handed MASKED VIEWS, never a `GameState`.** That is the design, not a convenience:
+it cannot publish what the mask withheld because it is never given it. Its window is the seat's view
+BEFORE the action and the view it is about to be sent — both frames, because a token that blocked and
+died is gone from every zone by the second one, and a filter that knew only the second would drop its
+hits and lose half the combat.
+
+**What was proved.** `apps/server/src/event-stream.test.ts` drives a REAL room with real client
+messages: a card drawn into a hand is named by NEITHER seat's event stream; no stream ever names a
+card in the opponent's hand; a spectator's stream names no seat's hand; the prose log did not regress;
+and a send that is not the result of an action carries no `events` field at all. It also pins the
+CONTAINMENT between this repo's two hidden-information tables — every wire-public kind must be one
+`packages/sim`'s `OBSERVATION_POLICY` also passes unredacted. **21 of core's 85 event kinds travel to a seat**; 79 of the 85 are unredacted for a pilot, so the wire table is by a wide margin the smaller of the two.
+
+Falsified by bypassing the filter in `Room.sendStateTo`: **4 of 8 reddened**, naming the drawn card by
+id (`seat a's event stream names drawn card 110`). Adding `drawCard` as a row reddens 2 protocol
+tests; deleting the id walk reddens 2 others.
+
+### Performance
+
+The expensive half — an instance-id walk over two whole views, per recipient — runs only when the
+action produced something public at all, and the cheap kind scan that decides runs ONCE per action
+rather than once per recipient. A room with no connections does neither. **Nothing in `packages/core`
+or `packages/sim` changed**, and neither is aware the protocol exists, so the sim's throughput is
+untouched by construction.
+
+### The parity claim
+
+`online-board-parity.test.ts` runs a REAL blocked combat through the REAL engine, stops at the action
+that dealt the damage, and derives the sequence twice: the hotseat board from the raw batch, the
+online board from `maskEventsForSeat`'s output. The two beat lists are compared field for field —
+same hits, same rounds, same amounts, same lethality, same timings — for BOTH seats. `key` is excluded
+and the test says why: a beat's key is its index in the CLIENT'S OWN log, and the two clients hold
+different logs, so asserting key equality would assert they are the same log.
+
+Falsified by dropping `damageDealt` from the table: both parity tests redden with
+`expected [] to deeply equal [ { kind: 'hit', …(11) }, …(1) ]`.
+
+### ⚠️ THE EIGHTH INSTANCE — an online player could never declare a block at all
+
+The rig found it; no test could. `OnlineBoard` derived its eligible blockers from the server's
+`declareBlockers` template, which is core's **baseline** and carries `blocks: []` by design
+(`generateLegalActions`: *"offer the empty (no-block) declaration as a baseline; the AI constructs
+specific assignments and passes them to applyAction"*). So the set was empty in every real block
+window and **the only button a defending online seat ever saw was "No blocks"**.
+
+§11's parity test was green throughout, and it is worth seeing why: it proved both boards ADVANCE the
+same blocker from a hand-built `CombatState` whose `blocks` were already populated. That is a claim
+about drawing a block, not about making one.
+
+The fix is `eligibleBlockerIds` in `view-model.ts` — the hotseat board's own rule (*my untapped
+creatures; the engine validates legality on submit*), now read by both boards (rule 12). The guard is
+a REACH assertion: render the online board on a real block window and require a selectable tile on
+the viewer's own seat. Falsified by restoring the template-derived set — that assertion, and only
+that one, reddens.
+
+### PHOTOGRAPHED — a blocked combat, online, with the damage on screen
+
+`apps/web/scripts/see-online-board.mjs` now reaches a BLOCKED combat. Four harness defects hid in the
+old version, every one of which reads as a product bug, and all four are written down in the file:
+
+1. the hand query was scoped to a `.play-hand` that is not `--hidden` — which also matches the far
+   seat's fanned backs, so the driver reported `hand=0` on a seat visibly holding five cards;
+2. it clicked sorcery-speed cards in the UPKEEP, got *"this spell can only be cast at sorcery speed"*
+   as a toast, and clicked the same card forever — never reporting `idle`, so the old stall detector
+   could not see it;
+3. it tapped every land in the upkeep, arriving in its main phase unable to pay for anything;
+4. **both seats attacked with everything**, so no seat ever had an untapped creature to block with —
+   which is precisely why this rig had only ever photographed unblocked combat.
+
+The run, read off the live DOM of the GUEST seat:
+
+```
+BLOCK DECLARED (guest): Confirm 1 block
+AT CONFIRM (guest) | attacking=2 blocking=2 staged=2 (blockers 1) arcs=4 declaredArcs=2
+                     holds=1 | Turn 9 · Declare Blockers
+ONLINE DAMAGE best (guest) | dmgLayer=1 impacts=2 bolts=2 holds=1 | Turn 9 · Combat Damage
+```
+
+`04-online-block-guest.png` shows, on the ONLINE board: the Host's Elemental lifted out of its home
+row and advanced toward the midline, outlined red and labelled **⚔ ATTACKING** with its faint home
+placeholder left behind; the Guest's Elemental ringed gold and badged **⊘ BLOCKING**; a dashed fiery
+arc running from the attacker to the Guest's life total; and the §10 beat announced across the top as
+**"Blockers declared — who is blocking whom"** with a Skip.
+
+`05-online-damage-guest.png`, one beat later: the status reads **Turn 9 · Combat Damage**, a red
+**COMBAT DAMAGE** badge sits in the status bar, the top banner reads **"Combat damage — damage
+travelling to each creature and player"**, and a **red damage bloom carrying the number 1** is painted
+on the opposing seat's battlefield row. The game log says `Step: combatDamage.` That is UX-15 on the
+online board, in a frame that is still in combat — the same assertion `verify-combat-visibility.mjs`
+makes for the hotseat board, made with a camera.
+
+### The numbers
+
+```
+npm run build                                          exit 0
+npx vitest run apps/web apps/server packages/protocol   Tests 2002 passed (2002) | 153 files, 0 failed
+node apps/web/scripts/verify-combat-visibility.mjs      6/6 checks passed
+node apps/web/scripts/verify-board-fits.mjs             32/32 checks passed
+```
+
+Baseline for apps/web + apps/server was 150 files / 1,952 tests; this is 151 / 1,966 there (+1 file,
++14 tests), plus `packages/protocol`'s 2 files / 36 tests.
+
+`PROTOCOL_VERSION` 2 → 3. Additive and backward-compatible in both directions:
+`MIN_COMPATIBLE_PROTOCOL_VERSION` stays 1, a v2 server simply omits `events`, and a v3 client reads
+the absence as "this server carries no event stream" — which is what every client did before v3.
