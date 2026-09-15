@@ -141,12 +141,21 @@ function isDeckLike(value: unknown): value is Partial<Deck> {
 
 /** Fill in any missing fields on a loaded deck with safe defaults. */
 function normalizeDeck(value: Partial<Deck>): Deck {
-  return {
+  const deck: Deck = {
     id: value.id ?? `deck-${Date.now().toString(36)}`,
     name: typeof value.name === 'string' && value.name.trim() ? value.name : 'Untitled Deck',
     cards: Array.isArray(value.cards) ? value.cards.flatMap(normalizeEntry) : [],
     updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : new Date().toISOString(),
   };
+  // ⚠️ This function REBUILDS field by field (see normalizeEntry for why), so a
+  // field absent from here is silently dropped on every reload. `copiedFrom` is
+  // what lets the built-in list say "you already copied this", and losing it at
+  // the storage boundary would make that marker work until you refreshed — the
+  // worst kind of half-shipped, because it looks fine when you build it.
+  if (typeof value.copiedFrom === 'string' && value.copiedFrom.trim()) {
+    deck.copiedFrom = value.copiedFrom;
+  }
+  return deck;
 }
 
 /**

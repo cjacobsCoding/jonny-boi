@@ -3036,6 +3036,61 @@ The other fifteen cards in the bucket, probed individually. None of them is this
 
 The honest headline for whoever picks this bucket up: **the biggest single item left in it is the
 filtered target (2 cards), and it is a `TargetRestriction` refactor, not a blocking feature.**
+
+### 3.147 A built-in deck must not look like one of yours — ✅ done
+
+> ⚠️ **Section number claimed off a contended range.** §3.146 was the highest in `main` when this
+> branch forked; other lanes are in flight. If an integrator finds a second §3.147, renumber this one —
+> it references nothing by number.
+
+**The report.** *"I renamed the Selesnya Blink deck to Acidic Angels, which apparently just DUPLICATED
+the deck and left a 'Selesnya Blink' deck behind."*
+
+**Nothing duplicated, and `renameActive` is innocent** — it maps over the deck list replacing in place.
+Selesnya Blink is one of the BUILT-IN gauntlet decks. The user copied it, renamed his copy, and the
+built-in stayed exactly where it had always been.
+
+**The root cause was a deliberate styling decision, stated out loud in the file that made it.**
+`gauntlet-decks.css`'s header read: *"reuses `.saved-decks` for the container so it sits visually with
+the user's own decks rather than looking like a new region."* Reference data and owned data, rendered
+identically, in one column. Two aggravating factors: nothing said a gauntlet deck had ALREADY been
+copied, so it kept inviting the action that caused the confusion; and the Play/online pickers listed
+both kinds flat, separated only by a "· sample" suffix.
+
+**What shipped.** One closed table — `lib/decklist/deckOrigin.ts` — answers "where did this deck come
+from, and how does every surface say so", and every deck-listing surface reads it:
+
+| surface | before | now |
+|---|---|---|
+| Deck Builder | `.saved-deck` rows, identical to yours | own `.builtin-deck` region: dashed + recessed, a 🔒 **Built-in** badge per row, `data-deck-origin` on every row; your decks sit under **Your decks** |
+| Deck Builder, already copied | "Copy to my decks", forever | *"✓ Already copied — yours is 'Acidic Angels'"* + **Open my copy**; **Copy again** stays, quietly |
+| Play setup | one flat `<select>` | `<optgroup>` **Your decks** / **Built-in gauntlet decks**, plus a note naming a built-in pick |
+| Online lobby | one flat `<select>` | the same component — it was a second copy of the menu builder, now deleted |
+
+**Provenance, not a name match.** A copied deck carries `Deck.copiedFrom`. The reported bug WAS a
+rename, so any answer derived from the name goes blind at exactly the moment it is needed.
+`storage.ts`'s `normalizeDeck` rebuilds a loaded deck field by field, so `copiedFrom` is listed there
+too — otherwise the marker would work until the first refresh.
+
+**Identity, not access.** Built-in decks remain fully selectable and directly playable; the harness
+asserts none of the nine options is disabled, because that is a deliberate feature, not a leak.
+
+**Guards** — `views/builtin-deck-identity.test.ts` (a built-in row carries the marker and badge, one of
+yours carries neither, the two never share a container class, a copied deck is reported by its renamed
+name), plus the mint site in `gauntletDecks.test.ts` and the reload in `storage.test.ts`. Falsifying
+the first two is what found the third: breaking only the provenance STAMP left the view test green.
+
+**Measured.** `npm run build` **exit 0**; `npx vitest run apps/web --minWorkers=1 --maxWorkers=1`
+**1,995 passed / 0 failed across 151 files** (151 is also the count of `*.test.ts` on disk under
+`apps/web`, and 0 were skipped); `verify-board-fits.mjs` **32/32, exit 0**; new
+`verify-deck-identity.mjs` **36/36, exit 0** across desktop (1440) and phone (375) — the built-in and
+saved rows measured `dashed` vs `solid` with different backgrounds from a real engine, and all nine
+built-in options confirmed still selectable.
+
+⚠️ **Scope note — the workspace suite was NOT run.** This box is 6-core/7 GB and the brief forbade it;
+`packages/*` are untouched by this branch, but that is an argument, not a measurement, and the
+integrator should run the full gate before merging.
+
 ### 3.143 Phyrexian and monocolour hybrid mana — one symbol shape, three families — ✅ done
 
 Two printed cost symbols the engine refused by name — **`{2/W}`** ("two generic, or one white",

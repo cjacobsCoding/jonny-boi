@@ -1,0 +1,48 @@
+/*
+ * DECK-ORIGIN VOCABULARY — the badge and note that say a deck is BUILT-IN rather
+ * than one of the user's own.
+ *
+ * Its own file because the distinction has to look the same on every surface
+ * that lists decks: the deck builder's built-in region, the Play setup's picker,
+ * and the online lobby's. They previously disagreed — the builder made built-ins
+ * look exactly like your decks, the pickers appended a bare "· sample" — and a
+ * user read the result as the app having duplicated his deck. One vocabulary,
+ * one file, read from the one table in `lib/decklist/deckOrigin.ts`.
+ */
+
+/* Shared badge — also rendered by the Play/online deck pickers. */
+.deck-origin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.deck-origin-badge--builtin {
+  /* Slate, not the gold accent: gold means "acts on your deck" everywhere else
+     in the app and this badge acts on nothing. Full-strength ink rather than
+     muted, though — a badge you have to look for does not solve a defect whose
+     whole content was "I could not tell these apart". Measured 10.7:1 against
+     --color-surface-hover, well over the 4.5:1 AA floor for text this size. */
+  background: var(--color-surface-hover);
+  color: var(--color-fg);
+  border: 1px solid var(--color-border-strong);
+}
+
+/* The note under a deck <select> when the current pick is a built-in deck. */
+.deck-origin-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin: var(--space-1) 0 0;
+  color: var(--color-fg-muted);
+  font-size: var(--text-xs);
+}
+
