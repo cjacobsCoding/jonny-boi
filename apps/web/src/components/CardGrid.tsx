@@ -24,6 +24,23 @@ import {
 import { CARD_GRID_MEASURE_SAMPLE } from '../lib/card-grid-config.js';
 import './card-grid.css';
 
+/**
+ * `useLayoutEffect` in the browser, `useEffect` on the server.
+ *
+ * The timing genuinely matters here: the first paint is sized from the
+ * documented FALLBACK metrics, and correcting it after the browser has painted
+ * shows a visible jump on the app's landing view. A layout effect corrects it
+ * in the same frame.
+ *
+ * But React warns about `useLayoutEffect` on every server render, and this grid
+ * IS asserted through `renderToStaticMarkup` (`card-grid-virtual.test.ts`) —
+ * the same collision `CardFace.tsx` resolved by dropping to `useEffect`, which
+ * it could afford because its pop fades in anyway. This one cannot, so it picks
+ * the hook instead of the semantics. There is no effect to run on a server
+ * render regardless: `sync` returns immediately with no `window`.
+ */
+const useMeasureEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
 interface CardGridProps {
   cards: readonly NormalizedCard[];
   onSelect: (card: NormalizedCard) => void;
@@ -176,10 +193,15 @@ export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): Reac
   }, []);
 
   // Measure before the browser paints, so the first frame's fallback metrics are
-  // corrected without a visible reflow. Re-runs when the query changes the list.
-  useLayoutEffect(() => {
+  // corrected without a visible reflow. Re-runs when the query changes the list,
+  // and once more when the metrics themselves change — the first pass happens
+  // against the FALLBACK row height, and the corrected height can name a
+  // different window. It converges rather than loops: `sync` hands back the
+  // previous state object when nothing moved, so the second pass re-renders
+  // nothing and the effect does not fire a third time.
+  useMeasureEffect(() => {
     sync();
-  }, [sync, cards]);
+  }, [sync, cards, metrics]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -245,7 +267,10 @@ export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): Reac
     );
   }
 
-  const columns = Math.max(1, metrics.columns);
+  // From the PLAN, not from `metrics`: the two are set together and agree, but
+  // reading the column count from the same object that sized the padding means
+  // they cannot disagree even for one frame.
+  const columns = Math.max(1, plan.columns);
   // Clamped against the CURRENT list: a re-query shrinks `cards` in the same
   // render that still carries the previous frame's plan (the layout effect
   // corrects it before paint), and an index past the end must not be a crash.
@@ -255,8 +280,13 @@ export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): Reac
     <div
       ref={gridRef}
       className="card-grid card-grid--virtual"
+      // The rows above and below the window are stood in for by PADDING, not by
+      // elements, so the page scrolls the full distance the pool deserves while
+      // the grid holds a screenful. Padding rather than an explicit height
+      // because cells are placed relative to `originRow` — see RenderPlan.
       style={{
-        height: plan.totalHeightPx > 0 ? `${plan.totalHeightPx}px` : undefined,
+        paddingTop: `${plan.paddingTopPx}px`,
+        paddingBottom: `${plan.paddingBottomPx}px`,
         gridAutoRows: `${plan.rowHeightPx}px`,
       }}
     >
@@ -273,7 +303,7 @@ export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): Reac
             // create an implicit extra column and shove the grid sideways;
             // letting the browser place within the row degrades to "a few too
             // many or too few tiles rendered" instead.
-            style={{ gridRowStart: Math.floor(index / columns) + 1 }}
+            style={{ gridRowStart: Math.floor(index / columns) - plan.originRow + 1 }}
           >
             <CardTile
               card={card}

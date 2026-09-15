@@ -113,8 +113,10 @@ describe('the rendered node count does not scale with the pool', () => {
     // The COUNTERWEIGHT to the assertions above: a grid that renders a fixed
     // window and forgets the rest would pass every one of them and give the
     // user a page that will not scroll. The runway must still know the pool.
+    // The rows below the window are stood in for by padding, so the padding IS
+    // the runway on a grid scrolled to the top.
     const runway = (html: string): number =>
-      Number(/style="height:(\d+(?:\.\d+)?)px/.exec(html)?.[1] ?? '0');
+      Number(/padding-bottom:(\d+(?:\.\d+)?)px/.exec(html)?.[1] ?? '0');
     expect(runway(small)).toBeGreaterThan(0);
     expect(runway(huge) / runway(small)).toBeCloseTo(4, 1);
   });

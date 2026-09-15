@@ -14,18 +14,20 @@
 
 .card-grid--virtual {
   /*
-    The grid claims the height of the WHOLE result list — set inline from
-    `planRender`, because it depends on the row count and the measured row
-    height — while only the rows near the viewport actually exist as elements.
-    That is what keeps the scrollbar telling the truth about the pool: a page
-    whose scrollbar only knows about the rendered window jumps under the hand.
+    The rows the virtualiser skipped are stood in for by PADDING — set inline
+    from `planRender`, because it depends on the row count and the measured row
+    height — while only the rows near the viewport exist as elements. That is
+    what keeps the scrollbar telling the truth about the pool: a page whose
+    scrollbar only knows about the rendered window jumps under the hand.
+
+    Padding rather than one tall box because cells are placed at rows RELATIVE
+    to the window (`RenderPlan.originRow`). Placing them at their absolute row
+    would make the browser materialise an implicit row track for every row above
+    them — 5,379 of them at the far end of the 32,276-card corpus, rebuilt on
+    every layout of a grid holding about forty elements.
   */
   align-content: start;
-  /*
-    Rows the virtualiser skipped still occupy their track, so a cell placed at
-    row 900 lands 900 rows down. `grid-auto-rows` is set inline to the MEASURED
-    tile height for the same reason the height is.
-  */
+  /* `grid-auto-rows` is set inline, to the MEASURED tile height. */
   position: relative;
 }
 

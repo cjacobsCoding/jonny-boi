@@ -77,10 +77,37 @@ export interface RenderPlan {
   readonly renderedCount: number;
   /** Rows the whole result list occupies. */
   readonly rowCount: number;
-  /** Height the grid must claim so the scrollbar tells the truth, in px. */
+  /** Height the grid occupies so the scrollbar tells the truth, in px. */
   readonly totalHeightPx: number;
   /** The row track height to pin, in px. */
   readonly rowHeightPx: number;
+  /**
+   * The column count this plan was computed with.
+   *
+   * Carried ON the plan rather than read from the metrics at render time so
+   * that the row a cell is placed in and the row count the padding was sized
+   * from can never be computed from two different column counts. They are one
+   * answer to one question (rule 12), and a frame where they disagreed would
+   * place cells in the wrong rows.
+   */
+  readonly columns: number;
+  /**
+   * The row the first rendered cell sits in. Cells are placed RELATIVE to it
+   * (`grid-row-start: row - originRow + 1`) rather than at their absolute row.
+   *
+   * ⚠️ This is not a micro-optimisation, it is the difference between O(window)
+   * and O(pool) layout work. CSS Grid materialises an implicit row track for
+   * every row up to the largest one an item is placed in, so placing a cell at
+   * its absolute row 5,379 — where the 32,276-card corpus ends — makes the
+   * browser build 5,379 track records on every layout of a grid that contains
+   * about forty elements. Placing relative to the window and pushing the window
+   * down with padding keeps the track count the size of the window.
+   */
+  readonly originRow: number;
+  /** Padding that stands in for the rows above the window, in px. */
+  readonly paddingTopPx: number;
+  /** Padding that stands in for the rows below the window, in px. */
+  readonly paddingBottomPx: number;
 }
 
 /** Distance from one row's top to the next row's top. */
@@ -233,7 +260,17 @@ export function planRender(input: PlanInput): RenderPlan {
   const totalHeightPx = totalHeightFor(rowCount, metrics);
 
   if (rowCount === 0) {
-    return { segments: [], renderedCount: 0, rowCount: 0, totalHeightPx: 0, rowHeightPx: metrics.rowHeightPx };
+    return {
+      segments: [],
+      renderedCount: 0,
+      rowCount: 0,
+      totalHeightPx: 0,
+      rowHeightPx: metrics.rowHeightPx,
+      columns,
+      originRow: 0,
+      paddingTopPx: 0,
+      paddingBottomPx: 0,
+    };
   }
 
   // Before a layout exists there is no scroll position to honour and no
@@ -263,7 +300,27 @@ export function planRender(input: PlanInput): RenderPlan {
 
   const merged = mergeSegments(segments);
   const renderedCount = merged.reduce((sum, [start, end]) => sum + (end - start), 0);
-  return { segments: merged, renderedCount, rowCount, totalHeightPx, rowHeightPx: metrics.rowHeightPx };
+  // The rows the window actually spans, which is what the padding stands in for.
+  // Read off the MERGED segments, not off `startRow`/`lastRow` above: with a
+  // focus anchor the rendered span can begin above the visible one and end
+  // below it, and padding sized from the visible rows alone would misplace the
+  // whole grid by the difference.
+  const originRow = merged.length > 0 ? Math.floor(merged[0]![0] / columns) : 0;
+  const lastRenderedRow =
+    merged.length > 0 ? Math.floor((merged[merged.length - 1]![1] - 1) / columns) : originRow;
+  const paddingTopPx = originRow * pitch;
+  const paddingBottomPx = Math.max(0, rowCount - 1 - lastRenderedRow) * pitch;
+  return {
+    segments: merged,
+    renderedCount,
+    rowCount,
+    totalHeightPx,
+    rowHeightPx: metrics.rowHeightPx,
+    columns,
+    originRow,
+    paddingTopPx,
+    paddingBottomPx,
+  };
 }
 
 /** Expand a plan's segments into the concrete indices to render, in order. */
@@ -280,6 +337,10 @@ export function samePlan(a: RenderPlan, b: RenderPlan): boolean {
   if (a.rowCount !== b.rowCount) return false;
   if (a.totalHeightPx !== b.totalHeightPx) return false;
   if (a.rowHeightPx !== b.rowHeightPx) return false;
+  if (a.columns !== b.columns) return false;
+  if (a.originRow !== b.originRow) return false;
+  if (a.paddingTopPx !== b.paddingTopPx) return false;
+  if (a.paddingBottomPx !== b.paddingBottomPx) return false;
   if (a.segments.length !== b.segments.length) return false;
   return a.segments.every(
     (segment, i) => segment[0] === b.segments[i]?.[0] && segment[1] === b.segments[i]?.[1],

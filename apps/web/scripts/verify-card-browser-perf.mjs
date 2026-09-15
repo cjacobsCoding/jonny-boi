@@ -77,6 +77,18 @@ const SETTLE_MS = 450;
 /** A visible vertical band with no tile in it, taller than this, is a HOLE. */
 const MAX_BLANK_BAND_PX = 260;
 
+/**
+ * Ceiling for ONE DevTools protocol call.
+ *
+ * Puppeteer's unnamed default is 180 s, and the BEFORE side of this measurement
+ * blows straight through it: a single `Page.captureScreenshot` of the
+ * un-virtualised deck builder at 375px — 5,651 tiles, 5,651 images, 6.7 MB of
+ * DOM — timed out, and the harness reported "could not run" against an app that
+ * was merely unusably slow. Reporting "I could not measure" when the honest
+ * answer is "it took four minutes to draw one frame" loses the finding.
+ */
+const PROTOCOL_TIMEOUT_MS = 600_000;
+
 const args = process.argv.slice(2);
 const headful = args.includes('--headful');
 const label = args.indexOf('--label') >= 0 ? args[args.indexOf('--label') + 1] : 'run';
@@ -277,6 +289,33 @@ async function measureSearchLatency(page, term) {
   return { ms: -1, from: before.trim(), to: '(never changed)' };
 }
 
+/**
+ * Empty the search box and wait for the grid to answer.
+ *
+ * Called after every latency measurement, because the NEXT measurement must see
+ * the whole pool. The first version of this harness skipped it and reported the
+ * Deck Builder at 375px as 1,336 nodes — a real number, of the 60 cards left
+ * over from a "goblin" search, presented as if it were the pool. Substituting a
+ * population you control for the one you were asked about is how a metric gets
+ * to be true by construction.
+ */
+async function clearSearch(page) {
+  const box = await page.$('.toolbar__search');
+  if (!box) return null;
+  await box.click({ clickCount: 3 });
+  await page.keyboard.press('Backspace');
+  const deadline = Date.now() + UI_TRANSITION_WAIT_MS;
+  while (Date.now() < deadline) {
+    const text = await page.evaluate(
+      () => document.querySelector('.result-count')?.textContent?.trim() ?? '',
+    );
+    const count = Number(/^(\d+)/.exec(text)?.[1] ?? '0');
+    if (count > 1000) return count;
+    await sleep(50);
+  }
+  return -1;
+}
+
 /** Click a top-level nav button by its label. */
 async function gotoView(page, viewLabel) {
   const clicked = await page.evaluate((text) => {
@@ -304,7 +343,12 @@ async function main() {
   if (!chrome) throw new Error(describeChromeSearch());
   const preview = await startPreview();
   const browser = await puppeteer.launch(
-    harnessLaunchOptions({ chromePath: chrome, headful, viewport: VIEWPORTS.desktop }),
+    harnessLaunchOptions({
+      chromePath: chrome,
+      headful,
+      viewport: VIEWPORTS.desktop,
+      protocolTimeoutMs: PROTOCOL_TIMEOUT_MS,
+    }),
   );
 
   const report = { label, takenAt: new Date().toISOString(), viewports: VIEWPORTS };
@@ -337,12 +381,13 @@ async function main() {
     const cardsSearch = await measureSearchLatency(page, 'goblin');
     const cardsSearchDom = await measureDom(page);
     // Clear the search so the next view starts from the full pool.
-    const box = await page.$('.toolbar__search');
-    if (box) {
-      await box.click({ clickCount: 3 });
-      await page.keyboard.press('Backspace');
-      await sleep(SETTLE_MS);
-    }
+    const cardsRestored = await clearSearch(page);
+    check(
+      'the Cards search was cleared back to the whole pool before moving on',
+      (cardsRestored ?? -1) > 1000,
+      `${cardsRestored} cards`,
+    );
+    await sleep(SETTLE_MS);
 
     report.cards = {
       timeToShellMs,
@@ -421,6 +466,13 @@ async function main() {
     );
 
     // ---- The phone, which DECKBUILDER-AND-ART.md §2 says has no layout ------
+    // THE POOL, not what a leftover search left behind — see clearSearch.
+    const deckRestored = await clearSearch(page);
+    check(
+      'the Deck Builder search was cleared back to the whole pool before the phone pass',
+      (deckRestored ?? -1) > 1000,
+      `${deckRestored} cards`,
+    );
     await page.setViewport(VIEWPORTS.phone);
     await sleep(SETTLE_MS * 2);
     const deckPhoneDom = await measureDom(page);
