@@ -589,6 +589,8 @@ function detachedAnswer(
     choiceId: choice.id,
     chooser: choice.chooser,
     choiceKind: choice.kind,
+    sourceInstanceId: choice.sourceInstanceId,
+    sourceName: choice.sourceName,
     answer,
     reason: 'asked outside a resolution — took the default answer',
   });
