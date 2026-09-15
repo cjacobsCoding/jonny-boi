@@ -15,6 +15,7 @@ import type { CastZone, GameAction } from './actions.js';
 import { DEFAULT_MANA_MODE } from './actions.js';
 import type {
   ActivatedAbility,
+  ActivationCost,
   AdditionalCastCost,
   CardDefinition,
   EffectRef,
@@ -1002,6 +1003,10 @@ function resolveTriggeredAbility(
       ...(obj.triggeringAmount !== undefined ? { triggeringAmount: obj.triggeringAmount } : {}),
       // "That creature" (DESIGN §3.107) rides the frame for the same reason.
       ...(obj.triggeringInstances !== undefined ? { triggeringInstances: obj.triggeringInstances } : {}),
+      // An ACTIVATED ability's `{X}` (DESIGN §3.148) — the same reason again:
+      // the value was chosen and charged before the ability reached the stack,
+      // and "gets +X/+0" is read during a resolution that outlives both.
+      ...(obj.xValue !== undefined ? { xValue: obj.xValue } : {}),
     },
     registry,
     emit,
@@ -5087,10 +5092,24 @@ function applyActivateAbility(
   // --- pay the cost, in full, before anything reaches the stack ---
   const player = state.players[action.player];
   const cost = ability.cost;
-  if (cost.mana) {
+  // §3.148 — the `{X}` in an ACTIVATION cost. The value is part of the ACTION
+  // (CR 602.2b: costs are paid before the ability is on the stack), and the
+  // whole cost — base plus `xValue × xCost` generic — is charged in ONE
+  // `payCost` so the planner sees it as the single payment it is; charging the
+  // X separately would let a restricted-mana pool fund half of it.
+  const xCount = cost.xCost ?? 0;
+  const xValue = action.xValue ?? 0;
+  if (xCount === 0 && action.xValue !== undefined && action.xValue !== 0) {
+    return rejectWith(prevState, 'that ability has no {X} in its cost');
+  }
+  if (!Number.isInteger(xValue) || xValue < 0 || xValue > MAX_X_VALUE) {
+    return rejectWith(prevState, 'that is not a legal value for X');
+  }
+  const manaDue = activationManaDue(cost, xValue);
+  if (manaDue) {
     const paid = payCost(
       player.manaPool,
-      cost.mana,
+      manaDue,
       spendPurposeIfRestricted(player.manaPool, source.def, 'activate'),
     );
     if (!paid.ok) return rejectWith(prevState, paid.reason);
@@ -5159,6 +5178,9 @@ function applyActivateAbility(
     label: ability.label,
     // An activated ability, loyalty included — see `origin` on the type.
     origin: 'activated',
+    // The X that was actually paid for rides to the resolution (§3.148), so the
+    // body's "gets +X/+0" reads the number rather than a default.
+    ...(xCount > 0 ? { xValue } : {}),
   });
   emit({
     type: 'abilityActivated',
@@ -5216,6 +5238,57 @@ function sacrificeCostCandidates(
     if (!matchesCardFilter(perm, filter)) continue;
     out.push(perm);
   }
+  return out;
+}
+
+/**
+ * The mana an activation actually owes: the printed base cost plus the generic
+ * the chosen X buys (§3.148). ONE answer, read by the payability gate, by the
+ * offer path's affordability search and by the payment itself, so "offered" and
+ * "accepted" cannot disagree about the price of an X.
+ *
+ * `undefined` for an ability with no mana component and X = 0 — the shape
+ * `payCost` is never called with.
+ */
+function activationManaDue(cost: ActivationCost, xValue: number): ManaCost | undefined {
+  const extra = (cost.xCost ?? 0) * xValue;
+  if (extra === 0) return cost.mana;
+  const base = cost.mana ?? {};
+  return { ...base, generic: (base.generic ?? 0) + extra };
+}
+
+/**
+ * The largest X this ability's controller could pay for RIGHT NOW (§3.148).
+ *
+ * Asked of the same `canPay` the gate and the payment use, walking upward one
+ * value at a time — the exact analogue of {@link maxAffordableX}, against the
+ * FLOATING POOL rather than the payment planner, because an activation cost is
+ * paid from mana already produced (CR 602.2b) and never taps a land itself.
+ * That is also what keeps this bounded in practice: the range is the pool, not
+ * the board.
+ */
+function maxAffordableActivationX(
+  state: GameState,
+  source: CardInstance,
+  ability: ActivatedAbility,
+): number {
+  const xCount = ability.cost.xCost ?? 0;
+  if (xCount === 0) return 0;
+  const pool = state.players[source.controller].manaPool;
+  const purpose = spendPurposeIfRestricted(pool, source.def, 'activate');
+  let max = 0;
+  while (max < MAX_X_VALUE) {
+    const due = activationManaDue(ability.cost, max + 1);
+    if (due === undefined || !canPay(pool, due, purpose)) break;
+    max += 1;
+  }
+  return max;
+}
+
+/** `[from … to]`, inclusive — the X values an activation offers (§3.148). */
+function rangeInclusive(from: number, to: number): number[] {
+  const out: number[] = [];
+  for (let n = from; n <= to; n++) out.push(n);
   return out;
 }
 
@@ -5955,27 +6028,40 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
       const payers = ability.cost.sacrificeAnother === undefined
         ? [undefined]
         : sacrificeCostCandidates(state, perm, ability.cost).map((c) => [c.instanceId] as const);
+      // §3.148 — an `{X}` in the activation cost is enumerated like a payer: one
+      // action per value the FLOATING pool can fund (CR 602.2b, the cost is paid
+      // as the ability is activated). Zero is always on offer, and is the whole
+      // list for every ability that prints no X, so nothing else here changed.
+      const xValues =
+        (ability.cost.xCost ?? 0) === 0
+          ? [undefined]
+          : rangeInclusive(0, maxAffordableActivationX(state, perm, ability));
       for (const payer of payers) {
         const costPart = payer === undefined ? {} : { costInstanceIds: [...payer] };
-        if (restriction === undefined) {
-          actions.push({
-            kind: 'activateAbility',
-            player: me,
-            instanceId: perm.instanceId,
-            abilityIndex: index,
-            ...costPart,
-          });
-          continue;
-        }
-        for (const target of legalTargetsFor(state, restriction, me, perm.def)) {
-          actions.push({
-            kind: 'activateAbility',
-            player: me,
-            instanceId: perm.instanceId,
-            abilityIndex: index,
-            targets: [target],
-            ...costPart,
-          });
+        for (const xValue of xValues) {
+          const xPart = xValue === undefined ? {} : { xValue };
+          if (restriction === undefined) {
+            actions.push({
+              kind: 'activateAbility',
+              player: me,
+              instanceId: perm.instanceId,
+              abilityIndex: index,
+              ...costPart,
+              ...xPart,
+            });
+            continue;
+          }
+          for (const target of legalTargetsFor(state, restriction, me, perm.def)) {
+            actions.push({
+              kind: 'activateAbility',
+              player: me,
+              instanceId: perm.instanceId,
+              abilityIndex: index,
+              targets: [target],
+              ...costPart,
+              ...xPart,
+            });
+          }
         }
       }
     }

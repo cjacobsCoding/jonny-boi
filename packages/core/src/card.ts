@@ -1653,6 +1653,31 @@ export interface AdditionalCastCost {
 export interface ActivationCost {
   /** Mana component, paid from the controller's floating pool. */
   readonly mana?: ManaCost;
+  /**
+   * How many `{X}` symbols the printed ACTIVATION cost carries — "**{X}{R}{G}**,
+   * {T}: Target creature gets +X/+0…" (Kessig Wolf Run), "{X}, {T}: Target
+   * player mills X cards" (Sands of Delirium). DESIGN §3.148.
+   *
+   * Exactly {@link CardDefinition.xCost}'s shape and meaning, one level down: the
+   * X portion is NOT part of {@link mana}, so every existing reader of an
+   * activation cost (the payability gate, the offer path's affordability check,
+   * `payCost`) is already correct reading the base cost and none of them had to
+   * learn a new symbol.
+   *
+   * The VALUE is chosen as the ability is ACTIVATED, not as it resolves (CR
+   * 601.2b via 602.2b — costs are paid before the ability goes on the stack), so
+   * it rides `ActivateAbilityAction.xValue` rather than being asked for later:
+   * the offer path enumerates one action per affordable value, the apply path
+   * charges `xValue × xCost` generic on top of the base cost, and the chosen
+   * number rides the stack object into the resolution
+   * (`AbilityStackObject.xValue` → `ResolutionFrame.xValue` →
+   * `EffectContext.xValue`) so the body's "gets +X/+0" reads what was paid for.
+   *
+   * Enumerating the value is affordable here in a way it is not for a cast:
+   * an activation cost is paid from the FLOATING pool, so the range is bounded
+   * by mana already produced rather than by everything that could be tapped.
+   */
+  readonly xCost?: number;
   /** The `{T}` symbol: tap this permanent (and obey summoning sickness). */
   readonly tap?: boolean;
   /** "Sacrifice ~": this permanent goes to its owner's graveyard. */

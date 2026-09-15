@@ -770,6 +770,18 @@ export interface TriggeredStackObject {
    */
   readonly origin?: 'activated';
   /**
+   * The value chosen for an ACTIVATED ability's `{X}` cost (DESIGN §3.148),
+   * recorded as the cost was paid — "{X}{R}{G}, {T}: Target creature gets
+   * +X/+0…" (Kessig Wolf Run).
+   *
+   * Rides the stack object for the same reason a cast's X rides the spell
+   * object: the choice is made before the ability is on the stack, and the body
+   * reads it during a resolution that outlives both. Absent for every trigger
+   * and for every activated ability whose cost prints no `{X}`; an absent value
+   * reads 0, the direction that can never play better than printed.
+   */
+  readonly xValue?: number;
+  /**
    * The player the EVENT that set this ability off was about — the referent of
    * a body's "that player" / "them". Rides the stack object so it survives into
    * the resolution frame and then into `EffectContext`, exactly the way a cast's

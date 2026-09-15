@@ -57,6 +57,7 @@ import {
   parsePayloadKeyword,
   COST_NOUNS,
   COST_NOUN_PHRASE,
+  resolveItsReferent,
 } from './rules.js';
 import { mergeKeywordGrant } from '@jonny-boi/core';
 import type { HybridComponent } from '@jonny-boi/core';
@@ -65,7 +66,14 @@ import type { CastZone, KeywordFlags } from '@jonny-boi/core';
 // §3.112 — the cast-alternative family's closed kind list, for the keyword sweep.
 import { ALTERNATIVE_COST_KINDS } from '@jonny-boi/core';
 import type { AlternativeCostKind } from '@jonny-boi/core';
-import { frontFaceName, normalizeClause, parseManaSymbols, prepareOracle, splitSentences } from './text.js';
+import {
+  frontFaceName,
+  normalizeClause,
+  parseManaSymbols,
+  prepareOracle,
+  splitCostSymbols,
+  splitSentences,
+} from './text.js';
 import { AS_ENTERS_PRIMITIVE } from '../choice-primitives.js';
 
 /**
@@ -834,9 +842,16 @@ function compileActivatedAbility(clause: string, assembly: Assembly, ctx: RuleCo
   // this engine cannot check, and they stay reported: an ability whose
   // restriction was dropped is activatable in windows the printed one is not.
   const sorceryOnly = SORCERY_SPEED_ONLY.exec(split.effect);
-  const effectText = sorceryOnly ? split.effect.slice(0, sorceryOnly.index).trim() : split.effect;
+  const withRestriction = sorceryOnly ? split.effect.slice(0, sorceryOnly.index).trim() : split.effect;
+  // §3.148 — "~ deals damage equal to ITS power to any target" (Spikeshot
+  // Goblin). Inside an activated ability's body the source is the only object
+  // "its" can name, and it was on the battlefield a moment ago to be activated,
+  // so the referent is provable here and is spelled out for the effect table.
+  // `resolveItsReferent` refuses to rewrite a body that names a second object
+  // ("target …"), which is what keeps this from guessing.
+  const effectText = resolveItsReferent(withRestriction, "~'s");
 
-  const effects = ctx.compileEffectClause(effectText);
+  const effects = ctx.compileEffectClause(effectText, { xBound: (cost.xCost ?? 0) > 0 });
   if (!effects || effects.length === 0) return false;
 
   assembly.activated.push({
@@ -935,6 +950,7 @@ const MANA_SYMBOLS = /^(?:\{[^}]+\})+$/;
 function parseActivationCost(text: string, ctx: RuleContext): ActivationCost | null {
   const cost: {
     mana?: ManaCost;
+    xCost?: number;
     tap?: boolean;
     sacrificeSelf?: boolean;
     sacrificeAnother?: CardFilter;
@@ -977,9 +993,21 @@ function parseActivationCost(text: string, ctx: RuleContext): ActivationCost | n
       continue;
     }
     if (MANA_SYMBOLS.test(part)) {
-      const mana = parseManaSymbols(part);
-      if (!mana) return null; // a symbol we cannot pay (hybrid, {X}, Phyrexian)
-      cost.mana = mana;
+      // §3.148 — `{X}` in an ACTIVATION cost ("{X}{R}{G}, {T}: …" — Kessig Wolf
+      // Run). The X symbols are partitioned off before the rest is parsed, for
+      // exactly the reason the CAST path does it (`partitionOtherSymbols`): X is
+      // 0 everywhere but on the stack, so the base cost every payability reader
+      // already understands stays the base cost, and the COUNT of X symbols is
+      // the multiplier the engine charges (`ActivationCost.xCost`).
+      const xCount = splitCostSymbols(part).filter((symbol) => symbol === 'X').length;
+      const rest = xCount === 0 ? part : part.replace(/\{x\}/gi, '');
+      // "{X}, {T}: …" (Sands of Delirium) prints X and nothing else — a real
+      // cost with no base mana at all, so an empty remainder is not a failure.
+      const mana = rest.trim().length === 0 ? undefined : parseManaSymbols(rest);
+      if (xCount === 0 && !mana) return null; // a symbol we cannot pay (Phyrexian, snow)
+      if (xCount > 0 && rest.trim().length > 0 && !mana) return null;
+      if (mana) cost.mana = mana;
+      if (xCount > 0) cost.xCost = xCount;
       continue;
     }
     return null; // an unrecognised cost component — report the whole line
@@ -1358,13 +1386,23 @@ export function compileCard(card: CompilableCard): CompileResult {
       assembly.matchedRules.push(ruleId);
     }
   };
-  const ctx: RuleContext = {
+  // `outerCtx` is the card's own context; `ctx` is the name every call site
+  // below uses. They are the same object — the two names exist so
+  // `compileEffectClause` can shadow `ctx` with a DERIVED context for one call
+  // (§3.148's `xBound`) while still reaching the base one.
+  const outerCtx: RuleContext = {
     card,
     compileEffectClause(
       text: string,
-      options?: { readonly targetFree?: boolean },
+      options?: { readonly targetFree?: boolean; readonly xBound?: boolean },
     ): readonly EffectRef[] | null {
       const targetFree = options?.targetFree === true;
+      // §3.148 — a derived context for this call only, so "X is bound here" is
+      // visible to the rules that read X without becoming a fact about the card.
+      // The nested compiles a rule may start from its `build` still see the
+      // unbound context, which is the safe direction: a deeper clause that meant
+      // the activation's X reports rather than reading a number nobody paid for.
+      const ctx = options?.xBound === true ? { ...outerCtx, xFromActivationCost: true } : outerCtx;
       const clause = normalizeClause(text);
       const whole = applyRules(EFFECT_RULES, clause, ctx, targetFree);
       if (whole) {
@@ -1501,6 +1539,7 @@ export function compileCard(card: CompilableCard): CompileResult {
       };
     },
   };
+  const ctx: RuleContext = outerCtx;
 
   for (const line of prepareOracle(card.oracleText, card.name)) {
     compileAbilityLine(line, assembly, ctx, isSpell);

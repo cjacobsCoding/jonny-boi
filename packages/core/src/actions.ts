@@ -271,6 +271,20 @@ export interface ActivateAbilityAction {
    * `TapForManaAction.costInstanceId` does for a mana ability.
    */
   readonly costInstanceIds?: readonly InstanceId[];
+  /**
+   * The value chosen for an `{X}` in the ACTIVATION cost (DESIGN §3.148) —
+   * "{X}{R}{G}, {T}: Target creature gets +X/+0…" (Kessig Wolf Run).
+   *
+   * On the action for the same reason `costInstanceIds` is: the cost is paid as
+   * the ability is activated (CR 602.2b), before it reaches the stack, so there
+   * is no resolution in which to ask. The generator offers one action per
+   * affordable value — bounded, because an activation cost is paid from the
+   * FLOATING pool rather than from everything the board could tap.
+   *
+   * Absent on an ability whose cost prints no `{X}`; an action that names one
+   * anyway is rejected, so a client cannot buy an X the card does not sell.
+   */
+  readonly xValue?: number;
 }
 
 /**

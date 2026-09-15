@@ -415,6 +415,18 @@ export interface CompileRule {
 export interface RuleContext {
   readonly card: CompilableCard;
   /**
+   * DESIGN §3.148 — set while compiling the BODY of an activated ability whose
+   * ACTIVATION cost prints `{X}` ("{X}{R}{G}, {T}: Target creature gets
+   * +X/+0…" — Kessig Wolf Run).
+   *
+   * The X-reading rules ask ONE question — "is X bound in this clause?" — and
+   * this is the second of the two answers; the first is the card's own `{X}`
+   * mana cost. Two sources, one reader (`xIsBound` in `rules.ts`), because a
+   * rule that checked only the mana cost would refuse Kessig Wolf Run and a
+   * rule that checked neither would read a cast-time X that was never chosen.
+   */
+  readonly xFromActivationCost?: boolean;
+  /**
    * Compile a nested clause (a trigger's body) with the same effect rules.
    * Returns the effects, or `null` when the body itself is unsupported — which
    * makes the whole trigger unsupported rather than silently empty.
@@ -422,10 +434,14 @@ export interface RuleContext {
    * Pass `targetFree` when the clause will run somewhere no target can be chosen
    * (a triggered ability); rules flagged {@link CompileRule.needsChosenTarget}
    * are then rejected rather than compiled into a no-op.
+   *
+   * Pass `xBound` when the clause is an activated ability's body and that
+   * ability's cost prints `{X}` — it sets {@link xFromActivationCost} for the
+   * rules this call runs.
    */
   compileEffectClause(
     text: string,
-    options?: { readonly targetFree?: boolean },
+    options?: { readonly targetFree?: boolean; readonly xBound?: boolean },
   ): readonly import('@jonny-boi/core').EffectRef[] | null;
   /**
    * Compile a TRIGGER's body, reporting what it targets.
