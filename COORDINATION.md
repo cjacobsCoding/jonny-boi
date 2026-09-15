@@ -13,6 +13,10 @@
   prevent-next-damage-fixed-recipient 10, target-player-mills-where-x 3) ·
   red-then-green on both families (widen `'forest'` to `isLand()` → 3 red incl. the targeting-completeness
   offer/legality sweep; drop the shield's `amount` → 4 red).
+  📉 **No throughput regression:** `sim match "Mono-Red Aggro" "Boros Aggro" --games 150 --seed 909
+  --workers 1` — 141/145/151 games/sec on this branch against 143/151/144 with the five source files
+  reverted (means 146 vs 146, this box's own spread is wider), and `Mono-Red Aggro 53/150` is identical
+  on both, which is the like-for-like proof.
   📈 **Compiler delta +106 accepted (6,305 → 6,411) on one fixed 32,341-card corpus**, the same corpus
   compiled twice with this branch's five source files reverted in between, so the number is the
   compiler's and not a corpus refresh's. Arbor Elf ✅ and Doorkeeper ✅ compile; **Axebane Guardian does
