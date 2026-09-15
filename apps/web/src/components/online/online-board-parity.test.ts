@@ -53,6 +53,7 @@ import { maskedViewToBoardView } from '../../lib/online/board-adapter.js';
 import { stageEntriesFor } from '../play/BoardScene.js';
 import type { StageEntry } from '../play/CombatStage.js';
 import { PlayBoard } from '../play/PlayBoard.js';
+import { announcementQueue } from '../../lib/play/announcements.js';
 import { AUTO_ADVANCING_HINT, OnlineBoard } from './OnlineBoard.js';
 
 const NAMES: Readonly<Record<PlayerId, string>> = { A: 'Alice', B: 'Bob' };
@@ -399,7 +400,16 @@ describe('the combat hold reaches BOTH boards, identically', () => {
     );
   }
 
-  /** Just the announce strip, from either board's markup. */
+  /**
+   * Just the announce strip, from either board's markup.
+   *
+   * ⚠️ IT LOOKS PAST THE SURFACE WRAPPER ON PURPOSE. Both boards now mount the
+   * strip inside `AnnouncementSurface`, and comparing the wrapper would compare
+   * the two boards' queues rather than the two boards' BANNERS — which is the
+   * thing rule 12 says must not drift. The wrapper's own parity is asserted by
+   * `announcement-queue.test.ts`, which requires every announcement on every
+   * board to come through that one component.
+   */
   function holdBanner(html: string): string {
     const start = html.indexOf('<div class="combat-hold ');
     expect(start, 'this board rendered no combat-hold banner at all').toBeGreaterThanOrEqual(0);
@@ -440,7 +450,9 @@ describe('the combat hold reaches BOTH boards, identically', () => {
         onConcede: () => {},
         stops: { fullControl: false },
         onStops: () => {},
-        combatHold: beat(),
+        // Handed in the SAME shape the online board builds: one queued
+        // announcement, through the one surface both boards mount.
+        announcements: announcementQueue([{ kind: 'combatHold', hold: beat() }]),
         onCombatHoldSkip: () => {},
       } as never),
     );

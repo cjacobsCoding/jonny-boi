@@ -116,6 +116,51 @@ each row carrying its priority and duration; announcements queue rather than sta
 lower-priority one waits. This must be built as the shared mechanism *now*, before the fourth
 announcer lands and makes it five.
 
+### ✅ SHIPPED — `lib/play/announcements.ts` + `components/play/AnnouncementSurface.tsx`
+
+The fourth announcer landed first, which is why Caleb saw the overlap. Measured off the
+stylesheets rather than guessed: `.reveal-banner` `top: 12% / z-index 70`, `.spell-hold` a centred
+card capped at `calc(100vh - 2rem)`, and `.combat-hold` and `.forced-choice` **declaring the
+identical `top` at the identical z-index** on a comment's promise that *"the two never stand at
+once"* — which nothing enforced, and whose `var(--combat-hold-status-clearance, 3.9rem)` could
+never have resolved anyway (a custom property is inherited by descendants, never by a sibling).
+
+**The table** is `ANNOUNCEMENT_KINDS`, a mapped type over an `AnnouncementKind` union DERIVED from
+`AnnouncementBody` — so a fifth announcement stops the build until somebody writes its rank, its
+gate, its slot and its beat, exactly as `FORCED_CHOICE_KINDS` does against core's `ChoiceKind`.
+Rank is **perishability**: how much of what an announcement describes is already gone by the time
+it could be shown again (combat frame → stack object → replayable event → a fold over the whole
+log).
+
+**"Queued for display" and "holding the game" are ONE answer.** `announcementQueue()` returns
+`showing`, `waiting` and `holdsGame` from one ordered list, and both movers read `holdsGame`.
+`ANNOUNCEMENT_RANK_INVARIANT` — every HOLDING kind outranks every NOTICE — is what makes the two
+agree by construction rather than by luck: whenever the game is frozen, the thing on screen is the
+reason. The beat belongs to the HEAD, never to a waiter, so a painted-over announcement can no
+longer burn its whole beat invisibly and vanish.
+
+**Three kinds hold, not two.** Measured from the shipped `PlayView`, which gated on
+`hold || combatHold || forcedChoice`: the settled-choice banner gates too, because its trigger
+resolves in the very next priority window. `announcements.test.ts` proves the new one-value gate is
+extensionally EQUAL to that expression over all 16 combinations.
+
+**The reveal got the beat it never had.** It was dismissed only by a click or the next reveal, so
+one Goblin Guide left a strip on screen for the rest of the game for everything else to collide
+with. `ANNOUNCEMENT_CONFIG.revealMs` derives from the settled-choice beat (same reading load: one
+sentence, one card face).
+
+**What the camera found that no test could.** `verify-announcement-queue.mjs` photographs a real
+frame where two announcements are due at once — and the first capture showed the survivor standing
+on the board's own status row. The SHIPPED `.forced-choice` banner does the same thing at the same
+slot, so it was this defect one layer down rather than something the queue introduced. The slot
+clearance is now published from `ANNOUNCEMENT_CONFIG.topSlotClearanceRem`, measured against the
+status row's real rect, and the rig asserts the two rects never intersect.
+
+**Not covered, stated rather than buried:** the opponent-action feed (`OpponentActionFeed`) is not
+an announcement and still has its own corner; at 1440px the surface's strip and the feed's pill
+touch. And `OnlineBoard` mounts the surface but constructs only the combat beat — it has no spell
+hold, settled choice or reveal to queue (§11/§12).
+
 ---
 
 ## WATCH-5 — "it lost where I would have won" — how to turn play into rules

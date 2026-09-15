@@ -948,6 +948,102 @@ export const FORCED_CHOICE_CONFIG: ForcedChoiceConfig = Object.freeze({
 });
 
 /**
+ * THE ONE ANNOUNCEMENT SURFACE (`lib/play/announcements.ts`).
+ *
+ * Caleb: *"we are getting some overriding overlays in app that look bad … those
+ * should reconcile somehow"*. Four `position: fixed` announcers were painting
+ * over each other — two of them (`.combat-hold` and `.forced-choice`) into the
+ * literally identical slot at the identical z-index.
+ *
+ * ⚠️ THREE OF THE FOUR BEATS ARE NOT HERE, ON PURPOSE. The combat beat belongs
+ * to {@link CombatHoldConfig}, the spell hold's to {@link SpellHoldConfig} and
+ * the settled choice's to {@link ForcedChoiceConfig}; the queue READS them
+ * through `ANNOUNCEMENT_KINDS` rather than restating them, so tuning a beat
+ * still happens in exactly one place (rule 12). What is new here is the ONE
+ * announcement that never had a beat at all.
+ */
+export interface AnnouncementConfig {
+  /**
+   * How long a revealed card stands, ms.
+   *
+   * ⚠️ IT USED TO HAVE NO BEAT, and that is half of the reported defect. The
+   * reveal banner was dismissed only by a click or by the NEXT reveal, so a
+   * Goblin Guide on turn three left a strip on screen for the rest of the game
+   * — a permanent obstacle for every later announcement to collide with. A
+   * notice that outlives what it is about is what made "overriding overlays"
+   * inevitable rather than occasional.
+   *
+   * DERIVED from {@link ForcedChoiceConfig.holdMs} rather than invented, because
+   * the two carry the same reading load: one sentence and one card face. A
+   * reveal is not a bigger event than a choice the game made for you.
+   */
+  readonly revealMs: number;
+  /**
+   * The same beat for a viewer who asked for reduced motion.
+   *
+   * A NUMBER, not a switch — the convention {@link Board3dConfig.reducedMotionTiltDeg}
+   * set and both holds follow. There is no travel to wait out, but the sentence
+   * and the card still have to be read, so it shortens rather than vanishing.
+   */
+  readonly reducedMotionRevealMs: number;
+  /**
+   * Fade of the surface as one announcement replaces another, ms.
+   *
+   * ONE fade for the whole surface, taken from the spell hold's, because the
+   * point of a single surface is that every announcement arrives the same way.
+   * `.spell-hold` and `.forced-choice` already read this same number through two
+   * separately published custom properties; the surface publishes one.
+   */
+  readonly fadeMs: number;
+  /**
+   * How far below the top of the viewport the `top` slot sits, in rem.
+   *
+   * ⚠️ MEASURED FROM A CAPTURE, not chosen. The old `.combat-hold` clearance was
+   * 3.9rem, which clears the app header and nothing else — and a SHORT strip got
+   * away with it. A TALL body in the same slot did not: a real 1440x1100 capture
+   * of the settled-choice banner (`verify-out/forced-choice/forced-choice-announced.png`)
+   * shows it standing over "Turn 33 · Main Phase 1 · Player 1's turn", and the
+   * reveal banner does the same the moment it shares that slot. An announcement
+   * that covers the board's own status line is the reported defect wearing a
+   * different hat.
+   *
+   * The board's status row measured 130px→168px at that window; 11rem (176px)
+   * clears its bottom edge with a small gap. `verify-announcement-queue.mjs`
+   * asserts the surface's rect never intersects the status row's, so this number
+   * is guarded rather than trusted.
+   */
+  readonly topSlotClearanceRem: number;
+}
+
+/** The default announcement-surface config (see {@link AnnouncementConfig}). */
+export const ANNOUNCEMENT_CONFIG: AnnouncementConfig = Object.freeze({
+  revealMs: FORCED_CHOICE_CONFIG.holdMs,
+  reducedMotionRevealMs: FORCED_CHOICE_CONFIG.reducedMotionHoldMs,
+  fadeMs: SPELL_HOLD_CONFIG.fadeMs,
+  topSlotClearanceRem: 11,
+});
+
+/**
+ * EVERY BEAT THE ANNOUNCEMENT QUEUE READS, in one bundle — the argument
+ * `ANNOUNCEMENT_KINDS`' duration rules take.
+ *
+ * ⚠️ IT REFERENCES the three configs rather than restating their numbers, which
+ * is the whole point: the combat beat is still tuned in {@link COMBAT_HOLD_CONFIG}
+ * and the spell hold's in {@link SpellHoldConfig}, and the queue cannot drift
+ * from the beat the announcement itself was built with.
+ *
+ * Deliberately NOT typed as `announcements.ts`'s `AnnouncementBeats`: that would
+ * make this module import the one that imports it. Structural typing pins the
+ * shape at every call site anyway, and `announcements.test.ts` asserts the
+ * bundle really is these three objects and not copies of them.
+ */
+export const ANNOUNCEMENT_BEATS = Object.freeze({
+  spellHold: SPELL_HOLD_CONFIG,
+  forcedChoice: FORCED_CHOICE_CONFIG,
+  announcement: ANNOUNCEMENT_CONFIG,
+});
+
+/**
  * The two-phase cast/activate transaction (UX-3/4/5).
  *
  * The commit boundary itself is `lib/play/proposal.ts` + the session snapshot

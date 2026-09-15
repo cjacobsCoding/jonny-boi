@@ -137,13 +137,14 @@
 }
 
 /* A revealed card is announced ON the board as well as in the log: a line in a
-   scrolling history is not what "so I can see it" means (report 210413). */
+   scrolling history is not what "so I can see it" means (report 210413).
+
+   ⚠️ NO `position`/`top`/`z-index` — `.announce` owns them (board-scene.css).
+   This banner sat at `top: 12%` with `z-index: 70`, ABOVE every hold, and was
+   dismissed only by a click or by the next reveal — so one Goblin Guide left a
+   strip on screen for the rest of the game for everything else to collide with.
+   That is the reported pair: the reveal and the opponent's cast, overlapping. */
 .reveal-banner {
-  position: fixed;
-  left: 50%;
-  top: 12%;
-  transform: translateX(-50%);
-  z-index: 70;
   display: flex;
   align-items: center;
   gap: var(--space-3);

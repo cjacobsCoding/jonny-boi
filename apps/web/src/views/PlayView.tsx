@@ -30,6 +30,7 @@ import {
 import { aiAction, aiMustAct, type AiSeatConfig } from '../lib/play/ai-seat.js';
 import { PilotPicker } from '../components/lab/PilotControls.js';
 import {
+  ANNOUNCEMENT_BEATS,
   COMBAT_HOLD_CONFIG,
   FORCED_CHOICE_CONFIG,
   HOTSEAT_CONFIG,
@@ -43,7 +44,6 @@ import {
 import { stackEntries } from '../lib/play/stack-view.js';
 import {
   extendPressure,
-  holdDurationMs,
   NO_HOLD_PRESSURE,
   pointerPressure,
   spellHoldDecision,
@@ -57,6 +57,13 @@ import {
   type CombatHold,
   type CombatHoldKind,
 } from '../lib/play/combat-hold.js';
+import {
+  announcementDurationMs,
+  announcementId,
+  announcementQueue,
+  type AnnouncementBody,
+} from '../lib/play/announcements.js';
+import { latestReveal } from '../lib/play/reveals.js';
 import { usePrefersReducedMotion } from '../components/play/AnimationLayer.js';
 import { buildBoardView } from '../lib/play/view-model.js';
 import { SetupScreen } from '../components/play/SetupScreen.js';
@@ -960,14 +967,13 @@ function LocalPlay({
     setHold(null);
   }, [hold, session]);
 
-  // The timer. Re-armed whenever the pressure changes, so moving the pointer
-  // onto the card lengthens the hold that is already running rather than
-  // needing a second one.
-  useEffect(() => {
-    if (!hold) return undefined;
-    const handle = window.setTimeout(releaseHold, holdDurationMs(holdPressure, SPELL_HOLD_CONFIG));
-    return () => window.clearTimeout(handle);
-  }, [hold, holdPressure, releaseHold]);
+  // ⚠️ NO TIMER HERE ANY MORE. Every announcement's beat is spent by the ONE
+  // timer below, and only while it is the announcement actually on screen. An
+  // arming-time timer is what made a painted-over announcement burn its whole
+  // beat invisibly and then vanish — the silent drop `announcements.ts` forbids.
+  // Pointer pressure still lengthens THIS hold: the pressure rides in the
+  // spell-hold body, so a change re-derives the head's duration and re-arms the
+  // one timer (`holdDurationMs` is still the rule, read through the table).
 
   /**
    * §3.143 / §10 — HOLDING COMBAT ON SCREEN.
@@ -1060,13 +1066,9 @@ function LocalPlay({
     setCombatHold({ hold: decision.hold, turn: session.state.turnNumber });
   }, [phase, session, combatHold, combatHoldFor]);
 
-  // The beat's timer. Its length came from the decision, so the beat the board
-  // announces and the beat actually waited out are the same number.
-  useEffect(() => {
-    if (!combatHold) return undefined;
-    const handle = window.setTimeout(releaseCombatHold, combatHold.hold.ms);
-    return () => window.clearTimeout(handle);
-  }, [combatHold, releaseCombatHold]);
+  // ⚠️ NO TIMER HERE EITHER — the queue's single timer spends this beat, using
+  // the very `hold.ms` the decision produced, so the beat the board announces
+  // and the beat it actually waits are still the same number.
 
   /**
    * WHOSE SCREEN THIS IS — hoisted above the effects because the forced-choice
@@ -1162,25 +1164,168 @@ function LocalPlay({
     }
   }, [phase, session, forcedChoice, announceForcedChoice]);
 
-  // The announcement's timer. Reduced motion picks the row's OTHER beat — a
-  // NUMBER, never a switch — because the WORDS still have to be read.
+  // ⚠️ AND NO TIMER HERE. The reduced-motion swap moved into this kind's row in
+  // `ANNOUNCEMENT_KINDS` — still a NUMBER, never a switch — so all four beats
+  // are chosen in one table and spent by one timer.
+
+  // ---------------------------------------------------------------------------
+  // THE ONE ANNOUNCEMENT SURFACE (`lib/play/announcements.ts`)
+  // ---------------------------------------------------------------------------
+  /**
+   * Caleb: *"we are getting some overriding overlays in app that look bad - like
+   * 'heres what goblin guide revealed from your library' and 'heres what the
+   * computer casted' - those should reconcile somehow"*.
+   *
+   * Four announcers, four `position: fixed` elements, none aware of the others —
+   * and two of them (`.combat-hold`, `.forced-choice`) declaring the identical
+   * slot at the identical z-index. Everything below assembles them into ONE
+   * ordered queue, from which BOTH answers are read: what the board mounts, and
+   * whether the game is held. `docs/WATCH-A-GAME.md` §WATCH-4 asked for exactly
+   * this, and asked for it *"before the fourth announcer lands and makes it
+   * five"* — it landed first, which is why Caleb saw the overlap.
+   */
+  /** A reveal the player has clicked away, by its index in the event log. */
+  const [dismissedReveal, setDismissedReveal] = useState<number | null>(null);
+
+  /**
+   * The reveal to announce (§3.119, report 210413).
+   *
+   * ⚠️ IT MOVED UP FROM `PlayBoard`, and had to. The queue decides both what is
+   * on screen and whether the game is held, and a queue assembled in two places
+   * is two answers to one question (rule 12) — the board would have ordered a
+   * list the gate never saw. A fold rather than state, exactly as before: a
+   * replay or a resumed game re-derives the same banner from the same log.
+   */
+  const reveal = useMemo(
+    () =>
+      session === null || viewerSeat === null
+        ? null
+        : latestReveal(
+            session.events,
+            viewerSeat,
+            session.names,
+            (id) => {
+              for (const pid of ['A', 'B'] as const) {
+                const player = session.state.players[pid];
+                for (const zone of [player.hand, player.library, player.graveyard, player.exile]) {
+                  const hit = zone.find((c) => c.instanceId === id);
+                  if (hit) return { cardId: hit.def.id, name: hit.def.name };
+                }
+              }
+              return undefined;
+            },
+            session.nameOf,
+          ),
+    [session, viewerSeat],
+  );
+
+  /*
+   * One body per live announcement, each memoised on its OWN inputs — so the
+   * queue's identity changes when an announcement really changes and not once
+   * per render, which is what lets the single timer below key off it.
+   */
+  const combatBody = useMemo(
+    (): AnnouncementBody | null =>
+      combatHold ? { kind: 'combatHold', hold: combatHold.hold } : null,
+    [combatHold],
+  );
+  const spellBody = useMemo(
+    (): AnnouncementBody | null =>
+      hold ? { kind: 'spellHold', hold, pressure: holdPressure } : null,
+    [hold, holdPressure],
+  );
+  const forcedBody = useMemo(
+    (): AnnouncementBody | null => (forcedChoice ? { kind: 'forcedChoice', forced: forcedChoice } : null),
+    [forcedChoice],
+  );
+  const revealBody = useMemo(
+    (): AnnouncementBody | null =>
+      reveal !== null && reveal.at !== dismissedReveal ? { kind: 'reveal', reveal } : null,
+    [reveal, dismissedReveal],
+  );
+
+  /**
+   * THE QUEUE — and therefore the gate. One value, read twice below and handed
+   * to the board, so "what is on screen" and "is the game held" cannot disagree.
+   */
+  const announcements = useMemo(
+    () => announcementQueue([combatBody, spellBody, forcedBody, revealBody]),
+    [combatBody, spellBody, forcedBody, revealBody],
+  );
+
+  /**
+   * THE ONE RELEASE FUNNEL. Each kind ends the way it always did — the hold
+   * books its `announced` set, the combat beat books its spent set, the settled
+   * choice clears, the reveal records its dismissal — but there is one place
+   * that knows which, so the timer and the board's own Skip/Got it/dismiss
+   * buttons cannot end an announcement two different ways.
+   */
+  const releaseAnnouncement = useCallback(
+    (body: AnnouncementBody): void => {
+      switch (body.kind) {
+        case 'combatHold':
+          return releaseCombatHold();
+        case 'spellHold':
+          return releaseHold();
+        case 'forcedChoice':
+          return setForcedChoice(null);
+        case 'reveal':
+          return setDismissedReveal(body.reveal.at);
+      }
+    },
+    [releaseCombatHold, releaseHold],
+  );
+
+  const head = announcements.showing;
+  /** The head's identity and its beat — the ONLY two things the timer restarts for. */
+  const headId = head === null ? null : announcementId(head);
+  const headMs = head === null ? 0 : announcementDurationMs(head, ANNOUNCEMENT_BEATS, reducedMotion);
+  /**
+   * The current head and the current release, kept fresh WITHOUT restarting the
+   * beat. Everything else in this component re-renders constantly (a session is
+   * a new object per action), and a timer that depended on those identities
+   * would re-arm continuously and never fire — which for a HOLDING announcement
+   * means a permanently frozen board.
+   */
+  const beatRef = useRef<{
+    readonly head: AnnouncementBody | null;
+    readonly release: (body: AnnouncementBody) => void;
+  }>({ head: null, release: releaseAnnouncement });
   useEffect(() => {
-    if (!forcedChoice) return undefined;
-    const ms = reducedMotion
-      ? FORCED_CHOICE_CONFIG.reducedMotionHoldMs
-      : FORCED_CHOICE_CONFIG.holdMs;
-    const handle = window.setTimeout(() => setForcedChoice(null), ms);
+    beatRef.current = { head, release: releaseAnnouncement };
+  });
+
+  /**
+   * ⚠️ THE ONE TIMER, AND IT BELONGS TO THE HEAD.
+   *
+   * A waiter's beat has not started. Before the queue each announcer armed its
+   * own `setTimeout` the moment it was created, so an announcement that had been
+   * painted over spent its whole beat invisible and then disappeared — the same
+   * "correct and never seen" defect this branch has spent ten items on. Keyed on
+   * the head's identity and its own duration, so hovering the held card
+   * (`holdPressure` → a longer `headMs`) still lengthens the beat that is
+   * running, and nothing else disturbs it.
+   */
+  useEffect(() => {
+    if (headId === null) return undefined;
+    const handle = window.setTimeout(() => {
+      const current = beatRef.current;
+      if (current.head !== null) current.release(current.head);
+    }, headMs);
     return () => window.clearTimeout(handle);
-  }, [forcedChoice, reducedMotion]);
+  }, [headId, headMs]);
+
 
   useEffect(() => {
     if (phase.kind !== 'play' || !session || session.gameOver) return;
-    // A hold is up: the board is showing the opponent's spell, or the combat
-    // that just happened, and the game must not walk out from under it.
-    // …and so must a settled-choice announcement: the trigger it describes
-    // resolves in the very next priority window, so a walker that kept going
-    // would leave the banner captioning a board that had moved on.
-    if (hold || combatHold || forcedChoice) return;
+    // ⚠️ ONE GATE, READ OFF THE QUEUE — `announcements.holdsGame`, which is
+    // `queue.some(row.holds)` and NOT `head.holds`. That distinction is the
+    // whole safety argument for queueing: a hold WAITING behind another hold
+    // still freezes the board, so the game cannot advance between two beats and
+    // no hold is ever released without having been seen. And because every
+    // holding kind outranks every notice (ANNOUNCEMENT_RANK_INVARIANT), the
+    // thing freezing the game is always the thing on screen.
+    if (announcements.holdsGame) return;
     const advanced = session.autoAdvancePriority(undefined, (candidate) =>
       shouldStopForPriority(stopContextFor(candidate), stops) ||
       // ⚠️ THE LOAD-BEARING GATE. Without this the walk below runs from declared
@@ -1197,7 +1342,7 @@ function LocalPlay({
     // Identity-equal when nothing was skipped, so React bails out and this cannot
     // become a render loop.
     if (advanced !== session) setSession(advanced);
-  }, [phase, session, stops, hold, combatHold, forcedChoice, combatHoldFor, spellHoldFor]);
+  }, [phase, session, stops, announcements, combatHoldFor, spellHoldFor]);
 
   // --- the computer's seat -------------------------------------------------------
   //
@@ -1222,16 +1367,12 @@ function LocalPlay({
 
   useEffect(() => {
     if (!ai || !aiPilot || !session || phase.kind !== 'play') return;
-    // §3.143 / UX-16 — while an opponent's spell is held on screen the computer
-    // does not get to move either. Gating only the auto-passer would let the AI
-    // pass priority underneath the announce card and resolve the very spell the
-    // player is being shown, which is the bug wearing a new hat.
-    // …and the combat hold does the same job for the combat that just happened:
-    // the AI passing priority underneath the beat would resolve combat damage
-    // and end the step while the player is still looking at the blockers.
-    // …and the same for a settled choice being announced: the computer passing
-    // priority underneath it would resolve the trigger the player is reading.
-    if (hold || combatHold || forcedChoice) return;
+    // THE SAME ONE GATE. Gating only the auto-passer would let the AI pass
+    // priority underneath an announcement and resolve the very thing the player
+    // is being shown — UX-16's bug wearing a new hat, and §10's after it. Both
+    // movers now read the identical value, so they cannot come to different
+    // conclusions about whether the game is moving.
+    if (announcements.holdsGame) return;
     if (!aiMustAct(session, ai.seat)) return;
     const handle = window.setTimeout(() => {
       const action = aiAction(session, aiPilot, aiRng);
@@ -1243,7 +1384,7 @@ function LocalPlay({
       setSession(result.rejected ? session.passPriority().session : result.session);
     }, HOTSEAT_CONFIG.aiThinkMs);
     return () => window.clearTimeout(handle);
-  }, [ai, aiPilot, aiRng, session, phase, hold, combatHold, forcedChoice]);
+  }, [ai, aiPilot, aiRng, session, phase, announcements]);
 
   // The computer keeps its opening hand. It has no mulligan policy of its own —
   // pilots decide in-game actions, not whether to ship a seven — so it always
@@ -1409,14 +1550,13 @@ function LocalPlay({
         onConcede={concede}
         stops={stops}
         onStops={changeStops}
-        hold={hold}
+        announcements={announcements}
         onHoldPointer={(over) => setHoldPressure((p) => pointerPressure(p, over))}
         onHoldExtend={() => setHoldPressure(extendPressure)}
         onHoldRelease={releaseHold}
-        combatHold={combatHold ? combatHold.hold : null}
         onCombatHoldSkip={releaseCombatHold}
-        forcedChoice={forcedChoice}
         onForcedChoiceDismiss={() => setForcedChoice(null)}
+        onRevealDismiss={setDismissedReveal}
         onForcedChoice={announceForcedChoice}
       />
     </div>
