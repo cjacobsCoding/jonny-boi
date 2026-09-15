@@ -1299,9 +1299,12 @@ export const KEYWORD_RULES: KeywordRules = {
   menace: '702.111',
   indestructible: '702.12',
   protectionFrom: '702.16',
-  // 702.11e is the hexproof rule's own subsection, NOT a rule of its own: the
-  // Comprehensive Rules define "hexproof from [quality]" inside 702.11.
-  hexproofFrom: '702.11',
+  // The SUBSECTION, not 702.11 — "hexproof from [quality]" is defined in
+  // 702.11e, while bare hexproof is 702.11a/b. Citing the parent would make two
+  // keyword abilities claim one CR 702 number, which GAP-15 refuses by
+  // construction: in CR 702 every keyword ability has its own number, so a
+  // collision means one of them is indexing into the other's rules text.
+  hexproofFrom: '702.11e',
   ward: '702.21',
   // poison family (§3.105). Toxic is 702.164 — NOT 702.181, which is Mobilize;
   // checked against the 2026-08-19 Comprehensive Rules text.

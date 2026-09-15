@@ -200,9 +200,9 @@ waits on the pool refresh (§8 note). A card is ✅ only when **every** printed 
 | Rhox Faithmender | life-change replacement | ⬜ `If you would gain life, you gain twice that much life instead.` The replacement layer watches damage, counters and draws; **life gain/loss is one more event kind** on a layer that already exists. |
 | Fog Bank | damage prevention | ⬜ `Prevent all combat damage that would be dealt to and dealt by ~.` A two-directional prevention shield. |
 | Craterhoof Behemoth | mass pump + keyword grant | ⬜ `When ~ enters, creatures you control gain trample and get +X/+X until end of turn, where X is the number of creatures you control.` The derived count is the family §3.149 landed — **re-blame; the residue may be only the mass keyword grant.** |
-| Fiendslayer Paladin | targeting restriction | ⬜ `~ can't be the target of black or red spells your opponents control.` Hexproof-from-a-quality, by colour and by controller. |
+| Fiendslayer Paladin | targeting restriction | ✅ §3.151 — set-verified +1/−0. ⚠️ **The row named a half that was FINISHED**: all four quarters of protection (CR 702.16) were already built in `core/protection.ts`. The gap was `hexproof from [quality]` (CR 702.11e), ONE rule against an opponent only — and the row's `/ward|protection from/` hint cannot match this card's printed line at all, so it sat in the generic catch-all. |
 
-**6 of 16 lane-verified, 4 in flight, 6 unstarted.**
+**7 of 16 lane-verified, 4 in flight, 5 unstarted.**
 
 ### 7b. What blaming the residue clause by clause showed (2026-09-15)
 
@@ -230,6 +230,32 @@ family column:
    NO-GO naming the residue is a successful outcome**, or it will be tempted to widen a template to
    swallow the clause it cannot do — which is the one thing the pool rule forbids.
 
+### 7c. Three failure modes the first six lanes had not seen (2026-09-15, §3.151)
+
+5. ⚠️ **A row can fail to CONTAIN its own acceptance card.** §8a item 2 says the row's name points
+   at the wrong half. Targeting protection is worse than that: `UNSUPPORTED_HINTS` selects the
+   ward/protection row with `/ward|protection from/`, and **Fiendslayer Paladin's printed line
+   contains neither word**, so the card the board files under that row is not in it — it is in the
+   generic *"a rules template"* catch-all. Measured over the whole corpus: 487 cards match the family
+   TEXT, 156 are in the row, and the 331-card difference is filed under **twelve** other rows.
+   **Selecting by hint alone would have missed 68% of the family.** Always take the population by
+   text, then ask which rows it is scattered across — the second number is the one that says whether
+   the row is a family at all.
+6. ⚠️ **The pool rule is violated in BOTH directions, and only one of them has ever been guarded.**
+   Every lane so far has protected against a card playing WEAKER than printed. §3.151 found the
+   mirror: Scryfall stamps a bare `"Hexproof"` beside `"Hexproof from"` on all 14 hexproof-from
+   cards, and the keyword sweep maps the bare word straight to a flag — so implementing
+   `hexproof from black` would have put those cards into the pool with FULL hexproof. A card playing
+   stronger than printed corrupts an A/B verdict exactly as much as one playing weaker, and
+   `status === 'complete'` says nothing about either. When a family's keyword has a NARROWER printed
+   variant, check what Scryfall's bare word does with it.
+7. ✅ **A blame script can report a false ZERO, and it looks exactly like a real finding.**
+   `protect-blame.mjs` read `result.unsupported`; the field is `result.missing`. `undefined ?? []`
+   reported the row as holding **0 cards** — the same shape as `modal-blame`'s and `loyalty-blame`'s
+   genuine "this half does not exist" results, which is what makes it dangerous. Before believing a
+   zero from a blame script, make the script print a NON-zero it can be checked against: the fix here
+   prints the twelve rows the population is actually filed under, which cannot all be empty.
+
 ## 8. Progress log
 
 **Read the DELTA column, not an absolute.** Each lane measures its own delta by compiling one fixed
@@ -244,6 +270,7 @@ and the shipped pool lags the compiler. Any absolute below is annotated with the
 | 2026-09-15 | **+122** | targeted trigger (PR #32) | DESIGN §3.148 — Oblivion Ring ✅, a near-miss on machinery that was already built |
 | 2026-09-15 | **+25** | counters (PR #33) | DESIGN §3.149a — Scavenging Ooze ✅, Luminarch Ascension ✅ |
 | 2026-09-15 | **+57** | {X} / derived value (PR #34) | DESIGN §3.149 — measured on the 32,341-card corpus against fork point `51919f7`, set-diffed (0 lost). **Kessig Wolf Run ✅** |
+| 2026-09-15 | **+1** | targeting protection | DESIGN §3.151 — `hexproof from [quality]` (CR 702.11e). Set-diffed both directions on the 32,341-card corpus against fork `162f143`: 6,696 → 6,697, **0 lost**. **Fiendslayer Paladin ✅**. The family's OTHER 21 fixed lines sit on cards blocked by other lanes; also fixed a stronger-than-printed sweep defect that would have given 14 hexproof-from cards FULL hexproof. |
 
 **Phase-2 total: +310 cards, 6 of Caleb's 16 blocked deck cards.**
 
