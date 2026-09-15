@@ -4291,6 +4291,34 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       return effects({ primitive: 'proliferate' });
     },
   },
+  // =========================================================================
+  // POPULATE (CR 701.32) — the copy-selector family's one keyword action.
+  // Written as ONE bounded block beside its sibling keyword actions; nothing
+  // around it is re-ordered. See `populateSourceFor` in `../copy-primitives.ts`
+  // for why populate is a SELECTOR on `createTokenCopy` and not a primitive.
+  // =========================================================================
+  {
+    id: 'populate',
+    description:
+      '"Populate" (CR 701.32a) — choose a creature token you control and create a token that\'s a copy of it (Trostani, Selesnya\'s Voice; Wake the Reflections; Growing Ranks; Vitu-Ghazi Guildmage; Song of the Worldsoul)',
+    /**
+     * The bare keyword, which is the whole printed clause on every card that
+     * prints it alone — the reminder text that spells it out is removed by
+     * `stripReminderText` before any rule is tried, so what reaches the table is
+     * the single word.
+     *
+     * ⚠️ **This is the ONLY home for populate's selector, and deliberately not a
+     * row in `TOKEN_COPY_SELECTORS`.** That table maps printed SELECTOR TEXT to
+     * a lookup, and no card in the corpus prints "a creature token you control"
+     * outside reminder text (measured: 0). A row there would be a rule that can
+     * never fire — the Gatecreeper Vine class `dead-rule-sweep.mjs` exists to
+     * catch — so the selector is named where the printed word that means it is.
+     */
+    pattern: /^populate$/,
+    build() {
+      return effects({ primitive: 'createTokenCopy', params: { chooseCreatureTokenYouControl: true, count: 1 } });
+    },
+  },
   {
     id: 'investigate',
     description: '"Investigate" (CR 701.51) — exactly "create a Clue token", as the rules define it',

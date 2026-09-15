@@ -267,6 +267,19 @@ const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string | readonly strin
   food: 'createPredefinedToken',
   investigate: 'createPredefinedToken',
   proliferate: 'proliferate',
+  // POPULATE (CR 701.32) is a keyword ACTION, not a keyword ability — Scryfall
+  // tags it like one, exactly as it tags proliferate above. The compiled
+  // evidence is the token copy the printed word makes, through the one
+  // `createTokenCopy` funnel rather than a populate-shaped primitive of its own.
+  //
+  // ⚠️ That evidence is not unique to populate, and it does not need to be: the
+  // guard below only suppresses a DUPLICATE keyword entry, never admits a card.
+  // A populate line the rule table could not read ("Populate X times", Full
+  // Flowering) puts its own text into `missing`, which is what keeps the card
+  // incomplete — this row changes only whether the same failure is reported a
+  // second time under the keyword's name. `treasure`/`food`/`investigate` all
+  // share `createPredefinedToken` for the same reason.
+  populate: 'createTokenCopy',
   // §3.110 — the counter keyword family's ACTION and ENTRY-SCRIPT members:
   // amass (CR 701.47) and bolster (701.39) are keyword actions printed as
   // spell text, explore (701.44) is a trigger body, and bloodthirst (702.54),
