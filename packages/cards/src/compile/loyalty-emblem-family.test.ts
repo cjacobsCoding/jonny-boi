@@ -24,10 +24,31 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { CardDefinition, CardInstance, GameState } from '@jonny-boi/core';
+import {
+  aggregateFor,
+  applyEffectRef,
+  createGame,
+  effectivePower,
+  hasNoMaximumHandSize,
+} from '@jonny-boi/core';
+import { buildRegistry } from '../pool.js';
 import { compileCard } from './compile.js';
 import { EMBLEM_DEFINITION_FIELDS } from './rules.js';
 import { EMBLEM_DEFINITION_FIELD_NAMES } from '../primitives.js';
 import type { CompilableCard } from './types.js';
+
+/** A vanilla 1/1 for the end-to-end deck — the game needs a library, not a theme. */
+const BEAR: CardDefinition = { id: 'bear', name: 'Bear', types: ['creature'], power: 1, toughness: 1 };
+
+/**
+ * A library of `BEAR`s. Built here rather than imported from core's
+ * `test-fixtures` — that would be a deep import into another package's src,
+ * and this is one line.
+ */
+const bearDeck = (n = 40): { cards: readonly CardDefinition[] } => ({
+  cards: Array.from({ length: n }, () => BEAR),
+});
 
 function card(
   overrides: Partial<CompilableCard> & { name: string; oracleText: string },
@@ -319,6 +340,80 @@ describe('the emblem: the seam was built, two specific things were missing', () 
       walker('Cost Reduction Probe', '−4: You get an emblem with "Artifact spells you cast cost {1} less to cast."'),
     );
     expect(result.status).not.toBe('complete');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// END TO END — the compiled emblem actually reaching the command zone
+// ---------------------------------------------------------------------------
+
+describe('the emblem the compiler produced really works from the command zone', () => {
+  /**
+   * ⚠️ PINNING WHAT THIS LANE RELIES ON, and the reason is a real incident.
+   * A merge into `main` once ate three lines of `foldCommandStatics`'s body by
+   * aligning `applied = true;` as a common line — git reported NO conflict and
+   * **emblem anthems would have applied nothing**, with every test still green
+   * (COORDINATION, 2026-09-13). Everything below this lane's emblem work stands
+   * on is asserted here against a live game, not against the compiled shape:
+   *   - a static radiating from the COMMAND zone reaches the continuous layer;
+   *   - `noMaximumHandSize` on an emblem's definition reaches
+   *     `hasNoMaximumHandSize`, the `player-statics.ts` reader;
+   *   - a TWO-ability emblem applies BOTH, which is the whole point of the split.
+   */
+  function emblemFromUltimate(oracle: string): CardDefinition {
+    const def = definitionOf(walker('Emblem Probe', oracle));
+    const ref = (def.activated ?? []).flatMap((a) => a.effects).find((e) => e.primitive === 'createEmblem');
+    expect(ref, 'the ultimate did not compile to a createEmblem').toBeDefined();
+    const state = createGame({
+      seed: 7,
+      decks: { A: bearDeck(), B: bearDeck() },
+    }).state;
+    const source: CardInstance = {
+      instanceId: state.nextInstanceId++,
+      def: { id: 'src', name: 'Source', types: ['creature'], power: 1, toughness: 1 },
+      controller: 'A',
+      owner: 'A',
+      zone: 'battlefield',
+      tapped: false,
+      summoningSick: false,
+      damageMarked: 0,
+      markedByDeathtouch: false,
+      attachedTo: null,
+      counters: {},
+    };
+    state.battlefield.push(source);
+    applyEffectRef(buildRegistry(), ref!, { state, source, controller: 'A' }, () => {}, []);
+    const command = state.players.A.command;
+    expect(command, 'no emblem reached the command zone').toHaveLength(1);
+    // Handed back WITH the state it lives in, via a property, so callers can
+    // assert against the live game rather than against the definition alone.
+    emblemState = state;
+    return command[0]!.def;
+  }
+  let emblemState: GameState;
+
+  it('a single-ability anthem emblem buffs from the command zone (the eaten-lines guard)', () => {
+    emblemFromUltimate('−8: You get an emblem with "Creatures you control get +1/+1."');
+    const bear = emblemState.battlefield.find((c) => c.def.name === 'Source')!;
+    expect(effectivePower(bear, aggregateFor(emblemState, bear.instanceId))).toBe(2);
+  });
+
+  it('a no-maximum-hand-size emblem reaches hasNoMaximumHandSize from the command zone', () => {
+    const def = emblemFromUltimate('−8: You get an emblem with "You have no maximum hand size."');
+    expect(def.noMaximumHandSize).toBe(true);
+    expect(hasNoMaximumHandSize(emblemState, 'A')).toBe(true);
+    // Only its controller — the reader walks that seat's command zone, not both.
+    expect(hasNoMaximumHandSize(emblemState, 'B')).toBe(false);
+  });
+
+  it('a TWO-ability emblem applies BOTH halves at once — the split, end to end', () => {
+    const def = emblemFromUltimate(
+      '−8: You get an emblem with "You have no maximum hand size" and "Creatures you control get +1/+1."',
+    );
+    expect(def.noMaximumHandSize).toBe(true);
+    expect(hasNoMaximumHandSize(emblemState, 'A')).toBe(true);
+    const bear = emblemState.battlefield.find((c) => c.def.name === 'Source')!;
+    expect(effectivePower(bear, aggregateFor(emblemState, bear.instanceId))).toBe(2);
   });
 });
 
