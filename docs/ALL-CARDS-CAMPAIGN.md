@@ -149,6 +149,17 @@ cards people actually own, rather than only the cards that happen to be easy.
 | --- | --- | --- | --- |
 | 2026-09-14 | 5,619 | — | baseline at mandate |
 | 2026-09-15 | 6,500 | +57 | the {X}/derived-value amount vocabulary (DESIGN §3.149) — measured on the 32,341-card corpus against fork point `51919f7`, set-diffed (0 lost). **Kessig Wolf Run compiles; Trostani still needs Populate.** |
+| 2026-09-15 | 6,687 | +34 | populate as a resolution-time CHOICE selector on `createTokenCopy`, its printed tails, and `", then "` as an ordered conjunction (DESIGN §3.150) — measured on ONE fixed 32,341-card corpus against fork point `fd1ca31`, set-diffed (0 lost). **Trostani, Selesnya's Voice ✅ compiles — the deck's populate card is in.** |
+
+> ⚠️ **The 299-card copy row was the §2 trap a FOURTH time, and worse than any before it: 300 cards,
+> 301 shapes, 1.00 cards per shape** — every card in it prints a sentence no other card prints.
+> `copysel-blame.mjs` shows its NAME points at the wrong half too: the row is **6% selectors and 74%
+> sentences with no rule**, its largest single piece being the unbuilt verb "becomes a copy of" (72
+> clauses). And ⚠️ **the row never contained populate at all** — all 25 printed populate cards are
+> filed under EIGHT other rows, because `UNSUPPORTED_HINTS` is first-match and `stripReminderText`
+> runs before any hint is tried. **This lane moved 34 cards while the row it was assigned stayed at
+> 300.** Run `copysel-blame.mjs --scan`, which selects by clause TEXT rather than by hint row, before
+> trusting any row size: by text this shape is 691 cards, not 498.
 
 > ⚠️ **The 953-card row was the §2 trap for the third time: 954 cards, 880 shapes, 1.08 cards per
 > shape.** And its NAME points at the wrong half — `xvalue-blame.mjs` shows **70% of it is a SENTENCE

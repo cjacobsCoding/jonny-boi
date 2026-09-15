@@ -59,6 +59,72 @@
   Grindclock, Surge Node and the whole mana-battery family now PLACE their charge counters and still do
   not enter the pool; proliferate's chooser; "double the number of counters"; every graveyard-exile rider
   that is not "creature card".
+- 2026-09-15 `feat/copy-selectors` — ✅ **committed, NOT pushed, NOT merged** (worker; integrator merges).
+  **§3.150 — the copy-selector row measured, and the card it "blocks" was never in it.**
+  The row named 299 cards and is the §3.120 artifact a FIFTH time, the thinnest yet: **300 cards, 301
+  distinct shapes — 1.00 cards per shape** (the five lanes now read 1.20 / 1.18 / 1.13 / 1.08 / 1.00).
+  NEW `copysel-blame.mjs` splits it by WHICH HALF has no rule: **SELECTION 32 clauses / 31 shapes,
+  FIDELITY 20 / 20, BOTH 7 / 7, SENTENCE 377 / 373, NOT-REWRITABLE 73 / 72** — a row called copy
+  *selectors* is **6% selectors and 74% sentences**, its largest single piece the unbuilt verb
+  **"becomes a copy of" (72 clauses)**.
+  ⚠️ **THE ROW NEVER CONTAINED POPULATE, OR ANY POPULATE CARD.** `UNSUPPORTED_HINTS` is first-match and
+  `stripReminderText` runs before any hint is tried, so all **25** printed populate cards are filed under
+  **EIGHT other rows** (12 "a rules template", 3 "at the beginning of…", 2 filtered-targeting, 2 "you may
+  / choose", and one each graveyard / enters-tapped / delayed-ability / **activated-ability** — that last
+  one is Trostani). `--scan` selects by clause TEXT instead of by hint row and reports **691 cards / 712
+  clauses against 498 / 509 by hint: 193 cards of this shape sit in other rows.** ⚠️ **This lane moved 34
+  cards and the row it was assigned stayed at 300 / 301.** Do not read a row size as a mechanic size.
+  Shipped: populate as a resolution-time **CHOICE** selector on `createTokenCopy` (a branch in
+  `copySourceFor`, NOT a primitive of its own — it inherits `copiableDefOf`, the doublers, the haste grant
+  and the delayed sacrifice); its printed tails through the token-copy family's OWN vocabulary
+  (`tokenEntryWords`, `TOKEN_COPY_GRANT_SENTENCE`, `TOKEN_COPY_DELAYED_REMOVAL`); `", then "` as a ROW in
+  the shared `compileConjunction` separator table; and `populate` in `PRIMITIVE_BACKED_KEYWORDS` beside
+  proliferate.
+  📊 **6,653 → 6,687 accepted, +34 gained / 0 LOST**, ONE fixed 32,341-card corpus compiled twice with
+  this branch's three sources reverted to fork point `fd1ca31` in between (via `git show`, never a
+  checkout). **15 of the 34 are populate cards** (25 printed, 0 → 15 complete); **19 are `", then "`**.
+  ✅ **Trostani, Selesnya's Voice compiles and is in the after-set** — the acceptance card.
+  📊 `npm run build` **exit 0** (unpiped, dist mtime verified newer than source) · `npx vitest run
+  packages/cards packages/core --minWorkers=1 --maxWorkers=1` — see the run line in the report ·
+  `dead-rule-sweep` **158 rules · 338 fired · 3 never**, 0 of them naming a corpus card; both new rules
+  verified FIRING on real cards (`populate` on 12+ incl. Trostani, `populate-with-token-tail` on Ghired
+  and Determined Iteration).
+  🔎 **Falsified FOUR times, red pasted in the report**: accepting leftover tail text reddens 2 (the
+  over-match — a populate that silently drops its own sacrifice); dropping the printed word "token" from
+  the candidate test reddens 2 (the widening — a nontoken Grizzly Bears gets copied); removing the
+  post-answer battlefield re-read reddens 1 (the vanished token falls back to the survivor); removing
+  `", then "` from the separator table reddens 2. A fifth sabotage was caught by `tsc` instead of a test.
+  ⚠️ **ONE EXISTING ASSERTION WAS FALSE AND IS REPLACED, NOT DELETED.** `scry-surveil.test.ts` read
+  "REFUSES a scry rider whose tail needs its own chosen target" and passed only because `", then "` was
+  not a separator: the SAME card as two sentences, or joined with `" and "`, has compiled to those exact
+  two refs since the scry family shipped (verified at the fork point, byte-identical effect lists). It
+  pinned a SPELLING, not a compiler property. Replaced with the stronger claim — all three spellings
+  compile to a byte-identical effect list. The other red was §3.149's own Trostani tripwire, written to
+  fire "the day populate lands"; it now asserts the card has NO blockers.
+  ⛔ **Generated files deliberately untouched** (pool, expansion report, card indexes) — the local corpus
+  trips a masking defect another live lane owns. No `apps/web` and no `packages/core` changes at all.
+  ⚠️ **§3.150 claimed off a contended range** — `main` carried §3.149 at fork and four lanes are live in
+  `rules.ts`. Renumber by grepping the number if a second §3.150 appears; this section references no other
+  by number except as prose.
+  ⚠️ **Semantic-conflict warning for the integrator:** this branch edits `compile/rules.ts` (one bounded
+  POPULATE block beside `proliferate`, plus two rows in the shared tail vocabulary near
+  `TOKEN_COPY_GRANT_SENTENCE`), `compile/compile.ts` (one row in `PRIMITIVE_BACKED_KEYWORDS`, and
+  `compileConjunction`'s local `CONJUNCTION` const becomes a `CLAUSE_SEQUENCERS` table) and
+  `copy-primitives.ts` (one branch in `copySourceFor` + two new functions). **Checked read-only against
+  `origin/feat/copy-templates` (`c1e2320`): no hunk overlap** — that branch changes `copySpell`, not
+  `createTokenCopy`, and its `compile.ts` hunks are at ~32, ~639 and ~1516 while mine are at ~268 and
+  ~824. Its residue list does not mention populate, for the hint-order reason above.
+  ⛔ **Left REPORTED, not approximated:** **"becomes a copy of" — 72 clauses, a whole printed VERB with no
+  rule** (a layer-1 copy applied to a permanent already on the battlefield; CORE work, and this lane
+  deliberately did not open `core/src/copy.ts` while `feat/copy-templates` was live in it — it is the
+  largest single thing left in this family); the SENTENCE third at large (377 clauses / 373 shapes, 1.01
+  each — the §3.120 shape inside the row's own majority); `Populate X times` (Full Flowering — a repeat
+  count where `createTokenCopy.count` is a static int); and the ten populate cards blocked by something
+  that is NOT populate — Scion of Vitu-Ghazi and Muster the Departed (an intervening "if"), Song of the
+  Worldsoul and Arboreal Alliance (a trigger CONDITION), **Cayth, Famed Mechanist (a modal bullet —
+  `feat/modal-templates` is live on exactly that)**, Ghired's Belligerence (X damage divided), Xavier Sal
+  (a cost removing a counter from another permanent), Selesnya Eulogist (graveyard exile) and Nesting
+  Dovehawk (a counters trigger).
 - 2026-09-15 `feat/targeted-trigger-templates` — ✅ **pushed-ready, NOT merged** (worker; integrator merges).
   **§3.148 — the targeted-trigger row measured, split THREE ways, and a card already in the pool that
   played better than printed.** The row named 888 cards and is the §3.120 artifact again (884 cards,
