@@ -20,6 +20,8 @@
 import type { CardDefinition } from '@jonny-boi/core';
 import { compileCard, getCardDefinition, type UnsupportedClause } from '@jonny-boi/cards';
 import type { NormalizedCard } from '@jonny-boi/data-tools/pure';
+import { IMPORTED_CARDS_STORAGE_KEY } from '../config.js';
+import { writeStorage } from '../persistence/write.js';
 
 /**
  * One imported card: what to show, and — when the engine can play it — what to
@@ -45,7 +47,7 @@ export interface ImportedCard {
 }
 
 /** localStorage key holding the imported-card map. */
-const STORAGE_KEY = 'jonny-boi:imported-cards:v1';
+const STORAGE_KEY = IMPORTED_CARDS_STORAGE_KEY;
 
 /** In-memory index, the source of truth during a session. */
 let store = new Map<string, ImportedCard>();
@@ -110,13 +112,15 @@ function upgradeStaleEntries(): void {
   if (upgraded) persist();
 }
 
-/** Persist the store; a storage failure is non-fatal for the session. */
+/**
+ * Persist the store.
+ *
+ * NOT quiet: these are cards the user went and imported. A failure here is the
+ * same shape as the one that lost two imported decks — the card is in memory,
+ * so the session looks fine and the import is gone on reload.
+ */
 function persist(): void {
-  try {
-    globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify([...store.values()]));
-  } catch {
-    // Quota exceeded or storage disabled — keep the in-memory store working.
-  }
+  writeStorage('imported-cards', STORAGE_KEY, JSON.stringify([...store.values()]));
 }
 
 /** Notify subscribers that the imported-card set changed. */

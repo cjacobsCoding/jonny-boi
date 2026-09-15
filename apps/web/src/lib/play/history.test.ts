@@ -10,7 +10,7 @@
  *  - a corrupt entry costs its own row, not the whole library;
  *  - lineage cannot hang on a deleted parent or a cyclic pointer.
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   childrenOf,
   decodeHistory,
@@ -28,6 +28,8 @@ import {
   type HistoryEntry,
 } from './history.js';
 import { PLAY_HISTORY_STORAGE_KEY } from '../config.js';
+import { writeBudgetChars } from '../persistence/budget.js';
+import { clearStorageNotices, storageNotices } from '../persistence/failures.js';
 import type { PlayRecord } from './persist.js';
 import { PLAY_RECORD_VERSION } from './persist.js';
 import type { PlayStorage } from './persist.js';
@@ -249,5 +251,104 @@ describe('storage', () => {
     const after = updateHistory((list) => deleteEntry(list, 'a'), storage);
     expect(after.map((e) => e.id)).toEqual(['b']);
     expect(readHistory(storage).map((e) => e.id)).toEqual(['b']);
+  });
+});
+
+
+/**
+ * SHEDDING MUST SPEAK.
+ *
+ * Dropping the oldest finished games to stay inside the budget is the right
+ * degradation — the alternative is storing nothing — but a fallback that fires
+ * silently is how a broken pipeline looks healthy for a week. The library
+ * quietly shrinking is exactly the kind of thing a user notices months later and
+ * attributes to a bug they cannot describe.
+ */
+describe('the library says when it drops games to fit', () => {
+  beforeEach(() => clearStorageNotices());
+  afterEach(() => clearStorageNotices());
+
+  /** An entry whose record is padded so a handful of them exceed the budget. */
+  function fat(id: string, finished: boolean, updatedAt: number): HistoryEntry {
+    const padded = record(1);
+    return {
+      id,
+      record: {
+        ...padded,
+        setup: { ...padded.setup, names: { A: 'x'.repeat(60_000), B: 'B' } },
+      },
+      outcome: finished ? { kind: 'win', winner: 'A', reason: 'damage' } : { kind: 'unfinished' },
+      createdAt: updatedAt,
+      updatedAt,
+    };
+  }
+
+  function memoryStorage(): PlayStorage {
+    const map = new Map<string, string>();
+    return {
+      getItem: (k) => map.get(k) ?? null,
+      setItem: (k, v) => void map.set(k, v),
+      removeItem: (k) => void map.delete(k),
+    };
+  }
+
+  it('reports the shed, naming how many games went', () => {
+    const storage = memoryStorage();
+    const budget = writeBudgetChars('play-history');
+    // Enough fat finished games to blow the budget several times over.
+    const count = Math.ceil((budget / 60_000) * 2) + 4;
+    const entries = Array.from({ length: count }, (_, i) => fat(`g${i}`, true, i + 1));
+
+    const result = writeHistory(entries, storage);
+
+    expect(result.ok).toBe(true);
+    const shed = storageNotices().filter((n) => n.reason === 'shed');
+    expect(shed).toHaveLength(1);
+    expect(shed[0]!.areaId).toBe('play-history');
+    expect(shed[0]!.severity).toBe('notice');
+    expect(shed[0]!.detail).toMatch(/\d+ finished games? (was|were) dropped/);
+  });
+
+  it('says nothing when nothing was dropped', () => {
+    const storage = memoryStorage();
+    expect(writeHistory([entry('a')], storage).ok).toBe(true);
+    expect(storageNotices()).toEqual([]);
+  });
+
+  it('sheds only FINISHED games, and still says so', () => {
+    const storage = memoryStorage();
+    const budget = writeBudgetChars('play-history');
+    const count = Math.ceil((budget / 60_000) * 2) + 4;
+    const entries = [
+      fat('keep-me', false, 1),
+      ...Array.from({ length: count }, (_, i) => fat(`g${i}`, true, i + 2)),
+    ];
+
+    writeHistory(entries, storage);
+    const stored = decodeHistory(storage.getItem(PLAY_HISTORY_STORAGE_KEY)!);
+
+    // A game you could still return to is the one thing the library must not
+    // decide to forget for you — even to make room.
+    expect(stored.some((e) => e.id === 'keep-me')).toBe(true);
+    expect(storageNotices().some((n) => n.reason === 'shed')).toBe(true);
+  });
+
+  it('returns a failing result, not silence, when the store refuses the write', () => {
+    const refusing: PlayStorage = {
+      getItem: () => null,
+      setItem: () => {
+        const error = new Error('full') as Error & { name: string };
+        error.name = 'QuotaExceededError';
+        throw error;
+      },
+      removeItem: () => {},
+    };
+    const result = writeHistory([entry('a')], refusing);
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.reason).toBe('quota');
+    expect(storageNotices().some((n) => n.areaId === 'play-history' && n.reason === 'quota')).toBe(
+      true,
+    );
   });
 });

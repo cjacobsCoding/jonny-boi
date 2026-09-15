@@ -71,8 +71,31 @@ export const HARNESS_CHROME_ARGS = Object.freeze([
  * @param {{width:number,height:number}} [opts.windowSize] sets `--window-size`
  * @param {{width:number,height:number}} [opts.viewport]   puppeteer defaultViewport
  * @param {readonly string[]} [opts.extra] harness-specific flags, reasoned locally
+ * @param {number} [opts.protocolTimeoutMs] ceiling for ONE DevTools call
+ *
+ * ## `protocolTimeoutMs` — opt-in, and why it exists
+ *
+ * Puppeteer gives every DevTools protocol call an UNNAMED 180 s default, and
+ * `verify-card-browser-perf.mjs` hit it: rasterising the pre-virtualisation
+ * card browser at 375px — 5,651 tiles with 5,651 images — made a single
+ * `Page.captureScreenshot` exceed it, and the harness reported "could not run"
+ * against an app that was merely very slow. That is the same shape
+ * `harness-wait-budgets.test.ts` was written for: a number nobody chose,
+ * deciding whether a measurement succeeds.
+ *
+ * It is OPT-IN rather than a new default because raising a ceiling turns a fast
+ * failure into a slow one, and the other harnesses drive a play surface of
+ * about twenty cards where 180 s already means "hung". A harness that measures
+ * something deliberately enormous passes its own budget, with its own reason.
  */
-export function harnessLaunchOptions({ chromePath, headful = false, windowSize, viewport, extra = [] }) {
+export function harnessLaunchOptions({
+  chromePath,
+  headful = false,
+  windowSize,
+  viewport,
+  extra = [],
+  protocolTimeoutMs,
+}) {
   const args = [...HARNESS_CHROME_ARGS];
   if (windowSize) args.push(`--window-size=${windowSize.width},${windowSize.height}`);
   args.push(...extra);
@@ -82,6 +105,7 @@ export function harnessLaunchOptions({ chromePath, headful = false, windowSize, 
     // the real browser, which is the one thing a harness must not do.
     headless: headful ? false : 'new',
     ...(viewport ? { defaultViewport: viewport } : {}),
+    ...(protocolTimeoutMs === undefined ? {} : { protocolTimeout: protocolTimeoutMs }),
     args,
   };
 }

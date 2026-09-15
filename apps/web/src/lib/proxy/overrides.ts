@@ -15,6 +15,7 @@
 
 import { PROXY_OVERRIDES_STORAGE_KEY } from './config.js';
 import { normalizeName, type ResolvedProxyCard } from './scryfall.js';
+import { writeStorage } from '../persistence/write.js';
 
 /** An override that swaps in a different Scryfall printing of the same card. */
 export interface PrintingOverride {
@@ -74,20 +75,18 @@ export function loadOverrides(): OverrideMap {
 }
 
 /**
- * Persist the overrides map to localStorage. Best-effort: an uploaded data URL
- * can be large and blow the quota — we swallow that so the in-session override
- * still works even if it can't be durably saved.
+ * Persist the overrides map to localStorage.
+ *
+ * NOT quiet, and this is the clearest example of why the swallow was wrong: an
+ * uploaded data URL is easily large enough to blow the quota, the override goes
+ * on working for the rest of the session, and the art the user hand-picked is
+ * gone on reload with no word said. Returns `false` on failure as it always
+ * did, so callers that check still work — but the user is told either way.
  */
 export function saveOverrides(map: OverrideMap): boolean {
-  try {
-    const obj: Record<string, CardOverride> = {};
-    for (const [key, value] of map) obj[key] = value;
-    globalThis.localStorage?.setItem(PROXY_OVERRIDES_STORAGE_KEY, JSON.stringify(obj));
-    return true;
-  } catch {
-    // Quota exceeded (big upload) or unavailable store — non-fatal.
-    return false;
-  }
+  const obj: Record<string, CardOverride> = {};
+  for (const [key, value] of map) obj[key] = value;
+  return writeStorage('proxy-overrides', PROXY_OVERRIDES_STORAGE_KEY, JSON.stringify(obj)).ok;
 }
 
 /**

@@ -63,6 +63,23 @@ printing and **say so**, not render a blank card.
 
 ## 2. DB-2 — Mobile deck building
 
+### 2.0 ⚠️ CORRECTION (2026-09-14): §2.1 BELOW IS WRONG. There IS a mobile layout.
+
+`styles.css:2002` is `@media (max-width: 860px)` and it collapses `.deck-layout` to one column and
+un-sticks `.deck-panel`. At 375px the deck panel stacks below the pool, everything is legible, and a
+harness measures no horizontal page scroll.
+
+**How the wrong claim was produced, because the method is the lesson:** the sweep searched media
+blocks for `deck-builder` and `builder__` — neither of which is the class the layout actually uses.
+Finding nothing, it concluded nothing existed. A search for the wrong name returns the same empty
+result as a genuine absence, and that is indistinguishable unless the search itself is checked
+against something known to be there.
+
+§2.1 is kept below rather than deleted because the real complaint ("the decks are on the bottom")
+is now EXPLAINED by it: the media query deliberately stacks the deck panel UNDER the pool. So that
+is the shipped mobile design, and the work is to judge whether stacking decks below a 6,000-card
+pool is the right call on a phone — not to add a layout that already exists.
+
 ### 2.1 MEASURED, structurally: there is no mobile layout at all
 
 `styles.css:833-839`:

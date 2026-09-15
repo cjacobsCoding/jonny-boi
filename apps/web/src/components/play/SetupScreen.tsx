@@ -1,42 +1,28 @@
 import { useMemo, useState, type ReactElement } from 'react';
-import { SAMPLE_DECKS } from '@jonny-boi/sim';
 import type { DecksApi } from '../../lib/useDecks.js';
-import { deckSize } from '../../lib/deck.js';
 import { HOTSEAT_CONFIG } from '../../lib/play/play-config.js';
 import {
   RANDOM_STARTER,
   resolveStartingPlayer,
   type StarterPreference,
 } from '../../lib/play/first-player.js';
-import {
-  validateChoice,
-  type DeckChoice,
-} from '../../lib/play/setup.js';
-
-/** A flat option list combining the user's saved decks and the bundled samples. */
-interface DeckMenuItem {
-  readonly key: string;
-  readonly label: string;
-  readonly choice: DeckChoice;
-}
-
-function buildMenu(decks: DecksApi): DeckMenuItem[] {
-  const saved: DeckMenuItem[] = decks.decks
-    .filter((d) => deckSize(d) > 0)
-    .map((d) => ({ key: `saved:${d.id}`, label: `${d.name} · ${deckSize(d)} cards (yours)`, choice: { source: 'saved', deck: d } }));
-  const samples: DeckMenuItem[] = SAMPLE_DECKS.map((d) => ({
-    key: `sample:${d.name}`,
-    label: `${d.name} · sample`,
-    choice: { source: 'sample', deck: d },
-  }));
-  return [...saved, ...samples];
-}
+import { validateChoice, type DeckChoice } from '../../lib/play/setup.js';
+// ONE menu builder for every deck picker — this screen used to keep a private
+// copy of it, which is how the two surfaces came to label built-in decks
+// differently. See lib/decklist/deckMenu.ts.
+import { buildDeckMenu } from '../../lib/decklist/deckMenu.js';
+import { BuiltinDeckNote, DeckMenuOptions } from '../DeckMenuOptions.js';
 
 /**
  * The pre-game setup: each player names themselves and picks a deck (their saved
- * decks + the six sample gauntlet decks), plus an optional seed. Both decks are
+ * decks + the six built-in gauntlet decks), plus an optional seed. Both decks are
  * validated against the curated pool; an illegal pick shows a friendly message and
  * the Start button stays disabled until both are legal.
+ *
+ * The two kinds of deck are GROUPED and labelled rather than listed flat: a
+ * built-in deck and your own copy of it used to be adjacent rows differing only
+ * by a suffix. Built-ins remain fully selectable — playing one directly is the
+ * point of listing them here.
  */
 export function SetupScreen({
   decks,
@@ -58,7 +44,7 @@ export function SetupScreen({
     starterPreference: StarterPreference;
   }) => void;
 }): ReactElement {
-  const menu = useMemo(() => buildMenu(decks), [decks]);
+  const menu = useMemo(() => buildDeckMenu(decks), [decks]);
 
   const [nameA, setNameA] = useState(aiSeat === 'A' ? HOTSEAT_CONFIG.defaultAiName : HOTSEAT_CONFIG.defaultNameA);
   const [nameB, setNameB] = useState(aiSeat === 'B' ? HOTSEAT_CONFIG.defaultAiName : HOTSEAT_CONFIG.defaultNameB);
@@ -67,8 +53,10 @@ export function SetupScreen({
   const [seedText, setSeedText] = useState(String(HOTSEAT_CONFIG.defaultSeed));
   const [starter, setStarter] = useState<StarterPreference>('A');
 
-  const choiceA = menu.find((m) => m.key === keyA)?.choice;
-  const choiceB = menu.find((m) => m.key === keyB)?.choice;
+  const itemA = menu.find((m) => m.key === keyA);
+  const itemB = menu.find((m) => m.key === keyB);
+  const choiceA = itemA?.choice;
+  const choiceB = itemB?.choice;
 
   const problemsA = useMemo(() => (choiceA ? validateChoice(choiceA) : ['Pick a deck.']), [choiceA]);
   const problemsB = useMemo(() => (choiceB ? validateChoice(choiceB) : ['Pick a deck.']), [choiceB]);
@@ -94,6 +82,7 @@ export function SetupScreen({
           const key = isA ? keyA : keyB;
           const setKey = isA ? setKeyA : setKeyB;
           const problems = isA ? problemsA : problemsB;
+          const item = isA ? itemA : itemB;
           const isAi = aiSeat === seat;
           return (
             <div key={seat} className="play-setup__seat">
@@ -121,13 +110,13 @@ export function SetupScreen({
                 <span>Deck</span>
                 <select className="select" value={key} onChange={(e) => setKey(e.target.value)} aria-label={`Seat ${seat} deck`}>
                   {menu.length === 0 && <option value="">No decks available</option>}
-                  {menu.map((m) => (
-                    <option key={m.key} value={m.key}>
-                      {m.label}
-                    </option>
-                  ))}
+                  <DeckMenuOptions menu={menu} />
                 </select>
               </label>
+              {/* Says what the current pick IS once the dropdown is closed —
+                  the collapsed control shows only the label, and the group
+                  heading that made it unambiguous is no longer on screen. */}
+              <BuiltinDeckNote origin={item?.origin} />
               {problems.length > 0 && (
                 <div className="play-setup__problems" role="alert">
                   <strong>Not ready:</strong>

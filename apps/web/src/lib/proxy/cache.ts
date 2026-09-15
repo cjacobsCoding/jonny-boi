@@ -16,6 +16,7 @@ import {
 } from './config.js';
 import { nameAliases, normalizeName, type ResolvedProxyCard } from './scryfall.js';
 import type { PrintOption } from './prints.js';
+import { writeStorage } from '../persistence/write.js';
 
 /** In-memory view of the persisted cache: normalized name → resolved card. */
 export type ProxyCache = Map<string, ResolvedProxyCard>;
@@ -39,15 +40,14 @@ export function loadCache(): ProxyCache {
   return cache;
 }
 
-/** Persist the cache to localStorage (best-effort; ignores quota/serialize errors). */
+/**
+ * Persist the cache. `quiet`: a pure Scryfall cache — a failure costs one
+ * refetch and nothing the user authored.
+ */
 export function saveCache(cache: ProxyCache): void {
-  try {
-    const obj: Record<string, ResolvedProxyCard> = {};
-    for (const [key, value] of cache) obj[key] = value;
-    globalThis.localStorage?.setItem(PROXY_CACHE_STORAGE_KEY, JSON.stringify(obj));
-  } catch {
-    // Non-fatal: caching is an optimization, not a correctness requirement.
-  }
+  const obj: Record<string, ResolvedProxyCard> = {};
+  for (const [key, value] of cache) obj[key] = value;
+  writeStorage('proxy-cache', PROXY_CACHE_STORAGE_KEY, JSON.stringify(obj), { quiet: true });
 }
 
 /**
@@ -95,18 +95,24 @@ export function getCachedPrints(name: string): PrintOption[] | undefined {
   }
 }
 
-/** Persist a card's printings list under its normalized name (best-effort). */
+/**
+ * Persist a card's printings list under its normalized name.
+ *
+ * `quiet` for the same reason as {@link saveCache}: a refetch, not a loss. The
+ * READ stays in its own try/catch because a corrupt store here must degrade to
+ * "no cached prints" rather than abandon the write that would replace it.
+ */
 export function putCachedPrints(name: string, prints: PrintOption[]): void {
+  let store: Record<string, CachedPrints> = {};
   try {
     const raw = globalThis.localStorage?.getItem(PROXY_PRINTS_CACHE_STORAGE_KEY);
-    const store: Record<string, CachedPrints> =
-      raw ? (JSON.parse(raw) as Record<string, CachedPrints>) : {};
-    store[normalizeName(name)] = { fetchedAt: Date.now(), prints };
-    globalThis.localStorage?.setItem(
-      PROXY_PRINTS_CACHE_STORAGE_KEY,
-      JSON.stringify(store),
-    );
+    if (raw) store = JSON.parse(raw) as Record<string, CachedPrints>;
   } catch {
-    // Non-fatal: prints caching is an etiquette optimization, not correctness.
+    // Corrupt cache → start clean; the write below replaces it wholesale.
+    store = {};
   }
+  store[normalizeName(name)] = { fetchedAt: Date.now(), prints };
+  writeStorage('proxy-prints', PROXY_PRINTS_CACHE_STORAGE_KEY, JSON.stringify(store), {
+    quiet: true,
+  });
 }

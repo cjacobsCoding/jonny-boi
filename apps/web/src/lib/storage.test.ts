@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DECKS_STORAGE_KEY } from './config.js';
 import type { Deck } from './deck.js';
-import { loadDecks, saveDecks } from './storage.js';
+import { loadDecks, mayPersistDecks, saveDecks } from './storage.js';
 import { entryPrintingOf, type EntryPrinting } from './printings/entryPrinting.js';
+import { clearStorageNotices, describeNotice, storageNotices } from './persistence/failures.js';
 
 /**
  * A minimal in-memory `localStorage`. The suite runs in plain Node with no DOM,
@@ -17,6 +18,27 @@ function installStorage(seed: Record<string, string> = {}): Map<string, string> 
     removeItem: (key: string) => void store.delete(key),
   });
   return store;
+}
+
+/**
+ * A `localStorage` whose `setItem` throws what a real browser throws when the
+ * ORIGIN IS FULL. This is the exact condition that lost two imported decks, and
+ * it is shaped like a `DOMException` rather than a bare `Error` because the
+ * funnel distinguishes a full origin (which the user can act on from the storage
+ * readout) from any other refusal (which they cannot).
+ */
+function installFullStorage(): void {
+  const store = new Map<string, string>();
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: () => {
+      const error = new Error('quota') as Error & { name: string; code: number };
+      error.name = 'QuotaExceededError';
+      error.code = 22;
+      throw error;
+    },
+    removeItem: (key: string) => void store.delete(key),
+  });
 }
 
 const RETRO: EntryPrinting = {
@@ -41,9 +63,33 @@ describe('deck storage', () => {
 
   it('round-trips a deck, chosen printings included', () => {
     saveDecks([DECK]);
-    const [loaded] = loadDecks();
+    const [loaded] = loadDecks().decks;
     expect(loaded).toEqual(DECK);
     expect(entryPrintingOf(loaded!, 'card-bolt')).toEqual(RETRO);
+  });
+
+  /**
+   * A deck copied from a BUILT-IN gauntlet deck remembers which one, and that
+   * memory has to survive a reload — it is the only thing that lets the built-in
+   * list say "you already copied this, yours is called X" instead of dangling the
+   * same Copy button forever.
+   *
+   * Pinned because `normalizeDeck` REBUILDS a loaded deck field by field: a field
+   * nobody added there is dropped silently on the first refresh. That is the
+   * shape of "works when you build it, gone by morning".
+   */
+  it('remembers which built-in deck a copy came from, across a reload', () => {
+    const copy: Deck = { ...DECK, id: 'd2', name: 'Acidic Angels', copiedFrom: 'Selesnya Blink' };
+    saveDecks([copy]);
+    const [loaded] = loadDecks().decks;
+    expect(loaded?.copiedFrom).toBe('Selesnya Blink');
+  });
+
+  it('leaves a deck that was NOT copied from a built-in without provenance', () => {
+    // The discriminator: if `copiedFrom` were defaulted rather than carried,
+    // every deck would claim to be a copy and the marker would mean nothing.
+    saveDecks([DECK]);
+    expect(loadDecks().decks[0]).not.toHaveProperty('copiedFrom');
   });
 
   it('keeps the card and drops the art when a stored printing is malformed', () => {
@@ -55,7 +101,7 @@ describe('deck storage', () => {
         },
       ]),
     });
-    const [loaded] = loadDecks();
+    const [loaded] = loadDecks().decks;
     expect(loaded!.cards).toEqual([{ cardId: 'card-bolt', count: 4 }]);
   });
 
@@ -74,7 +120,7 @@ describe('deck storage', () => {
         },
       ]),
     });
-    const [loaded] = loadDecks();
+    const [loaded] = loadDecks().decks;
     expect(Object.keys(loaded!.cards[0]!).sort()).toEqual(['cardId', 'count']);
   });
 
@@ -84,17 +130,149 @@ describe('deck storage', () => {
         { ...DECK, cards: [null, 'nope', { count: 4 }, { cardId: 'card-bolt', count: 4 }] },
       ]),
     });
-    expect(loadDecks()[0]!.cards).toEqual([{ cardId: 'card-bolt', count: 4 }]);
+    expect(loadDecks().decks[0]!.cards).toEqual([{ cardId: 'card-bolt', count: 4 }]);
   });
 
   it('recovers from corrupt storage rather than throwing', () => {
     installStorage({ [DECKS_STORAGE_KEY]: '{not json' });
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    expect(loadDecks()).toEqual([]);
+    expect(loadDecks().decks).toEqual([]);
     warn.mockRestore();
   });
 
   it('returns no decks when nothing has been saved', () => {
-    expect(loadDecks()).toEqual([]);
+    expect(loadDecks().decks).toEqual([]);
+  });
+});
+
+/**
+ * THE REGRESSION SUITE FOR THE DECK-LOSS BUG.
+ *
+ * Caleb imported two decks; they showed up for the session and were gone on the
+ * next load. `saveDecks` had caught the quota error into a `console.warn`, and a
+ * deck lives in React state the moment it is imported, so the session looked
+ * perfectly healthy. Every test here fails if that swallow comes back.
+ *
+ * Note WHAT is asserted. Not "it did not throw" — that is what a
+ * storage-refuses-to-write test usually checks, and a swallow passes it
+ * trivially. These assert the PRESENCE of a report and the ABSENCE of a false
+ * success, which is the only pair that can tell the two apart.
+ */
+describe('a write that cannot land is never reported as saved', () => {
+  beforeEach(() => clearStorageNotices());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    clearStorageNotices();
+  });
+
+  it('tells the caller the save failed when the origin is full', () => {
+    installFullStorage();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = saveDecks([DECK]);
+    warn.mockRestore();
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.reason).toBe('quota');
+  });
+
+  it('raises a user-visible notice naming the decks, not just a console line', () => {
+    installFullStorage();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    saveDecks([DECK]);
+    warn.mockRestore();
+
+    const notices = storageNotices();
+    expect(notices).toHaveLength(1);
+    expect(notices[0]!.areaId).toBe('decks');
+    expect(notices[0]!.severity).toBe('error');
+    // The message has to be worth showing: it must name the thing that failed
+    // and say the change will not survive a reload, which is precisely the fact
+    // the user was missing while wondering where two decks went.
+    const text = describeNotice(notices[0]!);
+    expect(text).toContain('Saved decks');
+    expect(text.toLowerCase()).toContain('reload');
+  });
+
+  it('does not bury the reader under a flood of failed debounced saves', () => {
+    installFullStorage();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (let i = 0; i < 60; i += 1) saveDecks([DECK]);
+    warn.mockRestore();
+
+    // Sixty failures are ONE banner. A registry that appended would bury the
+    // storage readout under its own scrollback.
+    expect(storageNotices()).toHaveLength(1);
+  });
+
+  it('reports the failure when storage is absent entirely (private browsing)', () => {
+    vi.stubGlobal('localStorage', undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = saveDecks([DECK]);
+    warn.mockRestore();
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.reason).toBe('unavailable');
+    expect(storageNotices()).toHaveLength(1);
+  });
+
+  it('refuses a deck list bigger than the decks area is budgeted for', () => {
+    installStorage();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // One absurd deck name, well past the decks area share of the origin.
+    const huge: Deck = { ...DECK, name: 'x'.repeat(600_000) };
+    const result = saveDecks([huge]);
+    warn.mockRestore();
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.reason).toBe('over-budget');
+    // And nothing was written, so whatever WAS stored is still there to read.
+    expect(localStorage.getItem(DECKS_STORAGE_KEY)).toBeNull();
+  });
+
+  it('says so when stored decks exist but cannot be read, and flags them corrupt', () => {
+    installStorage({ [DECKS_STORAGE_KEY]: '{not json' });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = loadDecks();
+    warn.mockRestore();
+
+    // `corrupt` is what stops `useDecks` writing a starter deck over the blob —
+    // a second, and unrecoverable, way to lose the same decks.
+    expect(result).toEqual({ decks: [], corrupt: true });
+    expect(storageNotices()[0]!.reason).toBe('unreadable');
+  });
+
+  it('does NOT flag corrupt when simply nothing has been saved', () => {
+    installStorage();
+    expect(loadDecks()).toEqual({ decks: [], corrupt: false });
+    expect(storageNotices()).toEqual([]);
+  });
+});
+
+
+/**
+ * THE SECOND WAY TO LOSE THE SAME DECKS.
+ *
+ * `loadDecks` returning `[]` for a corrupt blob looks identical to `[]` for an
+ * empty one — and the hook's response to empty is to mint a starter deck, which
+ * would then be written straight over whatever was really in storage. The first
+ * loss (a failed write) at least leaves the old decks on disk; this one erases
+ * them. The rule is a named predicate precisely so a test can hold it.
+ */
+describe('a deck blob that would not parse is never written over', () => {
+  it('refuses to persist while the stored decks are unreadable', () => {
+    expect(mayPersistDecks({ readCorrupt: true, deckCount: 1 })).toBe(false);
+    // Not even a full collection — the point is that the blob on disk is the
+    // only copy of something, and we do not know what.
+    expect(mayPersistDecks({ readCorrupt: true, deckCount: 12 })).toBe(false);
+  });
+
+  it('persists normally when the read was clean', () => {
+    expect(mayPersistDecks({ readCorrupt: false, deckCount: 1 })).toBe(true);
+  });
+
+  it('does not write an empty collection over a real one', () => {
+    // Before the initial load resolves the hook holds zero decks; writing then
+    // would blank the stored list between mount and first paint.
+    expect(mayPersistDecks({ readCorrupt: false, deckCount: 0 })).toBe(false);
   });
 });

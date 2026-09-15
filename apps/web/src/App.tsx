@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactElement } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactElement,
+} from 'react';
 import { attribution, allAvailableCards } from './lib/cards.js';
 import { BugReporter } from './components/BugReporter.js';
 import { registerStateSection } from './lib/bugreport/state-dump.js';
@@ -6,11 +13,12 @@ import { importedCardCount, subscribeToImportedCards } from './lib/decklist/impo
 import { NAV_FITS, computeNavOverflow, type NavOverflow } from './lib/nav-overflow.js';
 import { appUpdater, updateResumeFlag } from './lib/update/updater.js';
 import { UpdatePill } from './components/UpdatePill.js';
+import { StorageAlert } from './components/StorageAlert.js';
 import { useDecks } from './lib/useDecks.js';
 import { useSimWorker } from './lib/useSimWorker.js';
 import { useLabSelection } from './lib/useLabSelection.js';
 import { SAMPLE_DECKS } from '@jonny-boi/sim';
-import { AboutView } from './views/AboutView.js';
+import { AboutView, STORAGE_READOUT_ANCHOR_ID } from './views/AboutView.js';
 import { CardsView } from './views/CardsView.js';
 import { DeckBuilderView } from './views/DeckBuilderView.js';
 import { LabView } from './views/LabView.js';
@@ -133,6 +141,16 @@ export function App(): ReactElement {
 
   const activeViewLabel = VIEWS.find((v) => v.id === view)?.label ?? view;
 
+  // "See what is using storage" has to actually arrive at the readout, not at
+  // the top of the About page. The view switch is state, so the element does not
+  // exist yet when this runs — scroll on the next frame, once it has mounted.
+  const openStorageReadout = useCallback(() => {
+    setView('about');
+    requestAnimationFrame(() => {
+      document.getElementById(STORAGE_READOUT_ANCHOR_ID)?.scrollIntoView({ block: 'start' });
+    });
+  }, []);
+
   return (
     <div className="app">
       <header className="app__header">
@@ -166,6 +184,14 @@ export function App(): ReactElement {
         </div>
       </header>
 
+      {/*
+        A failed save is reported HERE, above the view switch and at the moment
+        it happens. Mounted in the shell for the same reason the bug reporter is:
+        storage fails on whatever screen you are on, and a message inside one
+        view would have to be navigated to in order to be seen.
+      */}
+      <StorageAlert onOpenStorageReadout={openStorageReadout} />
+
       <main className="app__main">
         {view === 'cards' && <CardsView />}
         {view === 'deck' && <DeckBuilderView decks={decks} />}
@@ -173,7 +199,7 @@ export function App(): ReactElement {
         {view === 'lab' && <LabView decks={decks} sim={labSim} selection={labSelection} />}
         {view === 'match' && <MatchView decks={decks} sim={matchSim} />}
         {view === 'proxies' && <ProxiesView decks={decks} />}
-        {view === 'about' && <AboutView />}
+        {view === 'about' && <AboutView decks={decks} />}
       </main>
 
       <footer className="app__footer">
