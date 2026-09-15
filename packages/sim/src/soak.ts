@@ -1,5 +1,5 @@
 /**
- * THE FULL-POOL SOAK — thousands of seeded games across the whole 357-card pool,
+ * THE FULL-POOL SOAK — thousands of seeded games across the WHOLE shipped pool,
  * asserting invariants and tallying that every mechanic actually FIRED.
  *
  * `soak-config.ts` holds the constants, the mechanic inventory and the
