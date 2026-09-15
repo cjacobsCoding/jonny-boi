@@ -892,6 +892,62 @@ export const COMBAT_HOLD_CONFIG: CombatHoldConfig = Object.freeze({
 });
 
 /**
+ * ANNOUNCING A CHOICE THE GAME SETTLED WITHOUT ASKING (`forced-choice.ts`).
+ *
+ * Caleb, on a Banisher Priest that exiled the only legal creature without a
+ * prompt: *"it should show that choice being made so the player understands what
+ * has happened."*
+ *
+ * ⚠️ These are JUDGED AGAINST THE EXISTING HOLD BEATS rather than invented. An
+ * announcement carries strictly MORE to read than {@link CombatHoldConfig}'s
+ * blocks beat (a sentence naming two cards, plus a card face) and strictly LESS
+ * than {@link SpellHoldConfig}'s (a full card you are invited to inspect), so it
+ * is sized between them — and it is DERIVED from both, so a change to either
+ * hold's pacing carries this with it instead of leaving a hand-tuned number
+ * behind.
+ */
+export interface ForcedChoiceConfig {
+  /**
+   * How long the announcement stands, ms.
+   *
+   * The board-reading beat plus half the spell hold: the beat is what a static
+   * picture costs to read at all ({@link HotseatConfig.aiThinkMs}, the app's one
+   * existing answer to that question), and the added half-hold is the sentence
+   * and the face that a bare board change does not have.
+   */
+  readonly holdMs: number;
+  /**
+   * The same beat for a viewer who asked for reduced motion.
+   *
+   * A NUMBER, not a switch — the convention {@link Board3dConfig.reducedMotionTiltDeg}
+   * set. There is nothing animating here to wait out, but the WORDS still have
+   * to be read, so it shortens rather than disappearing.
+   */
+  readonly reducedMotionHoldMs: number;
+  /** Fade in/out, matched to the spell hold so the two read as one language. */
+  readonly fadeMs: number;
+  /**
+   * Most banners one turn may spend, after which the rest are logged only.
+   *
+   * ⚠️ MEASURED CEILING, not a taste call. `packages/sim/src/soak-config.ts`
+   * records `choiceAutoAnswered ×1,980` inside one runaway game — the event is
+   * capable of firing in a torrent, and an unbounded banner would turn that into
+   * a frozen board. Four is the same order as {@link SpellHoldConfig.maxHoldsPerTurn}
+   * (6) and deliberately below it: a forced choice is a smaller event than an
+   * opponent's spell.
+   */
+  readonly maxPerTurn: number;
+}
+
+/** The default forced-choice announcement config (see {@link ForcedChoiceConfig}). */
+export const FORCED_CHOICE_CONFIG: ForcedChoiceConfig = Object.freeze({
+  holdMs: BOARD_READ_BEAT_MS + Math.round(SPELL_HOLD_CONFIG.holdMs / 2),
+  reducedMotionHoldMs: BOARD_READ_BEAT_MS,
+  fadeMs: SPELL_HOLD_CONFIG.fadeMs,
+  maxPerTurn: 4,
+});
+
+/**
  * The two-phase cast/activate transaction (UX-3/4/5).
  *
  * The commit boundary itself is `lib/play/proposal.ts` + the session snapshot

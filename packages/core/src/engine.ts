@@ -1312,6 +1312,8 @@ function createChoiceChannel(
       choiceId: choice.id,
       chooser: choice.chooser,
       choiceKind: choice.kind,
+      sourceInstanceId: choice.sourceInstanceId,
+      sourceName: choice.sourceName,
       answer,
       reason,
     });
@@ -2469,6 +2471,8 @@ function aimPendingTriggers(state: GameState, emit: (e: GameEvent) => void): voi
         choiceId: choice.id,
         chooser: choice.chooser,
         choiceKind: choice.kind,
+        sourceInstanceId: choice.sourceInstanceId,
+        sourceName: choice.sourceName,
         answer,
         reason: isTrivialChoice(choice) ? 'only one legal target' : 'the chooser can no longer act',
       });
@@ -2564,6 +2568,8 @@ function askTriggerModes(state: GameState, emit: (e: GameEvent) => void): boolea
         choiceId: choice.id,
         chooser: trigger.controller,
         choiceKind: choice.kind,
+        sourceInstanceId: choice.sourceInstanceId,
+        sourceName: choice.sourceName,
         answer,
         reason: isTrivialChoice(choice) ? 'only one legal set of modes' : 'the chooser can no longer act',
       });
@@ -4082,6 +4088,8 @@ function askModeChoice(state: GameState, spellInstanceId: InstanceId, emit: (e: 
       choiceId: choice.id,
       chooser: caster,
       choiceKind: choice.kind,
+      sourceInstanceId: choice.sourceInstanceId,
+      sourceName: choice.sourceName,
       answer,
       reason: isTrivialChoice(choice) ? 'only one legal set of modes' : 'the chooser can no longer act',
     });
@@ -4178,6 +4186,8 @@ function askModeTargetChoice(
         choiceId: choice.id,
         chooser: caster,
         choiceKind: choice.kind,
+        sourceInstanceId: choice.sourceInstanceId,
+        sourceName: choice.sourceName,
         answer,
         reason: isTrivialChoice(choice) ? 'only one legal target' : 'the chooser can no longer act',
       });
@@ -4507,6 +4517,8 @@ function askCostChoices(state: GameState, spellInstanceId: InstanceId, emit: (e:
         choiceId: choice.id,
         chooser: caster,
         choiceKind: choice.kind,
+        sourceInstanceId: choice.sourceInstanceId,
+        sourceName: choice.sourceName,
         answer: { kind: 'selectCards', instanceIds: forced },
         reason: isTrivialChoice(choice)
           ? 'only one legal way to pay this additional cost'

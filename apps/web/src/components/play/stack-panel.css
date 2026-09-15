@@ -277,51 +277,10 @@
   gap: 1px;
 }
 
-.stack-panel .stack-target {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-  font-size: var(--text-xs);
-  min-width: 0;
-}
-
-.stack-panel .stack-target__arrow {
-  color: var(--color-accent-soft);
-  font-weight: 700;
-}
-
-.stack-panel .stack-target__hover {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  min-width: 0;
-}
-
-.stack-panel .stack-target__name {
-  color: var(--color-fg);
-  overflow-wrap: anywhere;
-}
-
-.stack-panel .stack-target--player .stack-target__name {
-  /* A seat is not a permanent; it reads as the other kind of thing at a glance
-     rather than only through the screen-reader label. */
-  font-style: italic;
-  color: var(--color-fg-muted);
-}
-
-/* The kind word ("targets" / "targets player") exists for assistive tech only —
-   the arrow glyph carries it visually and is marked aria-hidden. */
-.stack-panel .stack-target__sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
+/* The `.stack-target*` rules that used to live here are now unscoped in
+   `card-references.css`, because `CardReferences.tsx` lifted the component out of
+   this panel so the spell hold and the forced-choice banner could mount the same
+   one (rule 3). Only the panel-SPECIFIC layout stays here. */
 
 /* --- condensed: deeper than maxVisibleEntries ------------------------------- */
 

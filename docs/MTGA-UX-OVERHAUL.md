@@ -1268,3 +1268,118 @@ the offset is zero and the display is the state again, by construction.
 
 **Guard:** with a pending beat the displayed life differs from `state`; after the last beat they
 are equal; and with the sequence skipped they are equal immediately. Falsify each direction.
+## 12. SHIPPED 2026-09-14 — the game decided FOR you, and said nothing
+
+Two reports, one week after §10, and the same sentence underneath both: *the game did something
+and the player cannot tell what*. **This is the eighth and ninth instance of the branch's signature
+failure**, and the eighth one is again a case where the RULES ARE ENTIRELY CORRECT.
+
+### The reports, verbatim
+
+> "whoah - I just played Banisher priest and it didnt let me choose a creature to banish - thats a
+> REALLY BAD REGRESSION"
+
+…and then, on working out the cause himself:
+
+> "Oh - its because there was only one option in this case... I see. Even so, **it should show that
+> choice being made so the player understands what has happened.**"
+
+> "When the computer plays Doom Blade when Im playing them, it does not show me clearly what the
+> target is when it displays on screen - it should show their target(s) for things along with the
+> card they are casting."
+
+### Where the settle actually is — measured, not assumed
+
+A rig cast the real Banisher Priest into a board holding exactly one opponent creature and printed
+every event:
+
+```
+triggerPutOnStack    "Enters: exile target creature an opponent controls until this leaves"
+choiceAutoAnswered   choiceKind=selectTargets answer={targets:[121]} reason="only one legal target"
+triggerTargetsChosen targets=[121]
+```
+
+…and with TWO opponent creatures the same cast emits `choiceAsked` and parks. So:
+
+- **It is CORE's settle**, `aimPendingTriggers` → `isTrivialChoice` (`engine.ts`), not the client's.
+  The three `ASK_WHEN_ONLY_ONE_ANSWER` sites in `apps/web/src/lib/play/proposal.ts` are not involved
+  at all — that table covers casts and activations, and its `targets` row already says ASK.
+- **It is right, and it stays.** The sim and the pilots depend on a game that never stops to collect
+  an inevitable answer (`SOAK_RUNAWAY_FORCED_EVENT` counts these).
+- **What was missing is that nothing said so.** `play-format.ts` explicitly dropped the event, with
+  the comment *"a single-legal-answer auto-answer is bookkeeping, not narrative"*. That sentence was
+  the bug.
+
+### What shipped
+
+**One mechanism, three surfaces.** `apps/web/src/lib/play/forced-choice.ts` is a pure, DOM-free
+decision in the image of `spell-hold.ts` and `combat-hold.ts`: a closed `FORCED_CHOICE_KINDS` table
+**mapped over core's own `ChoiceKind`**, a closed `FORCED_CHOICE_REFUSALS` set, and
+`forcedChoiceDecision`. The mapped type is the class guard: a new choice kind in
+`packages/core/src/choices.ts` stops the build here until somebody writes its words, so a kind
+cannot go silent by omission. Each row carries the VERB, the words for an answer that named nothing,
+whether the SHARED hotseat log may name the answer (`selectCards` may not — its candidates can be a
+hand), and how loudly it reports.
+
+**Core gained the provenance it already gave `choiceAsked`.** `choiceAutoAnswered` now carries
+`sourceInstanceId` + `sourceName` at all seven emit sites. Without it no consumer can name the asking
+card except by correlating the NEXT event, which is a second answer to "who asked?".
+
+**`AUTO_SETTLE_POLICY` replaces `ASK_WHEN_ONLY_ONE_ANSWER`** (`proposal.ts`) as a discriminated
+union: a row that SETTLES must name the `ChoiceKind` whose phrasing it borrows, so
+`{ ask: false, settles: true }` with nothing to say does not compile. That is "a kind with no
+phrasing must ASK" expressed as a type. Its one settling row — the single-legal-payer sacrifice cost
+— now rides out on the committed step and is announced through the SAME funnel.
+
+**`CardReferences.tsx`** lifts `StackTargetRow` out of `StackPanel.tsx` so the stack panel, the
+opponent-spell hold and the new banner all draw "what this is pointing at" with one component, one
+closed presentation table (`inline` / `face`) and one builder (`stack-view.targetView`).
+
+### The second defect, which only the rig could find
+
+`SpellHoldCard` gained the held spell's targets — and the first capture showed them EMPTY, above a
+game log that already read:
+
+```
+Computer casts Doom Blade. / Doom Blade resolves. / Grizzly Bears dies.
+```
+
+**UX-16's hold was announcing a spell that had already resolved**, which is why it had no target to
+name. Two causes, both §10's, and neither visible from source:
+
+1. the auto-passer's `shouldStop` predicate never asked the spell-hold rule (only the combat-hold
+   one), and a gate outside `autoAdvancePriority`'s loop cannot stop it partway;
+2. the arming effect booked `announced` immediately, so when the predicate DID ask it got
+   `alreadyAnnounced` — **the announcement defeating its own gate**. `releaseCombatHold` already
+   writes down that booking belongs on RELEASE; UX-16 never did it.
+
+`spellHoldFor` is now one callback asked by both, and the booking moved to `releaseHold`.
+
+### The numbers
+
+- `npm run build` — **exit 0**.
+- `npx vitest run apps/web packages/core --minWorkers=1 --maxWorkers=2` —
+  **Tests 3283 passed, 0 failed | 242 files**.
+- `verify-combat-visibility.mjs` **6/6**, `verify-board-fits.mjs` **32/32**.
+- `verify-forced-choice.mjs` (new) **12/12**, both reports photographed:
+
+```
+PASS  it NAMES the card that was chosen for you — "Banisher Priest targets Grizzly Bears"
+PASS  the chosen card is drawn as a CARD, not a name string — faces=1 names=["Grizzly Bears"]
+PASS  the GAME LOG carries it too
+      "Banisher Priest targets Grizzly Bears — only one legal target."
+PASS  the hold NAMES what the spell is aimed at — ["Grizzly Bears"]
+PASS  the whole hold is ON SCREEN — target and buttons included
+```
+
+Two existing guards caught real defects in this work and are worth naming: `board-scene.test.ts`
+rejected a literal `220ms` fallback inside an `animation:` declaration, and
+`play-class-coverage.test.ts` rejected `forced-choice__refs` as a class no stylesheet mentioned.
+
+### What is NOT covered, stated rather than buried
+
+**The online board gets the log line and nothing else.** `@jonny-boi/protocol` carries masked STATE,
+not `GameEvent`s, so `OnlineBoard` cannot see a `choiceAutoAnswered` at all and mounts no banner. The
+component and the decision are board-agnostic and ready for it; the missing half is the event stream
+(`feat/online-event-stream` is that work). Same for the opponent-spell hold, which the online board
+has never mounted.

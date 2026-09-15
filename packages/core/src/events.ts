@@ -894,6 +894,25 @@ export type GameEvent =
       readonly choiceKind: ChoiceKind;
       readonly answer: ChoiceAnswer;
       readonly reason: string;
+      /**
+       * WHICH CARD ASKED. Symmetric with `choiceAsked`, and it is here because
+       * its absence was a reported defect: a Banisher Priest with exactly one
+       * legal target exiled a creature with nothing on screen naming either the
+       * priest or its victim ("it should show that choice being made so the
+       * player understands what has happened").
+       *
+       * An announcement cannot name the asking card without this, and a UI that
+       * recovered it by correlating the NEXT event would be a second answer to
+       * "who asked?" (rule 12). {@link NO_ASKING_OBJECT} when a game rule asked.
+       */
+      readonly sourceInstanceId: InstanceId;
+      /**
+       * The asking card's name as the engine knew it, so a log line reads
+       * correctly even after the source has left the battlefield. May be empty
+       * for a question asked outside a resolution; every consumer falls back to
+       * looking `sourceInstanceId` up, exactly as `choiceAbandoned` does.
+       */
+      readonly sourceName: string;
     }
   | {
       // A resolution was abandoned because its question could not be represented

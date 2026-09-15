@@ -82,6 +82,7 @@ import {
   BOARD_3D_CONFIG,
   BOARD_LAYOUT_CONFIG,
   COMBAT_ADVANCE_CONFIG,
+  FORCED_CHOICE_CONFIG,
   SPELL_HOLD_CONFIG,
   TAP_ROTATION_CONFIG,
 } from '../../lib/play/play-config.js';
@@ -161,6 +162,10 @@ export function useBoardSceneVars(): CSSProperties {
     '--perm-staged-opacity': String(STAGED_HOME_TILE_OPACITY),
     '--combat-advance-ms': `${COMBAT_ADVANCE_CONFIG.advanceMs}ms`,
     '--spell-hold-fade-ms': `${SPELL_HOLD_CONFIG.fadeMs}ms`,
+    // The forced-choice announcement arrives the same way the spell hold does —
+    // its config DERIVES the number from `SPELL_HOLD_CONFIG.fadeMs` rather than
+    // repeating it, so the two can never drift.
+    '--forced-choice-fade-ms': `${FORCED_CHOICE_CONFIG.fadeMs}ms`,
     // §3.143 wave 3 — the ARRANGEMENT's own numbers (BOARD_LAYOUT_CONFIG). The
     // same rule as the tilt's: board-fit.css says how the board reads them and
     // contains none of them.

@@ -407,6 +407,18 @@ export class GameSession {
     return `#${id}`;
   };
 
+  /**
+   * Resolve an instance id to its CARD DEFINITION across every zone + the stack.
+   *
+   * The same lookup `nameOf` makes, answering the other half of the question:
+   * some things a surface needs are printed on the card and nowhere else — a
+   * modal ability's mode LABELS, for instance, where the event log carries only
+   * `mode1` (`forced-choice.ts`'s `modeLabelOf`). `undefined` for an id with no
+   * card behind it (a bare ability on the stack), which every caller degrades
+   * from rather than guessing.
+   */
+  defOf = (id: InstanceId): CardDefinition | undefined => this.findInstance(id)?.def;
+
   /** A player id → their chosen seat name (for the log). */
   playerName = (player: PlayerId): string => this.names[player];
 
