@@ -12,12 +12,12 @@ format, and every other mainstream export flavour besides.
 Checked against the real compiled pool, not assumed. The campaign is closing this gap card by card
 (`docs/ALL-CARDS-CAMPAIGN.md` §7a is the live board):
 
-| deck | distinct names | blocked at transcription (2026-09-14) | blocked now (2026-09-15) |
+| deck | distinct names | blocked at transcription (2026-09-14) | blocked now |
 | --- | --- | --- | --- |
-| Defender Ramp | 17 | 9 | **6** |
-| Acidic Angels | 22 | 8 | **4** |
+| Defender Ramp | 17 | 9 | **5** |
+| Acidic Angels | 22 | 8 | **1** |
 
-Six of the sixteen have been unblocked; four more are in flight. Each ✅ line names the lane that
+**Ten of the sixteen are unblocked, and Acidic Angels is ONE card from complete** — only Fiendslayer Paladin remains. Two more are evidenced NO-GOs with their residue named and pinned by a test (Jace, Tamiyo); four are unstarted. Each ✅ line names the lane that
 did it. Until a list is clean, importing it produces a deck with part of its identity missing — worth
 knowing before blaming the importer: the import dialog reports a "not found" count, and a deck that
 resolves to a handful of lands is not a deck.

@@ -22,7 +22,7 @@ import type { FloatingReplacement } from './internal/replacement.js';
 import type { DelayedTriggeredAbility } from './delayed.js';
 import type { CardGrant } from './card-grants.js';
 import type { PendingChoice, ResolutionFrame } from './choices.js';
-import type { TargetRestriction } from './targeting.js';
+import type { TargetSpec } from './targeting.js';
 // §3.111 — the closed exit table every graveyard cast leaves the stack by.
 import { GRAVEYARD_CAST_EXIT } from './graveyard-casting.js';
 
@@ -759,7 +759,7 @@ export interface TriggeredStackObject {
    * separate bookkeeping record that could drift out of step with it — the same
    * reason state-based actions are derived from the board rather than queued.
    */
-  readonly awaitingTargets?: TargetRestriction;
+  readonly awaitingTargets?: TargetSpec;
   /**
    * "ANOTHER target …" — this trigger's own source may not be chosen. Rides the
    * stack object beside {@link awaitingTargets} for the same reason: the choice

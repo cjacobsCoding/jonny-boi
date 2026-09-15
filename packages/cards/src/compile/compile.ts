@@ -29,7 +29,7 @@ import type {
   ManaCost,
   ManaProduction,
   PermanentModification,
-  TargetRestriction,
+  TargetSpec,
   TriggeredAbility,
 } from '@jonny-boi/core';
 import { DEFAULT_TARGET_RESTRICTION, restrictionOfEffects } from '@jonny-boi/core';
@@ -45,6 +45,8 @@ import type {
 } from './types.js';
 import {
   EFFECT_RULES,
+  stripTargetBound,
+  applyTargetBound,
   KEYWORD_ABILITY_BUILDERS,
   joinPayloadKeywords,
   KEYWORD_FLAGS,
@@ -267,6 +269,19 @@ const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string | readonly strin
   food: 'createPredefinedToken',
   investigate: 'createPredefinedToken',
   proliferate: 'proliferate',
+  // POPULATE (CR 701.32) is a keyword ACTION, not a keyword ability — Scryfall
+  // tags it like one, exactly as it tags proliferate above. The compiled
+  // evidence is the token copy the printed word makes, through the one
+  // `createTokenCopy` funnel rather than a populate-shaped primitive of its own.
+  //
+  // ⚠️ That evidence is not unique to populate, and it does not need to be: the
+  // guard below only suppresses a DUPLICATE keyword entry, never admits a card.
+  // A populate line the rule table could not read ("Populate X times", Full
+  // Flowering) puts its own text into `missing`, which is what keeps the card
+  // incomplete — this row changes only whether the same failure is reported a
+  // second time under the keyword's name. `treasure`/`food`/`investigate` all
+  // share `createPredefinedToken` for the same reason.
+  populate: 'createTokenCopy',
   // §3.110 — the counter keyword family's ACTION and ENTRY-SCRIPT members:
   // amass (CR 701.47) and bolster (701.39) are keyword actions printed as
   // spell text, explore (701.44) is a trigger body, and bloodthirst (702.54),
@@ -526,6 +541,13 @@ function applyRules(
   clause: string,
   ctx: RuleContext,
   targetFree = false,
+  /**
+   * §3.150 — set on the RECURSIVE call the target-bound pre-pass makes, so a
+   * clause whose bound has already been stripped cannot strip a second one and
+   * recurse. A flag rather than a context field because it is scoped to this
+   * one descent, not to the clause's compilation.
+   */
+  boundApplied = false,
 ): { contribution: ClauseContribution; ruleId: string } | null {
   for (const rule of rules) {
     if (targetFree && rule.needsChosenTarget) continue;
@@ -554,6 +576,33 @@ function applyRules(
     const binding = bound ? whereXBinding(bound[2] ?? '') : null;
     if (bound && binding) {
       return applyRules(rules, (bound[1] ?? '').trim(), { ...ctx, xDerivedBinding: binding }, targetFree);
+    }
+  }
+  // §3.150 — THE PRINTED TARGET BOUND, tried only after every rule has
+  // declined, exactly like the binding above and for the same reason: a clause
+  // that already compiles is untouched.
+  //
+  // The SENTENCES were never missing. "Destroy target creature." compiles
+  // today; "Destroy target creature with flying." refuses only because of the
+  // two printed words after the noun. So the bound is stripped, the ordinary
+  // rule compiles the clause it always could, and the restriction that rule
+  // declared is then NARROWED by the bound. One pre-pass gives every verb —
+  // destroy, exile, bounce, burn, counter, and whatever is written next — the
+  // whole bound vocabulary in one edit, instead of six copies of the noun
+  // table that would disagree the first time one of them grew a row.
+  //
+  // `applyTargetBound` refuses when the compiled clause declares no single
+  // restriction to narrow, so a bound is never attached to a guess: those
+  // cards keep reporting.
+  if (!boundApplied) {
+    const stripped = stripTargetBound(clause);
+    if (stripped) {
+      const inner = applyRules(rules, stripped.clause, ctx, targetFree, true);
+      const narrowed =
+        inner === null ? null : applyTargetBound(inner.contribution.effects ?? [], stripped.bound);
+      if (inner && narrowed) {
+        return { contribution: { ...inner.contribution, effects: narrowed }, ruleId: inner.ruleId };
+      }
     }
   }
   return null;
@@ -800,8 +849,30 @@ function watchesTheHost(ability: TriggeredAbility): boolean {
 }
 
 /**
- * Compile a body printed as ONE sentence joined by the word "and" - "you lose 1
- * life **and** create a 1/1 black Faerie Rogue creature token with flying".
+ * The printed words that join two effects into ONE ordered sequence, as a CLOSED
+ * table (rule 2 — the next joiner is a ROW, not a branch).
+ *
+ * `" and "` is the original member. `", then "` was added because it is the SAME
+ * question — "do A, then do B" — and the helper already answers it exactly: the
+ * refs it returns are applied in order, which is what the printed word "then"
+ * demands and what " and " was already getting for free.
+ *
+ * ⚠️ ORDER MATTERS, and `" and "` stays FIRST so that nothing which compiles
+ * today compiles differently: a sentence carrying both joiners takes the same
+ * cut it has always taken, and the new joiner is only ever reached by a sentence
+ * that had no answer at all.
+ *
+ * ", then " is strictly the SAFER of the two against a bad cut — the trap the
+ * helper's own comment names ("create a 1/1 **blue and black** Faerie") is a
+ * conjunction inside a NOUN PHRASE, and no printed card puts ", then" inside
+ * one. The both-halves-must-compile guard is what makes either safe.
+ */
+const CLAUSE_SEQUENCERS: readonly string[] = Object.freeze([' and ', ', then ']);
+
+/**
+ * Compile a body printed as ONE sentence joining two effects - "you lose 1 life
+ * **and** create a 1/1 black Faerie Rogue creature token with flying", "create a
+ * 3/3 green Centaur creature token**, then** populate".
  *
  * Tried only AFTER the whole body and the sentence split have both failed, so
  * nothing that compiles today compiles differently.
@@ -813,6 +884,9 @@ function watchesTheHost(ability: TriggeredAbility): boolean {
  * cutting at that "and" leaves "create a 1/1 blue", which matches no rule, so
  * the cut is abandoned and the earlier one ("you lose 1 life" / "create a 1/1
  * blue and black Faerie creature token with flying") is the one that stands.
+ * A back-reference is refused by the same guard: "Exile target creature, then
+ * its controller draws a card" cuts to a right half that names an object no rule
+ * can resolve alone, so the cut is abandoned and the card still reports.
  *
  * Left-to-right and recursive, so "A and B and C" is handled by the same walk,
  * and the first split whose halves BOTH compile wins.
@@ -821,17 +895,18 @@ function compileConjunction(
   clause: string,
   ctx: RuleContext,
 ): NonNullable<ReturnType<typeof applyRules>>[] | null {
-  const CONJUNCTION = ' and ';
-  let at = clause.indexOf(CONJUNCTION);
-  while (at >= 0) {
-    const left = applyRules(EFFECT_RULES, clause.slice(0, at).trim(), ctx);
-    if (left) {
-      const rest = clause.slice(at + CONJUNCTION.length).trim();
-      const whole = applyRules(EFFECT_RULES, rest, ctx);
-      const right = whole ? [whole] : compileConjunction(rest, ctx);
-      if (right) return [left, ...right];
+  for (const conjunction of CLAUSE_SEQUENCERS) {
+    let at = clause.indexOf(conjunction);
+    while (at >= 0) {
+      const left = applyRules(EFFECT_RULES, clause.slice(0, at).trim(), ctx);
+      if (left) {
+        const rest = clause.slice(at + conjunction.length).trim();
+        const whole = applyRules(EFFECT_RULES, rest, ctx);
+        const right = whole ? [whole] : compileConjunction(rest, ctx);
+        if (right) return [left, ...right];
+      }
+      at = clause.indexOf(conjunction, at + conjunction.length);
     }
-    at = clause.indexOf(CONJUNCTION, at + CONJUNCTION.length);
   }
   return null;
 }
@@ -1556,7 +1631,7 @@ export function compileCard(card: CompilableCard): CompileResult {
       if (!parts) return null;
 
       const refs: EffectRef[] = [];
-      let restriction: TargetRestriction | undefined;
+      let restriction: TargetSpec | undefined;
       let excludeSelf = false;
       let upToCount: number | undefined;
       let targetingParts = 0;

@@ -55,7 +55,7 @@ import { copiableDefOf } from './copy.js';
 import { modeById } from './modal.js';
 import type { CardInstance, GameState, InstanceId, PlayerId, SpellStackObject } from './state.js';
 import { NO_COUNTERS } from './state.js';
-import type { TargetRestriction } from './targeting.js';
+import type { TargetSpec } from './targeting.js';
 import { DEFAULT_TARGET_RESTRICTION, targetRestrictionOf } from './targeting.js';
 
 /** The shared empty aim list — frozen, so nothing can write through it. */
@@ -229,7 +229,7 @@ export function spellCopyAimAt(copy: SpellStackObject, slot: number): readonly (
  * cannot be read must keep the original's targets, and that is the direction
  * that can never play better than the printed card.
  */
-export function spellCopyAimRestriction(copy: SpellStackObject, slot: number): TargetRestriction | undefined {
+export function spellCopyAimRestriction(copy: SpellStackObject, slot: number): TargetSpec | undefined {
   if (slot === MODELESS_AIM_SLOT) {
     // ⚠️ `targetRestrictionOf` deliberately answers `undefined` for a spell whose
     // effect declares the DEFAULT restriction, because "any target" is left

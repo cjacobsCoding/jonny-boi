@@ -7,7 +7,7 @@
 4 Axebane Guardian             // ✗ not in pool
 3 Doorkeeper                   // ✅ compiles — §3.147
 2 Avacyn's Pilgrim
-2 Fog Bank                     // ✗ not in pool
+2 Fog Bank                     // ✅ compiles — §3.151 (damage prevention)
 2 Gatecreeper Vine
 2 Soul of the Harvest
 2 Craterhoof Behemoth          // ✗ not in pool

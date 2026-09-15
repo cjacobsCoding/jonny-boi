@@ -45,6 +45,137 @@
   `entersBattlefield` 12 = **130 sole-blocked cards**) is left REPORTED; it is four times this lane's
   delta and is the right next pick in this family. `lifeloss` (4) left reported — every printed member
   also needs a *"during your turn"* condition the filter cannot state.
+- 2026-09-15 **CORRECTION to my own wave-5 collision note, and a verdict on the two stranded lanes** (integrator).
+  I told two in-flight lanes to study `origin/feat/trigger-body-templates` as a live collision. **That
+  was wrong in a way worth recording, because the method that produced it looks reliable and is not.**
+  I read `git diff --stat origin/main...origin/feat/trigger-body-templates`, saw `choice-primitives.ts`
+  as +115 with no deletions, and concluded it was a NEW file. **An all-additions diffstat does not mean
+  a new file** — it means that branch only added lines to it. The `jb-modal` lane checked and told me
+  so: `choice-primitives.ts` already exists on `main`. Use `git diff --name-status` or
+  `git log --diff-filter=A`, never a line count, to answer "is this new".
+  ⚠️ **And the branch is superseded, not stranded.** `feat/trigger-body-templates-v2` (`2b8303a`) is
+  already contained in `origin/main`, which is why a dry-run merge of v1 reports an **add/add conflict
+  on `trigger-body-templates.test.ts`** — both sides create a file main already has. Merging v1 now
+  would re-land a superseded implementation. **Verdict: CLOSE `feat/trigger-body-templates`.** The
+  dry-run cost one command: `git merge-tree --write-tree --name-only origin/main origin/<branch>`
+  reports the conflict surface without touching a worktree, and it is how this was caught.
+  ✅ **`feat/copy-templates` (`c1e2320`) is genuinely stranded and genuinely mergeable.** Its own entry
+  above says SHIPPED with a gate: +3 as a set diff, 0 lost, gauntlet byte-identical, and it documents
+  that the audit row's "21 cards" headline was really 3. Against today's `main` it dry-runs to just
+  **two conflicts** — `COORDINATION.md` (additive) and `packages/core/src/engine.ts`. Its gate predates
+  seven compiler families, so it needs a real build+test after merging, not a textual merge and a
+  green memory. `feat/copy-selectors` already diffed it read-only and found **no hunk overlap** (that
+  branch changes `copySpell`; copy-selectors changed `createTokenCopy`). **Verdict: MERGE it.**
+  ⚠️ **Inventory remote heads AND check for a `-v2`.** `git branch -r --no-merged origin/main` finds
+  the stranded ones; `git branch -r --contains <branch>` tells you whether a successor already landed.
+  Neither is visible from `git worktree list`.
+
+- 2026-09-15 `feat/modal-templates` — ✅ **committed, NOT pushed / NOT merged** (worker; integrator merges).
+  **§3.150 — the MODAL row contains no modal work at all, and the row's name is wrong ABSOLUTELY.**
+  The row named 432 cards and blocks Selesnya Charm. Measured against a freshly fetched 32,414-card
+  corpus with NEW `packages/cards/scripts/modal-blame.mjs`: **531 clauses across 504 distinct shapes —
+  1.05 per shape**, the §3.120 artifact for the FIFTH row running and the thinnest ratio yet
+  (1.20 → 1.18 → 1.13 → 1.08 → **1.05**). The script re-probes each bullet IN A MODAL HARNESS on the
+  card's own type line and prefix, splitting the row three ways: **MODE-ONLY = 0**, BODY = 408 clauses
+  (392 sole), HEADER = 166 (29 sole), NOT-PROBEABLE = 135 (reported, never bucketed).
+  ⚠️ **MODE-ONLY IS ZERO — core's `modal.ts` and the cast-time mode/target pipeline have NO gaps.** A
+  lane that took this row at its name would have rebuilt a finished system. Every card in it is held
+  by a mode BODY belonging to another family, or by a header shape.
+  ⚠️ **THE HINT-ORDER TRAP IS REAL AND LARGE, and the next agent should not trust any row's count.**
+  `UNSUPPORTED_HINTS` is first-match and the modal hint is anchored `^choose …`, so **every modal
+  TRIGGER** cannot reach it: 518 blocked cards print a modal header while the row claims 531, with 145
+  clauses filed under *"a you may / choose template"* and 8 more under five other rows because a
+  bullet contained an earlier hint's word.
+  **Shipped instead: the printed BOUND on a target selector** — the largest concentrated shape in the
+  BODY bucket, measured corpus-wide BEFORE building (rule 11) at 233 cards on the targeting seam of
+  which only 32 are modal. So it was built as the CLASS, not the instance.
+  `TargetBound` rides WITH the restriction (`TargetSpec = TargetRestriction | { base, bound }`),
+  because a bound carries a NUMBER and a second positional argument through the ~14 call sites of
+  `isLegalTarget`/`legalTargetsFor` fails the moment one site forgets it — that site would police the
+  noun and silently ignore the bound, a card playing WIDER than printed. Enforced at all three points
+  (offer / accept / resolve). Mana value reads through `convertedManaCost`, never a second sum.
+  The compiler side is **ONE PRE-PASS in `applyRules`**, beside the `where X is …` binding §3.149 put
+  there and for the same reason: the SENTENCES were never missing. Destroy (75 corpus clauses), return
+  (23), "deals N damage to" (19), exile (17), counter (9) and gain-control-of (4) gain the whole
+  vocabulary in one edit instead of six copies of the noun table.
+  📈 **Accepted-count delta +175, ZERO lost (6,663 → 6,838)** on ONE fixed corpus compiled twice with
+  this lane's sixteen source files reverted in between via `git show <fork>:<path>` (no stash, no
+  checkout, no reset), the two name lists DIFFED with `playable-set.mjs` so the gain is a SET.
+  📏 **THE HONEST SMALLER NUMBERS, three of them:** the row said 432 and contains **no modal work**;
+  the bound family estimated 233 and delivered **175**; and **only 28 of the 175 are modal cards**.
+  ✅ **Selesnya Charm compiles** (§4a phase 2) — two of its three modes always did; only "Exile target
+  creature with power 5 or greater" refused. Also Crushing Canopy, Disdainful Stroke, Valorous Stance,
+  Red Elemental Blast, Roast, Abrupt Decay, Despark, Silverquill Charm, Witherbloom Charm.
+  🐛 **A shipped refusal was superseded, and is pinned POSITIVELY rather than deleted.**
+  `untap-family.test.ts` pinned Norritt as REPORTED for *"a colour narrowing core's restriction union
+  cannot express."* Core can express it now. Deleting the pin would leave nothing to fail if the bound
+  later stopped being carried, so it is replaced by an assertion that the card compiles carrying
+  `{ base: 'creature', bound: { colour: 'U' } }`.
+  ⚠️ **A GUARD THE OBVIOUS SOURCE COULD NOT GIVE, and the first draft passed vacuously.** The pre-pass
+  is not a row in `EFFECT_RULES`, so `rule-coverage.test.ts` and `dead-rule-sweep.mjs` cannot see it —
+  both quantify over the rule table. And `card-index.json` is the SHIPPED POOL, i.e. the cards that
+  already compiled, so it contains **ZERO** cards printing four of the five bound families by
+  construction: a guard sourced from it goes green while proving nothing. The lines are now
+  transcribed verbatim from the corpus with the card that prints each, and the one family the pool CAN
+  attest is still checked against the live index so one arm moves when the pool does.
+  🐛 **A REAL BUG FOUND BY RE-READING THE CODE, NOT BY A TEST — and the first 29 tests could not see
+  it.** `legalTargetsFor` builds a continuous index for the whole menu and passes it down;
+  `isLegalTarget` passes nothing. `targetMeetsBound` defaulted a missing index to "no modifications",
+  so the two read DIFFERENT power: the menu offered a pumped 2/2 for "power 5 or greater" and the
+  cast was then refused — precisely the §3.36 offer/accept disagreement this family's own test claims
+  to prevent. **Every test in the file ran on a board with no continuous effect, so all 29 passed
+  while the disagreement was live: a check that could not fail.** The parameter now carries the same
+  THREE-way distinction `isTargetableBy` uses (undefined = build one; null = this board provably has
+  none; an index = use it), with two discriminating tests — a pump entering the bound, a shrink
+  leaving it — that both go RED when the fix is reverted.
+  🔎 **Red-then-green on FOUR sabotages, all RED:** widen `shadow → flying` in the keyword table (the
+  refusal test goes red AND the card compiles — the exact defect the closed table prevents, 1 failed);
+  drop the `'or greater'` row from the direction table (**7** failed, Selesnya Charm among them); drop
+  the `target` anchor from the bound tail so it also strips GROUP selectors (1 failed);
+  restore the layered-stats default (**2** failed, in BOTH directions — a pump that should enter the
+  bound and a shrink that should leave it). Restored, 45 green across the two touched files.
+  ⚠️ **SEMANTIC-CONFLICT WARNING for the integrator:**
+  (1) `packages/core/src/targeting.ts` — the `TargetRestriction` union and **all five of its homes are
+  UNTOUCHED** (no new members), so the §3.49 completeness invariant is unaffected and lanes adding
+  members (the counters lane added `cardInAnyGraveyard`) do not conflict with this. What changes is
+  additive: one contiguous `§3.150` region after `ALL_TARGET_RESTRICTIONS`, plus `isLegalTarget` and
+  `legalTargetsFor` gaining a one-line unwrap. The old `isLegalTarget` body is unchanged — it was
+  renamed to `baseTargetIsLegal`, so a lane editing that if-chain merges textually.
+  (2) **A TYPE WIDENING crosses package lines**: `TargetRestriction` → `TargetSpec` on
+  `SpellMode.targets`, `TriggeredAbility.targets`, `StackObject.awaitingTargets`, two `choices.ts`
+  `restriction` fields, `restrictionOfEffects`/`targetRestrictionOf`/`describeRestriction`/
+  `triggerTargetPrompt`/`spellCopyAimRestriction`, `ai/effect-value.ts` `ModeEffects.targets` and one
+  `heuristic.ts` parameter. Any lane that annotates a variable `TargetRestriction` where core now
+  returns `TargetSpec` will get a type error, fixed by changing the annotation.
+  (3) `packages/cards/src/compile/rules.ts` — the new code is ONE contiguous region at the **tail of
+  the file, after `explainUnsupported`**, plus two lines added to each of the two import blocks.
+  **No existing rule was edited and nothing above was reformatted**, so the three other live lanes in
+  this file should merge cleanly.
+  (4) `packages/cards/src/compile/compile.ts` — `applyRules` gains a 6th parameter (`boundApplied`)
+  and a ~15-line pre-pass immediately before its final `return null`, directly under §3.149's
+  where-X pre-pass. A lane touching that function will conflict there.
+  (5) ⚠️ **`apps/web` WAS touched — 6 TYPE-ONLY annotations** in `lib/play/optional-trigger.ts` and
+  `lib/play/targeting.ts`. The brief said not to touch `apps/web`; the alternative was a red build,
+  and a bounded selector must reach the UI intact or the board offers targets the engine then refuses.
+  No behaviour, markup or styling changed.
+  ⚠️ **POOL NOT REGENERATED — ON PURPOSE**, per the brief: the local corpus trips a masking defect
+  owned by `fix/pool-refresh-3147`. The +175 is the COMPILER's delta on one fixed corpus, measured
+  twice. The 175 names are not in `expansion-candidates.json` either.
+  ⛔ **Left REPORTED, not approximated, with numbers:** the combat/tap STATE axis (**38 cards** —
+  `attackingCreature` is already a union member and a second answer to "is it attacking" is the DRY
+  failure rule 12 names); keywords the engine does not model (shadow, horsemanship, fear, intimidate);
+  a clause carrying TWO bounded selectors; a P/T or keyword bound on a SPELL (only the card-level
+  bounds are read off a stack object); and the rest of the modal row, RE-MEASURED after this lane
+  landed: **503 cards, still 1.05 per shape, still MODE-ONLY = 0** (367 BODY + 166 HEADER clauses).
+  `modal-blame.mjs` ranks it BY the family that owns it — a rules template 162, filtered-targeting 34
+  (nearly halved from 62; this lane took that half), entwine 26, static-buff 25, graveyard 21,
+  counters 15.
+  ⚠️ **NOT DONE:** no push (worker), no merge, no pool regeneration, no throughput benchmark (the
+  change adds one predicate to a menu already filtered, and the continuous index is built once per
+  menu rather than per candidate — but that is an argument, not a measurement, and it is not claimed
+  as one).
+  ⚠️ **§3.150 chosen after scanning EVERY remote head** — §3.149 is already double-claimed on `main`
+  (counters and {X} both write `### 3.149`); nothing anywhere claims §3.150.
 - 2026-09-15 **WAVE 5 CLAIM + THE COLLISION MAP FOR `compile/rules.ts`** (integrator).
   Three lanes dispatched on the families still blocking Caleb's own decks (ALL-CARDS §4a phase 2,
   §7a is the per-card board): `feat/modal-templates` in `D:/Cool Stuff/Claude/jb-modal` (modal, 432,
@@ -127,6 +258,72 @@
   Grindclock, Surge Node and the whole mana-battery family now PLACE their charge counters and still do
   not enter the pool; proliferate's chooser; "double the number of counters"; every graveyard-exile rider
   that is not "creature card".
+- 2026-09-15 `feat/copy-selectors` — ✅ **committed, NOT pushed, NOT merged** (worker; integrator merges).
+  **§3.150 — the copy-selector row measured, and the card it "blocks" was never in it.**
+  The row named 299 cards and is the §3.120 artifact a FIFTH time, the thinnest yet: **300 cards, 301
+  distinct shapes — 1.00 cards per shape** (the five lanes now read 1.20 / 1.18 / 1.13 / 1.08 / 1.00).
+  NEW `copysel-blame.mjs` splits it by WHICH HALF has no rule: **SELECTION 32 clauses / 31 shapes,
+  FIDELITY 20 / 20, BOTH 7 / 7, SENTENCE 377 / 373, NOT-REWRITABLE 73 / 72** — a row called copy
+  *selectors* is **6% selectors and 74% sentences**, its largest single piece the unbuilt verb
+  **"becomes a copy of" (72 clauses)**.
+  ⚠️ **THE ROW NEVER CONTAINED POPULATE, OR ANY POPULATE CARD.** `UNSUPPORTED_HINTS` is first-match and
+  `stripReminderText` runs before any hint is tried, so all **25** printed populate cards are filed under
+  **EIGHT other rows** (12 "a rules template", 3 "at the beginning of…", 2 filtered-targeting, 2 "you may
+  / choose", and one each graveyard / enters-tapped / delayed-ability / **activated-ability** — that last
+  one is Trostani). `--scan` selects by clause TEXT instead of by hint row and reports **691 cards / 712
+  clauses against 498 / 509 by hint: 193 cards of this shape sit in other rows.** ⚠️ **This lane moved 34
+  cards and the row it was assigned stayed at 300 / 301.** Do not read a row size as a mechanic size.
+  Shipped: populate as a resolution-time **CHOICE** selector on `createTokenCopy` (a branch in
+  `copySourceFor`, NOT a primitive of its own — it inherits `copiableDefOf`, the doublers, the haste grant
+  and the delayed sacrifice); its printed tails through the token-copy family's OWN vocabulary
+  (`tokenEntryWords`, `TOKEN_COPY_GRANT_SENTENCE`, `TOKEN_COPY_DELAYED_REMOVAL`); `", then "` as a ROW in
+  the shared `compileConjunction` separator table; and `populate` in `PRIMITIVE_BACKED_KEYWORDS` beside
+  proliferate.
+  📊 **6,653 → 6,687 accepted, +34 gained / 0 LOST**, ONE fixed 32,341-card corpus compiled twice with
+  this branch's three sources reverted to fork point `fd1ca31` in between (via `git show`, never a
+  checkout). **15 of the 34 are populate cards** (25 printed, 0 → 15 complete); **19 are `", then "`**.
+  ✅ **Trostani, Selesnya's Voice compiles and is in the after-set** — the acceptance card.
+  📊 `npm run build` **exit 0** (unpiped, dist mtime verified newer than source) · `npx vitest run
+  packages/cards packages/core --minWorkers=1 --maxWorkers=1` — see the run line in the report ·
+  `dead-rule-sweep` **158 rules · 338 fired · 3 never**, 0 of them naming a corpus card; both new rules
+  verified FIRING on real cards (`populate` on 12+ incl. Trostani, `populate-with-token-tail` on Ghired
+  and Determined Iteration).
+  🔎 **Falsified FOUR times, red pasted in the report**: accepting leftover tail text reddens 2 (the
+  over-match — a populate that silently drops its own sacrifice); dropping the printed word "token" from
+  the candidate test reddens 2 (the widening — a nontoken Grizzly Bears gets copied); removing the
+  post-answer battlefield re-read reddens 1 (the vanished token falls back to the survivor); removing
+  `", then "` from the separator table reddens 2. A fifth sabotage was caught by `tsc` instead of a test.
+  ⚠️ **ONE EXISTING ASSERTION WAS FALSE AND IS REPLACED, NOT DELETED.** `scry-surveil.test.ts` read
+  "REFUSES a scry rider whose tail needs its own chosen target" and passed only because `", then "` was
+  not a separator: the SAME card as two sentences, or joined with `" and "`, has compiled to those exact
+  two refs since the scry family shipped (verified at the fork point, byte-identical effect lists). It
+  pinned a SPELLING, not a compiler property. Replaced with the stronger claim — all three spellings
+  compile to a byte-identical effect list. The other red was §3.149's own Trostani tripwire, written to
+  fire "the day populate lands"; it now asserts the card has NO blockers.
+  ⛔ **Generated files deliberately untouched** (pool, expansion report, card indexes) — the local corpus
+  trips a masking defect another live lane owns. No `apps/web` and no `packages/core` changes at all.
+  ⚠️ **§3.150 claimed off a contended range** — `main` carried §3.149 at fork and four lanes are live in
+  `rules.ts`. Renumber by grepping the number if a second §3.150 appears; this section references no other
+  by number except as prose.
+  ⚠️ **Semantic-conflict warning for the integrator:** this branch edits `compile/rules.ts` (one bounded
+  POPULATE block beside `proliferate`, plus two rows in the shared tail vocabulary near
+  `TOKEN_COPY_GRANT_SENTENCE`), `compile/compile.ts` (one row in `PRIMITIVE_BACKED_KEYWORDS`, and
+  `compileConjunction`'s local `CONJUNCTION` const becomes a `CLAUSE_SEQUENCERS` table) and
+  `copy-primitives.ts` (one branch in `copySourceFor` + two new functions). **Checked read-only against
+  `origin/feat/copy-templates` (`c1e2320`): no hunk overlap** — that branch changes `copySpell`, not
+  `createTokenCopy`, and its `compile.ts` hunks are at ~32, ~639 and ~1516 while mine are at ~268 and
+  ~824. Its residue list does not mention populate, for the hint-order reason above.
+  ⛔ **Left REPORTED, not approximated:** **"becomes a copy of" — 72 clauses, a whole printed VERB with no
+  rule** (a layer-1 copy applied to a permanent already on the battlefield; CORE work, and this lane
+  deliberately did not open `core/src/copy.ts` while `feat/copy-templates` was live in it — it is the
+  largest single thing left in this family); the SENTENCE third at large (377 clauses / 373 shapes, 1.01
+  each — the §3.120 shape inside the row's own majority); `Populate X times` (Full Flowering — a repeat
+  count where `createTokenCopy.count` is a static int); and the ten populate cards blocked by something
+  that is NOT populate — Scion of Vitu-Ghazi and Muster the Departed (an intervening "if"), Song of the
+  Worldsoul and Arboreal Alliance (a trigger CONDITION), **Cayth, Famed Mechanist (a modal bullet —
+  `feat/modal-templates` is live on exactly that)**, Ghired's Belligerence (X damage divided), Xavier Sal
+  (a cost removing a counter from another permanent), Selesnya Eulogist (graveyard exile) and Nesting
+  Dovehawk (a counters trigger).
 - 2026-09-15 `feat/targeted-trigger-templates` — ✅ **pushed-ready, NOT merged** (worker; integrator merges).
   **§3.148 — the targeted-trigger row measured, split THREE ways, and a card already in the pool that
   played better than printed.** The row named 888 cards and is the §3.120 artifact again (884 cards,

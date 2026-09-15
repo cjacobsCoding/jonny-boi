@@ -155,11 +155,24 @@ describe('nouns outside the table report rather than widen', () => {
     { name: "Kiora's Follower", oracleText: '{T}: Untap another target permanent.' },
     // A supertype narrowing core's restriction union cannot express.
     { name: "Minamo, School at Water's Edge", oracleText: '{1}{U}, {T}: Untap target legendary permanent.' },
-    // A colour narrowing, likewise.
-    { name: 'Norritt', oracleText: '{2}, {T}: Untap target blue creature.' },
     // A controller scope: "permanent you control" is not a restriction core has.
     { name: 'Forensic Researcher', oracleText: '{2}{U}, {T}: Untap another target permanent you control.' },
   ];
+  // ⚠️ Norritt WAS on this list ("a colour narrowing core's restriction union
+  // cannot express"). §3.150 gave core that expression, so the refusal is gone
+  // and the card compiles. It is asserted POSITIVELY below rather than simply
+  // deleted from the list: a pinned refusal that is dropped without a
+  // replacement leaves nothing to fail if the bound later stops being carried,
+  // and "untap target creature" is exactly the wider card this file guards.
+  it('Norritt compiles now, and keeps the COLOUR the printed card names', () => {
+    const result = compileCard(card({ name: 'Norritt', oracleText: '{2}, {T}: Untap target blue creature.' }));
+    expect(result.status).toBe('complete');
+    expect(result.definition?.activated?.[0]?.effects[0]?.params?.targets).toEqual({
+      base: 'creature',
+      bound: { colour: 'U' },
+    });
+  });
+
   for (const printed of REFUSED) {
     it(`${printed.name} stays reported`, () => {
       const result = compileCard(card({ name: printed.name, oracleText: printed.oracleText }));

@@ -109,7 +109,7 @@ import {
   spellLeaveDestination,
   STEP_ORDER,
 } from './state.js';
-import type { TargetRestriction } from './targeting.js';
+import type { TargetSpec } from './targeting.js';
 import {
   describeRestriction,
   illegalTargetReason,
@@ -2437,7 +2437,7 @@ function aimPendingTriggers(state: GameState, emit: (e: GameEvent) => void): voi
     const index = state.stack.findIndex((object) => object.kind === 'trigger' && object.awaitingTargets !== undefined);
     if (index < 0) return;
     const trigger = state.stack[index] as TriggeredStackObject;
-    const restriction = trigger.awaitingTargets as TargetRestriction;
+    const restriction = trigger.awaitingTargets as TargetSpec;
     // The SOURCE card's definition rides along so a protected permanent is never
     // offered to an ability whose source has a protected quality (a red
     // creature's ETB damage cannot be aimed at protection-from-red). The source
@@ -2669,7 +2669,7 @@ function recordTriggerModes(state: GameState, modeIds: readonly string[], emit: 
     .map((id) => spec.modes.find((candidate) => candidate.id === id))
     .find((mode) => mode?.targets !== undefined);
   if (targetedMode?.targets !== undefined) {
-    (trigger as { awaitingTargets?: TargetRestriction }).awaitingTargets = targetedMode.targets;
+    (trigger as { awaitingTargets?: TargetSpec }).awaitingTargets = targetedMode.targets;
   }
   emit({
     type: 'triggerModesChosen',

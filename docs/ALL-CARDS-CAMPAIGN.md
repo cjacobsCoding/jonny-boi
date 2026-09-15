@@ -48,38 +48,52 @@ near-misses — the best cards-per-unit-work in the table, and the campaign shou
 | --- | --- | --- |
 | 730 | block restriction whose selector compares creatures / reads effective P/T | the CR 509.1c/d requirement solver itself is built |
 | 531 | "at the beginning of..." trigger BODY | the trigger itself — every printed scope, the "you may" form, the intervening "if" — is implemented |
-| 299 | copy-creating templates outside the closed tables | the copy system, token copies and delayed sacrifice tails are ALL implemented; three named selectors remain |
+| ~~299~~ | ~~copy-creating templates outside the closed tables~~ | ⚠️ **WORKED, AND THE ANNOTATION WAS WRONG** — see below |
 | 231 | "the chosen ..." READER | the named value IS stored on the permanent; this printed line has no rule that reads it |
 | 215 | additional-cost wording on a mana ability | life and mana costs themselves are implemented |
 
-That is roughly **2,000 cards sitting behind work that is mostly done**.
+That was the estimate. It is roughly **1,700 cards sitting behind work that is mostly done** — with
+one row struck out, for a reason worth keeping rather than quietly deleting.
+
+⚠️ **The copy row's annotation said "three named selectors remain". The lane that worked it measured
+6% selectors and 74% sentences with no rule at all** — 377 clauses over 373 distinct shapes, nothing
+like three named anythings. **An annotation claiming the hard half is built is a hypothesis, not a
+measurement**, and this one was written before anyone probed the row. Treat every remaining row in
+this table the same way: it says where to *look*, never what you will *find*. The lane still
+delivered — Populate turned out to be a genuine near-miss needing **zero** `packages/core` changes —
+but on machinery the annotation never mentioned, and in a row that did not contain a single populate
+card (§8a item 3).
 
 ## 4. The ranked families (top 20 of 103)
 
 | cards | cumulative | family |
 | --- | --- | --- |
 | 10,801 | 31.3% | a rules template — **aggregation artifact, see §2** |
-| 5,640 | 47.6% | "you may / choose" template |
-| 2,480 | 54.8% | counters template |
+| 5,640 | 47.6% | "you may / choose" template — holds **Jace’s ultimate** and, misfiled, **every modal TRIGGER** |
+| 2,480 | 54.8% | counters template — ✅ **worked, PR #33 (+25)**; the seam was the counter KIND, not any template |
 | 1,927 | 60.4% | graveyard template |
 | 1,506 | 64.7% | sacrifice template |
-| 1,449 | 68.9% | activated-ability template — **in flight** |
-| 953 | 71.7% | {X} or derived-value template |
-| 888 | 74.2% | targeted-trigger template |
+| 1,449 | 68.9% | activated-ability template — ✅ **worked, PR #31 (+106)**. ⚠️ also misfiles: Populate and Axebane Guardian both land here on the `{T}:` prefix |
+| 953 | 71.7% | {X} or derived-value template — ✅ **worked, PR #34 (+57)**. 70% of it is a sentence with no rule, filed here for the words "equal to" |
+| 888 | 74.2% | targeted-trigger template — ✅ **worked, PR #32 (+122)**, a near-miss on built machinery |
 | 788 | 76.5% | static-buff template |
 | 730 | 78.6% | block-restriction selector — **near-miss, §3** |
 | 556 | 80.2% | aura/equipment template |
 | 531 | 81.8% | "at the beginning of..." body — **near-miss, §3** |
 | 446 | 83.1% | filtered-targeting template |
-| 432 | 84.3% | modal template |
+| 432 | 84.3% | modal template — ✅ **worked, PR #41 (+175)**. ⚠️ **MODE-ONLY measured ZERO** — the modal system has no gaps; the row is bodies and headers |
 | 431 | 85.6% | library-search template |
 | 421 | 86.8% | library-look/reorder template |
 | 312 | 87.7% | group-damage template |
-| 300 | 88.6% | loyalty-ability template |
-| 299 | 89.4% | copy-creating selectors — **near-miss, §3** |
+| 300 | 88.6% | loyalty-ability template — ✅ **worked, PR #39 (+43)**. ⚠️ **COST-unknown measured ZERO** — loyalty is finished; the row is ability bodies |
+| 299 | 89.4% | copy-creating selectors — ✅ **worked, PR #42 (+34)**. ⚠️ **1.00 cards per shape**, and it contained no populate card at all |
 | 244 | 90.1% | transform/double-faced template |
 
 The tail is long: 103 families, and past roughly 90% the rows are tens of cards each.
+
+✅ marks a row a lane has actually worked, with what it really bought. **Seven worked rows, and in
+five of them the row NAME pointed at the wrong half of the problem** — twice at a half that does not
+exist. Read this table as a map of where to look. It has never once described what was found.
 
 ## 4a. THE MANDATED ORDER (2026-09-14) — this overrides picking by family size
 
@@ -91,15 +105,18 @@ Caleb, setting the sequence explicitly:
 
 So the campaign runs in three phases, in this order:
 
-**Phase 1 — the card browser must be fast first.** A pool heading toward 32,276 cards is unusable
-in a grid that renders every tile; fixing the browser is a PREREQUISITE, not a parallel nicety. See
-`DECKBUILDER-AND-ART.md`. (In flight.)
+**Phase 1 — the card browser must be fast first. ✅ SHIPPED.** A pool heading toward 32,276 cards is
+unusable in a grid that renders every tile, so this was a PREREQUISITE, not a parallel nicety. The
+landing page carried a **42 MB DOM** — 7.4 KB of expanded inline style per tile × 5,651 tiles — and
+load went 40.6s → 8.5s; the browser itself went **86,780 → 519 DOM nodes, 13.9s → 1.2s, and 316ms →
+17.7ms per scrolled frame.** See `DECKBUILDER-AND-ART.md`.
 
-**Phase 2 — Caleb's own two decks, completely.** 17 distinct blocked cards across 9 families
-(`docs/decks/`). This is deliberately NOT the cheapest work — it spans nine families to deliver two
-decks — and it is the right call anyway: a lab that cannot play the owner's own deck is not yet a
-lab. Every card listed in `docs/decks/*.txt` with a ✗ must compile, or the residue must be named
-card by card.
+**Phase 2 — Caleb's own two decks, completely. IN FLIGHT — 8 of 16 compile.** 16 distinct blocked
+cards across 9 families (`docs/decks/`; the earlier "17" double-counted Arbor Elf, which is in both
+lists). This is deliberately NOT the cheapest work — it spans nine families to deliver two decks —
+and it is the right call anyway: a lab that cannot play the owner's own deck is not yet a lab. Every
+card listed in `docs/decks/*.txt` with a ✗ must compile, or the residue must be named card by card.
+§7a is the live board; §8c is the set-verified count.
 
 **Phase 3 — the whole corpus, NEWEST SET FIRST, working backwards.** Not by family size.
 
@@ -163,6 +180,64 @@ columns):
   a remembered wording once matched no real card and no test could see it. Every new template is
   proven against the corpus or it does not ship.
 
+## 5a. THE DELIVERY STEP — a compiled card is not a playable card
+
+⚠️ **Nothing this campaign compiles reaches the app until the pool is REGENERATED.** The pool is
+generated data; the compiler gaining a family changes nothing a player can see. That gap is this
+project's signature failure — *built, tested, green and unreachable*, nine times — and the campaign
+manufactures it by design, because every lane is told not to commit generated files (so that lanes
+do not fight over one enormous file). **The regeneration is therefore a scheduled step, not a
+side effect, and it is the only step Caleb can actually feel.**
+
+### The whole pipeline is OFFLINE — verified by reading the scripts, not assumed
+
+```
+npx tsx packages/cards/scripts/build-expansion.ts --corpus <corpus.json>   # fills the scratch index
+npx tsx packages/cards/scripts/build-expansion.ts                          # writes the three outputs
+npm run fetch -w @jonny-boi/data-tools -- --corpus <corpus.json> --no-art  # refreshes card-index.json
+```
+
+Writes `packages/cards/data/expanded-pool.ts`, `packages/cards/data/expansion-report.json`,
+`packages/data-tools/data/starter-cards.json`, then `packages/data-tools/data/card-index.json` — and
+`apps/web/src/data/card-index.json` is DERIVED from that last one by
+`apps/web/scripts/build-card-index.mjs`, with a test that re-derives it and fails on drift.
+
+⚠️ **`npm run verify -w @jonny-boi/data-tools` is NETWORK** and must never run in a test or CI. The
+`--corpus` form above is the offline one. They are one word apart and do very different things.
+
+**All three artifacts move together or the app lies.** A pool ahead of the index renders bare ids and
+blank art; an index ahead of the pool offers cards the engine will not play.
+
+### State of the refresh (2026-09-15)
+
+| ref | pool | canonical index | web index |
+| --- | ---: | ---: | ---: |
+| `origin/main` | 5,651 | 5,651 | 5,651 |
+| `origin/fix/pool-refresh-3147` | **6,323** | **6,323** | **6,323** |
+
+The second is a **complete and internally consistent** regeneration — all three artifacts in step —
+plus four soak-defect fixes that took a wider pool from **754 violations to 4**. The session that
+made it **ended before pushing**, so it existed only on one disk; it is now on the remote.
+
+`origin/salvage/pool-refresh-3147` carries that session's **uncommitted** last change — the
+diagnosis *and* fix for those final 4 violations. Whoever finishes the refresh starts from the
+diagnosis instead of rediscovering it. Its reasoning is worth reading: a milled card is public the
+instant it lands face up, but Sudden Reclamation mills three and returns one to **hand** inside one
+resolution, so the card is public and hidden again with no decision boundary in between, and an audit
+that can only compare settled states reads the engine's own `zoneChange` as a leak.
+
+### Two corrections the refresh must carry
+
+1. **The counters lane left an instruction that can only land WITH a regeneration**: add
+   `if (!sourceCanHoldCounters(ctx)) return null;` to `put-counters-on-self` and delete the pinning
+   test in `named-counters.test.ts`. **The accepted count falls by exactly 2** — Big Play and
+   Miraculous Recovery, both rules-defective in the shipped pool — **and that fall is a correction.**
+   `pool-mechanics.test.ts` is absolute by design: *a card dropped from the pool to make a test pass
+   is the failure mode this guards*, which is why the fix cannot land alone.
+2. Acceptance is **a card the app can find**, not a number in a report. Launch it, search the browser
+   for the deck cards §7a marks ✅, and look. Every one of this project's nine unreachable-feature
+   failures was caught by a harness or a screenshot, and none of them by a test.
+
 ## 6. Joke sets
 
 Excluded per the mandate — Unglued, Unhinged, Unstable, Unsanctioned and kin. **Verify how the
@@ -191,10 +266,10 @@ waits on the pool refresh (§8 note). A card is ✅ only when **every** printed 
 | Scavenging Ooze | counters | ✅ §3.149a |
 | Luminarch Ascension | counters | ✅ §3.149a |
 | Kessig Wolf Run | {X} / derived value | ✅ §3.149 |
-| Selesnya Charm | modal | 🔧 in flight — `feat/modal-templates`. One clause: `Choose one — • +2/+2 and trample • Exile target creature with power 5 or greater • Create a 2/2 Knight token`. |
-| Trostani, Selesnya's Voice | **two** clauses | 🔧 in flight — `feat/copy-selectors`. `{1}{G}{W}, {T}: Populate` is the residue; *"gain life equal to that creature's toughness"* is the family §3.149 already landed, so **re-blame before assuming this lane owns it**. |
-| Jace, Architect of Thought | **three** clauses, two families | 🔧 `feat/loyalty-emblem` owns the `+1` and the `−2`; the **`−8` is the Primal Surge family**, so this card may be unreachable in that lane alone. The `−2` also needs a choice made by an **opponent** mid-resolution (pile separation) — a prompt seam, not a loyalty seam. |
-| Tamiyo, the Moon Sage | loyalty + emblem | 🔧 in flight — `feat/loyalty-emblem`. ⚠️ **the emblem carries TWO abilities needing two seams**: *"no maximum hand size"* is exactly what `player-statics.ts` was built for, but *"whenever a card is put into your graveyard from anywhere…"* is a **player-level TRIGGERED ability granted by an emblem**, and `player-statics.ts` is statics only. |
+| Selesnya Charm | target bound | ✅ §3.150 — **two of its three modes always compiled.** The blocker was never modal: `Exile target creature with power 5 or greater` is a printed BOUND on a target. |
+| Trostani, Selesnya's Voice | Populate | ✅ — and it was a **near-miss with zero `packages/core` changes**: `proliferate` already asked a resolution-time choice over battlefield permanents, and the token-copy primitive already existed. |
+| Jace, Architect of Thought | **three** clauses, three systems | ⛔ **well-evidenced NO-GO.** None of its three abilities is a loyalty problem: a duration-scoped delayed trigger, **opponent pile separation**, and the 5,640-card "you may / choose" row. Tests assert the counts (2 and 3), so a card quietly starting to compile one of them also fails. |
+| Tamiyo, the Moon Sage | loyalty + emblem | ⛔ `+1` compiles; two residues pinned by name. The `−2` needs a derived count with a **subject-player axis `DerivedCountName` has no row for at all** — widening to `creaturesOpponentControls` would change the card. The `−8`'s second ability needs a *"put into your graveyard from anywhere"* trigger: 23 corpus cards print it, **1** prints this body. |
 | Axebane Guardian | variable mana production | ⬜ `{T}: Add X mana in any combination of colors, where X is the number of creatures you control with defender.` **Two problems, not one**: a variable AMOUNT (`ManaAbility.produces` is a fixed mode list, `TapForManaAction.mode` an index) **and** *"in any combination of colors"*, which is a player choice at resolution. |
 | Primal Surge | ⚠️ **misfiled** | ⬜ `Exile the top card of your library. If it's a permanent card, you may put it onto the battlefield. If you do, repeat this process.` The row calls it *"you may / choose"*; **the actual blocker is `repeat this process`** — an unbounded iteration. The "you may" half is ordinary. |
 | Rhox Faithmender | life-change replacement | ✅ §3.151 — one more event kind cost one row in five places. The real work was the **funnel**: lifelink and a resolving spell both gain life, and this card prints both halves. |
@@ -202,7 +277,12 @@ waits on the pool refresh (§8 note). A card is ✅ only when **every** printed 
 | Craterhoof Behemoth | mass pump + keyword grant | ⬜ `When ~ enters, creatures you control gain trample and get +X/+X until end of turn, where X is the number of creatures you control.` The derived count is the family §3.149 landed — **re-blame; the residue may be only the mass keyword grant.** |
 | Fiendslayer Paladin | targeting restriction | ⬜ `~ can't be the target of black or red spells your opponents control.` Hexproof-from-a-quality, by colour and by controller. |
 
-**8 of 16 lane-verified, 4 in flight, 4 unstarted.**
+**10 of 16 lane-verified · 2 evidenced NO-GOs · 4 unstarted.** ⚠️ **Acidic Angels is ONE card from
+complete** — only Fiendslayer Paladin remains, and a lane is live on it. Defender Ramp still has **6**.
+
+⛔ is not a shelf. It means the residue has been **named and pinned by a test**, so the card enters
+the pool the moment the family that actually holds it lands — and a card that starts compiling while
+its residue is supposedly unbuilt makes that test fail rather than sliding in unnoticed.
 
 ### 7b. What blaming the residue clause by clause showed (2026-09-15)
 
@@ -243,26 +323,82 @@ and the shipped pool lags the compiler. Any absolute below is annotated with the
 | 2026-09-15 | **+106** | activated ability (PR #31) | DESIGN §3.147 — Arbor Elf ✅, Doorkeeper ✅ |
 | 2026-09-15 | **+122** | targeted trigger (PR #32) | DESIGN §3.148 — Oblivion Ring ✅, a near-miss on machinery that was already built |
 | 2026-09-15 | **+25** | counters (PR #33) | DESIGN §3.149a — Scavenging Ooze ✅, Luminarch Ascension ✅ |
-| 2026-09-15 | **+57** | {X} / derived value (PR #34) | DESIGN §3.149 — measured on the 32,341-card corpus against fork point `51919f7`, set-diffed (0 lost). **Kessig Wolf Run ✅** |
-| 2026-09-15 | **+29** | replacement / prevention | DESIGN §3.151 — measured on a PRIVATE copy of the 32,414-card corpus against fork point `162f143`, set-diffed (6,706 → 6,735, **0 lost**). **Rhox Faithmender ✅, Fog Bank ✅** |
+| 2026-09-15 | **+57** | {X} / derived value (PR #34) | DESIGN §3.149 — 32,341-card corpus against fork point `51919f7`, set-diffed (0 lost). **Kessig Wolf Run ✅** |
+| 2026-09-15 | **+43** | loyalty, emblem, untap (PR #39) | 32,341-card corpus against `fd1ca31`, set-diffed (0 lost). Attributed 36 freeze / 7 `and`-verb, **0 unattributed**. ⚠️ **Jace ✗ and Tamiyo ✗ — both honest NO-GOs**, residues pinned by name. |
+| 2026-09-15 | **+175** | printed TARGET BOUND (DESIGN §3.150) | 32,414-card corpus against `fd1ca31`, set-diffed (0 lost). **Selesnya Charm ✅.** ⚠️ Only **28** of the +175 are modal — the CLASS was fixed, not the instance. |
+| 2026-09-15 | **+34** | Populate / copy selectors (PR #42) | 32,341-card corpus against `fd1ca31`, set-diffed (0 lost). **Trostani, Selesnya’s Voice ✅** — and it needed **zero `packages/core` changes**. 15 of the 34 are populate cards; 19 are `", then "` as an ordered conjunction. |
+| 2026-09-15 | **+29** | replacement / prevention (PR #46) | DESIGN §3.151 — a PRIVATE copy of the 32,414-card corpus against `162f143`, set-diffed (6,706 → 6,735, **0 lost**). **Rhox Faithmender ✅, Fog Bank ✅** — Acidic Angels is now ONE card short. |
 
-**Phase-2 total: +339 cards, 8 of Caleb's 16 blocked deck cards.**
+> ⚠️ **The 299-card copy row was the §2 trap again and flatter than any before it: 300 cards,
+> 301 shapes — 1.00 cards per shape.** Every card in it prints a sentence no other card prints.
+> `copysel-blame.mjs` shows its NAME points at the wrong half too: the row is **6% selectors and 74%
+> sentences with no rule**, its largest single piece being the unbuilt verb "becomes a copy of" (72
+> clauses). And ⚠️ **the row never contained populate at all** — all 25 printed populate cards are
+> filed under EIGHT other rows, because `UNSUPPORTED_HINTS` is first-match and `stripReminderText`
+> runs before any hint is tried. **This lane moved 34 cards while the row it was assigned stayed at
+> 300.** Run `copysel-blame.mjs --scan`, which selects by clause TEXT rather than by hint row, before
+> trusting any row size: by text this shape is **691 cards, not 498**.
 
-### 8a. What four consecutive lanes proved — do not re-derive this
+> ⚠️ **The replacement row named the wrong half for the SIXTH consecutive lane.** It names the
+> EVENT KIND; the split is 268 kind / 187 body / **412 SENTENCE — clauses where both halves already
+> existed**. Life gain, the kind the row is named for, is **12 cards total**; the biggest kind is
+> `damage`, watched since the layer was written. And the leakage is the widest measured yet: by TEXT
+> **916 cards, by hint 142 — 774 sitting in other rows**, the largest destination being the §2
+> artifact row, **where Fog Bank itself was filed**.
 
-1. **Every family measured so far was an aggregation artifact** — 1.20, 1.18, 1.13 and 1.08 cards per
-   distinct shape. §2 is not a caveat about one row; it is the shape of the whole table. Measure into
-   shapes first, and **report the smaller honest number** when it shrinks.
-2. **In three of four, the row's own NAME pointed at the wrong half of the problem.** That is why
-   each lane now ships a committed `*-blame.mjs` — `activated-blame`, `targeted-blame`,
-   `counters-blame`, `xvalue-blame`. A row headline cannot tell you which half fails.
-3. ⚠️ **`UNSUPPORTED_HINTS` is FIRST-MATCH.** A family boundary is therefore hint **order**, not
-   meaning: cards of one shape are routinely filed under another row. Check before trusting a count.
+⚠️ **These deltas do not add up, and must not be added.** Each was measured against its own fork
+point on its own corpus, so the arithmetic sum is an upper bound, not a count. **The campaign total is
+a set diff of the final `main` against one fixed corpus** — and if it is smaller than the sum, the
+smaller number is the one that goes in this table (rule 11).
+
+### 8c. WAVE 5, MEASURED WHOLE (2026-09-15) — +251, not +252
+
+Run once after all three lanes were on `main`, on the corpus every lane shared
+(`corpus-fixed.json`, **32,341 cards**, md5 `718eae40bfdbfa5ae3db5adbc1590c88`), against the same
+BEFORE set two of the three lanes measured from:
+
+```
+BEFORE  compiler at fd1ca31   6,653 complete / 32,341
+AFTER   main @ 3f239a5        6,904 complete / 32,341
+GAINED  251        LOST  0
+```
+
+**The three lanes reported +43, +175 and +34 — an arithmetic +252. The measured whole is +251.** One
+card is not additive, because the lanes overlap where a clause has two blockers and because modal
+measured on a different corpus (32,414). The smaller number is the one that counts. **Nothing was
+lost: the LOST list is empty, so no lane's work erased another's** — which is the failure this whole
+practice exists to catch, and it has fired here before.
+
+**Eight of Caleb's sixteen blocked deck cards are verified present BY NAME in the compiled set** —
+Arbor Elf, Doorkeeper, Oblivion Ring, Scavenging Ooze, Luminarch Ascension, Kessig Wolf Run,
+Selesnya Charm, Trostani. Checked against the set itself, not taken from any lane's report.
+
+⚠️ **This is a COMPILER number, not a shipped-pool number.** See §5a: the app still ships 5,651.
+
+### 8a. What seven consecutive lanes proved — do not re-derive this
+
+1. **Every family measured so far was an aggregation artifact** — **1.20, 1.18, 1.13, 1.08, 1.05 and
+   1.04** cards per distinct shape, and one row measured at **1.00: every card in it prints a sentence
+   no other card prints.** §2 is not a caveat about one row; it is the shape of the whole table.
+   Measure into shapes first, and **report the smaller honest number** when it shrinks.
+2. **The row's own NAME pointed at the wrong half in five of six lanes.** That is why each lane now
+   ships a committed `*-blame.mjs` — `activated-`, `targeted-`, `counters-`, `xvalue-`, `loyalty-`,
+   `modal-`, `copysel-`. Two rows turned out to name a half that **does not exist**: `modal-blame`
+   reports **MODE-ONLY = 0** and `loyalty-blame` reports **COST-unknown = 0**. A lane taking either
+   row at its name would have rebuilt a finished system.
+3. ⚠️ **`UNSUPPORTED_HINTS` is FIRST-MATCH, and the leakage is large, not marginal.** The modal hint
+   is anchored `^choose`, so **every modal TRIGGER** falls through to another row. Selecting the copy
+   family by clause TEXT instead of by hint found **691 cards against 498 by hint — 193 cards of that
+   shape sat in other rows.** **Assume every row in §4 is a bucket; the burden of proof is on anyone
+   claiming otherwise.**
 4. ⚠️ **Verify a delta as a SET, not a count** (`scripts/playable-set.mjs`). The {X} lane read "+55"
    while eight cards had silently left the pool, with every test green.
 5. ⚠️ **`DERIVED_COUNTS` spread order is load-bearing** — `...FILTERED_DERIVED_COUNTS` then
    `...NAMED_DERIVED_COUNTS`, named last so it wins. `rules.ts` auto-merges **without a conflict**
    while reversing it, which costs 8 cards silently. Pinned by `xvalue-templates.test.ts:348`.
+6. ⚠️ **A row moving barely at all is not a failed lane.** The loyalty row went 668 → 665 clauses
+   while the lane gained 43 cards, and the copy row did not move at all while its lane gained 34.
+   Cards come from fixing a CLASS wherever it appears; the row is where the class was *noticed*.
 
 > ⚠️ **The 953-card row was the §2 trap for the third time: 954 cards, 880 shapes, 1.08 cards per
 > shape.** And its NAME points at the wrong half — `xvalue-blame.mjs` shows **70% of it is a SENTENCE

@@ -40,6 +40,9 @@ import type {
   StaticAffects,
   StaticControllerScope,
   TargetRestriction,
+  // §3.150 - the printed bound on a target selector.
+  TargetBound,
+  TargetNumericProperty,
   InterveningIf,
   TriggerCondition,
   TriggeredAbility,
@@ -53,6 +56,10 @@ import {
   PROTECTION_SUBTYPE_PREFIX,
   formatManaCost,
   MANA_COLORS,
+  // §3.150 - read and narrow the reserved target param through core's own
+  // name and validator, never a second spelling of either.
+  TARGET_RESTRICTION_PARAM,
+  isTargetRestriction,
 } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
 import {
@@ -4510,6 +4517,95 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^proliferate$/,
     build() {
       return effects({ primitive: 'proliferate' });
+    },
+  },
+  // =========================================================================
+  // POPULATE (CR 701.32) — the copy-selector family's one keyword action.
+  // Written as ONE bounded block beside its sibling keyword actions; nothing
+  // around it is re-ordered. See `populateSourceFor` in `../copy-primitives.ts`
+  // for why populate is a SELECTOR on `createTokenCopy` and not a primitive.
+  // =========================================================================
+  {
+    id: 'populate',
+    description:
+      '"Populate" (CR 701.32a) — choose a creature token you control and create a token that\'s a copy of it (Trostani, Selesnya\'s Voice; Wake the Reflections; Growing Ranks; Vitu-Ghazi Guildmage; Song of the Worldsoul)',
+    /**
+     * The bare keyword, which is the whole printed clause on every card that
+     * prints it alone — the reminder text that spells it out is removed by
+     * `stripReminderText` before any rule is tried, so what reaches the table is
+     * the single word.
+     *
+     * ⚠️ **This is the ONLY home for populate's selector, and deliberately not a
+     * row in `TOKEN_COPY_SELECTORS`.** That table maps printed SELECTOR TEXT to
+     * a lookup, and no card in the corpus prints "a creature token you control"
+     * outside reminder text (measured: 0). A row there would be a rule that can
+     * never fire — the Gatecreeper Vine class `dead-rule-sweep.mjs` exists to
+     * catch — so the selector is named where the printed word that means it is.
+     */
+    pattern: /^populate$/,
+    build() {
+      return effects({ primitive: 'createTokenCopy', params: { chooseCreatureTokenYouControl: true, count: 1 } });
+    },
+  },
+  {
+    id: 'populate-with-token-tail',
+    description:
+      '"Populate. The token enters tapped and attacking." (Ghired, Conclave Exile) · "Populate. The token created this way gains haste. Sacrifice it at the beginning of the next end step." (Determined Iteration) — CR 701.32a plus the printed sentences ABOUT the token it made',
+    /**
+     * The same keyword action, followed by sentences that talk about the object
+     * it just created. Separate from the bare rule above only because the bare
+     * one is anchored — one rule with an optional tail would match "populate X
+     * times" with the tail empty and quietly drop the "X times".
+     *
+     * ⚠️ Every tail here is read through the vocabulary the TOKEN-COPY family
+     * already owns — `TOKEN_COPY_DELAYED_REMOVAL`, `TOKEN_COPY_GRANT_SENTENCE`
+     * and `tokenEntryWords` — and NOT through a private copy. These sentences
+     * mean the same thing on Kiki-Jiki and on Determined Iteration; two readings
+     * would drift the day one of them learns a new wording (rule 12). The params
+     * they produce are the ones `createTokenCopy` already honours, so populate
+     * gets the haste grant, the delayed sacrifice and the entry words for free.
+     *
+     * ⚠️ The GRANT stays a layer-6 grant and is NOT folded into the copy — a
+     * second copy taken of Determined Iteration's token must not inherit the
+     * haste. That distinction is `grantToCreated`'s, and reusing it is how
+     * populate inherits it rather than re-deciding it.
+     */
+    pattern: /^populate\. (.+)$/,
+    build(match) {
+      let body = `. ${(match[1] ?? '').trim()}`;
+      const params: Record<string, unknown> = { chooseCreatureTokenYouControl: true, count: 1 };
+
+      // Parsed from the END, longest-anchored first, in the SAME order
+      // `buildTokenCopy` parses them — the delayed removal is the last printed
+      // sentence, the grant the one before it.
+      const delayed = body.match(TOKEN_COPY_DELAYED_REMOVAL);
+      if (delayed) {
+        params.delayedRemoval = delayed[1] === 'exile' ? 'exile' : 'sacrifice';
+        body = body.slice(0, body.length - (delayed[0] ?? '').length);
+      }
+      const grant = body.match(TOKEN_COPY_GRANT_SENTENCE);
+      if (grant) {
+        const flag = KEYWORD_FLAGS[(grant[1] ?? '').trim()];
+        if (flag === undefined) return null;
+        params.grantKeywords = { [flag]: true };
+        if (grant[2] !== undefined) params.grantUntilEndOfTurn = true;
+        body = body.slice(0, body.length - (grant[0] ?? '').length);
+      }
+      // "The token enters tapped and attacking." (Ghired) — the same closed set
+      // of entry words a "create a TAPPED token" clause prints before the noun,
+      // read by the same function, so a wording nobody has read is REPORTED
+      // rather than silently making an untapped token.
+      const entry = body.match(TOKEN_COPY_ENTRY_SENTENCE);
+      if (entry) {
+        const words = tokenEntryWords(entry[1]);
+        if (words === null) return null;
+        if (words.tapped) params.tapped = true;
+        if (words.attacking) params.attacking = true;
+        body = body.slice(0, body.length - (entry[0] ?? '').length);
+      }
+      // Anything the closed tails did not consume is a sentence with no rule.
+      if (body.trim().length > 0) return null;
+      return effects({ primitive: 'createTokenCopy', params });
     },
   },
   {
@@ -10237,7 +10333,20 @@ const TOKEN_COPY_DELAYED_REMOVAL =
  * the previous one created, anchored to the END of what remains.
  */
 const TOKEN_COPY_GRANT_SENTENCE =
-  /\. (?:it|they|that token|those tokens) gains? ([a-z' ]+?)( until end of turn)?$/;
+  /\. (?:it|they|that token|those tokens|the token created this way|the tokens created this way) gains? ([a-z' ]+?)( until end of turn)?$/;
+
+/**
+ * "**The token enters tapped and attacking.**" (Ghired, Conclave Exile) — the
+ * entry words printed as a trailing SENTENCE about the token that was just made,
+ * rather than as adjectives in front of the noun ("create a **tapped** token").
+ *
+ * The captured phrase goes through {@link tokenEntryWords}, the very function
+ * the in-front-of-the-noun form uses, so "tapped and attacking" means one thing
+ * in this codebase and a phrase outside that closed set is REPORTED from both
+ * spellings alike — never quietly turned into an ordinary untapped token, which
+ * would be a card playing better than printed.
+ */
+const TOKEN_COPY_ENTRY_SENTENCE = /\. (?:the|that) tokens? enters? ([a-z ]+?)$/;
 
 /** The printed words a "create … token" clause may put in front of "token". */
 interface TokenEntryWords {
@@ -12011,3 +12120,194 @@ export function explainUnsupported(clause: string): string {
   }
   return 'a rules template the compiler does not recognize yet';
 }
+
+// ===========================================================================
+// §3.150 — THE PRINTED TARGET BOUND. One pre-pass, not a rule per verb.
+//
+// Measured on a 32,414-card corpus: 233 blocked cards are held out by a bound
+// on a target selector alone, and the printed vocabulary is SMALL — four bound
+// families across six verbs (destroy 75, return 23, "deals N damage to" 19,
+// exile 17, counter 9, gain control of 4).
+//
+// A rule per verb would have re-spelled the whole noun vocabulary six times and
+// left the seventh verb still broken, which is the "two places answer one
+// question" failure rule 12 names. So this is ONE pre-pass in `applyRules`,
+// exactly where §3.149 put the "where X is …" binding and for the same reason:
+// the SENTENCES were never missing. "Destroy target creature." already
+// compiles; it refuses only because the printed words "with flying" follow the
+// noun. Strip the bound, let the ordinary rule compile the clause it always
+// could, then narrow the restriction that rule declared.
+//
+// So every verb — present and future — gains bounded targets in one edit, and
+// adding the next printed bound is a ROW in the tables below.
+// ===========================================================================
+
+/** The printed comparison words, as the {@link TargetBound} field each means. */
+const TARGET_BOUND_DIRECTIONS: Readonly<Record<string, 'atLeast' | 'atMost'>> = Object.freeze({
+  'or greater': 'atLeast',
+  'or more': 'atLeast',
+  'or less': 'atMost',
+  'or fewer': 'atMost',
+});
+
+/** The printed numeric properties a bound may compare, as core's own property names. */
+const TARGET_BOUND_PROPERTIES: Readonly<Record<string, TargetNumericProperty>> = Object.freeze({
+  power: 'power',
+  toughness: 'toughness',
+  'mana value': 'manaValue',
+  // Pre-2021 Oracle wording for the same number (CR 202.3). Both spellings are
+  // in the corpus, so both are rows — never one spelling matched and the other
+  // left to look like a different family.
+  'converted mana cost': 'manaValue',
+});
+
+/**
+ * The printed keywords a "with …"/"without …" bound may name, mapped to the
+ * core keyword flag each one is.
+ *
+ * CLOSED, and the refusals matter: a keyword the engine does not model is NOT
+ * quietly dropped from the selector, because "destroy target creature with
+ * shadow" compiled as "destroy target creature" is a strictly better card. A
+ * keyword outside this table makes the whole clause report.
+ */
+const TARGET_BOUND_KEYWORDS: Readonly<Record<string, keyof KeywordFlags>> = Object.freeze({
+  flying: 'flying',
+  trample: 'trample',
+  vigilance: 'vigilance',
+  haste: 'haste',
+  'first strike': 'firstStrike',
+  'double strike': 'doubleStrike',
+  deathtouch: 'deathtouch',
+  lifelink: 'lifelink',
+  defender: 'defender',
+  reach: 'reach',
+  menace: 'menace',
+  hexproof: 'hexproof',
+  indestructible: 'indestructible',
+  flash: 'flash',
+});
+
+/** The printed colour words a "target <colour> …" selector may name. */
+const TARGET_BOUND_COLOURS: Readonly<Record<string, 'W' | 'U' | 'B' | 'R' | 'G'>> = Object.freeze({
+  white: 'W',
+  blue: 'U',
+  black: 'B',
+  red: 'R',
+  green: 'G',
+});
+
+const TARGET_BOUND_KEYWORD_PHRASE = Object.keys(TARGET_BOUND_KEYWORDS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+const TARGET_BOUND_PROPERTY_PHRASE = Object.keys(TARGET_BOUND_PROPERTIES)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+const TARGET_BOUND_DIRECTION_PHRASE = Object.keys(TARGET_BOUND_DIRECTIONS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+
+/**
+ * The printed bound TAIL, anchored to the word "target" so only a TARGET
+ * selector is narrowed.
+ *
+ * ⚠️ Anchored deliberately: the same words follow a GROUP selector ("destroy
+ * each creature with mana value 3 or less"), and that is a different consumer
+ * with a different filter. Narrowing a group selector through the targeting
+ * seam would police a target that does not exist and leave the group
+ * unfiltered — a card playing wider than printed, in the half nobody looked at.
+ */
+const BOUND_TAIL = new RegExp(
+  `\\b(target [a-z][a-z ]*?)\\s+((?:with|without) (?:${TARGET_BOUND_KEYWORD_PHRASE})|with (?:${TARGET_BOUND_PROPERTY_PHRASE}) \\d+ (?:${TARGET_BOUND_DIRECTION_PHRASE}))\\b`,
+  'gi',
+);
+
+/** The printed COLOUR form, which sits before the noun rather than after it. */
+const BOUND_COLOUR = new RegExp(`\\btarget (${Object.keys(TARGET_BOUND_COLOURS).join('|')}) (?=[a-z])`, 'gi');
+
+/**
+ * Read one printed bound phrase into a {@link TargetBound}, or `null`.
+ *
+ * CLOSED (engineering rule 2): a phrase no row understands returns null and the
+ * clause reports with its real number, rather than being widened to the nearest
+ * bound that happens to exist.
+ */
+function parseBoundPhrase(phrase: string): TargetBound | null {
+  const keyword = new RegExp(`^(with|without) (${TARGET_BOUND_KEYWORD_PHRASE})$`, 'i').exec(phrase);
+  if (keyword) {
+    const flag = TARGET_BOUND_KEYWORDS[(keyword[2] ?? '').toLowerCase()];
+    if (flag === undefined) return null;
+    return (keyword[1] ?? '').toLowerCase() === 'with' ? { withKeyword: flag } : { withoutKeyword: flag };
+  }
+  const numeric = new RegExp(
+    `^with (${TARGET_BOUND_PROPERTY_PHRASE}) (\\d+) (${TARGET_BOUND_DIRECTION_PHRASE})$`,
+    'i',
+  ).exec(phrase);
+  if (numeric) {
+    const property = TARGET_BOUND_PROPERTIES[(numeric[1] ?? '').toLowerCase()];
+    const direction = TARGET_BOUND_DIRECTIONS[(numeric[3] ?? '').toLowerCase()];
+    if (property === undefined || direction === undefined) return null;
+    const value = Number(numeric[2]);
+    if (!Number.isInteger(value)) return null;
+    return direction === 'atLeast' ? { atLeast: { property, value } } : { atMost: { property, value } };
+  }
+  return null;
+}
+
+/** What {@link stripTargetBound} found: the clause without its bound, and the bound. */
+export interface StrippedTargetBound {
+  readonly clause: string;
+  readonly bound: TargetBound;
+}
+
+/**
+ * Take the printed bound off a clause's target selector, so the ordinary rules
+ * can compile the sentence they always could.
+ *
+ * Refuses (returns null) when the clause carries MORE THAN ONE bounded
+ * selector: a clause with two aims has no single restriction to narrow, and
+ * guessing which one the bound belongs to is how a closed table stops being
+ * closed. Those cards keep reporting, with their number.
+ */
+export function stripTargetBound(clause: string): StrippedTargetBound | null {
+  const tails = [...clause.matchAll(BOUND_TAIL)];
+  const colours = [...clause.matchAll(BOUND_COLOUR)];
+  if (tails.length + colours.length !== 1) return null;
+  if (tails.length === 1) {
+    const hit = tails[0] as RegExpMatchArray;
+    const bound = parseBoundPhrase((hit[2] ?? '').trim());
+    if (bound === null) return null;
+    return { clause: clause.replace(hit[0], hit[1] ?? ''), bound };
+  }
+  const hit = colours[0] as RegExpMatchArray;
+  const colour = TARGET_BOUND_COLOURS[(hit[1] ?? '').toLowerCase()];
+  if (colour === undefined) return null;
+  return { clause: clause.replace(hit[0], 'target '), bound: { colour } };
+}
+
+/**
+ * Narrow every target restriction a compiled clause declared by `bound`.
+ *
+ * Returns null — refusing the whole clause — when the compiled effects declare
+ * NO restriction, or declare more than one distinct one, or declare one that is
+ * already bounded. All three mean the printed bound has no single unambiguous
+ * home, and attaching it to a guess would produce a card that targets something
+ * its printed text does not allow. Refusing keeps the card REPORTED with its
+ * number, which is the project's whole acceptance rule.
+ */
+export function applyTargetBound(effects: readonly EffectRef[], bound: TargetBound): EffectRef[] | null {
+  const declared = new Set<string>();
+  for (const ref of effects) {
+    const value = ref.params?.[TARGET_RESTRICTION_PARAM];
+    if (value === undefined) continue;
+    if (!isTargetRestriction(value)) return null; // already bounded, or not a restriction at all
+    declared.add(value);
+  }
+  if (declared.size !== 1) return null;
+  const base = [...declared][0] as TargetRestriction;
+  return effects.map((ref) =>
+    ref.params?.[TARGET_RESTRICTION_PARAM] === undefined
+      ? ref
+      : { ...ref, params: { ...ref.params, [TARGET_RESTRICTION_PARAM]: { base, bound } } },
+  );
+}
+// ============================ end §3.150 ==================================
