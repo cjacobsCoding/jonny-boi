@@ -1235,3 +1235,36 @@ Baseline for apps/web + apps/server was 150 files / 1,952 tests; this is 151 / 1
 `PROTOCOL_VERSION` 2 → 3. Additive and backward-compatible in both directions:
 `MIN_COMPATIBLE_PROTOCOL_VERSION` stays 1, a v2 server simply omits `events`, and a v3 client reads
 the absence as "this server carries no event stream" — which is what every client did before v3.
+
+### UX-30 — the life total must not change before the damage arrives
+
+> cosmetic fix - the visually displayed health shouldn't reflect the after-damaged health total
+> until after the damage animations finish
+
+**Called cosmetic; it is actually a coherence bug.** The damage sequence takes
+`DAMAGE_ANIM_CONFIG.travelMs` (340 ms) to carry a bolt from its source to the seat it hits, but the
+life total is rendered straight from `GameState`, which the engine updated the instant the damage
+was dealt. So the number drops FIRST and the animation arrives afterwards to explain a change the
+player has already seen. That is the opposite of cause and effect, and it quietly undoes what §10's
+combat hold was built to achieve — you cannot read an exchange whose outcome is spoiled before it
+plays.
+
+**The fix is presentation-only, and the seam already exists.** The displayed life is
+`state life` + `damage that has not landed yet`, folded from the same `DamageBeat` sequence the
+animation is driven by (`damage-sequence.ts`) — so the number and the bolt are two readings of ONE
+model rather than two answers to “how much life do they have” (rule 3). When the last beat lands,
+the offset is zero and the display is the state again, by construction.
+
+⚠️ **Non-negotiable constraints, because a lagging life total is a dangerous thing to get wrong:**
+- The ENGINE's life is never touched, and nothing that reads life for a RULES decision may read the
+  lagged value. This is a render-time offset, full stop.
+- It must converge even when the animation is skipped, interrupted, or never runs (reduced motion,
+  a resumed game, a replay scrub). A display that can get stuck showing the wrong life is far worse
+  than one that updates too early — so the fold must be derived from the beats, never a mutable
+  counter that can be left behind.
+- Lethal is the case to test: a player taken to 0 or below must still show the real final number
+  once the beats finish — including a NEGATIVE one, which `END-OF-GAME.md` wants shown rather than
+  clamped.
+
+**Guard:** with a pending beat the displayed life differs from `state`; after the last beat they
+are equal; and with the sequence skipped they are equal immediately. Falsify each direction.
