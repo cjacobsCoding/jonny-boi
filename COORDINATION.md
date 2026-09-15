@@ -1,3 +1,42 @@
+- 2026-09-15 `feat/replacement-prevention` — ✅ **pushed-ready, NOT merged** (worker; integrator merges).
+  Worktree `D:/Cool Stuff/Claude/jb-replace`, forked from `origin/main` `162f143`.
+  **DESIGN §3.151 — REPLACEMENT AND PREVENTION. Rhox Faithmender ✅ and Fog Bank ✅. +29 cards, 0 lost,
+  set-verified** (6,706 → 6,735 on a fixed 32,414-card corpus, this lane's nine sources reverted with
+  `git show 162f143:<path>` and rebuilt in between).
+  **NEW `packages/cards/scripts/replace-blame.mjs`** — the eighth blame tool. The row's name points at
+  the wrong half for the SIXTH consecutive lane: it names the **event kind**, and adding one cost *one
+  row in five places* with **no new field and no new branch**. The family's real mass is **412 clauses /
+  303 sole-blocked cards on event kinds the layer ALREADY watched** — the gap is the printed WORDING.
+  ⚠️ **Selection by TEXT finds 916 cards against 142 by hint — 774 of this shape sit in other rows**,
+  302 of them in the §2 aggregation-artifact row, *which is where Fog Bank itself was filed.* A lane
+  scoping from the hint row would never have seen its own acceptance card. §7b's leakage warning is
+  now measured on a second family.
+  **FILES OWNED** (`rules.ts` is the six-way contender — expect a real merge, and build after it):
+  `packages/cards/src/compile/rules.ts` — **two regions only**: (1) new closed tables
+  `PREVENTION_STATIC_SUBJECTS` / `PREVENTION_SOURCE_CLASSES` / `LIFEGAIN_SUBJECTS`, appended after
+  `REPLACEMENT_MULTIPLIER_TOKEN`; (2) the `replacement-prevent-all-static` rule REWRITTEN in place plus
+  a new `replacement-lifegain` rule immediately after it. Nothing else in the file is touched.
+  `packages/core/src/replacement.ts` · `internal/replacement.ts` · `internal/damage-result.ts` ·
+  `index.ts` · `events.ts` · **NEW `core/src/life.ts`** · `packages/cards/src/effect-helpers.ts` ·
+  `primitives.ts` · NEW tests `core/src/life.test.ts`, `cards/src/replacement-lifegain.test.ts`.
+  ⚠️ **SEMANTIC CONFLICTS for the integrator, three:**
+  1. **`ReplacementEventKind` gained a fifth member (`'lifegain'`).** Any lane that `switch`es on it
+     exhaustively, or restates its members, will fail to compile — which is the desired outcome.
+     `events.ts` DID restate it, behind a comment claiming a pinning test that does not exist; the copy
+     was deleted rather than extended. If another lane re-adds a copy, delete theirs too.
+  2. **`effect-helpers.changeLife` now RETURNS the applied delta** (was `void`) and runs the CR 614
+     layer for a positive delta. Any lane that added a `changeLife` caller and emits its own `gainLife`
+     must read the return value, or it will log the printed amount instead of the gained one. Three
+     callers existed and all three were updated.
+  3. **`replacement-prevent-all-static`'s regex was replaced**, not extended. A lane that added a
+     recipient phrase to the old inline alternation must move it to `PREVENTION_STATIC_SUBJECTS` as a
+     row — and give it an honest `dealer` projection or `null`.
+  **DID NOT DO, by name:** the regenerated pool and card index are untouched (owned by
+  `fix/pool-refresh-3147`). `apps/web` untouched — no compile-time-exhaustive table needed a row.
+  The **zone-change destination vocabulary** (`dies` 63, `zoneToGraveyard` 42, `leavesBattlefield` 13,
+  `entersBattlefield` 12 = **130 sole-blocked cards**) is left REPORTED; it is four times this lane's
+  delta and is the right next pick in this family. `lifeloss` (4) left reported — every printed member
+  also needs a *"during your turn"* condition the filter cannot state.
 - 2026-09-15 **WAVE 5 CLAIM + THE COLLISION MAP FOR `compile/rules.ts`** (integrator).
   Three lanes dispatched on the families still blocking Caleb's own decks (ALL-CARDS §4a phase 2,
   §7a is the per-card board): `feat/modal-templates` in `D:/Cool Stuff/Claude/jb-modal` (modal, 432,

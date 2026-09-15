@@ -197,12 +197,12 @@ waits on the pool refresh (§8 note). A card is ✅ only when **every** printed 
 | Tamiyo, the Moon Sage | loyalty + emblem | 🔧 in flight — `feat/loyalty-emblem`. ⚠️ **the emblem carries TWO abilities needing two seams**: *"no maximum hand size"* is exactly what `player-statics.ts` was built for, but *"whenever a card is put into your graveyard from anywhere…"* is a **player-level TRIGGERED ability granted by an emblem**, and `player-statics.ts` is statics only. |
 | Axebane Guardian | variable mana production | ⬜ `{T}: Add X mana in any combination of colors, where X is the number of creatures you control with defender.` **Two problems, not one**: a variable AMOUNT (`ManaAbility.produces` is a fixed mode list, `TapForManaAction.mode` an index) **and** *"in any combination of colors"*, which is a player choice at resolution. |
 | Primal Surge | ⚠️ **misfiled** | ⬜ `Exile the top card of your library. If it's a permanent card, you may put it onto the battlefield. If you do, repeat this process.` The row calls it *"you may / choose"*; **the actual blocker is `repeat this process`** — an unbounded iteration. The "you may" half is ordinary. |
-| Rhox Faithmender | life-change replacement | ⬜ `If you would gain life, you gain twice that much life instead.` The replacement layer watches damage, counters and draws; **life gain/loss is one more event kind** on a layer that already exists. |
-| Fog Bank | damage prevention | ⬜ `Prevent all combat damage that would be dealt to and dealt by ~.` A two-directional prevention shield. |
+| Rhox Faithmender | life-change replacement | ✅ §3.151 — one more event kind cost one row in five places. The real work was the **funnel**: lifelink and a resolving spell both gain life, and this card prints both halves. |
+| Fog Bank | damage prevention | ✅ §3.151 — prevention was already built. What was missing was a way to say **`~`**: a closed anchor vocabulary read by both sides of the event. |
 | Craterhoof Behemoth | mass pump + keyword grant | ⬜ `When ~ enters, creatures you control gain trample and get +X/+X until end of turn, where X is the number of creatures you control.` The derived count is the family §3.149 landed — **re-blame; the residue may be only the mass keyword grant.** |
 | Fiendslayer Paladin | targeting restriction | ⬜ `~ can't be the target of black or red spells your opponents control.` Hexproof-from-a-quality, by colour and by controller. |
 
-**6 of 16 lane-verified, 4 in flight, 6 unstarted.**
+**8 of 16 lane-verified, 4 in flight, 4 unstarted.**
 
 ### 7b. What blaming the residue clause by clause showed (2026-09-15)
 
@@ -244,8 +244,9 @@ and the shipped pool lags the compiler. Any absolute below is annotated with the
 | 2026-09-15 | **+122** | targeted trigger (PR #32) | DESIGN §3.148 — Oblivion Ring ✅, a near-miss on machinery that was already built |
 | 2026-09-15 | **+25** | counters (PR #33) | DESIGN §3.149a — Scavenging Ooze ✅, Luminarch Ascension ✅ |
 | 2026-09-15 | **+57** | {X} / derived value (PR #34) | DESIGN §3.149 — measured on the 32,341-card corpus against fork point `51919f7`, set-diffed (0 lost). **Kessig Wolf Run ✅** |
+| 2026-09-15 | **+29** | replacement / prevention | DESIGN §3.151 — measured on a PRIVATE copy of the 32,414-card corpus against fork point `162f143`, set-diffed (6,706 → 6,735, **0 lost**). **Rhox Faithmender ✅, Fog Bank ✅** |
 
-**Phase-2 total: +310 cards, 6 of Caleb's 16 blocked deck cards.**
+**Phase-2 total: +339 cards, 8 of Caleb's 16 blocked deck cards.**
 
 ### 8a. What four consecutive lanes proved — do not re-derive this
 
@@ -268,6 +269,21 @@ and the shipped pool lags the compiler. Any absolute below is annotated with the
 > with no rule**, in this row only because its text contains the words "equal to". The amount
 > vocabulary, which is what the row is actually about, is ~132 winnable cards. Run the two committed
 > scripts before taking a headline from the table above.
+
+6. ⚠️ **A row that names a SEAM can be pointing at a seam that is already wide enough.** §3.151's row
+   names an *"event kind"*; adding one cost **one row in five places** and no new field, no new
+   branch, and nothing in the CR 614.5 or CR 616.1 machinery. The family's real mass was **412 clauses
+   / 303 sole-blocked cards whose event kind the layer ALREADY watched** — the gap was the printed
+   WORDING. *"What would one more X cost?"* is a question to answer by reading the layer **before**
+   scoping, and it took ten minutes.
+7. ⚠️ **Sabotage the cards-side caller, not only the core-side answer.** §3.151's second falsification
+   gutted `effect-helpers.changeLife` and **21 tests stayed green** while the feature silently stopped
+   working, because every test called core's function directly. A funnel is two ends; a suite that
+   only watches one end cannot see the other come loose. Falsify at the seam the USER's code path
+   crosses.
+8. ⚠️ **A duplicated type will be found by the compiler or by nobody.** `events.ts` restated
+   `ReplacementEventKind` behind a comment claiming a pinning test that did not exist. Prefer deleting
+   the second copy to adding a test that watches it — §3.151.
 
 ### 8b. In flight (wave 5, dispatched 2026-09-15)
 

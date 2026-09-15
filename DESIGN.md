@@ -2889,6 +2889,179 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.151 The CR 614/615 row names the EVENT KINDS — and the gap is the WORDINGS, on kinds the layer already watched — ✅ done
+
+> ⚠️ **Section number claimed off a contended range.** §3.150 was the highest in `main` when this
+> branch forked (and `main` already carries TWO §3.147 and TWO §3.149 sections), with several lanes
+> live in `rules.ts`. If an integrator finds a second §3.151, renumber this one.
+
+Acceptance cards: **Rhox Faithmender ✅** and **Fog Bank ✅**, both from `docs/decks/`.
+
+**NEW `packages/cards/scripts/replace-blame.mjs`** — the eighth blame tool, after `activated-blame`,
+`targeted-blame`, `counters-blame`, `xvalue-blame` and `loyalty-blame`. It splits each blocked CR
+614/615 clause into the two halves core's layer can fail on — the **EVENT KIND** it can watch
+(`ReplacementEventKind`, a closed list) and the **OUTCOME BODY** it can perform (`ReplacementOutcome`)
+— and re-probes each clause **alone on the card's own type line**. That last part is the trap the
+script exists for: `replacement-prevent-all-static` and `replacement-draw` both call
+`cardIsPermanent`, so probing a static on a generic sorcery would report half the family as a gap
+that is not there.
+
+Measured on a **private copy** of the 32,414-card corpus
+(`C:\Users\Caleb\AppData\Local\Temp\jb-replace-private\corpus.json` — private because a sibling lane
+renamed a shared corpus out from under a running measurement this week).
+
+**The row's name points at the wrong half for the SIXTH consecutive lane.** The hint row reads *"a
+LIFE-CHANGE event on the replacement layer (the layer watches damage, counters and draws; life
+gain/loss is one more event kind)"* — it names the EVENT KIND. The split says:
+
+| half | clauses | sole-blocked cards |
+|---|---:|---:|
+| **KIND gap** — event outside the closed set | 268 | 149 |
+| **BODY gap** — kind watched, outcome not expressible | 187 | 124 |
+| **SENTENCE gap** — *both halves already exist, only the wording is missing* | **412** | **303** |
+| NOT-PROBEABLE — no closed row names this event | 71 | — |
+
+And the largest event kind in the whole family is **`damage`, with 358–383 sole-blocked cards — a kind
+the layer has watched since it was written.** The kind the row is named for, life gain, is worth
+**12 sole-blocked cards**, of which **5 are outcomes core cannot express** and were left reported. So
+the honest number for the row's own headline is **7**, and the lane's other 22 cards came from the
+sentence half the row does not mention.
+
+**The leakage measurement, re-confirming §7b.** Selecting the family by TEXT (`would … instead` /
+`prevent …`) finds **916 cards**; selecting by the `/replacement|prevent/` hint rows finds **142**.
+**774 cards of this shape sit in other rows** — 302 of them in the §2 aggregation-artifact row, which
+is where **Fog Bank itself** was filed. A lane that had scoped from the hint row would never have seen
+its own acceptance card.
+
+#### What the layer already had — the answer to "what does one more event kind cost?"
+
+**Almost nothing, and that is the finding.** `ReplacementEventKind` gained one member,
+`REPLACEMENT_EVENT_KINDS` one row, `affectedPlayerPrefersMore` one answer, and
+`internal/replacement.ts` one façade that builds an event record. **No field was added to
+`ReplacementApplies`, no branch to `appliesTo`, and nothing to the CR 614.5 bitmask or the CR 616.1
+ordering search.** Life gain happens to a PLAYER and scales a QUANTITY, so it reads the recipient half
+of a filter that already existed and ignores the source half — exactly as a draw does. The token kind
+(§ earlier) claimed to be evidence the layer generalises; a fifth kind costing one row each in five
+places is the confirmation.
+
+**What it DID cost is a funnel, and that was the real work.** Two mechanisms gain life and they live
+in two packages: a resolving effect primitive (`cards/effect-helpers.changeLife`) and **LIFELINK** on
+core's combat-damage path (`internal/damage-result.ts`), which cannot reach into a primitive. Rhox
+Faithmender is a lifelink creature that doubles life gain — the two halves are printed on the same
+card — so a doubler wired to one mechanism and not the other is wrong about the card's own attack, and
+both halves look correct in isolation. **`core/src/life.ts` is therefore the `untap.ts` model: two
+mechanisms, ONE question** (`gainLifeAmount`), a pure function each site calls before performing its
+own mutation.
+
+⚠️ **Zero is a real answer.** "That player gains no life instead" (Sulfuric Vortex) compiles to
+`times: 0`, and CR 118.5 says a gain of nothing is not a life-gain event — so a caller that gets zero
+must emit **neither** `gainLife` nor `lifeChanged`, or "whenever you gain life" fires on a gain that
+did not happen. That is one `if (gained > 0)` at each of the two sites, and it is pinned by a test.
+
+⚠️ **`times: 0` rather than `preventAll`.** Prevention is CR **615** and applies to damage; a
+`preventAll` would have reported a `prevented` quantity in the log for an event that deals none.
+
+#### ANCHORS — one closed vocabulary read by BOTH sides of a damage event
+
+Fog Bank prints `Prevent all combat damage that would be dealt to and dealt by ~`. Two things were
+missing, and neither was prevention itself:
+
+1. **A way to say `~`.** `ReplacementApplies` had `recipientIs` (a RESOLVED instance id, minted when a
+   targeted shield resolves) but a PRINTED static does not know its own id at compile time. It also
+   had `excludeSource` — the printed word "another" — whose exact mirror did not exist.
+2. **A dealer side that can be pinned to one object.** The source half narrowed by CLASS
+   (`sourceController`, `sourceFilter`) and never by identity.
+
+Both are now `ReplacementAnchor` — a closed `'source' | 'attached'` — read through **one**
+`resolveAnchor` by `recipientAnchor` and `dealerAnchor` alike. One vocabulary because *"which object
+does `~` mean?"* is one question, and two answers would let a two-directional shield guard one
+creature while blanking another's damage. Adding "the creature it's blocking" is a **row**.
+
+⚠️ **The anchor is a READ at event time, never an id baked in at index time.** That is what makes an
+Aura that changes host guard the NEW host — `'attached'` reads `CardInstance.attachedTo` on every
+event. An unattached source anchors to nothing and the ability simply does not apply, which is the
+printed card's own answer and needed no special case.
+
+⚠️ **"To and dealt by" is TWO replacement entries, not one entry with two filters.** CR 615 applies
+each to its own event independently, and one entry would need a filter admitting an event matching
+EITHER side — a disjunction `ReplacementApplies` cannot state, and which as a blanket would fog the
+whole board. `replacement-lifegain.test.ts` asserts a third creature's damage to a fourth is
+**untouched**; that assertion is the one a blanket passes nothing else of.
+
+**Does the engine distinguish CR 614 from CR 615? No — and it is right not to.** Prevention is not a
+separate layer here: it is an OUTCOME (`preventAll`, `preventUpTo`, `preventHalfRoundedUp`) on the one
+replacement layer, sharing the CR 614.5 once-per-event rule and the CR 616.1 ordering with every
+multiplier. The brief asked this lane to say so rather than file one under the other; the shared
+machinery is the honest model, and CR 616.1 explicitly orders prevention effects alongside
+replacement effects for the same event.
+
+#### The delta, measured as a SET
+
+One fixed corpus compiled twice, this lane's nine sources reverted with `git show 162f143:<path>` (no
+checkout) and rebuilt in between:
+
+```
+before 6,706 complete / 32,414      after 6,735 complete / 32,414
+GAINED 29        LOST 0
+```
+
+Alhammarret's Archive · Argothian Treefolk · Boon Reflection · Bubble Matrix · Champion Lancer ·
+Cho-Manno, Revolutionary · Dawn Elemental · Defang · Emmara Tandris · Everdawn Champion · **Fog Bank**
+· Gaseous Form · General's Kabuto · Ghostly Possession · Guard Gomazoa · Heart of Light ·
+Inviolability · Istvan, Butcher of Eln · Knight of Dawn's Light · Light of Sanction · Muzzle ·
+**Rhox Faithmender** · Sandskin · Seraph of the Sword · Statecraft · Sulfuric Vortex ·
+Temporal Isolation · The Wind Crystal · Uncle Istvan
+
+Re-running `replace-blame.mjs` after the change independently agrees: sole-blocked family cards
+**592 → 563**, exactly −29.
+
+#### What stays REPORTED, with its number
+
+No template was widened to swallow any of these, and each is pinned by a test that fails if one ever
+quietly starts compiling:
+
+| shape | sole-blocked | why it is refused |
+|---|---:|---|
+| a gain turned into a LOSS — *"that player loses that much life instead"* (Tainted Remedy, Plague Drone) | 2 | a different EVENT, not a scaled quantity. `times: -1` would emit a `gainLife` of a negative number |
+| a gain turned into a DRAW — *"draw that many cards instead"* | 0 | a different ACTION; the vocabulary `replacement.ts`'s header excludes by name |
+| a gain gated on a LIFE TOTAL — *"while you have 5 or less life"* | 0 | no field in `ReplacementApplies`, and inventing one for a single card is not a table |
+| `lifeloss` as an event kind (Bloodletter of Aclazotz) | 4 | the kind is absent AND every printed member also needs a *"during your turn"* condition the filter cannot state |
+| *"if you would lose the game, instead …"* (Exquisite Archangel, Lich's Mirror) | 2 | not a life event at all — a game-loss replacement |
+| source classes outside the closed tail table — *"by artifact creatures"* (a type CONJUNCTION; `anyOfTypes` is a disjunction), *"by creatures with first strike"* (`CardFilter` has no keyword field), *"by creatures it's blocking"* (a RELATION) | ~5 | each would compile into a strictly better card |
+| compound recipients — *"to you and creatures you control"* (Blessed Sanctuary) | ~4 | two subjects in one clause; the subject table is one noun phrase |
+| the whole **ZONE-CHANGE** replacement family — `dies` 63, `zoneToGraveyard` 42, `leavesBattlefield` 13, `entersBattlefield` 12 | **130** | a DESTINATION change, not a quantity. `replacement.ts`'s header excludes it deliberately, and it is the single largest thing left in this row |
+
+**The next lane in this family should take the 130-card zone-change destination vocabulary, not
+another event kind** — it is four times the size of everything this lane shipped, and the blame tool
+now prints it.
+
+#### Two defects fixed in passing
+
+- **`events.ts` carried a SECOND copy of `ReplacementEventKind`**, spelled out behind a comment
+  claiming (a) `events.ts` had to stay free of engine imports and (b) `replacement.test.ts` pinned the
+  two lists identical. **Neither was true**: the file already imports `ContinuousDuration` from
+  `internal/`, and no such test existed. The fifth kind was caught by the COMPILER, which is the only
+  reason it did not ship as a log silently omitting a kind. The copy is gone — the field is the type —
+  so there is no second list left to disagree and no test needed to watch it (rule 12).
+- Two stale doc-comments in `internal/replacement.ts` ("ONE seam, four call sites", "the three
+  façades") corrected in the same commit.
+
+#### Falsification — four sabotages, and the second found a HOLE
+
+| sabotage | expected red | actual |
+|---|---|---|
+| "to and dealt by" compiled as ONE blanket entry | the third-party assertion | 4 red, incl. `expected +0 to be 4` — a bystander's damage fogged |
+| `effect-helpers.changeLife` skips the funnel | a resolving gain stops being doubled | **21 GREEN — nothing was watching the cards-side caller** |
+| `'attached'` resolves to the source | an Aura guards itself | 3 red across BOTH packages |
+| *"no life instead"* → `times: 1` (inert) | Sulfuric Vortex stops zeroing | 3 red, incl. `expected { times: 1 } to deeply equal { times: +0 }` |
+
+The second is the one worth recording. Every test in the file called core's `gainLifeAmount`
+directly — core's side of the question — so gutting the cards-side caller left the whole file green
+while a resolving *"you gain N life"* silently stopped being doubled. **That is exactly the bug the
+funnel exists to prevent, and the suite could not see it.** Two tests were added that drive the real
+`gainLife` PRIMITIVE and assert the life total and the emitted event amount; they go red on that
+sabotage with `expected 23 to be 26`. A guard is only a guard once you have watched it fail.
+
 ### 3.150 The loyalty row is the §3.120 artifact a FIFTH time — and the machinery it names is COMPLETE — ✅ done
 
 > ⚠️ **Section number claimed off a contended range.** `main` already carries TWO §3.147 sections and
