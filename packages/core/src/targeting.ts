@@ -577,7 +577,18 @@ export interface TargetBound {
   readonly withKeyword?: keyof KeywordFlags;
   /** "without <keyword>" — the printed negation, never "not in the card's own flags". */
   readonly withoutKeyword?: keyof KeywordFlags;
-  /** "target <colour> permanent" — one of MTG's five, matched against the card's colours. */
+  /**
+   * "target <colour> permanent" — one of MTG's five, matched against the card's
+   * printed colours.
+   *
+   * ⚠️ PRINTED, because `ContinuousEffect` has no colour field: this engine has
+   * no colour-changing layer at all, so `def.colors` is its only answer to
+   * "what colour is this permanent". That is faithful to what the engine can
+   * represent TODAY and unfaithful the moment a colour layer lands — so
+   * whoever builds one must route this read through it, exactly as
+   * `atLeast`/`atMost` and `withKeyword` already route through the continuous
+   * index.
+   */
   readonly colour?: 'W' | 'U' | 'B' | 'R' | 'G';
 }
 
