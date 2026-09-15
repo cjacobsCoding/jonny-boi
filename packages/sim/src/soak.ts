@@ -63,6 +63,7 @@ import {
   PLAYER_IDS,
   PLUS_ONE_COUNTER,
   poolTotal,
+  untapsDuringUntapStep,
 } from '@jonny-boi/core';
 import type { CardPool } from '@jonny-boi/cards';
 import type { EffectRegistry } from '@jonny-boi/core';
@@ -629,6 +630,31 @@ function createGameWatcher(inner: Pilot): GameWatcher {
   /** Stack object ids seen at the previous decision, and at the previous turn. */
   const stackIdsThisTurn = new Set<InstanceId>();
   let stackIdsLastTurn: ReadonlySet<InstanceId> = new Set();
+  /**
+   * Permanents that were LEGITIMATELY unable to untap when the previous turn was
+   * still running — the same freeze-a-snapshot idiom as `stackIdsLastTurn`, and
+   * for the same reason: the fact is gone by the time the check wants it.
+   *
+   * "Everything the active player controls is untapped at turn start" is FALSE
+   * in Magic, and the pool regeneration brought in the cards that prove it. Two
+   * printings make it false, and only one is still visible afterwards:
+   *
+   *  - CONTINUOUS — "~ doesn't untap during your untap step" (Grim Monolith,
+   *    Famished Paladin, Lurking Roper, Battered Golem all carry the compiled
+   *    `doesNotUntap` flag). Still true at the check, so it could be asked.
+   *  - ONE-SHOT — "doesn't untap during its controller's NEXT untap step"
+   *    (House Guildmage's first ability, Frost Trickster). This is stored as
+   *    `CardInstance.untapSkips` and is SPENT BY THE UNTAP STEP HAPPENING —
+   *    `untap.ts` says so explicitly — so by the first decision of the new turn
+   *    the counter reads zero and the engine's own predicate answers "it
+   *    untaps" about a permanent that correctly did not.
+   *
+   * Hence the snapshot. Asking `untapsDuringUntapStep` at the check would fix
+   * only the first half and would still report Snapcaster Mage and Shoal Kraken
+   * — frozen by an opponent's Guildmage — as engine defects.
+   */
+  let frozenLastTurn: ReadonlySet<InstanceId> = new Set();
+  const frozenThisTurn = new Set<InstanceId>();
   let lastTurn = 0;
   let lastState: GameState | null = null;
   let turnChecks = 0;
@@ -692,6 +718,7 @@ function createGameWatcher(inner: Pilot): GameWatcher {
       turnChecks++;
       // Freeze what the previous turn ended with before this turn overwrites it.
       stackIdsLastTurn = new Set(stackIdsThisTurn);
+      frozenLastTurn = new Set(frozenThisTurn);
       /*
        * Turn-boundary law: what a player checks the instant their turn starts.
        *
@@ -716,8 +743,20 @@ function createGameWatcher(inner: Pilot): GameWatcher {
         }
       }
       const active = state.activePlayer;
+      const turnIndex = indexContinuous(state);
       for (const inst of state.battlefield) {
-        if (inst.controller === active && inst.tapped) {
+        // Tapped is only a violation when the permanent HAD no reason to stay
+        // that way: not frozen while the last turn ran (one-shot, already
+        // spent), and not frozen now (continuous, e.g. its own printed flag or
+        // an Aura's grant). Asked of the engine's own predicate rather than a
+        // list rebuilt here — rule 12, and the list would go stale the day a
+        // new printing grants it.
+        if (
+          inst.controller === active &&
+          inst.tapped &&
+          !frozenLastTurn.has(inst.instanceId) &&
+          untapsDuringUntapStep(state, inst, turnIndex)
+        ) {
           record(SOAK_INVARIANTS.untapAtTurnStart, `#${inst.instanceId} ${inst.def.name} is still tapped on turn ${state.turnNumber}`, state, action);
         }
         if (inst.damageMarked !== 0) {
@@ -742,6 +781,14 @@ function createGameWatcher(inner: Pilot): GameWatcher {
     // turn that is ending.
     stackIdsThisTurn.clear();
     for (const obj of state.stack) stackIdsThisTurn.add(obj.instanceId);
+    // …and the same for the freeze, for the same reason: this is the last look
+    // at the turn that is ending, and `untapSkips` will be spent before the
+    // next one is checked.
+    frozenThisTurn.clear();
+    const frozenIndex = indexContinuous(state);
+    for (const inst of state.battlefield) {
+      if (!untapsDuringUntapStep(state, inst, frozenIndex)) frozenThisTurn.add(inst.instanceId);
+    }
   };
 
   const pilot: Pilot = {
