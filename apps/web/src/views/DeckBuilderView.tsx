@@ -15,7 +15,14 @@ import {
 import { MIN_DECK_SIZE } from '../lib/config.js';
 import { unsupportedReason } from '../lib/decklist/importedCards.js';
 import { assessDeckHealth, deckHealthBadge, describeDeckHealth } from '../lib/decklist/deckHealth.js';
-import { copyGauntletDeck, describeGauntletCopy, gauntletDecks } from '../lib/decklist/gauntletDecks.js';
+import {
+  copiesOfGauntletDeck,
+  copyGauntletDeck,
+  describeExistingCopies,
+  describeGauntletCopy,
+  gauntletDecks,
+} from '../lib/decklist/gauntletDecks.js';
+import { DECK_ORIGIN_ATTR, originPresentation } from '../lib/decklist/deckOrigin.js';
 import type { DecksApi } from '../lib/useDecks.js';
 import { CardToolbar } from '../components/CardToolbar.js';
 import { CardGrid } from '../components/CardGrid.js';
@@ -29,7 +36,8 @@ import { customPrintingCount } from '../lib/printings/entryPrinting.js';
 import { deckToDecklist } from '../lib/proxy/deckToText.js';
 import { copyText } from '../lib/clipboard.js';
 import './deck-health.css';
-import './gauntlet-decks.css';
+import '../components/deck-origin.css';
+import './builtin-decks.css';
 import './deck-steppers.css';
 
 /**
@@ -340,18 +348,27 @@ function unsupportedSummary(cardId: string): string {
     : "Can't be simulated yet.";
 }
 
-/** The saved-deck switcher (load / active highlight / delete). */
 /**
- * The Lab's six gauntlet decks, browsable and copyable.
+ * The six BUILT-IN gauntlet decks, browsable and copyable.
  *
- * These are bundled build data, so they are not editable in place — copying one
- * gives you your own deck to tune, which is the whole premise of the lab: take a
- * real meta list, change a card, and let the sim tell you if it got better.
- * (To PLAY one directly, the Play setup already lists them alongside your decks.)
+ * These are bundled build data — reference decks the Lab tests against. They are
+ * not editable in place; copying one gives you your own deck to tune, which is
+ * the whole premise of the lab: take a real meta list, change a card, and let the
+ * sim tell you if it got better. (To PLAY one directly, the Play setup lists them
+ * too — grouped under their own heading there for the same reason as here.)
+ *
+ * ⚠️ This list used to render `.saved-decks` / `.saved-deck`, the user's own
+ * classes, on purpose — so it "sat visually with the user's own decks". A user
+ * copied Selesnya Blink, renamed the copy, saw the untouched built-in still
+ * sitting in the column, and filed a bug saying the app had DUPLICATED his deck.
+ * It had not. So the built-in region is now unmistakably its own: its own
+ * container, a lock badge per row, and a marked origin attribute. Do not merge
+ * the two treatments back together.
  */
 function GauntletDecks({ decks }: { decks: DecksApi }): ReactElement {
   const [note, setNote] = useState<string | null>(null);
   const list = useMemo(() => gauntletDecks(), []);
+  const builtin = originPresentation('builtin');
 
   const copy = (sample: (typeof list)[number]): void => {
     const result = copyGauntletDeck(sample.deck);
@@ -360,26 +377,73 @@ function GauntletDecks({ decks }: { decks: DecksApi }): ReactElement {
   };
 
   return (
-    <div className="gauntlet-decks">
-      <div className="section-label">Gauntlet decks</div>
-      <p className="gauntlet-decks__intro">
-        The meta decks the Lab tests against. Copy one to tune it as your own.
+    <div className="builtin-decks">
+      <div className="section-label">Built-in gauntlet decks</div>
+      <p className="builtin-decks__intro">
+        Reference decks that ship with the app — not yours, and not editable. Copy one
+        to tune it as your own.
       </p>
-      <div className="saved-decks">
-        {list.map((sample) => (
-          <div key={sample.name} className="saved-deck gauntlet-deck">
-            <span className="gauntlet-deck__name">{sample.name}</span>
-            <span className="gauntlet-deck__meta">
-              {sample.archetype} · {sample.size} cards
-            </span>
-            <button type="button" className="btn btn--ghost" onClick={() => copy(sample)}>
-              Copy to my decks
-            </button>
-          </div>
-        ))}
+      <div className="builtin-deck-list">
+        {list.map((sample) => {
+          const copies = copiesOfGauntletDeck(sample.name, decks.decks);
+          const mine = copies[0];
+          return (
+            <div
+              key={sample.name}
+              className="builtin-deck"
+              {...{ [DECK_ORIGIN_ATTR]: 'builtin' }}
+            >
+              <div className="builtin-deck__heading">
+                <span
+                  className="deck-origin-badge deck-origin-badge--builtin"
+                  title={builtin.explanation}
+                >
+                  <span aria-hidden="true">{builtin.glyph}</span> {builtin.badge}
+                </span>
+                <span className="builtin-deck__name">{sample.name}</span>
+              </div>
+              <span className="builtin-deck__meta">
+                {sample.archetype} · {sample.size} cards
+              </span>
+              {/* Already copied? Say so, and offer the copy — not the same
+                  "Copy to my decks" button forever, which is the invitation
+                  that produced the duplicate-looking deck in the first place.
+                  Copying AGAIN stays possible (a second experimental branch of
+                  a list is a normal thing to want) but it is now the quiet
+                  option next to an explicit statement of what you already have. */}
+              {mine ? (
+                <div className="builtin-deck__copied">
+                  <span className="builtin-deck__copied-note" role="status">
+                    ✓ {describeExistingCopies(copies)}
+                  </span>
+                  <div className="builtin-deck__actions">
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() => decks.selectDeck(mine.id)}
+                    >
+                      Open my copy
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--ghost builtin-deck__again"
+                      onClick={() => copy(sample)}
+                    >
+                      Copy again
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" className="btn btn--ghost" onClick={() => copy(sample)}>
+                  Copy to my decks
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
       {note && (
-        <p className="gauntlet-decks__note" role="status">
+        <p className="builtin-decks__note" role="status">
           {note}
         </p>
       )}
@@ -387,17 +451,30 @@ function GauntletDecks({ decks }: { decks: DecksApi }): ReactElement {
   );
 }
 
+/**
+ * The saved-deck switcher — YOUR decks, the ones you can rename, edit and delete.
+ *
+ * Always rendered, even at one deck: this heading is what tells you which region
+ * of the panel is yours, and hiding it left a lone list of six built-in decks
+ * under the builder with nothing to contrast against.
+ */
 function SavedDecks({ decks }: { decks: DecksApi }): ReactElement {
-  if (decks.decks.length <= 1) return <></>;
   return (
     <div>
-      <div className="section-label">Saved decks</div>
+      <div className="section-label">Your decks</div>
       <div className="saved-decks">
         {decks.decks.map((deck) => {
           const isActive = deck.id === decks.activeDeck?.id;
           const count = deck.cards.reduce((sum, entry) => sum + entry.count, 0);
           return (
-            <div key={deck.id} className={`saved-deck${isActive ? ' saved-deck--active' : ''}`}>
+            <div
+              key={deck.id}
+              className={`saved-deck${isActive ? ' saved-deck--active' : ''}`}
+              // Marked as yours for the same reason built-ins are marked: the
+              // guard has to be able to assert that this row does NOT carry the
+              // built-in treatment, and an absent attribute cannot say that.
+              {...{ [DECK_ORIGIN_ATTR]: 'mine' }}
+            >
               <button
                 type="button"
                 className="saved-deck__name"

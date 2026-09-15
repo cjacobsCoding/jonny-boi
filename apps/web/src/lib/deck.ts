@@ -57,6 +57,19 @@ export interface Deck {
   cards: DeckEntry[];
   /** ISO timestamp of the last edit, for sorting the saved-deck list. */
   updatedAt: string;
+  /**
+   * For a deck made by copying a BUILT-IN gauntlet deck: that deck's name.
+   * Absent on decks built from scratch or imported, which is what every deck
+   * saved before this field existed says — so old decks need no migration.
+   *
+   * Provenance, not identity: it is never read to decide what the deck IS. It
+   * exists so the built-in list can say "you already have a copy of this, it is
+   * called X" instead of offering the same "Copy to my decks" button forever.
+   * That is the whole reason it is stored rather than derived from the name —
+   * the bug that prompted it was a user RENAMING their copy, and a name match
+   * would have gone blind at exactly that moment.
+   */
+  copiedFrom?: string;
 }
 
 /**
