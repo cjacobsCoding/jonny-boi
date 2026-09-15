@@ -52,17 +52,28 @@ const SELF = 'pool-size-claims.test.ts';
 const HISTORICAL = ['AT THE TIME', '(historical)', 'HISTORICAL'] as const;
 
 /**
- * The phrasings that assert a CURRENT pool size.
+ * The phrasings that assert THE SHIPPED POOL'S CURRENT size.
  *
- * Narrow by design: this forbids claims about the pool's size, not every number
- * near the word "pool". A deck list of 60 or a mana curve of 24 is none of its
- * business.
+ * ⚠️ NARROW ON PURPOSE, and the first draft was not. A pattern of plain
+ * `(\d+)-card pool` matched 18 sites, and most were not the bug: a test that
+ * builds a synthetic pool and asserts virtualisation ("a 20,000-card pool
+ * renders the same number of tiles as a 5,000-card one") is describing its own
+ * fixture, which is true forever and has nothing to do with what ships. A guard
+ * that cries wolf on correct code gets deleted, and then the real defect is
+ * unguarded — so this matches only text that presents a number as THE CURRENT
+ * SHIPPED POOL: "the shipped pool (N cards)", "today's N-card pool", "the whole
+ * N-card pool", "the pool is N".
+ *
+ * Historical measurements — "the 5,623-card pool (§3.118) made the AI…" — are a
+ * different thing again: true when written, and worth keeping. They take the
+ * {@link HISTORICAL} marker.
  */
 const CLAIM_PATTERNS: readonly RegExp[] = [
-  /(\d[\d,]*)[- ]card pool\b/i,
-  /\bpool \((\d[\d,]*) cards?\b/i,
-  /\bpool of (\d[\d,]*) cards?\b/i,
-  /\bshipped pool (?:is|holds|has) (\d[\d,]*)\b/i,
+  /\bshipped pool \((\d[\d,]*) cards?\b/i,
+  /\bshipped pool (?:is|of|holds|has) (\d[\d,]*)\b/i,
+  /\btoday'?s (\d[\d,]*)[- ]card pool\b/i,
+  /\bthe whole (\d[\d,]*)[- ]card pool\b/i,
+  /\bthe pool (?:is|holds|has) (\d[\d,]*) cards?\b/i,
 ];
 
 interface Claim {
@@ -117,17 +128,24 @@ describe('no source file hard-codes the pool size', () => {
 
   it('the matcher actually catches the wording that caused the bug', () => {
     // Watch it go RED on demand: the exact strings that were live in the repo,
-    // plus the historical form that must NOT trip it. Without this, a matcher
-    // broken into never matching anything would report a clean sweep.
+    // plus the forms that must NOT trip it. Without this, a matcher broken into
+    // never matching anything would report a clean sweep over the whole repo.
     const caught = claimsIn('x.ts', 'THE FULL-POOL SOAK — across the whole 357-card pool,');
     expect(caught).toHaveLength(1);
     expect(caught[0]?.claimed).toBe('357');
 
-    expect(claimsIn('x.ts', 'No card in the shipped pool (357 cards, `x`) is a Vanguard.')).toHaveLength(1);
-    expect(claimsIn('x.ts', 'it walks a pool of 6,914 cards and serializes each')).toHaveLength(1);
+    expect(
+      claimsIn('x.ts', 'No card in the shipped pool (357 cards, `x`) is a Vanguard.'),
+    ).toHaveLength(1);
+    expect(claimsIn('x.ts', "reached by any card in today's 5,651-card pool")).toHaveLength(1);
 
-    // History is exempt, and the exemption must be the marked kind only.
+    // History is exempt, and the exemption must be the MARKED kind only.
     expect(claimsIn('x.ts', 'the pool went 191 → 357 cards AT THE TIME')).toHaveLength(0);
+    // A synthetic fixture is not a claim about what ships — the false-positive
+    // class that made the first draft of this guard unusable.
+    expect(
+      claimsIn('x.ts', "it('a 20,000-card pool renders the same tiles as a 5,000-card one')"),
+    ).toHaveLength(0);
     expect(claimsIn('x.ts', 'a 60-card deck and a 24-land mana base')).toHaveLength(0);
   });
 

@@ -269,6 +269,16 @@ async function main() {
 
     console.log('');
     // ---- the assertions ----------------------------------------------------
+    // DENOMINATORS FIRST, always. A sibling lane's check over the primitive
+    // registry reported a false green because it was iterating an EMPTY
+    // registry — it passed by asserting nothing, and only printing the
+    // denominator caught it. So before any per-card claim is trusted, pin that
+    // there WERE cards to search for and that every one of them was searched.
+    check(
+      'the harness actually searched for cards (denominator is non-zero)',
+      DECK_CARDS.length > 0 && report.cards.length === DECK_CARDS.length,
+      `searched ${report.cards.length} of ${DECK_CARDS.length} named cards`,
+    );
     for (const row of report.cards) {
       check(`the card browser finds "${row.name}"`, row.found, `tiles: ${row.firstTiles.join(', ') || '(none)'}`);
     }

@@ -111,7 +111,8 @@ export interface OptionalGateShape {
  * directions (an asking primitive with no row; a row naming a primitive that no
  * longer asks), so the table cannot rot silently.
  *
- * Only four of the sixteen are reached by any card in today's 5,651-card pool
+ * Only four of the sixteen were reached by any card in the pool as measured at
+ * 5,651 cards AT THE TIME
  * (`mayEffects` 90, `payManaOrElse` 49, `counterUnlessPaid` 28, `mayCostEffects`
  * 16, `cumulativeUpkeep` 13, `mayShuffleLibrary` 3, `searchLibrary{optional}` 1
  * — 200 gate instances in all). The other rows are written anyway BECAUSE they
@@ -536,7 +537,7 @@ function gateBody(ref: EffectRef, shape: OptionalGateShape): readonly EffectRef[
  * target question for (absent when the source aims at nothing), and is what
  * decides {@link FoundGate.gatesTheTarget}.
  *
- * MEASURED against today's 5,651-card pool: every one of the 200 gate instances
+ * MEASURED against the pool at 5,651 cards AT THE TIME: every one of the 200 gate instances
  * sits at depth 0. The recursion is written anyway, because "it happens to be
  * flat today" is exactly the assumption the previous version encoded and was
  * bitten by.

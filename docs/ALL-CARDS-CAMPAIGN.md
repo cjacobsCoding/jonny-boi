@@ -213,18 +213,48 @@ blank art; an index ahead of the pool offers cards the engine will not play.
 | ref | pool | canonical index | web index |
 | --- | ---: | ---: | ---: |
 | `origin/main` | 5,651 | 5,651 | 5,651 |
-| `origin/fix/pool-refresh-3147` | **6,323** | **6,323** | **6,323** |
+| `origin/fix/pool-refresh-3147` | 6,323 | 6,323 | 6,323 |
+| **`feat/pool-refresh-wave5`** ✅ **SHIPPED** | **6,914** | **6,914** | **6,914** |
 
-The second is a **complete and internally consistent** regeneration — all three artifacts in step —
-plus four soak-defect fixes that took a wider pool from **754 violations to 4**. The session that
-made it **ended before pushing**, so it existed only on one disk; it is now on the remote.
+The middle row was a **complete and internally consistent** regeneration — all three artifacts in
+step — plus four soak-defect fixes that took a wider pool from **754 violations to 4**. The session
+that made it **ended before pushing**, so it existed only on one disk; it is now on the remote.
 
-`origin/salvage/pool-refresh-3147` carries that session's **uncommitted** last change — the
-diagnosis *and* fix for those final 4 violations. Whoever finishes the refresh starts from the
-diagnosis instead of rediscovering it. Its reasoning is worth reading: a milled card is public the
-instant it lands face up, but Sudden Reclamation mills three and returns one to **hand** inside one
-resolution, so the card is public and hidden again with no decision boundary in between, and an audit
-that can only compare settled states reads the engine's own `zoneChange` as a leak.
+`origin/salvage/pool-refresh-3147` carried that session's **uncommitted** last change — the
+diagnosis *and* fix for those final 4 violations. Its reasoning is worth reading: a milled card is
+public the instant it lands face up, but Sudden Reclamation mills three and returns one to **hand**
+inside one resolution, so the card is public and hidden again with no decision boundary in between,
+and an audit that can only compare settled states reads the engine's own `zoneChange` as a leak.
+
+**The last row is the delivery.** Regenerated from the freshest corpus on disk (32,414 paper
+non-joke cards), offline throughout, carrying BOTH of the above (the four committed soak fixes and
+the fifth salvaged one) plus the counters hand-off. `6,914 = 6,882 compiled + 32 curated`; the
+report reads 6,882 accepted / 25,500 rejected of 32,414 candidates, 0 unresolved. **+1,263 cards
+that a player can now find**, where before they were compiled, tested, green and invisible.
+
+Measured as a SET on the fixed measuring stick (`corpus-fixed.json`, 32,341, md5 `718eae40…`), with
+the compiler sources reverted to `main` in between so both sides are the same question:
+
+```
+BEFORE  main 0dbfc9d     6,904 complete / 32,341
+AFTER   this branch      6,902 complete / 32,341
+LOST    Big Play · Miraculous Recovery        GAINED  none
+```
+
+**Both losses are the CORRECTION §5a promised, not a regression** — each is an instant whose bare
+"it" was read as the source, so both sat in the shipped pool compiling `'complete'` while their
++1/+1 counter went nowhere. Nothing else moved in either direction, which is the property the
+set-diff exists to prove.
+
+**What Caleb's own decks now look like**, counted against the shipped pool rather than the compiler:
+
+| deck | distinct cards in pool | physical copies | still blocked |
+| --- | --- | --- | --- |
+| `acidic-angels.txt` | 20 / 22 | **59 / 65 — 90.8%** | Fiendslayer Paladin · Rhox Faithmender |
+| `defender-ramp.txt` | 11 / 17 | **34 / 49 — 69.4%** | Axebane Guardian · Fog Bank · Craterhoof Behemoth · Jace · Tamiyo · Primal Surge |
+
+The only absences are the eight §7a already documents as blocked — two evidenced NO-GOs and six
+unstarted. No card went missing that the board did not already predict.
 
 ### Two corrections the refresh must carry
 
