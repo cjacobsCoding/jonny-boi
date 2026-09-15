@@ -689,7 +689,7 @@ export function selfIfCreature(ctx: EffectContext): CardInstance | undefined {
  * that much life instead" (Rhox Faithmender, Boon Reflection) applies to every
  * primitive that gains life without any of them knowing the card exists. Core's
  * LIFELINK path asks the same question at its own call site, and
- * `life-parity.test.ts` fails if the two ever disagree — see `core/src/life.ts`
+ * `core/src/life.test.ts` fails if the two ever disagree — see `core/src/life.ts`
  * for why the mechanisms stay two and the answer stays one.
  *
  * A NEGATIVE delta is life LOSS or a paid cost, and no replacement watches

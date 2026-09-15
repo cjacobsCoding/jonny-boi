@@ -26,10 +26,13 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  REPLACEMENT_ANCHORS,
+  REPLACEMENT_EVENT_KINDS,
   createGame,
   indexReplacements,
   gainLifeAmount,
   replaceDamage,
+  replacementIsInert,
   type CardDefinition,
   type CardInstance,
   type GameEvent,
@@ -37,7 +40,7 @@ import {
   type PlayerId,
 } from '@jonny-boi/core';
 import { buildRegistry } from './pool.js';
-import { gainLife } from './primitives.js';
+import { CORE_PRIMITIVE_IDS, gainLife } from './primitives.js';
 import { compileCard } from './compile/compile.js';
 import type { CompilableCard } from './compile/types.js';
 
@@ -224,6 +227,73 @@ describe('the printed clause reaches the layer with EXACTLY the printed filter',
     expect(entry.applies.recipientAnchor).toBe('source');
     expect(entry.applies.sourceFilter).toEqual({ anyOfTypes: ['creature'] });
   });
+});
+
+describe('a card that compiles must also DO something — the inert-declaration trap', () => {
+  /**
+   * The quietest way this family could lie. `replacementIsInert` skips a
+   * declaration that neither scales, adds nor prevents — `times: 1`, `plus: 0` —
+   * so a rule that emitted one would produce a card the compiler calls
+   * `'complete'`, that enters the pool, and that does **nothing at all** on the
+   * board. Every A/B verdict the lab produces would be quietly biased by it, and
+   * no compile test would notice.
+   *
+   * Table-driven so a new row in `PREVENTION_STATIC_SUBJECTS` or
+   * `LIFEGAIN_SUBJECTS` is covered the day it is added, rather than needing
+   * somebody to remember this file exists.
+   */
+  const EVERY_CARD = [
+    RHOX_FAITHMENDER,
+    FOG_BANK,
+    BOON_REFLECTION,
+    KNIGHT_OF_DAWNS_LIGHT,
+    SULFURIC_VORTEX,
+    GASEOUS_FORM,
+    MUZZLE,
+    CHAMPION_LANCER,
+  ] as const;
+
+  it.each(EVERY_CARD.map((c) => [c.name, c] as const))(
+    '%s declares only LIVE replacements, from the closed vocabularies',
+    (_name, card) => {
+      const def = playable(card);
+      const entries = def.replacements ?? [];
+      expect(entries.length).toBeGreaterThan(0);
+      for (const entry of entries) {
+        expect(REPLACEMENT_EVENT_KINDS).toContain(entry.event);
+        expect(replacementIsInert(entry), `${card.name}: an inert declaration does nothing`).toBe(false);
+        for (const anchor of [entry.applies.recipientAnchor, entry.applies.dealerAnchor]) {
+          if (anchor !== undefined) expect(REPLACEMENT_ANCHORS).toContain(anchor);
+        }
+      }
+    },
+  );
+
+  it.each(EVERY_CARD.map((c) => [c.name, c] as const))(
+    '%s references only REGISTERED effect primitives',
+    (_name, card) => {
+      const def = playable(card);
+      const refs = [
+        ...(def.effects ?? []),
+        ...(def.triggers ?? []).flatMap((trigger) => trigger.effects ?? []),
+        ...(def.activated ?? []).flatMap((ability) => ability.effects ?? []),
+      ];
+      // ⚠️ These cards are NOT covered by `expanded-pool.test.ts`'s
+      // "never emits effectUnsupported" sweep: that reads the COMMITTED
+      // generated pool, which this lane deliberately did not regenerate (it is
+      // owned by another lane). So the same guarantee is asserted here for the
+      // cards this lane actually unblocked.
+      //
+      // A replacement declaration itself carries no primitive — but half of
+      // these cards print OTHER lines that do (Gaseous Form and Muzzle attach,
+      // Sulfuric Vortex deals upkeep damage), and those are the ones that could
+      // reach the engine as an unknown id.
+      expect(CORE_PRIMITIVE_IDS.length).toBeGreaterThan(0); // a registry of zero would make this vacuous
+      for (const ref of refs) {
+        expect(new Set(CORE_PRIMITIVE_IDS).has(ref.primitive), `${card.name} → ${ref.primitive}`).toBe(true);
+      }
+    },
+  );
 });
 
 describe('what stays REPORTED — no template is widened to swallow it (§3.151)', () => {

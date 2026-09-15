@@ -142,6 +142,22 @@ export interface ActiveReplacement {
   readonly controller: PlayerId;
   /** The permanent (or spell) it radiates from. */
   readonly sourceInstanceId: InstanceId;
+  /**
+   * The permanent itself, for a PRINTED ability.
+   *
+   * ⚠️ PERF, and that is its whole reason for existing: it makes an
+   * `'attached'` anchor a property read instead of a battlefield walk on the
+   * DAMAGE path. The instance is already in hand when the index is built, so
+   * this is one more property on an object being allocated anyway — the same
+   * trade `untap.ts` documents for passing a prebuilt `ContinuousIndex` rather
+   * than re-walking per permanent.
+   *
+   * Absent for a FLOATING record, whose source may have left the battlefield
+   * entirely. No floating replacement carries an anchor today, and one that did
+   * would correctly resolve to "this anchor names nothing" rather than to a
+   * stale object.
+   */
+  readonly sourceInstance?: CardInstance;
   /** Set for a floating record; the shield bookkeeping writes through it. */
   readonly floating?: FloatingReplacement;
 }
@@ -275,6 +291,7 @@ function pushAbilities(
       ability,
       controller: source.controller,
       sourceInstanceId: source.instanceId,
+      sourceInstance: source,
     });
   }
   return found;
@@ -345,7 +362,7 @@ function appliesTo(state: GameState, entry: ActiveReplacement, event: Replaceabl
       // "…damage that would be dealt BY ~" / "by enchanted creature". An
       // unresolvable anchor (an Aura attached to nothing) admits nothing, which
       // is the card's own answer and not a special case.
-      const anchored = resolveAnchor(state, entry, applies.dealerAnchor);
+      const anchored = resolveAnchor(entry, applies.dealerAnchor);
       if (anchored === undefined || source === undefined || source.instanceId !== anchored) return false;
     }
   }
@@ -370,7 +387,7 @@ function appliesTo(state: GameState, entry: ActiveReplacement, event: Replaceabl
   if (applies.recipientAnchor !== undefined) {
     // "…damage that would be dealt TO ~" / "to enchanted creature". An anchor
     // names a PERMANENT, so a player recipient never satisfies one.
-    const anchored = resolveAnchor(state, entry, applies.recipientAnchor);
+    const anchored = resolveAnchor(entry, applies.recipientAnchor);
     if (anchored === undefined || recipient === undefined || recipient.instanceId !== anchored) return false;
   }
   if (!scopeAdmits(applies.recipientController, owner, event.affectedPlayer)) return false;
@@ -401,20 +418,12 @@ function appliesTo(state: GameState, entry: ActiveReplacement, event: Replaceabl
  * unattached, an Aura whose host has left. The caller treats that as "does not
  * apply", which is the printed card's own answer.
  */
-function resolveAnchor(
-  state: GameState,
-  entry: ActiveReplacement,
-  anchor: ReplacementAnchor,
-): InstanceId | undefined {
+function resolveAnchor(entry: ActiveReplacement, anchor: ReplacementAnchor): InstanceId | undefined {
   if (anchor === 'source') return entry.sourceInstanceId;
-  // 'attached' — the permanent the source is attached to.
-  const permanents = state.battlefield;
-  for (let i = 0; i < permanents.length; i++) {
-    const perm = permanents[i] as CardInstance;
-    if (perm.instanceId !== entry.sourceInstanceId) continue;
-    return perm.attachedTo ?? undefined;
-  }
-  return undefined;
+  // 'attached' — the permanent the source is attached to, read off the instance
+  // the index already holds. One property read, no walk: see
+  // `ActiveReplacement.sourceInstance`.
+  return entry.sourceInstance?.attachedTo ?? undefined;
 }
 
 /**

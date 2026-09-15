@@ -2921,17 +2921,18 @@ gain/loss is one more event kind)"* — it names the EVENT KIND. The split says:
 | **SENTENCE gap** — *both halves already exist, only the wording is missing* | **412** | **303** |
 | NOT-PROBEABLE — no closed row names this event | 71 | — |
 
-And the largest event kind in the whole family is **`damage`, with 358–383 sole-blocked cards — a kind
-the layer has watched since it was written.** The kind the row is named for, life gain, is worth
-**12 sole-blocked cards**, of which **5 are outcomes core cannot express** and were left reported. So
-the honest number for the row's own headline is **7**, and the lane's other 22 cards came from the
-sentence half the row does not mention.
+And the largest event kind in the whole family is **`damage`, with 383 sole-blocked cards (358 after
+this lane) — a kind the layer has watched since it was written.** The kind the row is *named* for,
+life gain, has **12 sole-blocked cards in total**; **6 now compile and 6 stay reported** (named in the
+table below). So the honest number for the row's own headline is **6**, and the lane's other **23**
+cards came from the sentence half the row does not mention at all.
 
 **The leakage measurement, re-confirming §7b.** Selecting the family by TEXT (`would … instead` /
 `prevent …`) finds **916 cards**; selecting by the `/replacement|prevent/` hint rows finds **142**.
-**774 cards of this shape sit in other rows** — 302 of them in the §2 aggregation-artifact row, which
-is where **Fog Bank itself** was filed. A lane that had scoped from the hint row would never have seen
-its own acceptance card.
+**774 cards of this shape sit in other rows.** Counted by CLAUSE rather than by card (the two are not
+the same number and must not be quoted as each other), the largest destination is the §2
+aggregation-artifact row with **302 clauses** — which is where **Fog Bank itself** was filed. A lane
+that had scoped from the hint row would never have seen its own acceptance card.
 
 #### What the layer already had — the answer to "what does one more event kind cost?"
 
@@ -3020,20 +3021,39 @@ Re-running `replace-blame.mjs` after the change independently agrees: sole-block
 No template was widened to swallow any of these, and each is pinned by a test that fails if one ever
 quietly starts compiling:
 
+**The six life cards still blocked, by name** — verified by intersecting the 12 sole-blocked life
+cards with the post-change playable set, not inferred from a bucket count:
+
+| card | printed clause | why it is refused |
+|---|---|---|
+| Tainted Remedy · Plague Drone | *"that player **loses** that much life instead"* | a gain turned into a LOSS is a different EVENT, not a scaled quantity. `times: -1` would emit a `gainLife` carrying a negative number, and "whenever you gain life" would fire on a drain |
+| Bloodletter of Aclazotz | *"if an opponent would **lose** life **during your turn**, twice that much"* | the `lifeloss` kind is absent AND the clause needs a turn condition `ReplacementApplies` has no field for — two gaps, not one |
+| Exquisite Archangel · Lich's Mirror | *"if you would **lose the game**, instead …"* | not a life event at all — a game-loss replacement, a different layer |
+| Flames of the Blood Hand | *"…would gain life this turn, that player gains no life instead"* + *"the damage **can't be prevented**"* | a FLOATING one-shot aimed at a named player, plus an unpreventable-damage flag core has no field for |
+
+And the shapes refused outside the life family:
+
 | shape | sole-blocked | why it is refused |
 |---|---:|---|
-| a gain turned into a LOSS — *"that player loses that much life instead"* (Tainted Remedy, Plague Drone) | 2 | a different EVENT, not a scaled quantity. `times: -1` would emit a `gainLife` of a negative number |
 | a gain turned into a DRAW — *"draw that many cards instead"* | 0 | a different ACTION; the vocabulary `replacement.ts`'s header excludes by name |
 | a gain gated on a LIFE TOTAL — *"while you have 5 or less life"* | 0 | no field in `ReplacementApplies`, and inventing one for a single card is not a table |
-| `lifeloss` as an event kind (Bloodletter of Aclazotz) | 4 | the kind is absent AND every printed member also needs a *"during your turn"* condition the filter cannot state |
-| *"if you would lose the game, instead …"* (Exquisite Archangel, Lich's Mirror) | 2 | not a life event at all — a game-loss replacement |
-| source classes outside the closed tail table — *"by artifact creatures"* (a type CONJUNCTION; `anyOfTypes` is a disjunction), *"by creatures with first strike"* (`CardFilter` has no keyword field), *"by creatures it's blocking"* (a RELATION) | ~5 | each would compile into a strictly better card |
-| compound recipients — *"to you and creatures you control"* (Blessed Sanctuary) | ~4 | two subjects in one clause; the subject table is one noun phrase |
+| source classes outside the closed tail table — *"by artifact creatures"* (a type CONJUNCTION; `anyOfTypes` is a disjunction), *"by creatures with first strike"* (`CardFilter` has no keyword field), *"by creatures it's blocking"* (a RELATION between two permanents) | ~5 | each would compile into a strictly better card |
+| compound recipients — *"to you and creatures you control"* (Blessed Sanctuary), *"to you and permanents you control"* (Endure) | ~4 | two subjects in one clause; the subject table is one noun phrase |
 | the whole **ZONE-CHANGE** replacement family — `dies` 63, `zoneToGraveyard` 42, `leavesBattlefield` 13, `entersBattlefield` 12 | **130** | a DESTINATION change, not a quantity. `replacement.ts`'s header excludes it deliberately, and it is the single largest thing left in this row |
 
 **The next lane in this family should take the 130-card zone-change destination vocabulary, not
 another event kind** — it is four times the size of everything this lane shipped, and the blame tool
 now prints it.
+
+#### Performance — the walk that was there for ten minutes
+
+`resolveAnchor`'s `'attached'` branch first looked the source permanent up by walking
+`state.battlefield`, which put a linear scan on the **damage path** for every board holding an
+anchored Aura. `ActiveReplacement` now carries `sourceInstance` — the instance is already in hand when
+the index is built, so it costs one more property on an object being allocated anyway, and the anchor
+became a property read. Rule 7 says a regression is part of the report *with the number*; this one was
+removed before it could be measured, and the post-fix playable set is **byte-identical** to the
+pre-fix one (the change is engine-side, so no card moved — checked rather than assumed).
 
 #### Two defects fixed in passing
 
@@ -3046,7 +3066,35 @@ now prints it.
 - Two stale doc-comments in `internal/replacement.ts` ("ONE seam, four call sites", "the three
   façades") corrected in the same commit.
 
-#### Falsification — four sabotages, and the second found a HOLE
+#### ⚠️ What the 281-second pool test does NOT cover, by name
+
+`expanded-pool.test.ts`'s *"every compiled card resolves in a real game — never emits
+`effectUnsupported`"* passed in 281s, and it says **nothing about these 29 cards**: it reads the
+COMMITTED `data/expanded-pool.ts`, which holds **5,619** definitions — the stale baseline this lane
+deliberately did not regenerate (the shipped pool is owned by `fix/pool-refresh-3147`). Every one of
+the 29 was blocked when that file was generated, so none is in it. `compile.test.ts`'s
+unregistered-primitive sweep is no help either: it runs over the hand-authored `CARD_POOL`.
+
+So the guarantee was re-established for the cards this lane actually unblocked, three ways:
+
+1. **8 of the 29 are PLAYED** in `replacement-lifegain.test.ts` — real damage and life events on a
+   real `GameState`, not merely compiled.
+2. **All 29 were checked structurally** against the private corpus: each is `'complete'`, each
+   declares at least one **non-inert** replacement, every `event` is in `REPLACEMENT_EVENT_KINDS` and
+   every anchor in `REPLACEMENT_ANCHORS`, and **every effect primitive any of them references is
+   registered** — `addCounters`, `attachToTarget`, `dealDamage`, `pumpUntilEndOfTurn`,
+   `grantKeywordToYoursUntilEndOfTurn`, checked against a registry of 105.
+   ⚠️ The first run of that check was a **FALSE GREEN**: the registry import resolved to an empty set,
+   so "ALL REGISTERED" was vacuously true over zero known ids. It was caught by printing the
+   denominator, which is the whole reason the rule says to. The committed test now asserts
+   `CORE_PRIMITIVE_IDS.length > 0` before using it.
+3. **The inert-declaration trap is now a committed guard.** `replacementIsInert` skips `times: 1` /
+   `plus: 0`, so a rule emitting one would produce a card the compiler calls `'complete'`, that enters
+   the pool, and that **does nothing on the board** — biasing every A/B verdict the lab produces, with
+   no compile test able to see it. A table-driven `it.each` over all eight named cards now fails on
+   exactly that, and it was watched failing (sabotage 5 below).
+
+#### Falsification — five sabotages, and the second found a HOLE
 
 | sabotage | expected red | actual |
 |---|---|---|
@@ -3054,6 +3102,7 @@ now prints it.
 | `effect-helpers.changeLife` skips the funnel | a resolving gain stops being doubled | **21 GREEN — nothing was watching the cards-side caller** |
 | `'attached'` resolves to the source | an Aura guards itself | 3 red across BOTH packages |
 | *"no life instead"* → `times: 1` (inert) | Sulfuric Vortex stops zeroing | 3 red, incl. `expected { times: 1 } to deeply equal { times: +0 }` |
+| the doubler → `times: 1` — a card that compiles `'complete'` and does NOTHING | the inert guard | 7 red, incl. `Rhox Faithmender: an inert declaration does nothing` |
 
 The second is the one worth recording. Every test in the file called core's `gainLifeAmount`
 directly — core's side of the question — so gutting the cards-side caller left the whole file green

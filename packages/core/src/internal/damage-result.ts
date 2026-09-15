@@ -129,9 +129,10 @@ export function applyDamageResult(
     // replacement (Rhox Faithmender, Boon Reflection) does not care that this
     // life came from lifelink rather than from a resolving spell. The cards
     // package asks the same question for its own gain primitives; this is
-    // core's call site, and `life-parity.test.ts` fails if the two ever
-    // disagree — the same arrangement, for the same reason, as the counters
-    // funnel two rows above.
+    // core's call site, and `core/src/life.test.ts` fails if the two ever
+    // disagree ("LIFELINK asks the same question as a resolving effect") — the
+    // same arrangement, for the same reason, as the counters funnel two rows
+    // above.
     const gained = gainLifeAmount(state, source.controller, amount, emit);
     // CR 118.5 — a gain of nothing is NOT a life-gain event, so "that player
     // gains no life instead" (Sulfuric Vortex) must emit neither event or

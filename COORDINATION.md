@@ -7,10 +7,11 @@
   the wrong half for the SIXTH consecutive lane: it names the **event kind**, and adding one cost *one
   row in five places* with **no new field and no new branch**. The family's real mass is **412 clauses /
   303 sole-blocked cards on event kinds the layer ALREADY watched** — the gap is the printed WORDING.
-  ⚠️ **Selection by TEXT finds 916 cards against 142 by hint — 774 of this shape sit in other rows**,
-  302 of them in the §2 aggregation-artifact row, *which is where Fog Bank itself was filed.* A lane
-  scoping from the hint row would never have seen its own acceptance card. §7b's leakage warning is
-  now measured on a second family.
+  ⚠️ **Selection by TEXT finds 916 cards against 142 by hint — 774 of this shape sit in other rows.**
+  By CLAUSE (a different number, not quotable as the card count) the largest destination is the §2
+  aggregation-artifact row with 302, *which is where Fog Bank itself was filed.* A lane scoping from
+  the hint row would never have seen its own acceptance card. §7b's leakage warning is now measured on
+  a second family.
   **FILES OWNED** (`rules.ts` is the six-way contender — expect a real merge, and build after it):
   `packages/cards/src/compile/rules.ts` — **two regions only**: (1) new closed tables
   `PREVENTION_STATIC_SUBJECTS` / `PREVENTION_SOURCE_CLASSES` / `LIFEGAIN_SUBJECTS`, appended after
@@ -31,6 +32,13 @@
   3. **`replacement-prevent-all-static`'s regex was replaced**, not extended. A lane that added a
      recipient phrase to the old inline alternation must move it to `PREVENTION_STATIC_SUBJECTS` as a
      row — and give it an honest `dealer` projection or `null`.
+  ⚠️ **`expanded-pool.test.ts` does NOT cover these 29 cards** — it reads the COMMITTED
+  `data/expanded-pool.ts` (5,619 definitions, the stale baseline), and all 29 were blocked when that
+  was generated. Re-established three ways instead: 8 of the 29 are PLAYED in the new test file; all
+  29 checked structurally (complete · a non-inert replacement · closed kind+anchor · every referenced
+  primitive registered, against a registry of 105); and the inert-declaration trap is now a committed
+  `it.each` guard. **When `fix/pool-refresh-3147` regenerates, these 29 come into that sweep's scope
+  for the first time** — worth a look at that run.
   **DID NOT DO, by name:** the regenerated pool and card index are untouched (owned by
   `fix/pool-refresh-3147`). `apps/web` untouched — no compile-time-exhaustive table needed a row.
   The **zone-change destination vocabulary** (`dies` 63, `zoneToGraveyard` 42, `leavesBattlefield` 13,
