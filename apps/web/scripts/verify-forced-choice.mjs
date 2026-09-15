@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 /**
- * Drive the BUILT app in a real Chrome and prove the 2026-09-14 report is fixed:
- * WHEN THE GAME SETTLES A CHOICE WITHOUT ASKING, THE PLAYER IS TOLD WHAT IT
- * CHOSE — and the announcement is still on screen when a human looks.
+ * Drive the BUILT app in a real Chrome and prove the two 2026-09-14 reports are
+ * fixed. BOTH are "the game did something and the player cannot tell what", and
+ * both are answered by one mechanism, so one rig photographs both.
  *
- * Caleb: *"I just played Banisher priest and it didnt let me choose a creature
- * to banish"* … *"Even so, it should show that choice being made so the player
- * understands what has happened."*
+ * **Part 1 — the settled choice.** Caleb: *"I just played Banisher priest and it
+ * didnt let me choose a creature to banish"* … *"Even so, it should show that
+ * choice being made so the player understands what has happened."*
+ *
+ * **Part 2 — the held spell's target.** Caleb: *"When the computer plays Doom
+ * Blade when Im playing them, it does not show me clearly what the target is
+ * when it displays on screen - it should show their target(s) for things along
+ * with the card they are casting."*
  *
  * ## Why this is a rig and not a unit test
  *
@@ -74,6 +79,8 @@ const WATCH_SAMPLE_MS = 60;
 
 /** Card ids, from the pool. Named so a pool re-id fails loudly here. */
 const PLAINS = 'bc71ebf6-2056-41f7-be35-b2e5c34afa99';
+const SWAMP = '56719f6a-1a6c-4c0a-8d21-18f7d7350b68';
+const DOOM_BLADE = '59e7f2ae-4535-4191-98be-3e65b6b2befa';
 const FOREST = 'b34bb2dc-c1af-4d77-b0b3-a0fb342a5fc6';
 const BANISHER_PRIEST = '9f560b83-32d4-4bb4-a956-8f5db18599db';
 const GRIZZLY_BEARS = '14c8f55d-d177-4c25-a931-ebeb9e6062a0';
@@ -214,6 +221,26 @@ async function sample(page) {
       hold: count('.spell-hold'),
       holdTargets: named('.spell-hold .stack-target__name'),
       holdFaces: count('.spell-hold .card-refs--face .play-card'),
+      // What the STACK PANEL says the same object is aimed at. The hold and the
+      // panel read one producer, so a disagreement between these two is a real
+      // finding and not a rig quirk — worth printing on every miss.
+      panelTargets: named('.stack-panel .stack-target__name'),
+      holdHtml: (document.querySelector('.spell-hold')?.innerHTML ?? '').slice(0, 300),
+      // ⚠️ ON SCREEN, not merely in the DOM. A fixed, centred panel has no parent
+      // to bound it, and a real capture showed the target card clipped by the
+      // viewport with both buttons below the fold — a hold nobody can finish
+      // reading is the defect it exists to fix, wearing a new hat.
+      holdFits: (() => {
+        const el = document.querySelector('.spell-hold');
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return {
+          top: Math.round(r.top),
+          bottom: Math.round(r.bottom),
+          viewport: window.innerHeight,
+          inside: r.top >= 0 && r.bottom <= window.innerHeight,
+        };
+      })(),
       logLines: [...document.querySelectorAll('.game-log li, .game-log__line')]
         .map((e) => (e.textContent ?? '').trim())
         .slice(-14),
@@ -222,8 +249,33 @@ async function sample(page) {
   });
 }
 
+/** The two arrangements, as DATA — one row per report this rig photographs. */
+const ARRANGEMENTS = Object.freeze({
+  forcedChoice: Object.freeze({
+    you: { id: 'rig-priest', name: 'Rig Priest', cards: [
+      { cardId: BANISHER_PRIEST, count: 4 },
+      { cardId: PLAINS, count: 56 },
+    ] },
+    them: { id: 'rig-bears', name: 'Rig Bears', cards: [
+      { cardId: GRIZZLY_BEARS, count: 4 },
+      { cardId: FOREST, count: 56 },
+    ] },
+  }),
+  // The computer needs removal to cast AT something, and you need the something.
+  spellHold: Object.freeze({
+    you: { id: 'rig-bodies', name: 'Rig Bodies', cards: [
+      { cardId: GRIZZLY_BEARS, count: 4 },
+      { cardId: FOREST, count: 56 },
+    ] },
+    them: { id: 'rig-removal', name: 'Rig Removal', cards: [
+      { cardId: DOOM_BLADE, count: 4 },
+      { cardId: SWAMP, count: 56 },
+    ] },
+  }),
+});
+
 /** Seed two saved decks through the app's OWN persistence, then start Solo. */
-async function startArrangedSoloGame(page, url) {
+async function startArrangedSoloGame(page, url, arrangement) {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('button.nav-link', { timeout: APP_SHELL_WAIT_MS });
   await page.evaluate(
@@ -236,24 +288,8 @@ async function startArrangedSoloGame(page, url) {
       }
     },
     [
-      {
-        id: 'rig-priest',
-        name: 'Rig Priest',
-        updatedAt: new Date().toISOString(),
-        cards: [
-          { cardId: BANISHER_PRIEST, count: 4 },
-          { cardId: PLAINS, count: 56 },
-        ],
-      },
-      {
-        id: 'rig-bears',
-        name: 'Rig Bears',
-        updatedAt: new Date().toISOString(),
-        cards: [
-          { cardId: GRIZZLY_BEARS, count: 4 },
-          { cardId: FOREST, count: 56 },
-        ],
-      },
+      { ...arrangement.you, updatedAt: new Date().toISOString() },
+      { ...arrangement.them, updatedAt: new Date().toISOString() },
     ],
   );
   await page.reload({ waitUntil: 'domcontentloaded' });
@@ -261,22 +297,26 @@ async function startArrangedSoloGame(page, url) {
   await clickButton(page, /^Play$/);
   await clickButton(page, /Solo \(vs the computer\)/);
   await page.waitForSelector('select', { timeout: UI_TRANSITION_WAIT_MS });
-  const picked = await page.evaluate(() => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
-    const selects = [...document.querySelectorAll('select')];
-    const pick = (select, match) => {
-      const option = [...select.options].find((o) => match.test(o.textContent ?? ''));
-      if (!option) return null;
-      setter.call(select, option.value);
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-      return option.textContent;
-    };
-    return {
-      a: pick(selects[0], /Rig Priest/),
-      b: pick(selects[1], /Rig Bears/),
-      options: [...(selects[0]?.options ?? [])].map((o) => o.textContent),
-    };
-  });
+  const picked = await page.evaluate(
+    (yourName, theirName) => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      const selects = [...document.querySelectorAll('select')];
+      const pick = (select, name) => {
+        const option = [...select.options].find((o) => (o.textContent ?? '').startsWith(name));
+        if (!option) return null;
+        setter.call(select, option.value);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        return option.textContent;
+      };
+      return {
+        a: pick(selects[0], yourName),
+        b: pick(selects[1], theirName),
+        options: [...(selects[0]?.options ?? [])].map((o) => o.textContent),
+      };
+    },
+    arrangement.you.name,
+    arrangement.them.name,
+  );
   if (!picked.a || !picked.b) {
     throw new Error(`the seeded decks are not in the menu: ${JSON.stringify(picked.options)}`);
   }
@@ -410,6 +450,93 @@ async function watchForTheAnnouncement(page) {
   return { seen: false, first, best, sample: await sample(page) };
 }
 
+/**
+ * PART 2's driving step: deploy a creature and then do nothing but advance, so
+ * the computer has something to kill and the time to kill it.
+ *
+ * It NEVER attacks — an attacking creature is tapped and the AI's removal is
+ * less interesting aimed at a tapped body — and it never dismisses the hold.
+ */
+async function driveForARemovalSpell(page) {
+  return page.evaluate(() => {
+    const hand = [...document.querySelectorAll('.play-hand')].find(
+      (h) => !h.className.includes('hidden'),
+    );
+    const playable = hand ? [...hand.querySelectorAll('button.play-card--actionable')] : [];
+    const label = (b) => (b.getAttribute('title') ?? b.getAttribute('aria-label') ?? b.textContent ?? '');
+    const bear = playable.find((b) => /Grizzly Bears/i.test(label(b)));
+    const land = playable.find((b) => /Forest/i.test(label(b)));
+    if (bear) {
+      bear.click();
+      return { did: 'play-creature' };
+    }
+    if (land) {
+      land.click();
+      return { did: 'play-land' };
+    }
+    const rematch = [...document.querySelectorAll('button')].find(
+      (b) => /^Rematch/.test(b.textContent?.trim() ?? '') && !b.disabled,
+    );
+    if (rematch) {
+      rematch.click();
+      return { did: 'rematch' };
+    }
+    const keep = [...document.querySelectorAll('button')].find(
+      (b) => /^Keep \(/.test(b.textContent?.trim() ?? '') && !b.disabled,
+    );
+    if (keep) {
+      keep.click();
+      return { did: 'keep' };
+    }
+    const next = [...document.querySelectorAll('button')].find(
+      (b) =>
+        /Pass \/ advance|Pass priority|No blocks|^Confirm|Skip/.test(b.textContent ?? '') &&
+        !b.disabled,
+    );
+    if (next) {
+      next.click();
+      return { did: 'advance' };
+    }
+    return { did: 'nothing' };
+  });
+}
+
+/**
+ * Play until the opponent's spell is HELD on screen with a target under it.
+ *
+ * ⚠️ "Let it resolve" and "Keep looking" are deliberately absent from the driver
+ * above: the hold is the thing being photographed, so a driver that clicks
+ * through it is rushing past what it came to see (the combat rig's own scar).
+ */
+async function reachAHeldSpell(page) {
+  const spent = { creatures: 0, lands: 0, advances: 0, rematches: 0, holdFrames: 0 };
+  // The FIRST hold seen, kept even when it carries no target: a miss that can
+  // only say "never" is a miss nobody can debug. This is what the three earlier
+  // rigs in this repo could not do.
+  let firstHold = null;
+  const deadline = Date.now() + DRIVE_BUDGET_MS;
+  for (let step = 0; step < DRIVE_STEPS && Date.now() < deadline; step++) {
+    const before = await sample(page);
+    if (before.hold > 0) {
+      spent.holdFrames += 1;
+      if (!firstHold) firstHold = before;
+      if (before.holdTargets.length > 0) return { reached: true, spent, at: before };
+      // A held spell with NO target is a real, correct state (a cantrip), and
+      // the rig must not mistake it for the answer. Wait for a targeted one.
+    }
+    const acted = await driveForARemovalSpell(page);
+    if (acted.did === 'play-creature') spent.creatures += 1;
+    if (acted.did === 'play-land') spent.lands += 1;
+    if (acted.did === 'advance') spent.advances += 1;
+    if (acted.did === 'rematch') spent.rematches += 1;
+    await sleep(DRIVE_TICK_MS);
+  }
+  return { reached: false, why: 'ran out of steps', spent, firstHold, last: await sample(page) };
+}
+
+/** `--only=forcedChoice|spellHold` re-runs one half without paying for the other. */
+const ONLY = (process.argv.find((a) => a.startsWith('--only=')) ?? '').split('=')[1] ?? '';
+
 async function main() {
   const chrome = findChrome();
   if (!chrome) {
@@ -425,7 +552,8 @@ async function main() {
     const page = await browser.newPage();
     await page.setViewport(VIEWPORT);
 
-    await startArrangedSoloGame(page, preview.url);
+    if (ONLY !== 'spellHold') {
+    await startArrangedSoloGame(page, preview.url, ARRANGEMENTS.forcedChoice);
     const run = await reachTheCast(page);
     console.log(`  drive: ${JSON.stringify(run.spent)}`);
     if (!run.reached) {
@@ -471,6 +599,41 @@ async function main() {
       );
       await shot(page, 'forced-choice-announced.png');
       console.log(`  board: ${s.status}`);
+    }
+    }
+
+    if (ONLY === 'forcedChoice') return;
+    // --- PART 2: the opponent's removal spell, held WITH its target ----------
+    console.log('');
+    console.log('part 2 - the opponent Doom Blade, held with its target');
+    await startArrangedSoloGame(page, preview.url, ARRANGEMENTS.spellHold);
+    const held = await reachAHeldSpell(page);
+    console.log(`  drive: ${JSON.stringify(held.spent)}`);
+    if (!held.reached) {
+      check('reached an opponent spell held with a target', false, held.why);
+      console.log(`  first hold seen: ${JSON.stringify(held.firstHold)}`);
+      console.log(`  last: ${JSON.stringify(held.last)}`);
+      await shot(page, 'never-held.png');
+    } else {
+      const h = held.at;
+      check('reached an opponent spell held with a target', true, `.spell-hold ×${h.hold}`);
+      check(
+        'the hold NAMES what the spell is aimed at',
+        h.holdTargets.some((n) => /Grizzly Bears/i.test(n)),
+        JSON.stringify(h.holdTargets),
+      );
+      check(
+        'and draws it as a CARD, not a name string',
+        h.holdFaces > 0,
+        `faces=${h.holdFaces}`,
+      );
+      check(
+        'the whole hold is ON SCREEN — target and buttons included',
+        h.holdFits?.inside === true,
+        JSON.stringify(h.holdFits),
+      );
+      await shot(page, 'spell-hold-with-target.png');
+      console.log(`  board: ${h.status}`);
     }
   } catch (error) {
     console.error(`could not run: ${error instanceof Error ? error.message : String(error)}`);

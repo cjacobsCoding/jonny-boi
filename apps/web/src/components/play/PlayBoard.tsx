@@ -2461,15 +2461,23 @@ function SpellHoldCard({
       <span className="spell-hold__who">
         {opponentName} {HOLD_KINDS[hold.kind].announce}:
       </span>
-      <CardHover cardId={cardId}>
-        <CardFace size="full" cardId={cardId} name={name} explanation={explanation} />
-      </CardHover>
+      {/* A ROW, not a column, and that is a fix rather than a preference: with
+          the target stacked underneath, a real capture showed the target card
+          clipped by the bottom of the viewport and BOTH buttons off screen. The
+          spell and what it is aimed at are one picture and belong side by side —
+          which is also how a table reads it. `wrap` returns them to a column on
+          a narrow window, where there is height to spare. */}
+      <div className="spell-hold__body">
+        <CardHover cardId={cardId}>
+          <CardFace size="full" cardId={cardId} name={name} explanation={explanation} />
+        </CardHover>
+        {/* Shown as CARD FACES, not a name string: §0 is explicit that a target
+            must be "the actual card(s)". The list renders nothing when the spell
+            targets nothing, and names a PLAYER target in words because a seat is
+            not a card (`STACK_TARGET_KINDS_TABLE.player.hasFace`). */}
+        <CardReferenceList targets={targets} presentation="face" label="Targeting" />
+      </div>
       <span className="spell-hold__name">{name}</span>
-      {/* Shown as CARD FACES, not a name string: §0 is explicit that a target
-          must be "the actual card(s)". The list renders nothing when the spell
-          targets nothing, and names a PLAYER target in words because a seat is
-          not a card (`STACK_TARGET_KINDS_TABLE.player.hasFace`). */}
-      <CardReferenceList targets={targets} presentation="face" label="Targeting" />
       <span className="spell-hold__hint">
         Hover the card to keep reading it — it resolves on its own when you stop.
       </span>

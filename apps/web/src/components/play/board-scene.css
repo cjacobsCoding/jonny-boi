@@ -280,6 +280,31 @@
   }
 }
 
+/* The spell and its target, side by side.
+ *
+ * ⚠️ The height cap is load-bearing, not decoration. `.spell-hold` is
+ * `position: fixed` and centred, so it has no parent to be bounded by: with a
+ * target card added underneath, a real 1440x1100 capture showed the target
+ * clipped by the viewport and both buttons off screen entirely. The face is
+ * capped against the VIEWPORT, which is the only thing that actually bounds it.
+ */
+.spell-hold {
+  max-height: calc(100vh - var(--space-6, 2rem));
+}
+
+.spell-hold__body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.spell-hold__body .card-face--full {
+  max-height: min(56vh, 460px);
+}
+
 .spell-hold__who {
   font-size: var(--text-sm);
   font-weight: 700;

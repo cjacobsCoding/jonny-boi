@@ -118,7 +118,40 @@ describe('the opponent’s held spell shows what it is aimed at', () => {
   });
 
   it('it keeps role="status" — the harness reads role="dialog" as a parked question', () => {
-    expect(playBoard).toMatch(/className="spell-hold"[\s\S]{0,1200}role="status"/);
+    expect(playBoard).toMatch(/className="spell-hold"[\s\S]{0,1600}role="status"/);
+  });
+
+  /**
+   * MEASURED 2026-09-14 — and this is a real defect the rig found, not a
+   * hypothetical. The hold was announcing a Doom Blade whose log already read
+   * "Doom Blade resolves. / Grizzly Bears dies.", so there was no stack object
+   * left to name a target from. Two causes, one shape, and both are §10's:
+   *
+   *  1. the auto-passer's `shouldStop` predicate never asked the spell-hold rule
+   *     (only the combat-hold one), and a gate outside `autoAdvancePriority`'s
+   *     loop cannot stop it partway;
+   *  2. the arming effect booked `announced` immediately, so when the predicate
+   *     DID ask, it got `alreadyAnnounced` — the announcement defeating its own
+   *     gate. `releaseCombatHold` already writes down why booking belongs on
+   *     RELEASE.
+   */
+  it('the hold gates the walk from INSIDE the stop predicate', () => {
+    expect(playView, 'one place the rule is asked').toContain('const spellHoldFor = useCallback(');
+    expect(playView, 'and the walker asks it').toMatch(
+      /autoAdvancePriority\([\s\S]{0,600}spellHoldFor\(candidate\)\.kind === 'hold'/,
+    );
+  });
+
+  it('the hold is BOOKED on release, never on arm — or it defeats its own gate', () => {
+    const arming = playView.slice(
+      playView.indexOf('const decision = spellHoldFor(session);'),
+      playView.indexOf('const releaseHold = useCallback('),
+    );
+    expect(arming.length, 'the arming effect was found').toBeGreaterThan(0);
+    expect(arming, 'arming must not book the announcement').not.toContain('announcedRef.current.add');
+    expect(playView, 'releasing must').toMatch(
+      /const releaseHold = useCallback\([\s\S]{0,900}announcedRef\.current\.add/,
+    );
   });
 });
 

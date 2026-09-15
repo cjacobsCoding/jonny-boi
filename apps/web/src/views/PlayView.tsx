@@ -878,47 +878,96 @@ function LocalPlay({
   const announcedRef = useRef<Set<InstanceId>>(new Set());
   const holdTurnRef = useRef<{ turn: number; spent: number }>({ turn: 0, spent: 0 });
 
+  /**
+   * THE ONE PLACE the spell-hold rule is asked — the arming effect below AND the
+   * walker's own stop predicate.
+   *
+   * ⚠️ MEASURED 2026-09-14, and it is why this became a callback. A rig drove a
+   * real game to a real opponent Doom Blade and sampled the hold. The card was
+   * on screen — and the GAME LOG above it already read:
+   *
+   * ```
+   * Computer casts Doom Blade. / Doom Blade resolves. / Grizzly Bears dies.
+   * ```
+   *
+   * The hold was announcing a spell that had ALREADY RESOLVED, so it had no
+   * stack object left to read a target off, which is exactly the reported
+   * symptom ("it does not show me clearly what the target is"). The cause is
+   * §10's, verbatim: the effect-level `if (hold …) return;` reads the PREVIOUS
+   * render's `hold`, and `autoAdvancePriority` walks many priority windows
+   * inside ONE effect — so a gate outside the loop cannot stop it partway. The
+   * combat hold already learned this and gates inside `shouldStop`; UX-16 never
+   * did, and the defect stayed invisible because the announce CARD survives on
+   * its own state even after the object is gone.
+   */
+  const spellHoldFor = useCallback(
+    (candidate: GameSession): ReturnType<typeof spellHoldDecision> => {
+      const booked = holdTurnRef.current;
+      const spent = booked.turn === candidate.state.turnNumber ? booked.spent : 0;
+      // The TOP of the stack, through lane A's own producer — so "is this an
+      // activated ability or a trigger?" is answered in exactly one place, the
+      // place the stack panel answers it (rule 12). The resolvers are trivial
+      // because this path needs the kind and the controller, not the words.
+      const top =
+        stackEntries(candidate.state.stack, { nameOf: () => '', faceOf: () => null })[0] ?? null;
+      return spellHoldDecision(
+        {
+          viewer: revealed ?? candidate.state.priorityPlayer,
+          stackTop: top,
+          viewerWillStop: shouldStopForPriority(stopContextFor(candidate), stops),
+          announced: announcedRef.current,
+          holdsThisTurn: spent,
+          gameOver: candidate.gameOver,
+        },
+        SPELL_HOLD_CONFIG,
+      );
+    },
+    [revealed, stops],
+  );
+
   useEffect(() => {
     if (phase.kind !== 'play' || !session) return;
     if (hold) return; // one at a time; the timer below is what ends it
-    const turnNumber = session.state.turnNumber;
-    // The per-turn budget resets with the turn, not with the game.
-    if (holdTurnRef.current.turn !== turnNumber) holdTurnRef.current = { turn: turnNumber, spent: 0 };
-    // The TOP of the stack, through lane A's own producer — so "is this an
-    // activated ability or a trigger?" is answered in exactly one place, the
-    // place the stack panel answers it (rule 12). The resolvers are trivial
-    // because this path needs the kind and the controller, not the words.
-    const top =
-      stackEntries(session.state.stack, { nameOf: () => '', faceOf: () => null })[0] ?? null;
-    const decision = spellHoldDecision(
-      {
-        viewer: revealed ?? session.state.priorityPlayer,
-        stackTop: top,
-        viewerWillStop: shouldStopForPriority(stopContextFor(session), stops),
-        announced: announcedRef.current,
-        holdsThisTurn: holdTurnRef.current.spent,
-        gameOver: session.gameOver,
-      },
-      SPELL_HOLD_CONFIG,
-    );
+    const decision = spellHoldFor(session);
     if (decision.kind !== 'hold') return;
-    announcedRef.current.add(decision.hold.instanceId);
-    holdTurnRef.current = { turn: turnNumber, spent: holdTurnRef.current.spent + 1 };
     setHoldPressure(NO_HOLD_PRESSURE);
     setHold(decision.hold);
-  }, [phase, session, stops, hold, revealed]);
+  }, [phase, session, hold, spellHoldFor]);
+
+  /**
+   * End the hold — the timer, "Let it resolve", and nothing else.
+   *
+   * ⚠️ THE BOOKING HAPPENS HERE, ON RELEASE, NEVER ON ARM, and that is the whole
+   * repair. `releaseCombatHold` already records the reason in its own words:
+   * *"while the beat is running the walker's predicate must still answer 'stop
+   * here', because that predicate — not the effect's early return — is what
+   * holds the line INSIDE the walk."*
+   *
+   * MEASURED: booking `announced` at ARM made the arming effect DEFEAT ITS OWN
+   * GATE. Both effects run in one commit; the arming effect mutated the ref, and
+   * the auto-passer's predicate — which asks the same rule — then got
+   * `alreadyAnnounced` and walked straight on. The rig's evidence was a hold
+   * card sitting above a log that already read "Doom Blade resolves / Grizzly
+   * Bears dies", with no stack object left to name a target from.
+   */
+  const releaseHold = useCallback((): void => {
+    if (!hold) return;
+    const turnNumber = session?.state.turnNumber ?? holdTurnRef.current.turn;
+    // The per-turn budget resets with the turn, not with the game.
+    if (holdTurnRef.current.turn !== turnNumber) holdTurnRef.current = { turn: turnNumber, spent: 0 };
+    announcedRef.current.add(hold.instanceId);
+    holdTurnRef.current = { turn: turnNumber, spent: holdTurnRef.current.spent + 1 };
+    setHold(null);
+  }, [hold, session]);
 
   // The timer. Re-armed whenever the pressure changes, so moving the pointer
   // onto the card lengthens the hold that is already running rather than
   // needing a second one.
   useEffect(() => {
     if (!hold) return undefined;
-    const handle = window.setTimeout(
-      () => setHold(null),
-      holdDurationMs(holdPressure, SPELL_HOLD_CONFIG),
-    );
+    const handle = window.setTimeout(releaseHold, holdDurationMs(holdPressure, SPELL_HOLD_CONFIG));
     return () => window.clearTimeout(handle);
-  }, [hold, holdPressure]);
+  }, [hold, holdPressure, releaseHold]);
 
   /**
    * §3.143 / §10 — HOLDING COMBAT ON SCREEN.
@@ -1138,12 +1187,17 @@ function LocalPlay({
       // blockers to the next turn's main phase in one synchronous burst and
       // there is no frame in which `state.combat.blockersDeclared` is true for
       // the board to render from (§10).
-      combatHoldFor(candidate).kind === 'hold',
+      combatHoldFor(candidate).kind === 'hold' ||
+      // …and the SAME gate for UX-16, which never had one. Measured: the hold
+      // was announcing a Doom Blade whose log already said "resolves" and whose
+      // victim already said "dies", so it had no stack object left to name a
+      // target from — see `spellHoldFor`.
+      spellHoldFor(candidate).kind === 'hold',
     );
     // Identity-equal when nothing was skipped, so React bails out and this cannot
     // become a render loop.
     if (advanced !== session) setSession(advanced);
-  }, [phase, session, stops, hold, combatHold, forcedChoice, combatHoldFor]);
+  }, [phase, session, stops, hold, combatHold, forcedChoice, combatHoldFor, spellHoldFor]);
 
   // --- the computer's seat -------------------------------------------------------
   //
@@ -1358,7 +1412,7 @@ function LocalPlay({
         hold={hold}
         onHoldPointer={(over) => setHoldPressure((p) => pointerPressure(p, over))}
         onHoldExtend={() => setHoldPressure(extendPressure)}
-        onHoldRelease={() => setHold(null)}
+        onHoldRelease={releaseHold}
         combatHold={combatHold ? combatHold.hold : null}
         onCombatHoldSkip={releaseCombatHold}
         forcedChoice={forcedChoice}
