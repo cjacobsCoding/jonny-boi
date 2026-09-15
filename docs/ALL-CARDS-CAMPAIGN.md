@@ -28,6 +28,26 @@ states the rule it exists to protect:
 That rule is the whole reason this app can be trusted, so the campaign raises the number by
 **implementing mechanics**, never by loosening acceptance.
 
+### 1a. ⚠️ The rule has two directions, and only one has ever been guarded
+
+*"Almost-right"* has been read here as **weaker than printed** — a card whose ability was approximated
+away. Every guard in the campaign checks that direction. §3.152 found the other one, live:
+
+> Scryfall stamps a bare `"Hexproof"` beside `"Hexproof from"` on all 14 hexproof-from cards, and the
+> keyword sweep mapped the bare word straight to `hexproof: true` **before any evidence check**. The
+> moment `hexproof from black` compiled, Garruk's Harbinger, Knight of Grace, Sporeweb Weaver and
+> eleven others would have entered the pool **untargetable by every opponent spell of every colour.**
+
+**A card playing STRONGER than printed corrupts an A/B verdict exactly as much as one playing weaker,
+and `'complete'` says nothing about either** — the compiler's verdict is *"every printed ability is
+implemented"*, not *"nothing unprinted was implemented too"*. Nothing in the acceptance gate looks
+for a card that gained something.
+
+So every lane's sabotage pass owes a check in **both** directions, and the question to ask of a new
+keyword or flag is not only *did I implement what it prints* but **did anything set a flag this card
+does not print**. The fix in §3.152 is the shape to copy: a closed `KEYWORD_NARROWED_BY_PAYLOAD` row
+consulted **before** the flag branch, so a payload keyword can never fall through to its bare form.
+
 ## 2. The trap at the top of the table
 
 The largest row — *"a rules template the compiler does not recognize yet"*, **10,801 cards, 31% of
