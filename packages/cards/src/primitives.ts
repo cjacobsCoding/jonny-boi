@@ -53,6 +53,8 @@ import {
   effectivePower,
   turnFactHolds,
   isCreature,
+  // §3.149 — "if it WAS a creature card", asked of the definition by type word.
+  hasType,
   isLegalTarget,
   matchesCardFilter,
   isPlaneswalker,
@@ -83,6 +85,9 @@ import {
   moveOwnedCard,
   restrictionParam,
   firstPermanentTarget,
+  // §3.149 — the graveyard-card target is looked up wherever it is, not on the
+  // battlefield, so the exile reads the same instance the aim named.
+  firstTargetInstance,
   firstPlayerTarget,
   playersForParam,
   intParam,
@@ -1176,6 +1181,49 @@ export const exileGraveyard: EffectPrimitive = (ctx) => {
 };
 
 /**
+ * §3.149 — `exileTargetCardFromGraveyard`: "**Exile target card from a
+ * graveyard**" (62 cards print it), with the optional printed rider "**If it
+ * was a creature card, …**" (6 more).
+ *
+ * The rider is the whole reason this is one primitive rather than two chained
+ * effects. "If it **was**" is past tense on purpose: by the time the condition
+ * is asked the card is already in exile, and CR 608.2 resolves the sentence in
+ * printed order — so the type has to be read BEFORE the move and remembered.
+ * Splitting it into "exile" then "if the target was a creature" would ask the
+ * question of a card that has already left, which is the shape of a rule that
+ * quietly never fires.
+ *
+ * Params:
+ *  - `ifWasType`    — the printed card type the rider tests ('creature'). Absent
+ *                     ⇒ no rider, and the plain exile is the whole effect.
+ *  - `effects`      — what the rider runs, as ordinary refs compiled by the
+ *                     ordinary effect rules, so the rider can only ever do
+ *                     things the engine already implements.
+ *
+ * A target that has left the graveyard between announcement and resolution
+ * exiles nothing AND runs no rider — the card fizzles as CR 608.2b says, rather
+ * than paying out for a card it never exiled.
+ */
+export const exileTargetCardFromGraveyard: EffectPrimitive = (ctx) => {
+  const card = firstTargetInstance(ctx);
+  if (!card) return;
+  // Which graveyard it is actually in right now — the owner's, which is the
+  // only zone `moveOwnedCard` can splice it out of.
+  const owner = PLAYER_IDS.find((player) =>
+    ctx.state.players[player].graveyard.some((c) => c.instanceId === card.instanceId),
+  );
+  if (owner === undefined) return;
+  // Read the type BEFORE the move; see the doc comment.
+  const wasType = strParam(ctx, 'ifWasType');
+  const matched = wasType !== undefined && hasType(card.def, wasType as CardType);
+  const moved = moveOwnedCard(ctx, owner, card.instanceId, 'graveyard', 'exile');
+  if (!moved) return;
+  if (!matched) return;
+  const refs = nestedEffectRefs(ctx);
+  if (refs.length > 0) ctx.enqueueEffects(refs);
+};
+
+/**
  * `regenerate` — CR 701.15: "The next time this permanent would be destroyed
  * this turn, instead tap it, remove it from combat, and remove all damage from
  * it." ("{B}: Regenerate this creature", "{1}{G}: Regenerate ~".)
@@ -1916,6 +1964,8 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   preventDamage,
   addCounters,
   exileGraveyard,
+  // §3.149 — "Exile target card from a graveyard[. If it was a creature card, …]"
+  exileTargetCardFromGraveyard,
   regenerate,
   proliferate,
   attachToTarget,

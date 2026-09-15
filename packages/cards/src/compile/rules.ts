@@ -225,6 +225,8 @@ const PERMANENT_TARGET: TargetRestriction = 'permanent';
  */
 const GRAVEYARD_SPELL_TARGET: TargetRestriction = 'instantOrSorceryInYourGraveyard';
 const CREATURE_CARD_IN_YOUR_GRAVEYARD_TARGET: TargetRestriction = 'creatureCardInYourGraveyard';
+/** §3.149 — "target card from **a** graveyard": either player's, any card type. */
+const CARD_IN_ANY_GRAVEYARD_TARGET: TargetRestriction = 'cardInAnyGraveyard';
 
 
 /**
@@ -4819,6 +4821,54 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const kind = inertCounterKind(match[2] ?? '');
       if (amount === null || amount <= 0 || kind === null) return null;
       return effects({ primitive: 'addCounters', params: { amount, kind, self: true } });
+    },
+  },
+  {
+    /**
+     * "Exile target card from a graveyard." — 62 cards print it (Crypt Creeper,
+     * Relic of Progenitus, Scavenging Ooze) — with the optional printed rider
+     * "**If it was a creature card, …**".
+     *
+     * ONE rule for both sentences, because "it" is the card the FIRST sentence
+     * exiled and "was" is past tense: the type has to be read before the move.
+     * A standalone rider rule would be aimed at whatever target happened to be
+     * around, which is the trap `put-counters-then-grant-keyword` documents for
+     * the same reason.
+     *
+     * The rider's body goes through the ordinary effect rules TARGET-FREE, so it
+     * can only do what the engine already implements and a body needing a chosen
+     * target is refused rather than compiled into a silent no-op. Scavenging
+     * Ooze's body ("put a +1/+1 counter on ~ and you gain 1 life") rides the
+     * existing `effect-and-you-effect` conjunction.
+     *
+     * ⚠️ ONLY the "creature card" rider is read. "If it was a land card", "if it
+     * was an instant or sorcery card" and the "…, you gain 1 life" tails that
+     * are NOT gated on a type are different sentences with different meanings,
+     * and they keep reporting rather than being widened into this one.
+     */
+    id: 'exile-target-card-from-graveyard',
+    description:
+      '"Exile target card from a graveyard[. If it was a creature card, EFFECT]" (Crypt Creeper, Scavenging Ooze)',
+    pattern: /^exile target card from a graveyard(?:\. if it was a creature card, (.+))?$/,
+    needsChosenTarget: true,
+    build(match, ctx) {
+      const rider = match[1];
+      if (rider === undefined) {
+        return effects({
+          primitive: 'exileTargetCardFromGraveyard',
+          params: { targets: CARD_IN_ANY_GRAVEYARD_TARGET },
+        });
+      }
+      const body = ctx.compileEffectClause(rider, { targetFree: true });
+      if (body === null || body.length === 0) return null;
+      return effects({
+        primitive: 'exileTargetCardFromGraveyard',
+        params: {
+          targets: CARD_IN_ANY_GRAVEYARD_TARGET,
+          ifWasType: 'creature',
+          effects: [...body],
+        },
+      });
     },
   },
 ]);

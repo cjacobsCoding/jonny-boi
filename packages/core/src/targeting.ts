@@ -223,6 +223,21 @@ export type TargetRestriction =
    */
   | 'creatureCardInYourGraveyard'
   /**
+   * §3.149 — "target card from **a** graveyard" (Scavenging Ooze, Crypt
+   * Creeper, Relic of Progenitus; 62 cards print it).
+   *
+   * Deliberately the WIDEST graveyard aim in the union, and every widening is
+   * printed: "**a** graveyard" is either player's, not "your" (its two siblings
+   * above are scoped and stay scoped), and "**card**" is any card, not a
+   * creature card. That is why it needs no `controller` — unlike every
+   * "your graveyard" restriction, this one does not depend on who is acting, so
+   * it offers the same set to either player.
+   *
+   * Hexproof/shroud/protection do not apply, for the same RULE reason its
+   * siblings note: a card in a graveyard is not a permanent (CR 110.1).
+   */
+  | 'cardInAnyGraveyard'
+  /**
    * "target instant or sorcery spell" — Fork, Reverberate, Narset's Reversal.
    *
    * Its own restriction rather than a flavour of `'spell'` because the two are
@@ -407,6 +422,7 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'permanent' ||
     value === 'instantOrSorceryInYourGraveyard' ||
     value === 'creatureCardInYourGraveyard' ||
+    value === 'cardInAnyGraveyard' ||
     value === 'instantOrSorcerySpell' ||
     value === 'triggeredAbilityYouControl' ||
     value === 'instantOrSorcerySpellYouControl' ||
@@ -470,6 +486,8 @@ const TARGET_RESTRICTION_MEMBERS = {
   permanent: true,
   instantOrSorceryInYourGraveyard: true,
   creatureCardInYourGraveyard: true,
+  // §3.149 — "target card from a graveyard" (Scavenging Ooze).
+  cardInAnyGraveyard: true,
   instantOrSorcerySpell: true,
   triggeredAbilityYouControl: true,
   creatureOnBattlefieldOrInGraveyard: true,
@@ -619,6 +637,17 @@ export function isLegalTarget(
       const card = yard[i] as CardInstance;
       if (card.instanceId !== target) continue;
       return isCreature(card.def);
+    }
+    return false;
+  }
+  // §3.149 — "target card from A graveyard": either player's, any card type.
+  // No `controller` test, because the printed line does not scope by actor.
+  if (restriction === 'cardInAnyGraveyard') {
+    for (const player of PLAYER_IDS) {
+      const yard = state.players[player].graveyard;
+      for (let i = 0; i < yard.length; i++) {
+        if ((yard[i] as CardInstance).instanceId === target) return true;
+      }
     }
     return false;
   }
@@ -937,6 +966,16 @@ function enumerateTargets(
     for (let g = 0; g < graveyard.length; g++) {
       const card = graveyard[g] as CardInstance;
       if (isCreature(card.def)) out.push(card.instanceId);
+    }
+    return out;
+  }
+  // §3.149 — every card in BOTH graveyards, in a fixed player order so the
+  // offer list is deterministic (the sim replays by action index).
+  if (restriction === 'cardInAnyGraveyard') {
+    const out: (InstanceId | PlayerId)[] = [];
+    for (const player of PLAYER_IDS) {
+      const graveyard = state.players[player].graveyard;
+      for (let g = 0; g < graveyard.length; g++) out.push((graveyard[g] as CardInstance).instanceId);
     }
     return out;
   }
@@ -1303,6 +1342,8 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'a creature card in your graveyard';
     case 'instantOrSorceryInYourGraveyard':
       return 'an instant or sorcery card in your graveyard';
+    case 'cardInAnyGraveyard':
+      return 'a card in a graveyard';
     case 'creatureOnBattlefieldOrInGraveyard':
       return 'a creature on the battlefield or a creature card in a graveyard';
     case 'artifactCreature':
