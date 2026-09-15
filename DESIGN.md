@@ -2987,7 +2987,8 @@ printed card's own answer and needed no special case.
 each to its own event independently, and one entry would need a filter admitting an event matching
 EITHER side — a disjunction `ReplacementApplies` cannot state, and which as a blanket would fog the
 whole board. `replacement-lifegain.test.ts` asserts a third creature's damage to a fourth is
-**untouched**; that assertion is the one a blanket passes nothing else of.
+**untouched** — the one assertion a blanket implementation fails while passing every other test in
+the file, which is why it is there.
 
 **Does the engine distinguish CR 614 from CR 615? No — and it is right not to.** Prevention is not a
 separate layer here: it is an OUTCOME (`preventAll`, `preventUpTo`, `preventHalfRoundedUp`) on the one
