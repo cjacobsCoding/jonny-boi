@@ -434,7 +434,6 @@ try {
   let stalls = 0;
   let lastStatus = '';
   let dumped = false;
-  let noBlockShot = false;
 
   for (let i = 0; i < 6000 && !done; i++) {
     for (const [who, page] of seats) {
