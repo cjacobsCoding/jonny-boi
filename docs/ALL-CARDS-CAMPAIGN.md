@@ -375,13 +375,13 @@ Selesnya Charm, Trostani. Checked against the set itself, not taken from any lan
 
 ⚠️ **This is a COMPILER number, not a shipped-pool number.** See §5a: the app still ships 5,651.
 
-### 8a. What seven consecutive lanes proved — do not re-derive this
+### 8a. What eight consecutive lanes proved — do not re-derive this
 
 1. **Every family measured so far was an aggregation artifact** — **1.20, 1.18, 1.13, 1.08, 1.05 and
    1.04** cards per distinct shape, and one row measured at **1.00: every card in it prints a sentence
    no other card prints.** §2 is not a caveat about one row; it is the shape of the whole table.
    Measure into shapes first, and **report the smaller honest number** when it shrinks.
-2. **The row's own NAME pointed at the wrong half in five of six lanes.** That is why each lane now
+2. **The row's own NAME pointed at the wrong half in six of eight lanes.** That is why each lane now
    ships a committed `*-blame.mjs` — `activated-`, `targeted-`, `counters-`, `xvalue-`, `loyalty-`,
    `modal-`, `copysel-`. Two rows turned out to name a half that **does not exist**: `modal-blame`
    reports **MODE-ONLY = 0** and `loyalty-blame` reports **COST-unknown = 0**. A lane taking either
@@ -399,6 +399,19 @@ Selesnya Charm, Trostani. Checked against the set itself, not taken from any lan
 6. ⚠️ **A row moving barely at all is not a failed lane.** The loyalty row went 668 → 665 clauses
    while the lane gained 43 cards, and the copy row did not move at all while its lane gained 34.
    Cards come from fixing a CLASS wherever it appears; the row is where the class was *noticed*.
+7. ⚠️ **A falsification that stays green has found a HOLE, not a guard — treat it as the finding.**
+   The replacement lane gutted `effect-helpers.changeLife` and **all 21 tests stayed green** while a
+   resolving *"you gain N life"* silently stopped being doubled. Every one of those tests called
+   core's side directly, so none of them crossed the seam a card actually crosses. The sabotage was
+   supposed to prove the tests; instead it proved they were testing past the bug. Two tests were
+   added that drive the real primitive and go red with `expected 23 to be 26`. **When a sabotage does
+   not go red, do not shrug and move on — you have just learned that the thing you were about to
+   claim is unproven.**
+8. ⚠️ **Print the denominator before you believe any sweep.** That lane's first run of a check over
+   the primitive registry was **a false green over an EMPTY registry** — it passed because it
+   iterated nothing. It was caught only by printing the count, and the committed test now asserts the
+   denominator is non-zero *before* it asserts anything else. Any check shaped *"for each X, assert…"*
+   passes vacuously when X is empty, and that shape is everywhere in this campaign's tooling.
 
 > ⚠️ **The 953-card row was the §2 trap for the third time: 954 cards, 880 shapes, 1.08 cards per
 > shape.** And its NAME points at the wrong half — `xvalue-blame.mjs` shows **70% of it is a SENTENCE
