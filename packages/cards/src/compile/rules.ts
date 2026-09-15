@@ -4320,6 +4320,67 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'populate-with-token-tail',
+    description:
+      '"Populate. The token enters tapped and attacking." (Ghired, Conclave Exile) · "Populate. The token created this way gains haste. Sacrifice it at the beginning of the next end step." (Determined Iteration) — CR 701.32a plus the printed sentences ABOUT the token it made',
+    /**
+     * The same keyword action, followed by sentences that talk about the object
+     * it just created. Separate from the bare rule above only because the bare
+     * one is anchored — one rule with an optional tail would match "populate X
+     * times" with the tail empty and quietly drop the "X times".
+     *
+     * ⚠️ Every tail here is read through the vocabulary the TOKEN-COPY family
+     * already owns — `TOKEN_COPY_DELAYED_REMOVAL`, `TOKEN_COPY_GRANT_SENTENCE`
+     * and `tokenEntryWords` — and NOT through a private copy. These sentences
+     * mean the same thing on Kiki-Jiki and on Determined Iteration; two readings
+     * would drift the day one of them learns a new wording (rule 12). The params
+     * they produce are the ones `createTokenCopy` already honours, so populate
+     * gets the haste grant, the delayed sacrifice and the entry words for free.
+     *
+     * ⚠️ The GRANT stays a layer-6 grant and is NOT folded into the copy — a
+     * second copy taken of Determined Iteration's token must not inherit the
+     * haste. That distinction is `grantToCreated`'s, and reusing it is how
+     * populate inherits it rather than re-deciding it.
+     */
+    pattern: /^populate\. (.+)$/,
+    build(match) {
+      let body = `. ${(match[1] ?? '').trim()}`;
+      const params: Record<string, unknown> = { chooseCreatureTokenYouControl: true, count: 1 };
+
+      // Parsed from the END, longest-anchored first, in the SAME order
+      // `buildTokenCopy` parses them — the delayed removal is the last printed
+      // sentence, the grant the one before it.
+      const delayed = body.match(TOKEN_COPY_DELAYED_REMOVAL);
+      if (delayed) {
+        params.delayedRemoval = delayed[1] === 'exile' ? 'exile' : 'sacrifice';
+        body = body.slice(0, body.length - (delayed[0] ?? '').length);
+      }
+      const grant = body.match(TOKEN_COPY_GRANT_SENTENCE);
+      if (grant) {
+        const flag = KEYWORD_FLAGS[(grant[1] ?? '').trim()];
+        if (flag === undefined) return null;
+        params.grantKeywords = { [flag]: true };
+        if (grant[2] !== undefined) params.grantUntilEndOfTurn = true;
+        body = body.slice(0, body.length - (grant[0] ?? '').length);
+      }
+      // "The token enters tapped and attacking." (Ghired) — the same closed set
+      // of entry words a "create a TAPPED token" clause prints before the noun,
+      // read by the same function, so a wording nobody has read is REPORTED
+      // rather than silently making an untapped token.
+      const entry = body.match(TOKEN_COPY_ENTRY_SENTENCE);
+      if (entry) {
+        const words = tokenEntryWords(entry[1]);
+        if (words === null) return null;
+        if (words.tapped) params.tapped = true;
+        if (words.attacking) params.attacking = true;
+        body = body.slice(0, body.length - (entry[0] ?? '').length);
+      }
+      // Anything the closed tails did not consume is a sentence with no rule.
+      if (body.trim().length > 0) return null;
+      return effects({ primitive: 'createTokenCopy', params });
+    },
+  },
+  {
     id: 'investigate',
     description: '"Investigate" (CR 701.51) — exactly "create a Clue token", as the rules define it',
     pattern: /^investigate$/,
@@ -9798,7 +9859,20 @@ const TOKEN_COPY_DELAYED_REMOVAL =
  * the previous one created, anchored to the END of what remains.
  */
 const TOKEN_COPY_GRANT_SENTENCE =
-  /\. (?:it|they|that token|those tokens) gains? ([a-z' ]+?)( until end of turn)?$/;
+  /\. (?:it|they|that token|those tokens|the token created this way|the tokens created this way) gains? ([a-z' ]+?)( until end of turn)?$/;
+
+/**
+ * "**The token enters tapped and attacking.**" (Ghired, Conclave Exile) — the
+ * entry words printed as a trailing SENTENCE about the token that was just made,
+ * rather than as adjectives in front of the noun ("create a **tapped** token").
+ *
+ * The captured phrase goes through {@link tokenEntryWords}, the very function
+ * the in-front-of-the-noun form uses, so "tapped and attacking" means one thing
+ * in this codebase and a phrase outside that closed set is REPORTED from both
+ * spellings alike — never quietly turned into an ordinary untapped token, which
+ * would be a card playing better than printed.
+ */
+const TOKEN_COPY_ENTRY_SENTENCE = /\. (?:the|that) tokens? enters? ([a-z ]+?)$/;
 
 /** The printed words a "create … token" clause may put in front of "token". */
 interface TokenEntryWords {
