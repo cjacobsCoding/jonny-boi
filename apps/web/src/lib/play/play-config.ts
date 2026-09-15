@@ -1005,6 +1005,26 @@ export const ANNOUNCEMENT_CONFIG: AnnouncementConfig = Object.freeze({
 });
 
 /**
+ * EVERY BEAT THE ANNOUNCEMENT QUEUE READS, in one bundle — the argument
+ * `ANNOUNCEMENT_KINDS`' duration rules take.
+ *
+ * ⚠️ IT REFERENCES the three configs rather than restating their numbers, which
+ * is the whole point: the combat beat is still tuned in {@link COMBAT_HOLD_CONFIG}
+ * and the spell hold's in {@link SpellHoldConfig}, and the queue cannot drift
+ * from the beat the announcement itself was built with.
+ *
+ * Deliberately NOT typed as `announcements.ts`'s `AnnouncementBeats`: that would
+ * make this module import the one that imports it. Structural typing pins the
+ * shape at every call site anyway, and `announcements.test.ts` asserts the
+ * bundle really is these three objects and not copies of them.
+ */
+export const ANNOUNCEMENT_BEATS = Object.freeze({
+  spellHold: SPELL_HOLD_CONFIG,
+  forcedChoice: FORCED_CHOICE_CONFIG,
+  announcement: ANNOUNCEMENT_CONFIG,
+});
+
+/**
  * The two-phase cast/activate transaction (UX-3/4/5).
  *
  * The commit boundary itself is `lib/play/proposal.ts` + the session snapshot

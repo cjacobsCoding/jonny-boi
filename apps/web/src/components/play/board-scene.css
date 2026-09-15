@@ -245,12 +245,12 @@
 
 /* --- UX-16: the opponent's spell, held on screen --------------------------- */
 
+/* ⚠️ NO `position`, NO `top`/`left`, NO `z-index` — `.announce` owns all four
+ * now. This card was `position: fixed` and centred with a viewport-height cap,
+ * which is exactly how it came to cover `.reveal-banner` at `top: 12%`: the
+ * reported pair, a Goblin Guide reveal painted over by the opponent's cast.
+ * One surface mounts one announcement, so the overlap has no way to happen. */
 .spell-hold {
-  position: fixed;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 52;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -263,30 +263,13 @@
   max-width: min(92vw, 26rem);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .spell-hold {
-    animation: spell-hold-in var(--spell-hold-fade-ms) ease-out both;
-  }
-}
-
-@keyframes spell-hold-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, calc(-50% + 8px));
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%);
-  }
-}
-
 /* The spell and its target, side by side.
  *
- * ⚠️ The height cap is load-bearing, not decoration. `.spell-hold` is
- * `position: fixed` and centred, so it has no parent to be bounded by: with a
- * target card added underneath, a real 1440x1100 capture showed the target
- * clipped by the viewport and both buttons off screen entirely. The face is
- * capped against the VIEWPORT, which is the only thing that actually bounds it.
+ * ⚠️ The height cap is load-bearing, not decoration. With a target card added
+ * underneath, a real 1440x1100 capture showed the target clipped by the viewport
+ * and both buttons off screen entirely. The cap is against the VIEWPORT because
+ * `.announce--centre` is the fixed element and has no height of its own to
+ * inherit from.
  */
 .spell-hold {
   max-height: calc(100vh - var(--space-6, 2rem));
@@ -352,16 +335,11 @@
  * has a job to do.
  */
 
+/* ⚠️ NO `position`/`top`/`z-index`: `.announce--top` owns the slot. This rule
+ * and `.forced-choice` below used to declare the SAME `top` at the SAME
+ * z-index, on a stylesheet comment's promise that "the two never stand at
+ * once" — which nothing enforced and which was false. */
 .combat-hold {
-  position: fixed;
-  left: 50%;
-  /* Clears the board's status row — the same one-line clearance the opponent
-     feed names in opponent-feed.css, kept as a property here so the two are
-     obviously the same measurement if that row ever grows. */
-  --combat-hold-status-clearance: 3.9rem;
-  top: var(--combat-hold-status-clearance);
-  transform: translateX(-50%);
-  z-index: 52;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -415,26 +393,20 @@
  * Caleb, on Banisher Priest: *"it should show that choice being made so the
  * player understands what has happened."*
  *
- * Pinned to the TOP beside `.combat-hold`, and for the same reason: what it
- * describes happened on the battlefield, and a centred card like `.spell-hold`
- * would cover it. It is TALLER than the combat strip because it carries the
- * chosen card's face — the reports are explicit that a name string is not
- * enough — and it is the only thing on screen while it stands.
+ * It is TALLER than the combat strip because it carries the chosen card's face
+ * — the reports are explicit that a name string is not enough.
  *
- * ⚠️ The fade is the SPELL HOLD's, read from the same custom property, so the
- * three announcements on this surface arrive the same way. `--forced-choice-
- * fade-ms` is published by the board from `FORCED_CHOICE_CONFIG`.
+ * ⚠️ IT DECLARED THE COMBAT STRIP'S SLOT VERBATIM, and the comment that used to
+ * sit here explained that the two "never stand at once … so they share the slot
+ * rather than stacking". Nothing enforced that, and the fallback in
+ * `var(--combat-hold-status-clearance, 3.9rem)` could never have resolved
+ * anyway: a custom property declared on `.combat-hold` is inherited by ITS
+ * descendants, never by a SIBLING, so this rule always used the literal. Both
+ * facts are gone: `.announce--top` declares the clearance once and mounts one
+ * child.
  */
 
 .forced-choice {
-  position: fixed;
-  left: 50%;
-  /* The same clearance `.combat-hold` names, for the same status row. The two
-     never stand at once (a forced choice is settled at resolution, a combat
-     hold during combat), so they share the slot rather than stacking. */
-  top: var(--combat-hold-status-clearance, 3.9rem);
-  transform: translateX(-50%);
-  z-index: 52;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -445,24 +417,6 @@
   background: var(--color-surface-raised);
   box-shadow: 0 10px 32px rgb(0 0 0 / 50%);
   max-width: min(92vw, 30rem);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .forced-choice {
-    animation: forced-choice-in var(--forced-choice-fade-ms) ease-out both;
-  }
-}
-
-@keyframes forced-choice-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(-50%);
-  }
 }
 
 .forced-choice__head {
@@ -511,4 +465,95 @@
 .forced-choice__skip {
   font-size: var(--text-xs);
   padding: var(--space-1) var(--space-2);
+}
+
+/* --- THE ONE ANNOUNCEMENT SURFACE ------------------------------------------
+ *
+ * Caleb: *"we are getting some overriding overlays in app that look bad … those
+ * should reconcile somehow"*.
+ *
+ * Four announcers were four `position: fixed` elements with four hand-written
+ * slots and their own z-indexes — `.reveal-banner` at 70, the other three at 52,
+ * two of those at the identical `top`. This is the single element that replaces
+ * all four: ONE position, ONE z-index, and a SLOT chosen by the kind's row in
+ * `ANNOUNCEMENT_KINDS`. Only the head of the queue is ever mounted, so there is
+ * nothing left to stack.
+ *
+ * The z-index is the HIGHEST the old four carried (`.reveal-banner`'s 70) rather
+ * than an average: an announcement that could be covered by one of the layers
+ * the old banners outranked would be a new instance of the same defect.
+ */
+
+.announce {
+  position: fixed;
+  left: 50%;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  /* Not a click-shield: the bodies take their own clicks (dismiss, Skip, Keep
+     looking) and everything between them must stay usable, because an
+     announcement is never a prompt. */
+  pointer-events: none;
+}
+
+.announce__body,
+.announce__waiting {
+  pointer-events: auto;
+}
+
+/* The `top` slot — a strip under the board's status row.
+ *
+ * ⚠️ The clearance is declared HERE, once. It was previously declared on
+ * `.combat-hold` and read by `.forced-choice` through
+ * `var(--combat-hold-status-clearance, 3.9rem)`, which cannot work: a custom
+ * property is inherited by descendants, not by siblings, so the second rule
+ * silently used the literal fallback. Same one-line clearance the opponent feed
+ * names in opponent-feed.css. */
+.announce--top {
+  --announce-status-clearance: 3.9rem;
+  top: var(--announce-status-clearance);
+  transform: translateX(-50%);
+}
+
+/* The `centre` slot — a card big enough to read and hover (UX-16). */
+.announce--centre {
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* WHAT IS STILL COMING. A lower-ranked announcement WAITS rather than being
+   painted over or dropped, and this is the player-visible half of that promise:
+   without it a queued announcement is indistinguishable from one the game
+   swallowed, which is the defect class this whole branch has been fixing. */
+.announce__waiting {
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  color: var(--color-fg-muted);
+  font-size: var(--text-xs);
+}
+
+/* ONE entrance for every announcement, so the surface reads as one thing rather
+   than as four that happen to share a slot. `--announce-fade-ms` is published by
+   the board from `ANNOUNCEMENT_CONFIG.fadeMs`, which DERIVES from the spell
+   hold's fade — the number the two removed keyframes each read separately. */
+@media (prefers-reduced-motion: no-preference) {
+  .announce__body {
+    animation: announce-in var(--announce-fade-ms) ease-out both;
+  }
+}
+
+@keyframes announce-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
