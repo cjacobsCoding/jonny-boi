@@ -47,6 +47,22 @@ const NUMBER_WORDS: Readonly<Record<string, number>> = Object.freeze({
 export const COUNT_TOKEN = `(${Object.keys(NUMBER_WORDS).join('|')}|\\d+)`;
 
 /**
+ * A printed amount that may also be the letter **X** (DESIGN §3.149) — "~ deals
+ * X damage to each creature, where X is the number of …" (Chain Reaction),
+ * "{X}, {T}: Target player mills X cards" (Sands of Delirium).
+ *
+ * The SAME alternation as {@link COUNT_TOKEN} plus one letter, so a rule that
+ * takes an amount reads one token and the "is it a number or an X" question is
+ * asked in exactly one place (`parseAmount` in `rules.ts`). Two tokens with two
+ * parsers is how "deals X damage to each creature" would end up legal and
+ * "deals X damage to each opponent" reported.
+ *
+ * A rule keeps {@link COUNT_TOKEN} when an X genuinely cannot appear there — a
+ * characteristic-defining P/T offset, a printed counter count, a mana amount.
+ */
+export const AMOUNT_TOKEN = `(${Object.keys(NUMBER_WORDS).join('|')}|\\d+|x)`;
+
+/**
  * Read a signed integer out of printed text — "+2", "-4", "-0".
  *
  * ⚠️ THE `+ 0` IS THE WHOLE POINT, and it fixes a bug that only a bigger card

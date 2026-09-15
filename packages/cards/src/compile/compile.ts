@@ -57,6 +57,9 @@ import {
   parsePayloadKeyword,
   COST_NOUNS,
   COST_NOUN_PHRASE,
+  resolveItsReferent,
+  WHERE_X_IS_CLAUSE,
+  whereXBinding,
 } from './rules.js';
 import { mergeKeywordGrant } from '@jonny-boi/core';
 import type { HybridComponent } from '@jonny-boi/core';
@@ -65,7 +68,15 @@ import type { CastZone, KeywordFlags } from '@jonny-boi/core';
 // §3.112 — the cast-alternative family's closed kind list, for the keyword sweep.
 import { ALTERNATIVE_COST_KINDS } from '@jonny-boi/core';
 import type { AlternativeCostKind } from '@jonny-boi/core';
-import { frontFaceName, normalizeClause, parseCount, parseManaSymbols, prepareOracle, splitSentences } from './text.js';
+import {
+  frontFaceName,
+  normalizeClause,
+  parseCount,
+  parseManaSymbols,
+  prepareOracle,
+  splitCostSymbols,
+  splitSentences,
+} from './text.js';
 import type { ActivationRestriction } from '@jonny-boi/core';
 import { AS_ENTERS_PRIMITIVE } from '../choice-primitives.js';
 
@@ -525,6 +536,26 @@ function applyRules(
     // returns null — keep looking, then fall through to `missing`.
     if (contribution) return { contribution, ruleId: rule.id };
   }
+  // §3.149 — THE "WHERE X IS …" BINDING, tried only after every rule has
+  // declined, so a sentence that already compiles is untouched.
+  //
+  // This is ONE pre-pass rather than a rule per body, and that is the whole
+  // finding: the bodies — "deals X damage to each creature", "mills X cards",
+  // "prevent the next X damage" — were never missing. They are the ordinary
+  // plain-number rules, which refuse only because the word X has no value. Strip
+  // the clause that DEFINES X, put the value it names on the context, and every
+  // one of those bodies compiles unchanged. §3.147 measured this family as 74
+  // distinct bodies and left it for that reason; the bodies were the wrong unit.
+  //
+  // Guarded against recursion by the binding it sets: a sentence carrying two
+  // where-clauses binds the last and reports rather than looping.
+  if (ctx.xDerivedBinding === undefined) {
+    const bound = WHERE_X_IS_CLAUSE.exec(clause);
+    const binding = bound ? whereXBinding(bound[2] ?? '') : null;
+    if (bound && binding) {
+      return applyRules(rules, (bound[1] ?? '').trim(), { ...ctx, xDerivedBinding: binding }, targetFree);
+    }
+  }
   return null;
 }
 
@@ -857,8 +888,16 @@ function compileActivatedAbility(clause: string, assembly: Assembly, ctx: RuleCo
     activateOnly = { kind: 'sourceHasCounters', counter, min };
     effectText = effectText.slice(0, counterGate.index).trim();
   }
+  // §3.149 — "~ deals damage equal to ITS power to any target" (Spikeshot
+  // Goblin). Run AFTER the printed restrictions above are sliced off: the
+  // counter gate's own sentence contains "on it", and rewriting pronouns
+  // inside a clause that is about to be removed would be work at best and a
+  // wrong referent at worst. `resolveItsReferent` refuses to rewrite a body
+  // that names a second object ("target …"), which is what keeps it from
+  // guessing.
+  effectText = resolveItsReferent(effectText, "~'s");
 
-  const effects = ctx.compileEffectClause(effectText);
+  const effects = ctx.compileEffectClause(effectText, { xBound: (cost.xCost ?? 0) > 0 });
   if (!effects || effects.length === 0) return false;
 
   assembly.activated.push({
@@ -977,6 +1016,7 @@ const MANA_SYMBOLS = /^(?:\{[^}]+\})+$/;
 function parseActivationCost(text: string, ctx: RuleContext): ActivationCost | null {
   const cost: {
     mana?: ManaCost;
+    xCost?: number;
     tap?: boolean;
     sacrificeSelf?: boolean;
     sacrificeAnother?: CardFilter;
@@ -1019,9 +1059,21 @@ function parseActivationCost(text: string, ctx: RuleContext): ActivationCost | n
       continue;
     }
     if (MANA_SYMBOLS.test(part)) {
-      const mana = parseManaSymbols(part);
-      if (!mana) return null; // a symbol we cannot pay (hybrid, {X}, Phyrexian)
-      cost.mana = mana;
+      // §3.149 — `{X}` in an ACTIVATION cost ("{X}{R}{G}, {T}: …" — Kessig Wolf
+      // Run). The X symbols are partitioned off before the rest is parsed, for
+      // exactly the reason the CAST path does it (`partitionOtherSymbols`): X is
+      // 0 everywhere but on the stack, so the base cost every payability reader
+      // already understands stays the base cost, and the COUNT of X symbols is
+      // the multiplier the engine charges (`ActivationCost.xCost`).
+      const xCount = splitCostSymbols(part).filter((symbol) => symbol === 'X').length;
+      const rest = xCount === 0 ? part : part.replace(/\{x\}/gi, '');
+      // "{X}, {T}: …" (Sands of Delirium) prints X and nothing else — a real
+      // cost with no base mana at all, so an empty remainder is not a failure.
+      const mana = rest.trim().length === 0 ? undefined : parseManaSymbols(rest);
+      if (xCount === 0 && !mana) return null; // a symbol we cannot pay (Phyrexian, snow)
+      if (xCount > 0 && rest.trim().length > 0 && !mana) return null;
+      if (mana) cost.mana = mana;
+      if (xCount > 0) cost.xCost = xCount;
       continue;
     }
     return null; // an unrecognised cost component — report the whole line
@@ -1400,13 +1452,23 @@ export function compileCard(card: CompilableCard): CompileResult {
       assembly.matchedRules.push(ruleId);
     }
   };
-  const ctx: RuleContext = {
+  // `outerCtx` is the card's own context; `ctx` is the name every call site
+  // below uses. They are the same object — the two names exist so
+  // `compileEffectClause` can shadow `ctx` with a DERIVED context for one call
+  // (§3.149's `xBound`) while still reaching the base one.
+  const outerCtx: RuleContext = {
     card,
     compileEffectClause(
       text: string,
-      options?: { readonly targetFree?: boolean },
+      options?: { readonly targetFree?: boolean; readonly xBound?: boolean },
     ): readonly EffectRef[] | null {
       const targetFree = options?.targetFree === true;
+      // §3.149 — a derived context for this call only, so "X is bound here" is
+      // visible to the rules that read X without becoming a fact about the card.
+      // The nested compiles a rule may start from its `build` still see the
+      // unbound context, which is the safe direction: a deeper clause that meant
+      // the activation's X reports rather than reading a number nobody paid for.
+      const ctx = options?.xBound === true ? { ...outerCtx, xFromActivationCost: true } : outerCtx;
       const clause = normalizeClause(text);
       const whole = applyRules(EFFECT_RULES, clause, ctx, targetFree);
       if (whole) {
@@ -1543,6 +1605,7 @@ export function compileCard(card: CompilableCard): CompileResult {
       };
     },
   };
+  const ctx: RuleContext = outerCtx;
 
   for (const line of prepareOracle(card.oracleText, card.name)) {
     compileAbilityLine(line, assembly, ctx, isSpell);

@@ -3081,6 +3081,153 @@ whose body now compiles stops hiding its trigger — the same honest arithmetic 
 - **The TRIGGER-condition half at large** — 60 distinct shapes over 97 clauses, top shape
   `when ~ is turned face up` at 14. That is the §3.120 shape again inside the row's own third, so it
   was measured and left rather than written one condition at a time.
+### 3.149 The {X} row is the §3.120 artifact a third time — and its name points at the wrong half — ✅ done
+
+> ⚠️ **Section number claimed off a contended range.** §3.148 was the highest in `main` when this
+> work finished, and `fix/strionic-ability-copy` ALSO writes a `### 3.148`. Nothing anywhere claims
+> §3.149 (checked with the board's re-runnable remote scan). If an integrator finds a second §3.149,
+> renumber this one — the number appears in **35 places across eleven source files**, so rename by
+> grepping the number, never by editing the heading.
+
+The backlog entry *"an {X} or derived-value template the compiler does not recognize yet"* named
+**953 cards** and blocks two cards from `docs/decks/`. `gap-clauses.mjs` gave the §3.120 answer
+immediately: **954 cards, 973 clauses, 880 distinct shapes — 1.08 cards per shape, the thinnest of
+the three rows measured so far** (§3.147's was 1.2). Another bucket, not another system.
+
+**The row's NAME is the second finding, and it is wrong in the same way §3.147's was.** An
+amount-bearing sentence is two things — a SENTENCE and an AMOUNT — and the row cannot say which has
+no rule. NEW `packages/cards/scripts/xvalue-blame.mjs` re-probes every blocked clause with its
+amount rewritten to a plain number, through `compileCard` alone:
+
+| half | clauses | distinct shapes |
+|---|---:|---:|
+| **SENTENCE gap** — still fails with a plain number | **683** | 574 |
+| AMOUNT only — the sentence compiles once the amount is a number | 170 | 155 |
+| NOT-REWRITABLE — no rewrite row matched | 120 | 106 |
+
+**So 70% of this row is a sentence the effect table cannot build, wearing this row's label because
+its text happens to contain the words "equal to".** Widening the amount vocabulary does not move any
+of it. A brief written from the row's headline would have spent itself on the wrong half.
+
+⚠️ **The blame script is committed with the two traps that made its FIRST run wrong**, because both
+are the kind of mistake that produces a confident wrong number: the probe must wear the **card's own
+type line** (probing every clause on a vanilla creature reports "Draw 3 cards." as a sentence gap —
+it is a SPELL line and the compiler is right to refuse it on a creature, and that one mistake moved
+hundreds of clauses into the wrong bucket), and a rewrite must **insert** a number rather than delete
+the amount (stripping "equal to the number of snow permanents you control" off Skred leaves a
+sentence with no amount at all).
+
+**What is actually here is an AMOUNT VOCABULARY.** `xvalue-families.mjs` ranks it by CARDS a rule
+would free — not clauses, and not printed shapes, which say only "long tail":
+
+| amount spelling | cards it alone would free |
+|---|---:|
+| `where X is <count>` | 36 |
+| a board count with no row yet | 32 |
+| an object's characteristic | 29 |
+| other "equal to …" | 18 |
+| "…this way" (an event's size) | 9 |
+| `{X}` in an ACTIVATION cost | 6 |
+
+Four shipped, each a closed table in the existing style:
+
+1. **`{X}` in an activation cost.** `ActivationCost.xCost` mirrors `CardDefinition.xCost` one level
+   down: the X stays OUT of the base cost, so the payability gate, the offer path and `payCost` were
+   all already correct. The value rides the ACTION (CR 602.2b — the cost is paid before the ability
+   is on the stack, so there is no resolution in which to ask), and the offer path enumerates one
+   action per affordable value. **That enumeration is cheap here and would not be for a cast:** an
+   activation cost is paid from the FLOATING pool, so the range is mana already produced rather than
+   everything the board could tap. One `activationManaDue` answers "what does this cost" for the
+   gate, the affordability search and the payment alike.
+2. **An object's characteristic** — the third spelling of a variable amount, beside `{X}` and "equal
+   to the number of". One descriptor read at the ONE `intParam` seam, so life, draws and damage
+   learned "equal to that creature's toughness" in a single edit. ⚠️ **Only the readings whose object
+   is still on the battlefield.** A dies-trigger, a destroyed target and "the sacrificed creature's
+   power" all mean CR 608.2h LAST KNOWN INFORMATION, and this engine keeps no LKI snapshot of P/T —
+   so they keep REPORTING rather than compiling into a silent zero. The bare word **"its"** is not in
+   the table at all, because its referent moves with the sentence (the entering creature in Angelic
+   Chorus, the source itself in Spikeshot Goblin); it is resolved at the three seams where the
+   referent is PROVABLE, behind a guard that refuses to rewrite any body naming a second object.
+3. **The general "where X is …" binding — one pre-pass, not seventy-four bodies.** §3.147 measured
+   this family as 83 cards over 74 distinct BODIES, called it thin, and built only the one body
+   Doorkeeper needed. **The bodies were the wrong unit.** They were never missing: "deals X damage to
+   each creature", "mills X cards", "each opponent loses X life" are the ordinary plain-number rules,
+   refusing only because the word X had no value. `applyRules` now strips the clause that DEFINES X,
+   puts the count on the context, and re-runs — every one of those bodies compiles unchanged.
+   Doorkeeper's bespoke rule is DELETED; two answers to one question is the drift rule 12 warns
+   about. `AMOUNT_TOKEN` + `parseAmount` is the single place "number or X" is asked.
+4. **A FILTERED count row** (`countPermanentsMatching`), which stops the count vocabulary being a
+   row-in-core per printed noun. "Mountains you control", "artifacts they control", "Clerics on the
+   battlefield" are now ROWS IN THE COMPILER'S TABLE — generated in all three scopes at once, so a
+   noun cannot ship with only "you control" — evaluated by the one `matchesCardFilter` that targeting
+   legality and every search already use. As closed as the enum rows: a noun the compiler cannot turn
+   into a `CardFilter` still reports. **Core's CDA switch is deliberately untouched** (it runs on
+   every stat read), so a filtered count in a `*` box is REFUSED rather than silently read as zero.
+
+**Measured delta: 6,443 → 6,500 accepted, +57 gained, 0 lost, on one fixed 32,341-card corpus** — the
+same corpus compiled twice with this branch's sources reverted to the fork point in between, so the
+number is attributable to the compiler. The row itself went **954 → 921 cards, 880 → 850 shapes**.
+
+⚠️ **THE +57 IS A SET DIFF, AND THE FIRST ONE WAS A LIE.** `playable-set.mjs` first reported **+55
+gained and 8 LOST**: the generated filtered rows were spread LAST, so "lands you control" stopped
+being `landsYouControl` — the row core's characteristic-defining P/T evaluator knows — and became a
+filtered descriptor. The refusal in (4) then correctly declined it in a star box, and **Molimo,
+Maro-Sorcerer and seven siblings left the pool with every test green**. Named rows now win, the
+precedence is documented where it is made, and a test pins it. A bare count would have reported this
+as a win.
+
+**The acceptance cards, honestly.** **Kessig Wolf Run ✅ compiles.** **Trostani, Selesnya's Voice
+does NOT, and what blocks it is not this family:** its trigger compiles (that is the object-
+characteristic work), and its second line is **`{1}{G}{W}, {T}: Populate.`** — "create a token that's
+a copy of a creature token you control", a selector `createTokenCopy` does not have. That primitive
+takes `self`, `equipped` or a TARGET; populate is a CHOICE made on resolution among your creature
+tokens, which belongs to the copy-selector family (§3's 299-card near-miss row), not here. A test
+pins the residue. **Axebane Guardian was NOT made reachable and this lane did not try** — §3.147's
+reason stands unchanged (`ManaAbility.produces` is a fixed mode list and `TapForManaAction.mode` an
+index into it), and nothing here touches the mana system. Its sibling shape "Add an amount of {G}
+equal to ~'s power" (Marwyn, Viridian Joiner) is the *easier* case — one colour, variable length —
+and is left REPORTED for the same reason: a mana ability that lies is worse than one that refuses.
+
+**A dead rule the corpus caught.** `dead-rule-sweep.mjs` reported `object-characteristic-draw` firing
+on NOTHING in 32,341 cards — the only card printing that sentence is Gregor, Shrewd Magistrate, whose
+body sat behind a self-trigger where "its" was unresolved. That is precisely the class the sweep
+exists for; the third seam was opened and the rule now fires. No rule this section adds is dead; the
+three remaining dead rules (`draw-equal-to-count`, `destroy-creature-if-mana-value`,
+`destroy-target-permanent`) were dead on `main` before it.
+
+**Throughput, paired on one box.** `packages/sim/bench/pilot-bench.mjs --games 1200 --seed 4242`,
+five reps before and nine after, alternating builds: **median 195 games/sec before, 207 after**, with
+per-rep ranges of 170–199 and 179–221 that overlap almost entirely — this box's run-to-run band, which
+the bench's own header warns about. Every single run played the identical games (`A won 504/1200`
+in all fourteen), and the diff to `derived.ts` is purely additive: `evaluateDerivedCount`'s switch and
+`characteristicValue` are byte-identical to `main`, so the stat-read hot path cannot have moved.
+
+**Left REPORTED on purpose, with the reason each:**
+- **Every LKI reading** — "When ~ dies, you gain life equal to its power" (Bottle Golems, Conclave
+  Mentor), "Destroy target creature. You lose life equal to that creature's toughness" (Vendetta,
+  Devour in Shadow, Sever Soul, Chastise, Divine Offering, Terashi's Grasp), and the whole
+  "**the sacrificed** creature's power" family (Fling, Thud, Life's Legacy, Worthy Cause, Reckoner's
+  Bargain). CR 608.2h says last known information and core keeps no P/T snapshot. **This is the
+  largest single thing left in the amount half — roughly 19 of the 29 object-characteristic cards —
+  and it is one engine feature, not nineteen rules.**
+- **"its" in a sentence naming two objects** — "TARGET CREATURE YOU CONTROL deals damage equal to ITS
+  power to target creature an opponent controls" (179 cards in the sentence-gap half). Both the
+  amount AND the sentence are missing there: it is damage dealt by an object that is not the
+  resolving spell, which is a damage-SOURCE feature.
+- **Amounts outside the count vocabulary**: devotion (Gray Merchant), "the greatest power among
+  creatures you control", "the number of colors of mana spent to cast this spell" (Radiant Flames),
+  "twice the number of …" (Dwarven Shrine), "the number of cards in **their** hand" (Viseling, Iron
+  Maiden — a count relative to the TRIGGERING player, which the board-only evaluator's single `you`
+  argument cannot express), and every "…**this way**" event amount (Subversion, Rite of Consumption).
+- **A DRY duplicate this lane could not remove.** `damage-any-target` and `x-damage` are one sentence
+  written twice, one token apart. Merging them deletes `x-damage`, and
+  `apps/web/src/lib/about/mechanics.ts` names that id as the {X} mechanic's WITNESS with a test that
+  fails when a witness stops resolving. It is a two-file fix and this lane does not own `apps/web`;
+  both rules carry a note saying so.
+- **A pre-existing duplicate id**, untouched: `each-opponent-loses-life` is declared TWICE in
+  `EFFECT_RULES` (two different rules with the same `id`), so `matchedRules` and the coverage tooling
+  cannot tell them apart. Not introduced here and not fixed here.
+
 
 ### 3.147 The activated-ability row is the §3.120 artifact again — but one shape inside it concentrates — ✅ done
 

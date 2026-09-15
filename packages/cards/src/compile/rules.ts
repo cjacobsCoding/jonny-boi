@@ -22,6 +22,7 @@ import type {
   ChosenValueSubject,
   CopyAsEntersSpec,
   CopyExceptions,
+  DerivedCountScope,
   EffectRef,
   KeywordFlags,
   ManaActivationCondition,
@@ -55,6 +56,7 @@ import {
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
 import {
   ABILITY_WORD_LIST,
+  AMOUNT_TOKEN,
   COUNT_TOKEN,
   normalizeClause,
   parseCount,
@@ -67,6 +69,9 @@ import {
 } from './text.js';
 import { BASIC_LAND_NAMES } from '../../data/pool.js';
 import { ITS_MANA_COST } from '../primitives.js';
+// The one name for the filtered-count row, imported rather than re-spelled, so
+// the compiler and the reader cannot disagree about what it is called (§3.149).
+import { PERMANENTS_MATCHING } from '../effect-helpers.js';
 
 /**
  * The CYCLING words whose search this engine can express, and the filter each
@@ -343,7 +348,7 @@ const OPPONENT_TARGET: TargetRestriction = 'opponent';
  * because a derived value the engine only half-understands would silently make
  * a card stronger or weaker than printed.
  */
-const DERIVED_COUNTS: Readonly<Record<string, string>> = Object.freeze({
+const NAMED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = Object.freeze({
   'creatures you control': 'creaturesYouControl',
   'creatures your opponents control': 'creaturesOpponentControls',
   'creatures your opponent controls': 'creaturesOpponentControls',
@@ -369,6 +374,96 @@ const DERIVED_COUNTS: Readonly<Record<string, string>> = Object.freeze({
 });
 
 /**
+ * FILTERED rows (DESIGN §3.149) — the other half of the same vocabulary.
+ *
+ * {@link NAMED_DERIVED_COUNTS} names sets core wrote by hand; these carry their
+ * set AS DATA, so the next printed noun is one more line here instead of an enum
+ * row plus a `case` in core's evaluator. Both halves are read through
+ * {@link derivedValue} and land on the same descriptor shape, so a consumer
+ * cannot tell them apart and none had to change.
+ *
+ * Each row is a real printed phrase from the corpus — `dead-rule-sweep.mjs` and
+ * `rule-coverage.test.ts` are what stop a remembered wording getting in.
+ */
+const FILTERED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = Object.freeze({
+  ...subtypeCounts('mountain', 'Mountain'),
+  ...subtypeCounts('swamp', 'Swamp'),
+  ...subtypeCounts('forest', 'Forest'),
+  ...subtypeCounts('island', 'Island'),
+  ...subtypeCounts('plains', 'Plains', { plural: 'plains' }),
+  ...subtypeCounts('cleric', 'Cleric'),
+  ...subtypeCounts('goblin', 'Goblin'),
+  ...subtypeCounts('elf', 'Elf', { plural: 'elves' }),
+  ...subtypeCounts('shrine', 'Shrine'),
+  ...subtypeCounts('equipment', 'Equipment', { plural: 'equipment' }),
+  ...typeCounts('artifact', 'artifact'),
+  ...typeCounts('enchantment', 'enchantment'),
+  ...typeCounts('land', 'land'),
+});
+
+/**
+ * The whole vocabulary, one table, read by every consumer.
+ *
+ * ⚠️ **NAMED ROWS WIN, and that precedence is load-bearing.** The generated rows
+ * include "lands you control", which the named half already answers as
+ * `landsYouControl` — and `landsYouControl` is the row core's
+ * CHARACTERISTIC-DEFINING P/T evaluator knows. Spreading the generated half last
+ * silently replaced it with a filtered descriptor, and eight `*`/`*` creatures —
+ * Molimo, Maro-Sorcerer and its family — dropped out of the pool with nothing
+ * failing: `namedDerivedValue` correctly refused a filtered count in a star box,
+ * so the cards reported instead of compiling. The two counts mean the same
+ * number; only one of them is spellable in a P/T box. `xvalue-templates.test.ts`
+ * pins the precedence, and `playable-set.mjs` is what caught it — a +55 that was
+ * really a +47 with eight silent losses.
+ */
+const DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = Object.freeze({
+  ...FILTERED_DERIVED_COUNTS,
+  ...NAMED_DERIVED_COUNTS,
+});
+
+/** What a phrase in {@link DERIVED_COUNTS} means: a named core row, or a set carried as data. */
+type DerivedCountDescriptor =
+  | string
+  | { readonly countOf: typeof PERMANENTS_MATCHING; readonly filter: CardFilter; readonly scope: DerivedCountScope };
+
+/**
+ * The three printed scopes of a filtered count, as the rows they generate.
+ *
+ * ⚠️ "N you control" / "N they control" / "N on the battlefield" are DIFFERENT
+ * NUMBERS, and a table that carried only the first would quietly make "artifacts
+ * an opponent controls" count yours. Generated from one place so a noun added
+ * below gets all three spellings or none — the class of omission that otherwise
+ * shows up as one card in the pool and its sibling reported.
+ */
+function scopedCounts(
+  plural: string,
+  filter: CardFilter,
+): Record<string, DerivedCountDescriptor> {
+  const row = (scope: DerivedCountScope) => ({ countOf: PERMANENTS_MATCHING, filter, scope }) as const;
+  return {
+    [`${plural} you control`]: row('you'),
+    [`${plural} an opponent controls`]: row('opponents'),
+    [`${plural} your opponents control`]: row('opponents'),
+    [`${plural} they control`]: row('opponents'),
+    [`${plural} on the battlefield`]: row('any'),
+  };
+}
+
+/** A SUBTYPE noun ("Mountains you control", "Clerics on the battlefield"). */
+function subtypeCounts(
+  plural: string,
+  subtype: string,
+  options?: { readonly plural?: string },
+): Record<string, DerivedCountDescriptor> {
+  return scopedCounts(options?.plural ?? `${plural}s`, { anyOfSubtypes: [subtype] });
+}
+
+/** A CARD-TYPE noun ("artifacts you control"). */
+function typeCounts(plural: string, type: CardType): Record<string, DerivedCountDescriptor> {
+  return scopedCounts(`${plural}s`, { anyOfTypes: [type] });
+}
+
+/**
  * The printed subject **"you "**, made optional.
  *
  * Every "you may …" wrapper in this file — `mayEffectsFrom`, the inline
@@ -392,10 +487,33 @@ const DERIVED_PHRASE = `(${Object.keys(DERIVED_COUNTS)
   .sort((a, b) => b.length - a.length)
   .join('|')})`;
 
-/** The derived descriptor a printed phrase means, or null when unlisted. */
-function derivedValue(phrase: string): { countOf: string } | null {
-  const countOf = DERIVED_COUNTS[phrase.trim().toLowerCase()];
-  return countOf ? { countOf } : null;
+/**
+ * The derived descriptor a printed phrase means, or null when unlisted.
+ *
+ * Both halves of {@link DERIVED_COUNTS} land on ONE shape — a named row becomes
+ * `{ countOf }`, a filtered row is already the descriptor — so every consumer
+ * reads one thing and none of them learned that filtered counts exist.
+ */
+function derivedValue(phrase: string): Record<string, unknown> | null {
+  const entry = DERIVED_COUNTS[phrase.trim().toLowerCase()];
+  if (entry === undefined) return null;
+  return typeof entry === 'string' ? { countOf: entry } : { ...entry };
+}
+
+/**
+ * The same lookup for the two CHARACTERISTIC-DEFINING P/T rules, which may take
+ * only a NAMED row.
+ *
+ * A `*` box is evaluated by core's `characteristicValue` → `evaluateDerivedCount`,
+ * whose switch deliberately has no filter arm (see `countPermanentsMatching`'s
+ * PERF note: that switch runs on every stat read and is kept untouched). So a
+ * filtered count in a P/T box would silently be zero — "~'s power is equal to
+ * the number of Goblins you control" reading 0/0 — and the honest answer is to
+ * report the card until the CDA path can carry a filter.
+ */
+function namedDerivedValue(phrase: string): { countOf: string } | null {
+  const entry = DERIVED_COUNTS[phrase.trim().toLowerCase()];
+  return typeof entry === 'string' ? { countOf: entry } : null;
 }
 
 /**
@@ -434,7 +552,7 @@ const DERIVED_EACH_PHRASE = `(${Object.keys(DERIVED_EACH_TO_PLURAL)
   .join('|')})`;
 
 /** The derived descriptor a printed "for each …" phrase means, or null. */
-function derivedEachValue(phrase: string): { countOf: string } | null {
+function derivedEachValue(phrase: string): Record<string, unknown> | null {
   const plural = DERIVED_EACH_TO_PLURAL[phrase.trim().toLowerCase()];
   return plural === undefined ? null : derivedValue(plural);
 }
@@ -1510,6 +1628,108 @@ function sacrificeNounFilter(noun: string, nontoken: boolean): { filter?: CardFi
  */
 const CHOSEN_X_PARAM = Object.freeze({ chosenX: true });
 
+// --- object-characteristic amounts (DESIGN §3.149) -------------------------------
+//
+// The printed ways a card names ONE OBJECT whose power/toughness/mana value is
+// the amount, and the CLOSED table mapping each to the subject the engine reads.
+// Two tables rather than one regex alternation for the usual reason (rule 2):
+// adding "the equipped creature's power" is a ROW here, not a new branch, and a
+// spelling outside the table reports rather than being widened to the nearest
+// thing that happens to exist.
+//
+// ⚠️ The bare word "**its**" is deliberately ABSENT. Its referent depends on the
+// sentence around it — the entering creature in "whenever another creature you
+// control enters, you gain life equal to its toughness", but the source itself
+// in "{R}, {T}: ~ deals damage equal to its power to any target". A rule that
+// guessed would make one of those two cards play wrong, silently. It is resolved
+// at the two seams where the referent is PROVABLE instead — see
+// {@link resolveItsReferent}.
+
+/** Printed possessive → the object {@link ObjectCharacteristicValue} reads. */
+const OBJECT_CHARACTERISTIC_SUBJECTS: Readonly<Record<string, 'triggering' | 'source'>> = Object.freeze({
+  "that creature's": 'triggering',
+  "that permanent's": 'triggering',
+  "~'s": 'source',
+});
+
+/** Printed characteristic word → the characteristic read. */
+const OBJECT_CHARACTERISTIC_WORDS: Readonly<Record<string, 'power' | 'toughness' | 'manaValue'>> =
+  Object.freeze({
+    power: 'power',
+    toughness: 'toughness',
+    'mana value': 'manaValue',
+  });
+
+/** The characteristic-word alternation alone, longest-first so none is truncated. */
+const OBJECT_CHARACTERISTIC_WORD_PHRASE = Object.keys(OBJECT_CHARACTERISTIC_WORDS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+
+/** `(<possessive>) (<characteristic>)` — two capture groups, longest-first so none is truncated. */
+const OBJECT_CHARACTERISTIC_PHRASE = `(${Object.keys(OBJECT_CHARACTERISTIC_SUBJECTS)
+  .sort((a, b) => b.length - a.length)
+  .join('|')}) (${OBJECT_CHARACTERISTIC_WORD_PHRASE})`;
+
+/**
+ * The descriptor a printed "<possessive> <characteristic>" means, or `null`.
+ *
+ * Refuses a `source` reading on a card that is not a permanent: a SPELL's
+ * `ctx.source` is the spell on the stack, so "~'s power" there would read zero
+ * forever. No printed card asks it, and refusing keeps it that way.
+ */
+function objectCharacteristic(
+  possessive: string,
+  characteristic: string,
+  ctx: RuleContext,
+): { readOf: 'triggering' | 'source'; characteristic: 'power' | 'toughness' | 'manaValue' } | null {
+  const readOf = OBJECT_CHARACTERISTIC_SUBJECTS[possessive.trim().toLowerCase()];
+  const read = OBJECT_CHARACTERISTIC_WORDS[characteristic.trim().toLowerCase()];
+  if (readOf === undefined || read === undefined) return null;
+  if (readOf === 'source' && !cardIsPermanent(ctx)) return null;
+  return { readOf, characteristic: read };
+}
+
+/**
+ * Rewrite the bare "**its** <characteristic>" to an explicit possessive, but
+ * ONLY where the sentence names exactly one object it could refer to.
+ *
+ * Called from the two seams where the referent is provable: a board-watching
+ * ENTERS trigger (the permanent that entered is the only object named, and it
+ * is still on the battlefield) and an activated ability's body (the source is
+ * the only object named, and it was on the battlefield a moment ago to be
+ * activated). Everywhere else "its" is left alone and the clause reports.
+ *
+ * The guard is what makes this safe rather than clever: a body that also says
+ * "target", "that creature" or "equipped creature" has a SECOND candidate, so
+ * nothing is rewritten and the card reports instead of playing a coin-flip.
+ */
+const SECOND_OBJECT_WORDS = /\btarget\b|\bthat (?:creature|permanent|card|spell|player)\b|\bequipped\b|\benchanted\b/;
+export function resolveItsReferent(body: string, referent: "that creature's" | "~'s"): string {
+  if (!/\bits (?:power|toughness|mana value)\b/.test(body)) return body;
+  if (SECOND_OBJECT_WORDS.test(body)) return body;
+  return body.replace(/\bits (power|toughness|mana value)\b/g, `${referent} $1`);
+}
+
+/**
+ * Whether any of these effect refs reads the TRIGGERING object's characteristics
+ * — the question a board-watching trigger has to ask before deciding whether to
+ * carry its subject (`TriggerCondition.carriesSubject`).
+ *
+ * Shallow by design: the compiler emits the descriptor as a direct param value,
+ * exactly as `restrictionOfEffects` reads `targets`. A nested body that needed
+ * it would show up as an unread param and report, not as a silent zero.
+ */
+function readsTriggeringObject(refs: readonly EffectRef[]): boolean {
+  for (const ref of refs) {
+    for (const value of Object.values(ref.params ?? {})) {
+      if (typeof value === 'object' && value !== null && (value as { readOf?: unknown }).readOf === 'triggering') {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * Whether the card being compiled actually prints `{X}` in its mana cost. The
  * X-reading effect rules are gated on this: "deals X damage" on a card whose X
@@ -1519,6 +1739,159 @@ const CHOSEN_X_PARAM = Object.freeze({ chosenX: true });
  */
 function cardHasXCost(ctx: RuleContext): boolean {
   return ctx.card.manaCost.other.some((symbol) => symbol.toUpperCase() === 'X');
+}
+
+/**
+ * Whether a printed `X` in THIS clause has a value the engine actually charged
+ * for — the one question every X-reading rule asks.
+ *
+ * Two sources, one reader (§3.149): the card's own `{X}` mana cost (a cast-time
+ * choice), and an `{X}` in the ACTIVATION cost of the ability whose body this
+ * clause is (`RuleContext.xFromActivationCost`). Before the second existed,
+ * Kessig Wolf Run's "+X/+0" was refused by a rule looking at the wrong cost, and
+ * a rule that checked NEITHER would read a cast-time X nobody was ever asked
+ * for. An X defined by a "where X is …" clause is neither of these and still
+ * reports on its own terms.
+ */
+function xIsBound(ctx: RuleContext): boolean {
+  return ctx.xFromActivationCost === true || cardHasXCost(ctx);
+}
+
+/**
+ * WHAT `X` MEANS IN THIS CLAUSE — the one answer, read by every X rule.
+ *
+ * Three sources, in priority order, and each is a different printed thing:
+ *  1. a `where X is …` clause that DEFINED it (§3.149) — a derived count;
+ *  2. the card's own `{X}` mana cost — the value chosen and charged at cast;
+ *  3. the `{X}` in the ACTIVATION cost that put this body on the stack.
+ * `null` when nothing bound one, which is the refusal that keeps "deals X
+ * damage" on a card with no X anywhere out of the pool.
+ *
+ * The where-clause WINS over a cast-time X on purpose: a card printing both
+ * ("Suspend X—{X}{W}{W}") says two different numbers, and the clause that
+ * defines X in this sentence is the one this sentence means.
+ */
+function xParamValue(ctx: RuleContext): Record<string, unknown> | null {
+  if (ctx.xDerivedBinding !== undefined) return ctx.xDerivedBinding;
+  return xIsBound(ctx) ? CHOSEN_X_PARAM : null;
+}
+
+/**
+ * Read an {@link AMOUNT_TOKEN} slot: a printed number, a number word, or `X`.
+ *
+ * The ONE place the "number or X" question is asked, so every rule that takes
+ * an amount learned X in the same edit — and a card that spells its amount X on
+ * one line and 3 on another compiles both through one reader.
+ *
+ * `null` for an X nothing bound, exactly as {@link parseCount} is null for a
+ * word it does not know: the clause reports rather than dealing zero.
+ */
+function parseAmount(token: string | undefined, ctx: RuleContext): number | Record<string, unknown> | null {
+  if ((token ?? '').trim().toLowerCase() === 'x') return xParamValue(ctx);
+  return parseCount(token);
+}
+
+/**
+ * The trailing "**, where X is <PHRASE>**" that DEFINES a sentence's X, split
+ * into the sentence and the phrase.
+ *
+ * Anchored to the end and non-greedy on the left so it takes the LAST such
+ * clause and cannot swallow a body. The optional comma is real: some cards
+ * print "…, where X is …" and a few print it without.
+ */
+export const WHERE_X_IS_CLAUSE = /^(.+?),? where x is ([^.]+?)\.?$/;
+
+/**
+ * The derived descriptor a "where X is <PHRASE>" tail means, or `null`.
+ *
+ * Reads the SAME {@link DERIVED_COUNTS} table as "equal to the number of …",
+ * because they are the same quantity said two ways — one table, so the two
+ * spellings can never drift into different numbers, and a noun added for one is
+ * understood by the other in the same edit.
+ */
+export function whereXBinding(phrase: string): Record<string, unknown> | null {
+  const text = phrase.trim().toLowerCase();
+  for (const form of WHERE_X_ARITHMETIC) {
+    const match = form.pattern.exec(text);
+    if (!match) continue;
+    const count = derivedValue(match[form.countGroup]!);
+    if (!count) return null;
+    return { ...count, ...form.offset(Number.parseInt(match[form.constantGroup] ?? '0', 10)) };
+  }
+  // Only the "the number of …" spellings above are read. "where X is your
+  // devotion to black", "where X is the greatest power among creatures you
+  // control" and "where X is twice the number of …" are different quantities
+  // with no row in the count vocabulary, and each reports rather than being read
+  // as a count it is not.
+  return null;
+}
+
+/**
+ * The printed ARITHMETIC around a "where X is …" count, as a closed table.
+ *
+ * Four rows, in the order a card prints them, each saying which capture is the
+ * COUNT and which the CONSTANT, and what offset that shape means. A table
+ * because the next shape is a ROW (rule 2) — and because the reversed form is
+ * where the sign is easy to get backwards: "**3 minus** the number of cards in
+ * their hand" is `3 − count`, not `count − 3`, and those are different cards.
+ *
+ * Every subtracting row carries `min: 0` (CR 107.1b — a quantity that would be
+ * negative is zero), which the plain and adding rows do not need.
+ */
+const WHERE_X_ARITHMETIC: readonly {
+  readonly pattern: RegExp;
+  readonly countGroup: number;
+  readonly constantGroup: number;
+  readonly offset: (n: number) => Record<string, unknown>;
+}[] = Object.freeze([
+  // "3 plus the number of artifacts you control" (Welding Sparks)
+  { pattern: /^(\d+) plus the number of (.+)$/, countGroup: 2, constantGroup: 1, offset: (n) => ({ plus: n }) },
+  // "3 minus the number of cards in their hand" (Rackling, Wheel of Torture)
+  {
+    pattern: /^(\d+) minus the number of (.+)$/,
+    countGroup: 2,
+    constantGroup: 1,
+    offset: (n) => ({ times: -1, plus: n, min: 0 }),
+  },
+  // "the number of cards in their hand minus 4" (Viseling, Iron Maiden)
+  {
+    pattern: /^the number of (.+) minus (\d+)$/,
+    countGroup: 1,
+    constantGroup: 2,
+    offset: (n) => ({ plus: -n, min: 0 }),
+  },
+  // the plain form
+  { pattern: /^the number of (.+)$/, countGroup: 1, constantGroup: 0, offset: () => ({}) },
+]);
+
+/**
+ * A printed P/T slot in a pump: `+3`, `-2`, `+X`, `-X`.
+ *
+ * ONE token read by every pump rule, so the day "+X/+0" became payable both the
+ * plain pump and the pump-and-grant learned it in the same edit — two nearly
+ * identical patterns is exactly how "+X/+0" would have ended up legal on one
+ * card and reported on its sibling.
+ */
+const PUMP_AMOUNT = '([+-](?:\\d+|x))';
+
+/**
+ * The value a {@link PUMP_AMOUNT} slot means: a plain signed number, or the
+ * chosen X (negated for a minus slot through the shared `times` multiplier, so
+ * "gets -X/+X" reaches the adding primitive as the two numbers it prints).
+ *
+ * `null` when the slot says X and nothing in this clause bound one — the same
+ * refusal every other X rule makes, so a Kessig-shaped line on a card with no X
+ * anywhere reports instead of pumping by zero.
+ */
+function parsePumpAmount(token: string, ctx: RuleContext): number | Record<string, unknown> | null {
+  const text = token.trim().toLowerCase();
+  if (text.endsWith('x')) {
+    const x = xParamValue(ctx);
+    if (x === null) return null;
+    return text.startsWith('-') ? { ...x, times: -1 } : x;
+  }
+  const value = parseSignedInt(text);
+  return Number.isFinite(value) ? value : null;
 }
 
 /**
@@ -2137,7 +2510,14 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'damage-any-target',
     description:
-      '"~ deals N damage to any target / target creature / target player [or planeswalker]" — the printed target phrase becomes the effect\'s `targets` restriction',
+      '"~ deals N/X damage to any target / target creature / target player [or planeswalker]" — the printed target phrase becomes the effect\'s `targets` restriction',
+    // ⚠️ Stays on {@link COUNT_TOKEN} while its X sibling `x-damage` exists.
+    // The DRY answer is one rule over the shared AMOUNT token — they are the
+    // same sentence with the same recipient table and two parsers — but that
+    // deletes `x-damage`, and `apps/web/src/lib/about/mechanics.ts` names that
+    // id as the {X} mechanic's WITNESS with a test that fails when a witness
+    // stops resolving. It is a two-file fix for whoever owns both; §3.149 did
+    // not own `apps/web` and left the duplicate rather than break that page.
     pattern: new RegExp(`^~ deals ${COUNT_TOKEN} damage to ${DAMAGE_TARGET_PHRASE}$`),
     needsChosenTarget: true,
     build(match) {
@@ -2152,19 +2532,20 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     description:
       '"~ deals N damage to any target and you gain N life" (Lightning Helix — printed as one sentence or two)',
     pattern: new RegExp(
-      `^~ deals ${COUNT_TOKEN} damage to ${DAMAGE_TARGET_PHRASE}(?:\\.|,)? and you gain ${COUNT_TOKEN} life$|^~ deals ${COUNT_TOKEN} damage to ${DAMAGE_TARGET_PHRASE}\\. you gain ${COUNT_TOKEN} life$`,
+      `^~ deals ${AMOUNT_TOKEN} damage to ${DAMAGE_TARGET_PHRASE}(?:\\.|,)? and you gain ${AMOUNT_TOKEN} life$|^~ deals ${AMOUNT_TOKEN} damage to ${DAMAGE_TARGET_PHRASE}\\. you gain ${AMOUNT_TOKEN} life$`,
     ),
     needsChosenTarget: true,
-    build(match) {
+    build(match, ctx) {
       // The pattern has two alternations ("… and you gain" / "…. You gain"), each
       // carrying three groups (count, target phrase, life), so read whichever
-      // triple actually matched.
-      const damage = parseCount(match[1] ?? match[4]);
+      // triple actually matched. §3.149 — both halves are AMOUNT slots, because
+      // Tendrils of Corruption prints "deals X damage … and you gain X life".
+      const damage = parseAmount(match[1] ?? match[4], ctx);
       const restriction = damageRestriction(match[2] ?? match[5] ?? '');
-      const life = parseCount(match[3] ?? match[6]);
+      const life = parseAmount(match[3] ?? match[6], ctx);
       if (damage === null || life === null || restriction === null) return null;
       return effects(
-        { primitive: 'dealDamage', params: damageParams(damage, restriction) },
+        { primitive: 'dealDamage', params: damageParams(damage as never, restriction) },
         { primitive: 'gainLife', params: { amount: life } },
       );
     },
@@ -2259,34 +2640,112 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    /**
+     * "~ deals **X** damage to <TARGET>" — the X spelling of `damage-any-target`
+     * above. The two are one sentence written twice, and the right fix is one
+     * rule over the shared AMOUNT token; see that rule's note for why §3.149
+     * did not make it (the id is a witness in `apps/web`, which this lane does
+     * not own). The AMOUNT it reads is {@link xParamValue}'s, so all three
+     * sources of an X — cast cost, activation cost, `where X is …` — reach it.
+     */
     id: 'x-damage',
     description:
-      '"~ deals X damage to any target / target creature / target player" — X is the value chosen (and paid for) at cast time',
+      '"~ deals X damage to <TARGET>" — X from the cast cost, the activation cost, or a "where X is …" clause',
     pattern: new RegExp(`^~ deals x damage to ${DAMAGE_TARGET_PHRASE}$`),
     needsChosenTarget: true,
     build(match, ctx) {
-      if (!cardHasXCost(ctx)) return null; // an X defined elsewhere is not the cast-time X
+      const amount = xParamValue(ctx);
       const restriction = damageRestriction(match[1] ?? '');
-      if (restriction === null) return null;
-      return effects({ primitive: 'dealDamage', params: damageParams(CHOSEN_X_PARAM as never, restriction) });
+      if (amount === null || restriction === null) return null;
+      return effects({ primitive: 'dealDamage', params: damageParams(amount as never, restriction) });
     },
   },
   {
     id: 'x-draw',
-    description: '"[You] draw X cards" — X is the value chosen at cast time (Mind Spring)',
+    description:
+      '"[You] draw X cards" — X is the value chosen at cast time (Mind Spring) or at activation time (Bruce Banner)',
     pattern: new RegExp(`^${OPTIONAL_YOU}draw x cards$`),
     build(_match, ctx) {
-      if (!cardHasXCost(ctx)) return null;
-      return effects({ primitive: 'drawCards', params: { count: CHOSEN_X_PARAM } });
+      const count = xParamValue(ctx);
+      if (count === null) return null;
+      return effects({ primitive: 'drawCards', params: { count } });
     },
   },
   {
     id: 'x-gain-life',
-    description: '"[You] gain X life" — X is the value chosen at cast time',
+    description:
+      '"[You] gain X life" — X is the value chosen at cast time, or at activation time (Oracle of Nectars)',
     pattern: new RegExp(`^${OPTIONAL_YOU}gain x life$`),
     build(_match, ctx) {
-      if (!cardHasXCost(ctx)) return null;
-      return effects({ primitive: 'gainLife', params: { amount: CHOSEN_X_PARAM } });
+      const amount = xParamValue(ctx);
+      if (amount === null) return null;
+      return effects({ primitive: 'gainLife', params: { amount } });
+    },
+  },
+  // ===========================================================================
+  // === OBJECT-CHARACTERISTIC AMOUNTS (DESIGN §3.149) =========================
+  // ===========================================================================
+  //
+  // "…equal to THAT CREATURE'S toughness" / "…equal to ~'S POWER" — the third
+  // printed spelling of a variable amount, beside `{X}` and "equal to the
+  // number of …". All of these emit one descriptor
+  // ({@link ObjectCharacteristicValue}) read at the ONE `intParam` seam, so
+  // life, draws and damage learned it in a single edit and cannot disagree
+  // about what "that creature's toughness" means.
+  //
+  // ⚠️ ONLY THE SPELLINGS WHOSE OBJECT IS STILL ON THE BATTLEFIELD are here.
+  // "When ~ **dies**, you gain life equal to its power", "**Destroy** target
+  // creature. You lose life equal to that creature's toughness" and "equal to
+  // **the sacrificed** creature's power" all mean CR 608.2h LAST KNOWN
+  // INFORMATION, and this engine keeps no LKI snapshot of P/T — so they keep
+  // reporting rather than compiling into a silent zero. `xvalue-templates.test.ts`
+  // pins one card per refused family with the reason.
+  {
+    id: 'object-characteristic-gain-lose-life',
+    description:
+      '"[You] gain/lose life equal to THAT CREATURE\'S / ~\'S power|toughness|mana value" (Trostani, Angelic Chorus, Wolverine Riders)',
+    pattern: new RegExp(`^${OPTIONAL_YOU}(gain|lose) life equal to ${OBJECT_CHARACTERISTIC_PHRASE}$`),
+    build(match, ctx) {
+      const amount = objectCharacteristic(match[2]!, match[3]!, ctx);
+      if (!amount) return null;
+      return effects({
+        primitive: match[1] === 'gain' ? 'gainLife' : 'loseLife',
+        params: { amount },
+      });
+    },
+  },
+  {
+    id: 'object-characteristic-draw',
+    description: '"Draw cards equal to ~\'S / THAT CREATURE\'S power" (Gregor, Shrewd Magistrate)',
+    pattern: new RegExp(`^${OPTIONAL_YOU}draw cards equal to ${OBJECT_CHARACTERISTIC_PHRASE}$`),
+    build(match, ctx) {
+      const count = objectCharacteristic(match[1]!, match[2]!, ctx);
+      if (!count) return null;
+      return effects({ primitive: 'drawCards', params: { count } });
+    },
+  },
+  {
+    id: 'object-characteristic-damage',
+    description:
+      '"~ deals damage equal to ITS power to <TARGET>" (Spikeshot Goblin, Spikeshot Elder, Sif\'s Spearmaster)',
+    // The printed order is amount-then-recipient here and recipient-then-amount
+    // in `damage-equal-to-count`; both orders are real and both route to the one
+    // `dealDamage` ref, so the recipient table is read once either way.
+    //
+    // "ITS" is accepted HERE and nowhere else in this family, and the PATTERN is
+    // what earns it: the sentence names its dealer, `~`, before the word, so the
+    // referent is printed rather than inferred. The dangerous sibling — "TARGET
+    // CREATURE YOU CONTROL deals damage equal to its power to …", where "its"
+    // is the first target — does not match this pattern and keeps reporting.
+    pattern: new RegExp(
+      `^~ deals damage equal to (~'s|its) (${OBJECT_CHARACTERISTIC_WORD_PHRASE}) to ${DAMAGE_TARGET_PHRASE}$`,
+    ),
+    needsChosenTarget: true,
+    build(match, ctx) {
+      const amount = objectCharacteristic(match[1] === 'its' ? "~'s" : match[1]!, match[2]!, ctx);
+      const restriction = damageRestriction(match[3] ?? '');
+      if (!amount || restriction === null) return null;
+      return effects({ primitive: 'dealDamage', params: damageParams(amount as never, restriction) });
     },
   },
   {
@@ -2406,9 +2865,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // The bare form, with none of the "and you gain that much life" tail that
     // `each-opponent-loses-life-you-gain` handles; that rule is declared earlier,
     // so the longer printed line keeps the rule that knows about its second half.
-    pattern: new RegExp(`^each opponent loses ${COUNT_TOKEN} life$`),
-    build(match) {
-      const amount = parseCount(match[1]);
+    pattern: new RegExp(`^each opponent loses ${AMOUNT_TOKEN} life$`),
+    build(match, ctx) {
+      const amount = parseAmount(match[1], ctx);
       return amount === null
         ? null
         : effects({ primitive: 'loseLife', params: { amount, whichPlayer: 'opponent' } });
@@ -2723,8 +3182,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const subtype = AMASS_ARMY_TYPES[match[1] ?? ''];
       if (subtype === undefined) return null;
       if (match[2] === undefined) {
-        if (!cardHasXCost(ctx)) return null;
-        return effects({ primitive: 'amass', params: { subtype, amount: CHOSEN_X_PARAM } });
+        const amount = xParamValue(ctx);
+        if (amount === null) return null;
+        return effects({ primitive: 'amass', params: { subtype, amount } });
       }
       const amount = Number.parseInt(match[2], 10);
       if (!Number.isFinite(amount)) return null;
@@ -3026,29 +3486,29 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     /**
-     * "Target player mills X cards, **where X is the number of …**" (Doorkeeper,
-     * Phenax's granted ability).
+     * "Target player mills **X** cards", with or without a where-clause — the X of the
+     * card's own `{X}` cost (Traumatize's cousins) or of the ACTIVATION cost
+     * that put this body on the stack, "{X}, {T}: Target player mills X cards"
+     * (Sands of Delirium, Whetwheel). §3.149.
      *
-     * The OTHER printed spelling of a derived amount — `damage-equal-to-count`
-     * and `draw-equal-to-count` read "equal to the number of", and these are the
-     * same quantity said the other way round. Both go through
-     * {@link derivedValue} and therefore through the one {@link DERIVED_COUNTS}
-     * table, so the two spellings cannot drift into different numbers.
+     * Its own rule rather than an `x` row inside {@link COUNT_TOKEN}, because
+     * the two need different gates: a plain number is always readable and an X
+     * is only readable when something bound it ({@link xParamValue}).
      *
-     * ⚠️ Deliberately NOT gated on {@link cardHasXCost}: this X is DEFINED by
-     * the where-clause, not chosen at cast time, which is precisely the case
-     * that gate exists to keep the cast-time X rules away from.
+     * It REPLACED a second rule that spelled out "…, where X is the number of
+     * <COUNT>" for Doorkeeper alone. The where-clause is now stripped by the
+     * binding pre-pass in `applyRules` before any rule sees the sentence, so
+     * Doorkeeper and Sands of Delirium reach the same rule with the same X — two
+     * rules for one question was exactly the drift rule 12 warns about.
      */
-    id: 'target-player-mills-where-x',
-    description: '"Target player mills X cards, where X is the number of <COUNT>" (Doorkeeper)',
-    pattern: new RegExp(
-      `^target (player|opponent) mills x cards?, where x is the number of ${DERIVED_PHRASE}$`,
-    ),
+    id: 'target-player-mills-x',
+    description: '"Target player mills X cards" (Doorkeeper, Sands of Delirium, Whetwheel)',
+    pattern: /^target (player|opponent) mills x cards?$/,
     needsChosenTarget: true,
-    build(match) {
-      const count = derivedValue(match[2]!);
-      if (!count) return null;
-      return effects({ primitive: 'mill', params: { amount: count, targets: PLAYER_TARGET } });
+    build(_match, ctx) {
+      const amount = xParamValue(ctx);
+      if (amount === null) return null;
+      return effects({ primitive: 'mill', params: { amount, targets: PLAYER_TARGET } });
     },
   },
   {
@@ -3064,9 +3524,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'damage-to-each-creature',
     description: '"~ deals N damage to each creature"',
-    pattern: new RegExp(`^~ deals ${COUNT_TOKEN} damage to each creature$`),
-    build(match) {
-      const amount = parseCount(match[1]!);
+    pattern: new RegExp(`^~ deals ${AMOUNT_TOKEN} damage to each creature$`),
+    build(match, ctx) {
+      const amount = parseAmount(match[1], ctx);
       if (amount === null) return null;
       return effects({ primitive: 'dealDamageToEach', params: { amount, creatures: true } });
     },
@@ -3074,9 +3534,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'damage-to-each-opponent',
     description: '"~ deals N damage to each opponent"',
-    pattern: new RegExp(`^~ deals ${COUNT_TOKEN} damage to each opponent$`),
-    build(match) {
-      const amount = parseCount(match[1]!);
+    pattern: new RegExp(`^~ deals ${AMOUNT_TOKEN} damage to each opponent$`),
+    build(match, ctx) {
+      const amount = parseAmount(match[1], ctx);
       if (amount === null) return null;
       return effects({ primitive: 'dealDamageToEach', params: { amount, opponents: true } });
     },
@@ -3084,9 +3544,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'damage-to-each-creature-and-player',
     description: '"~ deals N damage to each creature and each player"',
-    pattern: new RegExp(`^~ deals ${COUNT_TOKEN} damage to each creature and each player$`),
-    build(match) {
-      const amount = parseCount(match[1]!);
+    pattern: new RegExp(`^~ deals ${AMOUNT_TOKEN} damage to each creature and each player$`),
+    build(match, ctx) {
+      const amount = parseAmount(match[1], ctx);
       if (amount === null) return null;
       return effects({
         primitive: 'dealDamageToEach',
@@ -3518,13 +3978,13 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // The NOUN is a row in `PUMP_TARGET_NOUNS`, not a second nearly identical
     // rule: bloodrush prints exactly this sentence with one word more, and a
     // copy of the rule for it is the thing that drifts.
-    pattern: new RegExp(`^target (${PUMP_TARGET_PHRASE}) gets ([+-]\\d+)\\/([+-]\\d+) until end of turn$`),
+    pattern: new RegExp(`^target (${PUMP_TARGET_PHRASE}) gets ${PUMP_AMOUNT}\\/${PUMP_AMOUNT} until end of turn$`),
     needsChosenTarget: true,
-    build(match) {
+    build(match, ctx) {
       const restriction = PUMP_TARGET_NOUNS[(match[1] ?? '').trim()];
-      const power = parseSignedInt(match[2] ?? '');
-      const toughness = parseSignedInt(match[3] ?? '');
-      if (restriction === undefined || !Number.isFinite(power) || !Number.isFinite(toughness)) return null;
+      const power = parsePumpAmount(match[2] ?? '', ctx);
+      const toughness = parsePumpAmount(match[3] ?? '', ctx);
+      if (restriction === undefined || power === null || toughness === null) return null;
       return effects({
         primitive: 'pumpUntilEndOfTurn',
         params: { power, toughness, targets: restriction },
@@ -3551,15 +4011,15 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     description:
       '"Target creature gets +X/+Y and gains KEYWORD until end of turn" — and the ATTACKING form (§3.112: "Bloodrush — {R}{G}, Discard this card: Target attacking creature gets +4/+4 and gains trample")',
     pattern: new RegExp(
-      `^target (${PUMP_TARGET_PHRASE}) gets ([+-]\\d+)\\/([+-]\\d+) and gains ${KEYWORD_TOKEN} until end of turn$`,
+      `^target (${PUMP_TARGET_PHRASE}) gets ${PUMP_AMOUNT}\\/${PUMP_AMOUNT} and gains ${KEYWORD_TOKEN} until end of turn$`,
     ),
     needsChosenTarget: true,
-    build(match) {
+    build(match, ctx) {
       const restriction = PUMP_TARGET_NOUNS[(match[1] ?? '').trim()];
-      const power = parseSignedInt(match[2] ?? '');
-      const toughness = parseSignedInt(match[3] ?? '');
+      const power = parsePumpAmount(match[2] ?? '', ctx);
+      const toughness = parsePumpAmount(match[3] ?? '', ctx);
       const keywords = keywordFlag(match[4] ?? '');
-      if (restriction === undefined || !Number.isFinite(power) || !Number.isFinite(toughness) || !keywords) return null;
+      if (restriction === undefined || power === null || toughness === null || !keywords) return null;
       return effects(
         { primitive: 'pumpUntilEndOfTurn', params: { power, toughness, targets: restriction } },
         { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords, targets: restriction } },
@@ -4330,9 +4790,9 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // nobody, so it must not compile to the `target opponent` form, which a
     // pilot could aim (and which would refuse to go on the stack with no legal
     // target). `whichPlayer` is what `loseLife` reads for the untargeted case.
-    pattern: new RegExp(`^each opponent loses ${COUNT_TOKEN} life$`),
-    build(match) {
-      const amount = parseCount(match[1]!);
+    pattern: new RegExp(`^each opponent loses ${AMOUNT_TOKEN} life$`),
+    build(match, ctx) {
+      const amount = parseAmount(match[1], ctx);
       return amount === null
         ? null
         : effects({ primitive: 'loseLife', params: { amount, whichPlayer: 'opponent' } });
@@ -6268,7 +6728,15 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       const event = match[10] === 'enters' ? 'permanentEnters' : 'permanentDies';
       const body = match[11] ?? '';
       const optional = body.startsWith('you may ');
-      const inner = optional ? body.slice('you may '.length) : body;
+      // "…you gain life equal to ITS toughness" (§3.149). On an ENTERS trigger
+      // the only object the body names is the permanent that just arrived, and
+      // it is still on the battlefield when the ability resolves — so "its" is
+      // provable here and is spelled out for the effect table. On a DIES trigger
+      // it is NOT: the object has left and its P/T would need CR 608.2h last
+      // known information, which this engine does not keep. Leaving "its" alone
+      // there is what makes those cards report instead of reading zero.
+      const raw = optional ? body.slice('you may '.length) : body;
+      const inner = event === 'permanentEnters' ? resolveItsReferent(raw, "that creature's") : raw;
       const compiled = ctx.compileTriggerBody(inner);
       // A MODAL body has empty effects on purpose (the chosen modes replace
       // them); it is never optional-wrapped here.
@@ -6276,6 +6744,16 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       if (compiled.modal !== undefined && optional) return null;
       const effectRefs = optional ? mayEffectsFrom(inner, compiled.effects) : compiled.effects;
       if (effectRefs === null) return null;
+      // A body that reads "that creature's toughness" needs the event's SUBJECT
+      // carried to the resolution (`triggeringInstances`). Opt-in, exactly as
+      // evolve's is: a trigger whose body never asks stays byte-identical, so
+      // this cannot change what any already-compiled card does.
+      const carriesSubject = readsTriggeringObject(effectRefs);
+      // A DIES trigger can never carry a live subject — the guard above should
+      // already have kept "its power" unresolved there, and this is the second
+      // lock on the same door: a printed "that creature's power" on a death
+      // reports rather than resolving against a permanent that is not there.
+      if (carriesSubject && event !== 'permanentEnters') return null;
       return {
         triggers: [
           {
@@ -6284,6 +6762,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
               who,
               permanentFilter: filter,
               ...(another ? { excludeSelf: true } : {}),
+              ...(carriesSubject ? { carriesSubject: true } : {}),
             },
             effects: effectRefs,
             label: `${another ? 'another ' : ''}${tokenWord ? `${tokenWord} ` : ''}${noun} (${who}) ${match[10]}: ${body}`,
@@ -6503,13 +6982,19 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'trigger-combat-damage-to-player',
-    description: '"Whenever ~ deals combat damage to a player, BODY"',
+    description: '"Whenever ~ deals combat damage to a player, BODY" (Gregor, Shrewd Magistrate)',
     pattern: /^whenever ~ deals combat damage to a player, (.+)$/,
     build(match, ctx) {
+      // §3.149 — the THIRD seam where the bare word "its" is provable: this
+      // trigger names `~` as its subject and nothing else, and `~` is on the
+      // battlefield (it just dealt combat damage). "…, draw cards equal to its
+      // power" is Gregor. `resolveItsReferent` still declines any body that
+      // names a second object, so nothing here is a guess.
+      const body = resolveItsReferent(match[1] ?? '', "~'s");
       return triggerFrom(
         ctx,
         { on: 'combatDamageToPlayer' },
-        match[1] ?? '',
+        body,
         `Combat damage to a player: ${match[1] ?? ''}`,
       );
     },
@@ -8284,7 +8769,9 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     build(match, ctx) {
       // Only a creature has a P/T box to define.
       if (!ctx.card.typeLine.types.some((type) => type.toLowerCase() === 'creature')) return null;
-      const count = derivedValue(match[1]!);
+      // A NAMED row only — see `namedDerivedValue`: core's CDA path has no
+      // filter arm, so a filtered count here would read 0/0 forever.
+      const count = namedDerivedValue(match[1]!);
       const plus = parseCount(match[2]);
       if (!count || plus === null) return null;
       return {
@@ -8304,7 +8791,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     ),
     build(match, ctx) {
       if (!ctx.card.typeLine.types.some((type) => type.toLowerCase() === 'creature')) return null;
-      const count = derivedValue(match[1]!);
+      const count = namedDerivedValue(match[1]!); // named rows only — see the sibling rule
       if (!count) return null;
       return {
         characteristicPT: {
