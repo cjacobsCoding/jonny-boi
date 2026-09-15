@@ -22,6 +22,13 @@
  * — asking the compiler's own closed noun table whether it knows the printed
  * noun is a direct answer where a probe would be a guess.
  *
+ * ⚠️ TWO THINGS THE SELECTOR COLUMN OVER-COUNTS, so read it as an upper bound:
+ * the lookup consults only `TARGET_NOUN_RESTRICTIONS`, so a DAMAGE recipient
+ * ("any target", "target player or planeswalker") that lives in the damage
+ * table reads as an unknown noun; and a body naming two things attributes the
+ * first. Both land in `selector` what is really a `body`. The TRIGGER and BODY
+ * columns are exact — they are probe results, not lookups.
+ *
  * Usage: node packages/cards/scripts/targeted-blame.mjs <corpus.json> [--top N]
  */
 import { readFileSync } from 'node:fs';
@@ -136,7 +143,10 @@ for (const raw of corpus) {
 
   for (const m of mine) {
     clauses += 1;
-    const text = (m.text ?? '').trim();
+    // `missing[].text` is the PRINTED clause (capitalised, trailing period), not
+    // the lowercased canonical form the rule table matches — so the split has to
+    // canonicalise first or every clause reads as unsplittable.
+    const text = (m.text ?? '').trim().replace(/\.$/, '').toLowerCase();
     const split = /^(when|whenever)\s+(.+?),\s+(.+)$/s.exec(text);
     let name, key;
     if (!split) {

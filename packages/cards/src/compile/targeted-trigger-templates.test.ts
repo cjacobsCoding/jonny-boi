@@ -70,27 +70,45 @@ describe('the body\'s leading pronoun — "it" is the source, but only where the
     expect(attacks.targets).toBe('playerOrPlaneswalker');
   });
 
-  it('⚠️ REFUSES the pronoun when the trigger watches ANOTHER permanent — the damage would come from the wrong object', () => {
-    // A BOARD-WATCHING trigger: "it" is the creature that died, never the
-    // source. Widen `SOURCE_SUBJECT_EVENTS` to `permanentDies` and this card
-    // compiles to the source burning someone, which is a different card.
+  it('a BOARD-WATCHING trigger keeps reporting — "it" there is the creature that died', () => {
+    // ⚠️ HONEST LABEL: this is a REGRESSION GUARD FOR THE CARD, not a
+    // falsification of `SOURCE_SUBJECT_EVENTS`. Adding `permanentDies` to that
+    // table does NOT redden it, and the reason is worth writing down:
+    // `trigger-permanent-enters-or-dies` calls `ctx.compileTriggerBody` DIRECTLY
+    // instead of going through `triggerFrom`, so the whole board-watching family
+    // never asks what "it" means. The closed table is the statement of intent
+    // that keeps the next caller honest; this assertion pins that the card stays
+    // reported however the plumbing moves. The live discriminator for the table
+    // is the `watches` case below, which does go red.
     const boardWatch = compileCard(
       card('Whenever another creature you control dies, it deals 1 damage to any target.'),
     );
     expect(boardWatch.status).toBe('incomplete');
+  });
 
-    // An EQUIPMENT'S host trigger is the same mistake wearing a flag: Extra Arms
+  it('⚠️ REFUSES the pronoun when the trigger watches ANOTHER permanent — the damage would come from the wrong object', () => {
+    // An EQUIPMENT'S host trigger is the mistake wearing a flag: Extra Arms
     // prints "whenever enchanted creature attacks, it deals 2 damage to any
     // target", and the Aura is not the thing that deals it. Drop the `watches`
     // check in `resolveSourcePronoun` and this one compiles.
+    //
+    // ⚠️ THE "Equip {2}" LINE IS LOAD-BEARING IN THE TEST ITSELF. Without it the
+    // card is an Equipment that cannot attach, the compiler refuses it for THAT
+    // reason, and this assertion passes no matter what `resolveSourcePronoun`
+    // does — a check that cannot fail. The reason is asserted below, not just
+    // the verdict.
     const hostWatch = compileCard(
-      card('Whenever equipped creature attacks, it deals 2 damage to any target.', {
+      card('Whenever equipped creature attacks, it deals 2 damage to any target.\nEquip {2}', {
         typeLine: { supertypes: [], types: ['Artifact'], subtypes: ['Equipment'] },
         power: null,
         toughness: null,
       }),
     );
     expect(hostWatch.status).toBe('incomplete');
+    expect(
+      hostWatch.missing.map((gap) => gap.text).join(' | '),
+      'refused for the PRONOUN, not for want of an Equip line',
+    ).toContain('it deals 2 damage');
   });
 });
 
