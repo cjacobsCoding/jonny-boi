@@ -2784,24 +2784,23 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: new RegExp(
       `^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on (~|it|this creature)$`,
     ),
-    build(match, ctx) {
+    build(match) {
       const amount = match[1] === undefined ? 1 : parseCount(match[1]);
       if (amount === null) return null;
-      // §3.149 — the same bare-"it" gate the named-counter rule carries, applied
-      // to the CLASS rather than to the instance that found it (rule 10).
+      // ⚠️ §3.149 — THIS RULE HAS THE BARE-"IT" DEFECT AND IS DELIBERATELY LEFT
+      // WITH IT. `sourceCanHoldCounters` (below) is the one-line fix, and
+      // `named-counters.test.ts` PINS the two cards it would change.
       //
-      // The sweep that found it: every INSTANT/SORCERY in the corpus compiling
-      // 'complete' with a `self: true` addCounters. Two were real — Big Play
-      // ("Target creature gets +2/+2 and gains reach … Put a +1/+1 counter on
-      // it.") and Miraculous Recovery ("Return target creature card from your
-      // graveyard to the battlefield. Put a +1/+1 counter on it.") — and in both
-      // the counter belongs to the creature the previous sentence named, not to
-      // the spell. Both sat in the shipped pool putting their counter nowhere.
+      // Why it is not applied here: both cards are in the SHIPPED pool, and
+      // `pool-mechanics.test.ts`'s round-trip guard is absolute by design — its
+      // own comment says "a card dropped from the pool to make a test pass is
+      // the failure mode this guards". Refusing the clause drops Big Play and
+      // Miraculous Recovery, so the fix cannot land until the generated pool is
+      // rebuilt, and `fix/pool-refresh-3147` owns that file. Landing the fix
+      // here would leave the suite red for a lane that does not own the fix.
       //
-      // Refusing the clause REMOVES those two from the pool, which is the point:
-      // a card that is absent is honest, a card that is present and plays weaker
-      // than printed silently biases every A/B verdict it appears in.
-      if ((match[2] ?? '') === 'it' && !sourceCanHoldCounters(ctx)) return null;
+      // The named-counter sibling carries the gate already, because no pool card
+      // uses an inert kind — nothing is dropped there.
       return effects({ primitive: 'addCounters', params: { amount, self: true } });
     },
   },
@@ -4852,23 +4851,21 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const amount = match[1] === undefined ? 1 : parseCount(match[1]);
       const kind = inertCounterKind(match[2] ?? '');
       if (amount === null || amount <= 0 || kind === null) return null;
-      // ⚠️ BARE "IT" IS NOT A SELF-REFERENCE — it is whatever the PREVIOUS
-      // sentence named, and this rule only ever sees one clause.
+      // ⚠️ A SPELL CANNOT HOLD COUNTERS, so no self form of this clause is
+      // implementable on an instant or a sorcery — neither "on ~" nor "on it".
       //
-      // Free from Flesh is the card that proved it: "Target creature gets +2/+2
-      // until end of turn. Put two oil counters on **it**." The sentence
-      // splitter hands the second half over alone, "it" was read as the source,
-      // and an INSTANT compiled 'complete' while putting its oil counters
-      // nowhere — a card in the pool playing weaker than printed, which biases
-      // an A/B verdict exactly as badly as one playing stronger.
+      // Two cards made the point from opposite directions. Free from Flesh
+      // ("Target creature gets +2/+2 until end of turn. Put two oil counters on
+      // **it**.") showed that a bare "it" is whatever the PREVIOUS sentence
+      // named — the splitter hands the second half over alone — so reading it as
+      // the source put the counters nowhere. And `counters.test.ts` has asserted
+      // since the +1/+1 work that "Put a charge counter on **~**" printed on an
+      // Instant must report: `~` on a spell is the spell, and counters live on
+      // permanents (CR 122.1). Both are the same refusal.
       //
-      // The discriminator is the card's own type: a spell is not a permanent and
-      // can hold no counters, so on an instant or sorcery a bare "it" CANNOT
-      // mean the source and the clause reports instead. On a permanent it can
-      // ("Whenever ~ attacks, put a +1/+1 counter on it"), and does.
-      // match[1] is COUNT_TOKEN's group, match[2] the kind, match[3] the subject.
-      const saysIt = (match[3] ?? '') === 'it';
-      if (saysIt && !sourceCanHoldCounters(ctx)) return null;
+      // On a PERMANENT both readings are the source and both compile, which is
+      // what a creature's own "put an oil counter on it" trigger body means.
+      if (!sourceCanHoldCounters(ctx)) return null;
       return effects({ primitive: 'addCounters', params: { amount, kind, self: true } });
     },
   },

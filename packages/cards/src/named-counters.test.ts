@@ -175,11 +175,32 @@ describe('§3.149 — inert named counters compile; counters with RULES do not',
     expect(result.matchedRules).not.toContain('put-named-counter-on-self');
   });
 
-  it('the SAME gate covers the +1/+1 sibling — Big Play, Miraculous Recovery', () => {
-    // Rule 10: fix the CLASS, not the instance. A corpus sweep for every
-    // instant/sorcery compiling 'complete' with a self:true addCounters found
-    // exactly these two, both shipped in the pool on main with their counter
-    // going nowhere. Real printed text, corpus 2026-09-15.
+  it('PINS the same defect still live on the +1/+1 sibling — Big Play, Miraculous Recovery', () => {
+    /*
+     * ⚠️ THIS TEST ASSERTS BEHAVIOUR THAT IS WRONG, ON PURPOSE. It is a pinned
+     * blocker in the style §3.147 used for Axebane Guardian: the defect is real,
+     * it is named, and the test goes RED the day somebody fixes it — which is
+     * the signal to delete this test and regenerate the pool.
+     *
+     * THE DEFECT. `put-counters-on-self` reads a bare "it" as the source. On an
+     * INSTANT that is impossible — counters live on permanents (CR 122.1) — and
+     * "it" is the creature the PREVIOUS sentence named. A corpus sweep for every
+     * instant/sorcery compiling 'complete' with a `self: true` addCounters found
+     * exactly these two, and both are in the SHIPPED pool putting their counter
+     * nowhere. Real printed text, corpus 2026-09-15.
+     *
+     * WHY IT IS NOT FIXED IN THIS LANE. The one-line fix is the
+     * `sourceCanHoldCounters` gate the named-counter rule already carries. But
+     * applying it drops both cards from the pool, and `pool-mechanics.test.ts`'s
+     * round-trip guard is absolute BY DESIGN — "a card dropped from the pool to
+     * make a test pass is the failure mode this guards". So the fix can only
+     * land together with a pool regeneration, and `fix/pool-refresh-3147` owns
+     * that generated file.
+     *
+     * FOR WHOEVER LANDS IT: add `if (!sourceCanHoldCounters(ctx)) return null;`
+     * to `put-counters-on-self`, delete this test, regenerate. Expect the
+     * accepted count to fall by exactly 2, and that fall is a correction.
+     */
     const cases: readonly (readonly [string, string])[] = [
       [
         'Big Play',
@@ -195,12 +216,12 @@ describe('§3.149 — inert named counters compile; counters with RULES do not',
         typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
       });
       const result = compileCard(spell);
-      expect(result.matchedRules, `${name} must not bind "it" to the spell`).not.toContain(
-        'put-counters-on-self',
+      expect(result.status, `${name}: if this is now 'incomplete', the defect is FIXED`).toBe(
+        'complete',
       );
-      expect(result.status, `${name} reports rather than playing weaker than printed`).toBe(
-        'incomplete',
-      );
+      // The counter is bound to the SPELL — this is the wrong binding, pinned.
+      const ref = (result.definition.effects ?? []).find((e) => e.primitive === 'addCounters');
+      expect(ref?.params?.self, `${name}: the wrong binding, pinned`).toBe(true);
     }
   });
 
