@@ -309,6 +309,17 @@ and the shipped pool lags the compiler. Any absolute below is annotated with the
 | 2026-09-15 | **+57** | {X} / derived value (PR #34) | DESIGN §3.149 — 32,341-card corpus against fork point `51919f7`, set-diffed (0 lost). **Kessig Wolf Run ✅** |
 | 2026-09-15 | **+43** | loyalty, emblem, untap (PR #39) | 32,341-card corpus against `fd1ca31`, set-diffed (0 lost). Attributed 36 freeze / 7 `and`-verb, **0 unattributed**. ⚠️ **Jace ✗ and Tamiyo ✗ — both honest NO-GOs**, residues pinned by name. |
 | 2026-09-15 | **+175** | printed TARGET BOUND (DESIGN §3.150) | 32,414-card corpus against `fd1ca31`, set-diffed (0 lost). **Selesnya Charm ✅.** ⚠️ Only **28** of the +175 are modal — the CLASS was fixed, not the instance. |
+| 2026-09-15 | **+34** | Populate / copy selectors (PR #42) | 32,341-card corpus against `fd1ca31`, set-diffed (0 lost). **Trostani, Selesnya’s Voice ✅** — and it needed **zero `packages/core` changes**. 15 of the 34 are populate cards; 19 are `", then "` as an ordered conjunction. |
+
+> ⚠️ **The 299-card copy row was the §2 trap again and flatter than any before it: 300 cards,
+> 301 shapes — 1.00 cards per shape.** Every card in it prints a sentence no other card prints.
+> `copysel-blame.mjs` shows its NAME points at the wrong half too: the row is **6% selectors and 74%
+> sentences with no rule**, its largest single piece being the unbuilt verb "becomes a copy of" (72
+> clauses). And ⚠️ **the row never contained populate at all** — all 25 printed populate cards are
+> filed under EIGHT other rows, because `UNSUPPORTED_HINTS` is first-match and `stripReminderText`
+> runs before any hint is tried. **This lane moved 34 cards while the row it was assigned stayed at
+> 300.** Run `copysel-blame.mjs --scan`, which selects by clause TEXT rather than by hint row, before
+> trusting any row size: by text this shape is **691 cards, not 498**.
 
 ⚠️ **These deltas do not add up, and must not be added.** Each was measured against its own fork
 point on its own corpus, so the arithmetic sum (+528) is an upper bound, not a count. **The campaign

@@ -2889,6 +2889,148 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.150 The copy-selector row is the §3.120 artifact a FIFTH time — and the card it "blocks" was never in it — ✅ done
+
+> ⚠️ **Section number claimed off a contended range.** `main` carried §3.149 at fork and four lanes
+> are live in `rules.ts` (`feat/copy-templates`, `feat/modal-templates`, `feat/loyalty-emblem`, this
+> one). If an integrator finds a second §3.150, renumber this one — it references no other section by
+> number except as prose.
+
+The backlog entry *"a copy-creating template outside the compiler's closed tables"* names **299
+cards**, and `docs/ALL-CARDS-CAMPAIGN.md` §3 files it as one of the five NEAR-MISSES: *"the copy
+system, token copies and delayed sacrifice tails are ALL implemented; three named selectors remain."*
+It is the row said to block **Trostani, Selesnya's Voice** from `docs/decks/acidic-angels.txt`.
+
+Three things were measured before anything was written, and all three contradict the headline.
+
+**1. The row is the §3.120 artifact again, and it is the thinnest yet.** `gap-clauses.mjs` over one
+fixed 32,341-card corpus: **300 cards, 301 distinct shapes — 1.00 cards per shape.** Every card in
+this row prints a sentence no other card prints. The five lanes that have now measured a row read
+1.20, 1.18, 1.13, 1.08 and 1.00; that is not noise, and the next lane should assume its row is a
+bucket before it assumes it is a system.
+
+**2. The row's NAME points at the wrong half, for the fourth time in five lanes.** NEW
+`packages/cards/scripts/copysel-blame.mjs` probes each blocked clause three ways through
+`compileCard` on the CARD'S OWN type line — a selector the compiler already knows with the tails
+kept, the printed selector with the tails stripped, and both:
+
+| where the blame sits | clauses | shapes | cards this blocks ALONE |
+|---|---:|---:|---:|
+| **SELECTION** — a selector outside the closed table | 32 | 31 | 22 |
+| **FIDELITY** — the selector is known, a TAIL is not | 20 | 20 | 19 |
+| BOTH | 7 | 7 | 6 |
+| **SENTENCE** — no rule for the printed verb at all | **377** | **373** | **217** |
+| NOT-REWRITABLE — no copy-verb row matched | 73 | 72 | — |
+
+So a row called *copy **selectors*** is **6% selectors and 74% sentences**, and a brief written from
+its name would have spent itself on the smaller sixteenth. The single biggest sentence gap is a whole
+unbuilt VERB: **"becomes a copy of", 72 clauses** (Cytoshape, Mirrorweave, Sakashima's Will,
+Cryptoplasm, Protean Thaumaturge).
+
+⚠️ **The script's own SELF-CHECK caught a bias in its first draft, and that is why it has one.** A
+spell-shaped substitute selector ("target creature") is illegal inside a TRIGGER BODY — a body may
+not grow an aim it did not print — so every trigger-body clause would have been filed a SENTENCE gap
+for the script's reason rather than the card's. Each verb now carries a TARGETLESS substitute (`~`,
+which is `{ self: true }`) beside the targeted one. Re-measured after the fix the split did not move,
+so the correction is verified neutral rather than assumed so — but a check that could not have failed
+would have proved nothing either way.
+
+**3. ⚠️ THE ROW DOES NOT CONTAIN THE CARD IT IS SAID TO BLOCK, OR ANY OTHER CARD OF ITS MECHANIC.**
+`UNSUPPORTED_HINTS` is first-match and `stripReminderText` runs before any hint is tried — so
+populate, whose copy words live entirely in reminder text, reaches the hints as the bare word.
+**All 25 printed populate cards in the corpus are filed under EIGHT other rows and not one under this
+one**: 12 under "a rules template" (§2's own aggregation artifact), 3 under the "at the beginning
+of…" body, 2 under filtered-targeting, 2 under "you may / choose", and one each under graveyard,
+enters-tapped, delayed-ability and — Trostani — **activated-ability**. Run with `--scan`, which
+selects by clause TEXT instead of by hint row, the same corpus reports **691 cards / 712 clauses
+against 498 / 509 by hint: 193 cards of this shape sit in other rows.** A row size is a statement
+about hint order, not about a mechanic.
+
+The arithmetic that follows from this is the finding worth carrying: **this lane moved 34 cards and
+the row it was assigned did not move at all — 300 cards and 301 shapes before and after.** A lane
+that had reported its delta as "the row went 300 → 300" would have reported a failure, and a lane
+that had worked the row would have spent itself on 301 one-off sentences.
+
+**What shipped, all of it in `packages/cards` and none of it in core:**
+
+1. **POPULATE as a SELECTOR on `createTokenCopy`, not a primitive of its own.** CR 701.32a is a
+   fourth way to answer "which permanent is copied", beside `self`, `equipped` and a target — so it
+   is one branch in `copySourceFor`, and populate inherits `copiableDefOf`, the doublers, the haste
+   grant and the delayed sacrifice instead of needing its own copy of each (rule 12). ⚠️ **It is a
+   CHOICE, not a target**, and the difference is printed: "choose" means the decision is made on
+   RESOLUTION, a token with hexproof is a legal populate, and the ability goes on the stack with
+   nothing to aim. Compiling it through the target path would have been wrong in three directions at
+   once and the board would have looked identical on the turn it mattered least.
+   ⚠️ **The chosen token may be gone by the time the answer arrives** — `chooseCards` parks and the
+   board is live across that window — so the id is re-read off the battlefield and re-checked against
+   the same three printed words that offered it. `isPopulatable` is the ONE place those words are
+   asked, so the menu and the post-answer check cannot disagree.
+2. **The printed TAILS, read through the token-copy family's OWN vocabulary.** Ghired's "The token
+   enters tapped and attacking" goes through `tokenEntryWords` — the very function the
+   "create a **tapped** token" form uses — and Determined Iteration's grant and delayed sacrifice
+   through `TOKEN_COPY_GRANT_SENTENCE` and `TOKEN_COPY_DELAYED_REMOVAL`. One reading, so these
+   sentences mean the same thing on Kiki-Jiki and on populate. The grant stays a layer-6 grant and is
+   never folded into the copy: a second copy of Determined Iteration's token must not inherit haste.
+3. **`", then "` is an ordered conjunction — one ROW in the shared helper, not a second splitter.**
+   Measured BEFORE building (rule 11): 2,212 blocked cards print it and 23 compile complete when it
+   is read as a sequence; the actual set diff was **+24**. `compileConjunction` already applies its
+   refs IN ORDER, which is exactly what the printed word "then" demands and what `" and "` was
+   getting for free — §3.60 pinned that two places answering "what does a joined sentence mean"
+   eventually disagree. `" and "` stays FIRST so nothing that compiled before compiles differently,
+   and `", then "` is the SAFER of the two against a bad cut: the trap the helper's own comment names
+   is a conjunction inside a noun phrase ("1/1 **blue and black** Faerie") and no card puts ", then"
+   inside one. The both-halves-must-compile guard refuses a back-reference outright.
+4. **`populate` joins `PRIMITIVE_BACKED_KEYWORDS`** beside proliferate: Scryfall tags the keyword
+   ACTION like an ability, and the rule compiling was not enough while the keyword sweep still
+   reported the word. The evidence (`createTokenCopy`) is not unique to populate and does not need to
+   be — that guard only suppresses a DUPLICATE report, never admits a card, because a populate line
+   the table could not read puts its own text into `missing` regardless.
+
+**`populate.test.ts` is a PLAY test, not a compile test**, because §3.148's Journey to Nowhere shipped
+as a one-way exile that every compile-level check in the repo called `'complete'`. It pins the three
+claims a definition dump cannot make: the menu is the three printed words (two legal answers among
+three decoys — a nontoken creature, a noncreature token, an opponent's token), the answer is
+HONOURED (the copy is of the chosen token, not the first candidate), and a chosen token that **died
+while the question was parked** creates nothing and does not fall back to the survivor.
+⚠️ Every engine test puts TWO creature tokens on the board on purpose: core settles a
+`min === max === candidates.length` question without asking, so a one-token test would assert nothing
+about the menu and would keep passing if the candidate filter broke open.
+
+**⚠️ One existing assertion was FALSE and is replaced rather than deleted.**
+`scry-surveil.test.ts` read *"REFUSES a scry rider whose tail needs its own chosen target"* on the
+text `Scry 1, then ~ deals 3 damage to any target`. It passed only because `", then "` was not a
+separator: the SAME card written as two sentences, or joined with `" and "`, has compiled to those
+exact two refs since the scry family shipped — verified against the fork point, byte-identical effect
+lists. It pinned a SPELLING, not a compiler property, and would have made the separator look like a
+regression when it is the §3.60 fix. What replaces it asserts the claim worth pinning: all three
+spellings compile to a byte-identical effect list, so a drift in any one of them goes red and names
+which. The other red was §3.149's own tripwire on Trostani, written to fire "the day populate lands".
+
+**Measured delta: 6,653 → 6,687 accepted, +34 gained, 0 LOST**, on ONE fixed 32,341-card corpus
+compiled twice with this branch's three sources reverted to fork point `fd1ca31` in between (via
+`git show`, never a checkout — the shared stash and the shared index stay untouched). **15 of the 34
+are populate cards** (25 printed, 0 → 15 complete) and **19 are the `", then "` separator**.
+**Trostani, Selesnya's Voice ✅ compiles and is in the after-set.** The pool was deliberately NOT
+regenerated: the local corpus trips a masking defect another live lane owns.
+
+**Left REPORTED on purpose, each with its number and its reason:**
+- **"becomes a copy of" — 72 clauses, a whole printed VERB with no rule at all.** A copy applied to a
+  permanent already on the battlefield is a layer-1 continuous effect, not `copyAsEnters`. That is
+  CORE work, and this lane deliberately did not open `packages/core/src/copy.ts` while
+  `feat/copy-templates` was live in it. It is the largest single thing left in this family.
+- **The SENTENCE third at large — 377 clauses over 373 shapes**, 1.01 clauses per shape. That is the
+  §3.120 shape again inside the row's own majority, so it was measured and left rather than written
+  one sentence at a time.
+- **`Populate X times`** (Full Flowering) — a repeat COUNT. `createTokenCopy.count` is a static int
+  and X is a cast-time value; that is the {X} lane's machinery meeting this one.
+- **The ten populate cards blocked by something that is not populate**, named card by card because
+  each belongs to a different family: Scion of Vitu-Ghazi and Muster the Departed (an intervening
+  "if"), Song of the Worldsoul and Arboreal Alliance (a trigger CONDITION), Cayth, Famed Mechanist (a
+  modal bullet — `feat/modal-templates` is live on exactly that), Ghired's Belligerence (X damage
+  divided among any number of targets), Xavier Sal (a cost that removes a counter from another
+  permanent), Selesnya Eulogist (exile a creature card from a graveyard), and Nesting Dovehawk (a
+  counters trigger). Seven of those are blocked by their populate-bearing clause alone; three carry a
+  second unrelated blocker.
 ### 3.150 The modal row has NO modal work in it — the bound on a target selector — ✅ done
 
 > ⚠️ **Section number claimed off a contended range.** §3.149 was the highest anywhere when this

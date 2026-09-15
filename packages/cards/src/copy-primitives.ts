@@ -30,6 +30,7 @@ import type {
 } from '@jonny-boi/core';
 import {
   describeRestriction,
+  isCreature,
   isLegalTarget,
   legalTargetsFor,
   makeSpellCopy,
@@ -394,6 +395,7 @@ function tokenEntryParam(ctx: EffectContext): TokenEntryOptions | undefined {
  * token — the outcome that can never play better than the printed card.
  */
 function copySourceFor(ctx: EffectContext): CardInstance | undefined {
+  if (ctx.params.chooseCreatureTokenYouControl === true) return populateSourceFor(ctx);
   if (ctx.params.self === true) {
     // Re-read from the battlefield rather than trusting `ctx.source`: the
     // resolution outlives the object, and `frameSource` hands back a
@@ -411,6 +413,90 @@ function copySourceFor(ctx: EffectContext): CardInstance | undefined {
   const restriction: TargetRestriction = restrictionParam(ctx);
   if (!isLegalTarget(ctx.state, restriction, target, ctx.controller, ctx.source.def)) return undefined;
   return ctx.state.battlefield.find((c) => c.instanceId === target);
+}
+
+/**
+ * POPULATE (CR 701.32a) — *"choose a creature token you control, then create a
+ * token that's a copy of that creature token."*
+ *
+ * A fourth way for {@link createTokenCopy} to find its source, and deliberately
+ * a SELECTOR on the one primitive rather than a `populate` primitive of its own:
+ * populate is not a new thing to do, it is a new way to answer "which permanent
+ * is copied". A second primitive would be a second answer to that question and
+ * would drift from this one the first time `copiableDefOf`, a doubler or an
+ * "except" tail changed (project rule 12) — and it would need its own copy of
+ * the haste grant and the delayed sacrifice that Determined Iteration prints.
+ *
+ * ⚠️ **A CHOICE, NOT A TARGET, and the difference is printed on the card.**
+ * Populate says "choose", so the decision is made on RESOLUTION and the object
+ * is never targeted: a token with hexproof or shroud is a legal populate, an
+ * opponent gets no window to respond to the pick, and an ability that populates
+ * is put on the stack with nothing to aim. Compiling it through the target path
+ * would be wrong in all three directions at once, and the board would look
+ * identical on the turn it mattered least.
+ *
+ * ⚠️ **The chosen token may not survive to be copied, and this is why the
+ * battlefield is re-read after the answer rather than the choice being trusted.**
+ * `ctx.chooseCards` may PARK — the primitive returns having mutated nothing and
+ * the engine re-runs it from the top when the answer arrives — and between the
+ * question and the answer the board is live. The chosen id is therefore looked
+ * up in `ctx.state.battlefield` exactly as every other selector here does, and
+ * re-checked against the same three printed words ("creature", "token", "you
+ * control") that chose it. A token that has died in the meantime creates no
+ * copy, which is the outcome that can never play better than the printed card.
+ * Re-reading the battlefield is also what keeps this on the one zone funnel:
+ * this primitive never moves anything, it asks the battlefield what is there.
+ *
+ * An empty candidate set is a legal no-op, NOT a failed cast (CR 701.32b): you
+ * may cast Wake the Reflections with no creature tokens and it simply does
+ * nothing. So the question is not asked at all when nothing can answer it —
+ * which is also what keeps a pilot from being handed a menu with no items.
+ */
+function populateSourceFor(ctx: EffectContext): CardInstance | undefined {
+  const candidates = ctx.state.battlefield.filter((permanent) => isPopulatable(permanent, ctx.controller));
+  // No creature tokens ⇒ populate does nothing, and asks nothing.
+  if (candidates.length === 0) return undefined;
+  const chosen = ctx.chooseCards({
+    chooser: ctx.controller,
+    prompt: 'Populate: choose a creature token you control to copy',
+    candidates: candidates.map((permanent) => ({
+      instanceId: permanent.instanceId,
+      cardId: permanent.def.id,
+      name: permanent.def.name,
+      zone: 'battlefield' as const,
+      controller: permanent.controller,
+    })),
+    // Populate is not optional once a candidate exists: the printed word is
+    // "choose", not "you may choose".
+    min: 1,
+    max: 1,
+    // Being chosen is GOOD for the chooser — it is their own token being
+    // duplicated — so a pilot with no opinion should take the best one.
+    valence: 'gain',
+    fromZone: 'battlefield',
+  });
+  if (!chosen) return undefined; // parked — nothing mutated, resume later
+  const id = chosen[0];
+  if (id === undefined) return undefined;
+  // Re-read, and re-check: the answer names an id, not an object, and the
+  // object it named may have left between the question and the answer.
+  const source = ctx.state.battlefield.find((permanent) => permanent.instanceId === id);
+  return source !== undefined && isPopulatable(source, ctx.controller) ? source : undefined;
+}
+
+/**
+ * The three printed words of populate's candidate set — "**creature** **token**
+ * **you control**" — asked in ONE place so the menu and the post-answer re-check
+ * can never disagree about what was offerable. That disagreement is the shape
+ * core's own `excludesSelfOfEffects` comment calls out: an engine that rejects
+ * what it offered.
+ *
+ * `def.isToken` is the CR 111.1 stamp rather than a name heuristic, so a token
+ * copy of a printed card answers true and the printed card answers false — the
+ * same field `tokenYouControl` and Second Harvest's iteration already read.
+ */
+function isPopulatable(permanent: CardInstance, controller: PlayerId): boolean {
+  return permanent.controller === controller && permanent.def.isToken === true && isCreature(permanent.def);
 }
 
 /**
