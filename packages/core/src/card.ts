@@ -189,6 +189,26 @@ export interface KeywordFlags {
    */
   readonly cantBlock?: boolean;
   /**
+   * §3.150 — **"~ doesn't untap during its controller's untap step"** (CR 302.6):
+   * the CONTINUOUS half of the does-not-untap family. Basalt Monolith and Grim
+   * Monolith print it on themselves; Waterknot, Dance of the Dead and Cement
+   * Shoes grant it to the permanent they are attached to.
+   *
+   * A keyword flag rather than a field on the instance, deliberately, and that
+   * is the whole reason the aura half costs nothing: a static already reaches
+   * "enchanted creature" through {@link StaticAbility.affects}, the continuous
+   * layer already ORs booleans, and destroying the Aura already ends the effect
+   * on the next index build. Storing "is frozen" on the permanent instead would
+   * have needed a second mechanism to take it back off.
+   *
+   * ⚠️ This is the CONTINUOUS form only. The ONE-SHOT printing — "doesn't untap
+   * during its controller's **next** untap step" — has a different lifetime (it
+   * survives its source leaving, and it expires by being spent), so it lives on
+   * {@link CardInstance.untapSkips}. Both are read by the single predicate
+   * `untapsDuringUntapStep`, which is the only thing the untap step asks.
+   */
+  readonly doesNotUntap?: boolean;
+  /**
    * "Can't be blocked except by N or more creatures" — the GENERAL form of which
    * {@link menace} is the N = 2 printing (Pathrazer of Ulamog prints N = 3).
    *
@@ -1402,7 +1422,7 @@ export interface SpellMode {
    * absent means the mode is target-free. `'any'` is meaningful here, because
    * whether a mode is CHOOSABLE at all depends on a legal target existing.
    */
-  readonly targets?: import('./targeting.js').TargetRestriction;
+  readonly targets?: import('./targeting.js').TargetSpec;
 }
 
 /**

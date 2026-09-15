@@ -192,6 +192,8 @@ export {
  * on every read, so its lifetime ends with its source and nothing has to expire.
  */
 export { hasNoMaximumHandSize, landPlayZonesFor } from './player-statics.js';
+// §3.150 — the untap step's ONE question, and the two writers of its one-shot half.
+export { addUntapSkips, spendUntapSkip, untapsDuringUntapStep } from './untap.js';
 
 /**
  * BLOCK REQUIREMENTS (CR 509.1c/d). `forcedBlockAssignment` is the seam an AI uses
@@ -287,6 +289,9 @@ export {
 // as data on the effect ref (`params.targets`) and enforced when actions are
 // offered, when a cast is applied, and again when the effect resolves.
 export type { TargetRestriction } from './targeting.js';
+// §3.150 - the printed BOUND on a target selector ("target creature with power
+// 5 or greater"). A spec is either the bare noun or the noun plus its bound.
+export type { TargetBound, TargetNumericProperty, BoundedTarget, TargetSpec } from './targeting.js';
 export {
   TARGET_RESTRICTION_PARAM,
   DEFAULT_TARGET_RESTRICTION,
@@ -299,6 +304,12 @@ export {
   restrictionOfEffects,
   describeRestriction,
   triggerTargetPrompt,
+  baseRestrictionOf,
+  boundOf,
+  isBoundedTarget,
+  isTargetSpec,
+  targetMeetsBound,
+  describeBound,
 } from './targeting.js';
 
 // Protection from [quality] + ward (protection.ts): the source-aware half of

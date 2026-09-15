@@ -39,6 +39,9 @@ import type {
   StaticAffects,
   StaticControllerScope,
   TargetRestriction,
+  // §3.150 - the printed bound on a target selector.
+  TargetBound,
+  TargetNumericProperty,
   InterveningIf,
   TriggerCondition,
   TriggeredAbility,
@@ -52,6 +55,10 @@ import {
   PROTECTION_SUBTYPE_PREFIX,
   formatManaCost,
   MANA_COLORS,
+  // §3.150 - read and narrow the reserved target param through core's own
+  // name and validator, never a second spelling of either.
+  TARGET_RESTRICTION_PARAM,
+  isTargetRestriction,
 } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
 import {
@@ -4183,6 +4190,88 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   // the word "another" — a Kiora's Follower that may untap itself for an
   // arbitrarily large mana loop, which is a card playing wider than printed.
   // The honest move is the empty one until `ActivatedAbility` can say it.
+  //
+  // ===========================================================================
+  // §3.150 — THE DOES-NOT-UNTAP FAMILY, one-shot half (`freezeTarget`).
+  //
+  // Measured before writing (rule 11): 246 corpus cards print "doesn't untap
+  // during", ALL of them blocked, 99 blocked SOLELY by such a clause. Unlike the
+  // loyalty row that led here (641 shapes / 668 clauses) these shapes CONCENTRATE.
+  //
+  // Off the SAME `UNTAP_TARGET_NOUNS` table the tap and untap verbs read — the
+  // things an ability may FREEZE are the same things it may tap, and §3.148
+  // already put `creature an opponent controls` in that table for the freeze
+  // family's ETB printing. One table, three verbs, so the next noun is a ROW.
+  //
+  // The CONTINUOUS half is not here: "enchanted/equipped creature doesn't untap
+  // during its controller's untap step" is ONE ROW in `KEYWORD_PHRASES`, which
+  // is what makes the Aura, the Equipment and the "gets +2/+0 AND doesn't untap"
+  // printings all work without a rule each.
+  // ===========================================================================
+  {
+    id: 'tap-target-noun-and-freeze',
+    description:
+      `"Tap target <NOUN>. It doesn't untap during its controller's next untap step" (Ojutai's Breath, Crippling Chill, Tamiyo's +1)`,
+    // TWO effects, not one primitive that does both: Skyline Cascade prints the
+    // freeze with no tap at all, so a combined primitive would have to carry a
+    // "do not actually tap" flag — a parameter that exists only because two
+    // printed sentences were forced into one rule.
+    //
+    // ⚠️ The sentence break is `\\.` — a LITERAL dot. In a template literal a
+    // lone `\.` is a non-escape and collapses to `.`, which silently makes the
+    // regex match ANY character there: "Tap target creature, it doesn't untap…"
+    // and worse would compile. `template-gaps.test.ts` pins the literal form.
+    //
+    // The second sentence's PRONOUN varies with what was tapped — "It" on
+    // Crippling Chill, "That creature" on Frost Trickster's trigger body — and
+    // every printing means the object the first sentence just aimed at. A closed
+    // alternation rather than `.+`: a pronoun this list does not name might refer
+    // to something else entirely, and freezing the wrong permanent is a card
+    // playing differently from the one printed.
+    pattern: new RegExp(
+      `^tap target (${UNTAP_TARGET_NOUN_PHRASE})\\. (?:it|that creature|that permanent|that artifact|that land) doesn'?t untap during its controller'?s next untap step$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const kind = UNTAP_TARGET_NOUNS[match[1] ?? ''];
+      if (kind === undefined) return null;
+      return effects(
+        { primitive: 'tapTarget', params: { targets: kind } },
+        // No `targets` on the freeze: both sentences aim at the SAME chosen
+        // permanent ("It"), and a second restriction here would let the two
+        // halves disagree about what was legal to aim at.
+        { primitive: 'freezeTarget', params: {} },
+      );
+    },
+  },
+  {
+    id: 'freeze-target-noun',
+    description:
+      `"Target <NOUN> doesn't untap during its controller's next untap step" — the freeze with NO tap (Skyline Cascade, House Guildmage, Elvish Hunter)`,
+    pattern: new RegExp(
+      `^target (${UNTAP_TARGET_NOUN_PHRASE}) doesn'?t untap during its controller'?s next untap step$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const kind = UNTAP_TARGET_NOUNS[match[1] ?? ''];
+      return kind === undefined
+        ? null
+        : effects({ primitive: 'freezeTarget', params: { targets: kind } });
+    },
+  },
+  // ⚠️ "…during its controller's untap step FOR AS LONG AS you control ~"
+  // (Dungeon Geists, Icefall Regent, Ty Lee) stays REPORTED. Its lifetime is
+  // neither of the two this family models: it is continuous but radiates onto
+  // ANOTHER permanent chosen once, which needs a static whose `affects` names a
+  // remembered instance — a thing `StaticAffects` cannot say. Compiling it as
+  // the one-shot freeze would unfreeze the creature a turn later while the
+  // Dungeon Geists is still on the battlefield, which is a strictly weaker card
+  // than the printed one; compiling it as the permanent flag would never
+  // unfreeze it at all. Both are wrong in a direction nothing would report.
+  // ⚠️ "…doesn't untap during its controller's next TWO untap steps"
+  // (Telekinesis) is expressible — `freezeTarget` takes a `count` — but its
+  // other two sentences are not, so the card keeps reporting anyway and no rule
+  // was written for a line nothing would reach (`dead-rule-sweep`).
   {
     /**
      * **"Create N X/Y COLOR [SUBTYPES] [artifact] creature token(s) [with
@@ -5309,17 +5398,36 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // ones, so both are accepted.
     pattern: /^you get an emblem with ["“‘](.+)["”’]$/,
     build(match, ctx) {
-      const body = match[1];
-      if (!body) return null;
-      const statics = emblemStatics(body, ctx);
-      const triggers = emblemTriggers(body, ctx);
-      if (statics.length === 0 && triggers.length === 0) return null;
+      const whole = match[1];
+      if (!whole) return null;
+      // §3.150 — an emblem may print SEVERAL quoted abilities, joined by "and"
+      // (Tamiyo the Moon Sage, Saheeli Filigree Master, Sarkhan the
+      // Dragonspeaker, Teferi Who Slows the Sunset). The old greedy `(.+)`
+      // swallowed the join and handed the tables one unparseable run, so every
+      // multi-ability emblem reported. Splitting is not optional generosity:
+      // compiling only the first quoted ability would put an emblem on the
+      // battlefield missing half of what it says.
+      const bodies = splitQuotedEmblemAbilities(whole);
+      if (bodies.length === 0) return null;
+      const statics: StaticAbility[] = [];
+      const triggers: TriggeredAbility[] = [];
+      const definitionFields: Record<string, unknown> = {};
+      for (const body of bodies) {
+        // EVERY quoted ability must compile, or the whole line reports. An
+        // emblem carrying two of its three abilities is exactly the silent
+        // approximation the compiler contract exists to prevent.
+        if (!foldEmblemAbility(body, ctx, statics, triggers, definitionFields)) return null;
+      }
+      if (statics.length === 0 && triggers.length === 0 && Object.keys(definitionFields).length === 0) {
+        return null;
+      }
       return effects({
         primitive: 'createEmblem',
         params: {
           name: `${ctx.card.name} emblem`,
           ...(statics.length > 0 ? { statics } : {}),
           ...(triggers.length > 0 ? { triggers } : {}),
+          ...(Object.keys(definitionFields).length > 0 ? { definitionFields } : {}),
         },
       });
     },
@@ -5543,6 +5651,106 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
 ]);
+
+/**
+ * §3.150 — split an emblem's quoted ability list into its abilities.
+ *
+ * `You get an emblem with "A" and "B"` prints two abilities, and the ONLY
+ * reliable delimiter is the quotation marks themselves: an emblem body is
+ * arbitrary card text and routinely contains the word "and", commas, and full
+ * stops of its own ("Whenever a card is put into your graveyard from anywhere,
+ * you may return it to your hand"). So this reads the QUOTES and never the
+ * prose.
+ *
+ * The match handed in has already had the OUTER pair stripped by the rule's
+ * pattern, so what arrives is either one bare body (the common case, and the
+ * one printing that contains no quotes at all) or a run like
+ * `A" and "B`. Splitting on a quote-run keeps both cases in one code path.
+ *
+ * ⚠️ Returns an EMPTY list rather than a guess when the run does not partition
+ * cleanly — an odd number of quote marks means the text is something this does
+ * not understand, and inventing a body from it would put an ability on the
+ * battlefield that no card prints.
+ */
+function splitQuotedEmblemAbilities(whole: string): readonly string[] {
+  // The join between two quoted abilities: a closing quote, "and" (or a comma
+  // list), an opening quote. A CLOSED set of separators, for the same reason
+  // every other table here is closed.
+  const parts = whole
+    .split(/["”’]\s*(?:,\s*)?(?:and\s+)?["“‘]/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  // A stray quote left inside any part means the split did not partition the
+  // run — report rather than compile half a sentence as a whole ability.
+  if (parts.some((part) => /["“”‘’]/.test(part))) return [];
+  return parts;
+}
+
+/**
+ * §3.150 — fold ONE quoted emblem ability into the emblem being built, and say
+ * whether it was fully understood.
+ *
+ * Three channels, because an emblem's ability may be any of three shapes and
+ * the first two were the only ones the original rule could carry:
+ *  1. a STATIC ("Artifact creatures you control get +1/+1");
+ *  2. a TRIGGER ("At the beginning of your draw step, draw two additional cards");
+ *  3. a DEFINITION-LEVEL flag — "You have no maximum hand size", which is not a
+ *     {@link StaticAbility} at all but `CardDefinition.noMaximumHandSize`, the
+ *     field `player-statics.ts` was built around and whose own header says an
+ *     emblem is the case it exists for. Without this channel the compiler read
+ *     the body correctly, produced the right contribution, and then dropped it
+ *     on the floor because the emblem only looked at `.statics`.
+ *
+ * {@link EMBLEM_DEFINITION_FIELDS} is CLOSED, and a contribution carrying any
+ * field outside it REFUSES — which is the whole point of writing this as a
+ * table. A rule that grows a new contribution field would otherwise be silently
+ * half-applied here, and an emblem is unremovable: a wrong one is wrong for the
+ * rest of the game with nothing to destroy.
+ */
+function foldEmblemAbility(
+  body: string,
+  ctx: RuleContext,
+  statics: StaticAbility[],
+  triggers: TriggeredAbility[],
+  definitionFields: Record<string, unknown>,
+): boolean {
+  const fromStatics = emblemStatics(body, ctx);
+  if (fromStatics.length > 0) {
+    statics.push(...fromStatics);
+    return true;
+  }
+  const fromTriggers = emblemTriggers(body, ctx);
+  if (fromTriggers.length > 0) {
+    triggers.push(...fromTriggers);
+    return true;
+  }
+  const clause = normalizeClause(body);
+  for (const rule of STATIC_RULES) {
+    const matched = clause.match(rule.pattern);
+    if (!matched) continue;
+    const contribution = rule.build(matched, ctx);
+    if (!contribution) continue;
+    const keys = Object.keys(contribution);
+    if (keys.length === 0 || !keys.every((key) => EMBLEM_DEFINITION_FIELDS.has(key))) continue;
+    for (const key of keys) definitionFields[key] = (contribution as Record<string, unknown>)[key];
+    return true;
+  }
+  return false;
+}
+
+/**
+ * The CLOSED set of compiler contribution fields an emblem may carry straight
+ * onto its own {@link CardDefinition}.
+ *
+ * One row so far, and it is deliberately one row: `noMaximumHandSize` is the
+ * field `hasNoMaximumHandSize` reads from the command zone, so an emblem
+ * carrying it genuinely works today. Every other contribution field either
+ * describes a PERMANENT an emblem is not (power, toughness, attachment) or
+ * needs a reader that does not look at the command zone — and the difference is
+ * not visible in the shape of the contribution, which is exactly why this is a
+ * named table and not a spread.
+ */
+export const EMBLEM_DEFINITION_FIELDS: ReadonlySet<string> = new Set(['noMaximumHandSize']);
 
 /**
  * The STATIC abilities an emblem body compiles to, or an empty list.
@@ -7858,6 +8066,28 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // §3.150 — the does-not-untap family's SELF printing (Basalt Monolith, Grim
+    // Monolith, Battered Golem, Spectral Force): 35 corpus clauses, 9 of them the
+    // card's only blocker. A printed keyword on the card itself, so it needs no
+    // static at all — the continuous layer reads `def.keywords` as the base set
+    // that every grant ORs onto, which is why one flag serves the self, the Aura
+    // and the Equipment printings from three different places.
+    id: 'self-does-not-untap',
+    description: `"~ doesn't untap during your untap step" (Basalt Monolith, Grim Monolith)`,
+    // "during YOUR untap step" when the card prints it about itself, "during ITS
+    // CONTROLLER'S" when a granted line does; both name the same step, because a
+    // permanent only ever untaps in its own controller's.
+    pattern: /^~ doesn'?t untap during (?:your|its controller'?s) untap step$/,
+    build() {
+      return { keywords: { doesNotUntap: true } };
+    },
+  },
+  // ⚠️ "~ doesn't untap during your untap step IF IT HAS A DEPLETION COUNTER ON
+  // IT" (Veldt, Lava Tubes) stays REPORTED: `KeywordFlags` is unconditional, and
+  // a conditional continuous ability needs a static whose `affects` can read a
+  // counter on the SOURCE. Dropping the condition makes a land that never
+  // untaps.
+  {
     // The mirror of the rule above, and a genuinely different one: this creature
     // may not be declared as a BLOCKER (Carrion Feeder, Gravecrawler, Bloodghast).
     // Both halves are printed together often enough to deserve their own pattern,
@@ -9274,8 +9504,15 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     // creature can't be blocked and has shroud" carries no leading "has". It is
     // a catch-all only in shape - `parseKeywordList` still has to recognise every
     // conjunct, so a line naming anything else returns null and keeps reporting.
+    // §3.150 — the grant verb after "and" is OPTIONAL for the same reason the
+    // third alternative exists at all: "gets +4/+2 AND DOESN'T UNTAP during its
+    // controller's untap step" (Vulshok Gauntlets, Dance of the Dead, Leaden
+    // Fists) prints a sentence where a keyword word would carry "has". Without
+    // this the whole line fell to the verbless catch-all, which then handed
+    // `parseKeywordList` the conjunct "gets +4/+2" and was refused. Nothing is
+    // widened: every conjunct still has to be a phrase the closed tables name.
     pattern:
-      /^(?:enchanted|equipped) creature (?:gets ([+-]\d+)\/([+-]\d+)(?: and (?:has|gains) (.+))?|(?:has|gains) (.+)|(.+))$/,
+      /^(?:enchanted|equipped) creature (?:gets ([+-]\d+)\/([+-]\d+)(?: and (?:(?:has|gains) )?(.+))?|(?:has|gains) (.+)|(.+))$/,
     build(match) {
       const power = match[1] === undefined ? 0 : parseSignedInt(match[1]);
       const toughness = match[2] === undefined ? 0 : parseSignedInt(match[2]);
@@ -9441,6 +9678,16 @@ const LEADING_GRANT_VERB = /^(?:has|have|gains?) /;
 const KEYWORD_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   "can't be blocked": 'unblockable',
   "can't block": 'cantBlock',
+  // §3.150 — the CONTINUOUS half of the does-not-untap family, as ONE ROW.
+  // This single entry is what makes every Aura and Equipment printing work:
+  // `attachment-modification` already routes "Enchanted creature <anything>"
+  // and "Equipped creature gets +2/+0 and <anything>" through this parser, so
+  // Waterknot, Cement Shoes, Dance of the Dead and Vulshok Gauntlets are all
+  // served by the row rather than by a rule each. The printed subject varies
+  // ("its controller's" on a granted line) and is not part of the key: the
+  // grant lands on the host, whose own untap step is the only one it could
+  // mean.
+  "doesn't untap during its controller's untap step": 'doesNotUntap',
 });
 
 /**
@@ -11646,3 +11893,194 @@ export function explainUnsupported(clause: string): string {
   }
   return 'a rules template the compiler does not recognize yet';
 }
+
+// ===========================================================================
+// §3.150 — THE PRINTED TARGET BOUND. One pre-pass, not a rule per verb.
+//
+// Measured on a 32,414-card corpus: 233 blocked cards are held out by a bound
+// on a target selector alone, and the printed vocabulary is SMALL — four bound
+// families across six verbs (destroy 75, return 23, "deals N damage to" 19,
+// exile 17, counter 9, gain control of 4).
+//
+// A rule per verb would have re-spelled the whole noun vocabulary six times and
+// left the seventh verb still broken, which is the "two places answer one
+// question" failure rule 12 names. So this is ONE pre-pass in `applyRules`,
+// exactly where §3.149 put the "where X is …" binding and for the same reason:
+// the SENTENCES were never missing. "Destroy target creature." already
+// compiles; it refuses only because the printed words "with flying" follow the
+// noun. Strip the bound, let the ordinary rule compile the clause it always
+// could, then narrow the restriction that rule declared.
+//
+// So every verb — present and future — gains bounded targets in one edit, and
+// adding the next printed bound is a ROW in the tables below.
+// ===========================================================================
+
+/** The printed comparison words, as the {@link TargetBound} field each means. */
+const TARGET_BOUND_DIRECTIONS: Readonly<Record<string, 'atLeast' | 'atMost'>> = Object.freeze({
+  'or greater': 'atLeast',
+  'or more': 'atLeast',
+  'or less': 'atMost',
+  'or fewer': 'atMost',
+});
+
+/** The printed numeric properties a bound may compare, as core's own property names. */
+const TARGET_BOUND_PROPERTIES: Readonly<Record<string, TargetNumericProperty>> = Object.freeze({
+  power: 'power',
+  toughness: 'toughness',
+  'mana value': 'manaValue',
+  // Pre-2021 Oracle wording for the same number (CR 202.3). Both spellings are
+  // in the corpus, so both are rows — never one spelling matched and the other
+  // left to look like a different family.
+  'converted mana cost': 'manaValue',
+});
+
+/**
+ * The printed keywords a "with …"/"without …" bound may name, mapped to the
+ * core keyword flag each one is.
+ *
+ * CLOSED, and the refusals matter: a keyword the engine does not model is NOT
+ * quietly dropped from the selector, because "destroy target creature with
+ * shadow" compiled as "destroy target creature" is a strictly better card. A
+ * keyword outside this table makes the whole clause report.
+ */
+const TARGET_BOUND_KEYWORDS: Readonly<Record<string, keyof KeywordFlags>> = Object.freeze({
+  flying: 'flying',
+  trample: 'trample',
+  vigilance: 'vigilance',
+  haste: 'haste',
+  'first strike': 'firstStrike',
+  'double strike': 'doubleStrike',
+  deathtouch: 'deathtouch',
+  lifelink: 'lifelink',
+  defender: 'defender',
+  reach: 'reach',
+  menace: 'menace',
+  hexproof: 'hexproof',
+  indestructible: 'indestructible',
+  flash: 'flash',
+});
+
+/** The printed colour words a "target <colour> …" selector may name. */
+const TARGET_BOUND_COLOURS: Readonly<Record<string, 'W' | 'U' | 'B' | 'R' | 'G'>> = Object.freeze({
+  white: 'W',
+  blue: 'U',
+  black: 'B',
+  red: 'R',
+  green: 'G',
+});
+
+const TARGET_BOUND_KEYWORD_PHRASE = Object.keys(TARGET_BOUND_KEYWORDS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+const TARGET_BOUND_PROPERTY_PHRASE = Object.keys(TARGET_BOUND_PROPERTIES)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+const TARGET_BOUND_DIRECTION_PHRASE = Object.keys(TARGET_BOUND_DIRECTIONS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+
+/**
+ * The printed bound TAIL, anchored to the word "target" so only a TARGET
+ * selector is narrowed.
+ *
+ * ⚠️ Anchored deliberately: the same words follow a GROUP selector ("destroy
+ * each creature with mana value 3 or less"), and that is a different consumer
+ * with a different filter. Narrowing a group selector through the targeting
+ * seam would police a target that does not exist and leave the group
+ * unfiltered — a card playing wider than printed, in the half nobody looked at.
+ */
+const BOUND_TAIL = new RegExp(
+  `\\b(target [a-z][a-z ]*?)\\s+((?:with|without) (?:${TARGET_BOUND_KEYWORD_PHRASE})|with (?:${TARGET_BOUND_PROPERTY_PHRASE}) \\d+ (?:${TARGET_BOUND_DIRECTION_PHRASE}))\\b`,
+  'gi',
+);
+
+/** The printed COLOUR form, which sits before the noun rather than after it. */
+const BOUND_COLOUR = new RegExp(`\\btarget (${Object.keys(TARGET_BOUND_COLOURS).join('|')}) (?=[a-z])`, 'gi');
+
+/**
+ * Read one printed bound phrase into a {@link TargetBound}, or `null`.
+ *
+ * CLOSED (engineering rule 2): a phrase no row understands returns null and the
+ * clause reports with its real number, rather than being widened to the nearest
+ * bound that happens to exist.
+ */
+function parseBoundPhrase(phrase: string): TargetBound | null {
+  const keyword = new RegExp(`^(with|without) (${TARGET_BOUND_KEYWORD_PHRASE})$`, 'i').exec(phrase);
+  if (keyword) {
+    const flag = TARGET_BOUND_KEYWORDS[(keyword[2] ?? '').toLowerCase()];
+    if (flag === undefined) return null;
+    return (keyword[1] ?? '').toLowerCase() === 'with' ? { withKeyword: flag } : { withoutKeyword: flag };
+  }
+  const numeric = new RegExp(
+    `^with (${TARGET_BOUND_PROPERTY_PHRASE}) (\\d+) (${TARGET_BOUND_DIRECTION_PHRASE})$`,
+    'i',
+  ).exec(phrase);
+  if (numeric) {
+    const property = TARGET_BOUND_PROPERTIES[(numeric[1] ?? '').toLowerCase()];
+    const direction = TARGET_BOUND_DIRECTIONS[(numeric[3] ?? '').toLowerCase()];
+    if (property === undefined || direction === undefined) return null;
+    const value = Number(numeric[2]);
+    if (!Number.isInteger(value)) return null;
+    return direction === 'atLeast' ? { atLeast: { property, value } } : { atMost: { property, value } };
+  }
+  return null;
+}
+
+/** What {@link stripTargetBound} found: the clause without its bound, and the bound. */
+export interface StrippedTargetBound {
+  readonly clause: string;
+  readonly bound: TargetBound;
+}
+
+/**
+ * Take the printed bound off a clause's target selector, so the ordinary rules
+ * can compile the sentence they always could.
+ *
+ * Refuses (returns null) when the clause carries MORE THAN ONE bounded
+ * selector: a clause with two aims has no single restriction to narrow, and
+ * guessing which one the bound belongs to is how a closed table stops being
+ * closed. Those cards keep reporting, with their number.
+ */
+export function stripTargetBound(clause: string): StrippedTargetBound | null {
+  const tails = [...clause.matchAll(BOUND_TAIL)];
+  const colours = [...clause.matchAll(BOUND_COLOUR)];
+  if (tails.length + colours.length !== 1) return null;
+  if (tails.length === 1) {
+    const hit = tails[0] as RegExpMatchArray;
+    const bound = parseBoundPhrase((hit[2] ?? '').trim());
+    if (bound === null) return null;
+    return { clause: clause.replace(hit[0], hit[1] ?? ''), bound };
+  }
+  const hit = colours[0] as RegExpMatchArray;
+  const colour = TARGET_BOUND_COLOURS[(hit[1] ?? '').toLowerCase()];
+  if (colour === undefined) return null;
+  return { clause: clause.replace(hit[0], 'target '), bound: { colour } };
+}
+
+/**
+ * Narrow every target restriction a compiled clause declared by `bound`.
+ *
+ * Returns null — refusing the whole clause — when the compiled effects declare
+ * NO restriction, or declare more than one distinct one, or declare one that is
+ * already bounded. All three mean the printed bound has no single unambiguous
+ * home, and attaching it to a guess would produce a card that targets something
+ * its printed text does not allow. Refusing keeps the card REPORTED with its
+ * number, which is the project's whole acceptance rule.
+ */
+export function applyTargetBound(effects: readonly EffectRef[], bound: TargetBound): EffectRef[] | null {
+  const declared = new Set<string>();
+  for (const ref of effects) {
+    const value = ref.params?.[TARGET_RESTRICTION_PARAM];
+    if (value === undefined) continue;
+    if (!isTargetRestriction(value)) return null; // already bounded, or not a restriction at all
+    declared.add(value);
+  }
+  if (declared.size !== 1) return null;
+  const base = [...declared][0] as TargetRestriction;
+  return effects.map((ref) =>
+    ref.params?.[TARGET_RESTRICTION_PARAM] === undefined
+      ? ref
+      : { ...ref, params: { ...ref.params, [TARGET_RESTRICTION_PARAM]: { base, bound } } },
+  );
+}
+// ============================ end §3.150 ==================================

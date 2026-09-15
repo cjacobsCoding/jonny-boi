@@ -54,7 +54,7 @@ import {
   type InstanceId,
   type PendingChoice,
   type PlayerId,
-  type TargetRestriction,
+  type TargetSpec,
 } from '@jonny-boi/core';
 
 // ---------------------------------------------------------------------------
@@ -381,7 +381,7 @@ export interface AbilitySource {
    * a spell mode both declare `targets`), otherwise from core's own
    * `restrictionOfEffects` — never from a second reader of our own.
    */
-  readonly targets?: TargetRestriction;
+  readonly targets?: TargetSpec;
   /** How many targets the engine will demand; 0 when the source aims at nothing. */
   readonly targetMin: number;
 }
@@ -406,7 +406,7 @@ export function abilitySourcesOf(def: CardDefinition | undefined | null): readon
     kind: AbilitySourceKind,
     label: string,
     effects: readonly EffectRef[] | undefined,
-    targets: TargetRestriction | undefined,
+    targets: TargetSpec | undefined,
     targetMin: number | undefined,
   ): void => {
     const refs = effects ?? [];
@@ -507,7 +507,7 @@ function isEffectRef(value: unknown): value is EffectRef {
  * top level, because that is what it validates a cast against) and what this
  * does need: a gate's body is one level down by construction.
  */
-function deepRestriction(refs: readonly EffectRef[]): TargetRestriction | undefined {
+function deepRestriction(refs: readonly EffectRef[]): TargetSpec | undefined {
   const here = restrictionOfEffects(refs);
   if (here !== undefined) return here;
   for (const ref of refs) {
@@ -543,7 +543,7 @@ function gateBody(ref: EffectRef, shape: OptionalGateShape): readonly EffectRef[
  */
 export function findOptionalGates(
   effects: readonly EffectRef[],
-  aim?: TargetRestriction,
+  aim?: TargetSpec,
 ): readonly FoundGate[] {
   const out: FoundGate[] = [];
   const walk = (refs: readonly EffectRef[], depth: number): void => {
