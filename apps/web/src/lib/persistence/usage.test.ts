@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { DECKS_STORAGE_KEY, PLAY_HISTORY_STORAGE_KEY, SUGGESTION_HISTORY_KEY_PREFIX } from '../config.js';
 import { PROXY_CACHE_STORAGE_KEY } from '../proxy/config.js';
 import {
