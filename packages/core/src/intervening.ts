@@ -29,6 +29,7 @@ import { opponentOf } from './state.js';
 import { aggregateFor } from './internal/continuous.js';
 import { effectivePower, effectiveToughness } from './internal/stats.js';
 import { cameUnderControlSinceLastUpkeep } from './upkeep-costs.js';
+import { turnFactHolds } from './turn-facts.js';
 
 /**
  * What the triggering EVENT was about, for the intervening-"if" kinds that
@@ -116,6 +117,21 @@ export type InterveningIf =
    * is the opponent, and "most or tied" is `opponent.life >= controller.life`.
    */
   | { readonly kind: 'opponentHasMostLife' }
+  /**
+   * §3.149 — "**if you didn't lose life this turn**" (Luminarch Ascension).
+   *
+   * Read off the `youLostLife` turn fact (turn-facts.ts), which every life
+   * decrease feeds through the engine's one emit chokepoint — so damage counts,
+   * exactly as the card's own reminder text says it must, and so does a payment
+   * or a drain. The NEGATION is what is printed, and it is evaluated here
+   * rather than stored, so there is one recorded fact ("you lost life") and one
+   * place that flips it.
+   *
+   * "You" is the SOURCE'S CONTROLLER, never the active player: the trigger is
+   * printed on the permanent and fires on each opponent's end step, so the
+   * player being asked about is the one who controls the enchantment.
+   */
+  | { readonly kind: 'didNotLoseLifeThisTurn' }
   | {
       readonly kind: 'controlCount';
       /** Whose permanents are counted. `'triggering'` is the player the event was about. */
@@ -153,6 +169,10 @@ export function interveningIfHolds(
       const had = about?.amount;
       return had !== undefined && had <= 0;
     }
+    // §3.149 — "if you didn't lose life this turn". `controller` is the source's
+    // controller, which is the referent of the printed "you" (see the kind).
+    case 'didNotLoseLifeThisTurn':
+      return !turnFactHolds(state, 'youLostLife', controller);
     case 'sourceNotRenowned': {
       const battlefield = state.battlefield;
       for (let i = 0; i < battlefield.length; i++) {

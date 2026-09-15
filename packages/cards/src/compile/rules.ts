@@ -5103,6 +5103,16 @@ const INTERVENING_IF_RULES: readonly {
       return condition as unknown as InterveningIf;
     },
   },
+  {
+    // §3.149 — "if you didn't lose life this turn" (Luminarch Ascension). The
+    // ONLY card in the 32,414-card corpus that prints this phrase, and it is
+    // here because Caleb's own deck needs it (ALL-CARDS-CAMPAIGN §4a phase 2),
+    // not because the family is large. Read off the `youLostLife` turn fact,
+    // which damage feeds — which is exactly what the card's own reminder text
+    // ("Damage causes loss of life.") insists on.
+    pattern: /^you didn'?t lose life this turn$/,
+    build: (): InterveningIf => ({ kind: 'didNotLoseLifeThisTurn' }),
+  },
 ]);
 
 /**

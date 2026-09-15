@@ -85,7 +85,26 @@ export type TurnFact =
    * any source — so it is recorded for the player on the other side of the
    * damage, never for the one who took it.
    */
-  | 'opponentWasDealtDamage';
+  | 'opponentWasDealtDamage'
+  /**
+   * §3.149 — "**if you didn't lose life this turn**" (Luminarch Ascension).
+   * True for the player whose life total went DOWN, by any means: damage is
+   * loss of life (the card prints that reminder itself), and so is a payment,
+   * a drain and a Phyrexian pip.
+   *
+   * The MIRROR of `youGainedLife` and not a signed reading of it, for the
+   * reason `lifeLoss` is its own trigger event rather than a negative
+   * `gainLife`: a card that fired on both directions is a different card, and
+   * a turn in which you gained 3 and lost 1 has to answer TRUE to both
+   * questions independently.
+   *
+   * The reader is an intervening "if" and therefore asks for the NEGATION
+   * ("didn't lose life"), which is exactly why this is a recorded fact rather
+   * than something derived at read time: an unrecorded state answers false to
+   * "did lose", so the negation answers true — the safe reading for a turn in
+   * which genuinely nothing happened.
+   */
+  | 'youLostLife';
 
 /** Every tracked fact, in canonical order — the closed vocabulary itself. */
 export const TURN_FACTS: readonly TurnFact[] = Object.freeze([
@@ -95,6 +114,7 @@ export const TURN_FACTS: readonly TurnFact[] = Object.freeze([
   'drewInOwnDrawStep',
   'castASpell',
   'opponentWasDealtDamage',
+  'youLostLife',
 ]);
 
 /** The bit each fact occupies in a player's mask. */
@@ -110,6 +130,10 @@ const FACT_BIT: Readonly<Record<TurnFact, number>> = Object.freeze({
   // `1 << 6`.
   castASpell: 1 << 4,
   opponentWasDealtDamage: 1 << 5,
+  // §3.149 — the bit the comment above reserved. `turn-facts.test.ts` asserts
+  // every bit is distinct, so the next lane to land a fact cannot silently
+  // share this one the way §3.112 and §3.110 nearly shared `1 << 4`.
+  youLostLife: 1 << 6,
 });
 
 /** Clear every player's facts. Called as a turn begins. */
@@ -186,6 +210,9 @@ export function recordTurnFacts(state: GameState, event: GameEvent): void {
     }
     case 'lifeChanged': {
       if (event.delta > 0) setTurnFact(state, 'youGainedLife', event.player);
+      // §3.149 — the other direction, recorded independently: a turn in which
+      // you both gained and lost life answers true to both questions.
+      else if (event.delta < 0) setTurnFact(state, 'youLostLife', event.player);
       return;
     }
     case 'drawCard': {

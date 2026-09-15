@@ -79,6 +79,8 @@ export { restrictionAllows } from './spend-restriction.js';
 // Card model seam
 export type {
   ActivatedAbility,
+  // §3.149 — the printed "Activate only if …" condition.
+  ActivationRestriction,
   AdditionalCastCost,
   CyclingAbility,
   EnteringCounters,
