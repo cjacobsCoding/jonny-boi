@@ -2889,6 +2889,198 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.149 The counters row is the §3.120 artifact a THIRD time — and the seam inside it is the KIND, not the template — ✅ done
+
+The backlog entry *"a counters template the compiler does not recognize yet"* named **2,480 cards**, the
+third-largest row, and it holds two cards from the owner's own deck (`docs/decks/acidic-angels.txt`).
+Measured against a freshly fetched **32,414-card** corpus (2026-09-15) with NEW
+`packages/cards/scripts/counters-blame.mjs`:
+
+```
+2,468 cards blocked (1,361 by this row ALONE) · 2,805 clauses
+template gaps: 2,598 clauses across 2,303 distinct shapes  →  1.13 clauses per shape
+largest single shape: 12 clauses ("Whenever you draw your second card each turn, put a +1/+1 counter on ~")
+```
+
+**So it is the §3.120 artifact again, and worse than §3.147's** — 1.13 clauses per shape against the
+activated row's 1.2, and the biggest lever inside it is worth about a dozen cards. A brief written from
+the 2,480 headline builds whichever shape it guessed. *Report the small number; it is the finding.*
+
+**The ONE seam that is not an artifact is the counter KIND.** §3.147 established that a row's NAME can
+point at the wrong half of its problem, so `counters-blame.mjs` asks the same question here in two ways:
+a closed VERB table (put / enters-with / remove / proliferate / the readers), and a probe that rewrites
+every named kind to `+1/+1` and recompiles. **207 clauses compile the moment the kind is one the engine
+can hold** — their templates already existed and only the vocabulary was missing.
+
+⚠️ **But only 142 of those 207 may be implemented honestly, and the split is the whole design.**
+`INERT_COUNTER_KINDS` is closed, and what is ABSENT is load-bearing: CR 122.1 attaches behaviour to some
+counters, and storing one whose rule nothing honours is a card playing **weaker** than printed — which
+biases an A/B verdict exactly as badly as one playing stronger. Shield (122.1c, eats a destruction) and
+stun (122.1d, eats an untap) are the two biggest kinds in the blocked set after `+1/+1` and `-1/-1`, and
+**both keep reporting**; so do time/fade/age (§3.106 owns those through suspend, vanishing and cumulative
+upkeep), loyalty/defense/level/lore (whole card types read them), the player counters, and keyword
+counters (122.1e, which GRANT a keyword).
+
+**What shipped**, each a table or a seam rather than a card:
+- `addCounters` takes a `kind`, and the target need not be a creature — charge counters go on artifacts,
+  storage on lands, quest on enchantments. Two rules read it (the put-on-self body, the "enters with N
+  `<kind>` counters" line), firing on **136** and **49** real corpus cards.
+- `ActivatedAbility.activateOnly` — the printed **"Activate only if ~ has four or more quest counters on
+  it"** (CR 602.5a). A RESTRICTION, not a cost: the counters are checked and never spent, so a cost would
+  be a strictly worse card and a `timing` would lose it. Enforced in `unpayableActivationReason`, the one
+  funnel both the legality check and the action-offer menu read, so it can never be offered-but-refused.
+  **3 corpus cards print this shape** — not the 8 a looser regex first suggested, because the other 5 are
+  "Activate only if **an opponent** has …", a different condition that keeps reporting.
+- `TargetRestriction.cardInAnyGraveyard` — **"Exile target card from a graveyard"**, 62 printed cards and
+  no existing aim that could express it (both graveyard restrictions are scoped to YOUR graveyard and
+  narrowed to a card type). The rider **"If it WAS a creature card, …"** lives in the same primitive as
+  the exile because the tense is load-bearing: by the time the condition is asked the card is in exile, so
+  the type is read before the move and remembered.
+- The `youLostLife` turn fact + the `didNotLoseLifeThisTurn` intervening "if", fed from the negative
+  `lifeChanged` delta so **damage counts** — which is what Luminarch Ascension's own reminder text demands.
+  Exactly **1 card in 32,414** prints that phrase; it is built because §4a phase 2 is Caleb's own decks,
+  not because the family is large.
+
+📊 **Accepted-count delta: 6,450 → 6,475 = +25, zero regressions**, one fixed corpus compiled twice with
+this lane's nine source files reverted in between (`accepted-count.mjs --names`, the two name lists
+diffed so the gain is a SET, not a subtraction).
+
+🐛 **A bare "it" is not a self-reference — and the same defect is already shipped on main.** Found by
+DIFFING the two accepted-card lists, not by a test. Free from Flesh — *"Target creature gets +2/+2 until
+end of turn. Put two oil counters on **it**."* — first compiled here as an INSTANT with `self: true`, so
+its oil counters went nowhere: the splitter hands the second half over alone, and "it" is whatever the
+PREVIOUS sentence named. The gate is the card's own type — counters live on permanents (CR 122.1), so no
+self form is implementable on a spell — and a pre-existing assertion in `counters.test.ts` ("Put a charge
+counter on **~**" on an Instant must report) showed `~` needs the same refusal as "it".
+
+⚠️ **The +1/+1 SIBLING HAS THE IDENTICAL BUG AND IS DELIBERATELY LEFT UNFIXED, pinned by a test.** A corpus
+sweep for every instant/sorcery compiling complete with a `self: true` addCounters found exactly two, both
+in the **shipped pool**, both putting their counter nowhere: **Big Play** and **Miraculous Recovery**.
+Applying the one-line gate to `put-counters-on-self` drops them, and `pool-mechanics.test.ts`'s round-trip
+guard is absolute by design — *"a card dropped from the pool to make a test pass is the failure mode this
+guards"*. The fix can only land WITH a pool regeneration, and `fix/pool-refresh-3147` owns that generated
+file. So `named-counters.test.ts` pins the wrong behaviour on purpose, in the style §3.147 used for
+Axebane Guardian: it names the one-line fix, and it goes RED the day somebody lands it, which is the
+signal to delete it and regenerate. Expect the count to fall by exactly 2, and that fall is a correction.
+
+✅ **Both deck cards compile.** Scavenging Ooze ✅ and Luminarch Ascension ✅. Crypt Creeper, Withered
+Wretch, Soul-Guide Lantern, Tablet of Compleation and 21 more came with them.
+
+📉 **No throughput regression.** `packages/sim/bench/pilot-bench.mjs --games 1200`, three runs a side
+against the same nine files reverted: **186 / 179 / 206 games/sec on this branch against 186 / 186 / 190**
+— medians identical at 186, and this box's own spread (179–206) is wider than the difference. The win
+counts are byte-identical on both sides at the same seeds (491 / 483 / 492), which is the like-for-like
+proof that nothing about gameplay moved.
+
+⚠️ **Still REPORTED, by name, rather than approximated:** shield and stun counters (25 + 71 clauses);
+time/fade/age outside §3.106's keywords; loyalty, defense, level and lore; keyword counters; the
+"Activate only if AN OPPONENT has …" form (5 cards); counter REMOVAL as an activation cost
+(`ActivationCost` still has no counter component, which is why Grindclock, Surge Node and the whole
+mana-battery family place their charge counters now and still do not enter the pool); proliferate's
+chooser; "double the number of counters"; and every rider on the graveyard exile that is not
+"creature card".
+### 3.148 The targeted-trigger row splits three ways, and one of the three was a card already in the pool — ✅ done
+
+> ⚠️ **Section number claimed off a contended range.** `main` already carries TWO §3.147 sections at
+> fork, and three lanes are live in `rules.ts`. If an integrator finds a second §3.148, renumber this
+> one — it references no other section by number except as prose.
+
+The backlog entry *"a targeted-trigger template the compiler does not recognize yet"* named **888
+cards**, and it holds Oblivion Ring from `docs/decks/acidic-angels.txt`. `gap-clauses.mjs` gave the
+§3.120 answer immediately: **884 cards, 890 clauses, 748 distinct shapes — 1.18 cards per shape,
+largest single shape 19.** Another bucket, not another system, exactly as §3.120 and §3.147 found
+before it.
+
+**The new question this row forced.** §3.147 showed that a row's NAME can point at the wrong half —
+its "activated-ability" row was 95% BODY, not cost. This row's name blames the TRIGGER, and a clause
+`When <EVENT>, <BODY>` can fail in **three** places. NEW
+`packages/cards/scripts/targeted-blame.mjs <corpus>` probes the halves black-box through
+`compileCard` (`<EVENT>, draw a card` and `when ~ enters, <BODY>`) and answers the third by asking
+the compiler's own closed noun table whether it can even aim at the printed noun:
+
+| where the blame sits | clauses | shapes | cards | cards this row blocks ALONE |
+|---|---:|---:|---:|---:|
+| the TRIGGER condition | 97 | 60 | 96 | 52 |
+| the TARGET selector | 137 | 99 | 137 | 95 |
+| **the BODY template** | **396** | **254** | **396** | **280** |
+| both halves | 256 | 247 | 253 | 107 |
+| neither (the whole sentence has no rule) | 4 | 4 | 4 | 3 |
+
+So unlike §3.147 the row does **not** collapse into one half — it is genuinely three problems under
+one label, and a brief written from the row's name would have spent itself on trigger conditions
+worth 52 cards while the body half held 280.
+
+**⚠️ The row BOUNDARY is decided by hint order, not by meaning.** `UNSUPPORTED_HINTS` is a first-match
+table and `/leaves the battlefield/` sits above the targeted-trigger entry, so every *"exile target
+X **until this leaves the battlefield**"* card — the modern O-Ring, 68 printed lines — is filed under
+a different row while being the same shape. Worth knowing before the next agent trusts a row size.
+
+**Three shapes shipped, each a closed table:**
+
+1. **The body's leading PRONOUN.** *"When this creature enters, **it** deals 2 damage to any target"*
+   is the single largest one-clause shape in the row (15 cards) and the effect rule for it already
+   existed — `damage-any-target` reads `~ deals N damage to <RECIPIENT>` over the whole
+   `DAMAGE_TARGET_RESTRICTIONS` table. What was missing was only that the body says "it" where the
+   rule says "~". Resolved in `triggerFrom`/`optionalTriggerFrom` over `SOURCE_SUBJECT_EVENTS`, a
+   CLOSED set of the events whose printed subject IS the source. ⚠️ **The discriminator is that the
+   same pronoun means a different object elsewhere**: on `permanentDies` it is the creature that
+   died, and on an Equipment's `watches: 'attachedHost'` it is the equipped creature (Extra Arms).
+   Widening the set, or dropping the `watches` check, compiles a card whose damage comes from the
+   wrong object — and `'complete'` says nothing about it. Two tests pin exactly that.
+
+2. **"creature an opponent controls" — one printed narrowing, four closed tables.** Core has said
+   `creatureAnOpponentControls` since Banisher Priest; four separate noun tables had never been
+   given the row. One row each in `TARGET_NOUN_RESTRICTIONS`, `PUMP_TARGET_NOUNS`,
+   `UNTAP_TARGET_NOUNS` and `DAMAGE_TARGET_RESTRICTIONS` and the shrink, the tap, the burn and the
+   removal verbs gain it in the same edit. It is never widened to `creature`: a shrink or a tap that
+   may be aimed at your own board is a strictly worse play offered as though it were legal.
+   **And a DRY defect the row exposed:** bounce was reading a PRIVATE `(creature|permanent)`
+   alternation instead of the shared table, so a noun added for destroy and exile reached two verbs
+   of three. `return-target-permanent-to-hand` reads the table now, which also hands it every noun
+   the table already had (`nonland permanent` among them) for free.
+
+3. **⚠️ A CARD ALREADY IN THE POOL, PLAYING BETTER THAN PRINTED.** The O-Ring is three printed
+   sentences and one machine: the ETB exile, the leaves-return, and the **LINK** between them
+   (`exileUntilLeaves` stamps `CardInstance.exiledUntilLeavesBy`; `returnExiledByThis` returns only
+   what that link names). `exile target creature` compiled through the generic `trigger-etb` into a
+   bare `exileTarget`, which records no link — so **Journey to Nowhere and Petravark shipped in
+   `expanded-pool.ts` as one-way exiles whose own printed second line gave back nothing**: removal
+   with no drawback, which is exactly the bias the pool exists to keep out, and which every
+   compile-level check in the repo called `'complete'`.
+   New `trigger-etb-exile-target-noun-linked` exiles through the linked funnel over the shared noun
+   table, **gated on the card actually printing the return line** — Galactus prints the same sentence
+   with no return and must keep compiling to a plain exile, so the same words are two different
+   cards and only the card knows which. Oblivion Ring ✅ and Faceless Butcher ✅ fall out of the same
+   rule, and the word "another" rides the ability as `targetsExcludeSelf` for Fiend Hunter's reason
+   (a Ring that could exile itself would leave, return itself and trigger again, for ever).
+   `oring-linked-play.test.ts` plays both cards through the real action loop — cast, aim, destroy the
+   enchantment with a Demystify from the pool, and look at where the prisoner ended up — because a
+   compile-level assertion is precisely the check that missed this for as long as it shipped.
+
+**Measured delta: 6,450 → 6,572 accepted, +122, and 0 cards lost**, on ONE fixed 32,414-card corpus
+compiled twice with this branch's `rules.ts` reverted in between, so the number is the compiler's and
+not a corpus refresh's. Oblivion Ring ✅ and Faceless Butcher ✅ compile. The row itself went
+**884 → 780 cards / 748 → 715 shapes**, and its former largest shape — "it deals N damage to any
+target", 19 clauses — is gone from the report entirely. The re-run blame shows where the remaining
+work moved: BODY 396 → 303 clauses, SELECTOR 137 → 127, TRIGGER 97 → 129 (it RISES, because a card
+whose body now compiles stops hiding its trigger — the same honest arithmetic §3.147's
+"cost/body/both" table produced).
+
+**Left REPORTED on purpose, each with its number and its reason:**
+- **The modern O-Ring, `exile target <NOUN> an opponent controls until ~ leaves the battlefield`** —
+  measured at **21 lines for `nonland permanent an opponent controls`, 6 for `artifact or creature`,
+  3 for `tapped creature`, 3 for `creature or planeswalker`**, all "an opponent controls". The
+  machinery is entirely built and the rule is one line; what is missing is core's vocabulary — each
+  needs a new `TargetRestriction` member at the five homes a restriction word has (§3.40), and this
+  lane deliberately did not open core's union while three lanes were live in `rules.ts`. That is the
+  cheapest remaining work in this family and it is a CORE task, not a compiler one.
+- **`tap target X. That creature doesn't untap during its controller's next untap step`** (Frost
+  Lynx, 8 clauses) — two sentences where the second says "THAT creature", and
+  `compileTriggerBody` refuses a body needing two aims rather than quietly pointing both at one
+  object. The "that creature" back-reference is the missing piece, not the untap delay.
+- **The TRIGGER-condition half at large** — 60 distinct shapes over 97 clauses, top shape
+  `when ~ is turned face up` at 14. That is the §3.120 shape again inside the row's own third, so it
+  was measured and left rather than written one condition at a time.
 ### 3.149 The {X} row is the §3.120 artifact a third time — and its name points at the wrong half — ✅ done
 
 > ⚠️ **Section number claimed off a contended range.** §3.148 was the highest in `main` when this

@@ -1733,7 +1733,52 @@ export interface ActivatedAbility {
   readonly timing?: CastTiming;
   /** Human-readable text for the log, the inspector, and the replay viewer. */
   readonly label: string;
+  /**
+   * §3.149 — a printed **"Activate only if …"** restriction (CR 602.5a): a
+   * condition that must hold for the ability to be activated at all.
+   *
+   * SEPARATE FROM {@link cost} on purpose, because the two are different rules
+   * and the difference is visible. A cost is PAID — it taps the permanent,
+   * spends the mana, removes the counters — and paying it changes the board. A
+   * restriction is merely CHECKED: Luminarch Ascension's four quest counters
+   * stay on it every time an Angel is made. Modelling the restriction as a cost
+   * would consume them, which is a strictly worse card; modelling it as a
+   * `timing` would lose it entirely.
+   *
+   * Enforced in `unpayableActivationReason`, the ONE funnel both the legality
+   * check and the action-offer menu read — so an ability the pilot may not
+   * activate is never offered AND never accepted, and the two answers cannot
+   * drift apart.
+   *
+   * Absent ⇒ no restriction, which is every ability written before this existed.
+   */
+  readonly activateOnly?: ActivationRestriction;
 }
+
+/**
+ * A printed "Activate only if …" condition — a CLOSED union, for the reason
+ * every table in this engine is closed: a restriction the engine cannot decide
+ * must make its card REPORT, never compile to one that is silently always true
+ * (a strictly better card) or always false (a dead one).
+ *
+ * One member so far. 226 cards in the corpus print an "Activate only if" of
+ * some shape and 8 of them print THIS shape, so the rest keep reporting until
+ * their own conditions are built — deliberately, rather than being widened into
+ * this one.
+ */
+export type ActivationRestriction = {
+  /**
+   * "Activate only if ~ has four or more **quest** counters on it" (Luminarch
+   * Ascension, Glistening Sphere, Cryptex). Counts counters of one KIND on the
+   * ability's own source; a source no longer on the battlefield has none, so
+   * the condition fails rather than defaulting to true.
+   */
+  readonly kind: 'sourceHasCounters';
+  /** The counter kind, exactly as `CardInstance.counters` keys it. */
+  readonly counter: string;
+  /** The printed floor — "four **or more**" is `min: 4`. */
+  readonly min: number;
+};
 
 /**
  * One printed CYCLING ability: what it costs and what cycling it does.

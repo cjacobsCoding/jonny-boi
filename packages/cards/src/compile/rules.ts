@@ -42,10 +42,12 @@ import type {
   InterveningIf,
   TriggerCondition,
   TriggeredAbility,
+  TriggerEvent,
   TriggerWho,
 } from '@jonny-boi/core';
 import {
   DEFAULT_TARGET_RESTRICTION,
+  DEFAULT_TRIGGER_WATCHES,
   PLUS_ONE_COUNTER,
   PROTECTION_SUBTYPE_PREFIX,
   formatManaCost,
@@ -60,6 +62,7 @@ import {
   parseCount,
   parseManaSymbols,
   parseSignedInt,
+  prepareOracle,
   selfReference,
   splitCostSymbols,
   stripReminderText,
@@ -135,6 +138,11 @@ const DAMAGE_TARGET_RESTRICTIONS: Readonly<Record<string, TargetRestriction>> = 
   'target creature or player': 'any',
   'target player or planeswalker': 'playerOrPlaneswalker',
   'target creature or planeswalker': 'creatureOrPlaneswalker',
+  // §3.148 — "When ~ enters, it deals 2 damage to target creature AN OPPONENT
+  // CONTROLS" (Oath of Chandra and kin). Its own row, not a flavour of
+  // 'creature': a burn trigger that may be pointed at your own board is a
+  // strictly worse play offered as though it were legal.
+  'target creature an opponent controls': 'creatureAnOpponentControls',
   'target creature, player, or planeswalker': 'any',
   'target creature, player or planeswalker': 'any',
 });
@@ -230,6 +238,8 @@ const PERMANENT_TARGET: TargetRestriction = 'permanent';
  */
 const GRAVEYARD_SPELL_TARGET: TargetRestriction = 'instantOrSorceryInYourGraveyard';
 const CREATURE_CARD_IN_YOUR_GRAVEYARD_TARGET: TargetRestriction = 'creatureCardInYourGraveyard';
+/** §3.149 — "target card from **a** graveyard": either player's, any card type. */
+const CARD_IN_ANY_GRAVEYARD_TARGET: TargetRestriction = 'cardInAnyGraveyard';
 
 
 /**
@@ -1927,6 +1937,10 @@ export const TARGET_NOUN_RESTRICTIONS: Readonly<Record<string, TargetRestriction
   'nonland permanent': 'nonlandPermanent',
   // §3.112 — bloodrush's aim (read off the live combat record by core).
   'attacking creature': 'attackingCreature',
+  // §3.148 — the most-printed narrowing in the targeted-trigger backlog, and
+  // the one core could already say (`creatureAnOpponentControls`, added for
+  // Banisher Priest). One row, and destroy/exile/bounce gain it together.
+  'creature an opponent controls': 'creatureAnOpponentControls',
   // ⚠️ "artifact, enchantment, or land" is deliberately NOT here: Oracle prints
   // it with and without the serial comma, and `destroy-target-artifact-
   // enchantment-or-land` owns both spellings. A row here would take one
@@ -1947,6 +1961,12 @@ export const TARGET_NOUN_RESTRICTIONS: Readonly<Record<string, TargetRestriction
 const PUMP_TARGET_NOUNS: Readonly<Record<string, TargetRestriction>> = Object.freeze({
   creature: CREATURE_TARGET,
   'attacking creature': ATTACKING_CREATURE_TARGET,
+  // §3.148 — "When ~ enters, target creature AN OPPONENT CONTROLS gets -2/-0
+  // until end of turn" is a whole printed family (Eyeblight Assassin and kin),
+  // and the shrink is only ever aimed at the other side. Widening it to
+  // `creature` would offer a pilot its own board as a legal target for a
+  // penalty, which is a card playing differently from its text.
+  'creature an opponent controls': CREATURE_AN_OPPONENT_CONTROLS_TARGET,
 });
 
 /** The pump nouns as an alternation, longest first so "creature" cannot truncate the pair. */
@@ -1980,7 +2000,9 @@ const TARGET_NOUN_PHRASE = Object.keys(TARGET_NOUN_RESTRICTIONS)
  * snow/legendary/colour narrowings ("untap target legendary permanent",
  * "untap another target snow permanent"). Each needs a restriction core cannot
  * say yet, and a closed table REPORTS rather than widening to the nearest thing
- * that happens to exist.
+ * that happens to exist. The CONTROLLER narrowing core CAN say is the row
+ * below — the test for membership is whether `TargetRestriction` carries the
+ * word, never whether the nearest thing would be close enough.
  */
 const UNTAP_TARGET_NOUNS: Readonly<Record<string, TargetRestriction>> = Object.freeze({
   creature: 'creature',
@@ -1992,6 +2014,10 @@ const UNTAP_TARGET_NOUNS: Readonly<Record<string, TargetRestriction>> = Object.f
   swamp: 'swamp',
   mountain: 'mountain',
   forest: 'forest',
+  // §3.148 — "When ~ enters, TAP target creature an opponent controls" (Frost
+  // Lynx and the whole freeze family). Printed on the tap verb only, and a row
+  // here rather than a rule of its own precisely so the pair cannot drift.
+  'creature an opponent controls': CREATURE_AN_OPPONENT_CONTROLS_TARGET,
 });
 
 /** The untap nouns as an alternation, longest first so none is truncated. */
@@ -2247,6 +2273,127 @@ const PREVENTION_FIXED_RECIPIENTS: Readonly<
 const PREVENTION_FIXED_PHRASE = Object.keys(PREVENTION_FIXED_RECIPIENTS)
   .sort((a, b) => b.length - a.length)
   .join('|');
+
+// =============================================================================
+// §3.149 — THE NAMED-COUNTER VOCABULARY
+// =============================================================================
+
+/**
+ * The counter kinds a card may PUT ON and this engine may store as plain
+ * instance state — a CLOSED table, and the closure is the whole safety argument.
+ *
+ * `counters-blame.mjs` measured the "counters template" backlog row and found
+ * that it is the §3.120 aggregation artifact a third time (2,598 clauses across
+ * 2,303 distinct shapes — 1.13 clauses per shape), with ONE real seam inside it:
+ * 207 clauses compile the moment the counter KIND is one the engine can hold,
+ * and their templates already exist. This table is that seam, restricted to the
+ * kinds where holding the counter is the FULL meaning of the printed line.
+ *
+ * ⚠️ WHAT IS DELIBERATELY ABSENT, and why each absence is load-bearing. CR 122.1
+ * attaches behaviour to some counters, and a card whose counter is stored but
+ * whose rule is not honoured plays WEAKER than printed — which biases an A/B
+ * verdict exactly as badly as one playing stronger:
+ *   - `shield` — CR 122.1c: removes itself instead of the permanent being
+ *     destroyed or dealt damage. 25 clauses want it; all of them keep reporting.
+ *   - `stun`   — CR 122.1d: removes itself instead of the permanent untapping.
+ *     71 clauses want it; all of them keep reporting.
+ *   - `time` / `fade` / `age` — suspend, fading and cumulative upkeep drive
+ *     these, and §3.106 already implements those keywords. A bare "put a time
+ *     counter on ~" outside that machinery is NOT the same thing, so it reports.
+ *   - `loyalty` / `defense` / `level` / `lore` — whole card types (planeswalkers,
+ *     battles, levelers, Sagas) read these; none is inert.
+ *   - `poison` / `energy` / `experience` — PLAYER counters, not permanent state.
+ *   - `keyword` counters (CR 122.1e) — a flying counter GRANTS flying. Storing
+ *     one silently would drop the grant.
+ *
+ * A kind outside this table has no rule, so its card reports by name rather than
+ * being widened into the nearest row that happens to exist.
+ */
+const INERT_COUNTER_KINDS: readonly string[] = Object.freeze([
+  'blood', 'bounty', 'brick', 'charge', 'depletion', 'divinity', 'flood',
+  'gold', 'growth', 'hatchling', 'healing', 'hoofprint', 'ice', 'intervention',
+  'ki', 'lodestone', 'luck', 'matrix', 'music', 'net', 'oil', 'page', 'plague',
+  'pressure', 'quest', 'rust', 'scream', 'slime', 'soul', 'spore', 'storage',
+  'study', 'tide', 'training', 'verse', 'wish',
+]);
+
+/** The alternation, built FROM the table so the two cannot drift apart. */
+const INERT_COUNTER_KIND_TOKEN = INERT_COUNTER_KINDS.join('|');
+
+/**
+ * The counter kind a printed word names, or `null` when the word is outside
+ * {@link INERT_COUNTER_KINDS}. The lookup exists so every rule reading a counter
+ * word asks ONE question in ONE place — a second `includes` somewhere else is
+ * how a kind ends up inert in one rule and reported in another.
+ */
+function inertCounterKind(word: string): string | null {
+  const kind = word.trim().toLowerCase();
+  return INERT_COUNTER_KINDS.includes(kind) ? kind : null;
+}
+
+/**
+ * Whether the card being compiled is something a counter can sit ON.
+ *
+ * Counters live on PERMANENTS (CR 122.1 — and on players, which is a different
+ * system). An instant or sorcery is on the stack and then in a graveyard; it is
+ * never a permanent, so a clause that would put counters "on it" cannot be
+ * talking about the spell itself. Used to refuse a bare "it" whose referent is
+ * the previous sentence's target rather than the source — see the rule that
+ * calls it for the card that proved the difference.
+ */
+function sourceCanHoldCounters(ctx: RuleContext): boolean {
+  return ctx.card.typeLine.types.some((printed) => {
+    const type = printed.toLowerCase();
+    return type !== 'instant' && type !== 'sorcery';
+  });
+}
+
+// --- §3.148, the O-Ring pair: an exile that must LINK, and the guard that says so ---
+
+/**
+ * The printed line that gives an O-Ring's exiled card back.
+ *
+ * ONE pattern, TWO readers: the effect rule that compiles the line, and
+ * {@link printsLinkedReturn}, which asks whether the card prints it at all. A
+ * second copy for the second question is the drift rule 12 names — the day the
+ * wording gains a spelling, only one copy would learn it and the disagreement
+ * would look like a card bug.
+ */
+const RETURN_EXILED_TO_BATTLEFIELD =
+  /^return (?:the exiled cards?|that exiled card) to the battlefield under (?:its|their) owners?['\u2019]?s? control$/;
+
+/** Angel of Serenity's destination — the same line, the same two readers. */
+const RETURN_EXILED_TO_HAND = /^return the exiled cards? to (?:its|their) owners?['\u2019]?s? hands?$/;
+
+/** The leaves-trigger prefix the return line is always printed under. */
+const LEAVES_TRIGGER_PREFIX = /^when ~ leaves the battlefield, (.+)$/;
+
+/**
+ * Does this card print the OTHER half of an O-Ring — a "when ~ leaves the
+ * battlefield, return the exiled card…" line?
+ *
+ * ⚠️ A GUARD, NOT A CONVENIENCE, and a shipped card is why it exists.
+ * "Exile target creature" compiles to a plain `exileTarget`, which records NO
+ * link back to the exiler, while `returnExiledByThis` returns only what the
+ * source's own link names (`CardInstance.exiledUntilLeavesBy`). Journey to
+ * Nowhere prints exactly those two sentences and compiled to that unlinked
+ * pair: the creature was exiled for ever and destroying the enchantment gave
+ * back nothing — removal with no drawback, a strictly BETTER card than the one
+ * printed, which is precisely the bias the pool exists to keep out.
+ *
+ * The exile half cannot see the pair from inside its own sentence, so it asks
+ * the card. Reads the SAME `prepareOracle` + `normalizeClause` the compiler
+ * reads the card with, so "this enchantment", "this creature" and the card's own
+ * name are already `~` and a printing wording cannot make the guard miss.
+ */
+function printsLinkedReturn(ctx: RuleContext): boolean {
+  for (const line of prepareOracle(ctx.card.oracleText, ctx.card.name)) {
+    const body = LEAVES_TRIGGER_PREFIX.exec(normalizeClause(line))?.[1];
+    if (body === undefined) continue;
+    if (RETURN_EXILED_TO_BATTLEFIELD.test(body) || RETURN_EXILED_TO_HAND.test(body)) return true;
+  }
+  return false;
+}
 
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
@@ -3166,11 +3313,25 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     id: 'put-counters-on-self',
     description: '"Put N +1/+1 counters on ~" (no target)',
     pattern: new RegExp(
-      `^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on (?:~|it|this creature)$`,
+      `^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on (~|it|this creature)$`,
     ),
     build(match) {
       const amount = match[1] === undefined ? 1 : parseCount(match[1]);
       if (amount === null) return null;
+      // ⚠️ §3.149 — THIS RULE HAS THE BARE-"IT" DEFECT AND IS DELIBERATELY LEFT
+      // WITH IT. `sourceCanHoldCounters` (below) is the one-line fix, and
+      // `named-counters.test.ts` PINS the two cards it would change.
+      //
+      // Why it is not applied here: both cards are in the SHIPPED pool, and
+      // `pool-mechanics.test.ts`'s round-trip guard is absolute by design — its
+      // own comment says "a card dropped from the pool to make a test pass is
+      // the failure mode this guards". Refusing the clause drops Big Play and
+      // Miraculous Recovery, so the fix cannot land until the generated pool is
+      // rebuilt, and `fix/pool-refresh-3147` owns that file. Landing the fix
+      // here would leave the suite red for a lane that does not own the fix.
+      //
+      // The named-counter sibling carries the gate already, because no pool card
+      // uses an inert kind — nothing is dropped there.
       return effects({ primitive: 'addCounters', params: { amount, self: true } });
     },
   },
@@ -3281,19 +3442,25 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'return-target-permanent-to-hand',
-    description: '"Return target creature/permanent to its owner\'s hand" (bounce)',
-    pattern: /^return target (creature|permanent) to (?:its|their) owner'?s hand$/,
+    description:
+      '"Return target <NOUN> to its owner\'s hand" (bounce) for every noun in TARGET_NOUN_RESTRICTIONS (Unsummon, Boomerang, Stingscourger)',
+    pattern: new RegExp(`^return target (${TARGET_NOUN_PHRASE}) to (?:its|their) owner'?s hand$`),
     needsChosenTarget: true,
     build(match) {
       // `returnToHand` has existed in the primitive library the whole time with
       // no rule able to reach it — bounce was reported unsupported purely for
       // want of this pattern.
       //
-      // "Target PERMANENT" is its own restriction and is NOT flattened to
-      // "creature": Cryptic Command bounces a land, and a bounce that could not
-      // would be a strictly weaker card than printed. (It used to flatten,
-      // because core had no `'permanent'` restriction to compile into.)
-      const restriction = match[1] === 'permanent' ? PERMANENT_TARGET : CREATURE_TARGET;
+      // §3.148 — the noun comes from the SHARED table now, not from a private
+      // `(creature|permanent)` alternation. Bounce is a removal verb like
+      // destroy and exile, it prints the same noun vocabulary, and keeping a
+      // second list meant "target creature an opponent controls" was understood
+      // by two verbs and refused by the third: one answer, one question (rule
+      // 12). "Target PERMANENT" is still its own restriction and is NOT
+      // flattened to "creature" — Cryptic Command bounces a land, and a bounce
+      // that could not would be a strictly weaker card than printed.
+      const restriction = TARGET_NOUN_RESTRICTIONS[match[1] ?? ''];
+      if (restriction === undefined) return null;
       return effects({ primitive: 'returnToHand', params: { targets: restriction } });
     },
   },
@@ -3437,8 +3604,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
      * whatever THIS permanent exiled, which the exile half recorded. Accepts the
      * singular and plural printings so Angel of Serenity's "cards" reads too.
      */
-    pattern:
-      /^return (?:the exiled cards?|that exiled card) to the battlefield under (?:its|their) owners?['\u2019]?s? control$/,
+    pattern: RETURN_EXILED_TO_BATTLEFIELD,
     build() {
       return effects({ primitive: 'returnExiledByThis', params: { to: 'battlefield' } });
     },
@@ -3446,7 +3612,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'return-exiled-by-this-to-hand',
     description: 'Return the exiled cards to their owners’ hands (Angel of Serenity)',
-    pattern: /^return the exiled cards? to (?:its|their) owners?['\u2019]?s? hands?$/,
+    pattern: RETURN_EXILED_TO_HAND,
     build() {
       return effects({ primitive: 'returnExiledByThis', params: { to: 'hand' } });
     },
@@ -5189,6 +5355,104 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       });
     },
   },
+  // ===========================================================================
+  // §3.149 — THE NAMED-COUNTER RULES. Kept as one contiguous region at the tail
+  // of this table because three lanes edited this file at once; nothing above
+  // is reformatted, and the whole family moves or merges as a block.
+  // ===========================================================================
+  {
+    /**
+     * "Put a **charge** counter on ~" / "Put two **quest** counters on ~" — a
+     * counter of a kind the rules attach no behaviour to (§3.149).
+     *
+     * Only the kinds in {@link INERT_COUNTER_KINDS} reach this rule, and that
+     * table is the whole safety argument: an inert counter's ONLY meaning comes
+     * from the card's own other printed lines, so storing it is exactly what the
+     * card says. A shield or stun counter — where CR 122.1 attaches behaviour to
+     * the counter itself — would be a card playing WEAKER than printed if it
+     * were stored and nothing honoured it, so those kinds are absent from the
+     * table and their cards keep reporting.
+     *
+     * The card is NOT thereby made playable on its own: a line that READS the
+     * counter ("Remove three charge counters from ~: …") still has to compile,
+     * or the card stays `incomplete` and never enters the pool. This rule closes
+     * the write half of the family; the read half reports until it is built.
+     */
+    id: 'put-named-counter-on-self',
+    description: '"Put N <inert-kind> counters on ~" — a counter the rules attach no behaviour to',
+    pattern: new RegExp(
+      `^put (?:an?|${COUNT_TOKEN}) (${INERT_COUNTER_KIND_TOKEN}) counters? on (~|it|this creature)$`,
+    ),
+    build(match, ctx) {
+      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
+      const kind = inertCounterKind(match[2] ?? '');
+      if (amount === null || amount <= 0 || kind === null) return null;
+      // ⚠️ A SPELL CANNOT HOLD COUNTERS, so no self form of this clause is
+      // implementable on an instant or a sorcery — neither "on ~" nor "on it".
+      //
+      // Two cards made the point from opposite directions. Free from Flesh
+      // ("Target creature gets +2/+2 until end of turn. Put two oil counters on
+      // **it**.") showed that a bare "it" is whatever the PREVIOUS sentence
+      // named — the splitter hands the second half over alone — so reading it as
+      // the source put the counters nowhere. And `counters.test.ts` has asserted
+      // since the +1/+1 work that "Put a charge counter on **~**" printed on an
+      // Instant must report: `~` on a spell is the spell, and counters live on
+      // permanents (CR 122.1). Both are the same refusal.
+      //
+      // On a PERMANENT both readings are the source and both compile, which is
+      // what a creature's own "put an oil counter on it" trigger body means.
+      if (!sourceCanHoldCounters(ctx)) return null;
+      return effects({ primitive: 'addCounters', params: { amount, kind, self: true } });
+    },
+  },
+  {
+    /**
+     * "Exile target card from a graveyard." — 62 cards print it (Crypt Creeper,
+     * Relic of Progenitus, Scavenging Ooze) — with the optional printed rider
+     * "**If it was a creature card, …**".
+     *
+     * ONE rule for both sentences, because "it" is the card the FIRST sentence
+     * exiled and "was" is past tense: the type has to be read before the move.
+     * A standalone rider rule would be aimed at whatever target happened to be
+     * around, which is the trap `put-counters-then-grant-keyword` documents for
+     * the same reason.
+     *
+     * The rider's body goes through the ordinary effect rules TARGET-FREE, so it
+     * can only do what the engine already implements and a body needing a chosen
+     * target is refused rather than compiled into a silent no-op. Scavenging
+     * Ooze's body ("put a +1/+1 counter on ~ and you gain 1 life") rides the
+     * existing `effect-and-you-effect` conjunction.
+     *
+     * ⚠️ ONLY the "creature card" rider is read. "If it was a land card", "if it
+     * was an instant or sorcery card" and the "…, you gain 1 life" tails that
+     * are NOT gated on a type are different sentences with different meanings,
+     * and they keep reporting rather than being widened into this one.
+     */
+    id: 'exile-target-card-from-graveyard',
+    description:
+      '"Exile target card from a graveyard[. If it was a creature card, EFFECT]" (Crypt Creeper, Scavenging Ooze)',
+    pattern: /^exile target card from a graveyard(?:\. if it was a creature card, (.+))?$/,
+    needsChosenTarget: true,
+    build(match, ctx) {
+      const rider = match[1];
+      if (rider === undefined) {
+        return effects({
+          primitive: 'exileTargetCardFromGraveyard',
+          params: { targets: CARD_IN_ANY_GRAVEYARD_TARGET },
+        });
+      }
+      const body = ctx.compileEffectClause(rider, { targetFree: true });
+      if (body === null || body.length === 0) return null;
+      return effects({
+        primitive: 'exileTargetCardFromGraveyard',
+        params: {
+          targets: CARD_IN_ANY_GRAVEYARD_TARGET,
+          ifWasType: 'creature',
+          effects: [...body],
+        },
+      });
+    },
+  },
 ]);
 
 /**
@@ -5232,6 +5496,56 @@ function emblemTriggers(body: string, ctx: RuleContext): readonly TriggeredAbili
 // rules above. If the body has no faithful implementation the whole trigger is
 // rejected (returns null) — never a trigger that fires and does nothing.
 
+// --- §3.148, the targeted-trigger row: the body's leading pronoun ---------------
+
+/**
+ * The trigger EVENTS whose printed SUBJECT is the source itself, so a body that
+ * opens with the pronoun "it" is talking about `~`.
+ *
+ * "When this creature enters, **it** deals 2 damage to any target" (Skeleton
+ * Archer) is the single largest one-clause shape in the targeted-trigger
+ * backlog. The effect rule for it already exists — `damage-any-target` reads
+ * "~ deals N damage to <RECIPIENT>" over the whole {@link DAMAGE_TARGET_RESTRICTIONS}
+ * table — so what was missing is only that the body says "it" where the rule
+ * says "~".
+ *
+ * A CLOSED TABLE rather than a blanket rewrite, because "it" means a DIFFERENT
+ * object on the events left out and getting that wrong is silent:
+ *  - `permanentEnters` / `permanentDies` are about some OTHER permanent
+ *    ("whenever a creature you control dies, it deals…") — resolving "it" to the
+ *    source would make the wrong object deal the damage;
+ *  - `castSpell`, the step triggers and the life events have no subject at all.
+ * A `watches` other than the default is the same problem wearing a flag: an
+ * Equipment's "whenever equipped creature attacks, **it** deals…" is about the
+ * equipped creature, never the Equipment.
+ */
+const SOURCE_SUBJECT_EVENTS: ReadonlySet<TriggerEvent> = new Set<TriggerEvent>([
+  'etb',
+  'attacks',
+  'blocks',
+  'becomesBlocked',
+  'blocksOrBecomesBlocked',
+  'becomesBlockedByCreature',
+  'dies',
+  'leaves',
+  'putIntoGraveyardFromBattlefield',
+  'combatDamageToPlayer',
+]);
+
+/**
+ * Rewrite a trigger body's LEADING "it" to `~`, and only where the trigger's
+ * subject IS the source.
+ *
+ * Leading only, deliberately: a later "it" in the same body is about whatever
+ * the earlier sentence just named ("exile target creature. return **it**…"), and
+ * that pronoun is the sentence's business, not this one's.
+ */
+function resolveSourcePronoun(condition: TriggeredAbility['condition'], bodyText: string): string {
+  if ((condition.watches ?? DEFAULT_TRIGGER_WATCHES) !== DEFAULT_TRIGGER_WATCHES) return bodyText;
+  if (!SOURCE_SUBJECT_EVENTS.has(condition.on)) return bodyText;
+  return bodyText.replace(/^it\b/i, '~');
+}
+
 /**
  * Build a one-condition trigger whose body is compiled from `bodyText`.
  *
@@ -5252,7 +5566,7 @@ function triggerFrom(
   bodyText: string,
   label: string,
 ): ClauseContribution | null {
-  const body = ctx.compileTriggerBody(bodyText);
+  const body = ctx.compileTriggerBody(resolveSourcePronoun(condition, bodyText));
   // A MODAL body has empty effects on purpose — the chosen modes' effects
   // replace them as the ability goes on the stack.
   if (body === null || (body.effects.length === 0 && body.modal === undefined)) return null;
@@ -5339,9 +5653,13 @@ function optionalTriggerFrom(
   innerBody: string,
   label: string,
 ): ClauseContribution | null {
-  const compiled = ctx.compileTriggerBody(innerBody);
+  // The same pronoun resolution the forced funnel does, for the reason DRY
+  // exists: two funnels that answer "what does 'it' mean here?" separately will
+  // eventually answer it differently, and only one of them will be right.
+  const body = resolveSourcePronoun(condition, innerBody);
+  const compiled = ctx.compileTriggerBody(body);
   if (compiled === null) return null;
-  const effects = mayEffectsFrom(innerBody, compiled.effects);
+  const effects = mayEffectsFrom(body, compiled.effects);
   if (effects === null || effects.length === 0) return null;
   return {
     triggers: [
@@ -5470,6 +5788,16 @@ const INTERVENING_IF_RULES: readonly {
       }
       return condition as unknown as InterveningIf;
     },
+  },
+  {
+    // §3.149 — "if you didn't lose life this turn" (Luminarch Ascension). The
+    // ONLY card in the 32,414-card corpus that prints this phrase, and it is
+    // here because Caleb's own deck needs it (ALL-CARDS-CAMPAIGN §4a phase 2),
+    // not because the family is large. Read off the `youLostLife` turn fact,
+    // which damage feeds — which is exactly what the card's own reminder text
+    // ("Damage causes loss of life.") insists on.
+    pattern: /^you didn'?t lose life this turn$/,
+    build: (): InterveningIf => ({ kind: 'didNotLoseLifeThisTurn' }),
   },
 ]);
 
@@ -5617,6 +5945,55 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
             condition: { on: 'leaves' },
             effects: [{ primitive: 'returnExiledByThis', params: { to: 'battlefield' } }],
             label: 'Leaves: return the exiled card',
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'trigger-etb-exile-target-noun-linked',
+    description:
+      '"When ~ enters, exile [another] target <NOUN>" on a card that ALSO prints the return line — every noun in TARGET_NOUN_RESTRICTIONS (Oblivion Ring, Journey to Nowhere, Faceless Butcher)',
+    /*
+     * §3.148. The OLDEST O-Ring wording, and the one the compiler read wrong.
+     *
+     * Three printed sentences make one machine: the ETB exile, the leaves-return,
+     * and the LINK between them (`exileUntilLeaves` stamps
+     * `CardInstance.exiledUntilLeavesBy`; `returnExiledByThis` reads it). Without
+     * this rule the sentence fell through to `trigger-etb` and compiled to a bare
+     * `exileTarget` — no link — so the card's own return half gave back nothing.
+     * Journey to Nowhere shipped in the pool that way.
+     *
+     * Ordered before `trigger-etb` for the reason the Banisher Priest rule is:
+     * the generic enters rule matches this sentence too, and what it builds is a
+     * strictly better card than the one printed.
+     *
+     * The PAIR is the condition, not the noun. A card that prints this sentence
+     * with NO return line ("Galactus, Devourer of Worlds") is a plain exile and
+     * must keep compiling to one, so the rule declines and lets `trigger-etb`
+     * have it — the same sentence means two different cards, and only the card
+     * knows which.
+     *
+     * "ANOTHER" is load-bearing exactly as it is on Fiend Hunter: an Oblivion
+     * Ring that could name itself would exile itself, leave, return itself and
+     * trigger again for ever (DESIGN §3.33's mirror). It rides the ability as
+     * `targetsExcludeSelf`, which the aiming pass reads when it builds the menu.
+     */
+    pattern: new RegExp(`^when ~ enters(?: the battlefield)?, exile (another )?target (${TARGET_NOUN_PHRASE})$`),
+    needsChosenTarget: true,
+    build(match, ctx) {
+      if (!printsLinkedReturn(ctx)) return null;
+      const restriction = TARGET_NOUN_RESTRICTIONS[match[2] ?? ''];
+      if (restriction === undefined) return null;
+      const excludeSelf = match[1] !== undefined;
+      return {
+        triggers: [
+          {
+            condition: { on: 'etb' },
+            effects: [{ primitive: 'exileUntilLeaves', params: { targets: restriction, max: 1 } }],
+            label: `Enters: exile ${excludeSelf ? 'another ' : ''}target ${match[2] ?? ''}`,
+            targets: restriction,
+            ...(excludeSelf ? { targetsExcludeSelf: true } : {}),
           },
         ],
       };
@@ -7356,6 +7733,31 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     build(_match, ctx) {
       if (!cardHasXCost(ctx)) return null;
       return { effects: [{ primitive: 'addCounters', params: { amount: CHOSEN_X_PARAM, self: true } }] };
+    },
+  },
+  {
+    // §3.149 — "~ enters with three CHARGE counters on it" (Trigon of
+    // Corruption, Blast Zone, Surge Node), "with three WISH counters" (Ring of
+    // Three Wishes). The +1/+1 sibling above with the kind read from the closed
+    // {@link INERT_COUNTER_KINDS} table; CR 614.1c puts these on as the
+    // permanent enters, which `addCounters`' self path already handles for a
+    // card still resolving into play.
+    //
+    // ⚠️ The counters are REAL but INERT: this rule alone does not make the card
+    // playable, because the line that spends them ("{T}, Remove three charge
+    // counters from ~: …") still has to compile. That is the intended outcome —
+    // the card reports until both halves exist, and never enters the pool with
+    // half its text.
+    id: 'enters-with-named-counters',
+    description: '"~ enters with N <inert-kind> counters on it"',
+    pattern: new RegExp(
+      `^~ enters(?: the battlefield)? with (?:an?|${COUNT_TOKEN}) (${INERT_COUNTER_KIND_TOKEN}) counters? on it\\.?$`,
+    ),
+    build(match) {
+      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
+      const kind = inertCounterKind(match[2] ?? '');
+      if (amount === null || amount <= 0 || kind === null) return null;
+      return { effects: [{ primitive: 'addCounters', params: { amount, kind, self: true } }] };
     },
   },
   {
