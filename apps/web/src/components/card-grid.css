@@ -1,0 +1,50 @@
+/* =========================================================================
+   The VIRTUALISED card grid (Cards browser + Deck Builder pool).
+
+   Co-located with `CardGrid.tsx` rather than added to `styles.css`, matching
+   the pattern the app already uses for a component that owns its own rules
+   (`card-hover.css`, `add-card-dialog.css`, `update-pill.css`).
+
+   ⚠️ THE COLUMN TRACKS ARE NOT REDEFINED HERE, ON PURPOSE. `.card-grid` in
+   `styles.css` still owns `grid-template-columns: repeat(auto-fill, minmax(…))`
+   and the phone media query that narrows it, and the virtualiser MEASURES what
+   the browser resolved rather than keeping a second copy of those numbers in
+   TypeScript (rule 12). A column width restated here would be a third copy.
+   ========================================================================= */
+
+.card-grid--virtual {
+  /*
+    The rows the virtualiser skipped are stood in for by PADDING — set inline
+    from `planRender`, because it depends on the row count and the measured row
+    height — while only the rows near the viewport exist as elements. That is
+    what keeps the scrollbar telling the truth about the pool: a page whose
+    scrollbar only knows about the rendered window jumps under the hand.
+
+    Padding rather than one tall box because cells are placed at rows RELATIVE
+    to the window (`RenderPlan.originRow`). Placing them at their absolute row
+    would make the browser materialise an implicit row track for every row above
+    them — 5,379 of them at the far end of the 32,276-card corpus, rebuilt on
+    every layout of a grid holding about forty elements.
+  */
+  align-content: start;
+  /* `grid-auto-rows` is set inline, to the MEASURED tile height. */
+  position: relative;
+}
+
+.card-grid__cell {
+  /*
+    A grid item defaults to `min-width: auto`, which refuses to shrink below its
+    content — and the tile's name and type line rely on shrinking to get their
+    ellipsis. The tile used to be the grid item itself and inherited this same
+    need; the cell now stands where it stood.
+  */
+  min-width: 0;
+  /*
+    Deliberately NOT `height: 100%` on the tile inside. The virtualiser measures
+    a tile's NATURAL height to decide the row track height; stretch the tile to
+    the track and the measurement returns the value it was given, which is a
+    check that cannot fail. The tile keeps its own height, the track is pinned
+    to it, and a wrong track corrects itself on the next layout pass.
+  */
+  display: block;
+}

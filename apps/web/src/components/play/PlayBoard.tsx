@@ -3,7 +3,6 @@ import { createRng } from '@jonny-boi/core';
 import { createDefaultAiRegistry, DEFAULT_PILOT_ID } from '@jonny-boi/ai';
 import type {
   CardDefinition,
-  CharacteristicExplanation,
   ChoiceAnswer,
   GameState,
   InstanceId,
@@ -84,7 +83,12 @@ import { actionBarHint, passButtonLabel, type StackHintContext } from '../../lib
 import { withStepStop, type PriorityStops } from '../../lib/play/priority-stops.js';
 import { CardHover } from '../CardHover.js';
 import { RevealBanner } from './RevealBanner.js';
-import { latestReveal } from '../../lib/play/reveals.js';
+import { SpellHoldCard } from './SpellHoldCard.js';
+import {
+  AnnouncementSurface,
+  type AnnouncementRenderers,
+} from './AnnouncementSurface.js';
+import { NO_ANNOUNCEMENTS, type AnnouncementQueue } from '../../lib/play/announcements.js';
 import {
   consumeDeferredMay,
   EMPTY_MAY_LEDGER,
@@ -101,12 +105,9 @@ import {
   type CombatDraft,
   type DamageSource,
 } from './BoardScene.js';
-import type { CombatHold } from '../../lib/play/combat-hold.js';
 import { CombatHoldBanner } from './CombatHoldBanner.js';
 import { CardFace } from './CardFace.js';
-import { HOLD_KINDS, type SpellHold } from '../../lib/play/spell-hold.js';
 import { targetView, type StackTargetView } from '../../lib/play/stack-view.js';
-import { CardReferenceList } from './CardReferences.js';
 import { ForcedChoiceBanner } from './ForcedChoiceBanner.js';
 import type { ForcedChoice } from '../../lib/play/forced-choice.js';
 import { groupJailedByJailer, jailSourcesOf } from '../../lib/play/jail-view.js';
@@ -197,14 +198,13 @@ export function PlayBoard({
   onConcede,
   stops,
   onStops,
-  hold,
+  announcements = NO_ANNOUNCEMENTS,
   onHoldPointer,
   onHoldExtend,
   onHoldRelease,
-  combatHold,
   onCombatHoldSkip,
-  forcedChoice,
   onForcedChoiceDismiss,
+  onRevealDismiss,
   onForcedChoice,
 }: {
   session: GameSession;
@@ -213,43 +213,33 @@ export function PlayBoard({
   onSubmit: (run: () => SubmitResult) => void;
   onConcede: () => void;
   /**
-   * §3.143 / UX-16 — the opponent's spell currently HELD on screen, or null.
+   * EVERYTHING BEING ANNOUNCED, as one ordered queue (`lib/play/announcements.ts`).
    *
-   * Owned by PlayView, not here, because the hold's whole job is to stop the
-   * auto-advance effect and the AI-seat effect, and both of those live there.
-   * The board only renders it and reports the player's attention back up: one
-   * value, so the pause and the walker cannot disagree about whether the game
-   * is moving — the same rule §3.119 set for the priority stops.
+   * Caleb: *"we are getting some overriding overlays in app that look bad …
+   * those should reconcile somehow"*. This prop replaced three separate ones
+   * (`hold`, `combatHold`, `forcedChoice`) plus the reveal this board derived
+   * for itself — four announcers that each mounted their own `position: fixed`
+   * element and painted over each other.
+   *
+   * ⚠️ ONE PROP, because it is ONE ANSWER. The queue also decides whether the
+   * game is HELD, and PlayView reads that from the same value it passes down
+   * here — so what the player is looking at and what is stopping the game can
+   * never be two different opinions (rule 12). The board renders the HEAD and
+   * says what is waiting; it never re-orders and never drops.
    */
-  hold?: SpellHold | null;
+  announcements?: AnnouncementQueue;
   /** The pointer moved onto / off the held card (it extends the hold). */
   onHoldPointer?: (over: boolean) => void;
   /** "Keep looking" — one explicit `extendMs`. */
   onHoldExtend?: () => void;
   /** "Let it resolve" — end the hold now. */
   onHoldRelease?: () => void;
-  /**
-   * §10 — the COMBAT beat currently being held, or null.
-   *
-   * Owned by PlayView for the same reason the spell hold is: the beat's whole
-   * job is to gate `autoAdvancePriority` and the AI seat, and both live there.
-   * The board only says what is being held, and offers the way out of it.
-   */
-  combatHold?: CombatHold | null;
-  /** "Skip" — give the beat up now and let combat run on. */
+  /** "Skip" — give the combat beat up now and let combat run on. */
   onCombatHoldSkip?: () => void;
-  /**
-   * A choice the ENGINE settled without asking, currently announced, or null.
-   *
-   * Caleb, on a Banisher Priest with one legal target: *"it should show that
-   * choice being made so the player understands what has happened."* Owned by
-   * PlayView for the same reason the two holds are — the announcement gates the
-   * auto-passer and the AI seat so it is not gone before it can be read, which
-   * is the whole lesson of §10.
-   */
-  forcedChoice?: ForcedChoice | null;
-  /** "Got it" — end the announcement now. */
+  /** "Got it" — end the settled-choice announcement now. */
   onForcedChoiceDismiss?: () => void;
+  /** The player clicked the revealed card away. */
+  onRevealDismiss?: (at: number) => void;
   /**
    * The board settled a pre-cast question itself (`AUTO_SETTLE_POLICY` — today
    * only the one-legal-payer sacrifice cost) and is handing it up to be
@@ -382,8 +372,6 @@ export function PlayBoard({
    * passes through.
    */
   const [stopsMenuOpen, setStopsMenuOpen] = useState(false);
-  /** A reveal the player has dismissed, by its index in the event log. */
-  const [dismissedReveal, setDismissedReveal] = useState<number | null>(null);
 
   /**
    * §3.67 — AI CO-PILOT. Off by default; the preference outlives the game.
@@ -774,17 +762,28 @@ export function PlayBoard({
    * hold whose object has already left the stack resolves to no targets rather
    * than to a guess.
    */
+  const shown = announcements?.showing ?? null;
+  /*
+   * ⚠️ RESOLVED FOR THE ANNOUNCEMENT ON SCREEN, not for every one that is live.
+   * `targetView` walks the stack and the battlefield per ref; doing it for a
+   * waiter would be work nobody can see, and a waiter's targets are rebuilt
+   * from the live stack when its turn comes — which is also more correct, since
+   * a target can leave the battlefield while the announcement waits.
+   */
+  const shownSpellHold = shown?.kind === 'spellHold' ? shown.hold : null;
+  const shownForcedChoice = shown?.kind === 'forcedChoice' ? shown.forced : null;
+
   const holdTargets = useMemo((): readonly StackTargetView[] => {
-    if (!hold) return [];
-    const entry = view.stack.find((e) => e.instanceId === hold.instanceId);
+    if (!shownSpellHold) return [];
+    const entry = view.stack.find((e) => e.instanceId === shownSpellHold.instanceId);
     return entry ? entry.targets.map((ref) => targetView(ref, referenceCtx)) : [];
-  }, [hold, view.stack, referenceCtx]);
+  }, [shownSpellHold, view.stack, referenceCtx]);
 
   /** The cards a forced choice picked, drawn by the same renderer as a target. */
   const forcedChoiceTargets = useMemo(
     (): readonly StackTargetView[] =>
-      forcedChoice ? forcedChoice.refs.map((ref) => targetView(ref, referenceCtx)) : [],
-    [forcedChoice, referenceCtx],
+      shownForcedChoice ? shownForcedChoice.refs.map((ref) => targetView(ref, referenceCtx)) : [],
+    [shownForcedChoice, referenceCtx],
   );
 
   /**
@@ -1662,28 +1661,65 @@ export function PlayBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preCommitOpen, proposal]);
 
-  /** The reveal to announce on the board, if any and not yet dismissed (§3.119). */
-  const reveal = useMemo(
-    () =>
-      latestReveal(
-        session.events,
-        viewer,
-        names,
-        (id) => {
-          for (const pid of ['A', 'B'] as const) {
-            const player = session.state.players[pid];
-            for (const zone of [player.hand, player.library, player.graveyard, player.exile]) {
-              const hit = zone.find((c) => c.instanceId === id);
-              if (hit) return { cardId: hit.def.id, name: hit.def.name };
-            }
-          }
-          return undefined;
-        },
-        session.nameOf,
+  /**
+   * HOW EACH ANNOUNCEMENT IS DRAWN. One entry per row of `ANNOUNCEMENT_KINDS`,
+   * as a mapped type — so a fifth announcement kind fails to compile HERE until
+   * somebody says what it looks like, the same way the table itself fails until
+   * somebody says what it ranks and whether it holds the game.
+   *
+   * ⚠️ NOTHING HERE DECIDES WHETHER TO SHOW. Every one of these is called only
+   * for the head of the queue; the ordering is the table's and the board does
+   * not get a vote, which is the entire point of having one surface.
+   */
+  const announcementRenderers: AnnouncementRenderers = useMemo(
+    () => ({
+      combatHold: (body) => (
+        <CombatHoldBanner
+          hold={body.hold}
+          {...(onCombatHoldSkip ? { onSkip: onCombatHoldSkip } : {})}
+        />
       ),
-    [session, viewer, names],
+      spellHold: (body) => (
+        <SpellHoldCard
+          hold={body.hold}
+          name={session.nameOf(body.hold.instanceId)}
+          cardId={faceOfInstance(body.hold.instanceId)}
+          /* UX-17 — the held spell wears its PROVENANCE too. A stack object is
+             public, so explaining it leaks nothing the viewer cannot already
+             read off the stack panel. */
+          explanation={explainForFace(session.state, body.hold.instanceId)}
+          targets={holdTargets}
+          opponentName={names[body.hold.controller]}
+          {...(onHoldPointer ? { onPointer: onHoldPointer } : {})}
+          {...(onHoldExtend ? { onExtend: onHoldExtend } : {})}
+          {...(onHoldRelease ? { onRelease: onHoldRelease } : {})}
+        />
+      ),
+      forcedChoice: (body) => (
+        <ForcedChoiceBanner
+          forced={body.forced}
+          chosen={forcedChoiceTargets}
+          {...(onForcedChoiceDismiss ? { onDismiss: onForcedChoiceDismiss } : {})}
+        />
+      ),
+      reveal: (body) => (
+        <RevealBanner reveal={body.reveal} onDismiss={() => onRevealDismiss?.(body.reveal.at)} />
+      ),
+    }),
+    [
+      session,
+      names,
+      faceOfInstance,
+      holdTargets,
+      forcedChoiceTargets,
+      onCombatHoldSkip,
+      onHoldPointer,
+      onHoldExtend,
+      onHoldRelease,
+      onForcedChoiceDismiss,
+      onRevealDismiss,
+    ],
   );
-  const showReveal = reveal !== null && reveal.at !== dismissedReveal;
 
   return (
     /*
@@ -2313,11 +2349,6 @@ export function PlayBoard({
         </div>
       )}
 
-      {/* §3.119 — a card revealed to both players, ON the board (report 210413). */}
-      {showReveal && reveal && (
-        <RevealBanner reveal={reveal} onDismiss={() => setDismissedReveal(reveal.at)} />
-      )}
-
       {/* §3.119 — where the game stops (reports 210141 / 211035 / 211359). */}
       {stopsMenuOpen && (
         <StopsMenu
@@ -2341,157 +2372,15 @@ export function PlayBoard({
         tileRectOf={tileRectOf}
         onDone={retireVfx}
       />
-      {/* §3.143 / UX-16 — the opponent's spell, held and inspectable BEFORE it
-          resolves. The post-hoc feed below still reports what happened; this is
-          the part that was missing. */}
-      {hold && (
-        <SpellHoldCard
-          hold={hold}
-          name={session.nameOf(hold.instanceId)}
-          cardId={faceOfInstance(hold.instanceId)}
-          /* UX-17 — the held spell wears its PROVENANCE too. A stack object is
-             public, so explaining it leaks nothing the viewer cannot already
-             read off the stack panel. */
-          explanation={explainForFace(session.state, hold.instanceId)}
-          targets={holdTargets}
-          opponentName={names[hold.controller]}
-          {...(onHoldPointer ? { onPointer: onHoldPointer } : {})}
-          {...(onHoldExtend ? { onExtend: onHoldExtend } : {})}
-          {...(onHoldRelease ? { onRelease: onHoldRelease } : {})}
-        />
-      )}
-      {/* The engine settled a question that had exactly one legal answer. It was
-          RIGHT to (the sim and the pilots depend on it) — but it happened in
-          silence, which is the reported defect. This says what it chose, names
-          the card, and asks for nothing. */}
-      {forcedChoice && (
-        <ForcedChoiceBanner
-          forced={forcedChoice}
-          chosen={forcedChoiceTargets}
-          {...(onForcedChoiceDismiss ? { onDismiss: onForcedChoiceDismiss } : {})}
-        />
-      )}
-      {/* §10 — the board is holding combat on screen so UX-13's advance and
-          UX-15's damage can actually be read. Says WHAT is being held and gets
-          out of the way on request, so it is never a tax every combat. */}
-      {combatHold && (
-        <CombatHoldBanner
-          hold={combatHold}
-          {...(onCombatHoldSkip ? { onSkip: onCombatHoldSkip } : {})}
-        />
-      )}
+      {/* ONE ANNOUNCEMENT SURFACE (`lib/play/announcements.ts`).
+          Caleb: *"we are getting some overriding overlays in app that look bad -
+          like 'heres what goblin guide revealed from your library' and 'heres
+          what the computer casted' - those should reconcile somehow"*. All four
+          announcers mount here, one at a time, in the table's priority order;
+          the loser WAITS and is counted on screen rather than being painted
+          over or dropped. */}
+      <AnnouncementSurface queue={announcements} renderers={announcementRenderers} />
       <OpponentActionFeed notes={opponentNotes} opponentName={names[otherOf(viewer)]} />
-    </div>
-  );
-}
-
-/**
- * §3.143 / UX-16 — AN OPPONENT'S SPELL, HELD ON SCREEN.
- *
- * Caleb: *"when an opponent casts a sorcery or instant card, I need to be able
- * to see it and inspect the card before it goes off - even if I have no
- * instant-speed things I could do in response … Right now, they just happen
- * invisibly and I have no idea why things are happening."*
- *
- * The card is drawn by lane P's `CardFace` at full size and wrapped in the ONE
- * hover funnel, so the held card is inspected exactly the way every other card
- * on this surface is. Moving the pointer onto it extends the hold (bounded by
- * `pointerHoldMs`); "Keep looking" adds one `extendMs`; "Let it resolve" ends
- * it now — so it is never a click-through tax on a player who does not want it.
- */
-function SpellHoldCard({
-  hold,
-  name,
-  cardId,
-  explanation,
-  targets,
-  opponentName,
-  onPointer,
-  onExtend,
-  onRelease,
-}: {
-  hold: SpellHold;
-  name: string;
-  cardId: string | null;
-  /** Core's characteristic breakdown for the held spell (§3.143 / UX-17). */
-  explanation: CharacteristicExplanation | undefined;
-  /**
-   * WHAT IT IS AIMED AT. Caleb, 2026-09-14: *"When the computer plays Doom Blade
-   * when Im playing them, it does not show me clearly what the target is when it
-   * displays on screen - it should show their target(s) for things along with
-   * the card they are casting."*
-   *
-   * Resolved by the board from the SAME `stackEntries` facts the stack panel
-   * reads, through `stack-view.targetView` — so "what is this pointing at?" has
-   * one answer here, in the panel, and in the forced-choice banner. Empty for a
-   * spell that targets nothing, which renders nothing at all
-   * (`CardReferenceList` owns that decision for all three mounts).
-   */
-  targets: readonly StackTargetView[];
-  opponentName: string;
-  onPointer?: (over: boolean) => void;
-  onExtend?: () => void;
-  onRelease?: () => void;
-}): ReactElement {
-  return (
-    <div
-      className="spell-hold"
-      /*
-       * ⚠️ `status`, NOT `dialog` (§3.143 wave 3). This card ANNOUNCES — it tells
-       * you what the opponent just cast and lets you look at it — and it is
-       * dismissed by a timer. A `dialog` role promises modality and a focus trap
-       * that this has never had, and it told every "is a question on screen?"
-       * probe that one was: `verify-game-resume.mjs` matches `[role="dialog"]`
-       * to decide whether the game parked a choice, saw THIS, announced "stopped
-       * ON A PARKED CHOICE", reloaded, and failed because a 2.4-second
-       * announcement is not something a reload can bring back. A live region is
-       * what an announcement is, and it is announced once, on appearance.
-       */
-      role="status"
-      aria-live="polite"
-      aria-label={`${opponentName} is casting ${name}`}
-      onPointerEnter={() => onPointer?.(true)}
-      onPointerLeave={() => onPointer?.(false)}
-    >
-      {/* The verb comes from the KIND table, not from an `if`: "is casting" and
-          "is activating" are different facts and a third kind is a row. */}
-      <span className="spell-hold__who">
-        {opponentName} {HOLD_KINDS[hold.kind].announce}:
-      </span>
-      {/* A ROW, not a column, and that is a fix rather than a preference: with
-          the target stacked underneath, a real capture showed the target card
-          clipped by the bottom of the viewport and BOTH buttons off screen. The
-          spell and what it is aimed at are one picture and belong side by side —
-          which is also how a table reads it. `wrap` returns them to a column on
-          a narrow window, where there is height to spare. */}
-      <div className="spell-hold__body">
-        {/* The spell and its own name stay together. Photographed once with the
-            name below the WHOLE body, the panel read "… Grizzly Bears / Doom
-            Blade", which invites exactly the misreading the announcement exists
-            to prevent. */}
-        <div className="spell-hold__subject">
-          <CardHover cardId={cardId}>
-            <CardFace size="full" cardId={cardId} name={name} explanation={explanation} />
-          </CardHover>
-          <span className="spell-hold__name">{name}</span>
-        </div>
-        {/* Shown as CARD FACES, not a name string: §0 is explicit that a target
-            must be "the actual card(s)". The list renders nothing when the spell
-            targets nothing, and names a PLAYER target in words because a seat is
-            not a card (`STACK_TARGET_KINDS_TABLE.player.hasFace`). */}
-        <CardReferenceList targets={targets} presentation="face" label="Targeting" />
-      </div>
-      <span className="spell-hold__hint">
-        Hover the card to keep reading it — it resolves on its own when you stop.
-      </span>
-      <div className="spell-hold__actions">
-        <button type="button" className="btn" onClick={onExtend}>
-          Keep looking
-        </button>
-        <button type="button" className="btn btn--ghost" onClick={onRelease}>
-          Let it resolve
-        </button>
-      </div>
     </div>
   );
 }

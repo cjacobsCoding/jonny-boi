@@ -9,7 +9,9 @@
 import { describe, expect, it } from 'vitest';
 import { SAMPLE_DECKS } from '@jonny-boi/sim';
 import {
+  copiesOfGauntletDeck,
   copyGauntletDeck,
+  describeExistingCopies,
   describeGauntletCopy,
   gauntletDecks,
   gauntletHeroDecks,
@@ -60,6 +62,40 @@ describe('copying a gauntlet deck into an editable one', () => {
       // Every id must resolve in the pool — a leftover name would silently break
       // every downstream surface (art, curve, validation, play).
       expect(getCard(entry.cardId), `unresolvable id ${entry.cardId}`).toBeDefined();
+    }
+  });
+
+  /**
+   * The mint site of the provenance the built-in list reads. Pinned HERE as well
+   * as at the view, because the two claims are different: the view test proves
+   * the list SAYS "already copied" when a deck carries provenance; this proves a
+   * copy actually gets it. Breaking only the stamp left the view test green.
+   */
+  it('stamps the copy with the built-in deck it came from', () => {
+    for (const sample of SAMPLE_DECKS) {
+      const copy = copyGauntletDeck(sample);
+      expect(copy.deck.copiedFrom, `${sample.name} copy lost its provenance`).toBe(sample.name);
+    }
+  });
+
+  it('reports a copy that already exists, by the COPY’s name after a rename', () => {
+    const sample = SAMPLE_DECKS[0]!;
+    const mine = { ...copyGauntletDeck(sample).deck, name: 'Acidic Angels' };
+    // The reported defect in one assertion: a renamed copy must still be found.
+    const found = copiesOfGauntletDeck(sample.name, [mine]);
+    expect(found).toHaveLength(1);
+    expect(describeExistingCopies(found)).toContain('Acidic Angels');
+    // ...and must not be attributed to a different built-in deck.
+    expect(copiesOfGauntletDeck(SAMPLE_DECKS[1]!.name, [mine])).toEqual([]);
+  });
+
+  it('does not count the Lab hero decks as copies the user has made', () => {
+    // `gauntletHeroDecks()` runs the same copy path, so they carry provenance
+    // too. Counting them would report every built-in deck as already copied
+    // before the user had copied anything.
+    const heroes = gauntletHeroDecks();
+    for (const sample of SAMPLE_DECKS) {
+      expect(copiesOfGauntletDeck(sample.name, heroes), `${sample.name}`).toEqual([]);
     }
   });
 

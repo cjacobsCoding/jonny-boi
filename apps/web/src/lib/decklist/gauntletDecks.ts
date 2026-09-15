@@ -103,7 +103,10 @@ export function copyGauntletDeck(sample: SimDeck, nameSuffix = ' (copy)'): Gaunt
     else cards.push({ cardId: card.id, count: entry.count, name: card.name });
   }
 
-  const deck: Deck = { ...createDeck(`${sample.name}${nameSuffix}`), cards };
+  // `copiedFrom` is stamped here, at the ONE place a copy is minted, so the
+  // built-in list can tell "you already have this" without guessing from the
+  // name — which is precisely what the user then renames.
+  const deck: Deck = { ...createDeck(`${sample.name}${nameSuffix}`), cards, copiedFrom: sample.name };
   return { deck, unresolved };
 }
 
@@ -139,6 +142,39 @@ export function gauntletHeroDecks(): readonly Deck[] {
     id: `${GAUNTLET_DECK_ID_PREFIX}${sample.name}`,
   }));
   return heroCache;
+}
+
+/**
+ * The user's decks that came from a given built-in deck, newest first.
+ *
+ * Hero decks are excluded by id: {@link gauntletHeroDecks} runs the same copy
+ * path, so they carry `copiedFrom` too, and counting them would report that you
+ * had already copied every built-in deck before you had copied any.
+ */
+export function copiesOfGauntletDeck(
+  gauntletName: string,
+  decks: readonly Deck[],
+): readonly Deck[] {
+  return decks
+    .filter((deck) => !isGauntletDeckId(deck.id) && deck.copiedFrom === gauntletName)
+    .slice()
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+/**
+ * What the built-in list says about a deck the user has already copied.
+ *
+ * Names the COPY, not the original: the copy is the thing they can open, and
+ * after a rename its name is the only handle they have on it. The bug this
+ * answers read, in full, "I renamed the Selesnya Blink deck to Acidic Angels,
+ * which apparently just DUPLICATED the deck" — this sentence is the one that
+ * would have prevented it.
+ */
+export function describeExistingCopies(copies: readonly Deck[]): string {
+  const newest = copies[0];
+  if (!newest) return '';
+  if (copies.length === 1) return `Already copied — yours is “${newest.name}”.`;
+  return `Already copied ${copies.length}× — newest is “${newest.name}”.`;
 }
 
 /** A one-line summary of a copy, for the toast/message after copying. */

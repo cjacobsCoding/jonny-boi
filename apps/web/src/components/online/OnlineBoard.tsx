@@ -27,6 +27,14 @@ import {
   type CombatHoldKind,
 } from '../../lib/play/combat-hold.js';
 import { CombatHoldBanner } from '../play/CombatHoldBanner.js';
+import { RevealBanner } from '../play/RevealBanner.js';
+import { SpellHoldCard } from '../play/SpellHoldCard.js';
+import { ForcedChoiceBanner } from '../play/ForcedChoiceBanner.js';
+import {
+  AnnouncementSurface,
+  type AnnouncementRenderers,
+} from '../play/AnnouncementSurface.js';
+import { announcementQueue, type AnnouncementBody } from '../../lib/play/announcements.js';
 import { usePrefersReducedMotion, useTileRects } from '../play/AnimationLayer.js';
 import {
   BoardScene,
@@ -439,6 +447,56 @@ export function OnlineBoard({
     // re-arm this timer forever — a beat that never ends is a hung game, not a
     // long pause.
   }, [holdKind, holdMs, holdTurn, bookCombatBeat]);
+
+  /**
+   * THE ANNOUNCEMENT QUEUE for this board. One entry today — see the mount at
+   * the bottom of the render for why it goes through the queue anyway.
+   */
+  const announcements = useMemo(
+    () =>
+      announcementQueue([
+        combatHold ? ({ kind: 'combatHold', hold: combatHold } as AnnouncementBody) : null,
+      ]),
+    [combatHold],
+  );
+
+  /**
+   * HOW THIS BOARD DRAWS EACH ANNOUNCEMENT. A mapped type over every kind, so a
+   * fifth announcement fails to compile on BOTH boards at once rather than
+   * landing on one and missing the other (§3.143 GAP-20, the defect that made
+   * `CombatHoldBanner` its own module in the first place).
+   *
+   * ⚠️ THREE OF THESE CANNOT FIRE ON THIS BOARD TODAY, and that is stated rather
+   * than hidden: `OnlineBoard` never constructs a spell-hold, settled-choice or
+   * reveal body, because the protocol carries a masked STATE and the seat-masked
+   * event stream is not yet folded into any of the three (§11/§12). They draw the
+   * SAME shared components the hotseat board draws, with the facts this board
+   * genuinely has — a spell hold here names no targets because this board cannot
+   * yet know them, which is an honest empty rather than an invented one.
+   */
+  const announcementRenderers: AnnouncementRenderers = useMemo(
+    () => ({
+      combatHold: (body) => (
+        <CombatHoldBanner
+          hold={body.hold}
+          onSkip={() => bookCombatBeat(body.hold.kind, masked.turnNumber)}
+        />
+      ),
+      spellHold: (body) => (
+        <SpellHoldCard
+          hold={body.hold}
+          name={nameOfInstance(body.hold.instanceId)}
+          cardId={faceOfInstance(body.hold.instanceId)}
+          explanation={undefined}
+          targets={[]}
+          opponentName={names[body.hold.controller]}
+        />
+      ),
+      forcedChoice: (body) => <ForcedChoiceBanner forced={body.forced} chosen={[]} />,
+      reveal: (body) => <RevealBanner reveal={body.reveal} onDismiss={() => undefined} />,
+    }),
+    [bookCombatBeat, masked.turnNumber, nameOfInstance, faceOfInstance, names],
+  );
 
   /**
    * Advance automatically through priority windows where passing is the ONLY legal
@@ -1436,16 +1494,15 @@ export function OnlineBoard({
         </div>
       )}
 
-      {/* §10 — the board is holding combat on screen so the blocks that were just
-          declared, and the damage that follows them, can actually be read. The
-          SAME strip the hotseat board mounts, so the two cannot be re-worded
-          apart; Skip ends the beat now, so it is never a tax every combat. */}
-      {combatHold && (
-        <CombatHoldBanner
-          hold={combatHold}
-          onSkip={() => bookCombatBeat(combatHold.kind, masked.turnNumber)}
-        />
-      )}
+      {/* THE SAME ONE ANNOUNCEMENT SURFACE the hotseat board mounts. This board
+          produces only the §10 combat beat today — it has no spell hold, no
+          settled-choice banner and no reveal, for the reason §12 states (it sees
+          a masked STATE and, until recently, no events at all). It goes through
+          the surface anyway, and that is the point: the next announcement added
+          here cannot become a fifth hand-rolled `position: fixed` element,
+          because `announcement-queue.test.ts` fails the moment a board mounts an
+          announcement component outside this one seam. */}
+      <AnnouncementSurface queue={announcements} renderers={announcementRenderers} />
     </div>
   );
 }

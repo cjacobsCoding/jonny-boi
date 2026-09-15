@@ -79,11 +79,10 @@ import {
 } from 'react';
 import { opponentOf, type GameEvent, type InstanceId, type PlayerId } from '@jonny-boi/core';
 import {
+  ANNOUNCEMENT_CONFIG,
   BOARD_3D_CONFIG,
   BOARD_LAYOUT_CONFIG,
   COMBAT_ADVANCE_CONFIG,
-  FORCED_CHOICE_CONFIG,
-  SPELL_HOLD_CONFIG,
   TAP_ROTATION_CONFIG,
 } from '../../lib/play/play-config.js';
 import { STAGED_HOME_TILE_OPACITY } from '../../lib/play/combat-stage.js';
@@ -161,11 +160,17 @@ export function useBoardSceneVars(): CSSProperties {
     '--perm-tapped-grayscale': String(TAP_ROTATION_CONFIG.tappedGrayscaleFraction),
     '--perm-staged-opacity': String(STAGED_HOME_TILE_OPACITY),
     '--combat-advance-ms': `${COMBAT_ADVANCE_CONFIG.advanceMs}ms`,
-    '--spell-hold-fade-ms': `${SPELL_HOLD_CONFIG.fadeMs}ms`,
-    // The forced-choice announcement arrives the same way the spell hold does —
-    // its config DERIVES the number from `SPELL_HOLD_CONFIG.fadeMs` rather than
-    // repeating it, so the two can never drift.
-    '--forced-choice-fade-ms': `${FORCED_CHOICE_CONFIG.fadeMs}ms`,
+    // ONE fade for the ONE announcement surface. It replaced
+    // `--spell-hold-fade-ms` and `--forced-choice-fade-ms`, which were two
+    // published properties carrying the same number into two hand-written
+    // keyframes — the parallel-vocabulary shape rule 12 exists to stop, and a
+    // miniature of the four-announcer problem this whole change is about.
+    // `ANNOUNCEMENT_CONFIG.fadeMs` still DERIVES from `SPELL_HOLD_CONFIG.fadeMs`,
+    // so the hold's pacing is what tunes it.
+    '--announce-fade-ms': `${ANNOUNCEMENT_CONFIG.fadeMs}ms`,
+    // Where the ONE surface's top slot sits — measured against the board's own
+    // status row, which a tall announcement was standing on top of.
+    '--announce-top-clearance': `${ANNOUNCEMENT_CONFIG.topSlotClearanceRem}rem`,
     // §3.143 wave 3 — the ARRANGEMENT's own numbers (BOARD_LAYOUT_CONFIG). The
     // same rule as the tilt's: board-fit.css says how the board reads them and
     // contains none of them.
