@@ -22,11 +22,14 @@ import {
   generateLegalActions,
   PLAYER_IDS,
   type CardInstance,
+  type GameEvent,
   type GameState,
   type PlayerId,
   type RulesConfig,
 } from '@jonny-boi/core';
 import {
+  isPublicEventKind,
+  maskEventsForSeat,
   maskStateForSeat,
   maskStateForSpectator,
   DEFAULT_STARTING_PLAYER_CHOICE,
@@ -35,6 +38,7 @@ import {
   PROTOCOL_VERSION,
   type DeckList,
   type LobbyPlayer,
+  type MaskedGameView,
   type StartingPlayerChoice,
   type RoomPhase,
   type ServerMessage,
@@ -592,9 +596,13 @@ export class Room {
       return;
     }
 
+    // The view each seat held BEFORE the action, captured before `this.state`
+    // moves on — `maskEventsForSeat` needs both frames so a token that blocked
+    // and died inside this very action is still a card the seat has seen.
+    const previous = this.state;
     this.state = result.state;
     const log = this.summarizeEvents(result.events);
-    this.broadcastState(log);
+    this.broadcastState(log, result.events, previous);
     this.checkGameOver();
   }
 
@@ -824,40 +832,79 @@ export class Room {
    * `maskStateForSeat`, the protocol's single chokepoint, so a client never
    * receives the opponent's hidden cards. Spectators get a neutral view (seat A's
    * public information — no hidden hands, since they aren't a seat).
+   *
+   * The event batch travels the same way and through the same discipline:
+   * `maskEventsForSeat` is the chokepoint's sibling and is handed only MASKED
+   * views, so it cannot publish what the mask withheld even by mistake.
+   *
+   * ⚠️ PERFORMANCE — a live server holds real games, so the expensive half (an
+   * instance-id walk over two whole views, per recipient) runs only when the
+   * action actually produced something public. Most do not. The cheap kind scan
+   * that decides runs ONCE per action, not once per recipient, and a room with no
+   * connections does neither.
    */
-  private broadcastState(log: readonly string[]): void {
+  private broadcastState(
+    log: readonly string[],
+    events: readonly GameEvent[] = [],
+    previous: GameState | null = null,
+  ): void {
     if (!this.state) return;
+    const carries = events.some((event) => isPublicEventKind(event.type));
+    const batch = carries ? { events, previous } : null;
     for (const id of PLAYER_IDS) {
       const conn = this.seats[id].connection;
-      if (conn) this.sendStateTo(conn, id, log);
+      if (conn) this.sendStateTo(conn, id, log, batch);
     }
-    for (const spec of this.spectators) this.sendStateTo(spec, null, log);
+    for (const spec of this.spectators) this.sendStateTo(spec, null, log, batch);
+  }
+
+  /**
+   * The view `seat` is entitled to — a spectator's built by the protocol itself
+   * (`maskStateForSpectator`), never assembled here out of a seat's view, which
+   * is what once made a spectator inherit whatever seat A was entitled to see.
+   */
+  private viewFor(state: GameState, seat: PlayerId | null): MaskedGameView {
+    return seat === null ? maskStateForSpectator(state) : maskStateForSeat(state, seat);
   }
 
   /**
    * Send one masked `state` message to a connection. `seat === null` means a
-   * spectator, whose view the protocol builds itself (`maskStateForSpectator`) —
-   * assembling one here out of a seat's view is what made a spectator inherit
-   * whatever that seat was entitled to see. `legalActions`/`yourTurn` are only
-   * populated for the seat that actually holds priority.
+   * spectator. `legalActions`/`yourTurn` are only populated for the seat that
+   * actually holds priority.
+   *
+   * `batch` is the action's event stream, or `null` for a send that is not the
+   * result of an action (a join, a reconnect, a resync after a refused move) —
+   * those carry no `events` field at all, because nothing fresh happened and a
+   * client that appended an empty batch would be told nothing twice.
    */
-  private sendStateTo(conn: Connection, seat: PlayerId | null, log: readonly string[] = []): void {
+  private sendStateTo(
+    conn: Connection,
+    seat: PlayerId | null,
+    log: readonly string[] = [],
+    batch: { readonly events: readonly GameEvent[]; readonly previous: GameState | null } | null = null,
+  ): void {
     if (!this.state) return;
     const yourTurn = seat !== null && this.state.priorityPlayer === seat;
     const legalActions = yourTurn ? generateLegalActions(this.state, this.config) : [];
+    const view = this.viewFor(this.state, seat);
 
-    if (seat === null) {
-      conn.send({
-        t: 'state',
-        view: maskStateForSpectator(this.state),
-        legalActions: [],
-        yourTurn: false,
-        log,
-      });
-      return;
-    }
+    const events =
+      batch === null
+        ? undefined
+        : maskEventsForSeat(batch.events, {
+            before: batch.previous === null ? null : this.viewFor(batch.previous, seat),
+            after: view,
+          });
 
-    const view = maskStateForSeat(this.state, seat);
-    conn.send({ t: 'state', view, legalActions, yourTurn, log });
+    conn.send({
+      t: 'state',
+      view,
+      legalActions: seat === null ? [] : legalActions,
+      yourTurn: seat === null ? false : yourTurn,
+      log,
+      // Omitted rather than sent empty: "nothing public happened" and "this
+      // server has no event channel" must not be the same message.
+      ...(events !== undefined && events.length > 0 ? { events } : {}),
+    });
   }
 }

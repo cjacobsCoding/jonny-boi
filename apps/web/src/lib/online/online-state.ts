@@ -13,6 +13,7 @@ import type {
   ErrorCode,
   LobbyPlayer,
   MaskedGameView,
+  PublicGameEvent,
   RoomPhase,
   ServerMessage,
   StartingPlayerChoice,
@@ -31,7 +32,21 @@ export interface GameFrame {
   readonly legalActions: readonly GameAction[];
   readonly yourTurn: boolean;
   readonly log: readonly string[];
+  /**
+   * THE WHOLE GAME'S public events so far, in order — this seat's share of them,
+   * already filtered by the server's `maskEventsForSeat`.
+   *
+   * CUMULATIVE, not the latest batch, because that is the shape its consumer
+   * needs: `useDamageSequence` keeps a high-water mark into one growing log and
+   * derives only what is new, so a per-frame array would make every frame look
+   * like a fresh combat. A server that sends no `events` (v2, or an action that
+   * produced nothing public) simply appends nothing.
+   */
+  readonly events: readonly PublicGameEvent[];
 }
+
+/** Shared empty log, so a frame from a server with no event channel allocates none. */
+const NO_EVENTS: readonly PublicGameEvent[] = Object.freeze([]);
 
 /**
  * Which screen the online flow is on. This is CLIENT-side routing derived from the
@@ -185,6 +200,10 @@ function reduceServer(state: OnlineState, msg: ServerMessage): OnlineState {
         screen: 'playing',
         result: null,
         mulliganHand: null,
+        // A REMATCH is a new game on the same connection, so the cumulative event
+        // log has to re-baseline here or the first frame of game two arrives
+        // carrying game one's combats and replays every one of them.
+        frame: state.frame === null ? null : { ...state.frame, events: NO_EVENTS },
       };
     case 'mulliganPrompt':
       return {
@@ -193,7 +212,14 @@ function reduceServer(state: OnlineState, msg: ServerMessage): OnlineState {
         mulliganHand: msg.hand,
         mulligansTaken: msg.mulligansTaken,
       };
-    case 'state':
+    case 'state': {
+      // APPEND, never replace: the frame is the latest board, but `events` is the
+      // running log the damage sequence is derived from. `msg.events` is this
+      // action's batch — absent on a v2 server, and absent on any send that was
+      // not the result of an action (a reconnect, a resync after a refused move),
+      // which is exactly when appending nothing is the right answer.
+      const previous = state.frame?.events ?? NO_EVENTS;
+      const batch = msg.events;
       return {
         ...state,
         screen: 'playing',
@@ -203,8 +229,10 @@ function reduceServer(state: OnlineState, msg: ServerMessage): OnlineState {
           legalActions: msg.legalActions,
           yourTurn: msg.yourTurn,
           log: msg.log,
+          events: batch === undefined || batch.length === 0 ? previous : [...previous, ...batch],
         },
       };
+    }
     case 'gameOver':
       return {
         ...state,

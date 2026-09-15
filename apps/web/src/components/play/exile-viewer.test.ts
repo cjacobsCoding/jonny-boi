@@ -271,7 +271,7 @@ describe('exile is an openable zone wherever the graveyard is', () => {
     const { state } = exileFixture();
     const html = renderToStaticMarkup(
       createElement(OnlineBoard, {
-        frame: { view: maskStateForSeat(state, 'A'), legalActions: [], yourTurn: false, log: [] },
+        frame: { view: maskStateForSeat(state, 'A'), legalActions: [], yourTurn: false, log: [], events: [] },
         names: NAMES,
         onAction: () => {},
         onConcede: () => {},

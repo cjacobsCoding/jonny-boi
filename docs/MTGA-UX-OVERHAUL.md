@@ -760,17 +760,16 @@ already sends `combat: state.combat` unredacted, and combat is public by the rul
 | **UX-12** advance + midline clamp | ✅ | both boards render `.board-midline` (the element `CombatStage` measures), and `stageEntriesFor` returns the same attacker advance from either board's view model |
 | **UX-13** blocker advance | ✅ | from one real blocked combat, both view models yield `{blocker, role:'blocker', toward:-1, meets:attacker}`; the control one beat earlier yields `['attacker']` only |
 | **UX-14** attack arcs | ✅ | the scene calls `combatArcPairs` with the attack half supplied; `blockerLinePairs` is deleted |
-| **UX-15** damage | ❌ **NOT REACHED — and it is a missing CHANNEL, not a masking limit** | see below |
+| **UX-15** damage | ✅ **REACHED — §12 built the channel** | the `state` message carries `PUBLIC_EVENT_KINDS`, filtered per seat by `maskEventsForSeat`; `05-online-damage-guest.png` shows a damage bloom on the ONLINE board in the combat-damage step |
 
-**⚠️ UX-15, stated honestly rather than claimed.** `deriveDamageSequence` needs the engine's
-`GameEvent` stream. The server's `state` message carries `MaskedGameView` + `legalActions` +
-`yourTurn` + `log`, and `Room.summarizeEvents` (`apps/server/src/room.ts`) folds the events down to
-**five kinds of pre-formatted English string**, throwing the structure away. An online client cannot
-derive the sequence from that, and deriving one from frame diffs would be a second answer to "what
-damage happened" (rule 12). The scene therefore takes `NO_DAMAGE_SOURCE`, a named constant whose doc
-comment carries this paragraph. **This is not a hidden-information problem** — combat damage is
-public by the rules and the server already narrates it to both seats in prose. The fix is a field on
-the `state` message carrying a CLOSED list of public event kinds; the call site is then one prop.
+**⚠️ UX-15 — the finding this section filed, and §12 closed.** As written here it read:
+*"`deriveDamageSequence` needs the engine's `GameEvent` stream. The server's `state` message carries
+`MaskedGameView` + `legalActions` + `yourTurn` + `log`, and `Room.summarizeEvents` folds the events
+down to five kinds of pre-formatted English string, throwing the structure away … This is not a
+hidden-information problem — combat damage is public by the rules and the server already narrates it
+to both seats in prose. The fix is a field on the `state` message carrying a CLOSED list of public
+event kinds; the call site is then one prop."* That diagnosis was exactly right, and §12 is that
+field. `NO_DAMAGE_SOURCE` and every comment describing the gap are deleted (rule 5).
 
 ### The guard, and its falsification
 
@@ -858,6 +857,417 @@ pure-function equality and it is not a photograph; stated as such.
   attacker in, no attack arc out, at every step `STEP_ORDER` knows;
 - six stylesheet/source comments describing the old split, including `board-fit.css`'s note that the
   online board *"sets none of `PlayBoard`'s inline custom properties"* — it sets all of them now.
+
+## 13. Prompt polish — raised 2026-09-14, NOT STARTED
+
+### UX-23 — a library search shows each unique card ONCE
+
+> When Gate Creeper Vine's trigger goes off and you are choosing a land/gate, it should show all
+> unique options once instead of showing all options, even duplicates. It can show a multipler
+> symbol instead to indicate how many you have left - bonus points if we can show a nice intuitive
+> pie chart of the remaining options - but no need to show identical cards more than once.
+
+**Why it happens.** A library search compiles to a `selectCards` over library CANDIDATES, and every
+copy is a distinct `CardInstance` — correctly, because the answer must name one instance id. So a
+deck with twelve Forests offers twelve identical-looking options. The model is right; the
+presentation is not.
+
+**Where it belongs: the view-model, not the component.** `lib/play/choice-view.ts` is the pure,
+unit-tested place that already decides what a prompt offers, and it already has the vocabulary —
+`pickCount` returns a multiplicity that the UI renders as “×2” for cards a player has PICKED
+(`choice-view.ts:218-221`). This is the same idea one step earlier: collapse identical candidates
+into one row carrying how many REMAIN. Reuse that vocabulary rather than inventing a second one.
+
+**The one correctness rule.** Grouping is presentation only: the submitted answer must still be a
+real instance id from the group (any member — they are genuinely interchangeable), and the engine
+must see exactly what it sees today. A test should pin that the answer produced from a grouped row
+is accepted by `validateChoiceAnswer` unchanged.
+
+**Group by what the player can SEE**, not by card id alone: two copies with different chosen art
+(§DB-1) still read as the same card, and a grouped row must not silently drop a distinction a
+player would notice. If a group is ever not interchangeable, it must NOT be grouped — report
+rather than approximate (rule 2).
+
+**The pie chart** (“bonus points”) is a real idea, not decoration: it answers “what is LEFT in my
+library” at a glance during a search. Treat it as optional and build the grouping first — the
+grouping is the fix, the chart is the flourish.
+
+### UX-24 — a target candidate shows the state that changes the decision
+
+> When choosing a creature to exile with Conjurer's closet, I want to see what special things my
+> creature choices have going on. Like if there's a Banisher Priest as an option, I want to see what
+> creature that Banisher Priest is already holding banished.
+
+**This is the right example to design from, because the hidden state INVERTS the decision.**
+Blinking a Banisher Priest makes it leave the battlefield, which returns the creature it was
+exiling — so "blink my Priest" can hand an opponent their bomb back. A player choosing blind is not
+making a choice, they are guessing.
+
+**MEASURED: every part of this already exists except the reach.**
+- The link is core data: `CardInstance.exiledUntilLeavesBy` names the jailer (a field since §3.56).
+- `lib/play/jail-view.ts` already GROUPS exiled cards per jailer, pure and unit-tested.
+- `BoardPermanentTile` already DRAWS the prisoner tucked under its jailer (§3.57).
+- `ChoicePrompt` / `choice-view.ts` use none of it — `grep -n jail` over both returns nothing.
+
+So this is the branch's signature failure once more: built, correct, and absent from the one
+surface where the decision is actually made.
+
+**FIX THE CLASS, NOT THE CARD (rule 1).** A jailer is one example of “state a candidate carries
+that would change which candidate you pick”. The others are already modelled too, and a fix that
+special-cases Banisher Priest leaves every sibling broken:
+
+| state | already modelled in |
+| --- | --- |
+| what it holds exiled | `jail-view.ts` |
+| auras / equipment attached | `attachments.ts` |
+| +1/+1 and other counters | `CardInstance.counters` |
+| granted or removed abilities, modified P/T | the §3.143 provenance layer |
+| tapped / summoning-sick / attacking / blocking | `BoardPermanent` in the view model |
+
+**THE DRY ANSWER, and it is nearly free:** a prompt candidate should render the SAME `CardFace`
+the battlefield tile renders — with its provenance and its jail — instead of a bare art crop. Every
+row of that table then appears in the prompt because it already appears on the tile, and a future
+row is understood by both in one edit. Writing a second “what is notable about this creature”
+summary for prompts is the parallel-vocabulary failure rule 3 forbids.
+
+⚠️ **Hidden information:** prompts render from the masked view online. A jailed card is public
+(exile zones are carried in full in both views — `jail-view.ts` says so explicitly), but anything
+the mask withholds must degrade honestly and never be reached for.
+
+**Guard:** a real Banisher Priest exiling a real creature, offered as a Conjurer's Closet target —
+the rendered prompt must name the prisoner. Falsify it by unlinking the prisoner and confirming
+exactly that assertion reddens.
+
+### UX-24a — tapped state, visible on a target candidate
+
+> when choosing targets for like Serenity Angel for example, I want to see if the card options are
+> tapped or not easily.
+
+**Not a separate item — this is UX-24's first acceptance case**, and recording it separately would
+invite a separate fix. `tapped` is already on `BoardPermanent` and the battlefield tile already
+shows it (the 90° turn, UX-11). A prompt candidate that renders the same `CardFace` the tile
+renders gets it for free, along with counters, auras, jailed prisoners and granted abilities. If a
+fix makes tapped visible and leaves the rest invisible, UX-24 was not done.
+
+### UX-25 — an artless card is still CARD-SHAPED
+
+> when choosing targets for like Serenity Angel for example, any creature Tokens render at a
+> different size - should be the same
+
+**Cause, found in `CardFace.tsx:218-224`:** with art it renders
+`<img className="card-face__art">`; without art it renders `<span class="card-face__fallback">`.
+An `<img>` carries an INTRINSIC ASPECT RATIO and fills its box; a `<span>` of text has no intrinsic
+size at all, so it collapses to the height of its words. A token — which has no pool entry and
+therefore no art — is the common way to hit that, which is why tokens are what Caleb noticed.
+
+**Fix the shape, not the token:** the face's BOX must be the same whether or not art loaded. Put
+the card aspect ratio on the container rather than relying on the image to supply it. That also
+covers the case nobody has reported yet but which happens offline and on a Scryfall miss — a real
+card whose image failed to load, today collapsing exactly like a token. One fix, both causes.
+
+**Guard:** render a face with art and a face without, and assert the two boxes have the same
+dimensions. That test fails today.
+
+### UX-26 — tokens deserve real art
+
+> token cards need cool mtg art
+
+Tokens currently render as a name on a plain plate, because the bundled card index carries no token
+entries at all (`build-card-index.mjs` has no notion of them) and a token has no pool card to look
+art up from.
+
+**This is buildable rather than aspirational:** Scryfall publishes tokens as first-class printings
+with their own art, so the art exists and is reachable by the same pipeline every other card uses.
+
+⚠️ **MEASURE THE COST FIRST (rule 4), because the index is already the app's heaviest asset.** The
+`card-index-*.js` chunk is ~6 MB and the card browser is already the slowest screen in the app
+(§7.4 records a 42 MB DOM found there). So: include ONLY the tokens the pool actually creates, not
+Scryfall's whole token corpus — enumerate them from the `createToken` calls in the compiled pool and
+report that count before fetching anything. A token the pool never makes must not cost a byte.
+
+⚠️ **And it interacts with DIST-1 (run fully offline):** token art fetched on demand is art that is
+absent on a plane. Whatever is chosen must degrade to UX-25's card-shaped plate and SAY it is
+unavailable, never render blank.
+
+### UX-27 — a target candidate must say WHICH ZONE it is in  — **live defect**
+
+> Its possible I was targeting creatures in the enemy graveyard by accident with serenity angel -
+> the UI should be much more clear about this
+
+Reported first as *"Serenity Angel ... did not seem to actually remove my opponents creatures"*, and
+this is the explanation. **The engine is innocent** — `angel-of-serenity.test.ts` drives it directly
+and its five cases pass, including *"exiles three across both zones"*. Exiling a creature CARD from a
+graveyard removes nothing from the battlefield, so the Angel did exactly what it was told.
+
+**THE DEFECT IS IN CORE'S TARGET OPTION, and it is small.** `targetOptionFor`
+(`packages/core/src/engine.ts:2720-2739`) returns `{ ref, name, controller }` — **and no zone**. It
+searches the battlefield, then the stack, then `findInstanceAnywhere`, so it KNOWS where it found
+the card and throws that away. A graveyard creature card and a battlefield creature therefore reach
+the prompt as the same shape with the same name and the same controller: the UI cannot distinguish
+them because the data does not.
+
+Angel of Serenity is the card that exposes it (“from the battlefield **and/or** creature cards from
+graveyards” — one combined list), but it is not the only one: every restriction spanning zones has
+the same hole.
+
+**The fix:**
+- Add the zone to `TargetOption` in core, populated where the card is actually found — one funnel,
+  so every consumer (prompt, AI target scorer, replay) gets it at once. The AI reads these options
+  too, and a pilot that cannot tell a graveyard card from a blocker is making the same mistake.
+- Render it. `choice-view.ts` already has `ZONE_LABELS` and `zoneLabel()` for `selectCards`'
+  `fromZone` — reuse that vocabulary, do not invent a second one (rule 3).
+- Group or visually separate the zones in the prompt when a list spans more than one. A flat list
+  of nine names where three are in a graveyard is a trap even when each is labelled.
+
+**Guard:** a real Angel of Serenity offered a battlefield creature and a graveyard creature card —
+the rendered prompt must distinguish them. Falsify by dropping the zone and confirming exactly that
+assertion reddens.
+
+⚠️ Related and already fixed in the same pass: the prompt's option list could not scroll
+(`.choice-prompt__options` lacked `min-height: 0`), so a long list pushed Confirm off screen — see
+`choice-prompt-scroll.test.ts`. That was Cloudshift's clipping, and it may also have contributed
+here.
+
+### UX-28 — backing out extends to CHOICES, not just casts
+
+> when anything gives you a choice and its something you initiated, you should be able to back out
+> of it if you havent chosen yet. For example, Temple Garden asking you if you want to enter tapped
+> or pay life - and none should be the wiser - tis not considered played until you choose and
+> confirm
+
+**This is UX-3/UX-4's rule applied one layer down, and the machinery already exists.**
+`lib/play/proposal.ts` already makes a CAST or an ACTIVATION reversible until commit — propose,
+answer the questions, confirm, and `cancelProposal` restores the pre-proposal state byte for byte.
+What it does not yet cover is a **land play whose as-enters choice is the first decision**.
+
+Temple Garden is the clean example: playing it is one action, and “pay 2 life or enter tapped” is
+an `asEnters` choice resolved as part of it. Caleb's framing is the right one — until that answer
+is given, the player has not finished the action, and backing out should leave **no trace**: the
+land back in hand, the land drop unspent, the log silent.
+
+**Design notes:**
+- Extend the proposal's OPENING kinds with the land play (`{kind: 'playLand'}` beside `cast`,
+  `activate`, `cycle`), so the same transaction, the same cancel affordance and the same
+  `REWIND_BLOCK_EXPLANATIONS` serve it. **Do not write a second rewind** (rule 3).
+- The honest-refusal rule carries over unchanged: `rewindVerdict` already decides when a rewind is
+  gone and renders the SENTENCE saying why instead of a dead button. An as-enters choice that has
+  already revealed something, or that another seat has acted after, must refuse rather than lie.
+- ⚠️ **Not every choice qualifies, and the table must say so.** “Something you initiated” is the
+  test: a choice forced on you by an OPPONENT'S spell is not backable, and neither is one whose
+  earlier half already changed the game. A closed table of which openings are rewindable, with a
+  reason per row, rather than a predicate that grows branches.
+
+**Guard:** play Temple Garden, back out at the tapped/pay-life question, and assert the land is in
+hand, the land drop is unspent, and the action log has no entry. Falsify by removing the rewind and
+confirming exactly that test reddens.
+
+### UX-29 — animations, still wanted
+
+> Also, I do really still want animations... Similar to what MTGA has or better
+
+Raised AFTER the combat hold shipped, so it is not a restatement of §10 — it is the broader ask the
+hold only began to answer. What exists today: the damage sequence, the fiery combat arcs, the
+attacker/blocker advance, and the holds that give them time to be seen. What that leaves untouched
+is most of a game: **drawing, playing a land, casting, resolving, dying, drawing the last card,
+gaining and losing life, tokens arriving, counters landing.**
+
+⚠️ **This item must be MEASURED before it is built** (rule 4), and the measurement is not a survey
+of MTGA — it is a list of the moments in a real game of THIS app where something changes with no
+motion at all. Drive a game with the existing rigs, capture the frames either side of each state
+change, and rank by how often each moment occurs. Build the top of that list. “Similar to MTGA or
+better” briefed straight into code produces a scattering of effects; the ranked list produces the
+three that make the game feel alive.
+
+⚠️ **Every animation obeys §10's lesson**: an animation that does not HOLD is invisible, and one
+that cannot be SKIPPED is infuriating in an app built to play hundreds of games. Durations are named
+constants in `play-config.ts`, judged against the existing beats, and honour reduced motion by
+scaling a number rather than flipping a boolean — the convention `BOARD_3D_CONFIG` already sets.
+
+See also [END-OF-GAME.md](END-OF-GAME.md), which is the same ask pointed at the last moment of a game.
+---
+
+## 12. SHIPPED 2026-09-14 — the wire carries EVENTS, and the online board animates damage
+
+### The gap, as §11 filed it
+
+> UX-15 **NOT REACHED**. `deriveDamageSequence` needs the `GameEvent` stream; the `state` message
+> carries a masked view plus pre-formatted log **strings** — `Room.summarizeEvents` folds events into
+> five kinds of English sentence and throws the structure away. **This is a missing channel, not a
+> masking limit.**
+
+So the hotseat board animated damage and the online board could not — the same fork §11 had just
+removed, one layer down. The client already had `deriveDamageSequence`, `DamageLayer` and the shared
+`BoardScene`; only the data was missing.
+
+### The closed table, and where it lives
+
+`packages/protocol/src/index.ts` — `PUBLIC_EVENT_KINDS`, **21 rows**, each a `kind: 'why it is
+public'` pair, frozen, with `PublicEventKind` and `PublicGameEvent` DERIVED from it so adding a kind
+is a ROW and every consumer's type widens for free. **A kind not in the table is not sent**,
+whatever it is. The rows are three groups:
+
+- **combat damage and what is emitted inside one assignment** — `damageDealt`, `damagePrevented`,
+  `lifeChanged`, `gainLife`, `poisonChanged`, `loyaltyChanged`, `defenseChanged`, `counterAdded`,
+  `replacementApplied` (`damage-sequence.ts`'s own companion table, which is what makes two damage
+  rounds read as two);
+- **what ends a round** — `creatureDied`, `planeswalkerDied`, `battleDefeated`, `playerLost`,
+  `gameOver` (deaths are state-based actions, and they are what attributes LETHALITY to a hit);
+- **the five kinds `summarizeEvents` already narrates to both seats in prose** — `landPlayed`,
+  `spellCast`, `attackersDeclared`, `blockersDeclared`, `stepBegin` — plus the two remaining public
+  boundaries a damage fold reads, `turnBegin` and `stackResolved`. For this group the structured form
+  discloses nothing the shipped English log did not.
+
+### The hidden-information boundary, and how per-seat filtering works
+
+`maskEventsForSeat` is `maskStateForSeat`'s sibling and sits beside it. **Two gates, both must pass:**
+
+1. the KIND is a row of the closed table;
+2. every card the event names — through core's exact, type-derived `instanceIdsNamedBy`, never a
+   key-name guess — appears in a view **that seat is already entitled to**.
+
+The second gate is why a public KIND is not enough: a counter placed on a face-down foretold card in
+the opponent's exile is a `counterAdded`, and the table alone would wave it through. An event failing
+either gate is dropped WHOLE, never trimmed.
+
+**The function is handed MASKED VIEWS, never a `GameState`.** That is the design, not a convenience:
+it cannot publish what the mask withheld because it is never given it. Its window is the seat's view
+BEFORE the action and the view it is about to be sent — both frames, because a token that blocked and
+died is gone from every zone by the second one, and a filter that knew only the second would drop its
+hits and lose half the combat.
+
+**What was proved.** `apps/server/src/event-stream.test.ts` drives a REAL room with real client
+messages: a card drawn into a hand is named by NEITHER seat's event stream; no stream ever names a
+card in the opponent's hand; a spectator's stream names no seat's hand; the prose log did not regress;
+and a send that is not the result of an action carries no `events` field at all. It also pins the
+CONTAINMENT between this repo's two hidden-information tables — every wire-public kind must be one
+`packages/sim`'s `OBSERVATION_POLICY` also passes unredacted. **21 of core's 85 event kinds travel to a seat**; 79 of the 85 are unredacted for a pilot, so the wire table is by a wide margin the smaller of the two.
+
+Falsified by bypassing the filter in `Room.sendStateTo`: **4 of 8 reddened**, naming the drawn card by
+id (`seat a's event stream names drawn card 110`). Adding `drawCard` as a row reddens 2 protocol
+tests; deleting the id walk reddens 2 others.
+
+### Performance
+
+The expensive half — an instance-id walk over two whole views, per recipient — runs only when the
+action produced something public at all, and the cheap kind scan that decides runs ONCE per action
+rather than once per recipient. A room with no connections does neither. **Nothing in `packages/core`
+or `packages/sim` changed**, and neither is aware the protocol exists, so the sim's throughput is
+untouched by construction.
+
+### The parity claim
+
+`online-board-parity.test.ts` runs a REAL blocked combat through the REAL engine, stops at the action
+that dealt the damage, and derives the sequence twice: the hotseat board from the raw batch, the
+online board from `maskEventsForSeat`'s output. The two beat lists are compared field for field —
+same hits, same rounds, same amounts, same lethality, same timings — for BOTH seats. `key` is excluded
+and the test says why: a beat's key is its index in the CLIENT'S OWN log, and the two clients hold
+different logs, so asserting key equality would assert they are the same log.
+
+Falsified by dropping `damageDealt` from the table: both parity tests redden with
+`expected [] to deeply equal [ { kind: 'hit', …(11) }, …(1) ]`.
+
+### ⚠️ THE EIGHTH INSTANCE — an online player could never declare a block at all
+
+The rig found it; no test could. `OnlineBoard` derived its eligible blockers from the server's
+`declareBlockers` template, which is core's **baseline** and carries `blocks: []` by design
+(`generateLegalActions`: *"offer the empty (no-block) declaration as a baseline; the AI constructs
+specific assignments and passes them to applyAction"*). So the set was empty in every real block
+window and **the only button a defending online seat ever saw was "No blocks"**.
+
+§11's parity test was green throughout, and it is worth seeing why: it proved both boards ADVANCE the
+same blocker from a hand-built `CombatState` whose `blocks` were already populated. That is a claim
+about drawing a block, not about making one.
+
+The fix is `eligibleBlockerIds` in `view-model.ts` — the hotseat board's own rule (*my untapped
+creatures; the engine validates legality on submit*), now read by both boards (rule 12). The guard is
+a REACH assertion: render the online board on a real block window and require a selectable tile on
+the viewer's own seat. Falsified by restoring the template-derived set — that assertion, and only
+that one, reddens.
+
+### PHOTOGRAPHED — a blocked combat, online, with the damage on screen
+
+`apps/web/scripts/see-online-board.mjs` now reaches a BLOCKED combat. Four harness defects hid in the
+old version, every one of which reads as a product bug, and all four are written down in the file:
+
+1. the hand query was scoped to a `.play-hand` that is not `--hidden` — which also matches the far
+   seat's fanned backs, so the driver reported `hand=0` on a seat visibly holding five cards;
+2. it clicked sorcery-speed cards in the UPKEEP, got *"this spell can only be cast at sorcery speed"*
+   as a toast, and clicked the same card forever — never reporting `idle`, so the old stall detector
+   could not see it;
+3. it tapped every land in the upkeep, arriving in its main phase unable to pay for anything;
+4. **both seats attacked with everything**, so no seat ever had an untapped creature to block with —
+   which is precisely why this rig had only ever photographed unblocked combat.
+
+The run, read off the live DOM of the GUEST seat:
+
+```
+BLOCK DECLARED (guest): Confirm 1 block
+AT CONFIRM (guest) | attacking=2 blocking=2 staged=2 (blockers 1) arcs=4 declaredArcs=2
+                     holds=1 | Turn 9 · Declare Blockers
+ONLINE DAMAGE best (guest) | dmgLayer=1 impacts=2 bolts=2 holds=1 | Turn 9 · Combat Damage
+```
+
+`04-online-block-guest.png` shows, on the ONLINE board: the Host's Elemental lifted out of its home
+row and advanced toward the midline, outlined red and labelled **⚔ ATTACKING** with its faint home
+placeholder left behind; the Guest's Elemental ringed gold and badged **⊘ BLOCKING**; a dashed fiery
+arc running from the attacker to the Guest's life total; and the §10 beat announced across the top as
+**"Blockers declared — who is blocking whom"** with a Skip.
+
+`05-online-damage-guest.png`, one beat later: the status reads **Turn 9 · Combat Damage**, a red
+**COMBAT DAMAGE** badge sits in the status bar, the top banner reads **"Combat damage — damage
+travelling to each creature and player"**, and a **red damage bloom carrying the number 1** is painted
+on the opposing seat's battlefield row. The game log says `Step: combatDamage.` That is UX-15 on the
+online board, in a frame that is still in combat — the same assertion `verify-combat-visibility.mjs`
+makes for the hotseat board, made with a camera.
+
+### The numbers
+
+```
+npm run build                                          exit 0
+npx vitest run apps/web apps/server packages/protocol   Tests 2002 passed (2002) | 153 files, 0 failed
+node apps/web/scripts/verify-combat-visibility.mjs      6/6 checks passed
+node apps/web/scripts/verify-board-fits.mjs             32/32 checks passed
+```
+
+Baseline for apps/web + apps/server was 150 files / 1,952 tests; this is 151 / 1,966 there (+1 file,
++14 tests), plus `packages/protocol`'s 2 files / 36 tests.
+
+`PROTOCOL_VERSION` 2 → 3. Additive and backward-compatible in both directions:
+`MIN_COMPATIBLE_PROTOCOL_VERSION` stays 1, a v2 server simply omits `events`, and a v3 client reads
+the absence as "this server carries no event stream" — which is what every client did before v3.
+
+### UX-30 — the life total must not change before the damage arrives
+
+> cosmetic fix - the visually displayed health shouldn't reflect the after-damaged health total
+> until after the damage animations finish
+
+**Called cosmetic; it is actually a coherence bug.** The damage sequence takes
+`DAMAGE_ANIM_CONFIG.travelMs` (340 ms) to carry a bolt from its source to the seat it hits, but the
+life total is rendered straight from `GameState`, which the engine updated the instant the damage
+was dealt. So the number drops FIRST and the animation arrives afterwards to explain a change the
+player has already seen. That is the opposite of cause and effect, and it quietly undoes what §10's
+combat hold was built to achieve — you cannot read an exchange whose outcome is spoiled before it
+plays.
+
+**The fix is presentation-only, and the seam already exists.** The displayed life is
+`state life` + `damage that has not landed yet`, folded from the same `DamageBeat` sequence the
+animation is driven by (`damage-sequence.ts`) — so the number and the bolt are two readings of ONE
+model rather than two answers to “how much life do they have” (rule 3). When the last beat lands,
+the offset is zero and the display is the state again, by construction.
+
+⚠️ **Non-negotiable constraints, because a lagging life total is a dangerous thing to get wrong:**
+- The ENGINE's life is never touched, and nothing that reads life for a RULES decision may read the
+  lagged value. This is a render-time offset, full stop.
+- It must converge even when the animation is skipped, interrupted, or never runs (reduced motion,
+  a resumed game, a replay scrub). A display that can get stuck showing the wrong life is far worse
+  than one that updates too early — so the fold must be derived from the beats, never a mutable
+  counter that can be left behind.
+- Lethal is the case to test: a player taken to 0 or below must still show the real final number
+  once the beats finish — including a NEGATIVE one, which `END-OF-GAME.md` wants shown rather than
+  clamped.
+
+**Guard:** with a pending beat the displayed life differs from `state`; after the last beat they
+are equal; and with the sequence skipped they are equal immediately. Falsify each direction.
 ## 12. SHIPPED 2026-09-14 — the game decided FOR you, and said nothing
 
 Two reports, one week after §10, and the same sentence underneath both: *the game did something
