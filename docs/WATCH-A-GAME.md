@@ -28,6 +28,20 @@
 
 ## WATCH-1 — one board, three perspectives
 
+### MEASURED 2026-09-14: it is a THIRD board, and that answers the “why?”
+
+`MatchView` → `components/match/MatchReplay.tsx`, which imports **its own
+`components/match/PermanentTile.tsx`** — not `play/BoardPermanentTile` — and lays out with its own
+`.replay-*` classes. So the app has THREE battlefield renderers: `PlayBoard` (hotseat),
+`OnlineBoard`, and this. The first two were unified behind `BoardScene` in §11; the watch tab was
+not, because it predates it and nobody looked.
+
+That is the whole explanation for “completely different layout — why?”, and it is the same DRY
+failure §11 fixed, one surface over. It also means **every visual item this branch shipped is absent
+here**: no tilt, no midline, no advance, no fiery arcs, no damage animation, no card faces with
+provenance — none of it, because none of it lives in `MatchReplay`.
+
+
 The watch tab renders its own layout. That is the **third** board in this app, after the hotseat and
 online boards — and §11's whole lesson was that two boards drifting is a DRY failure that costs
 features silently (the online board could not show an advance for months because nobody noticed).
@@ -59,6 +73,21 @@ Fixed on `feat/online-event-stream` by sharing the hotseat's own `eligibleBlocke
 (`view-model.ts`), with the engine still the authority at submit. **Eighth "green and unreachable"
 item on this branch**: the §11 parity test was green throughout because it tested *drawing* a block
 from a hand-built `CombatState`, never *making* one.
+
+### A THIRD possibility, found while measuring WATCH-1
+
+**A replay has no interaction at all.** `MatchReplay` renders a finished game with
+`PlaybackControls`; there is nothing to click and no seat to act for. So if Caleb was in the WATCH
+tab when he wrote “I cannot select attacker cards”, the app was behaving correctly and the defect is
+that it looks like a game you could act in. A spectator surface that is indistinguishable from a
+playable one is a UX bug in its own right, whatever the answer here turns out to be.
+
+So there are three candidates and they need telling apart before this is closed:
+1. the ONLINE empty-blocker set (fixed, merged — the leading candidate),
+2. a HOTSEAT block window (checked: `verify-combat-visibility` passes 6/6 driving a real game to a
+   confirmed block, and the interaction code marks the opponent's attackers selectable — so this is
+   the least likely),
+3. the WATCH tab, where it is correct behaviour presented confusingly.
 
 ⚠️ **Verify Caleb's report is this same bug and not a second one.** His report does not say whether
 he was online or in a hotseat game. If a HOTSEAT block window also refuses to select attackers, that
