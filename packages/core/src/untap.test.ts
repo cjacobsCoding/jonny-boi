@@ -38,6 +38,7 @@ import {
 import { deckOf, landDef } from './test-fixtures.js';
 import type { CardInstance, InstanceId, PlayerId } from './state.js';
 import { resetInstanceForNewZone } from './internal/zones.js';
+import { indexContinuous } from './internal/continuous.js';
 
 const ISLAND = landDef('Island', 'U');
 
@@ -94,21 +95,34 @@ function find(state: GameState, id: InstanceId): CardInstance {
 }
 
 /**
- * Run the untap step exactly as `beginTurn` does — the SAME two calls in the
- * same order.
+ * Run the untap step exactly as `beginTurn` does — the same calls in the same
+ * order — and, on every permanent, ALSO assert that the INDEXED answer and the
+ * one-off answer agree.
  *
- * ⚠️ A deliberate duplication of three lines, and it is the smaller evil: the
+ * ⚠️ That second assertion is the whole reason this helper is not three inline
+ * lines. §3.146 shipped a defect of exactly this shape: `aggregateFor` (the
+ * one-off) and `indexContinuous` (the bulk) are twins, one of them silently
+ * stopped reading a field the other read, and it made Tetsuko's creatures
+ * unblockable through only one of the two paths. The untap step takes the
+ * INDEXED path and every other caller takes the one-off, so a divergence here
+ * would mean a permanent that untaps in a real game and reports frozen to the
+ * inspector — or the reverse. Free to check, and it can only ever be checked
+ * here.
+ *
+ * ⚠️ A deliberate duplication of the loop, and it is the smaller evil: the
  * alternative is driving whole turns through `applyAction`, which needs a legal
  * pass-priority chain from both seats and would make a freeze test fail for
- * fifty reasons that are not about freezing. If `beginTurn` ever asks a
- * different question, `untapsDuringUntapStep` is the thing it would have to
- * stop calling — and `engine.ts` has exactly one call site, which a grep keeps
- * honest.
+ * fifty reasons that are not about freezing. `engine.ts` has exactly one call
+ * site of `untapsDuringUntapStep`, which a grep keeps honest.
  */
 function runUntapStep(state: GameState, active: PlayerId): void {
+  const index = indexContinuous(state);
   for (const inst of state.battlefield) {
     if (inst.controller !== active) continue;
-    const untaps = untapsDuringUntapStep(state, inst);
+    const untaps = untapsDuringUntapStep(state, inst, index);
+    expect(untaps, `indexed and one-off disagree for ${inst.def.name}`).toBe(
+      untapsDuringUntapStep(state, inst),
+    );
     spendUntapSkip(inst);
     if (!untaps || !inst.tapped) continue;
     inst.tapped = false;

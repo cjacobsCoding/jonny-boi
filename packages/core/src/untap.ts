@@ -34,22 +34,44 @@
 
 import { effectiveKeywords } from './internal/stats.js';
 import { aggregateFor } from './internal/continuous.js';
+import type { AggregatedMod, ContinuousIndex } from './internal/continuous.js';
 import type { CardInstance, GameState } from './state.js';
 
 /**
  * Whether `inst` untaps during its controller's untap step right now.
  *
- * Asks the CONTINUOUS half through the ordinary continuous index — so an
- * anthem-shaped grant from an Aura, an Equipment or the permanent's own static
- * all arrive by the same route — and the ONE-SHOT half off the instance.
+ * Asks the CONTINUOUS half through the ordinary continuous layer — so an
+ * anthem-shaped grant from an Aura, an Equipment or the permanent's own printed
+ * keyword all arrive by the same route — and the ONE-SHOT half off the instance.
  *
- * PERF: the aggregate walk is only reached when the permanent carries no stored
- * skip, and the untap step runs once per turn over one player's permanents. It
- * is not on the continuous-layering path, combat, or the mana planner.
+ * ⚠️ PERF, and it is the reason `index` exists. A caller looping over a whole
+ * zone MUST build one {@link ContinuousIndex} and pass it: `aggregateFor` is a
+ * battlefield walk per call, so asking it once per permanent would make the
+ * untap step QUADRATIC in board size. §3.15 measured a real ~9% throughput loss
+ * from a comparable per-call walk, which is why this is a parameter rather than
+ * a convenience left to whoever writes the next loop.
+ *
+ * Omitting it stays supported for the single-permanent question (an inspector,
+ * a pilot asking about one land), where one walk is the cheapest answer there
+ * is. `untap.test.ts` asserts the two forms always agree — §3.146 shipped a
+ * defect that was exactly a disagreement between these twins.
  */
-export function untapsDuringUntapStep(state: GameState, inst: CardInstance): boolean {
+export function untapsDuringUntapStep(
+  state: GameState,
+  inst: CardInstance,
+  index?: ContinuousIndex,
+): boolean {
   if ((inst.untapSkips ?? 0) > 0) return false;
-  return effectiveKeywords(inst, aggregateFor(state, inst.instanceId)).doesNotUntap !== true;
+  // The PRINTED flag is one property read and settles the whole question for
+  // Basalt Monolith and kin, so the self-printed half never builds an aggregate.
+  if (inst.def.keywords?.doesNotUntap === true) return false;
+  const mod: AggregatedMod | undefined = index
+    ? index.get(inst.instanceId)
+    : aggregateFor(state, inst.instanceId);
+  // Absent from the index means nothing modifies this permanent at all — the
+  // overwhelmingly common case, and the index deliberately holds no entry for it.
+  if (mod === undefined) return true;
+  return effectiveKeywords(inst, mod).doesNotUntap !== true;
 }
 
 /**

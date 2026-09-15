@@ -424,6 +424,30 @@ function drawOneCard(state: GameState, player: PlayerId, emit: (e: GameEvent) =>
   emit({ type: 'drawCard', player, instanceId: top.instanceId });
 }
 
+/**
+ * §3.150 — whether ANY object on the board could GRANT `doesNotUntap` to
+ * something else, so the untap step knows whether an index is worth building.
+ *
+ * The overwhelmingly common board carries no such source at all, and this is the
+ * whole cost of the family for that board: one indexed walk over definitions the
+ * engine has already loaded, no allocation, no continuous pass. A permanent's
+ * OWN printed flag is deliberately not counted — `untapsDuringUntapStep` reads
+ * that straight off the definition and never needs an aggregate for it.
+ */
+function boardMayGrantDoesNotUntap(state: GameState): boolean {
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const def = battlefield[i]!.def;
+    if (def.attachment?.modifies?.keywords?.doesNotUntap === true) return true;
+    const statics = def.statics;
+    if (statics === undefined) continue;
+    for (let s = 0; s < statics.length; s++) {
+      if (statics[s]!.keywords?.doesNotUntap === true) return true;
+    }
+  }
+  return false;
+}
+
 /** Begin a new turn: bump turn number, set active player, run untap/upkeep/draw. */
 function beginTurn(state: GameState, _config: RulesConfig, emit: (e: GameEvent) => void): void {
   // A new turn: nothing has happened in it yet. Cleared as the turn BEGINS
@@ -439,12 +463,18 @@ function beginTurn(state: GameState, _config: RulesConfig, emit: (e: GameEvent) 
 
   // Untap step.
   enterStep(state, 'untap', emit);
+  // §3.150 — ONE index for the whole step, never one aggregate walk per
+  // permanent: the per-call form walks the battlefield each time and would make
+  // this loop quadratic in board size. Built only when something on the board
+  // could actually GRANT the flag, so the ordinary board pays one indexed walk
+  // over definitions it has already loaded and allocates nothing.
+  const untapIndex = boardMayGrantDoesNotUntap(state) ? indexContinuous(state) : undefined;
   for (const inst of state.battlefield) {
     if (inst.controller !== state.activePlayer) continue;
-    // §3.150 — ONE question, asked in `untap.ts`. The skip is spent by this step
+    // ONE question, asked in `untap.ts`. The skip is spent by this step
     // HAPPENING, not by an untap being refused, so an already-untapped frozen
-    // permanent does not keep its freeze forever (see the file header).
-    const untaps = untapsDuringUntapStep(state, inst);
+    // permanent does not keep its freeze forever (see that file's header).
+    const untaps = untapsDuringUntapStep(state, inst, untapIndex);
     spendUntapSkip(inst);
     if (!untaps || !inst.tapped) continue;
     inst.tapped = false;
