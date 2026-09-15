@@ -57,10 +57,17 @@
  *    head of the queue is a holding announcement — so the thing gating the game
  *    is always the thing the player is looking at. There is no frame where the
  *    board is frozen and the screen shows something unrelated.
- * 2. **A hold is never dropped.** The gate is `some`, not `head`: a hold waiting
- *    behind ANOTHER hold still freezes the game, so the game cannot advance
- *    between two beats, and the second one is still standing in a live window
- *    when its turn comes.
+ * 2. **A hold is never dropped.** A hold waiting behind ANOTHER hold still
+ *    freezes the game, so the game cannot advance between two beats and the
+ *    second one is still standing in a live window when its turn comes.
+ *
+ * ⚠️ `some` RATHER THAN `head`, and the honest reason: under property 1 the two
+ * are extensionally EQUAL, and swapping them was TRIED — all 79 assertions in
+ * `announcements.test.ts` stayed green. `some` is written because it is the form
+ * that remains correct if a later row breaks the invariant, and the INVARIANT
+ * test is the one that catches such a row (falsified: moving `reveal` to rank 0
+ * reddens six assertions). Saying `some` is what catches something today would
+ * be a check that cannot fail wearing a comment claiming it can.
  *
  * ## ⚠️ AND THE BEAT IS SPENT BY THE HEAD, NEVER BY A WAITER
  *

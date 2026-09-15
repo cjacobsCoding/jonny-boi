@@ -310,9 +310,18 @@ describe('HOLDING THE GAME and BEING ON SCREEN are one answer', () => {
   });
 
   /**
-   * ⚠️ `some`, NOT `head`. A hold waiting behind another hold must still freeze
-   * the board, or the game advances between two beats and the second one is
-   * standing in a window that has already gone.
+   * A hold waiting behind another hold must still freeze the board, or the game
+   * advances between two beats and the second one is standing in a window that
+   * has already gone.
+   *
+   * ⚠️ MEASURED HONESTLY: this assertion does NOT discriminate `some` from
+   * `head`. Replacing `queue.some(row.holds)` with `head.holds` was tried, and
+   * all 79 assertions stayed green — because the rank invariant makes the two
+   * extensionally EQUAL (if any hold is queued, the head is a hold). The
+   * discriminating test for that is the invariant above, which reddens the
+   * moment a rank moves. `some` is written anyway because it is the form that
+   * stays correct if a future row breaks the invariant; the invariant test is
+   * what stops the row from breaking it silently.
    */
   it('a hold WAITING behind another hold still holds the game', () => {
     const queue = announcementQueue([COMBAT(), SPELL()]);
