@@ -885,6 +885,39 @@ export const tapTarget: EffectPrimitive = (ctx) => {
   ctx.emit({ type: 'tapped', instanceId: target.instanceId });
 };
 
+/**
+ * `untapTarget` — untap the target permanent. The mirror of {@link tapTarget},
+ * and the body of every printed "Untap target …" line (Arbor Elf, Voltaic Key,
+ * Kiora's Follower).
+ *
+ * WHICH permanents may be aimed at is NOT decided here: it is the ability's
+ * `targets` restriction, so "untap target Forest" and "untap target creature"
+ * are the same primitive with different data — and a noun the restriction
+ * vocabulary cannot say reports at compile time rather than being widened here.
+ * An already-untapped or illegal target is a safe no-op, exactly as tapping is.
+ */
+export const untapTarget: EffectPrimitive = (ctx) => {
+  const target = firstPermanentTarget(ctx);
+  if (!target || !target.tapped) return;
+  target.tapped = false;
+  ctx.emit({ type: 'untapped', instanceId: target.instanceId, player: target.controller });
+};
+
+/**
+ * `untapSelf` — untap the ability's own source ("{1}: Untap Morphling").
+ *
+ * Its own primitive rather than `untapTarget` with a self-target: the printed
+ * line names no target at all, so it cannot fizzle and it is not subject to
+ * hexproof/shroud/protection. Routing it through the targeted primitive would
+ * have given it a targeting gate the printed ability does not have.
+ */
+export const untapSelf: EffectPrimitive = (ctx) => {
+  const source = permanentById(ctx.state, ctx.source.instanceId);
+  if (!source || !source.tapped) return;
+  source.tapped = false;
+  ctx.emit({ type: 'untapped', instanceId: source.instanceId, player: source.controller });
+};
+
 // --- shared internals ----------------------------------------------------------
 
 /**
@@ -1825,6 +1858,8 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   sacrificeNamed,
   exileNamed,
   tapTarget,
+  untapTarget,
+  untapSelf,
   mill,
   fight,
   dealDamageToEach,

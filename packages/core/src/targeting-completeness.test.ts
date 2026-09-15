@@ -70,6 +70,19 @@ const ARTIFACT_CREATURE: CardDefinition = {
   ...creatureDef('zoo-artifact-creature', 2, 2),
   types: ['artifact', 'creature'],
 } as CardDefinition;
+/**
+ * One land carrying EVERY basic land type at once — the zoo's feed for the five
+ * basic-type restrictions ("untap target Forest").
+ *
+ * A single five-typed land rather than five lands, and that is the harder
+ * fixture on purpose: it is a legal candidate for all five words, so a legality
+ * branch that answered on the land's NAME or on `isLand` alone (offering a
+ * Plains to Arbor Elf) would split the offer and legality sets and go red here.
+ */
+const OMNIBASIC_LAND: CardDefinition = {
+  ...landDef('zoo-omnibasic', 'G'),
+  subtypes: ['plains', 'island', 'swamp', 'mountain', 'forest'],
+} as CardDefinition;
 const INSTANT = spellDef('zoo-instant', 'instant', []);
 const SORCERY = spellDef('zoo-sorcery', 'sorcery', []);
 
@@ -190,6 +203,7 @@ function buildZoo(withProtectedCreature = false): GameState {
   placePermanent(state, ARTIFACT_CREATURE, 'A');
   placePermanent(state, ENCHANTMENT, 'A');
   placePermanent(state, LAND, 'A');
+  placePermanent(state, OMNIBASIC_LAND, 'A');
   placePermanent(state, WALKER, 'A');
   placePermanent(state, BATTLE, 'A');
   placePermanent(state, TOKEN_BEAR, 'A');

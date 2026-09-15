@@ -1583,6 +1583,46 @@ const TARGET_NOUN_PHRASE = Object.keys(TARGET_NOUN_RESTRICTIONS)
   .join('|');
 
 /**
+ * The nouns an UNTAP (or a bare TAP) may name, as a closed table.
+ *
+ * Separate from {@link TARGET_NOUN_RESTRICTIONS} for the reason
+ * {@link PUMP_TARGET_NOUNS} is separate: that table is what a REMOVAL verb may
+ * point at, and "destroy target Forest" is not a printed sentence while "untap
+ * target Forest" is (Arbor Elf). These two verbs share one vocabulary — the
+ * things a permanent-state change can be aimed at — so a row added here is
+ * understood by `untap-target-noun`, `untap-another-target-noun` and
+ * `tap-target-noun` in the same edit, and the three cannot drift into
+ * disagreeing about which nouns are real.
+ *
+ * ⚠️ The five BASIC LAND TYPES are rows rather than one `land`: Arbor Elf may
+ * untap a Forest and may not untap an Island, and widening the printed word to
+ * "land" is a card playing wider than printed. Core's restriction union carries
+ * them for exactly this reason.
+ *
+ * Deliberately NOT here: "creature you control", "permanent you control" and the
+ * snow/legendary/colour narrowings ("untap target legendary permanent",
+ * "untap another target snow permanent"). Each needs a restriction core cannot
+ * say yet, and a closed table REPORTS rather than widening to the nearest thing
+ * that happens to exist.
+ */
+const UNTAP_TARGET_NOUNS: Readonly<Record<string, TargetRestriction>> = Object.freeze({
+  creature: 'creature',
+  land: 'land',
+  artifact: 'artifact',
+  permanent: 'permanent',
+  plains: 'plains',
+  island: 'island',
+  swamp: 'swamp',
+  mountain: 'mountain',
+  forest: 'forest',
+});
+
+/** The untap nouns as an alternation, longest first so none is truncated. */
+const UNTAP_TARGET_NOUN_PHRASE = Object.keys(UNTAP_TARGET_NOUNS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+
+/**
  * The printed SPELL nouns a counter line may name. Separate from the permanent
  * table because the objects live in different zones and no printed line mixes
  * them; same closed-table discipline.
@@ -3316,6 +3356,51 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       return effects({ primitive: 'tapTarget', params: { targets: CREATURE_TARGET } });
     },
   },
+  {
+    id: 'tap-target-noun',
+    description:
+      `"Tap target <NOUN>" for every noun in UNTAP_TARGET_NOUNS (Auriok Transfixer, Relic Barrier, Icy Manipulator)`,
+    // The tap half of the untap family, off the SAME noun table: a printed
+    // ability that can tap an artifact and one that can untap it name the same
+    // set of things, so one row serves both verbs (DESIGN §1.12).
+    pattern: new RegExp(`^tap target (${UNTAP_TARGET_NOUN_PHRASE})$`),
+    needsChosenTarget: true,
+    build(match) {
+      const kind = UNTAP_TARGET_NOUNS[match[1] ?? ''];
+      return kind === undefined ? null : effects({ primitive: 'tapTarget', params: { targets: kind } });
+    },
+  },
+  {
+    id: 'untap-self',
+    description: '"Untap ~" (Morphling, Grim Monolith, Staff of Compleation)',
+    // No target is named, so this is not `needsChosenTarget`: it works inside a
+    // trigger body and inside a granted ability exactly as printed.
+    pattern: /^untap ~$/,
+    build() {
+      return effects({ primitive: 'untapSelf', params: {} });
+    },
+  },
+  {
+    id: 'untap-target-noun',
+    description:
+      `"Untap target <NOUN>" for every noun in UNTAP_TARGET_NOUNS (Arbor Elf, Voltaic Key, Blossom Dryad, Jandor's Saddlebags, Kiora's Follower)`,
+    // ONE rule over the noun table, the shape `destroy-target-simple-permanent`
+    // established: the printed word is the whole of what may be aimed at, and
+    // the next noun is a ROW rather than a new rule.
+    pattern: new RegExp(`^untap target (${UNTAP_TARGET_NOUN_PHRASE})$`),
+    needsChosenTarget: true,
+    build(match) {
+      const kind = UNTAP_TARGET_NOUNS[match[1] ?? ''];
+      return kind === undefined ? null : effects({ primitive: 'untapTarget', params: { targets: kind } });
+    },
+  },
+  // ⚠️ "Untap ANOTHER target permanent" (Kiora's Follower, Manifold Key) stays
+  // REPORTED. Core carries the exclusion for a TRIGGER's aim
+  // (`TriggerBodyResult.targetsExcludeSelf`) but an ACTIVATED ability has no
+  // field for it, so the only rule that could be written here is one that drops
+  // the word "another" — a Kiora's Follower that may untap itself for an
+  // arbitrarily large mana loop, which is a card playing wider than printed.
+  // The honest move is the empty one until `ActivatedAbility` can say it.
   {
     /**
      * **"Create N X/Y COLOR [SUBTYPES] [artifact] creature token(s) [with

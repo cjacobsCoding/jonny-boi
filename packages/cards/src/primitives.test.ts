@@ -45,6 +45,8 @@ import {
   makeToken,
   pumpUntilEndOfTurn,
   tapTarget,
+  untapTarget,
+  untapSelf,
   mill,
   fight,
   dealDamageToEach,
@@ -806,6 +808,45 @@ describe('tapTarget', () => {
     const { ctx } = ctxFor(s, src, {}, [target.instanceId]);
     tapTarget(ctx);
     expect(target.tapped).toBe(true);
+  });
+});
+
+// --- untapTarget / untapSelf ----------------------------------------------------
+
+describe('untapTarget', () => {
+  it('untaps a TAPPED target permanent and says so', () => {
+    const s = emptyState();
+    const target = { ...inst(bear, 'B'), tapped: true };
+    s.battlefield.push(target);
+    const src = inst({ id: 'elf', name: 'Arbor Elf', types: ['creature'] }, 'A', 'battlefield');
+    const { ctx, events } = ctxFor(s, src, { targets: 'forest' }, [target.instanceId]);
+    untapTarget(ctx);
+    expect(target.tapped).toBe(false);
+    // The event matters: the untap step, "whenever ~ becomes untapped" triggers
+    // and the replay viewer all read it, and a silent mutation reaches none.
+    expect(events.some((e) => e.type === 'untapped')).toBe(true);
+  });
+
+  it('is a safe no-op with no target — never throws, never touches the board', () => {
+    const s = emptyState();
+    const src = inst({ id: 'elf', name: 'Arbor Elf', types: ['creature'] }, 'A', 'battlefield');
+    const { ctx, events } = ctxFor(s, src, { targets: 'forest' }, []);
+    expect(() => untapTarget(ctx)).not.toThrow();
+    expect(events).toHaveLength(0);
+  });
+});
+
+describe('untapSelf', () => {
+  it('untaps the ABILITY\'S OWN SOURCE, not a target', () => {
+    const s = emptyState();
+    const src = { ...inst({ id: 'gm', name: 'Grim Monolith', types: ['artifact'] }, 'A'), tapped: true };
+    const other = { ...inst(bear, 'A'), tapped: true };
+    s.battlefield.push(src, other);
+    const { ctx } = ctxFor(s, src, {}, [other.instanceId]);
+    untapSelf(ctx);
+    expect(src.tapped).toBe(false);
+    // The stray target is NOT what the printed line names, and must be left alone.
+    expect(other.tapped).toBe(true);
   });
 });
 

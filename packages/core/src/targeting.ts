@@ -279,6 +279,26 @@ export type TargetRestriction =
    */
   | 'permanentSpellYouControl'
   /**
+   * "Untap target **Forest**" (Arbor Elf), "target **Mountain**" — a land
+   * carrying one printed BASIC LAND TYPE.
+   *
+   * Five members rather than one `basicLand`, because the printed word IS the
+   * restriction: Arbor Elf may not untap an Island, and collapsing the five
+   * would be a card playing wider than printed — the exact infidelity this
+   * union exists to prevent. They are driven off one table
+   * ({@link BASIC_LAND_TYPE_SUBTYPE}) at every home that reads them, so the set
+   * has one definition and the next land type would be a ROW.
+   *
+   * A SUBTYPE question, asked through `hasSubtype` — so a Stomping Ground (a
+   * Mountain Forest) is a legal Arbor Elf target exactly as it is in paper, and
+   * a changeling land would be too.
+   */
+  | 'plains'
+  | 'island'
+  | 'swamp'
+  | 'mountain'
+  | 'forest'
+  /**
    * "target activated or triggered ability you control" — Lithoform Engine's
    * bottom mode, Return the Favor's mode. Both kinds sit on the stack as
    * `kind: 'trigger'` objects; what separates this from
@@ -338,6 +358,28 @@ export const TARGET_RESTRICTION_PARAM = 'targets';
 export const DEFAULT_TARGET_RESTRICTION: TargetRestriction = 'any';
 
 /** Whether an arbitrary value is a valid restriction word. */
+/**
+ * The five printed BASIC LAND TYPES, each as the restriction word that names it
+ * and the subtype `hasSubtype` asks for.
+ *
+ * ONE table read by every home a restriction word has — the validator, the
+ * legality check, the enumerator and the English namer — so the set cannot be
+ * five in one place and four in another, and the next type would be a row.
+ */
+const BASIC_LAND_TYPE_SUBTYPE = Object.freeze({
+  plains: 'plains',
+  island: 'island',
+  swamp: 'swamp',
+  mountain: 'mountain',
+  forest: 'forest',
+} as const);
+
+/** The subtype a basic-land-type restriction asks for, or `undefined`. */
+function basicLandSubtypeOf(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  return (BASIC_LAND_TYPE_SUBTYPE as Readonly<Record<string, string>>)[value];
+}
+
 export function isTargetRestriction(value: unknown): value is TargetRestriction {
   return (
     value === 'any' ||
@@ -376,7 +418,11 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'land' ||
     value === 'planeswalker' ||
     value === 'creatureOnBattlefieldOrInGraveyard' ||
-    value === 'artifactCreature'
+    value === 'artifactCreature' ||
+    // The five basic land types, asked of the ONE table that defines them so
+    // this home cannot fall behind the union (§3.40 — a word given four of its
+    // five homes is a word the engine silently never offers).
+    basicLandSubtypeOf(value) !== undefined
   );
 }
 
@@ -437,6 +483,12 @@ const TARGET_RESTRICTION_MEMBERS = {
   enchantment: true,
   land: true,
   planeswalker: true,
+  // The printed basic land types ("untap target Forest").
+  plains: true,
+  island: true,
+  swamp: true,
+  mountain: true,
+  forest: true,
 } as const satisfies Record<TargetRestriction, true>;
 
 /** See {@link TARGET_RESTRICTION_MEMBERS} — the union as a frozen runtime list. */
@@ -626,6 +678,13 @@ export function isLegalTarget(
   if (restriction === 'artifact') return permanent.def.types.includes('artifact');
   if (restriction === 'enchantment') return hasType(permanent.def, 'enchantment');
   if (restriction === 'land') return isLand(permanent.def);
+  // "Target Forest" / "target Mountain": a LAND carrying that basic type. Both
+  // halves are load-bearing — a creature named "Forest" is not a legal Arbor Elf
+  // target, and a dual carrying the type is.
+  const basicSubtype = basicLandSubtypeOf(restriction);
+  if (basicSubtype !== undefined) {
+    return isLand(permanent.def) && hasSubtype(permanent.def, basicSubtype);
+  }
   if (restriction === 'planeswalker') return isPlaneswalker(permanent.def);
   // "Target player or planeswalker": a permanent target must be a walker.
   if (restriction === 'playerOrPlaneswalker') return isPlaneswalker(permanent.def);
@@ -1096,6 +1155,20 @@ function enumerateTargets(
       if (isTargetableBy(state, permanent, controller, source, keywordIndex)) targets.push(permanent.instanceId);
     }
   }
+  // "Target Forest" — the same two-part question `isLegalTarget` asks, off the
+  // same table, so offer and apply name the same set (DESIGN §3.36).
+  const basicSubtype = basicLandSubtypeOf(restriction);
+  if (basicSubtype !== undefined) {
+    for (const permanent of state.battlefield) {
+      if (
+        isLand(permanent.def) &&
+        hasSubtype(permanent.def, basicSubtype) &&
+        isTargetableBy(state, permanent, controller, source, keywordIndex)
+      ) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
   return targets;
 }
 
@@ -1256,5 +1329,13 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'a planeswalker';
     case 'any':
       return 'any target (a creature, a player, a planeswalker, or a battle)';
+    // The printed basic land types. Named off the same table the other homes
+    // read, so a sixth row would arrive here with no edit.
+    case 'plains':
+    case 'island':
+    case 'swamp':
+    case 'mountain':
+    case 'forest':
+      return `a ${restriction.charAt(0).toUpperCase()}${restriction.slice(1)}`;
   }
 }
