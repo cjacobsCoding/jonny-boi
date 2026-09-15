@@ -9,7 +9,7 @@
 3 Cathedral Sanctifier
 3 Healer of the Pride
 3 Fiendslayer Paladin          // ✗ not in pool
-3 Rhox Faithmender             // ✗ not in pool
+3 Rhox Faithmender             // ✅ compiles — §3.151 (life-change replacement)
 2 Scavenging Ooze              // ✅ compiles — §3.149a
 2 Trostani, Selesnya's Voice   // ✅ compiles — Populate
 2 Archangel of Thune

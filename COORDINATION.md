@@ -1,3 +1,64 @@
+- 2026-09-15 `feat/replacement-prevention` — ⚠️ **ANOTHER SESSION COMMITTED INTO THIS WORKTREE
+  MID-LANE**, and the re-verification it forced is the entry worth reading.
+  After this lane's gate went green at `f3288a5`, two commits appeared on the branch that this lane
+  did not make: `f14642b` (a merge of `origin/main`, bringing the modal and copy-selector lanes —
+  **`rules.ts` +302, `core/targeting.ts` +299, `compile.ts` +103**) and `8b0f973` (a docs commit).
+  **A green measured before a merge is not a green after it** — this repo has had a clean textual
+  merge produce 269 compile errors. Everything below was therefore re-run on the merged tree:
+  `npm run build` **exit 0**, the playable set re-measured (**all 29 of this lane's cards still
+  compile, nothing lost versus the pre-merge measurement**; the absolute rose to 6,945 because the
+  other two lanes landed ~210 of their own), and the full `packages/cards packages/core` gate re-run.
+  The merge was clean semantically as well as textually — but that is a MEASUREMENT, not an
+  assumption, and it is the only reason it can be said.
+  ⚠️ The same merge left **§8a of `ALL-CARDS-CAMPAIGN.md` carrying one finding twice** and three of
+  this lane's items orphaned after the blockquote. De-duplicated in `0603c06`; §8a is a single 1-10
+  again. **Auto-merge does not renumber a list, and nothing fails when it doesn't.**
+  Worktree `D:/Cool Stuff/Claude/jb-replace`, forked from `origin/main` `162f143`.
+  **DESIGN §3.151 — REPLACEMENT AND PREVENTION. Rhox Faithmender ✅ and Fog Bank ✅. +29 cards, 0 lost,
+  set-verified** (6,706 → 6,735 on a fixed 32,414-card corpus, this lane's nine sources reverted with
+  `git show 162f143:<path>` and rebuilt in between).
+  **NEW `packages/cards/scripts/replace-blame.mjs`** — the eighth blame tool. The row's name points at
+  the wrong half for the SIXTH consecutive lane: it names the **event kind**, and adding one cost *one
+  row in five places* with **no new field and no new branch**. The family's real mass is **412 clauses /
+  303 sole-blocked cards on event kinds the layer ALREADY watched** — the gap is the printed WORDING.
+  ⚠️ **Selection by TEXT finds 916 cards against 142 by hint — 774 of this shape sit in other rows.**
+  By CLAUSE (a different number, not quotable as the card count) the largest destination is the §2
+  aggregation-artifact row with 302, *which is where Fog Bank itself was filed.* A lane scoping from
+  the hint row would never have seen its own acceptance card. §7b's leakage warning is now measured on
+  a second family.
+  **FILES OWNED** (`rules.ts` is the six-way contender — expect a real merge, and build after it):
+  `packages/cards/src/compile/rules.ts` — **two regions only**: (1) new closed tables
+  `PREVENTION_STATIC_SUBJECTS` / `PREVENTION_SOURCE_CLASSES` / `LIFEGAIN_SUBJECTS`, appended after
+  `REPLACEMENT_MULTIPLIER_TOKEN`; (2) the `replacement-prevent-all-static` rule REWRITTEN in place plus
+  a new `replacement-lifegain` rule immediately after it. Nothing else in the file is touched.
+  `packages/core/src/replacement.ts` · `internal/replacement.ts` · `internal/damage-result.ts` ·
+  `index.ts` · `events.ts` · **NEW `core/src/life.ts`** · `packages/cards/src/effect-helpers.ts` ·
+  `primitives.ts` · NEW tests `core/src/life.test.ts`, `cards/src/replacement-lifegain.test.ts`.
+  ⚠️ **SEMANTIC CONFLICTS for the integrator, three:**
+  1. **`ReplacementEventKind` gained a fifth member (`'lifegain'`).** Any lane that `switch`es on it
+     exhaustively, or restates its members, will fail to compile — which is the desired outcome.
+     `events.ts` DID restate it, behind a comment claiming a pinning test that does not exist; the copy
+     was deleted rather than extended. If another lane re-adds a copy, delete theirs too.
+  2. **`effect-helpers.changeLife` now RETURNS the applied delta** (was `void`) and runs the CR 614
+     layer for a positive delta. Any lane that added a `changeLife` caller and emits its own `gainLife`
+     must read the return value, or it will log the printed amount instead of the gained one. Three
+     callers existed and all three were updated.
+  3. **`replacement-prevent-all-static`'s regex was replaced**, not extended. A lane that added a
+     recipient phrase to the old inline alternation must move it to `PREVENTION_STATIC_SUBJECTS` as a
+     row — and give it an honest `dealer` projection or `null`.
+  ⚠️ **`expanded-pool.test.ts` does NOT cover these 29 cards** — it reads the COMMITTED
+  `data/expanded-pool.ts` (5,619 definitions, the stale baseline), and all 29 were blocked when that
+  was generated. Re-established three ways instead: 8 of the 29 are PLAYED in the new test file; all
+  29 checked structurally (complete · a non-inert replacement · closed kind+anchor · every referenced
+  primitive registered, against a registry of 105); and the inert-declaration trap is now a committed
+  `it.each` guard. **When `fix/pool-refresh-3147` regenerates, these 29 come into that sweep's scope
+  for the first time** — worth a look at that run.
+  **DID NOT DO, by name:** the regenerated pool and card index are untouched (owned by
+  `fix/pool-refresh-3147`). `apps/web` untouched — no compile-time-exhaustive table needed a row.
+  The **zone-change destination vocabulary** (`dies` 63, `zoneToGraveyard` 42, `leavesBattlefield` 13,
+  `entersBattlefield` 12 = **130 sole-blocked cards**) is left REPORTED; it is four times this lane's
+  delta and is the right next pick in this family. `lifeloss` (4) left reported — every printed member
+  also needs a *"during your turn"* condition the filter cannot state.
 - 2026-09-15 **CORRECTION to my own wave-5 collision note, and a verdict on the two stranded lanes** (integrator).
   I told two in-flight lanes to study `origin/feat/trigger-body-templates` as a live collision. **That
   was wrong in a way worth recording, because the method that produced it looks reliable and is not.**

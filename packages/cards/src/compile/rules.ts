@@ -33,6 +33,7 @@ import type {
   ManaSpendRestriction,
   ProtectionQuality,
   ReplacementApplies,
+  ReplacementOutcome,
   SourcePowerBlockBound,
   SpellMode,
   StaticAbility,
@@ -1574,6 +1575,144 @@ const REPLACEMENT_COUNTER_SUBJECTS: Readonly<Record<string, CardFilter | null>> 
 
 /** The alternation of the multiplier words, longest first. */
 const REPLACEMENT_MULTIPLIER_TOKEN = `(${Object.keys(REPLACEMENT_MULTIPLIERS)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/**
+ * §3.151 — THE STATIC PREVENTION SHIELD, as a table of SUBJECTS read by BOTH
+ * sides of the sentence.
+ *
+ * A printed static shield says which damage it stops in three printed
+ * directions — "dealt **to** X", "dealt **by** X", and "dealt to **and dealt
+ * by** X" (Fog Bank, Gaseous Form, Heart of Light). The subject X is the same
+ * noun phrase in all three, so it is ONE table and the direction chooses which
+ * projection of a row to read. Two tables — one for recipients and one for
+ * dealers — is how "enchanted creature" ends up meaning two different creatures
+ * in the same sentence (rule 12).
+ *
+ * `dealer: null` is a REFUSAL, not an omission: it says this subject has no
+ * printed "…dealt by" form the engine can express, so a card printing one
+ * reports instead of compiling into a shield that guards the wrong side. A
+ * player deals no damage, and "attacking creatures you control" has no printed
+ * by-form in the corpus — a projection that fires on no real card is exactly
+ * what `dead-rule-sweep.mjs` exists to catch.
+ *
+ * Every row is a real printed card, named. Adding a subject is a ROW.
+ */
+const PREVENTION_STATIC_SUBJECTS: Readonly<
+  Record<string, { readonly recipient: ReplacementApplies; readonly dealer: ReplacementApplies | null }>
+> = Object.freeze({
+  // "~" — the ability's own permanent. Fog Bank, Cho-Manno Revolutionary, Dawn
+  // Elemental, Guard Gomazoa, Seraph of the Sword, Everdawn Champion.
+  '~': { recipient: { recipientAnchor: 'source' }, dealer: { dealerAnchor: 'source' } },
+  // The permanent an Aura or Equipment is attached to. Gaseous Form, Sandskin,
+  // Ghostly Possession, Heart of Light, Inviolability (to); Muzzle, Defang,
+  // Temporal Isolation, Candletrap, Demonic Torment (by).
+  'enchanted creature': { recipient: { recipientAnchor: 'attached' }, dealer: { dealerAnchor: 'attached' } },
+  // General's Kabuto. Same anchor, different printed word — `attachedTo` does
+  // not care which kind of attachment it is, and neither does the card.
+  'equipped creature': { recipient: { recipientAnchor: 'attached' }, dealer: { dealerAnchor: 'attached' } },
+  // Crystal Barricade and kin. A PLAYER is never a damage source, so there is
+  // no dealer projection to write.
+  you: { recipient: { recipientController: 'you', recipientKind: 'player' }, dealer: null },
+  // Statecraft is the only printed card that uses this subject on BOTH sides,
+  // and it is why the dealer projection exists at all.
+  'creatures you control': {
+    recipient: {
+      recipientController: 'you',
+      recipientKind: 'permanent',
+      recipientFilter: { anyOfTypes: ['creature' as CardType] },
+    },
+    dealer: { sourceController: 'you', sourceFilter: { anyOfTypes: ['creature' as CardType] } },
+  },
+  // Vigor's shape — the printed word "other" (Crystal Barricade).
+  'other creatures you control': {
+    recipient: {
+      recipientController: 'you',
+      recipientKind: 'permanent',
+      recipientFilter: { anyOfTypes: ['creature' as CardType] },
+      excludeSource: true,
+    },
+    dealer: null,
+  },
+  // Dolmen Gate, Iroas.
+  'attacking creatures you control': {
+    recipient: {
+      recipientController: 'you',
+      recipientKind: 'permanent',
+      recipientFilter: { anyOfTypes: ['creature' as CardType] },
+      recipientAttacking: true,
+    },
+    dealer: null,
+  },
+  // Emmara Tandris.
+  'creature tokens you control': {
+    recipient: {
+      recipientController: 'you',
+      recipientKind: 'permanent',
+      recipientFilter: { anyOfTypes: ['creature' as CardType], isToken: true },
+    },
+    dealer: null,
+  },
+  // Bubble Matrix — symmetric, both players' creatures.
+  creatures: {
+    recipient: { recipientKind: 'permanent', recipientFilter: { anyOfTypes: ['creature' as CardType] } },
+    dealer: null,
+  },
+});
+
+/** The alternation of every prevention subject, longest first so none is truncated. */
+const PREVENTION_STATIC_SUBJECT_TOKEN = `(${Object.keys(PREVENTION_STATIC_SUBJECTS)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/**
+ * §3.151 — the optional printed tail narrowing WHICH SOURCES a static shield
+ * stops: "prevent all damage that would be dealt to ~ **by creatures**"
+ * (Champion Lancer, Uncle Istvan, Istvan Butcher of Eln), "**by artifact
+ * sources**" (Argothian Treefolk), "**by sources you control**" (Light of
+ * Sanction).
+ *
+ * CLOSED, and deliberately short. The tails left OUT are the ones core cannot
+ * express faithfully, and each is REPORTED rather than widened (§3.151):
+ *   - "by artifact creatures" — a CONJUNCTION of two types, and `anyOfTypes` is
+ *     a disjunction. Compiling it as `['artifact','creature']` would stop damage
+ *     from every creature, which is a strictly better card.
+ *   - "by creatures with first strike" — `CardFilter` has no keyword field.
+ *   - "by creatures it's blocking" / "by enchanted creatures" — a RELATION
+ *     between two permanents, which no filter can state.
+ */
+const PREVENTION_SOURCE_CLASSES: Readonly<Record<string, ReplacementApplies>> = Object.freeze({
+  creatures: { sourceFilter: { anyOfTypes: ['creature' as CardType] } },
+  'artifact sources': { sourceFilter: { anyOfTypes: ['artifact' as CardType] } },
+  'sources you control': { sourceController: 'you' },
+});
+
+/** The alternation of every source-class tail, longest first. */
+const PREVENTION_SOURCE_CLASS_TOKEN = `(${Object.keys(PREVENTION_SOURCE_CLASSES)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/**
+ * §3.151 — WHO a printed life-gain replacement watches. "If **you** would gain
+ * life" (Rhox Faithmender, Boon Reflection, Alhammarret's Archive, The Wind
+ * Crystal, Knight of Dawn's Light) and "if **a player** would gain life"
+ * (Sulfuric Vortex), which is the symmetric card.
+ *
+ * "An opponent" is deliberately ABSENT. It is printed — Tainted Remedy, Plague
+ * Drone — but only ever with the outcome "that player **loses** that much life
+ * instead", which turns a gain into a LOSS: a different event, not a scaled
+ * quantity, and one core's layer does not watch. A row here would be a branch
+ * that fires on no card the outcome table can finish, which is precisely the
+ * dead rule `dead-rule-sweep.mjs` exists to catch.
+ */
+const LIFEGAIN_SUBJECTS: Readonly<Record<string, StaticControllerScope>> = Object.freeze({
+  you: 'you',
+  'a player': 'any',
+});
+
+/** The alternation of every life-gain subject, longest first. */
+const LIFEGAIN_SUBJECT_TOKEN = `(${Object.keys(LIFEGAIN_SUBJECTS)
   .sort((a, b) => b.length - a.length)
   .join('|')})`;
 
@@ -7833,27 +7972,115 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
      */
     id: 'replacement-prevent-all-static',
     description:
-      '"Prevent all [combat] damage that would be dealt to [attacking|other] creatures you control / to you" on a permanent (Dolmen Gate, Iroas)',
-    pattern:
-      /^prevent all (combat |noncombat )?damage that would be dealt to (attacking creatures you control|other creatures you control|creatures you control|you)$/,
+      '"Prevent all [combat|noncombat] damage that would be dealt TO / BY / TO AND DEALT BY <subject> [by <source class>]" on a permanent — every row of PREVENTION_STATIC_SUBJECTS (Fog Bank, Gaseous Form, Dolmen Gate, Cho-Manno, Muzzle, General\'s Kabuto, Champion Lancer)',
+    pattern: new RegExp(
+      `^prevent all (combat |noncombat )?damage that would be dealt (to and dealt by|to|by) ${PREVENTION_STATIC_SUBJECT_TOKEN}` +
+        `(?: by ${PREVENTION_SOURCE_CLASS_TOKEN})?$`,
+    ),
     build(match, ctx) {
       if (!cardIsPermanent(ctx)) return null;
       const combatWord = match[1]?.trim();
-      const who = match[2] ?? '';
-      const applies: ReplacementApplies = {
-        ...(combatWord === 'combat' ? { combat: true } : {}),
-        ...(combatWord === 'noncombat' ? { combat: false } : {}),
-        recipientController: 'you',
-        ...(who === 'you'
-          ? { recipientKind: 'player' as const }
-          : {
-              recipientKind: 'permanent' as const,
-              recipientFilter: { anyOfTypes: ['creature' as CardType] },
-              ...(who === 'attacking creatures you control' ? { recipientAttacking: true } : {}),
-              ...(who === 'other creatures you control' ? { excludeSource: true } : {}),
-            }),
+      const direction = match[2] ?? '';
+      const subject = PREVENTION_STATIC_SUBJECTS[match[3] ?? ''];
+      if (subject === undefined) return null;
+      // "…by artifact creatures" and kin are OUTSIDE the closed table; the
+      // optional group simply does not match them, so the whole clause reports.
+      const sourceClass = match[4] === undefined ? undefined : PREVENTION_SOURCE_CLASSES[match[4]];
+      if (match[4] !== undefined && sourceClass === undefined) return null;
+      const combat: ReplacementApplies =
+        combatWord === 'combat' ? { combat: true } : combatWord === 'noncombat' ? { combat: false } : {};
+
+      // "TO AND DEALT BY" is TWO replacement effects, not one with two filters,
+      // and that is the faithful reading: CR 615 lets each be applied to its own
+      // event independently, and a single entry would have to admit an event
+      // matching EITHER side, which is a conjunction the filter cannot state.
+      // Fog Bank is exactly this card, and each half is an ordinary row.
+      const sides: ReplacementApplies[] = [];
+      if (direction === 'to' || direction === 'to and dealt by') {
+        sides.push({ ...combat, ...subject.recipient, ...(sourceClass ?? {}) });
+      }
+      if (direction === 'by' || direction === 'to and dealt by') {
+        // A subject with no dealer projection has no printed by-form the engine
+        // can express — refuse the clause rather than guess which side it meant.
+        if (subject.dealer === null) return null;
+        // "…dealt BY X by <source class>" is not a printed sentence — the tail
+        // narrows the DEALER, and the dealer is already pinned. Refuse rather
+        // than silently dropping one of the two narrowings.
+        if (sourceClass !== undefined) return null;
+        sides.push({ ...combat, ...subject.dealer });
+      }
+      if (sides.length === 0) return null;
+      return {
+        replacements: sides.map((applies) => ({
+          event: 'damage' as const,
+          applies,
+          outcome: { preventAll: true },
+          label: match[0],
+        })),
       };
-      return { replacements: [{ event: 'damage', applies, outcome: { preventAll: true }, label: match[0] }] };
+    },
+  },
+  {
+    /**
+     * §3.151 — "If you would gain life, you gain twice that much life instead"
+     * (Rhox Faithmender, Boon Reflection, Alhammarret's Archive, The Wind
+     * Crystal), "…that much life plus N instead" (Knight of Dawn's Light), and
+     * "if a player would gain life, that player gains no life instead"
+     * (Sulfuric Vortex).
+     *
+     * A fifth EVENT KIND on a layer that already existed — it scales a quantity
+     * exactly as the counter and token doublers do, so it adds no field to
+     * `ReplacementApplies` and no branch to the engine loop.
+     *
+     * ⚠️ "No life instead" compiles to `times: 0`, and that is exact rather than
+     * approximate: `fold` multiplies, the amount becomes zero, and core's life
+     * funnel emits NOTHING for a gain of zero (CR 118.5) — so "whenever you gain
+     * life" correctly does not fire. A `preventAll` would have been the wrong
+     * verb: prevention is CR 615 and applies to damage, and it would have
+     * reported a `prevented` quantity in the log for an event that deals none.
+     *
+     * What this rule deliberately does NOT match, each REPORTED with its count
+     * in §3.151 rather than widened to fit:
+     *   - "…draw that many cards instead" — a different ACTION, not a scaled
+     *     quantity (the vocabulary `replacement.ts`'s header excludes).
+     *   - "…that player loses that much life instead" (Tainted Remedy, Plague
+     *     Drone) — turns a gain into a LOSS, a different event.
+     *   - "…while you have N or less life" — a life-total condition the filter
+     *     has no field for.
+     */
+    id: 'replacement-lifegain',
+    description:
+      '"If you / a player would gain life, … twice that much / that much plus N / no life instead" (Rhox Faithmender, Knight of Dawn\'s Light, Sulfuric Vortex)',
+    pattern: new RegExp(
+      `^if ${LIFEGAIN_SUBJECT_TOKEN} would gain life, (?:you|that player) gains? ` +
+        `(?:${REPLACEMENT_MULTIPLIER_TOKEN} that much life|that much life plus ${COUNT_TOKEN}|no life) instead$`,
+    ),
+    build(match, ctx) {
+      if (!cardIsPermanent(ctx)) return null;
+      const scope = LIFEGAIN_SUBJECTS[match[1] ?? ''];
+      if (scope === undefined) return null;
+      const multiplierWord = match[2];
+      const plusWord = match[3];
+      // Exactly one of the three printed outcomes. "No life" is the form that
+      // matched neither capture group.
+      const outcome: ReplacementOutcome =
+        multiplierWord !== undefined
+          ? { times: REPLACEMENT_MULTIPLIERS[multiplierWord] as number }
+          : plusWord !== undefined
+            ? { plus: parseCount(plusWord) as number }
+            : { times: 0 };
+      if (outcome.times !== undefined && Number.isNaN(outcome.times)) return null;
+      if (outcome.plus !== undefined && (outcome.plus === null || outcome.plus <= 0)) return null;
+      return {
+        replacements: [
+          {
+            event: 'lifegain',
+            applies: scope === 'any' ? {} : { recipientController: scope },
+            outcome,
+            label: match[0],
+          },
+        ],
+      };
     },
   },
   {
