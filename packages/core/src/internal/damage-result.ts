@@ -52,6 +52,7 @@ import type { ContinuousIndex } from './continuous.js';
 import { NO_MOD } from './continuous.js';
 import { indexReplacements, replaceCounters } from './replacement.js';
 import { addPoisonCounters } from '../poison.js';
+import { gainLifeAmount } from '../life.js';
 
 /**
  * Apply the results of `amount` damage dealt by `source` to `target` (CR 120.3).
@@ -123,10 +124,24 @@ export function applyDamageResult(
   }
   if (sourceKeywords.lifelink === true) {
     // CR 120.3f / 702.15b — in addition to every row above, for any damage.
-    const controller = state.players[source.controller];
-    controller.life += amount;
-    emit({ type: 'gainLife', player: source.controller, amount });
-    emit({ type: 'lifeChanged', player: source.controller, delta: amount, to: controller.life });
+    //
+    // The AMOUNT goes through `life.ts`'s one question, because a life-gain
+    // replacement (Rhox Faithmender, Boon Reflection) does not care that this
+    // life came from lifelink rather than from a resolving spell. The cards
+    // package asks the same question for its own gain primitives; this is
+    // core's call site, and `life-parity.test.ts` fails if the two ever
+    // disagree — the same arrangement, for the same reason, as the counters
+    // funnel two rows above.
+    const gained = gainLifeAmount(state, source.controller, amount, emit);
+    // CR 118.5 — a gain of nothing is NOT a life-gain event, so "that player
+    // gains no life instead" (Sulfuric Vortex) must emit neither event or
+    // "whenever you gain life" fires on a gain that did not happen.
+    if (gained > 0) {
+      const controller = state.players[source.controller];
+      controller.life += gained;
+      emit({ type: 'gainLife', player: source.controller, amount: gained });
+      emit({ type: 'lifeChanged', player: source.controller, delta: gained, to: controller.life });
+    }
   }
 }
 

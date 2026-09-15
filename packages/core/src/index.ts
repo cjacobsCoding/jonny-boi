@@ -486,11 +486,13 @@ export {
 // index once and threads it, exactly as it does with `indexContinuous`.
 export type {
   ReplacementAbility,
+  ReplacementAnchor,
   ReplacementApplies,
   ReplacementEventKind,
   ReplacementOutcome,
 } from './replacement.js';
 export {
+  REPLACEMENT_ANCHORS,
   REPLACEMENT_EVENT_KINDS,
   affectedPlayerPrefersMore,
   replacementIsInert,
@@ -516,8 +518,14 @@ export {
   replaceCounters,
   replaceDamage,
   replaceDraw,
+  replaceLifeGain,
   runReplacements,
 } from './internal/replacement.js';
+
+// LIFE GAIN's one question — the funnel BOTH gain mechanisms ask (a resolving
+// effect in the cards package, and LIFELINK on core's own combat-damage path).
+// The `untap.ts` model: two mechanisms, one question.
+export { gainLifeAmount } from './life.js';
 
 // Delayed triggered abilities (CR 603.7) — an ability created DURING a
 // resolution that fires once at a named later moment. It lives on the STATE
