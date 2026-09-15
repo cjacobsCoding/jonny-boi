@@ -364,8 +364,12 @@ function unsupportedSummary(cardId: string): string {
  * It had not. So the built-in region is now unmistakably its own: its own
  * container, a lock badge per row, and a marked origin attribute. Do not merge
  * the two treatments back together.
+ *
+ * Exported alongside {@link SavedDecks} so `builtin-deck-identity.test.ts` can
+ * render the two lists side by side and assert they are TELLABLE APART in the
+ * markup. The claim is about what the UI says, which no engine test can see.
  */
-function GauntletDecks({ decks }: { decks: DecksApi }): ReactElement {
+export function GauntletDecks({ decks }: { decks: DecksApi }): ReactElement {
   const [note, setNote] = useState<string | null>(null);
   const list = useMemo(() => gauntletDecks(), []);
   const builtin = originPresentation('builtin');
@@ -458,7 +462,7 @@ function GauntletDecks({ decks }: { decks: DecksApi }): ReactElement {
  * of the panel is yours, and hiding it left a lone list of six built-in decks
  * under the builder with nothing to contrast against.
  */
-function SavedDecks({ decks }: { decks: DecksApi }): ReactElement {
+export function SavedDecks({ decks }: { decks: DecksApi }): ReactElement {
   return (
     <div>
       <div className="section-label">Your decks</div>
