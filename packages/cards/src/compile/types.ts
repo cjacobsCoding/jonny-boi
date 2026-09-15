@@ -427,6 +427,21 @@ export interface RuleContext {
    */
   readonly xFromActivationCost?: boolean;
   /**
+   * DESIGN §3.148 — what a printed `X` MEANS in this clause, when the sentence
+   * DEFINED it: "~ deals X damage to each creature, **where X is the number of
+   * creatures on the battlefield**" (Chain Reaction).
+   *
+   * Set by the binding pre-pass in `applyRules`, which strips the where-clause
+   * and re-runs the rules over what is left. That is why the family needed ONE
+   * change and not seventy-four: §3.147 measured 83 cards across 74 distinct
+   * BODIES and concluded the lane was thin, which is true of the bodies and
+   * false of the binding — the bodies were already written, as the plain-number
+   * rules they have always been, and all X ever needed was a value.
+   *
+   * Read through `xParamValue`, the one answer to "what does X mean here".
+   */
+  readonly xDerivedBinding?: Record<string, unknown>;
+  /**
    * Compile a nested clause (a trigger's body) with the same effect rules.
    * Returns the effects, or `null` when the body itself is unsupported — which
    * makes the whole trigger unsupported rather than silently empty.

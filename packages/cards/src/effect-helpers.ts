@@ -14,6 +14,7 @@
 
 import type {
   CardDefinition,
+  CardFilter,
   CardInstance,
   EffectContext,
   GameState,
@@ -22,6 +23,7 @@ import type {
   ManaCost,
   PlayerId,
   DerivedCountName,
+  DerivedCountScope,
   SpellStackObject,
   TargetRestriction,
 } from '@jonny-boi/core';
@@ -29,6 +31,7 @@ import {
   aggregateFor,
   ceaseToExistIfToken,
   convertedManaCost,
+  countPermanentsMatching,
   DEFAULT_TARGET_RESTRICTION,
   effectivePower,
   effectiveToughness,
@@ -64,11 +67,32 @@ import {
  * from the stat layer, and two vocabularies would let "cards in your graveyard"
  * mean one thing in a damage param and another in a P/T box.
  */
-export type DerivedCount = DerivedCountName;
+export type DerivedCount = DerivedCountName | typeof PERMANENTS_MATCHING;
+
+/**
+ * The one count name that carries its own SET as data instead of naming a
+ * hand-written one (DESIGN §3.148) — "the number of **Mountains you control**",
+ * "**artifacts they control**", "**Clerics on the battlefield**".
+ *
+ * Every other row of the vocabulary is a set written into core by hand, and the
+ * printed cards ask for dozens of them. This row makes the next one a ROW IN
+ * THE COMPILER'S PHRASE TABLE rather than a core change, evaluated by the one
+ * `matchesCardFilter` every other filter consumer already uses — as closed as
+ * the enum rows, because a printed noun the compiler cannot turn into a
+ * `CardFilter` still reports.
+ */
+export const PERMANENTS_MATCHING = 'permanentsMatching';
 
 /** A numeric param that is computed at resolution instead of printed. */
 export interface DerivedValue {
   readonly countOf: DerivedCount;
+  /**
+   * The set counted, for {@link PERMANENTS_MATCHING} — absent (and ignored) for
+   * every named row, whose set is core's.
+   */
+  readonly filter?: CardFilter;
+  /** Whose permanents the filtered count reaches. Defaults to `'you'`. */
+  readonly scope?: DerivedCountScope;
   /**
    * "+N/+N FOR EACH …" — the printed multiplier on a per-count value (rampage's
    * "+2/+2 for each creature blocking it beyond the first", DESIGN §3.107).
@@ -77,6 +101,25 @@ export interface DerivedValue {
    * primitive, so damage, draws and pumps all learn "for each" at once.
    */
   readonly times?: number;
+  /**
+   * A printed CONSTANT added after the count is scaled — "where X is **3 plus**
+   * the number of artifacts you control" (Welding Sparks), "the number of cards
+   * in their hand **minus 4**" (Viseling), and with `times: -1` the reversed
+   * "**3 minus** the number of cards in their hand" (Rackling).
+   *
+   * The same name and meaning as core's `CharacteristicFormula.plus`
+   * ("that number plus 1" — Tarmogoyf's toughness), on purpose: one word for
+   * one idea across the two places a derived value is offset.
+   */
+  readonly plus?: number;
+  /**
+   * A FLOOR applied last — `0` on every subtracting row, which is CR 107.1b:
+   * a quantity that would be negative is zero. Absent means no floor, which is
+   * what a PUMP needs ("gets -X/-X" is a negative modifier, not a negative
+   * quantity), and that difference is why this is data rather than a rule
+   * baked into the reader.
+   */
+  readonly min?: number;
 }
 
 /** Whether a param value is a derived-value descriptor. */
@@ -255,7 +298,13 @@ export function evaluateDerived(ctx: EffectContext, value: DerivedValue): number
   // count below turns out to be. One multiplication here, so no branch below
   // has to remember it.
   const times = scaleOf(value.times);
-  return times === 1 ? countOfDerived(ctx, value) : countOfDerived(ctx, value) * times;
+  const scaled = times === 1 ? countOfDerived(ctx, value) : countOfDerived(ctx, value) * times;
+  // The printed constant, then the printed floor — in that order, because
+  // "3 minus the number of cards in their hand" is floored AFTER the subtraction
+  // (CR 107.1b), not before it.
+  const offset = typeof value.plus === 'number' && Number.isFinite(value.plus) ? Math.trunc(value.plus) : 0;
+  const total = scaled + offset;
+  return typeof value.min === 'number' && Number.isFinite(value.min) ? Math.max(Math.trunc(value.min), total) : total;
 }
 
 /**
@@ -294,6 +343,14 @@ function countOfDerived(ctx: EffectContext, value: DerivedValue): number {
     // spell became — the frame is gone and the count lives on the instance
     // (`timesKicked`, written as it entered).
     return ctx.kickCount ?? (ctx.kicked === true ? 1 : (ctx.source.timesKicked ?? 0));
+  }
+  if (value.countOf === PERMANENTS_MATCHING) {
+    // The set is DATA on the descriptor (§3.148). A ref with no filter would be
+    // "every permanent", which no printed card means, so it counts nothing
+    // rather than everything — the direction that cannot play better than
+    // printed. The compiler never emits one.
+    if (value.filter === undefined) return 0;
+    return countPermanentsMatching(ctx.state, value.filter, value.scope ?? 'you', ctx.controller);
   }
   if (value.countOf === 'triggeringAmount') {
     // "That much" — the size of the event that set this trigger off, carried on

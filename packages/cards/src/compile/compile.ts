@@ -58,6 +58,8 @@ import {
   COST_NOUNS,
   COST_NOUN_PHRASE,
   resolveItsReferent,
+  WHERE_X_IS_CLAUSE,
+  whereXBinding,
 } from './rules.js';
 import { mergeKeywordGrant } from '@jonny-boi/core';
 import type { HybridComponent } from '@jonny-boi/core';
@@ -531,6 +533,26 @@ function applyRules(
     // A rule that recognized the shape but cannot implement this instance
     // returns null — keep looking, then fall through to `missing`.
     if (contribution) return { contribution, ruleId: rule.id };
+  }
+  // §3.148 — THE "WHERE X IS …" BINDING, tried only after every rule has
+  // declined, so a sentence that already compiles is untouched.
+  //
+  // This is ONE pre-pass rather than a rule per body, and that is the whole
+  // finding: the bodies — "deals X damage to each creature", "mills X cards",
+  // "prevent the next X damage" — were never missing. They are the ordinary
+  // plain-number rules, which refuse only because the word X has no value. Strip
+  // the clause that DEFINES X, put the value it names on the context, and every
+  // one of those bodies compiles unchanged. §3.147 measured this family as 74
+  // distinct bodies and left it for that reason; the bodies were the wrong unit.
+  //
+  // Guarded against recursion by the binding it sets: a sentence carrying two
+  // where-clauses binds the last and reports rather than looping.
+  if (ctx.xDerivedBinding === undefined) {
+    const bound = WHERE_X_IS_CLAUSE.exec(clause);
+    const binding = bound ? whereXBinding(bound[2] ?? '') : null;
+    if (bound && binding) {
+      return applyRules(rules, (bound[1] ?? '').trim(), { ...ctx, xDerivedBinding: binding }, targetFree);
+    }
   }
   return null;
 }

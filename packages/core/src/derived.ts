@@ -22,7 +22,8 @@
  */
 
 import type { CardType, CharacteristicFormula, DerivedCountName } from './card.js';
-import { isCreature } from './card.js';
+import { isCreature, matchesCardFilter } from './card.js';
+import type { CardFilter } from './choices.js';
 import type { GameState, PlayerId } from './state.js';
 import { PLAYER_IDS } from './state.js';
 
@@ -162,6 +163,54 @@ export function evaluateDerivedCount(state: GameState, countOf: DerivedCountName
     default:
       return 0;
   }
+}
+
+/**
+ * WHOSE permanents a FILTERED count reaches — the printed tail of "the number
+ * of Mountains **you control**" / "artifacts **they control**" / "Clerics **on
+ * the battlefield**".
+ */
+export type DerivedCountScope = 'you' | 'opponents' | 'any';
+
+/**
+ * Count the permanents matching a {@link CardFilter} (DESIGN §3.148).
+ *
+ * **This is the row that stops the count vocabulary being a row per noun.**
+ * Every entry in {@link DerivedCountName} above names one hand-written set, and
+ * the printed cards ask for dozens: Mountains, Swamps, Shrines, Equipment,
+ * Clerics, artifacts an opponent controls. Written as enum rows that is a core
+ * change per card; written as a filter it is a ROW IN THE COMPILER'S PHRASE
+ * TABLE (rule 2 — adding the next case must be a row), evaluated by the one
+ * `matchesCardFilter` that targeting legality, the statics pass and every
+ * search already use, so "Mountain" cannot mean one thing to a fetch and
+ * another to a count.
+ *
+ * It is exactly as FAITHFUL as the enum rows and not one step looser: a
+ * `CardFilter` is a closed structure, so a printed noun the compiler cannot turn
+ * into one still reports rather than being widened to the nearest noun that
+ * happens to exist.
+ *
+ * PERF: deliberately NOT reachable from {@link evaluateDerivedCount}'s switch,
+ * which the characteristic-defining P/T path drives on every stat read. That
+ * switch is untouched, so a Tarmogoyf costs exactly what it cost before; only a
+ * card that actually prints a filtered count pays for one.
+ */
+export function countPermanentsMatching(
+  state: GameState,
+  filter: CardFilter,
+  scope: DerivedCountScope,
+  you: PlayerId,
+): number {
+  const battlefield = state.battlefield;
+  const them = opponent(you);
+  let count = 0;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i]!;
+    if (scope === 'you' && perm.controller !== you) continue;
+    if (scope === 'opponents' && perm.controller !== them) continue;
+    if (matchesCardFilter(perm, filter)) count += 1;
+  }
+  return count;
 }
 
 /**

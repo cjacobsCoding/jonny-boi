@@ -167,7 +167,8 @@ export {
 // Derived values — the ONE evaluator behind "equal to the number of …" params
 // and characteristic-defining P/T, plus its closed count vocabulary.
 export type { CharacteristicFormula, CharacteristicPT, DerivedCountName } from './card.js';
-export { evaluateDerivedCount, characteristicValue } from './derived.js';
+export { evaluateDerivedCount, characteristicValue, countPermanentsMatching } from './derived.js';
+export type { DerivedCountScope } from './derived.js';
 
 // Turn-scoped fact memory (revolt / morbid / lifegain) — a NAMED closed
 // vocabulary, not a general event query. See turn-facts.ts.
