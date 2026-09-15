@@ -1,0 +1,124 @@
+/*
+ * THE BUILT-IN GAUNTLET DECKS — the region of the deck builder that is NOT yours.
+ *
+ * ⚠️ This file used to say, in its own header: "reuses `.saved-decks` for the
+ * container so it sits visually with the user's own decks rather than looking
+ * like a new region." That decision is REVERSED, and the reversal is the point of
+ * this file. Making reference data pixel-identical to the user's own decks meant
+ * a user who copied "Selesnya Blink" and renamed the copy saw the untouched
+ * built-in still sitting in the same column, in the same box, and reported that
+ * the app had duplicated his deck. It had not; he simply had no way to tell the
+ * two apart.
+ *
+ * So: a built-in deck now reads as bundled reference material. A tinted, dashed
+ * surface (dashed = "not a thing you own or edit" — nothing else in the app is
+ * dashed), a lock badge on every row, and its own heading and container classes
+ * so a future edit to `.saved-deck` cannot silently reunify them. Do NOT restyle
+ * these back onto `.saved-deck`.
+ *
+ * The BADGE itself lives in `components/deck-origin.css`, because the deck
+ * pickers mark a built-in choice with the same badge — one visual vocabulary for
+ * one distinction. Only the builder's own region is styled here.
+ */
+
+.builtin-decks {
+  margin-top: var(--space-5);
+  /* A rule above the region, so the eye sees a boundary before it sees a list.
+     `.saved-decks` has no such rule, which is what makes this read as separate. */
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-strong);
+}
+
+.builtin-decks__intro {
+  margin: 0 0 var(--space-2);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}
+
+.builtin-deck-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/*
+ * One built-in deck. Deliberately NOT `.saved-deck`:
+ *  - dashed border, because the row is not an object you own;
+ *  - recessed surface (`--color-surface`, below the panel's raised rows) so the
+ *    region sits *behind* your decks rather than beside them.
+ */
+.builtin-deck {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: flex-start;
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.builtin-deck__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.builtin-deck__name {
+  font-weight: 600;
+  color: var(--color-fg);
+}
+
+.builtin-deck__meta {
+  color: var(--color-fg-faint);
+  font-size: var(--text-xs);
+}
+
+/* The "you already have a copy" line — the sentence the bug report needed. */
+.builtin-deck__copied {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-self: stretch;
+}
+
+.builtin-deck__copied-note {
+  color: var(--color-success);
+  font-size: var(--text-xs);
+}
+
+.builtin-deck__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* Copying a second time stays possible, but stops being the loud invitation. */
+.builtin-deck__again {
+  color: var(--color-fg-faint);
+  font-size: var(--text-xs);
+}
+
+.builtin-decks__note {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2);
+  border-left: 3px solid var(--color-accent-soft);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}
+
+/*
+ * Phone. The deck panel is already a single column below 860px (styles.css), so
+ * the only thing that needs saying here is that the copied-state row must WRAP
+ * instead of pushing the panel wide — two buttons plus a sentence do not fit in
+ * 375px, and a horizontally scrolling deck panel would be a new bug of its own.
+ */
+@media (max-width: 520px) {
+  .builtin-deck__actions {
+    width: 100%;
+  }
+  .builtin-deck__actions .btn {
+    flex: 1 1 auto;
+  }
+}

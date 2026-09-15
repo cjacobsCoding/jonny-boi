@@ -1,3 +1,27 @@
+- 2026-09-14 `fix/builtin-deck-identity` — ✅ **pushed-ready, NOT merged** (worker; integrator merges).
+  **A built-in gauntlet deck must not look like one of yours** (DESIGN §3.147). The report was *"I renamed
+  the Selesnya Blink deck to Acidic Angels, which apparently just DUPLICATED the deck"* — nothing duplicated;
+  the built-in list was deliberately styled to look like the user's own decks and `gauntlet-decks.css` said so
+  in its own header. Reversed on every deck-listing surface from ONE closed table, `lib/decklist/deckOrigin.ts`.
+  📊 `npm run build` **exit 0** · `npx vitest run apps/web --minWorkers=1 --maxWorkers=1` **1,995 passed, 0 failed
+  / 151 files** (== 151 `*.test.ts` on disk, 0 skipped) · `verify-board-fits` **32/32 exit 0** · new
+  `verify-deck-identity` **36/36 exit 0** (desktop 1440 + phone 375; PNGs in `apps/web/verify-out/deck-identity/`).
+  ⚠️ **§3.147 IS CLAIMED OFF A CONTENDED RANGE.** §3.146 was the highest in `main` at fork. If a second §3.147
+  lands, renumber mine — it references nothing by number.
+  ⚠️ **SEMANTIC-CONFLICT WARNINGS FOR THE INTEGRATOR:**
+  (1) **`apps/web/src/lib/online/deck-menu.ts` is DELETED.** It was a second copy of `SetupScreen.tsx`'s private
+  `buildMenu` — two places answering one question, which is how the two surfaces came to label built-in decks
+  differently. Both consumers now read `lib/decklist/deckMenu.ts`; its test moved to `decklist/deckMenu.test.ts`.
+  A lane importing the old path will fail to COMPILE, which is the good case.
+  (2) **`apps/web/src/views/gauntlet-decks.css` is DELETED**, replaced by `views/builtin-decks.css` +
+  `components/deck-origin.css`. Class names `.gauntlet-deck*` are gone; a lane styling them paints nothing.
+  (3) `Deck` gains optional `copiedFrom`, and `storage.ts`'s `normalizeDeck` lists it — that function REBUILDS
+  field by field, so any lane adding a `Deck` field must add it there too or lose it on every reload.
+  (4) `DeckBuilderView.tsx` now EXPORTS `GauntletDecks` and `SavedDecks` (for the identity guard), and `SavedDecks`
+  renders unconditionally — it used to hide itself at `decks.length <= 1`, which left a lone column of built-ins.
+  ℹ️ **Not done, deliberately:** the Lab's hero picker already grouped by origin (`isGauntletDeckId`) and was left
+  alone; it is the one surface that never had the ambiguity. The full workspace suite was NOT run (6-core/7 GB box,
+  per the brief) — `packages/*` are untouched, but the integrator should run the whole gate.
 - 2026-09-14 `fix/announce-forced-choice` — ✅ **pushed-ready, NOT merged** (worker; integrator merges).
   **Two reports, one mechanism** (§12 of `docs/MTGA-UX-OVERHAUL.md`): a choice the engine settles
   because it had exactly one legal answer is now ANNOUNCED naming the card it chose, and UX-16's

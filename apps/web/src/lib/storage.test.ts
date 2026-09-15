@@ -68,6 +68,30 @@ describe('deck storage', () => {
     expect(entryPrintingOf(loaded!, 'card-bolt')).toEqual(RETRO);
   });
 
+  /**
+   * A deck copied from a BUILT-IN gauntlet deck remembers which one, and that
+   * memory has to survive a reload — it is the only thing that lets the built-in
+   * list say "you already copied this, yours is called X" instead of dangling the
+   * same Copy button forever.
+   *
+   * Pinned because `normalizeDeck` REBUILDS a loaded deck field by field: a field
+   * nobody added there is dropped silently on the first refresh. That is the
+   * shape of "works when you build it, gone by morning".
+   */
+  it('remembers which built-in deck a copy came from, across a reload', () => {
+    const copy: Deck = { ...DECK, id: 'd2', name: 'Acidic Angels', copiedFrom: 'Selesnya Blink' };
+    saveDecks([copy]);
+    const [loaded] = loadDecks().decks;
+    expect(loaded?.copiedFrom).toBe('Selesnya Blink');
+  });
+
+  it('leaves a deck that was NOT copied from a built-in without provenance', () => {
+    // The discriminator: if `copiedFrom` were defaulted rather than carried,
+    // every deck would claim to be a copy and the marker would mean nothing.
+    saveDecks([DECK]);
+    expect(loadDecks().decks[0]).not.toHaveProperty('copiedFrom');
+  });
+
   it('keeps the card and drops the art when a stored printing is malformed', () => {
     installStorage({
       [DECKS_STORAGE_KEY]: JSON.stringify([
