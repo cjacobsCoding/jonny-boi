@@ -1,0 +1,23 @@
+// Defender Ramp — blue/green, Axebane Guardian into Primal Surge
+// Transcribed from photo, 2026-09-14. Counts inferred from sleeve depth.
+// ✗ = not in jonny-boi's card pool (5,651 cards) as of 2026-09-14.
+
+4 Arbor Elf                    // ✗ not in pool
+4 Axebane Guardian             // ✗ not in pool
+3 Doorkeeper                   // ✗ not in pool
+2 Avacyn's Pilgrim
+2 Fog Bank                     // ✗ not in pool
+2 Gatecreeper Vine
+2 Soul of the Harvest
+2 Craterhoof Behemoth          // ✗ not in pool
+
+3 Jace, Architect of Thought   // ✗ not in pool
+2 Tamiyo, the Moon Sage        // ✗ not in pool
+2 Gilded Lotus
+2 Primal Surge                 // ✗ not in pool
+
+10 Forest
+4 Hinterland Harbor
+3 Island
+1 Kessig Wolf Run              // ✗ not in pool
+1 Izzet Guildgate
