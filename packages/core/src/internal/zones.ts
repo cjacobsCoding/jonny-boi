@@ -234,6 +234,11 @@ export function resetInstanceForNewZone(inst: CardInstance): void {
   // §3.110 — RENOWNED is a designation of THIS object (CR 702.112a); the new
   // object a zone change makes (CR 400.7) is not renowned. Same shape-guard.
   if (inst.renowned !== undefined) delete inst.renowned;
+  // §3.150 — a freeze ("doesn't untap during its controller's next untap step")
+  // is aimed at THIS object, and CR 400.7 makes a permanent that leaves a new
+  // one: bounce the frozen creature and replay it and it unfreezes, because the
+  // thing Frost Trickster froze is gone. Same shape-guard as `attachedTo`.
+  if (inst.untapSkips !== undefined) delete inst.untapSkips;
   // CR 712.8a: a double-faced card is front-face-up everywhere except the
   // battlefield, so a TRANSFORMED permanent that leaves (dies, bounces, exiles)
   // reverts to its printed front face here — the same single chokepoint that

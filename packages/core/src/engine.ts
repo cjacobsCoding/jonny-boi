@@ -86,6 +86,7 @@ import {
 } from './mana.js';
 import type { ManaTapPlan } from './mana-plan.js';
 import { planManaPayment } from './mana-plan.js';
+import { spendUntapSkip, untapsDuringUntapStep } from './untap.js';
 import type { ManaSpendRestriction } from './spend-restriction.js';
 import { resolveSpendRestriction, restrictionNamesChosenSubtype } from './spend-restriction.js';
 import type {
@@ -439,10 +440,15 @@ function beginTurn(state: GameState, _config: RulesConfig, emit: (e: GameEvent) 
   // Untap step.
   enterStep(state, 'untap', emit);
   for (const inst of state.battlefield) {
-    if (inst.controller === state.activePlayer && inst.tapped) {
-      inst.tapped = false;
-      emit({ type: 'untapped', instanceId: inst.instanceId, player: state.activePlayer });
-    }
+    if (inst.controller !== state.activePlayer) continue;
+    // §3.150 — ONE question, asked in `untap.ts`. The skip is spent by this step
+    // HAPPENING, not by an untap being refused, so an already-untapped frozen
+    // permanent does not keep its freeze forever (see the file header).
+    const untaps = untapsDuringUntapStep(state, inst);
+    spendUntapSkip(inst);
+    if (!untaps || !inst.tapped) continue;
+    inst.tapped = false;
+    emit({ type: 'untapped', instanceId: inst.instanceId, player: state.activePlayer });
   }
   // Summoning sickness clears for the active player's permanents at the start of
   // their turn (they've been controlled since the turn began).
