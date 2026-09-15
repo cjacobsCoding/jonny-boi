@@ -2889,6 +2889,178 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.152 The targeting-protection row names a half that was FINISHED — the gap was one keyword, and the row cannot see it — ✅ done
+
+> ⚠️ **Section number claimed off a contended range.** `main` carries TWO §3.147 sections and TWO
+> §3.149 sections at fork, `feat/modal-templates` carries an unpushed §3.150 of its own beside
+> main's, and several lanes are live in `rules.ts`. This lane claimed §3.151 off `origin/main` at
+> fork; **`feat/replacement-prevention` had claimed the same number in parallel**, so the integrator
+> renumbered this one to §3.152 at merge — which is the collision the warning above predicted.
+
+The acceptance card was **Fiendslayer Paladin** — `~ can't be the target of black or red spells your
+opponents control.` — filed on the §7a board under *"targeting restriction"*, pointing at the backlog
+row *"a ward/protection template the compiler does not recognize yet"*.
+
+**Both halves of that filing were wrong, and in opposite directions.**
+
+#### 1. The machinery the row names was already COMPLETE — all four quarters of it
+
+`packages/core/src/protection.ts` implements every rule of CR 702.16 and has since before this
+lane: can't be **targeted** (`isTargetableBy`), can't be **dealt damage**
+(`protectionPreventsDamage`), can't be **enchanted/equipped** (`isLegalHost`, so the SBA knocks an
+Aura off the moment protection is gained), can't be **blocked** (`canBlock`) — all four keyed on one
+shared answer to "what qualities does this source have?". `Protection from black and from red`
+compiles today; so does the granted form on an Equipment. **The brief for this lane offered a
+choice — implement all four quarters of protection, or ship only the sentence — and neither was the
+work, because the four quarters were finished.**
+
+#### 2. The row cannot see the acceptance card at all
+
+`UNSUPPORTED_HINTS` selects that row with `/\bward\b|\bprotection from\b/`, and Fiendslayer Paladin's
+printed line contains neither word. It is filed under **"a rules template the compiler does not
+recognize yet"**, the generic catch-all. So is every other card in its shape. The row's own blocked
+population and the family's blocked population are not the same set, in either direction:
+
+| population (blocked cards, 32,341-card corpus) | count |
+| --- | ---: |
+| matches the family TEXT (`can't be the target of` / `protection from` / `hexproof from` / `ward`) | **487** |
+| filed under the ward/protection ROW | **156** |
+| family text, filed under some OTHER row (leak IN) | **331** |
+| the ROW with no family text (leak OUT) | **0** |
+
+The 331 are filed under twelve different rows — 205 clauses under the generic *"rules template"*, 94
+under *"you may / choose"*, 48 under *counters*. **§8a item 3 measured again, and larger: selecting
+this family by hint alone would have missed 68% of it.**
+
+#### 3. What actually blocks the family — `packages/cards/scripts/protect-blame.mjs`
+
+Each blocked card's printed family LINE is re-probed alone on the card's own type line, against a
+control probe of that type line with no text, and then against a closed rewrite table. A card whose
+control probe refuses is reported NOT-PROBEABLE rather than bucketed.
+
+| blame | cards | what it means |
+| --- | ---: | --- |
+| OTHER-CLAUSE — every family line compiles alone | **184** | the family text is a red herring; the card is blocked elsewhere |
+| UNSPLIT — no rewrite in the closed table reaches it | 209 | grants, "the chosen colour", activated bodies — not this shape |
+| VOCAB — the ward COST is outside the table | 39 | `Ward—Pay 3 life`, `Ward—Discard a card` |
+| NOT-PROBEABLE (double-faced) | 26 | reported, never bucketed |
+| **SHAPE — `hexproof from X`** | **16** | the quality words are already understood; the SENTENCE is not |
+| VOCAB — the protection QUALITY is outside the table | 9 | `from snow`, `from mana value 3 or greater`, `from legendary creatures` |
+| **SHAPE — `can't be the target of …`** | **6** | including the acceptance card |
+| NOT-PROBEABLE (control probe refuses) | 4 | reported, never bucketed |
+
+**The split the row could not tell you: the gap is the SHAPE, not the quality vocabulary.** Only 9
+cards are blocked by a quality word; 22 are blocked by a sentence whose every quality word the
+compiler already reads.
+
+⚠️ **The blame script's own first run was a false zero, and it is worth recording how.** It read
+`result.unsupported`; the field is `result.missing`. `undefined ?? []` reported the row as holding
+**0 cards** — which is exactly the shape of a real §3.120 finding and would have been believed and
+written up. The second defect in the same run was the probe leaving Scryfall's bare `keywords` array
+on: `["Protection"]` alone makes a card report with EMPTY oracle text, so 334 of 487 cards came back
+NOT-PROBEABLE. Both are fixed and both are commented at the site.
+
+#### 4. What shipped: `hexproof from [quality]` (CR 702.11e), and why it is not protection
+
+`KeywordFlags.hexproofFrom` — a LIST payload beside `protectionFrom`, sharing its quality vocabulary
+and nothing else. CR 702.11e is **one** rule ("can't be the target of [quality] spells your opponents
+control or abilities your opponents control from [quality] sources"), and it binds only against an
+**opponent's** source.
+
+**So compiling `hexproof from black` into `protectionFrom` is not an approximation, it is three extra
+abilities and a wider scope — a card that plays STRONGER than printed.** That is the mirror of the
+failure the pool rule usually guards against and is equally disqualifying, and it is why the
+enforcement is one clause in `isTargetableBy` composed from the two predicates already there
+(hexproof's controller test, protection's `protectionBlocksSource`) rather than a third targeting
+rule that could drift from either.
+
+Both printings compile through the one payload parser, so the granted form on an Aura or Equipment
+came free:
+- the modern keyword — `Hexproof from black`, `Reach, hexproof from blue`, `Hexproof from artifacts,
+  creatures, and enchantments`;
+- the 2013 sentence — `~ can't be the target of black or red spells your opponents control.`
+
+⚠️ **`joinPayloadKeywords` needed widening, and the widening is closed.** Oracle spells a
+hexproof-from list WITHOUT repeating the preposition ("artifacts, creatures, and enchantments"),
+unlike protection ("black and from green"), so the keyword splitter tears it into bare words with
+nothing grammatical to rejoin them by. A bare fragment is therefore admitted **only when the closed
+quality tables already name it** — so `protection from black and lifelink` still compiles as two
+abilities rather than reading `lifelink` as a quality and silently dropping the keyword.
+
+#### 5. A stronger-than-printed defect found on the way, in code that predates this lane
+
+Scryfall stamps **both** `"Hexproof from"` and a bare `"Hexproof"` on every hexproof-from card. The
+keyword sweep's flag table maps the bare word straight to `hexproof: true`, before any evidence check
+— so the moment `hexproof from black` began compiling, Garruk's Harbinger, Knight of Grace, Sporeweb
+Weaver and eleven others would have entered the pool **untargetable by every opponent spell of every
+colour**. `KEYWORD_NARROWED_BY_PAYLOAD` is a one-row table checked BEFORE the flag branch: a card
+whose narrowed payload compiled skips the broad flag. A card that really prints plain hexproof
+compiles no narrow payload, so the row never fires. Watched red.
+
+#### 6. The honest number: **+1 card, −0**, set-verified
+
+`playable-set.mjs` over one fixed private corpus (32,341 cards), compiled twice with this branch's
+nine compiler sources reverted to the fork point `162f143` via `git show` in between, diffed **both**
+directions: **6,696 → 6,697. Gained: Fiendslayer Paladin. Lost: none.**
+
+That is smaller than the 22 cards whose family line this lane fixed, and the difference is the point:
+**16 of the 22 are blocked by something else entirely** — Garruk's Harbinger by a "you may" body,
+Knight of Grace and Knight of Malice by `gets +1/+0 as long as any player controls a black permanent`,
+four Jaheiras by a `specializes` trigger, Sphinx of the Guildpact by `~ is all colors`. Their
+hexproof-from line now compiles and is pinned; they enter the pool when their other lane lands.
+
+#### 7. Left REPORTED, with numbers — the residue, and why each
+
+- **The shroud-scoped sentence, 5 cards** — `~ can't be the target of red spells or abilities from
+  red sources` (Suq'Ata Firewalker, Mercenary Informer, Rebel Informer, Raiding Party) and
+  `~ can't be the target of blue or black spells` (Karplusan Strider). **No controller clause**, so
+  they bind against their own controller too; Karplusan Strider additionally says *spells* and never
+  *abilities*. Compiling them as hexproof-from would let their controller target them, which is not
+  how they are printed. Modelling them needs a second scope axis for a measured **+1** whole card
+  (only Suq'Ata Firewalker is otherwise clean), and "shroud from a quality" is not a Magic keyword —
+  so this is a deliberate NO-GO. **All five are pinned by name in
+  `targeting-protection-family.test.ts` as still-reporting**, so a later widening of the sentence
+  pattern cannot quietly compile them.
+- **The ward COST vocabulary, 39 cards blamed, upper bound +7 whole cards.** `Ward—Pay N life` (20
+  printings), `Ward—Discard a card` (11), `Ward—Sacrifice …` (8 shapes), `Ward {X}` (1). Measured
+  with an over-generous stand-in (`ward {2}` for every cost), so +7 is a ceiling, not an estimate.
+  `KeywordFlags.ward` is a `number`; this needs it widened to a closed cost union and is a different
+  family — a COST vocabulary, not a targeting restriction. §3.150's own closing note names it too.
+- **9 protection QUALITIES outside the closed table** — `from snow` (Ronom Hulk), `from mana value 3
+  or greater` (Mistmeadow Skulk), `from legendary creatures` (Tsabo Tavoc), `from non-Spirit
+  creatures`, `from each mana value among artifacts you control` (Rebbec). Each needs a new kind of
+  quality predicate, not a row.
+- **`Hexproof from activated and triggered abilities`** (Volatile Stormdrake) — names a source KIND,
+  not a source quality. **`Hexproof from each of its colors`** (Tam) and `gains hexproof from that
+  color` (Skrelv, Sungold Sentinel) — a quality computed at resolution, the "chosen colour" family.
+- **`~ can't be the target of Aura spells`** (Bartel Runeaxe, Tetsuo Umezawa), **`spells that can
+  target only Walls`** (Wall of Shadows), **`spells unless it attacked or blocked this turn`**
+  (Lurker), **`abilities from artifact sources`** (Artifact Ward), **`abilities your opponents
+  control`** (Shanna) — five one-card shapes, each a different axis.
+
+#### 8. Verification
+
+`npm run build` **exit 0**, unpiped. `npx vitest run packages/cards packages/core --minWorkers=1
+--maxWorkers=1` — **209 files passed, 19,807 tests passed, 0 failed**, no `Worker exited` line
+(fork baseline 207 / 19,772; this branch adds 2 files and 35 tests, and 19,772 + 35 = 19,807).
+
+**Six checks watched RED before being trusted**, each restored and re-run green:
+1. the "your opponents control" tail made optional → Karplusan Strider compiles, 1 red;
+2. the tail widened to accept `or abilities from X sources` → 4 shroud-scoped cards compile, 4 red;
+3. `hexproof from` routed into `protectionFrom` → 10 red;
+4. `KEYWORD_NARROWED_BY_PAYLOAD` removed → `expected true to be undefined`, the
+   stronger-than-printed defect, 1 red;
+5. the bare-word quality continuation dropped → Nevinyrral's three-quality line refuses, 1 red;
+6. the enforcement clause deleted from `isTargetableBy` → the code still compiles and 6 core tests
+   go red, which is the whole reason the enforcement has tests of its own.
+
+A seventh was found rather than staged: citing `702.11` for `hexproofFrom` collided with `hexproof`
+and `rules-citations.test.ts` GAP-15 failed. The correct citation is the **subsection 702.11e**.
+
+**No `EFFECT_RULES` entry was added**, so neither `rule-coverage.test.ts` nor `dead-rule-sweep.mjs`
+can reach this family — `targeting-protection-family.test.ts` is its coverage gate, and every Oracle
+string in it is copied verbatim from a named real corpus card for exactly that reason.
+
 ### 3.151 The CR 614/615 row names the EVENT KINDS — and the gap is the WORDINGS, on kinds the layer already watched — ✅ done
 
 > ⚠️ **Section number claimed off a contended range.** §3.150 was the highest in `main` when this

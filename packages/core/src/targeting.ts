@@ -1102,6 +1102,19 @@ function isTargetableBy(
   if (keywords.protectionFrom !== undefined && protectionBlocksSource(keywords.protectionFrom, source)) {
     return false;
   }
+  // HEXPROOF FROM [quality] (CR 702.11e) — hexproof's controller scope asked of
+  // protection's quality vocabulary, and the reason both halves are read from
+  // the predicates above rather than from a copy: this is not a third kind of
+  // targeting rule, it is the two already here combined, so it must agree with
+  // each of them by construction. Fiendslayer Paladin's printed sentence and
+  // Garruk's Harbinger's keyword are the same ability.
+  if (
+    keywords.hexproofFrom !== undefined &&
+    (caster === undefined || caster !== permanent.controller) &&
+    protectionBlocksSource(keywords.hexproofFrom, source)
+  ) {
+    return false;
+  }
   return true;
 }
 

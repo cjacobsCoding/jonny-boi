@@ -458,6 +458,7 @@ export const KEYWORD_VALUE_DISPLAY: {
   ward: 'appendValue',
   toxic: 'appendValue',
   protectionFrom: 'appendValue',
+  hexproofFrom: 'appendValue',
   // Terms that already spell the value out in words.
   minBlockers: 'inTerm',
   maxBlockers: 'inTerm',

@@ -28,6 +28,26 @@ states the rule it exists to protect:
 That rule is the whole reason this app can be trusted, so the campaign raises the number by
 **implementing mechanics**, never by loosening acceptance.
 
+### 1a. ⚠️ The rule has two directions, and only one has ever been guarded
+
+*"Almost-right"* has been read here as **weaker than printed** — a card whose ability was approximated
+away. Every guard in the campaign checks that direction. §3.152 found the other one, live:
+
+> Scryfall stamps a bare `"Hexproof"` beside `"Hexproof from"` on all 14 hexproof-from cards, and the
+> keyword sweep mapped the bare word straight to `hexproof: true` **before any evidence check**. The
+> moment `hexproof from black` compiled, Garruk's Harbinger, Knight of Grace, Sporeweb Weaver and
+> eleven others would have entered the pool **untargetable by every opponent spell of every colour.**
+
+**A card playing STRONGER than printed corrupts an A/B verdict exactly as much as one playing weaker,
+and `'complete'` says nothing about either** — the compiler's verdict is *"every printed ability is
+implemented"*, not *"nothing unprinted was implemented too"*. Nothing in the acceptance gate looks
+for a card that gained something.
+
+So every lane's sabotage pass owes a check in **both** directions, and the question to ask of a new
+keyword or flag is not only *did I implement what it prints* but **did anything set a flag this card
+does not print**. The fix in §3.152 is the shape to copy: a closed `KEYWORD_NARROWED_BY_PAYLOAD` row
+consulted **before** the flag branch, so a payload keyword can never fall through to its bare form.
+
 ## 2. The trap at the top of the table
 
 The largest row — *"a rules template the compiler does not recognize yet"*, **10,801 cards, 31% of
@@ -299,10 +319,11 @@ waits on the pool refresh (§8 note). A card is ✅ only when **every** printed 
 | Rhox Faithmender | life-change replacement | ✅ §3.151 — one more event kind cost one row in five places. The real work was the **funnel**: lifelink and a resolving spell both gain life, and this card prints both halves. |
 | Fog Bank | damage prevention | ✅ §3.151 — prevention was already built. What was missing was a way to say **`~`**: a closed anchor vocabulary read by both sides of the event. |
 | Craterhoof Behemoth | mass pump + keyword grant | ⬜ `When ~ enters, creatures you control gain trample and get +X/+X until end of turn, where X is the number of creatures you control.` The derived count is the family §3.149 landed — **re-blame; the residue may be only the mass keyword grant.** |
-| Fiendslayer Paladin | targeting restriction | ⬜ `~ can't be the target of black or red spells your opponents control.` Hexproof-from-a-quality, by colour and by controller. |
+| Fiendslayer Paladin | targeting restriction | ✅ §3.152 — set-verified +1/−0. ⚠️ **The row named a half that was FINISHED**: all four quarters of protection (CR 702.16) were already built in `core/protection.ts`. The gap was `hexproof from [quality]` (CR 702.11e), ONE rule against an opponent only — and the row's `/ward|protection from/` hint cannot match this card's printed line at all, so it sat in the generic catch-all. |
 
-**10 of 16 lane-verified · 2 evidenced NO-GOs · 4 unstarted.** ⚠️ **Acidic Angels is ONE card from
-complete** — only Fiendslayer Paladin remains, and a lane is live on it. Defender Ramp still has **6**.
+**11 of 16 lane-verified · 2 evidenced NO-GOs · 3 unstarted.** ✅ **ACIDIC ANGELS IS COMPLETE** — all
+22 of its names compile. Defender Ramp still has **5**: Axebane Guardian, Primal Surge, Craterhoof
+Behemoth, and the two evidenced NO-GOs.
 
 ⛔ is not a shelf. It means the residue has been **named and pinned by a test**, so the card enters
 the pool the moment the family that actually holds it lands — and a card that starts compiling while
@@ -334,6 +355,32 @@ family column:
    NO-GO naming the residue is a successful outcome**, or it will be tempted to widen a template to
    swallow the clause it cannot do — which is the one thing the pool rule forbids.
 
+### 7c. Three failure modes the first six lanes had not seen (2026-09-15, §3.152)
+
+5. ⚠️ **A row can fail to CONTAIN its own acceptance card.** §8a item 2 says the row's name points
+   at the wrong half. Targeting protection is worse than that: `UNSUPPORTED_HINTS` selects the
+   ward/protection row with `/ward|protection from/`, and **Fiendslayer Paladin's printed line
+   contains neither word**, so the card the board files under that row is not in it — it is in the
+   generic *"a rules template"* catch-all. Measured over the whole corpus: 487 cards match the family
+   TEXT, 156 are in the row, and the 331-card difference is filed under **twelve** other rows.
+   **Selecting by hint alone would have missed 68% of the family.** Always take the population by
+   text, then ask which rows it is scattered across — the second number is the one that says whether
+   the row is a family at all.
+6. ⚠️ **The pool rule is violated in BOTH directions, and only one of them has ever been guarded.**
+   Every lane so far has protected against a card playing WEAKER than printed. §3.152 found the
+   mirror: Scryfall stamps a bare `"Hexproof"` beside `"Hexproof from"` on all 14 hexproof-from
+   cards, and the keyword sweep maps the bare word straight to a flag — so implementing
+   `hexproof from black` would have put those cards into the pool with FULL hexproof. A card playing
+   stronger than printed corrupts an A/B verdict exactly as much as one playing weaker, and
+   `status === 'complete'` says nothing about either. When a family's keyword has a NARROWER printed
+   variant, check what Scryfall's bare word does with it.
+7. ✅ **A blame script can report a false ZERO, and it looks exactly like a real finding.**
+   `protect-blame.mjs` read `result.unsupported`; the field is `result.missing`. `undefined ?? []`
+   reported the row as holding **0 cards** — the same shape as `modal-blame`'s and `loyalty-blame`'s
+   genuine "this half does not exist" results, which is what makes it dangerous. Before believing a
+   zero from a blame script, make the script print a NON-zero it can be checked against: the fix here
+   prints the twelve rows the population is actually filed under, which cannot all be empty.
+
 ## 8. Progress log
 
 **Read the DELTA column, not an absolute.** Each lane measures its own delta by compiling one fixed
@@ -352,6 +399,7 @@ and the shipped pool lags the compiler. Any absolute below is annotated with the
 | 2026-09-15 | **+175** | printed TARGET BOUND (DESIGN §3.150) | 32,414-card corpus against `fd1ca31`, set-diffed (0 lost). **Selesnya Charm ✅.** ⚠️ Only **28** of the +175 are modal — the CLASS was fixed, not the instance. |
 | 2026-09-15 | **+34** | Populate / copy selectors (PR #42) | 32,341-card corpus against `fd1ca31`, set-diffed (0 lost). **Trostani, Selesnya’s Voice ✅** — and it needed **zero `packages/core` changes**. 15 of the 34 are populate cards; 19 are `", then "` as an ordered conjunction. |
 | 2026-09-15 | **+29** | replacement / prevention (PR #46) | DESIGN §3.151 — a PRIVATE copy of the 32,414-card corpus against `162f143`, set-diffed (6,706 → 6,735, **0 lost**). **Rhox Faithmender ✅, Fog Bank ✅** — Acidic Angels is now ONE card short. |
+| 2026-09-15 | **+1** | targeting protection (PR #47) | DESIGN §3.152 — `hexproof from [quality]` (CR 702.11e). 32,341-card corpus against `162f143`, set-diffed 6,696 → 6,697, **0 lost**. **Fiendslayer Paladin ✅ — and that COMPLETES Acidic Angels.** ⚠️ Also fixed a **stronger-than-printed** sweep defect that would have given 14 hexproof-from cards FULL hexproof. |
 
 > ⚠️ **The 299-card copy row was the §2 trap again and flatter than any before it: 300 cards,
 > 301 shapes — 1.00 cards per shape.** Every card in it prints a sentence no other card prints.
