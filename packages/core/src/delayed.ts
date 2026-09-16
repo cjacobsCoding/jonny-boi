@@ -126,6 +126,34 @@ export interface DelayedTriggeredAbility {
    * a new removal primitive would then be silently invisible to the pilot.
    */
   readonly removesFromBattlefield?: readonly InstanceId[];
+  /**
+   * §3.153 — a DURATION-SCOPED ability rather than a once-only one: it stays
+   * after it fires, and it is removed by {@link expiresAtTurnOf} instead.
+   *
+   * "Until your next turn, whenever a creature an opponent controls attacks, it
+   * gets -1/-0" (Jace, Architect of Thought's +1) is a THIRD lifetime beside the
+   * two this file already carries. Every ability here before it fired once and
+   * expired by being spent; this one has no fixed number of firings and expires
+   * by a MOMENT arriving.
+   *
+   * ⚠️ §1a — a delayed trigger that outlives its printed duration is the
+   * stronger-than-printed direction of the pool rule, and it is completely
+   * silent: the card simply keeps working. The two fields are therefore written
+   * together or not at all, and `delayed-triggers.test.ts` asserts a repeating
+   * record without an expiry cannot be created.
+   */
+  readonly repeating?: true;
+  /**
+   * §3.153 — the ability is removed when THIS player's turn begins.
+   *
+   * "Until your next turn" is exactly "until the beginning of your next turn",
+   * and the same argument the header makes for "the NEXT end step" makes this
+   * one exact with no turn-number arithmetic: the ability is created DURING its
+   * controller's turn, so that turn's `beginTurn` has already run and the next
+   * one this record can see is the following one. The opponent's turn in between
+   * is covered, which is the whole point of the printed duration.
+   */
+  readonly expiresAtTurnOf?: PlayerId;
 }
 
 /** What a primitive supplies to create one; the id and the turn are minted here. */
@@ -138,6 +166,13 @@ export interface DelayedTriggerRequest {
   readonly sourceInstanceId: InstanceId;
   /** See {@link DelayedTriggeredAbility.removesFromBattlefield} — for the pilot. */
   readonly removesFromBattlefield?: readonly InstanceId[];
+  /**
+   * §3.153 — "until PLAYER's next turn": the ability repeats until that player's
+   * turn begins. ONE field for both halves, so a repeating ability with no
+   * expiry is not expressible at all rather than merely discouraged — the
+   * unremovable-emblem argument, applied to a lifetime.
+   */
+  readonly untilTurnOf?: PlayerId;
 }
 
 /**
@@ -163,9 +198,42 @@ export function createDelayedTrigger(state: DelayedTriggerHost, request: Delayed
     ...(request.removesFromBattlefield !== undefined && request.removesFromBattlefield.length > 0
       ? { removesFromBattlefield: request.removesFromBattlefield }
       : {}),
+    // §3.153 — the two duration fields are set TOGETHER from one request field,
+    // so a repeating ability with no expiry cannot be built by any caller.
+    ...(request.untilTurnOf !== undefined
+      ? { repeating: true as const, expiresAtTurnOf: request.untilTurnOf }
+      : {}),
   };
   (state.delayedTriggers ??= []).push(record);
   return id;
+}
+
+/**
+ * §3.153 — drop every duration-scoped delayed ability whose moment has arrived,
+ * called by `beginTurn` for the player whose turn is starting.
+ *
+ * "Until your next turn" ends AT THE BEGINNING of that turn, so the removal runs
+ * before anything in the turn can trigger — a creature attacking on your next
+ * turn must not be shrunk by an ability that expired as the turn began.
+ *
+ * Returns the removed records so the caller can log them: an ability that
+ * silently stops working is indistinguishable from one that silently keeps
+ * working, and both are the same defect from the log's point of view.
+ */
+export function expireDelayedTriggersFor(
+  state: DelayedTriggerHost,
+  player: PlayerId,
+): readonly DelayedTriggeredAbility[] {
+  const records = state.delayedTriggers;
+  if (records === undefined || records.length === 0) return NO_DELAYED_MATCHES;
+  let expired: DelayedTriggeredAbility[] | null = null;
+  for (let i = records.length - 1; i >= 0; i--) {
+    const record = records[i] as DelayedTriggeredAbility;
+    if (record.expiresAtTurnOf !== player) continue;
+    (expired ??= []).push(record);
+    records.splice(i, 1);
+  }
+  return expired ?? NO_DELAYED_MATCHES;
 }
 
 /**

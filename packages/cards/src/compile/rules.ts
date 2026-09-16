@@ -534,11 +534,60 @@ function targetedEachValue(phrase: string): Record<string, unknown> | null {
   return entry === undefined || typeof entry === 'string' ? null : { ...entry };
 }
 
+/**
+ * Where the pile the controller did NOT take goes — the printed tail mapped to
+ * the primitive's closed destination vocabulary.
+ *
+ * ⚠️ These are the ONLY two tails in the corpus, and the table is closed on
+ * purpose: "the other into your graveyard" and "the other on the bottom of your
+ * library" are wildly different cards, and a rule that widened one into the
+ * other would be the silent approximation the compiler contract forbids. A third
+ * printed tail is a ROW here plus a row in `REST_DESTINATIONS`, and the test
+ * that compares the two lists is what stops them drifting (rule 12 — the copy is
+ * unavoidable because a param can arrive as generated pool data having never
+ * passed the compiler).
+ */
+const PILE_REST_DESTINATIONS: Readonly<Record<string, string>> = Object.freeze({
+  'on the bottom of your library in any order': 'libraryBottom',
+  'into your graveyard': 'graveyard',
+});
+
+/**
+ * The primitives whose printed subject may be the object a trigger's event was
+ * about — "**it** gets -1/-0 until end of turn" on a per-attacker trigger.
+ *
+ * A CLOSED table rather than a blanket stamp, and that is the fidelity knob: a
+ * body the engine cannot point at the attacker must REPORT, not quietly happen
+ * to the source instead. `subjectCreatures` is the one reader of the stamp, so
+ * only the primitives that consult it can honestly carry one.
+ */
+const TRIGGERING_SUBJECT_PRIMITIVES: ReadonlySet<string> = new Set([
+  'pumpUntilEndOfTurn',
+  'grantKeywordUntilEndOfTurn',
+]);
+
+/**
+ * Stamp `subject: 'triggering'` onto every ref, or refuse the whole body.
+ *
+ * All-or-nothing on purpose. A two-sentence body where one half points at the
+ * attacker and the other at the source is a card nobody printed, and it is the
+ * kind of half-right that compiles `'complete'` and reads perfectly in a diff.
+ */
+function withTriggeringSubject(refs: readonly EffectRef[]): readonly EffectRef[] | null {
+  const out: EffectRef[] = [];
+  for (const ref of refs) {
+    if (!TRIGGERING_SUBJECT_PRIMITIVES.has(ref.primitive)) return null;
+    out.push({ ...ref, params: { ...(ref.params ?? {}), subject: 'triggering' } });
+  }
+  return out;
+}
+
 /** The two tables a guard test reads to prove no targeting phrase leaked into the shared ones. */
 export const WALKER_RESIDUE_TABLES = Object.freeze({
   tapped: TAPPED_DERIVED_COUNTS,
   targetedEach: TARGETED_EACH_TO_PLURAL,
   targeted: TARGETED_DERIVED_COUNTS,
+  pileRest: PILE_REST_DESTINATIONS,
 });
 
 /**
@@ -3023,6 +3072,90 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   // --- the walker-residue family (DESIGN §3.153) ----------------------------
+  {
+    id: 'until-your-next-turn-attack-trigger',
+    description:
+      '"Until your next turn, whenever a creature [you control / an opponent controls] attacks, BODY" (Jace, Architect of Thought’s +1)',
+    /**
+     * A DURATION-SCOPED delayed trigger, which is a third lifetime beside the
+     * two the engine already had: it fires an unbounded number of times and
+     * stops at a MOMENT rather than by being spent.
+     *
+     * ⚠️ §1a, the stronger-than-printed direction. A delayed ability that
+     * outlives its printed duration is the same class of defect as an emblem
+     * that should never have existed, and it is completely silent — the card
+     * simply keeps working. Core takes the duration as ONE field
+     * (`untilTurnOf`) that writes both halves of the lifetime, so this rule
+     * cannot install a repeating ability with no expiry even by omission.
+     *
+     * ⚠️ The BODY is compiled target-free. A delayed ability resolves with an
+     * empty target list, so a body needing a chosen target would silently
+     * no-op — the same gate every trigger body already passes through.
+     */
+    pattern: new RegExp(
+      `^until your next turn, whenever a creature ` +
+        `(you control|an opponent controls|your opponents control) attacks, (.+)$`,
+    ),
+    build(match, ctx) {
+      const tail = (match[1] ?? '').trim();
+      const who = tail === 'you control' ? 'you' : 'opponent';
+      const body = match[2] ?? '';
+      // "IT gets -1/-0" — the object is the ATTACKER that fired this firing, not
+      // the source and not a target.
+      //
+      // The pronoun is rewritten to `~` so the body compiles through the ONE
+      // existing self-pump rule rather than a second copy of its `+N/+M` parser
+      // (rule 12), and the resulting ref is then stamped with the same
+      // `subject: 'triggering'` exalted and flanking use — `subjectCreatures` is
+      // the single reader that turns the stamp into the attacker. The stamp is
+      // safe only because {@link TRIGGERING_SUBJECT_PRIMITIVES} is closed: a body
+      // whose primitive does not consult that reader is refused rather than
+      // silently happening to the source instead.
+      const compiled = ctx.compileEffectClause(body.replace(/^it /, '~ '), { targetFree: true });
+      if (compiled === null || compiled.length === 0) return null;
+      const stamped = withTriggeringSubject(compiled);
+      if (stamped === null) return null;
+      return effects({
+        primitive: 'installUntilYourNextTurnTrigger',
+        params: {
+          condition: { on: 'creatureAttacks', who },
+          effects: stamped,
+          label: `Until your next turn: a creature (${who}) attacks — ${body}`,
+        },
+      });
+    },
+  },
+  {
+    id: 'reveal-opponent-splits-piles',
+    description:
+      '"Reveal the top N cards of your library. An opponent separates those cards into two piles. Put one pile into your hand and the other DESTINATION." (Jace, Architect of Thought’s −2; Fact or Fiction)',
+    /**
+     * ONE whole-line idiom, not three sentences: the second and third are
+     * meaningless without the reveal the first made, exactly as
+     * `pile-split-sacrifice` is one line rather than two.
+     *
+     * ⚠️ §3.150 filed this clause as "a prompt-seam question" — whether the
+     * engine can ask a NON-CONTROLLING player something mid-resolution at all.
+     * It can, and it already did: `pileSplitSacrifice` has asked its VICTIM
+     * which pile to sacrifice since Liliana's −6 landed. So the residue was
+     * never the seam; it was this sentence and the DESTINATION table below.
+     *
+     * The destination is data ({@link PILE_REST_DESTINATIONS}) because two
+     * printed cards give the leftover pile two different homes, and a branch per
+     * card is how the next one becomes a code change instead of a row.
+     */
+    pattern: new RegExp(
+      `^reveal the top ${COUNT_TOKEN} cards of your library\\. an opponent separates those cards into two piles\\. ` +
+        `put one pile into your hand and the other (${Object.keys(PILE_REST_DESTINATIONS).join('|')})$`,
+    ),
+    build(match) {
+      const count = parseCount(match[1]);
+      if (count === null || count <= 0) return null;
+      const rest = PILE_REST_DESTINATIONS[(match[2] ?? '').trim()];
+      if (rest === undefined) return null;
+      return effects({ primitive: 'revealAndOpponentSplitsPiles', params: { count, rest } });
+    },
+  },
   {
     id: 'return-triggering-card-to-hand',
     description:

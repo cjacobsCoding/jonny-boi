@@ -222,6 +222,9 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
    */
   delayedTriggerCreated: { id: 'none', sourceInstanceId: 'id', controller: 'none', label: 'none' },
   delayedTriggerFired: { id: 'none', sourceInstanceId: 'id', controller: 'none', label: 'none' },
+  // §3.153 — the expiry half. `id` is the record's own identity, not a card's,
+  // exactly as it is on the fired event above.
+  delayedTriggerExpired: { id: 'none', controller: 'none', label: 'none' },
   // `choiceId` is the QUESTION's id, not a card's. `sourceInstanceId` is a card's
   // — and is the field the CR 514.1 cleanup discard once pointed at a card in the
   // discarding player's hand (see `NO_ASKING_OBJECT` in `choices.ts`).

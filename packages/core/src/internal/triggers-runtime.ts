@@ -155,6 +155,9 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   regenerated: false,
   delayedTriggerCreated: false,
   delayedTriggerFired: false,
+  // §3.153 — an expiry removes a record from `state.delayedTriggers`, which is
+  // not the battlefield/command source set this map gates at all.
+  delayedTriggerExpired: false,
 });
 
 /**
@@ -425,7 +428,11 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     const matched = matchDelayedTriggers(records, event, subject);
     for (let i = 0; i < matched.length; i++) {
       const record = matched[i] as DelayedTriggeredAbility;
-      removeDelayedTrigger(state, record.id);
+      // §3.153 — a DURATION-SCOPED ability stays: it has no fixed number of
+      // firings, and `expireDelayedTriggersFor` removes it when its moment
+      // arrives instead. Every other delayed ability is still removed HERE, so
+      // CR 603.7a's "it triggers only once" remains structural for them.
+      if (record.repeating !== true) removeDelayedTrigger(state, record.id);
       baseEmit({
         type: 'delayedTriggerFired',
         id: record.id,

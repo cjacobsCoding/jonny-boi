@@ -105,6 +105,28 @@ export type TriggerEvent =
    */
   | 'creatureAttacksAlone'
   /**
+   * §3.153 — "Whenever **a creature** [you control / an opponent controls]
+   * **attacks**, …" (Jace, Architect of Thought's +1; Hellrider; Cathars'
+   * Crusade's attack cousins). 22 corpus clauses, **14 of them sole-blocked**.
+   *
+   * NOT `attacks`, which is SELF-referential — the permanent the ability is
+   * printed on. This one watches every declared attacker and fires ONCE PER
+   * ATTACKER (it is in {@link FIRES_PER_TRIGGERING_INSTANCE}), each firing
+   * carrying that attacker alone as its `triggeringInstances`, so a body saying
+   * "**it** gets -1/-0" shrinks exactly the creature that fired it.
+   *
+   * ⚠️ `who` is judged against the SUBJECT's controller, and the subject is the
+   * FIRST attacker. That is exact rather than a shortcut: CR 506.3 lets only the
+   * active player declare attackers, so one declaration has one controller and
+   * the first attacker answers for all of them.
+   *
+   * ⚠️ It deliberately takes NO `permanentFilter`. The `who` test above is made
+   * once for the whole declaration, so a per-attacker filter would be applied to
+   * one attacker and then fanned out over all of them — a card that fired off
+   * creatures it does not name. A printed filter reports instead.
+   */
+  | 'creatureAttacks'
+  /**
    * "Whenever ~ BLOCKS" — the blocker's half alone (Shu Defender, Netcaster
    * Spider's "blocks a creature with flying"). Fires once per declaration; the
    * creature it blocked is its `triggeringInstances`, which is what a
@@ -567,6 +589,18 @@ export function conditionMatches(
       if (subject === undefined) return false;
       return whoMatches(condition.who, subject.controller, sourceController);
     }
+    case 'creatureAttacks': {
+      // §3.153 — ANY declared attacker, however many. The count is deliberately
+      // unchecked, which is the whole difference from `creatureAttacksAlone`
+      // above; the fan-out in `matchTriggers` turns one match into one firing
+      // per attacker. See the event's doc for why the first attacker's
+      // controller settles `who` for the whole declaration (CR 506.3), and why
+      // a printed per-attacker filter is refused rather than half-applied.
+      if (event.type !== 'attackersDeclared' || event.attackers.length === 0) return false;
+      if (subject === undefined) return false;
+      if (condition.permanentFilter !== undefined) return false;
+      return whoMatches(condition.who, subject.controller, sourceController);
+    }
     case 'blocks': {
       const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
       if (watched === null || event.type !== 'blockersDeclared') return false;
@@ -887,6 +921,8 @@ export const TRIGGER_EVENT_SOURCES: Readonly<Record<TriggerEvent, readonly GameE
     // The combat keyword family's events (DESIGN §3.107): one attack-side, three
     // block-side, all read straight off the two declaration events.
     creatureAttacksAlone: ['attackersDeclared'],
+    // §3.153 — the per-attacker sibling, same declaration event.
+    creatureAttacks: ['attackersDeclared'],
     blocks: ['blockersDeclared'],
     becomesBlocked: ['blockersDeclared'],
     becomesBlockedByCreature: ['blockersDeclared'],
@@ -998,11 +1034,18 @@ export function matchTriggers(
             // combat-damage trigger reads its controller and creatureness).
             event.type === 'damageDealt' && typeof event.source === 'number'
             ? resolveSubject(event.source)
-            : // A LONE attack's subject is the attacker — what exalted's "a
-              // creature you control attacks alone" reads the controller of
-              // (DESIGN §3.107). Two or more attackers have no subject: nothing
-              // attacked alone.
-              event.type === 'attackersDeclared' && event.attackers.length === 1
+            : // An attack declaration's subject is the FIRST attacker. CR 506.3
+              // lets only the active player declare attackers, so one
+              // declaration has exactly one controller and the first answers for
+              // all of them — which is what the per-attacker `creatureAttacks`
+              // trigger (§3.153) reads its `who` against.
+              //
+              // Exalted's "a creature you control attacks ALONE" (§3.107) reads
+              // the same value and is unaffected: its own case tests
+              // `attackers.length !== 1` before looking at the subject at all,
+              // so widening this from the lone-attacker case cannot make it fire
+              // on a multi-creature attack.
+              event.type === 'attackersDeclared' && event.attackers.length > 0
               ? resolveSubject(event.attackers[0] as InstanceId)
               : undefined
         : undefined;
@@ -1033,6 +1076,9 @@ export function matchTriggers(
         ability.condition.on === 'creatureCombatDamageToPlayer' ||
         // Exalted reads the lone ATTACKER's controller (DESIGN §3.107).
         ability.condition.on === 'creatureAttacksAlone' ||
+        // §3.153 — the per-attacker trigger reads the declaration's controller
+        // off the first attacker (see the event's doc).
+        ability.condition.on === 'creatureAttacks' ||
         // A cast trigger narrowed by the chosen creature type needs the SPELL
         // object, for the same reason and through the same seam.
         ability.condition.spellSubtypeIsChosen === true;
@@ -1098,6 +1144,10 @@ export function matchTriggers(
  */
 const FIRES_PER_TRIGGERING_INSTANCE: ReadonlySet<TriggerEvent> = new Set<TriggerEvent>([
   'becomesBlockedByCreature',
+  // §3.153 — "whenever A CREATURE an opponent controls attacks" fires once per
+  // attacker (CR 508.1 declares them together but the ability watches each), so
+  // three attackers shrink three times rather than one of them shrinking once.
+  'creatureAttacks',
 ]);
 
 /**
@@ -1119,6 +1169,9 @@ export function triggeringInstancesFor(
 ): readonly InstanceId[] | undefined {
   switch (condition.on) {
     case 'creatureAttacksAlone':
+      return event.type === 'attackersDeclared' ? event.attackers : undefined;
+    // §3.153 — every declared attacker, fanned out one per firing by the caller.
+    case 'creatureAttacks':
       return event.type === 'attackersDeclared' ? event.attackers : undefined;
     case 'blocks': {
       if (event.type !== 'blockersDeclared') return undefined;

@@ -82,17 +82,25 @@ function graveyardOwnerOf(ctx: EffectContext, id: InstanceId): PlayerId | undefi
  *      that choice to nobody else, and Jace's controller is who "put one pile
  *      into your hand" is addressed to.
  *
- * ## "…on the bottom of your library in any order"
- * The other pile goes to the bottom, and the printed "in any order" is the
- * controller's: the cards are pushed in the order the split left them, which is
- * library order, and no question is asked for it. A prompt per ordering would
- * stop the game for a decision no pilot in this engine can use — and, unlike the
- * pile split, getting it wrong cannot make the card stronger or weaker, because
- * the same cards reach the same place either way.
+ * ## Where the OTHER pile goes is DATA
+ * Jace bottoms it ("on the bottom of your library in any order"); Fact or
+ * Fiction bins it ("into your graveyard"). One printed sentence, two
+ * destinations, so the destination is a param read from {@link REST_DESTINATIONS}
+ * — a CLOSED table, because a destination outside it must report rather than be
+ * approximated to the nearest zone that happens to exist.
+ *
+ * The printed "in any order" is the controller's, and the cards are pushed in
+ * the order the split left them. A prompt per ordering would stop the game for a
+ * decision no pilot here can use, and — unlike the pile split — getting it wrong
+ * cannot make the card stronger or weaker: the same cards reach the same place.
  */
 export const revealAndOpponentSplitsPiles: EffectPrimitive = (ctx) => {
   const count = countParam(ctx);
   const you = ctx.controller;
+  const rest = ctx.params.rest;
+  // A destination the table does not carry moves nothing rather than guessing a
+  // zone — the same closed-table refusal every other vocabulary here makes.
+  if (typeof rest !== 'string' || !REST_DESTINATIONS.has(rest)) return;
   const library = ctx.state.players[you].library;
   if (library.length === 0) return;
   // The top `count` cards, through core's ONE option collector — so the snapshot
@@ -139,15 +147,27 @@ export const revealAndOpponentSplitsPiles: EffectPrimitive = (ctx) => {
 
   const takeOne = picked[0] === PILE_ONE;
   const toHand = options.filter((o) => inPileOne.has(o.instanceId) === takeOne);
-  const toBottom = options.filter((o) => inPileOne.has(o.instanceId) !== takeOne);
+  const toRest = options.filter((o) => inPileOne.has(o.instanceId) !== takeOne);
   for (const option of toHand) moveOwnedCard(ctx, you, option.instanceId, 'library', 'hand');
-  for (const option of toBottom) {
+  for (const option of toRest) {
     // 'bottom' is `moveOwnedCard`'s default position, spelled out because the
     // printed line says it and a silent default is how a reader learns the wrong
     // thing about this card.
-    moveOwnedCard(ctx, you, option.instanceId, 'library', 'library', 'bottom');
+    if (rest === 'libraryBottom') moveOwnedCard(ctx, you, option.instanceId, 'library', 'library', 'bottom');
+    else moveOwnedCard(ctx, you, option.instanceId, 'library', 'graveyard');
   }
 };
+
+/**
+ * Where the pile the controller did NOT take goes — the printed tail, as a
+ * closed vocabulary rather than a branch per card.
+ *
+ * `'libraryBottom'` is Jace's "on the bottom of your library in any order";
+ * `'graveyard'` is Fact or Fiction's "into your graveyard". A param outside this
+ * set moves nothing and the compiler never emits one, which is the direction
+ * that cannot play better than printed.
+ */
+export const REST_DESTINATIONS: ReadonlySet<string> = new Set(['libraryBottom', 'graveyard']);
 
 /** The printed depth of the reveal ("the top **three** cards"), never an inline literal. */
 function countParam(ctx: EffectContext): number {
@@ -158,6 +178,41 @@ function countParam(ctx: EffectContext): number {
 /** The two pile ids, named rather than spelled at every use (they reach a UI). */
 const PILE_ONE = 'pile-1';
 const PILE_TWO = 'pile-2';
+
+/**
+ * `installUntilYourNextTurnTrigger` — Jace, Architect of Thought's +1: "**Until
+ * your next turn**, whenever a creature an opponent controls attacks, it gets
+ * -1/-0 until end of turn."
+ *
+ * ## The lifetime is the whole residue
+ * §3.150 filed this as "a duration-scoped delayed trigger", and that was exact.
+ * The loyalty half was finished; what did not exist was an ability that fires an
+ * unbounded number of times and stops at a MOMENT. `createDelayedTrigger`'s
+ * `untilTurnOf` is that lifetime, and core removes the record as the named
+ * player's turn begins — before the untap step, so nothing in that turn can
+ * still see it.
+ *
+ * ## The condition and body ride in params
+ * Both are baked by the compiler and handed through, exactly as
+ * `sacrificeNamed`'s subject is: the ability this creates is an ordinary
+ * `TriggeredAbility`, matched by the ordinary matcher, so there is no second
+ * vocabulary for "whenever a creature attacks" and no second stack-object kind.
+ *
+ * A malformed or absent condition installs NOTHING rather than an ability that
+ * watches everything — the direction that cannot play better than printed.
+ */
+export const installUntilYourNextTurnTrigger: EffectPrimitive = (ctx) => {
+  const condition = ctx.params.condition;
+  const effects = ctx.params.effects;
+  if (typeof condition !== 'object' || condition === null) return;
+  if (!Array.isArray(effects) || effects.length === 0) return;
+  ctx.createDelayedTrigger({
+    condition: condition as never,
+    effects: effects as never,
+    label: typeof ctx.params.label === 'string' ? ctx.params.label : 'until your next turn',
+    untilTurnOf: ctx.controller,
+  });
+};
 
 /** Self-registering into the shared primitive registry — DESIGN §2's seam. */
 export const WALKER_RESIDUE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object.freeze({

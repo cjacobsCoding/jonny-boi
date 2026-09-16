@@ -543,6 +543,7 @@ export type { DelayedTriggeredAbility, DelayedTriggerRequest } from './delayed.j
 export {
   createDelayedTrigger,
   delayedRemovalTargets,
+  expireDelayedTriggersFor,
   matchDelayedTriggers,
   pendingFromDelayed,
   removeDelayedTrigger,
