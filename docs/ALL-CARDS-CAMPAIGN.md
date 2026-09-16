@@ -211,7 +211,7 @@ tests — neither needs a lane of its own, both need the families that actually 
 derived count had landed, **and the keyword grant had landed years earlier**. The real gap was the
 missing MASS PUMP, which no row named at all.
 
-⭐ **NEW, measured by §3.155 on its way past — the wrappers, not the families.** Of the 254 cards
+⭐ **NEW, measured by §3.155 on its way past — the wrappers, not the families.** Of the **255** cards
 still sole-blocked by a mass until-end-of-turn clause, **344 clause-refusals are NOT-PROBEABLE**
 because the line carrying the clause refuses for another reason. Ranked by the printed marker on that
 line: **113 a trigger prefix · 74 an activation cost prefix · 59 an ability word (`Name —`) · 34 a

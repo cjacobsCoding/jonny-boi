@@ -9735,12 +9735,15 @@ only reason that is known.
 Gauntlet at seed 99 **identical on both trees** — `97/320 = 30.3%`, rows `17·14·19·7·8·10·17·5` — which
 is what says the change moved no game outcome. Four sabotages were each taken RED and restored.
 
-**Left REPORTED, with numbers:** 254 cards are still sole-blocked by a family clause, and **344 of
-them are NOT-PROBEABLE** — the mass clause sits inside a line that refuses for another reason
+**Left REPORTED, with numbers** (re-measured on the merged tree): **560 cards print this family by
+TEXT**, 131 compile, and **255 are still sole-blocked by a family clause** — of which **344
+clause-refusals are NOT-PROBEABLE** — the mass clause sits inside a line that refuses for another reason
 entirely (113 a trigger prefix, 74 an activation cost, 59 an ability word, 34 a kicked/conditional
 prefix, 23 a modal bullet). That is not mass-modification work; it is the wrappers. Genuinely in this
-family and left: **20 NOUN** (subtypes and "other"/"attacking" — a deliberate refusal, not a gap),
-**7 KEYWORD**, **5 AMOUNT** (`devotion`, `greatest power among` — count vocabulary, not this family).
+family and left: **21 NOUN** (subtypes and "other"/"attacking" — a deliberate refusal, not a gap),
+**7 KEYWORD**, **5 AMOUNT** (`devotion`, `greatest power among` — count vocabulary, not this family),
+**1 ORDER-or-SENTENCE**. The row this family was supposed to live in holds 123 of it; the rest is
+scattered over **21 other rows**, which is §8a item 3 for the eleventh time.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
