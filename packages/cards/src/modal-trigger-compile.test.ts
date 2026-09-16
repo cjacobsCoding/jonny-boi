@@ -51,7 +51,8 @@ describe('compiling modal triggers', () => {
     // Mode 2 carries BOTH sentences: the counters and the vigilance grant.
     expect(spec?.modes[1]?.effects.map((ref) => ref.primitive)).toEqual([
       'addCounters',
-      'grantKeywordToYoursUntilEndOfTurn',
+      // §3.153 — the mass grant is one row of the mass-modification family now.
+      'modifyYoursUntilEndOfTurn',
     ]);
   });
 

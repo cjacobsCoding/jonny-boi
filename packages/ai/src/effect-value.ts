@@ -341,6 +341,58 @@ function againstTarget(
   return value(perm);
 }
 
+/**
+ * §3.153 — price a MASS until-end-of-turn modification: one number per BODY it
+ * reaches, times the stats and keywords it gives each of them.
+ *
+ * ONE valuer behind both registered names (`modifyYoursUntilEndOfTurn` and the
+ * legacy `grantKeywordToYoursUntilEndOfTurn`), because they are one primitive.
+ *
+ * ⚠️ REPORTED, NOT PRICED: a DERIVED P/T amount ("+X/+X, where X is the number of
+ * creatures you control" — Craterhoof Behemoth) reads as 0 here and the card is
+ * valued at its keyword floor. The descriptor's arithmetic lives in
+ * `cards/effect-helpers.ts` and `ai` deliberately does not depend on `cards`, so
+ * pricing it properly means lifting the state-only half of that evaluator into
+ * `core` — a shared-file change this lane declined to make while other lanes were
+ * live in those files. Guessing instead (reusing `bodies` as the count, which is
+ * the right number for this one card and the wrong one for its siblings) is the
+ * silent approximation rule 2 forbids, so the floor is reported honestly rather
+ * than widened. `massModificationDerivedStats` in the tests pins the shortfall so
+ * it cannot be forgotten.
+ */
+function massModificationValue(
+  params: Readonly<Record<string, unknown>>,
+  ctx: EffectValueContext,
+): number {
+  const kw = params['keywords'];
+  let kwCount = 0;
+  if (typeof kw === 'object' && kw !== null) {
+    for (const key in kw as Record<string, unknown>) {
+      if ((kw as Record<string, unknown>)[key] === true) kwCount++;
+    }
+  }
+  // A derived amount is not a number and falls back to 0 — see the header.
+  const stats = intParam(params, 'power', 0) + intParam(params, 'toughness', 0);
+  const perBody = kwCount + stats;
+  if (perBody === 0) return 0;
+  const types = strArrayParam(params, 'anyOfTypes');
+  const toOpponent = strParam(params, 'scope') === 'opponent';
+  const beneficiary = toOpponent ? opponentOf(ctx.player) : ctx.player;
+  let bodies = 0;
+  for (const perm of ctx.state.battlefield) {
+    if (perm.controller !== beneficiary) continue;
+    if (types.length > 0) {
+      const permTypes: readonly string[] = perm.def.types;
+      if (!types.some((t) => permTypes.includes(t))) continue;
+    }
+    bodies++;
+  }
+  const value = bodies * perBody * ctx.weights.modePumpPerStatValue;
+  // A shrink pointed at our own board is a mistake, and at theirs it is removal —
+  // the same sign rule `pumpUntilEndOfTurn` applies one entry down.
+  return toOpponent ? -value : value;
+}
+
 // --- the value registry -----------------------------------------------------------
 
 /**
@@ -1384,37 +1436,27 @@ const LEDGERED_EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.fre
   },
 
   /**
-   * The MASS keyword grant ("creatures you control gain indestructible until
-   * end of turn" — Boros Charm's third mode). Worth a pump-sized amount per
-   * body per keyword: real, scales with the board it actually reaches, and
-   * ZERO on an empty board — where the flat unknown constant used to make
-   * this mode beat drawing a card on a board with nothing to protect.
-   * What it deliberately does not price: the sweeper it might blank (that
-   * needs the opponent's hand) — so it stays a floor, never a headline.
+   * The MASS until-end-of-turn modification ("creatures you control gain
+   * indestructible until end of turn" — Boros Charm's third mode; "creatures
+   * you control get +3/+3 and gain trample" — Overrun). Worth a pump-sized
+   * amount per body per keyword AND per stat: real, scales with the board it
+   * actually reaches, and ZERO on an empty board — where the flat unknown
+   * constant used to make this mode beat drawing a card on a board with nothing
+   * to protect.
+   *
+   * ⚠️ The P/T half is priced through {@link massModificationStats}, which reads
+   * a DERIVED amount ("+X/+X where X is the number of creatures you control" —
+   * Craterhoof Behemoth) through core's own evaluator. Pricing it with this
+   * file's `intParam` would have fallen back to 0 and valued the single most
+   * board-swinging card in the family at its keyword floor — a pilot that never
+   * casts its own finisher, which is exactly the shape of defect §3.42 was.
+   *
+   * What it deliberately does not price: the sweeper it might blank (that needs
+   * the opponent's hand) — so it stays a floor, never a headline.
    */
-  grantKeywordToYoursUntilEndOfTurn: (params, ctx) => {
-    const kw = params['keywords'];
-    if (typeof kw !== 'object' || kw === null) return 0;
-    let kwCount = 0;
-    for (const key in kw as Record<string, unknown>) {
-      if ((kw as Record<string, unknown>)[key] === true) kwCount++;
-    }
-    if (kwCount === 0) return 0;
-    const types = strArrayParam(params, 'anyOfTypes');
-    const toOpponent = strParam(params, 'scope') === 'opponent';
-    const beneficiary = toOpponent ? opponentOf(ctx.player) : ctx.player;
-    let bodies = 0;
-    for (const perm of ctx.state.battlefield) {
-      if (perm.controller !== beneficiary) continue;
-      if (types.length > 0) {
-        const permTypes: readonly string[] = perm.def.types;
-        if (!types.some((t) => permTypes.includes(t))) continue;
-      }
-      bodies++;
-    }
-    const value = bodies * kwCount * ctx.weights.modePumpPerStatValue;
-    return toOpponent ? -value : value;
-  },
+  modifyYoursUntilEndOfTurn: massModificationValue,
+  /** The legacy name for the same effect — see `primitives.ts`. One valuer, so the two cannot drift. */
+  grantKeywordToYoursUntilEndOfTurn: massModificationValue,
 
   /**
    * MILL — a real clock only in bulk, so each card is worth the small

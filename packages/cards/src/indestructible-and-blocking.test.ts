@@ -76,7 +76,10 @@ describe('the compiler understands indestructible', () => {
     expect(result.missing).toEqual([]);
     expect(result.status).toBe('complete');
     expect(result.definition.effects?.[0]).toEqual({
-      primitive: 'grantKeywordToYoursUntilEndOfTurn',
+      // §3.153 — the grant-only form is now one ROW of the mass-modification
+      // table, so it compiles to that family's primitive. No `power`/`toughness`
+      // on a line that prints none.
+      primitive: 'modifyYoursUntilEndOfTurn',
       // No type filter: the printed noun is "permanents", which narrows nothing.
       params: { keywords: { hexproof: true, indestructible: true } },
     });
