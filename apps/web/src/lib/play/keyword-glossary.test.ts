@@ -196,7 +196,11 @@ describe('the guard fires where the pool actually changes, not only here', () =>
     // calls the real `unexplainedPoolTerms`; if it ever answered from its own
     // copy of the rules, or from a different card index, this is where the fork
     // shows up.
-    const { checkGlossaryCoverage } = await import('../../../scripts/check-glossary-coverage.mjs');
+    const { checkGlossaryCoverage } = await import(
+      // @ts-ignore -- plain-JS gate script; typed by use, not by a .d.ts. Same
+      // idiom as card-index.test.ts, which imports build-card-index.mjs.
+      '../../../scripts/check-glossary-coverage.mjs'
+    );
     const result = await checkGlossaryCoverage();
     expect(result.printedTermCount).toBe(POOL_KEYWORDS.length);
     expect(result.unexplained).toEqual(unexplainedPoolTerms(POOL_KEYWORDS));
