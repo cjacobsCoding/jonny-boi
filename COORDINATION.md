@@ -1,3 +1,27 @@
+- 2026-09-15 **A FAILING TEST REACHED `main`, AND THE CAUSE WAS MY BRIEF, NOT THE LANE** (integrator).
+  `apps/web/src/lib/play/keyword-glossary.test.ts` was red on `main` for three merges. The lane that
+  caused it did nothing wrong: it **declared** its two `apps/web` rows in its report, and it ran
+  exactly the gate I specified — `npx vitest run packages/cards packages/core`. **That gate cannot
+  see `apps/web`.** So a lane can be fully honest, fully green against its stated gate, and still
+  land a red test.
+  The defect: the card-lane brief hard-codes its gate **in advance**, while the files a lane ends up
+  touching are only known **afterwards**. Two lanes declared `apps/web` edits this wave; one was
+  type-only (the build caught it) and one was a data row with a test behind it (nothing caught it).
+  ✅ **The rule, for every future brief:** *the gate is derived from the diff, not fixed in the
+  brief.* Run `git diff --name-only origin/main...HEAD | cut -d/ -f1-2 | sort -u` and run the suite
+  for **every** package or app it names. If that is too heavy for this box, run them **separately**
+  and quote each exit code — never drop one silently. `npm run verify` at the root is the full gate
+  and is correct but too large to run here while lanes are live; that is a RAM constraint, not
+  permission to test less than you changed.
+  ⚠️ **The failure was found by a lane working on something else entirely** — the card-browser crash
+  lane reported it as "the one failing test is not mine and is not fixed", named it precisely, and
+  proved its own branch touched none of its inputs. That is the right behaviour and worth copying:
+  **report a red you did not cause, name it, and prove it is not yours.** Do not fix it silently and
+  do not fold it into your own result.
+  The citation itself: `rules-manifest.ts` correctly says **`702.11e`** (hexproof-from is its own CR
+  702 keyword; citing the parent `702.11` makes two keyword abilities claim one number, which GAP-15
+  refuses by construction), while the web glossary still said `702.11`. Fixed here.
+
 - 2026-09-15 `feat/replacement-prevention` — ⚠️ **ANOTHER SESSION COMMITTED INTO THIS WORKTREE
   MID-LANE**, and the re-verification it forced is the entry worth reading.
   After this lane's gate went green at `f3288a5`, two commits appeared on the branch that this lane
