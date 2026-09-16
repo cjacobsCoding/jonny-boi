@@ -531,6 +531,16 @@ Selesnya Charm, Trostani. Checked against the set itself, not taken from any lan
    added that drive the real primitive and go red with `expected 23 to be 26`. **When a sabotage does
    not go red, do not shrug and move on — you have just learned that the thing you were about to
    claim is unproven.**
+
+   ⚠️ **This has now happened in THREE separate lanes, so treat it as the normal case, not a fluke.**
+   The third one sharpens it: the problem was the **fixture**, not the assertion. §3.155's first test
+   for a mana-payment ordering bug used **Cascading Cataracts** — a real card, and one of the 24 that
+   lane adds — but its tap cost is `{5}` **generic**, so both orderings produce the same colour split
+   and sabotaging the ordering left the suite green. Only a **coloured** tap cost separates them.
+   The test was well-written, asserted the right property, and could not fail, because the card it
+   chose could not express the difference. **Ask of every new test: what concrete input would make
+   this go red — and is that input actually the one I used?** That lane ran six falsifications and
+   had to rewrite two of them for this reason.
 8. ⚠️ **Print the denominator before you believe any sweep.** That lane's first run of a check over
    the primitive registry was **a false green over an EMPTY registry** — it passed because it
    iterated nothing. It was caught only by printing the count, and the committed test now asserts the
