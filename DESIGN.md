@@ -3262,6 +3262,286 @@ and `rules-citations.test.ts` GAP-15 failed. The correct citation is the **subse
 can reach this family — `targeting-protection-family.test.ts` is its coverage gate, and every Oracle
 string in it is copied verbatim from a named real corpus card for exactly that reason.
 
+### 3.156 ITERATIVE EFFECTS — `repeat this process`. The family is 44 cards, 38 shapes, and the honest delta is TWO — ✅ done
+
+> ⚠️ **Section number claimed off a contended range — and the first claim was TAKEN while this lane
+> was out.** At fork (`origin/main` `40f4227`) §3.152 was the highest anywhere, and a scan of every
+> remote branch's `DESIGN.md` found no `### 3.153`, so this lane claimed §3.153. By the time it
+> finished, `main` had moved to `ea9342a` carrying §3.153 (the owner-decks lane) and §3.154 (the
+> walkers lane), with §3.155 claimed by the variable-mana lane — so this became **§3.156**,
+> renumbered across all eight files that cited it before the merge.
+> **A remote scan is a snapshot, not a reservation.** The scan was correct when it ran and worthless
+> an hour later; the only thing that makes a number safe is re-checking it at MERGE time, which is
+> when this renumber was done. If an integrator finds a second §3.156, renumber this one again — it
+> references no other section by number except as citations.
+
+The acceptance card was **Primal Surge** — *"Exile the top card of your library. If it's a permanent
+card, you may put it onto the battlefield. If you do, repeat this process."* — the card Caleb's
+Defender Ramp deck is built to cast. §7a of the campaign files it under the 5,640-card *"you may /
+choose"* row; §7b corrected that to `repeat this process`. **Both were half right, and the
+measurement says which half.**
+
+#### 1. What `repeat-blame.mjs` measured before anything was written
+
+New committed tool, the ninth blame script, on a fixed 32,341-card corpus. It differs from its
+siblings in HOW it probes: rather than rebuilding the clause on the card's type line (the trap
+`modal-blame` was written around and `xvalue-blame` was bitten by), it **deletes the repeat sentence
+from the card's own printed text and recompiles the card** — so the trigger condition, the activation
+cost, the loyalty cost and the Saga chapter all stay exactly where the printed card puts them.
+
+```
+44 cards print "repeat"        — all 44 BLOCKED
+42 "repeat this process" · 2 "repeat the following process" · 0 "repeat that process"
+38 clauses / 38 shapes = 1.00 per shape
+ITERATION 15 clauses · BODY 23 · NOT-PROBEABLE 6
+cards that compile once the repeat sentence is removed: 1  (Grindstone)
+```
+
+- ⚠️ **1.00 cards per shape — the §3.120 aggregation artifact at its FLOOR, for the second time in
+  this campaign.** Every card in this family prints a sentence no other card prints. §8a item 1's
+  list of ratios (1.20 … 1.04, one at 1.00) gains its second 1.00, and this one is not a row at all.
+- ⚠️ **There is no iteration row in `UNSUPPORTED_HINTS`, so selecting by hint would have found ZERO
+  of this family.** The 44 are scattered across **14** rows; the largest is the *"you may / choose"*
+  row with 18, and the second is the §2 catch-all with 7. §8a item 3 and §7c item 5 now have a third
+  and strongest measurement: not *"the hint misses 68%"* but *"the hint cannot see the family"*.
+- ⚠️ **THE ROW NAME POINTED AT THE WRONG HALF FOR THE TENTH TIME, AND SO DID THE CORRECTION.** The
+  gap is the **BODIES**, 23 clauses to 15. And **Primal Surge is in the BODY bucket**: with its
+  repeat sentence deleted, `Exile the top card of your library. If it's a permanent card, you may put
+  it onto the battlefield.` still refuses. The card needed three things, not one — an exile-top, a
+  conditional put-onto-the-battlefield, and the loop.
+
+#### 2. The termination argument is the CARD's; the budget guards AUTHORING mistakes
+
+Both printed iterations consume a finite zone per step and put nothing back: `exileTopMayPlay` moves
+the top library card to exile before doing anything else, and `millSharedColorRepeat` stops the moment
+it cannot mill the printed count. The library is strictly shorter every step, so the step that finds
+it empty returns. **That, not a cap, is why they end.**
+
+⚠️ **The cap exists because the engine's existing runaway guard was structurally unable to see this
+class.** `MAX_CHOICES_PER_EFFECT_REF` bounds one effect that will not stop ASKING. An iteration
+that will not stop ENQUEUEING asks nothing, takes no game action and ends no turn — so it is invisible
+to that counter, to the sim's per-turn action bound, and through it to the soak's `gameCanEnd`
+invariant. It hangs the process rather than losing a game, which in a thousand-game soak reads as a
+slow game. **This is §3.140's blindness one layer further in**, and the answer is deliberately not a
+second mechanism: `MAX_EFFECT_STEPS_PER_RESOLUTION` is its sibling constant in the same file, counted
+in the same loop, and abandoning through the same `abandonResolution` funnel and the same
+`choiceAbandoned` event — which is what the sim redaction, the soak table and the web log already read.
+
+⚠️ **AND THE OLD CEILING WAS ALREADY TOO LOW FOR A REAL CARD.** It was 32, counted across the whole
+FRAME, under the comment *"Generous: no real card comes close"*. Primal Surge asks once per permanent
+it puts onto the battlefield, so Tamiyo + Jace Surge asks it fifty-odd times in ONE resolution — and
+an abandoned `confirm` degrades to **no**. The card would have stopped early and played WEAKER than
+printed with every test green. The comment was measurably false and is fixed in the same commit.
+**What replaced the ceiling is in §2a, and it is not a bigger number.**
+
+#### 2a. ⚠️ THE CEILING WAS COUNTING THE WRONG THING — found by a suite that got slow, not by a test
+
+The first version of this section raised the ask ceiling from 32 to `4 * LARGEST_LEGAL_LIBRARY` =
+**400**, "comfortably generous", with nothing measured behind the 4. Then `packages/cards` took **90
+minutes** on one file, and the cheapest explanation — the merged pool is larger — was available and
+wrong. Measuring the other side of my own change is what disproved it:
+
+```
+expanded-pool.test.ts, the whole-pool game (every card in a 6,944-card pool),
+same tree, one filtered test:
+  frame-wide ceiling  32  (main's value) : 1295.31s = 21.6 min — 1 passed
+  frame-wide ceiling 400  (first draft)  : stopped at  >54 min, still running
+  frame-wide ceiling 116  (second draft) : stopped at >105 min CPU, still running
+```
+
+**Only SOME of the resolutions that reach a ceiling are runaways.** The pool holds resolutions that
+legitimately ask in long loops — a copy mirror, a large storm count — and at 32 every one of them was
+being cut off early. Raising the ceiling does not make them wrong, it makes them *finish*, and
+finishing costs time. So the ceiling is a direct multiplier on any whole-pool measurement, which is
+not how a "generous safety margin" reads.
+
+⚠️ **AND LOWERING IT BACK WAS NOT THE FIX EITHER.** At 32 those resolutions were TRUNCATED — played
+weaker than printed — which is the §1a defect this section exists to close. The second draft chased
+the smallest *number* (116) and still bought a 3.6× slowdown, because **the number was never the
+mistake. The COUNTER was.** `MAX_CHOICES_PER_RESOLUTION` ran for the life of the frame, and a
+frame-wide total conflates two unrelated pathologies:
+
+| | what it is | the right bound |
+| --- | --- | --- |
+| ONE primitive asking in a loop its own answer never ends | a bug — what the ceiling was written for | per EFFECT REF |
+| MANY primitives each asking once | an iterative card: Primal Surge asks once per permanent, each from its own enqueued ref | per RESOLUTION, and by STEPS, not questions |
+
+A frame-wide counter cannot tell them apart, so it had to be raised for the second — and raising it
+let the first run twelve times further. Splitting them costs nothing and pays for both:
+
+```
+MAX_CHOICES_PER_EFFECT_REF      = 32   — renamed, value UNCHANGED, reset beside
+                                         frame.answers when the frame advances a ref
+MAX_EFFECT_STEPS_PER_RESOLUTION = 216  — REFS_PER_ITERATION (2) × LARGEST_LEGAL_LIBRARY
+                                         (100) + RESOLUTION_SLACK (16)
+```
+
+Every card that asks from one ref now keeps **main's exact behaviour and main's exact cost**; Primal
+Surge's fifty-odd questions come from fifty-odd different refs; and the frame is bounded by the step
+counter, whose shape actually matches an iteration. Nothing is left unbounded by the split, and the
+cross-lane semantic conflict the raise created is withdrawn — no lane's 32-based expectation moves.
+
+The acceptance row asserts `played.asked > MAX_CHOICES_PER_EFFECT_REF` — a **`<` on purpose**, so a
+future change that makes the counter frame-wide again fails where the reason is written down.
+Sabotaged by deleting the one-line reset: **23 of 56 cards stranded in the library**, red, restored.
+
+⚠️ **Two lessons, and the second is the expensive one.** The first: the cheapest explanation for a
+slow suite after a big merge is the merge, and it took 22 minutes of measuring the other side to
+refuse it. The second: when a constant has to be *tuned*, check whether it is being *counted* wrongly
+first. Both drafts here were arguments about a number that should never have been one number.
+
+#### 3. What shipped, and the honest number
+
+**+2 cards, 0 lost, set-verified** — 7,040 → 7,042 on the fixed corpus, with this lane's seven sources
+reverted via `git show origin/main:<path>` and both trees rebuilt in between. The diff both ways names
+exactly `Grindstone` and `Primal Surge`, and nothing else moved.
+
+Two printed templates in ONE bounded `rules.ts` region reached through a single spread line, and three
+primitives in a new `iterative-primitives.ts`. The body is split across two refs (`exileTopMayPlay` →
+`mayPlayExiledCard`) for the reason `millThenReturn`/`returnMilledCard` is: Primal Surge exiles a card
+and THEN asks about it, and a parked question re-runs its ref from the top, so a mutate-then-ask
+primitive exiles twice.
+
+`millSharedColorRepeat` (Grindstone) is worth more than its one card: **it is the iteration that asks
+NOTHING**, so it exercises the new bound with a real printed card instead of only a fixture.
+
+#### 3a. ⚠️ AND THE FIRST SET MEASUREMENT AFTER THE MERGE SAID −104, NOT +2
+
+`git merge origin/main` reported `rules.ts` and `primitives.ts` as AUTO-MERGED with no conflict.
+The build passed, every type-check passed, and `packages/cards` ran **118 files / 22,433 tests, exit
+0**. The playable SET is the only thing that disagreed:
+
+```
+origin/main      7,040 complete
+merged branch    6,938 complete      -> +2 gained, 104 LOST
+```
+
+The 104 are one shape — Akroan Phalanx, Burn Bright, Charge, Overrun, **Craterhoof Behemoth** —
+because two hunks resolved in favour of the pre-merge side and threw away §3.155:
+
+| file | what the merge kept | what it dropped |
+| --- | --- | --- |
+| `compile/rules.ts` | the SUPERSEDED `mass-grant-keyword-until-eot` | `mass-modify-yours-until-eot` and its whole region — 316 rule ids on `main`, 315 on the branch |
+| `primitives.ts` | the keyword-only `grantKeywordToYoursUntilEndOfTurn` | the P/T half §3.155 added |
+
+Both are now rebuilt as **`main`'s content plus this lane's additions only**: `rules.ts` +144/−0,
+`primitives.ts` +8/−0, every one of `main`'s 316 rule ids present plus exactly this lane's two.
+
+⚠️ **Craterhoof Behemoth is another lane's §7a acceptance card.** Had this shipped, that lane's card
+would have silently stopped compiling while the board still said it was done — which is §8a item 4's
+warning ("the {X} lane read +55 while eight cards had silently left the pool") happening again at
+**thirteen times the size**, and this time caused by the MERGE rather than by the change.
+
+⚠️ **AND TWO FILES WAS NOT THE EXTENT OF IT.** Repairing `rules.ts` and `primitives.ts` made the
+suite go RED on a test this lane never touched — `template-gaps.test.ts`'s *"REFUSES an
+until-end-of-turn team pump"*. §3.155 had UPDATED that case to *"COMPILES … and NEVER as a static"*,
+and **the merge reverted the rule and its test TOGETHER**, so the two agreed with each other and 118
+files / 22,433 tests passed. The inconsistency was invisible while both halves were wrong and became
+visible only when one half was fixed. A file-by-file audit then found five casualties, all §3.155's
+and none of them this lane's:
+
+| file | damage |
+| --- | --- |
+| `cards/src/compile/mass-modification-family.test.ts` | **462 lines, deleted outright** |
+| `cards/scripts/masspump-blame.mjs` | **243 lines, deleted outright** |
+| `ai/src/effect-value.ts` | −70 / +30 — the mass-pump valuation reverted |
+| `ai/src/effect-value-parity.test.ts` | **33 lines, deleted outright** |
+| `cards/src/compile/template-gaps.test.ts` | −10 / +2 — the expectation reverted to match |
+
+All five restored verbatim from `origin/main`. **`git merge` reported no conflict for any of them and
+`git status` was clean.**
+
+**The rule this earns** — three checks, none of which any gate performs on its own:
+
+1. `git diff --name-only origin/main` after the merge, and **justify every entry**. A file you did
+   not touch appearing there is the whole finding — and two of these were DELETIONS, which no
+   diff-of-my-own-files would ever have shown.
+2. Diff the rule ids (`grep -o "id: '[a-z0-9-]*'" | sort -u`) against `origin/main`.
+3. Re-run `playable-set.mjs` both ways. A count says +2. Only the SET says −104.
+
+(And `git show` hands you LF while the working tree is CRLF, so splice with matched endings or the
+repair silently no-ops — it did, once, here.)
+
+#### 3b. The gate, derived from the final diff
+
+```
+npm run build                       exit 0   (unpiped; 4 GB heap — it OOMs at 134 under the
+                                              default while other lanes build. A box limit.)
+vitest packages/core                exit 0   100 files / 1,406 tests, 0 Worker exited
+vitest packages/cards packages/ai   exit 0   173 files / 23,015 tests, 0 Worker exited, 0 skipped
+  -> cards+core combined            218 files / 23,839 tests  vs main's 217 / 23,825
+     = +1 file / +14 tests, exactly this lane's one new test file
+vitest sim/loop-runaway + loop-draw  exit 0  2 files / 9 tests  (NOT in the diff; run because
+                                              they own the "this game cannot end" class)
+```
+
+`packages/ai` is in that list because **registering a primitive is a change to `ai` whether or not
+`ai` appears in the diff**: `effect-value-parity.test.ts` quantifies over the primitive registry, so
+three new primitives make it red until they are priced or ledgered. That file's own §3.154 row
+records the lane that learned this the other way — its gate was derived from its own diff, `ai` was
+not in it, and the red reached `main`. The three rows added here are ledgered rather than priced,
+because what each is worth is a function of card ORDER in a library: pricing them off the real order
+would make the pilot play as though it had seen the top of a deck (§3.30), and pricing them off
+anything else is a guess the parity test would then bless with a green checkmark. Each row names
+what goes blind meanwhile and how to price it honestly later.
+
+⚠️ **That red only appeared after the merge repair, because the merge had DELETED the test file.**
+A deleted guard is a green suite — which is the same lesson as §3a, arriving from the other side.
+
+**Throughput**, three runs a side with rebuilds between: `origin/main` 95.3 / 106 / 102 games/sec,
+this branch 92.5 / 93.9 / 101. Overlapping, on a box this repo has already measured swinging 20 g/s
+on identical code — so **no measurable regression, and no speedup claimed**. Outcomes are
+**byte-identical on both sides**: 97/320 = 30.3%, rows 17·14·19·7·8·10·17·5, 1 timeout draw.
+
+**The rule-7 number**: `expanded-pool.test.ts`'s whole-pool game ran **20.1 and 30.5 min** on the
+final tree against **21.6 min measured at main's own ceiling** — overlapping and load-dominated. The
+two intermediate designs measured >54 min and >105 min. Parity restored, not traded away.
+
+#### 4. Left REPORTED, with numbers
+
+42 of the 44 still report, and the reason is the measurement rather than a shelf: **23 of the 38
+clauses are BODY gaps whose work lives in another family entirely**, ranked by the family that owns
+them — *"you may / choose"* 9, the §2 catch-all 5, transform 2, opponent-targeting 2, and one each
+for graveyard, counters, {X}, step-trigger and library-search. The remaining ITERATION-only wordings
+are a closed vocabulary this lane measured and did not implement: **`until …` 8 · `any number of
+times` 4 · `for <list>` 4 · `once` / `N more times` 3 · `Repeat the following process X times` 1.**
+Four of them are pinned by name in `iterative-effects.test.ts` as still-reporting, so a later
+widening of the sentence patterns cannot quietly compile them.
+
+⚠️ **Three corpus cards print `repeat this process` only in EXPLORE's reminder text** (Jadelight
+Ranger, Over the Edge, Defossilize) and are blocked by `it explores, then it explores again` — a
+different family wearing this one's word. `repeat-blame` reports them NOT-PROBEABLE by name rather
+than bucketing them.
+
+#### 5. Left UNDONE, and named
+
+Three, each with the reason it was not done here rather than a note to do it later:
+
+1. **The soak does not READ the new abandon.** The engine emits `choiceAbandoned` when
+   `MAX_EFFECT_STEPS_PER_RESOLUTION` trips, and `iterative-effects.test.ts` asserts that it does —
+   but `soak.ts` pushes `gameCanEnd` from the two ACTION bounds only, so a step-budget trip in a
+   soak run is counted by the mechanic table and asserted by nothing. **That is §3.140's own shape**
+   ("the count existed the whole time, said 8, and no assertion read it"), and the only reason it is
+   acceptable to leave is that it cannot fire today: both shipped iterations provably consume a
+   finite zone per step, so the signal is zero by construction rather than zero by luck. The fix is a
+   third `push` beside the other two in `runOneSoakGame`, keyed on a `choiceAbandoned` whose reason
+   names `effect steps`. It is not done here because `packages/sim` is outside this lane's diff and
+   therefore outside its derived gate, and a lane that edits a package it cannot afford to run is
+   how a red test reaches `main`.
+2. **The pilot is not taught to value either primitive.** `heuristic.ts`'s `PRIMITIVE` table does
+   not name `exileTopMayPlay`, so Primal Surge classifies as a "generic spell". ⚠️ **That is the
+   BENIGN half of the failure that table documents**: the cards it warns about (`copySpell`,
+   `blinkTarget`, `preventDamage`) are mis-TIMED when unlisted — a generic spell is offered only in
+   a main phase with an empty stack, which is the one window a counterspell or a fog is worthless
+   in. Primal Surge is a sorcery, so a main phase with an empty stack is its *only* legal window and
+   the fallthrough costs it nothing structural. What it costs is VALUATION, and this repo does not
+   ship a pilot valuation change without the two-seed A/B (§3.85). Grindstone is an activated
+   ability and never reaches the spell classifier at all.
+3. **Neither card reaches the app on this branch.** §5a's delivery step is a pool REGENERATION and
+   the pool artefacts belong to another lane; this one was told not to touch them. Verified by name
+   against `expanded-pool.ts` with four in-pool cards as the discriminator — and §3.154's Tamiyo is
+   absent for the same reason, so this is the wave's shared debt, not this lane's alone.
+
 ### 3.151 The CR 614/615 row names the EVENT KINDS — and the gap is the WORDINGS, on kinds the layer already watched — ✅ done
 
 > ⚠️ **Section number claimed off a contended range.** §3.150 was the highest in `main` when this

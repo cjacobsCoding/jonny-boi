@@ -2955,6 +2955,145 @@ function printsLinkedReturn(ctx: RuleContext): boolean {
   return false;
 }
 
+// ===========================================================================
+// §3.156 — THE ITERATIVE-EFFECTS FAMILY. `repeat this process`.
+//
+// OWNED BY THE `feat/iterative-effects` LANE. Everything this family adds to
+// `rules.ts` is inside this region and reaches `EFFECT_RULES` through the one
+// spread line at the end of that array, so a concurrent lane editing the mana
+// region meets one line instead of a block.
+//
+// WHAT WAS MEASURED FIRST (`scripts/repeat-blame.mjs`, 32,341-card corpus):
+// 44 cards print "repeat" and all 44 are blocked. 38 refused clauses across 38
+// distinct shapes — **1.00 cards per shape**, the §3.120 aggregation artifact
+// at its floor for the second time in this campaign. There is no iteration row
+// in `UNSUPPORTED_HINTS`, so the family is scattered across 14 other rows and
+// selecting it by hint would have found none of it.
+//
+// ⚠️ AND THE ROW NAME POINTED AT THE WRONG HALF TWICE OVER. The board files
+// Primal Surge under *"you may / choose"* (§7b item 2 already corrected that to
+// `repeat this process`) — and the measurement corrects it again: the split is
+// ITERATION 15 clauses against BODY 23, and **Primal Surge is in the BODY
+// bucket.** Its body refuses without the repeat sentence too. Exactly ONE corpus
+// card compiles the moment its repeat sentence is removed, and it is Grindstone.
+//
+// So this region is deliberately TWO templates for TWO cards, not an iteration
+// framework. The honest delta is the deliverable (§5); the remaining 42 cards
+// are reported by name with their blaming family in `docs/ALL-CARDS-CAMPAIGN.md`.
+// ===========================================================================
+
+/**
+ * The printed noun **"permanent card"**, as the filter every rule in this region
+ * reads. Built FROM {@link PERMANENT_TYPES} rather than spelled again, so a type
+ * added there (a seventh permanent type) is understood here in the same edit.
+ */
+const PERMANENT_CARD_FILTER: CardFilter = Object.freeze({ anyOfTypes: PERMANENT_TYPES });
+
+/**
+ * The printed characteristics two milled cards may be required to SHARE, as the
+ * `share` param of `millSharedColorRepeat`.
+ *
+ * A CLOSED table mirroring the primitive's own (`iterative-primitives.ts`), and
+ * the two are pinned identical by `iterative-effects.test.ts` — the compiler may
+ * not author a `share` the primitive would silently refuse, which is the shape
+ * §8a item 5 records for `DERIVED_COUNTS`.
+ */
+const SHARED_MILL_CHARACTERISTICS: Readonly<Record<string, string>> = Object.freeze({
+  color: 'color',
+  'card type': 'type',
+});
+
+/** The alternation, built FROM the table so the two cannot drift apart. */
+const SHARED_MILL_TOKEN = Object.keys(SHARED_MILL_CHARACTERISTICS).join('|');
+
+/**
+ * §3.156 — the iterative-effects rules.
+ *
+ * A named array rather than inline entries so the region is one unit; the order
+ * inside it is the order `applyRules` tries them, and neither pattern can match
+ * the other's card.
+ */
+const ITERATIVE_EFFECT_RULES: readonly CompileRule[] = Object.freeze([
+  {
+    /**
+     * PRIMAL SURGE — "Exile the top card of your library. If it's a permanent
+     * card, you may put it onto the battlefield. If you do, repeat this
+     * process."
+     *
+     * ONE rule for all three printed sentences, because they are one loop: the
+     * "if you do" that decides the repeat is the answer to the "you may", and a
+     * sentence-by-sentence compile would have to invent a channel between two
+     * refs to carry it. The compiled body is two refs all the same — see
+     * `iterative-primitives.ts` for why the exile and the question it asks about
+     * the exiled card cannot share one ref.
+     *
+     * The `repeat` flag is DATA on the ref rather than a second primitive, so
+     * the same body without its third sentence ("Exile the top card of your
+     * library. If it's a permanent card, you may put it onto the battlefield.")
+     * is the same template with one param off. That card is not in the corpus
+     * today, which is why the rule prints the repeat sentence as REQUIRED: a
+     * template matching text no printed card has is what `dead-rule-sweep.mjs`
+     * exists to catch.
+     */
+    id: 'exile-top-may-play-repeat',
+    description:
+      '"Exile the top card of your library. If it\'s a permanent card, you may put it onto the battlefield. If you do, repeat this process." (Primal Surge)',
+    pattern:
+      /^exile the top card of your library\. if it's a permanent card, you may put it onto the battlefield\. if you do, repeat this process$/,
+    build() {
+      return effects({
+        primitive: 'exileTopMayPlay',
+        params: { filter: PERMANENT_CARD_FILTER, repeat: true },
+      });
+    },
+  },
+  {
+    /**
+     * GRINDSTONE — "Target player mills two cards. If two cards that share a
+     * color were milled this way, repeat this process."
+     *
+     * ⚠️ THE ONLY CARD IN THE CORPUS THAT COMPILES ON THE ITERATION ALONE. Its
+     * first sentence already had a rule (`target-player-mills`); this one adds
+     * the repeat and nothing else, which is why it is the measurement's whole
+     * "iteration machinery" delta.
+     *
+     * It is also the iteration that ASKS NOTHING, and that is the reason it is
+     * worth shipping beyond its one card: an iteration that asks is bounded by
+     * machinery that already existed, and one that asks nothing was bounded by
+     * nothing at all until `MAX_EFFECT_STEPS_PER_RESOLUTION`. See the primitive.
+     */
+    id: 'target-player-mills-share-repeat',
+    description:
+      '"Target player mills N cards. If two cards that share a color/card type were milled this way, repeat this process." (Grindstone)',
+    pattern: new RegExp(
+      `^target (?:player|opponent) mills ${COUNT_TOKEN} cards?\\. if two cards that share a (${SHARED_MILL_TOKEN}) were milled this way, repeat this process$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const amount = parseCount(match[1]!);
+      if (amount === null) return null;
+      const share = SHARED_MILL_CHARACTERISTICS[match[2] ?? ''];
+      if (share === undefined) return null; // outside the closed table — report, never widen
+      return effects({
+        primitive: 'millSharedColorRepeat',
+        params: { amount, share, targets: PLAYER_TARGET },
+      });
+    },
+  },
+]);
+
+/**
+ * The `share` values this region may author, exported ONLY so
+ * `iterative-effects.test.ts` can pin them against the primitive's own closed
+ * table. Two tables spelling one vocabulary is unavoidable here — the compiler
+ * must not import a primitive's private map — so the guard that fails when they
+ * diverge is what makes the duplication safe (rule 12).
+ */
+export const SHARED_MILL_PARAM_VALUES: readonly string[] = Object.freeze(
+  Object.values(SHARED_MILL_CHARACTERISTICS),
+);
+// ======================= end §3.156 iterative effects ======================
+
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     /**
@@ -6360,6 +6499,11 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       });
     },
   },
+  // §3.156 — the ITERATIVE-EFFECTS family (`repeat this process`). Declared in its
+  // own region immediately ABOVE this array and spread in here as ONE line, so
+  // the family reads as a unit and a concurrent lane editing another region of
+  // `rules.ts` meets one line rather than a block.
+  ...ITERATIVE_EFFECT_RULES,
 ]);
 
 /**

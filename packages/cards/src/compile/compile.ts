@@ -283,8 +283,12 @@ const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string | readonly strin
   scry: 'scry',
   surveil: 'surveil',
   // §3.113 — "from among the milled cards" mills through its own primitive
-  // (the same funnel), so either is the evidence the line compiled.
-  mill: ['mill', 'millThenReturn'],
+  // (the same funnel), so either is the evidence the line compiled. §3.156 adds
+  // the iterative one (Grindstone's "…repeat this process"), which mills through
+  // `millTopCards` exactly as the other two do: a ROW here rather than a second
+  // guard, so the next primitive that mills is understood by this sweep in the
+  // same edit that adds it.
+  mill: ['mill', 'millThenReturn', 'millSharedColorRepeat'],
   // §3.113 — Scryfall tags "Learn" and "Double" (the power-doubling verb, CR
   // 701.10b — the damage-doubling replacement is `SCALING_KEYWORDS`' guard).
   learn: 'learn',

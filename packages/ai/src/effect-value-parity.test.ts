@@ -162,6 +162,38 @@ const KNOWN_UNPRICED: Readonly<Record<string, string>> = Object.freeze({
     'the MINIMUM over their best division, not the average of three cards. Pricing it as card ' +
     'advantage would systematically overrate it, and the pilot has no opponent-model to compute the ' +
     'min against. Blind meanwhile: the pilot reads this as flat regardless of what the top three are.',
+  /*
+   * §3.156's THREE ITERATIVE-EFFECTS PRIMITIVES — and they are ledgered HERE,
+   * by the lane, because the row above records what happens otherwise: §3.154's
+   * gate was derived from its own diff, `packages/ai` was not in it, and the red
+   * reached `main`. **A primitive REGISTRATION is a change to `ai` whether or not
+   * `ai` appears in the diff**, because this file quantifies over the registry.
+   *
+   * All three are ledgered rather than priced, and the reason is the same one in
+   * each case and is not a shrug: **what they are worth is a function of card
+   * ORDER in a library, which is hidden information.** A price computed from the
+   * real order would make the pilot play as though it had seen the top of a
+   * library — the §3.30 guarantee this repo enforces elsewhere with a redaction
+   * scan — and a price computed from anything else would be a guess this very
+   * test would then bless with a green checkmark.
+   */
+  exileTopMayPlay:
+    'Primal Surge’s body. Its value is HOW MANY consecutive permanent cards sit on top of your own ' +
+    'library, which is exactly the hidden information §3.30 forbids the pilot to read — pricing it ' +
+    'from the real order would let the pilot cast it only when it knew the run was long. Blind ' +
+    'meanwhile: a ten-mana sorcery scores flat, so the pilot casts it on curve rather than for value. ' +
+    'Price it with a distributional estimate over the DECKLIST (permanent density), never the library.',
+  mayPlayExiledCard:
+    'never on a pilot menu and never authored by the compiler on its own: it is enqueued at ' +
+    'resolution with the exiled card’s instanceId baked into its params, the same shape as the ' +
+    'delayed-trigger bodies above. The one decision it carries (the printed “you may”) is asked as a ' +
+    'confirm and answered by valence, not by this table. Blind meanwhile: nothing.',
+  millSharedColorRepeat:
+    'Grindstone’s body, and it IS on a pilot menu — so the debt is real. Its value is how deep the ' +
+    'mill runs, which is a function of the OPPONENT’s library order and colours: hidden information ' +
+    'twice over. Against a mono-coloured deck it is the whole library; against two colours it is ' +
+    'usually two cards. Blind meanwhile: the pilot cannot tell those two boards apart and prices ' +
+    'both as a flat activation. Price it from the opponent’s REVEALED colours, not their library.',
   returnTriggeringCardToHand:
     'Tamiyo’s emblem body — a trigger the engine fires when a card hits a graveyard from anywhere, ' +
     'never a pilot pick, and it reads the TRIGGERING card, which the value context does not carry. ' +

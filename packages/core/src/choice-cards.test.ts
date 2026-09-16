@@ -24,6 +24,7 @@ import {
   DEFAULT_RULES,
   dumpState,
   generateLegalActions,
+  MAX_CHOICES_PER_EFFECT_REF,
   opponentOf,
   serializeState,
   type CardDefinition,
@@ -815,12 +816,23 @@ describe('robustness', () => {
     state = castAndResolve(state, (spell as { instanceId: InstanceId }).instanceId, reg);
 
     // Answer whatever it asks; the engine's per-resolution budget ends it.
+    //
+    // ⚠️ THE CEILING IS READ, NEVER RE-SPELLED. This loop used to stop at a
+    // literal 200 — comfortably above the budget of the day (32) and silently
+    // below it the moment §3.156 raised the budget so a real iterative card
+    // (Primal Surge, which asks once per permanent it puts onto the
+    // battlefield) could finish. The test then failed for having the wrong
+    // number in it rather than for anything the engine did. A guard derived
+    // from the constant cannot drift, and the `+ 2` is the slack this row
+    // actually needs: the budget counts QUESTIONS, and the resolution takes one
+    // more answer to finish afterwards.
+    const budget = MAX_CHOICES_PER_EFFECT_REF + 2;
     let guard = 0;
-    while (state.pendingChoice && guard++ < 200) {
+    while (state.pendingChoice && guard++ < budget) {
       state = answer(state, reg, { kind: 'confirm', yes: true });
     }
     expect(state.pendingChoice ?? null).toBeNull();
-    expect(guard).toBeLessThan(200);
+    expect(guard).toBeLessThan(budget);
     expect(names(state.players.A.graveyard)).toContain('Endless Question');
   });
 

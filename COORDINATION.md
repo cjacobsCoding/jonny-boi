@@ -1,3 +1,120 @@
+- 2026-09-15 `feat/iterative-effects` — **DESIGN §3.156, ITERATIVE EFFECTS (`repeat this process`).**
+  **Primal Surge ✅ and Grindstone ✅. +2 cards, 0 lost, set-verified** (7,040 -> 7,042 on a fixed
+  32,341-card corpus; this lane's seven sources reverted with `git show origin/main:<path>` and both
+  trees rebuilt in between; the diff both ways names exactly those two and nothing else).
+  Worktree `D:/Cool Stuff/Claude/jb-repeat`, forked from `origin/main` `40f4227`. **NOT PUSHED** —
+  the brief forbade `git push`; the branch is local in that worktree, **19 commits**, merged TWICE —
+  with `origin/main` `ea9342a` and again with `c8cc7a6` (the §3.155 lane's own merge, PR #58) after
+  `main` moved under this lane a second time. **The second merge was verified with the three checks
+  the first one earned** and came back clean: no unexpected file differs from `main`, all 316 of
+  `main`'s rule ids are present plus this lane's 2, and the playable set is **7,040 -> 7,042, +2/−0**
+  re-measured against `c8cc7a6` rather than carried over from the earlier merge.
+  **NEW `packages/cards/scripts/repeat-blame.mjs`** — the ninth blame tool. 44 cards print "repeat",
+  all 44 blocked, **38 clauses / 38 shapes = 1.00 per shape**: the §3.120 artifact at its FLOOR for
+  the second time. ⚠️ **There is no iteration row in `UNSUPPORTED_HINTS` at all** — the family is
+  scattered across **14** rows, so selecting by hint would have found ZERO of it. That is a stronger
+  result than §7c item 5's 68%: the hint cannot see the family.
+  ⚠️ **THE ROW NAME POINTED AT THE WRONG HALF, AND SO DID THE CORRECTION.** The board says "you may /
+  choose"; §7b corrected that to `repeat this process`. Both are half right: the gap is the BODIES 23
+  clauses to 15, and **Primal Surge is in the BODY bucket** — with the repeat sentence deleted it
+  still refuses. Exactly ONE corpus card compiles on the iteration alone, and it is Grindstone.
+  **FILES OWNED** (`rules.ts` is contended — expect a real merge, and build after it):
+  `packages/cards/src/compile/rules.ts` — **one region only**: a `§3.156` block declared immediately
+  ABOVE `export const EFFECT_RULES` (it must be above it: a `const` spread into that array from below
+  is a TDZ error), reaching the array through **one spread line** `...ITERATIVE_EFFECT_RULES,` at its
+  end. Nothing else in the file is touched. `packages/cards/src/compile/compile.ts` — **one ROW**:
+  `millSharedColorRepeat` added to `PRIMITIVE_BACKED_KEYWORDS.mill`. `packages/cards/src/primitives.ts`
+  — one import + one spread. **NEW `packages/cards/src/iterative-primitives.ts`**, **NEW
+  `packages/cards/src/iterative-effects.test.ts`**, **NEW `packages/cards/scripts/repeat-blame.mjs`**.
+  `packages/core/src/choices.ts` · `engine.ts` · `index.ts` · `choice-cards.test.ts`.
+  ⚠️⚠️ **READ THIS ONE FIRST: THE `origin/main` MERGE SILENTLY DROPPED §3.155, AND EVERYTHING WAS
+  GREEN.** `git merge` reported `rules.ts` and `primitives.ts` as AUTO-MERGED with no conflict; the
+  build passed, every type-check passed, and `packages/cards` ran **118 files / 22,433 tests, exit 0**.
+  The playable SET is what caught it:
+  ```
+  origin/main      7,040 complete
+  merged branch    6,938 complete     -> +2 gained, 104 LOST
+  ```
+  The 104 are one shape — Akroan Phalanx, Burn Bright, Charge, Overrun, **Craterhoof Behemoth** —
+  because two hunks resolved in favour of the pre-merge side: `rules.ts` kept the SUPERSEDED
+  `mass-grant-keyword-until-eot` and lost `mass-modify-yours-until-eot` (316 rule ids on main, 315 on
+  the branch), and `primitives.ts` reverted `grantKeywordToYoursUntilEndOfTurn` to its keyword-only
+  form, dropping the P/T half. Both files are now rebuilt as **main's content plus this lane's
+  additions only** — `rules.ts` +144/−0, `primitives.ts` +8/−0, all 316 of main's rule ids present.
+  **Craterhoof Behemoth is another lane's §7a acceptance card.** Had this shipped, that card would
+  have stopped compiling and the board would still have said it was done.
+  ⚠️ **AND TWO FILES WAS NOT THE EXTENT.** Repairing those two made the suite go RED on a test this
+  lane never touched: §3.155 had UPDATED `template-gaps.test.ts` alongside its rule, and the merge
+  reverted BOTH — so they agreed with each other and 22,433 tests passed. The inconsistency was
+  invisible while both halves were wrong. A file-by-file audit found five more casualties, all
+  §3.155's: `mass-modification-family.test.ts` (**462 lines, deleted**), `masspump-blame.mjs`
+  (**243 lines, deleted**), `ai/src/effect-value.ts` (−70/+30), `effect-value-parity.test.ts`
+  (**33 lines, deleted**), `template-gaps.test.ts` (−10/+2). All restored verbatim from `origin/main`.
+  → **Integrators, three checks after ANY merge — no gate does these on its own:** (1) run
+  `git diff --name-only origin/main` and **justify every entry**; a file you did not touch appearing
+  there is the finding, and two of these were DELETIONS that no diff-of-my-own-files would show.
+  (2) diff the rule ids (`grep -o "id: '[a-z0-9-]*'" | sort -u`) against `origin/main`. (3) re-run
+  `playable-set.mjs` both ways — a count says +2, only the SET says −104. (And `git show` hands you
+  LF while the working tree is CRLF — splice with matched endings or the repair silently no-ops.)
+  ⚠️ **A CORE CONSTANT WAS RENAMED, BUT ITS VALUE DID NOT MOVE — no lane's expectation changes.**
+  `MAX_CHOICES_PER_RESOLUTION` (32) is now `MAX_CHOICES_PER_EFFECT_REF` (32), counted PER EFFECT REF
+  instead of per frame, with a new sibling `MAX_EFFECT_STEPS_PER_RESOLUTION` (216) bounding the frame.
+  If you hold a literal 32 in a choice loop, read the constant instead — `choice-cards.test.ts` had a
+  literal 200 that silently stopped bounding anything, and now derives from the constant.
+  ⚠️ **THE ROUTE TO THAT SPLIT IS THE PART WORTH READING, because two drafts of it were wrong.** The
+  first raised the frame-wide ceiling to 400 ("comfortably generous", nothing measured behind the 4).
+  `packages/cards` then took **90 minutes on one file** and the cheap explanation — the merged pool is
+  bigger — was available and WRONG. Measured on the same tree, one filtered whole-pool test:
+  **32 → 1295.31s = 21.6 min · 400 → >54 min · 116 → >105 min CPU.** The pool holds resolutions that
+  legitimately ask in long loops (a copy mirror, a big storm count); at 32 they were being TRUNCATED,
+  and raising the ceiling makes them FINISH, which costs time. So a ceiling is a budget somebody
+  actually spends. The second draft chased the smallest number (116) and still bought 3.6×.
+  **The number was never the mistake — the COUNTER was**: a frame-wide total cannot tell "one
+  primitive looping" (a bug, per-ref) from "many primitives each asking once" (an iterative card, and
+  legal). Split, both are bounded and neither pays for the other. Pinned by deleting the one-line
+  reset: **23 of 56 cards stranded in the library**, red, restored.
+  **If you re-tune either constant, re-run that filtered test on both sides** — a whole-pool
+  measurement is a direct multiple of the ask ceiling, and nothing in the suite says so on its own.
+  ⚠️ **The new bound exists because the old one could not SEE this class** — a resolution that will not
+  stop ENQUEUEING asks nothing, takes no action and ends no turn, so it is invisible to the ask budget,
+  to the sim's per-turn bound and to the soak's `gameCanEnd`. It hung the process instead of losing a
+  game. §3.140's blindness one layer in; both bounds now abandon through one `abandonResolution` funnel
+  and the same `choiceAbandoned` event, so no soak table or observation row needed a new entry.
+  **GATE, derived from the FINAL diff** (`git diff --name-only origin/main...HEAD | cut -d/ -f1-2 |
+  sort -u` = `packages/ai` + `packages/cards` + `packages/core`), each run separately, exit codes
+  quoted, nothing piped:
+  · `npm run build` **exit 0** (unpiped; it OOMs at exit 134 under default heap while other lanes
+    build — `NODE_OPTIONS=--max-old-space-size=4096` fixes it. A BOX limit, not a code failure.)
+  · `vitest packages/core` **exit 0 — 100 files / 1,406 tests**, 0 `Worker exited`, 100 == 100
+    `*.test.ts` on disk.
+  · `vitest packages/cards packages/ai` **exit 0 — 173 files / 23,015 tests**, 0 `Worker exited`,
+    0 skipped.
+  · combined `cards`+`core` = **218 files / 23,839 tests** against main's baseline of **217 /
+    23,825** — **+1 file / +14 tests, which is exactly this lane's one new test file.**
+  · `packages/sim` is NOT in the diff, but `loop-runaway.test.ts` + `loop-draw.test.ts` own the
+    "this game cannot end" class this lane touched, so they were run anyway: **exit 0, 2 files / 9
+    tests.** The two pre-existing soak failures main carries were not re-run and are **NOT CHECKED**
+    by this lane.
+  **THROUGHPUT** (`sim -- gauntlet "Mono-Red Aggro" --games 40 --seed 99`), three runs each side,
+  interleaved with rebuilds: `origin/main` **95.3 / 106 / 102 games/sec**, this branch **92.5 / 93.9
+  / 101**. Ranges overlap and this box is known to swing 20 g/s on identical code, so: **no
+  measurable regression, and no speedup claimed.** Outcomes **byte-identical on both sides** —
+  97/320 = 30.3%, rows 17·14·19·7·8·10·17·5, 1 timeout draw.
+  **AND THE ONE THAT MATTERS FOR RULE 7**: `expanded-pool.test.ts`, the whole-pool game, ran
+  **20.1 and 30.5 min** on the final tree against **21.6 min measured at main's own ceiling** —
+  overlapping and load-dominated. The intermediate designs were >54 min and >105 min. Parity is
+  restored, not traded away.
+  ⚠️ **Two traps this lane paid for twice, worth the next agent's ten seconds:**
+  (1) `git checkout -- <path>` restores to the last COMMIT, not to the pre-sabotage working tree. It
+  silently deleted an uncommitted export mid-falsification, and the test then failed with "undefined
+  and string", which reads exactly like a circular-import bug and is not one. **Commit before a
+  falsification pass.**
+  (2) The documented Bash-heredoc backslash mangling is live: a region appended with `cat >>` reached
+  disk one backslash short: a template literal needs a DOUBLED backslash to put an escaped dot into the
+  regex, and what landed was the single form — which inside a template literal is just a dot, matching
+  ANY character. The card still compiled, so no test could see it; **eslint's `no-useless-escape` was
+  the only thing that did.** Run lint on your own files, not just the suite. (Written with the Write/Edit
+  tool, because saying this through a heredoc ate the backslashes a third time.)
 - 2026-09-15 **INTEGRATOR NOTE — the in-flight pool chain carries the OLD deck names** (integrator).
   `main` renamed the photo decks on 2026-09-15 (`acidic-angels.txt` → `thunes-life.txt`,
   `defender-ramp.txt` → `tamiyo-jace-surge.txt`) and added the REAL `acidic-angels.txt`, which is a

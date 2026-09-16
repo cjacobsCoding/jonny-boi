@@ -202,8 +202,11 @@ were true on the corpus and compiler of the day they were taken.
 
 ### Caleb's own remaining deck cards, for sequencing against the above
 
-`Axebane Guardian` (variable mana amount **and** a colour choice at resolution) · `Primal Surge`
-(`repeat this process` — unbounded iteration, **not** the "you may" its row is named for).
+`Axebane Guardian` (variable mana amount **and** a colour choice at resolution) is the last one.
+~~`Primal Surge`~~ ✅ **§3.156** and ~~`Craterhoof Behemoth`~~ ✅ **§3.155** are done — and both are
+worth remembering for HOW they were misfiled: Primal Surge's row named the wrong half, the published
+correction named the *other* wrong half, and the blocker turned out to be the body AND the iteration;
+Craterhoof's row was wrong twice over. **Re-blame every remaining row here before scoping it.**
 Plus the two evidenced NO-GOs, `Jace` and `Tamiyo`, whose residues are named in §7a and pinned by
 tests — neither needs a lane of its own, both need the families that actually hold them.
 
@@ -312,6 +315,14 @@ set-diff exists to prove.
 The only absences are the eight §7a already documents as blocked — two evidenced NO-GOs and six
 unstarted. No card went missing that the board did not already predict.
 
+⚠️ **This table predates main's 2026-09-15 deck rename and its counts have not been re-measured
+since.** `defender-ramp.txt` is now `docs/decks/tamiyo-jace-surge.txt`, and the 22-name list called
+`acidic-angels.txt` here is now `thunes-life.txt` (the real `acidic-angels.txt` is a different
+16-name deck). The counts are left as the lane that measured them wrote them rather than adjusted by
+hand — **re-run the count rather than trusting this row.** What §3.156 changes about it is only that
+`Primal Surge` leaves the blocked column *at the next pool regeneration*, not now: this table counts
+against the SHIPPED POOL, and the pool has not been regenerated since this lane or §3.154.
+
 **What shipping 1,265 never-before-shipped cards actually exposed.** They went under
 `pool-mechanics` and `expanded-pool` for the first time, and every failure was a CHECK or a TABLE
 lagging the engine — not one was a card defect, and not one was fixed by shrinking the pool:
@@ -379,15 +390,22 @@ waits on the pool refresh (§8 note). A card is ✅ only when **every** printed 
 | Jace, Architect of Thought | **three** clauses, three systems | ⬜ §3.154 — **two of three landed; ONE clause left.** `+1` ✅ (a per-ATTACKER trigger event, which did not exist, plus a duration-scoped repeating delayed ability — a third lifetime). `−2` ✅ — and §3.150's "prompt-seam question" was already answered: `pileSplitSacrifice` has asked a NON-controlling player mid-resolution since Liliana's −6, so the residue was one sentence and a destination table. `−8` ⛔ **clause-level NO-GO, named:** the free-cast permission cannot cross seats — `generateLegalActions` offers an exile cast by walking the ASKING player's own `player.exile`, and a card exiled from B's library sits in B's exile. **321 clauses / 315 shapes / 168 sole-blocked** print "without paying its/their mana cost". |
 | Tamiyo, the Moon Sage | loyalty + emblem | ✅ **§3.154 — COMPLETE, and played.** `−2`: the subject-player axis belongs on §3.149's FILTERED descriptor, not on `DerivedCountName` — `subject` composes with `scope` and is read through `playersForParam`. `−8`: one `TriggerEvent` — and then `matchTriggers`' `watchesBoard` **closed list**, which the new kind was missing from, so the trigger never fired once while every compile assertion stayed green. |
 | Axebane Guardian | variable mana production | ⬜ `{T}: Add X mana in any combination of colors, where X is the number of creatures you control with defender.` **Two problems, not one**: a variable AMOUNT (`ManaAbility.produces` is a fixed mode list, `TapForManaAction.mode` an index) **and** *"in any combination of colors"*, which is a player choice at resolution. |
-| Primal Surge | ⚠️ **misfiled** | ⬜ `Exile the top card of your library. If it's a permanent card, you may put it onto the battlefield. If you do, repeat this process.` The row calls it *"you may / choose"*; **the actual blocker is `repeat this process`** — an unbounded iteration. The "you may" half is ordinary. |
+| Primal Surge | iterative effects | ✅ **§3.156 — set-verified +1/−0, and played.** ⚠️ **The row named the wrong half, and so did the correction.** The board said *"you may / choose"*; §7b corrected that to `repeat this process`; `repeat-blame.mjs` says it is BOTH — delete the repeat sentence and `Exile the top card of your library. If it's a permanent card, you may put it onto the battlefield.` still refuses. Three gaps, not one. Of 44 corpus cards printing "repeat", exactly **one** compiles on the iteration ALONE, and it is Grindstone (also ✅, and the iteration that asks NOTHING). |
 | Rhox Faithmender | life-change replacement | ✅ §3.151 — one more event kind cost one row in five places. The real work was the **funnel**: lifelink and a resolving spell both gain life, and this card prints both halves. |
 | Fog Bank | damage prevention | ✅ §3.151 — prevention was already built. What was missing was a way to say **`~`**: a closed anchor vocabulary read by both sides of the event. |
 | Craterhoof Behemoth | mass pump + keyword grant | ✅ §3.155 — set-verified **+104 / −0** on the MERGED tree (pre-merge it read +105; `main` had meanwhile won one of those cards by another route, so the smaller number is the true one — §8a item 1). ⚠️ **The re-blame was right and the row was wrong TWICE.** The derived count was already a row of `NAMED_DERIVED_COUNTS` (§3.149), and the residue was not the keyword grant either — that shipped long ago (Selfless Spirit). It was that **`pumpUntilEndOfTurn` had no MASS form at all**: the compiler could say "creatures you control gain indestructible" and could not say "creatures you control get +3/+3". **Overrun had no rule.** |
 | Fiendslayer Paladin | targeting restriction | ✅ §3.152 — set-verified +1/−0. ⚠️ **The row named a half that was FINISHED**: all four quarters of protection (CR 702.16) were already built in `core/protection.ts`. The gap was `hexproof from [quality]` (CR 702.11e), ONE rule against an opponent only — and the row's `/ward|protection from/` hint cannot match this card's printed line at all, so it sat in the generic catch-all. |
 
-**13 of 16 lane-verified · 1 clause-level NO-GO · 2 unstarted.** ✅ **ACIDIC ANGELS IS COMPLETE** — all
-22 of its names compile. Tamiyo + Jace Surge is down to **3**: Axebane Guardian, Primal Surge, and
-**Jace's `−8` alone** — his other two abilities compile and play (§3.154), and Tamiyo is complete.
+**14 of 16 lane-verified · 1 clause-level NO-GO · 1 unstarted.** ✅ **ACIDIC ANGELS IS COMPLETE** — all
+22 of its names compile. Tamiyo + Jace Surge is down to **2**: Axebane Guardian and **Jace's `−8`
+alone** — his other two abilities compile and play (§3.154), and Tamiyo is complete.
+
+⚠️ **THAT 2 IS MEASURED, not carried forward.** The §3.156 lane compiled all 17 names of
+`docs/decks/tamiyo-jace-surge.txt` against the current compiler: **15 complete, 2 blocked.** Worth
+doing because the number in this row has been wrong in the safe direction twice — Craterhoof sat here
+as ⬜ for a wave after §3.155 unblocked it. **Re-compile the list rather than copying the previous
+count.**
+
 ⚠️ **Both of the two NO-GOs this board carried are now gone**, which is the point §7a makes about ⛔:
 Tamiyo's residues were named and pinned rather than shelved, and the family that held them landed.
 

@@ -1122,7 +1122,7 @@ export function validateChoiceAnswer(choice: PendingChoice, answer: ChoiceAnswer
  *
  * This is the engine's floor: it is what a choice degrades to when the chooser
  * cannot answer (the game ended under them, a state arrived from a newer build,
- * a primitive asked more questions than {@link MAX_CHOICES_PER_RESOLUTION}). It is
+ * a primitive asked more questions than {@link MAX_CHOICES_PER_EFFECT_REF}). It is
  * always legal because normalisation guarantees `min <= optionCount`, which is
  * exactly why an unanswerable choice cannot exist.
  */
@@ -1233,12 +1233,96 @@ export function isTrivialChoice(choice: PendingChoice): boolean {
 }
 
 /**
- * A hard ceiling on how many questions ONE resolution may ask. A primitive with a
- * bug (asking inside a loop whose condition its own answer never changes) would
- * otherwise wedge the game forever; instead the engine abandons the rest of that
- * resolution with an event. Generous: no real card comes close.
+ * The largest LIBRARY a legal deck can put in front of an iterative effect — a
+ * 100-card singleton deck with nothing drawn yet.
+ *
+ * It is here rather than in a deck-format module because it is not a deckbuilding
+ * rule: it is the only thing that BOUNDS the two ceilings below. Every printed
+ * iteration this engine implements consumes a library card per step ("Exile the
+ * top card of your library … repeat this process"), so the library is the real
+ * termination argument and these ceilings exist only to catch an AUTHORING
+ * mistake — a body that iterates without consuming anything.
  */
-export const MAX_CHOICES_PER_RESOLUTION = 32;
+export const LARGEST_LEGAL_LIBRARY = 100;
+
+/**
+ * Effect refs one iteration of the longest shipped iterative body costs.
+ *
+ * TWO, and the reason is a rule rather than an accident: a parked question
+ * re-runs its effect ref from the top, so a body that mutates and THEN asks does
+ * its mutation twice. Primal Surge exiles a card and then asks about that card,
+ * which is exactly that shape — so it exiles in one ref and asks in a second.
+ */
+const REFS_PER_ITERATION = 2;
+
+/** Headroom above the iteration itself, for the sentences printed around it. */
+const RESOLUTION_SLACK = 16;
+
+/**
+ * A hard ceiling on how many EFFECT STEPS one resolution may run.
+ *
+ * ⚠️ THIS EXISTS BECAUSE THE OTHER CEILING COULD NOT SEE THE RUNAWAY IT WAS FOR.
+ * {@link MAX_CHOICES_PER_EFFECT_REF} bounds ONE primitive that will not stop
+ * ASKING. A resolution that will not stop ENQUEUEING asks nothing, takes no game
+ * action, and never ends a turn — so it is invisible to that counter, to the
+ * per-turn action bound and to the soak's `gameCanEnd` invariant, and it hangs
+ * the process rather than losing a game. That is the same blindness
+ * `sim/loop-runaway.test.ts` records for the per-turn bound (DESIGN §3.140), one
+ * layer further in: a check that cannot see the class it guards is not a check.
+ *
+ * It is a GUARD AGAINST AN AUTHORING MISTAKE, never the termination argument.
+ * A printed iteration terminates because its body consumes a finite zone; the
+ * card's own rule is what stops it, and this stops a body whose rule is wrong.
+ * Tripping it ABANDONS THE RESOLUTION WITH AN EVENT — a silent cap would make an
+ * iterative card play weaker than printed, which biases an A/B verdict exactly
+ * as badly as playing stronger (§1a).
+ *
+ * DERIVED, not picked: the longest shipped iterative body spends
+ * {@link REFS_PER_ITERATION} refs per library card (Primal Surge exiles in one
+ * ref and asks about the exiled card in a second — see `iterative-primitives.ts`
+ * for why that split is required), plus slack for the sentences around the loop.
+ */
+export const MAX_EFFECT_STEPS_PER_RESOLUTION =
+  REFS_PER_ITERATION * LARGEST_LEGAL_LIBRARY + RESOLUTION_SLACK;
+
+/**
+ * A hard ceiling on how many questions ONE EFFECT REF may ask. A primitive with
+ * a bug (asking inside a loop whose condition its own answer never changes)
+ * would otherwise wedge the game forever; instead the engine abandons the rest
+ * of that resolution with an event.
+ *
+ * ⚠️ **PER REF, NOT PER RESOLUTION — and that distinction is the whole fix.**
+ * The counter used to run for the life of the frame under the name
+ * `MAX_CHOICES_PER_RESOLUTION`, which conflated two different pathologies:
+ *
+ *   - ONE primitive asking in a loop that its own answer never ends. That is a
+ *     bug, it is what this ceiling was written for, and it is bounded per REF.
+ *   - MANY primitives each asking once. That is an iterative card — Primal Surge
+ *     asks one question per permanent it puts onto the battlefield, each from
+ *     its own enqueued ref — and it is a legal resolution, not a runaway.
+ *
+ * A frame-wide counter cannot tell them apart, so it had to be raised to let the
+ * second through, and raising it let the FIRST run twelve times further before
+ * being cut off. Measured on the same tree, `expanded-pool.test.ts`'s whole-pool
+ * game (every card in a 6,944-card pool, and the pool holds resolutions that ask
+ * in long loops — a copy mirror, a big storm count):
+ *
+ * ```
+ *   frame-wide ceiling  32 : 1295.31s = 21.6 min
+ *   frame-wide ceiling 400 : stopped at >54 min, still running
+ *   frame-wide ceiling 116 : stopped at >105 min of CPU, still running
+ * ```
+ *
+ * Per-ref at 32 gives **exactly the pre-existing behaviour for every card that
+ * asks from one ref** — the storm and copy shapes are bounded where they always
+ * were — while an iterative card's frame is bounded instead by
+ * {@link MAX_EFFECT_STEPS_PER_RESOLUTION}, which is the counter that actually
+ * matches its shape. Two pathologies, two counters, neither paying for the other.
+ *
+ * The value is unchanged at 32 deliberately: nothing about the bug this catches
+ * changed, so the number should not move either.
+ */
+export const MAX_CHOICES_PER_EFFECT_REF = 32;
 
 // --- answer enumeration (the AI / legal-action seam) ------------------------------
 
@@ -1470,8 +1554,25 @@ export interface ResolutionFrame {
    * without asking again — the reason a primitive must ask BEFORE it mutates.
    */
   answers: ChoiceAnswer[];
-  /** Questions asked across the whole frame; guards {@link MAX_CHOICES_PER_RESOLUTION}. */
+  /**
+   * Questions asked by the effect ref at {@link next}; guards
+   * {@link MAX_CHOICES_PER_EFFECT_REF}. RESET when the frame advances to the next
+   * ref, beside {@link answers} and for the same reason: a question belongs to
+   * one ref's conversation, and a frame-wide total cannot tell one primitive
+   * looping from many primitives each asking once.
+   */
   askCount: number;
+  /**
+   * Effect refs RUN by this frame so far; guards
+   * {@link MAX_EFFECT_STEPS_PER_RESOLUTION}.
+   *
+   * Not `effects.length`: an iterative effect enqueues its next step only after
+   * the previous one has run, so the list length is a snapshot of what is left,
+   * never a count of what has happened. Optional so a frame serialized by an
+   * older build resumes (as zero) rather than failing to parse — the bound then
+   * applies to the remainder of that resolution, which is the safe direction.
+   */
+  stepCount?: number;
   /** The spell card mid-resolution (absent for a trigger). */
   card?: CardInstance;
   /**
