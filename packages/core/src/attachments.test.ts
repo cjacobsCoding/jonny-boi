@@ -23,6 +23,7 @@ import {
   isLegallyAttached,
 } from './index.js';
 import { checkStateBasedActions } from './internal/sba.js';
+import { moveToZone } from './internal/zones.js';
 import { aggregateFor, indexContinuous, NO_MOD } from './internal/continuous.js';
 import { creatureDef, deckOf, landDef } from './test-fixtures.js';
 import type { CardInstance } from './state.js';
@@ -384,6 +385,114 @@ describe('state-based actions (CR 704.5m / 704.5n)', () => {
     expect(onBattlefield(state, runt.instanceId)).toBeUndefined();
     // …and the Aura, now attached to nothing, follows it. Both end in a graveyard.
     expect(onBattlefield(state, aura.instanceId)).toBeUndefined();
+  });
+});
+
+// --- the dangling reference (the hidden-information half) ----------------------
+
+/**
+ * Every battlefield permanent whose `attachedTo` names something that is NOT on
+ * the battlefield — the invariant, not the instance.
+ *
+ * Written as a sweep rather than as three hand-named expectations because the
+ * failure is a CLASS: `attachedTo` is an instance id that other code (the online
+ * mask, `@jonny-boi/protocol`) copies out verbatim, so a link left pointing at a
+ * card that has moved to a HAND publishes the identity of a hidden card. Any
+ * permanent, any host, any destination zone is the same bug.
+ */
+function danglingAttachmentLinks(state: GameState): string[] {
+  const onField = new Set(state.battlefield.map((c) => c.instanceId));
+  return state.battlefield
+    .filter((perm) => perm.attachedTo != null && !onField.has(perm.attachedTo))
+    .map((perm) => `${perm.def.name} still names ${String(perm.attachedTo)}`);
+}
+
+describe('a host that LEAVES the battlefield leaves no dangling link behind it', () => {
+  /*
+   * WHY THIS IS NOT COVERED BY THE STATE-BASED ACTION ABOVE.
+   *
+   * `isLegallyAttached` already answers "no" the moment the host is off the
+   * battlefield, so the SBA pass does knock the Aura into a graveyard and the
+   * Equipment loose — but only on the NEXT pass. Between the zone change and
+   * that pass the attachment still carries the host's instance id, and a
+   * resolution that parks a question (`runResolution` returns without an SBA
+   * check while `state.pendingChoice` stands) makes that window a settled state
+   * that the online mask serialises and sends to the opponent AND to a
+   * spectator. The soak in `packages/sim/src/masking.test.ts` caught exactly
+   * that — three Auras naming a creature that had just been bounced to its
+   * owner's hand — but it is a whole-game soak and far too slow to be the guard.
+   *
+   * So the rule is: the LINK is broken by the zone change itself. What each
+   * attachment then does about it is still the `whenIllegal` data the SBA reads.
+   */
+  it('breaks every dependent link at the zone change, BEFORE any SBA pass', () => {
+    const state = emptyBoard();
+    const bear = place(state, BEAR);
+    const aura = place(state, UNHOLY_STRENGTH);
+    const equipment = place(state, BONESPLITTER);
+    attachTo(state, aura, bear.instanceId, () => {});
+    attachTo(state, equipment, bear.instanceId, () => {});
+
+    // The host is BOUNCED — the leak's own shape: it lands in a hidden zone.
+    const events: GameEvent[] = [];
+    moveToZone(state, bear, 'hand', (e) => events.push(e), 'A');
+
+    // No state-based action has run, and none may be needed for this assertion.
+    expect(danglingAttachmentLinks(state)).toEqual([]);
+    expect(aura.attachedTo).toBeNull();
+    expect(equipment.attachedTo).toBeNull();
+    // …and the log says so, so a replay/inspector folding events agrees.
+    expect(events.filter((e) => e.type === 'permanentUnattached')).toHaveLength(2);
+  });
+
+  it('still lets the SBA decide the CONSEQUENCE — Aura dies, Equipment stays', () => {
+    // Breaking the link must not quietly take over CR 704.5m/n. The SBA reads
+    // `whenIllegal` exactly as before; it simply finds the link already gone.
+    const state = emptyBoard();
+    const bear = place(state, BEAR);
+    const aura = place(state, UNHOLY_STRENGTH);
+    const equipment = place(state, BONESPLITTER);
+    attachTo(state, aura, bear.instanceId, () => {});
+    attachTo(state, equipment, bear.instanceId, () => {});
+
+    moveToZone(state, bear, 'hand', () => {}, 'A');
+    runSbas(state);
+
+    expect(onBattlefield(state, aura.instanceId)).toBeUndefined();
+    expect(state.players.A.graveyard.map((c) => c.def.name)).toContain('Unholy Strength');
+    expect(onBattlefield(state, equipment.instanceId)).toBeDefined();
+  });
+
+  it('does NOT unattach when the move is INTO the battlefield', () => {
+    // The guard that keeps this from breaking attachments broadly: an Aura sets
+    // its link while it is still a resolving spell (CR 303.4f) and then ENTERS,
+    // so a funnel that unattached on every move would make every Aura arrive
+    // attached to nothing and die to the very next SBA pass.
+    const state = emptyBoard();
+    const bear = place(state, BEAR);
+    const aura = place(state, UNHOLY_STRENGTH);
+    // Put the Aura back on the stack, pointing at its host, and let it enter.
+    state.battlefield = state.battlefield.filter((c) => c.instanceId !== aura.instanceId);
+    aura.zone = 'stack';
+    aura.attachedTo = bear.instanceId;
+
+    moveToZone(state, aura, 'battlefield', () => {}, 'A');
+
+    expect(aura.attachedTo).toBe(bear.instanceId);
+    expect(isLegallyAttached(state, aura)).toBe(true);
+  });
+
+  it('a host that dies leaves no dangling link either', () => {
+    // The same class through the other destination — nothing about the fix may
+    // depend on WHICH zone the host went to.
+    const state = emptyBoard();
+    const bear = place(state, BEAR);
+    const aura = place(state, UNHOLY_STRENGTH);
+    attachTo(state, aura, bear.instanceId, () => {});
+
+    moveToZone(state, bear, 'graveyard', () => {}, 'A');
+
+    expect(danglingAttachmentLinks(state)).toEqual([]);
   });
 });
 

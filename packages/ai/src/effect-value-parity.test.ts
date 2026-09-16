@@ -63,6 +63,41 @@ const KNOWN_UNPRICED: Readonly<Record<string, string>> = Object.freeze({
   // baked into params — so a price would steer nothing. The doomed-chump combat
   // pricing (delayedRemovalTargets) is where the pilot actually reasons about
   // them.
+  /*
+   * THE UNTAP/FREEZE FAMILY — ledgered by the pool-refresh lane that first put
+   * them in front of this test, and ledgered on a MEASUREMENT rather than a
+   * shrug.
+   *
+   * `untapSelf` is the dangerous one to price blind. The same regeneration that
+   * exposed these primitives also measured 12 runaway soak games, and every one
+   * of the 12 contains Basalt Monolith — `{T}: Add {C}{C}{C}` plus
+   * `{3}: Untap` — with the pilot cycling tap/untap ~500 times in a single turn
+   * for ZERO net mana. A positive price on untapping your own permanent is
+   * precisely the input that deepens that loop, and the loop is owned by
+   * `fix/pilot-repeatable-noop`. Pricing this before the no-progress guard
+   * exists would be tuning against a known-broken search.
+   *
+   * `untapTarget` and `freezeTarget` are the two halves of one tempo question
+   * ("whose untap step am I spending?") and pricing either without the other
+   * would make the pilot value freezing an opponent differently from untapping
+   * itself. They go together, with the loop guard, as one piece of behaviour
+   * work — and what goes blind meanwhile is named: the pilot cannot tell a
+   * Frost Trickster aimed at a tapped-out opponent's only blocker from one
+   * aimed at a spare land.
+   */
+  untapSelf:
+    'entangled with the runaway-loop defect this lane MEASURED — 12 of 12 runaway soak games are ' +
+    'Basalt Monolith cycling {T}: Add {C}{C}{C} against {3}: Untap for zero net mana, ~500 times in ' +
+    'one turn. A positive price here feeds that loop; price it with the no-progress guard that ' +
+    'fix/pilot-repeatable-noop owns, not before. Blind meanwhile: any "pay to untap" mana engine.',
+  untapTarget:
+    'the other half of freezeTarget’s tempo question; pricing one without the other makes untapping ' +
+    'your own permanent and unfreezing an opponent’s score inconsistently. Blind meanwhile: ' +
+    'untapping a blocker mid-combat reads the same as untapping a spare land.',
+  freezeTarget:
+    'one tempo question with untapTarget — "whose untap step am I spending?". Blind meanwhile: a ' +
+    'Frost Trickster aimed at a tapped-out opponent’s only blocker scores the same as one aimed at ' +
+    'a spare land.',
   sacrificeNamed: 'delayed-trigger body only — never on a pilot menu; combat prices the doom instead',
   exileNamed: 'delayed-trigger body only — never on a pilot menu; combat prices the doom instead',
   // The three CAST-TRIGGER bodies (§3.113, `CardDefinition.castTriggers`). Same

@@ -582,6 +582,30 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
    * trigger — which is correct, and the same split `exileUntilLeaves` documents.
    */
   'copyTriggeredAbility',
+  /*
+   * --- THE UNTAP/FREEZE FAMILY AND THE GRAVEYARD EXILE — all four SAFE -------
+   *
+   * Classified by THIS lane because the pool regeneration is what put them in
+   * front of the test: each shipped with a recent compiler family, and this
+   * closed table is deliberately the thing that goes red until a human decides,
+   * rather than defaulting a new primitive to "safe" and quietly weakening the
+   * identical-game argument.
+   *
+   * `untapTarget` / `untapSelf` set a permanent's `tapped` flag and nothing
+   * else. `freezeTarget` writes `CardInstance.untapSkips`, a counter on a
+   * BATTLEFIELD object spent by the untap step. All three read the battlefield
+   * only — no zone change at all, so not even a `zoneChange` to attribute.
+   *
+   * `exileTargetCardFromGraveyard` (Scavenging Ooze, Relic of Progenitus) moves
+   * a card out of a GRAVEYARD, which is a public zone whose order both arms
+   * already agree on, and emits a `zoneChange` naming the instance — the same
+   * property that makes `mill` and `drawCards` safe above. A graveyard is not a
+   * library: nothing hidden is read and nothing branches on an unseen card.
+   */
+  'untapTarget',
+  'untapSelf',
+  'freezeTarget',
+  'exileTargetCardFromGraveyard',
 ]);
 
 /**

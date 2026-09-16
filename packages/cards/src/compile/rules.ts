@@ -3900,23 +3900,25 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: new RegExp(
       `^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on (~|it|this creature)$`,
     ),
-    build(match) {
+    build(match, ctx) {
       const amount = match[1] === undefined ? 1 : parseCount(match[1]);
       if (amount === null) return null;
-      // ⚠️ §3.149 — THIS RULE HAS THE BARE-"IT" DEFECT AND IS DELIBERATELY LEFT
-      // WITH IT. `sourceCanHoldCounters` (below) is the one-line fix, and
-      // `named-counters.test.ts` PINS the two cards it would change.
+      // §3.151 — THE BARE-"IT" GATE, landed with the pool regeneration that
+      // made it landable. A bare "it" is only the SOURCE when the source is a
+      // thing that can carry counters; on an instant or sorcery "it" is the
+      // previous sentence's target, and compiling that as a self-counter makes
+      // the card do something it does not print.
       //
-      // Why it is not applied here: both cards are in the SHIPPED pool, and
+      // This gate could not land alone. It refuses the clause on Big Play and
+      // Miraculous Recovery, both rules-defective in the shipped pool, and
       // `pool-mechanics.test.ts`'s round-trip guard is absolute by design — its
       // own comment says "a card dropped from the pool to make a test pass is
-      // the failure mode this guards". Refusing the clause drops Big Play and
-      // Miraculous Recovery, so the fix cannot land until the generated pool is
-      // rebuilt, and `fix/pool-refresh-3147` owns that file. Landing the fix
-      // here would leave the suite red for a lane that does not own the fix.
+      // the failure mode this guards". So the fix and the regeneration are one
+      // change: the two cards leave the pool as a CORRECTION, not a regression.
       //
-      // The named-counter sibling carries the gate already, because no pool card
-      // uses an inert kind — nothing is dropped there.
+      // The named-counter sibling (line ~5601) carries the same gate for the
+      // same reason — one question, one answer (rule 12).
+      if (!sourceCanHoldCounters(ctx)) return null;
       return effects({ primitive: 'addCounters', params: { amount, self: true } });
     },
   },

@@ -447,6 +447,35 @@ export const STEP_ORDER: readonly Step[] = [
 export const MAIN_STEPS: readonly Step[] = ['precombatMain', 'postcombatMain'];
 
 /**
+ * IS THE SORCERY-SPEED WINDOW OPEN for `player` (CR 307.1)? Your turn, a main
+ * phase, an empty stack — the one reader for all three.
+ *
+ * ⚠️ THIS IS RULE 12 WITH A SCAR. The engine OFFERS only what the window is open
+ * for, the engine ACCEPTS only what it is open for, and the PILOT plans only what
+ * it is open for — and that conjunction was written out by hand in more than a
+ * dozen places, several of which inlined the two step names instead of reading
+ * {@link MAIN_STEPS}. They never disagreed, which is exactly what made the real
+ * failure invisible: a consumer that never ASKS looks identical to one that asks
+ * and is told `true`. The pilot's cycling policy was that consumer. It fires at
+ * the END STEP ("the mana would go unused"), asked no timing question because
+ * plain cycling prints no timing restriction, and then transmute arrived as a
+ * cycling-shaped ability that is sorcery-only (CR 702.53a) — so the pilot
+ * proposed it at every end step it could pay for and the engine refused. A
+ * refusal is not a free retry: the harness passes priority after a few, so the
+ * pilot lost the rest of the turn.
+ *
+ * Typed STRUCTURALLY rather than as `GameState` so the AI's read-only view —
+ * which carries these three fields and hides the rest — is a legal argument with
+ * no cast. Cheapest tests first: the seat and the stack are both O(1).
+ */
+export function sorcerySpeedWindowFor(
+  state: { readonly activePlayer: PlayerId; readonly step: Step; readonly stack: readonly unknown[] },
+  player: PlayerId,
+): boolean {
+  return player === state.activePlayer && state.stack.length === 0 && MAIN_STEPS.includes(state.step);
+}
+
+/**
  * ONE announced mode of a modal spell — which mode was chosen, and what that
  * mode was aimed at.
  *
