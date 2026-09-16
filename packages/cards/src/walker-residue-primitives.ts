@@ -218,4 +218,5 @@ export const installUntilYourNextTurnTrigger: EffectPrimitive = (ctx) => {
 export const WALKER_RESIDUE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object.freeze({
   returnTriggeringCardToHand,
   revealAndOpponentSplitsPiles,
+  installUntilYourNextTurnTrigger,
 });

@@ -24,10 +24,12 @@ import type {
   PlayerId,
 } from '@jonny-boi/core';
 import {
+  aggregateFor,
   applyAction,
   createGame,
   DEFAULT_RULES,
   dumpState,
+  effectivePower,
   LOYALTY_COUNTER,
   untapsDuringUntapStep,
 } from '@jonny-boi/core';
@@ -408,5 +410,127 @@ describe('Tamiyo, the Moon Sage — played, not merely compiled', () => {
     // ZERO questions — the discriminator against the test above, which got two.
     expect(settled.questions).toBe(0);
     expect(s.players.B.hand.some((c) => c.instanceId === theirs.instanceId)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Jace, Architect of Thought — the two clauses this lane landed
+// ---------------------------------------------------------------------------
+
+const JACE_PLUS_ONE = printed({
+  name: 'Probe Architect',
+  oracleText:
+    '+1: Until your next turn, whenever a creature an opponent controls attacks, it gets -1/-0 until end of turn.',
+  typeLine: { supertypes: ['Legendary'], types: ['Planeswalker'], subtypes: ['Jace'] },
+  power: null,
+  toughness: null,
+  loyalty: 4,
+} as Partial<CompilableCard> & { name: string; oracleText: string });
+
+const JACE_MINUS_TWO = printed({
+  name: 'Probe Architect Two',
+  oracleText:
+    '−2: Reveal the top three cards of your library. An opponent separates those cards into two piles. Put one pile into your hand and the other on the bottom of your library in any order.',
+  typeLine: { supertypes: ['Legendary'], types: ['Planeswalker'], subtypes: ['Jace'] },
+  power: null,
+  toughness: null,
+  loyalty: 4,
+} as Partial<CompilableCard> & { name: string; oracleText: string });
+
+describe('Jace, Architect of Thought — the landed clauses, played', () => {
+  const reg = buildRegistry();
+
+  it("+1: the OPPONENT's attackers each shrink, and every one of them does", () => {
+    let s = gameAtMain(reg, 601);
+    const jace = place(s, definitionOf(JACE_PLUS_ONE), 'A');
+    s = act(s, { kind: 'activateAbility', player: 'A', instanceId: jace.instanceId, abilityIndex: 0 }, reg);
+    s = settleStack(s, reg).state;
+    expect(s.delayedTriggers ?? []).toHaveLength(1);
+
+    // Hand the turn to B and have TWO creatures attack. One firing per attacker
+    // is the printed reading; a single fire would shrink only one of them.
+    const one = place(s, bear('attacker-1'), 'B');
+    const two = place(s, bear('attacker-2'), 'B');
+    s = advanceToStep(s, 'declareAttackers', reg, 800);
+    while (s.activePlayer !== 'B' && !s.gameOver) s = advanceToStep(s, 'declareAttackers', reg, 800);
+    one.summoningSick = false;
+    two.summoningSick = false;
+    s = act(
+      s,
+      {
+        kind: 'declareAttackers',
+        player: 'B',
+        attackers: [{ instanceId: one.instanceId }, { instanceId: two.instanceId }],
+      },
+      reg,
+    );
+    s = settleStack(s, reg).state;
+
+    const powerOf = (id: InstanceId): number => {
+      const inst = s.battlefield.find((c) => c.instanceId === id)!;
+      return effectivePower(inst, aggregateFor(s, id));
+    };
+    // 2/2 printed, −1/−0 each. BOTH, which is the discriminator against a
+    // trigger that fired once for the declaration.
+    expect(powerOf(one.instanceId)).toBe(1);
+    expect(powerOf(two.instanceId)).toBe(1);
+  });
+
+  /**
+   * ⚠️ §1a, the STRONGER-than-printed direction, and the reason the lifetime is
+   * one field rather than two. "Until your next turn" ends as your next turn
+   * BEGINS — a delayed ability that quietly outlived it would keep shrinking
+   * attackers forever and nothing would ever report.
+   */
+  it('+1: the ability is GONE by the start of your next turn', () => {
+    let s = gameAtMain(reg, 602);
+    const jace = place(s, definitionOf(JACE_PLUS_ONE), 'A');
+    s = act(s, { kind: 'activateAbility', player: 'A', instanceId: jace.instanceId, abilityIndex: 0 }, reg);
+    s = settleStack(s, reg).state;
+    expect(s.delayedTriggers ?? []).toHaveLength(1);
+
+    // Through B's whole turn it is still there — the duration covers exactly the
+    // opponent's turn, which is the point of the printed line.
+    let guard = 0;
+    while (s.activePlayer === 'A' && !s.gameOver && guard++ < 400) s = pass(s, reg);
+    expect(s.delayedTriggers ?? []).toHaveLength(1);
+
+    // …and it is gone the moment A's next turn begins.
+    guard = 0;
+    while (s.activePlayer === 'B' && !s.gameOver && guard++ < 400) s = pass(s, reg);
+    expect(s.activePlayer).toBe('A');
+    expect(s.delayedTriggers ?? []).toHaveLength(0);
+  });
+
+  it('−2: an OPPONENT splits the revealed three, and the controller takes a pile', () => {
+    let s = gameAtMain(reg, 603);
+    const jace = place(s, definitionOf(JACE_MINUS_TWO), 'A');
+    const topThree = s.players.A.library.slice(0, 3).map((c) => c.instanceId);
+    const libraryBefore = s.players.A.library.length;
+    const handBefore = s.players.A.hand.length;
+
+    s = act(s, { kind: 'activateAbility', player: 'A', instanceId: jace.instanceId, abilityIndex: 0 }, reg);
+    s = resolveTop(s, reg);
+
+    // ⚠️ THE FINDING. The engine CAN ask a non-controlling player a question
+    // mid-resolution: this first question is addressed to B, not to A.
+    expect(s.pendingChoice, `no split question raised\n${dumpState(s)}`).toBeTruthy();
+    expect(s.pendingChoice!.chooser).toBe('B');
+    s = answer(s, reg, { kind: 'selectCards', instanceIds: [topThree[0]!] });
+
+    // The second question is the CONTROLLER's: which pile goes to hand.
+    expect(s.pendingChoice, `no pile question raised\n${dumpState(s)}`).toBeTruthy();
+    expect(s.pendingChoice!.chooser).toBe('A');
+    const modes = (s.pendingChoice as { modes?: ReadonlyArray<{ id: string }> }).modes ?? [];
+    s = answer(s, reg, { kind: 'chooseModes', modeIds: [modes[0]!.id] });
+
+    // Pile one was one card; it went to hand and the other two to the bottom.
+    expect(s.players.A.hand.length - handBefore).toBe(1);
+    expect(s.players.A.hand.some((c) => c.instanceId === topThree[0]!)).toBe(true);
+    expect(s.players.A.library.length).toBe(libraryBefore - 1);
+    // The other two are at the BOTTOM, not still on top — the destination the
+    // printed line names, and the discriminator against leaving them in place.
+    const bottom = s.players.A.library.slice(-2).map((c) => c.instanceId);
+    expect(bottom.sort()).toEqual([topThree[1]!, topThree[2]!].sort());
   });
 });
