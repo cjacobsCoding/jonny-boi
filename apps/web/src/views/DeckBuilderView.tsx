@@ -436,12 +436,16 @@ export function OwnerDecks({ decks }: { decks: DecksApi }): ReactElement {
               {/* Stated either way. "Complete" is a claim worth reading, and a
                   region where only the broken rows say anything trains the eye
                   to skip the ones that are fine — which is how a deck that went
-                  short would stop being noticed. */}
+                  short would stop being noticed.
+
+                  No `role="alert"`: these are static labels rendered on mount,
+                  and three of them would announce themselves as alerts before
+                  the reader had asked for anything. The colour, the icon and the
+                  sentence itself carry it, in normal reading order. */}
               <p
                 className={
                   complete ? 'owner-deck__status' : 'owner-deck__status owner-deck__status--short'
                 }
-                role={complete ? undefined : 'alert'}
               >
                 {complete ? '✓ ' : '⚠ '}
                 {describeCompleteness(summary)}

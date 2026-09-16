@@ -35,23 +35,28 @@ import {
 } from './ownerDecks.js';
 import { buildDeckMenu, menuItemsOfOrigin } from './deckMenu.js';
 import { DECK_ORIGINS } from './deckOrigin.js';
-import { startHotseatGame, validateChoice } from '../play/setup.js';
+import { startHotseatGame, validateChoice, validateChoiceForOnline } from '../play/setup.js';
 import type { DecksApi } from '../useDecks.js';
 
 /** A `DecksApi` with nothing saved — the app a first-time visitor opens. */
 const NO_SAVED_DECKS = { decks: [] } as unknown as DecksApi;
 
 /**
- * WHAT EACH DECK RESOLVED TO WHEN THIS WAS WRITTEN, and where the number is from.
+ * WHAT EACH DECK RESOLVES TO, AS A FLOOR, and where the floor came from.
  *
- * Measured on 2026-09-15 against the pool shipped on `main` — 5,651 cards, which
- * is some way behind the compiler (a pool refresh to ~6,900 is in flight on
- * another branch and will raise two of these). Method: `ownerDeckSummaries()`,
- * which resolves through the same `copyGauntletDeck` funnel the app's Copy
- * button uses, so this is the number the user sees and not a proxy for it.
+ * Measured 2026-09-15 with `ownerDeckSummaries()` — the same `copyGauntletDeck`
+ * funnel the app's Copy button runs, so these are the numbers the user sees and
+ * not a proxy for them. The pool held 6,944 cards AT THE TIME; it is generated
+ * data and grows, which is exactly why nothing below is an equality.
  *
- * `atLeastNames` is a FLOOR. `mustBeComplete` is the stronger claim, and it is
- * true of exactly one deck today.
+ * `atLeastNames` is a FLOOR: a card that stops resolving is a regression and
+ * goes red, while the campaign landing a new family just... lands. That
+ * distinction is not theoretical — this table read 16/14/8 hours before it read
+ * 16/22/12, and an equality would have turned the refresh into a red test in a
+ * lane that had nothing to do with it.
+ *
+ * `mustBeComplete` is the stronger claim. Pool growth cannot UN-complete a deck,
+ * so once a deck is whole it stays pinned whole.
  */
 const RESOLUTION_BASELINE = Object.freeze([
   Object.freeze({
@@ -59,26 +64,25 @@ const RESOLUTION_BASELINE = Object.freeze([
     names: 16,
     atLeastNames: 16,
     mustBeComplete: true,
-    // The blink deck. 16 of 16 on `main` — this one has been whole for a while,
-    // and the app must never ship a state in which it is not.
+    // The blink deck, and the one this lane's browser harness sits down and
+    // plays. 16/16 — the app must never ship a state in which it is not.
   }),
   Object.freeze({
     name: "Thune's Life",
     names: 22,
-    atLeastNames: 14,
-    mustBeComplete: false,
-    // 14/22 against the SHIPPED pool. The compiler already handles all 22
-    // (docs/decks/README.md), so this becomes 22/22 when the refreshed pool
-    // lands — a rise this floor is designed to let through without a red test.
+    atLeastNames: 22,
+    mustBeComplete: true,
+    // 22/22. It was 14/22 against the older pool and completed itself when the
+    // refresh landed — no edit here, which is the floor doing its job.
   }),
   Object.freeze({
     name: 'Tamiyo + Jace Surge',
     names: 17,
-    atLeastNames: 8,
+    atLeastNames: 12,
     mustBeComplete: false,
-    // 8/17 against the SHIPPED pool. The known ceiling is 12/17 even after the
-    // refresh: Axebane Guardian, Craterhoof Behemoth, Primal Surge and BOTH
-    // planeswalkers the deck is named after are still being built.
+    // 12/17, and the five that are left are the deck's own identity: Axebane
+    // Guardian, Craterhoof Behemoth, Primal Surge and BOTH planeswalkers it is
+    // named after. They are sibling lanes' work, not the pool's.
   }),
 ]);
 
@@ -156,9 +160,23 @@ describe('what each deck resolves to', () => {
     });
   }
 
+  it('every deck recorded as COMPLETE validates clean and could be played', () => {
+    // Derived from the table rather than named one at a time, so a deck that
+    // completes itself is covered the moment its floor is raised.
+    for (const expected of RESOLUTION_BASELINE) {
+      if (!expected.mustBeComplete) continue;
+      const summary = summaryFor(expected.name);
+      expect(summary.missing, expected.name).toEqual([]);
+      expect(
+        validateChoice({ source: 'owner', deck: ownerDeck(expected.name) }),
+        `${expected.name} is complete but will not start`,
+      ).toEqual([]);
+    }
+  });
+
   it('Acidic Angels is complete, and stays complete', () => {
-    // The one hard pin. It is his first scanned deck, it has been whole for a
-    // while, and it is the deck the app must be able to sit down and play.
+    // The one hard pin that also pins a NUMBER: 59 cards, not 60. It is his
+    // first scanned deck and the one the browser harness plays.
     const summary = summaryFor('Acidic Angels');
     expect(summary.missing).toEqual([]);
     expect(isComplete(summary)).toBe(true);
@@ -198,7 +216,9 @@ describe('a short deck says so, and names the cards', () => {
     // trains the eye to skip all of them.
     const summary = summaryFor('Acidic Angels');
     expect(describeShortfall(summary)).toBe('');
-    expect(describeCompleteness(summary)).toContain('All 16 cards are in the pool');
+    // 59, the CARDS — not 16, the distinct names. The row beside this sentence
+    // already says "59 cards", and two different totals in one panel read as a bug.
+    expect(describeCompleteness(summary)).toContain('All 59 cards are in the pool');
   });
 
   it('refuses to start a short deck, naming what is missing', () => {
@@ -213,6 +233,21 @@ describe('a short deck says so, and names the cards', () => {
       const name = missing.replace(/^\d+ /, '');
       expect(joined, `the refusal must name ${name}`).toContain(name);
     }
+  });
+});
+
+describe('online play keeps the constructed rules, on purpose', () => {
+  it('refuses a 59-card paper deck online even though local play accepts it', () => {
+    // The SERVER rebuilds the deck from its own curated pool and applies its own
+    // legality check. Saying yes here and having it refused there is a worse
+    // failure than saying no here, because it happens later and further away —
+    // the same reasoning that made validateChoiceForOnline exist at all. If a
+    // later edit "unifies" the two paths, this is what goes red.
+    const choice = { source: 'owner', deck: ownerDeck('Acidic Angels') } as const;
+    expect(validateChoice(choice)).toEqual([]);
+    expect(validateChoiceForOnline(choice)).toContain(
+      'deck size 59 is below the minimum of 60',
+    );
   });
 });
 

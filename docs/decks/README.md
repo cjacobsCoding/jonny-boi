@@ -64,10 +64,14 @@ refuses to start a game rather than shuffling up what is left, because a deck th
 handful of lands is not a deck. (Importing a list by hand reports the same thing as a "not found"
 count in the import dialog.)
 
-⚠️ The numbers above are measured against the COMPILER. The pool the shipped app carries lags it,
-so a deck can read as clean here and still be short in the app for a while — on the 5,651-card pool
-as of 2026-09-15 the app resolved Acidic Angels 16/16, Thune's Life 14/22 and Tamiyo + Jace Surge
-8/17. The app always prints its own number; this table is the ceiling those numbers are climbing to.
+⚠️ The table above is measured against the COMPILER; the pool the shipped app carries can lag it,
+so a deck can read as clean here and still be short in the app until the next regeneration. On the
+pool as regenerated 2026-09-15 the app resolves **Acidic Angels 16/16, Thune's Life 22/22 and
+Tamiyo + Jace Surge 12/17** — the app is caught up with this table, and it always prints its own
+number in the deck row rather than trusting this one.
+
+✅ **Two of the three are PLAYABLE end to end today.** Acidic Angels deals its 59 cards and Thune’s
+Life its 65; Tamiyo + Jace Surge refuses, by name, for all five cards it is still missing.
 
 All three lists are **2012–2013 Standard** (Return to Ravnica / M13 / Innistrad / Avacyn Restored). The
 pool has some of that era — Angel of Serenity, Thragtusk, Restoration Angel, Cloudshift, Conjurer's

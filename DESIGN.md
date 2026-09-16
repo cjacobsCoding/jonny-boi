@@ -2928,18 +2928,27 @@ closed table that says which rules each kind of deck is judged by; ONLINE play k
 constructed rules, because the server applies its own and a local yes it would refuse is worse than
 a no.
 
-**What it resolved to when it shipped** — measured against the pool on `main` (5,651 cards), which
-is a good way behind the compiler:
+**What it resolves to, measured** — and the measurement moved MID-LANE, which is the part worth
+reading. Against the pool this lane forked from it read 16/16, 14/22, 8/17; the regeneration that
+landed hours later took it to:
 
 | deck | names | cards | on screen |
 | --- | --- | --- | --- |
-| Acidic Angels | **16/16** | **59/59** | "All 16 cards are in the pool — this deck plays exactly as built." |
-| Thune's Life | 14/22 | 44/65 | "Incomplete — 44 of 65 cards…", naming all 8 |
-| Tamiyo + Jace Surge | 8/17 | 26/49 | "Incomplete — 26 of 49 cards…", naming all 9 |
+| Acidic Angels | **16/16** | **59/59** | "All 59 cards are in the pool — this deck plays exactly as built." |
+| Thune's Life | **22/22** | **65/65** | the same sentence — it completed itself when the pool refreshed |
+| Tamiyo + Jace Surge | 12/17 | 36/49 | "Incomplete — 36 of 49 cards…", naming all five |
 
-Those two rise on their own as the all-cards campaign lands their families, so nothing pins what a
-deck resolves TO — `ownerDecks.test.ts` pins a FLOOR per deck (a drop is red, growth is silent) and
-Acidic Angels is pinned at COMPLETE, a floor that is also its ceiling.
+**Not one line of this lane changed to absorb that**, and that is the design, not luck:
+`ownerDecks.test.ts` pins a FLOOR per deck, never an equality. A card that stops resolving is a
+regression and goes red; a family the campaign lands just lands. An equality would have turned the
+refresh into a red test in a lane that had nothing to do with it — and the browser harness had
+exactly that bug for one revision, asserting that Thune’s Life reported itself INCOMPLETE, which
+was true when written and false four hours later. It now asserts the SHAPE: every row says which
+of the two things it is, and a row that says it is short names the cards.
+
+**Two of the three are playable end to end**; Tamiyo + Jace Surge refuses, by name, for the five
+cards its own identity is made of (Axebane Guardian, Craterhoof Behemoth, Primal Surge, and both
+planeswalkers) — which is the feature working, not failing.
 
 **A short deck says so, loudly, through the EXISTING answer.** `gauntletDecks.ts` already had
 `unresolved` for exactly this, so the paper decks resolve through `copyGauntletDeck` rather than a

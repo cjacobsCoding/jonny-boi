@@ -84,6 +84,21 @@ const DECKS = Object.freeze([
   }),
 ]);
 
+/*
+ * ⚠️ `mustBeComplete: false` means "may be either", NOT "must be short".
+ *
+ * An earlier version of this file asserted that Thune's Life reported itself
+ * INCOMPLETE, which was true of the 5,651-card pool it was written against and
+ * false four hours later when the refresh to 6,944 landed and the deck went
+ * 22/22. A harness that goes red because the card pool got BETTER is worse than
+ * no harness: its red means nothing, so nobody reads it.
+ *
+ * What is actually being tested is the SHAPE — every row says which of the two
+ * things it is, and a row that says it is short names the cards. Acidic Angels
+ * is pinned complete because it is the deck this harness sits down and plays,
+ * and because pool growth cannot un-complete a deck.
+ */
+
 /** The deck he is going to sit down and play. Complete on `main`; 59 cards. */
 const PLAYABLE_DECK = 'Acidic Angels';
 /** Its size, so "the game dealt HIS deck" is a number and not an impression. */
@@ -518,28 +533,35 @@ try {
         `origin ${row.origin}, badge "${row.badgeText}", painted ${row.badgePainted}`,
       );
       // 4. It says what it is, out of the RENDERED text.
+      // Every row says WHICH of the two things it is — silence is never the claim.
+      const saysComplete = !row.short && /All \d+ cards are in the pool/.test(row.statusText);
+      const saysShort =
+        row.short &&
+        /^\W*Incomplete/.test(row.statusText) &&
+        /does not carry \d+ of its \d+ card names? yet/.test(row.statusText) &&
+        /\d+ of \d+ cards/.test(row.statusText);
+      check(
+        saysComplete || saysShort,
+        `${label}: "${deck.name}" states whether it is complete`,
+        row.statusText.slice(0, 120),
+      );
       if (deck.mustBeComplete) {
         check(
-          !row.short && /All \d+ cards are in the pool/.test(row.statusText),
-          `${label}: "${deck.name}" says it is complete`,
+          saysComplete,
+          `${label}: "${deck.name}" is complete — the deck this harness plays`,
           row.statusText.slice(0, 90),
         );
-      } else {
+      }
+      if (saysShort) {
+        // A short deck must NAME the cards. "Incomplete" on its own is the
+        // failure his own words describe: a deck that resolves to a handful of
+        // lands is not a deck, and not saying which cards went is how the
+        // importer gets blamed for the pool.
+        const namedAfterTheColon = row.statusText.split(':').slice(1).join(':').trim();
         check(
-          row.short && /Incomplete/.test(row.statusText),
-          `${label}: "${deck.name}" says it is INCOMPLETE`,
-          row.statusText.slice(0, 90),
-        );
-        check(
-          /does not carry \d+ of its \d+ card names? yet/.test(row.statusText) &&
-            /\d+ of \d+ cards/.test(row.statusText),
-          `${label}: "${deck.name}" names the size of the hole`,
-          row.statusText.slice(0, 120),
-        );
-        check(
-          row.statusText.includes(deck.tell) || row.statusText.split(',').length >= 2,
-          `${label}: "${deck.name}" names the missing cards`,
-          row.statusText.slice(0, 160),
+          namedAfterTheColon.length > 0 && /\d+ \w/.test(namedAfterTheColon),
+          `${label}: "${deck.name}" names the missing cards, with counts`,
+          namedAfterTheColon.slice(0, 160) || '(named nothing)',
         );
       }
     }
@@ -669,6 +691,11 @@ try {
         };
       });
       console.log(`  board: ${JSON.stringify(board)}`);
+      const poolSize = await page.evaluate(() => {
+        const m = /([\d,]+)\s+cards/.exec(document.body.innerText ?? '');
+        return m ? m[1] : 'unknown';
+      });
+      console.log(`  pool the app is running: ${poolSize} cards`);
       check(board.hasTurn && board.chars > 0, `${label}: the board is live`, `${board.chars} chars`);
       // 59 cards minus a 7-card opening hand: the library's own count is the
       // app's arithmetic on HIS deck, and it is 52 for a 59-card deck and 53

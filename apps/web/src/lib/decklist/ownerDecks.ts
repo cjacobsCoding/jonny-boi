@@ -129,8 +129,15 @@ export function describeShortfall(summary: OwnerDeckSummary): string {
   );
 }
 
-/** The line a COMPLETE deck says about itself — stated, so silence is never the claim. */
+/**
+ * The line a COMPLETE deck says about itself — stated, so silence is never the claim.
+ *
+ * Counts CARDS, not distinct names, for the same reason the shortfall sentence
+ * has to separate the two: the row above this one reads "59 cards", and "All 16
+ * cards are in the pool" beside that invites the reader to think a playset went
+ * missing somewhere.
+ */
 export function describeCompleteness(summary: OwnerDeckSummary): string {
   if (!isComplete(summary)) return describeShortfall(summary);
-  return `All ${summary.names} cards are in the pool — this deck plays exactly as built.`;
+  return `All ${summary.transcribedSize} cards are in the pool — this deck plays exactly as built.`;
 }
