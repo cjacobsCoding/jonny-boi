@@ -30,7 +30,7 @@ import type { Deck } from '../../src/deck.js';
 
 export const TAMIYO_JACE_SURGE: Deck = {
   name: 'Tamiyo + Jace Surge',
-  archetype: 'Simic defenders ramp (paper)',
+  archetype: 'Simic defenders ramp',
   cards: [
     { cardId: 'Arbor Elf', count: 4 },
     { cardId: 'Axebane Guardian', count: 4 },

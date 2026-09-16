@@ -117,11 +117,15 @@ export function ownerDeckSummaries(): readonly OwnerDeckSummary[] {
 export function describeShortfall(summary: OwnerDeckSummary): string {
   if (isComplete(summary)) return '';
   const cardsMissing = summary.transcribedSize - summary.resolvedSize;
+  // Two counts, said as two different things. An earlier wording put "8 of its
+  // 22 cards" beside "21 cards of the deck" in one sentence and read as a
+  // contradiction — the first number counts distinct NAMES, the second counts
+  // physical cards, and nothing in the line said so.
   return (
     `Incomplete — ${summary.resolvedSize} of ${summary.transcribedSize} cards. ` +
-    `${summary.missing.length} of its ${summary.names} cards ${summary.missing.length === 1 ? 'is' : 'are'} ` +
-    `not in the card pool yet, which is ${cardsMissing} card${cardsMissing === 1 ? '' : 's'} of the deck: ` +
-    `${summary.missing.join(', ')}.`
+    `The card pool does not carry ${summary.missing.length} of its ${summary.names} ` +
+    `card name${summary.missing.length === 1 ? '' : 's'} yet, which costs ${cardsMissing} ` +
+    `card${cardsMissing === 1 ? '' : 's'}: ${summary.missing.join(', ')}.`
   );
 }
 

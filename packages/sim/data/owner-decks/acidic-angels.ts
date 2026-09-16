@@ -30,7 +30,7 @@ import type { Deck } from '../../src/deck.js';
 
 export const ACIDIC_ANGELS: Deck = {
   name: 'Acidic Angels',
-  archetype: 'Selesnya blink/value (paper)',
+  archetype: 'Selesnya blink/value',
   cards: [
     { cardId: 'Strionic Resonator', count: 4 },
     { cardId: 'Gatecreeper Vine', count: 4 },

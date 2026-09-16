@@ -23,7 +23,7 @@ import type { Deck } from '../../src/deck.js';
 
 export const THUNES_LIFE: Deck = {
   name: "Thune's Life",
-  archetype: 'Selesnya lifegain (paper)',
+  archetype: 'Selesnya lifegain',
   cards: [
     { cardId: "Avacyn's Pilgrim", count: 4 },
     { cardId: 'Arbor Elf', count: 4 },
