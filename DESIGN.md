@@ -3432,10 +3432,36 @@ would have silently stopped compiling while the board still said it was done —
 warning ("the {X} lane read +55 while eight cards had silently left the pool") happening again at
 **thirteen times the size**, and this time caused by the MERGE rather than by the change.
 
-**The rule this earns**: after any merge into a lane that touched `rules.ts` or `primitives.ts`, diff
-the rule ids against `origin/main` and re-run `playable-set.mjs` both ways before believing any gate.
-A count says +2. Only the set says −104. (And `git show` hands you LF while the working tree is CRLF,
-so splice with matched endings or the repair silently no-ops — it did, once, here.)
+⚠️ **AND TWO FILES WAS NOT THE EXTENT OF IT.** Repairing `rules.ts` and `primitives.ts` made the
+suite go RED on a test this lane never touched — `template-gaps.test.ts`'s *"REFUSES an
+until-end-of-turn team pump"*. §3.155 had UPDATED that case to *"COMPILES … and NEVER as a static"*,
+and **the merge reverted the rule and its test TOGETHER**, so the two agreed with each other and 118
+files / 22,433 tests passed. The inconsistency was invisible while both halves were wrong and became
+visible only when one half was fixed. A file-by-file audit then found five casualties, all §3.155's
+and none of them this lane's:
+
+| file | damage |
+| --- | --- |
+| `cards/src/compile/mass-modification-family.test.ts` | **462 lines, deleted outright** |
+| `cards/scripts/masspump-blame.mjs` | **243 lines, deleted outright** |
+| `ai/src/effect-value.ts` | −70 / +30 — the mass-pump valuation reverted |
+| `ai/src/effect-value-parity.test.ts` | **33 lines, deleted outright** |
+| `cards/src/compile/template-gaps.test.ts` | −10 / +2 — the expectation reverted to match |
+
+All five restored verbatim from `origin/main`. **`git merge` reported no conflict for any of them and
+`git status` was clean.**
+
+**The rule this earns** — three checks, none of which any gate performs on its own:
+
+1. `git diff --name-only origin/main` after the merge, and **justify every entry**. A file you did
+   not touch appearing there is the whole finding — and two of these were DELETIONS, which no
+   diff-of-my-own-files would ever have shown.
+2. Diff the rule ids (`grep -o "id: '[a-z0-9-]*'" | sort -u`) against `origin/main`.
+3. Re-run `playable-set.mjs` both ways. A count says +2. Only the SET says −104.
+
+(And `git show` hands you LF while the working tree is CRLF, so splice with matched endings or the
+repair silently no-ops — it did, once, here.)
+
 #### 4. Left REPORTED, with numbers
 
 42 of the 44 still report, and the reason is the measurement rather than a shelf: **23 of the 38
