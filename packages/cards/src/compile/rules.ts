@@ -23,6 +23,7 @@ import type {
   CopyAsEntersSpec,
   CopyExceptions,
   DerivedCountScope,
+  PermanentStateFilter,
   EffectRef,
   KeywordFlags,
   ManaActivationCondition,
@@ -409,6 +410,220 @@ const FILTERED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> 
   ...typeCounts('land', 'land'),
 });
 
+// ===========================================================================
+// THE WALKER-RESIDUE FAMILY (DESIGN §3.154) — owned by `feat/walker-residues`.
+// Everything between this banner and its closing one is this lane's; siblings
+// are live in this file and must not need to read into it to merge.
+//
+// Two axes the count vocabulary did not have, both measured off Tamiyo, the
+// Moon Sage's −2 ("Draw a card for each tapped creature target player
+// controls"):
+//   1. a BOARD-STATE predicate — "tapped", which `CardFilter` cannot carry;
+//   2. a SUBJECT-PLAYER axis — whose seat the printed scope is read from.
+// ===========================================================================
+
+/** The word `playersForParam` reads for "the chosen player target". */
+const TARGET_PLAYER_SUBJECT = 'targetPlayer';
+
+/**
+ * The TAPPED counts, read from the COUNTING PLAYER's own seat.
+ *
+ * Generated through the same {@link scopedCounts} every other filtered noun uses,
+ * so "tapped creatures you control" / "…an opponent controls" / "…on the
+ * battlefield" arrive together or not at all — and then narrowed by the board
+ * state, which is the one thing a `CardFilter` cannot say (see core's
+ * `PermanentStateFilter`).
+ *
+ * ⚠️ NOTHING IN THIS TABLE NAMES A TARGET, and that is enforced rather than
+ * remembered: these rows are read by rules that declare no target, so a phrase
+ * like "…target player controls" reaching them would resolve its subject to the
+ * CONTROLLER and silently count the wrong player's board. The targeted phrases
+ * live in {@link TARGETED_EACH_TO_PLURAL} instead, and
+ * `walker-residues.test.ts` fails if a "target" phrase ever appears here.
+ *
+ * Measured first (rule 11): 8 corpus clauses across 7 shapes print "for each
+ * tapped creature", 3 of them sole-blocked. That smaller number is the honest
+ * ceiling for this half, and it is reported rather than the 246-clause
+ * "tapped creature" headline the row would have offered.
+ */
+const TAPPED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = Object.freeze(
+  tappedStateOf(scopedCounts('tapped creatures', { anyOfTypes: ['creature'] }), 'tapped'),
+);
+
+/**
+ * Narrow a generated scope family by a board state — the one place that turns
+ * "creatures you control" rows into "tapped creatures you control" rows.
+ *
+ * A transform over {@link scopedCounts}' output rather than a parameter on it,
+ * so the three printed scopes stay generated in exactly one place and a noun
+ * added there is understood here for free.
+ */
+function tappedStateOf(
+  rows: Record<string, DerivedCountDescriptor>,
+  permanentState: PermanentStateFilter,
+): Record<string, DerivedCountDescriptor> {
+  const out: Record<string, DerivedCountDescriptor> = {};
+  for (const [phrase, descriptor] of Object.entries(rows)) {
+    // Every row `scopedCounts` makes is the object arm; the string arm is the
+    // named-core-row half and cannot carry a board state at all.
+    if (typeof descriptor === 'string') continue;
+    out[phrase] = { ...descriptor, permanentState };
+  }
+  return out;
+}
+
+/**
+ * The SINGULAR "for each …" phrases whose subject is a **TARGET**, and the
+ * plural row each means.
+ *
+ * Its own table, deliberately NOT spread into {@link DERIVED_EACH_TO_PLURAL}.
+ * A printed "target player" is only honest if the card actually TARGETS a
+ * player: with no target chosen, `playersForParam` falls back to the controller,
+ * so Tamiyo would count her own tapped creatures with nobody having chosen
+ * anything — a different card, and one that never reports. `needsChosenTarget`
+ * is a STATIC flag on a rule, so the only way to make the targeting mandatory is
+ * to give these phrases a rule of their own; keeping them out of the shared
+ * table is what stops a target-free rule from ever reading one.
+ *
+ * ⚠️ "target OPPONENT controls" is deliberately absent, and its exclusion is the
+ * §1a check for this family. The count would be right in a two-seat game
+ * (`scope: 'opponents'`), but the engine cannot restrict a chosen target to a
+ * player who is not you — the same limitation `target-player-loses-life` already
+ * names — so the card would let its controller aim at themselves and still draw
+ * off the opponent's board. That is stronger than printed in one direction and
+ * weaker in the other, so those three corpus clauses keep reporting.
+ */
+const TARGETED_EACH_TO_PLURAL: Readonly<Record<string, string>> = Object.freeze({
+  'tapped creature target player controls': 'tapped creatures target player controls',
+});
+
+/**
+ * The PLURAL rows the table above names — the subject-targeted half of the count
+ * vocabulary, kept beside it for the same reason.
+ *
+ * `scope: 'you'` read from the TARGET's seat is exactly "permanents that player
+ * controls". The two fields are different questions and compose; see
+ * `DerivedValue.subject` for why collapsing them into `'opponents'` would be a
+ * different card.
+ */
+const TARGETED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = Object.freeze({
+  'tapped creatures target player controls': {
+    countOf: PERMANENTS_MATCHING,
+    filter: { anyOfTypes: ['creature'] } as CardFilter,
+    scope: 'you',
+    subject: TARGET_PLAYER_SUBJECT,
+    permanentState: 'tapped',
+  } as const,
+});
+
+/** The alternation of the targeted "for each" phrases, longest-first. */
+const TARGETED_EACH_PHRASE = `(${Object.keys(TARGETED_EACH_TO_PLURAL)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/**
+ * The descriptor a printed targeted "for each …" phrase means, or null.
+ *
+ * Mirrors {@link derivedEachValue} exactly — singular spelling in, plural row's
+ * answer out — so the two spellings of one count cannot drift apart.
+ */
+function targetedEachValue(phrase: string): Record<string, unknown> | null {
+  const plural = TARGETED_EACH_TO_PLURAL[phrase.trim().toLowerCase()];
+  if (plural === undefined) return null;
+  const entry = TARGETED_DERIVED_COUNTS[plural];
+  return entry === undefined || typeof entry === 'string' ? null : { ...entry };
+}
+
+/**
+ * Where the pile the controller did NOT take goes — the printed tail mapped to
+ * the primitive's closed destination vocabulary.
+ *
+ * ⚠️ These are the ONLY two tails in the corpus, and the table is closed on
+ * purpose: "the other into your graveyard" and "the other on the bottom of your
+ * library" are wildly different cards, and a rule that widened one into the
+ * other would be the silent approximation the compiler contract forbids. A third
+ * printed tail is a ROW here plus a row in `REST_DESTINATIONS`, and the test
+ * that compares the two lists is what stops them drifting (rule 12 — the copy is
+ * unavoidable because a param can arrive as generated pool data having never
+ * passed the compiler).
+ */
+const PILE_REST_DESTINATIONS: Readonly<Record<string, string>> = Object.freeze({
+  'on the bottom of your library in any order': 'libraryBottom',
+  'into your graveyard': 'graveyard',
+});
+
+/**
+ * The primitives whose printed subject may be the object a trigger's event was
+ * about — "**it** gets -1/-0 until end of turn" on a per-attacker trigger.
+ *
+ * A CLOSED table rather than a blanket stamp, and that is the fidelity knob: a
+ * body the engine cannot point at the attacker must REPORT, not quietly happen
+ * to the source instead. `subjectCreatures` is the one reader of the stamp, so
+ * only the primitives that consult it can honestly carry one.
+ */
+const TRIGGERING_SUBJECT_PRIMITIVES: ReadonlySet<string> = new Set([
+  'pumpUntilEndOfTurn',
+  'grantKeywordUntilEndOfTurn',
+]);
+
+/**
+ * Stamp `subject: 'triggering'` onto every ref, or refuse the whole body.
+ *
+ * All-or-nothing on purpose. A two-sentence body where one half points at the
+ * attacker and the other at the source is a card nobody printed, and it is the
+ * kind of half-right that compiles `'complete'` and reads perfectly in a diff.
+ */
+function withTriggeringSubject(refs: readonly EffectRef[]): readonly EffectRef[] | null {
+  const out: EffectRef[] = [];
+  for (const ref of refs) {
+    if (!TRIGGERING_SUBJECT_PRIMITIVES.has(ref.primitive)) return null;
+    out.push({ ...ref, params: { ...(ref.params ?? {}), subject: 'triggering' } });
+  }
+  return out;
+}
+
+/** The two tables a guard test reads to prove no targeting phrase leaked into the shared ones. */
+export const WALKER_RESIDUE_TABLES = Object.freeze({
+  tapped: TAPPED_DERIVED_COUNTS,
+  targetedEach: TARGETED_EACH_TO_PLURAL,
+  targeted: TARGETED_DERIVED_COUNTS,
+  pileRest: PILE_REST_DESTINATIONS,
+});
+
+/**
+ * The primitive that reads the card a graveyard trigger was about. Named rather
+ * than spelled as a bare string at both the rule that emits it and the rule that
+ * detects it — two copies of a string are two chances to typo one of them into
+ * silence (rule 12).
+ */
+const RETURN_TRIGGERING_CARD_TO_HAND = 'returnTriggeringCardToHand';
+
+/**
+ * Whether a compiled body names the card the trigger's event was about, and so
+ * needs `carriesSubject` on the condition.
+ *
+ * Deliberately NOT {@link readsTriggeringObject}: that one looks for a
+ * `{ readOf: 'triggering' }` PARAM, which is how a body reads a triggering
+ * permanent's power. This body names no param at all — the whole referent IS the
+ * primitive — so asking the same question the same way would answer "no" and the
+ * emblem would resolve against an empty `triggeringInstances` and silently
+ * return nothing. One question, two shapes of evidence; a single reader that
+ * accepted both would be a reader that cannot say which it found.
+ *
+ * It recurses through `mayEffects`' nested refs, because "you MAY return it"
+ * wraps the body one level deep and an unrecursed check reads the wrapper only.
+ */
+function readsTriggeringCard(refs: readonly EffectRef[]): boolean {
+  for (const ref of refs) {
+    if (ref.primitive === RETURN_TRIGGERING_CARD_TO_HAND) return true;
+    const nested = ref.params?.effects;
+    if (Array.isArray(nested) && readsTriggeringCard(nested as readonly EffectRef[])) return true;
+  }
+  return false;
+}
+
+// === end of the walker-residue count tables ================================
+
 /**
  * The whole vocabulary, one table, read by every consumer.
  *
@@ -426,13 +641,26 @@ const FILTERED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> 
  */
 const DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = Object.freeze({
   ...FILTERED_DERIVED_COUNTS,
+  // §3.154 — the walker-residue rows. Spread with the FILTERED half and BEFORE
+  // the named one, so the precedence the comment above protects is untouched:
+  // every phrase below carries the word "tapped", which no named row spells, so
+  // this spread can neither shadow a named row nor be shadowed by one.
+  ...TAPPED_DERIVED_COUNTS,
   ...NAMED_DERIVED_COUNTS,
 });
 
 /** What a phrase in {@link DERIVED_COUNTS} means: a named core row, or a set carried as data. */
 type DerivedCountDescriptor =
   | string
-  | { readonly countOf: typeof PERMANENTS_MATCHING; readonly filter: CardFilter; readonly scope: DerivedCountScope };
+  | {
+      readonly countOf: typeof PERMANENTS_MATCHING;
+      readonly filter: CardFilter;
+      readonly scope: DerivedCountScope;
+      /** §3.154 — WHOSE seat `scope` is read from. Absent means the controller. */
+      readonly subject?: string;
+      /** §3.154 — the board-state predicate ("tapped"). Absent means it does not care. */
+      readonly permanentState?: PermanentStateFilter;
+    };
 
 /**
  * The three printed scopes of a filtered count, as the rows they generate.
@@ -552,6 +780,15 @@ const DERIVED_EACH_TO_PLURAL: Readonly<Record<string, string>> = Object.freeze({
   'card in your hand': 'cards in your hand',
   'card in your graveyard': 'cards in your graveyard',
   'creature card in your graveyard': 'creature cards in your graveyard',
+  // §3.154 — the walker-residue family's target-FREE singulars. Safe in this
+  // shared table precisely because none of them names a target; the targeted
+  // spelling lives in `TARGETED_EACH_TO_PLURAL` and is read by one rule that
+  // declares the target.
+  'tapped creature you control': 'tapped creatures you control',
+  'tapped creature an opponent controls': 'tapped creatures an opponent controls',
+  'tapped creature your opponents control': 'tapped creatures your opponents control',
+  'tapped creature they control': 'tapped creatures they control',
+  'tapped creature on the battlefield': 'tapped creatures on the battlefield',
 });
 
 /** The alternation of the "for each" phrases, longest-first. */
@@ -2832,6 +3069,137 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const amount = derivedEachValue(match[2] ?? '');
       if (!amount) return null;
       return effects({ primitive: 'gainLife', params: { amount } });
+    },
+  },
+  // --- the walker-residue family (DESIGN §3.154) ----------------------------
+  {
+    id: 'until-your-next-turn-attack-trigger',
+    description:
+      '"Until your next turn, whenever a creature [you control / an opponent controls] attacks, BODY" (Jace, Architect of Thought’s +1)',
+    /**
+     * A DURATION-SCOPED delayed trigger, which is a third lifetime beside the
+     * two the engine already had: it fires an unbounded number of times and
+     * stops at a MOMENT rather than by being spent.
+     *
+     * ⚠️ §1a, the stronger-than-printed direction. A delayed ability that
+     * outlives its printed duration is the same class of defect as an emblem
+     * that should never have existed, and it is completely silent — the card
+     * simply keeps working. Core takes the duration as ONE field
+     * (`untilTurnOf`) that writes both halves of the lifetime, so this rule
+     * cannot install a repeating ability with no expiry even by omission.
+     *
+     * ⚠️ The BODY is compiled target-free. A delayed ability resolves with an
+     * empty target list, so a body needing a chosen target would silently
+     * no-op — the same gate every trigger body already passes through.
+     */
+    pattern: new RegExp(
+      `^until your next turn, whenever a creature ` +
+        `(you control|an opponent controls|your opponents control) attacks, (.+)$`,
+    ),
+    build(match, ctx) {
+      const tail = (match[1] ?? '').trim();
+      const who = tail === 'you control' ? 'you' : 'opponent';
+      const body = match[2] ?? '';
+      // "IT gets -1/-0" — the object is the ATTACKER that fired this firing, not
+      // the source and not a target.
+      //
+      // The pronoun is rewritten to `~` so the body compiles through the ONE
+      // existing self-pump rule rather than a second copy of its `+N/+M` parser
+      // (rule 12), and the resulting ref is then stamped with the same
+      // `subject: 'triggering'` exalted and flanking use — `subjectCreatures` is
+      // the single reader that turns the stamp into the attacker. The stamp is
+      // safe only because {@link TRIGGERING_SUBJECT_PRIMITIVES} is closed: a body
+      // whose primitive does not consult that reader is refused rather than
+      // silently happening to the source instead.
+      const compiled = ctx.compileEffectClause(body.replace(/^it /, '~ '), { targetFree: true });
+      if (compiled === null || compiled.length === 0) return null;
+      const stamped = withTriggeringSubject(compiled);
+      if (stamped === null) return null;
+      return effects({
+        primitive: 'installUntilYourNextTurnTrigger',
+        params: {
+          condition: { on: 'creatureAttacks', who },
+          effects: stamped,
+          label: `Until your next turn: a creature (${who}) attacks — ${body}`,
+        },
+      });
+    },
+  },
+  {
+    id: 'reveal-opponent-splits-piles',
+    description:
+      '"Reveal the top N cards of your library. An opponent separates those cards into two piles. Put one pile into your hand and the other DESTINATION." (Jace, Architect of Thought’s −2; Fact or Fiction)',
+    /**
+     * ONE whole-line idiom, not three sentences: the second and third are
+     * meaningless without the reveal the first made, exactly as
+     * `pile-split-sacrifice` is one line rather than two.
+     *
+     * ⚠️ §3.150 filed this clause as "a prompt-seam question" — whether the
+     * engine can ask a NON-CONTROLLING player something mid-resolution at all.
+     * It can, and it already did: `pileSplitSacrifice` has asked its VICTIM
+     * which pile to sacrifice since Liliana's −6 landed. So the residue was
+     * never the seam; it was this sentence and the DESTINATION table below.
+     *
+     * The destination is data ({@link PILE_REST_DESTINATIONS}) because two
+     * printed cards give the leftover pile two different homes, and a branch per
+     * card is how the next one becomes a code change instead of a row.
+     */
+    pattern: new RegExp(
+      `^reveal the top ${COUNT_TOKEN} cards of your library\\. an opponent separates those cards into two piles\\. ` +
+        `put one pile into your hand and the other (${Object.keys(PILE_REST_DESTINATIONS).join('|')})$`,
+    ),
+    build(match) {
+      const count = parseCount(match[1]);
+      if (count === null || count <= 0) return null;
+      const rest = PILE_REST_DESTINATIONS[(match[2] ?? '').trim()];
+      if (rest === undefined) return null;
+      return effects({ primitive: 'revealAndOpponentSplitsPiles', params: { count, rest } });
+    },
+  },
+  {
+    id: 'return-triggering-card-to-hand',
+    description:
+      '"Return it to your hand" — the card a graveyard trigger was about (the Moon Sage emblem)',
+    /**
+     * "IT" is the card the TRIGGER's event was about, not a target and not the
+     * source. That referent only exists inside a trigger whose condition asked
+     * for it (`carriesSubject`), which is why the rule that installs the trigger
+     * detects this primitive by name and sets the flag — `readsTriggeringCard`.
+     *
+     * ⚠️ `needsChosenTarget` is deliberately ABSENT and must stay absent: this
+     * body needs no target, and it is compiled from inside a trigger, where the
+     * target-free table is the one in force. Adding the flag would make the
+     * emblem's own body unreachable from the emblem's own trigger.
+     */
+    pattern: /^return it to your hand$/,
+    build() {
+      return effects({ primitive: RETURN_TRIGGERING_CARD_TO_HAND });
+    },
+  },
+  {
+    id: 'draw-for-each-targeted',
+    description:
+      '"Draw a card for each tapped creature target player controls." (Tamiyo, the Moon Sage\'s −2)',
+    /**
+     * The same sentence as `draw-for-each` below with ONE difference that has to
+     * be a different rule: the count's subject is a TARGET, so the card must
+     * actually aim at a player. `needsChosenTarget` is a static flag, and
+     * setting it on `draw-for-each` would refuse Shamanic Revelation's plain
+     * "draw a card for each creature you control" inside every trigger body —
+     * so the targeting form is its own row, ABOVE the plain one, reading the
+     * table the plain one deliberately cannot see.
+     *
+     * The target restriction is what makes the printed word "target" true:
+     * without it the resolution carries no player target, `playersForParam`
+     * falls back to the controller, and the card counts the wrong board with
+     * nothing to notice.
+     */
+    pattern: new RegExp(`^${OPTIONAL_YOU}draw a card for each ${TARGETED_EACH_PHRASE}$`),
+    needsChosenTarget: true,
+    build(match) {
+      const count = targetedEachValue(match[1] ?? '');
+      if (!count) return null;
+      return effects({ primitive: 'drawCards', params: { count, targets: PLAYER_TARGET } });
     },
   },
   {
@@ -6336,6 +6704,77 @@ function splitInterveningIf(
 }
 
 export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
+  // === THE WALKER-RESIDUE FAMILY (DESIGN §3.154) — owned by `feat/walker-residues` ===
+  {
+    id: 'trigger-card-into-graveyard-from-anywhere',
+    description:
+      '"Whenever [another] [TYPE] card is put into your/a graveyard from anywhere, BODY" (Tamiyo\'s emblem; Crawling Sensation; Ultron\'s Auxiliary)',
+    /**
+     * The whole "from anywhere" family in ONE rule, because it is one
+     * occurrence: a card reached a graveyard, from wherever it was. Splitting it
+     * per source zone is how the engine would end up with a mill trigger that
+     * does not fire on a discard.
+     *
+     * ⚠️ It is NOT `permanentDies`. That event is the battlefield → graveyard
+     * move alone, so a rule built on it would compile this printed line into a
+     * card that ignores every mill, every discard and every countered spell —
+     * strictly weaker than printed, and completely silent.
+     *
+     * ⚠️ "your graveyard" vs "a graveyard" is a real fidelity knob and not a
+     * synonym: `who: 'you'` against the card's OWNER for the first (CR 404.3),
+     * `'any'` for the second. Reading "a graveyard" as "yours" halves what the
+     * card sees; reading "yours" as "a" doubles it.
+     *
+     * The body is compiled by the shared trigger-body compiler, so every effect
+     * the engine already has is available here without a rule each, and the
+     * printed "you may" wrapper is the shared one.
+     */
+    pattern: new RegExp(
+      `^whenever (another |an? )?((?:${Object.keys(SPELL_TYPE_WORDS).join('|')}) )?card is put into ` +
+        `(your|a) graveyard from anywhere, (.+)$`,
+    ),
+    build(match, ctx) {
+      const typeWord = match[2]?.trim();
+      const filter: Record<string, unknown> = {};
+      if (typeWord !== undefined && typeWord.length > 0) {
+        const types = positiveSpellTypes(typeWord);
+        if (types === null) return null;
+        filter.anyOfTypes = types;
+      }
+      const who = match[3] === 'your' ? 'you' : 'any';
+      const another = (match[1] ?? '').trim() === 'another';
+      const body = match[4] ?? '';
+      const optional = body.startsWith('you may ');
+      const inner = optional ? body.slice('you may '.length) : body;
+      const compiled = ctx.compileTriggerBody(inner);
+      if (compiled === null || compiled.effects.length === 0) return null;
+      // A MODAL body's effects are replaced by the chosen modes; this family has
+      // no printed modal member, and admitting one would wrap a question in a
+      // question.
+      if (compiled.modal !== undefined) return null;
+      const effectRefs = optional ? mayEffectsFrom(inner, compiled.effects) : compiled.effects;
+      if (effectRefs === null) return null;
+      // "…return IT to your hand" needs the card the event was about carried to
+      // the resolution. Opt-in per body, so a trigger whose body never names the
+      // moved card compiles byte-identically to one written before this axis.
+      const carriesSubject = readsTriggeringCard(effectRefs);
+      return {
+        triggers: [
+          {
+            condition: {
+              on: 'cardPutIntoGraveyardFromAnywhere' as TriggerEvent,
+              who,
+              ...(Object.keys(filter).length > 0 ? { permanentFilter: filter as CardFilter } : {}),
+              ...(another ? { excludeSelf: true } : {}),
+              ...(carriesSubject ? { carriesSubject: true } : {}),
+            },
+            effects: effectRefs,
+            label: `card into ${match[3]} graveyard from anywhere: ${body}`,
+          },
+        ],
+      };
+    },
+  },
   {
     id: 'trigger-etb-exile-up-to-three-until-this-leaves',
     description:

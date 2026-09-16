@@ -105,6 +105,28 @@ export type TriggerEvent =
    */
   | 'creatureAttacksAlone'
   /**
+   * §3.154 — "Whenever **a creature** [you control / an opponent controls]
+   * **attacks**, …" (Jace, Architect of Thought's +1; Hellrider; Cathars'
+   * Crusade's attack cousins). 22 corpus clauses, **14 of them sole-blocked**.
+   *
+   * NOT `attacks`, which is SELF-referential — the permanent the ability is
+   * printed on. This one watches every declared attacker and fires ONCE PER
+   * ATTACKER (it is in {@link FIRES_PER_TRIGGERING_INSTANCE}), each firing
+   * carrying that attacker alone as its `triggeringInstances`, so a body saying
+   * "**it** gets -1/-0" shrinks exactly the creature that fired it.
+   *
+   * ⚠️ `who` is judged against the SUBJECT's controller, and the subject is the
+   * FIRST attacker. That is exact rather than a shortcut: CR 506.3 lets only the
+   * active player declare attackers, so one declaration has one controller and
+   * the first attacker answers for all of them.
+   *
+   * ⚠️ It deliberately takes NO `permanentFilter`. The `who` test above is made
+   * once for the whole declaration, so a per-attacker filter would be applied to
+   * one attacker and then fanned out over all of them — a card that fired off
+   * creatures it does not name. A printed filter reports instead.
+   */
+  | 'creatureAttacks'
+  /**
    * "Whenever ~ BLOCKS" — the blocker's half alone (Shu Defender, Netcaster
    * Spider's "blocks a creature with flying"). Fires once per declaration; the
    * creature it blocked is its `triggeringInstances`, which is what a
@@ -138,6 +160,27 @@ export type TriggerEvent =
    * the battlefield → graveyard move, for any permanent.
    */
   | 'putIntoGraveyardFromBattlefield'
+  /**
+   * §3.154 — "Whenever a card is put into **your graveyard from anywhere**"
+   * (Tamiyo, the Moon Sage's emblem; Crawling Sensation; Ultron's Auxiliary).
+   *
+   * NOT `permanentDies`, which is the battlefield → graveyard move alone and
+   * therefore misses the mill, the discard and the countered spell that are the
+   * whole point of "from anywhere"; NOT `putIntoGraveyardFromBattlefield`,
+   * which watches ONE object. This is any zone → a graveyard, for any card.
+   *
+   * ⚠️ **A CARD, not an object.** A token that dies reaches a graveyard on its
+   * way out of existence and is explicitly not a card (CR 111.7 / 701.17), so a
+   * trigger that fired on one would be strictly better than printed — the §1a
+   * direction nothing else guards. The matcher excludes tokens by definition.
+   *
+   * ⚠️ **"YOUR graveyard" is the card's OWNER's**, not its last controller's:
+   * a card always goes to its owner's graveyard (CR 404.3), so a creature you
+   * stole and killed fills THEIR yard, not yours. `who` is therefore resolved
+   * against the owner, which is the one place in this matcher that does not use
+   * `subjectMatches`.
+   */
+  | 'cardPutIntoGraveyardFromAnywhere'
   | 'castSpell'
   | 'upkeep'
   | 'drawStep'
@@ -546,6 +589,18 @@ export function conditionMatches(
       if (subject === undefined) return false;
       return whoMatches(condition.who, subject.controller, sourceController);
     }
+    case 'creatureAttacks': {
+      // §3.154 — ANY declared attacker, however many. The count is deliberately
+      // unchecked, which is the whole difference from `creatureAttacksAlone`
+      // above; the fan-out in `matchTriggers` turns one match into one firing
+      // per attacker. See the event's doc for why the first attacker's
+      // controller settles `who` for the whole declaration (CR 506.3), and why
+      // a printed per-attacker filter is refused rather than half-applied.
+      if (event.type !== 'attackersDeclared' || event.attackers.length === 0) return false;
+      if (subject === undefined) return false;
+      if (condition.permanentFilter !== undefined) return false;
+      return whoMatches(condition.who, subject.controller, sourceController);
+    }
     case 'blocks': {
       const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
       if (watched === null || event.type !== 'blockersDeclared') return false;
@@ -584,6 +639,20 @@ export function conditionMatches(
         event.to === 'graveyard' &&
         event.instanceId === watched
       );
+    }
+    case 'cardPutIntoGraveyardFromAnywhere': {
+      // §3.154 — ANY zone into a graveyard (see the event's doc). The `from`
+      // is deliberately unchecked: that is what "from anywhere" means, and a
+      // battlefield death qualifies exactly as a mill does.
+      if (event.type !== 'zoneChange' || event.to !== 'graveyard') return false;
+      if (condition.excludeSelf === true && event.instanceId === sourceInstanceId) return false;
+      if (!subject) return false;
+      // A TOKEN is not a card. It touches a graveyard on its way out of
+      // existence, and firing on it is the stronger-than-printed direction.
+      if (subject.card.def.isToken === true) return false;
+      // The OWNER's graveyard, not the last controller's — CR 404.3.
+      if (!whoMatches(condition.who, subject.card.owner, sourceController)) return false;
+      return matchesCardFilter(subject.card, condition.permanentFilter);
     }
     case 'castSpell': {
       if (event.type !== 'spellCast') return false;
@@ -852,12 +921,16 @@ export const TRIGGER_EVENT_SOURCES: Readonly<Record<TriggerEvent, readonly GameE
     // The combat keyword family's events (DESIGN §3.107): one attack-side, three
     // block-side, all read straight off the two declaration events.
     creatureAttacksAlone: ['attackersDeclared'],
+    // §3.154 — the per-attacker sibling, same declaration event.
+    creatureAttacks: ['attackersDeclared'],
     blocks: ['blockersDeclared'],
     becomesBlocked: ['blockersDeclared'],
     becomesBlockedByCreature: ['blockersDeclared'],
     dies: ['creatureDied'],
     leaves: ['zoneChange'],
     putIntoGraveyardFromBattlefield: ['zoneChange'],
+    // §3.154 — any zone INTO a graveyard, which is the same underlying move.
+    cardPutIntoGraveyardFromAnywhere: ['zoneChange'],
     castSpell: ['spellCast'],
     upkeep: ['stepBegin'],
     drawStep: ['stepBegin'],
@@ -954,21 +1027,8 @@ export function matchTriggers(
   const subjectOf = (): TriggerSubject | undefined => {
     if (!subjectResolved) {
       subjectResolved = true;
-      subject = resolveSubject
-        ? event.type === 'zoneChange' || event.type === 'spellCast'
-          ? resolveSubject(event.instanceId)
-          : // A damage event's subject is the DAMAGING object (the group
-            // combat-damage trigger reads its controller and creatureness).
-            event.type === 'damageDealt' && typeof event.source === 'number'
-            ? resolveSubject(event.source)
-            : // A LONE attack's subject is the attacker — what exalted's "a
-              // creature you control attacks alone" reads the controller of
-              // (DESIGN §3.107). Two or more attackers have no subject: nothing
-              // attacked alone.
-              event.type === 'attackersDeclared' && event.attackers.length === 1
-              ? resolveSubject(event.attackers[0] as InstanceId)
-              : undefined
-        : undefined;
+      const id = resolveSubject === undefined ? undefined : subjectInstanceOf(event);
+      subject = id === undefined ? undefined : resolveSubject!(id);
     }
     return subject;
   };
@@ -983,12 +1043,22 @@ export function matchTriggers(
       const watchesBoard =
         ability.condition.on === 'permanentEnters' ||
         ability.condition.on === 'permanentDies' ||
+        // §3.154 — "a card is put into your graveyard from anywhere" reads the
+        // moved card's OWNER, its token-ness and its printed filter, so it needs
+        // the subject exactly as the two board-watching kinds above do. Omitting
+        // it here is SILENT: the matcher sees `undefined` and refuses, so the
+        // trigger simply never fires and nothing reports. Caught by the play
+        // test, not by the compiler and not by any shape assertion.
+        ability.condition.on === 'cardPutIntoGraveyardFromAnywhere' ||
         // The group and per-creature combat-damage triggers read the DAMAGING
         // creature.
         ability.condition.on === 'groupCombatDamageToPlayer' ||
         ability.condition.on === 'creatureCombatDamageToPlayer' ||
         // Exalted reads the lone ATTACKER's controller (DESIGN §3.107).
         ability.condition.on === 'creatureAttacksAlone' ||
+        // §3.154 — the per-attacker trigger reads the declaration's controller
+        // off the first attacker (see the event's doc).
+        ability.condition.on === 'creatureAttacks' ||
         // A cast trigger narrowed by the chosen creature type needs the SPELL
         // object, for the same reason and through the same seam.
         ability.condition.spellSubtypeIsChosen === true;
@@ -1052,8 +1122,49 @@ export function matchTriggers(
  * by `matchTriggers` to fan a match out — so a kind added here is a row, and a
  * kind not here keeps the one-declaration-one-fire rule of CR 509.1h.
  */
+/**
+ * WHICH OBJECT an event's SUBJECT is — the one answer to "whose instance do I
+ * look up for this event", shared by the battlefield collector and the DELAYED
+ * one (§3.154).
+ *
+ * It was inlined in `matchTriggers` and the delayed collector carried its own
+ * two-event version of it. They disagreed, and the disagreement was silent: a
+ * delayed ability watching an attack declaration got `undefined`, its matcher
+ * refused, and the ability simply never fired with nothing anywhere reporting.
+ * One function is what stops the two collectors answering this differently
+ * again (rule 12).
+ *
+ * ⚠️ An attack declaration's subject is the FIRST attacker, and that is exact
+ * rather than a shortcut: CR 506.3 lets only the active player declare
+ * attackers, so one declaration has exactly one controller. Exalted's "attacks
+ * ALONE" (§3.107) reads the same value and is unaffected — its own case tests
+ * `attackers.length !== 1` before looking at the subject at all.
+ */
+export function subjectInstanceOf(event: GameEvent): InstanceId | undefined {
+  if (event.type === 'zoneChange' || event.type === 'spellCast') return event.instanceId;
+  // A damage event's subject is the DAMAGING object (the group combat-damage
+  // trigger reads its controller and creatureness).
+  if (event.type === 'damageDealt' && typeof event.source === 'number') return event.source;
+  if (event.type === 'attackersDeclared' && event.attackers.length > 0) {
+    return event.attackers[0] as InstanceId;
+  }
+  return undefined;
+}
+
+/**
+ * Whether this condition kind fires once per triggering OBJECT rather than once
+ * per event — read by both collectors, for the reason above.
+ */
+export function firesPerTriggeringInstance(on: TriggerEvent): boolean {
+  return FIRES_PER_TRIGGERING_INSTANCE.has(on);
+}
+
 const FIRES_PER_TRIGGERING_INSTANCE: ReadonlySet<TriggerEvent> = new Set<TriggerEvent>([
   'becomesBlockedByCreature',
+  // §3.154 — "whenever A CREATURE an opponent controls attacks" fires once per
+  // attacker (CR 508.1 declares them together but the ability watches each), so
+  // three attackers shrink three times rather than one of them shrinking once.
+  'creatureAttacks',
 ]);
 
 /**
@@ -1076,6 +1187,9 @@ export function triggeringInstancesFor(
   switch (condition.on) {
     case 'creatureAttacksAlone':
       return event.type === 'attackersDeclared' ? event.attackers : undefined;
+    // §3.154 — every declared attacker, fanned out one per firing by the caller.
+    case 'creatureAttacks':
+      return event.type === 'attackersDeclared' ? event.attackers : undefined;
     case 'blocks': {
       if (event.type !== 'blockersDeclared') return undefined;
       const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
@@ -1094,6 +1208,10 @@ export function triggeringInstancesFor(
     // --- the counter keyword family (DESIGN §3.110) ----------------------------
     case 'permanentEnters':
     case 'permanentDies':
+    // §3.154 — "you may return **it** to your hand": the card that just moved is
+    // the referent, and it reaches the body through the same `carriesSubject`
+    // channel the counter family opened, so the emblem needed no second one.
+    case 'cardPutIntoGraveyardFromAnywhere':
       // "That creature" — only for a condition that ASKS (`carriesSubject`),
       // so every board-watching trigger written before this is unchanged.
       if (condition.carriesSubject !== true || event.type !== 'zoneChange') return undefined;

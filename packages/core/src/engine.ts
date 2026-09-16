@@ -157,7 +157,7 @@ import { suspendWindowOpenFor } from './suspend.js';
 // §3.113 — the spell-count family: cast triggers and the library-pile windows.
 import { pushCastTriggers } from './cast-triggers.js';
 import { isFreeCastWindow, settleCastWindowAfterCast, spellOnStackById } from './cascade.js';
-import { createDelayedTrigger } from './delayed.js';
+import { createDelayedTrigger, expireDelayedTriggersFor } from './delayed.js';
 // §3.112 — the cast-alternative family.
 import type { AlternativeCostKind } from './cast-alternatives.js';
 import { ALTERNATIVE_COSTS, alternativeCostKindsOf, definitionCastAs } from './cast-alternatives.js';
@@ -460,6 +460,20 @@ function beginTurn(state: GameState, _config: RulesConfig, emit: (e: GameEvent) 
   const active = state.players[state.activePlayer];
   active.landsPlayedThisTurn = 0;
   emptyManaPools(state, emit);
+
+  // §3.154 — "until your next turn" ends AT THE BEGINNING of that turn, so a
+  // duration-scoped delayed ability is dropped here: before the untap step,
+  // before any attack could be declared, before anything in this turn can
+  // trigger. Running it later would leave the ability live for part of the turn
+  // it was printed to stop at, which is the §1a stronger-than-printed direction.
+  for (const expired of expireDelayedTriggersFor(state, state.activePlayer)) {
+    emit({
+      type: 'delayedTriggerExpired',
+      id: expired.id,
+      controller: expired.controller,
+      label: expired.ability.label ?? '',
+    });
+  }
 
   // Untap step.
   enterStep(state, 'untap', emit);

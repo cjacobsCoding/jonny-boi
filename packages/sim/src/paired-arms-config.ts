@@ -153,6 +153,28 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
   // and branches on what it saw.
   'surveil',
   /*
+   * §3.154 — Jace, Architect of Thought's −2 reads the top THREE cards, shows
+   * them to an OPPONENT, and the split that opponent makes is a decision taken
+   * while looking at cards the swap may have changed. Both halves break the
+   * identical-game argument, and the second is the stronger one: the same
+   * visible moves can produce different piles in the two arms.
+   */
+  'revealAndOpponentSplitsPiles',
+  /*
+   * §3.154 — the duration-scoped trigger INSTALLER (Jace's +1), classified
+   * CONSERVATIVELY for exactly the reason `mayEffects` above is: the ability it
+   * installs lives in an `effects` PARAM, and `allEffectRefs` walks only
+   * top-level refs off `def.effects` / `triggers` / `activated` / `cycling` —
+   * checked, not assumed. So a body that read a library would be invisible to
+   * the decklist scan.
+   *
+   * Today the body can only be a pump (`TRIGGERING_SUBJECT_PRIMITIVES` is a
+   * closed two-row table, both library-safe), so this costs a few extra variant
+   * games and buys nothing yet. It is here anyway: the day that table grows, the
+   * failure would be a wrong A/B verdict with nothing red.
+   */
+  'installUntilYourNextTurnTrigger',
+  /*
    * `chooseAsEnters` NAMES A VALUE as a permanent enters (a colour, a creature
    * type, a player). It moves no card and reveals no card — but the MENU it
    * offers for a creature type is built from every card its chooser owns,
@@ -302,6 +324,15 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   // Bounces a CHOSEN battlefield permanent to its owner's hand — reads the
   // battlefield and a hand, never a library.
   'returnChosenToHand',
+  /*
+   * §3.154 — Tamiyo's emblem body. It moves ONE card, and that card is the one
+   * the trigger's event was about: it arrives as `triggeringInstances`, and the
+   * move is graveyard → hand. The runner already tracks both of those zones
+   * precisely (the card reached the graveyard by a `zoneChange` naming its
+   * instance id, whatever zone it came from), so there is nothing hidden to
+   * branch on and no library read anywhere in it.
+   */
+  'returnTriggeringCardToHand',
   /*
    * THE DELAYED-ABILITY BODIES (CR 603.7) — both SAFE, and the argument is
    * simpler than the copy family's above: each moves permanents named by an

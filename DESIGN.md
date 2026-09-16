@@ -2889,6 +2889,126 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.154 The two walkers Caleb's deck is named for — and three of four residues were a CLOSED LIST, not a seam — ✅ Tamiyo, ⬜ Jace (one clause)
+
+> ⚠️ **Section number claimed off a contended range.** §3.152 was the highest on `origin/main` at
+> fork, and three sibling lanes (`jb-gloss`, `jb-mana`, `jb-repeat`) are live in `rules.ts`. If an
+> integrator finds a second §3.153, renumber this one — it references no other section by number
+> except backwards.
+
+§3.150 left **Tamiyo, the Moon Sage** and **Jace, Architect of Thought** as evidenced NO-GOs with
+five residues pinned by name. Four of the five are now gone. **Tamiyo compiles COMPLETE and plays**;
+Jace has one clause left, named below with its number.
+
+#### What the residues actually turned out to be
+
+Each was smaller than its description, and **three of the four were a CLOSED LIST that a new case had
+not been added to** — not a missing seam. That is §8a item 2's shape again, and it is worth stating in
+the form it took here, because a list like that is invisible in a diff:
+
+| residue, as §3.150 named it | what it actually was |
+|---|---|
+| `−2`: "`DerivedCountName` has **no subject-player axis at all**" | True, and the axis does not belong there. §3.149's FILTERED descriptor already carried a `scope`; what was missing was WHOSE SEAT that scope is read from. One field, read through `playersForParam` — the vocabulary every primitive that can happen to somebody other than its controller already shares. |
+| `−8`: "needs a *put into your graveyard from anywhere* trigger" | One `TriggerEvent` — and then **`matchTriggers`' `watchesBoard` list**, a closed disjunction naming the condition kinds that get the event's SUBJECT. Omitted from it, the matcher reads `undefined` and refuses: the trigger never fires, the compiled definition is perfect, and nothing reports. |
+| Jace `−2`: "**pile separation** — a prompt-seam question" | **The seam was already built and already used.** `pileSplitSacrifice` (Liliana's −6) has asked its VICTIM which pile to sacrifice since that rule landed. The engine CAN ask a non-controlling player a question mid-resolution, with parking and replay-from-answers. The residue was one sentence and a destination table. |
+| Jace `+1`: "a duration-scoped delayed trigger" | Exact — but it needed a SECOND thing the description does not mention: there was no per-ATTACKER trigger event at all. `attacks` is self-referential (the permanent the ability is printed on). |
+
+#### The count vocabulary gains two axes, and the targeting phrases get their own table
+
+`countPermanentsMatching` now takes a `PermanentStateFilter` (`'tapped'` / `'untapped'`). It is NOT a
+`CardFilter` field, and that separation is load-bearing: a `CardFilter` reads PRINTED characteristics
+off a `{ def, chosenAsEntered }` precisely so the same filter can select a card in a LIBRARY, a HAND
+or a GRAVEYARD — zones where tapped-ness does not exist and every card would answer the question the
+same wrong way.
+
+The SUBJECT axis is `DerivedValue.subject`, and it COMPOSES with `scope` rather than replacing it:
+`scope` is the printed relative tail, `subject` is the seat it is read from. **§3.150 named the exact
+wrong fix and was right to**: widening to `creaturesOpponentControls` makes a printed "target player"
+mean "the opponent", and Tamiyo may aim at herself. The play test asserts both directions on one
+board — three cards aimed at the opponent, one aimed at yourself.
+
+⚠️ **The targeted phrases live in their OWN table** (`TARGETED_EACH_TO_PLURAL`), unreachable from the
+rules that declare no target. With no chosen target, `playersForParam('targetPlayer')` falls back to
+the CONTROLLER — so a "target player controls" row read by a target-free rule counts the caster's own
+board and nothing anywhere reports. `needsChosenTarget` is a STATIC flag on a rule, so the only way to
+make the targeting mandatory is to give those phrases a rule of their own. A test fails if a "target"
+phrase ever appears in the shared table.
+
+⚠️ "target OPPONENT controls" is deliberately absent, and its exclusion is this family's §1a check.
+The count would be right in a two-seat game, but the engine cannot restrict a chosen target to a
+player who is not you — the limitation `target-player-loses-life` already names — so the card would
+let its controller aim at themselves and still draw off the opponent's board. Three corpus clauses
+keep reporting rather than compile into that.
+
+#### THE DEFECT THE PLAY TEST CAUGHT AND THE COMPILER COULD NOT
+
+`matchTriggers` resolves the event's SUBJECT only for a closed list of condition kinds
+(`watchesBoard`). The new graveyard trigger was not in it. Every compile-side assertion was green —
+the emblem's definition carried exactly the right condition, the right body and the right
+`carriesSubject` — and **the trigger never fired once.**
+
+That is §8a item 7 in its purest form, and the lesson is narrower than "write play tests": **a closed
+list that gates a CAPABILITY rather than a behaviour fails silently in the direction of doing
+nothing.** The manifest pattern (`TRIGGER_EVENT_SOURCES`, `SOURCE_SET_EVENTS`, `instance-ids`) makes
+three such lists compile-total, and all three caught this lane's new event and new event type
+immediately. `watchesBoard` is a hand-written `||` chain and caught nothing.
+
+#### §1a, in both directions, per ability
+
+- **the emblem is a CARD trigger.** A token reaches a graveyard on its way out of existence and is
+  explicitly not a card (CR 111.7). The matcher excludes tokens by definition; a play test kills a
+  0/0 token and asserts ZERO questions asked.
+- **"your graveyard" is the OWNER's** (CR 404.3), not the last controller's — a creature you stole and
+  killed fills THEIR yard. This is the one place the matcher cannot use `subjectMatches`, which reads
+  `controller`.
+- **the duration cannot outlive itself.** A repeating delayed ability with no expiry is not
+  expressible: `createDelayedTrigger` takes ONE request field (`untilTurnOf`) and writes both halves
+  of the lifetime from it. `beginTurn` expires it before the untap step and emits
+  `delayedTriggerExpired`, because an ability that silently stops and one that silently continues are
+  the same defect from the log's point of view.
+- **the per-attacker trigger refuses a printed FILTER.** Its `who` is judged once for the whole
+  declaration (exact — CR 506.3 gives one declaration one controller, so the first attacker answers
+  for all), so a per-attacker filter would be applied to one attacker and then fanned out over all of
+  them: a card firing off creatures it does not name.
+
+#### 📊 Measured BEFORE building, and the honest ceilings
+
+**NEW `packages/cards/scripts/walker-blame.mjs`** — the eighth blame tool. It prints the denominator
+FIRST and refuses to run on a report with no `cards` array, because §7c item 7's false ZERO looks
+exactly like a real finding. Re-run it; do not quote these numbers from here.
+
+Against the **refreshed** report (32,414 candidates · 6,912 accepted · **25,470 rejected** scanned):
+
+| family | clauses | shapes | SOLE-blocked | per shape | note |
+|---|---:|---:|---:|---:|---|
+| "for each tapped creature" | 8 | 7 | **3** | 1.14 | the honest ceiling for the count half — reported instead of the 246-clause "tapped creature" headline the row would have offered |
+| card → a graveyard FROM ANYWHERE (trigger) | 12 | 11 | **3** | 1.09 | the bare "a card" form is 2 clauses; the family generalises by card TYPE |
+| pile separation | 18 | 18 | **16** | **1.00** | the §3.120 artifact for the seventh time — every card in it prints a sentence no other card prints |
+| per-ATTACKER attack trigger | 23 | 22 | **14** | 1.05 | the largest of the four, and a general trigger event |
+| "until your next turn" | 118 | 118 | 44 | **1.00** | most need a continuous DURATION, not a delayed trigger — a different lane |
+| cast without paying its/their mana cost | 321 | 315 | **168** | 1.02 | Jace's remaining clause; see below for which part of it he actually needs |
+
+#### Jace's `−8` — a clause-level NO-GO, named
+
+`For each player, search that player's library for a nonland card and exile it, then that player
+shuffles. You may cast those cards without paying their mana costs.`
+
+Three parts, and only the third is hard:
+
+1. `SEARCH_DESTINATIONS` has no `'exile'` row — and its own comment says exile is absent only because
+   "no search template compiled here prints it". This one does. One row.
+2. `searchLibrary` already takes `who` (whose library), so searching another player's is expressible.
+3. ⛔ **The cast permission cannot cross seats.** `CardGrant.castFace` + `castFree` is exactly the
+   right shape and already exists (a defeated Siege's reward uses it). But `generateLegalActions`
+   offers an exile cast by walking **`player.exile` — the asking player's own exile zone** — and this
+   engine models exile per player, so a card exiled from B's library sits in B's exile and A is never
+   offered it. The grant carries no "who may cast this". The fix is a `castBy` on the grant plus a
+   second exile scan in the offer loop, which runs once per priority decision.
+
+**321 corpus clauses / 315 distinct shapes / 168 sole-blocked cards** print "without paying its/their
+mana cost" — the biggest population any of these residues touches, and 1.02 cards per shape, so it is
+the §3.120 artifact again rather than one system. The cross-seat half is the part Jace specifically
+needs; most of those 168 cast from the caster's own zones and want only the free-cast half.
 ### 3.153 His three real decks were in the repo and not in the app — ✅ done
 
 > ⚠️ **Section number claimed off a contended range.** `main` carries TWO §3.147s, TWO §3.149s and

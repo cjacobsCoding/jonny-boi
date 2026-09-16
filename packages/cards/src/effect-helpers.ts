@@ -24,6 +24,7 @@ import type {
   PlayerId,
   DerivedCountName,
   DerivedCountScope,
+  PermanentStateFilter,
   SpellStackObject,
   TargetRestriction,
 } from '@jonny-boi/core';
@@ -95,6 +96,30 @@ export interface DerivedValue {
   readonly filter?: CardFilter;
   /** Whose permanents the filtered count reaches. Defaults to `'you'`. */
   readonly scope?: DerivedCountScope;
+  /**
+   * WHOSE SEAT {@link scope} is read from — the SUBJECT-PLAYER axis, and the
+   * thing "for each tapped creature **target player** controls" (Tamiyo, the
+   * Moon Sage's −2) needs that no scope can express.
+   *
+   * `scope` and `subject` are different questions and compose: `scope` is the
+   * printed relative tail, `subject` is the player it is relative to. "Creatures
+   * you control" is `scope: 'you'` from the CONTROLLER's seat; "creatures target
+   * player controls" is `scope: 'you'` from the TARGET's seat. Collapsing the
+   * two — reading a printed "target player" as `'opponents'` — is a DIFFERENT
+   * CARD the moment its controller aims it at themselves, which Tamiyo may.
+   *
+   * The words are {@link playersForParam}'s, not a second vocabulary: one table
+   * answers "which player does this happen to" for a draw, a life change and now
+   * a count. Absent means the controller — what every count meant before this
+   * axis existed.
+   */
+  readonly subject?: string;
+  /**
+   * The BOARD-STATE predicate on a filtered count — "the number of **tapped**
+   * creatures …". Core's closed `PermanentStateFilter`; see it for why this is
+   * not a {@link CardFilter} field.
+   */
+  readonly permanentState?: PermanentStateFilter;
   /**
    * "+N/+N FOR EACH …" — the printed multiplier on a per-count value (rampage's
    * "+2/+2 for each creature blocking it beyond the first", DESIGN §3.107).
@@ -352,7 +377,18 @@ function countOfDerived(ctx: EffectContext, value: DerivedValue): number {
     // rather than everything — the direction that cannot play better than
     // printed. The compiler never emits one.
     if (value.filter === undefined) return 0;
-    return countPermanentsMatching(ctx.state, value.filter, value.scope ?? 'you', ctx.controller);
+    // THE SUBJECT-PLAYER AXIS. `scope` is the printed RELATIVE tail ("you
+    // control" / "an opponent controls" / "on the battlefield"); `subject` is
+    // WHOSE SEAT that tail is relative to, and the two compose: "creatures
+    // target player controls" is scope `'you'` read from the TARGET's seat.
+    //
+    // It is read through `playersForParam` — the ONE vocabulary every primitive
+    // that can happen to somebody other than its controller already shares — so
+    // "target player" cannot mean the aimed-at seat in a draw and something
+    // else in a count (rule 12). An absent subject is the controller, which is
+    // what every count written before this axis existed meant and still means.
+    const subject = playersForParam(ctx, value.subject)[0] ?? ctx.controller;
+    return countPermanentsMatching(ctx.state, value.filter, value.scope ?? 'you', subject, value.permanentState);
   }
   if (value.countOf === 'triggeringAmount') {
     // "That much" — the size of the event that set this trigger off, carried on

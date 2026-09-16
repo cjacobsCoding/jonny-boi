@@ -870,6 +870,23 @@ export type GameEvent =
       readonly label: string;
     }
   | {
+      /**
+       * §3.154 — a DURATION-SCOPED delayed ability reached its moment and was
+       * removed ("until your next turn"). Its own event rather than a flag on
+       * the fired one, because the two are opposite outcomes: `…Fired` says the
+       * ability DID something, this says it stopped being able to.
+       *
+       * It is emitted for the same reason a fallback reports: an ability that
+       * silently stops working and one that silently keeps working are the same
+       * defect from the log's point of view, and §1a makes the second of those
+       * the more dangerous direction.
+       */
+      readonly type: 'delayedTriggerExpired';
+      readonly id: number;
+      readonly controller: PlayerId;
+      readonly label: string;
+    }
+  | {
       // A resolving spell/ability asked a player a question; resolution is parked
       // until it is answered. The replay/inspector needs both halves of every
       // choice, which is why asking and answering are BOTH events.

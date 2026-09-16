@@ -266,6 +266,10 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
    */
   delayedTriggerCreated: 'public',
   delayedTriggerFired: 'public',
+  // §3.154 — public for the same reason the pair above is: a delayed ability's
+  // existence is announced to both seats, so its ending is too. Hiding it would
+  // let one seat believe an expired "until your next turn" is still in force.
+  delayedTriggerExpired: 'public',
   stackResolved: 'public',
   // Mana in a pool is open information in paper Magic, and it is the raw material
   // for the brief's §35–37 "represented mana" reasoning.
