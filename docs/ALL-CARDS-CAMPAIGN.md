@@ -380,12 +380,18 @@ waits on the pool refresh (§8 note). A card is ✅ only when **every** printed 
 | Primal Surge | iterative effects | ✅ **§3.156 — set-verified +1/−0, and played.** ⚠️ **The row named the wrong half, and so did the correction.** The board said *"you may / choose"*; §7b corrected that to `repeat this process`; `repeat-blame.mjs` says it is BOTH — delete the repeat sentence and `Exile the top card of your library. If it's a permanent card, you may put it onto the battlefield.` still refuses. Three gaps, not one. Of 44 corpus cards printing "repeat", exactly **one** compiles on the iteration ALONE, and it is Grindstone (also ✅, and the iteration that asks NOTHING). |
 | Rhox Faithmender | life-change replacement | ✅ §3.151 — one more event kind cost one row in five places. The real work was the **funnel**: lifelink and a resolving spell both gain life, and this card prints both halves. |
 | Fog Bank | damage prevention | ✅ §3.151 — prevention was already built. What was missing was a way to say **`~`**: a closed anchor vocabulary read by both sides of the event. |
-| Craterhoof Behemoth | mass pump + keyword grant | ⬜ `When ~ enters, creatures you control gain trample and get +X/+X until end of turn, where X is the number of creatures you control.` The derived count is the family §3.149 landed — **re-blame; the residue may be only the mass keyword grant.** |
+| Craterhoof Behemoth | mass pump + keyword grant | ✅ **§3.155 — and this row's own "re-blame first" note turned out to be right.** The residue WAS only the mass keyword grant plus a P/T half riding the same continuous effect; §3.149's derived count already supplied the X. Marked ✅ here by the §3.156 lane, which compiled the whole deck list and found the row stale: the card had been playable for a wave while three separate documents said it was not. |
 | Fiendslayer Paladin | targeting restriction | ✅ §3.152 — set-verified +1/−0. ⚠️ **The row named a half that was FINISHED**: all four quarters of protection (CR 702.16) were already built in `core/protection.ts`. The gap was `hexproof from [quality]` (CR 702.11e), ONE rule against an opponent only — and the row's `/ward|protection from/` hint cannot match this card's printed line at all, so it sat in the generic catch-all. |
 
-**13 of 16 lane-verified · 1 clause-level NO-GO · 2 unstarted.** ✅ **ACIDIC ANGELS IS COMPLETE** — all
-22 of its names compile. Tamiyo + Jace Surge is down to **3**: Axebane Guardian, Craterhoof Behemoth,
-and **Jace's `−8` alone** — his other two abilities compile and play (§3.154).
+**14 of 16 lane-verified · 1 clause-level NO-GO · 1 unstarted.** ✅ **ACIDIC ANGELS IS COMPLETE** — all
+22 of its names compile. Tamiyo + Jace Surge is down to **2**: Axebane Guardian and **Jace's `−8`
+alone** — his other two abilities compile and play (§3.154).
+
+⚠️ **THAT 2 WAS MEASURED; THE NUMBER IT REPLACES WAS NOT.** Compiling all 17 names of
+`docs/decks/tamiyo-jace-surge.txt` against the current compiler gives **15 complete, 2 blocked** —
+and **Craterhoof Behemoth is one of the 15**. §3.155 unblocked it, and this table, the deck README
+and §4c each still called it blocked because each inherited the count from the draft before it. The
+lesson is §4c's own, one level up: **re-blame before scoping, and re-compile before counting.**
 
 ⚠️ **THE COMPILER IS AHEAD OF THE SHIPPED POOL, and this table measures the COMPILER.** Neither
 Tamiyo (§3.154) nor Primal Surge (§3.156) is in `packages/cards/data/expanded-pool.ts` as it stands:

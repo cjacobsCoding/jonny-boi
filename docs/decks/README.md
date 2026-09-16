@@ -50,9 +50,14 @@ Checked against the real compiled pool, not assumed. The campaign is closing thi
 | Tamiyo + Jace Surge | 17 | 9 | **3** |
 
 ✅ **ACIDIC ANGELS and THUNE'S LIFE both compile end to end** — every name in each imports as the
-deck Caleb actually built. **Tamiyo + Jace Surge is the one still short**, at 3 of 17 names: Axebane
-Guardian, Craterhoof Behemoth, and Jace — whose `+1` and `−2` compile and play, leaving the `−8`
-alone (§3.154). Tamiyo herself is done (§3.154) and Primal Surge is done (§3.156).
+deck Caleb actually built. **Tamiyo + Jace Surge is the one still short, at 2 of 17 names**: Axebane
+Guardian, and Jace — whose `+1` and `−2` compile and play, leaving the `−8` alone (§3.154). Tamiyo
+herself is done (§3.154), Primal Surge is done (§3.156), and **Craterhoof Behemoth is done** (§3.155).
+
+⚠️ **That 2 was MEASURED, not inherited.** §7a and an earlier draft of this very table both still
+listed Craterhoof Behemoth as blocked; compiling all 17 names against the current compiler says it is
+not — §3.155 unblocked it and neither doc was updated. **Re-compile the list rather than copying the
+previous number**, which is the whole reason this row keeps being wrong in the safe direction.
 
 ⚠️ **This "blocked now" column measures the COMPILER, and the shipped pool lags it.** Neither Tamiyo
 nor Primal Surge is in `expanded-pool.ts` as regenerated on 2026-09-15, because both lanes merged

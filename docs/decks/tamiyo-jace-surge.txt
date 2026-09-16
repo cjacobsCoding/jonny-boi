@@ -10,7 +10,7 @@
 2 Fog Bank                     // ✅ compiles — §3.151 (damage prevention)
 2 Gatecreeper Vine
 2 Soul of the Harvest
-2 Craterhoof Behemoth          // ✗ not in pool
+2 Craterhoof Behemoth          // ✅ compiles — §3.155 (mass modification)
 
 3 Jace, Architect of Thought   // ✗ not in pool — §3.154 landed +1 and −2; only the −8's cross-seat free cast is left
 2 Tamiyo, the Moon Sage        // ✅ compiles — §3.154 (all three abilities, played end to end)
