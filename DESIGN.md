@@ -3294,7 +3294,7 @@ sabotage with `expected 23 to be 26`. A guard is only a guard once you have watc
 The backlog entry *"a copy-creating template outside the compiler's closed tables"* names **299
 cards**, and `docs/ALL-CARDS-CAMPAIGN.md` §3 files it as one of the five NEAR-MISSES: *"the copy
 system, token copies and delayed sacrifice tails are ALL implemented; three named selectors remain."*
-It is the row said to block **Trostani, Selesnya's Voice** from `docs/decks/acidic-angels.txt`.
+It is the row said to block **Trostani, Selesnya's Voice** from `docs/decks/thunes-life.txt`.
 
 Three things were measured before anything was written, and all three contradict the headline.
 
@@ -3435,7 +3435,7 @@ regenerated: the local corpus trips a masking defect another live lane owns.
 > renumber this one by grepping the number, never by editing the heading.
 
 The backlog entry *"a modal template the compiler does not recognize yet"* named **432 cards** and
-blocks **Selesnya Charm** from `docs/decks/acidic-angels.txt`. On a freshly fetched 32,414-card
+blocks **Selesnya Charm** from `docs/decks/thunes-life.txt`. On a freshly fetched 32,414-card
 corpus the row is **531 cards / 531 clauses across 504 distinct shapes — 1.05 clauses per shape**.
 
 **That is the §3.120 aggregation artifact for the FIFTH consecutive row, and the thinnest ratio yet
@@ -3577,7 +3577,7 @@ it is replaced by an assertion that the compiled card carries `{ base: 'creature
 
 The backlog entry *"a loyalty-ability template the compiler does not recognize yet"* named **~300
 cards**, plus the **emblem** shape, and between them they hold Jace, Architect of Thought and Tamiyo,
-the Moon Sage from `docs/decks/defender-ramp.txt`.
+the Moon Sage from `docs/decks/tamiyo-jace-surge.txt`.
 
 **NEW `packages/cards/scripts/loyalty-blame.mjs`** — the fifth blame tool, after `activated-blame`,
 `targeted-blame`, `counters-blame` and `xvalue-blame`. It splits each blocked loyalty line into its
@@ -3726,7 +3726,7 @@ starts compiling one of them fails too.
 ### 3.149 The counters row is the §3.120 artifact a THIRD time — and the seam inside it is the KIND, not the template — ✅ done
 
 The backlog entry *"a counters template the compiler does not recognize yet"* named **2,480 cards**, the
-third-largest row, and it holds two cards from the owner's own deck (`docs/decks/acidic-angels.txt`).
+third-largest row, and it holds two cards from the owner's own deck (`docs/decks/thunes-life.txt`).
 Measured against a freshly fetched **32,414-card** corpus (2026-09-15) with NEW
 `packages/cards/scripts/counters-blame.mjs`:
 
@@ -3820,7 +3820,7 @@ chooser; "double the number of counters"; and every rider on the graveyard exile
 > one — it references no other section by number except as prose.
 
 The backlog entry *"a targeted-trigger template the compiler does not recognize yet"* named **888
-cards**, and it holds Oblivion Ring from `docs/decks/acidic-angels.txt`. `gap-clauses.mjs` gave the
+cards**, and it holds Oblivion Ring from `docs/decks/thunes-life.txt`. `gap-clauses.mjs` gave the
 §3.120 answer immediately: **884 cards, 890 clauses, 748 distinct shapes — 1.18 cards per shape,
 largest single shape 19.** Another bucket, not another system, exactly as §3.120 and §3.147 found
 before it.

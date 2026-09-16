@@ -47,6 +47,7 @@ import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { describeChromeSearch, findChrome } from './lib/find-chrome.mjs';
 import { harnessLaunchOptions } from './lib/harness-chrome.mjs';
+import { watchPageErrors } from './lib/harness-page.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = resolve(HERE, '..');
@@ -70,7 +71,7 @@ const EXIT_CANNOT_RUN = 2;
  * regeneration not run. A total that merely went up says nothing.
  *
  * With Rhox Faithmender and Fiendslayer Paladin in, all 22 names in
- * `acidic-angels.txt` compile — the first of Caleb's decks that can come back
+ * `thunes-life.txt` compile — the first of Caleb's decks that can come back
  * whole.
  */
 const DECK_CARDS = Object.freeze([
@@ -303,13 +304,12 @@ async function main() {
     // page fails every check below with "MISSING" — which reads as "the card is
     // not in the pool" when the truth is "the app died". Capture the reason so
     // the harness reports the crash instead of libelling the data.
-    const pageErrors = [];
-    page.on('pageerror', (error) => pageErrors.push(`pageerror: ${error?.message ?? error}`));
-    page.on('console', (message) => {
-      if (message.type() === 'error') pageErrors.push(`console.error: ${message.text()}`);
-    });
-    page.on('crash', () => pageErrors.push('the renderer process CRASHED (out of memory?)'));
-    report.pageErrors = pageErrors;
+    // Through the SHARED funnel, not a hand-rolled listener: `harness-page.mjs`
+    // is the one answer to "did this page die", and `harness-page-errors.test.ts`
+    // fails any script that rolls its own. It also catches a page that throws
+    // once and then goes SILENT, which a bare `pageerror` listener does not.
+    const watcher = watchPageErrors(page, { consoleErrors: true });
+    report.pageErrors = watcher.errors;
     await page.goto(preview.url, { waitUntil: 'domcontentloaded', timeout: APP_SHELL_WAIT_MS });
     await page.waitForSelector('.card-tile', { timeout: FIRST_TILE_WAIT_MS });
     await gotoView(page, 'Cards');
@@ -411,8 +411,8 @@ async function main() {
     );
     check(
       'the app never threw while being driven',
-      pageErrors.length === 0,
-      pageErrors.slice(0, 3).join(' | ') || 'no page errors',
+      watcher.errors.length === 0,
+      watcher.errors.slice(0, 3).join(' | ') || 'no page errors',
     );
   } finally {
     mkdirSync(OUT_DIR, { recursive: true });

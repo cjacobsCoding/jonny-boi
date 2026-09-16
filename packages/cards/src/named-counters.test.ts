@@ -7,7 +7,7 @@
  * perfectly and covered nothing. So every string below was copied out of the
  * 32,414-card Scryfall corpus (2026-09-15), reminder text and all, and the two
  * acceptance cards for this lane — Scavenging Ooze and Luminarch Ascension, both
- * from `docs/decks/acidic-angels.txt` — are asserted COMPLETE by name.
+ * from `docs/decks/thunes-life.txt` — are asserted COMPLETE by name.
  *
  * ## The refusals are the other half of the claim
  * A template that swallows text it does not implement is worse than no template:
@@ -52,7 +52,7 @@ const why = (c: CompilableCard): string =>
 /* The two acceptance cards                                                    */
 /* -------------------------------------------------------------------------- */
 
-describe('§3.149 — Caleb’s deck cards (docs/decks/acidic-angels.txt)', () => {
+describe('§3.149 — Caleb’s deck cards (docs/decks/thunes-life.txt)', () => {
   const SCAVENGING_OOZE = card(
     'Scavenging Ooze',
     '{G}: Exile target card from a graveyard. If it was a creature card, put a +1/+1 counter on this creature and you gain 1 life.',
