@@ -329,7 +329,7 @@ describe('Jace, Architect of Thought — two clauses in, ONE residue pinned by n
    *     exile zone — and this engine models exile per player, so a card exiled
    *     from B's library sits in B's exile and A is never offered it.
    *
-   * Corpus: **320 clauses / 314 distinct shapes / 160 sole-blocked cards** print
+   * Corpus: **321 clauses / 315 distinct shapes / 168 sole-blocked cards** print
    * "without paying its/their mana cost".
    */
   it('reports exactly ONE residual ability, and this names it', () => {

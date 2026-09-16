@@ -2973,15 +2973,20 @@ immediately. `watchesBoard` is a hand-written `||` chain and caught nothing.
 
 #### 📊 Measured BEFORE building, and the honest ceilings
 
-Off `expansion-report.json`'s 26,625 rejected cards (rule 11):
+**NEW `packages/cards/scripts/walker-blame.mjs`** — the eighth blame tool. It prints the denominator
+FIRST and refuses to run on a report with no `cards` array, because §7c item 7's false ZERO looks
+exactly like a real finding. Re-run it; do not quote these numbers from here.
 
-| family | clauses | shapes | SOLE-blocked | note |
-|---|---:|---:|---:|---|
-| "for each tapped creature" | 8 | 7 | **3** | the honest ceiling for the count half — reported instead of the 246-clause "tapped creature" headline the row would have offered |
-| "a card is put into your/a graveyard from anywhere" | 11 | 10 | **3** | the bare "a card" form is 2 clauses; the family generalises by card TYPE |
-| pile separation | 18 | 18 | **16** | **1.00 cards per shape** — the §3.120 artifact for the seventh time |
-| per-attacker attack trigger | 22 | 21 | **14** | the largest of the four, and a general trigger event |
-| "until your next turn" | 118 | 118 | 42 | most need a continuous DURATION, not a delayed trigger — a different lane |
+Against the **refreshed** report (32,414 candidates · 6,912 accepted · **25,470 rejected** scanned):
+
+| family | clauses | shapes | SOLE-blocked | per shape | note |
+|---|---:|---:|---:|---:|---|
+| "for each tapped creature" | 8 | 7 | **3** | 1.14 | the honest ceiling for the count half — reported instead of the 246-clause "tapped creature" headline the row would have offered |
+| card → a graveyard FROM ANYWHERE (trigger) | 12 | 11 | **3** | 1.09 | the bare "a card" form is 2 clauses; the family generalises by card TYPE |
+| pile separation | 18 | 18 | **16** | **1.00** | the §3.120 artifact for the seventh time — every card in it prints a sentence no other card prints |
+| per-ATTACKER attack trigger | 23 | 22 | **14** | 1.05 | the largest of the four, and a general trigger event |
+| "until your next turn" | 118 | 118 | 44 | **1.00** | most need a continuous DURATION, not a delayed trigger — a different lane |
+| cast without paying its/their mana cost | 321 | 315 | **168** | 1.02 | Jace's remaining clause; see below for which part of it he actually needs |
 
 #### Jace's `−8` — a clause-level NO-GO, named
 
@@ -3000,10 +3005,10 @@ Three parts, and only the third is hard:
    offered it. The grant carries no "who may cast this". The fix is a `castBy` on the grant plus a
    second exile scan in the offer loop, which runs once per priority decision.
 
-**320 corpus clauses / 314 distinct shapes / 160 sole-blocked cards** print "without paying its/their
+**321 corpus clauses / 315 distinct shapes / 168 sole-blocked cards** print "without paying its/their
 mana cost" — the biggest population any of these residues touches, and 1.02 cards per shape, so it is
 the §3.120 artifact again rather than one system. The cross-seat half is the part Jace specifically
-needs; most of those 160 cast from the caster's own zones and want only the free-cast half.
+needs; most of those 168 cast from the caster's own zones and want only the free-cast half.
 
 ### 3.152 The targeting-protection row names a half that was FINISHED — the gap was one keyword, and the row cannot see it — ✅ done
 
