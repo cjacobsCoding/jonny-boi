@@ -1,4 +1,4 @@
-// Defender Ramp — blue/green, Axebane Guardian into Primal Surge
+// Tamiyo + Jace Surge — blue/green, Axebane Guardian into Primal Surge
 // Transcribed from photo, 2026-09-14. Counts inferred from sleeve depth.
 // ✗ = still blocked — the compiler does not implement one of its printed abilities yet.
 // ✅ = unblocked by the ALL-CARDS campaign; the lane that did it is named. See docs/ALL-CARDS-CAMPAIGN.md §7a.

@@ -374,7 +374,7 @@ waits on the pool refresh (§8 note). A card is ✅ only when **every** printed 
 | Fiendslayer Paladin | targeting restriction | ✅ §3.152 — set-verified +1/−0. ⚠️ **The row named a half that was FINISHED**: all four quarters of protection (CR 702.16) were already built in `core/protection.ts`. The gap was `hexproof from [quality]` (CR 702.11e), ONE rule against an opponent only — and the row's `/ward|protection from/` hint cannot match this card's printed line at all, so it sat in the generic catch-all. |
 
 **11 of 16 lane-verified · 2 evidenced NO-GOs · 3 unstarted.** ✅ **ACIDIC ANGELS IS COMPLETE** — all
-22 of its names compile. Defender Ramp still has **5**: Axebane Guardian, Primal Surge, Craterhoof
+22 of its names compile. Tamiyo + Jace Surge still has **5**: Axebane Guardian, Primal Surge, Craterhoof
 Behemoth, and the two evidenced NO-GOs.
 
 ⛔ is not a shelf. It means the residue has been **named and pinned by a test**, so the card enters
@@ -450,8 +450,8 @@ and the shipped pool lags the compiler. Any absolute below is annotated with the
 | 2026-09-15 | **+43** | loyalty, emblem, untap (PR #39) | 32,341-card corpus against `fd1ca31`, set-diffed (0 lost). Attributed 36 freeze / 7 `and`-verb, **0 unattributed**. ⚠️ **Jace ✗ and Tamiyo ✗ — both honest NO-GOs**, residues pinned by name. |
 | 2026-09-15 | **+175** | printed TARGET BOUND (DESIGN §3.150) | 32,414-card corpus against `fd1ca31`, set-diffed (0 lost). **Selesnya Charm ✅.** ⚠️ Only **28** of the +175 are modal — the CLASS was fixed, not the instance. |
 | 2026-09-15 | **+34** | Populate / copy selectors (PR #42) | 32,341-card corpus against `fd1ca31`, set-diffed (0 lost). **Trostani, Selesnya’s Voice ✅** — and it needed **zero `packages/core` changes**. 15 of the 34 are populate cards; 19 are `", then "` as an ordered conjunction. |
-| 2026-09-15 | **+29** | replacement / prevention (PR #46) | DESIGN §3.151 — a PRIVATE copy of the 32,414-card corpus against `162f143`, set-diffed (6,706 → 6,735, **0 lost**). **Rhox Faithmender ✅, Fog Bank ✅** — Acidic Angels is now ONE card short. |
-| 2026-09-15 | **+1** | targeting protection (PR #47) | DESIGN §3.152 — `hexproof from [quality]` (CR 702.11e). 32,341-card corpus against `162f143`, set-diffed 6,696 → 6,697, **0 lost**. **Fiendslayer Paladin ✅ — and that COMPLETES Acidic Angels.** ⚠️ Also fixed a **stronger-than-printed** sweep defect that would have given 14 hexproof-from cards FULL hexproof. |
+| 2026-09-15 | **+29** | replacement / prevention (PR #46) | DESIGN §3.151 — a PRIVATE copy of the 32,414-card corpus against `162f143`, set-diffed (6,706 → 6,735, **0 lost**). **Rhox Faithmender ✅, Fog Bank ✅** — Thune’s Life is now ONE card short. |
+| 2026-09-15 | **+1** | targeting protection (PR #47) | DESIGN §3.152 — `hexproof from [quality]` (CR 702.11e). 32,341-card corpus against `162f143`, set-diffed 6,696 → 6,697, **0 lost**. **Fiendslayer Paladin ✅ — and that COMPLETES Thune’s Life.** ⚠️ Also fixed a **stronger-than-printed** sweep defect that would have given 14 hexproof-from cards FULL hexproof. |
 
 > ⚠️ **The 299-card copy row was the §2 trap again and flatter than any before it: 300 cards,
 > 301 shapes — 1.00 cards per shape.** Every card in it prints a sentence no other card prints.
