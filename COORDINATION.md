@@ -1,5 +1,5 @@
 - 2026-09-15 `feat/iterative-effects` — **DESIGN §3.156, ITERATIVE EFFECTS (`repeat this process`).**
-  **Primal Surge ✅ and Grindstone ✅. +2 cards, 0 lost, set-verified** (6,934 -> 6,936 on a fixed
+  **Primal Surge ✅ and Grindstone ✅. +2 cards, 0 lost, set-verified** (7,040 -> 7,042 on a fixed
   32,341-card corpus; this lane's seven sources reverted with `git show origin/main:<path>` and both
   trees rebuilt in between; the diff both ways names exactly those two and nothing else).
   Worktree `D:/Cool Stuff/Claude/jb-repeat`, forked from `origin/main` `40f4227`. **NOT PUSHED** —
@@ -22,6 +22,26 @@
   — one import + one spread. **NEW `packages/cards/src/iterative-primitives.ts`**, **NEW
   `packages/cards/src/iterative-effects.test.ts`**, **NEW `packages/cards/scripts/repeat-blame.mjs`**.
   `packages/core/src/choices.ts` · `engine.ts` · `index.ts` · `choice-cards.test.ts`.
+  ⚠️⚠️ **READ THIS ONE FIRST: THE `origin/main` MERGE SILENTLY DROPPED §3.155, AND EVERYTHING WAS
+  GREEN.** `git merge` reported `rules.ts` and `primitives.ts` as AUTO-MERGED with no conflict; the
+  build passed, every type-check passed, and `packages/cards` ran **118 files / 22,433 tests, exit 0**.
+  The playable SET is what caught it:
+  ```
+  origin/main      7,040 complete
+  merged branch    6,938 complete     -> +2 gained, 104 LOST
+  ```
+  The 104 are one shape — Akroan Phalanx, Burn Bright, Charge, Overrun, **Craterhoof Behemoth** —
+  because two hunks resolved in favour of the pre-merge side: `rules.ts` kept the SUPERSEDED
+  `mass-grant-keyword-until-eot` and lost `mass-modify-yours-until-eot` (316 rule ids on main, 315 on
+  the branch), and `primitives.ts` reverted `grantKeywordToYoursUntilEndOfTurn` to its keyword-only
+  form, dropping the P/T half. Both files are now rebuilt as **main's content plus this lane's
+  additions only** — `rules.ts` +144/−0, `primitives.ts` +8/−0, all 316 of main's rule ids present.
+  **Craterhoof Behemoth is another lane's §7a acceptance card.** Had this shipped, that card would
+  have stopped compiling and the board would still have said it was done.
+  → **Integrators: after ANY merge into a lane that touched `rules.ts` or `primitives.ts`, diff the
+  rule ids (`grep -o "id: '[a-z0-9-]*'" | sort -u`) against `origin/main` and re-run `playable-set.mjs`
+  both ways. A count says +2. Only the SET says −104.** (And `git show` hands you LF while the working
+  tree is CRLF — splice with matched endings or the repair silently no-ops.)
   ⚠️ **A CORE CONSTANT WAS RENAMED, BUT ITS VALUE DID NOT MOVE — no lane's expectation changes.**
   `MAX_CHOICES_PER_RESOLUTION` (32) is now `MAX_CHOICES_PER_EFFECT_REF` (32), counted PER EFFECT REF
   instead of per frame, with a new sibling `MAX_EFFECT_STEPS_PER_RESOLUTION` (216) bounding the frame.

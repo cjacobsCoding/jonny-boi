@@ -3392,7 +3392,7 @@ first. Both drafts here were arguments about a number that should never have bee
 
 #### 3. What shipped, and the honest number
 
-**+2 cards, 0 lost, set-verified** — 6,934 → 6,936 on the fixed corpus, with this lane's seven sources
+**+2 cards, 0 lost, set-verified** — 7,040 → 7,042 on the fixed corpus, with this lane's seven sources
 reverted via `git show origin/main:<path>` and both trees rebuilt in between. The diff both ways names
 exactly `Grindstone` and `Primal Surge`, and nothing else moved.
 
@@ -3405,6 +3405,37 @@ primitive exiles twice.
 `millSharedColorRepeat` (Grindstone) is worth more than its one card: **it is the iteration that asks
 NOTHING**, so it exercises the new bound with a real printed card instead of only a fixture.
 
+#### 3a. ⚠️ AND THE FIRST SET MEASUREMENT AFTER THE MERGE SAID −104, NOT +2
+
+`git merge origin/main` reported `rules.ts` and `primitives.ts` as AUTO-MERGED with no conflict.
+The build passed, every type-check passed, and `packages/cards` ran **118 files / 22,433 tests, exit
+0**. The playable SET is the only thing that disagreed:
+
+```
+origin/main      7,040 complete
+merged branch    6,938 complete      -> +2 gained, 104 LOST
+```
+
+The 104 are one shape — Akroan Phalanx, Burn Bright, Charge, Overrun, **Craterhoof Behemoth** —
+because two hunks resolved in favour of the pre-merge side and threw away §3.155:
+
+| file | what the merge kept | what it dropped |
+| --- | --- | --- |
+| `compile/rules.ts` | the SUPERSEDED `mass-grant-keyword-until-eot` | `mass-modify-yours-until-eot` and its whole region — 316 rule ids on `main`, 315 on the branch |
+| `primitives.ts` | the keyword-only `grantKeywordToYoursUntilEndOfTurn` | the P/T half §3.155 added |
+
+Both are now rebuilt as **`main`'s content plus this lane's additions only**: `rules.ts` +144/−0,
+`primitives.ts` +8/−0, every one of `main`'s 316 rule ids present plus exactly this lane's two.
+
+⚠️ **Craterhoof Behemoth is another lane's §7a acceptance card.** Had this shipped, that lane's card
+would have silently stopped compiling while the board still said it was done — which is §8a item 4's
+warning ("the {X} lane read +55 while eight cards had silently left the pool") happening again at
+**thirteen times the size**, and this time caused by the MERGE rather than by the change.
+
+**The rule this earns**: after any merge into a lane that touched `rules.ts` or `primitives.ts`, diff
+the rule ids against `origin/main` and re-run `playable-set.mjs` both ways before believing any gate.
+A count says +2. Only the set says −104. (And `git show` hands you LF while the working tree is CRLF,
+so splice with matched endings or the repair silently no-ops — it did, once, here.)
 #### 4. Left REPORTED, with numbers
 
 42 of the 44 still report, and the reason is the measurement rather than a shelf: **23 of the 38
