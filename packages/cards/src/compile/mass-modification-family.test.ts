@@ -1,5 +1,5 @@
 /**
- * §3.153 — THE MASS UNTIL-END-OF-TURN MODIFICATION FAMILY, compiled AND PLAYED.
+ * §3.155 — THE MASS UNTIL-END-OF-TURN MODIFICATION FAMILY, compiled AND PLAYED.
  *
  * Acceptance card: **Craterhoof Behemoth**, one of the five cards keeping the
  * "Tamiyo + Jace Surge" deck out of the pool (`docs/ALL-CARDS-CAMPAIGN.md` §7a).
@@ -90,7 +90,7 @@ const CRATERHOOF = record({
 
 // --- the compiler half ------------------------------------------------------------
 
-describe('§3.153 the compiler reads a mass until-end-of-turn modification', () => {
+describe('§3.155 the compiler reads a mass until-end-of-turn modification', () => {
   it('compiles CRATERHOOF BEHEMOTH complete — the acceptance card', () => {
     const result = compileCard(CRATERHOOF);
     expect(result.missing, JSON.stringify(result.missing)).toEqual([]);
@@ -160,7 +160,7 @@ describe('§3.153 the compiler reads a mass until-end-of-turn modification', () 
     expect(body?.params?.toughness).toBe(0);
   });
 
-  it('compiles the PUMP-ONLY order, which had no rule at all before §3.153', () => {
+  it('compiles the PUMP-ONLY order, which had no rule at all before §3.155', () => {
     const result = compileCard(
       record({
         name: 'Gnawing Crescendo Fragment',
@@ -388,7 +388,7 @@ function definitionOf(card: CompilableCard): CardDefinition {
   return result.definition;
 }
 
-describe('§3.153 Craterhoof Behemoth, PLAYED', () => {
+describe('§3.155 Craterhoof Behemoth, PLAYED', () => {
   it('buffs every creature you control by the number of creatures you control, with trample', () => {
     const HOOF = definitionOf(CRATERHOOF);
     let s = gameAtMain();
@@ -447,7 +447,7 @@ const OVERRUN_RECORD = record({
   toughness: undefined,
 });
 
-describe('§3.153 Overrun, PLAYED — the printed-number order reaches the board too', () => {
+describe('§3.155 Overrun, PLAYED — the printed-number order reaches the board too', () => {
   it('gives every creature you control +3/+3 and trample, and the opponent nothing', () => {
     const OVERRUN = definitionOf(OVERRUN_RECORD);
     let s = gameAtMain();

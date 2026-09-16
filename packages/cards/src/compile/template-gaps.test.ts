@@ -322,7 +322,7 @@ describe('template gaps — the neighbouring wordings still refuse honestly', ()
   });
 
   it('COMPILES an until-end-of-turn team pump, and NEVER as a static (different mechanic)', () => {
-    // ⚠️ This case used to assert `incomplete`, and that half is obsolete: §3.153
+    // ⚠️ This case used to assert `incomplete`, and that half is obsolete: §3.155
     // gave the compiler the mass until-end-of-turn modification, so Overrun's own
     // sentence has a rule now. The half that MATTERS is unchanged and is the
     // reason the case survives rather than being deleted — an anthem and a

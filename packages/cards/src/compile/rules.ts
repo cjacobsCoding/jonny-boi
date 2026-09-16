@@ -2192,7 +2192,7 @@ const PUMP_TARGET_PHRASE = Object.keys(PUMP_TARGET_NOUNS)
   .join('|');
 
 // ===========================================================================
-// §3.153 — THE MASS UNTIL-END-OF-TURN MODIFICATION FAMILY (this lane's region)
+// §3.155 — THE MASS UNTIL-END-OF-TURN MODIFICATION FAMILY (this lane's region)
 // ===========================================================================
 
 /**
@@ -2211,7 +2211,7 @@ const PUMP_TARGET_PHRASE = Object.keys(PUMP_TARGET_NOUNS)
  * Measured over the 32,341-card corpus before this was written: 359 cards print
  * a mass until-end-of-turn modification on a noun "you control" — 258 pump-only,
  * 95 pump-then-grant, 6 grant-then-pump. Only the last row of this table existed
- * before §3.153, which is why all four of the acceptance card's siblings
+ * before §3.155, which is why all four of the acceptance card's siblings
  * reported. Each row names real printed cards for `dead-rule-sweep.mjs`.
  *
  * ⚠️ Each row declares which capture is which because the groups MOVE between
@@ -2295,7 +2295,7 @@ function parseMassModification(body: string, ctx: RuleContext): Record<string, u
   return null;
 }
 
-// ======================= end §3.153 region =================================
+// ======================= end §3.155 region =================================
 
 /** The table's nouns as a regex alternation, longest first so none is truncated. */
 const TARGET_NOUN_PHRASE = Object.keys(TARGET_NOUN_RESTRICTIONS)
@@ -3699,7 +3699,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       if (keywords === null) return null;
       return effects(
         { primitive: 'addCounters', params: { amount: 1, each: true, scope: 'you' } },
-        // §3.153 — the mass modification's own primitive. The old name still
+        // §3.155 — the mass modification's own primitive. The old name still
         // resolves (it is the same function), but the compiler emits ONE name so
         // a reader of the generated pool cannot conclude there are two effects.
         { primitive: 'grantKeywordToYoursUntilEndOfTurn', params: { keywords, anyOfTypes: ['creature'] } },
@@ -4353,7 +4353,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   // ===========================================================================
-  // §3.153 — THE MASS UNTIL-END-OF-TURN MODIFICATION FAMILY (this lane's region)
+  // §3.155 — THE MASS UNTIL-END-OF-TURN MODIFICATION FAMILY (this lane's region)
   // ===========================================================================
   {
     // The MASS modification: "Creatures you control gain indestructible until
@@ -4400,7 +4400,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       });
     },
   },
-  // ======================= end §3.153 region =================================
+  // ======================= end §3.155 region =================================
   {
     // The SELF form of the evasion grant, with a comparing restriction attached:
     // "~ can't be blocked this turn except by creatures with haste" (Gingerbrute's

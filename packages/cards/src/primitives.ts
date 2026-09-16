@@ -389,7 +389,7 @@ export const grantKeywordUntilEndOfTurn: EffectPrimitive = (ctx) => {
  *     (Overrun) — both halves;
  *   - "Creatures you control gain trample and get +X/+X until end of turn,
  *     where X is the number of creatures you control" (Craterhoof Behemoth) —
- *     both halves, the pump derived at resolution (§3.153).
+ *     both halves, the pump derived at resolution (§3.155).
  *
  * It is a separate primitive from the single-target grant because it targets
  * NOTHING: there is no chosen creature, no legality question, and the set it
@@ -410,7 +410,7 @@ export const grantKeywordUntilEndOfTurn: EffectPrimitive = (ctx) => {
  * X is the number of creatures you control" is counted when this resolves.
  *
  * ⚠️ **THE NAME IS NARROWER THAN THE PRIMITIVE, DELIBERATELY AND TEMPORARILY.**
- * §3.153 gave this the P/T half, so a pump-only card ("Creatures you control get
+ * §3.155 gave this the P/T half, so a pump-only card ("Creatures you control get
  * +2/+0 until end of turn") now compiles to a primitive whose name says only
  * "grantKeyword". The honest name is `modifyYoursUntilEndOfTurn`, and renaming it
  * was written, tested and then REVERTED for one measured reason: the shipped pool

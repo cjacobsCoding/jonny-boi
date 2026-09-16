@@ -9456,11 +9456,12 @@ it tested DRAWING a block rather than making one. Fixed by sharing the hotseat's
 real BLOCKED combat and photographs the damage blooming on the online board while the status still
 reads *Combat Damage*.
 
-### 3.153 The mass until-end-of-turn MODIFICATION — the compiler had the grant and no mass pump at all — ✅ done
+### 3.155 The mass until-end-of-turn MODIFICATION — the compiler had the grant and no mass pump at all — ✅ done
 
-> ⚠️ **Section number claimed off `origin/main` at fork (§3.152 was the tail).** Three other lanes
-> were live in `rules.ts` at the time, so the integrator may have to renumber, exactly as §3.151 →
-> §3.152 was renumbered.
+> ⚠️ **Renumbered once already.** This lane forked when §3.152 was the tail and claimed §3.153; by the
+> time it merged, `main` had taken **both §3.153 and §3.154**, so it moved to §3.155 — the third
+> renumber in this wave (§3.151 → §3.152 was the first). Several lanes are live in `rules.ts`, so the
+> integrator may have to move it again.
 
 Acceptance card: **Craterhoof Behemoth** — one of the five names still blocking *Tamiyo + Jace Surge*
 (`docs/ALL-CARDS-CAMPAIGN.md` §7a) — `When ~ enters, creatures you control gain trample and get
@@ -9498,11 +9499,21 @@ item 5 again: selecting this family by hint would have measured the wrong set in
   but cannot parse FALL THROUGH, because "gain trample and get +X/+X" also matches the grant-only row.
 - **`mass-modify-yours-until-eot`** supersedes the narrower `mass-grant-keyword-until-eot`, which
   became one row of that table.
-- **`modifyYoursUntilEndOfTurn`** — ONE primitive answering *"which permanents does an untargeted
-  until-end-of-turn modification reach, and what does it do to them"*, emitting ONE continuous effect
-  per permanent carrying both halves. `grantKeywordToYoursUntilEndOfTurn` is **the same function**
-  under its old name, because the shipped pool spells it in tens of places and a second
-  implementation behind the old name is how two answers to one question start to drift.
+- **`grantKeywordToYoursUntilEndOfTurn`** gains the P/T half, so it is now ONE primitive answering
+  *"which permanents does an untargeted until-end-of-turn modification reach, and what does it do to
+  them"* — emitting ONE continuous effect per permanent carrying both halves, and writing each half
+  only when the card prints it, so every mass grant in the shipped pool emits exactly the record it
+  always did.
+
+#### ⚠️ The rename was written, tested, and REVERTED — and the order matters
+
+The honest name is `modifyYoursUntilEndOfTurn`; a pump-only card now compiles to a primitive whose
+name says only *"grantKeyword"*. Renaming it is **one line and forty red tests**: the shipped pool is
+GENERATED DATA spelling the old id in tens of places, and `compile.test.ts` and `fidelity.test.ts`
+compare the compiler's output against it **ref by ref**. A pool refresh was in flight and
+`packages/cards/data/` was off-limits to this lane, so the rename was reverted rather than shipped
+red. **It must land in the same change as a regeneration, never before it.** The full
+`packages/cards` gate is what caught this — a targeted run of the new suite was green throughout.
 
 #### ⚠️ §1a — the guard runs in BOTH directions
 

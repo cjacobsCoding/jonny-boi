@@ -342,11 +342,11 @@ function againstTarget(
 }
 
 /**
- * §3.153 — price a MASS until-end-of-turn modification: one number per BODY it
+ * §3.155 — price a MASS until-end-of-turn modification: one number per BODY it
  * reaches, times the stats and keywords it gives each of them.
  *
  * ⚠️ The primitive is named for the keyword half only. It does the P/T half too
- * since §3.153; the rename is blocked on a pool regeneration (see `primitives.ts`).
+ * since §3.155; the rename is blocked on a pool regeneration (see `primitives.ts`).
  *
  * ⚠️ REPORTED, NOT PRICED: a DERIVED P/T amount ("+X/+X, where X is the number of
  * creatures you control" — Craterhoof Behemoth) reads as 0 here and the card is

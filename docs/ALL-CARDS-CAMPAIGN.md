@@ -207,11 +207,11 @@ were true on the corpus and compiler of the day they were taken.
 Plus the two evidenced NO-GOs, `Jace` and `Tamiyo`, whose residues are named in §7a and pinned by
 tests — neither needs a lane of its own, both need the families that actually hold them.
 
-~~`Craterhoof Behemoth`~~ — ✅ §3.153. The re-blame this row demanded paid off twice over: the
+~~`Craterhoof Behemoth`~~ — ✅ §3.155. The re-blame this row demanded paid off twice over: the
 derived count had landed, **and the keyword grant had landed years earlier**. The real gap was the
 missing MASS PUMP, which no row named at all.
 
-⭐ **NEW, measured by §3.153 on its way past — the wrappers, not the families.** Of the 254 cards
+⭐ **NEW, measured by §3.155 on its way past — the wrappers, not the families.** Of the 254 cards
 still sole-blocked by a mass until-end-of-turn clause, **344 clause-refusals are NOT-PROBEABLE**
 because the line carrying the clause refuses for another reason. Ranked by the printed marker on that
 line: **113 a trigger prefix · 74 an activation cost prefix · 59 an ability word (`Name —`) · 34 a
@@ -330,7 +330,7 @@ waits on the pool refresh (§8 note). A card is ✅ only when **every** printed 
 | Primal Surge | ⚠️ **misfiled** | ⬜ `Exile the top card of your library. If it's a permanent card, you may put it onto the battlefield. If you do, repeat this process.` The row calls it *"you may / choose"*; **the actual blocker is `repeat this process`** — an unbounded iteration. The "you may" half is ordinary. |
 | Rhox Faithmender | life-change replacement | ✅ §3.151 — one more event kind cost one row in five places. The real work was the **funnel**: lifelink and a resolving spell both gain life, and this card prints both halves. |
 | Fog Bank | damage prevention | ✅ §3.151 — prevention was already built. What was missing was a way to say **`~`**: a closed anchor vocabulary read by both sides of the event. |
-| Craterhoof Behemoth | mass pump + keyword grant | ✅ §3.153 — set-verified **+105 / −0**. ⚠️ **The re-blame was right and the row was wrong TWICE.** The derived count was already a row of `NAMED_DERIVED_COUNTS` (§3.149), and the residue was not the keyword grant either — that shipped long ago (Selfless Spirit). It was that **`pumpUntilEndOfTurn` had no MASS form at all**: the compiler could say "creatures you control gain indestructible" and could not say "creatures you control get +3/+3". **Overrun had no rule.** |
+| Craterhoof Behemoth | mass pump + keyword grant | ✅ §3.155 — set-verified **+105 / −0**. ⚠️ **The re-blame was right and the row was wrong TWICE.** The derived count was already a row of `NAMED_DERIVED_COUNTS` (§3.149), and the residue was not the keyword grant either — that shipped long ago (Selfless Spirit). It was that **`pumpUntilEndOfTurn` had no MASS form at all**: the compiler could say "creatures you control gain indestructible" and could not say "creatures you control get +3/+3". **Overrun had no rule.** |
 | Fiendslayer Paladin | targeting restriction | ✅ §3.152 — set-verified +1/−0. ⚠️ **The row named a half that was FINISHED**: all four quarters of protection (CR 702.16) were already built in `core/protection.ts`. The gap was `hexproof from [quality]` (CR 702.11e), ONE rule against an opponent only — and the row's `/ward|protection from/` hint cannot match this card's printed line at all, so it sat in the generic catch-all. |
 
 **12 of 16 lane-verified · 2 evidenced NO-GOs · 2 unstarted.** ✅ **ACIDIC ANGELS IS COMPLETE** — all
@@ -412,7 +412,7 @@ and the shipped pool lags the compiler. Any absolute below is annotated with the
 | 2026-09-15 | **+34** | Populate / copy selectors (PR #42) | 32,341-card corpus against `fd1ca31`, set-diffed (0 lost). **Trostani, Selesnya’s Voice ✅** — and it needed **zero `packages/core` changes**. 15 of the 34 are populate cards; 19 are `", then "` as an ordered conjunction. |
 | 2026-09-15 | **+29** | replacement / prevention (PR #46) | DESIGN §3.151 — a PRIVATE copy of the 32,414-card corpus against `162f143`, set-diffed (6,706 → 6,735, **0 lost**). **Rhox Faithmender ✅, Fog Bank ✅** — Thune’s Life is now ONE card short. |
 | 2026-09-15 | **+1** | targeting protection (PR #47) | DESIGN §3.152 — `hexproof from [quality]` (CR 702.11e). 32,341-card corpus against `162f143`, set-diffed 6,696 → 6,697, **0 lost**. **Fiendslayer Paladin ✅ — and that COMPLETES Thune’s Life.** ⚠️ Also fixed a **stronger-than-printed** sweep defect that would have given 14 hexproof-from cards FULL hexproof. |
-| 2026-09-15 | **+105** | mass until-end-of-turn modification (DESIGN §3.153) | 32,341-card corpus against fork point `8ee821a`, set-diffed **6,934 → 7,039, 0 lost**. **Craterhoof Behemoth ✅** — and the re-blame §7b item 3 demanded was right twice: the derived count had landed, the keyword grant had landed years earlier, and the real gap was that `pumpUntilEndOfTurn` had **no MASS form**. ⚠️ **Overrun — printed in 1998 — had no rule.** Gauntlet seed 99 byte-identical on both trees (`97/320`, rows `17·14·19·7·8·10·17·5`). |
+| 2026-09-15 | **+105** | mass until-end-of-turn modification (DESIGN §3.155) | 32,341-card corpus against fork point `8ee821a`, set-diffed **6,934 → 7,039, 0 lost**. **Craterhoof Behemoth ✅** — and the re-blame §7b item 3 demanded was right twice: the derived count had landed, the keyword grant had landed years earlier, and the real gap was that `pumpUntilEndOfTurn` had **no MASS form**. ⚠️ **Overrun — printed in 1998 — had no rule.** Gauntlet seed 99 byte-identical on both trees (`97/320`, rows `17·14·19·7·8·10·17·5`). |
 
 > ⚠️ **The 299-card copy row was the §2 trap again and flatter than any before it: 300 cards,
 > 301 shapes — 1.00 cards per shape.** Every card in it prints a sentence no other card prints.
@@ -503,8 +503,17 @@ Selesnya Charm, Trostani. Checked against the set itself, not taken from any lan
    sole-blocked cards whose event kind the layer ALREADY watched**; the gap was the printed WORDING.
    *"What would one more X cost?"* is a question to answer by reading the layer **before** scoping,
    and answering it took ten minutes.
+12. ⚠️ **A PRIMITIVE RENAME IS A POOL MIGRATION, and the targeted suite cannot see it.** §3.155
+    renamed one primitive to match what it now does. `compile.test.ts` and `fidelity.test.ts` compare
+    the compiler's output against the SHIPPED POOL **ref by ref**, so the rename was **40 red tests**
+    in two files the lane had never opened — while its own new suite, and every file it had touched,
+    stayed green. It was reverted: a pool refresh was in flight and `packages/cards/data/` was
+    off-limits, and shipping the rename would have handed `main` a red gate exactly as the
+    keyword-glossary incident did. **A rename lands in the same change as a regeneration or not at
+    all** — and the lesson under it is the board's own rule restated: *run the suite for every
+    package your diff names, whole*. The narrow run that proves your feature cannot prove your rename.
 11. ⚠️ **The axis no row names is SINGLE-TARGET vs MASS, and it is invisible from the backlog.**
-    §3.153's row promised a *"mass keyword grant"*. The keyword grant existed (Selfless Spirit), the
+    §3.155's row promised a *"mass keyword grant"*. The keyword grant existed (Selfless Spirit), the
     derived count existed (§3.149), the trigger existed, the where-X binding existed — and the card
     still refused, because `pumpUntilEndOfTurn` was **single-target only and had no mass form**.
     Every hint in `UNSUPPORTED_HINTS` names a *kind of effect*; none names the *shape of the set it
