@@ -15,7 +15,7 @@
 3 Jace, Architect of Thought   // ✗ not in pool
 2 Tamiyo, the Moon Sage        // ✗ not in pool
 2 Gilded Lotus
-2 Primal Surge                 // ✗ not in pool
+2 Primal Surge                 // ✅ compiles — §3.153 (iterative effects)
 
 10 Forest
 4 Hinterland Harbor

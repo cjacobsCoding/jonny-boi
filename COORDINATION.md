@@ -1,3 +1,59 @@
+- 2026-09-15 `feat/iterative-effects` — **DESIGN §3.153, ITERATIVE EFFECTS (`repeat this process`).**
+  **Primal Surge ✅ and Grindstone ✅. +2 cards, 0 lost, set-verified** (6,934 -> 6,936 on a fixed
+  32,341-card corpus; this lane's seven sources reverted with `git show origin/main:<path>` and both
+  trees rebuilt in between; the diff both ways names exactly those two and nothing else).
+  Worktree `D:/Cool Stuff/Claude/jb-repeat`, forked from `origin/main` `40f4227`. **NOT PUSHED** —
+  the brief forbade `git push`; the branch is local in that worktree, four commits.
+  **NEW `packages/cards/scripts/repeat-blame.mjs`** — the ninth blame tool. 44 cards print "repeat",
+  all 44 blocked, **38 clauses / 38 shapes = 1.00 per shape**: the §3.120 artifact at its FLOOR for
+  the second time. ⚠️ **There is no iteration row in `UNSUPPORTED_HINTS` at all** — the family is
+  scattered across **14** rows, so selecting by hint would have found ZERO of it. That is a stronger
+  result than §7c item 5's 68%: the hint cannot see the family.
+  ⚠️ **THE ROW NAME POINTED AT THE WRONG HALF, AND SO DID THE CORRECTION.** The board says "you may /
+  choose"; §7b corrected that to `repeat this process`. Both are half right: the gap is the BODIES 23
+  clauses to 15, and **Primal Surge is in the BODY bucket** — with the repeat sentence deleted it
+  still refuses. Exactly ONE corpus card compiles on the iteration alone, and it is Grindstone.
+  **FILES OWNED** (`rules.ts` is contended — expect a real merge, and build after it):
+  `packages/cards/src/compile/rules.ts` — **one region only**: a `§3.153` block declared immediately
+  ABOVE `export const EFFECT_RULES` (it must be above it: a `const` spread into that array from below
+  is a TDZ error), reaching the array through **one spread line** `...ITERATIVE_EFFECT_RULES,` at its
+  end. Nothing else in the file is touched. `packages/cards/src/compile/compile.ts` — **one ROW**:
+  `millSharedColorRepeat` added to `PRIMITIVE_BACKED_KEYWORDS.mill`. `packages/cards/src/primitives.ts`
+  — one import + one spread. **NEW `packages/cards/src/iterative-primitives.ts`**, **NEW
+  `packages/cards/src/iterative-effects.test.ts`**, **NEW `packages/cards/scripts/repeat-blame.mjs`**.
+  `packages/core/src/choices.ts` · `engine.ts` · `index.ts` · `choice-cards.test.ts`.
+  ⚠️ **SEMANTIC CONFLICT FOR THE INTEGRATOR: this lane changed a CORE constant every package reads.**
+  `MAX_CHOICES_PER_RESOLUTION` was **32** under the comment *"Generous: no real card comes close"*.
+  Primal Surge asks once per permanent it puts onto the battlefield, so Defender Ramp asks it fifty-odd
+  times in ONE resolution — and an abandoned `confirm` degrades to **no**, i.e. the card stops early and
+  plays WEAKER than printed with every test green. It is now derived from a named
+  `LARGEST_LEGAL_LIBRARY` alongside a new sibling `MAX_EFFECT_STEPS_PER_RESOLUTION` (400). Any lane
+  holding a literal near 32 in a choice loop will need the same treatment `choice-cards.test.ts` got.
+  ⚠️ **The new bound exists because the old one could not SEE this class** — a resolution that will not
+  stop ENQUEUEING asks nothing, takes no action and ends no turn, so it is invisible to the ask budget,
+  to the sim's per-turn bound and to the soak's `gameCanEnd`. It hung the process instead of losing a
+  game. §3.140's blindness one layer in; both bounds now abandon through one `abandonResolution` funnel
+  and the same `choiceAbandoned` event, so no soak table or observation row needed a new entry.
+  **GATE, derived from the diff** (`git diff --name-only origin/main...HEAD | cut -d/ -f1-2 | sort -u`
+  = `packages/cards` + `packages/core`), each run separately and unpiped:
+  `packages/core` **100 files / 1402 tests, exit 0**; `packages/cards` **114 files / 18,520 tests,
+  exit 0**; combined **214 files / 19,922 tests** against **214 `*.test.ts` on disk**, `Worker exited`
+  count **0**, `skipped` **0**. `npm run build` **exit 0** (unpiped; it OOMs at exit 134 under default
+  heap while three lanes are live — `NODE_OPTIONS=--max-old-space-size=4096` fixes it, and that is a
+  BOX limit, not a code failure). Gauntlet seed 99 **97/320 = 30.3%, rows 17·14·19·7·8·10·17·5, 1
+  timeout draw — byte-identical on both sides of the change.**
+  ⚠️ **Two traps this lane paid for twice, worth the next agent's ten seconds:**
+  (1) `git checkout -- <path>` restores to the last COMMIT, not to the pre-sabotage working tree. It
+  silently deleted an uncommitted export mid-falsification, and the test then failed with "undefined
+  and string", which reads exactly like a circular-import bug and is not one. **Commit before a
+  falsification pass.**
+  (2) The documented Bash-heredoc backslash mangling is live: a region appended with `cat >>` reached
+  disk one backslash short: a template literal needs a DOUBLED backslash to put an escaped dot into the
+  regex, and what landed was the single form — which inside a template literal is just a dot, matching
+  ANY character. The card still compiled, so no test could see it; **eslint's `no-useless-escape` was
+  the only thing that did.** Run lint on your own files, not just the suite. (Written with the Write/Edit
+  tool, because saying this through a heredoc ate the backslashes a third time.)
+
 - 2026-09-15 **A FAILING TEST REACHED `main`, AND THE CAUSE WAS MY BRIEF, NOT THE LANE** (integrator).
   `apps/web/src/lib/play/keyword-glossary.test.ts` was red on `main` for three merges. The lane that
   caused it did nothing wrong: it **declared** its two `apps/web` rows in its report, and it ran

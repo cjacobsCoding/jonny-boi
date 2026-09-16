@@ -3061,6 +3061,102 @@ and `rules-citations.test.ts` GAP-15 failed. The correct citation is the **subse
 can reach this family — `targeting-protection-family.test.ts` is its coverage gate, and every Oracle
 string in it is copied verbatim from a named real corpus card for exactly that reason.
 
+### 3.153 ITERATIVE EFFECTS — `repeat this process`. The family is 44 cards, 38 shapes, and the honest delta is TWO — ✅ done
+
+> ⚠️ **Section number claimed off a contended range, and checked rather than assumed.** §3.152 is the
+> highest in `origin/main` at fork (`40f4227`). A scan of every remote branch's `DESIGN.md` for a
+> `### 3.153` heading found **none** — the highest any branch claims is §3.152. If an integrator finds
+> a second §3.153, renumber this one: it references no other section by number except as citations.
+
+The acceptance card was **Primal Surge** — *"Exile the top card of your library. If it's a permanent
+card, you may put it onto the battlefield. If you do, repeat this process."* — the card Caleb's
+Defender Ramp deck is built to cast. §7a of the campaign files it under the 5,640-card *"you may /
+choose"* row; §7b corrected that to `repeat this process`. **Both were half right, and the
+measurement says which half.**
+
+#### 1. What `repeat-blame.mjs` measured before anything was written
+
+New committed tool, the ninth blame script, on a fixed 32,341-card corpus. It differs from its
+siblings in HOW it probes: rather than rebuilding the clause on the card's type line (the trap
+`modal-blame` was written around and `xvalue-blame` was bitten by), it **deletes the repeat sentence
+from the card's own printed text and recompiles the card** — so the trigger condition, the activation
+cost, the loyalty cost and the Saga chapter all stay exactly where the printed card puts them.
+
+```
+44 cards print "repeat"        — all 44 BLOCKED
+42 "repeat this process" · 2 "repeat the following process" · 0 "repeat that process"
+38 clauses / 38 shapes = 1.00 per shape
+ITERATION 15 clauses · BODY 23 · NOT-PROBEABLE 6
+cards that compile once the repeat sentence is removed: 1  (Grindstone)
+```
+
+- ⚠️ **1.00 cards per shape — the §3.120 aggregation artifact at its FLOOR, for the second time in
+  this campaign.** Every card in this family prints a sentence no other card prints. §8a item 1's
+  list of ratios (1.20 … 1.04, one at 1.00) gains its second 1.00, and this one is not a row at all.
+- ⚠️ **There is no iteration row in `UNSUPPORTED_HINTS`, so selecting by hint would have found ZERO
+  of this family.** The 44 are scattered across **14** rows; the largest is the *"you may / choose"*
+  row with 18, and the second is the §2 catch-all with 7. §8a item 3 and §7c item 5 now have a third
+  and strongest measurement: not *"the hint misses 68%"* but *"the hint cannot see the family"*.
+- ⚠️ **THE ROW NAME POINTED AT THE WRONG HALF FOR THE TENTH TIME, AND SO DID THE CORRECTION.** The
+  gap is the **BODIES**, 23 clauses to 15. And **Primal Surge is in the BODY bucket**: with its
+  repeat sentence deleted, `Exile the top card of your library. If it's a permanent card, you may put
+  it onto the battlefield.` still refuses. The card needed three things, not one — an exile-top, a
+  conditional put-onto-the-battlefield, and the loop.
+
+#### 2. The termination argument is the CARD's; the budget guards AUTHORING mistakes
+
+Both printed iterations consume a finite zone per step and put nothing back: `exileTopMayPlay` moves
+the top library card to exile before doing anything else, and `millSharedColorRepeat` stops the moment
+it cannot mill the printed count. The library is strictly shorter every step, so the step that finds
+it empty returns. **That, not a cap, is why they end.**
+
+⚠️ **The cap exists because the engine's existing runaway guard was structurally unable to see this
+class.** `MAX_CHOICES_PER_RESOLUTION` bounds a resolution that will not stop ASKING. An iteration
+that will not stop ENQUEUEING asks nothing, takes no game action and ends no turn — so it is invisible
+to that counter, to the sim's per-turn action bound, and through it to the soak's `gameCanEnd`
+invariant. It hangs the process rather than losing a game, which in a thousand-game soak reads as a
+slow game. **This is §3.140's blindness one layer further in**, and the answer is deliberately not a
+second mechanism: `MAX_EFFECT_STEPS_PER_RESOLUTION` is its sibling constant in the same file, counted
+in the same loop, and abandoning through the same `abandonResolution` funnel and the same
+`choiceAbandoned` event — which is what the sim redaction, the soak table and the web log already read.
+
+⚠️ **AND THE OLD CEILING WAS ALREADY TOO LOW FOR A REAL CARD.** `MAX_CHOICES_PER_RESOLUTION` was 32
+under the comment *"Generous: no real card comes close"*. Primal Surge asks once per permanent it puts
+onto the battlefield, so Defender Ramp asks it fifty-odd times in ONE resolution — and an abandoned
+`confirm` degrades to **no**. The card would have stopped early and played WEAKER than printed with
+every test green. Both ceilings now derive from one named `LARGEST_LEGAL_LIBRARY`, and the stale
+comment is fixed in the same commit.
+
+#### 3. What shipped, and the honest number
+
+**+2 cards, 0 lost, set-verified** — 6,934 → 6,936 on the fixed corpus, with this lane's seven sources
+reverted via `git show origin/main:<path>` and both trees rebuilt in between. The diff both ways names
+exactly `Grindstone` and `Primal Surge`, and nothing else moved.
+
+Two printed templates in ONE bounded `rules.ts` region reached through a single spread line, and three
+primitives in a new `iterative-primitives.ts`. The body is split across two refs (`exileTopMayPlay` →
+`mayPlayExiledCard`) for the reason `millThenReturn`/`returnMilledCard` is: Primal Surge exiles a card
+and THEN asks about it, and a parked question re-runs its ref from the top, so a mutate-then-ask
+primitive exiles twice.
+
+`millSharedColorRepeat` (Grindstone) is worth more than its one card: **it is the iteration that asks
+NOTHING**, so it exercises the new bound with a real printed card instead of only a fixture.
+
+#### 4. Left REPORTED, with numbers
+
+42 of the 44 still report, and the reason is the measurement rather than a shelf: **23 of the 38
+clauses are BODY gaps whose work lives in another family entirely**, ranked by the family that owns
+them — *"you may / choose"* 9, the §2 catch-all 5, transform 2, opponent-targeting 2, and one each
+for graveyard, counters, {X}, step-trigger and library-search. The remaining ITERATION-only wordings
+are a closed vocabulary this lane measured and did not implement: **`until …` 8 · `any number of
+times` 4 · `for <list>` 4 · `once` / `N more times` 3 · `Repeat the following process X times` 1.**
+Four of them are pinned by name in `iterative-effects.test.ts` as still-reporting, so a later
+widening of the sentence patterns cannot quietly compile them.
+
+⚠️ **Three corpus cards print `repeat this process` only in EXPLORE's reminder text** (Jadelight
+Ranger, Over the Edge, Defossilize) and are blocked by `it explores, then it explores again` — a
+different family wearing this one's word. `repeat-blame` reports them NOT-PROBEABLE by name rather
+than bucketing them.
 ### 3.151 The CR 614/615 row names the EVENT KINDS — and the gap is the WORDINGS, on kinds the layer already watched — ✅ done
 
 > ⚠️ **Section number claimed off a contended range.** §3.150 was the highest in `main` when this
