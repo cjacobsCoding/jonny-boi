@@ -377,10 +377,14 @@ async function main() {
     for (const row of report.cards) {
       check(`the card browser finds "${row.name}"`, row.found, `tiles: ${row.firstTiles.join(', ') || '(none)'}`);
     }
+    // Both halves in the detail, because reporting only the first one printed
+    // "11/11" next to the word FAIL — a message that makes a reader doubt the
+    // check rather than read the cause (the three cards that drew no tile).
     check(
       'every search NARROWED the grid — the box is not inert',
       report.cards.every((c) => c.narrowed && c.tilesDrawn > 0),
-      `${report.cards.filter((c) => c.narrowed).length}/${report.cards.length} returned fewer than ${poolSize} cards`,
+      `${report.cards.filter((c) => c.narrowed).length}/${report.cards.length} returned fewer than ` +
+        `${poolSize} cards, and ${report.cards.filter((c) => c.tilesDrawn > 0).length}/${report.cards.length} drew a tile`,
     );
     // A stale frame repeats a hash; a blank frame repeats a SMALL hash. Both
     // have been accepted as proof in this repo before, so both are refused.
