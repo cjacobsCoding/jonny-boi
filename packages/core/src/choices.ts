@@ -1122,7 +1122,7 @@ export function validateChoiceAnswer(choice: PendingChoice, answer: ChoiceAnswer
  *
  * This is the engine's floor: it is what a choice degrades to when the chooser
  * cannot answer (the game ended under them, a state arrived from a newer build,
- * a primitive asked more questions than {@link MAX_CHOICES_PER_RESOLUTION}). It is
+ * a primitive asked more questions than {@link MAX_CHOICES_PER_EFFECT_REF}). It is
  * always legal because normalisation guarantees `min <= optionCount`, which is
  * exactly why an unanswerable choice cannot exist.
  */
@@ -1255,26 +1255,14 @@ export const LARGEST_LEGAL_LIBRARY = 100;
  */
 const REFS_PER_ITERATION = 2;
 
-/**
- * Headroom above the iteration itself, for the sentences printed around it.
- *
- * ⚠️ SMALL ON PURPOSE, AND THE MEASUREMENT SAYS WHY. The ceilings below used to
- * be `4 * LARGEST_LEGAL_LIBRARY`, chosen as "comfortably generous" with nothing
- * measured behind the 4. It is not free: `expanded-pool.test.ts`'s whole-pool
- * game runs every pool card, and the pool contains resolutions that ask in long
- * loops (a copy mirror, a big storm count). Every one of them now runs to the
- * ceiling instead of the old 32, so the ceiling is a direct multiplier on that
- * test — measured at **21.6 min with the old 32 against >54 min at 400, on the
- * same tree**. A ceiling is a budget somebody actually spends; pick the smallest
- * one that is still correct for the printed card, not the roundest one.
- */
+/** Headroom above the iteration itself, for the sentences printed around it. */
 const RESOLUTION_SLACK = 16;
 
 /**
  * A hard ceiling on how many EFFECT STEPS one resolution may run.
  *
  * ⚠️ THIS EXISTS BECAUSE THE OTHER CEILING COULD NOT SEE THE RUNAWAY IT WAS FOR.
- * {@link MAX_CHOICES_PER_RESOLUTION} bounds a resolution that will not stop
+ * {@link MAX_CHOICES_PER_EFFECT_REF} bounds ONE primitive that will not stop
  * ASKING. A resolution that will not stop ENQUEUEING asks nothing, takes no game
  * action, and never ends a turn — so it is invisible to that counter, to the
  * per-turn action bound and to the soak's `gameCanEnd` invariant, and it hangs
@@ -1298,35 +1286,43 @@ export const MAX_EFFECT_STEPS_PER_RESOLUTION =
   REFS_PER_ITERATION * LARGEST_LEGAL_LIBRARY + RESOLUTION_SLACK;
 
 /**
- * A hard ceiling on how many questions ONE resolution may ask. A primitive with a
- * bug (asking inside a loop whose condition its own answer never changes) would
- * otherwise wedge the game forever; instead the engine abandons the rest of that
- * resolution with an event.
+ * A hard ceiling on how many questions ONE EFFECT REF may ask. A primitive with
+ * a bug (asking inside a loop whose condition its own answer never changes)
+ * would otherwise wedge the game forever; instead the engine abandons the rest
+ * of that resolution with an event.
  *
- * ⚠️ IT USED TO BE 32, UNDER THE COMMENT *"generous: no real card comes close"*.
- * That was measured false by the first iterative card implemented: Primal Surge
- * asks once per permanent it puts onto the battlefield, so a permanent-heavy
- * deck asks it fifty-odd times in ONE resolution. The old ceiling abandoned the
- * rest of the resolution, and an abandoned `confirm` degrades to NO — so the
- * card would have stopped early and played WEAKER than printed while every test
- * stayed green.
+ * ⚠️ **PER REF, NOT PER RESOLUTION — and that distinction is the whole fix.**
+ * The counter used to run for the life of the frame under the name
+ * `MAX_CHOICES_PER_RESOLUTION`, which conflated two different pathologies:
  *
- * ⚠️ AND IT IS NOT FREE TO RAISE, which the first version of this change missed.
- * Only SOME of the resolutions that reach a ceiling are runaways; the rest are
- * real cards doing real work, and the pool has resolutions that ask in long
- * loops. Raising 32 → 400 more than doubled `expanded-pool.test.ts`'s whole-pool
- * game (21.6 min → >54 min on the same tree), because every such resolution now
- * runs 12.5× further before being cut off. Lowering it back is not the answer —
- * at 32 those cards were being TRUNCATED, i.e. played weaker than printed, which
- * is the defect this section exists to fix. The answer is the SMALLEST correct
- * value: one ask per library card is what the printed card can need, so that
- * plus {@link RESOLUTION_SLACK} is what it gets.
+ *   - ONE primitive asking in a loop that its own answer never ends. That is a
+ *     bug, it is what this ceiling was written for, and it is bounded per REF.
+ *   - MANY primitives each asking once. That is an iterative card — Primal Surge
+ *     asks one question per permanent it puts onto the battlefield, each from
+ *     its own enqueued ref — and it is a legal resolution, not a runaway.
  *
- * Not simply {@link MAX_EFFECT_STEPS_PER_RESOLUTION}: a step may ask at most one
- * question, but an iteration costs {@link REFS_PER_ITERATION} steps per ask, so
- * equating them would buy a factor of two nobody asked for.
+ * A frame-wide counter cannot tell them apart, so it had to be raised to let the
+ * second through, and raising it let the FIRST run twelve times further before
+ * being cut off. Measured on the same tree, `expanded-pool.test.ts`'s whole-pool
+ * game (every card in a 6,944-card pool, and the pool holds resolutions that ask
+ * in long loops — a copy mirror, a big storm count):
+ *
+ * ```
+ *   frame-wide ceiling  32 : 1295.31s = 21.6 min
+ *   frame-wide ceiling 400 : stopped at >54 min, still running
+ *   frame-wide ceiling 116 : stopped at >105 min of CPU, still running
+ * ```
+ *
+ * Per-ref at 32 gives **exactly the pre-existing behaviour for every card that
+ * asks from one ref** — the storm and copy shapes are bounded where they always
+ * were — while an iterative card's frame is bounded instead by
+ * {@link MAX_EFFECT_STEPS_PER_RESOLUTION}, which is the counter that actually
+ * matches its shape. Two pathologies, two counters, neither paying for the other.
+ *
+ * The value is unchanged at 32 deliberately: nothing about the bug this catches
+ * changed, so the number should not move either.
  */
-export const MAX_CHOICES_PER_RESOLUTION = LARGEST_LEGAL_LIBRARY + RESOLUTION_SLACK;
+export const MAX_CHOICES_PER_EFFECT_REF = 32;
 
 // --- answer enumeration (the AI / legal-action seam) ------------------------------
 
@@ -1558,7 +1554,13 @@ export interface ResolutionFrame {
    * without asking again — the reason a primitive must ask BEFORE it mutates.
    */
   answers: ChoiceAnswer[];
-  /** Questions asked across the whole frame; guards {@link MAX_CHOICES_PER_RESOLUTION}. */
+  /**
+   * Questions asked by the effect ref at {@link next}; guards
+   * {@link MAX_CHOICES_PER_EFFECT_REF}. RESET when the frame advances to the next
+   * ref, beside {@link answers} and for the same reason: a question belongs to
+   * one ref's conversation, and a frame-wide total cannot tell one primitive
+   * looping from many primitives each asking once.
+   */
   askCount: number;
   /**
    * Effect refs RUN by this frame so far; guards

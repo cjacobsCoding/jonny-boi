@@ -24,7 +24,7 @@ import {
   DEFAULT_RULES,
   dumpState,
   generateLegalActions,
-  MAX_CHOICES_PER_RESOLUTION,
+  MAX_CHOICES_PER_EFFECT_REF,
   opponentOf,
   serializeState,
   type CardDefinition,
@@ -826,7 +826,7 @@ describe('robustness', () => {
     // from the constant cannot drift, and the `+ 2` is the slack this row
     // actually needs: the budget counts QUESTIONS, and the resolution takes one
     // more answer to finish afterwards.
-    const budget = MAX_CHOICES_PER_RESOLUTION + 2;
+    const budget = MAX_CHOICES_PER_EFFECT_REF + 2;
     let guard = 0;
     while (state.pendingChoice && guard++ < budget) {
       state = answer(state, reg, { kind: 'confirm', yes: true });

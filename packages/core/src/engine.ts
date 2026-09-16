@@ -51,7 +51,7 @@ import {
   enumerateChoiceAnswers,
   isTrivialChoice,
   matchesCardFilter,
-  MAX_CHOICES_PER_RESOLUTION,
+  MAX_CHOICES_PER_EFFECT_REF,
   MAX_EFFECT_STEPS_PER_RESOLUTION,
   NO_ASKING_OBJECT,
   normalizeChoiceRequest,
@@ -1119,7 +1119,7 @@ function runResolution(
     // this process") enqueues its next step into this same frame, so a body
     // whose repeat rule never becomes false spins here forever — asking
     // nothing, taking no game action, ending no turn, and therefore invisible
-    // to `MAX_CHOICES_PER_RESOLUTION`, to the sim's per-turn action bound and
+    // to `MAX_CHOICES_PER_EFFECT_REF`, to the sim's per-turn action bound and
     // to the soak's `gameCanEnd` invariant. It hangs the process instead of
     // losing a game, which in a thousand-game soak reads as a slow game.
     //
@@ -1176,6 +1176,13 @@ function runResolution(
     frame.stepCount = (frame.stepCount ?? 0) + 1;
     // Answers belong to one effect ref; the next ref starts its own conversation.
     frame.answers.length = 0;
+    // ⚠️ AND SO DOES THE QUESTION COUNT. `MAX_CHOICES_PER_EFFECT_REF` exists to
+    // catch ONE primitive asking in a loop its own answer never ends; carrying
+    // the total across refs made it also punish an iterative card, whose every
+    // question comes from a different enqueued ref. The frame is bounded by
+    // `MAX_EFFECT_STEPS_PER_RESOLUTION` instead — the counter that matches that
+    // shape — so nothing is left unbounded by the split.
+    frame.askCount = 0;
   }
   finishResolution(state, frame, emit);
 }
@@ -1366,8 +1373,8 @@ function finishSpellResolution(
 /**
  * THE ONE PLACE A RESOLUTION IS GIVEN UP ON, whichever bound noticed.
  *
- * Two different runaways end here — a resolution that will not stop asking
- * ({@link MAX_CHOICES_PER_RESOLUTION}, and a question whose kind cannot be
+ * Two different runaways end here — ONE EFFECT that will not stop asking
+ * ({@link MAX_CHOICES_PER_EFFECT_REF}, and a question whose kind cannot be
  * represented at all) and one that will not stop enqueueing
  * ({@link MAX_EFFECT_STEPS_PER_RESOLUTION}) — because they are one fact wearing
  * two counters: *this resolution is not going to finish on its own.* Two
@@ -1435,8 +1442,8 @@ function createChoiceChannel(
         askIndex += 1;
         return recorded;
       }
-      if (frame.askCount >= MAX_CHOICES_PER_RESOLUTION) {
-        return abandon(`asked more than ${MAX_CHOICES_PER_RESOLUTION} questions in one resolution`);
+      if (frame.askCount >= MAX_CHOICES_PER_EFFECT_REF) {
+        return abandon(`asked more than ${MAX_CHOICES_PER_EFFECT_REF} questions in one effect`);
       }
       // Only the ENGINE can say whether a payment is affordable — it is the one
       // that knows what is still untapped — so a `payMana` request is enriched

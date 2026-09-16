@@ -34,7 +34,7 @@ import {
   createGame,
   DEFAULT_RULES,
   dumpState,
-  MAX_CHOICES_PER_RESOLUTION,
+  MAX_CHOICES_PER_EFFECT_REF,
   MAX_EFFECT_STEPS_PER_RESOLUTION,
 } from '@jonny-boi/core';
 import { compileCard } from './compile/compile.js';
@@ -416,12 +416,14 @@ describe('PRIMAL SURGE, played', () => {
   });
 
   it('a PERMANENT-HEAVY deck empties its library onto the battlefield without the engine giving up', () => {
-    // ⚠️ THE ROW THE OLD 32-QUESTION CEILING WOULD HAVE FAILED. Caleb's Defender
-    // Ramp deck is what Primal Surge is built for, and it is almost all
+    // ⚠️ THE ROW THE OLD FRAME-WIDE CEILING WOULD HAVE FAILED. Caleb's "Tamiyo +
+    // Jace Surge" deck is what Primal Surge is built for, and it is almost all
     // permanents — so the real card asks fifty-odd questions in ONE resolution.
-    // Under the old bound the rest of the resolution was abandoned and the
-    // remaining `confirm`s degraded to NO, which is a card playing WEAKER than
-    // printed with every test still green.
+    // While the 32-question ceiling counted across the whole FRAME, the rest of
+    // the resolution was abandoned and the remaining `confirm`s degraded to NO:
+    // a card playing WEAKER than printed with every test still green. The
+    // ceiling is now per EFFECT REF, which is the pathology it was written for,
+    // and this card's fifty-odd questions come from fifty-odd different refs.
     const reg = buildRegistry();
     let s = gameAtMain(reg);
     fund(s, 'A', { G: 9, C: 9 });
@@ -438,10 +440,19 @@ describe('PRIMAL SURGE, played', () => {
       abandoned(played.events),
       'the engine gave up on a legal resolution — the ceiling is too low',
     ).toEqual([]);
-    // And the ceilings really are above what this card needs, stated as the
-    // numbers rather than as "it worked": a row that passes because the deck
-    // happens to be small is not the check it claims to be.
-    expect(MAX_CHOICES_PER_RESOLUTION).toBeGreaterThan(deck.length);
+    // ⚠️ AND WHICH CEILING IS DOING THE WORK, stated as numbers rather than as
+    // "it worked" — a row that passes because the deck happens to be small is
+    // not the check it claims to be, and this card's whole design rests on the
+    // two ceilings counting DIFFERENT things:
+    //
+    //   - the per-REF ask ceiling is SMALLER than the number of questions this
+    //     resolution asked, and that is correct. Each question comes from its
+    //     own enqueued ref, so none of them is the loop that ceiling guards.
+    //     Asserted as a `<` so a future change that makes it frame-wide again
+    //     fails HERE, where the reason is written down.
+    //   - the per-RESOLUTION step ceiling is what genuinely bounds the frame,
+    //     and it must exceed two refs per iteration.
+    expect(played.asked).toBeGreaterThan(MAX_CHOICES_PER_EFFECT_REF);
     expect(MAX_EFFECT_STEPS_PER_RESOLUTION).toBeGreaterThan(deck.length * 2);
   });
 });
