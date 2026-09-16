@@ -373,14 +373,24 @@ function endTheTurn(state: GameState): GameState {
   return s;
 }
 
-describe('§3.153 Craterhoof Behemoth, PLAYED', () => {
-  const HOOF = (() => {
-    const result = compileCard(CRATERHOOF);
-    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
-    return result.definition;
-  })();
+/**
+ * Compile a record and hand back its definition, INSIDE a test.
+ *
+ * ⚠️ Deliberately not a module-level constant. Written that way first, the
+ * sabotage that proved this suite (deleting the grant-then-pump row) failed at
+ * module init and vitest reported the file as **"0 test"** — a suite that cannot
+ * fail per-assertion because it never collects. The red was real but it arrived
+ * in the shape of a missing suite, which is the shape a skipped file also has.
+ */
+function definitionOf(card: CompilableCard): CardDefinition {
+  const result = compileCard(card);
+  expect(result.status, `${card.name}: ${JSON.stringify(result.missing)}`).toBe('complete');
+  return result.definition;
+}
 
+describe('§3.153 Craterhoof Behemoth, PLAYED', () => {
   it('buffs every creature you control by the number of creatures you control, with trample', () => {
+    const HOOF = definitionOf(CRATERHOOF);
     let s = gameAtMain();
     const mine1 = place(s, OX, 'A');
     const mine2 = place(s, OX, 'A');
@@ -405,6 +415,7 @@ describe('§3.153 Craterhoof Behemoth, PLAYED', () => {
   });
 
   it('does NOT reach a creature that enters AFTER it resolved — the set is read at resolution', () => {
+    const HOOF = definitionOf(CRATERHOOF);
     let s = gameAtMain();
     const before = place(s, OX, 'A');
     s = castFromHand(s, HOOF);
@@ -416,6 +427,7 @@ describe('§3.153 Craterhoof Behemoth, PLAYED', () => {
   });
 
   it('wears off at end of turn — it is a duration, not a static and not a counter', () => {
+    const HOOF = definitionOf(CRATERHOOF);
     let s = gameAtMain();
     const mine = place(s, OX, 'A');
     s = castFromHand(s, HOOF);
@@ -427,22 +439,17 @@ describe('§3.153 Craterhoof Behemoth, PLAYED', () => {
   });
 });
 
-describe('§3.153 Overrun, PLAYED — the printed-number order reaches the board too', () => {
-  const OVERRUN = (() => {
-    const result = compileCard(
-      record({
-        name: 'Overrun',
-        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
-        oracleText: 'Creatures you control get +3/+3 and gain trample until end of turn.',
-        power: undefined,
-        toughness: undefined,
-      }),
-    );
-    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
-    return result.definition;
-  })();
+const OVERRUN_RECORD = record({
+  name: 'Overrun',
+  typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+  oracleText: 'Creatures you control get +3/+3 and gain trample until end of turn.',
+  power: undefined,
+  toughness: undefined,
+});
 
+describe('§3.153 Overrun, PLAYED — the printed-number order reaches the board too', () => {
   it('gives every creature you control +3/+3 and trample, and the opponent nothing', () => {
+    const OVERRUN = definitionOf(OVERRUN_RECORD);
     let s = gameAtMain();
     const mine = place(s, OX, 'A');
     const theirs = place(s, OX, 'B');

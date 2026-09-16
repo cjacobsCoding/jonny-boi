@@ -3699,7 +3699,10 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       if (keywords === null) return null;
       return effects(
         { primitive: 'addCounters', params: { amount: 1, each: true, scope: 'you' } },
-        { primitive: 'grantKeywordToYoursUntilEndOfTurn', params: { keywords, anyOfTypes: ['creature'] } },
+        // §3.153 — the mass modification's own primitive. The old name still
+        // resolves (it is the same function), but the compiler emits ONE name so
+        // a reader of the generated pool cannot conclude there are two effects.
+        { primitive: 'modifyYoursUntilEndOfTurn', params: { keywords, anyOfTypes: ['creature'] } },
       );
     },
   },

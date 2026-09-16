@@ -416,20 +416,19 @@ export const modifyYoursUntilEndOfTurn: EffectPrimitive = (ctx) => {
   // Nothing to do at all — not "no keywords", which is the printed pump-only
   // form and must still reach the board.
   if (isEmptyKeywords(keywords) && power === 0 && toughness === 0) return;
-  const grantsKeywords = !isEmptyKeywords(keywords);
+  // Each half is written only when the card prints it. That keeps the grant-only
+  // form — every mass grant in the shipped pool — emitting exactly the record it
+  // always did, so adding the pump costs the hot continuous layer nothing on the
+  // cards that do not use it (rule 7).
+  const grant = isEmptyKeywords(keywords) ? {} : { keywords };
+  const pump = power === 0 && toughness === 0 ? {} : { power, toughness };
   const types = strArrayParam(ctx, 'anyOfTypes');
   const opponents = strParam(ctx, 'scope') === 'opponent';
   for (const perm of ctx.state.battlefield) {
     const theirs = perm.controller !== ctx.controller;
     if (theirs !== opponents) continue;
     if (types.length > 0 && !types.some((type) => perm.def.types.includes(type as CardType))) continue;
-    ctx.addContinuousEffect({
-      target: perm.instanceId,
-      ...(grantsKeywords ? { keywords } : {}),
-      power,
-      toughness,
-      duration: 'endOfTurn',
-    });
+    ctx.addContinuousEffect({ target: perm.instanceId, ...grant, ...pump, duration: 'endOfTurn' });
   }
 };
 
