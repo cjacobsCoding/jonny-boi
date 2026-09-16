@@ -22,13 +22,25 @@
   — one import + one spread. **NEW `packages/cards/src/iterative-primitives.ts`**, **NEW
   `packages/cards/src/iterative-effects.test.ts`**, **NEW `packages/cards/scripts/repeat-blame.mjs`**.
   `packages/core/src/choices.ts` · `engine.ts` · `index.ts` · `choice-cards.test.ts`.
-  ⚠️ **SEMANTIC CONFLICT FOR THE INTEGRATOR: this lane changed a CORE constant every package reads.**
-  `MAX_CHOICES_PER_RESOLUTION` was **32** under the comment *"Generous: no real card comes close"*.
-  Primal Surge asks once per permanent it puts onto the battlefield, so Defender Ramp asks it fifty-odd
-  times in ONE resolution — and an abandoned `confirm` degrades to **no**, i.e. the card stops early and
-  plays WEAKER than printed with every test green. It is now derived from a named
-  `LARGEST_LEGAL_LIBRARY` alongside a new sibling `MAX_EFFECT_STEPS_PER_RESOLUTION` (400). Any lane
-  holding a literal near 32 in a choice loop will need the same treatment `choice-cards.test.ts` got.
+  ⚠️ **A CORE CONSTANT WAS RENAMED, BUT ITS VALUE DID NOT MOVE — no lane's expectation changes.**
+  `MAX_CHOICES_PER_RESOLUTION` (32) is now `MAX_CHOICES_PER_EFFECT_REF` (32), counted PER EFFECT REF
+  instead of per frame, with a new sibling `MAX_EFFECT_STEPS_PER_RESOLUTION` (216) bounding the frame.
+  If you hold a literal 32 in a choice loop, read the constant instead — `choice-cards.test.ts` had a
+  literal 200 that silently stopped bounding anything, and now derives from the constant.
+  ⚠️ **THE ROUTE TO THAT SPLIT IS THE PART WORTH READING, because two drafts of it were wrong.** The
+  first raised the frame-wide ceiling to 400 ("comfortably generous", nothing measured behind the 4).
+  `packages/cards` then took **90 minutes on one file** and the cheap explanation — the merged pool is
+  bigger — was available and WRONG. Measured on the same tree, one filtered whole-pool test:
+  **32 → 1295.31s = 21.6 min · 400 → >54 min · 116 → >105 min CPU.** The pool holds resolutions that
+  legitimately ask in long loops (a copy mirror, a big storm count); at 32 they were being TRUNCATED,
+  and raising the ceiling makes them FINISH, which costs time. So a ceiling is a budget somebody
+  actually spends. The second draft chased the smallest number (116) and still bought 3.6×.
+  **The number was never the mistake — the COUNTER was**: a frame-wide total cannot tell "one
+  primitive looping" (a bug, per-ref) from "many primitives each asking once" (an iterative card, and
+  legal). Split, both are bounded and neither pays for the other. Pinned by deleting the one-line
+  reset: **23 of 56 cards stranded in the library**, red, restored.
+  **If you re-tune either constant, re-run that filtered test on both sides** — a whole-pool
+  measurement is a direct multiple of the ask ceiling, and nothing in the suite says so on its own.
   ⚠️ **The new bound exists because the old one could not SEE this class** — a resolution that will not
   stop ENQUEUEING asks nothing, takes no action and ends no turn, so it is invisible to the ask budget,
   to the sim's per-turn bound and to the soak's `gameCanEnd`. It hung the process instead of losing a

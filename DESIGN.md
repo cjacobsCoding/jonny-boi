@@ -3318,7 +3318,7 @@ it cannot mill the printed count. The library is strictly shorter every step, so
 it empty returns. **That, not a cap, is why they end.**
 
 ⚠️ **The cap exists because the engine's existing runaway guard was structurally unable to see this
-class.** `MAX_CHOICES_PER_RESOLUTION` bounds a resolution that will not stop ASKING. An iteration
+class.** `MAX_CHOICES_PER_EFFECT_REF` bounds one effect that will not stop ASKING. An iteration
 that will not stop ENQUEUEING asks nothing, takes no game action and ends no turn — so it is invisible
 to that counter, to the sim's per-turn action bound, and through it to the soak's `gameCanEnd`
 invariant. It hangs the process rather than losing a game, which in a thousand-game soak reads as a
@@ -3327,12 +3327,68 @@ second mechanism: `MAX_EFFECT_STEPS_PER_RESOLUTION` is its sibling constant in t
 in the same loop, and abandoning through the same `abandonResolution` funnel and the same
 `choiceAbandoned` event — which is what the sim redaction, the soak table and the web log already read.
 
-⚠️ **AND THE OLD CEILING WAS ALREADY TOO LOW FOR A REAL CARD.** `MAX_CHOICES_PER_RESOLUTION` was 32
-under the comment *"Generous: no real card comes close"*. Primal Surge asks once per permanent it puts
-onto the battlefield, so Defender Ramp asks it fifty-odd times in ONE resolution — and an abandoned
-`confirm` degrades to **no**. The card would have stopped early and played WEAKER than printed with
-every test green. Both ceilings now derive from one named `LARGEST_LEGAL_LIBRARY`, and the stale
-comment is fixed in the same commit.
+⚠️ **AND THE OLD CEILING WAS ALREADY TOO LOW FOR A REAL CARD.** It was 32, counted across the whole
+FRAME, under the comment *"Generous: no real card comes close"*. Primal Surge asks once per permanent
+it puts onto the battlefield, so Tamiyo + Jace Surge asks it fifty-odd times in ONE resolution — and
+an abandoned `confirm` degrades to **no**. The card would have stopped early and played WEAKER than
+printed with every test green. The comment was measurably false and is fixed in the same commit.
+**What replaced the ceiling is in §2a, and it is not a bigger number.**
+
+#### 2a. ⚠️ THE CEILING WAS COUNTING THE WRONG THING — found by a suite that got slow, not by a test
+
+The first version of this section raised the ask ceiling from 32 to `4 * LARGEST_LEGAL_LIBRARY` =
+**400**, "comfortably generous", with nothing measured behind the 4. Then `packages/cards` took **90
+minutes** on one file, and the cheapest explanation — the merged pool is larger — was available and
+wrong. Measuring the other side of my own change is what disproved it:
+
+```
+expanded-pool.test.ts, the whole-pool game (every card in a 6,944-card pool),
+same tree, one filtered test:
+  frame-wide ceiling  32  (main's value) : 1295.31s = 21.6 min — 1 passed
+  frame-wide ceiling 400  (first draft)  : stopped at  >54 min, still running
+  frame-wide ceiling 116  (second draft) : stopped at >105 min CPU, still running
+```
+
+**Only SOME of the resolutions that reach a ceiling are runaways.** The pool holds resolutions that
+legitimately ask in long loops — a copy mirror, a large storm count — and at 32 every one of them was
+being cut off early. Raising the ceiling does not make them wrong, it makes them *finish*, and
+finishing costs time. So the ceiling is a direct multiplier on any whole-pool measurement, which is
+not how a "generous safety margin" reads.
+
+⚠️ **AND LOWERING IT BACK WAS NOT THE FIX EITHER.** At 32 those resolutions were TRUNCATED — played
+weaker than printed — which is the §1a defect this section exists to close. The second draft chased
+the smallest *number* (116) and still bought a 3.6× slowdown, because **the number was never the
+mistake. The COUNTER was.** `MAX_CHOICES_PER_RESOLUTION` ran for the life of the frame, and a
+frame-wide total conflates two unrelated pathologies:
+
+| | what it is | the right bound |
+| --- | --- | --- |
+| ONE primitive asking in a loop its own answer never ends | a bug — what the ceiling was written for | per EFFECT REF |
+| MANY primitives each asking once | an iterative card: Primal Surge asks once per permanent, each from its own enqueued ref | per RESOLUTION, and by STEPS, not questions |
+
+A frame-wide counter cannot tell them apart, so it had to be raised for the second — and raising it
+let the first run twelve times further. Splitting them costs nothing and pays for both:
+
+```
+MAX_CHOICES_PER_EFFECT_REF      = 32   — renamed, value UNCHANGED, reset beside
+                                         frame.answers when the frame advances a ref
+MAX_EFFECT_STEPS_PER_RESOLUTION = 216  — REFS_PER_ITERATION (2) × LARGEST_LEGAL_LIBRARY
+                                         (100) + RESOLUTION_SLACK (16)
+```
+
+Every card that asks from one ref now keeps **main's exact behaviour and main's exact cost**; Primal
+Surge's fifty-odd questions come from fifty-odd different refs; and the frame is bounded by the step
+counter, whose shape actually matches an iteration. Nothing is left unbounded by the split, and the
+cross-lane semantic conflict the raise created is withdrawn — no lane's 32-based expectation moves.
+
+The acceptance row asserts `played.asked > MAX_CHOICES_PER_EFFECT_REF` — a **`<` on purpose**, so a
+future change that makes the counter frame-wide again fails where the reason is written down.
+Sabotaged by deleting the one-line reset: **23 of 56 cards stranded in the library**, red, restored.
+
+⚠️ **Two lessons, and the second is the expensive one.** The first: the cheapest explanation for a
+slow suite after a big merge is the merge, and it took 22 minutes of measuring the other side to
+refuse it. The second: when a constant has to be *tuned*, check whether it is being *counted* wrongly
+first. Both drafts here were arguments about a number that should never have been one number.
 
 #### 3. What shipped, and the honest number
 
@@ -3364,6 +3420,36 @@ widening of the sentence patterns cannot quietly compile them.
 Ranger, Over the Edge, Defossilize) and are blocked by `it explores, then it explores again` — a
 different family wearing this one's word. `repeat-blame` reports them NOT-PROBEABLE by name rather
 than bucketing them.
+
+#### 5. Left UNDONE, and named
+
+Three, each with the reason it was not done here rather than a note to do it later:
+
+1. **The soak does not READ the new abandon.** The engine emits `choiceAbandoned` when
+   `MAX_EFFECT_STEPS_PER_RESOLUTION` trips, and `iterative-effects.test.ts` asserts that it does —
+   but `soak.ts` pushes `gameCanEnd` from the two ACTION bounds only, so a step-budget trip in a
+   soak run is counted by the mechanic table and asserted by nothing. **That is §3.140's own shape**
+   ("the count existed the whole time, said 8, and no assertion read it"), and the only reason it is
+   acceptable to leave is that it cannot fire today: both shipped iterations provably consume a
+   finite zone per step, so the signal is zero by construction rather than zero by luck. The fix is a
+   third `push` beside the other two in `runOneSoakGame`, keyed on a `choiceAbandoned` whose reason
+   names `effect steps`. It is not done here because `packages/sim` is outside this lane's diff and
+   therefore outside its derived gate, and a lane that edits a package it cannot afford to run is
+   how a red test reaches `main`.
+2. **The pilot is not taught to value either primitive.** `heuristic.ts`'s `PRIMITIVE` table does
+   not name `exileTopMayPlay`, so Primal Surge classifies as a "generic spell". ⚠️ **That is the
+   BENIGN half of the failure that table documents**: the cards it warns about (`copySpell`,
+   `blinkTarget`, `preventDamage`) are mis-TIMED when unlisted — a generic spell is offered only in
+   a main phase with an empty stack, which is the one window a counterspell or a fog is worthless
+   in. Primal Surge is a sorcery, so a main phase with an empty stack is its *only* legal window and
+   the fallthrough costs it nothing structural. What it costs is VALUATION, and this repo does not
+   ship a pilot valuation change without the two-seed A/B (§3.85). Grindstone is an activated
+   ability and never reaches the spell classifier at all.
+3. **Neither card reaches the app on this branch.** §5a's delivery step is a pool REGENERATION and
+   the pool artefacts belong to another lane; this one was told not to touch them. Verified by name
+   against `expanded-pool.ts` with four in-pool cards as the discriminator — and §3.154's Tamiyo is
+   absent for the same reason, so this is the wave's shared debt, not this lane's alone.
+
 ### 3.151 The CR 614/615 row names the EVENT KINDS — and the gap is the WORDINGS, on kinds the layer already watched — ✅ done
 
 > ⚠️ **Section number claimed off a contended range.** §3.150 was the highest in `main` when this

@@ -47,11 +47,18 @@ Checked against the real compiled pool, not assumed. The campaign is closing thi
 | --- | --- | --- | --- |
 | Acidic Angels | 16 | — | **0** ✅ |
 | Thune’s Life | 22 | 8 | **0** ✅ |
-| Tamiyo + Jace Surge | 17 | 9 | **5** |
+| Tamiyo + Jace Surge | 17 | 9 | **3** |
 
 ✅ **ACIDIC ANGELS and THUNE'S LIFE both compile end to end** — every name in each imports as the
-deck Caleb actually built. **Tamiyo + Jace Surge is the one still short**, at 5 of 17 names: Axebane
-Guardian, Craterhoof Behemoth, Primal Surge, and the two planeswalkers the deck is named after.
+deck Caleb actually built. **Tamiyo + Jace Surge is the one still short**, at 3 of 17 names: Axebane
+Guardian, Craterhoof Behemoth, and Jace — whose `+1` and `−2` compile and play, leaving the `−8`
+alone (§3.154). Tamiyo herself is done (§3.154) and Primal Surge is done (§3.156).
+
+⚠️ **This "blocked now" column measures the COMPILER, and the shipped pool lags it.** Neither Tamiyo
+nor Primal Surge is in `expanded-pool.ts` as regenerated on 2026-09-15, because both lanes merged
+after it — so the app still names them on screen as missing, correctly. The row moves in the app at
+the next regeneration, not at this merge. (Checked by name against the generated pool, with four
+cards that ARE in it as the discriminator.)
 
 ⚠️ **Jace and Tamiyo were filed as evidenced NO-GOs, and that reads very differently now.** A card
 whose residue is named and pinned is a fine outcome for a card nobody asked about — it is not a fine
