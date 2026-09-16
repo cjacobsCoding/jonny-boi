@@ -384,7 +384,7 @@
   📈 **Compiler delta +122 accepted (6,450 → 6,572), 0 lost, on one fixed 32,414-card corpus** — the
   same corpus compiled twice with this branch's `rules.ts` reverted in between (`git show
   origin/main:…` + a file copy; **never `git stash`**), so the number is the compiler's and not a
-  corpus refresh's. **Oblivion Ring ✅ and Faceless Butcher ✅ compile** — `docs/decks/acidic-angels.txt`
+  corpus refresh's. **Oblivion Ring ✅ and Faceless Butcher ✅ compile** — `docs/decks/thunes-life.txt`
   loses one ✗. The row went 884 → 780 cards.
   ⚠️ **A DEFECT IN THE SHIPPED POOL, NOT A NEW FEATURE.** `exile target creature` compiled to a bare
   `exileTarget`, which records no link, beside a `returnExiledByThis` that returns only what the link

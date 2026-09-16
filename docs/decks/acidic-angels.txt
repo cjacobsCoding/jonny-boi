@@ -1,29 +1,37 @@
-// Acidic Angels — Selesnya lifegain into angels
-// Transcribed from photo, 2026-09-14. Counts inferred from sleeve depth.
+// Acidic Angels — Selesnya blink/value, the FIRST deck Caleb scanned in
+// 59 cards in 16 piles. Transcribed from the physical deck, not from OCR.
 // ✗ = still blocked — the compiler does not implement one of its printed abilities yet.
-// ✅ = unblocked by the ALL-CARDS campaign; the lane that did it is named. See docs/ALL-CARDS-CAMPAIGN.md §7a.
+// ✅ = in the pool. See docs/ALL-CARDS-CAMPAIGN.md §7a.
+//
+// ⚠️ NAME HISTORY, because it cost real time. The scanner imported this deck as
+// "Selesnya Blink (scanned)" — the name of a BUILT-IN sample deck it resembles —
+// and Caleb renamed it to "Acidic Angels", which is when the built-in-fork bug
+// surfaced (DESIGN §3.35). It is not the built-in, and it is not Thune's Life:
+// two other sessions have now confused it with one or the other. Its tell is in
+// the name: Acidic Slime and Angel of Serenity.
+//
+// SOURCE: this list is the GROUND_TRUTH table in
+// apps/web/src/lib/scan/fixtures/../real-photo.test.ts, which transcribes the
+// physical deck in reading order and is what the OCR pipeline is scored against.
+// That test is the reason the list survived at all — it was never in docs/decks
+// until 2026-09-15, so every "where are my decks" answer before then was
+// answered from the wrong two files.
 
+4 Strionic Resonator
+4 Gatecreeper Vine
+4 Banisher Priest
+4 Acidic Slime
+2 Fiend Hunter
 4 Avacyn's Pilgrim
-4 Arbor Elf                    // ✅ compiles — §3.147
-4 Soul Warden
-3 Cathedral Sanctifier
-3 Healer of the Pride
-3 Fiendslayer Paladin          // ✅ compiles — §3.152 (hexproof from a quality)
-3 Rhox Faithmender             // ✅ compiles — §3.151 (life-change replacement)
-2 Scavenging Ooze              // ✅ compiles — §3.149a
-2 Trostani, Selesnya's Voice   // ✅ compiles — Populate
-2 Archangel of Thune
-1 Avacyn, Angel of Hope
+3 Angel of Serenity
+3 Restoration Angel
+4 Elvish Visionary
+3 Thragtusk
 
-3 Selesnya Charm               // ✅ compiles — §3.150 (target bound)
-2 Giant Growth
-2 Oblivion Ring                // ✅ compiles — §3.148
-2 Luminarch Ascension          // ✅ compiles — §3.149a
-2 Cathars' Crusade
-1 Collective Blessing
-1 Akroma's Memorial
+2 Cloudshift
+3 Conjurer's Closet
 
-4 Sunpetal Grove
 4 Temple Garden
-7 Forest
-6 Plains
+4 Sunpetal Grove
+6 Forest
+5 Plains
