@@ -49,6 +49,7 @@ import {
   spellCanBeCountered,
   spellLeaveDestination,
   TARGET_RESTRICTION_PARAM,
+  unattachDependentsOf,
 } from '@jonny-boi/core';
 
 // --- param reading (typed, defaulted — no magic numbers leak in) ---------------
@@ -857,6 +858,22 @@ export function movePermanentTo(ctx: EffectContext, perm: CardInstance, to: Owne
   pruneCardGrantsFor(ctx.state, perm.instanceId);
   ctx.state.players[perm.owner][to].push(perm);
   ctx.emit({ type: 'zoneChange', instanceId: perm.instanceId, from: 'battlefield', to });
+  // CR 400.7 + 704.5m/n, the OTHER direction of the same zone change:
+  // `resetInstanceForNewZone` above cleared what this permanent pointed at, and
+  // this clears what still points AT it — the `attachedTo` on every Aura and
+  // Equipment it was wearing. Core's shared implementation, called from this
+  // funnel and from core's `moveToZone` alike, for the reason the two funnels
+  // exist at all: a rule implemented in one and not the other is a rule that
+  // depends on which primitive bounced the creature. Emitted AFTER the
+  // `zoneChange`, so leaves/dies triggers still see the board it left.
+  //
+  // Left to the state-based action alone it was a real hidden-information leak:
+  // the SBA does knock them off, but only on its next pass, and a resolution
+  // that parks a question settles first — with a battlefield permanent naming a
+  // card that has already reached a HAND, which `maskStateForSeat` ships
+  // verbatim to the opponent and to a spectator. Only the LINK is broken here;
+  // `whenIllegal` still decides the consequence, in one place.
+  unattachDependentsOf(ctx.state, perm.instanceId, ctx.emit);
   // CR 704.5d — a token that has left the battlefield ceases to exist. Core's
   // shared implementation, called AFTER the zoneChange so every "dies" trigger
   // still sees the move: this helper is the cards-side leave funnel and must
