@@ -197,8 +197,11 @@ describe('the guard fires where the pool actually changes, not only here', () =>
     // copy of the rules, or from a different card index, this is where the fork
     // shows up.
     const { checkGlossaryCoverage } = await import(
-      // @ts-ignore -- plain-JS gate script; typed by use, not by a .d.ts. Same
-      // idiom as card-index.test.ts, which imports build-card-index.mjs.
+      // @ts-expect-error -- plain-JS gate script; typed by use, not by a .d.ts.
+      // Same situation as card-index.test.ts importing build-card-index.mjs,
+      // but `expect-error` rather than `ignore`: if the script ever gains types
+      // this line fails instead of quietly suppressing nothing, which is why it
+      // also needs no eslint-disable beside it.
       '../../../scripts/check-glossary-coverage.mjs'
     );
     const result = await checkGlossaryCoverage();
