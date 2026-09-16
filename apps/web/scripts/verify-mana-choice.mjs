@@ -27,6 +27,7 @@ import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { describeChromeSearch, findChrome } from './lib/find-chrome.mjs';
 import { harnessLaunchOptions } from './lib/harness-chrome.mjs';
+import { watchPageErrors } from './lib/harness-page.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = resolve(HERE, '..');
@@ -250,8 +251,8 @@ async function main() {
   const browser = await puppeteer.launch(harnessLaunchOptions({ chromePath: chrome }));
   try {
     const page = await browser.newPage();
+    const watcher = watchPageErrors(page);
     await page.setViewport(VIEWPORT);
-    page.on('pageerror', (err) => console.log('  pageerror:', String(err).slice(0, 200)));
 
     // `domcontentloaded`, never `networkidle2`: the landing view pulls hundreds
     // of Scryfall images, so "the network went quiet" depends on an external host.
@@ -457,6 +458,16 @@ async function main() {
       check('Cancel leaves the hand unchanged', afterCancel.hand === handBefore);
       await shot(page, '05-after-cancel.png');
     }
+    // ⚠️ THE APP ITSELF, before anything above is believed. A harness with no
+    // pageerror listener cannot tell "the app crashed" from "the thing I was
+    // measuring is not there", and it always reports the second - that is how a
+    // React #185 crash in the card grid got filed as "8 cards are missing from
+    // the browser". See lib/harness-page.mjs.
+    check(
+      'the app threw nothing while the harness drove it',
+      watcher.errors.length === 0,
+      watcher.errors.slice(0, 2).join(' | '),
+    );
   } finally {
     await browser.close().catch(() => {});
     preview.child.kill();

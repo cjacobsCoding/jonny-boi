@@ -84,5 +84,42 @@ export const CARD_GRID_FALLBACK_ROW_PITCH_PX = 336;
  * offset by one of those asks the grid to render tens of thousands of rows.
  * Below this the fallback pitch is used and the metrics report themselves as
  * unmeasured.
+ *
+ * ⚠️ This floor alone is NOT enough, and the way it was not enough is the whole
+ * of the React #185 crash — see `CARD_GRID_MIN_TILE_ASPECT` below.
  */
 export const CARD_GRID_MIN_BELIEVABLE_ROW_PITCH_PX = 40;
+
+/**
+ * How tall a tile must be relative to its own width before its height is
+ * believed, as height ÷ width.
+ *
+ * ## The reading this refuses, and what it cost
+ *
+ * A card tile is a portrait card: `.card-tile__art` is `aspect-ratio: 488 / 680`
+ * with a body under it, so a laid-out tile is always TALLER THAN IT IS WIDE —
+ * about 1.87× at the desktop column width, and still ~1.95× on a 375px phone.
+ *
+ * A tile that has not laid out is not. When the art box has no width to work
+ * from, its aspect-ratio makes it zero-HEIGHT, and the tile measures its body
+ * alone: 94px tall at 192px wide, a ratio of 0.49. That passed
+ * {@link CARD_GRID_MIN_BELIEVABLE_ROW_PITCH_PX} comfortably — 94 + 16 is well
+ * over 40 — so the grid pinned a 94px row track, which made the window twice as
+ * many rows, which mounted thirty more not-yet-laid-out tiles that also
+ * measured 94px. The measurement chose which tiles to measure. Every query
+ * restarted that cycle; after a handful of searches React's nested-update limit
+ * was reached and the whole app unmounted with error #185.
+ *
+ * ## Why a RATIO and not a pixel floor
+ *
+ * A pixel floor is a second copy of the stylesheet's tile height, and the two
+ * would drift (rule 12). A ratio states the only thing that is actually
+ * invariant — a card is portrait — in terms of a number measured at the same
+ * instant from the same box, so it holds at every column width, on a phone, and
+ * in the deck builder where the stepper makes the body taller.
+ *
+ * 1.0 rather than something nearer the real 1.87: this is a CLOSED check that
+ * refuses a reading, not a tuning knob, and it should refuse only readings that
+ * cannot be a card. A tile that is merely square is already impossible.
+ */
+export const CARD_GRID_MIN_TILE_ASPECT = 1;

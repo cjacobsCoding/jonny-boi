@@ -39,6 +39,7 @@ import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { describeChromeSearch, findChrome } from './lib/find-chrome.mjs';
 import { harnessLaunchOptions } from './lib/harness-chrome.mjs';
+import { watchPageErrors } from './lib/harness-page.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = resolve(HERE, '..');
@@ -591,18 +592,12 @@ async function main() {
     page.on('request', (req) => {
       if (/scryfall/i.test(req.url()) && req.resourceType() === 'image') cardImageRequests++;
     });
-    const pageErrors = [];
     // Printed the moment they happen, not only in the summary. A run where the
     // React tree threw and came down looked, in the summary, like a page whose
     // nav buttons had simply gone missing — which sent the diagnosis off in
     // entirely the wrong direction until the error was read.
-    page.on('pageerror', (e) => {
-      pageErrors.push(String(e));
-      console.log('  PAGE ERROR: ' + String(e).slice(0, 200));
-    });
-    page.on('console', (msg) => {
-      if (msg.type() === 'error') console.log(`  CONSOLE ERROR: ${msg.text().slice(0, 200)}`);
-    });
+    const watcher = watchPageErrors(page, { consoleErrors: true });
+    const pageErrors = watcher.errors;
 
     // ---- Cards (the landing view) -----------------------------------------
     const navStart = Date.now();
