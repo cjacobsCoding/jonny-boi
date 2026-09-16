@@ -762,6 +762,52 @@ describe('returnToHand', () => {
     expect(s.battlefield).toHaveLength(0);
     expect(s.players.B.hand.map((c) => c.def.name)).toEqual(['Bear']);
   });
+
+  /*
+   * THE HIDDEN-INFORMATION HALF, on the cards-side leave funnel.
+   *
+   * `movePermanentTo` is the OTHER of this repo's two battlefield-leave funnels
+   * (core's `moveToZone` is the first, and `packages/core`'s
+   * `attachments.test.ts` pins the same rule there). A bounce that leaves an
+   * Aura still carrying its host's instance id publishes the identity of a card
+   * now sitting in a HAND — `maskStateForSeat` copies `state.battlefield` out
+   * verbatim, to the opponent and to a spectator. The state-based actions do
+   * clear it, but only on the next pass, and a resolution that parks a question
+   * settles before that pass runs.
+   *
+   * Found by `packages/sim/src/masking.test.ts` on a full-pool soak — three
+   * Auras naming a Towering Indrik that had just been bounced — which is far too
+   * slow to be the guard for it.
+   */
+  it('leaves no Aura naming the host it just bounced into a hand', () => {
+    const s = emptyState();
+    const host = inst(bear, 'B');
+    const aura = inst(
+      {
+        id: 'weight',
+        name: 'Weight of the Underworld',
+        types: ['enchantment'],
+        subtypes: ['aura'],
+        attachment: {
+          attachesTo: { anyOfTypes: ['creature'] },
+          whenIllegal: 'toGraveyard',
+          modifies: { power: -1, toughness: -3 },
+        },
+      },
+      'A',
+    );
+    aura.attachedTo = host.instanceId;
+    s.battlefield.push(host, aura);
+    const src = inst({ id: 'cc', name: 'Cryptic Command', types: ['instant'] }, 'A', 'stack');
+    const { ctx } = ctxFor(s, src, {}, [host.instanceId]);
+
+    returnToHand(ctx);
+
+    const onField = new Set(s.battlefield.map((c) => c.instanceId));
+    const dangling = s.battlefield.filter((p) => p.attachedTo != null && !onField.has(p.attachedTo));
+    expect(dangling.map((p) => `${p.def.name} still names ${String(p.attachedTo)}`)).toEqual([]);
+    expect(aura.attachedTo).toBeNull();
+  });
 });
 
 describe('tapPermanents', () => {

@@ -1,3 +1,24 @@
+- 2026-09-15 **INTEGRATOR NOTE — the in-flight pool chain carries the OLD deck names** (integrator).
+  `main` renamed the photo decks on 2026-09-15 (`acidic-angels.txt` → `thunes-life.txt`,
+  `defender-ramp.txt` → `tamiyo-jace-surge.txt`) and added the REAL `acidic-angels.txt`, which is a
+  different 16-name deck. **`fix/attachment-unlink` and `fix/glossary-pool-coverage` forked before
+  that** and still say the old names in comments, DESIGN/COORDINATION prose and test `describe`
+  headings.
+  ✅ **Textually and semantically safe to merge** — checked: `verify-deck-cards-reachable.mjs` uses a
+  hardcoded `DECK_CARDS` array and does **not** read `docs/decks/*.txt`, and every other hit is a
+  comment or a describe string. A `merge-tree` dry run against `main` reports **zero conflicts**.
+  ⚠️ **But the LABELS are wrong and must be fixed at merge, not after.** That chain reports
+  *"acidic-angels 22/22 distinct, 65/65 copies"* — those are **Thune's Life**'s numbers. The real
+  Acidic Angels is **16 names / 59 copies**. Shipping the branch text unedited would re-introduce
+  exactly the confusion that took three rounds to correct, into the file that is supposed to be the
+  authority on it.
+  **At merge:** rewrite those labels to `Thune's Life`, and leave every `Acidic Angels` in
+  `apps/web/src/lib/decklist/*` and DESIGN §3.35 alone — there it means the deck Caleb really did
+  rename from the built-in, which is the same deck as the new `acidic-angels.txt`.
+  ⚠️ **Do not fix this by editing the live lanes' worktrees.** A lane that reported complete was
+  resumed by an unrelated message this week and found three commits it had not made; it re-ran its
+  whole gate, correctly, but that is cost. The integrator owns the merge — fix it there.
+
 - 2026-09-15 **A FAILING TEST REACHED `main`, AND THE CAUSE WAS MY BRIEF, NOT THE LANE** (integrator).
   `apps/web/src/lib/play/keyword-glossary.test.ts` was red on `main` for three merges. The lane that
   caused it did nothing wrong: it **declared** its two `apps/web` rows in its report, and it ran

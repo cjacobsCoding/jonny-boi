@@ -72,6 +72,35 @@ type Registry = ReturnType<typeof buildRegistry>;
 
 // --- pool queries (by CHARACTERISTIC, never by name — the sweep must survive pool edits) ---
 
+/**
+ * ⚠️ A RIG PIECE IS PICKED FOR INERTNESS, NOT FOR ITS TYPE LINE.
+ *
+ * Picking by characteristic is right — a rig pinned to card NAMES rots the first
+ * time the pool is edited. But "is an Aura" is a statement about what a card IS,
+ * and what the rig needs is a statement about what it must NOT DO: a rig piece
+ * may not change combat legality, damage, or P/T beyond what the rig sets
+ * itself, or the sweep is measuring the scenery instead of the candidate.
+ *
+ * THE BUG THIS EXISTS FOR. The pool regeneration (5,651 → 6,914) re-rolled EVERY
+ * pick here, because the pool is name-sorted and 1,265 new cards sorted in ahead
+ * of the old winners. The aura went `Alexi's Cloak` → **`Aether Tunnel`, which
+ * grants `unblockable`** — so the rig enchanted its own attacker, then asserted
+ * a block against it, and the failure surfaced as
+ *
+ *     rig: engine rejected an action it offered —
+ *     Llanowar Elves cannot block Absorbing Man and Titania
+ *
+ * which reads exactly like an engine defect and is not one: the engine was
+ * right, and the fixture had armed the attacker. Two creature picks moved too —
+ * `plainCreature` tested `effects`/`triggers`/`activated`/`keywords` but never
+ * `replacements` or `produces`, so it accepted a damage-DOUBLER (Absorbing Man
+ * and Titania) as "a plain creature with no script of its own" and a mana elf as
+ * a vanilla blocker.
+ *
+ * So inertness is asserted, not hoped for: {@link rigPiecesAreInert} below fails
+ * with a named, actionable message the next time a regeneration re-rolls a pick
+ * onto something with a script — rather than one of these mystery rejections.
+ */
 function firstPoolCard(label: string, predicate: (card: CardDefinition) => boolean): CardDefinition {
   const found = CARD_POOL.find(predicate);
   if (!found) throw new Error(`the pool no longer holds ${label} — re-pick the rig pieces`);
@@ -80,22 +109,77 @@ function firstPoolCard(label: string, predicate: (card: CardDefinition) => boole
 
 const A_LAND = firstPoolCard(
   'a plain land',
-  (c) => c.types.includes('land') && c.types.length === 1 && (c.effects?.length ?? 0) === 0,
+  (c) =>
+    c.types.includes('land') &&
+    c.types.length === 1 &&
+    (c.effects?.length ?? 0) === 0 &&
+    (c.triggers?.length ?? 0) === 0 &&
+    (c.replacements?.length ?? 0) === 0,
 );
-/** A plain creature with no script of its own, so every observed effect belongs to the candidate. */
+
+/**
+ * A creature with no script of its own, so every observed effect belongs to the
+ * candidate. `replacements` and `produces` are part of "no script": a damage
+ * replacement rewrites the very numbers this sweep reads, and a mana ability is
+ * an activated ability wearing a different field name.
+ */
 const plainCreature = (c: CardDefinition): boolean =>
   c.types.includes('creature') &&
   c.types.length === 1 &&
   (c.effects?.length ?? 0) === 0 &&
   (c.triggers?.length ?? 0) === 0 &&
   (c.activated?.length ?? 0) === 0 &&
+  (c.replacements?.length ?? 0) === 0 &&
+  (c.produces?.length ?? 0) === 0 &&
+  (c.producesOptions?.length ?? 0) === 0 &&
+  (c.manaAbilities?.length ?? 0) === 0 &&
   c.keywords === undefined &&
   c.characteristicPT === undefined;
-const RIG_CREATURE = firstPoolCard('a plain creature', (c) => plainCreature(c) && (c.power ?? 0) >= 2);
-const RIG_BLOCKER = firstPoolCard('a small plain creature', (c) => plainCreature(c) && (c.toughness ?? 0) <= 2);
-const RIG_AURA = firstPoolCard('an aura', (c) => (c.subtypes ?? []).some((s) => s.toLowerCase() === 'aura'));
-const RIG_EQUIPMENT = firstPoolCard('an equipment', (c) =>
-  (c.subtypes ?? []).some((s) => s.toLowerCase() === 'equipment'),
+
+/**
+ * An attachment that only moves NUMBERS. It may pump — the rig wants a pumped
+ * creature — but it may not grant a keyword, because every combat-relevant
+ * keyword this pool prints (unblockable, flying, menace, defender, fear,
+ * intimidate, shadow, horsemanship, protection) changes who may block whom, and
+ * the rig's whole job is to declare a legal block.
+ */
+const inertAttachment = (c: CardDefinition): boolean => {
+  const modifies = c.attachment?.modifies;
+  if (modifies === undefined) return false;
+  if (Object.keys(modifies.keywords ?? {}).length > 0) return false;
+  // A GRANTED activated ability is a script too — it just arrives by attachment
+  // instead of being printed on the creature (Paradise Mantle's "{T}: Add …").
+  if ((modifies.activated?.length ?? 0) > 0) return false;
+  // ATTACHING IS NOT A SCRIPT. An Aura attaches with a spell effect and an
+  // Equipment with its printed equip ability, so an Equipment ALWAYS has an
+  // `activated` entry — demanding none of them rejected every Equipment in the
+  // pool and took the whole file down with "the pool no longer holds an INERT
+  // equipment". What must be inert is everything the piece does BESIDES attach.
+  const attachOnly = (effects: readonly { primitive: string }[]): boolean =>
+    effects.every((e) => e.primitive === 'attachToTarget' || e.primitive === 'equip');
+  return (
+    (c.triggers?.length ?? 0) === 0 &&
+    (c.replacements?.length ?? 0) === 0 &&
+    attachOnly(c.effects ?? []) &&
+    (c.activated ?? []).every((ability) => attachOnly(ability.effects))
+  );
+};
+
+const RIG_CREATURE = firstPoolCard(
+  'an INERT plain creature with power >= 2',
+  (c) => plainCreature(c) && (c.power ?? 0) >= 2,
+);
+const RIG_BLOCKER = firstPoolCard(
+  'an INERT small plain creature (toughness <= 2)',
+  (c) => plainCreature(c) && (c.toughness ?? 0) <= 2,
+);
+const RIG_AURA = firstPoolCard(
+  'an INERT aura — one that grants no keywords',
+  (c) => (c.subtypes ?? []).some((s) => s.toLowerCase() === 'aura') && inertAttachment(c),
+);
+const RIG_EQUIPMENT = firstPoolCard(
+  'an INERT equipment — one that grants no keywords',
+  (c) => (c.subtypes ?? []).some((s) => s.toLowerCase() === 'equipment') && inertAttachment(c),
 );
 
 // --- state building (the fidelity-suite idiom: place, don't cast, so effects are attributable) ---
@@ -496,6 +580,54 @@ const COMBAT_SWEEP_MIN_CAST = 60;
 const COMBAT_SWEEP_MIN_LEAVERS = 12;
 
 describe('zone-leave invariants, swept over every pool-drawn funnel (§3.44 class)', () => {
+  /**
+   * THE RIG IS SCENERY AND MUST STAY SCENERY — asserted, because it stopped
+   * being scenery once and cost an afternoon.
+   *
+   * Every piece here is chosen by scanning a NAME-SORTED pool for the first card
+   * matching a predicate, so a regeneration that inserts cards alphabetically
+   * ahead of the old winners silently re-rolls all four. That is what happened at
+   * 5,651 → 6,914: the aura became `Aether Tunnel`, which grants `unblockable`,
+   * and the sweeps below failed with "engine rejected an action it offered" —
+   * a message that accuses the ENGINE of a defect the FIXTURE caused.
+   *
+   * This test turns that mystery into a sentence naming the card and the field.
+   * It runs first, and it is cheap.
+   */
+  it('the rig pieces are INERT — a re-rolled pick cannot masquerade as an engine defect', () => {
+    // Denominator first: a predicate that matched nothing would make every
+    // assertion below vacuously true.
+    expect(CARD_POOL.length, 'the pool is empty — nothing below means anything').toBeGreaterThan(0);
+
+    for (const [label, piece] of [
+      ['RIG_CREATURE', RIG_CREATURE],
+      ['RIG_BLOCKER', RIG_BLOCKER],
+    ] as const) {
+      expect(plainCreature(piece), `${label} is ${piece.name}, which carries a script`).toBe(true);
+    }
+    for (const [label, piece] of [
+      ['RIG_AURA', RIG_AURA],
+      ['RIG_EQUIPMENT', RIG_EQUIPMENT],
+    ] as const) {
+      const granted = Object.keys(piece.attachment?.modifies?.keywords ?? {});
+      expect(
+        granted,
+        `${label} is ${piece.name}, which GRANTS ${granted.join(', ')}. A rig attachment may ` +
+          'move numbers but never grant a keyword: every combat keyword this pool prints ' +
+          '(unblockable, flying, menace, defender, protection…) changes who may block whom, ' +
+          'and the rig exists to declare a legal block. Re-pick, do not relax the sweep.',
+      ).toEqual([]);
+      expect(inertAttachment(piece), `${label} is ${piece.name}, which carries a script`).toBe(true);
+    }
+
+    // The rig's attacker must actually be blockable by its own blocker — the
+    // precise property whose absence produced the original mystery.
+    expect(
+      RIG_CREATURE.keywords?.unblockable ?? false,
+      `RIG_CREATURE is ${RIG_CREATURE.name}, which cannot be blocked`,
+    ).toBe(false);
+  });
+
   it('sorcery speed: every castable card, aimed at the rigged board', () => {
     const reg = buildRegistry();
     const rig = buildMainRig(reg, 4931);

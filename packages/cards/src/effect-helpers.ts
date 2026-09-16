@@ -49,6 +49,7 @@ import {
   spellCanBeCountered,
   spellLeaveDestination,
   TARGET_RESTRICTION_PARAM,
+  unattachDependentsOf,
 } from '@jonny-boi/core';
 
 // --- param reading (typed, defaulted — no magic numbers leak in) ---------------
@@ -857,6 +858,22 @@ export function movePermanentTo(ctx: EffectContext, perm: CardInstance, to: Owne
   pruneCardGrantsFor(ctx.state, perm.instanceId);
   ctx.state.players[perm.owner][to].push(perm);
   ctx.emit({ type: 'zoneChange', instanceId: perm.instanceId, from: 'battlefield', to });
+  // CR 400.7 + 704.5m/n, the OTHER direction of the same zone change:
+  // `resetInstanceForNewZone` above cleared what this permanent pointed at, and
+  // this clears what still points AT it — the `attachedTo` on every Aura and
+  // Equipment it was wearing. Core's shared implementation, called from this
+  // funnel and from core's `moveToZone` alike, for the reason the two funnels
+  // exist at all: a rule implemented in one and not the other is a rule that
+  // depends on which primitive bounced the creature. Emitted AFTER the
+  // `zoneChange`, so leaves/dies triggers still see the board it left.
+  //
+  // Left to the state-based action alone it was a real hidden-information leak:
+  // the SBA does knock them off, but only on its next pass, and a resolution
+  // that parks a question settles first — with a battlefield permanent naming a
+  // card that has already reached a HAND, which `maskStateForSeat` ships
+  // verbatim to the opponent and to a spectator. Only the LINK is broken here;
+  // `whenIllegal` still decides the consequence, in one place.
+  unattachDependentsOf(ctx.state, perm.instanceId, ctx.emit);
   // CR 704.5d — a token that has left the battlefield ceases to exist. Core's
   // shared implementation, called AFTER the zoneChange so every "dies" trigger
   // still sees the move: this helper is the cards-side leave funnel and must
@@ -968,6 +985,34 @@ export function millTopCards(ctx: EffectContext, who: PlayerId, amount: number):
   for (let i = 0; i < count; i++) {
     const card = player.library[0];
     if (!card) break;
+    /*
+     * §3.147 — SAY THAT THIS CARD BECAME PUBLIC, at the one mill funnel.
+     *
+     * A milled card lands face up in a graveyard, so it is public from that
+     * instant — but it need not still be there when anyone next looks. Sudden
+     * Reclamation mills three and returns one to HAND inside a single
+     * resolution, so that card is public and then hidden again with no decision
+     * boundary in between, and the observation audit — which can only compare
+     * settled states — saw its own `zoneChange` naming a card it still held as
+     * never-seen and called it a leak.
+     *
+     * Exactly the cascade/ripple shape, and it takes the same remedy for the
+     * same reason (§3.119): a reveal is how the engine says "this became
+     * public" when no observable zone change survives to prove it.
+     * `cardRevealed` fires no triggers, so this adds a fact to the log and
+     * changes no game outcome. Emitted BEFORE the move, because the scanner
+     * reads a flush in emission order.
+     *
+     * It lives HERE rather than in the two mill primitives because this is the
+     * one funnel both go through — a second copy would eventually disagree.
+     */
+    ctx.emit({
+      type: 'cardRevealed',
+      player: who,
+      instanceId: card.instanceId,
+      name: card.def.name,
+      fromZone: 'library',
+    });
     moveOwnedCard(ctx, who, card.instanceId, 'library', 'graveyard');
     milled.push(card.instanceId);
   }
