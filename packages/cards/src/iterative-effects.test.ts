@@ -1,5 +1,5 @@
 /**
- * THE ITERATIVE-EFFECTS FAMILY (§3.153) — `repeat this process`, proven the way
+ * THE ITERATIVE-EFFECTS FAMILY (§3.156) — `repeat this process`, proven the way
  * this compiler's contract demands: the REAL printed card compiles `'complete'`
  * with its data pinned, AND the compiled definition is PLAYED through a real
  * `createGame` + `applyAction` game with every question actually answered.
@@ -474,7 +474,7 @@ describe('GRINDSTONE, played — the iteration that asks NOTHING', () => {
 
     expect(s.players.B.library).toEqual([]);
     expect(s.players.B.graveyard.length).toBe(10);
-    // Nothing was ASKED: this is the shape that had no bound before §3.153.
+    // Nothing was ASKED: this is the shape that had no bound before §3.156.
     expect(played.asked).toBe(0);
     expect(abandoned(played.events)).toEqual([]);
   });
@@ -530,7 +530,7 @@ describe('GRINDSTONE, played — the iteration that asks NOTHING', () => {
 describe('a body that iterates without consuming anything is ABANDONED, and says so', () => {
   it('trips MAX_EFFECT_STEPS_PER_RESOLUTION, emits the reason, and lets the game carry on', () => {
     // ⚠️ THE AUTHORING MISTAKE THIS BOUND EXISTS FOR, written as a fixture rather
-    // than hoped for. Everything in §3.153 terminates because its body consumes
+    // than hoped for. Everything in §3.156 terminates because its body consumes
     // a finite zone; this one consumes nothing, which is exactly what a future
     // iterative card gets wrong. Before the bound it hung the process — no
     // question, no action, no turn, and nothing the soak watches.

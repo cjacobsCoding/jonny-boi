@@ -202,8 +202,8 @@ were true on the corpus and compiler of the day they were taken.
 
 ### Caleb's own remaining deck cards, for sequencing against the above
 
-`Axebane Guardian` (variable mana amount **and** a colour choice at resolution) · ~~`Primal Surge`~~ ✅ §3.153
-(and the blocker was **neither** half the board named — see §3.153: the BODY had no rule either) ·
+`Axebane Guardian` (variable mana amount **and** a colour choice at resolution) · ~~`Primal Surge`~~ ✅ §3.156
+(and the blocker was **neither** half the board named — see §3.156: the BODY had no rule either) ·
 `Craterhoof Behemoth` (mass keyword grant; the derived count already landed, so **re-blame first**).
 Plus the two evidenced NO-GOs, `Jace` and `Tamiyo`, whose residues are named in §7a and pinned by
 tests — neither needs a lane of its own, both need the families that actually hold them.
@@ -315,7 +315,7 @@ waits on the pool refresh (§8 note). A card is ✅ only when **every** printed 
 | Jace, Architect of Thought | **three** clauses, three systems | ⛔ **well-evidenced NO-GO.** None of its three abilities is a loyalty problem: a duration-scoped delayed trigger, **opponent pile separation**, and the 5,640-card "you may / choose" row. Tests assert the counts (2 and 3), so a card quietly starting to compile one of them also fails. |
 | Tamiyo, the Moon Sage | loyalty + emblem | ⛔ `+1` compiles; two residues pinned by name. The `−2` needs a derived count with a **subject-player axis `DerivedCountName` has no row for at all** — widening to `creaturesOpponentControls` would change the card. The `−8`'s second ability needs a *"put into your graveyard from anywhere"* trigger: 23 corpus cards print it, **1** prints this body. |
 | Axebane Guardian | variable mana production | ⬜ `{T}: Add X mana in any combination of colors, where X is the number of creatures you control with defender.` **Two problems, not one**: a variable AMOUNT (`ManaAbility.produces` is a fixed mode list, `TapForManaAction.mode` an index) **and** *"in any combination of colors"*, which is a player choice at resolution. |
-| Primal Surge | iterative effects | ✅ §3.153 — set-verified +1/−0. ⚠️ **The row named the wrong half, and so did the correction.** The board said *"you may / choose"*; §7b corrected that to `repeat this process`. `repeat-blame.mjs` says it is BOTH: with the repeat sentence deleted the card still refuses, so `Exile the top card of your library. If it's a permanent card, you may put it onto the battlefield.` had no rule either. Three things, not one. The one corpus card that needed the iteration ALONE was Grindstone. |
+| Primal Surge | iterative effects | ✅ §3.156 — set-verified +1/−0. ⚠️ **The row named the wrong half, and so did the correction.** The board said *"you may / choose"*; §7b corrected that to `repeat this process`. `repeat-blame.mjs` says it is BOTH: with the repeat sentence deleted the card still refuses, so `Exile the top card of your library. If it's a permanent card, you may put it onto the battlefield.` had no rule either. Three things, not one. The one corpus card that needed the iteration ALONE was Grindstone. |
 | Rhox Faithmender | life-change replacement | ✅ §3.151 — one more event kind cost one row in five places. The real work was the **funnel**: lifelink and a resolving spell both gain life, and this card prints both halves. |
 | Fog Bank | damage prevention | ✅ §3.151 — prevention was already built. What was missing was a way to say **`~`**: a closed anchor vocabulary read by both sides of the event. |
 | Craterhoof Behemoth | mass pump + keyword grant | ⬜ `When ~ enters, creatures you control gain trample and get +X/+X until end of turn, where X is the number of creatures you control.` The derived count is the family §3.149 landed — **re-blame; the residue may be only the mass keyword grant.** |

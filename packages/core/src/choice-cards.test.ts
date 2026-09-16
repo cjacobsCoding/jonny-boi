@@ -819,7 +819,7 @@ describe('robustness', () => {
     //
     // ⚠️ THE CEILING IS READ, NEVER RE-SPELLED. This loop used to stop at a
     // literal 200 — comfortably above the budget of the day (32) and silently
-    // below it the moment §3.153 raised the budget so a real iterative card
+    // below it the moment §3.156 raised the budget so a real iterative card
     // (Primal Surge, which asks once per permanent it puts onto the
     // battlefield) could finish. The test then failed for having the wrong
     // number in it rather than for anything the engine did. A guard derived

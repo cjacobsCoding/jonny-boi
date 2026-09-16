@@ -283,7 +283,7 @@ const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string | readonly strin
   scry: 'scry',
   surveil: 'surveil',
   // §3.113 — "from among the milled cards" mills through its own primitive
-  // (the same funnel), so either is the evidence the line compiled. §3.153 adds
+  // (the same funnel), so either is the evidence the line compiled. §3.156 adds
   // the iterative one (Grindstone's "…repeat this process"), which mills through
   // `millTopCards` exactly as the other two do: a ROW here rather than a second
   // guard, so the next primitive that mills is understood by this sweep in the

@@ -3061,12 +3061,18 @@ and `rules-citations.test.ts` GAP-15 failed. The correct citation is the **subse
 can reach this family — `targeting-protection-family.test.ts` is its coverage gate, and every Oracle
 string in it is copied verbatim from a named real corpus card for exactly that reason.
 
-### 3.153 ITERATIVE EFFECTS — `repeat this process`. The family is 44 cards, 38 shapes, and the honest delta is TWO — ✅ done
+### 3.156 ITERATIVE EFFECTS — `repeat this process`. The family is 44 cards, 38 shapes, and the honest delta is TWO — ✅ done
 
-> ⚠️ **Section number claimed off a contended range, and checked rather than assumed.** §3.152 is the
-> highest in `origin/main` at fork (`40f4227`). A scan of every remote branch's `DESIGN.md` for a
-> `### 3.153` heading found **none** — the highest any branch claims is §3.152. If an integrator finds
-> a second §3.153, renumber this one: it references no other section by number except as citations.
+> ⚠️ **Section number claimed off a contended range — and the first claim was TAKEN while this lane
+> was out.** At fork (`origin/main` `40f4227`) §3.152 was the highest anywhere, and a scan of every
+> remote branch's `DESIGN.md` found no `### 3.153`, so this lane claimed §3.153. By the time it
+> finished, `main` had moved to `ea9342a` carrying §3.153 (the owner-decks lane) and §3.154 (the
+> walkers lane), with §3.155 claimed by the variable-mana lane — so this became **§3.156**,
+> renumbered across all eight files that cited it before the merge.
+> **A remote scan is a snapshot, not a reservation.** The scan was correct when it ran and worthless
+> an hour later; the only thing that makes a number safe is re-checking it at MERGE time, which is
+> when this renumber was done. If an integrator finds a second §3.156, renumber this one again — it
+> references no other section by number except as citations.
 
 The acceptance card was **Primal Surge** — *"Exile the top card of your library. If it's a permanent
 card, you may put it onto the battlefield. If you do, repeat this process."* — the card Caleb's

@@ -2613,7 +2613,7 @@ function printsLinkedReturn(ctx: RuleContext): boolean {
 }
 
 // ===========================================================================
-// §3.153 — THE ITERATIVE-EFFECTS FAMILY. `repeat this process`.
+// §3.156 — THE ITERATIVE-EFFECTS FAMILY. `repeat this process`.
 //
 // OWNED BY THE `feat/iterative-effects` LANE. Everything this family adds to
 // `rules.ts` is inside this region and reaches `EFFECT_RULES` through the one
@@ -2664,7 +2664,7 @@ const SHARED_MILL_CHARACTERISTICS: Readonly<Record<string, string>> = Object.fre
 const SHARED_MILL_TOKEN = Object.keys(SHARED_MILL_CHARACTERISTICS).join('|');
 
 /**
- * §3.153 — the iterative-effects rules.
+ * §3.156 — the iterative-effects rules.
  *
  * A named array rather than inline entries so the region is one unit; the order
  * inside it is the order `applyRules` tries them, and neither pattern can match
@@ -2749,7 +2749,7 @@ const ITERATIVE_EFFECT_RULES: readonly CompileRule[] = Object.freeze([
 export const SHARED_MILL_PARAM_VALUES: readonly string[] = Object.freeze(
   Object.values(SHARED_MILL_CHARACTERISTICS),
 );
-// ======================= end §3.153 iterative effects ======================
+// ======================= end §3.156 iterative effects ======================
 
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
@@ -5999,7 +5999,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       });
     },
   },
-  // §3.153 — the ITERATIVE-EFFECTS family (`repeat this process`). Declared at
+  // §3.156 — the ITERATIVE-EFFECTS family (`repeat this process`). Declared at
   // the end of this file in its own region and spread in here as ONE line, so
   // the family reads as a unit and a concurrent lane editing another region of
   // `rules.ts` meets one line rather than a block.

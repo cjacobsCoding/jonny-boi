@@ -1,4 +1,4 @@
-- 2026-09-15 `feat/iterative-effects` — **DESIGN §3.153, ITERATIVE EFFECTS (`repeat this process`).**
+- 2026-09-15 `feat/iterative-effects` — **DESIGN §3.156, ITERATIVE EFFECTS (`repeat this process`).**
   **Primal Surge ✅ and Grindstone ✅. +2 cards, 0 lost, set-verified** (6,934 -> 6,936 on a fixed
   32,341-card corpus; this lane's seven sources reverted with `git show origin/main:<path>` and both
   trees rebuilt in between; the diff both ways names exactly those two and nothing else).
@@ -14,7 +14,7 @@
   clauses to 15, and **Primal Surge is in the BODY bucket** — with the repeat sentence deleted it
   still refuses. Exactly ONE corpus card compiles on the iteration alone, and it is Grindstone.
   **FILES OWNED** (`rules.ts` is contended — expect a real merge, and build after it):
-  `packages/cards/src/compile/rules.ts` — **one region only**: a `§3.153` block declared immediately
+  `packages/cards/src/compile/rules.ts` — **one region only**: a `§3.156` block declared immediately
   ABOVE `export const EFFECT_RULES` (it must be above it: a `const` spread into that array from below
   is a TDZ error), reaching the array through **one spread line** `...ITERATIVE_EFFECT_RULES,` at its
   end. Nothing else in the file is touched. `packages/cards/src/compile/compile.ts` — **one ROW**:
