@@ -559,7 +559,7 @@ const ENTRIES = {
   plot: {
     term: 'Plot',
     kind: 'keyword',
-    text: 'At sorcery speed you may pay its plot cost and exile it from your hand. On a LATER turn you cast it from exile for FREE. You pay the whole price up front, unlike foretell — and nothing counts down, unlike suspend. It simply waits.',
+    text: 'At sorcery speed you may pay its plot cost and exile it from your hand. On a LATER turn you cast it from exile for FREE, again at sorcery speed. You pay the whole price up front, unlike foretell — and nothing counts down, unlike suspend. It simply waits.',
   },
   prototype: {
     term: 'Prototype',
