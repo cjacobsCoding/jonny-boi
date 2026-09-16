@@ -221,6 +221,20 @@ export const millSharedColorRepeat: EffectPrimitive = (ctx) => {
   if (shared) repeatProcess(ctx, 'millSharedColorRepeat');
 };
 
+/**
+ * The `share` values {@link millSharedColorRepeat} can honour, exported ONLY so
+ * `iterative-effects.test.ts` can pin them against the compiler's own closed
+ * table (`SHARED_MILL_PARAM_VALUES` in `compile/rules.ts`).
+ *
+ * The duplication is unavoidable — a rule table may not import a primitive's
+ * private map — so the test that fails when they diverge is what makes it safe.
+ * §8a item 5 is the same shape: `DERIVED_COUNTS`' spread order costs 8 cards
+ * silently and is pinned by a test for exactly this reason.
+ */
+export const SHARED_MILL_PREDICATE_KEYS: readonly string[] = Object.freeze(
+  Object.keys(SHARED_CHARACTERISTICS),
+);
+
 /** The primitives this module contributes to the shared registry. */
 export const ITERATIVE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object.freeze({
   exileTopMayPlay,
