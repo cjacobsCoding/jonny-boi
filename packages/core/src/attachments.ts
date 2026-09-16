@@ -278,15 +278,27 @@ export function detachFromHost(
 }
 
 /**
- * Unattach everything attached to `hostId` — used when that host has LEFT the
- * battlefield but its instance id is coming straight back (a blink).
+ * Unattach everything attached to `hostId` — **called by both of this repo's
+ * battlefield-leave funnels** (core's `internal/zones.ts` `moveToZone` and the
+ * cards package's `movePermanentTo`) the instant that host leaves.
  *
- * Normally nothing has to say this: {@link isLegallyAttached} asks whether the
- * host is still on the battlefield, so a died/bounced/exiled host knocks its
- * Auras and Equipment off at the next state-based-action pass all by itself. A
- * blink returns the SAME id, so that question answers "yes" about an object
- * CR 400.7 says is a different one, and an Aura would stay on a creature it
- * never enchanted.
+ * ## Why the state-based action is not enough on its own
+ * {@link isLegallyAttached} asks whether the host is still on the battlefield,
+ * so a died/bounced/exiled host does knock its Auras and Equipment off — but
+ * only at the NEXT state-based-action pass, and `runResolution` returns without
+ * one while a question is parked. In that window a battlefield permanent still
+ * carries the instance id of a card that has already reached a HAND, and
+ * `@jonny-boi/protocol`'s `maskStateForSeat` copies `state.battlefield` out
+ * verbatim — so the opponent and any spectator are handed the identity of a
+ * hidden card. A dangling reference is the bug; the mask is the last line, not
+ * the first. `packages/sim/src/masking.test.ts` found it on a full-pool game;
+ * `attachments.test.ts` and `cards`' `primitives.test.ts` are the fast guards.
+ *
+ * A BLINK is the second reason, and the one this function was written for: it
+ * returns the SAME id, so "is the host on the battlefield" answers *yes* about
+ * an object CR 400.7 says is a different one, and an Aura would stay on a
+ * creature it never enchanted. The leave funnel now breaks the link before the
+ * id comes back, which covers that case too.
  *
  * Only the LINK is broken here. What each attachment then does about it —
  * an Aura to its owner's graveyard, an Equipment simply unattached — is the

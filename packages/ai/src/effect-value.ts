@@ -572,6 +572,37 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     );
   },
 
+  /**
+   * "EXILE TARGET CARD FROM A GRAVEYARD[, and if it was a <type>, <body>]" — a
+   * WRAPPER, and §3.42's exact shape again: registered, unpriced, and its nested
+   * body never read.
+   *
+   * ⚠️ WHAT WENT BLIND. Scavenging Ooze — one of Caleb's own deck cards, and an
+   * acceptance card for the pool refresh — prints
+   * `{G}: Exile target card from a graveyard. If it was a creature card, put a
+   * +1/+1 counter on this creature and you gain 1 life.` The counter and the
+   * life ARE the reason to activate it; with the body unpriced the pilot scored
+   * every graveyard card identically and had no reason to prefer the creature
+   * card that actually grows the Ooze. Exactly the Conjurer's Closet failure
+   * `mayEffects` documents above, on a different card.
+   *
+   * The BASE exile is deliberately worth 0 rather than a guessed constant.
+   * Graveyard hate's value is what the opponent's graveyard is worth to THEM —
+   * a decklist-and-plan fact `EffectValueContext` does not carry — and inventing
+   * a number here would be a price wearing a green checkmark, which is the thing
+   * `attachToTarget`'s ledger row refuses. The body is priced because the body
+   * is knowable; the hate is left to be measured.
+   *
+   * The `ifWasType` gate is NOT discounted. The pilot picks the target, so on a
+   * live decision it is choosing the very card the gate reads, and a share would
+   * make the creature card and the land score closer together — blurring the
+   * one distinction this entry exists to draw.
+   */
+  exileTargetCardFromGraveyard: (params, ctx) => {
+    const inner = params['effects'];
+    return Array.isArray(inner) ? valueOfEffects(inner as readonly EffectRef[], ctx) : 0;
+  },
+
   blinkTarget: (_params, ctx) => {
     const perm = firstTargetPermanent(ctx);
     if (!perm) return 0;

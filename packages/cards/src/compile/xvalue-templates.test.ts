@@ -262,7 +262,7 @@ describe('Trostani, Selesnya\'s Voice — what is left, exactly', () => {
    *
    * The test is KEPT rather than deleted, pointed at the same card, because what
    * it is really for is that Trostani — the owner's own card, from
-   * `docs/decks/acidic-angels.txt` — is pinned by name from the lane that made
+   * `docs/decks/thunes-life.txt` — is pinned by name from the lane that made
    * its {X} half work. The claim it makes now is the stronger one: nothing is
    * left at all. Its sibling below, which proves the amount half compiles on its
    * own, is untouched and is still this lane's discriminator.

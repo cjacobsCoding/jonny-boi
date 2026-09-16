@@ -3,7 +3,7 @@
  *
  * The gauntlet decks in `../data/decks` are eight curated archetypes. They are
  * the right thing to measure a card swap against and the wrong thing to soak an
- * engine with: they touch a fraction of the 357-card pool, and the systems that
+ * engine with: they touch a fraction of the pool, and the systems that
  * shipped in the last three days barely appear in them at all. Worse, they never
  * COLLIDE — no gauntlet deck puts a planeswalker, an Equipment, a protection
  * creature, a modal spell and a flashback spell in the same game, which is
@@ -282,9 +282,10 @@ export interface SoakCardIndex {
 }
 
 /**
- * Index a pool once for the whole soak. Cheap, but it walks 357 cards and
+ * Index a pool once for the whole soak. It walks EVERY card in the pool and
  * serializes each of them, so it is done once per run and threaded — never
- * rebuilt per deck.
+ * rebuilt per deck. That mattered at 357 cards; the pool is now an order of
+ * magnitude larger, so rebuilding this per deck would dominate a soak run.
  */
 export function indexPoolForSoak(cards: readonly CardDefinition[]): SoakCardIndex {
   const spells: CardDefinition[] = [];

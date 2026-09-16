@@ -136,7 +136,8 @@ export function lastAnchoringChild(
  *
  * Measured from the report's OWN clip rather than guessed: the frozen frame's
  * DOM is 10,540 nodes, of which **5,140 are `<option>`** — the A/B Swap tab
- * mounts two card pickers over the whole 5,097-card pool. Nothing else on the
+ * mounts two card pickers over the whole pool, 5,097 cards AT THE TIME and
+ * larger now, so the node count scales with it. Nothing else on the
  * page is heavy (no image, no SVG, no canvas), which is why the Lab looks light
  * when you measure it on another tab and is pathological on that one.
  *

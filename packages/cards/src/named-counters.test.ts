@@ -7,7 +7,7 @@
  * perfectly and covered nothing. So every string below was copied out of the
  * 32,414-card Scryfall corpus (2026-09-15), reminder text and all, and the two
  * acceptance cards for this lane — Scavenging Ooze and Luminarch Ascension, both
- * from `docs/decks/acidic-angels.txt` — are asserted COMPLETE by name.
+ * from `docs/decks/thunes-life.txt` — are asserted COMPLETE by name.
  *
  * ## The refusals are the other half of the claim
  * A template that swallows text it does not implement is worse than no template:
@@ -52,7 +52,7 @@ const why = (c: CompilableCard): string =>
 /* The two acceptance cards                                                    */
 /* -------------------------------------------------------------------------- */
 
-describe('§3.149 — Caleb’s deck cards (docs/decks/acidic-angels.txt)', () => {
+describe('§3.149 — Caleb’s deck cards (docs/decks/thunes-life.txt)', () => {
   const SCAVENGING_OOZE = card(
     'Scavenging Ooze',
     '{G}: Exile target card from a graveyard. If it was a creature card, put a +1/+1 counter on this creature and you gain 1 life.',
@@ -175,31 +175,27 @@ describe('§3.149 — inert named counters compile; counters with RULES do not',
     expect(result.matchedRules).not.toContain('put-named-counter-on-self');
   });
 
-  it('PINS the same defect still live on the +1/+1 sibling — Big Play, Miraculous Recovery', () => {
+  it('the +1/+1 sibling now REFUSES a bare "it" on a spell — Big Play, Miraculous Recovery', () => {
     /*
-     * ⚠️ THIS TEST ASSERTS BEHAVIOUR THAT IS WRONG, ON PURPOSE. It is a pinned
-     * blocker in the style §3.147 used for Axebane Guardian: the defect is real,
-     * it is named, and the test goes RED the day somebody fixes it — which is
-     * the signal to delete this test and regenerate the pool.
+     * §3.151 — the guard that replaced a pinned defect. This test used to assert
+     * the WRONG behaviour on purpose, because the fix could not land alone: the
+     * `sourceCanHoldCounters` gate drops both these cards from the pool, and
+     * `pool-mechanics.test.ts`'s round-trip guard is absolute by design. The
+     * pool refresh landed the gate and the regeneration as one change, so the
+     * pin is now a guard pointing the other way.
      *
-     * THE DEFECT. `put-counters-on-self` reads a bare "it" as the source. On an
-     * INSTANT that is impossible — counters live on permanents (CR 122.1) — and
-     * "it" is the creature the PREVIOUS sentence named. A corpus sweep for every
-     * instant/sorcery compiling 'complete' with a `self: true` addCounters found
-     * exactly these two, and both are in the SHIPPED pool putting their counter
-     * nowhere. Real printed text, corpus 2026-09-15.
+     * THE DEFECT IT GUARDS. `put-counters-on-self` read a bare "it" as the
+     * source. On an INSTANT that is impossible — counters live on permanents
+     * (CR 122.1) — and "it" is the creature the PREVIOUS sentence named, because
+     * the sentence splitter hands the second half over alone. Both cards were in
+     * the shipped pool putting their counter nowhere, playing weaker than
+     * printed. A corpus sweep for every instant/sorcery compiling 'complete'
+     * with a `self: true` addCounters found exactly these two.
      *
-     * WHY IT IS NOT FIXED IN THIS LANE. The one-line fix is the
-     * `sourceCanHoldCounters` gate the named-counter rule already carries. But
-     * applying it drops both cards from the pool, and `pool-mechanics.test.ts`'s
-     * round-trip guard is absolute BY DESIGN — "a card dropped from the pool to
-     * make a test pass is the failure mode this guards". So the fix can only
-     * land together with a pool regeneration, and `fix/pool-refresh-3147` owns
-     * that generated file.
-     *
-     * FOR WHOEVER LANDS IT: add `if (!sourceCanHoldCounters(ctx)) return null;`
-     * to `put-counters-on-self`, delete this test, regenerate. Expect the
-     * accepted count to fall by exactly 2, and that fall is a correction.
+     * Deleting this test instead of inverting it would unpin the class: the gate
+     * is one line, and the day somebody removes it these two cards would quietly
+     * re-enter the pool mis-compiled, exactly as before. Real printed text,
+     * corpus 2026-09-15.
      */
     const cases: readonly (readonly [string, string])[] = [
       [
@@ -216,12 +212,13 @@ describe('§3.149 — inert named counters compile; counters with RULES do not',
         typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
       });
       const result = compileCard(spell);
-      expect(result.status, `${name}: if this is now 'incomplete', the defect is FIXED`).toBe(
-        'complete',
+      expect(
+        result.status,
+        `${name}: a spell cannot hold counters, so the clause must report`,
+      ).toBe('incomplete');
+      expect(result.matchedRules, `${name}: the bare-"it" rule must not match`).not.toContain(
+        'put-counters-on-self',
       );
-      // The counter is bound to the SPELL — this is the wrong binding, pinned.
-      const ref = (result.definition.effects ?? []).find((e) => e.primitive === 'addCounters');
-      expect(ref?.params?.self, `${name}: the wrong binding, pinned`).toBe(true);
     }
   });
 

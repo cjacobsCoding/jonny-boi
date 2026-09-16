@@ -202,8 +202,8 @@ were true on the corpus and compiler of the day they were taken.
 
 ### Caleb's own remaining deck cards, for sequencing against the above
 
-`Axebane Guardian` (variable mana amount **and** a colour choice at resolution) · ~~`Primal Surge`~~ ✅ §3.156
-(and the blocker was **neither** half the board named — see §3.156: the BODY had no rule either) ·
+`Axebane Guardian` (variable mana amount **and** a colour choice at resolution) · `Primal Surge`
+(`repeat this process` — unbounded iteration, **not** the "you may" its row is named for) ·
 `Craterhoof Behemoth` (mass keyword grant; the derived count already landed, so **re-blame first**).
 Plus the two evidenced NO-GOs, `Jace` and `Tamiyo`, whose residues are named in §7a and pinned by
 tests — neither needs a lane of its own, both need the families that actually hold them.
@@ -257,18 +257,70 @@ blank art; an index ahead of the pool offers cards the engine will not play.
 | ref | pool | canonical index | web index |
 | --- | ---: | ---: | ---: |
 | `origin/main` | 5,651 | 5,651 | 5,651 |
-| `origin/fix/pool-refresh-3147` | **6,323** | **6,323** | **6,323** |
+| `origin/fix/pool-refresh-3147` | 6,323 | 6,323 | 6,323 |
+| **`feat/pool-refresh-wave5`** ✅ **SHIPPED** | **6,944** | **6,944** | **6,944** |
 
-The second is a **complete and internally consistent** regeneration — all three artifacts in step —
-plus four soak-defect fixes that took a wider pool from **754 violations to 4**. The session that
-made it **ended before pushing**, so it existed only on one disk; it is now on the remote.
+The middle row was a **complete and internally consistent** regeneration — all three artifacts in
+step — plus four soak-defect fixes that took a wider pool from **754 violations to 4**. The session
+that made it **ended before pushing**, so it existed only on one disk; it is now on the remote.
 
-`origin/salvage/pool-refresh-3147` carries that session's **uncommitted** last change — the
-diagnosis *and* fix for those final 4 violations. Whoever finishes the refresh starts from the
-diagnosis instead of rediscovering it. Its reasoning is worth reading: a milled card is public the
-instant it lands face up, but Sudden Reclamation mills three and returns one to **hand** inside one
-resolution, so the card is public and hidden again with no decision boundary in between, and an audit
-that can only compare settled states reads the engine's own `zoneChange` as a leak.
+`origin/salvage/pool-refresh-3147` carried that session's **uncommitted** last change — the
+diagnosis *and* fix for those final 4 violations. Its reasoning is worth reading: a milled card is
+public the instant it lands face up, but Sudden Reclamation mills three and returns one to **hand**
+inside one resolution, so the card is public and hidden again with no decision boundary in between,
+and an audit that can only compare settled states reads the engine's own `zoneChange` as a leak.
+
+**The last row is the delivery.** Regenerated from the freshest corpus on disk (32,414 paper
+non-joke cards), offline throughout, carrying BOTH of the above (the four committed soak fixes and
+the fifth salvaged one) plus the counters hand-off. `6,944 = 6,912 compiled + 32 curated`; the
+report reads 6,912 accepted / 25,470 rejected of 32,414 candidates, 0 unresolved. **+1,293 cards
+that a player can now find**, where before they were compiled, tested, green and invisible.
+
+Measured as a SET on the fixed measuring stick (`corpus-fixed.json`, 32,341, md5 `718eae40…`), with
+the compiler sources reverted to `main` in between so both sides are the same question:
+
+```
+BEFORE  main bf18f79     6,934 complete / 32,341
+AFTER   this branch      6,932 complete / 32,341
+LOST    Big Play · Miraculous Recovery        GAINED  none
+```
+
+**Both losses are the CORRECTION §5a promised, not a regression** — each is an instant whose bare
+"it" was read as the source, so both sat in the shipped pool compiling `'complete'` while their
++1/+1 counter went nowhere. Nothing else moved in either direction, which is the property the
+set-diff exists to prove.
+
+**What Caleb's own decks now look like**, counted against the shipped pool rather than the compiler:
+
+| deck | distinct cards in pool | physical copies | still blocked |
+| --- | --- | --- | --- |
+| `acidic-angels.txt` | **22 / 22** | **65 / 65 — 100%** | — **COMPLETE** |
+| `defender-ramp.txt` | 12 / 17 | **36 / 49 — 73.5%** | Axebane Guardian · Craterhoof Behemoth · Jace · Tamiyo · Primal Surge |
+
+The only absences are the eight §7a already documents as blocked — two evidenced NO-GOs and six
+unstarted. No card went missing that the board did not already predict.
+
+**What shipping 1,265 never-before-shipped cards actually exposed.** They went under
+`pool-mechanics` and `expanded-pool` for the first time, and every failure was a CHECK or a TABLE
+lagging the engine — not one was a card defect, and not one was fixed by shrinking the pool:
+
+| where | what | outcome |
+| --- | --- | --- |
+| `fidelity.test.ts` | asked `isTargetRestriction` (the string half) after core grew `TargetSpec`; Abrupt Decay's bounded target was the first in the pool to prove it | fixed — asks `isTargetSpec` |
+| `zone-leave-invariants.test.ts` | picks rig pieces from a NAME-SORTED pool, so the regeneration re-rolled all four; the aura became `Aether Tunnel`, which grants **unblockable**, and the rig then asserted a block against its own attacker | fixed — pieces picked for INERTNESS, with a guard that names the card |
+| soak `untapAtTurnStart` | fired 50× on CORRECT behaviour: `doesNotUntap` cards (Grim Monolith, Famished Paladin) and House Guildmage's one-shot freeze, which is spent by the untap step happening | fixed — the freeze is snapshotted before the turn flips |
+| `paired-arms`, `effect-value-parity` | four primitives from recent lanes unclassified/unpriced | 1 priced (`exileTargetCardFromGraveyard` — **Scavenging Ooze's payoff was invisible to the pilot**), 3 ledgered with reasons |
+| soak runaway ×12 | **all 12** contain Basalt Monolith cycling `{T}: Add {C}{C}{C}` against `{3}: Untap` for zero net mana | REPORTED — `fix/pilot-repeatable-noop` owns it |
+| card browser | React #185 (max update depth) after several searches in a row | REPORTED — reproduces on the 5,651 pool too, so not the refresh |
+| `masking.test.ts` | a bounced creature leaves its Auras' `attachedTo` pointing at it, so the masked view names a card now in HAND — `Towering Indrik`, seat B **and a spectator** | REPORTED — transient (one action), and `unattachDependentsOf` is the intended fix, **exported and never called** |
+
+**Soak violations: 64 → 12 → 4** (the last drop came with the merged main). The 4 are the Basalt
+Monolith loop, named above.
+
+⚠️ **§1a's other direction is now guarded.** `stronger-than-printed.test.ts` asserts every keyword
+flag a pool card carries appears in its own printed text — **6,944 of 6,944 checked, 0 not checked,
+0 overreaching**. Watched going red on real data (giving the real Grizzly Bears `flying` fails it).
+Its evidence table is CLOSED, which immediately found eight keyword flags nothing had ever checked.
 
 ### Two corrections the refresh must carry
 
@@ -312,18 +364,18 @@ waits on the pool refresh (§8 note). A card is ✅ only when **every** printed 
 | Kessig Wolf Run | {X} / derived value | ✅ §3.149 |
 | Selesnya Charm | target bound | ✅ §3.150 — **two of its three modes always compiled.** The blocker was never modal: `Exile target creature with power 5 or greater` is a printed BOUND on a target. |
 | Trostani, Selesnya's Voice | Populate | ✅ — and it was a **near-miss with zero `packages/core` changes**: `proliferate` already asked a resolution-time choice over battlefield permanents, and the token-copy primitive already existed. |
-| Jace, Architect of Thought | **three** clauses, three systems | ⛔ **well-evidenced NO-GO.** None of its three abilities is a loyalty problem: a duration-scoped delayed trigger, **opponent pile separation**, and the 5,640-card "you may / choose" row. Tests assert the counts (2 and 3), so a card quietly starting to compile one of them also fails. |
-| Tamiyo, the Moon Sage | loyalty + emblem | ⛔ `+1` compiles; two residues pinned by name. The `−2` needs a derived count with a **subject-player axis `DerivedCountName` has no row for at all** — widening to `creaturesOpponentControls` would change the card. The `−8`'s second ability needs a *"put into your graveyard from anywhere"* trigger: 23 corpus cards print it, **1** prints this body. |
+| Jace, Architect of Thought | **three** clauses, three systems | ⬜ §3.154 — **two of three landed; ONE clause left.** `+1` ✅ (a per-ATTACKER trigger event, which did not exist, plus a duration-scoped repeating delayed ability — a third lifetime). `−2` ✅ — and §3.150's "prompt-seam question" was already answered: `pileSplitSacrifice` has asked a NON-controlling player mid-resolution since Liliana's −6, so the residue was one sentence and a destination table. `−8` ⛔ **clause-level NO-GO, named:** the free-cast permission cannot cross seats — `generateLegalActions` offers an exile cast by walking the ASKING player's own `player.exile`, and a card exiled from B's library sits in B's exile. **321 clauses / 315 shapes / 168 sole-blocked** print "without paying its/their mana cost". |
+| Tamiyo, the Moon Sage | loyalty + emblem | ✅ **§3.154 — COMPLETE, and played.** `−2`: the subject-player axis belongs on §3.149's FILTERED descriptor, not on `DerivedCountName` — `subject` composes with `scope` and is read through `playersForParam`. `−8`: one `TriggerEvent` — and then `matchTriggers`' `watchesBoard` **closed list**, which the new kind was missing from, so the trigger never fired once while every compile assertion stayed green. |
 | Axebane Guardian | variable mana production | ⬜ `{T}: Add X mana in any combination of colors, where X is the number of creatures you control with defender.` **Two problems, not one**: a variable AMOUNT (`ManaAbility.produces` is a fixed mode list, `TapForManaAction.mode` an index) **and** *"in any combination of colors"*, which is a player choice at resolution. |
-| Primal Surge | iterative effects | ✅ §3.156 — set-verified +1/−0. ⚠️ **The row named the wrong half, and so did the correction.** The board said *"you may / choose"*; §7b corrected that to `repeat this process`. `repeat-blame.mjs` says it is BOTH: with the repeat sentence deleted the card still refuses, so `Exile the top card of your library. If it's a permanent card, you may put it onto the battlefield.` had no rule either. Three things, not one. The one corpus card that needed the iteration ALONE was Grindstone. |
+| Primal Surge | ⚠️ **misfiled** | ⬜ `Exile the top card of your library. If it's a permanent card, you may put it onto the battlefield. If you do, repeat this process.` The row calls it *"you may / choose"*; **the actual blocker is `repeat this process`** — an unbounded iteration. The "you may" half is ordinary. |
 | Rhox Faithmender | life-change replacement | ✅ §3.151 — one more event kind cost one row in five places. The real work was the **funnel**: lifelink and a resolving spell both gain life, and this card prints both halves. |
 | Fog Bank | damage prevention | ✅ §3.151 — prevention was already built. What was missing was a way to say **`~`**: a closed anchor vocabulary read by both sides of the event. |
 | Craterhoof Behemoth | mass pump + keyword grant | ⬜ `When ~ enters, creatures you control gain trample and get +X/+X until end of turn, where X is the number of creatures you control.` The derived count is the family §3.149 landed — **re-blame; the residue may be only the mass keyword grant.** |
 | Fiendslayer Paladin | targeting restriction | ✅ §3.152 — set-verified +1/−0. ⚠️ **The row named a half that was FINISHED**: all four quarters of protection (CR 702.16) were already built in `core/protection.ts`. The gap was `hexproof from [quality]` (CR 702.11e), ONE rule against an opponent only — and the row's `/ward|protection from/` hint cannot match this card's printed line at all, so it sat in the generic catch-all. |
 
-**12 of 16 lane-verified · 2 evidenced NO-GOs · 2 unstarted.** ✅ **ACIDIC ANGELS IS COMPLETE** — all
-22 of its names compile. Defender Ramp still has **4**: Axebane Guardian, Craterhoof
-Behemoth, and the two evidenced NO-GOs.
+**12 of 16 lane-verified · 1 clause-level NO-GO · 3 unstarted.** ✅ **ACIDIC ANGELS IS COMPLETE** — all
+22 of its names compile. Tamiyo + Jace Surge is down to **4**: Axebane Guardian, Primal Surge,
+Craterhoof Behemoth, and **Jace's `−8` alone** — his other two abilities compile and play (§3.154).
 
 ⛔ is not a shelf. It means the residue has been **named and pinned by a test**, so the card enters
 the pool the moment the family that actually holds it lands — and a card that starts compiling while
@@ -398,8 +450,8 @@ and the shipped pool lags the compiler. Any absolute below is annotated with the
 | 2026-09-15 | **+43** | loyalty, emblem, untap (PR #39) | 32,341-card corpus against `fd1ca31`, set-diffed (0 lost). Attributed 36 freeze / 7 `and`-verb, **0 unattributed**. ⚠️ **Jace ✗ and Tamiyo ✗ — both honest NO-GOs**, residues pinned by name. |
 | 2026-09-15 | **+175** | printed TARGET BOUND (DESIGN §3.150) | 32,414-card corpus against `fd1ca31`, set-diffed (0 lost). **Selesnya Charm ✅.** ⚠️ Only **28** of the +175 are modal — the CLASS was fixed, not the instance. |
 | 2026-09-15 | **+34** | Populate / copy selectors (PR #42) | 32,341-card corpus against `fd1ca31`, set-diffed (0 lost). **Trostani, Selesnya’s Voice ✅** — and it needed **zero `packages/core` changes**. 15 of the 34 are populate cards; 19 are `", then "` as an ordered conjunction. |
-| 2026-09-15 | **+29** | replacement / prevention (PR #46) | DESIGN §3.151 — a PRIVATE copy of the 32,414-card corpus against `162f143`, set-diffed (6,706 → 6,735, **0 lost**). **Rhox Faithmender ✅, Fog Bank ✅** — Acidic Angels is now ONE card short. |
-| 2026-09-15 | **+1** | targeting protection (PR #47) | DESIGN §3.152 — `hexproof from [quality]` (CR 702.11e). 32,341-card corpus against `162f143`, set-diffed 6,696 → 6,697, **0 lost**. **Fiendslayer Paladin ✅ — and that COMPLETES Acidic Angels.** ⚠️ Also fixed a **stronger-than-printed** sweep defect that would have given 14 hexproof-from cards FULL hexproof. |
+| 2026-09-15 | **+29** | replacement / prevention (PR #46) | DESIGN §3.151 — a PRIVATE copy of the 32,414-card corpus against `162f143`, set-diffed (6,706 → 6,735, **0 lost**). **Rhox Faithmender ✅, Fog Bank ✅** — Thune’s Life is now ONE card short. |
+| 2026-09-15 | **+1** | targeting protection (PR #47) | DESIGN §3.152 — `hexproof from [quality]` (CR 702.11e). 32,341-card corpus against `162f143`, set-diffed 6,696 → 6,697, **0 lost**. **Fiendslayer Paladin ✅ — and that COMPLETES Thune’s Life.** ⚠️ Also fixed a **stronger-than-printed** sweep defect that would have given 14 hexproof-from cards FULL hexproof. |
 
 > ⚠️ **The 299-card copy row was the §2 trap again and flatter than any before it: 300 cards,
 > 301 shapes — 1.00 cards per shape.** Every card in it prints a sentence no other card prints.
@@ -479,6 +531,16 @@ Selesnya Charm, Trostani. Checked against the set itself, not taken from any lan
    added that drive the real primitive and go red with `expected 23 to be 26`. **When a sabotage does
    not go red, do not shrug and move on — you have just learned that the thing you were about to
    claim is unproven.**
+
+   ⚠️ **This has now happened in THREE separate lanes, so treat it as the normal case, not a fluke.**
+   The third one sharpens it: the problem was the **fixture**, not the assertion. §3.155's first test
+   for a mana-payment ordering bug used **Cascading Cataracts** — a real card, and one of the 24 that
+   lane adds — but its tap cost is `{5}` **generic**, so both orderings produce the same colour split
+   and sabotaging the ordering left the suite green. Only a **coloured** tap cost separates them.
+   The test was well-written, asserted the right property, and could not fail, because the card it
+   chose could not express the difference. **Ask of every new test: what concrete input would make
+   this go red — and is that input actually the one I used?** That lane ran six falsifications and
+   had to rewrite two of them for this reason.
 8. ⚠️ **Print the denominator before you believe any sweep.** That lane's first run of a check over
    the primitive registry was **a false green over an EMPTY registry** — it passed because it
    iterated nothing. It was caught only by printing the count, and the committed test now asserts the

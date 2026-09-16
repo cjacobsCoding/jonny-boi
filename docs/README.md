@@ -10,7 +10,7 @@ a session scratchpad does not survive the session. That is the whole reason this
 | file | covers | status |
 | --- | --- | --- |
 | [ALL-CARDS-CAMPAIGN.md](ALL-CARDS-CAMPAIGN.md) | **every MTG card playable** — the measured baseline, **§1a the pool rule's two directions**, the mandated phase order, **§4c the next-picks queue**, **§5a the delivery step**, the per-card acceptance board (§7a), and what nine lanes proved (§8a) | active — phase 2, **11 of 16 deck cards unblocked**, pool regeneration in flight |
-| [decks/](decks/) | Caleb's two physical decks, transcribed from photos, with per-card blocked/unblocked state | ✅ **Acidic Angels complete (22/22)**; Defender Ramp 5 blocked |
+| [decks/](decks/) | Caleb's two physical decks, transcribed from photos, with per-card blocked/unblocked state | ✅ **Thune’s Life complete (22/22)**; Tamiyo + Jace Surge 5 blocked |
 | [MTGA-UX-OVERHAUL.md](MTGA-UX-OVERHAUL.md) | the play surface — UX-1…UX-30, §9 zones-as-piles, §10 the combat hold, §13 prompt polish | 17 shipped, UX-18…30 open |
 | [WATCH-A-GAME.md](WATCH-A-GAME.md) | the watch tab, its layout and perspectives, the seed, overlapping overlays, and how a human's better line becomes a pilot improvement | open (WATCH-2 merged) |
 | [SUGGEST-THEMES.md](SUGGEST-THEMES.md) | Lab → Suggest: deck themes, building out from a 2-card seed, mana bases | open |

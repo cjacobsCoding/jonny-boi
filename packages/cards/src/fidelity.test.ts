@@ -34,7 +34,9 @@ import {
   createGame,
   DEFAULT_RULES,
   generateLegalActions,
+  isBoundedTarget,
   isTargetRestriction,
+  isTargetSpec,
   targetRestrictionOf,
 } from '@jonny-boi/core';
 import { buildRegistry } from './pool.js';
@@ -383,26 +385,40 @@ describe('pool audit — every card claimed faithful really is', () => {
   });
 
   it('every declared target restriction is a value the engine enforces', () => {
-    // Asked of the ENGINE (`isTargetRestriction`), never of a list copied here:
-    // a hand-kept copy goes stale the moment core learns a new restriction, and
+    // Asked of the ENGINE (`isTargetSpec`), never of a list copied here: a
+    // hand-kept copy goes stale the moment core learns a new restriction, and
     // it did — "Destroy target artifact" compiled to `targets: 'artifact'`,
     // which core has enforced since the attachment work, and this audit called
     // it unenforced anyway. The engine's own predicate cannot drift from the
     // engine.
+    //
+    // ⚠️ AND THE SAME STALENESS BIT THIS LINE ITSELF, one level up. It asked
+    // `isTargetRestriction` — the STRING half — after core grew `TargetSpec`
+    // = string | BoundedTarget for printed bounds ("target creature with power
+    // 5 or greater"). No card in the SHIPPED pool carried a bounded target, so
+    // the audit stayed green on a predicate that had become half an answer; the
+    // pool regeneration brought the first ones in and Abrupt Decay
+    // (`{base: 'nonlandPermanent', bound: {atMost: {manaValue, 3}}}`) failed it.
+    // `isTargetSpec` is the whole question, which is why it is the one to ask.
     for (const card of CARD_POOL) {
       for (const ref of card.effects ?? []) {
         const declared = ref.params?.targets;
         if (declared === undefined) continue;
         expect(
-          isTargetRestriction(declared),
-          `${card.name} declares targets: ${String(declared)}`,
+          isTargetSpec(declared),
+          // JSON, not String(): a bounded spec stringifies to "[object Object]",
+          // which names neither the card's problem nor the shape it declared.
+          `${card.name} declares targets: ${JSON.stringify(declared)}`,
         ).toBe(true);
       }
       // …and if it declares a NARROWING one, the engine reads it back. ('any' is
-      // the default and is deliberately not reported as a restriction.)
-      const narrow = (card.effects ?? []).some(
-        (ref) => isTargetRestriction(ref.params?.targets) && ref.params?.targets !== 'any',
-      );
+      // the default and is deliberately not reported as a restriction.) A
+      // BOUNDED spec is narrowing by construction — it is never built with an
+      // empty bound, so there is no "bounded but equivalent to the bare noun".
+      const narrow = (card.effects ?? []).some((ref) => {
+        const declared = ref.params?.targets;
+        return isBoundedTarget(declared) || (isTargetRestriction(declared) && declared !== 'any');
+      });
       expect(targetRestrictionOf(card) !== undefined, card.name).toBe(narrow);
     }
   });

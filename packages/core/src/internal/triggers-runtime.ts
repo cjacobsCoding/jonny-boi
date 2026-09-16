@@ -20,7 +20,13 @@ import type { GameEvent } from '../events.js';
 import type { CardInstance, GameState, InstanceId } from '../state.js';
 import { recordTurnFacts } from '../turn-facts.js';
 import type { PendingTrigger, TriggerSource } from '../triggers.js';
-import { eventTypeWatchBit, matchTriggers, orderPendingTriggers, watchedEventMaskOf } from '../triggers.js';
+import {
+  eventTypeWatchBit,
+  matchTriggers,
+  orderPendingTriggers,
+  subjectInstanceOf,
+  watchedEventMaskOf,
+} from '../triggers.js';
 import { interveningIfHolds } from '../intervening.js';
 import type { DelayedTriggeredAbility } from '../delayed.js';
 import { matchDelayedTriggers, pendingFromDelayed, removeDelayedTrigger } from '../delayed.js';
@@ -155,6 +161,9 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   regenerated: false,
   delayedTriggerCreated: false,
   delayedTriggerFired: false,
+  // §3.154 — an expiry removes a record from `state.delayedTriggers`, which is
+  // not the battlefield/command source set this map gates at all.
+  delayedTriggerExpired: false,
 });
 
 /**
@@ -420,12 +429,19 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     // board-watching condition reads — the same rule (and the same resolver) the
     // ordinary scan uses. A step trigger, which is every delayed ability this
     // engine's compiler builds, never asks for it at all.
-    const subject =
-      event.type === 'zoneChange' || event.type === 'spellCast' ? resolveSubject(event.instanceId) : undefined;
+    // §3.154 — the SAME subject rule the battlefield collector uses, read from
+    // `triggers.ts` rather than restated here. The restatement covered two event
+    // kinds and silently starved every delayed ability watching any other.
+    const subjectId = subjectInstanceOf(event);
+    const subject = subjectId === undefined ? undefined : resolveSubject(subjectId);
     const matched = matchDelayedTriggers(records, event, subject);
     for (let i = 0; i < matched.length; i++) {
       const record = matched[i] as DelayedTriggeredAbility;
-      removeDelayedTrigger(state, record.id);
+      // §3.154 — a DURATION-SCOPED ability stays: it has no fixed number of
+      // firings, and `expireDelayedTriggersFor` removes it when its moment
+      // arrives instead. Every other delayed ability is still removed HERE, so
+      // CR 603.7a's "it triggers only once" remains structural for them.
+      if (record.repeating !== true) removeDelayedTrigger(state, record.id);
       baseEmit({
         type: 'delayedTriggerFired',
         id: record.id,
@@ -433,7 +449,9 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
         controller: record.controller,
         label: record.ability.label ?? '',
       });
-      (queue ??= []).push(pendingFromDelayed(record, event, subject));
+      // May be SEVERAL: a per-attacker condition fans out one pending per
+      // attacker, exactly as the battlefield collector does.
+      for (const pending of pendingFromDelayed(record, event, subject)) (queue ??= []).push(pending);
     }
   };
 

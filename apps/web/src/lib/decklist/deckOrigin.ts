@@ -27,8 +27,18 @@
  * directly PLAYABLE from the Play setup. This is about identity, not access.
  */
 
-/** The two kinds of deck a list can hold. Closed on purpose — see {@link originPresentation}. */
-export type DeckOrigin = 'builtin' | 'mine';
+/**
+ * The kinds of deck a list can hold. Closed on purpose — see
+ * {@link originPresentation}.
+ *
+ * `owner` arrived third: the owner's REAL, physical decks, transcribed card by
+ * card and bundled with the app (`packages/sim/data/owner-decks/`). They are a
+ * third noun, not a shade of the other two — not reference data he may copy, and
+ * not a deck he built in this app and may edit. Before they existed as a row
+ * here they existed only as loose `.txt` files he would have had to paste into
+ * Import by hand, which is why he opened the app and could not find his decks.
+ */
+export type DeckOrigin = 'builtin' | 'owner' | 'mine';
 
 /** How one origin presents itself, everywhere it is shown. */
 export interface DeckOriginPresentation {
@@ -50,13 +60,42 @@ export interface DeckOriginPresentation {
    * be rendered at all — an `<option>` may only contain text.
    */
   readonly labelSuffix: string;
+  /**
+   * The sentence shown UNDER a deck `<select>` once this kind of deck is the
+   * current pick. A collapsed `<select>` shows only the chosen label, and the
+   * `<optgroup>` heading that made it unambiguous is no longer on screen — this
+   * is what keeps the pick from being a surprise.
+   *
+   * Empty for the user's own decks: there is nothing to explain about picking
+   * your own deck, and a note under every choice would be noise.
+   */
+  readonly pickerNote: string;
 }
 
 /**
  * The closed table. A new kind of deck (a shared deck, a downloaded one) is a
  * ROW here plus its `DeckOrigin` member, never a branch at a call site.
+ *
+ * ⚠️ **KEY ORDER IS RENDER ORDER.** `DeckMenuOptions` walks `Object.keys` of this
+ * object to lay out the `<optgroup>`s, so moving a row moves a group in every
+ * deck picker in the app. `owner` sits first deliberately: the owner's own paper
+ * decks are the ones he is reaching for, and burying them under nine gauntlet
+ * decks is a smaller version of the problem this feature exists to fix.
  */
 export const DECK_ORIGINS: Readonly<Record<DeckOrigin, DeckOriginPresentation>> = Object.freeze({
+  owner: Object.freeze({
+    origin: 'owner',
+    badge: 'Paper',
+    glyph: '🃏',
+    explanation:
+      'One of your real, physical decks — transcribed card by card and bundled with the app ' +
+      'so it is simply here, with nothing to import. It is a RECORD of the deck in your box, ' +
+      'so it is not edited in place: copy it to tune a version of your own.',
+    groupLabel: 'Your paper decks',
+    labelSuffix: 'paper',
+    pickerNote:
+      'Your real deck, exactly as transcribed. To tune a version of it, copy it in the Deck Builder.',
+  }),
   builtin: Object.freeze({
     origin: 'builtin',
     badge: 'Built-in',
@@ -66,6 +105,7 @@ export const DECK_ORIGINS: Readonly<Record<DeckOrigin, DeckOriginPresentation>> 
       'it cannot be renamed, edited or deleted — copy it to get one of your own.',
     groupLabel: 'Built-in gauntlet decks',
     labelSuffix: 'built-in',
+    pickerNote: 'You can play it as-is. To tune it, copy it in the Deck Builder.',
   }),
   mine: Object.freeze({
     origin: 'mine',
@@ -74,6 +114,7 @@ export const DECK_ORIGINS: Readonly<Record<DeckOrigin, DeckOriginPresentation>> 
     explanation: 'One of your own decks — rename, edit or delete it freely.',
     groupLabel: 'Your decks',
     labelSuffix: 'yours',
+    pickerNote: '',
   }),
 });
 
