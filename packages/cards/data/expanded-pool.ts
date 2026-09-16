@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 6882 cards.
+ * 6912 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -2522,6 +2522,29 @@ const POOL_0: readonly CardDefinition[] = [
           },
         ],
         label: 'another creature (any) dies: you may put a +1/+1 counter on ~',
+      },
+    ],
+  },
+  // If you would gain life, you gain twice that much life instead.
+  // If you would draw a card except the first one you draw in each of your draw steps, draw two cards instead.
+  {
+    id: '4f4187f1-05bd-4db6-a2e7-d677eff588ee',
+    name: 'Alhammarret\'s Archive',
+    types: ['artifact'],
+    cost: { generic: 5 },
+    legendary: true,
+    replacements: [
+      {
+        event: 'lifegain',
+        applies: { recipientController: 'you' },
+        outcome: { times: 2 },
+        label: 'if you would gain life, you gain twice that much life instead',
+      },
+      {
+        event: 'draw',
+        applies: { recipientController: 'you', exceptFirstDrawEachDrawStep: true },
+        outcome: { times: 2 },
+        label: 'if you would draw a card except the first one you draw in each of your draw steps, draw two cards instead',
       },
     ],
   },
@@ -5201,6 +5224,24 @@ const POOL_0: readonly CardDefinition[] = [
     toughness: 3,
     keywords: { trample: true },
     subtypes: ['boar'],
+  },
+  // Prevent all damage that would be dealt to this creature by artifact sources.
+  {
+    id: '36b0d5b3-84d7-4888-90e9-2d0eb16c11d6',
+    name: 'Argothian Treefolk',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    power: 3,
+    toughness: 5,
+    subtypes: ['treefolk'],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { recipientAnchor: 'source', sourceFilter: { anyOfTypes: ['artifact'] } },
+        outcome: { preventAll: true },
+        label: 'prevent all damage that would be dealt to ~ by artifact sources',
+      },
+    ],
   },
   // {T}, Pay 1 life, Sacrifice this land: Search your library for a Mountain or Plains card, put it onto the battlefield, then shuffle.
   {
@@ -9159,6 +9200,9 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_1: readonly CardDefinition[] = [
   // When this creature enters, draw a card, then discard a card.
   {
     id: 'ca2215dd-6300-49cf-b9b2-3a840b786c31',
@@ -9196,9 +9240,6 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_1: readonly CardDefinition[] = [
   // Protection from creatures
   {
     id: 'decec62b-7ac4-4097-9215-5db18db2dec6',
@@ -12588,6 +12629,21 @@ const POOL_1: readonly CardDefinition[] = [
     ],
     effects: [{ primitive: 'drawCards', params: { count: 4 } }],
   },
+  // If you would gain life, you gain twice that much life instead.
+  {
+    id: '0d4032a7-600c-4b30-a012-fe3cde1be9c9',
+    name: 'Boon Reflection',
+    types: ['enchantment'],
+    cost: { generic: 4, W: 1 },
+    replacements: [
+      {
+        event: 'lifegain',
+        applies: { recipientController: 'you' },
+        outcome: { times: 2 },
+        label: 'if you would gain life, you gain twice that much life instead',
+      },
+    ],
+  },
   // Backup 1 (When this creature enters, put a +1/+1 counter on target creature. If that's another creature, it gains the following abilities until end of turn.)
   // Flying, first strike, lifelink
   {
@@ -14176,6 +14232,21 @@ const POOL_1: readonly CardDefinition[] = [
       {
         primitive: 'grantKeywordUntilEndOfTurn',
         params: { keywords: { trample: true }, targets: 'creature' },
+      },
+    ],
+  },
+  // Prevent all damage that would be dealt to creatures.
+  {
+    id: '0ca9c239-84ff-4527-aa23-bdb11856744c',
+    name: 'Bubble Matrix',
+    types: ['artifact'],
+    cost: { generic: 4 },
+    replacements: [
+      {
+        event: 'damage',
+        applies: { recipientKind: 'permanent', recipientFilter: { anyOfTypes: ['creature'] } },
+        outcome: { preventAll: true },
+        label: 'prevent all damage that would be dealt to creatures',
       },
     ],
   },
@@ -16977,6 +17048,24 @@ const POOL_1: readonly CardDefinition[] = [
       { primitive: 'scry', params: { count: 2 } },
     ],
   },
+  // Prevent all damage that would be dealt to this creature by creatures.
+  {
+    id: 'ed5dc388-bf84-46cd-a05e-1fe5fe2a666c',
+    name: 'Champion Lancer',
+    types: ['creature'],
+    cost: { generic: 4, W: 2 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['human', 'knight'],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { recipientAnchor: 'source', sourceFilter: { anyOfTypes: ['creature'] } },
+        outcome: { preventAll: true },
+        label: 'prevent all damage that would be dealt to ~ by creatures',
+      },
+    ],
+  },
   // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
   {
     id: '2f7e5122-89ff-4a25-96a5-fee5f96da7f2',
@@ -17675,6 +17764,25 @@ const POOL_1: readonly CardDefinition[] = [
     keywords: { reach: true },
     subtypes: ['shapeshifter'],
   },
+  // Prevent all damage that would be dealt to Cho-Manno.
+  {
+    id: 'fe04dfe7-6376-4c12-9404-0e1ae0942917',
+    name: 'Cho-Manno, Revolutionary',
+    types: ['creature'],
+    cost: { generic: 2, W: 2 },
+    power: 2,
+    toughness: 2,
+    legendary: true,
+    subtypes: ['human', 'rebel'],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { recipientAnchor: 'source' },
+        outcome: { preventAll: true },
+        label: 'prevent all damage that would be dealt to ~',
+      },
+    ],
+  },
   // As this land enters, you may reveal an Island or Swamp card from your hand. If you don't, this land enters tapped.
   // {T}: Add {U} or {B}.
   {
@@ -18027,6 +18135,9 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_2: readonly CardDefinition[] = [
   // Creatures you control have "{T}: Add {G}."
   {
     id: 'f378ee17-bf8b-4a83-b42e-86da10817dba',
@@ -18149,9 +18260,6 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_2: readonly CardDefinition[] = [
   // When this enchantment enters, create two 1/1 green and white Kithkin creature tokens.
   // {4}{W}: Create a 1/1 green and white Kithkin creature token.
   {
@@ -23926,6 +24034,26 @@ const POOL_2: readonly CardDefinition[] = [
     ],
   },
   // Flying
+  // Prevent all damage that would be dealt to this creature.
+  {
+    id: 'fd90a303-25fb-460b-bd55-6249f61c361c',
+    name: 'Dawn Elemental',
+    types: ['creature'],
+    cost: { W: 4 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['elemental'],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { recipientAnchor: 'source' },
+        outcome: { preventAll: true },
+        label: 'prevent all damage that would be dealt to ~',
+      },
+    ],
+  },
+  // Flying
   {
     id: '42d30894-82b9-4af8-b0bb-48a78acbc4bd',
     name: 'Dawn Gryff',
@@ -25237,6 +25365,29 @@ const POOL_2: readonly CardDefinition[] = [
           targets: { base: 'creature', bound: { withKeyword: 'defender' } },
         },
       ],
+    },
+  },
+  // Enchant creature
+  // Prevent all damage that would be dealt by enchanted creature.
+  {
+    id: 'f12fee0b-c237-4188-a718-1572f72c63ba',
+    name: 'Defang',
+    types: ['enchantment'],
+    cost: { generic: 1, W: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { dealerAnchor: 'attached' },
+        outcome: { preventAll: true },
+        label: 'prevent all damage that would be dealt by enchanted creature',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
     },
   },
   // Destroy target creature with power 2 or less.
@@ -26746,6 +26897,9 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_3: readonly CardDefinition[] = [
   // Direct Current deals 2 damage to any target.
   // Jump-start (You may cast this card from your graveyard by discarding a card in addition to paying its other costs. Then exile this card.)
   {
@@ -26890,9 +27044,6 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_3: readonly CardDefinition[] = [
   // Protection from red
   // Cycling {2} ({2}, Discard this card: Draw a card.)
   {
@@ -31858,6 +32009,29 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // Prevent all damage that would be dealt to creature tokens you control.
+  {
+    id: '7d415858-5f7d-406c-bb30-b4c48ebaad08',
+    name: 'Emmara Tandris',
+    types: ['creature'],
+    cost: { generic: 5, W: 1, G: 1 },
+    power: 5,
+    toughness: 7,
+    legendary: true,
+    subtypes: ['elf', 'shaman'],
+    replacements: [
+      {
+        event: 'damage',
+        applies: {
+          recipientController: 'you',
+          recipientKind: 'permanent',
+          recipientFilter: { anyOfTypes: ['creature'], isToken: true },
+        },
+        outcome: { preventAll: true },
+        label: 'prevent all damage that would be dealt to creature tokens you control',
+      },
+    ],
+  },
   // {5}, {T}: Draw two cards, then discard a card.
   {
     id: 'decb78dd-03d7-43a0-8ff5-1b97c6f515c9',
@@ -33288,6 +33462,24 @@ const POOL_3: readonly CardDefinition[] = [
         ],
       },
     },
+  },
+  // Prevent all combat damage that would be dealt to this creature.
+  {
+    id: '46c38e2a-3a82-402f-a436-f9ebb2ba2ea4',
+    name: 'Everdawn Champion',
+    types: ['creature'],
+    cost: { generic: 1, W: 2 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'soldier'],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { combat: true, recipientAnchor: 'source' },
+        outcome: { preventAll: true },
+        label: 'prevent all combat damage that would be dealt to ~',
+      },
+    ],
   },
   // {B}: This creature gets +1/+1 until end of turn.
   // Undying (When this creature dies, if it had no +1/+1 counters on it, return it to the battlefield under its owner's control with a +1/+1 counter on it.)
@@ -35722,6 +35914,9 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_4: readonly CardDefinition[] = [
   // ({T}: Add {U} or {B}.)
   // This land enters tapped.
   // Cycling {2} ({2}, Discard this card: Draw a card.)
@@ -35900,6 +36095,19 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // First strike (This creature deals combat damage before creatures without first strike.)
+  // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
+  // This creature can't be the target of black or red spells your opponents control.
+  {
+    id: '6788d4ac-86f1-4ac5-915d-fdfe7e408443',
+    name: 'Fiendslayer Paladin',
+    types: ['creature'],
+    cost: { generic: 1, W: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { firstStrike: true, lifelink: true, hexproofFrom: ['black', 'red'] },
+    subtypes: ['human', 'knight'],
+  },
   // When this creature enters, you may search your library for a creature card with mana value 6 or greater, reveal it, put it into your hand, then shuffle.
   {
     id: '28a1dd7f-2e42-4062-a941-b489b98a49fc',
@@ -35936,9 +36144,6 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_4: readonly CardDefinition[] = [
   // Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)
   // When this creature enters, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")
   {
@@ -37896,6 +38101,33 @@ const POOL_4: readonly CardDefinition[] = [
       {
         primitive: 'preventDamage',
         params: { combat: true, label: 'prevent all combat damage that would be dealt this turn' },
+      },
+    ],
+  },
+  // Defender (This creature can't attack.)
+  // Flying
+  // Prevent all combat damage that would be dealt to and dealt by this creature.
+  {
+    id: '18748b1d-4161-482c-a726-8762b4c1819c',
+    name: 'Fog Bank',
+    types: ['creature'],
+    cost: { generic: 1, U: 1 },
+    power: 0,
+    toughness: 2,
+    keywords: { defender: true, flying: true },
+    subtypes: ['wall'],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { combat: true, recipientAnchor: 'source' },
+        outcome: { preventAll: true },
+        label: 'prevent all combat damage that would be dealt to and dealt by ~',
+      },
+      {
+        event: 'damage',
+        applies: { combat: true, dealerAnchor: 'source' },
+        outcome: { preventAll: true },
+        label: 'prevent all combat damage that would be dealt to and dealt by ~',
       },
     ],
   },
@@ -40722,6 +40954,35 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Enchant creature
+  // Prevent all combat damage that would be dealt to and dealt by enchanted creature.
+  {
+    id: 'c5464250-a6a9-4399-a67f-2488073794e9',
+    name: 'Gaseous Form',
+    types: ['enchantment'],
+    cost: { generic: 2, U: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { combat: true, recipientAnchor: 'attached' },
+        outcome: { preventAll: true },
+        label: 'prevent all combat damage that would be dealt to and dealt by enchanted creature',
+      },
+      {
+        event: 'damage',
+        applies: { combat: true, dealerAnchor: 'attached' },
+        outcome: { preventAll: true },
+        label: 'prevent all combat damage that would be dealt to and dealt by enchanted creature',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+    },
+  },
   // Defender
   // When this creature enters, you may search your library for a basic land card or a Gate card, reveal it, put it into your hand, then shuffle.
   {
@@ -41027,6 +41288,38 @@ const POOL_4: readonly CardDefinition[] = [
         label: '{1}, sacrifice a creature: put a +1/+1 counter on each klingon you control',
       },
     ],
+  },
+  // Equipped creature has shroud. (It can't be the target of spells or abilities.)
+  // Prevent all combat damage that would be dealt to equipped creature.
+  // Equip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: '1382c339-256f-4ba1-a4cc-6307d0859964',
+    name: 'General\'s Kabuto',
+    types: ['artifact'],
+    cost: { generic: 4 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { combat: true, recipientAnchor: 'attached' },
+        outcome: { preventAll: true },
+        label: 'prevent all combat damage that would be dealt to equipped creature',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 0, toughness: 0, keywords: { shroud: true } },
+    },
   },
   // Reach
   // When this creature enters, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")
@@ -41709,6 +42002,37 @@ const POOL_4: readonly CardDefinition[] = [
         label: '{1}{b}: ~ gets +1/+1 until end of turn',
       },
     ],
+  },
+  // Enchant creature
+  // Enchanted creature has flying.
+  // Prevent all combat damage that would be dealt to and dealt by enchanted creature.
+  {
+    id: 'c11eb854-4c03-4abd-aaf1-9718608a34b3',
+    name: 'Ghostly Possession',
+    types: ['enchantment'],
+    cost: { generic: 2, W: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { combat: true, recipientAnchor: 'attached' },
+        outcome: { preventAll: true },
+        label: 'prevent all combat damage that would be dealt to and dealt by enchanted creature',
+      },
+      {
+        event: 'damage',
+        applies: { combat: true, dealerAnchor: 'attached' },
+        outcome: { preventAll: true },
+        label: 'prevent all combat damage that would be dealt to and dealt by enchanted creature',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 0, toughness: 0, keywords: { flying: true } },
+    },
   },
   // Flying, vigilance
   {
@@ -44787,6 +45111,9 @@ const POOL_4: readonly CardDefinition[] = [
     keywords: { flying: true },
     subtypes: ['sphinx'],
   },
+];
+
+const POOL_5: readonly CardDefinition[] = [
   // Reach (This creature can block creatures with flying.)
   {
     id: 'cecc53b1-942e-4b44-bf93-dd2d8cc92d6d',
@@ -45025,9 +45352,6 @@ const POOL_4: readonly CardDefinition[] = [
     subtypes: ['construct'],
     alternativeCosts: { prototype: { cost: { generic: 1, B: 1 }, face: { power: 1, toughness: 1 } } },
   },
-];
-
-const POOL_5: readonly CardDefinition[] = [
   // Trample (This creature can deal excess combat damage to the player it's attacking.)
   {
     id: '061dc7da-c803-49eb-b50a-a0801f09b5c0',
@@ -46739,6 +47063,26 @@ const POOL_5: readonly CardDefinition[] = [
       modifies: { power: 0, toughness: 0, keywords: { defender: true } },
     },
   },
+  // Defender, flying
+  // Prevent all combat damage that would be dealt to this creature.
+  {
+    id: '505969a2-0869-461e-a69a-3b380579e00a',
+    name: 'Guard Gomazoa',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 1,
+    toughness: 3,
+    keywords: { defender: true, flying: true },
+    subtypes: ['jellyfish'],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { combat: true, recipientAnchor: 'source' },
+        outcome: { preventAll: true },
+        label: 'prevent all combat damage that would be dealt to ~',
+      },
+    ],
+  },
   // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
   // When this creature enters, create two 3/3 white Knight creature tokens.
   {
@@ -48338,6 +48682,35 @@ const POOL_5: readonly CardDefinition[] = [
         label: 'Sacrifice ~: exile target card from a graveyard',
       },
     ],
+  },
+  // Enchant creature (Target a creature as you cast this. This card enters attached to that creature.)
+  // Prevent all damage that would be dealt to and dealt by enchanted creature.
+  {
+    id: '45aa4b29-ce6b-4579-bee6-06a9ccfda55c',
+    name: 'Heart of Light',
+    types: ['enchantment'],
+    cost: { generic: 2, W: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { recipientAnchor: 'attached' },
+        outcome: { preventAll: true },
+        label: 'prevent all damage that would be dealt to and dealt by enchanted creature',
+      },
+      {
+        event: 'damage',
+        applies: { dealerAnchor: 'attached' },
+        outcome: { preventAll: true },
+        label: 'prevent all damage that would be dealt to and dealt by enchanted creature',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+    },
   },
   // {T}: Add {R}.
   // Sacrifice this artifact: Add {R}.
@@ -53192,6 +53565,29 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // Enchant creature
+  // Prevent all damage that would be dealt to enchanted creature.
+  {
+    id: '9ece8504-389a-43e3-b178-7067722c4b75',
+    name: 'Inviolability',
+    types: ['enchantment'],
+    cost: { generic: 1, W: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { recipientAnchor: 'attached' },
+        outcome: { preventAll: true },
+        label: 'prevent all damage that would be dealt to enchanted creature',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+    },
+  },
   // Hexproof (This creature can't be the target of spells or abilities your opponents control.)
   // This creature can't be blocked.
   {
@@ -53306,6 +53702,9 @@ const POOL_5: readonly CardDefinition[] = [
     keywords: { doubleStrike: true },
     subtypes: ['human', 'soldier'],
   },
+];
+
+const POOL_6: readonly CardDefinition[] = [
   // Menace (This creature can't be blocked except by two or more creatures.)
   // When this creature enters, put a +1/+1 counter on target creature.
   {
@@ -53593,9 +53992,6 @@ const POOL_5: readonly CardDefinition[] = [
     ],
     producesOptions: [{ W: 1 }, { U: 1 }],
   },
-];
-
-const POOL_6: readonly CardDefinition[] = [
   // This land enters tapped.
   // {T}: Add {W}.
   // {T}, Sacrifice this land: Add {G}{U}.
@@ -53631,6 +54027,35 @@ const POOL_6: readonly CardDefinition[] = [
     types: ['land'],
     entersTappedUnless: { controlsSubtype: ['plains', 'swamp'] },
     producesOptions: [{ W: 1 }, { B: 1 }],
+  },
+  // Istvan attacks each combat if able.
+  // Prevent all damage that would be dealt to Istvan by creatures.
+  // Whenever a creature an opponent controls dies, put two +1/+1 counters on Istvan.
+  {
+    id: 'b30b1577-6b04-4ab5-92bc-ab54fdd5a621',
+    name: 'Istvan, Butcher of Eln',
+    types: ['creature'],
+    cost: { generic: 1, B: 3 },
+    power: 1,
+    toughness: 3,
+    legendary: true,
+    keywords: { mustAttack: true },
+    subtypes: ['human'],
+    triggers: [
+      {
+        condition: { on: 'permanentDies', who: 'opponent', permanentFilter: { anyOfTypes: ['creature'] } },
+        effects: [{ primitive: 'addCounters', params: { amount: 2, self: true } }],
+        label: 'creature (opponent) dies: put two +1/+1 counters on ~',
+      },
+    ],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { recipientAnchor: 'source', sourceFilter: { anyOfTypes: ['creature'] } },
+        outcome: { preventAll: true },
+        label: 'prevent all damage that would be dealt to ~ by creatures',
+      },
+    ],
   },
   // Counter target spell unless its controller pays {2}.
   {
@@ -57464,6 +57889,34 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // First strike
+  // If you would gain life, you gain that much life plus 1 instead.
+  // {1}{W}: This creature gets +1/+1 until end of turn.
+  {
+    id: 'b7c7a54e-4df6-4745-8bae-aeefda934d82',
+    name: 'Knight of Dawn\'s Light',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { firstStrike: true },
+    subtypes: ['human', 'knight'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, W: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: '{1}{w}: ~ gets +1/+1 until end of turn',
+      },
+    ],
+    replacements: [
+      {
+        event: 'lifegain',
+        applies: { recipientController: 'you' },
+        outcome: { plus: 1 },
+        label: 'if you would gain life, you gain that much life plus 1 instead',
+      },
+    ],
+  },
   // Protection from black (This creature can't be blocked, targeted, dealt damage, or enchanted by anything black.)
   // Exalted (Whenever a creature you control attacks alone, that creature gets +1/+1 until end of turn.)
   {
@@ -60062,6 +60515,26 @@ const POOL_6: readonly CardDefinition[] = [
       ],
     },
   },
+  // Prevent all damage that would be dealt to creatures you control by sources you control.
+  {
+    id: 'daff382a-980e-4f0c-b26c-70c8a43c66f1',
+    name: 'Light of Sanction',
+    types: ['enchantment'],
+    cost: { generic: 1, W: 2 },
+    replacements: [
+      {
+        event: 'damage',
+        applies: {
+          recipientController: 'you',
+          recipientKind: 'permanent',
+          recipientFilter: { anyOfTypes: ['creature'] },
+          sourceController: 'you',
+        },
+        outcome: { preventAll: true },
+        label: 'prevent all damage that would be dealt to creatures you control by sources you control',
+      },
+    ],
+  },
   // {T}, Sacrifice this creature: Exile target black creature.
   {
     id: '19451993-7a53-4a50-bfca-ddc9cdfbe168',
@@ -62541,6 +63014,9 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_7: readonly CardDefinition[] = [
   // As an additional cost to cast this spell, sacrifice a land.
   // Magma Rift deals 5 damage to target creature.
   {
@@ -62876,9 +63352,6 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_7: readonly CardDefinition[] = [
   // {T}, Pay 1 life: Add one mana of any color.
   {
     id: 'd0ee5bdc-2b69-4b73-9a20-ffcc18783b29',
@@ -68612,6 +69085,29 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // Enchant creature
+  // Prevent all damage that would be dealt by enchanted creature.
+  {
+    id: '8b3048ec-bcbf-4a69-b56f-83bbe82b68e5',
+    name: 'Muzzle',
+    types: ['enchantment'],
+    cost: { generic: 1, W: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { dealerAnchor: 'attached' },
+        outcome: { preventAll: true },
+        label: 'prevent all damage that would be dealt by enchanted creature',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+    },
+  },
   // Destroy target land. Search your library for a Forest card, put that card onto the battlefield tapped, then shuffle.
   {
     id: '6841dbf6-5023-4612-bbd7-182fd35b05c8',
@@ -71433,6 +71929,9 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_8: readonly CardDefinition[] = [
   // {T}: Prevent the next 1 damage that would be dealt to target creature this turn.
   {
     id: '4949330d-9f12-459a-8a64-bd304fc53954',
@@ -71824,9 +72323,6 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_8: readonly CardDefinition[] = [
   // When this creature dies, you may draw a card.
   {
     id: '673bebb4-9c82-40ca-8552-b9030e961005',
@@ -80487,6 +80983,9 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_9: readonly CardDefinition[] = [
   // You may play lands from your graveyard.
   {
     id: '3f8a0a0e-81f7-40a2-b393-bdc1423549f6',
@@ -80897,9 +81396,6 @@ const POOL_8: readonly CardDefinition[] = [
     ],
     effects: [{ primitive: 'discardCard', params: { count: 1, who: 'targetPlayer', targets: 'player' } }],
   },
-];
-
-const POOL_9: readonly CardDefinition[] = [
   // When this creature enters, destroy target creature an opponent controls.
   {
     id: 'a4dfbac0-1849-41c5-853a-1fee108d0b01',
@@ -83389,6 +83885,26 @@ const POOL_9: readonly CardDefinition[] = [
           },
         ],
         label: 'Exalted',
+      },
+    ],
+  },
+  // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
+  // If you would gain life, you gain twice that much life instead.
+  {
+    id: 'c79a8938-aae6-42ff-888c-2783e11a8d4f',
+    name: 'Rhox Faithmender',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 1,
+    toughness: 5,
+    keywords: { lifelink: true },
+    subtypes: ['rhino', 'monk'],
+    replacements: [
+      {
+        event: 'lifegain',
+        applies: { recipientController: 'you' },
+        outcome: { times: 2 },
+        label: 'if you would gain life, you gain twice that much life instead',
       },
     ],
   },
@@ -86998,6 +87514,35 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // Enchant creature
+  // Prevent all combat damage that would be dealt to and dealt by enchanted creature.
+  {
+    id: '80b59844-c9d4-4bc1-86e6-4cc596d9165d',
+    name: 'Sandskin',
+    types: ['enchantment'],
+    cost: { generic: 2, W: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { combat: true, recipientAnchor: 'attached' },
+        outcome: { preventAll: true },
+        label: 'prevent all combat damage that would be dealt to and dealt by enchanted creature',
+      },
+      {
+        event: 'damage',
+        applies: { combat: true, dealerAnchor: 'attached' },
+        outcome: { preventAll: true },
+        label: 'prevent all combat damage that would be dealt to and dealt by enchanted creature',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+    },
+  },
   // This land enters tapped.
   // {T}: Add {W}, {B}, or {G}.
   {
@@ -89384,6 +89929,9 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_10: readonly CardDefinition[] = [
   // Sacrifice this enchantment: Return target creature to its owner's hand.
   {
     id: '6dfc7060-e374-486f-8029-d3fdfe4b61e7',
@@ -89738,9 +90286,6 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_10: readonly CardDefinition[] = [
   // Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)
   // Target creature gets +3/+0 until end of turn.
   {
@@ -90401,6 +90946,26 @@ const POOL_10: readonly CardDefinition[] = [
     toughness: 4,
     keywords: { flying: true, indestructible: true },
     subtypes: ['angel'],
+  },
+  // Flying
+  // Prevent all combat damage that would be dealt to this creature.
+  {
+    id: 'd9789cac-5774-4f72-82c3-18f11f9d4a62',
+    name: 'Seraph of the Sword',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { combat: true, recipientAnchor: 'source' },
+        outcome: { preventAll: true },
+        label: 'prevent all combat damage that would be dealt to ~',
+      },
+    ],
   },
   // When this land enters, you gain 1 life.
   // Whenever an Angel you control enters, you gain 1 life.
@@ -98380,6 +98945,9 @@ const POOL_10: readonly CardDefinition[] = [
     keywords: { trample: true },
     subtypes: ['beast'],
   },
+];
+
+const POOL_11: readonly CardDefinition[] = [
   // {1}{R}{R}: This creature deals damage equal to its power to any target.
   {
     id: '14c14e44-20ff-4128-b07d-4b751fc82d4e',
@@ -98818,9 +99386,6 @@ const POOL_10: readonly CardDefinition[] = [
       modifies: { power: 1, toughness: 1, keywords: { protectionFrom: ['creatures'] } },
     },
   },
-];
-
-const POOL_11: readonly CardDefinition[] = [
   // When this creature dies, each opponent loses 1 life and you gain 1 life.
   {
     id: 'cf3765b7-11e2-4837-b5e5-ca24adc0e33c',
@@ -100217,6 +100782,32 @@ const POOL_11: readonly CardDefinition[] = [
         condition: { on: 'leaves' },
         effects: [{ primitive: 'returnExiledByThis', params: { to: 'battlefield' } }],
         label: 'Leaves: return the exiled card',
+      },
+    ],
+  },
+  // Prevent all combat damage that would be dealt to and dealt by creatures you control.
+  {
+    id: '76dcd19e-8daf-4d53-946b-c07d5eca3cc9',
+    name: 'Statecraft',
+    types: ['enchantment'],
+    cost: { generic: 3, U: 1 },
+    replacements: [
+      {
+        event: 'damage',
+        applies: {
+          combat: true,
+          recipientController: 'you',
+          recipientKind: 'permanent',
+          recipientFilter: { anyOfTypes: ['creature'] },
+        },
+        outcome: { preventAll: true },
+        label: 'prevent all combat damage that would be dealt to and dealt by creatures you control',
+      },
+      {
+        event: 'damage',
+        applies: { combat: true, sourceController: 'you', sourceFilter: { anyOfTypes: ['creature'] } },
+        outcome: { preventAll: true },
+        label: 'prevent all combat damage that would be dealt to and dealt by creatures you control',
       },
     ],
   },
@@ -102522,6 +103113,29 @@ const POOL_11: readonly CardDefinition[] = [
         cost: { tap: true, sacrificeSelf: true },
         effects: [{ primitive: 'addMana', params: { mana: ['U', 'R'] } }],
         label: '{t}, sacrifice ~: add {u}{r}',
+      },
+    ],
+  },
+  // At the beginning of each player's upkeep, this enchantment deals 2 damage to that player.
+  // If a player would gain life, that player gains no life instead.
+  {
+    id: '3253a624-50cc-4a8a-9b0c-9902aa53775f',
+    name: 'Sulfuric Vortex',
+    types: ['enchantment'],
+    cost: { generic: 1, R: 2 },
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'any' },
+        effects: [{ primitive: 'dealDamage', params: { amount: 2, whichPlayer: 'triggering' } }],
+        label: 'each player\'s upkeep: ~ deals 2 damage to that player',
+      },
+    ],
+    replacements: [
+      {
+        event: 'lifegain',
+        applies: {},
+        outcome: { times: 0 },
+        label: 'if a player would gain life, that player gains no life instead',
       },
     ],
   },
@@ -106148,6 +106762,33 @@ const POOL_11: readonly CardDefinition[] = [
     castTriggers: [{ keyword: 'storm', label: 'Storm', effects: [{ primitive: 'stormCopies' }] }],
     effects: [{ primitive: 'returnToHand', params: { targets: 'permanent' } }],
   },
+  // Flash
+  // Enchant creature
+  // Enchanted creature has shadow. (It can block or be blocked by only creatures with shadow.)
+  // Prevent all damage that would be dealt by enchanted creature.
+  {
+    id: '72380757-6344-43e6-a4ed-bd753f2431d5',
+    name: 'Temporal Isolation',
+    types: ['enchantment'],
+    cost: { generic: 1, W: 1 },
+    keywords: { flash: true },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { dealerAnchor: 'attached' },
+        outcome: { preventAll: true },
+        label: 'prevent all damage that would be dealt by enchanted creature',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 0, toughness: 0, keywords: { shadow: true } },
+    },
+  },
   // When this creature enters, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")
   // {2}, {T}, Sacrifice a Food: Target player loses 3 life.
   {
@@ -106938,6 +107579,37 @@ const POOL_11: readonly CardDefinition[] = [
     keywords: { firstStrike: true, haste: true },
     subtypes: ['human', 'hero'],
   },
+  // White spells you cast cost {1} less to cast.
+  // If you would gain life, you gain twice that much life instead.
+  // {4}{W}{W}, {T}: Creatures you control gain flying and lifelink until end of turn.
+  {
+    id: '19bd0885-baaa-40f2-9c59-b1ea53807540',
+    name: 'The Wind Crystal',
+    types: ['artifact'],
+    cost: { generic: 2, W: 2 },
+    legendary: true,
+    castCostReduction: { amount: 1, filter: { anyOfColors: ['W'] } },
+    activated: [
+      {
+        cost: { mana: { generic: 4, W: 2 }, tap: true },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { keywords: { flying: true, lifelink: true }, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{4}{w}{w}, {t}: creatures you control gain flying and lifelink until end of turn',
+      },
+    ],
+    replacements: [
+      {
+        event: 'lifegain',
+        applies: { recipientController: 'you' },
+        outcome: { times: 2 },
+        label: 'if you would gain life, you gain twice that much life instead',
+      },
+    ],
+  },
   // Flying, protection from red
   {
     id: 'fd909c26-930d-4af0-b19a-c899847338b4',
@@ -106981,6 +107653,9 @@ const POOL_11: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_12: readonly CardDefinition[] = [
   // Search your library for a basic land card, put it onto the battlefield tapped, then shuffle. Investigate. (Create a Clue token. It's an artifact with "{2}, Sacrifice this token: Draw a card.")
   {
     id: 'f4a31d4a-34bc-46b4-b20f-a5460191b35d',
@@ -107465,9 +108140,6 @@ const POOL_11: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_12: readonly CardDefinition[] = [
   // Soulshift 7 (When this creature dies, you may return target Spirit card with mana value 7 or less from your graveyard to your hand.)
   {
     id: '5c88355e-dff0-4d51-a33c-08e14d6217d4',
@@ -112074,6 +112746,24 @@ const POOL_12: readonly CardDefinition[] = [
       },
     ],
   },
+  // Prevent all damage that would be dealt to this creature by creatures.
+  {
+    id: '9bf85d06-9efe-488d-9af0-fb945b346524',
+    name: 'Uncle Istvan',
+    types: ['creature'],
+    cost: { generic: 1, B: 3 },
+    power: 1,
+    toughness: 3,
+    subtypes: ['human'],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { recipientAnchor: 'source', sourceFilter: { anyOfTypes: ['creature'] } },
+        outcome: { preventAll: true },
+        label: 'prevent all damage that would be dealt to ~ by creatures',
+      },
+    ],
+  },
   // {R}: This creature gets +1/-1 until end of turn.
   // Unearth {2}{B} ({2}{B}: Return this card from your graveyard to the battlefield. It gains haste. Exile it at the beginning of the next end step or if it would leave the battlefield. Unearth only as a sorcery.)
   {
@@ -115968,6 +116658,9 @@ const POOL_12: readonly CardDefinition[] = [
     cost: { generic: 1, U: 1 },
     effects: [{ primitive: 'drawCards', params: { count: 2, whichPlayer: 'each' } }],
   },
+];
+
+const POOL_13: readonly CardDefinition[] = [
   // Fabricate 2 (When this creature enters, put two +1/+1 counters on it or create two 1/1 colorless Servo artifact creature tokens.)
   {
     id: '918691b1-f927-4027-a444-adc418f3ab16',
@@ -116437,9 +117130,6 @@ const POOL_12: readonly CardDefinition[] = [
     castTriggers: [{ keyword: 'storm', label: 'Storm', effects: [{ primitive: 'stormCopies' }] }],
     effects: [{ primitive: 'destroyTarget', params: { targets: 'land' } }],
   },
-];
-
-const POOL_13: readonly CardDefinition[] = [
   // Flying, haste
   {
     id: '46419d29-21a1-4753-a2f0-1d0d996ec54e',

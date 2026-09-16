@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-09-15T21:49:03.620Z",
+  "generatedAt": "2026-09-16T00:14:54.688Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 6914,
+  "requested": 6944,
   "unresolved": [],
   "cards": [
     {
@@ -7575,6 +7575,59 @@
         "display": "https://cards.scryfall.io/display/front/b/7/b7d30720-5baa-4779-a435-14fab778bad6.webp?1783938401",
         "art": "https://cards.scryfall.io/art/front/b/7/b7d30720-5baa-4779-a435-14fab778bad6.webp?1783938401",
         "crop": "https://cards.scryfall.io/crop/front/b/7/b7d30720-5baa-4779-a435-14fab778bad6.webp?1783938401"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "4f4187f1-05bd-4db6-a2e7-d677eff588ee",
+      "name": "Alhammarret's Archive",
+      "manaCost": {
+        "generic": 5,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Legendary Artifact",
+      "oracleText": "If you would gain life, you gain twice that much life instead.\nIf you would draw a card except the first one you draw in each of your draw steps, draw two cards instead.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "c21",
+      "collectorNumber": "233",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/f/4f4187f1-05bd-4db6-a2e7-d677eff588ee.jpg?1783927520",
+        "normal": "https://cards.scryfall.io/normal/front/4/f/4f4187f1-05bd-4db6-a2e7-d677eff588ee.jpg?1783927520",
+        "large": "https://cards.scryfall.io/large/front/4/f/4f4187f1-05bd-4db6-a2e7-d677eff588ee.jpg?1783927520",
+        "png": "https://cards.scryfall.io/png/front/4/f/4f4187f1-05bd-4db6-a2e7-d677eff588ee.png?1783927520",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/f/4f4187f1-05bd-4db6-a2e7-d677eff588ee.jpg?1783927520",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/4/f/4f4187f1-05bd-4db6-a2e7-d677eff588ee.jpg?1783927520",
+        "thumb": "https://cards.scryfall.io/thumb/front/4/f/4f4187f1-05bd-4db6-a2e7-d677eff588ee.webp?1783927520",
+        "grid": "https://cards.scryfall.io/grid/front/4/f/4f4187f1-05bd-4db6-a2e7-d677eff588ee.webp?1783927520",
+        "display": "https://cards.scryfall.io/display/front/4/f/4f4187f1-05bd-4db6-a2e7-d677eff588ee.webp?1783927520",
+        "art": "https://cards.scryfall.io/art/front/4/f/4f4187f1-05bd-4db6-a2e7-d677eff588ee.webp?1783927520",
+        "crop": "https://cards.scryfall.io/crop/front/4/f/4f4187f1-05bd-4db6-a2e7-d677eff588ee.webp?1783927520"
       },
       "localImages": {},
       "layout": "normal",
@@ -16432,6 +16485,63 @@
         "display": "https://cards.scryfall.io/display/front/a/f/afe5e4ec-9c0e-4b1a-b3c6-e9631cf214eb.webp?1783946319",
         "art": "https://cards.scryfall.io/art/front/a/f/afe5e4ec-9c0e-4b1a-b3c6-e9631cf214eb.webp?1783946319",
         "crop": "https://cards.scryfall.io/crop/front/a/f/afe5e4ec-9c0e-4b1a-b3c6-e9631cf214eb.webp?1783946319"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "36b0d5b3-84d7-4888-90e9-2d0eb16c11d6",
+      "name": "Argothian Treefolk",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Treefolk"
+        ]
+      },
+      "rawTypeLine": "Creature — Treefolk",
+      "oracleText": "Prevent all damage that would be dealt to this creature by artifact sources.",
+      "power": 3,
+      "toughness": 5,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "me4",
+      "collectorNumber": "143",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/6/36b0d5b3-84d7-4888-90e9-2d0eb16c11d6.jpg?1783941429",
+        "normal": "https://cards.scryfall.io/normal/front/3/6/36b0d5b3-84d7-4888-90e9-2d0eb16c11d6.jpg?1783941429",
+        "large": "https://cards.scryfall.io/large/front/3/6/36b0d5b3-84d7-4888-90e9-2d0eb16c11d6.jpg?1783941429",
+        "png": "https://cards.scryfall.io/png/front/3/6/36b0d5b3-84d7-4888-90e9-2d0eb16c11d6.png?1783941429",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/6/36b0d5b3-84d7-4888-90e9-2d0eb16c11d6.jpg?1783941429",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/3/6/36b0d5b3-84d7-4888-90e9-2d0eb16c11d6.jpg?1783941429",
+        "thumb": "https://cards.scryfall.io/thumb/front/3/6/36b0d5b3-84d7-4888-90e9-2d0eb16c11d6.webp?1783941429",
+        "grid": "https://cards.scryfall.io/grid/front/3/6/36b0d5b3-84d7-4888-90e9-2d0eb16c11d6.webp?1783941429",
+        "display": "https://cards.scryfall.io/display/front/3/6/36b0d5b3-84d7-4888-90e9-2d0eb16c11d6.webp?1783941429",
+        "art": "https://cards.scryfall.io/art/front/3/6/36b0d5b3-84d7-4888-90e9-2d0eb16c11d6.webp?1783941429",
+        "crop": "https://cards.scryfall.io/crop/front/3/6/36b0d5b3-84d7-4888-90e9-2d0eb16c11d6.webp?1783941429"
       },
       "localImages": {},
       "layout": "normal",
@@ -41011,6 +41121,61 @@
       "faces": []
     },
     {
+      "id": "0d4032a7-600c-4b30-a012-fe3cde1be9c9",
+      "name": "Boon Reflection",
+      "manaCost": {
+        "generic": 4,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "If you would gain life, you gain twice that much life instead.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "2xm",
+      "collectorNumber": "10",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/d/0d4032a7-600c-4b30-a012-fe3cde1be9c9.jpg?1783930220",
+        "normal": "https://cards.scryfall.io/normal/front/0/d/0d4032a7-600c-4b30-a012-fe3cde1be9c9.jpg?1783930220",
+        "large": "https://cards.scryfall.io/large/front/0/d/0d4032a7-600c-4b30-a012-fe3cde1be9c9.jpg?1783930220",
+        "png": "https://cards.scryfall.io/png/front/0/d/0d4032a7-600c-4b30-a012-fe3cde1be9c9.png?1783930220",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/d/0d4032a7-600c-4b30-a012-fe3cde1be9c9.jpg?1783930220",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/0/d/0d4032a7-600c-4b30-a012-fe3cde1be9c9.jpg?1783930220",
+        "thumb": "https://cards.scryfall.io/thumb/front/0/d/0d4032a7-600c-4b30-a012-fe3cde1be9c9.webp?1783930220",
+        "grid": "https://cards.scryfall.io/grid/front/0/d/0d4032a7-600c-4b30-a012-fe3cde1be9c9.webp?1783930220",
+        "display": "https://cards.scryfall.io/display/front/0/d/0d4032a7-600c-4b30-a012-fe3cde1be9c9.webp?1783930220",
+        "art": "https://cards.scryfall.io/art/front/0/d/0d4032a7-600c-4b30-a012-fe3cde1be9c9.webp?1783930220",
+        "crop": "https://cards.scryfall.io/crop/front/0/d/0d4032a7-600c-4b30-a012-fe3cde1be9c9.webp?1783930220"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "84e1cc7d-e645-4b0e-b117-63f93528ed12",
       "name": "Boon-Bringer Valkyrie",
       "manaCost": {
@@ -46481,6 +46646,57 @@
         "display": "https://cards.scryfall.io/display/front/6/f/6f40427d-231c-4baa-b1ed-4a2200dd5186.webp?1783931655",
         "art": "https://cards.scryfall.io/art/front/6/f/6f40427d-231c-4baa-b1ed-4a2200dd5186.webp?1783931655",
         "crop": "https://cards.scryfall.io/crop/front/6/f/6f40427d-231c-4baa-b1ed-4a2200dd5186.webp?1783931655"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "0ca9c239-84ff-4527-aa23-bdb11856744c",
+      "name": "Bubble Matrix",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "Prevent all damage that would be dealt to creatures.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "wth",
+      "collectorNumber": "146",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/c/0ca9c239-84ff-4527-aa23-bdb11856744c.jpg?1783946716",
+        "normal": "https://cards.scryfall.io/normal/front/0/c/0ca9c239-84ff-4527-aa23-bdb11856744c.jpg?1783946716",
+        "large": "https://cards.scryfall.io/large/front/0/c/0ca9c239-84ff-4527-aa23-bdb11856744c.jpg?1783946716",
+        "png": "https://cards.scryfall.io/png/front/0/c/0ca9c239-84ff-4527-aa23-bdb11856744c.png?1783946716",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/c/0ca9c239-84ff-4527-aa23-bdb11856744c.jpg?1783946716",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/0/c/0ca9c239-84ff-4527-aa23-bdb11856744c.jpg?1783946716",
+        "thumb": "https://cards.scryfall.io/thumb/front/0/c/0ca9c239-84ff-4527-aa23-bdb11856744c.webp?1783946716",
+        "grid": "https://cards.scryfall.io/grid/front/0/c/0ca9c239-84ff-4527-aa23-bdb11856744c.webp?1783946716",
+        "display": "https://cards.scryfall.io/display/front/0/c/0ca9c239-84ff-4527-aa23-bdb11856744c.webp?1783946716",
+        "art": "https://cards.scryfall.io/art/front/0/c/0ca9c239-84ff-4527-aa23-bdb11856744c.webp?1783946716",
+        "crop": "https://cards.scryfall.io/crop/front/0/c/0ca9c239-84ff-4527-aa23-bdb11856744c.webp?1783946716"
       },
       "localImages": {},
       "layout": "normal",
@@ -55513,6 +55729,64 @@
       "faces": []
     },
     {
+      "id": "ed5dc388-bf84-46cd-a05e-1fe5fe2a666c",
+      "name": "Champion Lancer",
+      "manaCost": {
+        "generic": 4,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Knight"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Knight",
+      "oracleText": "Prevent all damage that would be dealt to this creature by creatures.",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "me4",
+      "collectorNumber": "8",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/d/ed5dc388-bf84-46cd-a05e-1fe5fe2a666c.jpg?1783941464",
+        "normal": "https://cards.scryfall.io/normal/front/e/d/ed5dc388-bf84-46cd-a05e-1fe5fe2a666c.jpg?1783941464",
+        "large": "https://cards.scryfall.io/large/front/e/d/ed5dc388-bf84-46cd-a05e-1fe5fe2a666c.jpg?1783941464",
+        "png": "https://cards.scryfall.io/png/front/e/d/ed5dc388-bf84-46cd-a05e-1fe5fe2a666c.png?1783941464",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/d/ed5dc388-bf84-46cd-a05e-1fe5fe2a666c.jpg?1783941464",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/e/d/ed5dc388-bf84-46cd-a05e-1fe5fe2a666c.jpg?1783941464",
+        "thumb": "https://cards.scryfall.io/thumb/front/e/d/ed5dc388-bf84-46cd-a05e-1fe5fe2a666c.webp?1783941464",
+        "grid": "https://cards.scryfall.io/grid/front/e/d/ed5dc388-bf84-46cd-a05e-1fe5fe2a666c.webp?1783941464",
+        "display": "https://cards.scryfall.io/display/front/e/d/ed5dc388-bf84-46cd-a05e-1fe5fe2a666c.webp?1783941464",
+        "art": "https://cards.scryfall.io/art/front/e/d/ed5dc388-bf84-46cd-a05e-1fe5fe2a666c.webp?1783941464",
+        "crop": "https://cards.scryfall.io/crop/front/e/d/ed5dc388-bf84-46cd-a05e-1fe5fe2a666c.webp?1783941464"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "2f7e5122-89ff-4a25-96a5-fee5f96da7f2",
       "name": "Champion of Arashin",
       "manaCost": {
@@ -57854,6 +58128,66 @@
         "display": "https://cards.scryfall.io/display/front/a/9/a9767360-d536-4902-9d2d-1f3474ce89d6.webp?1783904419",
         "art": "https://cards.scryfall.io/art/front/a/9/a9767360-d536-4902-9d2d-1f3474ce89d6.webp?1783904419",
         "crop": "https://cards.scryfall.io/crop/front/a/9/a9767360-d536-4902-9d2d-1f3474ce89d6.webp?1783904419"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "fe04dfe7-6376-4c12-9404-0e1ae0942917",
+      "name": "Cho-Manno, Revolutionary",
+      "manaCost": {
+        "generic": 2,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Rebel"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Human Rebel",
+      "oracleText": "Prevent all damage that would be dealt to Cho-Manno.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "10e",
+      "collectorNumber": "12",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/e/fe04dfe7-6376-4c12-9404-0e1ae0942917.jpg?1783943080",
+        "normal": "https://cards.scryfall.io/normal/front/f/e/fe04dfe7-6376-4c12-9404-0e1ae0942917.jpg?1783943080",
+        "large": "https://cards.scryfall.io/large/front/f/e/fe04dfe7-6376-4c12-9404-0e1ae0942917.jpg?1783943080",
+        "png": "https://cards.scryfall.io/png/front/f/e/fe04dfe7-6376-4c12-9404-0e1ae0942917.png?1783943080",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/e/fe04dfe7-6376-4c12-9404-0e1ae0942917.jpg?1783943080",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/e/fe04dfe7-6376-4c12-9404-0e1ae0942917.jpg?1783943080",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/e/fe04dfe7-6376-4c12-9404-0e1ae0942917.webp?1783943080",
+        "grid": "https://cards.scryfall.io/grid/front/f/e/fe04dfe7-6376-4c12-9404-0e1ae0942917.webp?1783943080",
+        "display": "https://cards.scryfall.io/display/front/f/e/fe04dfe7-6376-4c12-9404-0e1ae0942917.webp?1783943080",
+        "art": "https://cards.scryfall.io/art/front/f/e/fe04dfe7-6376-4c12-9404-0e1ae0942917.webp?1783943080",
+        "crop": "https://cards.scryfall.io/crop/front/f/e/fe04dfe7-6376-4c12-9404-0e1ae0942917.webp?1783943080"
       },
       "localImages": {},
       "layout": "normal",
@@ -79307,6 +79641,65 @@
       "faces": []
     },
     {
+      "id": "fd90a303-25fb-460b-bd55-6249f61c361c",
+      "name": "Dawn Elemental",
+      "manaCost": {
+        "generic": 0,
+        "W": 4,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elemental"
+        ]
+      },
+      "rawTypeLine": "Creature — Elemental",
+      "oracleText": "Flying\nPrevent all damage that would be dealt to this creature.",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "scg",
+      "collectorNumber": "7",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/d/fd90a303-25fb-460b-bd55-6249f61c361c.jpg?1783944893",
+        "normal": "https://cards.scryfall.io/normal/front/f/d/fd90a303-25fb-460b-bd55-6249f61c361c.jpg?1783944893",
+        "large": "https://cards.scryfall.io/large/front/f/d/fd90a303-25fb-460b-bd55-6249f61c361c.jpg?1783944893",
+        "png": "https://cards.scryfall.io/png/front/f/d/fd90a303-25fb-460b-bd55-6249f61c361c.png?1783944893",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/d/fd90a303-25fb-460b-bd55-6249f61c361c.jpg?1783944893",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/d/fd90a303-25fb-460b-bd55-6249f61c361c.jpg?1783944893",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/d/fd90a303-25fb-460b-bd55-6249f61c361c.webp?1783944893",
+        "grid": "https://cards.scryfall.io/grid/front/f/d/fd90a303-25fb-460b-bd55-6249f61c361c.webp?1783944893",
+        "display": "https://cards.scryfall.io/display/front/f/d/fd90a303-25fb-460b-bd55-6249f61c361c.webp?1783944893",
+        "art": "https://cards.scryfall.io/art/front/f/d/fd90a303-25fb-460b-bd55-6249f61c361c.webp?1783944893",
+        "crop": "https://cards.scryfall.io/crop/front/f/d/fd90a303-25fb-460b-bd55-6249f61c361c.webp?1783944893"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "42d30894-82b9-4af8-b0bb-48a78acbc4bd",
       "name": "Dawn Gryff",
       "manaCost": {
@@ -83267,6 +83660,65 @@
         "display": "https://cards.scryfall.io/display/front/4/3/43df9f41-944e-4cf3-ac80-524eadac221d.webp?1783933684",
         "art": "https://cards.scryfall.io/art/front/4/3/43df9f41-944e-4cf3-ac80-524eadac221d.webp?1783933684",
         "crop": "https://cards.scryfall.io/crop/front/4/3/43df9f41-944e-4cf3-ac80-524eadac221d.webp?1783933684"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "f12fee0b-c237-4188-a718-1572f72c63ba",
+      "name": "Defang",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nPrevent all damage that would be dealt by enchanted creature.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "avr",
+      "collectorNumber": "15",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/1/f12fee0b-c237-4188-a718-1572f72c63ba.jpg?1783940737",
+        "normal": "https://cards.scryfall.io/normal/front/f/1/f12fee0b-c237-4188-a718-1572f72c63ba.jpg?1783940737",
+        "large": "https://cards.scryfall.io/large/front/f/1/f12fee0b-c237-4188-a718-1572f72c63ba.jpg?1783940737",
+        "png": "https://cards.scryfall.io/png/front/f/1/f12fee0b-c237-4188-a718-1572f72c63ba.png?1783940737",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/1/f12fee0b-c237-4188-a718-1572f72c63ba.jpg?1783940737",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/1/f12fee0b-c237-4188-a718-1572f72c63ba.jpg?1783940737",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/1/f12fee0b-c237-4188-a718-1572f72c63ba.webp?1783940737",
+        "grid": "https://cards.scryfall.io/grid/front/f/1/f12fee0b-c237-4188-a718-1572f72c63ba.webp?1783940737",
+        "display": "https://cards.scryfall.io/display/front/f/1/f12fee0b-c237-4188-a718-1572f72c63ba.webp?1783940737",
+        "art": "https://cards.scryfall.io/art/front/f/1/f12fee0b-c237-4188-a718-1572f72c63ba.webp?1783940737",
+        "crop": "https://cards.scryfall.io/crop/front/f/1/f12fee0b-c237-4188-a718-1572f72c63ba.webp?1783940737"
       },
       "localImages": {},
       "layout": "normal",
@@ -105366,6 +105818,68 @@
       "faces": []
     },
     {
+      "id": "7d415858-5f7d-406c-bb30-b4c48ebaad08",
+      "name": "Emmara Tandris",
+      "manaCost": {
+        "generic": 5,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 7,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elf",
+          "Shaman"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Elf Shaman",
+      "oracleText": "Prevent all damage that would be dealt to creature tokens you control.",
+      "power": 5,
+      "toughness": 7,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G",
+        "W"
+      ],
+      "colorIdentity": [
+        "G",
+        "W"
+      ],
+      "keywords": [],
+      "set": "c19",
+      "collectorNumber": "191",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/d/7d415858-5f7d-406c-bb30-b4c48ebaad08.jpg?1783932737",
+        "normal": "https://cards.scryfall.io/normal/front/7/d/7d415858-5f7d-406c-bb30-b4c48ebaad08.jpg?1783932737",
+        "large": "https://cards.scryfall.io/large/front/7/d/7d415858-5f7d-406c-bb30-b4c48ebaad08.jpg?1783932737",
+        "png": "https://cards.scryfall.io/png/front/7/d/7d415858-5f7d-406c-bb30-b4c48ebaad08.png?1783932737",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/d/7d415858-5f7d-406c-bb30-b4c48ebaad08.jpg?1783932737",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/7/d/7d415858-5f7d-406c-bb30-b4c48ebaad08.jpg?1783932737",
+        "thumb": "https://cards.scryfall.io/thumb/front/7/d/7d415858-5f7d-406c-bb30-b4c48ebaad08.webp?1783932737",
+        "grid": "https://cards.scryfall.io/grid/front/7/d/7d415858-5f7d-406c-bb30-b4c48ebaad08.webp?1783932737",
+        "display": "https://cards.scryfall.io/display/front/7/d/7d415858-5f7d-406c-bb30-b4c48ebaad08.webp?1783932737",
+        "art": "https://cards.scryfall.io/art/front/7/d/7d415858-5f7d-406c-bb30-b4c48ebaad08.webp?1783932737",
+        "crop": "https://cards.scryfall.io/crop/front/7/d/7d415858-5f7d-406c-bb30-b4c48ebaad08.webp?1783932737"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "decb78dd-03d7-43a0-8ff5-1b97c6f515c9",
       "name": "Emmessi Tome",
       "manaCost": {
@@ -109780,6 +110294,64 @@
         "display": "https://cards.scryfall.io/display/front/d/3/d38cfe97-77b3-4423-95ac-88eb850cf854.webp?1783939571",
         "art": "https://cards.scryfall.io/art/front/d/3/d38cfe97-77b3-4423-95ac-88eb850cf854.webp?1783939571",
         "crop": "https://cards.scryfall.io/crop/front/d/3/d38cfe97-77b3-4423-95ac-88eb850cf854.webp?1783939571"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "46c38e2a-3a82-402f-a436-f9ebb2ba2ea4",
+      "name": "Everdawn Champion",
+      "manaCost": {
+        "generic": 1,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Soldier"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Soldier",
+      "oracleText": "Prevent all combat damage that would be dealt to this creature.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "gnt",
+      "collectorNumber": "11",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/6/46c38e2a-3a82-402f-a436-f9ebb2ba2ea4.jpg?1783933990",
+        "normal": "https://cards.scryfall.io/normal/front/4/6/46c38e2a-3a82-402f-a436-f9ebb2ba2ea4.jpg?1783933990",
+        "large": "https://cards.scryfall.io/large/front/4/6/46c38e2a-3a82-402f-a436-f9ebb2ba2ea4.jpg?1783933990",
+        "png": "https://cards.scryfall.io/png/front/4/6/46c38e2a-3a82-402f-a436-f9ebb2ba2ea4.png?1783933990",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/6/46c38e2a-3a82-402f-a436-f9ebb2ba2ea4.jpg?1783933990",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/4/6/46c38e2a-3a82-402f-a436-f9ebb2ba2ea4.jpg?1783933990",
+        "thumb": "https://cards.scryfall.io/thumb/front/4/6/46c38e2a-3a82-402f-a436-f9ebb2ba2ea4.webp?1783933990",
+        "grid": "https://cards.scryfall.io/grid/front/4/6/46c38e2a-3a82-402f-a436-f9ebb2ba2ea4.webp?1783933990",
+        "display": "https://cards.scryfall.io/display/front/4/6/46c38e2a-3a82-402f-a436-f9ebb2ba2ea4.webp?1783933990",
+        "art": "https://cards.scryfall.io/art/front/4/6/46c38e2a-3a82-402f-a436-f9ebb2ba2ea4.webp?1783933990",
+        "crop": "https://cards.scryfall.io/crop/front/4/6/46c38e2a-3a82-402f-a436-f9ebb2ba2ea4.webp?1783933990"
       },
       "localImages": {},
       "layout": "normal",
@@ -118610,6 +119182,67 @@
       "faces": []
     },
     {
+      "id": "6788d4ac-86f1-4ac5-915d-fdfe7e408443",
+      "name": "Fiendslayer Paladin",
+      "manaCost": {
+        "generic": 1,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Knight"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Knight",
+      "oracleText": "First strike (This creature deals combat damage before creatures without first strike.)\nLifelink (Damage dealt by this creature also causes you to gain that much life.)\nThis creature can't be the target of black or red spells your opponents control.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Lifelink",
+        "First strike"
+      ],
+      "set": "e01",
+      "collectorNumber": "8",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/7/6788d4ac-86f1-4ac5-915d-fdfe7e408443.jpg?1783936166",
+        "normal": "https://cards.scryfall.io/normal/front/6/7/6788d4ac-86f1-4ac5-915d-fdfe7e408443.jpg?1783936166",
+        "large": "https://cards.scryfall.io/large/front/6/7/6788d4ac-86f1-4ac5-915d-fdfe7e408443.jpg?1783936166",
+        "png": "https://cards.scryfall.io/png/front/6/7/6788d4ac-86f1-4ac5-915d-fdfe7e408443.png?1783936166",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/7/6788d4ac-86f1-4ac5-915d-fdfe7e408443.jpg?1783936166",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/6/7/6788d4ac-86f1-4ac5-915d-fdfe7e408443.jpg?1783936166",
+        "thumb": "https://cards.scryfall.io/thumb/front/6/7/6788d4ac-86f1-4ac5-915d-fdfe7e408443.webp?1783936166",
+        "grid": "https://cards.scryfall.io/grid/front/6/7/6788d4ac-86f1-4ac5-915d-fdfe7e408443.webp?1783936166",
+        "display": "https://cards.scryfall.io/display/front/6/7/6788d4ac-86f1-4ac5-915d-fdfe7e408443.webp?1783936166",
+        "art": "https://cards.scryfall.io/art/front/6/7/6788d4ac-86f1-4ac5-915d-fdfe7e408443.webp?1783936166",
+        "crop": "https://cards.scryfall.io/crop/front/6/7/6788d4ac-86f1-4ac5-915d-fdfe7e408443.webp?1783936166"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "28a1dd7f-2e42-4062-a941-b489b98a49fc",
       "name": "Fierce Empath",
       "manaCost": {
@@ -125232,6 +125865,66 @@
         "normal": "fog-normal.jpg",
         "art_crop": "fog-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "18748b1d-4161-482c-a726-8762b4c1819c",
+      "name": "Fog Bank",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Wall"
+        ]
+      },
+      "rawTypeLine": "Creature — Wall",
+      "oracleText": "Defender (This creature can't attack.)\nFlying\nPrevent all combat damage that would be dealt to and dealt by this creature.",
+      "power": 0,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Flying",
+        "Defender"
+      ],
+      "set": "fdn",
+      "collectorNumber": "591",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/8/18748b1d-4161-482c-a726-8762b4c1819c.jpg?1783908934",
+        "normal": "https://cards.scryfall.io/normal/front/1/8/18748b1d-4161-482c-a726-8762b4c1819c.jpg?1783908934",
+        "large": "https://cards.scryfall.io/large/front/1/8/18748b1d-4161-482c-a726-8762b4c1819c.jpg?1783908934",
+        "png": "https://cards.scryfall.io/png/front/1/8/18748b1d-4161-482c-a726-8762b4c1819c.png?1783908934",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/8/18748b1d-4161-482c-a726-8762b4c1819c.jpg?1783908934",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/1/8/18748b1d-4161-482c-a726-8762b4c1819c.jpg?1783908934",
+        "thumb": "https://cards.scryfall.io/thumb/front/1/8/18748b1d-4161-482c-a726-8762b4c1819c.webp?1783908934",
+        "grid": "https://cards.scryfall.io/grid/front/1/8/18748b1d-4161-482c-a726-8762b4c1819c.webp?1783908934",
+        "display": "https://cards.scryfall.io/display/front/1/8/18748b1d-4161-482c-a726-8762b4c1819c.webp?1783908934",
+        "art": "https://cards.scryfall.io/art/front/1/8/18748b1d-4161-482c-a726-8762b4c1819c.webp?1783908934",
+        "crop": "https://cards.scryfall.io/crop/front/1/8/18748b1d-4161-482c-a726-8762b4c1819c.webp?1783908934"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -134282,6 +134975,65 @@
       "faces": []
     },
     {
+      "id": "c5464250-a6a9-4399-a67f-2488073794e9",
+      "name": "Gaseous Form",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nPrevent all combat damage that would be dealt to and dealt by enchanted creature.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "ema",
+      "collectorNumber": "51",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/5/c5464250-a6a9-4399-a67f-2488073794e9.jpg?1783937615",
+        "normal": "https://cards.scryfall.io/normal/front/c/5/c5464250-a6a9-4399-a67f-2488073794e9.jpg?1783937615",
+        "large": "https://cards.scryfall.io/large/front/c/5/c5464250-a6a9-4399-a67f-2488073794e9.jpg?1783937615",
+        "png": "https://cards.scryfall.io/png/front/c/5/c5464250-a6a9-4399-a67f-2488073794e9.png?1783937615",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/5/c5464250-a6a9-4399-a67f-2488073794e9.jpg?1783937615",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/c/5/c5464250-a6a9-4399-a67f-2488073794e9.jpg?1783937615",
+        "thumb": "https://cards.scryfall.io/thumb/front/c/5/c5464250-a6a9-4399-a67f-2488073794e9.webp?1783937615",
+        "grid": "https://cards.scryfall.io/grid/front/c/5/c5464250-a6a9-4399-a67f-2488073794e9.webp?1783937615",
+        "display": "https://cards.scryfall.io/display/front/c/5/c5464250-a6a9-4399-a67f-2488073794e9.webp?1783937615",
+        "art": "https://cards.scryfall.io/art/front/c/5/c5464250-a6a9-4399-a67f-2488073794e9.webp?1783937615",
+        "crop": "https://cards.scryfall.io/crop/front/c/5/c5464250-a6a9-4399-a67f-2488073794e9.webp?1783937615"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "0f539127-535f-4e0d-abaa-e884521098d2",
       "name": "Gatecreeper Vine",
       "manaCost": {
@@ -135156,6 +135908,61 @@
         "display": "https://cards.scryfall.io/display/front/c/4/c46a0910-215c-4757-8bfe-7eca479157a5.webp?1786396042",
         "art": "https://cards.scryfall.io/art/front/c/4/c46a0910-215c-4757-8bfe-7eca479157a5.webp?1786396042",
         "crop": "https://cards.scryfall.io/crop/front/c/4/c46a0910-215c-4757-8bfe-7eca479157a5.webp?1786396042"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "1382c339-256f-4ba1-a4cc-6307d0859964",
+      "name": "General's Kabuto",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature has shroud. (It can't be the target of spells or abilities.)\nPrevent all combat damage that would be dealt to equipped creature.\nEquip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "chk",
+      "collectorNumber": "251",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/3/1382c339-256f-4ba1-a4cc-6307d0859964.jpg?1783944280",
+        "normal": "https://cards.scryfall.io/normal/front/1/3/1382c339-256f-4ba1-a4cc-6307d0859964.jpg?1783944280",
+        "large": "https://cards.scryfall.io/large/front/1/3/1382c339-256f-4ba1-a4cc-6307d0859964.jpg?1783944280",
+        "png": "https://cards.scryfall.io/png/front/1/3/1382c339-256f-4ba1-a4cc-6307d0859964.png?1783944280",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/3/1382c339-256f-4ba1-a4cc-6307d0859964.jpg?1783944280",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/1/3/1382c339-256f-4ba1-a4cc-6307d0859964.jpg?1783944280",
+        "thumb": "https://cards.scryfall.io/thumb/front/1/3/1382c339-256f-4ba1-a4cc-6307d0859964.webp?1783944280",
+        "grid": "https://cards.scryfall.io/grid/front/1/3/1382c339-256f-4ba1-a4cc-6307d0859964.webp?1783944280",
+        "display": "https://cards.scryfall.io/display/front/1/3/1382c339-256f-4ba1-a4cc-6307d0859964.webp?1783944280",
+        "art": "https://cards.scryfall.io/art/front/1/3/1382c339-256f-4ba1-a4cc-6307d0859964.webp?1783944280",
+        "crop": "https://cards.scryfall.io/crop/front/1/3/1382c339-256f-4ba1-a4cc-6307d0859964.webp?1783944280"
       },
       "localImages": {},
       "layout": "normal",
@@ -136886,6 +137693,65 @@
         "display": "https://cards.scryfall.io/display/front/7/d/7d9f1fda-8a94-48fe-9682-5b2fdbc31bad.webp?1783938412",
         "art": "https://cards.scryfall.io/art/front/7/d/7d9f1fda-8a94-48fe-9682-5b2fdbc31bad.webp?1783938412",
         "crop": "https://cards.scryfall.io/crop/front/7/d/7d9f1fda-8a94-48fe-9682-5b2fdbc31bad.webp?1783938412"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c11eb854-4c03-4abd-aaf1-9718608a34b3",
+      "name": "Ghostly Possession",
+      "manaCost": {
+        "generic": 2,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nEnchanted creature has flying.\nPrevent all combat damage that would be dealt to and dealt by enchanted creature.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "cn2",
+      "collectorNumber": "85",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/1/c11eb854-4c03-4abd-aaf1-9718608a34b3.jpg?1783937336",
+        "normal": "https://cards.scryfall.io/normal/front/c/1/c11eb854-4c03-4abd-aaf1-9718608a34b3.jpg?1783937336",
+        "large": "https://cards.scryfall.io/large/front/c/1/c11eb854-4c03-4abd-aaf1-9718608a34b3.jpg?1783937336",
+        "png": "https://cards.scryfall.io/png/front/c/1/c11eb854-4c03-4abd-aaf1-9718608a34b3.png?1783937336",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/1/c11eb854-4c03-4abd-aaf1-9718608a34b3.jpg?1783937336",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/c/1/c11eb854-4c03-4abd-aaf1-9718608a34b3.jpg?1783937336",
+        "thumb": "https://cards.scryfall.io/thumb/front/c/1/c11eb854-4c03-4abd-aaf1-9718608a34b3.webp?1783937336",
+        "grid": "https://cards.scryfall.io/grid/front/c/1/c11eb854-4c03-4abd-aaf1-9718608a34b3.webp?1783937336",
+        "display": "https://cards.scryfall.io/display/front/c/1/c11eb854-4c03-4abd-aaf1-9718608a34b3.webp?1783937336",
+        "art": "https://cards.scryfall.io/art/front/c/1/c11eb854-4c03-4abd-aaf1-9718608a34b3.webp?1783937336",
+        "crop": "https://cards.scryfall.io/crop/front/c/1/c11eb854-4c03-4abd-aaf1-9718608a34b3.webp?1783937336"
       },
       "localImages": {},
       "layout": "normal",
@@ -154096,6 +154962,66 @@
       "faces": []
     },
     {
+      "id": "505969a2-0869-461e-a69a-3b380579e00a",
+      "name": "Guard Gomazoa",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Jellyfish"
+        ]
+      },
+      "rawTypeLine": "Creature — Jellyfish",
+      "oracleText": "Defender, flying\nPrevent all combat damage that would be dealt to this creature.",
+      "power": 1,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Flying",
+        "Defender"
+      ],
+      "set": "pca",
+      "collectorNumber": "17",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/0/505969a2-0869-461e-a69a-3b380579e00a.jpg?1783936841",
+        "normal": "https://cards.scryfall.io/normal/front/5/0/505969a2-0869-461e-a69a-3b380579e00a.jpg?1783936841",
+        "large": "https://cards.scryfall.io/large/front/5/0/505969a2-0869-461e-a69a-3b380579e00a.jpg?1783936841",
+        "png": "https://cards.scryfall.io/png/front/5/0/505969a2-0869-461e-a69a-3b380579e00a.png?1783936841",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/0/505969a2-0869-461e-a69a-3b380579e00a.jpg?1783936841",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/5/0/505969a2-0869-461e-a69a-3b380579e00a.jpg?1783936841",
+        "thumb": "https://cards.scryfall.io/thumb/front/5/0/505969a2-0869-461e-a69a-3b380579e00a.webp?1783936841",
+        "grid": "https://cards.scryfall.io/grid/front/5/0/505969a2-0869-461e-a69a-3b380579e00a.webp?1783936841",
+        "display": "https://cards.scryfall.io/display/front/5/0/505969a2-0869-461e-a69a-3b380579e00a.webp?1783936841",
+        "art": "https://cards.scryfall.io/art/front/5/0/505969a2-0869-461e-a69a-3b380579e00a.webp?1783936841",
+        "crop": "https://cards.scryfall.io/crop/front/5/0/505969a2-0869-461e-a69a-3b380579e00a.webp?1783936841"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "525ba5c7-3ce5-4e52-b8b5-96c9040a6738",
       "name": "Guarded Heir",
       "manaCost": {
@@ -159680,6 +160606,65 @@
         "display": "https://cards.scryfall.io/display/front/8/d/8d09a887-958c-4a63-81d6-f5ec484223c2.webp?1783933764",
         "art": "https://cards.scryfall.io/art/front/8/d/8d09a887-958c-4a63-81d6-f5ec484223c2.webp?1783933764",
         "crop": "https://cards.scryfall.io/crop/front/8/d/8d09a887-958c-4a63-81d6-f5ec484223c2.webp?1783933764"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "45aa4b29-ce6b-4579-bee6-06a9ccfda55c",
+      "name": "Heart of Light",
+      "manaCost": {
+        "generic": 2,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature (Target a creature as you cast this. This card enters attached to that creature.)\nPrevent all damage that would be dealt to and dealt by enchanted creature.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "10e",
+      "collectorNumber": "19",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/5/45aa4b29-ce6b-4579-bee6-06a9ccfda55c.jpg?1783943079",
+        "normal": "https://cards.scryfall.io/normal/front/4/5/45aa4b29-ce6b-4579-bee6-06a9ccfda55c.jpg?1783943079",
+        "large": "https://cards.scryfall.io/large/front/4/5/45aa4b29-ce6b-4579-bee6-06a9ccfda55c.jpg?1783943079",
+        "png": "https://cards.scryfall.io/png/front/4/5/45aa4b29-ce6b-4579-bee6-06a9ccfda55c.png?1783943079",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/5/45aa4b29-ce6b-4579-bee6-06a9ccfda55c.jpg?1783943079",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/4/5/45aa4b29-ce6b-4579-bee6-06a9ccfda55c.jpg?1783943079",
+        "thumb": "https://cards.scryfall.io/thumb/front/4/5/45aa4b29-ce6b-4579-bee6-06a9ccfda55c.webp?1783943079",
+        "grid": "https://cards.scryfall.io/grid/front/4/5/45aa4b29-ce6b-4579-bee6-06a9ccfda55c.webp?1783943079",
+        "display": "https://cards.scryfall.io/display/front/4/5/45aa4b29-ce6b-4579-bee6-06a9ccfda55c.webp?1783943079",
+        "art": "https://cards.scryfall.io/art/front/4/5/45aa4b29-ce6b-4579-bee6-06a9ccfda55c.webp?1783943079",
+        "crop": "https://cards.scryfall.io/crop/front/4/5/45aa4b29-ce6b-4579-bee6-06a9ccfda55c.webp?1783943079"
       },
       "localImages": {},
       "layout": "normal",
@@ -176645,6 +177630,65 @@
       "faces": []
     },
     {
+      "id": "9ece8504-389a-43e3-b178-7067722c4b75",
+      "name": "Inviolability",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nPrevent all damage that would be dealt to enchanted creature.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "mmq",
+      "collectorNumber": "23",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/e/9ece8504-389a-43e3-b178-7067722c4b75.jpg?1783945980",
+        "normal": "https://cards.scryfall.io/normal/front/9/e/9ece8504-389a-43e3-b178-7067722c4b75.jpg?1783945980",
+        "large": "https://cards.scryfall.io/large/front/9/e/9ece8504-389a-43e3-b178-7067722c4b75.jpg?1783945980",
+        "png": "https://cards.scryfall.io/png/front/9/e/9ece8504-389a-43e3-b178-7067722c4b75.png?1783945980",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/e/9ece8504-389a-43e3-b178-7067722c4b75.jpg?1783945980",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/9/e/9ece8504-389a-43e3-b178-7067722c4b75.jpg?1783945980",
+        "thumb": "https://cards.scryfall.io/thumb/front/9/e/9ece8504-389a-43e3-b178-7067722c4b75.webp?1783945980",
+        "grid": "https://cards.scryfall.io/grid/front/9/e/9ece8504-389a-43e3-b178-7067722c4b75.webp?1783945980",
+        "display": "https://cards.scryfall.io/display/front/9/e/9ece8504-389a-43e3-b178-7067722c4b75.webp?1783945980",
+        "art": "https://cards.scryfall.io/art/front/9/e/9ece8504-389a-43e3-b178-7067722c4b75.webp?1783945980",
+        "crop": "https://cards.scryfall.io/crop/front/9/e/9ece8504-389a-43e3-b178-7067722c4b75.webp?1783945980"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "14d265aa-c1d8-4faa-b282-5c273ab725fd",
       "name": "Invisible Stalker",
       "manaCost": {
@@ -178389,6 +179433,65 @@
         "display": "https://cards.scryfall.io/display/front/7/8/78814c92-b52c-462a-866f-3e7da9db9f70.webp?1783903727",
         "art": "https://cards.scryfall.io/art/front/7/8/78814c92-b52c-462a-866f-3e7da9db9f70.webp?1783903727",
         "crop": "https://cards.scryfall.io/crop/front/7/8/78814c92-b52c-462a-866f-3e7da9db9f70.webp?1783903727"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "b30b1577-6b04-4ab5-92bc-ab54fdd5a621",
+      "name": "Istvan, Butcher of Eln",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 3,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Human",
+      "oracleText": "Istvan attacks each combat if able.\nPrevent all damage that would be dealt to Istvan by creatures.\nWhenever a creature an opponent controls dies, put two +1/+1 counters on Istvan.",
+      "power": 1,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "mbc",
+      "collectorNumber": "14",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/3/b30b1577-6b04-4ab5-92bc-ab54fdd5a621.jpg?1785758886",
+        "normal": "https://cards.scryfall.io/normal/front/b/3/b30b1577-6b04-4ab5-92bc-ab54fdd5a621.jpg?1785758886",
+        "large": "https://cards.scryfall.io/large/front/b/3/b30b1577-6b04-4ab5-92bc-ab54fdd5a621.jpg?1785758886",
+        "png": "https://cards.scryfall.io/png/front/b/3/b30b1577-6b04-4ab5-92bc-ab54fdd5a621.png?1785758886",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/3/b30b1577-6b04-4ab5-92bc-ab54fdd5a621.jpg?1785758886",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/3/b30b1577-6b04-4ab5-92bc-ab54fdd5a621.jpg?1785758886",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/3/b30b1577-6b04-4ab5-92bc-ab54fdd5a621.webp?1785758886",
+        "grid": "https://cards.scryfall.io/grid/front/b/3/b30b1577-6b04-4ab5-92bc-ab54fdd5a621.webp?1785758886",
+        "display": "https://cards.scryfall.io/display/front/b/3/b30b1577-6b04-4ab5-92bc-ab54fdd5a621.webp?1785758886",
+        "art": "https://cards.scryfall.io/art/front/b/3/b30b1577-6b04-4ab5-92bc-ab54fdd5a621.webp?1785758886",
+        "crop": "https://cards.scryfall.io/crop/front/b/3/b30b1577-6b04-4ab5-92bc-ab54fdd5a621.webp?1785758886"
       },
       "localImages": {},
       "layout": "normal",
@@ -190235,6 +191338,66 @@
       "faces": []
     },
     {
+      "id": "b7c7a54e-4df6-4745-8bae-aeefda934d82",
+      "name": "Knight of Dawn's Light",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Knight"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Knight",
+      "oracleText": "First strike\nIf you would gain life, you gain that much life plus 1 instead.\n{1}{W}: This creature gets +1/+1 until end of turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "First strike"
+      ],
+      "set": "dmu",
+      "collectorNumber": "23",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/7/b7c7a54e-4df6-4745-8bae-aeefda934d82.jpg?1783921364",
+        "normal": "https://cards.scryfall.io/normal/front/b/7/b7c7a54e-4df6-4745-8bae-aeefda934d82.jpg?1783921364",
+        "large": "https://cards.scryfall.io/large/front/b/7/b7c7a54e-4df6-4745-8bae-aeefda934d82.jpg?1783921364",
+        "png": "https://cards.scryfall.io/png/front/b/7/b7c7a54e-4df6-4745-8bae-aeefda934d82.png?1783921364",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/7/b7c7a54e-4df6-4745-8bae-aeefda934d82.jpg?1783921364",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/7/b7c7a54e-4df6-4745-8bae-aeefda934d82.jpg?1783921364",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/7/b7c7a54e-4df6-4745-8bae-aeefda934d82.webp?1783921364",
+        "grid": "https://cards.scryfall.io/grid/front/b/7/b7c7a54e-4df6-4745-8bae-aeefda934d82.webp?1783921364",
+        "display": "https://cards.scryfall.io/display/front/b/7/b7c7a54e-4df6-4745-8bae-aeefda934d82.webp?1783921364",
+        "art": "https://cards.scryfall.io/art/front/b/7/b7c7a54e-4df6-4745-8bae-aeefda934d82.webp?1783921364",
+        "crop": "https://cards.scryfall.io/crop/front/b/7/b7c7a54e-4df6-4745-8bae-aeefda934d82.webp?1783921364"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "1646cb67-e0ac-4f2d-af21-618ff3613d69",
       "name": "Knight of Glory",
       "manaCost": {
@@ -198749,6 +199912,61 @@
         "display": "https://cards.scryfall.io/display/front/b/c/bcb00599-e082-49b0-88f3-ef91b75595e4.webp?1783931088",
         "art": "https://cards.scryfall.io/art/front/b/c/bcb00599-e082-49b0-88f3-ef91b75595e4.webp?1783931088",
         "crop": "https://cards.scryfall.io/crop/front/b/c/bcb00599-e082-49b0-88f3-ef91b75595e4.webp?1783931088"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "daff382a-980e-4f0c-b26c-70c8a43c66f1",
+      "name": "Light of Sanction",
+      "manaCost": {
+        "generic": 1,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "Prevent all damage that would be dealt to creatures you control by sources you control.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "rav",
+      "collectorNumber": "24",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/a/daff382a-980e-4f0c-b26c-70c8a43c66f1.jpg?1783943697",
+        "normal": "https://cards.scryfall.io/normal/front/d/a/daff382a-980e-4f0c-b26c-70c8a43c66f1.jpg?1783943697",
+        "large": "https://cards.scryfall.io/large/front/d/a/daff382a-980e-4f0c-b26c-70c8a43c66f1.jpg?1783943697",
+        "png": "https://cards.scryfall.io/png/front/d/a/daff382a-980e-4f0c-b26c-70c8a43c66f1.png?1783943697",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/a/daff382a-980e-4f0c-b26c-70c8a43c66f1.jpg?1783943697",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/d/a/daff382a-980e-4f0c-b26c-70c8a43c66f1.jpg?1783943697",
+        "thumb": "https://cards.scryfall.io/thumb/front/d/a/daff382a-980e-4f0c-b26c-70c8a43c66f1.webp?1783943697",
+        "grid": "https://cards.scryfall.io/grid/front/d/a/daff382a-980e-4f0c-b26c-70c8a43c66f1.webp?1783943697",
+        "display": "https://cards.scryfall.io/display/front/d/a/daff382a-980e-4f0c-b26c-70c8a43c66f1.webp?1783943697",
+        "art": "https://cards.scryfall.io/art/front/d/a/daff382a-980e-4f0c-b26c-70c8a43c66f1.webp?1783943697",
+        "crop": "https://cards.scryfall.io/crop/front/d/a/daff382a-980e-4f0c-b26c-70c8a43c66f1.webp?1783943697"
       },
       "localImages": {},
       "layout": "normal",
@@ -227057,6 +228275,65 @@
         "display": "https://cards.scryfall.io/display/front/2/d/2dbe9207-06e8-4837-8227-0f960490771b.webp?1783904094",
         "art": "https://cards.scryfall.io/art/front/2/d/2dbe9207-06e8-4837-8227-0f960490771b.webp?1783904094",
         "crop": "https://cards.scryfall.io/crop/front/2/d/2dbe9207-06e8-4837-8227-0f960490771b.webp?1783904094"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "8b3048ec-bcbf-4a69-b56f-83bbe82b68e5",
+      "name": "Muzzle",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nPrevent all damage that would be dealt by enchanted creature.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "mmq",
+      "collectorNumber": "30",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/b/8b3048ec-bcbf-4a69-b56f-83bbe82b68e5.jpg?1783945978",
+        "normal": "https://cards.scryfall.io/normal/front/8/b/8b3048ec-bcbf-4a69-b56f-83bbe82b68e5.jpg?1783945978",
+        "large": "https://cards.scryfall.io/large/front/8/b/8b3048ec-bcbf-4a69-b56f-83bbe82b68e5.jpg?1783945978",
+        "png": "https://cards.scryfall.io/png/front/8/b/8b3048ec-bcbf-4a69-b56f-83bbe82b68e5.png?1783945978",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/b/8b3048ec-bcbf-4a69-b56f-83bbe82b68e5.jpg?1783945978",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/b/8b3048ec-bcbf-4a69-b56f-83bbe82b68e5.jpg?1783945978",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/b/8b3048ec-bcbf-4a69-b56f-83bbe82b68e5.webp?1783945978",
+        "grid": "https://cards.scryfall.io/grid/front/8/b/8b3048ec-bcbf-4a69-b56f-83bbe82b68e5.webp?1783945978",
+        "display": "https://cards.scryfall.io/display/front/8/b/8b3048ec-bcbf-4a69-b56f-83bbe82b68e5.webp?1783945978",
+        "art": "https://cards.scryfall.io/art/front/8/b/8b3048ec-bcbf-4a69-b56f-83bbe82b68e5.webp?1783945978",
+        "crop": "https://cards.scryfall.io/crop/front/8/b/8b3048ec-bcbf-4a69-b56f-83bbe82b68e5.webp?1783945978"
       },
       "localImages": {},
       "layout": "normal",
@@ -274982,6 +276259,66 @@
       "faces": []
     },
     {
+      "id": "c79a8938-aae6-42ff-888c-2783e11a8d4f",
+      "name": "Rhox Faithmender",
+      "manaCost": {
+        "generic": 3,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Rhino",
+          "Monk"
+        ]
+      },
+      "rawTypeLine": "Creature — Rhino Monk",
+      "oracleText": "Lifelink (Damage dealt by this creature also causes you to gain that much life.)\nIf you would gain life, you gain twice that much life instead.",
+      "power": 1,
+      "toughness": 5,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Lifelink"
+      ],
+      "set": "tdc",
+      "collectorNumber": "128",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/7/c79a8938-aae6-42ff-888c-2783e11a8d4f.jpg?1783907119",
+        "normal": "https://cards.scryfall.io/normal/front/c/7/c79a8938-aae6-42ff-888c-2783e11a8d4f.jpg?1783907119",
+        "large": "https://cards.scryfall.io/large/front/c/7/c79a8938-aae6-42ff-888c-2783e11a8d4f.jpg?1783907119",
+        "png": "https://cards.scryfall.io/png/front/c/7/c79a8938-aae6-42ff-888c-2783e11a8d4f.png?1783907119",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/7/c79a8938-aae6-42ff-888c-2783e11a8d4f.jpg?1783907119",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/c/7/c79a8938-aae6-42ff-888c-2783e11a8d4f.jpg?1783907119",
+        "thumb": "https://cards.scryfall.io/thumb/front/c/7/c79a8938-aae6-42ff-888c-2783e11a8d4f.webp?1783907119",
+        "grid": "https://cards.scryfall.io/grid/front/c/7/c79a8938-aae6-42ff-888c-2783e11a8d4f.webp?1783907119",
+        "display": "https://cards.scryfall.io/display/front/c/7/c79a8938-aae6-42ff-888c-2783e11a8d4f.webp?1783907119",
+        "art": "https://cards.scryfall.io/art/front/c/7/c79a8938-aae6-42ff-888c-2783e11a8d4f.webp?1783907119",
+        "crop": "https://cards.scryfall.io/crop/front/c/7/c79a8938-aae6-42ff-888c-2783e11a8d4f.webp?1783907119"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "64c3c972-82f6-46ea-8f9f-090c65c22e44",
       "name": "Rhox Maulers",
       "manaCost": {
@@ -287114,6 +288451,65 @@
       "faces": []
     },
     {
+      "id": "80b59844-c9d4-4bc1-86e6-4cc596d9165d",
+      "name": "Sandskin",
+      "manaCost": {
+        "generic": 2,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nPrevent all combat damage that would be dealt to and dealt by enchanted creature.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "ons",
+      "collectorNumber": "52",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/0/80b59844-c9d4-4bc1-86e6-4cc596d9165d.jpg?1783945091",
+        "normal": "https://cards.scryfall.io/normal/front/8/0/80b59844-c9d4-4bc1-86e6-4cc596d9165d.jpg?1783945091",
+        "large": "https://cards.scryfall.io/large/front/8/0/80b59844-c9d4-4bc1-86e6-4cc596d9165d.jpg?1783945091",
+        "png": "https://cards.scryfall.io/png/front/8/0/80b59844-c9d4-4bc1-86e6-4cc596d9165d.png?1783945091",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/0/80b59844-c9d4-4bc1-86e6-4cc596d9165d.jpg?1783945091",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/0/80b59844-c9d4-4bc1-86e6-4cc596d9165d.jpg?1783945091",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/0/80b59844-c9d4-4bc1-86e6-4cc596d9165d.webp?1783945091",
+        "grid": "https://cards.scryfall.io/grid/front/8/0/80b59844-c9d4-4bc1-86e6-4cc596d9165d.webp?1783945091",
+        "display": "https://cards.scryfall.io/display/front/8/0/80b59844-c9d4-4bc1-86e6-4cc596d9165d.webp?1783945091",
+        "art": "https://cards.scryfall.io/art/front/8/0/80b59844-c9d4-4bc1-86e6-4cc596d9165d.webp?1783945091",
+        "crop": "https://cards.scryfall.io/crop/front/8/0/80b59844-c9d4-4bc1-86e6-4cc596d9165d.webp?1783945091"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "e7482def-e87e-4a7f-9c18-7859483b2a66",
       "name": "Sandsteppe Citadel",
       "manaCost": {
@@ -298529,6 +299925,65 @@
         "normal": "seraph-of-the-suns-normal.jpg",
         "art_crop": "seraph-of-the-suns-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "d9789cac-5774-4f72-82c3-18f11f9d4a62",
+      "name": "Seraph of the Sword",
+      "manaCost": {
+        "generic": 3,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying\nPrevent all combat damage that would be dealt to this creature.",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "m14",
+      "collectorNumber": "31",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/9/d9789cac-5774-4f72-82c3-18f11f9d4a62.jpg?1783939941",
+        "normal": "https://cards.scryfall.io/normal/front/d/9/d9789cac-5774-4f72-82c3-18f11f9d4a62.jpg?1783939941",
+        "large": "https://cards.scryfall.io/large/front/d/9/d9789cac-5774-4f72-82c3-18f11f9d4a62.jpg?1783939941",
+        "png": "https://cards.scryfall.io/png/front/d/9/d9789cac-5774-4f72-82c3-18f11f9d4a62.png?1783939941",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/9/d9789cac-5774-4f72-82c3-18f11f9d4a62.jpg?1783939941",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/d/9/d9789cac-5774-4f72-82c3-18f11f9d4a62.jpg?1783939941",
+        "thumb": "https://cards.scryfall.io/thumb/front/d/9/d9789cac-5774-4f72-82c3-18f11f9d4a62.webp?1783939941",
+        "grid": "https://cards.scryfall.io/grid/front/d/9/d9789cac-5774-4f72-82c3-18f11f9d4a62.webp?1783939941",
+        "display": "https://cards.scryfall.io/display/front/d/9/d9789cac-5774-4f72-82c3-18f11f9d4a62.webp?1783939941",
+        "art": "https://cards.scryfall.io/art/front/d/9/d9789cac-5774-4f72-82c3-18f11f9d4a62.webp?1783939941",
+        "crop": "https://cards.scryfall.io/crop/front/d/9/d9789cac-5774-4f72-82c3-18f11f9d4a62.webp?1783939941"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -330369,6 +331824,61 @@
       "faces": []
     },
     {
+      "id": "76dcd19e-8daf-4d53-946b-c07d5eca3cc9",
+      "name": "Statecraft",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "Prevent all combat damage that would be dealt to and dealt by creatures you control.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "mmq",
+      "collectorNumber": "106",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/6/76dcd19e-8daf-4d53-946b-c07d5eca3cc9.jpg?1783945960",
+        "normal": "https://cards.scryfall.io/normal/front/7/6/76dcd19e-8daf-4d53-946b-c07d5eca3cc9.jpg?1783945960",
+        "large": "https://cards.scryfall.io/large/front/7/6/76dcd19e-8daf-4d53-946b-c07d5eca3cc9.jpg?1783945960",
+        "png": "https://cards.scryfall.io/png/front/7/6/76dcd19e-8daf-4d53-946b-c07d5eca3cc9.png?1783945960",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/6/76dcd19e-8daf-4d53-946b-c07d5eca3cc9.jpg?1783945960",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/7/6/76dcd19e-8daf-4d53-946b-c07d5eca3cc9.jpg?1783945960",
+        "thumb": "https://cards.scryfall.io/thumb/front/7/6/76dcd19e-8daf-4d53-946b-c07d5eca3cc9.webp?1783945960",
+        "grid": "https://cards.scryfall.io/grid/front/7/6/76dcd19e-8daf-4d53-946b-c07d5eca3cc9.webp?1783945960",
+        "display": "https://cards.scryfall.io/display/front/7/6/76dcd19e-8daf-4d53-946b-c07d5eca3cc9.webp?1783945960",
+        "art": "https://cards.scryfall.io/art/front/7/6/76dcd19e-8daf-4d53-946b-c07d5eca3cc9.webp?1783945960",
+        "crop": "https://cards.scryfall.io/crop/front/7/6/76dcd19e-8daf-4d53-946b-c07d5eca3cc9.webp?1783945960"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "ba41211a-30b0-4064-a197-5d17472b278f",
       "name": "Staunch Defenders",
       "manaCost": {
@@ -338163,6 +339673,61 @@
         "display": "https://cards.scryfall.io/display/front/2/2/22c66ed6-55fb-4c65-aac4-26d9cc3053b8.webp?1783945643",
         "art": "https://cards.scryfall.io/art/front/2/2/22c66ed6-55fb-4c65-aac4-26d9cc3053b8.webp?1783945643",
         "crop": "https://cards.scryfall.io/crop/front/2/2/22c66ed6-55fb-4c65-aac4-26d9cc3053b8.webp?1783945643"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "3253a624-50cc-4a8a-9b0c-9902aa53775f",
+      "name": "Sulfuric Vortex",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 2,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "At the beginning of each player's upkeep, this enchantment deals 2 damage to that player.\nIf a player would gain life, that player gains no life instead.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "dmr",
+      "collectorNumber": "144",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/2/3253a624-50cc-4a8a-9b0c-9902aa53775f.jpg?1783918451",
+        "normal": "https://cards.scryfall.io/normal/front/3/2/3253a624-50cc-4a8a-9b0c-9902aa53775f.jpg?1783918451",
+        "large": "https://cards.scryfall.io/large/front/3/2/3253a624-50cc-4a8a-9b0c-9902aa53775f.jpg?1783918451",
+        "png": "https://cards.scryfall.io/png/front/3/2/3253a624-50cc-4a8a-9b0c-9902aa53775f.png?1783918451",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/2/3253a624-50cc-4a8a-9b0c-9902aa53775f.jpg?1783918451",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/3/2/3253a624-50cc-4a8a-9b0c-9902aa53775f.jpg?1783918451",
+        "thumb": "https://cards.scryfall.io/thumb/front/3/2/3253a624-50cc-4a8a-9b0c-9902aa53775f.webp?1783918451",
+        "grid": "https://cards.scryfall.io/grid/front/3/2/3253a624-50cc-4a8a-9b0c-9902aa53775f.webp?1783918451",
+        "display": "https://cards.scryfall.io/display/front/3/2/3253a624-50cc-4a8a-9b0c-9902aa53775f.webp?1783918451",
+        "art": "https://cards.scryfall.io/art/front/3/2/3253a624-50cc-4a8a-9b0c-9902aa53775f.webp?1783918451",
+        "crop": "https://cards.scryfall.io/crop/front/3/2/3253a624-50cc-4a8a-9b0c-9902aa53775f.webp?1783918451"
       },
       "localImages": {},
       "layout": "normal",
@@ -351057,6 +352622,66 @@
       "faces": []
     },
     {
+      "id": "72380757-6344-43e6-a4ed-bd753f2431d5",
+      "name": "Temporal Isolation",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Flash\nEnchant creature\nEnchanted creature has shadow. (It can block or be blocked by only creatures with shadow.)\nPrevent all damage that would be dealt by enchanted creature.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Enchant",
+        "Flash"
+      ],
+      "set": "tsr",
+      "collectorNumber": "48",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/2/72380757-6344-43e6-a4ed-bd753f2431d5.jpg?1783927858",
+        "normal": "https://cards.scryfall.io/normal/front/7/2/72380757-6344-43e6-a4ed-bd753f2431d5.jpg?1783927858",
+        "large": "https://cards.scryfall.io/large/front/7/2/72380757-6344-43e6-a4ed-bd753f2431d5.jpg?1783927858",
+        "png": "https://cards.scryfall.io/png/front/7/2/72380757-6344-43e6-a4ed-bd753f2431d5.png?1783927858",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/2/72380757-6344-43e6-a4ed-bd753f2431d5.jpg?1783927858",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/7/2/72380757-6344-43e6-a4ed-bd753f2431d5.jpg?1783927858",
+        "thumb": "https://cards.scryfall.io/thumb/front/7/2/72380757-6344-43e6-a4ed-bd753f2431d5.webp?1783927858",
+        "grid": "https://cards.scryfall.io/grid/front/7/2/72380757-6344-43e6-a4ed-bd753f2431d5.webp?1783927858",
+        "display": "https://cards.scryfall.io/display/front/7/2/72380757-6344-43e6-a4ed-bd753f2431d5.webp?1783927858",
+        "art": "https://cards.scryfall.io/art/front/7/2/72380757-6344-43e6-a4ed-bd753f2431d5.webp?1783927858",
+        "crop": "https://cards.scryfall.io/crop/front/7/2/72380757-6344-43e6-a4ed-bd753f2431d5.webp?1783927858"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "8adbd4a5-3171-495a-a540-0ecf280b77fc",
       "name": "Tempting Witch",
       "manaCost": {
@@ -353788,6 +355413,63 @@
         "display": "https://cards.scryfall.io/display/front/7/7/77134e93-4c03-476b-ab60-d8fb48f7a74f.webp?1783903042",
         "art": "https://cards.scryfall.io/art/front/7/7/77134e93-4c03-476b-ab60-d8fb48f7a74f.webp?1783903042",
         "crop": "https://cards.scryfall.io/crop/front/7/7/77134e93-4c03-476b-ab60-d8fb48f7a74f.webp?1783903042"
+      },
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "19bd0885-baaa-40f2-9c59-b1ea53807540",
+      "name": "The Wind Crystal",
+      "manaCost": {
+        "generic": 2,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Legendary Artifact",
+      "oracleText": "White spells you cast cost {1} less to cast.\nIf you would gain life, you gain twice that much life instead.\n{4}{W}{W}, {T}: Creatures you control gain flying and lifelink until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "fin",
+      "collectorNumber": "43",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/9/19bd0885-baaa-40f2-9c59-b1ea53807540.jpg?1783906641",
+        "normal": "https://cards.scryfall.io/normal/front/1/9/19bd0885-baaa-40f2-9c59-b1ea53807540.jpg?1783906641",
+        "large": "https://cards.scryfall.io/large/front/1/9/19bd0885-baaa-40f2-9c59-b1ea53807540.jpg?1783906641",
+        "png": "https://cards.scryfall.io/png/front/1/9/19bd0885-baaa-40f2-9c59-b1ea53807540.png?1783906641",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/9/19bd0885-baaa-40f2-9c59-b1ea53807540.jpg?1783906641",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/1/9/19bd0885-baaa-40f2-9c59-b1ea53807540.jpg?1783906641",
+        "thumb": "https://cards.scryfall.io/thumb/front/1/9/19bd0885-baaa-40f2-9c59-b1ea53807540.webp?1783906641",
+        "grid": "https://cards.scryfall.io/grid/front/1/9/19bd0885-baaa-40f2-9c59-b1ea53807540.webp?1783906641",
+        "display": "https://cards.scryfall.io/display/front/1/9/19bd0885-baaa-40f2-9c59-b1ea53807540.webp?1783906641",
+        "art": "https://cards.scryfall.io/art/front/1/9/19bd0885-baaa-40f2-9c59-b1ea53807540.webp?1783906641",
+        "crop": "https://cards.scryfall.io/crop/front/1/9/19bd0885-baaa-40f2-9c59-b1ea53807540.webp?1783906641"
       },
       "localImages": {},
       "layout": "normal",
@@ -370598,6 +372280,63 @@
         "normal": "unclaimed-territory-normal.jpg",
         "art_crop": "unclaimed-territory-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "9bf85d06-9efe-488d-9af0-fb945b346524",
+      "name": "Uncle Istvan",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 3,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human"
+        ]
+      },
+      "rawTypeLine": "Creature — Human",
+      "oracleText": "Prevent all damage that would be dealt to this creature by creatures.",
+      "power": 1,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "tsb",
+      "collectorNumber": "51",
+      "rarity": "special",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/b/9bf85d06-9efe-488d-9af0-fb945b346524.jpg?1783943274",
+        "normal": "https://cards.scryfall.io/normal/front/9/b/9bf85d06-9efe-488d-9af0-fb945b346524.jpg?1783943274",
+        "large": "https://cards.scryfall.io/large/front/9/b/9bf85d06-9efe-488d-9af0-fb945b346524.jpg?1783943274",
+        "png": "https://cards.scryfall.io/png/front/9/b/9bf85d06-9efe-488d-9af0-fb945b346524.png?1783943274",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/b/9bf85d06-9efe-488d-9af0-fb945b346524.jpg?1783943274",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/9/b/9bf85d06-9efe-488d-9af0-fb945b346524.jpg?1783943274",
+        "thumb": "https://cards.scryfall.io/thumb/front/9/b/9bf85d06-9efe-488d-9af0-fb945b346524.webp?1783943274",
+        "grid": "https://cards.scryfall.io/grid/front/9/b/9bf85d06-9efe-488d-9af0-fb945b346524.webp?1783943274",
+        "display": "https://cards.scryfall.io/display/front/9/b/9bf85d06-9efe-488d-9af0-fb945b346524.webp?1783943274",
+        "art": "https://cards.scryfall.io/art/front/9/b/9bf85d06-9efe-488d-9af0-fb945b346524.webp?1783943274",
+        "crop": "https://cards.scryfall.io/crop/front/9/b/9bf85d06-9efe-488d-9af0-fb945b346524.webp?1783943274"
+      },
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
