@@ -379,8 +379,8 @@ export const grantKeywordUntilEndOfTurn: EffectPrimitive = (ctx) => {
 };
 
 /**
- * `modifyYoursUntilEndOfTurn` — the MASS form of the two grants above, and the
- * ONE answer to *"which permanents does an untargeted until-end-of-turn
+ * `grantKeywordToYoursUntilEndOfTurn` — the MASS form of the two grants above,
+ * and the ONE answer to *"which permanents does an untargeted until-end-of-turn
  * modification reach, and what does it do to them"*:
  *
  *   - "Creatures you control gain indestructible until end of turn" (Selfless
@@ -408,8 +408,20 @@ export const grantKeywordUntilEndOfTurn: EffectPrimitive = (ctx) => {
  * `'you'` (the default) or `'opponent'`. `params.power` / `params.toughness`
  * accept a printed number OR a derived descriptor (`intParam`), so "+X/+X where
  * X is the number of creatures you control" is counted when this resolves.
+ *
+ * ⚠️ **THE NAME IS NARROWER THAN THE PRIMITIVE, DELIBERATELY AND TEMPORARILY.**
+ * §3.153 gave this the P/T half, so a pump-only card ("Creatures you control get
+ * +2/+0 until end of turn") now compiles to a primitive whose name says only
+ * "grantKeyword". The honest name is `modifyYoursUntilEndOfTurn`, and renaming it
+ * was written, tested and then REVERTED for one measured reason: the shipped pool
+ * is GENERATED DATA that spells this id in tens of places, and `compile.test.ts`
+ * + `fidelity.test.ts` compare the compiler's output against it ref by ref — so
+ * the rename turns **40 tests red** until `packages/cards/data/` is regenerated.
+ * A pool refresh was in flight and off-limits to that lane. **The rename must
+ * land in the same change as a regeneration, never before it**, and doing it in
+ * the wrong order is how a lane hands `main` a red gate.
  */
-export const modifyYoursUntilEndOfTurn: EffectPrimitive = (ctx) => {
+export const grantKeywordToYoursUntilEndOfTurn: EffectPrimitive = (ctx) => {
   const keywords = keywordsParam(ctx);
   const power = intParam(ctx, 'power', 0);
   const toughness = intParam(ctx, 'toughness', 0);
@@ -431,16 +443,6 @@ export const modifyYoursUntilEndOfTurn: EffectPrimitive = (ctx) => {
     ctx.addContinuousEffect({ target: perm.instanceId, ...grant, ...pump, duration: 'endOfTurn' });
   }
 };
-
-/**
- * The name the SHIPPED POOL spells for the keyword-only half of the mass
- * modification above. It is the same function, not a copy: the pool is generated
- * data holding tens of `grantKeywordToYoursUntilEndOfTurn` refs, and a second
- * implementation behind the old name is exactly how two answers to one question
- * start to drift. Everything the compiler emits from §3.153 onward uses
- * {@link modifyYoursUntilEndOfTurn}.
- */
-export const grantKeywordToYoursUntilEndOfTurn: EffectPrimitive = modifyYoursUntilEndOfTurn;
 
 /**
  * The five colours a printed token may declare, in canonical order. Used to keep
@@ -2037,7 +2039,6 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   pumpUntilEndOfTurn,
   grantKeywordUntilEndOfTurn,
   grantKeywordToYoursUntilEndOfTurn,
-  modifyYoursUntilEndOfTurn,
   createPredefinedToken,
   makeToken,
   livingWeaponGerm,

@@ -97,7 +97,7 @@ describe('§3.153 the compiler reads a mass until-end-of-turn modification', () 
     expect(result.status).toBe('complete');
     const body = result.definition.triggers?.[0]?.effects?.[0];
     expect(body).toEqual({
-      primitive: 'modifyYoursUntilEndOfTurn',
+      primitive: 'grantKeywordToYoursUntilEndOfTurn',
       params: {
         keywords: { trample: true },
         // The derived count §3.149 landed — NOT re-invented by this lane.
@@ -120,7 +120,7 @@ describe('§3.153 the compiler reads a mass until-end-of-turn modification', () 
     );
     expect(result.missing, JSON.stringify(result.missing)).toEqual([]);
     expect(result.definition.effects?.[0]).toEqual({
-      primitive: 'modifyYoursUntilEndOfTurn',
+      primitive: 'grantKeywordToYoursUntilEndOfTurn',
       params: { keywords: { trample: true }, power: 3, toughness: 3, anyOfTypes: ['creature'] },
     });
   });
@@ -172,7 +172,7 @@ describe('§3.153 the compiler reads a mass until-end-of-turn modification', () 
     );
     expect(result.missing, JSON.stringify(result.missing)).toEqual([]);
     expect(result.definition.effects?.[0]).toEqual({
-      primitive: 'modifyYoursUntilEndOfTurn',
+      primitive: 'grantKeywordToYoursUntilEndOfTurn',
       // No `keywords` key at all: a line that grants none must not carry an empty
       // grant object, or `isEmptyKeywords` and the AI's keyword count disagree
       // about whether this card does anything.

@@ -345,8 +345,8 @@ function againstTarget(
  * §3.153 — price a MASS until-end-of-turn modification: one number per BODY it
  * reaches, times the stats and keywords it gives each of them.
  *
- * ONE valuer behind both registered names (`modifyYoursUntilEndOfTurn` and the
- * legacy `grantKeywordToYoursUntilEndOfTurn`), because they are one primitive.
+ * ⚠️ The primitive is named for the keyword half only. It does the P/T half too
+ * since §3.153; the rename is blocked on a pool regeneration (see `primitives.ts`).
  *
  * ⚠️ REPORTED, NOT PRICED: a DERIVED P/T amount ("+X/+X, where X is the number of
  * creatures you control" — Craterhoof Behemoth) reads as 0 here and the card is
@@ -1454,8 +1454,6 @@ const LEDGERED_EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.fre
    * What it deliberately does not price: the sweeper it might blank (that needs
    * the opponent's hand) — so it stays a floor, never a headline.
    */
-  modifyYoursUntilEndOfTurn: massModificationValue,
-  /** The legacy name for the same effect — see `primitives.ts`. One valuer, so the two cannot drift. */
   grantKeywordToYoursUntilEndOfTurn: massModificationValue,
 
   /**

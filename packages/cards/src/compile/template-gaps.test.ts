@@ -321,7 +321,14 @@ describe('template gaps — the neighbouring wordings still refuse honestly', ()
     expect(result.status).toBe('incomplete');
   });
 
-  it('REFUSES an until-end-of-turn team pump as a static (different mechanic)', () => {
+  it('COMPILES an until-end-of-turn team pump, and NEVER as a static (different mechanic)', () => {
+    // ⚠️ This case used to assert `incomplete`, and that half is obsolete: §3.153
+    // gave the compiler the mass until-end-of-turn modification, so Overrun's own
+    // sentence has a rule now. The half that MATTERS is unchanged and is the
+    // reason the case survives rather than being deleted — an anthem and a
+    // team pump read almost identically and are different mechanics. A static
+    // would last forever and reach creatures that arrive later; this must be a
+    // DURATION, registered as an effect, gone at cleanup.
     const result = compileCard(
       makeCard({
         name: 'Test Overrun Lite',
@@ -329,8 +336,9 @@ describe('template gaps — the neighbouring wordings still refuse honestly', ()
         oracleText: 'Creatures you control get +1/+1 until end of turn.',
       }),
     );
-    expect(result.status).toBe('incomplete');
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
     expect(result.definition.statics).toBeUndefined();
+    expect(result.definition.effects?.[0]?.primitive).toBe('grantKeywordToYoursUntilEndOfTurn');
   });
 
   it('REFUSES a permanently-controlling theft ("gain control of target creature" with no duration)', () => {

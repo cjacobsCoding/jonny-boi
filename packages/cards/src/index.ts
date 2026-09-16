@@ -38,7 +38,6 @@ export {
   pumpUntilEndOfTurn,
   grantKeywordUntilEndOfTurn,
   grantKeywordToYoursUntilEndOfTurn,
-  modifyYoursUntilEndOfTurn,
   makeToken,
   persistReturn,
   destroyTarget,
