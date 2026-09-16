@@ -1020,6 +1020,13 @@ export function matchTriggers(
       const watchesBoard =
         ability.condition.on === 'permanentEnters' ||
         ability.condition.on === 'permanentDies' ||
+        // §3.153 — "a card is put into your graveyard from anywhere" reads the
+        // moved card's OWNER, its token-ness and its printed filter, so it needs
+        // the subject exactly as the two board-watching kinds above do. Omitting
+        // it here is SILENT: the matcher sees `undefined` and refuses, so the
+        // trigger simply never fires and nothing reports. Caught by the play
+        // test, not by the compiler and not by any shape assertion.
+        ability.condition.on === 'cardPutIntoGraveyardFromAnywhere' ||
         // The group and per-creature combat-damage triggers read the DAMAGING
         // creature.
         ability.condition.on === 'groupCombatDamageToPlayer' ||
