@@ -135,6 +135,39 @@ const KNOWN_UNPRICED: Readonly<Record<string, string>> = Object.freeze({
   returnChosenToHand: 'unreachable from pool refs today',
   wardCounterUnlessPaid: 'unreachable from pool refs today; ward’s tax is priced elsewhere',
   blinkSelf: 'unreachable from pool refs today; the pilot’s blink goal prices the PLAY, not this ref',
+  /*
+   * §3.154's THREE WALKER-RESIDUE PRIMITIVES. Ledgered by the integrator, not by
+   * the lane that wrote them — which is itself the finding: §3.154's gate was
+   * derived from its own diff (`cards`, `core`, `sim`, `web`) and `packages/ai`
+   * was not in it, so this red reached `main`. A primitive REGISTRATION is a
+   * change to `ai` whether or not `ai` appears in the diff, because this file
+   * quantifies over the registry. Two later lanes each proved the red
+   * pre-existing by reverting their own work and reproducing the same three
+   * names — which is how it got attributed correctly instead of blamed on them.
+   *
+   * All three are ledgered rather than priced, and none of it is a shrug:
+   * a price computed from params would be wrong in a way a green test would
+   * then certify.
+   */
+  installUntilYourNextTurnTrigger:
+    'Jace’s +1 — an INSTALLER, not an effect: what it is worth is the sum of a -1/-0 over every ' +
+    'attack an opponent declares before your next turn, which is a function of THEIR future choices. ' +
+    '`EffectValueContext` carries one board state and no turn horizon, so any price here is a guess ' +
+    'the parity test would then bless. ⚠️ Unlike the other delayed-ability bodies above, this one IS ' +
+    'on a pilot menu (it is a loyalty ability the pilot activates), so the honest debt is real: ' +
+    'blind meanwhile, the pilot cannot tell Jace’s +1 against a wide aggro board from the same +1 ' +
+    'against an empty one. Price it with the planeswalker-loyalty policy, which does not exist yet.',
+  revealAndOpponentSplitsPiles:
+    'Jace’s −2 — an ADVERSARIAL split: the opponent divides and you take one pile, so its value is ' +
+    'the MINIMUM over their best division, not the average of three cards. Pricing it as card ' +
+    'advantage would systematically overrate it, and the pilot has no opponent-model to compute the ' +
+    'min against. Blind meanwhile: the pilot reads this as flat regardless of what the top three are.',
+  returnTriggeringCardToHand:
+    'Tamiyo’s emblem body — a trigger the engine fires when a card hits a graveyard from anywhere, ' +
+    'never a pilot pick, and it reads the TRIGGERING card, which the value context does not carry. ' +
+    'Same shape as the graveyard-ability bodies above. Blind meanwhile: nothing, while it is only ' +
+    'reachable from an emblem the pilot cannot choose to make — revisit if a castable card ever ' +
+    'carries this ref.',
 });
 
 // --- generic pool traversal -------------------------------------------------------
