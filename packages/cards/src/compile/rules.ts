@@ -2723,7 +2723,7 @@ const ITERATIVE_EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     description:
       '"Target player mills N cards. If two cards that share a color/card type were milled this way, repeat this process." (Grindstone)',
     pattern: new RegExp(
-      `^target (?:player|opponent) mills ${COUNT_TOKEN} cards?\. if two cards that share a (${SHARED_MILL_TOKEN}) were milled this way, repeat this process$`,
+      `^target (?:player|opponent) mills ${COUNT_TOKEN} cards?\\. if two cards that share a (${SHARED_MILL_TOKEN}) were milled this way, repeat this process$`,
     ),
     needsChosenTarget: true,
     build(match) {
