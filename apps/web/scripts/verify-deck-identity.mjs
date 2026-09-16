@@ -43,6 +43,7 @@ import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { findChrome } from './lib/find-chrome.mjs';
 import { harnessLaunchOptions } from './lib/harness-chrome.mjs';
+import { watchPageErrors } from './lib/harness-page.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = resolve(HERE, '..');
@@ -387,6 +388,7 @@ try {
   for (const [label, viewport] of Object.entries(VIEWPORTS)) {
     console.log(`\n== ${label} ${viewport.width}x${viewport.height} ==`);
     const page = await browser.newPage();
+    const watcher = watchPageErrors(page, { label });
     await page.setViewport(viewport);
     // ⚠️ Each viewport must start from a FRESH app, not from what the previous
     // pass left behind. Pages of one browser share an origin's localStorage, so
@@ -602,6 +604,10 @@ try {
       picker.noteText ?? 'no note',
     );
     check(!picker.pageScrollsX, `${label}: the Play setup does not scroll horizontally`);
+    // ⚠️ AND THE APP ITSELF. Without this a crash reads as "the control is
+    // missing" — which is how a React #185 crash in the card grid was once
+    // filed as "8 cards are missing". See lib/harness-page.mjs.
+    check(watcher.errors.length === 0, `${label}: the app threw nothing`, watcher.errors.slice(0, 2).join(' | '));
 
     await page.close();
   }

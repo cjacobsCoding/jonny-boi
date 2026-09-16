@@ -35,6 +35,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { describeChromeSearch, findChrome } from './lib/find-chrome.mjs';
 import { harnessLaunchOptions } from './lib/harness-chrome.mjs';
+import { watchPageErrors } from './lib/harness-page.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = resolve(HERE, '..');
@@ -208,8 +209,7 @@ async function main() {
   let extractedReplay = null;
   try {
     const page = await browser.newPage();
-    const pageErrors = [];
-    page.on('pageerror', (error) => pageErrors.push(String(error)));
+    const pageErrors = watchPageErrors(page).errors;
     // `domcontentloaded`, NOT `networkidle2`. The app holds connections open (a
     // sim worker, the service worker), so "the network went quiet" never happens
     // and the harness timed out after 90 s on an app that had loaded in two.
@@ -686,8 +686,7 @@ async function main() {
       writeFileSync(replayPath, extractedReplay);
       console.log(chr10 + 'Opening the replay the way a person would...');
       const replayPage = await browser.newPage();
-      const replayErrors = [];
-      replayPage.on('pageerror', (error) => replayErrors.push(String(error)));
+      const replayErrors = watchPageErrors(replayPage, { label: 'replay' }).errors;
       await replayPage.goto(pathToFileURL(replayPath).href, { waitUntil: 'load' });
       // The player builds its iframe asynchronously once it has parsed events.
       await new Promise((r) => setTimeout(r, 2500));

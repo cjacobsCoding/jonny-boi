@@ -32,6 +32,7 @@ import {
   CARD_GRID_FOCUS_KEEP_ROWS,
   CARD_GRID_INITIAL_ROWS,
   CARD_GRID_MIN_BELIEVABLE_ROW_PITCH_PX,
+  CARD_GRID_MIN_TILE_ASPECT,
   CARD_GRID_OVERSCAN_ROWS,
 } from './card-grid-config.js';
 
@@ -133,11 +134,32 @@ export function cardGridMetricsAreMeasured(metrics: GridMetrics): boolean {
  * i.e. exactly the unbounded render this system exists to prevent, arriving
  * through the back door. A closed check that REPORTS rather than widening to
  * whatever was passed (rule 2).
+ *
+ * ## ⚠️ WHY `tileWidthPx` IS REQUIRED, AND NOT OPTIONAL
+ *
+ * The pitch floor above is a floor against *nothing*, and there is a whole
+ * class of readings that clear it and are still not a tile. The one that took
+ * the card browser down: a tile whose art box has no width to work from gets a
+ * zero-height art box out of its `aspect-ratio` and measures its BODY alone —
+ * 94px at 192px wide. 94 + 16 sails past a floor of 40.
+ *
+ * What made that catastrophic rather than ugly is that `CardGrid` derives the
+ * rendered window from this pitch: a 94px row track makes the window twice as
+ * many rows, which mounts thirty more not-yet-laid-out tiles, which also
+ * measure 94px. The measurement decided what was measured, and React unmounted
+ * the app with error #185 after a handful of searches.
+ *
+ * So the width comes in as a REQUIRED argument rather than an optional extra: a
+ * caller that has a height to offer has a width too — they come off the same
+ * `getBoundingClientRect` — and an optional check is one a future caller
+ * silently skips. See {@link CARD_GRID_MIN_TILE_ASPECT}.
  */
 export function gridMetricsFrom(raw: {
   columns: number;
   rowHeightPx: number;
   rowGapPx: number;
+  /** The widest tile measured in the same pass as `rowHeightPx`. */
+  tileWidthPx: number;
 }): GridMetrics {
   const columns = Math.floor(raw.columns);
   const pitch = raw.rowHeightPx + raw.rowGapPx;
@@ -145,7 +167,8 @@ export function gridMetricsFrom(raw: {
     Number.isFinite(columns) &&
     columns >= 1 &&
     Number.isFinite(pitch) &&
-    pitch >= CARD_GRID_MIN_BELIEVABLE_ROW_PITCH_PX;
+    pitch >= CARD_GRID_MIN_BELIEVABLE_ROW_PITCH_PX &&
+    tileShapeIsBelievable(raw.rowHeightPx, raw.tileWidthPx);
   if (!believable) return FALLBACK_GRID_METRICS;
   return {
     columns,
@@ -153,6 +176,24 @@ export function gridMetricsFrom(raw: {
     rowGapPx: raw.rowGapPx,
     measured: true,
   };
+}
+
+/**
+ * Could a box this shape be a laid-out card tile?
+ *
+ * Exported so the thing that refuses a reading can be tested, and named, on its
+ * own — "the metrics fell back" is a symptom, "that tile was wider than it was
+ * tall, so it had not laid out" is a diagnosis.
+ *
+ * A width that is missing or nonsensical answers TRUE: this check's job is to
+ * catch a collapsed tile, and a caller with no width to offer is a different
+ * problem, already covered by the pitch floor. Answering false there would turn
+ * every DOM-free caller into a permanent fallback.
+ */
+export function tileShapeIsBelievable(rowHeightPx: number, tileWidthPx: number): boolean {
+  if (!Number.isFinite(tileWidthPx) || tileWidthPx <= 0) return true;
+  if (!Number.isFinite(rowHeightPx)) return false;
+  return rowHeightPx >= tileWidthPx * CARD_GRID_MIN_TILE_ASPECT;
 }
 
 /**

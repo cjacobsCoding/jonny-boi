@@ -13,6 +13,7 @@ import {
   FALLBACK_GRID_METRICS,
   cardGridMetricsAreMeasured,
   gridMetricsFrom,
+  tileShapeIsBelievable,
   deriveColumnCount,
   planIndices,
   planRender,
@@ -27,11 +28,17 @@ import {
   CARD_GRID_FOCUS_KEEP_ROWS,
   CARD_GRID_INITIAL_ROWS,
   CARD_GRID_MIN_BELIEVABLE_ROW_PITCH_PX,
+  CARD_GRID_MIN_TILE_ASPECT,
   CARD_GRID_OVERSCAN_ROWS,
 } from './card-grid-config.js';
 
 /** A believable desktop measurement: 6 columns of 320px tiles over a 16px gap. */
-const DESKTOP: GridMetrics = gridMetricsFrom({ columns: 6, rowHeightPx: 320, rowGapPx: 16 });
+const DESKTOP: GridMetrics = gridMetricsFrom({
+  columns: 6,
+  rowHeightPx: 320,
+  rowGapPx: 16,
+  tileWidthPx: 186,
+});
 
 describe('the measurement gate is CLOSED — an unbelievable metric reports, never widens', () => {
   it('accepts a real measurement and says it is measured', () => {
@@ -45,7 +52,7 @@ describe('the measurement gate is CLOSED — an unbelievable metric reports, nev
     // scroll offset by that and the grid is asked for tens of thousands of rows
     // — the unbounded render this system exists to prevent, arriving through
     // the back door.
-    const collapsed = gridMetricsFrom({ columns: 6, rowHeightPx: 2, rowGapPx: 0 });
+    const collapsed = gridMetricsFrom({ columns: 6, rowHeightPx: 2, rowGapPx: 0, tileWidthPx: 186 });
     expect(cardGridMetricsAreMeasured(collapsed)).toBe(false);
     expect(collapsed).toEqual(FALLBACK_GRID_METRICS);
     // Pinned against the named threshold, so moving the constant moves the test.
@@ -53,19 +60,125 @@ describe('the measurement gate is CLOSED — an unbelievable metric reports, nev
       columns: 6,
       rowHeightPx: CARD_GRID_MIN_BELIEVABLE_ROW_PITCH_PX - 1,
       rowGapPx: 0,
+      // Narrow enough that the PITCH floor is the thing being tested here, not
+      // the tile-shape rule below it.
+      tileWidthPx: 1,
     });
     expect(cardGridMetricsAreMeasured(justUnder)).toBe(false);
     const justOver = gridMetricsFrom({
       columns: 6,
       rowHeightPx: CARD_GRID_MIN_BELIEVABLE_ROW_PITCH_PX,
       rowGapPx: 0,
+      tileWidthPx: 1,
     });
     expect(cardGridMetricsAreMeasured(justOver)).toBe(true);
   });
 
   it('refuses a zero or nonsense column count', () => {
-    expect(cardGridMetricsAreMeasured(gridMetricsFrom({ columns: 0, rowHeightPx: 320, rowGapPx: 16 }))).toBe(false);
-    expect(cardGridMetricsAreMeasured(gridMetricsFrom({ columns: Number.NaN, rowHeightPx: 320, rowGapPx: 16 }))).toBe(false);
+    expect(cardGridMetricsAreMeasured(gridMetricsFrom({ columns: 0, rowHeightPx: 320, rowGapPx: 16, tileWidthPx: 186 }))).toBe(false);
+    expect(cardGridMetricsAreMeasured(gridMetricsFrom({ columns: Number.NaN, rowHeightPx: 320, rowGapPx: 16, tileWidthPx: 186 }))).toBe(false);
+  });
+});
+
+describe('a tile that has not laid out is refused — the React #185 loop', () => {
+  /*
+   * THE DEFECT. `.card-tile__art-btn` is a <button>, which is shrink-to-fit
+   * sized whatever its `display` says. Its only content was an `<img>` with no
+   * intrinsic width until it loaded, so a COLD tile's art box was 0 wide, its
+   * `aspect-ratio: 488 / 680` made it 0 TALL, and the tile measured its body
+   * alone: 94px at 192px wide.
+   *
+   * Nothing above caught that. 94 + 16 is far over the 40px pitch floor, so the
+   * grid pinned a 94px row track — and `planRender` divides the viewport by that
+   * pitch, so the window went from 5 rows to 10, mounting thirty more cold tiles
+   * that also measured 94px. The measurement chose what to measure. Each hop was
+   * a setState from a layout effect; React unmounted the app at fifty, and it
+   * took about fifteen searches to get there.
+   *
+   * The numbers below are the ones actually read out of Chrome on 2026-09-15.
+   */
+  const COLD_TILE_HEIGHT_PX = 94;
+  const LAID_OUT_TILE_HEIGHT_PX = 358.75;
+  const TILE_WIDTH_PX = 192;
+
+  it('the 94px-at-192px reading that crashed the browser is not believed', () => {
+    const cold = gridMetricsFrom({
+      columns: 6,
+      rowHeightPx: COLD_TILE_HEIGHT_PX,
+      rowGapPx: 16,
+      tileWidthPx: TILE_WIDTH_PX,
+    });
+    expect(cardGridMetricsAreMeasured(cold)).toBe(false);
+    expect(cold).toEqual(FALLBACK_GRID_METRICS);
+    // And it is NOT the pitch floor that catches it — that floor passes this
+    // reading. Without the shape rule the check could not fail.
+    expect(COLD_TILE_HEIGHT_PX + 16).toBeGreaterThan(CARD_GRID_MIN_BELIEVABLE_ROW_PITCH_PX);
+  });
+
+  it('the same tile once it HAS laid out is believed', () => {
+    const warm = gridMetricsFrom({
+      columns: 6,
+      rowHeightPx: LAID_OUT_TILE_HEIGHT_PX,
+      rowGapPx: 16,
+      tileWidthPx: TILE_WIDTH_PX,
+    });
+    expect(cardGridMetricsAreMeasured(warm)).toBe(true);
+    expect(warm.rowHeightPx).toBe(LAID_OUT_TILE_HEIGHT_PX);
+  });
+
+  it('the rule is the named ratio, so moving the constant moves the test', () => {
+    const width = 200;
+    expect(tileShapeIsBelievable(width * CARD_GRID_MIN_TILE_ASPECT, width)).toBe(true);
+    expect(tileShapeIsBelievable(width * CARD_GRID_MIN_TILE_ASPECT - 0.01, width)).toBe(false);
+  });
+
+  it('a phone column is still portrait, so the rule does not fire on a real phone', () => {
+    // 375px / 2 columns of 140px-min tracks: a ~165px tile, art 165 x 680/488
+    // = 230, plus a ~92px body. Narrower than desktop and still far past 1:1.
+    const phone = gridMetricsFrom({ columns: 2, rowHeightPx: 322, rowGapPx: 12, tileWidthPx: 165 });
+    expect(cardGridMetricsAreMeasured(phone)).toBe(true);
+  });
+
+  it('no width to offer is not a failed measurement — DOM-free callers still work', () => {
+    // Answering false here would make every server render and every test a
+    // permanent fallback, which is a different bug wearing this fix's clothes.
+    expect(tileShapeIsBelievable(320, 0)).toBe(true);
+    expect(tileShapeIsBelievable(320, Number.NaN)).toBe(true);
+  });
+
+  it('THE LOOP ITSELF: a cold reading must not widen the window', () => {
+    // The mechanism, in one assertion. Feed planRender the cold pitch and the
+    // laid-out pitch at the same viewport and the cold one renders strictly
+    // more rows — that is the feedback edge. Because the cold metrics are
+    // refused above, the grid never plans from them.
+    const viewportPx = 800;
+    const cold = gridMetricsFrom({
+      columns: 6,
+      rowHeightPx: COLD_TILE_HEIGHT_PX,
+      rowGapPx: 16,
+      tileWidthPx: TILE_WIDTH_PX,
+    });
+    const warm = gridMetricsFrom({
+      columns: 6,
+      rowHeightPx: LAID_OUT_TILE_HEIGHT_PX,
+      rowGapPx: 16,
+      tileWidthPx: TILE_WIDTH_PX,
+    });
+    const rendered = (metrics: GridMetrics): number =>
+      planRender({ itemCount: 5_651, metrics, scrollTopPx: 0, viewportPx }).renderedCount;
+    // If the cold metrics had been believed, the raw pitch would have rendered
+    // twice the tiles. Shown explicitly so the claim is not taken on trust.
+    const unguarded = planRender({
+      itemCount: 5_651,
+      metrics: { columns: 6, rowHeightPx: COLD_TILE_HEIGHT_PX, rowGapPx: 16, measured: true },
+      scrollTopPx: 0,
+      viewportPx,
+    });
+    expect(unguarded.renderedCount).toBeGreaterThan(rendered(warm));
+    // Guarded, the cold reading is the fallback, which renders a first
+    // screenful — never a window sized from a collapsed tile.
+    expect(cardGridMetricsAreMeasured(cold)).toBe(false);
+    expect(rendered(cold)).toBeLessThan(unguarded.renderedCount);
   });
 });
 
@@ -276,7 +389,7 @@ describe('the padding stands in for the rows that are not rendered', () => {
   it('the plan carries the column count it was computed with', () => {
     const plan = planRender({ itemCount: 20_000, metrics: DESKTOP, scrollTopPx: 0, viewportPx });
     expect(plan.columns).toBe(DESKTOP.columns);
-    const narrow = gridMetricsFrom({ columns: 2, rowHeightPx: 260, rowGapPx: 12 });
+    const narrow = gridMetricsFrom({ columns: 2, rowHeightPx: 260, rowGapPx: 12, tileWidthPx: 165 });
     expect(planRender({ itemCount: 20_000, metrics: narrow, scrollTopPx: 0, viewportPx }).columns).toBe(2);
   });
 

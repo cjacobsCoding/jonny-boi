@@ -292,7 +292,7 @@ const ENTRIES = {
   hexproofFrom: {
     term: 'Hexproof from',
     kind: 'keyword',
-    rule: '702.11',
+    rule: '702.11e',
     flag: 'hexproofFrom',
     text: 'Your opponents cannot target it with spells or abilities of the named quality. Only ONE of protection’s four rules, and only against opponents: their black removal cannot aim at a creature with hexproof from black, but their black board wipe still kills it, their black creature can still block it, and you can still target it yourself.',
     aliases: ['hexproof from'],

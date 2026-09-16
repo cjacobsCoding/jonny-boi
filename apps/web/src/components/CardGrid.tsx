@@ -102,7 +102,16 @@ interface CardGridProps {
  */
 export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): ReactElement {
   const gridRef = useRef<HTMLDivElement | null>(null);
-  const [metrics, setMetrics] = useState<GridMetrics>(FALLBACK_GRID_METRICS);
+  // ⚠️ THE MEASURED METRICS ARE NOT STATE, AND THAT IS THE FIX FOR #185.
+  //
+  // They were, and nothing ever read them: `syncInner` derives the next plan
+  // from the measurement it just took, not from a previous render's metrics.
+  // The only thing the state did was re-run the layout effect that had just set
+  // it, which re-measured a window that had changed BECAUSE it was set, which
+  // set it again — a `setState` per hop, every one of them scheduled from
+  // inside React's commit phase. React caps nested updates at fifty and
+  // unmounts the tree; a handful of searches got there. The measurement now
+  // lands in one place, `plan`, and reaches the debug dump through `debugRef`.
   const [plan, setPlan] = useState<RenderPlan>(() =>
     planRender({
       itemCount: cards.length,
@@ -124,7 +133,13 @@ export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): Reac
   const watchedTilesRef = useRef<Set<Element>>(new Set());
   // What the state dump reports. A ref so the registered section closure always
   // sees the current frame rather than the one it was created in.
-  const debugRef = useRef({ plan, metrics, scrollTopPx: 0, viewportPx: 0, focusIndex: null as number | null });
+  const debugRef = useRef({
+    plan,
+    metrics: FALLBACK_GRID_METRICS as GridMetrics,
+    scrollTopPx: 0,
+    viewportPx: 0,
+    focusIndex: null as number | null,
+  });
 
   /**
    * Read the grid's real geometry and decide what to render. The ONE place that
@@ -178,6 +193,11 @@ export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): Reac
             columns,
             rowHeightPx,
             rowGapPx: Number.isFinite(rowGapPx) ? rowGapPx : 0,
+            // The width is what lets `gridMetricsFrom` refuse a tile that has
+            // not laid out. A card is portrait; a box 192px wide and 94px tall
+            // is a tile whose art box collapsed, and pinning the row track to
+            // one of those is what fed the update loop that unmounted the app.
+            tileWidthPx,
           });
 
     // The page is the scroller (the grid sits in normal flow, under a sticky
@@ -224,8 +244,23 @@ export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): Reac
     // size is dominated by the padding this component sets, so it changes for
     // reasons that have nothing to do with how tall a tile is.
     //
-    // No loop: a tile's height is its own content, never the row track we pin
-    // from it, so re-measuring cannot move what is being measured.
+    // ⚠️ THERE IS A LOOP, AND THIS COMMENT USED TO DENY IT. It said: "a tile's
+    // height is its own content, never the row track we pin from it, so
+    // re-measuring cannot move what is being measured." The first half is true
+    // and the conclusion does not follow. Re-measuring does not change a given
+    // tile's height — it changes WHICH TILES EXIST, because the pitch measured
+    // here is what `planRender` divides the viewport by. Halve the measured
+    // height and the window doubles; the new tiles are cold, measure short too,
+    // and the next pass reads a different number again.
+    //
+    // Two things stop it, and they are deliberately at different levels:
+    //   1. the reading itself is now refused when it cannot be a laid-out tile
+    //      (`gridMetricsFrom` takes the width), and the CSS that produced the
+    //      94px reading is fixed at source (`.card-tile__art-btn` has a width);
+    //   2. re-measuring is never SYNCHRONOUS with the commit that caused it —
+    //      see the layout effect below. A cycle that turns once per frame
+    //      converges visibly; one that turns inside React's commit phase hits
+    //      the nested-update limit and takes the app down.
     // EVERY rendered tile, not just the first one. The row track is pinned to
     // the TALLEST tile on screen, so watching one of them answers a different
     // question than the one being asked: a later tile growing by 3px left the
@@ -251,31 +286,44 @@ export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): Reac
       }
     }
 
+    // The measurement reaches the bug report through the ref, not through
+    // state. It is diagnostic output: nothing renders from it, so making it
+    // state only bought a re-render — and, until #185, a re-entry.
     debugRef.current = { plan: nextPlan, metrics: nextMetrics, scrollTopPx, viewportPx, focusIndex };
-    setMetrics((prev) =>
-      prev.columns === nextMetrics.columns &&
-      prev.rowHeightPx === nextMetrics.rowHeightPx &&
-      prev.rowGapPx === nextMetrics.rowGapPx &&
-      prev.measured === nextMetrics.measured
-        ? prev
-        : nextMetrics,
-    );
-    // Only re-render when the WINDOW moves. Scrolling fires continuously and a
-    // setState per pixel would spend the frame budget this change exists to
-    // save; most scroll events leave the plan identical.
+    // THE ONLY setState HERE, and only when the WINDOW moves. Scrolling fires
+    // continuously and a setState per pixel would spend the frame budget this
+    // component exists to save; most scroll events leave the plan identical.
+    //
+    // One state, one writer: whatever the measurement said is already folded
+    // into `nextPlan`, so there is no second value that can disagree with it
+    // and no second update that can re-trigger this function (rule 12).
     setPlan((prev) => (samePlan(prev, nextPlan) ? prev : nextPlan));
   }, []);
 
   // Measure before the browser paints, so the first frame's fallback metrics are
-  // corrected without a visible reflow. Re-runs when the query changes the list,
-  // and once more when the metrics themselves change — the first pass happens
-  // against the FALLBACK row height, and the corrected height can name a
-  // different window. It converges rather than loops: `sync` hands back the
-  // previous state object when nothing moved, so the second pass re-renders
-  // nothing and the effect does not fire a third time.
+  // corrected without a visible reflow. Re-runs when the query changes the list.
+  //
+  // ⚠️ THE DEPENDENCY LIST IS THE FIX. It used to carry the measured `metrics`
+  // too, on the theory that the first pass measures against the FALLBACK row
+  // height and a second pass is needed to apply the corrected one. The theory
+  // was wrong — `syncInner` derives its plan from the measurement it just took,
+  // so the corrected height is already applied by the pass that found it — and
+  // what the dependency actually bought was a guaranteed re-entry: set the
+  // metrics, re-run this effect, measure the window that setting them produced,
+  // set them again. Every hop was a `setState` from inside React's commit
+  // phase. React counts those as nested updates, resets the count only on a
+  // commit that leaves no synchronous work behind, and throws #185 at fifty;
+  // a handful of searches got there and the app unmounted.
+  //
+  // What is left is one synchronous measurement per query, which cannot feed
+  // itself because nothing it writes is in this list. A tile that changes size
+  // after it mounts — the real reason a second look is ever needed — is what
+  // the ResizeObserver below is for, and that path re-syncs through `schedule`:
+  // next animation frame, its own task, where a re-measure is not a nested
+  // update.
   useMeasureEffect(() => {
     sync();
-  }, [sync, cards, metrics]);
+  }, [sync, cards]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
