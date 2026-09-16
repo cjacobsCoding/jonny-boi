@@ -1037,6 +1037,15 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
    */
   delayedTriggerCreated: 'delayed-trigger',
   delayedTriggerFired: 'delayed-trigger',
+  /*
+   * §3.153 — the DURATION-SCOPED half ("until your next turn"). Deliberately
+   * NOT a witness for `delayed-trigger`: expiring is what a duration-scoped
+   * ability does INSTEAD of firing, so counting it would let a game that never
+   * once fired a delayed ability claim the mechanic. `null` is the honest
+   * classification — this event proves a lifetime ended, which nothing else in
+   * the soak is asking about yet.
+   */
+  delayedTriggerExpired: null,
   triggerTargetsChosen: 'trigger-targets',
   controlChanged: 'control-change',
   damagePrevented: 'damage-prevention',
