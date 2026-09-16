@@ -1246,6 +1246,31 @@ export function isTrivialChoice(choice: PendingChoice): boolean {
 export const LARGEST_LEGAL_LIBRARY = 100;
 
 /**
+ * Effect refs one iteration of the longest shipped iterative body costs.
+ *
+ * TWO, and the reason is a rule rather than an accident: a parked question
+ * re-runs its effect ref from the top, so a body that mutates and THEN asks does
+ * its mutation twice. Primal Surge exiles a card and then asks about that card,
+ * which is exactly that shape — so it exiles in one ref and asks in a second.
+ */
+const REFS_PER_ITERATION = 2;
+
+/**
+ * Headroom above the iteration itself, for the sentences printed around it.
+ *
+ * ⚠️ SMALL ON PURPOSE, AND THE MEASUREMENT SAYS WHY. The ceilings below used to
+ * be `4 * LARGEST_LEGAL_LIBRARY`, chosen as "comfortably generous" with nothing
+ * measured behind the 4. It is not free: `expanded-pool.test.ts`'s whole-pool
+ * game runs every pool card, and the pool contains resolutions that ask in long
+ * loops (a copy mirror, a big storm count). Every one of them now runs to the
+ * ceiling instead of the old 32, so the ceiling is a direct multiplier on that
+ * test — measured at **21.6 min with the old 32 against >54 min at 400, on the
+ * same tree**. A ceiling is a budget somebody actually spends; pick the smallest
+ * one that is still correct for the printed card, not the roundest one.
+ */
+const RESOLUTION_SLACK = 16;
+
+/**
  * A hard ceiling on how many EFFECT STEPS one resolution may run.
  *
  * ⚠️ THIS EXISTS BECAUSE THE OTHER CEILING COULD NOT SEE THE RUNAWAY IT WAS FOR.
@@ -1260,12 +1285,17 @@ export const LARGEST_LEGAL_LIBRARY = 100;
  * It is a GUARD AGAINST AN AUTHORING MISTAKE, never the termination argument.
  * A printed iteration terminates because its body consumes a finite zone; the
  * card's own rule is what stops it, and this stops a body whose rule is wrong.
- * So it is set well above any legal library rather than tuned to a card, and
- * tripping it ABANDONS THE RESOLUTION WITH AN EVENT — a silent cap would make an
+ * Tripping it ABANDONS THE RESOLUTION WITH AN EVENT — a silent cap would make an
  * iterative card play weaker than printed, which biases an A/B verdict exactly
  * as badly as playing stronger (§1a).
+ *
+ * DERIVED, not picked: the longest shipped iterative body spends
+ * {@link REFS_PER_ITERATION} refs per library card (Primal Surge exiles in one
+ * ref and asks about the exiled card in a second — see `iterative-primitives.ts`
+ * for why that split is required), plus slack for the sentences around the loop.
  */
-export const MAX_EFFECT_STEPS_PER_RESOLUTION = 4 * LARGEST_LEGAL_LIBRARY;
+export const MAX_EFFECT_STEPS_PER_RESOLUTION =
+  REFS_PER_ITERATION * LARGEST_LEGAL_LIBRARY + RESOLUTION_SLACK;
 
 /**
  * A hard ceiling on how many questions ONE resolution may ask. A primitive with a
@@ -1281,11 +1311,22 @@ export const MAX_EFFECT_STEPS_PER_RESOLUTION = 4 * LARGEST_LEGAL_LIBRARY;
  * card would have stopped early and played WEAKER than printed while every test
  * stayed green.
  *
- * Derived from {@link MAX_EFFECT_STEPS_PER_RESOLUTION} rather than picked again,
- * because a step may ask at most one question and the two are one fact: *how
- * long may a single resolution run before the engine calls it a runaway.*
+ * ⚠️ AND IT IS NOT FREE TO RAISE, which the first version of this change missed.
+ * Only SOME of the resolutions that reach a ceiling are runaways; the rest are
+ * real cards doing real work, and the pool has resolutions that ask in long
+ * loops. Raising 32 → 400 more than doubled `expanded-pool.test.ts`'s whole-pool
+ * game (21.6 min → >54 min on the same tree), because every such resolution now
+ * runs 12.5× further before being cut off. Lowering it back is not the answer —
+ * at 32 those cards were being TRUNCATED, i.e. played weaker than printed, which
+ * is the defect this section exists to fix. The answer is the SMALLEST correct
+ * value: one ask per library card is what the printed card can need, so that
+ * plus {@link RESOLUTION_SLACK} is what it gets.
+ *
+ * Not simply {@link MAX_EFFECT_STEPS_PER_RESOLUTION}: a step may ask at most one
+ * question, but an iteration costs {@link REFS_PER_ITERATION} steps per ask, so
+ * equating them would buy a factor of two nobody asked for.
  */
-export const MAX_CHOICES_PER_RESOLUTION = MAX_EFFECT_STEPS_PER_RESOLUTION;
+export const MAX_CHOICES_PER_RESOLUTION = LARGEST_LEGAL_LIBRARY + RESOLUTION_SLACK;
 
 // --- answer enumeration (the AI / legal-action seam) ------------------------------
 
