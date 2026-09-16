@@ -59,7 +59,12 @@ import type { EffectRef } from './card.js';
 import type { GameEvent } from './events.js';
 import type { InstanceId, PlayerId } from './state.js';
 import type { PendingTrigger, TriggerCondition, TriggeredAbility, TriggerSubject } from './triggers.js';
-import { conditionMatches, triggeringPlayerFor } from './triggers.js';
+import {
+  conditionMatches,
+  firesPerTriggeringInstance,
+  triggeringInstancesFor,
+  triggeringPlayerFor,
+} from './triggers.js';
 
 /**
  * One delayed triggered ability, waiting for its moment.
@@ -311,15 +316,30 @@ export function pendingFromDelayed(
   record: DelayedTriggeredAbility,
   event: GameEvent,
   subject?: TriggerSubject,
-): PendingTrigger {
-  const triggeringPlayer = triggeringPlayerFor(record.ability.condition, event, subject);
-  return {
+): readonly PendingTrigger[] {
+  const condition = record.ability.condition;
+  const triggeringPlayer = triggeringPlayerFor(condition, event, subject);
+  // §3.153 — WHICH OBJECTS the event was about, and the per-object fan-out, both
+  // read from `triggers.ts` rather than re-derived here.
+  //
+  // ⚠️ This used to return ONE pending with no `triggeringInstances` at all,
+  // which is a silent half of the machinery: an ordinary printed trigger
+  // watching a per-attacker event fans out and carries its attacker, and the
+  // identical ability installed as a DELAYED one did neither. So Jace's +1 put
+  // an ability on the stack whose body had no object to act on and shrank
+  // nothing — green everywhere, because nothing was testing a delayed ability
+  // that watches an object.
+  const triggering = triggeringInstancesFor(condition, event, record.sourceInstanceId);
+  const base = {
     sourceInstanceId: record.sourceInstanceId,
     controller: record.controller,
     ability: record.ability,
     abilityIndex: 0,
     ...(triggeringPlayer !== undefined ? { triggeringPlayer } : {}),
   };
+  if (triggering === undefined) return [base];
+  if (!firesPerTriggeringInstance(condition.on)) return [{ ...base, triggeringInstances: triggering }];
+  return triggering.map((id) => ({ ...base, triggeringInstances: [id] }));
 }
 
 /** The answer when nothing is scheduled for removal. Shared and frozen. */

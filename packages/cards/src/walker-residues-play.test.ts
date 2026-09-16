@@ -467,7 +467,7 @@ describe('Jace, Architect of Thought — the landed clauses, played', () => {
       {
         kind: 'declareAttackers',
         player: 'B',
-        attackers: [{ instanceId: one.instanceId }, { instanceId: two.instanceId }],
+        attackers: [one.instanceId, two.instanceId],
       },
       reg,
     );

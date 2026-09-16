@@ -1027,28 +1027,8 @@ export function matchTriggers(
   const subjectOf = (): TriggerSubject | undefined => {
     if (!subjectResolved) {
       subjectResolved = true;
-      subject = resolveSubject
-        ? event.type === 'zoneChange' || event.type === 'spellCast'
-          ? resolveSubject(event.instanceId)
-          : // A damage event's subject is the DAMAGING object (the group
-            // combat-damage trigger reads its controller and creatureness).
-            event.type === 'damageDealt' && typeof event.source === 'number'
-            ? resolveSubject(event.source)
-            : // An attack declaration's subject is the FIRST attacker. CR 506.3
-              // lets only the active player declare attackers, so one
-              // declaration has exactly one controller and the first answers for
-              // all of them — which is what the per-attacker `creatureAttacks`
-              // trigger (§3.153) reads its `who` against.
-              //
-              // Exalted's "a creature you control attacks ALONE" (§3.107) reads
-              // the same value and is unaffected: its own case tests
-              // `attackers.length !== 1` before looking at the subject at all,
-              // so widening this from the lone-attacker case cannot make it fire
-              // on a multi-creature attack.
-              event.type === 'attackersDeclared' && event.attackers.length > 0
-              ? resolveSubject(event.attackers[0] as InstanceId)
-              : undefined
-        : undefined;
+      const id = resolveSubject === undefined ? undefined : subjectInstanceOf(event);
+      subject = id === undefined ? undefined : resolveSubject!(id);
     }
     return subject;
   };
@@ -1142,6 +1122,43 @@ export function matchTriggers(
  * by `matchTriggers` to fan a match out — so a kind added here is a row, and a
  * kind not here keeps the one-declaration-one-fire rule of CR 509.1h.
  */
+/**
+ * WHICH OBJECT an event's SUBJECT is — the one answer to "whose instance do I
+ * look up for this event", shared by the battlefield collector and the DELAYED
+ * one (§3.153).
+ *
+ * It was inlined in `matchTriggers` and the delayed collector carried its own
+ * two-event version of it. They disagreed, and the disagreement was silent: a
+ * delayed ability watching an attack declaration got `undefined`, its matcher
+ * refused, and the ability simply never fired with nothing anywhere reporting.
+ * One function is what stops the two collectors answering this differently
+ * again (rule 12).
+ *
+ * ⚠️ An attack declaration's subject is the FIRST attacker, and that is exact
+ * rather than a shortcut: CR 506.3 lets only the active player declare
+ * attackers, so one declaration has exactly one controller. Exalted's "attacks
+ * ALONE" (§3.107) reads the same value and is unaffected — its own case tests
+ * `attackers.length !== 1` before looking at the subject at all.
+ */
+export function subjectInstanceOf(event: GameEvent): InstanceId | undefined {
+  if (event.type === 'zoneChange' || event.type === 'spellCast') return event.instanceId;
+  // A damage event's subject is the DAMAGING object (the group combat-damage
+  // trigger reads its controller and creatureness).
+  if (event.type === 'damageDealt' && typeof event.source === 'number') return event.source;
+  if (event.type === 'attackersDeclared' && event.attackers.length > 0) {
+    return event.attackers[0] as InstanceId;
+  }
+  return undefined;
+}
+
+/**
+ * Whether this condition kind fires once per triggering OBJECT rather than once
+ * per event — read by both collectors, for the reason above.
+ */
+export function firesPerTriggeringInstance(on: TriggerEvent): boolean {
+  return FIRES_PER_TRIGGERING_INSTANCE.has(on);
+}
+
 const FIRES_PER_TRIGGERING_INSTANCE: ReadonlySet<TriggerEvent> = new Set<TriggerEvent>([
   'becomesBlockedByCreature',
   // §3.153 — "whenever A CREATURE an opponent controls attacks" fires once per
