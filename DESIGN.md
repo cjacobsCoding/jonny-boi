@@ -3462,6 +3462,41 @@ All five restored verbatim from `origin/main`. **`git merge` reported no conflic
 (And `git show` hands you LF while the working tree is CRLF, so splice with matched endings or the
 repair silently no-ops — it did, once, here.)
 
+#### 3b. The gate, derived from the final diff
+
+```
+npm run build                       exit 0   (unpiped; 4 GB heap — it OOMs at 134 under the
+                                              default while other lanes build. A box limit.)
+vitest packages/core                exit 0   100 files / 1,406 tests, 0 Worker exited
+vitest packages/cards packages/ai   exit 0   173 files / 23,015 tests, 0 Worker exited, 0 skipped
+  -> cards+core combined            218 files / 23,839 tests  vs main's 217 / 23,825
+     = +1 file / +14 tests, exactly this lane's one new test file
+vitest sim/loop-runaway + loop-draw  exit 0  2 files / 9 tests  (NOT in the diff; run because
+                                              they own the "this game cannot end" class)
+```
+
+`packages/ai` is in that list because **registering a primitive is a change to `ai` whether or not
+`ai` appears in the diff**: `effect-value-parity.test.ts` quantifies over the primitive registry, so
+three new primitives make it red until they are priced or ledgered. That file's own §3.154 row
+records the lane that learned this the other way — its gate was derived from its own diff, `ai` was
+not in it, and the red reached `main`. The three rows added here are ledgered rather than priced,
+because what each is worth is a function of card ORDER in a library: pricing them off the real order
+would make the pilot play as though it had seen the top of a deck (§3.30), and pricing them off
+anything else is a guess the parity test would then bless with a green checkmark. Each row names
+what goes blind meanwhile and how to price it honestly later.
+
+⚠️ **That red only appeared after the merge repair, because the merge had DELETED the test file.**
+A deleted guard is a green suite — which is the same lesson as §3a, arriving from the other side.
+
+**Throughput**, three runs a side with rebuilds between: `origin/main` 95.3 / 106 / 102 games/sec,
+this branch 92.5 / 93.9 / 101. Overlapping, on a box this repo has already measured swinging 20 g/s
+on identical code — so **no measurable regression, and no speedup claimed**. Outcomes are
+**byte-identical on both sides**: 97/320 = 30.3%, rows 17·14·19·7·8·10·17·5, 1 timeout draw.
+
+**The rule-7 number**: `expanded-pool.test.ts`'s whole-pool game ran **20.1 and 30.5 min** on the
+final tree against **21.6 min measured at main's own ceiling** — overlapping and load-dominated. The
+two intermediate designs measured >54 min and >105 min. Parity restored, not traded away.
+
 #### 4. Left REPORTED, with numbers
 
 42 of the 44 still report, and the reason is the measurement rather than a shelf: **23 of the 38

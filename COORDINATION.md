@@ -3,7 +3,8 @@
   32,341-card corpus; this lane's seven sources reverted with `git show origin/main:<path>` and both
   trees rebuilt in between; the diff both ways names exactly those two and nothing else).
   Worktree `D:/Cool Stuff/Claude/jb-repeat`, forked from `origin/main` `40f4227`. **NOT PUSHED** —
-  the brief forbade `git push`; the branch is local in that worktree, four commits.
+  the brief forbade `git push`; the branch is local in that worktree, **16 commits**, merged with
+  `origin/main` `ea9342a`.
   **NEW `packages/cards/scripts/repeat-blame.mjs`** — the ninth blame tool. 44 cards print "repeat",
   all 44 blocked, **38 clauses / 38 shapes = 1.00 per shape**: the §3.120 artifact at its FLOOR for
   the second time. ⚠️ **There is no iteration row in `UNSUPPORTED_HINTS` at all** — the family is
@@ -75,14 +76,30 @@
   to the sim's per-turn bound and to the soak's `gameCanEnd`. It hung the process instead of losing a
   game. §3.140's blindness one layer in; both bounds now abandon through one `abandonResolution` funnel
   and the same `choiceAbandoned` event, so no soak table or observation row needed a new entry.
-  **GATE, derived from the diff** (`git diff --name-only origin/main...HEAD | cut -d/ -f1-2 | sort -u`
-  = `packages/cards` + `packages/core`), each run separately and unpiped:
-  `packages/core` **100 files / 1402 tests, exit 0**; `packages/cards` **114 files / 18,520 tests,
-  exit 0**; combined **214 files / 19,922 tests** against **214 `*.test.ts` on disk**, `Worker exited`
-  count **0**, `skipped` **0**. `npm run build` **exit 0** (unpiped; it OOMs at exit 134 under default
-  heap while three lanes are live — `NODE_OPTIONS=--max-old-space-size=4096` fixes it, and that is a
-  BOX limit, not a code failure). Gauntlet seed 99 **97/320 = 30.3%, rows 17·14·19·7·8·10·17·5, 1
-  timeout draw — byte-identical on both sides of the change.**
+  **GATE, derived from the FINAL diff** (`git diff --name-only origin/main...HEAD | cut -d/ -f1-2 |
+  sort -u` = `packages/ai` + `packages/cards` + `packages/core`), each run separately, exit codes
+  quoted, nothing piped:
+  · `npm run build` **exit 0** (unpiped; it OOMs at exit 134 under default heap while other lanes
+    build — `NODE_OPTIONS=--max-old-space-size=4096` fixes it. A BOX limit, not a code failure.)
+  · `vitest packages/core` **exit 0 — 100 files / 1,406 tests**, 0 `Worker exited`, 100 == 100
+    `*.test.ts` on disk.
+  · `vitest packages/cards packages/ai` **exit 0 — 173 files / 23,015 tests**, 0 `Worker exited`,
+    0 skipped.
+  · combined `cards`+`core` = **218 files / 23,839 tests** against main's baseline of **217 /
+    23,825** — **+1 file / +14 tests, which is exactly this lane's one new test file.**
+  · `packages/sim` is NOT in the diff, but `loop-runaway.test.ts` + `loop-draw.test.ts` own the
+    "this game cannot end" class this lane touched, so they were run anyway: **exit 0, 2 files / 9
+    tests.** The two pre-existing soak failures main carries were not re-run and are **NOT CHECKED**
+    by this lane.
+  **THROUGHPUT** (`sim -- gauntlet "Mono-Red Aggro" --games 40 --seed 99`), three runs each side,
+  interleaved with rebuilds: `origin/main` **95.3 / 106 / 102 games/sec**, this branch **92.5 / 93.9
+  / 101**. Ranges overlap and this box is known to swing 20 g/s on identical code, so: **no
+  measurable regression, and no speedup claimed.** Outcomes **byte-identical on both sides** —
+  97/320 = 30.3%, rows 17·14·19·7·8·10·17·5, 1 timeout draw.
+  **AND THE ONE THAT MATTERS FOR RULE 7**: `expanded-pool.test.ts`, the whole-pool game, ran
+  **20.1 and 30.5 min** on the final tree against **21.6 min measured at main's own ceiling** —
+  overlapping and load-dominated. The intermediate designs were >54 min and >105 min. Parity is
+  restored, not traded away.
   ⚠️ **Two traps this lane paid for twice, worth the next agent's ten seconds:**
   (1) `git checkout -- <path>` restores to the last COMMIT, not to the pre-sabotage working tree. It
   silently deleted an uncommitted export mid-falsification, and the test then failed with "undefined
