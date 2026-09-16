@@ -9937,6 +9937,94 @@ it tested DRAWING a block rather than making one. Fixed by sharing the hotseat's
 real BLOCKED combat and photographs the damage blooming on the online board while the status still
 reads *Combat Damage*.
 
+### 3.155 The mass until-end-of-turn MODIFICATION — the compiler had the grant and no mass pump at all — ✅ done
+
+> ⚠️ **Renumbered once already.** This lane forked when §3.152 was the tail and claimed §3.153; by the
+> time it merged, `main` had taken **both §3.153 and §3.154**, so it moved to §3.155 — the third
+> renumber in this wave (§3.151 → §3.152 was the first). Several lanes are live in `rules.ts`, so the
+> integrator may have to move it again.
+
+Acceptance card: **Craterhoof Behemoth** — one of the five names still blocking *Tamiyo + Jace Surge*
+(`docs/ALL-CARDS-CAMPAIGN.md` §7a) — `When ~ enters, creatures you control gain trample and get
++X/+X until end of turn, where X is the number of creatures you control.`
+
+#### The re-blame was right, and the card was cheaper than its row
+
+§7b item 3 predicted this one: *"two cards may be cheaper than their row says, because §3.149 already
+landed."* Compiling the card before scoping it showed exactly ONE refusal —
+
+```
+BLOCKED [a rules template the compiler does not recognize yet]:
+  "When ~ enters, creatures you control gain trample and get +X/+X until end of turn,
+   where X is the number of creatures you control."
+```
+
+— and `'creatures you control': 'creaturesYouControl'` was **already a row of `NAMED_DERIVED_COUNTS`**.
+Nothing about the derived count, the where-X binding, the trigger, or the keyword grant needed
+building. The whole residue was that **`pumpUntilEndOfTurn` is single-target and there was no mass
+form of it**: the compiler could say *"creatures you control gain indestructible"* and could not say
+*"creatures you control get +3/+3"* — Overrun, printed in 1998, had no rule.
+
+#### The row named the wrong half for the seventh time, and split the family across 22 rows
+
+`masspump-blame.mjs` takes the family by TEXT: **560 cards** print a mass until-end-of-turn
+modification. Of the still-blocked half, the largest rows were *"a static-buff template"* (123) and
+the generic *"a rules template"* catch-all (108) — **Craterhoof and Overrun, one printed family, in
+two different rows** — with the remainder scattered over **twenty more**. §8a item 3 again, and §7c
+item 5 again: selecting this family by hint would have measured the wrong set in both directions.
+
+#### What shipped
+
+- **`MASS_EOT_MODIFICATIONS`** — the four printed ORDERS as a closed table (`gain KW and get +P/+T`,
+  `get +P/+T and gain KW`, the pump alone, the grant alone). The next order is a ROW. Rows that match
+  but cannot parse FALL THROUGH, because "gain trample and get +X/+X" also matches the grant-only row.
+- **`mass-modify-yours-until-eot`** supersedes the narrower `mass-grant-keyword-until-eot`, which
+  became one row of that table.
+- **`grantKeywordToYoursUntilEndOfTurn`** gains the P/T half, so it is now ONE primitive answering
+  *"which permanents does an untargeted until-end-of-turn modification reach, and what does it do to
+  them"* — emitting ONE continuous effect per permanent carrying both halves, and writing each half
+  only when the card prints it, so every mass grant in the shipped pool emits exactly the record it
+  always did.
+
+#### ⚠️ The rename was written, tested, and REVERTED — and the order matters
+
+The honest name is `modifyYoursUntilEndOfTurn`; a pump-only card now compiles to a primitive whose
+name says only *"grantKeyword"*. Renaming it is **one line and forty red tests**: the shipped pool is
+GENERATED DATA spelling the old id in tens of places, and `compile.test.ts` and `fidelity.test.ts`
+compare the compiler's output against it **ref by ref**. A pool refresh was in flight and
+`packages/cards/data/` was off-limits to this lane, so the rename was reverted rather than shipped
+red. **It must land in the same change as a regeneration, never before it.** The full
+`packages/cards` gate is what caught this — a targeted run of the new suite was green throughout.
+
+#### ⚠️ §1a — the guard runs in BOTH directions
+
+The pattern is anchored at the noun, so **"OTHER creatures you control"** (Umaro), **"ATTACKING
+creatures you control"** (Tourach's Gate) and **"Dinosaurs you control"** (Huatli) do not match, and
+**Pathbreaker Ibex** — whose *"where X is the greatest power among creatures you control"* has no row
+in `DERIVED_COUNTS` — still reports. Each is a printed set NARROWER than the pattern would reach, and
+each is pinned by a test that fails if it ever quietly starts compiling.
+
+#### Measured
+
+**+104 cards, 0 lost**, set-diffed (`playable-set.mjs`) over the 32,341-card corpus
+(md5 `718eae40bfdbfa5ae3db5adbc1590c88`) against the post-merge fork point `4d22e3b`:
+**6,936 → 7,040**. ⚠️ **Pre-merge the same measurement read +105** — `main` had won one
+of those cards by another route in the meantime, so the smaller number is the true one (§8a
+item 1), and re-measuring AFTER the merge rather than carrying the figure across it is the
+only reason that is known.
+Gauntlet at seed 99 **identical on both trees** — `97/320 = 30.3%`, rows `17·14·19·7·8·10·17·5` — which
+is what says the change moved no game outcome. Four sabotages were each taken RED and restored.
+
+**Left REPORTED, with numbers** (re-measured on the merged tree): **560 cards print this family by
+TEXT**, 131 compile, and **255 are still sole-blocked by a family clause** — of which **344
+clause-refusals are NOT-PROBEABLE** — the mass clause sits inside a line that refuses for another reason
+entirely (113 a trigger prefix, 74 an activation cost, 59 an ability word, 34 a kicked/conditional
+prefix, 23 a modal bullet). That is not mass-modification work; it is the wrappers. Genuinely in this
+family and left: **21 NOUN** (subtypes and "other"/"attacking" — a deliberate refusal, not a gap),
+**7 KEYWORD**, **5 AMOUNT** (`devotion`, `greatest power among` — count vocabulary, not this family),
+**1 ORDER-or-SENTENCE**. The row this family was supposed to live in holds 123 of it; the rest is
+scattered over **21 other rows**, which is §8a item 3 for the eleventh time.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

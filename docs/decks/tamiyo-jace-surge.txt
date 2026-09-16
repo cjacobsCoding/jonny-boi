@@ -10,12 +10,17 @@
 2 Fog Bank                     // ✅ compiles — §3.151 (damage prevention)
 2 Gatecreeper Vine
 2 Soul of the Harvest
-2 Craterhoof Behemoth          // ✅ compiles — §3.155 (mass modification)
+2 Craterhoof Behemoth          // ✅ compiles — §3.155 (mass until-end-of-turn modification)
+                               //    ⚠️ NOT YET IN THE SHIPPED POOL: §3.155 landed after the last
+                               //    regeneration and was forbidden to run another. The next
+                               //    regeneration brings it in — and must add 'Craterhoof Behemoth'
+                               //    to DECK_CARDS in apps/web/scripts/verify-deck-cards-reachable.mjs,
+                               //    where absent-becoming-present is the discriminator.
 
 3 Jace, Architect of Thought   // ✗ not in pool — §3.154 landed +1 and −2; only the −8's cross-seat free cast is left
 2 Tamiyo, the Moon Sage        // ✅ compiles — §3.154 (all three abilities, played end to end)
 2 Gilded Lotus
-2 Primal Surge                 // ✅ compiles — §3.156 (iterative effects)
+2 Primal Surge                 // ✗ not in pool
 
 10 Forest
 4 Hinterland Harbor
