@@ -527,6 +527,29 @@ button {
   all: unset;
   cursor: pointer;
   display: block;
+  /* ⚠️ AND THE WIDTH IS LOAD-BEARING — it is what stops the tile collapsing to
+     94px, which is what took the whole card browser down with React #185.
+
+     A `<button>` is SHRINK-TO-FIT sized whatever its `display` is, so this one's
+     used width is the max-content of its only child: `.card-tile__art`, an
+     empty box whose height comes from `aspect-ratio: 488 / 680`, holding an
+     `<img>` at `width: 100%`. A lazy image contributes no intrinsic width until
+     it has loaded, so max-content is 0 -> the art box is 0 wide -> its
+     aspect-ratio makes it 0 TALL -> a cold tile measures its body alone (94px)
+     instead of 359px, and jumps when the image arrives.
+
+     That is not only a layout jump. `CardGrid` pins the row track to the
+     tallest rendered tile and derives from that pitch which rows to render, so a
+     94px reading doubles the window, mounts thirty more cold tiles that also
+     read 94px, and feeds itself. Every query re-cold-started that cycle;
+     React's nested-update counter reached its limit after a handful of searches
+     and unmounted the app. `verify-card-search-stability.mjs` is the guard.
+
+     The same shape is already documented on the play surfaces — see
+     `ability-prompts.css`, "a `.card-face` with no width inside an auto-height
+     button has nothing for its `aspect-ratio` to work from". This tile was the
+     copy nobody had looked at. */
+  width: 100%;
 }
 
 .card-tile__img {
