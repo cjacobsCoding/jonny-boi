@@ -258,7 +258,7 @@ blank art; an index ahead of the pool offers cards the engine will not play.
 | --- | ---: | ---: | ---: |
 | `origin/main` | 5,651 | 5,651 | 5,651 |
 | `origin/fix/pool-refresh-3147` | 6,323 | 6,323 | 6,323 |
-| **`feat/pool-refresh-wave5`** ✅ **SHIPPED** | **6,914** | **6,914** | **6,914** |
+| **`feat/pool-refresh-wave5`** ✅ **SHIPPED** | **6,944** | **6,944** | **6,944** |
 
 The middle row was a **complete and internally consistent** regeneration — all three artifacts in
 step — plus four soak-defect fixes that took a wider pool from **754 violations to 4**. The session
@@ -272,16 +272,16 @@ and an audit that can only compare settled states reads the engine's own `zoneCh
 
 **The last row is the delivery.** Regenerated from the freshest corpus on disk (32,414 paper
 non-joke cards), offline throughout, carrying BOTH of the above (the four committed soak fixes and
-the fifth salvaged one) plus the counters hand-off. `6,914 = 6,882 compiled + 32 curated`; the
-report reads 6,882 accepted / 25,500 rejected of 32,414 candidates, 0 unresolved. **+1,263 cards
+the fifth salvaged one) plus the counters hand-off. `6,944 = 6,912 compiled + 32 curated`; the
+report reads 6,912 accepted / 25,470 rejected of 32,414 candidates, 0 unresolved. **+1,293 cards
 that a player can now find**, where before they were compiled, tested, green and invisible.
 
 Measured as a SET on the fixed measuring stick (`corpus-fixed.json`, 32,341, md5 `718eae40…`), with
 the compiler sources reverted to `main` in between so both sides are the same question:
 
 ```
-BEFORE  main 0dbfc9d     6,904 complete / 32,341
-AFTER   this branch      6,902 complete / 32,341
+BEFORE  main bf18f79     6,934 complete / 32,341
+AFTER   this branch      6,932 complete / 32,341
 LOST    Big Play · Miraculous Recovery        GAINED  none
 ```
 
@@ -294,8 +294,8 @@ set-diff exists to prove.
 
 | deck | distinct cards in pool | physical copies | still blocked |
 | --- | --- | --- | --- |
-| `acidic-angels.txt` | 20 / 22 | **59 / 65 — 90.8%** | Fiendslayer Paladin · Rhox Faithmender |
-| `defender-ramp.txt` | 11 / 17 | **34 / 49 — 69.4%** | Axebane Guardian · Fog Bank · Craterhoof Behemoth · Jace · Tamiyo · Primal Surge |
+| `acidic-angels.txt` | **22 / 22** | **65 / 65 — 100%** | — **COMPLETE** |
+| `defender-ramp.txt` | 12 / 17 | **36 / 49 — 73.5%** | Axebane Guardian · Craterhoof Behemoth · Jace · Tamiyo · Primal Surge |
 
 The only absences are the eight §7a already documents as blocked — two evidenced NO-GOs and six
 unstarted. No card went missing that the board did not already predict.
@@ -312,11 +312,13 @@ lagging the engine — not one was a card defect, and not one was fixed by shrin
 | `paired-arms`, `effect-value-parity` | four primitives from recent lanes unclassified/unpriced | 1 priced (`exileTargetCardFromGraveyard` — **Scavenging Ooze's payoff was invisible to the pilot**), 3 ledgered with reasons |
 | soak runaway ×12 | **all 12** contain Basalt Monolith cycling `{T}: Add {C}{C}{C}` against `{3}: Untap` for zero net mana | REPORTED — `fix/pilot-repeatable-noop` owns it |
 | card browser | React #185 (max update depth) after several searches in a row | REPORTED — reproduces on the 5,651 pool too, so not the refresh |
+| `masking.test.ts` | a bounced creature leaves its Auras' `attachedTo` pointing at it, so the masked view names a card now in HAND — `Towering Indrik`, seat B **and a spectator** | REPORTED — transient (one action), and `unattachDependentsOf` is the intended fix, **exported and never called** |
 
-**Soak violations: 64 → 12.** The 12 are the Basalt Monolith loop, named above.
+**Soak violations: 64 → 12 → 4** (the last drop came with the merged main). The 4 are the Basalt
+Monolith loop, named above.
 
 ⚠️ **§1a's other direction is now guarded.** `stronger-than-printed.test.ts` asserts every keyword
-flag a pool card carries appears in its own printed text — **6,914 of 6,914 checked, 0 not checked,
+flag a pool card carries appears in its own printed text — **6,944 of 6,944 checked, 0 not checked,
 0 overreaching**. Watched going red on real data (giving the real Grizzly Bears `flying` fails it).
 Its evidence table is CLOSED, which immediately found eight keyword flags nothing had ever checked.
 
