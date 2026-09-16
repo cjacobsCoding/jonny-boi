@@ -13,20 +13,35 @@
  *
  * ## Where the row list came from (rule 11 — derive it, don't remember it)
  *
- * Two measured sources, unioned on 2026-09-11:
+ * Two measured sources, unioned on 2026-09-11 and re-measured on 2026-09-15
+ * against the refreshed pool:
  *
  *  1. **The engine's vocabulary** — every key of `KeywordFlags`
- *     (`packages/core/src/card.ts`), 36 of them. {@link KEYWORD_FLAG_GLOSSARY}
+ *     (`packages/core/src/card.ts`). {@link KEYWORD_FLAG_GLOSSARY}
  *     is a MAPPED TYPE over that interface, so adding a keyword to core stops
  *     `tsc` until this file names the row explaining it — the same default-deny
  *     shape as core's own `KEYWORD_LIST_IS_EXHAUSTIVE` and `KEYWORD_RULES`, and
  *     `keyword-glossary.test.ts` re-derives the key list from `card.ts` so the
  *     gap is also loud in a plain `vitest run`.
  *  2. **What the pool actually prints** — the `keywords` array Scryfall supplies
- *     for each of the 5,651 cards in `apps/web/src/data/card-index.json`: 85
- *     distinct terms. The test re-derives that count from the JSON rather than
- *     trusting this comment, and fails on any term that resolves to nothing and
- *     is not listed in {@link POOL_TERMS_WITHOUT_GLOSSARY}.
+ *     for each card in `apps/web/src/data/card-index.json`. The test and
+ *     `apps/web/scripts/check-glossary-coverage.mjs` both re-derive that list
+ *     from the JSON rather than trusting any count written here, and fail on any
+ *     term that resolves to nothing and is not listed in
+ *     {@link POOL_TERMS_WITHOUT_GLOSSARY}. ⚠️ Deliberately no card count in this
+ *     sentence: the previous version said "5,651 cards, 85 distinct terms", the
+ *     pool refresh took it to 6,944 cards and 129 terms, and a doc-comment number
+ *     nothing re-derives is a bug with a blast radius (CLAUDE.md).
+ *
+ * ## When the coverage gap is caught
+ *
+ * The 44-term gap this file closed on 2026-09-15 opened when the pool was
+ * REGENERATED and was only visible much later, to whoever next ran the `apps/web`
+ * suite. {@link unexplainedPoolTerms} is now the single answer to "does every
+ * printed keyword resolve?", and `build-card-index.mjs` calls it through
+ * `check-glossary-coverage.mjs` as part of regenerating (and of `--check`, which
+ * `npm run verify` runs) — so the person who grows the pool is told in the same
+ * command, instead of the guard firing on a stranger three branches downstream.
  *
  * ## Why most rows carry no CR number
  *
@@ -501,6 +516,129 @@ const ENTRIES = {
     kind: 'keyword',
     text: 'When this Equipment enters, it makes a 0/0 black Phyrexian Germ token and attaches itself to it. The Germ is only alive because of what the Equipment gives it, so moving the Equipment off kills it.',
   },
+  blitz: {
+    term: 'Blitz',
+    kind: 'keyword',
+    text: 'An alternative cost you may pay as you cast the creature. It arrives with haste and “when this creature dies, draw a card”, and you sacrifice it at the beginning of the next end step — so it buys one hasty swing and a card, never a permanent you keep.',
+  },
+  dash: {
+    term: 'Dash',
+    kind: 'keyword',
+    text: 'An alternative cost you may pay as you cast the creature. It has haste, and it returns to your HAND at the beginning of the next end step — so unlike blitz it survives, and you may dash it again next turn.',
+  },
+  evoke: {
+    term: 'Evoke',
+    kind: 'keyword',
+    text: 'A cheaper alternative cost. Pay it and the creature is sacrificed the moment it enters — but its “when this enters” trigger is already on the stack by then, so you buy the effect and give up the body.',
+  },
+  surge: {
+    term: 'Surge',
+    kind: 'keyword',
+    text: 'A cheaper alternative cost you may pay only if you or a teammate has ALREADY cast another spell this turn. An opponent’s spell never turns it on, so in a two-player game it is your own earlier spell or nothing.',
+  },
+  escape: {
+    term: 'Escape',
+    kind: 'keyword',
+    text: 'You may cast it from your GRAVEYARD for its escape cost, which also requires exiling the stated number of OTHER cards from your graveyard. Those exiled cards are the real price; the card itself returns to the graveyard afterwards and can escape again.',
+  },
+  retrace: {
+    term: 'Retrace',
+    kind: 'keyword',
+    text: 'You may cast it from your GRAVEYARD by discarding a land card in addition to its normal cost. It goes back to the graveyard afterwards, so it is repeatable for as long as you have lands to throw away.',
+  },
+  jumpStart: {
+    term: 'Jump-start',
+    kind: 'keyword',
+    text: 'You may cast it from your GRAVEYARD by discarding a card in addition to its normal cost, and it is exiled afterwards. Flashback that charges a card instead of a different mana cost — and, like flashback, it works exactly once.',
+  },
+  foretell: {
+    term: 'Foretell',
+    kind: 'keyword',
+    text: 'During YOUR turn you may pay {2} and exile it from your hand face down. On a LATER turn you may cast it from exile for its foretell cost. It hides the card and splits the price across two turns; you cannot foretell and cast it on the same turn.',
+  },
+  plot: {
+    term: 'Plot',
+    kind: 'keyword',
+    text: 'At sorcery speed you may pay its plot cost and exile it from your hand. On a LATER turn you cast it from exile for FREE. You pay the whole price up front, unlike foretell — and nothing counts down, unlike suspend. It simply waits.',
+  },
+  prototype: {
+    term: 'Prototype',
+    kind: 'keyword',
+    text: 'You may cast it as a smaller version for the printed prototype cost: that mana cost, that colour, that power and toughness. Name, types, abilities and text are unchanged, so it is one card with two sizes rather than two different cards.',
+  },
+  warp: {
+    term: 'Warp',
+    kind: 'keyword',
+    text: 'You may cast it from your hand for its cheaper warp cost. It is exiled at the beginning of the next end step, and you may cast it from exile normally on a later turn. Warping is a loan of the card for one turn, not a discount on keeping it.',
+  },
+  entwine: {
+    term: 'Entwine',
+    kind: 'keyword',
+    text: 'On a modal spell, pay the entwine cost on top of its normal cost and you choose ALL of its modes instead of the printed number. It is still one spell resolving once, and the modes happen in their printed order.',
+  },
+
+  // --- used from hand or graveyard: the card itself is never CAST ----------
+  // Every row here is an ACTIVATED ability of a card outside the battlefield.
+  // The distinction is the one a player gets wrong: none of these is a spell, so
+  // none can be answered by "counter target spell", and none triggers anything
+  // that watches for a cast.
+  channel: {
+    term: 'Channel',
+    kind: 'keyword',
+    text: 'An ability of the card while it is in your HAND: pay the channel cost, discard it, get the effect. You never cast the card, so a counterspell cannot answer it — and the card itself never reaches the battlefield.',
+  },
+  bloodrush: {
+    term: 'Bloodrush',
+    kind: 'keyword',
+    text: 'An ability of the creature card while it is in your HAND: pay the cost, discard it, and an ATTACKING creature gets the printed bonus until end of turn. The creature is never cast, so it cannot be countered and its body never arrives.',
+  },
+  transmute: {
+    term: 'Transmute',
+    kind: 'keyword',
+    text: 'An ability of the card while it is in your HAND: pay the transmute cost, discard it, and search your library for a card with the SAME mana value. Sorcery speed, and the card found goes to your hand — neither card is cast.',
+  },
+  embalm: {
+    term: 'Embalm',
+    kind: 'keyword',
+    text: 'Pay the embalm cost and exile the card from your GRAVEYARD to create a token copy of it that is a white Zombie with no mana cost. Sorcery speed. The card is gone for good, and the token dies to everything the original would.',
+  },
+  eternalize: {
+    term: 'Eternalize',
+    kind: 'keyword',
+    text: 'Pay the eternalize cost and exile the card from your GRAVEYARD to create a token copy that is a 4/4 black Zombie with no mana cost. Embalm, except the token is always 4/4 whatever the printed size was.',
+  },
+  encore: {
+    term: 'Encore',
+    kind: 'keyword',
+    text: 'Pay the encore cost and exile the card from your GRAVEYARD to get one hasty token copy PER OPPONENT, each attacking that opponent this turn if able. They are sacrificed at the beginning of the next end step, so it buys one attack, not a board.',
+  },
+  scavenge: {
+    term: 'Scavenge',
+    kind: 'keyword',
+    text: 'Pay the scavenge cost and exile the creature card from your GRAVEYARD to put that many +1/+1 counters on target creature, the number being the exiled card’s POWER. Sorcery speed, and the card never comes back — you are spending it for counters.',
+  },
+  unearth: {
+    term: 'Unearth',
+    kind: 'keyword',
+    text: 'Pay the unearth cost to return the creature from your GRAVEYARD to the battlefield with haste. It is exiled at the beginning of the next end step — or the instant it would leave the battlefield — so you get one turn and cannot blink it away to keep it.',
+  },
+
+  // --- cast triggers: they resolve BEFORE the spell that made them ---------
+  cascade: {
+    term: 'Cascade',
+    kind: 'keyword',
+    text: 'When you CAST it, exile cards off the top of your library until you hit a nonland card that costs less, and you may cast that one for free; the rest go to the bottom in a random order. The trigger resolves before the cascade spell itself, so the free spell happens first.',
+  },
+  storm: {
+    term: 'Storm',
+    kind: 'keyword',
+    text: 'When you CAST it, you get a copy for every spell cast before it this turn by ANY player, and each copy may choose new targets. The copies are put onto the stack, not cast, so they do not add to anyone else’s storm count.',
+  },
+  ripple: {
+    term: 'Ripple',
+    kind: 'keyword',
+    text: 'When you CAST it, you may reveal the top N cards of your library and cast any with the SAME NAME for free; the rest go to the bottom. Only same-name cards qualify, so a single copy of the card in your deck ripples into nothing.',
+  },
 
   // --- cost reduction ------------------------------------------------------
   convoke: {
@@ -555,6 +693,71 @@ const ENTRIES = {
     kind: 'keyword',
     text: 'The card has NO color, whatever mana symbols are printed on its cost. It is still cast with that colored mana; it just is not that color for anything that cares.',
   },
+  afterlife: {
+    term: 'Afterlife',
+    kind: 'keyword',
+    text: 'When the creature DIES, you get that many 1/1 white and black Spirit tokens with flying. Dying is the only trigger — exiled, bounced or turned into something else, you get nothing.',
+  },
+  backup: {
+    term: 'Backup',
+    kind: 'keyword',
+    text: 'When it enters, put that many +1/+1 counters on target creature. Point it at something OTHER than itself and that creature also gains the abilities printed under backup until end of turn; point it at itself and you get only the counters, because it already has those abilities.',
+  },
+  bloodthirst: {
+    term: 'Bloodthirst',
+    kind: 'keyword',
+    text: 'If an opponent was dealt damage this turn, the creature enters with that many +1/+1 counters. It is checked as it arrives, so the damage has to have happened FIRST — and any damage counts, not just combat damage.',
+  },
+  dethrone: {
+    term: 'Dethrone',
+    kind: 'keyword',
+    text: 'Whenever it ATTACKS the player with the most life, or tied for the most, put a +1/+1 counter on it. The check happens when attackers are declared, so life totals changing later in the turn make no difference.',
+  },
+  devour: {
+    term: 'Devour',
+    kind: 'keyword',
+    text: 'As the creature enters you may sacrifice any number of creatures, and it arrives with the printed number of +1/+1 counters FOR EACH one sacrificed. They are eaten as it enters, so they never share the battlefield with it and their death triggers still fire.',
+  },
+  evolve: {
+    term: 'Evolve',
+    kind: 'keyword',
+    text: 'Whenever another creature you control enters with GREATER power or GREATER toughness than this one, put a +1/+1 counter on this one. Beating either stat is enough; matching it is not, and each counter raises the bar for the next creature.',
+  },
+  fabricate: {
+    term: 'Fabricate',
+    kind: 'keyword',
+    text: 'When it enters, choose ONE: that many +1/+1 counters on it, or that many 1/1 colorless Servo artifact creature tokens. Never both — the choice is made when the trigger resolves, not when you cast it.',
+  },
+  modular: {
+    term: 'Modular',
+    kind: 'keyword',
+    text: 'It enters with that many +1/+1 counters, and when it DIES you may move the counters it had onto target artifact creature. The counters move rather than being recreated, so whatever it actually died with is what carries on.',
+  },
+  outlast: {
+    term: 'Outlast',
+    kind: 'keyword',
+    text: 'Pay the outlast cost and TAP the creature to put a +1/+1 counter on it. Sorcery speed only, and tapping is part of the cost — so each turn you are choosing between growing it and attacking with it.',
+  },
+  renown: {
+    term: 'Renown',
+    kind: 'keyword',
+    text: 'The first time it deals COMBAT damage to a player it gets that many +1/+1 counters and becomes renowned. Once only: a renowned creature that connects again gets nothing, and damage dealt to a creature never counts.',
+  },
+  riot: {
+    term: 'Riot',
+    kind: 'keyword',
+    text: 'As it enters, YOU choose: a +1/+1 counter, or haste. Never both, and the choice is made as it arrives on the battlefield rather than as you cast it.',
+  },
+  undying: {
+    term: 'Undying',
+    kind: 'keyword',
+    text: 'When it DIES, if it had no +1/+1 counter on it, it returns to the battlefield with one. That counter is what stops the loop — the second death finds a counter already there. Persist is the same trick with -1/-1.',
+  },
+  unleash: {
+    term: 'Unleash',
+    kind: 'keyword',
+    text: 'You may have it enter with a +1/+1 counter. While it has one it CANNOT BLOCK. The choice is made once, as it enters, and removing the counter later is the only way to get a blocker back.',
+  },
 
   // --- ability words (CR 207.2c — no rules meaning of their own) ------------
   landfall: {
@@ -581,6 +784,11 @@ const ENTRIES = {
     term: 'Alliance',
     kind: 'abilityWord',
     text: 'Flavour text for "whenever another creature you control enters the battlefield". The word itself does nothing; the ability after it does.',
+  },
+  undergrowth: {
+    term: 'Undergrowth',
+    kind: 'abilityWord',
+    text: 'Flavour text for "the number of creature cards in your graveyard". The word itself does nothing; the ability after the dash counts them, and it counts them when it RESOLVES, not when it triggered.',
   },
 
   // --- keyword actions (CR 701) --------------------------------------------
@@ -618,6 +826,31 @@ const ENTRIES = {
     term: 'Transform',
     kind: 'action',
     text: 'Turn a double-faced permanent over so its other face is up. It is the SAME permanent throughout — auras, counters, damage and summoning sickness all stay exactly as they were.',
+  },
+  amass: {
+    term: 'Amass',
+    kind: 'action',
+    text: 'Put that many +1/+1 counters on an Army you control — and if you control none, first create a 0/0 black Army token to put them on. However many times you amass you still have ONE Army; the counters pile onto the same creature.',
+  },
+  bolster: {
+    term: 'Bolster',
+    kind: 'action',
+    text: 'Put that many +1/+1 counters on the creature you control with the LEAST toughness; you pick if several are tied. It does not target, so hexproof and shroud cannot stop it — and it can never hit an opponent’s creature.',
+  },
+  explore: {
+    term: 'Explore',
+    kind: 'action',
+    text: 'Reveal the top card of your library. A land goes to your hand. Anything else puts a +1/+1 counter on the exploring creature, and then YOU decide whether that card stays on top or goes to the graveyard.',
+  },
+  learn: {
+    term: 'Learn',
+    kind: 'action',
+    text: 'Choose one: reveal a Lesson card you own from OUTSIDE the game and put it in your hand, discard a card and draw a card, or do nothing. Doing nothing is a legal choice — and with no Lessons available the rummage is usually the only other one.',
+  },
+  populate: {
+    term: 'Populate',
+    kind: 'action',
+    text: 'Create a token that is a copy of a creature TOKEN you control, your choice which. It copies tokens only, never a real card, so populating with no creature token on the battlefield does nothing at all.',
   },
 
   // --- predefined tokens (CR 111.10) ---------------------------------------
@@ -835,4 +1068,30 @@ export const POOL_TERMS_WITHOUT_GLOSSARY: Readonly<Record<string, string>> = Obj
   Double:
     'Scryfall tags damage-DOUBLING replacement effects ("it deals double that damage instead") with this. It is not a keyword — there is no word on the card for a player to hover — and writing a glossary row for the bare verb "double" would explain something that does not exist.',
   Triple: 'The same, for damage-tripling effects. See "Double".',
+  Heal: 'A Scryfall tag, not a printed ability: regeneration\'s reminder text ends "…and heal all damage on it", and the tagger picks the verb up out of it. All 10 cards in the pool tagged "Heal" are also tagged "Regenerate", and none prints the word "Heal" anywhere a player could hover — the hoverable word is Regenerate, which has its own row.',
+  Jump: 'A Scryfall tag produced by the hyphen in "Jump-start": all 6 cards in the pool tagged "Jump" are also tagged "Jump-start", and none prints a bare "Jump" ability. (The 1994 card literally NAMED Jump carries no keywords at all.) A row here would explain a keyword that does not exist; the hoverable word is Jump-start.',
 });
+
+/**
+ * Every printed term that would render with NO tooltip — the coverage question,
+ * answered in ONE place (rule 12).
+ *
+ * ⚠️ Two very different callers ask it, and they used to ask it separately:
+ * `keyword-glossary.test.ts`, which runs when somebody runs the `apps/web`
+ * suite, and `apps/web/scripts/check-glossary-coverage.mjs`, which runs the
+ * moment the card index is regenerated. The gap this repo actually shipped
+ * (44 printed keywords with no row) opened at regeneration time and was only
+ * visible at test time, on another branch, days later. Both callers now run this
+ * function over the real table, so neither can drift from the other and the
+ * loud one fires FIRST.
+ *
+ * Returns the offending terms sorted, so the message is stable and diffable.
+ */
+export function unexplainedPoolTerms(printedTerms: Iterable<string>): readonly string[] {
+  return [...new Set(printedTerms)]
+    .filter(
+      (term) =>
+        glossaryEntry(term) === undefined && POOL_TERMS_WITHOUT_GLOSSARY[term] === undefined,
+    )
+    .sort();
+}
