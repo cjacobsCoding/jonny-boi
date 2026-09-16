@@ -119,6 +119,7 @@ import { TRIGGER_COPY_PRIMITIVES } from './trigger-copy-primitives.js';
 import { BLINK_PRIMITIVES } from './blink-primitives.js';
 import { COUNTER_KEYWORD_PRIMITIVES } from './counter-keyword-primitives.js';
 import { SPELL_COUNT_PRIMITIVES } from './spell-count-primitives.js';
+import { WALKER_RESIDUE_PRIMITIVES } from './walker-residue-primitives.js';
 
 // --- the primitives ------------------------------------------------------------
 
@@ -2112,6 +2113,11 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   // a card from among them into your hand", doubling power, and the
   // reveal-the-top-card draw.
   ...SPELL_COUNT_PRIMITIVES,
+  // §3.154 — the walker-residue bodies (`./walker-residue-primitives`): the
+  // card a graveyard trigger was about, and the pile split an OPPONENT makes
+  // over a revealed set. Its own module because both act on an object the
+  // resolution never targeted.
+  ...WALKER_RESIDUE_PRIMITIVES,
 });
 
 /** The set of primitive ids this package provides (for validation). */

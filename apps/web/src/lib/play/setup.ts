@@ -12,7 +12,14 @@
  */
 import { createGame, type EngineResult } from '@jonny-boi/core';
 import { buildRegistry, loadCardPool, type CardPool } from '@jonny-boi/cards';
-import { loadDeck, validateDeck, type Deck as SimDeck } from '@jonny-boi/sim';
+import {
+  DEFAULT_DECK_RULES,
+  loadDeck,
+  ownerDeckRules,
+  validateDeck,
+  type Deck as SimDeck,
+  type DeckRules,
+} from '@jonny-boi/sim';
 import type { Deck as WebDeck } from '../deck.js';
 import { toSimPayload } from '../sim-format.js';
 import { importedCard, importedDefinitions, subscribeToImportedCards } from '../decklist/importedCards.js';
@@ -55,16 +62,60 @@ export function invalidateHotseatPool(): void {
 // one subscription keeps them in step for the life of the page.
 subscribeToImportedCards(invalidateHotseatPool);
 
-/** A deck the player picked for a seat: either one of their saved decks or a sample. */
+/**
+ * A deck the player picked for a seat: one of their saved decks, a bundled
+ * gauntlet sample, or one of the owner's bundled PAPER decks.
+ *
+ * `owner` is its own member rather than another `sample` because the two are
+ * judged by different legality rules — see {@link DECK_CHOICE_RULES}.
+ */
 export type DeckChoice =
   | { readonly source: 'saved'; readonly deck: WebDeck }
-  | { readonly source: 'sample'; readonly deck: SimDeck };
+  | { readonly source: 'sample'; readonly deck: SimDeck }
+  | { readonly source: 'owner'; readonly deck: SimDeck };
 
 /** Resolve a deck choice to the sim's `Deck` shape (the loader's input). */
 export function toSimDeck(choice: DeckChoice): SimDeck {
-  if (choice.source === 'sample') return choice.deck;
+  if (choice.source === 'sample' || choice.source === 'owner') return choice.deck;
   // A saved web deck → sim payload (cardId = Scryfall UUID, resolved by the pool).
   return toSimPayload(choice.deck) as SimDeck;
+}
+
+/**
+ * WHICH LEGALITY RULES EACH KIND OF DECK IS JUDGED BY — a closed table, so a new
+ * kind of deck is a row rather than a branch grown at every validation site
+ * (CLAUDE.md rule 2).
+ *
+ * ⚠️ The `owner` row is the interesting one, and it is a different QUESTION
+ * rather than a relaxation. A constructed deck is legal at ≥ 60 cards because 60
+ * is the floor a player may build to. A paper deck has already been built — it
+ * is sitting in a box — so the only thing worth asking is whether the app can
+ * deal out the thing that exists. `ownerDeckRules` therefore sets the minimum to
+ * the deck's OWN transcribed size: Acidic Angels is 59 cards and complete at 59,
+ * while a 65-card list that resolves to 44 still refuses, by name, for every
+ * card the pool cannot supply. It cannot be gamed into passing a short deck —
+ * the minimum is derived from the transcription, never chosen.
+ *
+ * The 4-of limit and the basic-land exemption are identical for every row.
+ */
+const DECK_CHOICE_RULES: Readonly<
+  Record<DeckChoice['source'], (choice: DeckChoice) => DeckRules>
+> = Object.freeze({
+  saved: () => DEFAULT_DECK_RULES,
+  sample: () => DEFAULT_DECK_RULES,
+  owner: (choice) => ownerDeckRules(toSimDeck(choice)),
+});
+
+/** The legality rules this choice is judged by. Closed: an unknown source reports. */
+export function rulesForChoice(choice: DeckChoice): DeckRules {
+  const row = DECK_CHOICE_RULES[choice.source];
+  if (!row) {
+    throw new Error(
+      `Unknown deck choice source "${String(choice.source)}" — add a row to ` +
+        `DECK_CHOICE_RULES rather than defaulting it.`,
+    );
+  }
+  return row(choice);
 }
 
 /** The display name of a deck choice. */
@@ -77,7 +128,7 @@ export function deckChoiceName(choice: DeckChoice): string {
  * the player's imported ones. Empty array = legal.
  */
 export function validateChoice(choice: DeckChoice): string[] {
-  return validateDeck(toSimDeck(choice), hotseatPool());
+  return validateDeck(toSimDeck(choice), hotseatPool(), rulesForChoice(choice));
 }
 
 let cachedCuratedPool: CardPool | null = null;
@@ -102,6 +153,12 @@ function curatedOnlyPool(): CardPool {
  * way to look it up — the store knows the name even when the curated pool does not.
  */
 export function validateChoiceForOnline(choice: DeckChoice): string[] {
+  // ⚠️ DEFAULT rules, on purpose, even for a paper deck. The SERVER rebuilds the
+  // deck from its own curated pool and applies its own legality check, so the
+  // only useful answer here is the server's answer. Saying yes to a 59-card
+  // paper deck locally and having the server refuse it with `invalidDeck` is a
+  // worse failure than refusing it here, because it happens later and further
+  // away — the same reasoning that made this function exist at all.
   return validateDeck(toSimDeck(choice), curatedOnlyPool()).map(explainOnlineProblem);
 }
 
@@ -157,8 +214,10 @@ export function startHotseatGame(setup: HotseatSetup): { ok: true; game: Started
 
   const pool = hotseatPool();
   const registry = buildRegistry();
-  const loadedA = loadDeck(toSimDeck(setup.choiceA), pool);
-  const loadedB = loadDeck(toSimDeck(setup.choiceB), pool);
+  // Same rules the validation above used — loading with a different rule set
+  // than we validated with is how a "ready" setup throws on Start.
+  const loadedA = loadDeck(toSimDeck(setup.choiceA), pool, rulesForChoice(setup.choiceA));
+  const loadedB = loadDeck(toSimDeck(setup.choiceB), pool, rulesForChoice(setup.choiceB));
 
   const created = createGame({
     seed: setup.seed,

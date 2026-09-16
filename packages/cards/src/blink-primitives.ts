@@ -22,7 +22,7 @@
  * do" for destroy, bounce, reanimate and fetch. A third opinion is how the funnels
  * drift, and `effect-helpers.ts` carries a scar comment about exactly that.
  *
- * ⚠️ What the funnels canNOT answer, and why `blinkOne` says three more things.
+ * ⚠️ What the funnels canNOT answer, and why `blinkOne` says two more things.
  * The returned card keeps its INSTANCE ID (a blink is not a new card, and every
  * id-keyed reference in the state has to stay sound). Three rules in this engine
  * were enforced purely by an id no longer being on the battlefield — removal from
@@ -31,7 +31,13 @@
  * back before any of them can look. So the second and third bullets above were,
  * until §3.43, quietly false: a blinked attacker still connected for its damage,
  * an Aura stayed on a creature it had never enchanted, and a Giant Growth came
- * back with it. See `blinkOne`.
+ * back with it.
+ *
+ * The ATTACHMENT one is no longer blink's to say: `movePermanentTo` now breaks
+ * every dependent link on the way out, for every leave path, because a
+ * battlefield permanent left naming a card that has moved to a hand is a
+ * hidden-information leak whether or not the id comes back. Blink still owes the
+ * other two. See `blinkOne`.
  *
  * ⚠️ Immediate return ONLY. "Return it at the beginning of the next end step"
  * (Flickerwisp, Eerie Interlude, Ghostway) is a DELAYED trigger, which the engine
@@ -43,7 +49,6 @@ import {
   dropContinuousEffectsFor,
   isLegalTarget,
   removeFromCombat,
-  unattachDependentsOf,
   type CardInstance,
   type EffectContext,
   type EffectPrimitive,
@@ -82,15 +87,19 @@ function blinkOne(ctx: EffectContext, permanent: CardInstance): CardInstance | u
   // the board it left — the same ordering `ceaseToExistIfToken` relies on.
   //   - CR 506.4: it is removed from combat. Without this a blinked attacker
   //     still connects for full damage AND returns untapped.
-  //   - CR 400.7 + 704.5m/n: Auras and Equipment were attached to the OBJECT
-  //     that left, not to the one coming back. Only the link is broken here;
-  //     the state-based actions decide what each attachment does about it.
   //   - CR 400.7 again: a floating continuous effect applied to that object, so
   //     a Giant Growth does not follow it back — and neither does a "gain
   //     control until end of turn", which is precisely what makes blinking a
   //     stolen creature keep it (see the `controller` option below).
+  //   - CR 400.7 + 704.5m/n: the Auras and Equipment it was wearing were
+  //     attached to the OBJECT that left, not to the one coming back. That one
+  //     is NOT said here any more: `movePermanentTo` above breaks every
+  //     dependent link itself, at the same point and through the same core
+  //     helper (`unattachDependentsOf`), because leaving a battlefield permanent
+  //     naming a card that has moved to a hand is a hidden-information leak on
+  //     every leave path, not only on a blink. Two calls would be two answers to
+  //     one question; this is the same rule, one funnel up.
   removeFromCombat(ctx.state.combat, id);
-  unattachDependentsOf(ctx.state, id, ctx.emit);
   dropContinuousEffectsFor(ctx.state, id);
   // "…return that card to the battlefield under ITS OWNER'S control"
   // (Teleportation Circle) vs "…under YOUR control" (Cloudshift, Thassa). The

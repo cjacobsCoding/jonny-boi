@@ -24,6 +24,7 @@ import type {
   PlayerId,
   DerivedCountName,
   DerivedCountScope,
+  PermanentStateFilter,
   SpellStackObject,
   TargetRestriction,
 } from '@jonny-boi/core';
@@ -49,6 +50,7 @@ import {
   spellCanBeCountered,
   spellLeaveDestination,
   TARGET_RESTRICTION_PARAM,
+  unattachDependentsOf,
 } from '@jonny-boi/core';
 
 // --- param reading (typed, defaulted — no magic numbers leak in) ---------------
@@ -94,6 +96,30 @@ export interface DerivedValue {
   readonly filter?: CardFilter;
   /** Whose permanents the filtered count reaches. Defaults to `'you'`. */
   readonly scope?: DerivedCountScope;
+  /**
+   * WHOSE SEAT {@link scope} is read from — the SUBJECT-PLAYER axis, and the
+   * thing "for each tapped creature **target player** controls" (Tamiyo, the
+   * Moon Sage's −2) needs that no scope can express.
+   *
+   * `scope` and `subject` are different questions and compose: `scope` is the
+   * printed relative tail, `subject` is the player it is relative to. "Creatures
+   * you control" is `scope: 'you'` from the CONTROLLER's seat; "creatures target
+   * player controls" is `scope: 'you'` from the TARGET's seat. Collapsing the
+   * two — reading a printed "target player" as `'opponents'` — is a DIFFERENT
+   * CARD the moment its controller aims it at themselves, which Tamiyo may.
+   *
+   * The words are {@link playersForParam}'s, not a second vocabulary: one table
+   * answers "which player does this happen to" for a draw, a life change and now
+   * a count. Absent means the controller — what every count meant before this
+   * axis existed.
+   */
+  readonly subject?: string;
+  /**
+   * The BOARD-STATE predicate on a filtered count — "the number of **tapped**
+   * creatures …". Core's closed `PermanentStateFilter`; see it for why this is
+   * not a {@link CardFilter} field.
+   */
+  readonly permanentState?: PermanentStateFilter;
   /**
    * "+N/+N FOR EACH …" — the printed multiplier on a per-count value (rampage's
    * "+2/+2 for each creature blocking it beyond the first", DESIGN §3.107).
@@ -351,7 +377,18 @@ function countOfDerived(ctx: EffectContext, value: DerivedValue): number {
     // rather than everything — the direction that cannot play better than
     // printed. The compiler never emits one.
     if (value.filter === undefined) return 0;
-    return countPermanentsMatching(ctx.state, value.filter, value.scope ?? 'you', ctx.controller);
+    // THE SUBJECT-PLAYER AXIS. `scope` is the printed RELATIVE tail ("you
+    // control" / "an opponent controls" / "on the battlefield"); `subject` is
+    // WHOSE SEAT that tail is relative to, and the two compose: "creatures
+    // target player controls" is scope `'you'` read from the TARGET's seat.
+    //
+    // It is read through `playersForParam` — the ONE vocabulary every primitive
+    // that can happen to somebody other than its controller already shares — so
+    // "target player" cannot mean the aimed-at seat in a draw and something
+    // else in a count (rule 12). An absent subject is the controller, which is
+    // what every count written before this axis existed meant and still means.
+    const subject = playersForParam(ctx, value.subject)[0] ?? ctx.controller;
+    return countPermanentsMatching(ctx.state, value.filter, value.scope ?? 'you', subject, value.permanentState);
   }
   if (value.countOf === 'triggeringAmount') {
     // "That much" — the size of the event that set this trigger off, carried on
@@ -857,6 +894,22 @@ export function movePermanentTo(ctx: EffectContext, perm: CardInstance, to: Owne
   pruneCardGrantsFor(ctx.state, perm.instanceId);
   ctx.state.players[perm.owner][to].push(perm);
   ctx.emit({ type: 'zoneChange', instanceId: perm.instanceId, from: 'battlefield', to });
+  // CR 400.7 + 704.5m/n, the OTHER direction of the same zone change:
+  // `resetInstanceForNewZone` above cleared what this permanent pointed at, and
+  // this clears what still points AT it — the `attachedTo` on every Aura and
+  // Equipment it was wearing. Core's shared implementation, called from this
+  // funnel and from core's `moveToZone` alike, for the reason the two funnels
+  // exist at all: a rule implemented in one and not the other is a rule that
+  // depends on which primitive bounced the creature. Emitted AFTER the
+  // `zoneChange`, so leaves/dies triggers still see the board it left.
+  //
+  // Left to the state-based action alone it was a real hidden-information leak:
+  // the SBA does knock them off, but only on its next pass, and a resolution
+  // that parks a question settles first — with a battlefield permanent naming a
+  // card that has already reached a HAND, which `maskStateForSeat` ships
+  // verbatim to the opponent and to a spectator. Only the LINK is broken here;
+  // `whenIllegal` still decides the consequence, in one place.
+  unattachDependentsOf(ctx.state, perm.instanceId, ctx.emit);
   // CR 704.5d — a token that has left the battlefield ceases to exist. Core's
   // shared implementation, called AFTER the zoneChange so every "dies" trigger
   // still sees the move: this helper is the cards-side leave funnel and must
@@ -968,6 +1021,34 @@ export function millTopCards(ctx: EffectContext, who: PlayerId, amount: number):
   for (let i = 0; i < count; i++) {
     const card = player.library[0];
     if (!card) break;
+    /*
+     * §3.147 — SAY THAT THIS CARD BECAME PUBLIC, at the one mill funnel.
+     *
+     * A milled card lands face up in a graveyard, so it is public from that
+     * instant — but it need not still be there when anyone next looks. Sudden
+     * Reclamation mills three and returns one to HAND inside a single
+     * resolution, so that card is public and then hidden again with no decision
+     * boundary in between, and the observation audit — which can only compare
+     * settled states — saw its own `zoneChange` naming a card it still held as
+     * never-seen and called it a leak.
+     *
+     * Exactly the cascade/ripple shape, and it takes the same remedy for the
+     * same reason (§3.119): a reveal is how the engine says "this became
+     * public" when no observable zone change survives to prove it.
+     * `cardRevealed` fires no triggers, so this adds a fact to the log and
+     * changes no game outcome. Emitted BEFORE the move, because the scanner
+     * reads a flush in emission order.
+     *
+     * It lives HERE rather than in the two mill primitives because this is the
+     * one funnel both go through — a second copy would eventually disagree.
+     */
+    ctx.emit({
+      type: 'cardRevealed',
+      player: who,
+      instanceId: card.instanceId,
+      name: card.def.name,
+      fromZone: 'library',
+    });
     moveOwnedCard(ctx, who, card.instanceId, 'library', 'graveyard');
     milled.push(card.instanceId);
   }

@@ -114,6 +114,26 @@ export async function committedWebIndexText() {
   return text === undefined ? undefined : normalizeNewlines(text);
 }
 
+/**
+ * Everything that must still be true of the app AFTER the index changes.
+ *
+ * ⚠️ This runs here, in the generator, on purpose. A pool refresh is the only
+ * event that can add a keyword nothing explains, and the guard that noticed it
+ * used to live only in the `apps/web` Vitest suite — so the person who
+ * regenerated got a clean run and a stranger three branches later got the red.
+ * One refresh landed 1,293 cards and cost 44 keywords their tooltip that way.
+ * Fire the check where the change is made, by the person who made it.
+ *
+ * Imported lazily: `card-index.test.ts` imports this module for
+ * `projectCardIndex`, and must not pay for `esbuild` to do it.
+ */
+async function checkDownstreamOfTheIndex() {
+  const { checkGlossaryCoverage, reportGlossaryCoverage } = await import(
+    './check-glossary-coverage.mjs'
+  );
+  return reportGlossaryCoverage(await checkGlossaryCoverage());
+}
+
 async function main() {
   const checkOnly = process.argv.includes('--check');
   const expected = await expectedWebIndexText();
@@ -121,6 +141,7 @@ async function main() {
 
   if (actual === expected) {
     console.info('[card-index] up to date.');
+    if (!(await checkDownstreamOfTheIndex())) process.exitCode = 1;
     return;
   }
   if (checkOnly) {
@@ -134,6 +155,9 @@ async function main() {
   }
   await writeFile(WEB_INDEX_URL, expected, 'utf8');
   console.info(`[card-index] wrote ${fileURLToPath(WEB_INDEX_URL)}`);
+  // Deliberately AFTER the write: the new index is what the app will ship, so it
+  // is the one the coverage question has to be asked about.
+  if (!(await checkDownstreamOfTheIndex())) process.exitCode = 1;
 }
 
 // Only run the CLI when invoked directly; importing this module (the test does)

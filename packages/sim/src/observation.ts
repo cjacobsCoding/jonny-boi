@@ -266,6 +266,10 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
    */
   delayedTriggerCreated: 'public',
   delayedTriggerFired: 'public',
+  // §3.154 — public for the same reason the pair above is: a delayed ability's
+  // existence is announced to both seats, so its ending is too. Hiding it would
+  // let one seat believe an expired "until your next turn" is still in force.
+  delayedTriggerExpired: 'public',
   stackResolved: 'public',
   // Mana in a pool is open information in paper Magic, and it is the raw material
   // for the brief's §35–37 "represented mana" reasoning.
@@ -624,7 +628,22 @@ export function createObservationLeakScanner(report: (detail: string) => void): 
         // KEYS and an answer's `instanceIds` are as visible as `instanceId`.
         for (const id of instanceIdsNamedBy(observation)) {
           if (neverSeen.has(id)) {
-            report(`observation ${observation.type} names #${id}, a card the table has never seen`);
+            /*
+             * ⚠️ SAY WHICH MOVE IT WAS. This used to report only the event type
+             * and the id, and "observation zoneChange names #87" costs the next
+             * reader a full replay to learn the one thing that identifies the
+             * leak — where the card was going. A zoneChange is only projected
+             * with its id when its DESTINATION is public, so from→to is exactly
+             * the discriminator between the legitimate cases and the bug, and
+             * it is already in the observation. Same lesson the soak's rejection
+             * report learned: a true report that cannot be acted on is a bug of
+             * its own.
+             */
+            const move =
+              observation.type === 'zoneChange' && 'from' in observation && 'to' in observation
+                ? ` (${String(observation.from)} -> ${String(observation.to)})`
+                : '';
+            report(`observation ${observation.type}${move} names #${id}, a card the table has never seen`);
           }
         }
       }

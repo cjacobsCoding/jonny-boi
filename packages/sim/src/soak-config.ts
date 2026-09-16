@@ -8,7 +8,9 @@
  * legend rule, emblems, transform, modal casting, flashback + graveyard grants,
  * protection/ward, indestructible, {X}/kicker, cycling/buyback/madness,
  * scry/surveil, counters, characteristic-defining P/T, turn facts and the
- * mana-ability model — and the pool went 191 → 357 cards. Every one of them was
+ * mana-ability model — and the pool went 191 → 357 cards AT THE TIME (it is far
+ * larger now; this sentence is the history that motivated the soak, not a
+ * current measurement). Every one of them was
  * tested IN ISOLATION by the agent that built it. Almost none were tested
  * TOGETHER. The gauntlet decks in `../data/decks` are curated and small; they
  * exercise a fraction of the pool and essentially none of the collisions.
@@ -1035,6 +1037,15 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
    */
   delayedTriggerCreated: 'delayed-trigger',
   delayedTriggerFired: 'delayed-trigger',
+  /*
+   * §3.154 — the DURATION-SCOPED half ("until your next turn"). Deliberately
+   * NOT a witness for `delayed-trigger`: expiring is what a duration-scoped
+   * ability does INSTEAD of firing, so counting it would let a game that never
+   * once fired a delayed ability claim the mechanic. `null` is the honest
+   * classification — this event proves a lifetime ended, which nothing else in
+   * the soak is asking about yet.
+   */
+  delayedTriggerExpired: null,
   triggerTargetsChosen: 'trigger-targets',
   controlChanged: 'control-change',
   damagePrevented: 'damage-prevention',

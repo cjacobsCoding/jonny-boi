@@ -13,6 +13,7 @@ import { pruneCardGrantsFor } from '../card-grants.js';
 import { discardDestination } from '../madness.js';
 import { markBattlefieldEntry } from '../upkeep-costs.js';
 import { leaveBattlefieldDestination } from '../graveyard-casting.js';
+import { unattachDependentsOf } from '../attachments.js';
 
 /**
  * Find a battlefield permanent by id, or undefined.
@@ -99,6 +100,27 @@ function removeFromCurrentZone(state: GameState, inst: CardInstance): void {
  * Move an instance to a destination zone, emitting `zoneChange`. For per-player
  * destinations the card lands in the given `toPlayer` (defaults to its owner).
  * The stack is handled by the engine separately (stack objects, not raw zones).
+ *
+ * ## A LEAVING PERMANENT TAKES ITS DEPENDENTS' LINKS WITH IT
+ * The two directions of a zone change are not the same job, and this funnel owes
+ * both. `resetInstanceForNewZone` clears what the MOVING object points at; the
+ * {@link unattachDependentsOf} call below clears what still points AT it — the
+ * `attachedTo` on every Aura and Equipment that was attached to it.
+ *
+ * That used to be left entirely to the attachment state-based action, which
+ * asks "is the host still on the battlefield" and so does knock them off — but
+ * only on the NEXT pass, and `runResolution` returns without a pass while a
+ * question is parked. The state that settles in that window carries a
+ * battlefield permanent naming a card that has already reached a HAND, and
+ * `@jonny-boi/protocol`'s `maskStateForSeat` copies `state.battlefield` out
+ * verbatim, so the opponent and any spectator are told the identity of a hidden
+ * card. `packages/sim/src/masking.test.ts` caught it on a full-pool game; the
+ * guards are in `attachments.test.ts`.
+ *
+ * Only the LINK is broken here. What each attachment then DOES about it — an
+ * Aura to its owner's graveyard, an Equipment merely unattached — is still the
+ * `whenIllegal` data `internal/sba.ts` reads, so there is exactly one place
+ * that decides the consequence.
  */
 export function moveToZone(
   state: GameState,
@@ -138,6 +160,13 @@ export function moveToZone(
     if (arr) arr.push(inst);
   }
   emit({ type: 'zoneChange', instanceId: inst.instanceId, from, to: destination });
+  // AFTER the `zoneChange`, so every leaves/dies trigger still sees the board it
+  // left — the same ordering contract `ceaseToExistIfToken` relies on. Guarded on
+  // `from`, because this funnel also moves cards INTO the battlefield: an Aura
+  // sets its link while it is still a resolving spell (CR 303.4f) and then
+  // enters, and unattaching on entry would make every Aura arrive attached to
+  // nothing.
+  if (from === 'battlefield') unattachDependentsOf(state, inst.instanceId, emit);
   ceaseToExistIfToken(state, inst, emit);
 }
 

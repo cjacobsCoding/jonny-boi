@@ -59,7 +59,12 @@ import type { EffectRef } from './card.js';
 import type { GameEvent } from './events.js';
 import type { InstanceId, PlayerId } from './state.js';
 import type { PendingTrigger, TriggerCondition, TriggeredAbility, TriggerSubject } from './triggers.js';
-import { conditionMatches, triggeringPlayerFor } from './triggers.js';
+import {
+  conditionMatches,
+  firesPerTriggeringInstance,
+  triggeringInstancesFor,
+  triggeringPlayerFor,
+} from './triggers.js';
 
 /**
  * One delayed triggered ability, waiting for its moment.
@@ -126,6 +131,36 @@ export interface DelayedTriggeredAbility {
    * a new removal primitive would then be silently invisible to the pilot.
    */
   readonly removesFromBattlefield?: readonly InstanceId[];
+  /**
+   * §3.154 — a DURATION-SCOPED ability rather than a once-only one: it stays
+   * after it fires, and it is removed by {@link expiresAtTurnOf} instead.
+   *
+   * "Until your next turn, whenever a creature an opponent controls attacks, it
+   * gets -1/-0" (Jace, Architect of Thought's +1) is a THIRD lifetime beside the
+   * two this file already carries. Every ability here before it fired once and
+   * expired by being spent; this one has no fixed number of firings and expires
+   * by a MOMENT arriving.
+   *
+   * ⚠️ §1a — a delayed trigger that outlives its printed duration is the
+   * stronger-than-printed direction of the pool rule, and it is completely
+   * silent: the card simply keeps working. So the two fields are written
+   * together or not at all — {@link DelayedTriggerRequest.untilTurnOf} is the
+   * ONE field that sets both, and no caller can reach either directly.
+   * `cards/walker-residues-play.test.ts` asserts the pair over every record the
+   * compiler can produce.
+   */
+  readonly repeating?: true;
+  /**
+   * §3.154 — the ability is removed when THIS player's turn begins.
+   *
+   * "Until your next turn" is exactly "until the beginning of your next turn",
+   * and the same argument the header makes for "the NEXT end step" makes this
+   * one exact with no turn-number arithmetic: the ability is created DURING its
+   * controller's turn, so that turn's `beginTurn` has already run and the next
+   * one this record can see is the following one. The opponent's turn in between
+   * is covered, which is the whole point of the printed duration.
+   */
+  readonly expiresAtTurnOf?: PlayerId;
 }
 
 /** What a primitive supplies to create one; the id and the turn are minted here. */
@@ -138,6 +173,13 @@ export interface DelayedTriggerRequest {
   readonly sourceInstanceId: InstanceId;
   /** See {@link DelayedTriggeredAbility.removesFromBattlefield} — for the pilot. */
   readonly removesFromBattlefield?: readonly InstanceId[];
+  /**
+   * §3.154 — "until PLAYER's next turn": the ability repeats until that player's
+   * turn begins. ONE field for both halves, so a repeating ability with no
+   * expiry is not expressible at all rather than merely discouraged — the
+   * unremovable-emblem argument, applied to a lifetime.
+   */
+  readonly untilTurnOf?: PlayerId;
 }
 
 /**
@@ -163,9 +205,42 @@ export function createDelayedTrigger(state: DelayedTriggerHost, request: Delayed
     ...(request.removesFromBattlefield !== undefined && request.removesFromBattlefield.length > 0
       ? { removesFromBattlefield: request.removesFromBattlefield }
       : {}),
+    // §3.154 — the two duration fields are set TOGETHER from one request field,
+    // so a repeating ability with no expiry cannot be built by any caller.
+    ...(request.untilTurnOf !== undefined
+      ? { repeating: true as const, expiresAtTurnOf: request.untilTurnOf }
+      : {}),
   };
   (state.delayedTriggers ??= []).push(record);
   return id;
+}
+
+/**
+ * §3.154 — drop every duration-scoped delayed ability whose moment has arrived,
+ * called by `beginTurn` for the player whose turn is starting.
+ *
+ * "Until your next turn" ends AT THE BEGINNING of that turn, so the removal runs
+ * before anything in the turn can trigger — a creature attacking on your next
+ * turn must not be shrunk by an ability that expired as the turn began.
+ *
+ * Returns the removed records so the caller can log them: an ability that
+ * silently stops working is indistinguishable from one that silently keeps
+ * working, and both are the same defect from the log's point of view.
+ */
+export function expireDelayedTriggersFor(
+  state: DelayedTriggerHost,
+  player: PlayerId,
+): readonly DelayedTriggeredAbility[] {
+  const records = state.delayedTriggers;
+  if (records === undefined || records.length === 0) return NO_DELAYED_MATCHES;
+  let expired: DelayedTriggeredAbility[] | null = null;
+  for (let i = records.length - 1; i >= 0; i--) {
+    const record = records[i] as DelayedTriggeredAbility;
+    if (record.expiresAtTurnOf !== player) continue;
+    (expired ??= []).push(record);
+    records.splice(i, 1);
+  }
+  return expired ?? NO_DELAYED_MATCHES;
 }
 
 /**
@@ -241,15 +316,30 @@ export function pendingFromDelayed(
   record: DelayedTriggeredAbility,
   event: GameEvent,
   subject?: TriggerSubject,
-): PendingTrigger {
-  const triggeringPlayer = triggeringPlayerFor(record.ability.condition, event, subject);
-  return {
+): readonly PendingTrigger[] {
+  const condition = record.ability.condition;
+  const triggeringPlayer = triggeringPlayerFor(condition, event, subject);
+  // §3.154 — WHICH OBJECTS the event was about, and the per-object fan-out, both
+  // read from `triggers.ts` rather than re-derived here.
+  //
+  // ⚠️ This used to return ONE pending with no `triggeringInstances` at all,
+  // which is a silent half of the machinery: an ordinary printed trigger
+  // watching a per-attacker event fans out and carries its attacker, and the
+  // identical ability installed as a DELAYED one did neither. So Jace's +1 put
+  // an ability on the stack whose body had no object to act on and shrank
+  // nothing — green everywhere, because nothing was testing a delayed ability
+  // that watches an object.
+  const triggering = triggeringInstancesFor(condition, event, record.sourceInstanceId);
+  const base = {
     sourceInstanceId: record.sourceInstanceId,
     controller: record.controller,
     ability: record.ability,
     abilityIndex: 0,
     ...(triggeringPlayer !== undefined ? { triggeringPlayer } : {}),
   };
+  if (triggering === undefined) return [base];
+  if (!firesPerTriggeringInstance(condition.on)) return [{ ...base, triggeringInstances: triggering }];
+  return triggering.map((id) => ({ ...base, triggeringInstances: [id] }));
 }
 
 /** The answer when nothing is scheduled for removal. Shared and frozen. */
