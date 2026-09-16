@@ -451,8 +451,15 @@ describe('Jace, Architect of Thought — the landed clauses, played', () => {
     // is the printed reading; a single fire would shrink only one of them.
     const one = place(s, bear('attacker-1'), 'B');
     const two = place(s, bear('attacker-2'), 'B');
-    s = advanceToStep(s, 'declareAttackers', reg, 800);
-    while (s.activePlayer !== 'B' && !s.gameOver) s = advanceToStep(s, 'declareAttackers', reg, 800);
+    // ONE bounded pass loop, not a nested `advanceToStep` retry: that form spins
+    // forever the moment the step already matches on the wrong player's turn,
+    // and a hanging test is worse than a failing one.
+    let guard = 0;
+    while (!(s.activePlayer === 'B' && s.step === 'declareAttackers') && !s.gameOver && guard++ < 800) {
+      s = pass(s, reg);
+    }
+    expect(s.activePlayer, `never reached B's declare-attackers\n${dumpState(s)}`).toBe('B');
+    expect(s.step).toBe('declareAttackers');
     one.summoningSick = false;
     two.summoningSick = false;
     s = act(
