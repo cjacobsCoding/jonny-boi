@@ -74,7 +74,12 @@ const CARD_ANATOMY =
 /** A card mechanic no card in the shipped pool has. */
 function noCardHasIt(what: string): string {
   return (
-    `No card in the shipped pool (357 cards, ${''}\`packages/cards/src/data\`) is a ${what}. ` +
+    // No CARD COUNT here on purpose. It read "357 cards" while the shipped pool
+    // was 6,914 — the pool is generated data and this string is not, so any
+    // number written here is stale the next time the pool is regenerated. The
+    // sentence never needed the count: what it asserts is that the compiler
+    // refuses text it cannot build, which is true at every pool size.
+    `No card in the shipped pool (${''}\`packages/cards/data\`) is a ${what}. ` +
     'The compiler REFUSES text it cannot build rather than approximating it ' +
     '(UNSUPPORTED-MECHANICS.md), so an unimplemented mechanic cannot leak into a game.'
   );

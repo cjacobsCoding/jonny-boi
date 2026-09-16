@@ -7,8 +7,11 @@
  *
  * 1. **Unit rules** for the table, the scan and the ledger.
  * 2. **A POOL SWEEP** (`the real pool`) that re-measures the class on every run
- *    — 5,651 cards, every ability source, every depth — and fails if a card with
- *    a tabulated gate plus targets would still be asked in the wrong order. This
+ *    — the whole pool, every ability source, every depth — and fails if a card
+ *    with a tabulated gate plus targets would still be asked in the wrong order.
+ *    (No card count written here: it said "5,651 cards" while the pool held
+ *    6,944, and a number nothing re-derives is a bug with a blast radius. The
+ *    sweep asserts the pool size itself, from the pool.) This
  *    is the guard rule 10 demands: the previous fix was a predicate over
  *    `def.triggers` with no sweep behind it, so nothing could see the day it
  *    stopped matching.
@@ -174,13 +177,30 @@ describe('the scan looks at EVERY ability source, not just def.triggers', () => 
     expect([...fields].sort()).toEqual(Object.keys(CARD_DEFINITION_FIELD_SCAN).sort());
   });
 
-  it('enumerates a trigger, an activated ability and a spell script from the same card shape', () => {
+  it('the declared ability-source vocabulary and the real pool describe each other', () => {
     const kinds = new Set<string>();
     for (const def of pool.cards) for (const source of abilitySourcesOf(def)) kinds.add(source.kind);
-    // Every kind the enumeration declares must be reachable from the real pool,
-    // or the vocabulary is describing cards that do not exist.
+
+    // THE RULE, in both directions: the vocabulary must not declare a kind no
+    // card produces, and the scan must not produce a kind the vocabulary does
+    // not declare.
+    //
+    // ⚠️ This used to assert the FIXTURE instead — it named the three kinds that
+    // happened to be unreachable when it was written (`castTrigger`,
+    // `graveyardAbility`, `alternativeCostRider`) and demanded they stay
+    // unreachable. The pool refresh then made it fail for IMPROVING: the new
+    // cards brought in the first cascade (a cast trigger), the first
+    // embalm / eternalize / encore / unearth (graveyard abilities) and the first
+    // evoke / dash / blitz / warp (alternative-cost riders), so the unreached
+    // list emptied and a test that should have celebrated that went red. A test
+    // that fails when the thing it guards gets better is pinning a snapshot, not
+    // a rule — so it now states the rule, and it is satisfiable from here on.
     const unreached = ABILITY_SOURCE_KINDS.filter((kind) => !kinds.has(kind));
-    expect(unreached).toEqual(['castTrigger', 'graveyardAbility', 'alternativeCostRider']);
+    expect(unreached, 'the vocabulary declares a kind no pool card produces').toEqual([]);
+
+    const declared = new Set<string>(ABILITY_SOURCE_KINDS);
+    const undeclared = [...kinds].filter((kind) => !declared.has(kind)).sort();
+    expect(undeclared, 'the scan produced a kind the vocabulary does not declare').toEqual([]);
   });
 
   it('memoises per definition — this runs inside a render pass', () => {
@@ -243,6 +263,50 @@ function sweep(): readonly SweepRow[] {
   return rows;
 }
 
+/**
+ * THE NUMBER as it stood on the 5,651-card pool this sweep was first written
+ * against. Kept so the movement below can be stated as a difference rather than
+ * as a replacement.
+ */
+const CLASS_CARD_COUNT_BEFORE_THE_POOL_REFRESH = 24;
+
+/**
+ * The ten cards the 2026-09-15 pool refresh (5,651 -> 6,944) added to the
+ * "you may &lt;do X to&gt; target Y" class.
+ *
+ * MEASURED, not assumed. Every one of them was checked three ways before the
+ * number was allowed to move:
+ *
+ *  1. it prints the shape — each oracle text below is a real "you may … target"
+ *     triggered ability, quoted from the card index;
+ *  2. the sweep classifies it as `kind: 'trigger'`, `depth: 0`,
+ *     `primitive: 'mayEffects'`, which the assertions above re-check for the
+ *     whole class rather than for these ten specially;
+ *  3. it is genuinely NEW — none of the ten appears in `main`'s pool sources,
+ *     and all 24 of the previously counted cards still do. So the delta is ten
+ *     arrivals, not a reshuffle: no card left the class, and no card that was
+ *     already in the pool changed shape into it.
+ *
+ * The oracle line is written beside each one because "34" on its own is a number
+ * a future reader has to re-derive to trust.
+ */
+const CLASS_CARDS_ADDED_BY_THE_POOL_REFRESH: readonly string[] = [
+  'Beacon Hawk', // combat damage to a player: you may untap target creature
+  'Dispersal Technician', // enters: you may return target artifact to its owner's hand
+  'Festering Mummy', // dies: you may put a -1/-1 counter on target creature
+  'Foundation Breaker', // enters: you may destroy target artifact or enchantment
+  'Glowing Anemone', // enters: you may return target land to its owner's hand
+  'Lumengrid Sentinel', // artifact you control enters: you may tap target permanent
+  'Mirran Spy', // cast an artifact spell: you may untap target creature
+  'Necropede', // dies: you may put a -1/-1 counter on target creature
+  'Noxious Dragon', // dies: you may destroy target creature with mana value 3 or less
+  'Riddlemaster Sphinx', // enters: you may return target creature an opponent controls to its owner's hand
+];
+
+/** THE NUMBER on today's pool — the 24 above plus the ten arrivals. */
+const CLASS_CARD_COUNT =
+  CLASS_CARD_COUNT_BEFORE_THE_POOL_REFRESH + CLASS_CARDS_ADDED_BY_THE_POOL_REFRESH.length;
+
 describe('the real pool — the measurement, and the guard that it stays true', () => {
   const rows = sweep();
   const mays = rows.filter((r) => r.semantics === 'may');
@@ -254,18 +318,34 @@ describe('the real pool — the measurement, and the guard that it stays true', 
     expect(rows.length).toBeGreaterThan(100);
   });
 
-  it('THE NUMBER: 24 cards print "you may <do X to> target Y" — all triggers, all at depth 0', () => {
-    // Reported honestly, and it is SMALLER than the headline that motivated the
-    // work: the previous narrow rule missed NONE of these. UX-6 was not a
-    // coverage gap, it was a delivery bug (see the engine probe below) plus this
-    // class-shaped generalisation, which is what stops the coverage gap from
-    // opening the first time a card lands outside `def.triggers`.
-    expect(new Set(klass.map((r) => r.cardName)).size).toBe(24);
+  it(`THE NUMBER: ${CLASS_CARD_COUNT} cards print "you may <do X to> target Y" — all triggers, all at depth 0`, () => {
+    // Reported honestly, and it was SMALLER than the headline that motivated the
+    // work: the previous narrow rule missed NONE of the original 24. UX-6 was
+    // not a coverage gap, it was a delivery bug (see the engine probe below)
+    // plus this class-shaped generalisation, which is what stops the coverage
+    // gap from opening the first time a card lands outside `def.triggers`.
+    //
+    // The number then moved 24 -> 34 on the pool refresh, and it is ACCOUNTED
+    // FOR rather than bumped: see CLASS_CARDS_ADDED_BY_THE_POOL_REFRESH.
+    expect(new Set(klass.map((r) => r.cardName)).size).toBe(CLASS_CARD_COUNT);
     expect(new Set(klass.map((r) => r.source.kind))).toEqual(new Set(['trigger']));
     expect(new Set(klass.map((r) => r.depth))).toEqual(new Set([0]));
     expect(new Set(klass.map((r) => r.primitive))).toEqual(new Set(['mayEffects']));
     expect(klass.map((r) => r.cardName)).toContain("Conjurer's Closet");
     expect(klass.map((r) => r.cardName)).toContain('Aura Shards');
+  });
+
+  it('the ten cards the pool refresh added to the class are all still in it', () => {
+    // The evidence behind the new number, asserted rather than asserted-about.
+    // If the count above ever moves again, this says whether the movement is one
+    // of these ten leaving or something else entirely — which is the difference
+    // between a guard and a rubber stamp.
+    const names = new Set(klass.map((r) => r.cardName));
+    const absent = CLASS_CARDS_ADDED_BY_THE_POOL_REFRESH.filter((name) => !names.has(name));
+    expect(absent, 'a card counted into the new number is no longer in the class').toEqual([]);
+    expect(CLASS_CARDS_ADDED_BY_THE_POOL_REFRESH).toHaveLength(
+      CLASS_CARD_COUNT - CLASS_CARD_COUNT_BEFORE_THE_POOL_REFRESH,
+    );
   });
 
   it('EVERY card in the class folds — this is the "asked in the wrong order" guard', () => {
