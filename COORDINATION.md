@@ -3,8 +3,12 @@
   32,341-card corpus; this lane's seven sources reverted with `git show origin/main:<path>` and both
   trees rebuilt in between; the diff both ways names exactly those two and nothing else).
   Worktree `D:/Cool Stuff/Claude/jb-repeat`, forked from `origin/main` `40f4227`. **NOT PUSHED** —
-  the brief forbade `git push`; the branch is local in that worktree, **16 commits**, merged with
-  `origin/main` `ea9342a`.
+  the brief forbade `git push`; the branch is local in that worktree, **19 commits**, merged TWICE —
+  with `origin/main` `ea9342a` and again with `c8cc7a6` (the §3.155 lane's own merge, PR #58) after
+  `main` moved under this lane a second time. **The second merge was verified with the three checks
+  the first one earned** and came back clean: no unexpected file differs from `main`, all 316 of
+  `main`'s rule ids are present plus this lane's 2, and the playable set is **7,040 -> 7,042, +2/−0**
+  re-measured against `c8cc7a6` rather than carried over from the earlier merge.
   **NEW `packages/cards/scripts/repeat-blame.mjs`** — the ninth blame tool. 44 cards print "repeat",
   all 44 blocked, **38 clauses / 38 shapes = 1.00 per shape**: the §3.120 artifact at its FLOOR for
   the second time. ⚠️ **There is no iteration row in `UNSUPPORTED_HINTS` at all** — the family is
