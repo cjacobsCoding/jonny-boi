@@ -440,37 +440,50 @@ describe('the acceptance cards — what landed, and the residue BY NAME', () => 
     expect(missingTexts(TAMIYO).some((t) => t.startsWith('+1:'))).toBe(false);
   });
 
-  it('Tamiyo REPORTS exactly two residual abilities, and this names both', () => {
-    const texts = missingTexts(TAMIYO);
-    expect(texts).toHaveLength(2);
-    // −2: a derived count over "tapped creatures TARGET PLAYER controls".
-    // `DerivedCountName` is a closed 12-row vocabulary with no tapped-creature
-    // row and — the harder half — no SUBJECT-PLAYER axis at all: every row
-    // counts for "you" or globally. Widening to `creaturesOpponentControls`
-    // would silently make a printed "target player" mean "the opponent", which
-    // is a different card whenever Tamiyo's controller aims at themselves.
-    expect(texts.some((t) => t.includes('for each tapped creature target player controls'))).toBe(true);
-    // −8: the emblem's SECOND ability. The split and the no-maximum-hand-size
-    // channel both landed (see the emblem tests above); what is missing is a
-    // trigger on "a card is put into your graveyard FROM ANYWHERE" — every
-    // zone at once, with a body pointing back at the card that moved. 23 corpus
-    // cards print the trigger; ONE prints this body.
-    expect(texts.some((t) => t.includes('put into your graveyard from anywhere'))).toBe(true);
+  /**
+   * ⚠️ §3.153 LANDED BOTH OF TAMIYO'S RESIDUES, and this test failing is how the
+   * change announced itself — which is exactly what §3.150 wrote it for: "a card
+   * that quietly starts compiling one of them fails too". It did not slide in.
+   *
+   * The two residues, and what each actually turned out to be:
+   *  - `−2` "for each tapped creature TARGET PLAYER controls". §3.150 was right
+   *    that `DerivedCountName` has no subject-player axis — and right that
+   *    widening to `creaturesOpponentControls` would be a different card. The
+   *    axis belongs one level up, on §3.149's FILTERED descriptor, where `scope`
+   *    already lived: `subject` says WHOSE SEAT that scope is read from.
+   *  - `−8`'s second ability. The emblem SEAM was finished, as §3.150's probe
+   *    said. What was missing was one `TriggerEvent` — and then a row in
+   *    `matchTriggers`' `watchesBoard` list, whose omission made the trigger
+   *    never fire while every compile assertion stayed green.
+   */
+  it('Tamiyo now compiles COMPLETE — both §3.150 residues landed in §3.153', () => {
+    expect(missingTexts(TAMIYO)).toHaveLength(0);
   });
 
-  it('Jace is a well-evidenced NO-GO: three abilities, three unrelated systems', () => {
+  /**
+   * ⚠️ §3.153 landed TWO of Jace's three. The count is still asserted exactly,
+   * for the reason it always was: it fails both ways — if the last clause
+   * quietly starts compiling, and if either landed clause regresses.
+   */
+  it('Jace REPORTS exactly ONE residual ability, and this names it', () => {
     const texts = missingTexts(JACE);
-    expect(texts).toHaveLength(3);
-    // +1: a DELAYED, duration-scoped trigger installed by a loyalty ability —
-    // "until your next turn" is a lifetime no `TriggeredAbility` carries.
+    expect(texts).toHaveLength(1);
+    // +1 ✅ §3.153: the duration-scoped delayed trigger §3.150 named, PLUS a
+    // per-ATTACKER trigger event that did not exist — `attacks` is
+    // self-referential, so there was no way to watch another creature attacking.
     expect(texts.some((t) => t.includes('Until your next turn, whenever a creature an opponent controls attacks'))).toBe(
-      true,
+      false,
     );
-    // −2: pile separation. A choice made by an OPPONENT during resolution over a
-    // revealed set — a prompt-seam question, not a loyalty one.
-    expect(texts.some((t) => t.includes('separates those cards into two piles'))).toBe(true);
-    // −8: the 5,640-card "you may / choose" row, NOT this lane. Searching every
-    // player's library and casting the exiles for free.
-    expect(texts.some((t) => t.includes('You may cast those cards without paying their mana costs'))).toBe(true);
+    // −2 ✅ §3.153, and §3.150's framing was the thing that was wrong: it is not
+    // a prompt-seam question. `pileSplitSacrifice` (Liliana's −6) has asked its
+    // VICTIM — a non-controlling player — a mid-resolution question since that
+    // rule landed. The residue was one sentence and a destination table.
+    expect(texts.some((t) => t.includes('separates those cards into two piles'))).toBe(false);
+    // −8 ⛔ the one left. NOT the free cast on its own: `CardGrant.castFace` +
+    // `castFree` already exists. `generateLegalActions` offers an exile cast by
+    // walking the ASKING player's own `player.exile`, and this engine models
+    // exile per player — so a card exiled from B's library sits in B's exile and
+    // A is never offered it. 321 corpus clauses / 315 shapes / 168 sole-blocked.
+    expect(texts[0]).toContain('You may cast those cards without paying their mana costs');
   });
 });
