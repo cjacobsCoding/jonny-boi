@@ -161,7 +161,7 @@ export const SOURCE_SET_EVENTS: Readonly<Record<GameEvent['type'], boolean>> = O
   regenerated: false,
   delayedTriggerCreated: false,
   delayedTriggerFired: false,
-  // §3.153 — an expiry removes a record from `state.delayedTriggers`, which is
+  // §3.154 — an expiry removes a record from `state.delayedTriggers`, which is
   // not the battlefield/command source set this map gates at all.
   delayedTriggerExpired: false,
 });
@@ -429,7 +429,7 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     // board-watching condition reads — the same rule (and the same resolver) the
     // ordinary scan uses. A step trigger, which is every delayed ability this
     // engine's compiler builds, never asks for it at all.
-    // §3.153 — the SAME subject rule the battlefield collector uses, read from
+    // §3.154 — the SAME subject rule the battlefield collector uses, read from
     // `triggers.ts` rather than restated here. The restatement covered two event
     // kinds and silently starved every delayed ability watching any other.
     const subjectId = subjectInstanceOf(event);
@@ -437,7 +437,7 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     const matched = matchDelayedTriggers(records, event, subject);
     for (let i = 0; i < matched.length; i++) {
       const record = matched[i] as DelayedTriggeredAbility;
-      // §3.153 — a DURATION-SCOPED ability stays: it has no fixed number of
+      // §3.154 — a DURATION-SCOPED ability stays: it has no fixed number of
       // firings, and `expireDelayedTriggersFor` removes it when its moment
       // arrives instead. Every other delayed ability is still removed HERE, so
       // CR 603.7a's "it triggers only once" remains structural for them.

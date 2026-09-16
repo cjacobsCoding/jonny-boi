@@ -30,8 +30,10 @@ import './deck-origin.css';
  * "Your decks" heading over nothing reads as decks that failed to load.
  */
 export function DeckMenuOptions({ menu }: { menu: readonly DeckMenuItem[] }): ReactElement {
-  // Order matters: the user's own decks first, because that is what they are
-  // usually reaching for. Driven off the table so a new origin needs no edit here.
+  // Group order is the TABLE's key order, so a new origin needs no edit here and
+  // the running order lives in exactly one place. (This comment used to claim
+  // "the user's own decks first"; the table has never said that, and a comment
+  // that describes an order the code does not have is worse than none.)
   const order = Object.keys(DECK_ORIGINS) as readonly DeckOrigin[];
   const groups = order
     .map((origin) => ({ origin, items: menuItemsOfOrigin(menu, origin) }))
@@ -61,22 +63,31 @@ export function DeckMenuOptions({ menu }: { menu: readonly DeckMenuItem[] }): Re
 }
 
 /**
- * The note shown under a deck `<select>` when the chosen deck is a built-in one.
+ * The note shown under a deck `<select>` saying what KIND of deck is currently
+ * picked — for any origin that has something to say about itself.
  *
  * Deliberately NOT a warning and never disabling anything: playing a gauntlet
- * deck directly is a feature the Play setup offers on purpose. It says what the
- * pick is so the choice is never a surprise, and points at the thing the player
- * probably wanted if it was.
+ * deck, or one of the owner's paper decks, directly is a feature these pickers
+ * offer on purpose. It says what the pick is so the choice is never a surprise,
+ * and points at the thing the player probably wanted if it was.
+ *
+ * ⚠️ This was `BuiltinDeckNote`, hard-coded to one origin, and adding a second
+ * kind of bundled deck would have meant a second near-identical component and a
+ * branch at both call sites. The sentence is a COLUMN in `DECK_ORIGINS`
+ * (`pickerNote`) instead, so a new origin is still one row (CLAUDE.md rule 2).
+ * An origin with an empty note renders nothing, which is how "your own decks"
+ * stays unbadged.
  */
-export function BuiltinDeckNote({ origin }: { origin: DeckOrigin | undefined }): ReactElement {
-  if (origin !== 'builtin') return <></>;
-  const presentation = originPresentation('builtin');
+export function DeckOriginNote({ origin }: { origin: DeckOrigin | undefined }): ReactElement {
+  if (!origin) return <></>;
+  const presentation = originPresentation(origin);
+  if (presentation.pickerNote === '') return <></>;
   return (
-    <p className="deck-origin-note" {...{ [DECK_ORIGIN_ATTR]: 'builtin' }}>
-      <span className="deck-origin-badge deck-origin-badge--builtin">
+    <p className="deck-origin-note" {...{ [DECK_ORIGIN_ATTR]: origin }}>
+      <span className={`deck-origin-badge deck-origin-badge--${origin}`}>
         <span aria-hidden="true">{presentation.glyph}</span> {presentation.badge}
       </span>{' '}
-      You can play it as-is. To tune it, copy it in the Deck Builder.
+      {presentation.pickerNote}
     </p>
   );
 }

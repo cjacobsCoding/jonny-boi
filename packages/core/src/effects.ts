@@ -345,7 +345,7 @@ export interface DelayedTriggerArgs {
    */
   readonly removesFromBattlefield?: readonly InstanceId[];
   /**
-   * §3.153 — "**Until your next turn**, whenever …": the ability repeats until
+   * §3.154 — "**Until your next turn**, whenever …": the ability repeats until
    * this player's turn begins, instead of firing once. One field for both halves
    * of that lifetime, so a repeating ability with no expiry cannot be asked for.
    */
@@ -500,7 +500,7 @@ export function applyEffectRef(
         ...(request.removesFromBattlefield !== undefined
           ? { removesFromBattlefield: request.removesFromBattlefield }
           : {}),
-        // §3.153 — "until PLAYER's next turn": passed straight through, because
+        // §3.154 — "until PLAYER's next turn": passed straight through, because
         // the two duration fields it sets are written together by
         // `createDelayedTrigger` and nothing here may set one without the other.
         ...(request.untilTurnOf !== undefined ? { untilTurnOf: request.untilTurnOf } : {}),

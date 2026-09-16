@@ -5,7 +5,7 @@ import type { DecksApi } from '../../lib/useDecks.js';
 import { useOnlineGame } from '../../lib/online/useOnlineGame.js';
 import { deckChoiceToDeckList } from '../../lib/online/deck-list.js';
 import { buildDeckMenu } from '../../lib/decklist/deckMenu.js';
-import { BuiltinDeckNote, DeckMenuOptions } from '../DeckMenuOptions.js';
+import { DeckMenuOptions, DeckOriginNote } from '../DeckMenuOptions.js';
 import { friendlyError } from '../../lib/online/online-state.js';
 import {
   ERROR_TOAST_MS,
@@ -360,7 +360,7 @@ function LobbyScreen({
           {/* Same note as the hotseat setup, from the same component: bringing a
               built-in deck to an online game is allowed and sometimes wanted, but
               it should never be a thing you discover after the game starts. */}
-          <BuiltinDeckNote origin={menu.find((m) => m.key === deckKey)?.origin} />
+          <DeckOriginNote origin={menu.find((m) => m.key === deckKey)?.origin} />
           {problems.length > 0 && (
             <div className="play-setup__problems" role="alert">
               <strong>Not ready:</strong>

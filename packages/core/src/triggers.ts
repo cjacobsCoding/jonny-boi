@@ -105,7 +105,7 @@ export type TriggerEvent =
    */
   | 'creatureAttacksAlone'
   /**
-   * §3.153 — "Whenever **a creature** [you control / an opponent controls]
+   * §3.154 — "Whenever **a creature** [you control / an opponent controls]
    * **attacks**, …" (Jace, Architect of Thought's +1; Hellrider; Cathars'
    * Crusade's attack cousins). 22 corpus clauses, **14 of them sole-blocked**.
    *
@@ -161,7 +161,7 @@ export type TriggerEvent =
    */
   | 'putIntoGraveyardFromBattlefield'
   /**
-   * §3.153 — "Whenever a card is put into **your graveyard from anywhere**"
+   * §3.154 — "Whenever a card is put into **your graveyard from anywhere**"
    * (Tamiyo, the Moon Sage's emblem; Crawling Sensation; Ultron's Auxiliary).
    *
    * NOT `permanentDies`, which is the battlefield → graveyard move alone and
@@ -590,7 +590,7 @@ export function conditionMatches(
       return whoMatches(condition.who, subject.controller, sourceController);
     }
     case 'creatureAttacks': {
-      // §3.153 — ANY declared attacker, however many. The count is deliberately
+      // §3.154 — ANY declared attacker, however many. The count is deliberately
       // unchecked, which is the whole difference from `creatureAttacksAlone`
       // above; the fan-out in `matchTriggers` turns one match into one firing
       // per attacker. See the event's doc for why the first attacker's
@@ -641,7 +641,7 @@ export function conditionMatches(
       );
     }
     case 'cardPutIntoGraveyardFromAnywhere': {
-      // §3.153 — ANY zone into a graveyard (see the event's doc). The `from`
+      // §3.154 — ANY zone into a graveyard (see the event's doc). The `from`
       // is deliberately unchecked: that is what "from anywhere" means, and a
       // battlefield death qualifies exactly as a mill does.
       if (event.type !== 'zoneChange' || event.to !== 'graveyard') return false;
@@ -921,7 +921,7 @@ export const TRIGGER_EVENT_SOURCES: Readonly<Record<TriggerEvent, readonly GameE
     // The combat keyword family's events (DESIGN §3.107): one attack-side, three
     // block-side, all read straight off the two declaration events.
     creatureAttacksAlone: ['attackersDeclared'],
-    // §3.153 — the per-attacker sibling, same declaration event.
+    // §3.154 — the per-attacker sibling, same declaration event.
     creatureAttacks: ['attackersDeclared'],
     blocks: ['blockersDeclared'],
     becomesBlocked: ['blockersDeclared'],
@@ -929,7 +929,7 @@ export const TRIGGER_EVENT_SOURCES: Readonly<Record<TriggerEvent, readonly GameE
     dies: ['creatureDied'],
     leaves: ['zoneChange'],
     putIntoGraveyardFromBattlefield: ['zoneChange'],
-    // §3.153 — any zone INTO a graveyard, which is the same underlying move.
+    // §3.154 — any zone INTO a graveyard, which is the same underlying move.
     cardPutIntoGraveyardFromAnywhere: ['zoneChange'],
     castSpell: ['spellCast'],
     upkeep: ['stepBegin'],
@@ -1043,7 +1043,7 @@ export function matchTriggers(
       const watchesBoard =
         ability.condition.on === 'permanentEnters' ||
         ability.condition.on === 'permanentDies' ||
-        // §3.153 — "a card is put into your graveyard from anywhere" reads the
+        // §3.154 — "a card is put into your graveyard from anywhere" reads the
         // moved card's OWNER, its token-ness and its printed filter, so it needs
         // the subject exactly as the two board-watching kinds above do. Omitting
         // it here is SILENT: the matcher sees `undefined` and refuses, so the
@@ -1056,7 +1056,7 @@ export function matchTriggers(
         ability.condition.on === 'creatureCombatDamageToPlayer' ||
         // Exalted reads the lone ATTACKER's controller (DESIGN §3.107).
         ability.condition.on === 'creatureAttacksAlone' ||
-        // §3.153 — the per-attacker trigger reads the declaration's controller
+        // §3.154 — the per-attacker trigger reads the declaration's controller
         // off the first attacker (see the event's doc).
         ability.condition.on === 'creatureAttacks' ||
         // A cast trigger narrowed by the chosen creature type needs the SPELL
@@ -1125,7 +1125,7 @@ export function matchTriggers(
 /**
  * WHICH OBJECT an event's SUBJECT is — the one answer to "whose instance do I
  * look up for this event", shared by the battlefield collector and the DELAYED
- * one (§3.153).
+ * one (§3.154).
  *
  * It was inlined in `matchTriggers` and the delayed collector carried its own
  * two-event version of it. They disagreed, and the disagreement was silent: a
@@ -1161,7 +1161,7 @@ export function firesPerTriggeringInstance(on: TriggerEvent): boolean {
 
 const FIRES_PER_TRIGGERING_INSTANCE: ReadonlySet<TriggerEvent> = new Set<TriggerEvent>([
   'becomesBlockedByCreature',
-  // §3.153 — "whenever A CREATURE an opponent controls attacks" fires once per
+  // §3.154 — "whenever A CREATURE an opponent controls attacks" fires once per
   // attacker (CR 508.1 declares them together but the ability watches each), so
   // three attackers shrink three times rather than one of them shrinking once.
   'creatureAttacks',
@@ -1187,7 +1187,7 @@ export function triggeringInstancesFor(
   switch (condition.on) {
     case 'creatureAttacksAlone':
       return event.type === 'attackersDeclared' ? event.attackers : undefined;
-    // §3.153 — every declared attacker, fanned out one per firing by the caller.
+    // §3.154 — every declared attacker, fanned out one per firing by the caller.
     case 'creatureAttacks':
       return event.type === 'attackersDeclared' ? event.attackers : undefined;
     case 'blocks': {
@@ -1208,7 +1208,7 @@ export function triggeringInstancesFor(
     // --- the counter keyword family (DESIGN §3.110) ----------------------------
     case 'permanentEnters':
     case 'permanentDies':
-    // §3.153 — "you may return **it** to your hand": the card that just moved is
+    // §3.154 — "you may return **it** to your hand": the card that just moved is
     // the referent, and it reaches the body through the same `carriesSubject`
     // channel the counter family opened, so the emblem needed no second one.
     case 'cardPutIntoGraveyardFromAnywhere':

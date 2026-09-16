@@ -41,6 +41,17 @@ export { loadDeck, validateDeck, DeckLoadError } from './deck.js';
 // Sample decks (the provisional gauntlet — DESIGN §3.5 / §3.8).
 export { SAMPLE_DECKS } from '../data/decks/index.js';
 
+// The OWNER'S real, physical decks — a SEPARATE registry, deliberately not part
+// of the gauntlet above (see `data/owner-decks/index.ts` for why adding them to
+// it would move every A/B baseline the lab has ever recorded).
+export {
+  OWNER_DECKS,
+  OWNER_DECK_ENTRIES,
+  ownerDeckRules,
+  transcribedSize,
+} from '../data/owner-decks/index.js';
+export type { OwnerDeckEntry } from '../data/owner-decks/index.js';
+
 // Statistics (pure).
 export type { ProportionCI, PairedTable, McNemarResult, MultipleComparisonsMethod } from './stats.js';
 // The group-sequential boundary (§3.92). Exported because the web Lab runs the

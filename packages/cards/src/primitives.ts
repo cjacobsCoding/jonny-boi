@@ -2076,7 +2076,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   // a card from among them into your hand", doubling power, and the
   // reveal-the-top-card draw.
   ...SPELL_COUNT_PRIMITIVES,
-  // §3.153 — the walker-residue bodies (`./walker-residue-primitives`): the
+  // §3.154 — the walker-residue bodies (`./walker-residue-primitives`): the
   // card a graveyard trigger was about, and the pile split an OPPONENT makes
   // over a revealed set. Its own module because both act on an object the
   // resolution never targeted.

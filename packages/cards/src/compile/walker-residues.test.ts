@@ -1,5 +1,5 @@
 /**
- * THE WALKER-RESIDUE FAMILY (DESIGN §3.153) — the two residues §3.150 pinned on
+ * THE WALKER-RESIDUE FAMILY (DESIGN §3.154) — the two residues §3.150 pinned on
  * Tamiyo, the Moon Sage by name, and the three clauses it pinned on Jace,
  * Architect of Thought.
  *

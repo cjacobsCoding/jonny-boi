@@ -411,7 +411,7 @@ const FILTERED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> 
 });
 
 // ===========================================================================
-// THE WALKER-RESIDUE FAMILY (DESIGN §3.153) — owned by `feat/walker-residues`.
+// THE WALKER-RESIDUE FAMILY (DESIGN §3.154) — owned by `feat/walker-residues`.
 // Everything between this banner and its closing one is this lane's; siblings
 // are live in this file and must not need to read into it to merge.
 //
@@ -641,7 +641,7 @@ function readsTriggeringCard(refs: readonly EffectRef[]): boolean {
  */
 const DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = Object.freeze({
   ...FILTERED_DERIVED_COUNTS,
-  // §3.153 — the walker-residue rows. Spread with the FILTERED half and BEFORE
+  // §3.154 — the walker-residue rows. Spread with the FILTERED half and BEFORE
   // the named one, so the precedence the comment above protects is untouched:
   // every phrase below carries the word "tapped", which no named row spells, so
   // this spread can neither shadow a named row nor be shadowed by one.
@@ -656,9 +656,9 @@ type DerivedCountDescriptor =
       readonly countOf: typeof PERMANENTS_MATCHING;
       readonly filter: CardFilter;
       readonly scope: DerivedCountScope;
-      /** §3.153 — WHOSE seat `scope` is read from. Absent means the controller. */
+      /** §3.154 — WHOSE seat `scope` is read from. Absent means the controller. */
       readonly subject?: string;
-      /** §3.153 — the board-state predicate ("tapped"). Absent means it does not care. */
+      /** §3.154 — the board-state predicate ("tapped"). Absent means it does not care. */
       readonly permanentState?: PermanentStateFilter;
     };
 
@@ -780,7 +780,7 @@ const DERIVED_EACH_TO_PLURAL: Readonly<Record<string, string>> = Object.freeze({
   'card in your hand': 'cards in your hand',
   'card in your graveyard': 'cards in your graveyard',
   'creature card in your graveyard': 'creature cards in your graveyard',
-  // §3.153 — the walker-residue family's target-FREE singulars. Safe in this
+  // §3.154 — the walker-residue family's target-FREE singulars. Safe in this
   // shared table precisely because none of them names a target; the targeted
   // spelling lives in `TARGETED_EACH_TO_PLURAL` and is read by one rule that
   // declares the target.
@@ -3071,7 +3071,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       return effects({ primitive: 'gainLife', params: { amount } });
     },
   },
-  // --- the walker-residue family (DESIGN §3.153) ----------------------------
+  // --- the walker-residue family (DESIGN §3.154) ----------------------------
   {
     id: 'until-your-next-turn-attack-trigger',
     description:
@@ -6704,7 +6704,7 @@ function splitInterveningIf(
 }
 
 export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
-  // === THE WALKER-RESIDUE FAMILY (DESIGN §3.153) — owned by `feat/walker-residues` ===
+  // === THE WALKER-RESIDUE FAMILY (DESIGN §3.154) — owned by `feat/walker-residues` ===
   {
     id: 'trigger-card-into-graveyard-from-anywhere',
     description:

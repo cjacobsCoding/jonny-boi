@@ -132,7 +132,7 @@ export interface DelayedTriggeredAbility {
    */
   readonly removesFromBattlefield?: readonly InstanceId[];
   /**
-   * §3.153 — a DURATION-SCOPED ability rather than a once-only one: it stays
+   * §3.154 — a DURATION-SCOPED ability rather than a once-only one: it stays
    * after it fires, and it is removed by {@link expiresAtTurnOf} instead.
    *
    * "Until your next turn, whenever a creature an opponent controls attacks, it
@@ -151,7 +151,7 @@ export interface DelayedTriggeredAbility {
    */
   readonly repeating?: true;
   /**
-   * §3.153 — the ability is removed when THIS player's turn begins.
+   * §3.154 — the ability is removed when THIS player's turn begins.
    *
    * "Until your next turn" is exactly "until the beginning of your next turn",
    * and the same argument the header makes for "the NEXT end step" makes this
@@ -174,7 +174,7 @@ export interface DelayedTriggerRequest {
   /** See {@link DelayedTriggeredAbility.removesFromBattlefield} — for the pilot. */
   readonly removesFromBattlefield?: readonly InstanceId[];
   /**
-   * §3.153 — "until PLAYER's next turn": the ability repeats until that player's
+   * §3.154 — "until PLAYER's next turn": the ability repeats until that player's
    * turn begins. ONE field for both halves, so a repeating ability with no
    * expiry is not expressible at all rather than merely discouraged — the
    * unremovable-emblem argument, applied to a lifetime.
@@ -205,7 +205,7 @@ export function createDelayedTrigger(state: DelayedTriggerHost, request: Delayed
     ...(request.removesFromBattlefield !== undefined && request.removesFromBattlefield.length > 0
       ? { removesFromBattlefield: request.removesFromBattlefield }
       : {}),
-    // §3.153 — the two duration fields are set TOGETHER from one request field,
+    // §3.154 — the two duration fields are set TOGETHER from one request field,
     // so a repeating ability with no expiry cannot be built by any caller.
     ...(request.untilTurnOf !== undefined
       ? { repeating: true as const, expiresAtTurnOf: request.untilTurnOf }
@@ -216,7 +216,7 @@ export function createDelayedTrigger(state: DelayedTriggerHost, request: Delayed
 }
 
 /**
- * §3.153 — drop every duration-scoped delayed ability whose moment has arrived,
+ * §3.154 — drop every duration-scoped delayed ability whose moment has arrived,
  * called by `beginTurn` for the player whose turn is starting.
  *
  * "Until your next turn" ends AT THE BEGINNING of that turn, so the removal runs
@@ -319,7 +319,7 @@ export function pendingFromDelayed(
 ): readonly PendingTrigger[] {
   const condition = record.ability.condition;
   const triggeringPlayer = triggeringPlayerFor(condition, event, subject);
-  // §3.153 — WHICH OBJECTS the event was about, and the per-object fan-out, both
+  // §3.154 — WHICH OBJECTS the event was about, and the per-object fan-out, both
   // read from `triggers.ts` rather than re-derived here.
   //
   // ⚠️ This used to return ONE pending with no `triggeringInstances` at all,

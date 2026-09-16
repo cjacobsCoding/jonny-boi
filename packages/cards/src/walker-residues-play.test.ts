@@ -1,5 +1,5 @@
 /**
- * THE WALKER RESIDUES, PLAYED (DESIGN §3.153).
+ * THE WALKER RESIDUES, PLAYED (DESIGN §3.154).
  *
  * `compile/walker-residues.test.ts` proves the SHAPES the compiler emits. This
  * file proves the cards actually do what they print, by driving each ability in

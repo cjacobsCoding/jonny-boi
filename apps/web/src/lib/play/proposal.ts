@@ -595,7 +595,7 @@ export const PROPOSAL_EVENT_POLICY: { readonly [K in GameEvent['type']]: Proposa
   cardGrantExpired: 'rewindable',
   delayedTriggerCreated: 'rewindable',
   delayedTriggerFired: 'rewindable',
-  // §3.153 — the duration-scoped half's expiry. Rewindable beside the pair it
+  // §3.154 — the duration-scoped half's expiry. Rewindable beside the pair it
   // belongs to: it changes only `state.delayedTriggers`, which a proposal
   // re-derives wholesale, exactly as `continuousEffectExpired` above does.
   delayedTriggerExpired: 'rewindable',

@@ -11,7 +11,7 @@ import { validateChoice, type DeckChoice } from '../../lib/play/setup.js';
 // copy of it, which is how the two surfaces came to label built-in decks
 // differently. See lib/decklist/deckMenu.ts.
 import { buildDeckMenu } from '../../lib/decklist/deckMenu.js';
-import { BuiltinDeckNote, DeckMenuOptions } from '../DeckMenuOptions.js';
+import { DeckMenuOptions, DeckOriginNote } from '../DeckMenuOptions.js';
 
 /**
  * The pre-game setup: each player names themselves and picks a deck (their saved
@@ -116,7 +116,7 @@ export function SetupScreen({
               {/* Says what the current pick IS once the dropdown is closed —
                   the collapsed control shows only the label, and the group
                   heading that made it unambiguous is no longer on screen. */}
-              <BuiltinDeckNote origin={item?.origin} />
+              <DeckOriginNote origin={item?.origin} />
               {problems.length > 0 && (
                 <div className="play-setup__problems" role="alert">
                   <strong>Not ready:</strong>

@@ -222,7 +222,7 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
    */
   delayedTriggerCreated: { id: 'none', sourceInstanceId: 'id', controller: 'none', label: 'none' },
   delayedTriggerFired: { id: 'none', sourceInstanceId: 'id', controller: 'none', label: 'none' },
-  // §3.153 — the expiry half. `id` is the record's own identity, not a card's,
+  // §3.154 — the expiry half. `id` is the record's own identity, not a card's,
   // exactly as it is on the fired event above.
   delayedTriggerExpired: { id: 'none', controller: 'none', label: 'none' },
   // `choiceId` is the QUESTION's id, not a card's. `sourceInstanceId` is a card's

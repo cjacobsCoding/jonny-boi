@@ -12,8 +12,8 @@
 2 Soul of the Harvest
 2 Craterhoof Behemoth          // ✗ not in pool
 
-3 Jace, Architect of Thought   // ✗ not in pool — §3.153 landed +1 and −2; only the −8's cross-seat free cast is left
-2 Tamiyo, the Moon Sage        // ✅ compiles — §3.153 (all three abilities, played end to end)
+3 Jace, Architect of Thought   // ✗ not in pool — §3.154 landed +1 and −2; only the −8's cross-seat free cast is left
+2 Tamiyo, the Moon Sage        // ✅ compiles — §3.154 (all three abilities, played end to end)
 2 Gilded Lotus
 2 Primal Surge                 // ✗ not in pool
 

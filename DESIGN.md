@@ -2889,7 +2889,7 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
-### 3.153 The two walkers Caleb's deck is named for — and three of four residues were a CLOSED LIST, not a seam — ✅ Tamiyo, ⬜ Jace (one clause)
+### 3.154 The two walkers Caleb's deck is named for — and three of four residues were a CLOSED LIST, not a seam — ✅ Tamiyo, ⬜ Jace (one clause)
 
 > ⚠️ **Section number claimed off a contended range.** §3.152 was the highest on `origin/main` at
 > fork, and three sibling lanes (`jb-gloss`, `jb-mana`, `jb-repeat`) are live in `rules.ts`. If an
@@ -3009,6 +3009,86 @@ Three parts, and only the third is hard:
 mana cost" — the biggest population any of these residues touches, and 1.02 cards per shape, so it is
 the §3.120 artifact again rather than one system. The cross-seat half is the part Jace specifically
 needs; most of those 168 cast from the caster's own zones and want only the free-cast half.
+### 3.153 His three real decks were in the repo and not in the app — ✅ done
+
+> ⚠️ **Section number claimed off a contended range.** `main` carries TWO §3.147s, TWO §3.149s and
+> THREE §3.150s at fork, and five lanes are live. §3.153 was the next free number on `origin/main`
+> when this lane forked; **renumber it freely at merge** — nothing in the code refers to it.
+
+He opened the app to play one of his own decks and could not find them. They were correct,
+committed and tested — as three `.txt` files in `docs/decks/` that a person would have had to open
+and paste into **Deck Builder → Import** by hand. Nothing in the app read them. That is the ninth
+time work here has been written, committed, green and unreachable, and not one of the nine was
+caught by a test: a test can ask whether the data exists, never whether a person can get to it.
+
+**The registry is SEPARATE from `SAMPLE_DECKS`, and that is the load-bearing decision.**
+`packages/sim/data/decks/index.ts` is not a bag of decks — it **is** the §3.8 meta gauntlet every
+A/B verdict is measured against, its spread was tuned so each deck is somebody’s bad matchup, and
+its own header records that merely REORDERING it moved a recorded baseline (a gauntlet matchup is
+seeded by the opponent's INDEX). Adding three personal decks to it would have redefined the field
+every number the lab has ever produced refers to. So: `packages/sim/data/owner-decks/`, same idiom
+(one data file per deck, an index that collects them), surfaced beside the gauntlet decks and never
+entering it. `owner-decks.test.ts` asserts the two registries stay disjoint and that the gauntlet is
+still nine decks.
+
+**A transcription is not edited.** The NAMES are read off the physical cards; the COUNTS are
+inferred from sleeve-edge depth (`docs/decks/README.md` §Confidence). Two of the three are not 60
+cards — Acidic Angels is 59 and Tamiyo + Jace Surge is 49 — and they ship exactly as transcribed.
+Padding one to a legal 60 would mean inventing a card he does not own, and at that moment it stops
+being a record of his deck. The app REPORTS instead.
+
+**Which forced a second row in the legality table, not a relaxation of the first.** A constructed
+deck is legal at ≥ 60 because 60 is the floor a player may BUILD to; a paper deck has already been
+built, so the only question worth asking is whether the app can deal out the thing that exists.
+`ownerDeckRules(deck)` sets `minDeckSize` to the deck’s OWN transcribed size — derived, never
+chosen, so it cannot be gamed. Acidic Angels is therefore legal and playable at 59/59; a 65-card
+list that resolves to 44 still refuses, by name, for every card the pool cannot supply. The 4-of
+limit and the basic-land exemption are unchanged. `DECK_CHOICE_RULES` in `lib/play/setup.ts` is the
+closed table that says which rules each kind of deck is judged by; ONLINE play keeps the
+constructed rules, because the server applies its own and a local yes it would refuse is worse than
+a no.
+
+**What it resolves to, measured** — and the measurement moved MID-LANE, which is the part worth
+reading. Against the pool this lane forked from it read 16/16, 14/22, 8/17; the regeneration that
+landed hours later took it to:
+
+| deck | names | cards | on screen |
+| --- | --- | --- | --- |
+| Acidic Angels | **16/16** | **59/59** | "All 59 cards are in the pool — this deck plays exactly as built." |
+| Thune's Life | **22/22** | **65/65** | the same sentence — it completed itself when the pool refreshed |
+| Tamiyo + Jace Surge | 12/17 | 36/49 | "Incomplete — 36 of 49 cards…", naming all five |
+
+**Not one line of this lane changed to absorb that**, and that is the design, not luck:
+`ownerDecks.test.ts` pins a FLOOR per deck, never an equality. A card that stops resolving is a
+regression and goes red; a family the campaign lands just lands. An equality would have turned the
+refresh into a red test in a lane that had nothing to do with it — and the browser harness had
+exactly that bug for one revision, asserting that Thune’s Life reported itself INCOMPLETE, which
+was true when written and false four hours later. It now asserts the SHAPE: every row says which
+of the two things it is, and a row that says it is short names the cards.
+
+**Two of the three are playable end to end**; Tamiyo + Jace Surge refuses, by name, for the five
+cards its own identity is made of (Axebane Guardian, Craterhoof Behemoth, Primal Surge, and both
+planeswalkers) — which is the feature working, not failing.
+
+**A short deck says so, loudly, through the EXISTING answer.** `gauntletDecks.ts` already had
+`unresolved` for exactly this, so the paper decks resolve through `copyGauntletDeck` rather than a
+second resolver — the copy path and the "is it complete?" readout are the same computation by
+construction (rule 12). His words are the acceptance criterion: *a deck that resolves to a handful
+of lands is not a deck.*
+
+**A third deck origin, as a ROW.** `DECK_ORIGINS` gains `owner` — badge, glyph, explanation, group
+label, option suffix and now a `pickerNote` column — so the builder region, both deck pickers and
+the note under a `<select>` are all marked by construction. `BuiltinDeckNote` became
+`DeckOriginNote` in the same edit: hard-coded to one origin, a second kind of bundled deck would
+have meant a second near-identical component and a branch at both call sites.
+
+**Proven by a browser harness, because nine unreachable features were not.**
+`apps/web/scripts/verify-owner-decks.mjs` boots a real Chrome on a cold profile (localStorage
+cleared before any app script runs), finds all three by name, measures each row against the
+VIEWPORT rather than the DOM, reads the completeness sentence out of the rendered text, then picks
+Acidic Angels in the Play setup, starts a Solo game, and reads the opening hand back card by card.
+70 checks, exit 0. The same harness against a build of `origin/main` exits 1 with *"no .owner-deck
+row appeared — his decks are not in this build"*, with the app fully alive.
 
 ### 3.152 The targeting-protection row names a half that was FINISHED — the gap was one keyword, and the row cannot see it — ✅ done
 

@@ -441,7 +441,7 @@ describe('the acceptance cards — what landed, and the residue BY NAME', () => 
   });
 
   /**
-   * ⚠️ §3.153 LANDED BOTH OF TAMIYO'S RESIDUES, and this test failing is how the
+   * ⚠️ §3.154 LANDED BOTH OF TAMIYO'S RESIDUES, and this test failing is how the
    * change announced itself — which is exactly what §3.150 wrote it for: "a card
    * that quietly starts compiling one of them fails too". It did not slide in.
    *
@@ -456,25 +456,25 @@ describe('the acceptance cards — what landed, and the residue BY NAME', () => 
    *    `matchTriggers`' `watchesBoard` list, whose omission made the trigger
    *    never fire while every compile assertion stayed green.
    */
-  it('Tamiyo now compiles COMPLETE — both §3.150 residues landed in §3.153', () => {
+  it('Tamiyo now compiles COMPLETE — both §3.150 residues landed in §3.154', () => {
     expect(missingTexts(TAMIYO)).toHaveLength(0);
   });
 
   /**
-   * ⚠️ §3.153 landed TWO of Jace's three. The count is still asserted exactly,
+   * ⚠️ §3.154 landed TWO of Jace's three. The count is still asserted exactly,
    * for the reason it always was: it fails both ways — if the last clause
    * quietly starts compiling, and if either landed clause regresses.
    */
   it('Jace REPORTS exactly ONE residual ability, and this names it', () => {
     const texts = missingTexts(JACE);
     expect(texts).toHaveLength(1);
-    // +1 ✅ §3.153: the duration-scoped delayed trigger §3.150 named, PLUS a
+    // +1 ✅ §3.154: the duration-scoped delayed trigger §3.150 named, PLUS a
     // per-ATTACKER trigger event that did not exist — `attacks` is
     // self-referential, so there was no way to watch another creature attacking.
     expect(texts.some((t) => t.includes('Until your next turn, whenever a creature an opponent controls attacks'))).toBe(
       false,
     );
-    // −2 ✅ §3.153, and §3.150's framing was the thing that was wrong: it is not
+    // −2 ✅ §3.154, and §3.150's framing was the thing that was wrong: it is not
     // a prompt-seam question. `pileSplitSacrifice` (Liliana's −6) has asked its
     // VICTIM — a non-controlling player — a mid-resolution question since that
     // rule landed. The residue was one sentence and a destination table.

@@ -153,7 +153,7 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
   // and branches on what it saw.
   'surveil',
   /*
-   * §3.153 — Jace, Architect of Thought's −2 reads the top THREE cards, shows
+   * §3.154 — Jace, Architect of Thought's −2 reads the top THREE cards, shows
    * them to an OPPONENT, and the split that opponent makes is a decision taken
    * while looking at cards the swap may have changed. Both halves break the
    * identical-game argument, and the second is the stronger one: the same
@@ -161,7 +161,7 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
    */
   'revealAndOpponentSplitsPiles',
   /*
-   * §3.153 — the duration-scoped trigger INSTALLER (Jace's +1), classified
+   * §3.154 — the duration-scoped trigger INSTALLER (Jace's +1), classified
    * CONSERVATIVELY for exactly the reason `mayEffects` above is: the ability it
    * installs lives in an `effects` PARAM, and `allEffectRefs` walks only
    * top-level refs off `def.effects` / `triggers` / `activated` / `cycling` —
@@ -325,7 +325,7 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   // battlefield and a hand, never a library.
   'returnChosenToHand',
   /*
-   * §3.153 — Tamiyo's emblem body. It moves ONE card, and that card is the one
+   * §3.154 — Tamiyo's emblem body. It moves ONE card, and that card is the one
    * the trigger's event was about: it arrives as `triggeringInstances`, and the
    * move is graveyard → hand. The runner already tracks both of those zones
    * precisely (the card reached the graveyard by a `zoneChange` naming its

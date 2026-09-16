@@ -461,7 +461,7 @@ function beginTurn(state: GameState, _config: RulesConfig, emit: (e: GameEvent) 
   active.landsPlayedThisTurn = 0;
   emptyManaPools(state, emit);
 
-  // §3.153 — "until your next turn" ends AT THE BEGINNING of that turn, so a
+  // §3.154 — "until your next turn" ends AT THE BEGINNING of that turn, so a
   // duration-scoped delayed ability is dropped here: before the untap step,
   // before any attack could be declared, before anything in this turn can
   // trigger. Running it later would leave the ability live for part of the turn

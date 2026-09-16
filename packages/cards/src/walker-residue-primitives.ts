@@ -1,5 +1,5 @@
 /**
- * THE WALKER-RESIDUE PRIMITIVES (DESIGN §3.153) — the bodies the two residues
+ * THE WALKER-RESIDUE PRIMITIVES (DESIGN §3.154) — the bodies the two residues
  * §3.150 pinned on Tamiyo, the Moon Sage and Jace, Architect of Thought need,
  * and nothing else.
  *

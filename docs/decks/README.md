@@ -25,8 +25,18 @@ Angels'` constants in `apps/web` are **all the same deck**. An earlier version o
 they were two decks that happened to share a string. They are not, and reading it that way is what
 made the correction take three rounds.
 
-Paste either list into **Deck Builder → Import** — the parser accepts this plain `4 Card Name`
-format, and every other mainstream export flavour besides.
+✅ **THESE LISTS ARE NOW IN THE APP — there is nothing to paste** (DESIGN §3.153). Each one is a
+data file in `packages/sim/data/owner-decks/`, listed in the Deck Builder under **Your paper
+decks** and offered in every deck picker, so you can open or play one straight from a cold start.
+
+⚠️ **THESE `.txt` FILES ARE STILL THE SOURCE OF TRUTH.** Correct a name or a count HERE;
+`packages/sim/src/owner-decks.test.ts` re-reads these files and fails if the shipped registry has
+drifted from them by so much as one copy, so the two cannot answer differently. What the registry
+must NOT do is diverge silently, which is why the guard exists rather than a comment asking nicely.
+
+Pasting a list into **Deck Builder → Import** still works, and is how you would bring in a deck
+that is not one of these three — the parser accepts this plain `4 Card Name` format, and every
+other mainstream export flavour besides.
 
 ## Two of the three are complete
 
@@ -48,9 +58,20 @@ whose residue is named and pinned is a fine outcome for a card nobody asked abou
 outcome for the two cards a deck is named after. Their residues are in §7a; the families that hold
 them are the work, not the cards.
 
-Until a list is clean, importing it produces a deck with part of its identity missing — worth knowing
-before blaming the importer: the import dialog reports a "not found" count, and a deck that
-resolves to a handful of lands is not a deck.
+Until a list is clean, the deck in the app is missing part of its identity — and it SAYS SO, in its
+own row, naming every card the pool cannot supply and how many cards of the deck they cost. It also
+refuses to start a game rather than shuffling up what is left, because a deck that resolves to a
+handful of lands is not a deck. (Importing a list by hand reports the same thing as a "not found"
+count in the import dialog.)
+
+⚠️ The table above is measured against the COMPILER; the pool the shipped app carries can lag it,
+so a deck can read as clean here and still be short in the app until the next regeneration. On the
+pool as regenerated 2026-09-15 the app resolves **Acidic Angels 16/16, Thune's Life 22/22 and
+Tamiyo + Jace Surge 12/17** — the app is caught up with this table, and it always prints its own
+number in the deck row rather than trusting this one.
+
+✅ **Two of the three are PLAYABLE end to end today.** Acidic Angels deals its 59 cards and Thune’s
+Life its 65; Tamiyo + Jace Surge refuses, by name, for all five cards it is still missing.
 
 All three lists are **2012–2013 Standard** (Return to Ravnica / M13 / Innistrad / Avacyn Restored). The
 pool has some of that era — Angel of Serenity, Thragtusk, Restoration Angel, Cloudshift, Conjurer's
