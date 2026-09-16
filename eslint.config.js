@@ -110,7 +110,20 @@ export default tseslint.config(
     // Calling it `verify-*` to get these globals would have enrolled it in the
     // budget gate under false pretences; leaving it out would have handed it the
     // same eighteen false `no-undef` errors this comment was written about.
-    files: ['apps/web/scripts/verify-*.mjs', 'apps/web/scripts/see-*.mjs'],
+    // ⚠️ AND `lib/`, BECAUSE A SHARED HELPER IS THE SAME TWO-PROGRAMS FILE. The
+    // whole point of `lib/harness-page.mjs` is that ONE implementation answers
+    // "did the page throw, and is it still there?" for every harness — and
+    // answering the second half means a `page.evaluate` reading `document`,
+    // exactly the inner-half code this block exists for. Leaving `lib/` out
+    // would hand the funnel the same false `no-undef` errors the comment above
+    // was written about, and the obvious way to silence them would be to copy
+    // the helper back into each harness. A prefix convention that punishes
+    // sharing is the trap wearing different clothes.
+    files: [
+      'apps/web/scripts/verify-*.mjs',
+      'apps/web/scripts/see-*.mjs',
+      'apps/web/scripts/lib/*.mjs',
+    ],
     languageOptions: {
       globals: {
         document: 'readonly',
@@ -132,6 +145,11 @@ export default tseslint.config(
         DataView: 'readonly',
         innerWidth: 'readonly',
         innerHeight: 'readonly',
+        // The frame-time sampler in `verify-card-browser-perf.mjs` drives its own
+        // rAF loop inside `page.evaluate` — it has been reporting two false
+        // `no-undef` errors since it was written, which is what a missing row in
+        // this table looks like.
+        requestAnimationFrame: 'readonly',
         // Used by BOTH halves: the harness inflates the archive's deflated
         // entries to check them, and times its own fetches out.
         DecompressionStream: 'readonly',

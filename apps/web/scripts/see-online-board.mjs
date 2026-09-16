@@ -53,6 +53,7 @@ import { resolve } from 'node:path';
 import puppeteer from 'puppeteer-core';
 import { findChrome } from './lib/find-chrome.mjs';
 import { harnessLaunchOptions } from './lib/harness-chrome.mjs';
+import { watchPageErrors } from './lib/harness-page.mjs';
 
 const WEB_ROOT = resolve(import.meta.dirname, '..');
 const REPO_ROOT = resolve(WEB_ROOT, '..', '..');
@@ -134,7 +135,10 @@ async function openSeat(browser, appUrl, serverUrl, name) {
   const ctx = await browser.createBrowserContext();
   const page = await ctx.newPage();
   await page.setViewport(VIEWPORT);
-  page.on('pageerror', (e) => console.log(`  [${name}] pageerror:`, String(e).slice(0, 160)));
+  // Through the funnel, not a sixth hand-rolled listener. This script reports
+  // rather than asserting — a person reads it — but a page that threw must be
+  // visible in that report or the rest of it describes a corpse.
+  watchPageErrors(page, { label: name });
   await page.goto(`${appUrl}?server=${encodeURIComponent(serverUrl)}`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('button.nav-link', { timeout: APP_SHELL_WAIT_MS });
   await click(page, /^Play$/);
