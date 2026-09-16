@@ -52,6 +52,7 @@ import {
   isTrivialChoice,
   matchesCardFilter,
   MAX_CHOICES_PER_RESOLUTION,
+  MAX_EFFECT_STEPS_PER_RESOLUTION,
   NO_ASKING_OBJECT,
   normalizeChoiceRequest,
   NOTHING_CHOSEN,
@@ -1100,6 +1101,26 @@ function runResolution(
   emit: (e: GameEvent) => void,
 ): void {
   while (frame.next < frame.effects.length) {
+    // ⚠️ THE RUNAWAY THE ASK BUDGET CANNOT SEE. An iterative effect ("repeat
+    // this process") enqueues its next step into this same frame, so a body
+    // whose repeat rule never becomes false spins here forever — asking
+    // nothing, taking no game action, ending no turn, and therefore invisible
+    // to `MAX_CHOICES_PER_RESOLUTION`, to the sim's per-turn action bound and
+    // to the soak's `gameCanEnd` invariant. It hangs the process instead of
+    // losing a game, which in a thousand-game soak reads as a slow game.
+    //
+    // Abandoning the REST of the resolution (rather than silently stopping the
+    // loop) is the same degradation the ask budget performs, through the same
+    // funnel and the same event: a cap that quietly returned would make the
+    // card play weaker than printed with every test still green.
+    if ((frame.stepCount ?? 0) >= MAX_EFFECT_STEPS_PER_RESOLUTION) {
+      abandonResolution(
+        frameSource(state, frame),
+        `ran more than ${MAX_EFFECT_STEPS_PER_RESOLUTION} effect steps in one resolution`,
+        emit,
+      );
+      break;
+    }
     const ref = frame.effects[frame.next] as EffectRef;
     const source = frameSource(state, frame);
     // A modal spell's effects each point where THEIR mode was aimed; everything
@@ -1133,6 +1154,12 @@ function runResolution(
       return;
     }
     frame.next += 1;
+    // ONE STEP = ONE COMPLETED EFFECT REF, counted here rather than at the top
+    // of the loop so a ref re-run after a park (the replay path) is not charged
+    // again: how many QUESTIONS a ref may ask is the other budget's question,
+    // and charging both for the same park would make them disagree about which
+    // runaway they caught.
+    frame.stepCount = (frame.stepCount ?? 0) + 1;
     // Answers belong to one effect ref; the next ref starts its own conversation.
     frame.answers.length = 0;
   }
@@ -1323,6 +1350,30 @@ function finishSpellResolution(
 }
 
 /**
+ * THE ONE PLACE A RESOLUTION IS GIVEN UP ON, whichever bound noticed.
+ *
+ * Two different runaways end here — a resolution that will not stop asking
+ * ({@link MAX_CHOICES_PER_RESOLUTION}, and a question whose kind cannot be
+ * represented at all) and one that will not stop enqueueing
+ * ({@link MAX_EFFECT_STEPS_PER_RESOLUTION}) — because they are one fact wearing
+ * two counters: *this resolution is not going to finish on its own.* Two
+ * emitters would eventually disagree about how that is reported, and a consumer
+ * would learn to watch only one of them.
+ *
+ * The event's `type` predates the second bound and is kept: `choiceAbandoned` is
+ * read by the sim's observation redaction, the soak's mechanic table and the web
+ * log formatter, and renaming it would rewrite every serialized log for a word.
+ * The `reason` is what says which bound tripped, and it always names a number.
+ */
+function abandonResolution(
+  source: CardInstance,
+  reason: string,
+  emit: (e: GameEvent) => void,
+): void {
+  emit({ type: 'choiceAbandoned', sourceInstanceId: source.instanceId, reason });
+}
+
+/**
  * Build the channel one effect-ref invocation asks its questions through.
  *
  * Questions are numbered per invocation: number `i` is answered from
@@ -1343,7 +1394,7 @@ function createChoiceChannel(
 ): ChoiceChannel {
   let askIndex = 0;
   const abandon = (reason: string): undefined => {
-    emit({ type: 'choiceAbandoned', sourceInstanceId: source.instanceId, reason });
+    abandonResolution(source, reason, emit);
     return undefined;
   };
   const settle = (choice: PendingChoice, reason: string): ChoiceAnswer => {

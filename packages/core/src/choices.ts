@@ -1233,12 +1233,59 @@ export function isTrivialChoice(choice: PendingChoice): boolean {
 }
 
 /**
+ * The largest LIBRARY a legal deck can put in front of an iterative effect — a
+ * 100-card singleton deck with nothing drawn yet.
+ *
+ * It is here rather than in a deck-format module because it is not a deckbuilding
+ * rule: it is the only thing that BOUNDS the two ceilings below. Every printed
+ * iteration this engine implements consumes a library card per step ("Exile the
+ * top card of your library … repeat this process"), so the library is the real
+ * termination argument and these ceilings exist only to catch an AUTHORING
+ * mistake — a body that iterates without consuming anything.
+ */
+export const LARGEST_LEGAL_LIBRARY = 100;
+
+/**
+ * A hard ceiling on how many EFFECT STEPS one resolution may run.
+ *
+ * ⚠️ THIS EXISTS BECAUSE THE OTHER CEILING COULD NOT SEE THE RUNAWAY IT WAS FOR.
+ * {@link MAX_CHOICES_PER_RESOLUTION} bounds a resolution that will not stop
+ * ASKING. A resolution that will not stop ENQUEUEING asks nothing, takes no game
+ * action, and never ends a turn — so it is invisible to that counter, to the
+ * per-turn action bound and to the soak's `gameCanEnd` invariant, and it hangs
+ * the process rather than losing a game. That is the same blindness
+ * `sim/loop-runaway.test.ts` records for the per-turn bound (DESIGN §3.140), one
+ * layer further in: a check that cannot see the class it guards is not a check.
+ *
+ * It is a GUARD AGAINST AN AUTHORING MISTAKE, never the termination argument.
+ * A printed iteration terminates because its body consumes a finite zone; the
+ * card's own rule is what stops it, and this stops a body whose rule is wrong.
+ * So it is set well above any legal library rather than tuned to a card, and
+ * tripping it ABANDONS THE RESOLUTION WITH AN EVENT — a silent cap would make an
+ * iterative card play weaker than printed, which biases an A/B verdict exactly
+ * as badly as playing stronger (§1a).
+ */
+export const MAX_EFFECT_STEPS_PER_RESOLUTION = 4 * LARGEST_LEGAL_LIBRARY;
+
+/**
  * A hard ceiling on how many questions ONE resolution may ask. A primitive with a
  * bug (asking inside a loop whose condition its own answer never changes) would
  * otherwise wedge the game forever; instead the engine abandons the rest of that
- * resolution with an event. Generous: no real card comes close.
+ * resolution with an event.
+ *
+ * ⚠️ IT USED TO BE 32, UNDER THE COMMENT *"generous: no real card comes close"*.
+ * That was measured false by the first iterative card implemented: Primal Surge
+ * asks once per permanent it puts onto the battlefield, so a permanent-heavy
+ * deck asks it fifty-odd times in ONE resolution. The old ceiling abandoned the
+ * rest of the resolution, and an abandoned `confirm` degrades to NO — so the
+ * card would have stopped early and played WEAKER than printed while every test
+ * stayed green.
+ *
+ * Derived from {@link MAX_EFFECT_STEPS_PER_RESOLUTION} rather than picked again,
+ * because a step may ask at most one question and the two are one fact: *how
+ * long may a single resolution run before the engine calls it a runaway.*
  */
-export const MAX_CHOICES_PER_RESOLUTION = 32;
+export const MAX_CHOICES_PER_RESOLUTION = MAX_EFFECT_STEPS_PER_RESOLUTION;
 
 // --- answer enumeration (the AI / legal-action seam) ------------------------------
 
@@ -1472,6 +1519,17 @@ export interface ResolutionFrame {
   answers: ChoiceAnswer[];
   /** Questions asked across the whole frame; guards {@link MAX_CHOICES_PER_RESOLUTION}. */
   askCount: number;
+  /**
+   * Effect refs RUN by this frame so far; guards
+   * {@link MAX_EFFECT_STEPS_PER_RESOLUTION}.
+   *
+   * Not `effects.length`: an iterative effect enqueues its next step only after
+   * the previous one has run, so the list length is a snapshot of what is left,
+   * never a count of what has happened. Optional so a frame serialized by an
+   * older build resumes (as zero) rather than failing to parse — the bound then
+   * applies to the remainder of that resolution, which is the safe direction.
+   */
+  stepCount?: number;
   /** The spell card mid-resolution (absent for a trigger). */
   card?: CardInstance;
   /**

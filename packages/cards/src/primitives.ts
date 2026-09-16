@@ -119,6 +119,7 @@ import { TRIGGER_COPY_PRIMITIVES } from './trigger-copy-primitives.js';
 import { BLINK_PRIMITIVES } from './blink-primitives.js';
 import { COUNTER_KEYWORD_PRIMITIVES } from './counter-keyword-primitives.js';
 import { SPELL_COUNT_PRIMITIVES } from './spell-count-primitives.js';
+import { ITERATIVE_PRIMITIVES } from './iterative-primitives.js';
 
 // --- the primitives ------------------------------------------------------------
 
@@ -2075,6 +2076,13 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   // a card from among them into your hand", doubling power, and the
   // reveal-the-top-card draw.
   ...SPELL_COUNT_PRIMITIVES,
+  // The iterative-effects family (`./iterative-primitives`): `repeat this
+  // process`. Its own module because the mechanic is a RE-ENTRY into the same
+  // resolution rather than an effect — the body is split across two refs so the
+  // question it asks comes before the mutation it asks about, and the loop's
+  // bound is core's `MAX_EFFECT_STEPS_PER_RESOLUTION`, deliberately not a second
+  // budget of its own.
+  ...ITERATIVE_PRIMITIVES,
 });
 
 /** The set of primitive ids this package provides (for validation). */
