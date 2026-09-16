@@ -437,9 +437,13 @@ function Token({ token, popId }: { readonly token: RulesToken; readonly popId: s
                 <span className="card-face__pop-kind"> · {GLOSSARY_KIND_LABELS[token.glossary.kind]}</span>
               </span>
               <span className="card-face__pop-body">{token.glossary.text}</span>
-              {/* Only the 36 engine-flag rows carry a rule number, and lane F's
+              {/* Only the engine-FLAG rows carry a rule number, and lane F's
                   test pins each against the repo's enforced KEYWORD_RULES. A row
-                  without one prints none rather than a guess. */}
+                  without one prints none rather than a guess — which is most of
+                  them: the 42 rows the pool refresh added are printed keywords
+                  the engine models as scripts, not as `KeywordFlags`, so the
+                  manifest has no citation to give them. (No count here: this
+                  comment said "36" while core declared 38.) */}
               {token.glossary.rule !== undefined && (
                 <span className="card-face__pop-rule">CR {token.glossary.rule}</span>
               )}

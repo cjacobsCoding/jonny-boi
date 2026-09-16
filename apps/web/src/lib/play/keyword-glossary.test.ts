@@ -11,8 +11,11 @@
  *  - `packages/core/src/card.ts` — every key of `interface KeywordFlags`;
  *  - `packages/core/src/conformance/rules-manifest.ts` — `KEYWORD_RULES`, so a
  *    CR citation here cannot fork from the one the conformance suite enforces;
- *  - `apps/web/src/data/card-index.json` — every keyword the 5,651-card pool
- *    actually prints.
+ *  - `apps/web/src/data/card-index.json` — every keyword the pool actually
+ *    prints. No card count is written down here: this file used to say
+ *    "5,651-card pool" long after the refresh took it past 6,900, which is the
+ *    stale-comment defect CLAUDE.md calls a bug with a blast radius. The size is
+ *    asserted from the JSON instead.
  *
  * CRLF trap (CLAUDE.md): these files are CRLF on a Windows checkout and LF in
  * git, so every read normalises newlines before matching.
@@ -31,6 +34,7 @@ import {
   glossaryEntry,
   glossaryForFlag,
   normalizeGlossaryTerm,
+  unexplainedPoolTerms,
   type GlossaryKey,
 } from './keyword-glossary.js';
 
@@ -144,11 +148,17 @@ describe('CR citations cannot fork from the conformance manifest', () => {
 });
 
 describe('the pool is covered — every printed keyword resolves or is a declared gap', () => {
-  it('resolves every keyword the 5,651-card pool prints', () => {
-    const unexplained = POOL_KEYWORDS.filter(
-      (term) => glossaryEntry(term) === undefined && POOL_TERMS_WITHOUT_GLOSSARY[term] === undefined,
-    );
+  it('resolves every keyword the pool prints', () => {
+    // No card count in the title on purpose: it was "5,651-card" here while the
+    // pool held 6,944, which is the same stale-number defect CLAUDE.md warns
+    // about. The size is asserted below, from the JSON.
+    const unexplained = unexplainedPoolTerms(POOL_KEYWORDS);
     expect(unexplained, 'the pool prints a keyword with no glossary row').toEqual([]);
+  });
+
+  it('re-derived the pool from the index, so the assertion above is not vacuous', () => {
+    expect(Object.keys(CARD_INDEX.cards).length).toBeGreaterThan(5000);
+    expect(POOL_KEYWORDS.length).toBeGreaterThan(100);
   });
 
   it('every declared gap is still a term the pool actually prints', () => {
@@ -163,6 +173,33 @@ describe('the pool is covered — every printed keyword resolves or is a declare
     for (const [term, reason] of Object.entries(POOL_TERMS_WITHOUT_GLOSSARY)) {
       expect(reason.length, `${term} is excluded with no reason`).toBeGreaterThan(40);
     }
+  });
+});
+
+describe('the guard fires where the pool actually changes, not only here', () => {
+  // The 44-term gap did not get through because nobody wrote the assertion above
+  // — it was written, and it passed for weeks, then failed on a branch belonging
+  // to someone who had not touched the pool. What was missing was a check at the
+  // moment of the edit. These two tests pin that wiring so it cannot be removed
+  // silently; without them "it fires sooner" is a sentence in a commit message.
+
+  it('the card-index generator runs the coverage gate', () => {
+    const generator = readSource('../../../scripts/build-card-index.mjs');
+    expect(
+      generator,
+      'build-card-index.mjs no longer calls the glossary gate — a pool refresh can lose tooltips silently again',
+    ).toContain('check-glossary-coverage.mjs');
+  });
+
+  it('the gate and this test give the SAME answer, over the same table', async () => {
+    // One answer to one question (rule 12). The gate strips the TypeScript and
+    // calls the real `unexplainedPoolTerms`; if it ever answered from its own
+    // copy of the rules, or from a different card index, this is where the fork
+    // shows up.
+    const { checkGlossaryCoverage } = await import('../../../scripts/check-glossary-coverage.mjs');
+    const result = await checkGlossaryCoverage();
+    expect(result.printedTermCount).toBe(POOL_KEYWORDS.length);
+    expect(result.unexplained).toEqual(unexplainedPoolTerms(POOL_KEYWORDS));
   });
 });
 
@@ -226,30 +263,60 @@ describe('normalizeGlossaryTerm — one normaliser for both vocabularies', () =>
   });
 });
 
+/**
+ * Words that must resolve to NOTHING, tabulated by WHY — and the why is
+ * load-bearing, not decoration.
+ *
+ *  - `'typo'` — a spelling one letter from a real row, or a bare fragment. It
+ *    proves the lookup does not fuzzy-match, and it is safe forever, because no
+ *    card prints it.
+ *  - `'unprinted'` — a REAL Magic keyword with no row. This kind is only honest
+ *    while the pool does not print the word. The day it does, the coverage guard
+ *    above demands a row and this one demands there be none, and the two
+ *    contradict.
+ *
+ * ⚠️ That contradiction is not hypothetical: `'storm'` sat in this list as an
+ * unmodelled keyword until the pool refresh brought in 15 cards printing Storm.
+ * Only the coverage guard failed; this one stayed green while asserting the
+ * opposite thing. So every `'unprinted'` row is now ALSO asserted to be absent
+ * from the pool — the collision fails here, by name, the first time a refresh
+ * creates it, instead of being settled by whichever test someone edited first.
+ */
+const MUST_NOT_RESOLVE = [
+  { term: 'vigilant', kind: 'typo' },
+  { term: 'flyin', kind: 'typo' },
+  { term: 'firs strike', kind: 'typo' },
+  { term: 'deathtouched', kind: 'typo' },
+  { term: 'walk', kind: 'typo' },
+  { term: 'cycl', kind: 'typo' },
+  { term: 'annihilator', kind: 'unprinted' },
+  { term: 'banding', kind: 'unprinted' },
+  { term: 'dredge', kind: 'unprinted' },
+] as const;
+
 describe('the table is CLOSED — a near miss returns nothing, never a plausible lie', () => {
-  it.each([
-    'vigilant',
-    'flyin',
-    'firs strike',
-    'deathtouched',
-    'annihilator',
-    'banding',
-    'storm',
-    'dredge',
-    'walk',
-    'cycl',
-    'protection',
-  ])('%s', (term) => {
-    // Every one of these is either a real Magic keyword this engine does not
-    // model or a typo one letter from a real row. "protection" is the exception
-    // that proves the design: it IS a declared alias, so it resolves — which is
-    // a row, not a fuzzy match.
-    const entry = glossaryEntry(term);
-    if (term === 'protection') {
-      expect(entry?.term).toBe('Protection from');
-      return;
-    }
-    expect(entry, `${term} must not resolve to a near match`).toBeUndefined();
+  it.each(MUST_NOT_RESOLVE)('$term ($kind) resolves to nothing', ({ term }) => {
+    expect(glossaryEntry(term), `${term} must not resolve to a near match`).toBeUndefined();
+  });
+
+  it('every "unprinted" entry really is absent from the pool', () => {
+    // The cross-guard. A term listed here as unprinted that the pool now prints
+    // is a direct contradiction of `resolves every keyword the pool prints`, and
+    // it must fail HERE — where the reason is written down — rather than leaving
+    // someone to discover the conflict by writing a row and watching this file
+    // go red for no stated reason.
+    const printed = new Set(POOL_KEYWORDS.map((term) => term.toLowerCase()));
+    const nowPrinted = MUST_NOT_RESOLVE.filter(
+      (row) => row.kind === 'unprinted' && printed.has(row.term.toLowerCase()),
+    ).map((row) => row.term);
+    expect(
+      nowPrinted,
+      'the pool now prints this keyword — it needs a glossary row, and this entry must go',
+    ).toEqual([]);
+  });
+
+  it('"protection" is the exception that proves the design: a declared alias, not a fuzzy match', () => {
+    expect(glossaryEntry('protection')?.term).toBe('Protection from');
   });
 });
 
