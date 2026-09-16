@@ -24,7 +24,7 @@
 import type { CardType, CharacteristicFormula, DerivedCountName } from './card.js';
 import { isCreature, matchesCardFilter } from './card.js';
 import type { CardFilter } from './choices.js';
-import type { GameState, PlayerId } from './state.js';
+import type { CardInstance, GameState, PlayerId } from './state.js';
 import { PLAYER_IDS } from './state.js';
 
 /** The other seat (local copy — this module sits below the zone helpers). */
@@ -173,6 +173,34 @@ export function evaluateDerivedCount(state: GameState, countOf: DerivedCountName
 export type DerivedCountScope = 'you' | 'opponents' | 'any';
 
 /**
+ * The BOARD-STATE half of a filtered count — "the number of **tapped** creatures
+ * …", "each **untapped** land you control".
+ *
+ * Its own axis rather than a field on {@link CardFilter}, and that separation is
+ * load-bearing. A `CardFilter` reads PRINTED characteristics off a
+ * `ChoiceBearingPermanent` (`{ def, chosenAsEntered }`) precisely so the same
+ * filter can select a card in a LIBRARY, a HAND or a GRAVEYARD, where "tapped"
+ * does not exist and every card would answer the question the same wrong way.
+ * Tapped-ness is a fact about a permanent on the battlefield, so it is asked
+ * only where the battlefield is — here.
+ *
+ * CLOSED, like every other vocabulary in this file: a printed board-state word
+ * outside these two reports rather than being widened to the nearest one that
+ * happens to exist.
+ */
+export type PermanentStateFilter = 'tapped' | 'untapped';
+
+/**
+ * Whether a permanent satisfies a board-state predicate. `undefined` means the
+ * count does not care and every permanent passes — the overwhelmingly common
+ * case, and the one that costs a single `undefined` check.
+ */
+function matchesPermanentState(perm: CardInstance, state: PermanentStateFilter | undefined): boolean {
+  if (state === undefined) return true;
+  return state === 'tapped' ? perm.tapped === true : perm.tapped !== true;
+}
+
+/**
  * Count the permanents matching a {@link CardFilter} (DESIGN §3.149).
  *
  * **This is the row that stops the count vocabulary being a row per noun.**
@@ -200,6 +228,7 @@ export function countPermanentsMatching(
   filter: CardFilter,
   scope: DerivedCountScope,
   you: PlayerId,
+  permanentState?: PermanentStateFilter,
 ): number {
   const battlefield = state.battlefield;
   const them = opponent(you);
@@ -208,6 +237,9 @@ export function countPermanentsMatching(
     const perm = battlefield[i]!;
     if (scope === 'you' && perm.controller !== you) continue;
     if (scope === 'opponents' && perm.controller !== them) continue;
+    // Board state before the filter: it is one property read, and it rejects
+    // most of the battlefield for the counts that ask it at all.
+    if (!matchesPermanentState(perm, permanentState)) continue;
     if (matchesCardFilter(perm, filter)) count += 1;
   }
   return count;

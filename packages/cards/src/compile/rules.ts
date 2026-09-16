@@ -23,6 +23,7 @@ import type {
   CopyAsEntersSpec,
   CopyExceptions,
   DerivedCountScope,
+  PermanentStateFilter,
   EffectRef,
   KeywordFlags,
   ManaActivationCondition,
@@ -409,6 +410,139 @@ const FILTERED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> 
   ...typeCounts('land', 'land'),
 });
 
+// ===========================================================================
+// THE WALKER-RESIDUE FAMILY (DESIGN §3.153) — owned by `feat/walker-residues`.
+// Everything between this banner and its closing one is this lane's; siblings
+// are live in this file and must not need to read into it to merge.
+//
+// Two axes the count vocabulary did not have, both measured off Tamiyo, the
+// Moon Sage's −2 ("Draw a card for each tapped creature target player
+// controls"):
+//   1. a BOARD-STATE predicate — "tapped", which `CardFilter` cannot carry;
+//   2. a SUBJECT-PLAYER axis — whose seat the printed scope is read from.
+// ===========================================================================
+
+/** The word `playersForParam` reads for "the chosen player target". */
+const TARGET_PLAYER_SUBJECT = 'targetPlayer';
+
+/**
+ * The TAPPED counts, read from the COUNTING PLAYER's own seat.
+ *
+ * Generated through the same {@link scopedCounts} every other filtered noun uses,
+ * so "tapped creatures you control" / "…an opponent controls" / "…on the
+ * battlefield" arrive together or not at all — and then narrowed by the board
+ * state, which is the one thing a `CardFilter` cannot say (see core's
+ * `PermanentStateFilter`).
+ *
+ * ⚠️ NOTHING IN THIS TABLE NAMES A TARGET, and that is enforced rather than
+ * remembered: these rows are read by rules that declare no target, so a phrase
+ * like "…target player controls" reaching them would resolve its subject to the
+ * CONTROLLER and silently count the wrong player's board. The targeted phrases
+ * live in {@link TARGETED_EACH_TO_PLURAL} instead, and
+ * `walker-residues.test.ts` fails if a "target" phrase ever appears here.
+ *
+ * Measured first (rule 11): 8 corpus clauses across 7 shapes print "for each
+ * tapped creature", 3 of them sole-blocked. That smaller number is the honest
+ * ceiling for this half, and it is reported rather than the 246-clause
+ * "tapped creature" headline the row would have offered.
+ */
+const TAPPED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = Object.freeze(
+  tappedStateOf(scopedCounts('tapped creatures', { anyOfTypes: ['creature'] }), 'tapped'),
+);
+
+/**
+ * Narrow a generated scope family by a board state — the one place that turns
+ * "creatures you control" rows into "tapped creatures you control" rows.
+ *
+ * A transform over {@link scopedCounts}' output rather than a parameter on it,
+ * so the three printed scopes stay generated in exactly one place and a noun
+ * added there is understood here for free.
+ */
+function tappedStateOf(
+  rows: Record<string, DerivedCountDescriptor>,
+  permanentState: PermanentStateFilter,
+): Record<string, DerivedCountDescriptor> {
+  const out: Record<string, DerivedCountDescriptor> = {};
+  for (const [phrase, descriptor] of Object.entries(rows)) {
+    // Every row `scopedCounts` makes is the object arm; the string arm is the
+    // named-core-row half and cannot carry a board state at all.
+    if (typeof descriptor === 'string') continue;
+    out[phrase] = { ...descriptor, permanentState };
+  }
+  return out;
+}
+
+/**
+ * The SINGULAR "for each …" phrases whose subject is a **TARGET**, and the
+ * plural row each means.
+ *
+ * Its own table, deliberately NOT spread into {@link DERIVED_EACH_TO_PLURAL}.
+ * A printed "target player" is only honest if the card actually TARGETS a
+ * player: with no target chosen, `playersForParam` falls back to the controller,
+ * so Tamiyo would count her own tapped creatures with nobody having chosen
+ * anything — a different card, and one that never reports. `needsChosenTarget`
+ * is a STATIC flag on a rule, so the only way to make the targeting mandatory is
+ * to give these phrases a rule of their own; keeping them out of the shared
+ * table is what stops a target-free rule from ever reading one.
+ *
+ * ⚠️ "target OPPONENT controls" is deliberately absent, and its exclusion is the
+ * §1a check for this family. The count would be right in a two-seat game
+ * (`scope: 'opponents'`), but the engine cannot restrict a chosen target to a
+ * player who is not you — the same limitation `target-player-loses-life` already
+ * names — so the card would let its controller aim at themselves and still draw
+ * off the opponent's board. That is stronger than printed in one direction and
+ * weaker in the other, so those three corpus clauses keep reporting.
+ */
+const TARGETED_EACH_TO_PLURAL: Readonly<Record<string, string>> = Object.freeze({
+  'tapped creature target player controls': 'tapped creatures target player controls',
+});
+
+/**
+ * The PLURAL rows the table above names — the subject-targeted half of the count
+ * vocabulary, kept beside it for the same reason.
+ *
+ * `scope: 'you'` read from the TARGET's seat is exactly "permanents that player
+ * controls". The two fields are different questions and compose; see
+ * `DerivedValue.subject` for why collapsing them into `'opponents'` would be a
+ * different card.
+ */
+const TARGETED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = Object.freeze({
+  'tapped creatures target player controls': {
+    countOf: PERMANENTS_MATCHING,
+    filter: { anyOfTypes: ['creature'] } as CardFilter,
+    scope: 'you',
+    subject: TARGET_PLAYER_SUBJECT,
+    permanentState: 'tapped',
+  } as const,
+});
+
+/** The alternation of the targeted "for each" phrases, longest-first. */
+const TARGETED_EACH_PHRASE = `(${Object.keys(TARGETED_EACH_TO_PLURAL)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/**
+ * The descriptor a printed targeted "for each …" phrase means, or null.
+ *
+ * Mirrors {@link derivedEachValue} exactly — singular spelling in, plural row's
+ * answer out — so the two spellings of one count cannot drift apart.
+ */
+function targetedEachValue(phrase: string): Record<string, unknown> | null {
+  const plural = TARGETED_EACH_TO_PLURAL[phrase.trim().toLowerCase()];
+  if (plural === undefined) return null;
+  const entry = TARGETED_DERIVED_COUNTS[plural];
+  return entry === undefined || typeof entry === 'string' ? null : { ...entry };
+}
+
+/** The two tables a guard test reads to prove no targeting phrase leaked into the shared ones. */
+export const WALKER_RESIDUE_TABLES = Object.freeze({
+  tapped: TAPPED_DERIVED_COUNTS,
+  targetedEach: TARGETED_EACH_TO_PLURAL,
+  targeted: TARGETED_DERIVED_COUNTS,
+});
+
+// === end of the walker-residue count tables ================================
+
 /**
  * The whole vocabulary, one table, read by every consumer.
  *
@@ -426,13 +560,26 @@ const FILTERED_DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> 
  */
 const DERIVED_COUNTS: Readonly<Record<string, DerivedCountDescriptor>> = Object.freeze({
   ...FILTERED_DERIVED_COUNTS,
+  // §3.153 — the walker-residue rows. Spread with the FILTERED half and BEFORE
+  // the named one, so the precedence the comment above protects is untouched:
+  // every phrase below carries the word "tapped", which no named row spells, so
+  // this spread can neither shadow a named row nor be shadowed by one.
+  ...TAPPED_DERIVED_COUNTS,
   ...NAMED_DERIVED_COUNTS,
 });
 
 /** What a phrase in {@link DERIVED_COUNTS} means: a named core row, or a set carried as data. */
 type DerivedCountDescriptor =
   | string
-  | { readonly countOf: typeof PERMANENTS_MATCHING; readonly filter: CardFilter; readonly scope: DerivedCountScope };
+  | {
+      readonly countOf: typeof PERMANENTS_MATCHING;
+      readonly filter: CardFilter;
+      readonly scope: DerivedCountScope;
+      /** §3.153 — WHOSE seat `scope` is read from. Absent means the controller. */
+      readonly subject?: string;
+      /** §3.153 — the board-state predicate ("tapped"). Absent means it does not care. */
+      readonly permanentState?: PermanentStateFilter;
+    };
 
 /**
  * The three printed scopes of a filtered count, as the rows they generate.
@@ -552,6 +699,15 @@ const DERIVED_EACH_TO_PLURAL: Readonly<Record<string, string>> = Object.freeze({
   'card in your hand': 'cards in your hand',
   'card in your graveyard': 'cards in your graveyard',
   'creature card in your graveyard': 'creature cards in your graveyard',
+  // §3.153 — the walker-residue family's target-FREE singulars. Safe in this
+  // shared table precisely because none of them names a target; the targeted
+  // spelling lives in `TARGETED_EACH_TO_PLURAL` and is read by one rule that
+  // declares the target.
+  'tapped creature you control': 'tapped creatures you control',
+  'tapped creature an opponent controls': 'tapped creatures an opponent controls',
+  'tapped creature your opponents control': 'tapped creatures your opponents control',
+  'tapped creature they control': 'tapped creatures they control',
+  'tapped creature on the battlefield': 'tapped creatures on the battlefield',
 });
 
 /** The alternation of the "for each" phrases, longest-first. */
@@ -2832,6 +2988,33 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const amount = derivedEachValue(match[2] ?? '');
       if (!amount) return null;
       return effects({ primitive: 'gainLife', params: { amount } });
+    },
+  },
+  // --- the walker-residue family (DESIGN §3.153) ----------------------------
+  {
+    id: 'draw-for-each-targeted',
+    description:
+      '"Draw a card for each tapped creature target player controls." (Tamiyo, the Moon Sage\'s −2)',
+    /**
+     * The same sentence as `draw-for-each` below with ONE difference that has to
+     * be a different rule: the count's subject is a TARGET, so the card must
+     * actually aim at a player. `needsChosenTarget` is a static flag, and
+     * setting it on `draw-for-each` would refuse Shamanic Revelation's plain
+     * "draw a card for each creature you control" inside every trigger body —
+     * so the targeting form is its own row, ABOVE the plain one, reading the
+     * table the plain one deliberately cannot see.
+     *
+     * The target restriction is what makes the printed word "target" true:
+     * without it the resolution carries no player target, `playersForParam`
+     * falls back to the controller, and the card counts the wrong board with
+     * nothing to notice.
+     */
+    pattern: new RegExp(`^${OPTIONAL_YOU}draw a card for each ${TARGETED_EACH_PHRASE}$`),
+    needsChosenTarget: true,
+    build(match) {
+      const count = targetedEachValue(match[1] ?? '');
+      if (!count) return null;
+      return effects({ primitive: 'drawCards', params: { count, targets: PLAYER_TARGET } });
     },
   },
   {
