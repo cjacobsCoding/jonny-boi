@@ -3,21 +3,32 @@
  * The card-facing declaration half is `../replacement.ts`, which is also where
  * the family is introduced.
  *
- * ## ONE seam, four call sites
- * Damage, counters, draws and TOKEN COUNTS all ask the SAME question through the
- * same function. That is the whole point of the module: the once-per-event rule,
- * the ordering rule and the shield bookkeeping exist once, so a damage doubler
- * and a token doubler cannot end up with two different ideas of what "instead"
- * means. The four exported façades ({@link replaceDamage},
- * {@link replaceCounters}, {@link replaceDraw}, {@link replaceTokens}) only build
- * the event record and unpack the result; {@link runReplacements} is the single
- * engine.
+ * ## ONE seam, five call sites
+ * Damage, counters, draws, TOKEN COUNTS and LIFE GAIN all ask the SAME question
+ * through the same function. That is the whole point of the module: the
+ * once-per-event rule, the ordering rule and the shield bookkeeping exist once,
+ * so a damage doubler and a lifegain doubler cannot end up with two different
+ * ideas of what "instead" means. The five exported façades
+ * ({@link replaceDamage}, {@link replaceCounters}, {@link replaceDraw},
+ * {@link replaceTokenCount}, {@link replaceLifeGain}) only build the event
+ * record and unpack the result; {@link runReplacements} is the single engine.
  *
- * ⚠️ The token kind needed **no third rule** — it is the strongest evidence the
- * layer generalises. It scales a quantity (how many of the tokens an effect was
- * already creating), so it reuses `ReplacementApplies` unchanged, terminates by
- * the same CR 614.5 bitmask, and is ordered by the same CR 616.1 search. The
- * only line it added anywhere is `affectedPlayerPrefersMore`'s answer for it.
+ * ⚠️ The token kind needed **no third rule**, and LIFE GAIN needed no sixth —
+ * together they are the strongest evidence the layer generalises. Each scales a
+ * quantity, so each reuses `ReplacementApplies` unchanged, terminates by the
+ * same CR 614.5 bitmask, and is ordered by the same CR 616.1 search. The only
+ * line either added anywhere is `affectedPlayerPrefersMore`'s answer for it.
+ * §3.151 measured the consequence: the gap in the CR 614/615 backlog is NOT the
+ * event kinds — it is the printed WORDINGS on kinds the layer already watches.
+ *
+ * ## ANCHORS — the one answer to "which object does `~` mean?"
+ * A printed shield names its own permanent ("dealt to and dealt by ~" — Fog
+ * Bank) or the permanent it is attached to ("enchanted creature" — Gaseous
+ * Form). Both SIDES of a damage event can be anchored and both read the SAME
+ * closed vocabulary through {@link resolveAnchor} (`ReplacementAnchor`), so a
+ * two-directional shield cannot protect one creature while blanking another's
+ * damage. Resolution is a READ at event time, never an id baked in at index
+ * time — which is why an Aura that changes host guards the new host.
  *
  * ## CR 614.5 — an effect applies AT MOST ONCE to a given event
  * This is the rule that makes a doubling effect terminate. After a replacement
@@ -88,6 +99,7 @@ import { matchesCardFilter } from '../choices.js';
 import type { StaticControllerScope } from '../statics.js';
 import type {
   ReplacementAbility,
+  ReplacementAnchor,
   ReplacementApplies,
   ReplacementEventKind,
   ReplacementOutcome,
@@ -130,6 +142,22 @@ export interface ActiveReplacement {
   readonly controller: PlayerId;
   /** The permanent (or spell) it radiates from. */
   readonly sourceInstanceId: InstanceId;
+  /**
+   * The permanent itself, for a PRINTED ability.
+   *
+   * ⚠️ PERF, and that is its whole reason for existing: it makes an
+   * `'attached'` anchor a property read instead of a battlefield walk on the
+   * DAMAGE path. The instance is already in hand when the index is built, so
+   * this is one more property on an object being allocated anyway — the same
+   * trade `untap.ts` documents for passing a prebuilt `ContinuousIndex` rather
+   * than re-walking per permanent.
+   *
+   * Absent for a FLOATING record, whose source may have left the battlefield
+   * entirely. No floating replacement carries an anchor today, and one that did
+   * would correctly resolve to "this anchor names nothing" rather than to a
+   * stale object.
+   */
+  readonly sourceInstance?: CardInstance;
   /** Set for a floating record; the shield bookkeeping writes through it. */
   readonly floating?: FloatingReplacement;
 }
@@ -263,6 +291,7 @@ function pushAbilities(
       ability,
       controller: source.controller,
       sourceInstanceId: source.instanceId,
+      sourceInstance: source,
     });
   }
   return found;
@@ -329,6 +358,13 @@ function appliesTo(state: GameState, entry: ActiveReplacement, event: Replaceabl
     if (applies.sourceFilter !== undefined) {
       if (source === undefined || !matchesCardFilter(source, applies.sourceFilter)) return false;
     }
+    if (applies.dealerAnchor !== undefined) {
+      // "…damage that would be dealt BY ~" / "by enchanted creature". An
+      // unresolvable anchor (an Aura attached to nothing) admits nothing, which
+      // is the card's own answer and not a special case.
+      const anchored = resolveAnchor(entry, applies.dealerAnchor);
+      if (anchored === undefined || source === undefined || source.instanceId !== anchored) return false;
+    }
   }
 
   if (event.kind === 'draw') {
@@ -348,6 +384,12 @@ function appliesTo(state: GameState, entry: ActiveReplacement, event: Replaceabl
     const actual = recipient === undefined ? event.affectedPlayer : recipient.instanceId;
     if (applies.recipientIs !== actual) return false;
   }
+  if (applies.recipientAnchor !== undefined) {
+    // "…damage that would be dealt TO ~" / "to enchanted creature". An anchor
+    // names a PERMANENT, so a player recipient never satisfies one.
+    const anchored = resolveAnchor(entry, applies.recipientAnchor);
+    if (anchored === undefined || recipient === undefined || recipient.instanceId !== anchored) return false;
+  }
   if (!scopeAdmits(applies.recipientController, owner, event.affectedPlayer)) return false;
   if (recipient !== undefined) {
     if (applies.excludeSource === true && recipient.instanceId === entry.sourceInstanceId) return false;
@@ -360,6 +402,28 @@ function appliesTo(state: GameState, entry: ActiveReplacement, event: Replaceabl
     return false;
   }
   return true;
+}
+
+/**
+ * WHICH OBJECT an anchor names, right now. The ONE answer to "what does `~`
+ * mean on this replacement effect?" — asked by both the recipient side and the
+ * dealer side, so a two-directional shield (Fog Bank) cannot end up with two
+ * different ideas of which creature it is protecting.
+ *
+ * Resolved FRESH on every event rather than baked in when the ability is
+ * indexed, which is what makes an Aura that changes host guard the new host:
+ * `attachedTo` is read at the moment the damage is being dealt.
+ *
+ * `undefined` means the anchor names nothing right now — an Equipment that is
+ * unattached, an Aura whose host has left. The caller treats that as "does not
+ * apply", which is the printed card's own answer.
+ */
+function resolveAnchor(entry: ActiveReplacement, anchor: ReplacementAnchor): InstanceId | undefined {
+  if (anchor === 'source') return entry.sourceInstanceId;
+  // 'attached' — the permanent the source is attached to, read off the instance
+  // the index already holds. One property read, no walk: see
+  // `ActiveReplacement.sourceInstance`.
+  return entry.sourceInstance?.attachedTo ?? undefined;
 }
 
 /**
@@ -662,7 +726,7 @@ export function expireFloatingReplacements(
  * needs no bookkeeping at all.
  */
 
-// --- the three façades ----------------------------------------------------------
+// --- the five façades -----------------------------------------------------------
 
 /**
  * The ONE question every damage site asks: how much damage is actually dealt?
@@ -773,6 +837,40 @@ export function replaceDraw(
   };
   runReplacements(state, index, event, emit);
   return { count: event.amount, winsGame: event.winsGame };
+}
+
+/**
+ * The ONE question every life-GAIN site asks: how much life does this player
+ * actually gain?
+ *
+ * Callers do not reach this directly — they go through `life.ts`'s
+ * {@link gainLifeAmount}, which is the funnel both the effect-primitive path and
+ * the LIFELINK path share. This is the layer's façade underneath it, kept beside
+ * the other four so the five event kinds read as one family.
+ *
+ * Returns the replaced amount. Zero is a real answer ("that player gains no
+ * life instead" — Sulfuric Vortex), and a caller that gains zero must emit
+ * nothing at all: CR 118.5 says an event that gains no life is not a life-gain
+ * event, so "whenever you gain life" must not see it.
+ */
+export function replaceLifeGain(
+  state: GameState,
+  index: ReplacementIndex,
+  player: PlayerId,
+  amount: number,
+  emit: (e: GameEvent) => void,
+): number {
+  if (index.length === 0 || amount <= 0) return amount;
+  const event: ReplaceableEvent = {
+    kind: 'lifegain',
+    affectedPlayer: player,
+    combat: false,
+    amount,
+    prevented: 0,
+    winsGame: false,
+  };
+  runReplacements(state, index, event, emit);
+  return event.amount;
 }
 
 /**

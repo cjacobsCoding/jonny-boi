@@ -37,6 +37,7 @@ import {
   effectiveToughness,
   evaluateDerivedCount,
   entersTapped,
+  gainLifeAmount,
   isCreature,
   isPlayerTarget,
   isTargetRestriction,
@@ -680,12 +681,38 @@ export function selfIfCreature(ctx: EffectContext): CardInstance | undefined {
 
 // --- life -----------------------------------------------------------------------
 
-/** Apply a life delta to a player and emit `lifeChanged`. Pure on the draft. */
-export function changeLife(ctx: EffectContext, player: PlayerId, delta: number): void {
-  if (delta === 0) return;
+/**
+ * Apply a life delta to a player and emit `lifeChanged`. Pure on the draft.
+ *
+ * A POSITIVE delta is a life GAIN (CR 118.3) and goes through core's one
+ * life-gain question first, so a printed "if you would gain life, you gain twice
+ * that much life instead" (Rhox Faithmender, Boon Reflection) applies to every
+ * primitive that gains life without any of them knowing the card exists. Core's
+ * LIFELINK path asks the same question at its own call site, and
+ * `core/src/life.test.ts` fails if the two ever disagree — see `core/src/life.ts`
+ * for why the mechanisms stay two and the answer stays one.
+ *
+ * A NEGATIVE delta is life LOSS or a paid cost, and no replacement watches
+ * either today (§3.151 reports that population rather than approximating it),
+ * so it falls straight through.
+ *
+ * ⚠️ Zero after replacement is a REAL answer — "that player gains no life
+ * instead" (Sulfuric Vortex). CR 118.5 says a gain of nothing is not a life-gain
+ * event, so nothing is written and nothing is emitted; a caller that emits its
+ * own `gainLife` must therefore read this function's return value and not its
+ * own argument.
+ *
+ * @returns the delta actually applied — the caller's `delta` unless a
+ *   replacement changed it.
+ */
+export function changeLife(ctx: EffectContext, player: PlayerId, delta: number): number {
+  if (delta === 0) return 0;
+  const applied = delta > 0 ? gainLifeAmount(ctx.state, player, delta, ctx.emit) : delta;
+  if (applied === 0) return 0;
   const p = ctx.state.players[player];
-  p.life += delta;
-  ctx.emit({ type: 'lifeChanged', player, delta, to: p.life });
+  p.life += applied;
+  ctx.emit({ type: 'lifeChanged', player, delta: applied, to: p.life });
+  return applied;
 }
 
 // --- zone movement (one funnel, so every move emits the same event) --------------

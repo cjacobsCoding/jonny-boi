@@ -2889,6 +2889,401 @@ The three siblings in the same brief still report honestly: umbra armor needs a 
 event kind core does not have, and ward's non-mana costs need its payload widened from a number to a
 closed cost union.
 
+### 3.152 The targeting-protection row names a half that was FINISHED — the gap was one keyword, and the row cannot see it — ✅ done
+
+> ⚠️ **Section number claimed off a contended range.** `main` carries TWO §3.147 sections and TWO
+> §3.149 sections at fork, `feat/modal-templates` carries an unpushed §3.150 of its own beside
+> main's, and several lanes are live in `rules.ts`. This lane claimed §3.151 off `origin/main` at
+> fork; **`feat/replacement-prevention` had claimed the same number in parallel**, so the integrator
+> renumbered this one to §3.152 at merge — which is the collision the warning above predicted.
+
+The acceptance card was **Fiendslayer Paladin** — `~ can't be the target of black or red spells your
+opponents control.` — filed on the §7a board under *"targeting restriction"*, pointing at the backlog
+row *"a ward/protection template the compiler does not recognize yet"*.
+
+**Both halves of that filing were wrong, and in opposite directions.**
+
+#### 1. The machinery the row names was already COMPLETE — all four quarters of it
+
+`packages/core/src/protection.ts` implements every rule of CR 702.16 and has since before this
+lane: can't be **targeted** (`isTargetableBy`), can't be **dealt damage**
+(`protectionPreventsDamage`), can't be **enchanted/equipped** (`isLegalHost`, so the SBA knocks an
+Aura off the moment protection is gained), can't be **blocked** (`canBlock`) — all four keyed on one
+shared answer to "what qualities does this source have?". `Protection from black and from red`
+compiles today; so does the granted form on an Equipment. **The brief for this lane offered a
+choice — implement all four quarters of protection, or ship only the sentence — and neither was the
+work, because the four quarters were finished.**
+
+#### 2. The row cannot see the acceptance card at all
+
+`UNSUPPORTED_HINTS` selects that row with `/\bward\b|\bprotection from\b/`, and Fiendslayer Paladin's
+printed line contains neither word. It is filed under **"a rules template the compiler does not
+recognize yet"**, the generic catch-all. So is every other card in its shape. The row's own blocked
+population and the family's blocked population are not the same set, in either direction:
+
+| population (blocked cards, 32,341-card corpus) | count |
+| --- | ---: |
+| matches the family TEXT (`can't be the target of` / `protection from` / `hexproof from` / `ward`) | **487** |
+| filed under the ward/protection ROW | **156** |
+| family text, filed under some OTHER row (leak IN) | **331** |
+| the ROW with no family text (leak OUT) | **0** |
+
+The 331 are filed under twelve different rows — 205 clauses under the generic *"rules template"*, 94
+under *"you may / choose"*, 48 under *counters*. **§8a item 3 measured again, and larger: selecting
+this family by hint alone would have missed 68% of it.**
+
+#### 3. What actually blocks the family — `packages/cards/scripts/protect-blame.mjs`
+
+Each blocked card's printed family LINE is re-probed alone on the card's own type line, against a
+control probe of that type line with no text, and then against a closed rewrite table. A card whose
+control probe refuses is reported NOT-PROBEABLE rather than bucketed.
+
+| blame | cards | what it means |
+| --- | ---: | --- |
+| OTHER-CLAUSE — every family line compiles alone | **184** | the family text is a red herring; the card is blocked elsewhere |
+| UNSPLIT — no rewrite in the closed table reaches it | 209 | grants, "the chosen colour", activated bodies — not this shape |
+| VOCAB — the ward COST is outside the table | 39 | `Ward—Pay 3 life`, `Ward—Discard a card` |
+| NOT-PROBEABLE (double-faced) | 26 | reported, never bucketed |
+| **SHAPE — `hexproof from X`** | **16** | the quality words are already understood; the SENTENCE is not |
+| VOCAB — the protection QUALITY is outside the table | 9 | `from snow`, `from mana value 3 or greater`, `from legendary creatures` |
+| **SHAPE — `can't be the target of …`** | **6** | including the acceptance card |
+| NOT-PROBEABLE (control probe refuses) | 4 | reported, never bucketed |
+
+**The split the row could not tell you: the gap is the SHAPE, not the quality vocabulary.** Only 9
+cards are blocked by a quality word; 22 are blocked by a sentence whose every quality word the
+compiler already reads.
+
+⚠️ **The blame script's own first run was a false zero, and it is worth recording how.** It read
+`result.unsupported`; the field is `result.missing`. `undefined ?? []` reported the row as holding
+**0 cards** — which is exactly the shape of a real §3.120 finding and would have been believed and
+written up. The second defect in the same run was the probe leaving Scryfall's bare `keywords` array
+on: `["Protection"]` alone makes a card report with EMPTY oracle text, so 334 of 487 cards came back
+NOT-PROBEABLE. Both are fixed and both are commented at the site.
+
+#### 4. What shipped: `hexproof from [quality]` (CR 702.11e), and why it is not protection
+
+`KeywordFlags.hexproofFrom` — a LIST payload beside `protectionFrom`, sharing its quality vocabulary
+and nothing else. CR 702.11e is **one** rule ("can't be the target of [quality] spells your opponents
+control or abilities your opponents control from [quality] sources"), and it binds only against an
+**opponent's** source.
+
+**So compiling `hexproof from black` into `protectionFrom` is not an approximation, it is three extra
+abilities and a wider scope — a card that plays STRONGER than printed.** That is the mirror of the
+failure the pool rule usually guards against and is equally disqualifying, and it is why the
+enforcement is one clause in `isTargetableBy` composed from the two predicates already there
+(hexproof's controller test, protection's `protectionBlocksSource`) rather than a third targeting
+rule that could drift from either.
+
+Both printings compile through the one payload parser, so the granted form on an Aura or Equipment
+came free:
+- the modern keyword — `Hexproof from black`, `Reach, hexproof from blue`, `Hexproof from artifacts,
+  creatures, and enchantments`;
+- the 2013 sentence — `~ can't be the target of black or red spells your opponents control.`
+
+⚠️ **`joinPayloadKeywords` needed widening, and the widening is closed.** Oracle spells a
+hexproof-from list WITHOUT repeating the preposition ("artifacts, creatures, and enchantments"),
+unlike protection ("black and from green"), so the keyword splitter tears it into bare words with
+nothing grammatical to rejoin them by. A bare fragment is therefore admitted **only when the closed
+quality tables already name it** — so `protection from black and lifelink` still compiles as two
+abilities rather than reading `lifelink` as a quality and silently dropping the keyword.
+
+#### 5. A stronger-than-printed defect found on the way, in code that predates this lane
+
+Scryfall stamps **both** `"Hexproof from"` and a bare `"Hexproof"` on every hexproof-from card. The
+keyword sweep's flag table maps the bare word straight to `hexproof: true`, before any evidence check
+— so the moment `hexproof from black` began compiling, Garruk's Harbinger, Knight of Grace, Sporeweb
+Weaver and eleven others would have entered the pool **untargetable by every opponent spell of every
+colour**. `KEYWORD_NARROWED_BY_PAYLOAD` is a one-row table checked BEFORE the flag branch: a card
+whose narrowed payload compiled skips the broad flag. A card that really prints plain hexproof
+compiles no narrow payload, so the row never fires. Watched red.
+
+#### 6. The honest number: **+1 card, −0**, set-verified
+
+`playable-set.mjs` over one fixed private corpus (32,341 cards), compiled twice with this branch's
+nine compiler sources reverted to the fork point `162f143` via `git show` in between, diffed **both**
+directions: **6,696 → 6,697. Gained: Fiendslayer Paladin. Lost: none.**
+
+That is smaller than the 22 cards whose family line this lane fixed, and the difference is the point:
+**16 of the 22 are blocked by something else entirely** — Garruk's Harbinger by a "you may" body,
+Knight of Grace and Knight of Malice by `gets +1/+0 as long as any player controls a black permanent`,
+four Jaheiras by a `specializes` trigger, Sphinx of the Guildpact by `~ is all colors`. Their
+hexproof-from line now compiles and is pinned; they enter the pool when their other lane lands.
+
+#### 7. Left REPORTED, with numbers — the residue, and why each
+
+- **The shroud-scoped sentence, 5 cards** — `~ can't be the target of red spells or abilities from
+  red sources` (Suq'Ata Firewalker, Mercenary Informer, Rebel Informer, Raiding Party) and
+  `~ can't be the target of blue or black spells` (Karplusan Strider). **No controller clause**, so
+  they bind against their own controller too; Karplusan Strider additionally says *spells* and never
+  *abilities*. Compiling them as hexproof-from would let their controller target them, which is not
+  how they are printed. Modelling them needs a second scope axis for a measured **+1** whole card
+  (only Suq'Ata Firewalker is otherwise clean), and "shroud from a quality" is not a Magic keyword —
+  so this is a deliberate NO-GO. **All five are pinned by name in
+  `targeting-protection-family.test.ts` as still-reporting**, so a later widening of the sentence
+  pattern cannot quietly compile them.
+- **The ward COST vocabulary, 39 cards blamed, upper bound +7 whole cards.** `Ward—Pay N life` (20
+  printings), `Ward—Discard a card` (11), `Ward—Sacrifice …` (8 shapes), `Ward {X}` (1). Measured
+  with an over-generous stand-in (`ward {2}` for every cost), so +7 is a ceiling, not an estimate.
+  `KeywordFlags.ward` is a `number`; this needs it widened to a closed cost union and is a different
+  family — a COST vocabulary, not a targeting restriction. §3.150's own closing note names it too.
+- **9 protection QUALITIES outside the closed table** — `from snow` (Ronom Hulk), `from mana value 3
+  or greater` (Mistmeadow Skulk), `from legendary creatures` (Tsabo Tavoc), `from non-Spirit
+  creatures`, `from each mana value among artifacts you control` (Rebbec). Each needs a new kind of
+  quality predicate, not a row.
+- **`Hexproof from activated and triggered abilities`** (Volatile Stormdrake) — names a source KIND,
+  not a source quality. **`Hexproof from each of its colors`** (Tam) and `gains hexproof from that
+  color` (Skrelv, Sungold Sentinel) — a quality computed at resolution, the "chosen colour" family.
+- **`~ can't be the target of Aura spells`** (Bartel Runeaxe, Tetsuo Umezawa), **`spells that can
+  target only Walls`** (Wall of Shadows), **`spells unless it attacked or blocked this turn`**
+  (Lurker), **`abilities from artifact sources`** (Artifact Ward), **`abilities your opponents
+  control`** (Shanna) — five one-card shapes, each a different axis.
+
+#### 8. Verification
+
+`npm run build` **exit 0**, unpiped. `npx vitest run packages/cards packages/core --minWorkers=1
+--maxWorkers=1` — **209 files passed, 19,807 tests passed, 0 failed**, no `Worker exited` line
+(fork baseline 207 / 19,772; this branch adds 2 files and 35 tests, and 19,772 + 35 = 19,807).
+
+**Six checks watched RED before being trusted**, each restored and re-run green:
+1. the "your opponents control" tail made optional → Karplusan Strider compiles, 1 red;
+2. the tail widened to accept `or abilities from X sources` → 4 shroud-scoped cards compile, 4 red;
+3. `hexproof from` routed into `protectionFrom` → 10 red;
+4. `KEYWORD_NARROWED_BY_PAYLOAD` removed → `expected true to be undefined`, the
+   stronger-than-printed defect, 1 red;
+5. the bare-word quality continuation dropped → Nevinyrral's three-quality line refuses, 1 red;
+6. the enforcement clause deleted from `isTargetableBy` → the code still compiles and 6 core tests
+   go red, which is the whole reason the enforcement has tests of its own.
+
+A seventh was found rather than staged: citing `702.11` for `hexproofFrom` collided with `hexproof`
+and `rules-citations.test.ts` GAP-15 failed. The correct citation is the **subsection 702.11e**.
+
+**No `EFFECT_RULES` entry was added**, so neither `rule-coverage.test.ts` nor `dead-rule-sweep.mjs`
+can reach this family — `targeting-protection-family.test.ts` is its coverage gate, and every Oracle
+string in it is copied verbatim from a named real corpus card for exactly that reason.
+
+### 3.151 The CR 614/615 row names the EVENT KINDS — and the gap is the WORDINGS, on kinds the layer already watched — ✅ done
+
+> ⚠️ **Section number claimed off a contended range.** §3.150 was the highest in `main` when this
+> branch forked (and `main` already carries TWO §3.147 and TWO §3.149 sections), with several lanes
+> live in `rules.ts`. If an integrator finds a second §3.151, renumber this one.
+
+Acceptance cards: **Rhox Faithmender ✅** and **Fog Bank ✅**, both from `docs/decks/`.
+
+**NEW `packages/cards/scripts/replace-blame.mjs`** — the eighth blame tool, after `activated-blame`,
+`targeted-blame`, `counters-blame`, `xvalue-blame` and `loyalty-blame`. It splits each blocked CR
+614/615 clause into the two halves core's layer can fail on — the **EVENT KIND** it can watch
+(`ReplacementEventKind`, a closed list) and the **OUTCOME BODY** it can perform (`ReplacementOutcome`)
+— and re-probes each clause **alone on the card's own type line**. That last part is the trap the
+script exists for: `replacement-prevent-all-static` and `replacement-draw` both call
+`cardIsPermanent`, so probing a static on a generic sorcery would report half the family as a gap
+that is not there.
+
+Measured on a **private copy** of the 32,414-card corpus
+(`C:\Users\Caleb\AppData\Local\Temp\jb-replace-private\corpus.json` — private because a sibling lane
+renamed a shared corpus out from under a running measurement this week).
+
+**The row's name points at the wrong half for the SIXTH consecutive lane.** The hint row reads *"a
+LIFE-CHANGE event on the replacement layer (the layer watches damage, counters and draws; life
+gain/loss is one more event kind)"* — it names the EVENT KIND. The split says:
+
+| half | clauses | sole-blocked cards |
+|---|---:|---:|
+| **KIND gap** — event outside the closed set | 268 | 149 |
+| **BODY gap** — kind watched, outcome not expressible | 187 | 124 |
+| **SENTENCE gap** — *both halves already exist, only the wording is missing* | **412** | **303** |
+| NOT-PROBEABLE — no closed row names this event | 71 | — |
+
+And the largest event kind in the whole family is **`damage`, with 383 sole-blocked cards (358 after
+this lane) — a kind the layer has watched since it was written.** The kind the row is *named* for,
+life gain, has **12 sole-blocked cards in total**; **6 now compile and 6 stay reported** (named in the
+table below). So the honest number for the row's own headline is **6**, and the lane's other **23**
+cards came from the sentence half the row does not mention at all.
+
+**The leakage measurement, re-confirming §7b.** Selecting the family by TEXT (`would … instead` /
+`prevent …`) finds **916 cards**; selecting by the `/replacement|prevent/` hint rows finds **142**.
+**774 cards of this shape sit in other rows.** Counted by CLAUSE rather than by card (the two are not
+the same number and must not be quoted as each other), the largest destination is the §2
+aggregation-artifact row with **302 clauses** — which is where **Fog Bank itself** was filed. A lane
+that had scoped from the hint row would never have seen its own acceptance card.
+
+#### What the layer already had — the answer to "what does one more event kind cost?"
+
+**Almost nothing, and that is the finding.** `ReplacementEventKind` gained one member,
+`REPLACEMENT_EVENT_KINDS` one row, `affectedPlayerPrefersMore` one answer, and
+`internal/replacement.ts` one façade that builds an event record. **No field was added to
+`ReplacementApplies`, no branch to `appliesTo`, and nothing to the CR 614.5 bitmask or the CR 616.1
+ordering search.** Life gain happens to a PLAYER and scales a QUANTITY, so it reads the recipient half
+of a filter that already existed and ignores the source half — exactly as a draw does. The token kind
+(§ earlier) claimed to be evidence the layer generalises; a fifth kind costing one row each in five
+places is the confirmation.
+
+**What it DID cost is a funnel, and that was the real work.** Two mechanisms gain life and they live
+in two packages: a resolving effect primitive (`cards/effect-helpers.changeLife`) and **LIFELINK** on
+core's combat-damage path (`internal/damage-result.ts`), which cannot reach into a primitive. Rhox
+Faithmender is a lifelink creature that doubles life gain — the two halves are printed on the same
+card — so a doubler wired to one mechanism and not the other is wrong about the card's own attack, and
+both halves look correct in isolation. **`core/src/life.ts` is therefore the `untap.ts` model: two
+mechanisms, ONE question** (`gainLifeAmount`), a pure function each site calls before performing its
+own mutation.
+
+⚠️ **Zero is a real answer.** "That player gains no life instead" (Sulfuric Vortex) compiles to
+`times: 0`, and CR 118.5 says a gain of nothing is not a life-gain event — so a caller that gets zero
+must emit **neither** `gainLife` nor `lifeChanged`, or "whenever you gain life" fires on a gain that
+did not happen. That is one `if (gained > 0)` at each of the two sites, and it is pinned by a test.
+
+⚠️ **`times: 0` rather than `preventAll`.** Prevention is CR **615** and applies to damage; a
+`preventAll` would have reported a `prevented` quantity in the log for an event that deals none.
+
+#### ANCHORS — one closed vocabulary read by BOTH sides of a damage event
+
+Fog Bank prints `Prevent all combat damage that would be dealt to and dealt by ~`. Two things were
+missing, and neither was prevention itself:
+
+1. **A way to say `~`.** `ReplacementApplies` had `recipientIs` (a RESOLVED instance id, minted when a
+   targeted shield resolves) but a PRINTED static does not know its own id at compile time. It also
+   had `excludeSource` — the printed word "another" — whose exact mirror did not exist.
+2. **A dealer side that can be pinned to one object.** The source half narrowed by CLASS
+   (`sourceController`, `sourceFilter`) and never by identity.
+
+Both are now `ReplacementAnchor` — a closed `'source' | 'attached'` — read through **one**
+`resolveAnchor` by `recipientAnchor` and `dealerAnchor` alike. One vocabulary because *"which object
+does `~` mean?"* is one question, and two answers would let a two-directional shield guard one
+creature while blanking another's damage. Adding "the creature it's blocking" is a **row**.
+
+⚠️ **The anchor is a READ at event time, never an id baked in at index time.** That is what makes an
+Aura that changes host guard the NEW host — `'attached'` reads `CardInstance.attachedTo` on every
+event. An unattached source anchors to nothing and the ability simply does not apply, which is the
+printed card's own answer and needed no special case.
+
+⚠️ **"To and dealt by" is TWO replacement entries, not one entry with two filters.** CR 615 applies
+each to its own event independently, and one entry would need a filter admitting an event matching
+EITHER side — a disjunction `ReplacementApplies` cannot state, and which as a blanket would fog the
+whole board. `replacement-lifegain.test.ts` asserts a third creature's damage to a fourth is
+**untouched** — the one assertion a blanket implementation fails while passing every other test in
+the file, which is why it is there.
+
+**Does the engine distinguish CR 614 from CR 615? No — and it is right not to.** Prevention is not a
+separate layer here: it is an OUTCOME (`preventAll`, `preventUpTo`, `preventHalfRoundedUp`) on the one
+replacement layer, sharing the CR 614.5 once-per-event rule and the CR 616.1 ordering with every
+multiplier. The brief asked this lane to say so rather than file one under the other; the shared
+machinery is the honest model, and CR 616.1 explicitly orders prevention effects alongside
+replacement effects for the same event.
+
+#### The delta, measured as a SET
+
+One fixed corpus compiled twice, this lane's nine sources reverted with `git show 162f143:<path>` (no
+checkout) and rebuilt in between:
+
+```
+before 6,706 complete / 32,414      after 6,735 complete / 32,414
+GAINED 29        LOST 0
+```
+
+Alhammarret's Archive · Argothian Treefolk · Boon Reflection · Bubble Matrix · Champion Lancer ·
+Cho-Manno, Revolutionary · Dawn Elemental · Defang · Emmara Tandris · Everdawn Champion · **Fog Bank**
+· Gaseous Form · General's Kabuto · Ghostly Possession · Guard Gomazoa · Heart of Light ·
+Inviolability · Istvan, Butcher of Eln · Knight of Dawn's Light · Light of Sanction · Muzzle ·
+**Rhox Faithmender** · Sandskin · Seraph of the Sword · Statecraft · Sulfuric Vortex ·
+Temporal Isolation · The Wind Crystal · Uncle Istvan
+
+Re-running `replace-blame.mjs` after the change independently agrees: sole-blocked family cards
+**592 → 563**, exactly −29.
+
+#### What stays REPORTED, with its number
+
+No template was widened to swallow any of these, and each is pinned by a test that fails if one ever
+quietly starts compiling:
+
+**The six life cards still blocked, by name** — verified by intersecting the 12 sole-blocked life
+cards with the post-change playable set, not inferred from a bucket count:
+
+| card | printed clause | why it is refused |
+|---|---|---|
+| Tainted Remedy · Plague Drone | *"that player **loses** that much life instead"* | a gain turned into a LOSS is a different EVENT, not a scaled quantity. `times: -1` would emit a `gainLife` carrying a negative number, and "whenever you gain life" would fire on a drain |
+| Bloodletter of Aclazotz | *"if an opponent would **lose** life **during your turn**, twice that much"* | the `lifeloss` kind is absent AND the clause needs a turn condition `ReplacementApplies` has no field for — two gaps, not one |
+| Exquisite Archangel · Lich's Mirror | *"if you would **lose the game**, instead …"* | not a life event at all — a game-loss replacement, a different layer |
+| Flames of the Blood Hand | *"…would gain life this turn, that player gains no life instead"* + *"the damage **can't be prevented**"* | a FLOATING one-shot aimed at a named player, plus an unpreventable-damage flag core has no field for |
+
+And the shapes refused outside the life family:
+
+| shape | sole-blocked | why it is refused |
+|---|---:|---|
+| a gain turned into a DRAW — *"draw that many cards instead"* | 0 | a different ACTION; the vocabulary `replacement.ts`'s header excludes by name |
+| a gain gated on a LIFE TOTAL — *"while you have 5 or less life"* | 0 | no field in `ReplacementApplies`, and inventing one for a single card is not a table |
+| source classes outside the closed tail table — *"by artifact creatures"* (a type CONJUNCTION; `anyOfTypes` is a disjunction), *"by creatures with first strike"* (`CardFilter` has no keyword field), *"by creatures it's blocking"* (a RELATION between two permanents) | ~5 | each would compile into a strictly better card |
+| compound recipients — *"to you and creatures you control"* (Blessed Sanctuary), *"to you and permanents you control"* (Endure) | ~4 | two subjects in one clause; the subject table is one noun phrase |
+| the whole **ZONE-CHANGE** replacement family — `dies` 63, `zoneToGraveyard` 42, `leavesBattlefield` 13, `entersBattlefield` 12 | **130** | a DESTINATION change, not a quantity. `replacement.ts`'s header excludes it deliberately, and it is the single largest thing left in this row |
+
+**The next lane in this family should take the 130-card zone-change destination vocabulary, not
+another event kind** — it is four times the size of everything this lane shipped, and the blame tool
+now prints it.
+
+#### Performance — the walk that was there for ten minutes
+
+`resolveAnchor`'s `'attached'` branch first looked the source permanent up by walking
+`state.battlefield`, which put a linear scan on the **damage path** for every board holding an
+anchored Aura. `ActiveReplacement` now carries `sourceInstance` — the instance is already in hand when
+the index is built, so it costs one more property on an object being allocated anyway, and the anchor
+became a property read. Rule 7 says a regression is part of the report *with the number*; this one was
+removed before it could be measured, and the post-fix playable set is **byte-identical** to the
+pre-fix one (the change is engine-side, so no card moved — checked rather than assumed).
+
+#### Two defects fixed in passing
+
+- **`events.ts` carried a SECOND copy of `ReplacementEventKind`**, spelled out behind a comment
+  claiming (a) `events.ts` had to stay free of engine imports and (b) `replacement.test.ts` pinned the
+  two lists identical. **Neither was true**: the file already imports `ContinuousDuration` from
+  `internal/`, and no such test existed. The fifth kind was caught by the COMPILER, which is the only
+  reason it did not ship as a log silently omitting a kind. The copy is gone — the field is the type —
+  so there is no second list left to disagree and no test needed to watch it (rule 12).
+- Two stale doc-comments in `internal/replacement.ts` ("ONE seam, four call sites", "the three
+  façades") corrected in the same commit.
+
+#### ⚠️ What the 281-second pool test does NOT cover, by name
+
+`expanded-pool.test.ts`'s *"every compiled card resolves in a real game — never emits
+`effectUnsupported`"* passed in 281s, and it says **nothing about these 29 cards**: it reads the
+COMMITTED `data/expanded-pool.ts`, which holds **5,619** definitions — the stale baseline this lane
+deliberately did not regenerate (the shipped pool is owned by `fix/pool-refresh-3147`). Every one of
+the 29 was blocked when that file was generated, so none is in it. `compile.test.ts`'s
+unregistered-primitive sweep is no help either: it runs over the hand-authored `CARD_POOL`.
+
+So the guarantee was re-established for the cards this lane actually unblocked, three ways:
+
+1. **8 of the 29 are PLAYED** in `replacement-lifegain.test.ts` — real damage and life events on a
+   real `GameState`, not merely compiled.
+2. **All 29 were checked structurally** against the private corpus: each is `'complete'`, each
+   declares at least one **non-inert** replacement, every `event` is in `REPLACEMENT_EVENT_KINDS` and
+   every anchor in `REPLACEMENT_ANCHORS`, and **every effect primitive any of them references is
+   registered** — `addCounters`, `attachToTarget`, `dealDamage`, `pumpUntilEndOfTurn`,
+   `grantKeywordToYoursUntilEndOfTurn`, checked against a registry of 105.
+   ⚠️ The first run of that check was a **FALSE GREEN**: the registry import resolved to an empty set,
+   so "ALL REGISTERED" was vacuously true over zero known ids. It was caught by printing the
+   denominator, which is the whole reason the rule says to. The committed test now asserts
+   `CORE_PRIMITIVE_IDS.length > 0` before using it.
+3. **The inert-declaration trap is now a committed guard.** `replacementIsInert` skips `times: 1` /
+   `plus: 0`, so a rule emitting one would produce a card the compiler calls `'complete'`, that enters
+   the pool, and that **does nothing on the board** — biasing every A/B verdict the lab produces, with
+   no compile test able to see it. A table-driven `it.each` over all eight named cards now fails on
+   exactly that, and it was watched failing (sabotage 5 below).
+
+#### Falsification — five sabotages, and the second found a HOLE
+
+| sabotage | expected red | actual |
+|---|---|---|
+| "to and dealt by" compiled as ONE blanket entry | the third-party assertion | 4 red, incl. `expected +0 to be 4` — a bystander's damage fogged |
+| `effect-helpers.changeLife` skips the funnel | a resolving gain stops being doubled | **21 GREEN — nothing was watching the cards-side caller** |
+| `'attached'` resolves to the source | an Aura guards itself | 3 red across BOTH packages |
+| *"no life instead"* → `times: 1` (inert) | Sulfuric Vortex stops zeroing | 3 red, incl. `expected { times: 1 } to deeply equal { times: +0 }` |
+| the doubler → `times: 1` — a card that compiles `'complete'` and does NOTHING | the inert guard | 7 red, incl. `Rhox Faithmender: an inert declaration does nothing` |
+
+The second is the one worth recording. Every test in the file called core's `gainLifeAmount`
+directly — core's side of the question — so gutting the cards-side caller left the whole file green
+while a resolving *"you gain N life"* silently stopped being doubled. **That is exactly the bug the
+funnel exists to prevent, and the suite could not see it.** Two tests were added that drive the real
+`gainLife` PRIMITIVE and assert the life total and the emitted event amount; they go red on that
+sabotage with `expected 23 to be 26`. A guard is only a guard once you have watched it fail.
+
 ### 3.150 The copy-selector row is the §3.120 artifact a FIFTH time — and the card it "blocks" was never in it — ✅ done
 
 > ⚠️ **Section number claimed off a contended range.** `main` carried §3.149 at fork and four lanes
