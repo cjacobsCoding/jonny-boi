@@ -541,6 +541,38 @@ export const WALKER_RESIDUE_TABLES = Object.freeze({
   targeted: TARGETED_DERIVED_COUNTS,
 });
 
+/**
+ * The primitive that reads the card a graveyard trigger was about. Named rather
+ * than spelled as a bare string at both the rule that emits it and the rule that
+ * detects it — two copies of a string are two chances to typo one of them into
+ * silence (rule 12).
+ */
+const RETURN_TRIGGERING_CARD_TO_HAND = 'returnTriggeringCardToHand';
+
+/**
+ * Whether a compiled body names the card the trigger's event was about, and so
+ * needs `carriesSubject` on the condition.
+ *
+ * Deliberately NOT {@link readsTriggeringObject}: that one looks for a
+ * `{ readOf: 'triggering' }` PARAM, which is how a body reads a triggering
+ * permanent's power. This body names no param at all — the whole referent IS the
+ * primitive — so asking the same question the same way would answer "no" and the
+ * emblem would resolve against an empty `triggeringInstances` and silently
+ * return nothing. One question, two shapes of evidence; a single reader that
+ * accepted both would be a reader that cannot say which it found.
+ *
+ * It recurses through `mayEffects`' nested refs, because "you MAY return it"
+ * wraps the body one level deep and an unrecursed check reads the wrapper only.
+ */
+function readsTriggeringCard(refs: readonly EffectRef[]): boolean {
+  for (const ref of refs) {
+    if (ref.primitive === RETURN_TRIGGERING_CARD_TO_HAND) return true;
+    const nested = ref.params?.effects;
+    if (Array.isArray(nested) && readsTriggeringCard(nested as readonly EffectRef[])) return true;
+  }
+  return false;
+}
+
 // === end of the walker-residue count tables ================================
 
 /**
@@ -2991,6 +3023,26 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   // --- the walker-residue family (DESIGN §3.153) ----------------------------
+  {
+    id: 'return-triggering-card-to-hand',
+    description:
+      '"Return it to your hand" — the card a graveyard trigger was about (the Moon Sage emblem)',
+    /**
+     * "IT" is the card the TRIGGER's event was about, not a target and not the
+     * source. That referent only exists inside a trigger whose condition asked
+     * for it (`carriesSubject`), which is why the rule that installs the trigger
+     * detects this primitive by name and sets the flag — `readsTriggeringCard`.
+     *
+     * ⚠️ `needsChosenTarget` is deliberately ABSENT and must stay absent: this
+     * body needs no target, and it is compiled from inside a trigger, where the
+     * target-free table is the one in force. Adding the flag would make the
+     * emblem's own body unreachable from the emblem's own trigger.
+     */
+    pattern: /^return it to your hand$/,
+    build() {
+      return effects({ primitive: RETURN_TRIGGERING_CARD_TO_HAND });
+    },
+  },
   {
     id: 'draw-for-each-targeted',
     description:
@@ -6517,6 +6569,77 @@ function splitInterveningIf(
 }
 
 export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
+  // === THE WALKER-RESIDUE FAMILY (DESIGN §3.153) — owned by `feat/walker-residues` ===
+  {
+    id: 'trigger-card-into-graveyard-from-anywhere',
+    description:
+      '"Whenever [another] [TYPE] card is put into your/a graveyard from anywhere, BODY" (Tamiyo\'s emblem; Crawling Sensation; Ultron\'s Auxiliary)',
+    /**
+     * The whole "from anywhere" family in ONE rule, because it is one
+     * occurrence: a card reached a graveyard, from wherever it was. Splitting it
+     * per source zone is how the engine would end up with a mill trigger that
+     * does not fire on a discard.
+     *
+     * ⚠️ It is NOT `permanentDies`. That event is the battlefield → graveyard
+     * move alone, so a rule built on it would compile this printed line into a
+     * card that ignores every mill, every discard and every countered spell —
+     * strictly weaker than printed, and completely silent.
+     *
+     * ⚠️ "your graveyard" vs "a graveyard" is a real fidelity knob and not a
+     * synonym: `who: 'you'` against the card's OWNER for the first (CR 404.3),
+     * `'any'` for the second. Reading "a graveyard" as "yours" halves what the
+     * card sees; reading "yours" as "a" doubles it.
+     *
+     * The body is compiled by the shared trigger-body compiler, so every effect
+     * the engine already has is available here without a rule each, and the
+     * printed "you may" wrapper is the shared one.
+     */
+    pattern: new RegExp(
+      `^whenever (another |an? )?((?:${Object.keys(SPELL_TYPE_WORDS).join('|')}) )?card is put into ` +
+        `(your|a) graveyard from anywhere, (.+)$`,
+    ),
+    build(match, ctx) {
+      const typeWord = match[2]?.trim();
+      const filter: Record<string, unknown> = {};
+      if (typeWord !== undefined && typeWord.length > 0) {
+        const types = positiveSpellTypes(typeWord);
+        if (types === null) return null;
+        filter.anyOfTypes = types;
+      }
+      const who = match[3] === 'your' ? 'you' : 'any';
+      const another = (match[1] ?? '').trim() === 'another';
+      const body = match[4] ?? '';
+      const optional = body.startsWith('you may ');
+      const inner = optional ? body.slice('you may '.length) : body;
+      const compiled = ctx.compileTriggerBody(inner);
+      if (compiled === null || compiled.effects.length === 0) return null;
+      // A MODAL body's effects are replaced by the chosen modes; this family has
+      // no printed modal member, and admitting one would wrap a question in a
+      // question.
+      if (compiled.modal !== undefined) return null;
+      const effectRefs = optional ? mayEffectsFrom(inner, compiled.effects) : compiled.effects;
+      if (effectRefs === null) return null;
+      // "…return IT to your hand" needs the card the event was about carried to
+      // the resolution. Opt-in per body, so a trigger whose body never names the
+      // moved card compiles byte-identically to one written before this axis.
+      const carriesSubject = readsTriggeringCard(effectRefs);
+      return {
+        triggers: [
+          {
+            condition: {
+              on: 'cardPutIntoGraveyardFromAnywhere' as TriggerEvent,
+              who,
+              ...(Object.keys(filter).length > 0 ? { permanentFilter: filter as CardFilter } : {}),
+              ...(another ? { excludeSelf: true } : {}),
+              ...(carriesSubject ? { carriesSubject: true } : {}),
+            },
+            effects: effectRefs,
+            label: `card into ${match[3]} graveyard from anywhere: ${body}`,
+          },
+        ],
+      };
+    },
+  },
   {
     id: 'trigger-etb-exile-up-to-three-until-this-leaves',
     description:

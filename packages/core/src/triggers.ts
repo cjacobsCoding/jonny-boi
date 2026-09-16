@@ -138,6 +138,27 @@ export type TriggerEvent =
    * the battlefield → graveyard move, for any permanent.
    */
   | 'putIntoGraveyardFromBattlefield'
+  /**
+   * §3.153 — "Whenever a card is put into **your graveyard from anywhere**"
+   * (Tamiyo, the Moon Sage's emblem; Crawling Sensation; Ultron's Auxiliary).
+   *
+   * NOT `permanentDies`, which is the battlefield → graveyard move alone and
+   * therefore misses the mill, the discard and the countered spell that are the
+   * whole point of "from anywhere"; NOT `putIntoGraveyardFromBattlefield`,
+   * which watches ONE object. This is any zone → a graveyard, for any card.
+   *
+   * ⚠️ **A CARD, not an object.** A token that dies reaches a graveyard on its
+   * way out of existence and is explicitly not a card (CR 111.7 / 701.17), so a
+   * trigger that fired on one would be strictly better than printed — the §1a
+   * direction nothing else guards. The matcher excludes tokens by definition.
+   *
+   * ⚠️ **"YOUR graveyard" is the card's OWNER's**, not its last controller's:
+   * a card always goes to its owner's graveyard (CR 404.3), so a creature you
+   * stole and killed fills THEIR yard, not yours. `who` is therefore resolved
+   * against the owner, which is the one place in this matcher that does not use
+   * `subjectMatches`.
+   */
+  | 'cardPutIntoGraveyardFromAnywhere'
   | 'castSpell'
   | 'upkeep'
   | 'drawStep'
@@ -585,6 +606,20 @@ export function conditionMatches(
         event.instanceId === watched
       );
     }
+    case 'cardPutIntoGraveyardFromAnywhere': {
+      // §3.153 — ANY zone into a graveyard (see the event's doc). The `from`
+      // is deliberately unchecked: that is what "from anywhere" means, and a
+      // battlefield death qualifies exactly as a mill does.
+      if (event.type !== 'zoneChange' || event.to !== 'graveyard') return false;
+      if (condition.excludeSelf === true && event.instanceId === sourceInstanceId) return false;
+      if (!subject) return false;
+      // A TOKEN is not a card. It touches a graveyard on its way out of
+      // existence, and firing on it is the stronger-than-printed direction.
+      if (subject.card.def.isToken === true) return false;
+      // The OWNER's graveyard, not the last controller's — CR 404.3.
+      if (!whoMatches(condition.who, subject.card.owner, sourceController)) return false;
+      return matchesCardFilter(subject.card, condition.permanentFilter);
+    }
     case 'castSpell': {
       if (event.type !== 'spellCast') return false;
       if (!whoMatches(condition.who, event.player, sourceController)) return false;
@@ -858,6 +893,8 @@ export const TRIGGER_EVENT_SOURCES: Readonly<Record<TriggerEvent, readonly GameE
     dies: ['creatureDied'],
     leaves: ['zoneChange'],
     putIntoGraveyardFromBattlefield: ['zoneChange'],
+    // §3.153 — any zone INTO a graveyard, which is the same underlying move.
+    cardPutIntoGraveyardFromAnywhere: ['zoneChange'],
     castSpell: ['spellCast'],
     upkeep: ['stepBegin'],
     drawStep: ['stepBegin'],
@@ -1094,6 +1131,10 @@ export function triggeringInstancesFor(
     // --- the counter keyword family (DESIGN §3.110) ----------------------------
     case 'permanentEnters':
     case 'permanentDies':
+    // §3.153 — "you may return **it** to your hand": the card that just moved is
+    // the referent, and it reaches the body through the same `carriesSubject`
+    // channel the counter family opened, so the emblem needed no second one.
+    case 'cardPutIntoGraveyardFromAnywhere':
       // "That creature" — only for a condition that ASKS (`carriesSubject`),
       // so every board-watching trigger written before this is unchanged.
       if (condition.carriesSubject !== true || event.type !== 'zoneChange') return undefined;
