@@ -3,12 +3,14 @@
 // ✗ = still blocked — the compiler does not implement one of its printed abilities yet.
 // ✅ = in the pool. See docs/ALL-CARDS-CAMPAIGN.md §7a.
 //
-// ⚠️ NAME HISTORY, because it cost real time. The scanner imported this deck as
-// "Selesnya Blink (scanned)" — the name of a BUILT-IN sample deck it resembles —
-// and Caleb renamed it to "Acidic Angels", which is when the built-in-fork bug
-// surfaced (DESIGN §3.35). It is not the built-in, and it is not Thune's Life:
-// two other sessions have now confused it with one or the other. Its tell is in
-// the name: Acidic Slime and Angel of Serenity.
+// ⚠️ NAME HISTORY, because it cost real time. Caleb SCANNED this deck; the app
+// filed it under the name of the BUILT-IN sample deck it resembles, "Selesnya
+// Blink (scanned)"; he renamed it to its real name, "Acidic Angels", and that
+// rename is what surfaced the built-in-fork bug (DESIGN §3.35).
+// THIS IS THE DECK IN THAT STORY. It is not a different deck that happens to
+// share the name — an earlier version of these docs said so and was wrong. It is
+// also not Thune's Life, which is the green/white lifegain photo deck.
+// Its tell: Acidic Slime and Angel of Serenity.
 //
 // SOURCE: this list is the GROUND_TRUTH table in
 // apps/web/src/lib/scan/fixtures/../real-photo.test.ts, which transcribes the

@@ -15,9 +15,15 @@ these; none of the names were mine to invent:
 | **Tamiyo + Jace Surge** | blue/green defenders ramp | the two planeswalkers it is named for |
 
 The photo deck now called `thunes-life.txt` was filed as "Acidic Angels" for a day, which made
-"Acidic Angels is complete" read as an answer about the wrong deck. And `acidic-angels.txt`'s own
-list was imported by the scanner as *"Selesnya Blink (scanned)"* — after a BUILT-IN sample deck it
-resembles — which is how the built-in-fork bug (DESIGN §3.35) was found in the first place.
+"Acidic Angels is complete" read as an answer about the wrong deck.
+
+⚠️ **There is exactly ONE Acidic Angels, and it is the deck in the fork-bug story.** Caleb scanned
+it; the app filed it under the name of the BUILT-IN sample deck it resembles, *"Selesnya Blink
+(scanned)"*; he renamed it to its real name, **Acidic Angels**; and that rename is what surfaced the
+built-in-fork bug (DESIGN §3.35). The list below, the §3.35 story, and the `RENAMED_COPY = 'Acidic
+Angels'` constants in `apps/web` are **all the same deck**. An earlier version of this file claimed
+they were two decks that happened to share a string. They are not, and reading it that way is what
+made the correction take three rounds.
 
 Paste either list into **Deck Builder → Import** — the parser accepts this plain `4 Card Name`
 format, and every other mainstream export flavour besides.
