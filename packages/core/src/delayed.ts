@@ -138,9 +138,11 @@ export interface DelayedTriggeredAbility {
    *
    * ⚠️ §1a — a delayed trigger that outlives its printed duration is the
    * stronger-than-printed direction of the pool rule, and it is completely
-   * silent: the card simply keeps working. The two fields are therefore written
-   * together or not at all, and `delayed-triggers.test.ts` asserts a repeating
-   * record without an expiry cannot be created.
+   * silent: the card simply keeps working. So the two fields are written
+   * together or not at all — {@link DelayedTriggerRequest.untilTurnOf} is the
+   * ONE field that sets both, and no caller can reach either directly.
+   * `cards/walker-residues-play.test.ts` asserts the pair over every record the
+   * compiler can produce.
    */
   readonly repeating?: true;
   /**

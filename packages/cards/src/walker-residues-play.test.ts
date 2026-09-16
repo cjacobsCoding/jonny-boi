@@ -502,6 +502,32 @@ describe('Jace, Architect of Thought — the landed clauses, played', () => {
     expect(s.delayedTriggers ?? []).toHaveLength(0);
   });
 
+  /**
+   * ⚠️ THE PAIR GUARD (rule 1 — ship the guard with the fix).
+   *
+   * `repeating` and `expiresAtTurnOf` are written together by
+   * `createDelayedTrigger` from ONE request field, so a repeating ability with
+   * no expiry is not expressible. This asserts the invariant on a real record
+   * rather than trusting the constructor: a record that repeats forever is the
+   * §1a stronger-than-printed direction, and it is silent — the card just keeps
+   * working, with no test anywhere watching a lifetime.
+   */
+  it('+1: the installed record REPEATS and CARRIES AN EXPIRY — never one without the other', () => {
+    let s = gameAtMain(reg, 604);
+    const jace = place(s, definitionOf(JACE_PLUS_ONE), 'A');
+    s = act(s, { kind: 'activateAbility', player: 'A', instanceId: jace.instanceId, abilityIndex: 0 }, reg);
+    s = settleStack(s, reg).state;
+
+    const records = s.delayedTriggers ?? [];
+    // Print the denominator first: an empty list would pass a `for each` check
+    // vacuously (§8a item 8).
+    expect(records.length).toBe(1);
+    for (const record of records) {
+      expect(record.repeating).toBe(true);
+      expect(record.expiresAtTurnOf).toBe('A');
+    }
+  });
+
   it('−2: an OPPONENT splits the revealed three, and the controller takes a pile', () => {
     let s = gameAtMain(reg, 603);
     const jace = place(s, definitionOf(JACE_MINUS_TWO), 'A');
