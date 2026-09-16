@@ -38,10 +38,19 @@
   additions only** — `rules.ts` +144/−0, `primitives.ts` +8/−0, all 316 of main's rule ids present.
   **Craterhoof Behemoth is another lane's §7a acceptance card.** Had this shipped, that card would
   have stopped compiling and the board would still have said it was done.
-  → **Integrators: after ANY merge into a lane that touched `rules.ts` or `primitives.ts`, diff the
-  rule ids (`grep -o "id: '[a-z0-9-]*'" | sort -u`) against `origin/main` and re-run `playable-set.mjs`
-  both ways. A count says +2. Only the SET says −104.** (And `git show` hands you LF while the working
-  tree is CRLF — splice with matched endings or the repair silently no-ops.)
+  ⚠️ **AND TWO FILES WAS NOT THE EXTENT.** Repairing those two made the suite go RED on a test this
+  lane never touched: §3.155 had UPDATED `template-gaps.test.ts` alongside its rule, and the merge
+  reverted BOTH — so they agreed with each other and 22,433 tests passed. The inconsistency was
+  invisible while both halves were wrong. A file-by-file audit found five more casualties, all
+  §3.155's: `mass-modification-family.test.ts` (**462 lines, deleted**), `masspump-blame.mjs`
+  (**243 lines, deleted**), `ai/src/effect-value.ts` (−70/+30), `effect-value-parity.test.ts`
+  (**33 lines, deleted**), `template-gaps.test.ts` (−10/+2). All restored verbatim from `origin/main`.
+  → **Integrators, three checks after ANY merge — no gate does these on its own:** (1) run
+  `git diff --name-only origin/main` and **justify every entry**; a file you did not touch appearing
+  there is the finding, and two of these were DELETIONS that no diff-of-my-own-files would show.
+  (2) diff the rule ids (`grep -o "id: '[a-z0-9-]*'" | sort -u`) against `origin/main`. (3) re-run
+  `playable-set.mjs` both ways — a count says +2, only the SET says −104. (And `git show` hands you
+  LF while the working tree is CRLF — splice with matched endings or the repair silently no-ops.)
   ⚠️ **A CORE CONSTANT WAS RENAMED, BUT ITS VALUE DID NOT MOVE — no lane's expectation changes.**
   `MAX_CHOICES_PER_RESOLUTION` (32) is now `MAX_CHOICES_PER_EFFECT_REF` (32), counted PER EFFECT REF
   instead of per frame, with a new sibling `MAX_EFFECT_STEPS_PER_RESOLUTION` (216) bounding the frame.
