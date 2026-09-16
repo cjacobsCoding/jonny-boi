@@ -9726,8 +9726,12 @@ each is pinned by a test that fails if it ever quietly starts compiling.
 
 #### Measured
 
-**+105 cards, 0 lost**, set-diffed (`playable-set.mjs`) over the 32,341-card corpus
-(md5 `718eae40bfdbfa5ae3db5adbc1590c88`) against fork point `8ee821a`: **6,934 → 7,039**.
+**+104 cards, 0 lost**, set-diffed (`playable-set.mjs`) over the 32,341-card corpus
+(md5 `718eae40bfdbfa5ae3db5adbc1590c88`) against the post-merge fork point `4d22e3b`:
+**6,936 → 7,040**. ⚠️ **Pre-merge the same measurement read +105** — `main` had won one
+of those cards by another route in the meantime, so the smaller number is the true one (§8a
+item 1), and re-measuring AFTER the merge rather than carrying the figure across it is the
+only reason that is known.
 Gauntlet at seed 99 **identical on both trees** — `97/320 = 30.3%`, rows `17·14·19·7·8·10·17·5` — which
 is what says the change moved no game outcome. Four sabotages were each taken RED and restored.
 
