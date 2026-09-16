@@ -379,33 +379,69 @@ export const grantKeywordUntilEndOfTurn: EffectPrimitive = (ctx) => {
 };
 
 /**
- * `grantKeywordToYoursUntilEndOfTurn` — the MASS form of the grant above:
- * "Creatures you control gain indestructible until end of turn" (Selfless
- * Spirit), "Permanents you control gain hexproof and indestructible until end of
- * turn" (Heroic Intervention).
+ * `modifyYoursUntilEndOfTurn` — the MASS form of the two grants above, and the
+ * ONE answer to *"which permanents does an untargeted until-end-of-turn
+ * modification reach, and what does it do to them"*:
  *
- * It is a separate primitive rather than a flag on the single-target one because
- * it targets NOTHING: there is no chosen creature, no legality question, and the
- * set it reaches is decided at RESOLUTION from the board as it then stands. That
- * is also why it must not be modelled as a static — the grant outlives the spell
- * that made it (until cleanup) and reaches only the permanents that were there.
+ *   - "Creatures you control gain indestructible until end of turn" (Selfless
+ *     Spirit) — the keyword half alone;
+ *   - "Creatures you control get +3/+3 and gain trample until end of turn"
+ *     (Overrun) — both halves;
+ *   - "Creatures you control gain trample and get +X/+X until end of turn,
+ *     where X is the number of creatures you control" (Craterhoof Behemoth) —
+ *     both halves, the pump derived at resolution (§3.153).
+ *
+ * It is a separate primitive from the single-target grant because it targets
+ * NOTHING: there is no chosen creature, no legality question, and the set it
+ * reaches is decided at RESOLUTION from the board as it then stands — which is
+ * why a creature that enters AFTER this resolves is not in it. That is also why
+ * it must not be modelled as a static: the modification outlives the spell that
+ * made it (until cleanup) and reaches only the permanents that were there.
+ *
+ * ⚠️ The keyword half and the P/T half are ONE continuous effect per permanent,
+ * not two. A card prints them as one sentence and they share one duration, so
+ * splitting them into two primitives would have been two battlefield scans that
+ * could disagree about the set — the DRY failure this primitive exists to avoid.
  *
  * `params.anyOfTypes` narrows the set the way the printed noun does; omitting it
  * is the printed word "permanents", which narrows nothing. `params.scope` is
- * `'you'` (the default) or `'opponent'`.
+ * `'you'` (the default) or `'opponent'`. `params.power` / `params.toughness`
+ * accept a printed number OR a derived descriptor (`intParam`), so "+X/+X where
+ * X is the number of creatures you control" is counted when this resolves.
  */
-export const grantKeywordToYoursUntilEndOfTurn: EffectPrimitive = (ctx) => {
+export const modifyYoursUntilEndOfTurn: EffectPrimitive = (ctx) => {
   const keywords = keywordsParam(ctx);
-  if (isEmptyKeywords(keywords)) return;
+  const power = intParam(ctx, 'power', 0);
+  const toughness = intParam(ctx, 'toughness', 0);
+  // Nothing to do at all — not "no keywords", which is the printed pump-only
+  // form and must still reach the board.
+  if (isEmptyKeywords(keywords) && power === 0 && toughness === 0) return;
+  const grantsKeywords = !isEmptyKeywords(keywords);
   const types = strArrayParam(ctx, 'anyOfTypes');
   const opponents = strParam(ctx, 'scope') === 'opponent';
   for (const perm of ctx.state.battlefield) {
     const theirs = perm.controller !== ctx.controller;
     if (theirs !== opponents) continue;
     if (types.length > 0 && !types.some((type) => perm.def.types.includes(type as CardType))) continue;
-    ctx.addContinuousEffect({ target: perm.instanceId, keywords, duration: 'endOfTurn' });
+    ctx.addContinuousEffect({
+      target: perm.instanceId,
+      ...(grantsKeywords ? { keywords } : {}),
+      power,
+      toughness,
+      duration: 'endOfTurn',
+    });
   }
 };
+
+/**
+ * The name the SHIPPED POOL spells for the keyword-only half of the mass
+ * modification above. It is the same function, not a copy: the pool is generated
+ * data holding tens of `grantKeywordToYoursUntilEndOfTurn` refs, and a second
+ * implementation behind the old name is exactly how two answers to one question
+ * start to drift. Everything the compiler emits from §3.153 onward uses
+ * {@link modifyYoursUntilEndOfTurn}.
+ */
+export const grantKeywordToYoursUntilEndOfTurn: EffectPrimitive = modifyYoursUntilEndOfTurn;
 
 /**
  * The five colours a printed token may declare, in canonical order. Used to keep
@@ -2002,6 +2038,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   pumpUntilEndOfTurn,
   grantKeywordUntilEndOfTurn,
   grantKeywordToYoursUntilEndOfTurn,
+  modifyYoursUntilEndOfTurn,
   createPredefinedToken,
   makeToken,
   livingWeaponGerm,

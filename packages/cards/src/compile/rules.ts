@@ -2191,6 +2191,112 @@ const PUMP_TARGET_PHRASE = Object.keys(PUMP_TARGET_NOUNS)
   .sort((a, b) => b.length - a.length)
   .join('|');
 
+// ===========================================================================
+// §3.153 — THE MASS UNTIL-END-OF-TURN MODIFICATION FAMILY (this lane's region)
+// ===========================================================================
+
+/**
+ * The printed ORDERS a MASS until-end-of-turn modification comes in, as a CLOSED
+ * table (rule 2): the next printed order is a ROW here, never a fourth rule.
+ *
+ * A card says the same two things — a keyword grant and a P/T change, both
+ * lasting to cleanup — in whichever order reads best, and the orders are not
+ * interchangeable text:
+ *
+ *   "…gain trample and get +X/+X"      Craterhoof Behemoth, Moonshaker Cavalry
+ *   "…get +3/+3 and gain trample"      Overrun, Marshaling Cry, Zariel
+ *   "…get +2/+0"                       Sauron the Lidless Eye, Huatli's −7
+ *   "…gain indestructible"             Selfless Spirit, Heroic Intervention
+ *
+ * Measured over the 32,341-card corpus before this was written: 359 cards print
+ * a mass until-end-of-turn modification on a noun "you control" — 258 pump-only,
+ * 95 pump-then-grant, 6 grant-then-pump. Only the last row of this table existed
+ * before §3.153, which is why all four of the acceptance card's siblings
+ * reported. Each row names real printed cards for `dead-rule-sweep.mjs`.
+ *
+ * ⚠️ Each row declares which capture is which because the groups MOVE between
+ * orders — the keyword list is group 1 in one row and group 3 in the next. That
+ * is the whole reason these are a table of small patterns re-matched against the
+ * body rather than one alternation: a single regex would have renumbered every
+ * group the day a fifth order was added.
+ *
+ * `keywordGroup`/`powerGroup` of 0 means "this order does not print that half" —
+ * and the half it does not print is left OFF the params entirely, so a pump-only
+ * line never grants an empty keyword object and a grant-only line never pumps by
+ * zero.
+ */
+const MASS_EOT_MODIFICATIONS: readonly {
+  readonly pattern: RegExp;
+  readonly keywordGroup: number;
+  readonly powerGroup: number;
+  readonly toughnessGroup: number;
+}[] = Object.freeze([
+  // Craterhoof Behemoth, Moonshaker Cavalry, Pathbreaker Ibex, Craterclaw
+  // Colossus, Blossoming Bogbeast — the grant first, the pump second.
+  {
+    pattern: new RegExp(`^gain (.+) and get ${PUMP_AMOUNT}\\/${PUMP_AMOUNT}$`),
+    keywordGroup: 1,
+    powerGroup: 2,
+    toughnessGroup: 3,
+  },
+  // Overrun, Marshaling Cry, Devoted Paladin, Squad Commander — the pump first.
+  {
+    pattern: new RegExp(`^get ${PUMP_AMOUNT}\\/${PUMP_AMOUNT} and gain (.+)$`),
+    keywordGroup: 3,
+    powerGroup: 1,
+    toughnessGroup: 2,
+  },
+  // The pump alone — Sauron the Lidless Eye, Gnawing Crescendo, Huatli's −7.
+  {
+    pattern: new RegExp(`^get ${PUMP_AMOUNT}\\/${PUMP_AMOUNT}$`),
+    keywordGroup: 0,
+    powerGroup: 1,
+    toughnessGroup: 2,
+  },
+  // The grant alone — Selfless Spirit, Heroic Intervention. This is the form the
+  // superseded `mass-grant-keyword-until-eot` rule read; it is a ROW now, so the
+  // day a new keyword spelling lands it lands for all four orders at once.
+  { pattern: /^gain (.+)$/, keywordGroup: 1, powerGroup: 0, toughnessGroup: 0 },
+]);
+
+/**
+ * Read the body of a mass modification — everything between the printed noun and
+ * "until end of turn" — into the params {@link MASS_EOT_MODIFICATIONS} describes.
+ *
+ * Rows are tried in order and a row that MATCHES but cannot be parsed FALLS
+ * THROUGH to the next one rather than refusing: "gain trample and get +X/+X"
+ * matches the grant-only row too, and reading it there would parse "trample and
+ * get +X/+X" as a keyword list. Falling through is what makes the table's order
+ * a statement about specificity rather than a trap.
+ *
+ * `null` when no row parses — a keyword the engine does not model, an order with
+ * no row, or an X nothing bound. The whole line then reports, which is the pool
+ * rule: never the half we understood.
+ */
+function parseMassModification(body: string, ctx: RuleContext): Record<string, unknown> | null {
+  for (const order of MASS_EOT_MODIFICATIONS) {
+    const match = order.pattern.exec(body);
+    if (match === null) continue;
+    const params: Record<string, unknown> = {};
+    if (order.keywordGroup > 0) {
+      const keywords = parseKeywordList(match[order.keywordGroup] ?? '');
+      if (keywords === null) continue;
+      params.keywords = keywords;
+    }
+    if (order.powerGroup > 0) {
+      const power = parsePumpAmount(match[order.powerGroup] ?? '', ctx);
+      const toughness = parsePumpAmount(match[order.toughnessGroup] ?? '', ctx);
+      if (power === null || toughness === null) continue;
+      params.power = power;
+      params.toughness = toughness;
+    }
+    return params;
+  }
+  return null;
+}
+
+// ======================= end §3.153 region =================================
+
 /** The table's nouns as a regex alternation, longest first so none is truncated. */
 const TARGET_NOUN_PHRASE = Object.keys(TARGET_NOUN_RESTRICTIONS)
   .sort((a, b) => b.length - a.length)
@@ -4243,34 +4349,55 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       );
     },
   },
+  // ===========================================================================
+  // §3.153 — THE MASS UNTIL-END-OF-TURN MODIFICATION FAMILY (this lane's region)
+  // ===========================================================================
   {
-    // The MASS grant: "Creatures you control gain indestructible until end of
-    // turn" (Selfless Spirit), "Permanents you control gain hexproof and
-    // indestructible until end of turn" (Heroic Intervention).
+    // The MASS modification: "Creatures you control gain indestructible until
+    // end of turn" (Selfless Spirit), "Permanents you control gain hexproof and
+    // indestructible until end of turn" (Heroic Intervention), "Creatures you
+    // control get +3/+3 and gain trample until end of turn" (Overrun),
+    // "Creatures you control gain trample and get +X/+X until end of turn,
+    // where X is the number of creatures you control" (Craterhoof Behemoth).
     //
-    // It is its own primitive rather than a flag on the single-target grant
-    // because it TARGETS NOTHING: there is no chosen creature and no legality
-    // question, and the set it reaches is read off the board at resolution. Nor
-    // is it a static - the grant outlives the spell that made it (to cleanup)
-    // and reaches only what was on the battlefield when it resolved.
-    id: 'mass-grant-keyword-until-eot',
-    description: '"Creatures/permanents you control gain KEYWORDS until end of turn"',
-    pattern: new RegExp(
-      `^(${Object.keys(STATIC_NOUN_TYPES).join('|')})s you control gain (.+) until end of turn$`,
-    ),
-    build(match) {
+    // ⚠️ This rule SUPERSEDES the narrower `mass-grant-keyword-until-eot`: the
+    // grant-only form is one ROW of {@link MASS_EOT_MODIFICATIONS} rather than a
+    // rule of its own. Two rules reading one noun table still needed two
+    // patterns, and a printed order added to one of them would have been missing
+    // from the other — which is precisely how "+X/+0" ends up legal on one card
+    // and reported on its sibling (see {@link PUMP_AMOUNT}).
+    //
+    // It compiles to its own primitive rather than a flag on the single-target
+    // grant because it TARGETS NOTHING: there is no chosen creature and no
+    // legality question, and the set it reaches is read off the board at
+    // RESOLUTION — so a creature that enters afterwards is not in it. Nor is it a
+    // static: the modification outlives the spell that made it (to cleanup) and
+    // reaches only what was on the battlefield when it resolved.
+    //
+    // ⚠️ The noun is anchored at the START of the clause, so "OTHER creatures you
+    // control …" (Umaro) and "ATTACKING creatures you control …" (Tourach's Gate)
+    // do NOT match. Both name a strictly narrower set than this rule would reach,
+    // and widening them would put a card into the pool playing STRONGER than
+    // printed (§1a) — the direction nothing else in the acceptance gate watches.
+    id: 'mass-modify-yours-until-eot',
+    description:
+      '"Creatures/permanents you control get +X/+Y and/or gain KEYWORDS until end of turn" (Selfless Spirit, Overrun, Craterhoof Behemoth, Moonshaker Cavalry)',
+    pattern: new RegExp(`^(${Object.keys(STATIC_NOUN_TYPES).join('|')})s you control (.+) until end of turn$`),
+    build(match, ctx) {
       const nounType = STATIC_NOUN_TYPES[match[1] ?? ''];
       if (nounType === undefined) return null;
-      const keywords = parseKeywordList(match[2] ?? '');
-      // A keyword the engine does not model reports the whole line rather than
-      // granting only the half we understood.
-      if (keywords === null) return null;
+      const modification = parseMassModification(match[2] ?? '', ctx);
+      // A keyword the engine does not model, a printed order with no row, or an
+      // X nothing bound: report the whole line rather than applying the half we
+      // understood.
+      if (modification === null) return null;
       return effects({
-        primitive: 'grantKeywordToYoursUntilEndOfTurn',
-        params: { keywords, ...(nounType === null ? {} : { anyOfTypes: [nounType] }) },
+        primitive: 'modifyYoursUntilEndOfTurn',
+        params: { ...modification, ...(nounType === null ? {} : { anyOfTypes: [nounType] }) },
       });
     },
   },
+  // ======================= end §3.153 region =================================
   {
     // The SELF form of the evasion grant, with a comparing restriction attached:
     // "~ can't be blocked this turn except by creatures with haste" (Gingerbrute's
