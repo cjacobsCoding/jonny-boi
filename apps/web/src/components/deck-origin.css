@@ -1,6 +1,6 @@
 /*
- * DECK-ORIGIN VOCABULARY — the badge and note that say a deck is BUILT-IN rather
- * than one of the user's own.
+ * DECK-ORIGIN VOCABULARY — the badge and note that say what KIND of deck this
+ * is: bundled reference data, one of the owner's real paper decks, or his own.
  *
  * Its own file because the distinction has to look the same on every surface
  * that lists decks: the deck builder's built-in region, the Play setup's picker,
@@ -35,7 +35,19 @@
   border: 1px solid var(--color-border-strong);
 }
 
-/* The note under a deck <select> when the current pick is a built-in deck. */
+/*
+ * The owner's PAPER decks. Gold — the app's accent — where the built-in badge is
+ * deliberately slate: these decks ARE his, and the accent means "yours" in this
+ * palette. Ink over a raised surface rather than gold-on-gold, so the badge is
+ * as readable as the built-in one at the same size.
+ */
+.deck-origin-badge--owner {
+  background: var(--color-surface-raised);
+  color: var(--color-accent-soft);
+  border: 1px solid var(--color-accent-soft);
+}
+
+/* The note under a deck <select> saying what kind of deck the current pick is. */
 .deck-origin-note {
   display: flex;
   align-items: center;

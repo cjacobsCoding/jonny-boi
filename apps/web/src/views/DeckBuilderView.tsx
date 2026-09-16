@@ -22,6 +22,12 @@ import {
   describeGauntletCopy,
   gauntletDecks,
 } from '../lib/decklist/gauntletDecks.js';
+import {
+  describeCompleteness,
+  isComplete,
+  ownerDeckSummaries,
+  type OwnerDeckSummary,
+} from '../lib/decklist/ownerDecks.js';
 import { DECK_ORIGIN_ATTR, originPresentation } from '../lib/decklist/deckOrigin.js';
 import type { DecksApi } from '../lib/useDecks.js';
 import { CardToolbar } from '../components/CardToolbar.js';
@@ -38,6 +44,7 @@ import { copyText } from '../lib/clipboard.js';
 import './deck-health.css';
 import '../components/deck-origin.css';
 import './builtin-decks.css';
+import './owner-decks.css';
 import './deck-steppers.css';
 
 /**
@@ -310,6 +317,10 @@ function DeckPanel({
         </div>
       )}
 
+      {/* His REAL decks sit directly under his own: they are the ones he came
+          looking for, and burying them under nine reference decks is a smaller
+          version of the problem this region exists to fix. */}
+      <OwnerDecks decks={decks} />
       <SavedDecks decks={decks} />
       <GauntletDecks decks={decks} />
 
@@ -346,6 +357,133 @@ function unsupportedSummary(cardId: string): string {
   return systems.length > 0
     ? `Can't be simulated yet — needs ${systems.join('; ')}.`
     : "Can't be simulated yet.";
+}
+
+/**
+ * THE OWNER'S REAL DECKS — his three physical, sleeved decks, in the app.
+ *
+ * ## The defect this exists for
+ *
+ * He opened the app to play one of his own decks and could not find them. They
+ * had only ever existed as loose `.txt` files in `docs/decks/`, which a person
+ * would have had to open and paste into Import by hand. The lists were correct,
+ * committed, and tested — and unreachable from the app, which is the ninth time
+ * that shape of failure has been filed here. A file in the repo is not delivery.
+ *
+ * ## Why it is a separate region from the gauntlet decks
+ *
+ * A built-in gauntlet deck is REFERENCE DATA the Lab measures against. One of
+ * these is a RECORD of a deck he owns. They are different nouns, so — exactly as
+ * `builtin-decks.css` argues for the previous pair — they must never render as
+ * the same thing. Same reasoning, third noun, its own container and badge.
+ *
+ * ## A short deck says so, loudly
+ *
+ * These lists are 2012–13 Standard and the compiled pool does not carry all of
+ * it yet. A deck whose cards the pool cannot supply must SAY WHICH ONES, in the
+ * row, without being clicked — silently handing back a 26-card "deck" is the
+ * failure his own words name: *a deck that resolves to a handful of lands is not
+ * a deck.* The count moves upward on its own as the card campaign lands
+ * families; `ownerDecks.test.ts` pins a floor so it can never move down quietly.
+ */
+export function OwnerDecks({ decks }: { decks: DecksApi }): ReactElement {
+  const [note, setNote] = useState<string | null>(null);
+  // `decks.decks` is the same INVISIBLE dependency the card pool has above: an
+  // imported card grows the pool a summary is computed against, and this list is
+  // the only signal it happened.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const list = useMemo(() => ownerDeckSummaries(), [decks.decks]);
+  const owner = originPresentation('owner');
+
+  const copy = (summary: OwnerDeckSummary): void => {
+    const result = copyGauntletDeck(summary.deck);
+    decks.importDeck(result.deck);
+    setNote(describeGauntletCopy(result));
+  };
+
+  return (
+    <div className="owner-decks">
+      <div className="section-label">{owner.groupLabel}</div>
+      <p className="owner-decks__intro">
+        Your real decks, transcribed card by card and bundled with the app — nothing to
+        import. Play one straight from the Play screen, or copy one to tune a version of
+        your own.
+      </p>
+      <div className="owner-deck-list">
+        {list.map((summary) => {
+          const copies = copiesOfGauntletDeck(summary.name, decks.decks);
+          const mine = copies[0];
+          const complete = isComplete(summary);
+          return (
+            <div
+              key={summary.name}
+              className="owner-deck"
+              {...{ [DECK_ORIGIN_ATTR]: 'owner' }}
+            >
+              <div className="owner-deck__heading">
+                <span
+                  className="deck-origin-badge deck-origin-badge--owner"
+                  title={owner.explanation}
+                >
+                  <span aria-hidden="true">{owner.glyph}</span> {owner.badge}
+                </span>
+                <span className="owner-deck__name">{summary.name}</span>
+              </div>
+              <span className="owner-deck__meta">
+                {summary.archetype} · {summary.transcribedSize} cards ·{' '}
+                {summary.resolvedNames}/{summary.names} names in the pool
+              </span>
+              {/* Stated either way. "Complete" is a claim worth reading, and a
+                  region where only the broken rows say anything trains the eye
+                  to skip the ones that are fine — which is how a deck that went
+                  short would stop being noticed. */}
+              <p
+                className={
+                  complete ? 'owner-deck__status' : 'owner-deck__status owner-deck__status--short'
+                }
+                role={complete ? undefined : 'alert'}
+              >
+                {complete ? '✓ ' : '⚠ '}
+                {describeCompleteness(summary)}
+              </p>
+              {mine ? (
+                <div className="owner-deck__copied">
+                  <span className="owner-deck__copied-note" role="status">
+                    ✓ {describeExistingCopies(copies)}
+                  </span>
+                  <div className="owner-deck__actions">
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() => decks.selectDeck(mine.id)}
+                    >
+                      Open my copy
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--ghost owner-deck__again"
+                      onClick={() => copy(summary)}
+                    >
+                      Copy again
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" className="btn btn--ghost" onClick={() => copy(summary)}>
+                  Copy to my decks
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {note && (
+        <p className="owner-decks__note" role="status">
+          {note}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /**

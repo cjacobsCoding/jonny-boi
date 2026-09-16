@@ -80,11 +80,18 @@ function poolByName(): Map<string, NormalizedCard> {
 }
 
 /**
- * Copy a gauntlet deck into an editable deck of your own.
+ * Copy a BUNDLED sim deck into an editable deck of your own.
  *
  * A copy, not a reference: the bundled deck is immutable build data, and the
  * point of copying is to change it. The name is suffixed so it does not read as
  * the canonical gauntlet list once you have tuned it.
+ *
+ * ⚠️ This is THE name → pool resolution funnel for every bundled deck, not only
+ * the gauntlet ones: `ownerDecks.ts` resolves the owner's paper decks through it
+ * too, and reads the same `unresolved` to report what the pool cannot supply.
+ * Keep it deck-source-agnostic — a second resolver would be a second answer to
+ * one question, and the two would eventually disagree (CLAUDE.md rule 12). The
+ * `Gauntlet` in the name is history; the behaviour is not gauntlet-specific.
  */
 export function copyGauntletDeck(sample: SimDeck, nameSuffix = ' (copy)'): GauntletCopy {
   const index = poolByName();
