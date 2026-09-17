@@ -47,6 +47,12 @@ import {
   transcribedSize,
 } from '../data/owner-decks/index.js';
 import { DEFAULT_DECK_RULES } from './config.js';
+// The PUBLIC surface, as the web app imports it. A namespace import rather than
+// a dynamic one inside the test: `await import('./index.js')` pulls in the whole
+// package the first time it runs, which took 5 s and blew vitest's default
+// timeout whenever this file ran ALONE — a check that goes red for a reason
+// unrelated to what it asserts is worse than no check.
+import * as simPublicSurface from './index.js';
 
 /** Repo root, from this file: `packages/sim/src/` → three levels up. */
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
@@ -188,14 +194,16 @@ describe('the owner decks are NOT the gauntlet', () => {
 });
 
 describe('a seeded deck gets NO special legality rules', () => {
-  it('exports no per-deck rules function at all', async () => {
+  it('exports no per-deck rules function at all', () => {
     // `ownerDeckRules` set a deck's legal minimum to its own transcribed size,
     // so a 59-card list could report itself legal. It existed for exactly one
     // deck, and that deck is no longer seeded. Asserted on the PUBLIC surface
     // rather than by reading this module, because the web app imports from the
     // package root and that is the surface a re-add would reappear on.
-    const sim: Record<string, unknown> = await import('./index.js');
-    expect(Object.keys(sim)).not.toContain('ownerDeckRules');
+    const exported = Object.keys(simPublicSurface);
+    // Not vacuous: the surface really is loaded and really does carry the decks.
+    expect(exported).toContain('OWNER_DECKS');
+    expect(exported).not.toContain('ownerDeckRules');
   });
 
   it('the transcriptions themselves respect the 4-of rule', () => {
