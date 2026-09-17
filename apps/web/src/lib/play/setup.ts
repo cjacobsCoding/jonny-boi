@@ -15,7 +15,6 @@ import { buildRegistry, loadCardPool, type CardPool } from '@jonny-boi/cards';
 import {
   DEFAULT_DECK_RULES,
   loadDeck,
-  ownerDeckRules,
   validateDeck,
   type Deck as SimDeck,
   type DeckRules,
@@ -63,20 +62,23 @@ export function invalidateHotseatPool(): void {
 subscribeToImportedCards(invalidateHotseatPool);
 
 /**
- * A deck the player picked for a seat: one of their saved decks, a bundled
- * gauntlet sample, or one of the owner's bundled PAPER decks.
+ * A deck the player picked for a seat: one of their saved decks, or a bundled
+ * gauntlet sample.
  *
- * `owner` is its own member rather than another `sample` because the two are
- * judged by different legality rules — see {@link DECK_CHOICE_RULES}.
+ * ⚠️ There was briefly a third member, `owner`, for the owner's transcribed
+ * paper decks, and it existed solely so they could be judged by a different
+ * minimum deck size. Both are gone: a transcription is SEEDED as one of his
+ * saved decks (`decklist/paperDecks.ts`), so by the time a deck reaches this
+ * type it is `saved` like anything else he owns, and it is judged by the same
+ * constructed rules as anything else he owns.
  */
 export type DeckChoice =
   | { readonly source: 'saved'; readonly deck: WebDeck }
-  | { readonly source: 'sample'; readonly deck: SimDeck }
-  | { readonly source: 'owner'; readonly deck: SimDeck };
+  | { readonly source: 'sample'; readonly deck: SimDeck };
 
 /** Resolve a deck choice to the sim's `Deck` shape (the loader's input). */
 export function toSimDeck(choice: DeckChoice): SimDeck {
-  if (choice.source === 'sample' || choice.source === 'owner') return choice.deck;
+  if (choice.source === 'sample') return choice.deck;
   // A saved web deck → sim payload (cardId = Scryfall UUID, resolved by the pool).
   return toSimPayload(choice.deck) as SimDeck;
 }
@@ -86,24 +88,23 @@ export function toSimDeck(choice: DeckChoice): SimDeck {
  * kind of deck is a row rather than a branch grown at every validation site
  * (CLAUDE.md rule 2).
  *
- * ⚠️ The `owner` row is the interesting one, and it is a different QUESTION
- * rather than a relaxation. A constructed deck is legal at ≥ 60 cards because 60
- * is the floor a player may build to. A paper deck has already been built — it
- * is sitting in a box — so the only thing worth asking is whether the app can
- * deal out the thing that exists. `ownerDeckRules` therefore sets the minimum to
- * the deck's OWN transcribed size: Acidic Angels is 59 cards and complete at 59,
- * while a 65-card list that resolves to 44 still refuses, by name, for every
- * card the pool cannot supply. It cannot be gamed into passing a short deck —
- * the minimum is derived from the transcription, never chosen.
+ * ⚠️ **Every row is `DEFAULT_DECK_RULES`, and that is the point.** There was a
+ * third row, `owner`, whose rules set the minimum deck size to a paper deck's
+ * own transcribed count so a 59-card list could report itself legal. It existed
+ * for exactly one deck, which is no longer seeded. His decks now obey the same
+ * constructed rules as any deck he builds — which is what *"one collection"*
+ * means — and a deck that is short of 60 says so in its row, where he can fix it.
  *
- * The 4-of limit and the basic-land exemption are identical for every row.
+ * The table stays, with its rows equal, because it is the seam: a genuinely
+ * different KIND of deck is a row here rather than a branch grown at every
+ * validation site (CLAUDE.md rule 2), and `rulesForChoice` still reports an
+ * unknown source instead of defaulting it.
  */
 const DECK_CHOICE_RULES: Readonly<
   Record<DeckChoice['source'], (choice: DeckChoice) => DeckRules>
 > = Object.freeze({
   saved: () => DEFAULT_DECK_RULES,
   sample: () => DEFAULT_DECK_RULES,
-  owner: (choice) => ownerDeckRules(toSimDeck(choice)),
 });
 
 /** The legality rules this choice is judged by. Closed: an unknown source reports. */

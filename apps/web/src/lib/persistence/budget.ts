@@ -47,6 +47,7 @@ import {
   PLAY_HISTORY_STORAGE_KEY,
   PLAY_RESUME_STORAGE_KEY,
   PRIORITY_STOPS_STORAGE_KEY,
+  SEEDED_DECKS_STORAGE_KEY,
   SERVER_URL_STORAGE_KEY,
   SOUND_STORAGE_KEY,
   SUGGESTION_HISTORY_KEY_PREFIX,
@@ -160,6 +161,19 @@ export const STORAGE_AREAS = [
     share: 0.15,
     clearable: false,
     why: 'Every deck you have built or imported. This is the one thing here that cannot be rebuilt.',
+  },
+  {
+    id: 'seeded-decks',
+    label: 'Delivered-deck ledger',
+    match: { kind: 'exact', key: SEEDED_DECKS_STORAGE_KEY },
+    scope: 'local',
+    kind: 'preference',
+    // A handful of short ids. Sized as a preference on purpose: it is
+    // bookkeeping ABOUT decks, never deck content, and it must never be able to
+    // crowd out the `decks` row it exists to serve.
+    share: 0.002,
+    clearable: false,
+    why: 'Which of your transcribed paper decks have already been added to your collection. Not the decks themselves — clearing this would offer to add them again.',
   },
   {
     id: 'active-deck',

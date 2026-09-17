@@ -1,6 +1,23 @@
 /**
  * THE OWNER'S REAL DECKS — the physical, sleeved decks that exist on a table,
- * transcribed card by card and bundled with the app so they are simply THERE.
+ * transcribed card by card so the app can put them into his collection.
+ *
+ * ## What these are, and what they are NOT
+ *
+ * They are a SEED. On a profile that has never been given one, the web app
+ * mints each of these as an ordinary saved deck the owner owns outright — one
+ * he can rename, edit, add to, and delete like any deck he built by hand. After
+ * that first mint this registry is not consulted for that deck again: his copy
+ * is the deck, and nothing here can reach back into it.
+ *
+ * They are NOT a separate kind of deck with its own region, its own badge or its
+ * own legality rules. That is what they were for one revision, and Caleb's
+ * verdict on it was immediate: *"why is there a 'your paper decks' and 'your
+ * decks' - this is dumb. I just want one collection of decks and I must be able
+ * to edit all of them, regardless of whether scanned in."* A transcription is
+ * how a deck GOT here; it is not a different noun once it has arrived. See
+ * `apps/web/src/lib/decklist/paperDecks.ts` for the seeding rules, which are
+ * add-only by construction.
  *
  * ## Why this is a separate registry and not more rows in `SAMPLE_DECKS`
  *
@@ -8,25 +25,32 @@
  * the Lab A/B-tests every verdict against. Its spread of identities was tuned on
  * purpose so each deck is somebody's bad matchup, and a gauntlet matchup is
  * seeded by the opponent's INDEX — that file's own comment records that merely
- * *reordering* it moved a recorded baseline. Adding three personal decks to it
- * would change the field every A/B verdict is measured against, so every number
- * the lab has ever produced would silently mean something else.
+ * *reordering* it moved a recorded baseline. Adding personal decks to it would
+ * change the field every A/B verdict is measured against, so every number the
+ * lab has ever produced would silently mean something else. The gauntlet stays
+ * the meta field; these stay his. That line is the one thing about the previous
+ * revision that was right, and it is not blurred here.
  *
- * So: a second registry, same idiom (one data file per deck, this index collects
- * them), surfaced beside the gauntlet decks in the builder and in every deck
- * picker, and never entering the gauntlet. Adding a deck stays a data edit
- * (CLAUDE.md rule 2): drop a file in this directory and add ONE row below.
+ * Adding a deck stays a data edit (CLAUDE.md rule 2): drop a file in this
+ * directory and add ONE row below.
  *
- * ## These lists are a transcription, and transcriptions are not edited
+ * ## These lists are a transcription, and a transcription is not padded
  *
  * The NAMES are read off the physical cards. The COUNTS are inferred from
  * sleeve-edge depth and the mana bases are the least certain part
- * (`docs/decks/README.md` §Confidence). Two of the three are not 60 cards. They
- * are shipped exactly as transcribed — padding a deck to a legal 60 would mean
- * inventing a card the owner does not own, and the moment that happens this is
- * no longer a record of his deck. What the app does instead is REPORT: the
- * builder names every card the pool cannot supply, and `OWNER_DECK_RULES` makes
- * "legal" mean "all of it is here", not "it reached sixty somehow".
+ * (`docs/decks/README.md` §Confidence). Tamiyo + Jace Surge is 49 cards, which
+ * is short of a legal 60, and it is seeded at 49 anyway — padding it would mean
+ * inventing cards the owner does not own, and the moment that happens this stops
+ * being a record of his deck.
+ *
+ * ⚠️ **There is no special legality rule for a seeded deck, and there must not
+ * be one again.** An earlier revision shipped `ownerDeckRules`, which set the
+ * minimum deck size to the deck's own transcribed count so that a 59-card list
+ * could report itself "legal". It existed for exactly one deck — a 59-card
+ * *Acidic Angels* that Caleb already owned a correct 60-card version of, and
+ * which should never have been seeded at all. Both are gone. A seeded deck is
+ * judged by `DEFAULT_DECK_RULES` like every other deck, and a short one is
+ * REPORTED as short in its row, where he can now simply fix it.
  *
  * ## The source of truth is `docs/decks/`
  *
@@ -37,9 +61,6 @@
  */
 
 import type { Deck } from '../../src/deck.js';
-import type { DeckRules } from '../../src/config.js';
-import { DEFAULT_DECK_RULES } from '../../src/config.js';
-import { ACIDIC_ANGELS } from './acidic-angels.js';
 import { THUNES_LIFE } from './thunes-life.js';
 import { TAMIYO_JACE_SURGE } from './tamiyo-jace-surge.js';
 
@@ -53,9 +74,16 @@ export interface OwnerDeckEntry {
 /**
  * The registry. ONE row per deck — the deck and the file it came from — so the
  * divergence guard needs no table of its own to keep in step with this one.
+ *
+ * ⚠️ **`Acidic Angels` is deliberately absent and must not be re-added.** It was
+ * here for one revision as a 59-card transcription; the owner already had a
+ * correct 60-card *Acidic Angels* of his own in the app, made by copying the
+ * built-in *Selesnya Blink* and renaming it (the rename that surfaced the
+ * built-in-fork bug, DESIGN §3.35). Seeding a second, worse copy of a deck he
+ * already owned is the defect, not the 59th card. `owner-decks.test.ts` fails if
+ * the name comes back.
  */
 export const OWNER_DECK_ENTRIES: readonly OwnerDeckEntry[] = Object.freeze([
-  Object.freeze({ deck: ACIDIC_ANGELS, source: 'docs/decks/acidic-angels.txt' }),
   Object.freeze({ deck: THUNES_LIFE, source: 'docs/decks/thunes-life.txt' }),
   Object.freeze({ deck: TAMIYO_JACE_SURGE, source: 'docs/decks/tamiyo-jace-surge.txt' }),
 ]);
@@ -68,30 +96,4 @@ export function transcribedSize(deck: Deck): number {
   return deck.cards.reduce((total, entry) => total + entry.count, 0);
 }
 
-/**
- * The legality rules a PAPER deck is judged by.
- *
- * ⚠️ Read the minimum carefully: it is the deck's OWN transcribed size, not 60.
- * That is not a relaxation, it is a different question. A constructed deck is
- * legal at ≥ 60 cards because that is the floor a player may build to. A paper
- * deck has already been built — it is sitting in a box — so the only thing worth
- * checking is whether the app can actually deal out the thing that exists. A
- * 59-card deck whose 59 cards are all present is complete; a 65-card deck that
- * resolves to 47 is not, and it must refuse rather than shuffle up 47 cards and
- * call it his deck. *"A deck that resolves to a handful of lands is not a deck."*
- *
- * Deliberately derived per deck rather than stored: a count corrected in
- * `docs/decks/` flows straight through, with nothing to keep in step by hand.
- *
- * The 4-of limit and the basic-land exemption are UNCHANGED — a transcription
- * that somehow holds five Thragtusk is a transcription error, and that is
- * exactly the sort of thing this should still catch.
- */
-export function ownerDeckRules(deck: Deck): DeckRules {
-  return Object.freeze({
-    ...DEFAULT_DECK_RULES,
-    minDeckSize: transcribedSize(deck),
-  });
-}
-
-export { ACIDIC_ANGELS, THUNES_LIFE, TAMIYO_JACE_SURGE };
+export { THUNES_LIFE, TAMIYO_JACE_SURGE };

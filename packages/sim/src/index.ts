@@ -41,13 +41,18 @@ export { loadDeck, validateDeck, DeckLoadError } from './deck.js';
 // Sample decks (the provisional gauntlet — DESIGN §3.5 / §3.8).
 export { SAMPLE_DECKS } from '../data/decks/index.js';
 
-// The OWNER'S real, physical decks — a SEPARATE registry, deliberately not part
-// of the gauntlet above (see `data/owner-decks/index.ts` for why adding them to
-// it would move every A/B baseline the lab has ever recorded).
+// The OWNER'S real, physical decks — the SEED the web app mints his own copies
+// from. A separate registry from the gauntlet above on purpose (see
+// `data/owner-decks/index.ts`: adding them to it would move every A/B baseline
+// the lab has ever recorded), and NOT a separate kind of deck once seeded.
+//
+// ⚠️ `ownerDeckRules` used to be exported here and is gone. It set a deck's
+// legal minimum to its own transcribed size so a 59-card list could call itself
+// legal; it existed for one deck that is no longer seeded at all. A seeded deck
+// obeys `DEFAULT_DECK_RULES` like every other deck.
 export {
   OWNER_DECKS,
   OWNER_DECK_ENTRIES,
-  ownerDeckRules,
   transcribedSize,
 } from '../data/owner-decks/index.js';
 export type { OwnerDeckEntry } from '../data/owner-decks/index.js';

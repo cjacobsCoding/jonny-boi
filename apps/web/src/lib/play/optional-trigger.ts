@@ -39,7 +39,7 @@
  *
  * ## The table is CLOSED, and a shape outside it REPORTS
  *
- * Sixteen rows, one per primitive in `@jonny-boi/cards` that stops the game to
+ * Seventeen rows, one per primitive in `@jonny-boi/cards` that stops the game to
  * ask (derived from the primitive SOURCE — see the sweep in the test, which
  * fails if a new asking primitive appears with no row). A primitive that is not
  * a row is not a gate: {@link foldedMayPrompt} returns `null` and the board
@@ -137,6 +137,27 @@ export const OPTIONAL_GATE_SHAPES: Readonly<Record<string, OptionalGateShape>> =
     question: 'confirm',
     semantics: 'may',
     why: '"You may shuffle your library" — a complete clause on its own with no consequence for declining.',
+  },
+  /*
+   * §3.156's iteration gate. `bodyParams` is EMPTY because the put-onto-battlefield
+   * lives inside the primitive rather than in data — `instanceId` is runtime
+   * knowledge that only `exileTopMayPlay` has, so the compiler could not author a
+   * body param for it even in principle.
+   *
+   * ⚠️ Its sibling `exileTopMayPlay` deliberately has NO row: it exiles and
+   * enqueues without ever stopping to ask, so it is not a gate. The sweep in the
+   * test agrees — it found exactly one new asking primitive, not two.
+   *
+   * Declining does more here than in any other row on this table: it ENDS the
+   * iteration. "If you do, repeat this process" is false on a no, so the loop
+   * stops. That is the printed card, and a body that repeated anyway would play
+   * STRONGER than printed (§1a).
+   */
+  mayPlayExiledCard: {
+    bodyParams: [],
+    question: 'confirm',
+    semantics: 'may',
+    why: '"you may put it onto the battlefield" — and on a no the iteration ends, because "if you do" is false.',
   },
   searchLibrary: {
     bodyParams: [],

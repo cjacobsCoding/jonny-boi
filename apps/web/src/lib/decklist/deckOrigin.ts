@@ -31,14 +31,21 @@
  * The kinds of deck a list can hold. Closed on purpose — see
  * {@link originPresentation}.
  *
- * `owner` arrived third: the owner's REAL, physical decks, transcribed card by
- * card and bundled with the app (`packages/sim/data/owner-decks/`). They are a
- * third noun, not a shade of the other two — not reference data he may copy, and
- * not a deck he built in this app and may edit. Before they existed as a row
- * here they existed only as loose `.txt` files he would have had to paste into
- * Import by hand, which is why he opened the app and could not find his decks.
+ * ⚠️ **There are TWO, and a third was tried and rejected.** An `owner` origin
+ * was added for the owner's transcribed paper decks, which gave them their own
+ * region, their own badge and their own legality rules. His verdict: *"why is
+ * there a 'your paper decks' and 'your decks' - this is dumb. I just want one
+ * collection of decks and I must be able to edit all of them, regardless of
+ * whether scanned in."*
+ *
+ * He is right, and the rule generalises: **how a deck arrived is not a kind of
+ * deck.** Scanned, transcribed, imported, pasted or built card by card, the
+ * result is a deck he owns — `mine`. The only genuine second noun is the
+ * built-in gauntlet, which he does not own and which the Lab measures every
+ * verdict against. A transcription now seeds a `mine` deck at first run
+ * (`decklist/paperDecks.ts`); it never becomes a row here.
  */
-export type DeckOrigin = 'builtin' | 'owner' | 'mine';
+export type DeckOrigin = 'builtin' | 'mine';
 
 /** How one origin presents itself, everywhere it is shown. */
 export interface DeckOriginPresentation {
@@ -78,23 +85,19 @@ export interface DeckOriginPresentation {
  *
  * ⚠️ **KEY ORDER IS RENDER ORDER.** `DeckMenuOptions` walks `Object.keys` of this
  * object to lay out the `<optgroup>`s, so moving a row moves a group in every
- * deck picker in the app. `owner` sits first deliberately: the owner's own paper
- * decks are the ones he is reaching for, and burying them under nine gauntlet
- * decks is a smaller version of the problem this feature exists to fix.
+ * deck picker in the app. `mine` sits first deliberately: his own decks are the
+ * ones he is reaching for, and burying them under nine gauntlet decks is the
+ * same mistake in a smaller place.
  */
 export const DECK_ORIGINS: Readonly<Record<DeckOrigin, DeckOriginPresentation>> = Object.freeze({
-  owner: Object.freeze({
-    origin: 'owner',
-    badge: 'Paper',
-    glyph: '🃏',
-    explanation:
-      'One of your real, physical decks — transcribed card by card and bundled with the app ' +
-      'so it is simply here, with nothing to import. It is a RECORD of the deck in your box, ' +
-      'so it is not edited in place: copy it to tune a version of your own.',
-    groupLabel: 'Your paper decks',
-    labelSuffix: 'paper',
-    pickerNote:
-      'Your real deck, exactly as transcribed. To tune a version of it, copy it in the Deck Builder.',
+  mine: Object.freeze({
+    origin: 'mine',
+    badge: '',
+    glyph: '',
+    explanation: 'One of your own decks — rename, edit or delete it freely.',
+    groupLabel: 'Your decks',
+    labelSuffix: 'yours',
+    pickerNote: '',
   }),
   builtin: Object.freeze({
     origin: 'builtin',
@@ -106,15 +109,6 @@ export const DECK_ORIGINS: Readonly<Record<DeckOrigin, DeckOriginPresentation>> 
     groupLabel: 'Built-in gauntlet decks',
     labelSuffix: 'built-in',
     pickerNote: 'You can play it as-is. To tune it, copy it in the Deck Builder.',
-  }),
-  mine: Object.freeze({
-    origin: 'mine',
-    badge: '',
-    glyph: '',
-    explanation: 'One of your own decks — rename, edit or delete it freely.',
-    groupLabel: 'Your decks',
-    labelSuffix: 'yours',
-    pickerNote: '',
   }),
 });
 

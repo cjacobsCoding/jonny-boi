@@ -1,7 +1,6 @@
 /**
- * THE deck-choice menu: the player's saved decks, the owner's bundled PAPER
- * decks, and the built-in gauntlet decks — for every surface that asks "which
- * deck?".
+ * THE deck-choice menu: the player's own decks and the built-in gauntlet decks
+ * — for every surface that asks "which deck?".
  *
  * ## Why this moved out of `lib/online/`
  *
@@ -20,7 +19,7 @@
  * play a gauntlet deck directly is a real feature, and this changes only how it is
  * LABELLED.
  */
-import { OWNER_DECKS, SAMPLE_DECKS, transcribedSize } from '@jonny-boi/sim';
+import { SAMPLE_DECKS } from '@jonny-boi/sim';
 import type { DecksApi } from '../useDecks.js';
 import { deckSize } from '../deck.js';
 import type { DeckChoice } from '../play/setup.js';
@@ -36,21 +35,18 @@ export interface DeckMenuItem {
 }
 
 /**
- * Saved decks (non-empty) first, then the built-in gauntlet decks, then the
- * owner's paper decks.
+ * His own decks (non-empty) first, then the built-in gauntlet decks.
  *
  * ⚠️ ARRAY ORDER IS NOT RENDER ORDER — `DeckMenuOptions` groups by origin, and
  * the groups run in `DECK_ORIGINS` key order. What this order DOES decide is the
  * default pick: `SetupScreen` seeds seat A with `menu[0]` and seat B with
- * `menu[1]`. Paper decks are appended LAST for exactly that reason. Two of the
- * three are short of cards the pool does not carry yet, and defaulting a seat to
- * a deck that cannot start would greet the player with "Not ready" before they
- * had chosen anything.
+ * `menu[1]`.
  *
- * ⚠️ Paper decks are listed WHOLE, short or not, and deliberately: the shortfall
- * is reported by `validateChoice` under the control, naming every missing card.
- * Hiding a short deck would put us back where this feature started — his decks
- * not being in the app, with no explanation.
+ * ⚠️ A deck of his is listed WHOLE, short or not, and deliberately: the shortfall
+ * is reported by `validateChoice` under the control, naming what is wrong.
+ * Hiding a short deck would put us back where this started — his decks not being
+ * in the app, with no explanation. A transcribed deck needs no special case here
+ * at all: by the time this runs it is one of his saved decks like any other.
  *
  * The label carries the origin suffix because an `<option>` can hold nothing but
  * text — no badge, no icon. The `<optgroup>` heading (see `DeckMenuOptions`) is
@@ -72,13 +68,7 @@ export function buildDeckMenu(decks: DecksApi): DeckMenuItem[] {
     choice: { source: 'sample', deck: d },
     origin: 'builtin',
   }));
-  const owner: DeckMenuItem[] = OWNER_DECKS.map((d) => ({
-    key: `owner:${d.name}`,
-    label: `${d.name} · ${transcribedSize(d)} cards (${DECK_ORIGINS.owner.labelSuffix})`,
-    choice: { source: 'owner', deck: d },
-    origin: 'owner',
-  }));
-  return [...saved, ...samples, ...owner];
+  return [...saved, ...samples];
 }
 
 /** The items of one origin, in menu order. Used to fill one `<optgroup>`. */

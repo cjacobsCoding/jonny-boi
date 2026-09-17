@@ -3,7 +3,7 @@
  *
  * ## Why a divergence guard and not just unit tests
  *
- * These three lists exist twice on purpose: as prose transcriptions in
+ * These lists exist twice on purpose: as prose transcriptions in
  * `docs/decks/*.txt`, which is where the owner reads and corrects them, and as
  * `Deck` data in `packages/sim/data/owner-decks/`, which is what the app plays.
  * Two places answering one question will eventually answer it differently
@@ -15,6 +15,17 @@
  * was an answer about the wrong deck. That is the class this file closes: the
  * `.txt` is the source of truth and this test re-reads it, so a typo in either
  * copy fails rather than quietly becoming the decklist.
+ *
+ * ## And ACIDIC ANGELS IS NOT ONE OF THEM
+ *
+ * It was, for one revision, as a 59-card transcription. Caleb already owned a
+ * correct 60-card *Acidic Angels* in the app — the copy of the built-in
+ * *Selesnya Blink* he renamed, which is what surfaced the fork bug (§3.35). The
+ * seed was a worse duplicate of a deck he already had, and his reaction to being
+ * told it had been "deleted" is the reason the guard below is by NAME and
+ * unconditional: *"dont scare me like that - because the correct 60 card version
+ * of it was already in my decks."* Nothing in this repo may seed that name
+ * again. His own copy lives in his browser and no code here can reach it.
  *
  * ## And the gauntlet stays the gauntlet
  *
@@ -33,16 +44,21 @@ import { SAMPLE_DECKS } from '../data/decks/index.js';
 import {
   OWNER_DECKS,
   OWNER_DECK_ENTRIES,
-  ownerDeckRules,
   transcribedSize,
 } from '../data/owner-decks/index.js';
 import { DEFAULT_DECK_RULES } from './config.js';
+// The PUBLIC surface, as the web app imports it. A namespace import rather than
+// a dynamic one inside the test: `await import('./index.js')` pulls in the whole
+// package the first time it runs, which took 5 s and blew vitest's default
+// timeout whenever this file ran ALONE — a check that goes red for a reason
+// unrelated to what it asserts is worse than no check.
+import * as simPublicSurface from './index.js';
 
 /** Repo root, from this file: `packages/sim/src/` → three levels up. */
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
 /**
- * THE THREE DECKS, BY NAME, AND WHAT EACH ONE IS.
+ * THE DECKS, BY NAME, AND WHAT EACH ONE IS.
  *
  * Spelled out here rather than derived from the registry, because a test that
  * reads the registry to decide what the registry should contain cannot fail when
@@ -52,13 +68,6 @@ const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
  * by string.
  */
 const EXPECTED = Object.freeze([
-  Object.freeze({
-    name: 'Acidic Angels',
-    source: 'docs/decks/acidic-angels.txt',
-    names: 16,
-    cards: 59,
-    tell: ['Acidic Slime', 'Angel of Serenity'],
-  }),
   Object.freeze({
     name: "Thune's Life",
     source: 'docs/decks/thunes-life.txt',
@@ -100,11 +109,17 @@ function readTranscription(relativePath: string): readonly { count: number; name
 }
 
 describe("the owner's decks are registered", () => {
-  it('holds all three, by their real names', () => {
+  it('holds every one of them, by their real names', () => {
     for (const expected of EXPECTED) {
       const deck = OWNER_DECKS.find((d) => d.name === expected.name);
       expect(deck, `"${expected.name}" is missing from OWNER_DECKS`).toBeDefined();
     }
+    // The registry holds EXACTLY these. A test that only checks the expected
+    // decks are present cannot fail when an extra one is seeded, and seeding a
+    // deck he did not ask for is the defect this whole change exists to undo.
+    expect(OWNER_DECKS.map((d) => d.name).sort()).toEqual(
+      EXPECTED.map((e) => e.name).slice().sort(),
+    );
   });
 
   it('is the deck it says it is, not another deck under the same name', () => {
@@ -178,31 +193,17 @@ describe('the owner decks are NOT the gauntlet', () => {
   });
 });
 
-describe('paper-deck legality rules', () => {
-  it('sets the minimum to the deck it actually is', () => {
-    for (const deck of OWNER_DECKS) {
-      expect(ownerDeckRules(deck).minDeckSize, deck.name).toBe(transcribedSize(deck));
-    }
-  });
-
-  it('cannot be gamed into passing a short deck', () => {
-    // The minimum is DERIVED from the transcription, never chosen — so it can
-    // only ever say "all of it is here", never "this is close enough".
-    const acidic = OWNER_DECKS.find((d) => d.name === 'Acidic Angels')!;
-    expect(ownerDeckRules(acidic).minDeckSize).toBe(59);
-    expect(ownerDeckRules(acidic).minDeckSize).toBeLessThan(DEFAULT_DECK_RULES.minDeckSize);
-    // …and a deck that is over the constructed minimum is held to its own,
-    // HIGHER, size rather than being let through at 60.
-    const thunes = OWNER_DECKS.find((d) => d.name === "Thune's Life")!;
-    expect(ownerDeckRules(thunes).minDeckSize).toBeGreaterThan(DEFAULT_DECK_RULES.minDeckSize);
-  });
-
-  it('relaxes nothing else', () => {
-    for (const deck of OWNER_DECKS) {
-      const rules = ownerDeckRules(deck);
-      expect(rules.maxCopiesNonBasic).toBe(DEFAULT_DECK_RULES.maxCopiesNonBasic);
-      expect(rules.unlimitedCopies).toBe(DEFAULT_DECK_RULES.unlimitedCopies);
-    }
+describe('a seeded deck gets NO special legality rules', () => {
+  it('exports no per-deck rules function at all', () => {
+    // `ownerDeckRules` set a deck's legal minimum to its own transcribed size,
+    // so a 59-card list could report itself legal. It existed for exactly one
+    // deck, and that deck is no longer seeded. Asserted on the PUBLIC surface
+    // rather than by reading this module, because the web app imports from the
+    // package root and that is the surface a re-add would reappear on.
+    const exported = Object.keys(simPublicSurface);
+    // Not vacuous: the surface really is loaded and really does carry the decks.
+    expect(exported).toContain('OWNER_DECKS');
+    expect(exported).not.toContain('ownerDeckRules');
   });
 
   it('the transcriptions themselves respect the 4-of rule', () => {
@@ -213,6 +214,48 @@ describe('paper-deck legality rules', () => {
           DEFAULT_DECK_RULES.maxCopiesNonBasic,
         );
       }
+    }
+  });
+
+  it('is held to the ordinary constructed minimum, and one deck is short of it', () => {
+    // Not a defect to fix here, and not something to paper over with a special
+    // rule: Tamiyo + Jace Surge is 49 cards as transcribed. It seeds at 49, its
+    // row says it is short, and he can now add the eleven himself — which is
+    // what "one collection, all editable" bought.
+    const short = OWNER_DECKS.filter((d) => transcribedSize(d) < DEFAULT_DECK_RULES.minDeckSize);
+    expect(short.map((d) => d.name)).toEqual(['Tamiyo + Jace Surge']);
+  });
+});
+
+describe('ACIDIC ANGELS IS NOT SEEDED — and must never be again', () => {
+  /**
+   * ⚠️ Unconditional and by NAME. He owns a correct 60-card *Acidic Angels*
+   * already, in his browser, made long before any of this. The seed was a
+   * 59-card duplicate of it. Re-adding the name would put a second, worse deck
+   * of that name back beside his — and the web seeder additionally refuses any
+   * seed whose name he already uses (`paperDecks.ts`), so this is the first of
+   * two locks rather than the only one.
+   */
+  const BANNED = 'Acidic Angels';
+
+  it('is absent from the registry', () => {
+    expect(OWNER_DECKS.map((d) => d.name)).not.toContain(BANNED);
+    expect(OWNER_DECK_ENTRIES.map((e) => e.source)).not.toContain(
+      'docs/decks/acidic-angels.txt',
+    );
+  });
+
+  it('is absent from the gauntlet too, so nothing else ships that name', () => {
+    expect(SAMPLE_DECKS.map((d) => d.name)).not.toContain(BANNED);
+  });
+
+  it('no seeded deck carries its tell — a rename would not smuggle it back', () => {
+    // Content, not just the label. The deck's tell is Acidic Slime + Angel of
+    // Serenity; the same list under another name is still the same duplicate.
+    for (const deck of OWNER_DECKS) {
+      const names = deck.cards.map((c) => c.cardId);
+      const tells = ['Acidic Slime', 'Angel of Serenity'].filter((t) => names.includes(t));
+      expect(tells, `${deck.name} looks like ${BANNED}`).not.toHaveLength(2);
     }
   });
 });
