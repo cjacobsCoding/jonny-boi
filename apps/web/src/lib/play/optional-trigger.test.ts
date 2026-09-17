@@ -129,7 +129,12 @@ describe('OPTIONAL_GATE_SHAPES is a closed table over what the cards package act
 
   it('found the asking primitives by scanning the primitive source, not by memory', () => {
     // A scan that finds nothing would make every assertion below vacuous.
-    expect(asking.size).toBe(16);
+    // 16 -> 17 when DESIGN 3.156 added `mayPlayExiledCard` (Primal Surge's
+    // "you may put it onto the battlefield"). Its sibling `exileTopMayPlay` is
+    // NOT counted and has no row: it exiles and enqueues without ever asking.
+    // This number is a denominator guard, not a fact to keep in step by hand --
+    // if it disagrees with the scan, read the scan.
+    expect(asking.size).toBe(17);
     expect(asking.has('mayEffects')).toBe(true);
   });
 

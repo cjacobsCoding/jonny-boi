@@ -226,6 +226,25 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
   // Reads the top card and branches on what it is — the same shape as
   // `revealTopCard`, with the same dangerous miss (it looked and moved nothing).
   'revealTopDrawIf',
+  /*
+   * §3.156's ITERATIVE trio, all three classified LIBRARY-READING and all three
+   * conservatively so — the whole point of an iteration is that how far it gets
+   * is a function of library ORDER, which is exactly what a paired arm must hold
+   * constant.
+   *
+   * `exileTopMayPlay` reads the top card. `millSharedColorRepeat` (Grindstone)
+   * mills two at a time and repeats while they share a colour, so its depth is
+   * library order and nothing else.
+   *
+   * `mayPlayExiledCard` is the arguable one and is listed anyway. It reads
+   * EXILE, not a library — but it is the body `exileTopMayPlay` enqueues, and a
+   * yes from it repeats the process into another library read. Classifying it
+   * safe would let a paired arm diverge on the second iteration while the first
+   * matched, which is the hardest possible version of this bug to see.
+   */
+  'exileTopMayPlay',
+  'mayPlayExiledCard',
+  'millSharedColorRepeat',
 ]);
 
 /**
