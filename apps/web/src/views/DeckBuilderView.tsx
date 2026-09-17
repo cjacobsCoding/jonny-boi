@@ -10,6 +10,8 @@ import {
   manaCurve,
   validateDeck,
   toExport,
+  describeDeckProblems,
+  unresolvedCopies,
   type DeckIssue,
 } from '../lib/deck.js';
 import { MIN_DECK_SIZE } from '../lib/config.js';
@@ -22,12 +24,6 @@ import {
   describeGauntletCopy,
   gauntletDecks,
 } from '../lib/decklist/gauntletDecks.js';
-import {
-  describeCompleteness,
-  isComplete,
-  ownerDeckSummaries,
-  type OwnerDeckSummary,
-} from '../lib/decklist/ownerDecks.js';
 import { DECK_ORIGIN_ATTR, originPresentation } from '../lib/decklist/deckOrigin.js';
 import type { DecksApi } from '../lib/useDecks.js';
 import { CardToolbar } from '../components/CardToolbar.js';
@@ -44,7 +40,6 @@ import { copyText } from '../lib/clipboard.js';
 import './deck-health.css';
 import '../components/deck-origin.css';
 import './builtin-decks.css';
-import './owner-decks.css';
 import './deck-steppers.css';
 
 /**
@@ -292,6 +287,38 @@ function DeckPanel({
             </div>
           ))
         )}
+
+        {/* CARDS THE POOL CANNOT SUPPLY YET — listed in the deck, not hidden.
+            These have no `cardId`, so they cannot be a `deck-entry`: there is
+            nothing to inspect, nothing to step up, and no art. What they DO
+            need is to be visible and removable, because a deck that silently
+            arrived thirteen cards light is the failure his own words name — and
+            because "I must be able to edit all of them" has to reach the one
+            part of a transcribed deck that has no card behind it. */}
+        {(active.unresolved ?? []).length > 0 && (
+          <div className="deck-group deck-group--unresolved">
+            <div className="deck-group__title">
+              Not in the card pool yet ({unresolvedCopies(active)})
+            </div>
+            {(active.unresolved ?? []).map((missing) => (
+              <div key={missing.name} className="deck-entry deck-entry--unresolved">
+                <span className="deck-entry__count">{missing.count}×</span>
+                <span className="deck-entry__name" title={`${missing.name} is in this deck on paper, but the compiled card pool does not carry it yet. It will be added automatically when it does.`}>
+                  {missing.name}
+                </span>
+                <button
+                  type="button"
+                  className="deck-step deck-step--remove"
+                  onClick={() => decks.removeUnresolvedCard(missing.name)}
+                  aria-label={`Drop ${missing.name} from this deck`}
+                  title={`Drop ${missing.name} from this deck`}
+                >
+                  −
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {ioOpen && (
@@ -317,10 +344,9 @@ function DeckPanel({
         </div>
       )}
 
-      {/* His REAL decks sit directly under his own: they are the ones he came
-          looking for, and burying them under nine reference decks is a smaller
-          version of the problem this region exists to fix. */}
-      <OwnerDecks decks={decks} />
+      {/* ONE collection. His transcribed paper decks are seeded INTO
+          `SavedDecks` as decks of his own (see `lib/decklist/paperDecks.ts`),
+          so there is nothing else to mount here — which is the entire fix. */}
       <SavedDecks decks={decks} />
       <GauntletDecks decks={decks} />
 
@@ -357,137 +383,6 @@ function unsupportedSummary(cardId: string): string {
   return systems.length > 0
     ? `Can't be simulated yet — needs ${systems.join('; ')}.`
     : "Can't be simulated yet.";
-}
-
-/**
- * THE OWNER'S REAL DECKS — his three physical, sleeved decks, in the app.
- *
- * ## The defect this exists for
- *
- * He opened the app to play one of his own decks and could not find them. They
- * had only ever existed as loose `.txt` files in `docs/decks/`, which a person
- * would have had to open and paste into Import by hand. The lists were correct,
- * committed, and tested — and unreachable from the app, which is the ninth time
- * that shape of failure has been filed here. A file in the repo is not delivery.
- *
- * ## Why it is a separate region from the gauntlet decks
- *
- * A built-in gauntlet deck is REFERENCE DATA the Lab measures against. One of
- * these is a RECORD of a deck he owns. They are different nouns, so — exactly as
- * `builtin-decks.css` argues for the previous pair — they must never render as
- * the same thing. Same reasoning, third noun, its own container and badge.
- *
- * ## A short deck says so, loudly
- *
- * These lists are 2012–13 Standard and the compiled pool does not carry all of
- * it yet. A deck whose cards the pool cannot supply must SAY WHICH ONES, in the
- * row, without being clicked — silently handing back a 26-card "deck" is the
- * failure his own words name: *a deck that resolves to a handful of lands is not
- * a deck.* The count moves upward on its own as the card campaign lands
- * families; `ownerDecks.test.ts` pins a floor so it can never move down quietly.
- */
-export function OwnerDecks({ decks }: { decks: DecksApi }): ReactElement {
-  const [note, setNote] = useState<string | null>(null);
-  // `decks.decks` is the same INVISIBLE dependency the card pool has above: an
-  // imported card grows the pool a summary is computed against, and this list is
-  // the only signal it happened.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const list = useMemo(() => ownerDeckSummaries(), [decks.decks]);
-  const owner = originPresentation('owner');
-
-  const copy = (summary: OwnerDeckSummary): void => {
-    const result = copyGauntletDeck(summary.deck);
-    decks.importDeck(result.deck);
-    setNote(describeGauntletCopy(result));
-  };
-
-  return (
-    <div className="owner-decks">
-      <div className="section-label">{owner.groupLabel}</div>
-      <p className="owner-decks__intro">
-        Your real decks, transcribed card by card and bundled with the app — nothing to
-        import. Play one straight from the Play screen, or copy one to tune a version of
-        your own.
-      </p>
-      <div className="owner-deck-list">
-        {list.map((summary) => {
-          const copies = copiesOfGauntletDeck(summary.name, decks.decks);
-          const mine = copies[0];
-          const complete = isComplete(summary);
-          return (
-            <div
-              key={summary.name}
-              className="owner-deck"
-              {...{ [DECK_ORIGIN_ATTR]: 'owner' }}
-            >
-              <div className="owner-deck__heading">
-                <span
-                  className="deck-origin-badge deck-origin-badge--owner"
-                  title={owner.explanation}
-                >
-                  <span aria-hidden="true">{owner.glyph}</span> {owner.badge}
-                </span>
-                <span className="owner-deck__name">{summary.name}</span>
-              </div>
-              <span className="owner-deck__meta">
-                {summary.archetype} · {summary.transcribedSize} cards ·{' '}
-                {summary.resolvedNames}/{summary.names} names in the pool
-              </span>
-              {/* Stated either way. "Complete" is a claim worth reading, and a
-                  region where only the broken rows say anything trains the eye
-                  to skip the ones that are fine — which is how a deck that went
-                  short would stop being noticed.
-
-                  No `role="alert"`: these are static labels rendered on mount,
-                  and three of them would announce themselves as alerts before
-                  the reader had asked for anything. The colour, the icon and the
-                  sentence itself carry it, in normal reading order. */}
-              <p
-                className={
-                  complete ? 'owner-deck__status' : 'owner-deck__status owner-deck__status--short'
-                }
-              >
-                {complete ? '✓ ' : '⚠ '}
-                {describeCompleteness(summary)}
-              </p>
-              {mine ? (
-                <div className="owner-deck__copied">
-                  <span className="owner-deck__copied-note" role="status">
-                    ✓ {describeExistingCopies(copies)}
-                  </span>
-                  <div className="owner-deck__actions">
-                    <button
-                      type="button"
-                      className="btn btn--ghost"
-                      onClick={() => decks.selectDeck(mine.id)}
-                    >
-                      Open my copy
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn--ghost owner-deck__again"
-                      onClick={() => copy(summary)}
-                    >
-                      Copy again
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button type="button" className="btn btn--ghost" onClick={() => copy(summary)}>
-                  Copy to my decks
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      {note && (
-        <p className="owner-decks__note" role="status">
-          {note}
-        </p>
-      )}
-    </div>
-  );
 }
 
 /**
@@ -598,7 +493,31 @@ export function GauntletDecks({ decks }: { decks: DecksApi }): ReactElement {
 }
 
 /**
- * The saved-deck switcher — YOUR decks, the ones you can rename, edit and delete.
+ * YOUR DECKS — the one collection, and the only one he owns.
+ *
+ * ## There is exactly one of these, on purpose
+ *
+ * For one revision there were two: this, and a separate read-only region called
+ * "Your paper decks" holding the physical decks he had transcribed. *"why is
+ * there a 'your paper decks' and 'your decks' - this is dumb. I just want one
+ * collection of decks and I must be able to edit all of them, regardless of
+ * whether scanned in."* A transcribed deck is now SEEDED into this list as a
+ * deck of his own (`lib/decklist/paperDecks.ts`) and is from then on
+ * indistinguishable from one he built by hand — which is what he asked for, and
+ * why there is nothing in this component that knows where a deck came from.
+ *
+ * The built-in gauntlet stays its own region. It is not his, the Lab measures
+ * every verdict against it, and the last time the two were rendered alike he
+ * filed a duplication bug (DESIGN §3.35). One collection of HIS decks, not one
+ * list of all decks.
+ *
+ * ## A deck that is not right says so, in the row
+ *
+ * *"a deck that resolves to a handful of lands is not a deck."* A row whose deck
+ * is short of sixty, or whose cards the compiled pool cannot supply yet, prints
+ * the reason under its name rather than leaving him to open each one and count.
+ * The sentence comes from `describeDeckProblems`, which reads the same two
+ * fields `validateDeck` does — one answer to one question (CLAUDE.md rule 12).
  *
  * Always rendered, even at one deck: this heading is what tells you which region
  * of the panel is yours, and hiding it left a lone list of six built-in decks
@@ -617,6 +536,7 @@ export function SavedDecks({ decks }: { decks: DecksApi }): ReactElement {
         {decks.decks.map((deck) => {
           const isActive = deck.id === decks.activeDeck?.id;
           const count = deck.cards.reduce((sum, entry) => sum + entry.count, 0);
+          const problems = describeDeckProblems(deck);
           return (
             <div
               key={deck.id}
@@ -633,6 +553,17 @@ export function SavedDecks({ decks }: { decks: DecksApi }): ReactElement {
               >
                 {deck.name} · {count}
               </button>
+              {/* Rendered only when something IS wrong. A line under every deck
+                  saying "60 cards, fine" trains the eye to skip the line, which
+                  is how the deck that went short stops being noticed.
+
+                  No `role="alert"`: these are static labels present on mount,
+                  and a collection of them would announce themselves before he
+                  had asked anything. The icon, the colour and the sentence
+                  carry it in normal reading order. */}
+              {problems !== '' && (
+                <p className="saved-deck__problems">⚠ {problems}</p>
+              )}
             </div>
           );
         })}

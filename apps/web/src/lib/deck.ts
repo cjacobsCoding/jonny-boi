@@ -50,6 +50,23 @@ export interface DeckEntry {
   printing?: EntryPrinting;
 }
 
+/**
+ * A card the deck is known to contain that the pool CANNOT SUPPLY YET, kept by
+ * name because there is no id to keep.
+ *
+ * `DeckEntry.name` is a tombstone for an id that stopped resolving;
+ * this is the opposite case — a card that never resolved in the first place,
+ * because the compiler does not carry it. The two are different questions and a
+ * single field could not answer both: an unresolved name has no `cardId` at all,
+ * so it cannot be a `DeckEntry` without inventing one.
+ */
+export interface UnresolvedCard {
+  /** The card's printed name, as the transcription or decklist spelled it. */
+  readonly name: string;
+  /** Copies the deck should hold. A 4-of is a bigger hole than a 1-of. */
+  readonly count: number;
+}
+
 /** A saved deck. `id` is a local UUID; `cardId`s reference the card pool. */
 export interface Deck {
   id: string;
@@ -57,6 +74,24 @@ export interface Deck {
   cards: DeckEntry[];
   /** ISO timestamp of the last edit, for sorting the saved-deck list. */
   updatedAt: string;
+  /**
+   * Cards this deck should hold that the pool could not supply when it was
+   * created. Absent on every deck built from the pool by hand — you cannot add a
+   * card the app does not have — which is what every deck saved before this
+   * field existed says, so old decks need no migration.
+   *
+   * ⚠️ This is the PERSISTED form of `GauntletCopy.unresolved`, not a second
+   * answer to "what is missing" (CLAUDE.md rule 12). It is written once by the
+   * one resolver that produces it, and re-read by that same resolver as the pool
+   * grows — see `decklist/paperDecks.ts#reconcileUnresolved`, which folds a name
+   * into `cards` the moment the compiler learns it.
+   *
+   * It exists because dropping those names silently is the exact failure Caleb
+   * named: *"a deck that resolves to a handful of lands is not a deck."* Without
+   * it, a 49-card paper deck would arrive as 36 cards and read as a deck HE had
+   * built badly, rather than as a deck the app could not fully supply.
+   */
+  unresolved?: UnresolvedCard[];
   /**
    * For a deck made by copying a BUILT-IN gauntlet deck: that deck's name.
    * Absent on decks built from scratch or imported, which is what every deck
@@ -149,6 +184,31 @@ export function removeCard(deck: Deck, cardId: string): Deck {
           entry.cardId === cardId ? { ...entry, count: entry.count - 1 } : entry,
         );
   return { ...deck, cards, updatedAt: new Date().toISOString() };
+}
+
+/**
+ * Drop a card the pool cannot supply from the deck's wish-list.
+ *
+ * Editability has to reach these too. They are the one part of a seeded deck he
+ * cannot delete with the ordinary stepper — there is no card in the grid to step
+ * down — so without this a transcription error, or a card he has simply decided
+ * not to play, would sit in his deck's row forever telling him something is
+ * missing that he does not want. *"I must be able to edit all of them."*
+ *
+ * Returns the same deck unchanged when the name is not on the list, so a
+ * double-click cannot bump `updatedAt` on a deck nothing happened to.
+ */
+export function removeUnresolved(deck: Deck, name: string): Deck {
+  const missing = deck.unresolved ?? [];
+  const remaining = missing.filter((entry) => entry.name !== name);
+  if (remaining.length === missing.length) return deck;
+  const next: Deck = { ...deck, updatedAt: new Date().toISOString() };
+  if (remaining.length > 0) next.unresolved = remaining;
+  // Deleted rather than left as `[]`: an empty array and an absent field mean
+  // the same thing, and a deck that stores both shapes makes every reader decide
+  // which it is looking at.
+  else delete next.unresolved;
+  return next;
 }
 
 /** A resolved deck entry paired with its card record (skips unknown ids). */
@@ -340,6 +400,14 @@ export function validateDeck(deck: Deck): DeckIssue[] {
       });
     }
   }
+  for (const missing of deck.unresolved ?? []) {
+    issues.push({
+      message:
+        `${missing.count}× ${missing.name} — the card pool doesn’t carry this card yet, ` +
+        `so it isn’t in the deck. It will be added automatically when the pool does.`,
+      severity: 'warning',
+    });
+  }
   const size = deckSize(deck);
   if (size < MIN_DECK_SIZE) {
     issues.push({
@@ -348,6 +416,51 @@ export function validateDeck(deck: Deck): DeckIssue[] {
     });
   }
   return issues;
+}
+
+/** Copies of cards this deck should hold that the pool cannot supply yet. */
+export function unresolvedCopies(deck: Deck): number {
+  return (deck.unresolved ?? []).reduce((sum, missing) => sum + missing.count, 0);
+}
+
+/**
+ * ONE SENTENCE SAYING WHAT IS WRONG WITH THIS DECK — or `''` when nothing is.
+ *
+ * ## Why the deck ROW needs its own sentence
+ *
+ * `validateDeck` already answers this, but it answers it as a LIST, for the one
+ * deck that is open in the builder. The collection is a list of every deck he
+ * has, and his complaint about the previous design was that a deck can be short
+ * or incomplete without the list saying so — *"a deck that resolves to a handful
+ * of lands is not a deck."* So this is the same facts, in a row-sized shape.
+ *
+ * ⚠️ Not a second source of truth: both this and `validateDeck` read `cards` and
+ * `unresolved` and nothing else, and `deck.test.ts` pins that a deck this calls
+ * fine has no blocking issue and vice versa. Adding a third thing that can be
+ * wrong with a deck means adding it in both, in one edit.
+ */
+export function describeDeckProblems(deck: Deck): string {
+  const parts: string[] = [];
+  const missing = deck.unresolved ?? [];
+  const size = deckSize(deck);
+  if (missing.length > 0) {
+    const copies = unresolvedCopies(deck);
+    const named = missing.map((m) => `${m.count} ${m.name}`).join(', ');
+    parts.push(
+      `${size} of ${size + copies} cards — the pool doesn’t carry ` +
+        `${missing.length} name${missing.length === 1 ? '' : 's'} yet ` +
+        `(${copies} card${copies === 1 ? '' : 's'}): ${named}.`,
+    );
+  }
+  if (size < MIN_DECK_SIZE) {
+    // Said even when cards are missing, because they are different problems with
+    // different fixes: the pool will supply the first on its own, and only he
+    // can fix the second. An earlier version printed only the first, and a deck
+    // that would STILL be short at full resolution looked like it was one pool
+    // update away from being playable.
+    parts.push(`Only ${size} cards — a Constructed deck needs ${MIN_DECK_SIZE}.`);
+  }
+  return parts.join(' ');
 }
 
 /** Convert a deck to its portable export shape (sim-compatible). */

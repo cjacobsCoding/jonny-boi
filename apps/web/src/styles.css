@@ -927,6 +927,33 @@ button {
   font-size: var(--text-sm);
 }
 
+/*
+ * CARDS THIS DECK HOLDS ON PAPER THAT THE POOL CANNOT SUPPLY YET.
+ *
+ * Warning-coloured rather than muted, and listed inside the deck rather than
+ * hidden behind a count. A transcribed deck whose missing cards were dropped
+ * silently would read as a deck the owner had built badly; these lines are what
+ * make it read as a deck the app cannot fully supply yet.
+ */
+.deck-group--unresolved .deck-group__title {
+  color: var(--color-warning);
+  border-bottom-color: var(--color-warning);
+}
+
+.deck-entry--unresolved {
+  color: var(--color-warning);
+}
+
+/* No card behind the name, so nothing to open — the pointer must not promise
+   an inspector that cannot exist. */
+.deck-entry--unresolved .deck-entry__name {
+  cursor: help;
+}
+
+.deck-entry--unresolved .deck-entry__name:hover {
+  color: var(--color-warning);
+}
+
 .deck-entry__count {
   font-variant-numeric: tabular-nums;
   font-weight: 700;
@@ -1035,11 +1062,30 @@ button {
 .saved-deck {
   display: flex;
   align-items: center;
+  /* Wraps so a deck that has something wrong with it can say so on its own
+     line, under its name, without turning every healthy row into two lines. */
+  flex-wrap: wrap;
   gap: var(--space-2);
   padding: var(--space-2);
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
   background: var(--color-surface-raised);
+}
+
+/*
+ * WHAT IS WRONG WITH THIS DECK, in the row.
+ *
+ * Warning-coloured and full width. "a deck that resolves to a handful of lands
+ * is not a deck" — so a short or incomplete deck must be legible as such from
+ * the collection, without opening it. `flex-basis: 100%` puts it on its own
+ * line inside the wrapping row rather than squeezing the deck's name.
+ */
+.saved-deck__problems {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-warning);
+  font-size: var(--text-xs);
+  line-height: 1.45;
 }
 
 .saved-deck--active {

@@ -1,11 +1,19 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { NormalizedCard } from '@jonny-boi/data-tools';
 import {
   type Deck,
   addCard as addCardToDeck,
   removeCard as removeCardFromDeck,
+  removeUnresolved as removeUnresolvedFromDeck,
   createDeck,
 } from './deck.js';
+import {
+  loadSettledSeeds,
+  planSeeding,
+  recordSettledSeeds,
+  reconcileUnresolved,
+  type SettledSeed,
+} from './decklist/paperDecks.js';
 import {
   withEntryPrinting,
   withoutEntryPrinting,
@@ -30,6 +38,14 @@ export interface DecksApi {
   renameActive: (name: string) => void;
   addCard: (card: NormalizedCard) => void;
   removeCard: (cardId: string) => void;
+  /**
+   * Drop a card the pool cannot supply from the active deck's wish-list.
+   *
+   * The counterpart of {@link removeCard} for the one part of a deck that has no
+   * card in the grid to step down. Without it a seeded deck would carry a line
+   * he could never clear, which is not "editable like any other deck".
+   */
+  removeUnresolvedCard: (name: string) => void;
   /**
    * Choose the Scryfall printing this slot of the active deck uses, or pass
    * `null` to go back to the pool's default art. Art only — the card's identity
@@ -67,27 +83,61 @@ export function useDecks(): DecksApi {
    */
   const [readCorrupt, setReadCorrupt] = useState(false);
 
+  /**
+   * Seeds settled by this session's load, waiting for the decks to be stored.
+   *
+   * ⚠️ A ref and not state, on purpose: recording a seed as delivered BEFORE its
+   * deck is safely on disk is how a deck gets marked done and then lost, which
+   * is the failure `docs/PLAY-HISTORY-AND-STORAGE.md` §1 documents. The persist
+   * effect below drains this only after `saveDecks` reports success.
+   */
+  const pendingSeedRecord = useRef<SettledSeed[]>([]);
+
   // Initial load — recover gracefully if storage is empty/corrupt.
   useEffect(() => {
     const { decks: loaded, corrupt } = loadDecks();
     setReadCorrupt(corrupt);
-    if (loaded.length === 0) {
+    if (corrupt) {
+      // ⚠️ NOTHING is seeded onto an unreadable blob. His decks may well still
+      // be in there; adding to what we could not read, and then writing it back,
+      // is the second and unrecoverable way to lose them. `loadDecks` has
+      // already told him what happened, and `mayPersistDecks` blocks the write.
       const starter = createDeck(DEFAULT_DECK_NAME);
       setDecks([starter]);
       setActiveId(starter.id);
       return;
     }
-    setDecks(loaded);
+
+    // His transcribed paper decks join the ONE collection here, as ordinary
+    // decks of his own — add-only, name-collision-safe, once per profile.
+    const plan = planSeeding(loaded, loadSettledSeeds());
+    const reconciled = reconcileUnresolved(plan.decks);
+    pendingSeedRecord.current = plan.settled;
+
+    if (reconciled.length === 0) {
+      const starter = createDeck(DEFAULT_DECK_NAME);
+      setDecks([starter]);
+      setActiveId(starter.id);
+      return;
+    }
+    setDecks(reconciled);
     const storedActive = loadActiveDeckId();
-    const exists = loaded.some((deck) => deck.id === storedActive);
-    setActiveId(exists ? storedActive : loaded[0]!.id);
+    const exists = reconciled.some((deck) => deck.id === storedActive);
+    setActiveId(exists ? storedActive : reconciled[0]!.id);
   }, []);
 
   // Persist whenever decks or the active selection change. `saveDecks` reports
   // its own failure to the user through the persistence notice registry, which
   // the app shell renders — this effect deliberately does not swallow anything.
   useEffect(() => {
-    if (mayPersistDecks({ readCorrupt, deckCount: decks.length })) saveDecks(decks);
+    if (!mayPersistDecks({ readCorrupt, deckCount: decks.length })) return;
+    const result = saveDecks(decks);
+    // The ledger goes SECOND, and only on a successful deck write. A seed marked
+    // delivered whose deck did not make it to disk would never be offered again.
+    if (result.ok && pendingSeedRecord.current.length > 0) {
+      recordSettledSeeds(pendingSeedRecord.current);
+      pendingSeedRecord.current = [];
+    }
   }, [decks, readCorrupt]);
   useEffect(() => {
     if (readCorrupt) return;
@@ -141,6 +191,11 @@ export function useDecks(): DecksApi {
     [updateActive],
   );
 
+  const removeUnresolvedCard = useCallback(
+    (name: string) => updateActive((deck) => removeUnresolvedFromDeck(deck, name)),
+    [updateActive],
+  );
+
   const setEntryPrinting = useCallback(
     (cardId: string, printing: EntryPrinting | null) =>
       updateActive((deck) =>
@@ -174,6 +229,7 @@ export function useDecks(): DecksApi {
     renameActive,
     addCard,
     removeCard,
+    removeUnresolvedCard,
     setEntryPrinting,
     replaceActive,
     importDeck,

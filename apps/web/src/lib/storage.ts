@@ -16,7 +16,7 @@
  * `corrupt`, because the caller's next move would otherwise be to overwrite it
  * with a fresh empty list and destroy any chance of getting it back.
  */
-import type { Deck, DeckEntry } from './deck.js';
+import type { Deck, DeckEntry, UnresolvedCard } from './deck.js';
 import { getCard } from './cards.js';
 import { isEntryPrinting } from './printings/entryPrinting.js';
 import { DECKS_STORAGE_KEY, ACTIVE_DECK_STORAGE_KEY } from './config.js';
@@ -155,7 +155,35 @@ function normalizeDeck(value: Partial<Deck>): Deck {
   if (typeof value.copiedFrom === 'string' && value.copiedFrom.trim()) {
     deck.copiedFrom = value.copiedFrom;
   }
+  // Same trap as `copiedFrom`, and a worse one to fall into: `unresolved` is
+  // what makes a deck say which of its cards the pool cannot supply. Dropping it
+  // here would silently turn a 49-card paper deck into a 36-card deck of his own
+  // on the first reload — the deck would stop explaining itself and start
+  // looking like something he built badly.
+  const unresolved = normalizeUnresolved(value.unresolved);
+  if (unresolved.length > 0) deck.unresolved = unresolved;
   return deck;
+}
+
+/**
+ * Rebuild the wish-list of cards the pool could not supply.
+ *
+ * Rebuilt field by field for the same reason entries are, and filtered to
+ * well-formed rows: a corrupt line costs one line of the explanation, never the
+ * deck. A non-array (or absent) value is "nothing missing", which is what every
+ * deck saved before this field existed means.
+ */
+function normalizeUnresolved(raw: unknown): UnresolvedCard[] {
+  if (!Array.isArray(raw)) return [];
+  const out: UnresolvedCard[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'object' || item === null) continue;
+    const row = item as Record<string, unknown>;
+    if (typeof row.name !== 'string' || !row.name.trim()) continue;
+    if (typeof row.count !== 'number' || !Number.isFinite(row.count) || row.count <= 0) continue;
+    out.push({ name: row.name, count: Math.floor(row.count) });
+  }
+  return out;
 }
 
 /**

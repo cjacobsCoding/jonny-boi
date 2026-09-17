@@ -16,6 +16,18 @@ export const DECKS_STORAGE_KEY = 'jonny-boi.decks.v1';
 /** localStorage key for the id of the currently-open deck. */
 export const ACTIVE_DECK_STORAGE_KEY = 'jonny-boi.activeDeckId.v1';
 
+/**
+ * localStorage key for the ledger of transcriptions already SETTLED into his
+ * collection — see `decklist/paperDecks.ts`.
+ *
+ * ⚠️ Deliberately a key of its own rather than a field inside the decks blob.
+ * The decks blob is the one thing in this origin that cannot be rebuilt, and the
+ * seeding bookkeeping must not be able to make it bigger, change its shape, or
+ * fail its write. Losing this key costs one no-op seeding pass; losing the decks
+ * costs his decks.
+ */
+export const SEEDED_DECKS_STORAGE_KEY = 'jonny-boi.decks.seeded.v1';
+
 /** Default name for a freshly-created deck. */
 export const DEFAULT_DECK_NAME = 'New Deck';
 
