@@ -3009,7 +3009,16 @@ Three parts, and only the third is hard:
 mana cost" — the biggest population any of these residues touches, and 1.02 cards per shape, so it is
 the §3.120 artifact again rather than one system. The cross-seat half is the part Jace specifically
 needs; most of those 168 cast from the caster's own zones and want only the free-cast half.
-### 3.153 His three real decks were in the repo and not in the app — ✅ done
+### 3.153 His three real decks were in the repo and not in the app — ✅ done, then ⚠️ HALF UNDONE by §3.157
+
+> ⚠️ **READ §3.157 BEFORE THIS ONE.** The diagnosis below was right — his decks were
+> not in the app — and the REMEDY was wrong. It put them in a SECOND, read-only region called
+> "Your paper decks" instead of in the collection his decks already lived in, and gave them an
+> `owner` origin and their own legality rules to go with it. Everything below about the paper
+> region, the `owner` origin, `ownerDeckRules`, the third badge and `verify-owner-decks.mjs`
+> describes code that **no longer exists**. Kept because the measurement and the harness
+> technique were sound and are reused; the design was not.
+
 
 > ⚠️ **Section number claimed off a contended range.** `main` carries TWO §3.147s, TWO §3.149s and
 > THREE §3.150s at fork, and five lanes are live. §3.153 was the next free number on `origin/main`
@@ -3089,6 +3098,89 @@ VIEWPORT rather than the DOM, reads the completeness sentence out of the rendere
 Acidic Angels in the Play setup, starts a Solo game, and reads the opening hand back card by card.
 70 checks, exit 0. The same harness against a build of `origin/main` exits 1 with *"no .owner-deck
 row appeared — his decks are not in this build"*, with the app fully alive.
+
+### 3.157 Two collections of his decks, one of them read-only — the shape of "one collection" — ✅ done
+
+> ⚠️ **Section number claimed off a contended range.** §3.156 was the highest anywhere on
+> `origin/main` at fork (`f7fb8a5`); §3.157 was the next free number. **Renumber it freely at
+> merge** — nothing in the code refers to it.
+
+**Supersedes the remedy in §3.153, not its diagnosis.**
+
+> "yo why is there a 'your paper decks' and 'your decks' - this is dumb. I just want one collection
+> of decks and I must be able to edit all of them, regardless of whether scanned in. And you can
+> ditch the Acidic Angels deck with 59 cards, not sure why its missing one"
+
+He asked for his decks to be in the app. §3.153 added a **second** region above the one his decks
+already lived in — its own container, its own `Paper` badge, a third `DeckOrigin`, a third
+`DeckChoice` source, and `ownerDeckRules`, a per-deck legality rule that set a deck's legal minimum
+to its own transcribed size so a 59-card list could report itself legal. Three regions of decks in
+one panel, two of them claiming to be his, and the two that were his could not be edited at all.
+
+**The rule the fix encodes: how a deck ARRIVED is not a kind of deck.** Scanned, transcribed,
+imported, pasted or built card by card — the result is a deck he owns and can edit. `DeckOrigin` is
+back to two members, and the one that stays is the one that is genuinely a different noun: the
+**built-in gauntlet** is reference data the Lab measures every verdict against, he does not own it,
+and rendering it like his own is what produced the fork bug (§3.35). That line is not blurred here
+— the gauntlet keeps its own region, its own badge and its `Copy to my decks` button.
+
+**A transcription is now SEEDED, once per profile, as an ordinary deck of his.**
+`lib/decklist/paperDecks.ts` mints it into `decks.decks` and then has nothing more to do with it:
+rename it, edit it, delete it, play it.
+
+⚠️ **Seeding is ADD-ONLY, and that is structural rather than a convention** — deck storage has
+already cost him decks once (`docs/PLAY-HISTORY-AND-STORAGE.md` §1), and §3.153's own seed
+DUPLICATED a deck he owned. `planSeeding` is pure and returns `[...existing, ...minted]`; it has no
+path that filters, replaces, renames, merges or reorders an existing deck, and the guard asserts
+that with `toBe` on the OBJECT REFERENCE, because a `.map()` returning equal copies would satisfy
+every value check while quietly rewriting his whole collection. Three further rules:
+
+- **His name wins.** A seed whose name he already uses (case- and space-insensitively) is SKIPPED
+  and his deck is left exactly as it was — never suffixed, never merged, never replaced.
+- **A deck he deletes stays deleted.** A ledger (`jonny-boi.decks.seeded.v1`, its own storage row,
+  deliberately not a field inside the decks blob) records a seed as *settled* — delivered or
+  skipped — so "is a deck with this id present?" is never the question. The ledger is written
+  **after** the decks are safely stored, so a seed can never be marked delivered while its deck is
+  lost; and a stable per-seed deck id is the belt for a ledger write that itself failed.
+- **Nothing is seeded onto an unreadable blob.** `readCorrupt` short-circuits the whole pass.
+
+**⚠️ ACIDIC ANGELS: the 59-card SEED is deleted; HIS 60-card deck was never ours to touch.**
+
+> "You say Acidic Angel deck is gone - but its not and dont scare me like that - because the correct
+> 60 card version of it was already in my decks."
+
+His is the copy of the built-in *Selesnya Blink* he renamed — the deck in the §3.35 story — and it
+lives in his browser where no code here can reach it. What is gone is the 59-card transcription this
+repo shipped beside it: `acidic-angels.ts`, `docs/decks/acidic-angels.txt`, its registry row, and
+every fixture asserting three seeded decks. `owner-decks.test.ts` now fails if the name, **or its
+card list under another name**, ever reappears.
+
+**`ownerDeckRules` is retired with it.** It existed only for that 59-card deck. His decks are judged
+by `DEFAULT_DECK_RULES` like any deck he builds — which is what "one collection" means — so
+*Tamiyo + Jace Surge* seeds at its transcribed **49 cards** and is short of 60. That is correct, it
+is stated in the row, and he can now fix it, because the deck is editable.
+
+**A deck that is not right SAYS SO, in the row** (`describeDeckProblems`), reading the same two
+fields `validateDeck` does rather than becoming a second answer to one question. A deck whose cards
+the pool cannot carry yet keeps them as `Deck.unresolved` — the persisted form of
+`GauntletCopy.unresolved`, from the one bundled-deck resolver — so nothing is silently dropped, the
+row names every missing card with its count, and `reconcileUnresolved` folds each one into the deck
+the moment the pool learns it. Those entries are removable too: *"I must be able to edit all of
+them"* has to reach the one part of a transcribed deck with no card behind it.
+
+**Proven by a browser harness, because nine unreachable features were not.**
+`apps/web/scripts/verify-one-deck-collection.mjs` boots a real Chrome at 1440x1100 and 375x812 and
+runs **80 checks, exit 0**: a cold profile shows exactly one `.saved-decks-region`, zero paper
+regions, zero paper badges and no `owner` origin, with the word "paper" nowhere on the panel; both
+transcribed decks are in **Your decks**, marked `mine`, measured against the VIEWPORT rather than
+the DOM; the short deck names its five missing cards in rendered text; one deck is then opened,
+renamed, has a card removed, and both changes survive a reload; and a profile that already holds a
+60-card **Acidic Angels** keeps it — once, at 60 cards, under its own id, in `localStorage` as well
+as on screen — across three loads, while the seeds still arrive beside it.
+
+The same harness, byte-identical, against a build of `origin/main` **exits 1** with 26 failures in
+the shape of the claim: *4 paper regions, 3 paper badges*, the word "paper" on screen, none of his
+decks in "Your decks", and *"Acidic Angels has card controls — 0 steppers"* — read-only, as designed.
 
 ### 3.152 The targeting-protection row names a half that was FINISHED — the gap was one keyword, and the row cannot see it — ✅ done
 
