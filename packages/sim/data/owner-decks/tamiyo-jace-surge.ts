@@ -16,14 +16,21 @@
  * nobody asked about; it is not a fine outcome for the two cards a deck is named
  * after, which is why `docs/ALL-CARDS-CAMPAIGN.md` §7a holds them.
  *
- * Shipping it anyway, loudly short, is the point: the owner's third deck EXISTS
- * in the app and says exactly what it is missing, instead of being absent and
- * unexplained. The count moves on its own as the campaign lands those families —
- * `ownerDecks.test.ts` pins the number so the movement is visible.
+ * Shipping it anyway, loudly short, is the point: the deck EXISTS in the app and
+ * says exactly what it is missing, instead of being absent and unexplained. The
+ * count moves on its own as the campaign lands those families —
+ * `paperDecks.ts#reconcileUnresolved` folds each name into the seeded deck the
+ * moment the pool learns it, and `paperDecks.test.ts` pins that it can only ever
+ * move upward.
  *
- * 49 cards as transcribed, which is under the 60-card minimum even at full
- * resolution. Not padded: see `acidic-angels.ts` for why a transcription is not
- * corrected by inventing cards.
+ * ⚠️ **49 cards as transcribed, which is short of 60 even at full resolution,
+ * and it seeds that way on purpose.** The names are read off the physical cards
+ * and the counts inferred from sleeve depth; padding to a legal 60 would mean
+ * inventing cards the owner does not own, and the moment that happens this stops
+ * being a record of his deck. An earlier revision hid the shortfall behind
+ * `ownerDeckRules`, a per-deck legality rule that made 49 "legal"; that rule is
+ * retired (§3.157). The deck is judged like any deck he builds, its row says it
+ * is short, and he can fix it himself because it is his and it is editable.
  */
 
 import type { Deck } from '../../src/deck.js';

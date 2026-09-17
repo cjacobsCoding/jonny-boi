@@ -87,11 +87,13 @@ function poolByName(): Map<string, NormalizedCard> {
  * the canonical gauntlet list once you have tuned it.
  *
  * ⚠️ This is THE name → pool resolution funnel for every bundled deck, not only
- * the gauntlet ones: `ownerDecks.ts` resolves the owner's paper decks through it
- * too, and reads the same `unresolved` to report what the pool cannot supply.
- * Keep it deck-source-agnostic — a second resolver would be a second answer to
- * one question, and the two would eventually disagree (CLAUDE.md rule 12). The
- * `Gauntlet` in the name is history; the behaviour is not gauntlet-specific.
+ * the gauntlet ones: `paperDecks.ts` seeds the owner's transcribed decks through
+ * it, persists the same `unresolved` onto the deck so a short deck can say what
+ * it is missing, and calls back in through here as the pool grows to fold each
+ * name in. Keep it deck-source-agnostic — a second resolver would be a second
+ * answer to one question, and the two would eventually disagree (CLAUDE.md rule
+ * 12). The `Gauntlet` in the name is history; the behaviour is not
+ * gauntlet-specific.
  */
 export function copyGauntletDeck(sample: SimDeck, nameSuffix = ' (copy)'): GauntletCopy {
   const index = poolByName();
