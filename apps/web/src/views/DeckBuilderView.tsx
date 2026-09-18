@@ -15,8 +15,12 @@ import {
   type DeckIssue,
 } from '../lib/deck.js';
 import { MIN_DECK_SIZE } from '../lib/config.js';
-import { unsupportedReason } from '../lib/decklist/importedCards.js';
-import { assessDeckHealth, deckHealthBadge, describeDeckHealth } from '../lib/decklist/deckHealth.js';
+import {
+  assessDeckHealth,
+  deckHealthBadge,
+  describeDeckHealth,
+  whyUnplayable,
+} from '../lib/decklist/deckHealth.js';
 import {
   copiesOfGauntletDeck,
   copyGauntletDeck,
@@ -236,7 +240,7 @@ function DeckPanel({
                   >
                     {card.name}
                   </span>
-                  {unsupportedReason(card.id) && (
+                  {whyUnplayable(card.id) && (
                     <span
                       className="deck-entry__unsupported"
                       title={unsupportedSummary(card.id)}
@@ -378,8 +382,9 @@ const ISSUE_ICONS: Readonly<Record<DeckIssue['severity'], string>> = {
  * rules text needs, so the answer to "why is this flagged?" is one hover away.
  */
 function unsupportedSummary(cardId: string): string {
-  const missing = unsupportedReason(cardId) ?? [];
-  const systems = [...new Set(missing.map((gap) => gap.missingEngineSystem))];
+  // `whyUnplayable`, not the import store: the marker on a card's line must mean
+  // the same thing as the badge on the deck and the refusal in Play.
+  const systems = whyUnplayable(cardId) ?? [];
   return systems.length > 0
     ? `Can't be simulated yet — needs ${systems.join('; ')}.`
     : "Can't be simulated yet.";

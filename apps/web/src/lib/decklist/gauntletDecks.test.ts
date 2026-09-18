@@ -21,7 +21,7 @@ import {
 import { deckSize } from '../deck.js';
 import { getCard } from '../cards.js';
 import { toSimPayload } from '../sim-format.js';
-import { unsupportedCardNames } from '../deck.js';
+import { assessDeckHealth } from './deckHealth.js';
 
 /** Total cards in a bundled sim deck. */
 function simSize(deck: (typeof SAMPLE_DECKS)[number]): number {
@@ -157,7 +157,7 @@ describe('gauntlet decks are selectable as the Lab hero', () => {
       // are the two conditions `lib/heroValidation.ts` gates on.
       expect(deckSize(hero), `${hero.name} is not a full deck`).toBeGreaterThanOrEqual(60);
       expect(
-        unsupportedCardNames(hero),
+        assessDeckHealth(hero.cards).unplayable.map((c) => c.name),
         `${hero.name} holds a card the engine cannot play`,
       ).toEqual([]);
     }

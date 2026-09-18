@@ -18,7 +18,8 @@
 
 import { validateDeck as validateSimDeck, type Deck as SimDeck } from '@jonny-boi/sim';
 import { loadCardPool } from './sim-pool.js';
-import { unsupportedCardNames, type Deck } from './deck.js';
+import { type Deck } from './deck.js';
+import { deckHealthProblems } from './decklist/deckHealth.js';
 import { toSimPayload } from './sim-format.js';
 
 /** Shown when no deck is selected at all — not a validation failure, an empty state. */
@@ -32,15 +33,14 @@ export const NO_DECK_SELECTED = 'No deck selected.';
 export function validateHero(hero: Deck | null): string[] {
   if (!hero) return [NO_DECK_SELECTED];
 
-  const unsupported = unsupportedCardNames(hero);
-  if (unsupported.length > 0) {
-    const count = `${unsupported.length} card${unsupported.length === 1 ? '' : 's'}`;
-    return [
-      `${count} in this deck can’t be simulated yet: ${unsupported.join(', ')}. ` +
-        'The deck itself is fine — swap them out to run it, or check the deck panel ' +
-        'for what the engine still needs.',
-    ];
-  }
+  // Support first, on its own — and through the SAME funnel Play and the deck
+  // builder use. This used to be a private list of names that said which cards
+  // were holding the deck up but never what they needed, so "check the deck panel
+  // for what the engine still needs" was the answer to a question we could just
+  // answer here. It is also why the Lab and Play could disagree: they asked two
+  // different functions.
+  const unsupported = deckHealthProblems(hero.cards);
+  if (unsupported.length > 0) return unsupported;
 
   // `SimDeckPayload` is structurally the sim's `Deck` (name/archetype/cards), so
   // the authoritative check is the sim's own — not a UI approximation of it.

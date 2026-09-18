@@ -21,13 +21,18 @@ import {
 } from '@jonny-boi/sim';
 import type { Deck as WebDeck } from '../deck.js';
 import { toSimPayload } from '../sim-format.js';
-import { importedCard, importedDefinitions, subscribeToImportedCards } from '../decklist/importedCards.js';
-
-let cachedPool: CardPool | null = null;
+import { importedCard } from '../decklist/importedCards.js';
+import { deckHealthProblems } from '../decklist/deckHealth.js';
+import { invalidateCardPool as invalidateLocalPool, loadCardPool as loadLocalPool } from '../sim-pool.js';
 
 /**
  * The pool every LOCAL play path validates and plays from: the curated cards PLUS
  * the player's own imported ones.
+ *
+ * ⚠️ This used to build and memoize its OWN pool with exactly the arguments
+ * `lib/sim-pool.ts` already used — two memos, two subscriptions, one question.
+ * They agreed only because nobody had yet changed one of them; now there is one
+ * pool, and "what can this app play?" has one answer (CLAUDE.md rule 12).
  *
  * ⚠️ **The `extraCards` seam existed for exactly this and was never wired up.**
  * `importedDefinitions()`'s own doc says it is "for `loadCardPool({ extraCards })`",
@@ -46,20 +51,19 @@ let cachedPool: CardPool | null = null;
  * must not require a reload to play it.
  */
 export function hotseatPool(): CardPool {
-  if (!cachedPool) {
-    cachedPool = loadCardPool({ onWarn: () => {}, extraCards: importedDefinitions() });
-  }
-  return cachedPool;
+  return loadLocalPool();
 }
 
-/** Drop the memo so the next `hotseatPool()` sees newly imported cards. */
+/**
+ * Drop the memo so the next `hotseatPool()` sees newly imported cards.
+ *
+ * Kept as the play path's own name for the operation (tests and views say
+ * "invalidate the hotseat pool"), but it now clears the ONE local pool rather
+ * than a second copy of it.
+ */
 export function invalidateHotseatPool(): void {
-  cachedPool = null;
+  invalidateLocalPool();
 }
-
-// Subscribed once at module load: the store is a singleton and so is the memo, so
-// one subscription keeps them in step for the life of the page.
-subscribeToImportedCards(invalidateHotseatPool);
 
 /**
  * A deck the player picked for a seat: one of their saved decks, or a bundled
@@ -127,9 +131,22 @@ export function deckChoiceName(choice: DeckChoice): string {
 /**
  * Validate a deck choice for LOCAL play (Solo, pass-and-play): curated cards plus
  * the player's imported ones. Empty array = legal.
+ *
+ * ⚠️ Support is asked FIRST, and reported ON ITS OWN. The sim's validator does
+ * refuse an unsupported deck, but only as a side effect of the card not being in
+ * the pool, and the words it produces are the wrong ones: a deck holding four
+ * copies of a card the engine cannot play reported
+ * `unknown card "3f2e…-cafe" (not in the pool by id or name)` followed by
+ * `deck size 56 is below the minimum of 60` — a raw uuid and a deck size that is
+ * not actually wrong. {@link deckHealthProblems} names the card and what the
+ * engine still needs, which is the same answer the Lab, the Match viewer and the
+ * deck-builder badge give (CLAUDE.md rule 12).
  */
 export function validateChoice(choice: DeckChoice): string[] {
-  return validateDeck(toSimDeck(choice), hotseatPool(), rulesForChoice(choice));
+  const deck = toSimDeck(choice);
+  const unsupported = deckHealthProblems(deck.cards);
+  if (unsupported.length > 0) return unsupported;
+  return validateDeck(deck, hotseatPool(), rulesForChoice(choice));
 }
 
 let cachedCuratedPool: CardPool | null = null;
