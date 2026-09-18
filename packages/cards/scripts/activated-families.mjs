@@ -70,7 +70,7 @@ for (const raw of corpus) {
     const m = RESTRICTION.exec(body);
     return m ? { core: body.slice(0, m.index).trim(), suffix: m[1].toLowerCase() } : null;
   });
-  if (stripped.every((s) => s !== null) && stripped.every((s, i) => bodyOk(raw.name, s.core))) {
+  if (stripped.every((s) => s !== null) && stripped.every((s) => bodyOk(raw.name, s.core))) {
     restrictionOnly.add(raw.name);
     for (const s of stripped) {
       const k = s.suffix.replace(/\b\d+\b/g, 'N');

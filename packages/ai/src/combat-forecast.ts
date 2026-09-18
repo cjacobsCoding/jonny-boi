@@ -443,6 +443,15 @@ function forecastPlan(ctx: ForecastContext, plan: readonly CardInstance[]): Plan
         theirDead.add(primary.instanceId);
         theirDeadStats += statTotal(primary, index);
       }
+      // A BLOCKED lifelinker still gains its full power (CR 510.1c + 702.15b):
+      // every point it has is assigned somewhere — to its blockers, or through
+      // them if it tramples — and lifelink counts damage dealt, not damage that
+      // mattered. This used to be credited only on the unblocked branch above, so
+      // the model thought a 6/6 lifelinker gained nothing the moment a 1/1 stepped
+      // in front of it, and would decline an attack that actually races fine.
+      if (keywordsOf(attacker, index).lifelink === true) {
+        lifelinkGain += projectedPower(ctx, attacker, ctx.opp);
+      }
       // Trample-through damage is the ATTACKER's damage, so it lands on the
       // attacker's clock: poison for an infect trampler (Putrefax), life otherwise.
       const through = attackerPressure(attacker, outcome.damageThrough, index);

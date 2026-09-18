@@ -118,6 +118,53 @@ export function pureManaExchange(ability: ActivatedAbility): ManaExchange | unde
   return { cost: cost.mana, produced };
 }
 
+/** The one effect primitive that hands a permanent back its own tap. */
+const UNTAP_SELF = 'untapSelf';
+
+/**
+ * The SECOND shape of "gives back exactly what it takes": `{N}: Untap ~` on a
+ * permanent whose own tap makes mana — Basalt Monolith's `{3}: Untap Basalt
+ * Monolith` under its `{T}: Add {C}{C}{C}`.
+ *
+ * It is {@link pureManaExchange} with one step of indirection. The ability adds
+ * no mana itself, so the credit-side scorer never sees a mana payoff — it sees
+ * `untapSelf`, prices an untapped permanent as worth something, and pays the
+ * `{3}` by tapping the very Monolith it is about to untap. The state after
+ * resolution is the state before: Monolith untapped, pool unchanged. MEASURED in
+ * the soak (seed 165826623, turn 13): `tapped ×538, manaAdded ×523, untapped
+ * ×523` in one turn until CR 104.4b drew the game — §3.141's Bog Initiate turn,
+ * with the tap and the pay swapped.
+ *
+ * Read as an exchange, the cost is the ability's mana cost and the "produced"
+ * side is what the permanent's tap yields — because that is precisely what the
+ * untap buys back. The equality test then does the rest, and keeps the cases
+ * that are NOT loops: an untap that costs less than the tap makes grows the pool
+ * (a real mana engine, and the engine's turn bound is the right guard for a true
+ * infinite); an untap whose tap makes a colour the pool lacked changes the pool
+ * (a fix, allowed once — the second iteration is identical and refused, exactly
+ * as a filter land's second run is).
+ *
+ * Only a FIXED bundle (`produces`) is read. A source whose tap is a choice
+ * (`producesOptions`) or a scripted mana ability is not this shape, and the
+ * honest answer for it is the one this module gives for everything it cannot
+ * decide: no ruling, the pilot keeps the play it has today.
+ */
+export function untapSelfExchange(ability: ActivatedAbility, def: CardDefinition): ManaExchange | undefined {
+  const cost = ability.cost;
+  if (cost.mana === undefined) return undefined;
+  if (cost.tap || cost.sacrificeSelf || cost.sacrificeAnother) return undefined;
+  if (cost.life !== undefined || cost.loyalty !== undefined) return undefined;
+  if (ability.effects.length !== 1 || ability.effects[0]?.primitive !== UNTAP_SELF) return undefined;
+  const produced = def.produces;
+  if (produced === undefined || produced.length === 0) return undefined;
+  return { cost: cost.mana, produced };
+}
+
+/** Either shape of exchange this module rules on, or `undefined` for neither. */
+function exchangeOf(ability: ActivatedAbility, def: CardDefinition): ManaExchange | undefined {
+  return pureManaExchange(ability) ?? untapSelfExchange(ability, def);
+}
+
 /**
  * The pool this exchange would leave behind, or `undefined` when the cost cannot
  * be paid out of `pool` at all (which is not this module's question — the caller
@@ -165,7 +212,7 @@ export function manaExchangeIsNoOp(
   def: CardDefinition,
   pool: ManaPool | undefined,
 ): boolean {
-  const exchange = pureManaExchange(ability);
+  const exchange = exchangeOf(ability, def);
   if (exchange === undefined) return false;
   // `undefined` is the caller saying "I could not predict the pool" — see
   // `poolAfterPlan`. A restricted parcel makes two pools with equal colour counts
@@ -186,9 +233,10 @@ export function manaExchangeIsNoOp(
  * MCTS rollout policy, where (see `heuristic.ts`'s header) everything it
  * allocates is multiplied by ~20,000 per look-ahead decision. Predicting the
  * pool means a battlefield scan and a pool copy per planned tap — work worth
- * doing for the two cards in the pool that could loop and for nothing else. So
- * the CHEAP half runs first: `pureManaExchange` refuses almost every ability on
- * one property read, and the prediction is never built for those.
+ * doing for the handful of cards in the pool that could loop and for nothing
+ * else. So the CHEAP half runs first: `exchangeOf` (both shapes) refuses almost
+ * every ability on one or two property reads, and the prediction is never built
+ * for those.
  *
  * Written as `f(cheap) && g(expensive)` at the call site instead, this ordering
  * would be one refactor away from being lost.
@@ -200,7 +248,7 @@ export function manaExchangeIsNoOpOnceFunded(
   player: PlayerId,
   plan: readonly ManaTapPlan[],
 ): boolean {
-  if (pureManaExchange(ability) === undefined) return false;
+  if (exchangeOf(ability, def) === undefined) return false;
   return manaExchangeIsNoOp(ability, def, poolAfterPlan(view, player, plan));
 }
 

@@ -8,7 +8,8 @@
  *     normal step; double strike deals in both.
  *   - deathtouch: any damage > 0 from a deathtouch source is lethal.
  *   - trample: excess damage beyond a blocker's lethal threshold tramples to the
- *     defending player.
+ *     defending player. Without trample that excess is not lost — a blocked
+ *     attacker assigns ALL of its power among its blockers (CR 510.1c).
  *   - lifelink: damage dealt also gains its controller that much life.
  *   - infect / wither / toxic (§3.105): what damage DOES once it lands — marks or
  *     -1/-1 counters, life or poison, lifelink and toxic on top — is CR 120.3's
@@ -595,16 +596,43 @@ function runDamageStep(
       dealToAttackedObject(state, attacker, attacked, atkPower, index, replacements, defendingPlayer, emit);
       continue;
     }
-    // Blocked → assign lethal to each blocker in order, trample overflow.
+    // Blocked → DIVIDE the attacker's damage among its blockers (CR 510.1c).
+    //
+    // ⚠️ "At least lethal to each blocker, in order, before the next one may be
+    // assigned any" is a FLOOR on a legal division, not a ceiling on how much is
+    // dealt. This loop used to assign `min(remaining, lethal)` per blocker and
+    // then DROP whatever was left unless the attacker had trample — so a 100/100
+    // lifelinker blocked by a Llanowar Elves dealt 1 damage and gained 1 life.
+    // The blocker died either way, which is why only the life total gave it away.
+    //
+    // Everything past the last blocker's lethal threshold has exactly two legal
+    // destinations: through to the attacked player/permanent if the attacker
+    // tramples (CR 702.19b), and otherwise onto the blockers. The division is the
+    // attacker's controller's choice; with the lethal floor already satisfied the
+    // only choice left is which blocker takes the excess, and it goes to the LAST
+    // in the damage assignment order — the standard assignment, and the only one
+    // the engine can make without stopping to ask.
+    const assignment = new Array<number>(blockers.length).fill(0);
     let remaining = atkPower;
-    for (const blocker of blockers) {
-      if (remaining <= 0) break;
-      const need = lethalNeeded(blocker, attacker, index);
+    for (let i = 0; i < blockers.length && remaining > 0; i += 1) {
+      const need = lethalNeeded(blockers[i] as CardInstance, attacker, index);
       const assign = Math.min(remaining, need);
-      applyDamage(state, attacker, blocker, assign, index, replacements, emit);
+      assignment[i] = assign;
       remaining -= assign;
     }
-    if (remaining > 0 && kw(attacker, index).trample) {
+    const tramples = kw(attacker, index).trample === true;
+    if (remaining > 0 && !tramples) {
+      assignment[blockers.length - 1] = (assignment[blockers.length - 1] as number) + remaining;
+      remaining = 0;
+    }
+    // Dealt per blocker in ONE call each: two calls for the same blocker would be
+    // two `damageDealt` events for one assignment, and would spend a prevention
+    // shield twice on a single hit.
+    for (let i = 0; i < blockers.length; i += 1) {
+      const amount = assignment[i] as number;
+      if (amount > 0) applyDamage(state, attacker, blockers[i] as CardInstance, amount, index, replacements, emit);
+    }
+    if (remaining > 0 && tramples) {
       dealToAttackedObject(state, attacker, attacked, remaining, index, replacements, defendingPlayer, emit);
     }
   }

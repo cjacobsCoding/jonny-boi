@@ -3182,6 +3182,18 @@ The same harness, byte-identical, against a build of `origin/main` **exits 1** w
 the shape of the claim: *4 paper regions, 3 paper badges*, the word "paper" on screen, none of his
 decks in "Your decks", and *"Acidic Angels has card controls — 0 steppers"* — read-only, as designed.
 
+> ⚠️ **What this merge broke, found a day later (2026-09-18).** The `Browser harnesses` run on
+> this merge commit went RED on *Layout fits the window* and stayed red — the harness is advisory,
+> and its log said `.play-board` not found, which is the symptom two steps after the cause. The
+> cause: `SetupScreen` seeded seat A with `menu[0]` and seat B with `menu[1]`, the menu lists his
+> decks first, and one of the two seeded here cannot start — **Tamiyo + Jace Surge is 49 cards and
+> holds five cards the engine does not play** (Thune's Life, 65 cards, is legal). A seat therefore
+> defaulted to it, Start was disabled with a legality message under that seat, and the harness,
+> which sets only seat A, could never start a game. Fixed in `deckMenu.ts: defaultSeatKeys` — the seats open on the first
+> two decks `validateChoice` accepts, his short decks stay listed whole exactly as this section
+> intends, and the harness now prints the "Not ready" list when Start never enables. Tamiyo + Jace
+> Surge is still 49 cards: that is the transcription, not the app, and only the paper can fix it.
+
 ### 3.152 The targeting-protection row names a half that was FINISHED — the gap was one keyword, and the row cannot see it — ✅ done
 
 > ⚠️ **Section number claimed off a contended range.** `main` carries TWO §3.147 sections and TWO
@@ -10186,6 +10198,59 @@ of 60`, the Lab said the card's name with no system, and deck health called an i
 label: the problem appears under the control the moment it is picked, and health-checking every
 saved deck on every render to decorate an `<option>` buys a worse trade. Said here rather than
 discovered later.
+### 3.159 A blocked attacker threw away every point past lethal — lifelink gained 1 from a 100-damage hit — ✅ done
+
+> ⚠️ **Section number claimed off a contended range.** §3.157 was the highest anywhere on
+> `origin/main` at fork (`3501c27`), and a sibling lane claimed §3.158. **Renumber it freely at
+> merge** — nothing in the code refers to it.
+
+> "btw, I just dealt over 100 damage to a blocking llanowar elf with my lifelink creature and did
+> not get over 100 health for it - I think I only got 1"
+
+He is exactly right, and the number he guessed is the number the engine produced.
+
+**The defect.** `internal/combat.ts` assigned combat damage like this:
+
+```ts
+for (const blocker of blockers) {
+  const assign = Math.min(remaining, lethalNeeded(blocker, attacker, index));
+  applyDamage(state, attacker, blocker, assign, …);
+  remaining -= assign;
+}
+if (remaining > 0 && kw(attacker, index).trample) { /* …to the player… */ }
+```
+
+Everything left after the last blocker's lethal threshold was **discarded** unless the attacker
+had trample. CR 510.1c says the attacker's controller *divides* its combat damage among the
+creatures blocking it and may not assign to a later blocker until each earlier one has lethal —
+"at least lethal to each, in order" is a **floor on a legal division, not a ceiling on how much
+is dealt**. Damage that is not trampling does not evaporate; it lands on the blockers.
+
+So a 100/100 lifelinker blocked by a Llanowar Elves dealt **1**. The Elves died either way, which
+is precisely why nothing caught it: the only observable difference is in the things computed from
+the amount — the lifelink gain (CR 702.15b counts damage *dealt*, not damage that mattered), a
+prevention shield's arithmetic, and any "whenever this deals damage" trigger.
+
+**The fix** builds the assignment first and then deals it: lethal to each blocker in order, and
+the excess piled onto the **last blocker in the order** when the attacker has no trample. Dealt
+in one `applyDamage` call per blocker, deliberately — two calls for one blocker would be two
+`damageDealt` events for a single assignment and would spend a prevention shield twice on one hit.
+Trample is untouched: it is the thing that lets the excess skip the blockers, and a test asserts
+the two cases still differ, so a fix that "works" by making everything trample would fail.
+
+**The sibling, fixed with it** (rule 10 — the class, not the instance). `ai/combat-forecast.ts`
+credited `lifelinkGain` only on its **unblocked** branch, so the model believed a lifelinker
+gained nothing the moment a 1/1 stepped in front of it. That is the same question — *how much
+does a blocked attacker deal?* — answered wrong in a second place, and it would have made the AI
+decline attacks that race perfectly well. A blocked lifelinker gains its full power.
+
+**The guard.** `combat-full-assignment.test.ts` replays the reported board: 100-power lifelinker,
+one Llanowar Elves, no trample → 100 damage to the blocker and **100 life gained**; a second case
+puts a 0/4 wall behind the Elves and asserts 1 then 99, which is the ordering rule and the pile
+rule in one; the trample control asserts 1 to the blocker and 99 to the face. It reads damage
+from the EVENT LOG rather than the battlefield on purpose — a creature dealt lethal damage is
+gone by the time combat ends, so reading the permanent would report nothing for exactly the case
+under test.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B

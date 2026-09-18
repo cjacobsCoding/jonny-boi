@@ -263,16 +263,33 @@ async function main() {
     await clickButton(page, /^Play$/);
     await clickButton(page, /Solo \(vs the computer\)/);
     check('solo setup reached', await textPresent(page, /Start game/));
-    await page.evaluate(() => {
-      const select = [...document.querySelectorAll('select')].find((s) =>
-        [...s.options].some((o) => /Mono-Green Ramp/.test(o.textContent ?? '')),
-      );
-      const option = [...select.options].find((o) => /Mono-Green Ramp/.test(o.textContent ?? ''));
+    // BOTH seats are pinned. This used to set only seat A and take whatever seat B
+    // defaulted to — which was whatever deck happened to sit second in the menu,
+    // and the menu changed under it twice: first his transcribed paper decks were
+    // listed there under relaxed rules (so the computer played a 56-card lifegain
+    // deck), then they lost those rules and the default skipped to Boros Aggro,
+    // whose burn kills the mana creature this rig is trying to keep alive. A drive
+    // loop that arranges a board must own BOTH decks; the mirror has no removal.
+    const seats = await page.evaluate(() => {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
-      setter.call(select, option.value);
-      select.dispatchEvent(new Event('change', { bubbles: true }));
+      const picked = [];
+      for (const select of document.querySelectorAll('select')) {
+        const option = [...select.options].find((o) => /Mono-Green Ramp/.test(o.textContent ?? ''));
+        if (!option) continue;
+        setter.call(select, option.value);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        picked.push(option.textContent?.trim());
+      }
+      return picked;
     });
-    await clickButton(page, /^Start game$/);
+    check('both seats pinned to Mono-Green Ramp', seats.length === 2, seats.join(' | '));
+    const started = await clickButton(page, /^Start game$/);
+    if (!started) {
+      const problems = await page.evaluate(() =>
+        [...document.querySelectorAll('.play-setup__problems')].map((el) => el.innerText.replace(/\s+/g, ' ').trim()).join(' | '),
+      );
+      throw new Error(`Start game never became clickable — ${problems || 'no "Not ready" list on screen'}`);
+    }
     check('mulligan screen shown', await textPresent(page, /Keep \(/));
     await clickButton(page, /^Keep \(/);
     await clickButton(page, /^Confirm bottom/, { timeoutMs: 1500 });
@@ -286,9 +303,18 @@ async function main() {
     // ---- arrange the reported board: a Forest AND a mana creature, both untapped
     // Played, never poked: lands from hand, then the Mystic cast off the first one.
     let arranged = false;
+    // One line per drive-loop turn, printed only on failure. The second loop
+    // below already explains its misses; this one used to end with nothing but
+    // "could not arrange the reported board", which in CI — no one to open a
+    // screenshot — is a rig that cannot be diagnosed from its own log.
+    const turnLog = [];
+    let endedBecause = 'the turn budget ran out';
     for (let turn = 0; turn < TURN_BUDGET && !arranged; turn++) {
       const phase = await toMyMain(page);
-      if (phase === null) break;
+      if (phase === null) {
+        endedBecause = 'the game ended (or Main Phase 1 was never reached again)';
+        break;
+      }
       await installProbes(page);
       // One land per turn (the engine refuses a second), then the mana creature.
       await page.evaluate(() => window.__mc.play('Forest'));
@@ -310,13 +336,24 @@ async function main() {
       const untappedForest = state.mine.some((p) => /Forest/.test(p.text) && !p.tapped);
       const chipCard = state.hand.find((c) => c.chip);
       arranged = untappedCreature && untappedForest && chipCard !== undefined;
+      turnLog.push(
+        `${phase} — mine: ${state.mine.map((p) => `${p.text}${p.tapped ? ' (tapped)' : ''}`).join(', ') || '(none)'}; ` +
+          `hand: ${state.hand.map((c) => `${c.name}${c.chip ? ' ⛁' : ''}`).join(', ') || '(empty)'}`,
+      );
       if (!arranged) {
         await clickButton(page, /Pass \/ advance|Pass priority/, { timeoutMs: 4000 });
         await sleep(AI_BEAT_MS);
       }
     }
     check('a board with an untapped mana creature AND an untapped Forest was reached', arranged);
-    if (!arranged) throw new Error('could not arrange the reported board');
+    if (!arranged) {
+      console.log(`  drive loop stopped because ${endedBecause}; what each of my main phases looked like:`);
+      for (const line of turnLog) console.log(`    ${line}`);
+      const body = await page.evaluate(() => (document.body.innerText ?? '').replace(/\s+/g, ' ').slice(0, 600));
+      console.log(`  screen now: ${body}`);
+      await shot(page, 'mana-choice-could-not-arrange.png');
+      throw new Error('could not arrange the reported board');
+    }
 
     await installProbes(page);
     const before = await page.evaluate(() => ({ mine: window.__mc.mine(), hand: window.__mc.hand() }));
