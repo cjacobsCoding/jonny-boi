@@ -31,7 +31,6 @@ const shapeOf = (t) => t.replace(/\{[^}]*\}/g, '{}').replace(/\b\d+\b/g, 'N').re
 
 const costGap = new Map(), bodyGap = new Map(), bothGap = new Map(), neither = new Map();
 let clauses = 0, cards = 0, soleCards = 0;
-const sampleCards = new Map();
 
 for (const raw of corpus) {
   let r;

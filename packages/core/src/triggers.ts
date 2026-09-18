@@ -1211,6 +1211,7 @@ export function triggeringInstancesFor(
     // §3.154 — "you may return **it** to your hand": the card that just moved is
     // the referent, and it reaches the body through the same `carriesSubject`
     // channel the counter family opened, so the emblem needed no second one.
+    // falls through
     case 'cardPutIntoGraveyardFromAnywhere':
       // "That creature" — only for a condition that ASKS (`carriesSubject`),
       // so every board-watching trigger written before this is unchanged.
