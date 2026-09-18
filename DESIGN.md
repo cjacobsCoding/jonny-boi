@@ -10194,11 +10194,15 @@ had never had the suite run in CI, so each failure had to be ruled on rather tha
   permanent's own tap — and `ai/mana-exchange.ts` now reads that shape too (`untapSelfExchange`),
   through the same pool-equality test, so a cheaper untap (a real engine) and a colour-fixing
   untap (allowed once) survive. Seven table rows plus the funded-path case that IS the loop. The
-  soak reached this board only because this branch's combat change moved the game's life totals
-  (deck A also holds *Moment of Heroism*, which grants lifelink); the pilot bug was latent on main.
+  same game, action for action, fails on `main` (PR #63 ran the suite there: seed 165826623, turn
+  13, 2313 actions) — the pilot bug was latent, and this branch's combat change did not move it.
 - `sim/parallel-host.test.ts` ×2 — the spawned worker died with `Unknown file extension ".ts"`:
-  `--import tsx` in the worker's `execArgv` never took effect on the runner's **Node 20**, while
-  every dev box on Node 24 passes. Node 20 was past end-of-life; all three workflows now run 22.
+  `--import tsx` in the worker's `execArgv` never took effect on the Linux runner, on Node 20 or
+  on 22 (where native type-stripping loaded the `.ts` entry and it died one import later on the
+  unmapped `./parallel-slices.js`), while every Windows dev box passes. Under a loader-less
+  process the host now spawns the freshly BUILT worker from `dist/` — the artefact the CLI runs —
+  and keeps the `.ts` route as the fallback; a `dist/` older than its sources is refused. Node 20
+  was past end-of-life regardless; all three workflows now run 22.
 - The `Browser harnesses` job, once past the §3.157 default-seat regression, exposed two rig
   defects in `verify-mana-choice.mjs`: it owned one seat's deck and inherited the other (now pins
   both to the Mono-Green mirror, which has no removal), and its `toMyMain` polled for an ENABLED
