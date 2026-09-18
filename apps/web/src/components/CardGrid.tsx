@@ -141,31 +141,10 @@ export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): Reac
     focusIndex: null as number | null,
   });
 
-  /**
-   * Read the grid's real geometry and decide what to render. The ONE place that
-   * touches layout, so a selector or CSS change breaks one function rather than
-   * every number that depends on it.
-   */
-  const sync = useCallback(() => {
-    const grid = gridRef.current;
-    if (!grid || typeof window === 'undefined') return;
-    // ⚠️ RE-ENTRANCY GUARD, and it is load-bearing.
-    //
-    // `sync` sets state, which re-renders, which unmounts the tiles that left
-    // the window — and unmounting the focused element fires `focusout`
-    // SYNCHRONOUSLY, inside React's commit. A focus listener that called `sync`
-    // straight back therefore re-entered it mid-commit; the app threw, the tree
-    // came down, and the harness found a page with no nav buttons and 94px
-    // tiles. One frame of recursion is enough to do that.
-    if (syncingRef.current) return;
-    syncingRef.current = true;
-    try {
-      syncInner(grid);
-    } finally {
-      syncingRef.current = false;
-    }
-  }, []);
-
+  // Declared BEFORE `sync`, which calls it: `sync` used to close over a binding
+  // declared after it — legal, since the closure only ran later, but the React
+  // compiler could not preserve the memo across it and exhaustive-deps could not
+  // list it. Both callbacks have no dependencies, so identity is unchanged.
   const syncInner = useCallback((grid: HTMLDivElement) => {
     if (typeof window === 'undefined') return;
 
@@ -299,6 +278,31 @@ export function CardGrid({ cards, onSelect, deckControls }: CardGridProps): Reac
     // and no second update that can re-trigger this function (rule 12).
     setPlan((prev) => (samePlan(prev, nextPlan) ? prev : nextPlan));
   }, []);
+
+  /**
+   * Read the grid's real geometry and decide what to render. The ONE place that
+   * touches layout, so a selector or CSS change breaks one function rather than
+   * every number that depends on it.
+   */
+  const sync = useCallback(() => {
+    const grid = gridRef.current;
+    if (!grid || typeof window === 'undefined') return;
+    // ⚠️ RE-ENTRANCY GUARD, and it is load-bearing.
+    //
+    // `sync` sets state, which re-renders, which unmounts the tiles that left
+    // the window — and unmounting the focused element fires `focusout`
+    // SYNCHRONOUSLY, inside React's commit. A focus listener that called `sync`
+    // straight back therefore re-entered it mid-commit; the app threw, the tree
+    // came down, and the harness found a page with no nav buttons and 94px
+    // tiles. One frame of recursion is enough to do that.
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    try {
+      syncInner(grid);
+    } finally {
+      syncingRef.current = false;
+    }
+  }, [syncInner]);
 
   // Measure before the browser paints, so the first frame's fallback metrics are
   // corrected without a visible reflow. Re-runs when the query changes the list.

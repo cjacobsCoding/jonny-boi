@@ -188,7 +188,7 @@ describe('§3.150 — the bound is ENFORCED, not merely recorded', () => {
   });
 
   it('an at-MOST bound points the other way — the direction is not decoration', () => {
-    const { state, big, small } = boardWithBigAndSmall();
+    const { state, small } = boardWithBigAndSmall();
     const spell = compiled('Probe', 'Destroy target creature with power 2 or less.').definition!;
     const spec = specOf(spell)!;
     expect([...legalTargetsFor(state, spec, 'A', spell)]).toEqual([small]);
