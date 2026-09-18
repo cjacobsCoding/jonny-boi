@@ -262,10 +262,27 @@ async function startSoloGame(page, url) {
     setter.call(select, 'sample:Selesnya Blink');
     select.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  await clickButton(page, /^Start game$/);
-  await clickButton(page, /^Keep \(/, { timeoutMs: 20_000 });
+  // Assertive, not fire-and-forget. `clickButton` skips a DISABLED button and
+  // returns false, so when Start was never enabled this rig used to sail on and
+  // die 20 s later on "`.play-board` not found" — the symptom, two steps after
+  // the cause. It went that way for a whole day on `main`: the setup screen had
+  // opened on two short decks, the "Not ready" list under each seat said exactly
+  // why, and the log never repeated it. Now the log says what the screen says.
+  const started = await clickButton(page, /^Start game$/);
+  if (!started) throw new Error(`Start game never became clickable — ${await setupProblems(page)}`);
+  const kept = await clickButton(page, /^Keep \(/, { timeoutMs: 20_000 });
+  if (!kept) throw new Error(`the mulligan screen never offered Keep — ${await setupProblems(page)}`);
   await page.waitForSelector('.play-board', { timeout: UI_TRANSITION_WAIT_MS });
   await sleep(AI_BEAT_MS);
+}
+
+/** What the setup screen is complaining about, for an error message that names the cause. */
+async function setupProblems(page) {
+  return page.evaluate(() => {
+    const lists = [...document.querySelectorAll('.play-setup__problems')];
+    if (lists.length === 0) return `no "Not ready" list on screen; body: ${(document.body.innerText ?? '').slice(0, 400)}`;
+    return lists.map((el, i) => `seat ${i === 0 ? 'A' : 'B'}: ${el.innerText.replace(/\s+/g, ' ').trim()}`).join(' | ');
+  });
 }
 
 /** Play the game forward until the battlefield is genuinely crowded. */

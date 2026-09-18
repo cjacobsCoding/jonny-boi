@@ -10,7 +10,7 @@ import { validateChoice, type DeckChoice } from '../../lib/play/setup.js';
 // ONE menu builder for every deck picker — this screen used to keep a private
 // copy of it, which is how the two surfaces came to label built-in decks
 // differently. See lib/decklist/deckMenu.ts.
-import { buildDeckMenu } from '../../lib/decklist/deckMenu.js';
+import { buildDeckMenu, defaultSeatKeys } from '../../lib/decklist/deckMenu.js';
 import { DeckMenuOptions, DeckOriginNote } from '../DeckMenuOptions.js';
 
 /**
@@ -48,8 +48,12 @@ export function SetupScreen({
 
   const [nameA, setNameA] = useState(aiSeat === 'A' ? HOTSEAT_CONFIG.defaultAiName : HOTSEAT_CONFIG.defaultNameA);
   const [nameB, setNameB] = useState(aiSeat === 'B' ? HOTSEAT_CONFIG.defaultAiName : HOTSEAT_CONFIG.defaultNameB);
-  const [keyA, setKeyA] = useState(menu[0]?.key ?? '');
-  const [keyB, setKeyB] = useState(menu[1]?.key ?? menu[0]?.key ?? '');
+  // The first two decks that can actually START, not the first two rows: his own
+  // decks lead the menu, and the day two short ones were seeded the screen opened
+  // with Start disabled under both seats. See `defaultSeatKeys`.
+  const [initialSeats] = useState(() => defaultSeatKeys(menu));
+  const [keyA, setKeyA] = useState(initialSeats.a);
+  const [keyB, setKeyB] = useState(initialSeats.b);
   const [seedText, setSeedText] = useState(String(HOTSEAT_CONFIG.defaultSeed));
   const [starter, setStarter] = useState<StarterPreference>('A');
 
