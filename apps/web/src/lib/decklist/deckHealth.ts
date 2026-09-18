@@ -179,11 +179,12 @@ export function describeDeckHealth(health: DeckHealth): string {
     (c) => `${c.count}× ${c.name} (needs ${c.missingSystems.join(', ')})`,
   );
   const n = health.unplayable.length;
+  const copies = health.affectedCopies;
   return (
     `This deck can’t be played or tested yet — ${n} card${n === 1 ? '' : 's'} ` +
-    `(${health.affectedCopies} cop${health.affectedCopies === 1 ? 'y' : 'ies'}) ` +
-    `use mechanics the engine doesn’t support: ${parts.join('; ')}. ` +
-    'Swap them out to run the deck — everything else about it is fine.'
+    `(${copies} cop${copies === 1 ? 'y' : 'ies'}) ` +
+    `${n === 1 ? 'uses' : 'use'} mechanics the engine doesn’t support: ${parts.join('; ')}. ` +
+    `Swap ${n === 1 ? 'it' : 'them'} out to run the deck — everything else about it is fine.`
   );
 }
 
