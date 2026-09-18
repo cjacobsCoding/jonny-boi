@@ -36,7 +36,7 @@ import {
 } from '@jonny-boi/core';
 import { buildRegistry, loadCardPool } from '@jonny-boi/cards';
 import { createHeuristicPilot } from './heuristic.js';
-import { manaExchangeIsNoOp, pureManaExchange } from './mana-exchange.js';
+import { manaExchangeIsNoOp, manaExchangeIsNoOpOnceFunded, pureManaExchange } from './mana-exchange.js';
 import { giveHand, landDef } from './test-support.js';
 
 /** Bog Initiate's printed ability (Invasion) — the card the runaway was made of. */
@@ -106,6 +106,59 @@ const RITUAL: CardDefinition = {
       label: '{1}: add {b}{b}',
     },
   ],
+};
+
+/**
+ * Basalt Monolith: `{T}: Add {C}{C}{C}` and `{3}: Untap Basalt Monolith` — the
+ * SECOND shape of the same runaway. The untap adds no mana, so the credit-side
+ * scorer never sees a mana payoff; it sees an untap, and pays the {3} by tapping
+ * the Monolith it is about to untap. Soak seed 165826623 did that 523 times in
+ * one turn. Read as an exchange, the "produced" side is what the tap makes.
+ */
+const BASALT_MONOLITH: CardDefinition = {
+  id: 'basalt-monolith',
+  name: 'Basalt Monolith',
+  types: ['artifact'],
+  cost: { generic: 3 },
+  produces: ['C', 'C', 'C'],
+  activated: [
+    {
+      cost: { mana: { generic: 3 } },
+      effects: [{ primitive: 'untapSelf', params: {} }],
+      label: '{3}: untap ~',
+    },
+  ],
+};
+
+/** An untap that costs LESS than the tap makes: a real mana engine, never a no-op. */
+const GENEROUS_MONOLITH: CardDefinition = {
+  ...BASALT_MONOLITH,
+  id: 'generous-monolith',
+  name: 'Generous Monolith',
+  activated: [
+    {
+      cost: { mana: { generic: 2 } },
+      effects: [{ primitive: 'untapSelf', params: {} }],
+      label: '{2}: untap ~',
+    },
+  ],
+};
+
+/** A coloured rock with a generic untap: the tap FIXES a colourless pool once. */
+const EMERALD_MONOLITH: CardDefinition = {
+  ...BASALT_MONOLITH,
+  id: 'emerald-monolith',
+  name: 'Emerald Monolith',
+  produces: ['G', 'G', 'G'],
+};
+
+/** An untap on a source whose tap is a CHOICE — not the fixed-bundle shape; no ruling. */
+const CHOOSY_MONOLITH: CardDefinition = {
+  ...BASALT_MONOLITH,
+  id: 'choosy-monolith',
+  name: 'Choosy Monolith',
+  produces: undefined,
+  producesOptions: [{ C: 3 }, { G: 3 }] as CardDefinition['producesOptions'],
 };
 
 function poolOf(counts: Partial<Record<ManaColor, number>>): ManaPool {
@@ -182,6 +235,49 @@ describe('a pure mana exchange is worthless exactly when it changes nothing', ()
       pool: poolOf({ B: 1 }),
       noOp: false,
     },
+    // ---- the untap-self shape (Basalt Monolith, soak seed 165826623) ----------
+    {
+      what: 'Basalt Monolith with its own {C}{C}{C} floating — pay 3, untap, tap for 3: identical',
+      def: BASALT_MONOLITH,
+      pool: poolOf({ C: 3 }),
+      noOp: true,
+    },
+    {
+      what: 'Basalt Monolith on {C}{C}{C}{G} — the generic eats the colourless, the pool returns',
+      def: BASALT_MONOLITH,
+      pool: poolOf({ C: 3, G: 1 }),
+      noOp: true,
+    },
+    {
+      what: 'Basalt Monolith on an empty pool — unpayable as offered; the FUNDED check owns that',
+      def: BASALT_MONOLITH,
+      pool: emptyPool(),
+      noOp: false,
+    },
+    {
+      what: 'an untap cheaper than the tap it buys back grows the pool — a real engine, allowed',
+      def: GENEROUS_MONOLITH,
+      pool: poolOf({ C: 2 }),
+      noOp: false,
+    },
+    {
+      what: 'a green rock untapped with colourless mana turns {C}{C}{C} into {G}{G}{G} — a fix, allowed',
+      def: EMERALD_MONOLITH,
+      pool: poolOf({ C: 3 }),
+      noOp: false,
+    },
+    {
+      what: 'the same green rock a second time, on the green it just made — identical, refused',
+      def: EMERALD_MONOLITH,
+      pool: poolOf({ G: 3 }),
+      noOp: true,
+    },
+    {
+      what: 'a source whose tap is a choice is not the fixed-bundle shape — no ruling',
+      def: CHOOSY_MONOLITH,
+      pool: poolOf({ C: 3 }),
+      noOp: false,
+    },
   ];
 
   for (const row of ROWS) {
@@ -189,6 +285,24 @@ describe('a pure mana exchange is worthless exactly when it changes nothing', ()
       expect(manaExchangeIsNoOp(abilityOf(row.def), row.def, row.pool)).toBe(row.noOp);
     });
   }
+
+  it('FUNDED by its own tap — the exact loop: nothing floating, the plan taps the Monolith to untap it', () => {
+    // This is where seed 165826623 lived. The pool is empty, so the offered
+    // check cannot rule; the funding plan is "tap Basalt Monolith for {C}{C}{C}",
+    // and after paying the {3} out of that the pool is empty again and the
+    // Monolith is untapped — the state it started in.
+    // The plan's source must be ON the board: the predictor looks the tap up to
+    // check for a spend restriction, and a source it cannot find is "cannot
+    // predict", which is (correctly) never a no-op.
+    const view = {
+      players: { A: { manaPool: emptyPool() } },
+      battlefield: [{ instanceId: 1, def: BASALT_MONOLITH }],
+    } as unknown as Parameters<typeof manaExchangeIsNoOpOnceFunded>[2];
+    const plan = [{ instanceId: 1, production: { C: 3 } }] as unknown as Parameters<typeof manaExchangeIsNoOpOnceFunded>[4];
+    expect(manaExchangeIsNoOpOnceFunded(abilityOf(BASALT_MONOLITH), BASALT_MONOLITH, view, 'A', plan)).toBe(true);
+    // The control: the cheaper untap nets a mana every cycle, so it is not refused.
+    expect(manaExchangeIsNoOpOnceFunded(abilityOf(GENEROUS_MONOLITH), GENEROUS_MONOLITH, view, 'A', plan)).toBe(false);
+  });
 
   it('declines to rule on a pool carrying restricted mana', () => {
     // Equal colour counts do NOT mean an identical pool when some of it may only
