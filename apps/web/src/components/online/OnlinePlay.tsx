@@ -4,7 +4,7 @@ import { isLand, type PlayerId } from '@jonny-boi/core';
 import type { DecksApi } from '../../lib/useDecks.js';
 import { useOnlineGame } from '../../lib/online/useOnlineGame.js';
 import { deckChoiceToDeckList } from '../../lib/online/deck-list.js';
-import { buildDeckMenu } from '../../lib/decklist/deckMenu.js';
+import { buildDeckMenu, firstStartableKey } from '../../lib/decklist/deckMenu.js';
 import { DeckMenuOptions, DeckOriginNote } from '../DeckMenuOptions.js';
 import { friendlyError } from '../../lib/online/online-state.js';
 import {
@@ -284,7 +284,12 @@ function LobbyScreen({
   menu: ReturnType<typeof buildDeckMenu>;
 }): ReactElement {
   const { state } = online;
-  const [deckKey, setDeckKey] = useState(menu[0]?.key ?? '');
+  // The first deck the SERVER would accept, not the first row: his own decks lead
+  // the menu and one of them cannot be played online, so the lobby used to open
+  // with Ready disabled. Same class as the Solo setup — see deckMenu.ts.
+  const [deckKey, setDeckKey] = useState(() =>
+    firstStartableKey(menu, (c) => validateChoiceForOnline(c).length === 0),
+  );
   const choice = menu.find((m) => m.key === deckKey)?.choice;
   // ONLINE, not local: the server knows only the curated pool — see
   // `validateChoiceForOnline` for why validating with the local pool here would be
