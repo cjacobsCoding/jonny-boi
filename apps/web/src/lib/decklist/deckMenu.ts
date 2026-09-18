@@ -77,12 +77,13 @@ export function buildDeckMenu(decks: DecksApi): DeckMenuItem[] {
  *
  * ⚠️ It used to be `menu[0]` and `menu[1]`, full stop — and the menu lists his
  * own decks first. The moment his transcribed paper decks were seeded as saved
- * decks (§3.157), the default Solo setup opened on two SHORT decks (47 and 56
- * cards), Start was disabled with a legality message under each seat, and the
- * board-fits harness — which sets only seat A — could never start a game: `main`
- * went red on the merge that seeded them and stayed red. A setup screen that
- * opens un-startable is a worse first impression than one that opens on a
- * built-in deck, and a harness that trips over it is telling us so.
+ * decks (§3.157), seat B defaulted to the one that cannot start — 49 cards, five
+ * of them unsupported — so the default Solo setup opened with Start disabled and
+ * a legality message under it, and the board-fits harness, which sets only seat
+ * A, could never start a game: `main` went red on the merge that seeded them and
+ * stayed red. A setup screen that opens un-startable is a worse first impression
+ * than one that opens on a deck that can, and a harness that trips over it is
+ * telling us so.
  *
  * Legality is asked of {@link validateChoice} — the same answer the Start button
  * itself is gated on — never re-derived here. When NOTHING in the menu is legal

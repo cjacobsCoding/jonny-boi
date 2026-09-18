@@ -113,10 +113,12 @@ function api(decks: readonly Deck[]): Parameters<typeof buildDeckMenu>[0] {
 }
 
 describe('where the two seats start (defaultSeatKeys)', () => {
-  it('THE RED MAIN: two short decks lead the menu, and the seats skip past them', () => {
-    // The exact shape that broke the board-fits harness: his two transcribed
-    // decks are first (47 and 56 cards), so menu[0]/menu[1] were both illegal
-    // and Start was disabled before anyone touched anything.
+  it('THE RED MAIN: illegal decks lead the menu, and the seats skip past them', () => {
+    // The shape that broke the board-fits harness, made worse: his transcribed
+    // decks lead the menu and one of them cannot start (49 cards, five of them
+    // unsupported), so a seat defaulted to it and Start was disabled before
+    // anyone touched anything. Here BOTH leading decks are illegal, so a fix
+    // that skipped only one row would still fail.
     const menu = buildDeckMenu(api([shortDeck('p1', 'Tamiyo + Jace Surge'), shortDeck('p2', "Thune's Life")]));
     expect(menu[0]?.origin, 'the fixture must put his decks first, like the real menu').toBe('mine');
     const { a, b } = defaultSeatKeys(menu);

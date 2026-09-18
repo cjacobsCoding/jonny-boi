@@ -263,16 +263,33 @@ async function main() {
     await clickButton(page, /^Play$/);
     await clickButton(page, /Solo \(vs the computer\)/);
     check('solo setup reached', await textPresent(page, /Start game/));
-    await page.evaluate(() => {
-      const select = [...document.querySelectorAll('select')].find((s) =>
-        [...s.options].some((o) => /Mono-Green Ramp/.test(o.textContent ?? '')),
-      );
-      const option = [...select.options].find((o) => /Mono-Green Ramp/.test(o.textContent ?? ''));
+    // BOTH seats are pinned. This used to set only seat A and take whatever seat B
+    // defaulted to — which was whatever deck happened to sit second in the menu,
+    // and the menu changed under it twice: first his transcribed paper decks were
+    // listed there under relaxed rules (so the computer played a 56-card lifegain
+    // deck), then they lost those rules and the default skipped to Boros Aggro,
+    // whose burn kills the mana creature this rig is trying to keep alive. A drive
+    // loop that arranges a board must own BOTH decks; the mirror has no removal.
+    const seats = await page.evaluate(() => {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
-      setter.call(select, option.value);
-      select.dispatchEvent(new Event('change', { bubbles: true }));
+      const picked = [];
+      for (const select of document.querySelectorAll('select')) {
+        const option = [...select.options].find((o) => /Mono-Green Ramp/.test(o.textContent ?? ''));
+        if (!option) continue;
+        setter.call(select, option.value);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        picked.push(option.textContent?.trim());
+      }
+      return picked;
     });
-    await clickButton(page, /^Start game$/);
+    check('both seats pinned to Mono-Green Ramp', seats.length === 2, seats.join(' | '));
+    const started = await clickButton(page, /^Start game$/);
+    if (!started) {
+      const problems = await page.evaluate(() =>
+        [...document.querySelectorAll('.play-setup__problems')].map((el) => el.innerText.replace(/\s+/g, ' ').trim()).join(' | '),
+      );
+      throw new Error(`Start game never became clickable — ${problems || 'no "Not ready" list on screen'}`);
+    }
     check('mulligan screen shown', await textPresent(page, /Keep \(/));
     await clickButton(page, /^Keep \(/);
     await clickButton(page, /^Confirm bottom/, { timeoutMs: 1500 });

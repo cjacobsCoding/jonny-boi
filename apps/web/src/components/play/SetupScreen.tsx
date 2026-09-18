@@ -49,8 +49,8 @@ export function SetupScreen({
   const [nameA, setNameA] = useState(aiSeat === 'A' ? HOTSEAT_CONFIG.defaultAiName : HOTSEAT_CONFIG.defaultNameA);
   const [nameB, setNameB] = useState(aiSeat === 'B' ? HOTSEAT_CONFIG.defaultAiName : HOTSEAT_CONFIG.defaultNameB);
   // The first two decks that can actually START, not the first two rows: his own
-  // decks lead the menu, and the day two short ones were seeded the screen opened
-  // with Start disabled under both seats. See `defaultSeatKeys`.
+  // decks lead the menu, and the day a short, unsupported one was seeded second
+  // the screen opened with Start disabled. See `defaultSeatKeys`.
   const [initialSeats] = useState(() => defaultSeatKeys(menu));
   const [keyA, setKeyA] = useState(initialSeats.a);
   const [keyB, setKeyB] = useState(initialSeats.b);
