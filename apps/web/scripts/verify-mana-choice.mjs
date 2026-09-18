@@ -234,13 +234,37 @@ async function shot(page, name) {
 async function toMyMain(page) {
   for (let i = 0; i < TURN_BUDGET; i++) {
     await installProbes(page);
+    // ⚠️ WAIT FOR PRIORITY FIRST, THEN LOOK, THEN PASS — three steps, in that order.
+    //
+    // This used to read the phase and then call `clickButton(Pass)`, which polls
+    // until the Pass button is ENABLED and clicks it the instant it is. The
+    // button enables exactly when the human next receives priority — which,
+    // after the computer's turn, is the human's own Main Phase 1. So whenever
+    // the computer's beat outlasted `AI_BEAT_MS`, the rig passed straight
+    // through the very phase it was driving towards, and the game log read
+    // "Turn 3 — Player 1's turn." with nothing under it. Turns 3 and 5 went by
+    // without a land drop in a run whose only visible symptom was "no chip".
+    await waitForPassButton(page, 4000);
     const phase = await page.evaluate(() => window.__mc.phase());
     if (/Main Phase 1/.test(phase) && /Player 1's turn/.test(phase)) return phase;
     if (/wins the game/.test(await page.evaluate(() => document.body.innerText))) return null;
-    await clickButton(page, /Pass \/ advance|Pass priority/, { timeoutMs: 4000 });
+    await clickButton(page, /Pass \/ advance|Pass priority/, { timeoutMs: 1000 });
     await sleep(AI_BEAT_MS);
   }
   return null;
+}
+
+/** Block until the Pass button is enabled (the human holds priority) or the budget ends. Never clicks. */
+async function waitForPassButton(page, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const enabled = await page.evaluate(
+      () => [...document.querySelectorAll('button')].some((b) => /Pass \/ advance|Pass priority/.test(b.textContent?.trim() ?? '') && !b.disabled),
+    );
+    if (enabled) return true;
+    await sleep(100);
+  }
+  return false;
 }
 
 async function main() {
