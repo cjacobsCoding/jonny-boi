@@ -144,9 +144,25 @@ export function deckChoiceName(choice: DeckChoice): string {
  */
 export function validateChoice(choice: DeckChoice): string[] {
   const deck = toSimDeck(choice);
+  const rules = rulesForChoice(choice);
   const unsupported = deckHealthProblems(deck.cards);
-  if (unsupported.length > 0) return unsupported;
-  return validateDeck(deck, hotseatPool(), rulesForChoice(choice));
+  if (unsupported.length > 0) return [...unsupported, ...deckSizeProblems(deck, rules)];
+  return validateDeck(deck, hotseatPool(), rules);
+}
+
+/**
+ * The size rule, judged over EVERY entry — unsupported cards included.
+ *
+ * Only used alongside a health refusal: the sim's own validator cannot be asked
+ * then, because it counts only the cards it resolved and would report a
+ * 47-card deck holding five unsupported cards as 42. But a deck can be short AND
+ * unsupported at once (his transcribed one is), and learning the second problem
+ * only after fixing the first is a worse afternoon. Same words as the sim's line,
+ * so the two never read differently.
+ */
+export function deckSizeProblems(deck: SimDeck, rules: DeckRules): string[] {
+  const size = deck.cards.reduce((sum, entry) => sum + entry.count, 0);
+  return size < rules.minDeckSize ? [`deck size ${size} is below the minimum of ${rules.minDeckSize}`] : [];
 }
 
 let cachedCuratedPool: CardPool | null = null;

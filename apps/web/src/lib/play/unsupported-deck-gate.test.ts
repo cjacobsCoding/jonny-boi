@@ -159,6 +159,52 @@ describe('a deck holding a card the compiler could not finish', () => {
   });
 });
 
+describe('a deck that is short AND holds an unsupported card', () => {
+  // His transcribed deck, exactly: 47 cards, five of them unsupported. The
+  // support refusal used to come back ALONE, so he would fix five cards and only
+  // then learn the deck was thirteen short. The sim's own validator cannot be
+  // asked here — it counts only the cards it resolved and would say 42 — so the
+  // size rule is judged over every entry and added in the sim's own words.
+  const SHORT = 47;
+  function shortDeck(): WebDeck {
+    return {
+      id: 'deck-short',
+      name: 'Short and unsupported',
+      updatedAt: new Date(0).toISOString(),
+      cards: [
+        { cardId: BROKEN_ID, count: 4 },
+        { cardId: FOREST_NAME, count: SHORT - 4 },
+      ],
+    } as unknown as WebDeck;
+  }
+
+  beforeEach(() => {
+    registerImportedCards([
+      { card: BROKEN_RECORD, missing: [{ text: 'x', missingEngineSystem: BROKEN_SYSTEM }] },
+    ]);
+    invalidateHotseatPool();
+  });
+
+  it('PLAY says both — the unsupported card and the true size', () => {
+    const said = validateChoice(choiceOf(shortDeck())).join(' ');
+    expect(said).toContain(BROKEN_NAME);
+    expect(said, 'the size is the WHOLE deck, unsupported copies included').toContain(`deck size ${SHORT} is below the minimum of 60`);
+    expect(said, 'never the count of resolved cards only').not.toContain(`deck size ${SHORT - 4}`);
+  });
+
+  it('the LAB says both, in the same words', () => {
+    const said = validateHero(shortDeck() as unknown as Parameters<typeof validateHero>[0]).join(' ');
+    expect(said).toContain(BROKEN_NAME);
+    expect(said).toContain(`deck size ${SHORT} is below the minimum of 60`);
+  });
+
+  it('a FULL deck with an unsupported card says nothing about size', () => {
+    const said = validateChoice(choiceOf(deckWith(BROKEN_ID, 4))).join(' ');
+    expect(said).toContain(BROKEN_NAME);
+    expect(said).not.toMatch(/deck size/);
+  });
+});
+
 describe('a deck holding a card the engine has simply never been taught', () => {
   // No import entry, no curated definition — the all-of-Scryfall case. The old
   // deck-health rule ("unsupported only if the import store says so") called this
