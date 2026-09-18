@@ -286,9 +286,18 @@ async function main() {
     // ---- arrange the reported board: a Forest AND a mana creature, both untapped
     // Played, never poked: lands from hand, then the Mystic cast off the first one.
     let arranged = false;
+    // One line per drive-loop turn, printed only on failure. The second loop
+    // below already explains its misses; this one used to end with nothing but
+    // "could not arrange the reported board", which in CI — no one to open a
+    // screenshot — is a rig that cannot be diagnosed from its own log.
+    const turnLog = [];
+    let endedBecause = 'the turn budget ran out';
     for (let turn = 0; turn < TURN_BUDGET && !arranged; turn++) {
       const phase = await toMyMain(page);
-      if (phase === null) break;
+      if (phase === null) {
+        endedBecause = 'the game ended (or Main Phase 1 was never reached again)';
+        break;
+      }
       await installProbes(page);
       // One land per turn (the engine refuses a second), then the mana creature.
       await page.evaluate(() => window.__mc.play('Forest'));
@@ -310,13 +319,24 @@ async function main() {
       const untappedForest = state.mine.some((p) => /Forest/.test(p.text) && !p.tapped);
       const chipCard = state.hand.find((c) => c.chip);
       arranged = untappedCreature && untappedForest && chipCard !== undefined;
+      turnLog.push(
+        `${phase} — mine: ${state.mine.map((p) => `${p.text}${p.tapped ? ' (tapped)' : ''}`).join(', ') || '(none)'}; ` +
+          `hand: ${state.hand.map((c) => `${c.name}${c.chip ? ' ⛁' : ''}`).join(', ') || '(empty)'}`,
+      );
       if (!arranged) {
         await clickButton(page, /Pass \/ advance|Pass priority/, { timeoutMs: 4000 });
         await sleep(AI_BEAT_MS);
       }
     }
     check('a board with an untapped mana creature AND an untapped Forest was reached', arranged);
-    if (!arranged) throw new Error('could not arrange the reported board');
+    if (!arranged) {
+      console.log(`  drive loop stopped because ${endedBecause}; what each of my main phases looked like:`);
+      for (const line of turnLog) console.log(`    ${line}`);
+      const body = await page.evaluate(() => (document.body.innerText ?? '').replace(/\s+/g, ' ').slice(0, 600));
+      console.log(`  screen now: ${body}`);
+      await shot(page, 'mana-choice-could-not-arrange.png');
+      throw new Error('could not arrange the reported board');
+    }
 
     await installProbes(page);
     const before = await page.evaluate(() => ({ mine: window.__mc.mine(), hand: window.__mc.hand() }));
