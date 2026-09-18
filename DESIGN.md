@@ -10117,6 +10117,60 @@ family and left: **21 NOUN** (subtypes and "other"/"attacking" — a deliberate 
 **1 ORDER-or-SENTENCE**. The row this family was supposed to live in holds 123 of it; the rest is
 scattered over **21 other rows**, which is §8a item 3 for the eleventh time.
 
+### 3.159 A blocked attacker threw away every point past lethal — lifelink gained 1 from a 100-damage hit — ✅ done
+
+> ⚠️ **Section number claimed off a contended range.** §3.157 was the highest anywhere on
+> `origin/main` at fork (`3501c27`), and a sibling lane claimed §3.158. **Renumber it freely at
+> merge** — nothing in the code refers to it.
+
+> "btw, I just dealt over 100 damage to a blocking llanowar elf with my lifelink creature and did
+> not get over 100 health for it - I think I only got 1"
+
+He is exactly right, and the number he guessed is the number the engine produced.
+
+**The defect.** `internal/combat.ts` assigned combat damage like this:
+
+```ts
+for (const blocker of blockers) {
+  const assign = Math.min(remaining, lethalNeeded(blocker, attacker, index));
+  applyDamage(state, attacker, blocker, assign, …);
+  remaining -= assign;
+}
+if (remaining > 0 && kw(attacker, index).trample) { /* …to the player… */ }
+```
+
+Everything left after the last blocker's lethal threshold was **discarded** unless the attacker
+had trample. CR 510.1c says the attacker's controller *divides* its combat damage among the
+creatures blocking it and may not assign to a later blocker until each earlier one has lethal —
+"at least lethal to each, in order" is a **floor on a legal division, not a ceiling on how much
+is dealt**. Damage that is not trampling does not evaporate; it lands on the blockers.
+
+So a 100/100 lifelinker blocked by a Llanowar Elves dealt **1**. The Elves died either way, which
+is precisely why nothing caught it: the only observable difference is in the things computed from
+the amount — the lifelink gain (CR 702.15b counts damage *dealt*, not damage that mattered), a
+prevention shield's arithmetic, and any "whenever this deals damage" trigger.
+
+**The fix** builds the assignment first and then deals it: lethal to each blocker in order, and
+the excess piled onto the **last blocker in the order** when the attacker has no trample. Dealt
+in one `applyDamage` call per blocker, deliberately — two calls for one blocker would be two
+`damageDealt` events for a single assignment and would spend a prevention shield twice on one hit.
+Trample is untouched: it is the thing that lets the excess skip the blockers, and a test asserts
+the two cases still differ, so a fix that "works" by making everything trample would fail.
+
+**The sibling, fixed with it** (rule 10 — the class, not the instance). `ai/combat-forecast.ts`
+credited `lifelinkGain` only on its **unblocked** branch, so the model believed a lifelinker
+gained nothing the moment a 1/1 stepped in front of it. That is the same question — *how much
+does a blocked attacker deal?* — answered wrong in a second place, and it would have made the AI
+decline attacks that race perfectly well. A blocked lifelinker gains its full power.
+
+**The guard.** `combat-full-assignment.test.ts` replays the reported board: 100-power lifelinker,
+one Llanowar Elves, no trample → 100 damage to the blocker and **100 life gained**; a second case
+puts a 0/4 wall behind the Elves and asserts 1 then 99, which is the ordering rule and the pile
+rule in one; the trample control asserts 1 to the blocker and 99 to the face. It reads damage
+from the EVENT LOG rather than the battlefield on purpose — a creature dealt lethal damage is
+gone by the time combat ends, so reading the permanent would report nothing for exactly the case
+under test.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.
