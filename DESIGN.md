@@ -3182,6 +3182,17 @@ The same harness, byte-identical, against a build of `origin/main` **exits 1** w
 the shape of the claim: *4 paper regions, 3 paper badges*, the word "paper" on screen, none of his
 decks in "Your decks", and *"Acidic Angels has card controls — 0 steppers"* — read-only, as designed.
 
+> ⚠️ **What this merge broke, found a day later (2026-09-18).** The `Browser harnesses` run on
+> this merge commit went RED on *Layout fits the window* and stayed red — the harness is advisory,
+> and its log said `.play-board` not found, which is the symptom two steps after the cause. The
+> cause: `SetupScreen` seeded seat A with `menu[0]` and seat B with `menu[1]`, the menu lists his
+> decks first, and the two seeded here are **47 and 56 cards**. The default Solo setup therefore
+> opened with Start disabled and a legality message under both seats; the harness sets only seat A
+> and could never start a game. Fixed in `deckMenu.ts: defaultSeatKeys` — the seats open on the first
+> two decks `validateChoice` accepts, his short decks stay listed whole exactly as this section
+> intends, and the harness now prints the "Not ready" list when Start never enables. The two decks
+> are still short: that is the transcription, not the app, and only the paper can fix it.
+
 ### 3.152 The targeting-protection row names a half that was FINISHED — the gap was one keyword, and the row cannot see it — ✅ done
 
 > ⚠️ **Section number claimed off a contended range.** `main` carries TWO §3.147 sections and TWO
