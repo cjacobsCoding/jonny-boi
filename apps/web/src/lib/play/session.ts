@@ -21,6 +21,7 @@ import {
   backFaceCastZonesOf,
   canPay,
   castPermissionFor,
+  DEFAULT_RULES,
   generateLegalActions,
   hasCardGrants,
   hasCastableBackFace,
@@ -36,6 +37,7 @@ import {
   type CardInstance,
   type CastZone,
   type ChoiceAnswer,
+  type ComboWindow,
   type EffectRegistry,
   type GameAction,
   type GameEvent,
@@ -46,6 +48,7 @@ import {
   type ManaTapPlan,
   type PendingChoice,
   type PlayerId,
+  type RulesConfig,
 } from '@jonny-boi/core';
 import { HOTSEAT_CONFIG } from './play-config.js';
 import {
@@ -340,6 +343,14 @@ export class GameSession {
      * entries away with them.
      */
     readonly actions: readonly GameAction[],
+    /**
+     * §3.177 — the rules every action of this game is applied and offered
+     * under. The engine default for every session but the Play board's, whose
+     * `playRulesFor` names the human seats the engine may open a combo window
+     * for. Fixed for the life of the game, because the recorded action log
+     * replays only under the rules it was recorded under.
+     */
+    readonly rules: RulesConfig = DEFAULT_RULES,
   ) {}
 
   /** Wrap a freshly-created game + its setup events. */
@@ -347,8 +358,9 @@ export class GameSession {
     created: { state: GameState; events: readonly GameEvent[] },
     registry: EffectRegistry,
     names: Readonly<Record<PlayerId, string>>,
+    rules: RulesConfig = DEFAULT_RULES,
   ): GameSession {
-    return new GameSession(created.state, [...created.events], registry, names, []);
+    return new GameSession(created.state, [...created.events], registry, names, [], rules);
   }
 
   /** The seat that currently holds priority (whose action menu to show). */
@@ -387,7 +399,7 @@ export class GameSession {
 
   /** Legal actions for the current priority-holder (the raw engine menu). */
   legalActions(): readonly GameAction[] {
-    return (this.memoLegalActions ??= generateLegalActions(this.state));
+    return (this.memoLegalActions ??= generateLegalActions(this.state, this.rules));
   }
 
   /**
@@ -427,7 +439,7 @@ export class GameSession {
    * reason if the engine refused it, in which case state is unchanged). Never throws.
    */
   submit(action: GameAction): SubmitResult {
-    const result = applyAction(this.state, action, undefined, this.registry);
+    const result = applyAction(this.state, action, this.rules, this.registry);
     const reject = result.events.find((e) => e.type === 'actionRejected');
     if (reject && reject.type === 'actionRejected') {
       // Rejected: the engine returns a clone of the prior state; keep OUR state +
@@ -440,6 +452,7 @@ export class GameSession {
       this.registry,
       this.names,
       [...this.actions, action],
+      this.rules,
     );
     return { session: next, rejected: null, events: result.events };
   }
@@ -447,6 +460,32 @@ export class GameSession {
   /** Pass priority for the current priority-holder. */
   passPriority(): SubmitResult {
     return this.submit({ kind: 'passPriority', player: this.priorityPlayer });
+  }
+
+  // --- infinite combos (§3.177) -------------------------------------------------
+
+  /**
+   * The open combo window, or null: the engine has found a loop the priority-
+   * holder was stepping through and is waiting for its owner's answer. While it
+   * stands the engine offers that owner nothing but `repeatCombo` and
+   * `dismissCombo`, so a board keys its whole prompt off this one getter.
+   */
+  get comboWindow(): ComboWindow | null {
+    return this.state.comboWindow ?? null;
+  }
+
+  /** Run the found loop `times` more times (CR 732.4) — the engine validates the count. */
+  repeatCombo(times: number): SubmitResult {
+    const window = this.comboWindow;
+    if (!window) return { session: this, rejected: 'no combo window is open', events: [] };
+    return this.submit({ kind: 'repeatCombo', player: window.owner, times });
+  }
+
+  /** Decline the found loop; it is not offered again this turn. */
+  dismissCombo(): SubmitResult {
+    const window = this.comboWindow;
+    if (!window) return { session: this, rejected: 'no combo window is open', events: [] };
+    return this.submit({ kind: 'dismissCombo', player: window.owner });
   }
 
   /** Play a land from the priority-holder's hand. */
@@ -641,6 +680,9 @@ export class GameSession {
     // A parked question is ALWAYS a real decision — and the only legal action is
     // answering it, so auto-advance must stop here rather than try to pass.
     if (this.pendingChoice) return true;
+    // So is an open combo window (§3.177): the engine refuses a pass while it
+    // stands, and "run your loop N times?" is a decision only the owner makes.
+    if (this.comboWindow) return true;
     for (const action of this.legalActions()) {
       if (action.kind === 'passPriority' || action.kind === 'tapForMana') continue;
       return true; // playLand / castSpell / declareAttackers / declareBlockers
@@ -1394,7 +1436,7 @@ export class GameSession {
     // The action log is carried unchanged: a concession is not an engine action
     // (nothing could replay it), and a conceded game is OVER — persistence clears
     // its record rather than ever replaying up to here.
-    return new GameSession(next, [...this.events, ...events], this.registry, this.names, this.actions);
+    return new GameSession(next, [...this.events, ...events], this.registry, this.names, this.actions, this.rules);
   }
 
   // --- mulligan support (London style) -----------------------------------------
@@ -1409,8 +1451,9 @@ export class GameSession {
     created: { state: GameState; events: readonly GameEvent[] },
     registry: EffectRegistry,
     names: Readonly<Record<PlayerId, string>>,
+    rules: RulesConfig = DEFAULT_RULES,
   ): GameSession {
-    return GameSession.fromCreated(created, registry, names);
+    return GameSession.fromCreated(created, registry, names, rules);
   }
 
   /**
@@ -1435,7 +1478,7 @@ export class GameSession {
     // Not an engine action, so it CANNOT ride the action log — persistence
     // records keeps/bottoms in its own mulligan transcript (persist.ts) and
     // replays them through this same method.
-    return new GameSession(next, this.events, this.registry, this.names, this.actions);
+    return new GameSession(next, this.events, this.registry, this.names, this.actions, this.rules);
   }
 
   // --- internals ---------------------------------------------------------------

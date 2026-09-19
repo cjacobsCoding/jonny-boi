@@ -50,6 +50,9 @@ import {
 } from '../persistence/write.js';
 import { GameSession } from './session.js';
 import { startHotseatGame, toSimDeck, type DeckChoice } from './setup.js';
+// §3.177 — the rebuilt session must run under the rules the record was played
+// under, or a recorded `repeatCombo` replays into a game with no window open.
+import { playRulesFor } from './combo-rules.js';
 
 /**
  * The record-shape version. Bump ONLY on an incompatible change, together with
@@ -299,7 +302,8 @@ export function rebuildFromRecord(record: PlayRecord, throughAction?: number): R
     const problems = [...started.problems.a, ...started.problems.b].join(' · ');
     return { ok: false, reason: `the saved decks no longer validate: ${problems}` };
   }
-  let session = GameSession.fromCreated(started.game.created, started.game.registry, record.setup.names);
+  const rules = playRulesFor(record.setup.ai?.seat);
+  let session = GameSession.fromCreated(started.game.created, started.game.registry, record.setup.names, rules);
 
   const taken: Record<PlayerId, number> = { A: 0, B: 0 };
   const done: Record<PlayerId, boolean> = { A: false, B: false };
@@ -310,7 +314,7 @@ export function rebuildFromRecord(record: PlayRecord, throughAction?: number): R
       const nth = taken[step.seat] + 1;
       const restarted = startHotseatGame({ ...base, seed: mulliganReseed(record.setup.seed, nth) });
       if (!restarted.ok) return { ok: false, reason: 'the saved decks no longer validate' };
-      session = GameSession.fromCreated(restarted.game.created, restarted.game.registry, record.setup.names);
+      session = GameSession.fromCreated(restarted.game.created, restarted.game.registry, record.setup.names, rules);
       taken[step.seat] = nth;
     } else {
       session = session.bottomCards(step.seat, step.bottomed);

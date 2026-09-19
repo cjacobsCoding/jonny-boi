@@ -535,13 +535,15 @@ export const PROPOSAL_EVENT_POLICY: { readonly [K in GameEvent['type']]: Proposa
   priorityPassed: (e, ctx) => (e.player === ctx.proposer ? 'rewindable' : 'handsOff'),
   // A choice the engine gave up on is still a choice somebody was holding.
   choiceAbandoned: 'handsOff',
-  // §3.177 — a combo window is a decision the ENGINE parked with its owner; the
-  // owner acting on it is theirs to take back only while nothing has run. A
-  // window opening for the proposer mid-announcement is unreachable today (it
-  // opens after an action settles), classified by meaning like every row here.
-  comboWindowOpened: (e, ctx) => (e.player === ctx.proposer ? 'rewindable' : 'handsOff'),
+  // §3.177 — a REPEAT replays the recorded cycle, the other seat's passes
+  // included: the floor moved through them, exactly as one live
+  // `priorityPassed` by anybody else does above. Unreachable inside an
+  // announcement today (the window opens only after an action settles and
+  // the working session never submits a repeat), classified by meaning like
+  // every row here. The window opening and a dismissal are further down: a
+  // window found in a working session vanishes with it, and declining one
+  // changes nothing on the board.
   comboRepeated: 'handsOff',
-  comboDismissed: (e, ctx) => (e.player === ctx.proposer ? 'rewindable' : 'handsOff'),
 
   // --- everything else: discarding the working session restores it exactly ---
   // (Most of these cannot fire during an announcement at all; they are
@@ -556,6 +558,9 @@ export const PROPOSAL_EVENT_POLICY: { readonly [K in GameEvent['type']]: Proposa
   triggerCopied: 'rewindable',
   madnessDeclined: 'rewindable',
   suspendDeclined: 'rewindable',
+  // §3.177 — see the `comboRepeated` row above for why these two are not blocks.
+  comboWindowOpened: 'rewindable',
+  comboDismissed: 'rewindable',
   stackResolved: 'rewindable',
   manaAdded: 'rewindable',
   manaCostPaid: 'rewindable',

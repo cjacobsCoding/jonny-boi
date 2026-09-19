@@ -3,6 +3,8 @@ import { createRng, type InstanceId, type PlayerId } from '@jonny-boi/core';
 import { createDefaultAiRegistry, DEFAULT_PILOT_ID } from '@jonny-boi/ai';
 import type { DecksApi } from '../lib/useDecks.js';
 import { GameSession, type SubmitResult } from '../lib/play/session.js';
+// §3.177 — the engine watches the HUMAN seats for an infinite combo; this names them.
+import { playRulesFor } from '../lib/play/combo-rules.js';
 import {
   startHotseatGame,
   type DeckChoice,
@@ -707,7 +709,7 @@ function LocalPlay({
       B: { id: 'B', name: cfg.names.B },
     };
     setTransport(ai ? createSoloVsAiTransport(seats, humanSeatOf(ai)) : createLocalHotseatTransport(seats));
-    setSession(GameSession.fromCreated(started.game.created, started.game.registry, cfg.names));
+    setSession(GameSession.fromCreated(started.game.created, started.game.registry, cfg.names, playRulesFor(ai?.seat)));
     setMulligan({
       deciding: cfg.startingPlayer,
       taken: { A: 0, B: 0 },
@@ -790,10 +792,10 @@ function LocalPlay({
       startingPlayer: config.startingPlayer,
     });
     if (!started.ok) return; // decks were already validated; defensive no-op
-    setSession(GameSession.fromCreated(started.game.created, started.game.registry, config.names));
+    setSession(GameSession.fromCreated(started.game.created, started.game.registry, config.names, playRulesFor(ai?.seat)));
     setMulligan({ ...mulligan, taken: { ...mulligan.taken, [seat]: nextTaken } });
     setTranscript((t) => [...t, { kind: 'mulligan', seat }]);
-  }, [config, mulligan, session, seed]);
+  }, [ai, config, mulligan, session, seed]);
 
   const onKeep = useCallback(
     (bottomed: readonly InstanceId[]): void => {

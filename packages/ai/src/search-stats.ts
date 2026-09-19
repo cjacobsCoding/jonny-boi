@@ -117,6 +117,13 @@ export function actionEquivalenceKey(state: GameState, action: GameAction): stri
       return `pass:${action.player}`;
     case 'answerChoice':
       return `ans:${action.choiceId}:${JSON.stringify(action.answer)}`;
+    // §3.177 — the combo window's two answers. A pilot is never offered them
+    // (the window opens only for seats the Play board names), so these rows
+    // exist because the switch is total, not because search widens on them.
+    case 'repeatCombo':
+      return `combo:repeat:${action.times}`;
+    case 'dismissCombo':
+      return 'combo:dismiss';
     default: {
       const exhaustive: never = action;
       void exhaustive;

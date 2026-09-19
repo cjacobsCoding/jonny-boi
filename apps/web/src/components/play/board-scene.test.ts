@@ -186,6 +186,9 @@ describe('every fixed overlay is a SIBLING of the scene, not a descendant', () =
       '<CombatHoldBanner',
       '<OpponentActionFeed',
       '<StackPanel',
+      // §3.177 — the infinite-combo prompt (hotseat/solo only: the online view
+      // does not carry the window yet, see the DESIGN section).
+      '<ComboPrompt',
     ],
     'OnlineBoard.tsx': [
       '<CardZoomOverlay',

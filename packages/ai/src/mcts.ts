@@ -925,6 +925,11 @@ function describeAction(action: GameAction): string {
       return 'pass';
     case 'answerChoice':
       return `answer choice #${action.choiceId}`;
+    // §3.177 — never offered to a pilot; rows because the switch is total.
+    case 'repeatCombo':
+      return `repeat loop ×${action.times}`;
+    case 'dismissCombo':
+      return 'dismiss loop';
     default: {
       const _exhaustive: never = action;
       void _exhaustive;
