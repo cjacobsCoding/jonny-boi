@@ -61,6 +61,7 @@ import type { ActivatedAbility } from './card.js';
 import type { CardFilter } from './choices.js';
 import { matchesCardFilter } from './choices.js';
 import { chosenColorOf, chosenSubtypeOf } from './as-enters.js';
+import type { StaticCondition } from './static-conditions.js';
 
 /**
  * Whose permanents a static reaches, relative to the source's controller.
@@ -260,6 +261,16 @@ export interface StaticAbility extends PermanentModification {
    * longer carries the restriction.
    */
   readonly blockBoundFromSourcePower?: SourcePowerBlockBound;
+  /**
+   * §3.169 — the printed "**as long as …**": the static applies only while
+   * this condition holds, re-read every time the continuous index is built
+   * (which is what makes "Threshold — ~ gets +7/+7 as long as seven or more
+   * cards are in your graveyard" switch on the moment the seventh card lands,
+   * with nothing stored). Absent means always on, which is every static
+   * written before this. See `static-conditions.ts` for the closed table and
+   * for why none of its members can disturb the single-pass fold.
+   */
+  readonly activeWhile?: StaticCondition;
   /**
    * Optional human-readable label for the inspector / event log ("Anthem: creatures
    * you control get +1/+1"). Never read by the rules.

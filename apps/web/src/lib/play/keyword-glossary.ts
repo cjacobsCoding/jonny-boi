@@ -790,6 +790,21 @@ const ENTRIES = {
     kind: 'abilityWord',
     text: 'Flavour text for "the number of creature cards in your graveyard". The word itself does nothing; the ability after the dash counts them, and it counts them when it RESOLVES, not when it triggered.',
   },
+  threshold: {
+    term: 'Threshold',
+    kind: 'abilityWord',
+    text: 'Flavour text for "as long as seven or more cards are in your graveyard". The word itself does nothing; the ability after the dash is on while your graveyard holds seven or more cards and off the moment it holds fewer — it counts every card there, not just creatures.',
+  },
+  delirium: {
+    term: 'Delirium',
+    kind: 'abilityWord',
+    text: 'Flavour text for "as long as there are four or more card types among cards in your graveyard". The word itself does nothing; the ability after the dash counts TYPES, not cards — a creature, a land, an instant and an artifact is four, while forty creatures is one.',
+  },
+  fatefulHour: {
+    term: 'Fateful hour',
+    kind: 'abilityWord',
+    text: 'Flavour text for "as long as you have 5 or less life". The word itself does nothing; the ability after the dash is on while your life total is five or lower and switches off the moment you gain past it.',
+  },
   parley: {
     term: 'Parley',
     kind: 'abilityWord',

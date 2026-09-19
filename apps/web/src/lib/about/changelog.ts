@@ -70,6 +70,22 @@ export type ChangelogEntry =
  */
 export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
   {
+    section: '3.169',
+    date: '2026-09-19',
+    kind: 'mechanic',
+    title: '"As long as …" — conditional static abilities',
+    summary:
+      'Threshold, delirium, metalcraft, "as long as it’s equipped", "as long as it’s attacking", fateful hour: a static that switches on and off with the game now does — Krosan Beast is a 1/1 until the seventh card hits your graveyard and an 8/8 the moment it does. 123 more cards play as printed.',
+    cards: [
+      'Krosan Beast',
+      'Grim Flayer',
+      'Skyhunter Cub',
+      'Indomitable Archangel',
+      'Gavony Ironwright',
+    ],
+    witness: { kind: 'rule', id: 'static-self-modification' },
+  },
+  {
     section: '3.168',
     date: '2026-09-19',
     kind: 'mechanic',

@@ -79,6 +79,7 @@ import { COMBAT_FAMILY_PAYLOAD_KEYS, mergeCombatFamilyPayload } from './stats.js
 import type { GameEvent } from '../events.js';
 import type { SourcePowerBlockBound, StaticAbility } from '../statics.js';
 import { modificationIsInert, staticAppliesTo, staticIsInert, staticsOf } from '../statics.js';
+import { staticConditionHolds } from '../static-conditions.js';
 import { characteristicValue } from '../derived.js';
 import { markControlChange } from '../upkeep-costs.js';
 
@@ -396,6 +397,20 @@ function collectStaticSources(
   return out;
 }
 
+/**
+ * Is this static doing anything RIGHT NOW? Inert data folds nothing, and
+ * (§3.169) a conditional static whose "as long as …" does not hold folds
+ * nothing either — neither here nor in the settled pass, which is why this is
+ * asked before the deferral. ONE predicate for the bulk index, the
+ * per-permanent aggregate and the emblem fold: the three walk the same statics
+ * and answer the same abilities by index, so a gate present in one and absent
+ * in another is an ability offered and then resolved to `undefined`.
+ */
+function staticIsLive(state: GameState, source: CardInstance, ability: StaticAbility): boolean {
+  if (staticIsInert(ability)) return false;
+  return ability.activeWhile === undefined || staticConditionHolds(state, source, ability.activeWhile);
+}
+
 /** Get (creating if needed) the accumulator for one instance. */
 function accumulatorFor(map: Map<InstanceId, MutableMod>, id: InstanceId): MutableMod {
   let agg = map.get(id);
@@ -494,7 +509,7 @@ export function indexContinuous(state: GameState): ContinuousIndex {
     const battlefield = state.battlefield;
     for (const source of sources) {
       for (const ability of staticsOf(source.def)) {
-        if (staticIsInert(ability)) continue;
+        if (!staticIsLive(state, source, ability)) continue;
         // A static that reads EFFECTIVE P/T — in its SELECTOR (Tetsuko, Delney)
         // or in the BOUND it grants (Champion of Lambholt) — cannot be answered
         // yet: the numbers it reads are what this very pass is computing.
@@ -729,7 +744,7 @@ function aggregateWith(state: GameState, instanceId: InstanceId, runSettledPass:
       const declared = source.def.statics;
       if (declared === undefined || declared.length === 0) continue;
       for (const ability of declared) {
-        if (staticIsInert(ability)) continue;
+        if (!staticIsLive(state, source, ability)) continue;
         // Deferred for the same reason as in `indexContinuous`: the numbers this
         // static reads are what this walk is computing.
         if (readsSettledStats(ability)) {
@@ -760,13 +775,13 @@ function aggregateWith(state: GameState, instanceId: InstanceId, runSettledPass:
     // Same direct-read guard as the bulk path: no iterator for a two-element list.
     const commandA = state.players.A.command;
     if (commandA.length > 0) {
-      const folded = foldCommandStatics(commandA, target, agg, runSettledPass);
+      const folded = foldCommandStatics(state, commandA, target, agg, runSettledPass);
       any = folded.applied || any;
       if (folded.deferred !== null) deferred = deferred === null ? folded.deferred : deferred.concat(folded.deferred);
     }
     const commandB = state.players.B.command;
     if (commandB.length > 0) {
-      const folded = foldCommandStatics(commandB, target, agg, runSettledPass);
+      const folded = foldCommandStatics(state, commandB, target, agg, runSettledPass);
       any = folded.applied || any;
       if (folded.deferred !== null) deferred = deferred === null ? folded.deferred : deferred.concat(folded.deferred);
     }
@@ -815,6 +830,7 @@ function aggregateWith(state: GameState, instanceId: InstanceId, runSettledPass:
  * OWN bound, which is the defect `aggregateFor`'s note describes.
  */
 function foldCommandStatics(
+  state: GameState,
   zone: readonly CardInstance[],
   target: CardInstance,
   agg: MutableMod,
@@ -827,7 +843,7 @@ function foldCommandStatics(
     const declared = source.def.statics;
     if (declared === undefined || declared.length === 0) continue;
     for (const ability of declared) {
-      if (staticIsInert(ability)) continue;
+      if (!staticIsLive(state, source, ability)) continue;
       // An emblem may radiate a settled-stats static too, and it has to reach
       // the same pass a battlefield source's does, or the two homes of one rule
       // would answer differently.

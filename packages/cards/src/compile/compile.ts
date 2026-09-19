@@ -47,6 +47,8 @@ import {
   EFFECT_RULES,
   stripTargetBound,
   applyTargetBoundToContribution,
+  stripStaticCondition,
+  applyStaticCondition,
   KEYWORD_ABILITY_BUILDERS,
   joinPayloadKeywords,
   KEYWORD_FLAGS,
@@ -581,6 +583,8 @@ function applyRules(
    * one descent, not to the clause's compilation.
    */
   boundApplied = false,
+  /** §3.169 — set on the recursive call the static-condition pre-pass makes, so one condition is stripped per line. */
+  conditionApplied = false,
 ): { contribution: ClauseContribution; ruleId: string } | null {
   for (const rule of rules) {
     if (targetFree && rule.needsChosenTarget) continue;
@@ -634,6 +638,25 @@ function applyRules(
       const narrowed = inner === null ? null : applyTargetBoundToContribution(inner.contribution, stripped.bound);
       if (inner && narrowed) {
         return { contribution: narrowed, ruleId: inner.ruleId };
+      }
+    }
+  }
+  // §3.169 — THE PRINTED "AS LONG AS …", for STATIC lines only, and tried last
+  // for the same reason as the two pre-passes above: a line that already
+  // compiles is untouched. The condition is stripped, the body compiles through
+  // the ordinary static rules, and the condition is attached to every static
+  // that came back — so a self pump, a team anthem and a granted keyword all
+  // gain the whole condition vocabulary in one edit. A body that compiles to
+  // anything OTHER than statics (an attachment's modification, where "it" is
+  // the host) is refused by `applyStaticCondition`, and a condition outside
+  // the closed table never strips at all: both leave the line reporting.
+  if (rules === STATIC_RULES && !conditionApplied) {
+    const stripped = stripStaticCondition(clause);
+    if (stripped) {
+      const inner = applyRules(rules, stripped.clause, ctx, targetFree, boundApplied, true);
+      const gated = inner === null ? null : applyStaticCondition(inner.contribution, stripped.condition);
+      if (inner && gated) {
+        return { contribution: gated, ruleId: inner.ruleId };
       }
     }
   }
