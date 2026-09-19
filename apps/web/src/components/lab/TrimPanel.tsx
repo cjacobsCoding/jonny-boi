@@ -116,9 +116,9 @@ export function TrimPanel({
   const heroId = hero?.id ?? '';
   const [session, setSession] = useState<Session>(() => IDLE_SESSION(heroId));
   // A different hero is a different session — never carry rounds across decks.
-  useEffect(() => {
-    setSession((current) => (current.deckId === heroId ? current : IDLE_SESSION(heroId)));
-  }, [heroId]);
+  // Adjusted DURING render (React's pattern for state that follows a prop), so
+  // no frame ever shows one deck's rounds under another deck's name.
+  if (session.deckId !== heroId) setSession(IDLE_SESSION(heroId));
 
   const deckSize = hero ? hero.cards.reduce((sum, entry) => sum + entry.count, 0) : 0;
   const ratio = useMemo(() => (hero ? landRatioOfWebDeck(hero) : null), [hero]);
