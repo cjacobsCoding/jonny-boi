@@ -198,8 +198,9 @@ describe('what stays reported, and why', () => {
   });
 
   it('a condition outside the table leaves the whole line reporting', () => {
+    // ("it's your turn" was the first sample here until §3.173 gave it a row.)
     for (const cond of [
-      "it's your turn",
+      "an opponent's turn",
       'you control a Gate',
       'an opponent has 10 or less life',
       'seven or more cards are in all graveyards',
@@ -222,6 +223,19 @@ describe('what stays reported, and why', () => {
       condition: { kind: 'sourceAttached', by: 'Equipment' },
     });
     expect(stripStaticCondition('~ gets +2/+2')).toBeNull();
-    expect(stripStaticCondition("~ gets +2/+2 as long as it's your turn")).toBeNull();
+    // §3.173 — "it's your turn" is a member now, in all three printed orders.
+    expect(stripStaticCondition("~ gets +2/+2 as long as it's your turn")).toEqual({
+      clause: '~ gets +2/+2',
+      condition: { kind: 'yourTurn' },
+    });
+    expect(stripStaticCondition('during your turn, it gets +2/+2')).toEqual({
+      clause: '~ gets +2/+2',
+      condition: { kind: 'yourTurn' },
+    });
+    expect(stripStaticCondition('~ has first strike during your turn')).toEqual({
+      clause: '~ has first strike',
+      condition: { kind: 'yourTurn' },
+    });
+    expect(stripStaticCondition("~ gets +2/+2 as long as it's an opponent's turn")).toBeNull();
   });
 });

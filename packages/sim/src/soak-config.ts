@@ -656,7 +656,18 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
   },
   { id: 'attachment', label: 'attachments — an Aura or Equipment attached', witnessKind: 'event', printedBy: (c) => (c as { attachment?: unknown }).attachment !== undefined },
   { id: 'token', label: 'tokens — a token created', witnessKind: 'event', printedBy: (_c, t) => t.includes('createToken') || t.includes('makeToken') },
-  { id: 'regeneration', label: 'regeneration — a shield spent to replace a destruction', witnessKind: 'event', printedBy: (c) => JSON.stringify((c )).includes('"regenerate"') },
+  {
+    id: 'regeneration',
+    label: 'regeneration — a shield spent to replace a destruction',
+    witnessKind: 'event',
+    printedBy: (c) => JSON.stringify((c )).includes('"regenerate"'),
+    // §3.173 — a SEQUENCED witness (a shield must be bought BEFORE the lethal
+    // event of the same turn), and the pool churn that took the pool past
+    // 7,700 made the observation scan's anchored grid miss it, exactly as it
+    // missed transform-dfc (§3.162) and trigger-copy (§3.170). The overtime
+    // lane, paid only on a miss.
+    extraAnchorAttempts: SOAK_SEQUENCED_EXTRA_ATTEMPTS,
+  },
   { id: 'triggered-ability', label: 'triggered abilities — one put on the stack', witnessKind: 'event', printedBy: (c) => ((c as { triggers?: readonly unknown[] }).triggers ?? []).length > 0 },
   { id: 'modal-trigger', label: 'modal triggers — a "Choose one —" body answered on the stack', witnessKind: 'event', printedBy: (c) => ((c as { triggers?: readonly { modal?: unknown }[] }).triggers ?? []).some((t) => t.modal !== undefined) },
   {

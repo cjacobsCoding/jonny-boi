@@ -82,7 +82,15 @@ export type StaticCondition =
   /** "as long as it's attacking" (Kor Scythemaster). */
   | { readonly kind: 'sourceAttacking' }
   /** "as long as you have 5 or less life" (Gavony Ironwright). */
-  | { readonly kind: 'lifeAtMost'; readonly max: number };
+  | { readonly kind: 'lifeAtMost'; readonly max: number }
+  /**
+   * §3.173 — "during your turn, ~ has first strike" (Fresh-Faced Recruit,
+   * Duelist of Deep Faith), "as long as it's your turn" (Faithful Pikemaster),
+   * "~ gets +2/+2 during your turn" (Skophos Reaver): on while the source's
+   * controller is the active player. Read live, so it switches off the moment
+   * the turn passes — which is what makes the Recruit a 2/1 on the block.
+   */
+  | { readonly kind: 'yourTurn' };
 
 /** The value of a count source, relative to the static's SOURCE. */
 export function staticCountValue(
@@ -163,5 +171,7 @@ export function staticConditionHolds(
       return state.combat !== null && state.combat.attackers.includes(source.instanceId);
     case 'lifeAtMost':
       return state.players[source.controller].life <= condition.max;
+    case 'yourTurn':
+      return state.activePlayer === source.controller;
   }
 }

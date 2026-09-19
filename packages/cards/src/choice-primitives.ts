@@ -726,6 +726,21 @@ export const returnToHand: EffectPrimitive = (ctx) => {
 };
 
 /**
+ * `bounceSelf` — §3.173 "**Return ~ to its owner's hand**" as the body of an
+ * activated ability (Darting Merfolk, Shackles, Sliptide Serpent, the Odyssey
+ * "Discard a card:" flyers). The SOURCE, through the same zone move
+ * `returnToHand` makes, so an Aura's detach and a token's ceasing to exist
+ * happen exactly as they do for a targeted bounce. Not `returnSelfToHand`,
+ * which is dash's rider and rightly refuses anything not cast with dash. Gone
+ * from the battlefield before this resolves → nothing to return, a no-op.
+ */
+export const bounceSelf: EffectPrimitive = (ctx) => {
+  const self = ctx.state.battlefield.find((c) => c.instanceId === ctx.source.instanceId);
+  if (!self) return;
+  movePermanentTo(ctx, self, 'hand');
+};
+
+/**
  * `tapPermanents` — tap (or UNTAP) every permanent matching `params.types`
  * (default: creatures) controlled by `params.who` (default: the opponent).
  * Cryptic Command's "tap all creatures your opponents control"; a Falter-style
@@ -1473,6 +1488,7 @@ export const CHOICE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Obje
   moveTargetFromGraveyard,
   returnFromGraveyard,
   returnToHand,
+  bounceSelf,
   tapPermanents,
   counterUnlessPaid,
   payManaOrElse,

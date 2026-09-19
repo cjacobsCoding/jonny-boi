@@ -70,6 +70,16 @@ export type ChangelogEntry =
  */
 export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
   {
+    section: '3.173',
+    date: '2026-09-19',
+    kind: 'mechanic',
+    title: 'Six small rows: combat-only removal, the other board, "during your turn", can’t block, self-bounce, two taplands',
+    summary:
+      'Sandblast and the archers hit attacking or blocking creatures; Nausea and Turn the Tide shrink the right boards; Fresh-Faced Recruit has first strike on your turn and not theirs; Goblin Shortcutter stops a blocker; Darting Merfolk bounces itself; Abandoned Campground and Spire Garden enter tapped when the card says so. 180 more cards play as printed.',
+    cards: ['Sandblast', 'Nausea', 'Fresh-Faced Recruit', 'Goblin Shortcutter', 'Darting Merfolk', 'Abandoned Campground'],
+    witness: { kind: 'rule', id: 'grant-cant-block-until-eot' },
+  },
+  {
     section: '3.172',
     date: '2026-09-19',
     kind: 'mechanic',

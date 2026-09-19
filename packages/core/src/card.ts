@@ -3027,6 +3027,19 @@ export interface EntersUntappedCondition {
     readonly filter: CardFilter;
     readonly minimum?: number;
   };
+  /**
+   * §3.173 — "~ enters tapped unless a player has 13 or less life" (the
+   * Duskmourn slow lands: Abandoned Campground, Raucous Carnival …). ANY
+   * player's total, read from `EntersTappedContext.lifeTotals`.
+   */
+  readonly anyPlayerLifeAtMost?: number;
+  /**
+   * §3.173 — "~ enters tapped unless you have two or more opponents" (the
+   * Battlebond lands: Spire Garden, Sea of Clouds …). Counted from
+   * `EntersTappedContext.opponentCount`; in this engine's two-player games it
+   * is never met, and the land enters tapped as printed.
+   */
+  readonly minOpponents?: number;
 }
 
 /**
@@ -3043,6 +3056,20 @@ export interface EntersTappedContext {
   }[];
   /** The entering permanent, excluded from its own condition when present. */
   readonly self?: unknown;
+  /**
+   * §3.173 — every player's life total, for "unless a player has 13 or less
+   * life" (the Duskmourn slow lands). Absent ⇒ the condition cannot be read and
+   * the land enters tapped (the printed default).
+   */
+  readonly lifeTotals?: readonly number[];
+  /**
+   * §3.173 — how many opponents the controller has, for "unless you have two
+   * or more opponents" (the Battlebond lands). This engine plays two-player
+   * games, so the answer is one, the condition never holds, and the land
+   * enters tapped — exactly what the printed card does in a two-player game.
+   * Absent ⇒ tapped, as above.
+   */
+  readonly opponentCount?: number;
 }
 
 /**
@@ -3241,6 +3268,20 @@ function conditionMet(
     // checkland.
     const has = others.some((permanent) => wanted.some((subtype) => hasSubtype(permanent.def, subtype)));
     if (!has) return false;
+  }
+
+  // §3.173 — "unless a player has 13 or less life": ANY player's total, read
+  // from the context; no totals to read means the exception cannot be claimed.
+  if (condition.anyPlayerLifeAtMost !== undefined) {
+    const totals = context.lifeTotals;
+    if (totals === undefined) return false;
+    const max = condition.anyPlayerLifeAtMost;
+    if (!totals.some((life) => life <= max)) return false;
+  }
+
+  // §3.173 — "unless you have two or more opponents": counted, never assumed.
+  if (condition.minOpponents !== undefined) {
+    if ((context.opponentCount ?? 0) < condition.minOpponents) return false;
   }
 
   if (condition.controlsMatching !== undefined) {
