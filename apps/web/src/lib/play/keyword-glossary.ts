@@ -790,6 +790,11 @@ const ENTRIES = {
     kind: 'abilityWord',
     text: 'Flavour text for "the number of creature cards in your graveyard". The word itself does nothing; the ability after the dash counts them, and it counts them when it RESOLVES, not when it triggered.',
   },
+  parley: {
+    term: 'Parley',
+    kind: 'abilityWord',
+    text: 'Flavour text for "each player reveals the top card of their library" — EVERY player, including the one who tapped it. The ability after the dash says what each nonland revealed is worth (Selvala: mana and life for you), and then each player draws the card they revealed, so it feeds your opponent too.',
+  },
 
   // --- keyword actions (CR 701) --------------------------------------------
   scry: {

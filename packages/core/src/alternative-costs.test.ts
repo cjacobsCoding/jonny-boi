@@ -91,6 +91,15 @@ const MADNESS_CREATURE: CardDefinition = {
   madness: { generic: 1, U: 1 },
 };
 
+/** Madlands-shaped: a LAND that prints madness {0}. A land cannot be cast
+ * (CR 305.9), so the window it opens has exactly one legal answer — decline. */
+const MADNESS_LAND: CardDefinition = {
+  id: 'madness-land',
+  name: 'Madlands',
+  types: ['land'],
+  madness: { generic: 0 },
+};
+
 /** A plain card with no madness — the control for the discard funnel. */
 const PLAIN_CARD: CardDefinition = {
   id: 'plain-card',
@@ -472,6 +481,27 @@ describe('madness — a replacement on the discard, then a cast from exile', () 
     expect(result.events.some((e) => e.type === 'madnessDeclined')).toBe(true);
     expect(state.madnessWindow ?? null).toBeNull();
     expect(state.players.A.exile).toHaveLength(0);
+    expect(state.players.A.graveyard.some((c) => c.instanceId === exiledId)).toBe(true);
+  });
+
+  it('a LAND with madness opens the window but is never offered the cast — pass sends it to the graveyard', () => {
+    // The soak caught the pilot being offered `castSpell` for Madlands, which the
+    // apply path then refused ("lands are played, not cast"): an offered action
+    // must always be a legal one.
+    const { reg } = makeRegistry();
+    let state = gameAtMain(reg);
+    state = discardViaEffect(state, reg, MADNESS_LAND);
+    expect(state.madnessWindow?.controller).toBe('A');
+    const exiledId = state.players.A.exile[0]!.instanceId;
+
+    const offers = generateLegalActions(state, DEFAULT_RULES);
+    expect(offers.some((a) => a.kind === 'castSpell')).toBe(false);
+    expect(offers.some((a) => a.kind === 'passPriority' && a.player === 'A')).toBe(true);
+
+    const result = applyAction(state, { kind: 'passPriority', player: 'A' }, DEFAULT_RULES, reg);
+    state = result.state;
+    expect(result.events.some((e) => e.type === 'madnessDeclined')).toBe(true);
+    expect(state.madnessWindow ?? null).toBeNull();
     expect(state.players.A.graveyard.some((c) => c.instanceId === exiledId)).toBe(true);
   });
 

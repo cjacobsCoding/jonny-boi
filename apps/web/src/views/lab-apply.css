@@ -19,3 +19,12 @@
   color: var(--color-fg);
   font-size: var(--text-sm);
 }
+
+/* §3.165 — once pressed, the button SAYS it applied instead of offering the
+   same change forever; the label carries the deck's name. */
+.verdict-banner__apply--done {
+  border-color: var(--color-success);
+  color: var(--color-success);
+  cursor: default;
+  opacity: 1;
+}

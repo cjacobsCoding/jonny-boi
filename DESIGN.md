@@ -10543,6 +10543,132 @@ changes nothing" — and dropped Heliod's lifegain counters on the floor while i
 enchantment. They are exactly what make it a 6/6 the turn devotion arrives. The gate is gone; the
 self form goes through the any-permanent reader the named kinds already used.
 
+### 3.164 A mana ability whose AMOUNT the board decides — Axebane Guardian, Gaea's Cradle, and Selvala's parley — ✅ done
+
+> "And Selvala, Explorer Returned" — and, from §3.161: *Tamiyo + Jace Surge* had one unsupported card
+> left, Axebane Guardian.
+
+**Measured first.** 83 cards on the 32,341-card corpus print a mana ability whose amount is not a
+number: "Add {G} **for each** creature you control" (37 — Gaea's Cradle, Priest of Titania, Elvish
+Archdruid, Cabal Stronghold), "Add X mana of any one color, **where X is** this creature's power"
+(19), "Add **an amount of** {G} **equal to** your devotion to green" (14 — Karametra's Acolyte,
+Cradle Clearcutter), "Add X mana **in any combination of colors**, where X is …" (5 — Axebane
+Guardian, Selvala, Heart of the Wilds). Every one reported before this, on the same missing piece.
+Selvala, Explorer Returned's parley is the 84th and its own shape: the amount is decided by a REVEAL.
+
+**The model (`core/mana-amount.ts`).** A mana ability's modes stay what they were — fixed
+productions indexed by `TapForManaAction.mode` — and `ManaAbility.amount` is a MULTIPLIER on the
+chosen mode, read off the board as the ability is activated (CR 605.3: a mana ability resolves at
+once, so the number is the number at that moment). A count of zero is a tap that adds nothing,
+which is the printed card too. The amount vocabulary is a CLOSED subset of the derived counts —
+the battlefield rows, a filtered permanent count, devotion, the source's own layered power — and
+the reason is the planner: it plans against a `ManaPlanView` (battlefield and pools, nothing else,
+because an online client plans against a redacted view), and an amount the engine could compute
+and the planner could not is a tap the two would value differently. `manaAmountOf` takes exactly
+that view. **The planner scales the mode by the same reader** (`mana-plan.ts`), so it funds
+{G}{G}{G} off one Cradle and three creatures, plans nothing from a Cradle on an empty board, and
+plans nothing from a parley, whose amount does not exist until the reveal.
+
+**"In any combination of colors."** The modes are the five colours, each worth the whole amount, so
+a pilot that wants X green taps for X green; the action may instead carry a `split`, validated to
+sum to the amount over the ability's own colours (short, over, or a colour it does not offer are
+refused by name; a split on an ability that prints no combination is refused too). The shipped
+planner does not search splits — it plans one mode per tap, as it always has — so the ENGINE is not
+narrowed by the model, and a human tapping Axebane through the menu gets the colour modes today.
+
+**The parley (`ManaAbilityRider.parley`).** "Each player reveals the top card of their library. For
+each nonland card revealed this way, add {G} and you gain 1 life. Then each player draws a card." A
+mana ability (CR 605.1a — no target, adds mana) whose amount is decided by a reveal, so the reveal
+happens BEFORE the mana is added, controller first, as public `cardRevealed` events; the life is
+gained through the one life-gain funnel (Rhox Faithmender doubles it, "whenever you gain life" sees
+it); each player draws through the one draw funnel; and the SBA pass that follows a draw runs. The
+ability's one mode is EMPTY, which is what keeps the planner honest: the engine adds what the reveal
+earns. The tap menu labels it *Parley*; a derived amount shows as its board's number ("3 G").
+
+**Compiler.** `mana-ability-derived-amount` reads the four shapes (with an optional mana cost in
+front of the `{T}`) through the SAME count readers every other count uses — `derivedEachValue`,
+`whereXBinding`, the devotion rows — and then refuses anything outside the amount vocabulary (a hand
+count, an offset). "This creature's power" is the one phrase with no count row. The filtered counts
+learned their SINGULAR "for each" spellings, generated from the same rows as their plurals
+(`FILTERED_EACH_TO_PLURAL`), which is what "for each Elf you control" needed and what every other
+"for each" consumer now has too. `mana-ability-parley` compiles Selvala's line to the rider.
+
+**Played** (`core/mana-amount.test.ts`, `cards/derived-mana-play.test.ts`): a Cradle for three and
+for nothing; Axebane's mode, a legal split and three illegal ones; a pumped Clearcutter for five;
+the planner's one Cradle tap; Selvala's reveal with a rigged nonland top — one green, one life, one
+`gainLife` event, both players draw and A draws the card it revealed — and the all-lands reveal that
+adds nothing and still draws. Compiled whole: Selvala, Explorer Returned, Axebane Guardian, Gaea's
+Cradle, Karametra's Acolyte, Priest of Titania, Elvish Archdruid, Cradle Clearcutter. **Both of his
+decks are now fully supported by the engine**: Thune's Life at all 77 cards, Tamiyo + Jace Surge at
+all 49. Pool at regeneration: **7,115 → 7,136** (+21, every one a scaling source: the seven above, and
+Cabal Coffers, Magus of the Coffers, Tolarian Academy, Serra's Sanctum, Rofellos, Marwyn, Circle of
+Dreams Druid, Viridian Joiner, Rainveil Rejuvenator, and the "Add X mana in any combination" family —
+Heronblade Elite, Kami of Whispered Hopes, Sanctum Weaver, Wirewood Channeler, Mona Lisa); index
+7,168/7,168, `--check` clean.
+
+**Two guards learned the shape.** The keyword glossary (a closed table; the index builder refuses a
+printed keyword it cannot explain) gained *Parley*. And `expanded-pool.test.ts`'s mana-ceiling guard —
+an independent reading of each card's printed "Add …" line — reported all 31 modes of the new family
+as "no printed line to check against": it now reads the printed SHAPES of a board-decided amount
+(`PRINTED_DERIVED_AMOUNT`) and holds a scaling line to a scaling mode whose base is exactly one
+mana (a parley's exactly none) — and, sabotaged to treat every mode as fixed, it named all eleven
+cards that scale, which is the red a guard has to be able to show.
+
+### 3.165 The Lab's A/B pickers — type to find one card, a copies menu that follows the line, an Apply that says it applied — ✅ done
+
+> "the dropdowns in Lab -> A/B Test are awful to use. Anytime we have a card selector dropdown like
+> this in the app, we must make it one where you can type to filter, and expose advanced settings to
+> filter further too - to help you find the one card." · "if there is only one copy of the card in
+> the deck, it shouldn't give all those options to swap 1, 2, 3, ect- that makes no sense" · "when
+> you click 'apply to my deck', it needs to visibly show that it applied"
+
+Three defects on one screen, all of them the same shape: the panel rendered a control that was
+CORRECT and not USABLE. The "add" side was a native `<select>` over the whole 7,000-card pool — a
+scroll wheel with no search; the copies menu listed "exactly 2/3/4" for a card the deck holds once
+(`copiesForScope` clamps them all to one, so four entries meant the same swap); and "Apply to my
+deck" wrote the change to the deck and then sat there offering it again, indistinguishable from a
+button that had done nothing.
+
+**The picker (`components/lab/CardPicker.tsx`, model in `lib/lab/cardPicker.ts`).** A combobox in
+the WAI-ARIA sense — a text input filtering a listbox, arrow keys, Enter, Escape — that EVERY
+single-card selector in the app now goes through. The model is pure and tested: it reuses the card
+browser's own `CardQuery` and `queryCards` (search, colour chips, type chips), so a filter means one
+thing in the Cards view and in the Lab, and adds the ranking a picker needs that a browser does not —
+an exact name, then names that start with the term, then a word inside the name, then a substring,
+each tier alphabetical — and a cap (`CARD_PICKER_MAX_ROWS` = 40) with an honest footer ("40 of N shown —
+keep typing to narrow it down"), so the dropdown never tries to render the pool. Mana-value bounds are the one
+"advanced" filter the browser's query does not carry (it sorts by it instead) and are applied before
+the ranking. Which cards are candidates is the CALLER's decision — the hero's cards for "cut", the
+pool for "add" — and the picker never widens or narrows that set; a card the caller lists that the
+pool cannot describe is still offered, by name. The Suggest panel's "consider cutting" is a checkbox
+GRID over the hero's twenty-odd distinct cards, not a dropdown, and stays one: the complaint is about
+finding one card in thousands, and a grid you can see whole is already found.
+
+**The copies menu (`lib/lab/swapScopeOptions.ts`).** ONE function derives the menu from the cut
+card's line, so no panel can disagree about it: a 1-of has exactly one choice ("The only copy — it is
+a 1-of", and the menu is disabled); an N-of offers the playset (all N), the single copy, and every
+exact count strictly between — "exactly 2" only appears when the line holds more than two, because
+at two it IS the playset; nothing picked yet shows the two named questions the menu always led with.
+The test pins the property that matters: every entry moves a DIFFERENT number of copies. Picking a
+1-of after a 4-of cannot leave "exactly 3" selected — the shown scope is `reconcileScope(stored,
+menu)` derived at render (the stored choice if the new line still offers it, else the menu's first),
+rather than an effect writing state back.
+
+**The applied state.** Pressing Apply records WHICH result it was pressed for, by object identity:
+the button becomes "✓ Applied to <deck>" (ghost style, disabled, its tooltip pointing at Deck
+Builder) for that result, and a new run — a new result object — gets a live button again. Component
+state, not deck state, on purpose: the deck already shows the change in Deck Builder; what was
+missing was the acknowledgement on the screen where the button was pressed.
+
+**Verification.** `lib/lab/cardPicker.test.ts` (ranking tiers, case and whitespace, the cap and its
+count, the browser's filters, the bounds); `lib/lab/swapScopeOptions.test.ts` (the 1-of, the 2-of,
+the 4-of's distinct-copies property, the round-trip of option values, reconciliation);
+`components/lab/swap-panel-pickers.test.ts` — a static render of the real panel (the
+`gauntlet-row-owner.test.ts` idiom), because every one of these was a "wire the consumer" defect
+waiting to happen: two comboboxes and no native card `<select>`; a 1-of leaves one disabled option;
+a finished verdict renders a LIVE apply button (no `disabled` attribute — matched as an attribute,
+since a false `aria-disabled` would still contain the word, which is how the first draft of this
+test failed against a button that was live).
 ### 3.166 What came online — an in-app changelog of mechanics, held to the roadmap and the pool — ✅ done
 
 > "an in-app changelog of mechanics coming online"

@@ -67,14 +67,15 @@ Checked against the real compiled pool, not assumed. The campaign is closing thi
 
 | deck | distinct names | cards | blocked when transcribed | blocked now |
 | --- | --- | --- | --- | --- |
-| Thune's Life | 22 (+6 revised) | 65 (+12 revised) | 8 | **1** — Selvala, Explorer Returned, from the 2026-09-18 revision (§3.162; her parley is §3.164) |
-| Tamiyo + Jace Surge | 17 | 49 | 9 | **1** — Axebane Guardian (§3.161) |
+| Thune's Life | 22 (+6 revised) | 65 (+12 revised) | 8 | **0** ✅ (§3.164) |
+| Tamiyo + Jace Surge | 17 | 49 | 9 | **0** ✅ (§3.164) |
 
 ✅ **THUNE'S LIFE AS TRANSCRIBED COMPILES END TO END** — every one of its 22 names resolves. The
 **2026-09-18 revision** (the `// revision` block at the foot of `thunes-life.txt`) adds the six cards
-he asked for by name, two of each: five of them compile and are in the deck (Skyclave Apparition,
-Tyvar's Stand, Spike Feeder, Voice of the Blessed — §3.162; Heliod, Sun-Crowned — §3.163), and
-Selvala, Explorer Returned rides the deck's wish-list until the derived-mana family lands (§3.164).
+he asked for by name, two of each — all six compile and are in the deck (Skyclave Apparition,
+Tyvar's Stand, Spike Feeder, Voice of the Blessed — §3.162; Heliod, Sun-Crowned — §3.163; Selvala,
+Explorer Returned — §3.164). **Tamiyo + Jace Surge compiles end to end too** since §3.164 closed
+Axebane Guardian; it stays 49 cards as transcribed (see below).
 
 ## A revision is how a seeded deck is added to
 
@@ -102,12 +103,11 @@ set a paper deck's legal minimum to its own transcribed size, so 49 could report
 That rule is retired. The deck is judged by the same constructed rules as any deck he builds, its
 row says plainly that it is short, **and he can now simply fix it, because the deck is editable.**
 
-⚠️ **The "blocked now" column measures the SHIPPED POOL, and the compiler runs ahead of it.** Tamiyo,
-Jace, Primal Surge, Craterhoof Behemoth and Axebane Guardian all have compiler work landed or in
-flight (§3.154–§3.156); the pool the app carries was regenerated 2026-09-15 and does not have all of
-them yet. The app prints **its own** number in the deck row rather than trusting this table, and
-`paperDecks.ts` folds each name into the deck automatically the moment the pool learns it — so this
-row moves at the next regeneration, with nothing to update by hand.
+⚠️ **The "blocked now" column measures the SHIPPED POOL, and the compiler runs ahead of it.** The
+app prints **its own** number in the deck row rather than trusting this table, and `paperDecks.ts`
+folds each name into the deck automatically the moment the pool learns it — so this row moves at
+the next regeneration, with nothing to update by hand. (Tamiyo, Jace, Primal Surge, Craterhoof
+Behemoth and Axebane Guardian each took a section of their own: §3.154–§3.156, §3.161, §3.164.)
 
 Until a list is clean, the deck in the app is missing part of its identity — and it SAYS SO, in its
 own row, naming every card the pool cannot supply and how many cards of the deck they cost, because

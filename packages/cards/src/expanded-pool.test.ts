@@ -35,6 +35,7 @@ import {
   effectiveToughness,
   generateLegalActions,
   indexContinuous,
+  manaExtrasOf,
   manaModesOf,
   NO_MOD,
 } from '@jonny-boi/core';
@@ -789,14 +790,34 @@ describe('every compiled card resolves in a real game', () => {
       const modes = manaModesOf(card);
       if (modes.length === 0) continue;
       const printed = printedManaCeiling(oracleTextOf(card.name));
-      for (const mode of modes) {
+      const extras = manaExtrasOf(card);
+      modes.forEach((mode, index) => {
         const total = Object.values(mode).reduce((sum: number, n) => sum + (n ?? 0), 0);
-        if (total <= 0) failures.push(`${card.name} has an empty mana mode`);
+        // §3.164 — a mode whose AMOUNT the board decides is compiled as its UNIT
+        // (one mana, scaled at activation), and a parley rider's mana all comes
+        // from the reveal (an empty base). Each is checked against the printed
+        // line's own shape: a scaling line must have compiled a scaling mode,
+        // and a scaling mode must come from a scaling line.
+        const ability = extras?.[index]?.ability;
+        const parley = ability?.rider?.parley !== undefined;
+        const scaled = parley || ability?.amount !== undefined;
+        if (scaled) {
+          const unit = parley ? 0 : 1;
+          if (printed !== 'derived') {
+            failures.push(`${card.name}: compiled a board-derived amount, but the card prints a fixed "Add …" line`);
+          } else if (total !== unit) {
+            failures.push(`${card.name}: a derived mode's base must be exactly ${unit} mana, got ${total}`);
+          }
+          return;
+        }
+        if (printed === 'derived') {
+          failures.push(`${card.name}: the card prints a board-derived amount, but the compiled mode is fixed at ${total}`);
+        } else if (total <= 0) failures.push(`${card.name} has an empty mana mode`);
         else if (printed === undefined) failures.push(`${card.name}: no printed "Add …" line to check against`);
         else if (total > printed) {
           failures.push(`${card.name} mode adds ${total} mana; the card prints at most ${printed}`);
         }
-      }
+      });
     }
     expect(failures).toEqual([]);
   });
@@ -835,6 +856,17 @@ const oracleTextOf = (name: string): string | undefined => {
   return text === undefined || text.length === 0 ? undefined : text;
 };
 
+/**
+ * The printed shapes of a mana amount the board decides (§3.164). A SECOND
+ * reading, on purpose distinct from the compiler's `manaAmountFromPhrase`.
+ */
+const PRINTED_DERIVED_AMOUNT: readonly RegExp[] = [
+  /\bAdd X mana\b/,
+  /\bAdd an amount of \{[WUBRGC]\} equal to\b/,
+  /\bAdd (?:\{[WUBRGC]\}|[a-z]+ mana of any one color) for each\b/,
+  /\bFor each nonland card revealed this way, add \{[WUBRGC]\}/,
+];
+
 /** Number words a printed "Add N mana of …" line can use. */
 const PRINTED_NUMBER_WORDS: Readonly<Record<string, number>> = Object.freeze({
   one: 1,
@@ -862,9 +894,16 @@ const PRINTED_NUMBER_WORDS: Readonly<Record<string, number>> = Object.freeze({
  * `undefined` when the card prints no Add clause at all, which the caller
  * reports rather than passing — a compiled mana source whose text never says
  * "Add" is exactly the kind of thing worth looking at by hand.
+ *
+ * `'derived'` (§3.164) when the amount is the BOARD's to decide — "Add X mana
+ * … where X is", "Add an amount of {G} equal to", "Add {G} for each", or a
+ * parley's "For each nonland card revealed this way, add {G}" — read here by
+ * the printed words alone, so a compiled mode that scales can be held to a
+ * line that scales and a fixed line cannot have compiled a scaling mode.
  */
-function printedManaCeiling(text: string | undefined): number | undefined {
+function printedManaCeiling(text: string | undefined): number | 'derived' | undefined {
   if (text === undefined) return undefined;
+  if (PRINTED_DERIVED_AMOUNT.some((shape) => shape.test(text))) return 'derived';
   let ceiling: number | undefined;
   // Each "Add" runs to the end of its sentence; alternatives are separated by
   // "or" / commas, and only ONE alternative is produced per activation.

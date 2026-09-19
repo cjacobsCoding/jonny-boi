@@ -78,6 +78,24 @@ export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
       'What came online, newest first, on the About page — every row is a shipped roadmap section, every card it names is in the pool, and a section that ships without a row here fails the build.',
   },
   {
+    section: '3.165',
+    date: '2026-09-19',
+    kind: 'app',
+    title: 'The Lab’s A/B pickers: type to find one card',
+    summary:
+      'Both card selectors in Lab → A/B Swap Test are now type-to-filter boxes with the card browser’s colour and type chips and a mana-value range. The copies menu only offers what the cut card’s line can give (a 1-of has one choice), and "Apply to my deck" now says "✓ Applied" once it has.',
+  },
+  {
+    section: '3.164',
+    date: '2026-09-19',
+    kind: 'mechanic',
+    title: 'Mana abilities the board sizes — and Selvala’s parley',
+    summary:
+      'Gaea’s Cradle, Axebane Guardian, Karametra’s Acolyte, Priest of Titania and their family add as much as the board says; Axebane splits it across colours. Selvala, Explorer Returned reveals, pays you green and life per nonland, and everyone draws. Both of your decks are now fully supported by the engine.',
+    cards: ['Selvala, Explorer Returned', 'Axebane Guardian', "Gaea's Cradle", 'Priest of Titania'],
+    witness: { kind: 'rule', id: 'mana-ability-parley' },
+  },
+  {
     section: '3.163',
     date: '2026-09-19',
     kind: 'mechanic',
