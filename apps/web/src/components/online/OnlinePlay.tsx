@@ -276,7 +276,7 @@ function MenuScreen({
 }
 
 /** Lobby: show both seats, pick a deck, ready up. */
-function LobbyScreen({
+export function LobbyScreen({
   online,
   menu,
 }: {
