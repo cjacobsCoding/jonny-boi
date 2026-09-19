@@ -21,6 +21,7 @@ import {
   isOffScreen,
   optionIsPrunable,
   prunableChildIndices,
+  pruningAllowedIn,
   withTimeout,
   type CaptureAttempt,
 } from './capture-policy.js';
@@ -59,7 +60,9 @@ function belowFoldTail(prune: boolean): Set<Element> {
   const prunePastFold = (parent: Element): void => {
     const children = Array.from(parent.children);
     if (children.length === 0) return;
-    const tops = children.map(anchorTop);
+    // A table's rows are one box to the layout (see `PRUNE_EXEMPT_PARENTS`):
+    // keep them all and look inside each for something prunable instead.
+    const tops = pruningAllowedIn(parent.tagName) ? children.map(anchorTop) : children.map(() => null);
     const dropped = new Set(prunableChildIndices(tops, viewportHeight));
     for (const index of dropped) skip.add(children[index]!);
     // Recurse into everything KEPT — including the boxless children after the

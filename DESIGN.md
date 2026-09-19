@@ -11087,6 +11087,52 @@ B 28, C 25, D 28, E 31, F 20, and a handful the rows reached through the pre-pas
 place — Ground Rift's *"target creature WITHOUT FLYING can't block"* through the target-bound
 strip, Fleeting Effigy's end-step *"return this creature to its owner's hand"* as a trigger body.
 
+### 3.176 The gathered feedback — 90 bug-report bundles triaged, every human one answered — ✅ done
+
+> "address all gathered unaddressed feedback"
+
+Ninety `bugreport_*.zip` bundles sat in `~/Downloads` (2026-08-19 → 2026-09-18). Thirty are the
+reporter's own VERIFY probes; twenty-three are cited by id in DESIGN, the board or a commit; the
+remaining **37 human reports** were triaged one by one against the LIVE build of 2026-09-19
+(`index-COgRcwvb.js`), in the browser where that was the only honest way. The table is the record:
+FIXED HERE means this lane's commit; ADDRESSED names the section that shipped the fix without citing
+the id; NOT REPRODUCIBLE carries what was tried.
+
+| report | screen | what was said | verdict |
+|---|---|---|---|
+| 20260918_215728 | Lab | the debug capture collapsed the suggestion table to one stretched row; "there must be a way to see the actual cards from here" | **FIXED HERE** — the capture's below-fold prune skipped a table's rows and the rasteriser copies computed heights, so one row inherited the whole table's; table parts are prune-exempt (`PRUNE_EXEMPT_PARENTS`, pinned). Result names in the Suggest table and the A/B verdict are `CardHover` anchors |
+| 20260918_215432 | Deck Builder | "duplicate rules text — there should only be one set on a card" | **FIXED HERE** — the full face's live text box was bottom-anchored and auto-height, covering only the flavour line; it now spans the printed text box (`--card-face-text-box-height`, text from the top) so it REPLACES the printed rules |
+| 20260917_220137 | Play | "This look awful. Rules text should be neatly baked onto the card without overlapping the card art" | **FIXED HERE** — the hand drew the full face at 96–148px; a `compact` size draws the printed scan with only the aftermarket strip, and the readable text is the hover preview (`play-card-live-face.test.ts` re-pinned) |
+| 20260917_220347 | Play | "all the crap in the way — I can't even click on the creature attacking" | **FIXED HERE** — the opponent-action feed was pinned over the board's top-right (pointer-transparent, but four notes hid the attacking Craw Wurm); it lives in the log rail now, above the log, never over a tile |
+| 20260917_215126 | Play | the "Computer is casting" hold: "no way to continue or skip out of this… cards could be side by side" | ADDRESSED by §3.143 wave 3 — `SpellHoldCard` has "Keep looking" / "Let it resolve" and a side-by-side body; the reported build (3501c27) predates it. Live check NOT DONE (needs the computer to cast while watching) |
+| 20260907_191145 / 191002 / 20260827_205319 / 20260825_211628 | Play | scrolling to see the whole game; cramped battlefield | ADDRESSED by §3.62 / §3.126 — verified live at 1440×900: `scrollHeight === innerHeight`, the controls at y 776–812 |
+| 20260907_190808 | Play | a 3/3 Beast token with no image and no P/T | ADDRESSED by §3.29 (a token keeps its printed face) and the tile's P/T footer; not re-produced live |
+| 20260907_190210 | Play | "Theres no way to look at other players graveyards" | **FIXED HERE** — reproduced live (the opponent's rail showed a number, the viewer's a button); either seat's graveyard opens through the one `ZonePanel`, on both boards (`graveyard-both-seats.test.ts`) |
+| 20260907_185927 / 20260825_212455 | Play | auto-tapping a mana elf instead of a land; "it should ask" | ADDRESSED by §3.60 (spare the useful source; the "Choose mana" slot button is live in the hand) |
+| 20260829_215916 | Play | "A land somehow got stuck on my screen" | NOT REPRODUCIBLE — the drag ghost of §3.54's era; drag-to-play was rebuilt in §3.51/§3.54 |
+| 20260827_210805 | Play | no mulligan phase; random first player | ADDRESSED by §3.63 and the London mulligan screen — verified live (Solo setup: "On the play: Player 1 / Computer / Random (flip a coin)"; the keep/mulligan screen) |
+| 20260827_205636 | Play | "an area that says no lands and no creatures… why not a zone called Battlefield?" | ADDRESSED by §3.124 — verified live: "Battlefield — no creatures / No lands" |
+| 20260825_213118 | Play | hover cards in hand | ADDRESSED by §3.119 (report 205149) — `CardHover` wraps every hand card |
+| 20260825_213019 | Play | asked for blockers when nothing attacks | ADDRESSED by §3.119 (CR 508.8 — an empty attack skips the blockers step, `engine.ts`) |
+| 20260825_212931 | Play | Conjurer's Closet asks for the creature before the "may" | ADDRESSED by §3.143 UX-6/UX-7 — the board asks the may first and reveals the target picker on a yes (`optional-trigger.ts`) |
+| 20260825_212749 | Play | "see the actual cards and whose they are" when choosing | ADDRESSED by §3.143 UX-8/UX-10 — choice prompts render card faces |
+| 20260825_212620 | Play | back out of Temple Garden's pay-2-life choice | WON'T FIX, by the rules: the land is already played when the choice is asked (CR 614.12 — the replacement decides how it enters); the prompt is the only remaining decision |
+| 20260825_212210 | Play | Swiftspear's +1/+1 "not clear from what"; pacing/animation | ADDRESSED by §3.143 UX-17 (the P/T breakdown names every contributing card) and §3.57 (animations) |
+| 20260825_212048 | Play | a visual of libraries and graveyards "like MTGA" | ADDRESSED by §3.119 (the zone rail in words) + openable graveyards/exile (UX-10, and this lane for the opponent's) |
+| 20260825_211945 | Play | Gatecreeper Vine's search did nothing | ADDRESSED by §3.56 (the search OR that intersected) |
+| 20260825_211845 | Play | Banisher Priest's exiled card should peek out and be hoverable | ADDRESSED by §3.56 (the jail link) + `jail-tile.test.ts` |
+| 20260825_211521 | Play | "It says I should have gotten a land when Goblin Guide attacked but I never did" | NOT REPRODUCIBLE — the trigger is pinned (`choice-cards.test.ts` "a land on top goes to the defender hand", `primitives.test.ts`); a nonland reveal puts nothing in hand |
+| 20260825_211445 | Play | stopped on the blocking phase with no possible blockers | **FIXED HERE** — reproduced live (Goblin Guide attacked, "No blocks" sat there with no creature in play); a block declaration whose only legal form is the empty one is FORCED and made for the player (`blockDeclarationIsForced`, `autoAdvancePriority`, the Arena-style stop rule), while a real block still stops |
+| 20260825_211238 | Play | pressing B (report) moved the ribbon and scrolled the log | NOT REPRODUCIBLE on live — the reporter opens as a portal; the status bar, footer and log measured identical before and during |
+| 20260819_231405 | Lab | Suggest refused to run after applying Thragtusk | NOT REPRODUCIBLE — the Lab gate now names why a deck cannot run (`lab-alert`); a 61st card is reported, not silently refused |
+| 20260819_231015 / 20260827_210919 / 20260827_211945 | Cards | duplicate printings; the Instant filter | ADDRESSED by §3.55 / §3.61 — verified live: one Avacyn's Pilgrim, one Acidic Slime, the Instant filter yields 3,753 instants |
+
+**Verification.** The four FIXED HERE items each ship a pin: `capture-policy.test.ts` (table parts are
+prune-exempt), `play-card-live-face.test.ts` (the hand face is compact; the glossary lives on the
+full face), `graveyard-both-seats.test.ts`, `auto-advance.test.ts` (the forced declaration is made;
+a real block still stops), `right-overlay-inset.test.ts` (the feed pins to nothing). Live checks are
+the table's own column.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.
