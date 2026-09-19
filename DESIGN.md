@@ -10614,6 +10614,61 @@ as "no printed line to check against": it now reads the printed SHAPES of a boar
 mana (a parley's exactly none) — and, sabotaged to treat every mode as fixed, it named all eleven
 cards that scale, which is the red a guard has to be able to show.
 
+### 3.165 The Lab's A/B pickers — type to find one card, a copies menu that follows the line, an Apply that says it applied — ✅ done
+
+> "the dropdowns in Lab -> A/B Test are awful to use. Anytime we have a card selector dropdown like
+> this in the app, we must make it one where you can type to filter, and expose advanced settings to
+> filter further too - to help you find the one card." · "if there is only one copy of the card in
+> the deck, it shouldn't give all those options to swap 1, 2, 3, ect- that makes no sense" · "when
+> you click 'apply to my deck', it needs to visibly show that it applied"
+
+Three defects on one screen, all of them the same shape: the panel rendered a control that was
+CORRECT and not USABLE. The "add" side was a native `<select>` over the whole 7,000-card pool — a
+scroll wheel with no search; the copies menu listed "exactly 2/3/4" for a card the deck holds once
+(`copiesForScope` clamps them all to one, so four entries meant the same swap); and "Apply to my
+deck" wrote the change to the deck and then sat there offering it again, indistinguishable from a
+button that had done nothing.
+
+**The picker (`components/lab/CardPicker.tsx`, model in `lib/lab/cardPicker.ts`).** A combobox in
+the WAI-ARIA sense — a text input filtering a listbox, arrow keys, Enter, Escape — that EVERY
+single-card selector in the app now goes through. The model is pure and tested: it reuses the card
+browser's own `CardQuery` and `queryCards` (search, colour chips, type chips), so a filter means one
+thing in the Cards view and in the Lab, and adds the ranking a picker needs that a browser does not —
+an exact name, then names that start with the term, then a word inside the name, then a substring,
+each tier alphabetical — and a cap (`CARD_PICKER_MAX_ROWS` = 40) with an honest footer ("40 of N shown —
+keep typing to narrow it down"), so the dropdown never tries to render the pool. Mana-value bounds are the one
+"advanced" filter the browser's query does not carry (it sorts by it instead) and are applied before
+the ranking. Which cards are candidates is the CALLER's decision — the hero's cards for "cut", the
+pool for "add" — and the picker never widens or narrows that set; a card the caller lists that the
+pool cannot describe is still offered, by name. The Suggest panel's "consider cutting" is a checkbox
+GRID over the hero's twenty-odd distinct cards, not a dropdown, and stays one: the complaint is about
+finding one card in thousands, and a grid you can see whole is already found.
+
+**The copies menu (`lib/lab/swapScopeOptions.ts`).** ONE function derives the menu from the cut
+card's line, so no panel can disagree about it: a 1-of has exactly one choice ("The only copy — it is
+a 1-of", and the menu is disabled); an N-of offers the playset (all N), the single copy, and every
+exact count strictly between — "exactly 2" only appears when the line holds more than two, because
+at two it IS the playset; nothing picked yet shows the two named questions the menu always led with.
+The test pins the property that matters: every entry moves a DIFFERENT number of copies. Picking a
+1-of after a 4-of cannot leave "exactly 3" selected — the shown scope is `reconcileScope(stored,
+menu)` derived at render (the stored choice if the new line still offers it, else the menu's first),
+rather than an effect writing state back.
+
+**The applied state.** Pressing Apply records WHICH result it was pressed for, by object identity:
+the button becomes "✓ Applied to <deck>" (ghost style, disabled, its tooltip pointing at Deck
+Builder) for that result, and a new run — a new result object — gets a live button again. Component
+state, not deck state, on purpose: the deck already shows the change in Deck Builder; what was
+missing was the acknowledgement on the screen where the button was pressed.
+
+**Verification.** `lib/lab/cardPicker.test.ts` (ranking tiers, case and whitespace, the cap and its
+count, the browser's filters, the bounds); `lib/lab/swapScopeOptions.test.ts` (the 1-of, the 2-of,
+the 4-of's distinct-copies property, the round-trip of option values, reconciliation);
+`components/lab/swap-panel-pickers.test.ts` — a static render of the real panel (the
+`gauntlet-row-owner.test.ts` idiom), because every one of these was a "wire the consumer" defect
+waiting to happen: two comboboxes and no native card `<select>`; a 1-of leaves one disabled option;
+a finished verdict renders a LIVE apply button (no `disabled` attribute — matched as an attribute,
+since a false `aria-disabled` would still contain the word, which is how the first draft of this
+test failed against a button that was live).
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.
