@@ -16,9 +16,14 @@
  *
  *  1. the full face really is drawn by the SHARED `CardFace`, not a second
  *     renderer (spec §2.4);
- *  2. a keyword the card PRINTS carries a tooltip with its explanation, with no
- *     `explanation` prop in sight — the hand has no continuous-effect index and
- *     must still explain "haste";
+ *  2. a keyword the card PRINTS carries a tooltip with its explanation on the
+ *     FULL face, with no `explanation` prop in sight — the hand has no
+ *     continuous-effect index and must still explain "haste". Since bug report
+ *     20260917_220137 the hand DRAWS the `compact` face (the printed scan, with
+ *     only the aftermarket strip) and the full face is the hover preview
+ *     `PlayBoard` wraps around every hand card — so the glossary is read one
+ *     hover away, on a face big enough to read it, and never as a 7px overlay
+ *     climbing over the art;
  *  3. the tooltip is not CLIPPED. `.play-card` is `overflow: hidden`, and a pop
  *     that exists inside a clipping box is a feature that shipped invisible —
  *     which is this whole wave's failure mode, in one CSS property;
@@ -35,6 +40,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { CARD_POOL } from '@jonny-boi/cards';
 import { getCard } from '../../lib/cards.js';
 import { glossaryEntry } from '../../lib/play/keyword-glossary.js';
+import { CardFace } from './CardFace.js';
 import { PlayCard } from './PlayCard.js';
 
 /**
@@ -78,8 +84,18 @@ describe('PlayCard’s full face is the shared, live CardFace', () => {
     expect(html).toContain('play-card__face');
   });
 
-  it('a printed keyword carries its glossary tooltip — with no explanation prop', () => {
+  it('the hand face is COMPACT: the printed scan, no second copy of the printed rules (20260917_220137)', () => {
     const html = fullFace();
+    expect(html).toContain('card-face--compact');
+    expect(html).not.toContain('card-face--full');
+    // The scan prints the rules; a compact face never re-renders a printed line.
+    expect(html).not.toContain('card-face__line--printed');
+  });
+
+  it('a printed keyword carries its glossary tooltip on the FULL face — with no explanation prop', () => {
+    const html = renderToStaticMarkup(
+      createElement(CardFace, { size: 'full', cardId: SUBJECT.id, name: SUBJECT.name }),
+    );
     const entry = glossaryEntry(KEYWORD);
     expect(entry, `the glossary must know "${KEYWORD}"`).toBeDefined();
     expect(html).toContain('role="tooltip"');

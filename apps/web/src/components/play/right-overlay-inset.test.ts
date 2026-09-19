@@ -99,12 +99,14 @@ function rightPinnedOverlays(): readonly RightPin[] {
 }
 
 describe('overlays pinned to the play board’s right edge', () => {
-  it('the sweep is not vacuous — it finds the two overlays it exists for', () => {
+  it('the sweep is not vacuous — it finds the overlay it exists for', () => {
     const selectors = rightPinnedOverlays().map((p) => p.selector);
-    // If a refactor renames these, this assertion is the thing that should fail
+    // If a refactor renames this, this assertion is the thing that should fail
     // first — a silent zero-match sweep would pass every other test here forever.
-    expect(selectors.some((s) => s.includes('.opp-feed'))).toBe(true);
+    // (`.opp-feed` was the second anchor until bug report 20260917_220347 moved
+    // the feed INTO the rail, where it pins to nothing.)
     expect(selectors.some((s) => s.includes('.stack-panel--floating'))).toBe(true);
+    expect(selectors.some((s) => s.includes('.opp-feed')), 'the feed is in the rail, not over the board').toBe(false);
   });
 
   it('every right-pinned overlay clears the log rail through the shared token', () => {

@@ -1480,6 +1480,15 @@ button {
   border-bottom: none;
 }
 
+/* A card name in a Lab result is a hover anchor for the real card (bug report
+   20260918_215728): the dotted underline is the only cue a plain word can carry
+   that it does something, and it reads as a reference, not a link. */
+.lab-card-name {
+  text-decoration: underline dotted var(--color-fg-faint);
+  text-underline-offset: 0.15em;
+  cursor: help;
+}
+
 .lab-table__num {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

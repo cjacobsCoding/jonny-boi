@@ -70,6 +70,14 @@ export type ChangelogEntry =
  */
 export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
   {
+    section: '3.176',
+    date: '2026-09-19',
+    kind: 'fix',
+    title: 'The gathered feedback: 37 reports answered',
+    summary:
+      'Every human bug report from 2026-08-19 to 2026-09-18 triaged against the live build. Fixed now: the hand shows the printed card instead of a wall of tiny text, a card never shows its rules twice, the opponent’s graveyard opens, the game no longer stops for blockers you do not have, the computer’s plays are listed beside the log instead of over your creatures, and a bug-report capture keeps every row of a table.',
+  },
+  {
     section: '3.173',
     date: '2026-09-19',
     kind: 'mechanic',

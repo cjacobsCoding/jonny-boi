@@ -169,7 +169,10 @@ describe('UX-1 — the ONLINE stack shows real cards, not the word "card"', () =
     const images = stack.match(/<img\b[^>]*>/g) ?? [];
     expect(images.length, 'the stack row rendered no card image').toBeGreaterThan(0);
     const record = getCard(spell.def.id)!;
-    expect(stack).toContain(cardImage(record, 'large')!);
+    // The stack row draws the COMPACT face since bug report 20260917_220137 —
+    // the printed scan at row size asks for the `normal` image; the `large`
+    // one is the hover preview's. Either is "a real Scryfall face".
+    expect(stack).toContain(cardImage(record, 'normal')!);
     expect(stack).toContain(spell.def.name);
   });
 
