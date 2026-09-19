@@ -570,23 +570,33 @@ describe('targeted counters that must not touch the opponent’s board', () => {
     expect(partial.status).toBe('incomplete');
   });
 
-  it('does NOT reach "it gains …" as a sentence of its own', () => {
-    // "It" means the creature the sentence BEFORE targeted, so the two sentences
-    // are only trustworthy matched together. On its own the line has no prior
-    // target at all — in a trigger core would aim it at any creature on the
-    // table — so it must keep reporting.
-    const result = compileCard(
-      scryfall({
-        name: 'Trigger Trick',
-        cost: { G: 1 },
-        types: ['Creature'],
-        subtypes: ['Elf'],
-        power: 1,
-        toughness: 1,
-        oracleText: 'When Trigger Trick enters, it gains hexproof until end of turn.',
-      }),
+  it('reaches "it gains …" only where "it" IS the source, and reports it everywhere else', () => {
+    // "When ~ enters, it gains hexproof": the enters trigger's subject is the
+    // source, so the leading pronoun resolves to ~ (§3.148's closed table) and
+    // the self grant (§3.171) compiles it TARGET-FREE — the entering creature
+    // grants itself, which is exactly what the sentence says.
+    const creature = (name: string, oracleText: string) =>
+      scryfall({ name, cost: { G: 1 }, types: ['Creature'], subtypes: ['Elf'], power: 1, toughness: 1, oracleText });
+    const own = compileCard(creature('Trigger Trick', 'When Trigger Trick enters, it gains hexproof until end of turn.'));
+    expect(own.status).toBe('complete');
+    expect(own.definition.triggers?.[0]?.effects).toEqual([
+      { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords: { hexproof: true } } },
+    ]);
+
+    // "Whenever ANOTHER creature enters, it gains …": "it" is the other
+    // creature, no row resolves it, and the line reports rather than granting
+    // the source something the card never gave it.
+    const other = compileCard(
+      creature('Other Trick', 'Whenever another creature you control enters, it gains hexproof until end of turn.'),
     );
-    expect(result.status).toBe('incomplete');
+    expect(other.status).toBe('incomplete');
+
+    // On a spell, "It gains …" as a sentence of its own has no prior target at
+    // all — the two sentences are only trustworthy matched together.
+    const bare = compileCard(
+      scryfall({ name: 'Bare Trick', cost: { G: 1 }, types: ['Instant'], oracleText: 'It gains hexproof until end of turn.' }),
+    );
+    expect(bare.status).toBe('incomplete');
   });
 
   it('Snakeskin Veil grows one of the caster’s OWN creatures in a real game', () => {

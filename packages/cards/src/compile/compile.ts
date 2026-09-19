@@ -1233,7 +1233,7 @@ function parseActivationCost(text: string, ctx: RuleContext): ActivationCost | n
       const rest = xCount === 0 ? part : part.replace(/\{x\}/gi, '');
       // "{X}, {T}: …" (Sands of Delirium) prints X and nothing else — a real
       // cost with no base mana at all, so an empty remainder is not a failure.
-      const mana = rest.trim().length === 0 ? undefined : parseManaSymbols(rest);
+      const mana = rest.trim().length === 0 ? undefined : parseActivationMana(rest);
       if (xCount === 0 && !mana) return null; // a symbol we cannot pay (Phyrexian, snow)
       if (xCount > 0 && rest.trim().length > 0 && !mana) return null;
       if (mana) cost.mana = mana;
@@ -1244,6 +1244,41 @@ function parseActivationCost(text: string, ctx: RuleContext): ActivationCost | n
   }
 
   return Object.keys(cost).length > 0 ? (cost as ActivationCost) : null;
+}
+
+/**
+ * §3.171 — the mana half of an activation cost, HYBRIDS included: "{U/R}:
+ * Stream Hopper gains flying until end of turn", "{G/W}{G/W}: …" (Rune-Cervin
+ * Rider), the Lockets' "{W/U}{W/U}{W/U}{W/U}, {T}, Sacrifice ~". The symbols go
+ * through the SAME closed component table the cast cost uses
+ * (`partitionOtherSymbols`), so a hybrid symbol means one thing whether it is
+ * paid to cast or to activate, and the one payment funnel (`payCost`) already
+ * searches its components.
+ *
+ * A PHYREXIAN symbol is refused here although the cast path pays it: a cast
+ * action carries the life it announces (`phyrexianLife`) and an activation
+ * has no such field yet, so compiling "{R/P}: ~ gets +1/+0" would strip the
+ * card of its whole point (paying life instead). The line reports until the
+ * offer path can name the life option. Snow, and anything else outside the
+ * table, reports exactly as before.
+ */
+function parseActivationMana(text: string): ManaCost | null {
+  const plain = parseManaSymbols(text);
+  if (plain) return plain;
+  const simple: string[] = [];
+  const other: string[] = [];
+  for (const symbol of splitCostSymbols(text)) {
+    const isSimple = /^\d+$/.test(symbol) || (MANA_COLORS as readonly string[]).includes(symbol);
+    (isSimple ? simple : other).push(symbol);
+  }
+  const { hybrid, xCount, unpayable } = partitionOtherSymbols(other);
+  // The X symbols were partitioned off by the caller; one still here is a
+  // shape this reader was not written for, and refusing keeps it reported.
+  if (unpayable.length > 0 || xCount > 0 || hybrid.length === 0) return null;
+  if (hybrid.some((components) => components.some(isLifeComponent))) return null;
+  const base = simple.length === 0 ? {} : parseManaSymbols(simple.map((s) => `{${s}}`).join(''));
+  if (base === null) return null;
+  return { ...base, hybrid };
 }
 
 /** Capitalize the first character, for a readable ability label. */

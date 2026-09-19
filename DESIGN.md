@@ -10917,6 +10917,67 @@ index 7,338/7,338, `--check` clean. The observation soak's `trigger-copy` witnes
 larger pool — the same pool-churn brittleness §3.162 met on `transform-dfc` — and got the same
 sequenced overtime lane, red before it and green after.
 
+### 3.171 "~ gains flying until end of turn" — the self keyword grant, and hybrid mana on an activation — ✅ done
+
+> "start adding all the rest of the missing mechanics"
+
+The one-clause measurement's largest cheap family after the enters-trigger tail: **"~ gains KEYWORD
+until end of turn"** as the body of an activated ability (*"{B}: Stromgald Crusader gains flying"*,
+*"{1}{W}: Unyielding Krumar gains first strike"*, *"Pay 2 life: Shadowcloak Vampire gains flying"*),
+its sibling *"~ gets +N/+N and gains KEYWORD until end of turn"* (Hopping Automaton, Leaping Lizard,
+Miner's Bane), and the same two sentences as a trigger body (Fledgling Griffin's landfall, Kruin
+Striker). The target form (*"target creature gains flying"*) and the self PUMP (*"~ gets +1/+1"*)
+both compiled for years; the self GRANT never had a row, so 340 cards carried the sentence and
+every one reported. Measured before building (`probe-selfgain`, corpus 32,341, 2026-09-19): 182
+cards had nothing else blocking them — 116 activated with a cost the parser already accepts, 58
+triggered whose heads were not probed, 8 with two such lines.
+
+**Two effect-rule rows, no new mechanism.** `self-grant-keyword-until-eot` and
+`self-pump-and-grant-until-eot` compile to the same `grantKeywordUntilEndOfTurn` /
+`pumpUntilEndOfTurn` primitives the target forms use, with NO target — the primitives fall back to
+their source, which is what lets one row serve an activated body and a triggered one alike (the
+same reason `self-pump-until-eot` is the only pump a trigger may use). The keyword list goes through
+`parseKeywordList`, the one closed reading every granted line uses: *fear*, *islandwalk*, a printed
+CHOICE (*"your choice of vigilance, lifelink, or haste"*), *"protection from the color of your
+choice"* and *"gains flying and loses trample"* all return null and keep reporting rather than
+granting a weaker card; *"protection from red"* rides the payload table and compiles.
+
+**The cost the family kept tripping over: hybrid mana on an activation.** *"{U/R}: Stream Hopper
+gains flying"*, *"{1}{G/W}{G/W}: Rune-Cervin Rider gets +1/+1"*, the ten Lockets' *"{W/U}{W/U}{W/U}{W/U},
+{T}, Sacrifice ~"* — the cast path has paid every hybrid family since §3.143, but the activation-cost
+parser still read plain symbols only. `parseActivationMana` now hands the compound symbols to the
+SAME closed component table the cast cost uses (`partitionOtherSymbols`), so a symbol means one thing
+whether it is paid to cast or to activate, and the one payment funnel (`payCost` / `canPay`) already
+searches its components — the offer path, the payability gate and the apply path learned nothing.
+Two symbols stay refused on purpose: a **Phyrexian** one (*"{R/P}: Moltensteel Dragon gets +1/+0"*),
+because a cast action carries the life it announces (`phyrexianLife`) and an activation has no such
+field yet — compiling it would strip the card of its whole point; and **snow** (*"{S}: Chilling
+Shade gets +1/+1"*), which needs snow-permanent tracking the engine does not have. Both report by
+name, as before.
+
+**Verification.** `compile/self-keyword-grant.test.ts` (10; 8 red on the previous sources, the two
+refusal guards green on both): Stromgald Crusader's grant is target-free and its pump untouched;
+Stonehorn Chanter's list is one grant with both flags; Keeper of Kookus's protection payload; Hopping
+Automaton's pump-and-grant; the five refusals above; Fledgling Griffin and Kruin Striker as
+triggers; Stream Hopper's `hybrid: [['U','R']]`, Rune-Cervin Rider's generic beside two hybrids;
+Moltensteel Dragon and Chilling Shade still reported. `cards/self-keyword-grant.test.ts` (2, played
+on the real text): Unyielding Krumar's ability is offered, charges {1}{W}, asks for nothing, and
+after resolution the creature HAS first strike through the layer combat reads — gone on the next
+turn; Stream Hopper's "{U/R}" is payable with red alone and with blue alone, and with green alone
+it is neither offered nor accepted (sabotaged once — grant flying, expect first strike — and it
+failed). Pool at regeneration: **7,306 → 7,496** (+190, nothing left; index 7,528/7,528, `--check`
+clean). Read against the two measurements rather than either headline: ~160 of the newcomers carry
+one of the two grant sentences (131 activated, ~29 triggered — so most of the 58 unprobed trigger
+heads did NOT compile, and the family delivered under its 182), 27 came in on the hybrid cost alone
+(the ten Lockets, Trostani's {G/W} pump, the Shadowmoor hybrids), and 6 — Stream Hopper among them —
+needed both.
+
+**Measured and left for the next lanes** (`probe-costs`, the whole corpus, cost refused while the body
+compiles): *"discard a card"* as an activation cost — 66 cards blocked by it alone, 92 with its
+variants (*a creature card*, *a land card*, *at random*, *discard ~*); *"exile ~ from your
+graveyard"* — 33, a generic graveyard ability; *"tap an untapped creature you control"* and its
+counts and nouns — ~40; *{Q}* — 8; Phyrexian activation costs — 5; snow — 6.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.
