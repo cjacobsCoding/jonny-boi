@@ -624,6 +624,14 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   'exileUntilLeaves',
   'returnExiledByThis',
   /*
+   * §3.162 — the THIRD linked-exile tail (Skyclave Apparition): the exiled
+   * card's owner gets an X/X token when the exiler leaves. SAFE by the same
+   * argument as the pair above — it walks the two exiles for the link and
+   * creates a token, which is a new object but not a decklist card; nothing is
+   * drawn, searched or revealed.
+   */
+  'tokenForExiledByThis',
+  /*
    * COPYING A TRIGGERED ABILITY — SAFE. The copy is a stack object, never a
    * card: nothing is drawn, searched or revealed by the copy machinery itself,
    * and no decklist instance changes identity. The copied ability may of course
