@@ -326,6 +326,9 @@ export const CARD_DEFINITION_FIELD_SCAN: {
   attachment: 'otherObject',
   backFace: 'otherFace',
   frontFace: 'otherFace',
+  // §3.163 — a god's non-creature form is its own base definition minus one
+  // type; the base is what the board already scans, so the form adds nothing.
+  creatureForm: 'otherFace',
   // --- everything else: no EffectRef is reachable from the declared type ---
   id: 'noEffectRefs',
   name: 'noEffectRefs',
@@ -341,6 +344,7 @@ export const CARD_DEFINITION_FIELD_SCAN: {
   power: 'noEffectRefs',
   toughness: 'noEffectRefs',
   characteristicPT: 'noEffectRefs',
+  creatureUnlessDevotion: 'noEffectRefs',
   loyalty: 'noEffectRefs',
   defense: 'noEffectRefs',
   legendary: 'noEffectRefs',

@@ -36,5 +36,5 @@
 +2 Tyvar's Stand                // ✅ compiles — §3.162 (keyword list on a pump)
 +2 Spike Feeder                 // ✅ compiles — §3.162 (remove-counters cost)
 +2 Voice of the Blessed         // ✅ compiles — §3.162 (counter-threshold static)
-+2 Heliod, Sun-Crowned          // ✗ "isn't a creature" while devotion < 5 is a type layer — §3.163; rides the deck's wish-list until then
++2 Heliod, Sun-Crowned          // ✅ compiles — §3.163 (devotion, and the gods' type layer)
 +2 Selvala, Explorer Returned   // ✗ parley's mana AMOUNT is board-derived (the Axebane Guardian family) — §3.164; wish-list until then

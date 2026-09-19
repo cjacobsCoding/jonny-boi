@@ -292,6 +292,9 @@ export type { TargetRestriction } from './targeting.js';
 // §3.150 - the printed BOUND on a target selector ("target creature with power
 // 5 or greater"). A spec is either the bare noun or the noun plus its bound.
 export type { TargetBound, TargetNumericProperty, BoundedTarget, TargetSpec } from './targeting.js';
+// §3.163 — devotion (CR 700.5) and the gods' "isn't a creature" type layer.
+export { devotionTo, devotionOfCost, settleDevotionForms, nonCreatureFormOf, creatureFormOf } from './devotion.js';
+export type { CreatureUnlessDevotion } from './devotion.js';
 export {
   TARGET_RESTRICTION_PARAM,
   DEFAULT_TARGET_RESTRICTION,

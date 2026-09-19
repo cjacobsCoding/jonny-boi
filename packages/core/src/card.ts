@@ -22,6 +22,7 @@ import type { LandPlayZone } from './actions.js';
 // Type-only, so it is erased at build time and no runtime import cycle exists
 // (`copy.ts` imports this module's `unionProtection` for real).
 import type { CopyAsEntersSpec } from './copy.js';
+import type { CreatureUnlessDevotion } from './devotion.js';
 import type { ManaSpendKind, ManaSpendPurpose, ManaSpendRestriction } from './spend-restriction.js';
 // TYPE-ONLY, and deliberately so: `choices.ts` imports this module for its colour
 // and subtype readers, so a VALUE import here would close a runtime cycle. A
@@ -705,6 +706,22 @@ export interface CardDefinition {
    * what a count means.
    */
   readonly characteristicPT?: CharacteristicPT;
+  /**
+   * §3.163 — "As long as your devotion to white is less than five, ~ isn't a
+   * creature" (the Theros gods; 23 cards print the shape, 11 in one colour and
+   * 12 in a pair). While the controller's devotion to `colors` is below `min`
+   * the permanent carries its NON-CREATURE FORM — this definition minus the
+   * creature type — and is a creature again the moment devotion reaches it.
+   * The layer is a definition swap like a transform or a copy; see
+   * `devotion.ts` for why, and for when it is settled.
+   */
+  readonly creatureUnlessDevotion?: CreatureUnlessDevotion;
+  /**
+   * Set ONLY on a non-creature form made by `nonCreatureFormOf`: the base
+   * definition it derives from, which is what the zone reset restores and what
+   * the layer re-derives from. Absent on every printed definition.
+   */
+  readonly creatureForm?: CardDefinition;
   /**
    * Printed starting loyalty — planeswalkers only. The permanent ENTERS with this
    * many loyalty counters (CR 306.5b), stored in `CardInstance.counters` under
@@ -1513,6 +1530,19 @@ export type DerivedCountName =
   | 'creaturesYouControlWithDefender'
   /** Distinct card types among cards in ALL graveyards (Tarmogoyf). */
   | 'cardTypesInAllGraveyards'
+  /**
+   * §3.163 — "your devotion to white" (CR 700.5): the white mana symbols among
+   * the mana costs of permanents you control, hybrid faces included. Five rows,
+   * one per colour, because the printed phrase names one colour and the count
+   * is read by "where X is your devotion to black" (Gray Merchant of Asphodel),
+   * "…equal to your devotion to blue" (Master of Waves) and the gods' type
+   * layer through one function, `devotionTo`.
+   */
+  | 'devotionToWhite'
+  | 'devotionToBlue'
+  | 'devotionToBlack'
+  | 'devotionToRed'
+  | 'devotionToGreen'
   /**
    * How many times the SPELL that produced this effect was kicked — "for each
    * time it was kicked" on a multikicker card.

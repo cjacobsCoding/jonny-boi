@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 7103 cards.
+ * 7115 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -5951,6 +5951,23 @@ const POOL_0: readonly CardDefinition[] = [
       modifies: { power: 1, toughness: 3, keywords: { deathtouch: true } },
     },
   },
+  // Target creature gets +X/+X until end of turn, where X is your devotion to green. (Each {G} in the mana costs of permanents you control counts toward your devotion to green.)
+  {
+    id: '19353629-07be-47e2-a7d5-3a5e5e1120c8',
+    name: 'Aspect of Hydra',
+    types: ['instant'],
+    cost: { G: 1 },
+    effects: [
+      {
+        primitive: 'pumpUntilEndOfTurn',
+        params: {
+          power: { countOf: 'devotionToGreen' },
+          toughness: { countOf: 'devotionToGreen' },
+          targets: 'creature',
+        },
+      },
+    ],
+  },
   // Enchant creature
   // Enchanted creature has shroud. (It can't be the target of spells or abilities.)
   // When this Aura is put into a graveyard from the battlefield, return it to its owner's hand.
@@ -9233,6 +9250,9 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_1: readonly CardDefinition[] = [
   // Haste
   // {T}: Add one mana of any color. Spend this mana only to cast a creature spell.
   {
@@ -9254,9 +9274,6 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_1: readonly CardDefinition[] = [
   // Exile target card from a graveyard. Create a 1/1 white and black Spirit creature token with flying.
   {
     id: '396bdd5f-2aad-48ba-a4b1-f2b2365a1a53',
@@ -10785,6 +10802,33 @@ const POOL_1: readonly CardDefinition[] = [
       label: 'Equip {2}',
       modifies: { power: 1, toughness: 0, keywords: { wither: true } },
     },
+  },
+  // When this creature enters, target creature an opponent controls gets -X/-X until end of turn, where X is your devotion to black. (Each {B} in the mana costs of permanents you control counts toward your devotion to black.)
+  {
+    id: '7865c079-1d91-48d4-852d-d104b6e0c157',
+    name: 'Blight-Breath Catoblepas',
+    types: ['creature'],
+    cost: { generic: 4, B: 2 },
+    power: 3,
+    toughness: 2,
+    subtypes: ['beast'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: {
+              power: { countOf: 'devotionToBlack', times: -1 },
+              toughness: { countOf: 'devotionToBlack', times: -1 },
+              targets: 'creatureAnOpponentControls',
+            },
+          },
+        ],
+        label: 'Enters: target creature an opponent controls gets -x/-x until end of turn, where x is your devotion to black',
+        targets: 'creatureAnOpponentControls',
+      },
+    ],
   },
   // Toxic 1 (Players dealt combat damage by this creature also get a poison counter.)
   // When this creature dies, proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.)
@@ -18130,6 +18174,9 @@ const POOL_1: readonly CardDefinition[] = [
       modifies: { power: 2, toughness: 2, keywords: { menace: true } },
     },
   },
+];
+
+const POOL_2: readonly CardDefinition[] = [
   // Changeling (This card is every creature type.)
   // Reach
   {
@@ -18162,9 +18209,6 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_2: readonly CardDefinition[] = [
   // As this land enters, you may reveal an Island or Swamp card from your hand. If you don't, this land enters tapped.
   // {T}: Add {U} or {B}.
   {
@@ -26998,6 +27042,9 @@ const POOL_2: readonly CardDefinition[] = [
       label: 'Enchant creature',
     },
   },
+];
+
+const POOL_3: readonly CardDefinition[] = [
   // At the beginning of combat on your turn, populate. The token created this way gains haste. Sacrifice it at the beginning of the next end step. (To populate, create a token that's a copy of a creature token you control.)
   {
     id: 'd95490fe-44f2-4f83-b587-b0df402d38ed',
@@ -27033,9 +27080,6 @@ const POOL_2: readonly CardDefinition[] = [
       { primitive: 'dealDamageToEach', params: { amount: 1, creatures: true, players: true } },
     ],
   },
-];
-
-const POOL_3: readonly CardDefinition[] = [
   // Devil's Play deals X damage to any target.
   // Flashback {X}{R}{R}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
   {
@@ -36160,6 +36204,9 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_4: readonly CardDefinition[] = [
   {
     id: '89f08297-f477-4330-a99e-3f0847c31364',
     name: 'Fearless Halberdier',
@@ -36189,9 +36236,6 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_4: readonly CardDefinition[] = [
   // When this creature dies, amass Goblins 4. (Put four +1/+1 counters on an Army you control. It's also a Goblin. If you don't control an Army, create a 0/0 black Goblin Army creature token first.)
   {
     id: '2efe2dc7-3eaa-47f6-b1ae-f974c4a8ae79',
@@ -45369,6 +45413,9 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_5: readonly CardDefinition[] = [
   // When this creature dies, destroy target land.
   {
     id: '9f5b02af-140e-404d-bf8a-6a706b323a13',
@@ -45399,9 +45446,6 @@ const POOL_4: readonly CardDefinition[] = [
     keywords: { flying: true, cantBlock: true },
     subtypes: ['goblin'],
   },
-];
-
-const POOL_5: readonly CardDefinition[] = [
   {
     id: 'c3ed9cd3-5e6a-4e86-b120-ff27b744311d',
     name: 'Goblin Hero',
@@ -50508,6 +50552,90 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // Indestructible
+  // As long as your devotion to white is less than five, Heliod isn't a creature. (Each {W} in the mana costs of permanents you control counts toward your devotion to white.)
+  // Other creatures you control have vigilance.
+  // {2}{W}{W}: Create a 2/1 white Cleric enchantment creature token.
+  {
+    id: 'b83e9693-4996-498c-95f7-884d40341298',
+    name: 'Heliod, God of the Sun',
+    types: ['enchantment', 'creature'],
+    cost: { generic: 3, W: 1 },
+    power: 5,
+    toughness: 6,
+    legendary: true,
+    keywords: { indestructible: true },
+    subtypes: ['god'],
+    creatureUnlessDevotion: { colors: ['W'], min: 5 },
+    activated: [
+      {
+        cost: { mana: { generic: 2, W: 2 } },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 2,
+              toughness: 1,
+              name: 'Cleric',
+              colors: ['W'],
+              subtypes: ['Cleric'],
+              types: ['enchantment', 'creature'],
+            },
+          },
+        ],
+        label: '{2}{w}{w}: create a 2/1 white cleric enchantment creature token',
+      },
+    ],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'you', excludeSource: true },
+        keywords: { vigilance: true },
+        label: 'other creatures you control have vigilance',
+      },
+    ],
+  },
+  // Indestructible
+  // As long as your devotion to white is less than five, Heliod isn't a creature.
+  // Whenever you gain life, put a +1/+1 counter on target creature or enchantment you control.
+  // {1}{W}: Another target creature gains lifelink until end of turn.
+  {
+    id: '3245ff74-1f9c-4518-a23f-1579f338f232',
+    name: 'Heliod, Sun-Crowned',
+    types: ['enchantment', 'creature'],
+    cost: { generic: 2, W: 1 },
+    power: 5,
+    toughness: 5,
+    legendary: true,
+    keywords: { indestructible: true },
+    subtypes: ['god'],
+    creatureUnlessDevotion: { colors: ['W'], min: 5 },
+    triggers: [
+      {
+        condition: { on: 'gainLife', who: 'you' },
+        effects: [
+          {
+            primitive: 'addCounters',
+            params: { amount: 1, targets: 'creatureOrEnchantmentYouControl' },
+          },
+        ],
+        label: 'Gain life: put a +1/+1 counter on target creature or enchantment you control',
+        targets: 'creatureOrEnchantmentYouControl',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 1, W: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordUntilEndOfTurn',
+            params: { keywords: { lifelink: true }, targets: 'creature', excludeSelf: true },
+          },
+        ],
+        targetsExcludeSelf: true,
+        label: '{1}{w}: another target creature gains lifelink until end of turn',
+      },
+    ],
+  },
   // When this creature enters, you may search your library for an Aura card, reveal it, put it into your hand, then shuffle.
   {
     id: 'cafce2f5-f4f4-465b-96dc-bcdd29d4e4bb',
@@ -53995,6 +54123,9 @@ const POOL_5: readonly CardDefinition[] = [
     subtypes: ['vampire'],
     madness: { generic: 2, R: 1 },
   },
+];
+
+const POOL_6: readonly CardDefinition[] = [
   // This artifact enters with three oil counters on it.
   // {4}, {T}, Remove an oil counter from this artifact: Create a 3/3 colorless Phyrexian Golem artifact creature token. Activate only as a sorcery.
   {
@@ -54067,9 +54198,6 @@ const POOL_5: readonly CardDefinition[] = [
     ],
     producesOptions: [{ W: 1 }, { B: 1 }, { G: 1 }],
   },
-];
-
-const POOL_6: readonly CardDefinition[] = [
   {
     id: 'ff7a4769-7a64-4016-8db0-b56c6b98aff3',
     name: 'Independent Troops',
@@ -55394,6 +55522,42 @@ const POOL_6: readonly CardDefinition[] = [
         cost: { mana: { generic: 3, G: 1 } },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
         label: '{3}{g}: ~ gets +2/+2 until end of turn',
+      },
+    ],
+  },
+  // Indestructible
+  // As long as your devotion to red and white is less than seven, Iroas isn't a creature.
+  // Creatures you control have menace.
+  // Prevent all damage that would be dealt to attacking creatures you control.
+  {
+    id: 'b4036bb7-835d-4690-aca1-1ab566776e9a',
+    name: 'Iroas, God of Victory',
+    types: ['enchantment', 'creature'],
+    cost: { generic: 2, W: 1, R: 1 },
+    power: 7,
+    toughness: 4,
+    legendary: true,
+    keywords: { indestructible: true },
+    subtypes: ['god'],
+    creatureUnlessDevotion: { colors: ['R', 'W'], min: 7 },
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'you' },
+        keywords: { menace: true },
+        label: 'creatures you control have menace',
+      },
+    ],
+    replacements: [
+      {
+        event: 'damage',
+        applies: {
+          recipientController: 'you',
+          recipientKind: 'permanent',
+          recipientFilter: { anyOfTypes: ['creature'] },
+          recipientAttacking: true,
+        },
+        outcome: { preventAll: true },
+        label: 'prevent all damage that would be dealt to attacking creatures you control',
       },
     ],
   },
@@ -57882,6 +58046,48 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // Indestructible
+  // As long as your devotion to green and white is less than seven, Karametra isn't a creature.
+  // Whenever you cast a creature spell, you may search your library for a Forest or Plains card, put it onto the battlefield tapped, then shuffle.
+  {
+    id: '2bd9d26e-984c-4cf8-8c46-447f9776668f',
+    name: 'Karametra, God of Harvests',
+    types: ['enchantment', 'creature'],
+    cost: { generic: 3, W: 1, G: 1 },
+    power: 6,
+    toughness: 7,
+    legendary: true,
+    keywords: { indestructible: true },
+    subtypes: ['god'],
+    creatureUnlessDevotion: { colors: ['G', 'W'], min: 7 },
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellType: 'creature' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may search your library for a forest or plains card, put it onto the battlefield tapped, then shuffle',
+              valence: 'gain',
+              effects: [
+                {
+                  primitive: 'searchLibrary',
+                  params: {
+                    who: 'controller',
+                    count: 1,
+                    filter: { anyOfTypes: ['land'], anyOfSubtypes: ['forest', 'plains'] },
+                    destination: 'battlefield',
+                    tapped: true,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        label: 'Cast creature: you may search your library for a forest or plains card, put it onto the battlefield tapped, then shuffle',
+      },
+    ],
+  },
   // Other Warriors you control get +1/+1.
   {
     id: '6f921dca-ce93-42d1-87b1-149973558467',
@@ -59573,6 +59779,23 @@ const POOL_6: readonly CardDefinition[] = [
         condition: { on: 'dies' },
         effects: [{ primitive: 'dealDamageToEach', params: { amount: 2, opponents: true } }],
         label: 'Dies: it deals 2 damage to each opponent',
+      },
+    ],
+  },
+  // Creatures you control get +X/+X until end of turn, where X is your devotion to green. (Each {G} in the mana costs of permanents you control counts toward your devotion to green.)
+  {
+    id: 'b1b6b7a7-0ac8-470a-949b-4779ded95359',
+    name: 'Klothys\'s Design',
+    types: ['sorcery'],
+    cost: { generic: 5, G: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: {
+          power: { countOf: 'devotionToGreen' },
+          toughness: { countOf: 'devotionToGreen' },
+          anyOfTypes: ['creature'],
+        },
       },
     ],
   },
@@ -63289,6 +63512,9 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_7: readonly CardDefinition[] = [
   // Menace
   // Whenever a nontoken Knight you control dies, each opponent loses 1 life and you draw a card.
   {
@@ -63421,9 +63647,6 @@ const POOL_6: readonly CardDefinition[] = [
     ],
     produces: ['U'],
   },
-];
-
-const POOL_7: readonly CardDefinition[] = [
   // Vigilance
   {
     id: 'c8f6cc1f-b7e4-470d-8d48-ef848d7c1116',
@@ -72321,6 +72544,9 @@ const POOL_7: readonly CardDefinition[] = [
     keywords: { reach: true },
     subtypes: ['spider'],
   },
+];
+
+const POOL_8: readonly CardDefinition[] = [
   // Reach (This creature can block creatures with flying.)
   {
     id: 'f9b1628d-aacd-4e19-9ebb-bcd9b2842c91',
@@ -72427,9 +72653,6 @@ const POOL_7: readonly CardDefinition[] = [
     toughness: 5,
     subtypes: ['lizard'],
   },
-];
-
-const POOL_8: readonly CardDefinition[] = [
   // {T}: Add {C}.
   // {1}{U}{B}, {T}: Target player mills three cards.
   {
@@ -73995,6 +74218,41 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+  // Indestructible
+  // As long as your devotion to green is less than five, Nylea isn't a creature. (Each {G} in the mana costs of permanents you control counts toward your devotion to green.)
+  // Other creatures you control have trample.
+  // {3}{G}: Target creature gets +2/+2 until end of turn.
+  {
+    id: 'f185a734-a32a-4244-88e8-dabafbfd064f',
+    name: 'Nylea, God of the Hunt',
+    types: ['enchantment', 'creature'],
+    cost: { generic: 3, G: 1 },
+    power: 6,
+    toughness: 6,
+    legendary: true,
+    keywords: { indestructible: true },
+    subtypes: ['god'],
+    creatureUnlessDevotion: { colors: ['G'], min: 5 },
+    activated: [
+      {
+        cost: { mana: { generic: 3, G: 1 } },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: 2, toughness: 2, targets: 'creature' },
+          },
+        ],
+        label: '{3}{g}: target creature gets +2/+2 until end of turn',
+      },
+    ],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'you', excludeSource: true },
+        keywords: { trample: true },
+        label: 'other creatures you control have trample',
+      },
+    ],
+  },
   // Trample
   // Other creatures you control have trample.
   {
@@ -74011,6 +74269,29 @@ const POOL_8: readonly CardDefinition[] = [
         affects: { anyOfTypes: ['creature'], controller: 'you', excludeSource: true },
         keywords: { trample: true },
         label: 'other creatures you control have trample',
+      },
+    ],
+  },
+  // When this creature enters, target creature you control gets +X/+0 until end of turn, where X is your devotion to green. (Each {G} in the mana costs of permanents you control counts toward your devotion to green.)
+  {
+    id: '2a4fe89a-0d2b-493f-883e-a1e0b0918340',
+    name: 'Nylea\'s Huntmaster',
+    types: ['creature'],
+    cost: { generic: 3, G: 1 },
+    power: 4,
+    toughness: 3,
+    subtypes: ['centaur', 'shaman'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: { power: { countOf: 'devotionToGreen' }, toughness: 0, targets: 'creatureYouControl' },
+          },
+        ],
+        label: 'Enters: target creature you control gets +x/+0 until end of turn, where x is your devotion to green',
+        targets: 'creatureYouControl',
       },
     ],
   },
@@ -81438,6 +81719,9 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_9: readonly CardDefinition[] = [
   // Psychotic Haze deals 1 damage to each creature and each player.
   // Madness {1}{B} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
   {
@@ -81552,9 +81836,46 @@ const POOL_8: readonly CardDefinition[] = [
     flashback: { W: 1 },
     effects: [{ primitive: 'exileTargetCardFromGraveyard', params: { targets: 'cardInAnyGraveyard' } }],
   },
-];
-
-const POOL_9: readonly CardDefinition[] = [
+  // Indestructible
+  // As long as your devotion to red is less than five, Purphoros isn't a creature.
+  // Whenever another creature you control enters, Purphoros deals 2 damage to each opponent.
+  // {2}{R}: Creatures you control get +1/+0 until end of turn.
+  {
+    id: '4736a2c4-c89c-48db-a104-6303e7e2eee8',
+    name: 'Purphoros, God of the Forge',
+    types: ['enchantment', 'creature'],
+    cost: { generic: 3, R: 1 },
+    power: 6,
+    toughness: 5,
+    legendary: true,
+    keywords: { indestructible: true },
+    subtypes: ['god'],
+    creatureUnlessDevotion: { colors: ['R'], min: 5 },
+    triggers: [
+      {
+        condition: {
+          on: 'permanentEnters',
+          who: 'you',
+          permanentFilter: { anyOfTypes: ['creature'] },
+          excludeSelf: true,
+        },
+        effects: [{ primitive: 'dealDamageToEach', params: { amount: 2, opponents: true } }],
+        label: 'another creature (you) enters: ~ deals 2 damage to each opponent',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2, R: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 0, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{2}{r}: creatures you control get +1/+0 until end of turn',
+      },
+    ],
+  },
   // When this creature dies, draw a card.
   {
     id: 'e26c576d-94c8-4f63-9f54-732fb1eade12',
@@ -90415,6 +90736,9 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_10: readonly CardDefinition[] = [
   // Whenever this creature attacks, each opponent loses 1 life and you gain 1 life.
   {
     id: 'b1daf5bb-c8e9-4e79-a532-ca92a9a885cd',
@@ -90623,9 +90947,6 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_10: readonly CardDefinition[] = [
   // Counter target spell.
   // Amass Orcs 1. (Put a +1/+1 counter on an Army you control. It's also an Orc. If you don't control an Army, create a 0/0 black Orc Army creature token first.)
   {
@@ -99502,6 +99823,9 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_11: readonly CardDefinition[] = [
   // Wither (This deals damage to creatures in the form of -1/-1 counters.)
   // Whenever this creature blocks or becomes blocked, it gets -3/-0 until end of turn.
   {
@@ -99678,9 +100002,6 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_11: readonly CardDefinition[] = [
   // Trample
   // Whenever this creature deals combat damage to a player, put a +1/+1 counter on it.
   {
@@ -108685,6 +109006,9 @@ const POOL_11: readonly CardDefinition[] = [
     subtypes: ['human', 'druid'],
     manaAbilities: [{ derivedColors: 'landsOpponentsControl' }],
   },
+];
+
+const POOL_12: readonly CardDefinition[] = [
   // Equipped creature gets +1/+0.
   // Whenever equipped creature dies, you gain 3 life.
   // Equip {1}
@@ -108919,9 +109243,6 @@ const POOL_11: readonly CardDefinition[] = [
     },
     costAssist: 'improvise',
   },
-];
-
-const POOL_12: readonly CardDefinition[] = [
   // Target creature gets -6/-6 until end of turn. You gain 2 life.
   {
     id: '4af17ae0-1035-4cb2-8974-98b377bfaa48',
@@ -111254,6 +111575,41 @@ const POOL_12: readonly CardDefinition[] = [
       },
     ],
   },
+  // Indestructible
+  // As long as your devotion to blue is less than five, Thassa isn't a creature. (Each {U} in the mana costs of permanents you control counts toward your devotion to blue.)
+  // At the beginning of your upkeep, scry 1.
+  // {1}{U}: Target creature you control can't be blocked this turn.
+  {
+    id: '9f9db424-e668-48b4-b275-7b35be4e1bf8',
+    name: 'Thassa, God of the Sea',
+    types: ['enchantment', 'creature'],
+    cost: { generic: 2, U: 1 },
+    power: 5,
+    toughness: 5,
+    legendary: true,
+    keywords: { indestructible: true },
+    subtypes: ['god'],
+    creatureUnlessDevotion: { colors: ['U'], min: 5 },
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [{ primitive: 'scry' }],
+        label: 'your upkeep: scry 1',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 1, U: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordUntilEndOfTurn',
+            params: { keywords: { unblockable: true }, targets: 'creatureYouControl' },
+          },
+        ],
+        label: '{1}{u}: target creature you control can\'t be blocked this turn',
+      },
+    ],
+  },
   // Draw three cards. Target player mills three cards.
   {
     id: '3ac987ac-3f81-4704-b42c-651f44670641',
@@ -112281,6 +112637,36 @@ const POOL_12: readonly CardDefinition[] = [
           filter: { anyOfTypes: ['land'], anyOfSubtypes: ['forest'] },
           destination: 'battlefield',
         },
+      },
+    ],
+  },
+  // Flash
+  // Flying
+  // When this creature enters, target creature an opponent controls gets -X/-0 until end of turn, where X is your devotion to blue. (Each {U} in the mana costs of permanents you control counts toward your devotion to blue.)
+  {
+    id: '242cdffb-5037-4d49-b194-4b60274a8758',
+    name: 'Threnody Singer',
+    types: ['creature'],
+    cost: { generic: 1, U: 1 },
+    power: 1,
+    toughness: 3,
+    keywords: { flash: true, flying: true },
+    subtypes: ['siren'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'pumpUntilEndOfTurn',
+            params: {
+              power: { countOf: 'devotionToBlue', times: -1 },
+              toughness: 0,
+              targets: 'creatureAnOpponentControls',
+            },
+          },
+        ],
+        label: 'Enters: target creature an opponent controls gets -x/-0 until end of turn, where x is your devotion to blue',
+        targets: 'creatureAnOpponentControls',
       },
     ],
   },
@@ -117495,6 +117881,9 @@ const POOL_12: readonly CardDefinition[] = [
     changeling: true,
     subtypes: ['shapeshifter'],
   },
+];
+
+const POOL_13: readonly CardDefinition[] = [
   // {7}, {T}, Sacrifice this artifact: Destroy target permanent.
   {
     id: 'e142122f-3a04-436e-a958-dc2224b4fc6d',
@@ -117680,9 +118069,6 @@ const POOL_12: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_13: readonly CardDefinition[] = [
   // Whenever another creature you control dies, put a +1/+1 counter on this creature.
   {
     id: '5f48622a-abf3-407f-921f-77c29d59ba8e',
@@ -126117,6 +126503,9 @@ const POOL_13: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_14: readonly CardDefinition[] = [
   // ({T}: Add {R} or {G}.)
   // This land enters tapped.
   {
@@ -126254,9 +126643,6 @@ const POOL_13: readonly CardDefinition[] = [
     toughness: 4,
     subtypes: ['beast'],
   },
-];
-
-const POOL_14: readonly CardDefinition[] = [
   // Vigilance (Attacking doesn't cause this creature to tap.)
   {
     id: 'ced54aa6-c8ee-451f-91cd-967fe766ec13',

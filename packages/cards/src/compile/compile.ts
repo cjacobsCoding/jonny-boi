@@ -666,6 +666,8 @@ interface Assembly {
   asEntersChoice?: import('@jonny-boi/core').AsEntersChoice;
   /** "~ is the chosen type in addition to its other types". */
   isChosenSubtype?: boolean;
+  /** §3.163 — the gods' devotion condition, once the line prints it. */
+  creatureUnlessDevotion?: CardDefinition['creatureUnlessDevotion'];
   /** The printed "Kicker {COST}", once some line prints it. */
   kicker?: ManaCost;
   /**
@@ -780,6 +782,7 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   }
   if (contribution.asEntersChoice !== undefined) assembly.asEntersChoice = contribution.asEntersChoice;
   if (contribution.isChosenSubtype) assembly.isChosenSubtype = true;
+  if (contribution.creatureUnlessDevotion !== undefined) assembly.creatureUnlessDevotion = contribution.creatureUnlessDevotion;
   if (contribution.kicker) assembly.kicker = contribution.kicker;
   if (contribution.additionalCost) assembly.additionalCost = contribution.additionalCost;
   if (contribution.multikicker) assembly.multikicker = contribution.multikicker;
@@ -2058,6 +2061,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(assembly.costAssist !== undefined ? { costAssist: assembly.costAssist } : {}),
     ...(assembly.asEntersChoice !== undefined ? { asEntersChoice: assembly.asEntersChoice } : {}),
     ...(assembly.isChosenSubtype ? { isChosenSubtype: true } : {}),
+    ...(assembly.creatureUnlessDevotion !== undefined ? { creatureUnlessDevotion: assembly.creatureUnlessDevotion } : {}),
     ...(xCount > 0 ? { xCost: xCount } : {}),
     ...(assembly.kicker ? { kicker: assembly.kicker } : {}),
     ...(assembly.additionalCost ? { additionalCost: assembly.additionalCost } : {}),
