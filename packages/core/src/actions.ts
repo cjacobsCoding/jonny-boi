@@ -6,6 +6,7 @@
  */
 
 import type { ChoiceAnswer } from './choices.js';
+import type { ManaProduction } from './mana.js';
 import type { InstanceId, PlayerId } from './state.js';
 
 /** Pass priority. The single always-legal action when you hold priority. */
@@ -77,6 +78,13 @@ export interface TapForManaAction {
   readonly kind: 'tapForMana';
   readonly player: PlayerId;
   readonly instanceId: InstanceId;
+  /**
+   * §3.164 — for an ability that adds its amount "in any combination of
+   * colors": the combination, which must sum to the amount over the ability's
+   * own colours (`splitMatchesAmount`). Omitted ⇒ the whole amount in the
+   * chosen `mode`'s colour. Refused on any other ability.
+   */
+  readonly split?: ManaProduction;
   /**
    * Which mana mode to activate, indexing the source's normalised mode list
    * (`manaModesOf`). A modal source — Birds of Paradise, a dual land — offers one

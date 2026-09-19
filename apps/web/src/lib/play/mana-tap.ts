@@ -15,7 +15,10 @@
  * the engine's menu gets right for free.
  */
 import {
+  manaAmountOf,
+  manaExtrasOf,
   manaModesOf,
+  scaleProduction,
   MANA_COLORS,
   type CardInstance,
   type GameAction,
@@ -55,17 +58,32 @@ function permanentById(state: ManaTapBoard, id: InstanceId): CardInstance | unde
   return state.battlefield.find((c) => c.instanceId === id);
 }
 
-/** Describe one mode as its produced colours, e.g. `['C','C']` for a Sol Ring. */
-function colorsOfMode(card: CardInstance, mode: number | undefined): ManaColor[] {
+/**
+ * Describe one mode as its produced colours, e.g. `['C','C']` for a Sol Ring.
+ *
+ * §3.164 — a board-derived AMOUNT (Gaea's Cradle, Axebane Guardian) scales the
+ * mode by the same reader the engine applies, so the button says "3 G" on the
+ * board that makes three; a parley (Selvala) produces nothing the menu can
+ * count before its reveal, so its one mode reads empty and is labelled below.
+ */
+function colorsOfMode(state: ManaTapBoard, card: CardInstance, mode: number | undefined): ManaColor[] {
   const modes = manaModesOf(card.def);
   const chosen = modes[mode ?? 0];
   if (!chosen) return [];
+  const amountSpec = card.def.manaAbilities === undefined ? undefined : manaExtrasOf(card.def)?.[mode ?? 0]?.ability.amount;
+  const production = amountSpec === undefined ? chosen : scaleProduction(chosen, manaAmountOf(state, card, amountSpec));
   const out: ManaColor[] = [];
   for (const color of MANA_COLORS) {
-    const n = chosen[color] ?? 0;
+    const n = production[color] ?? 0;
     for (let i = 0; i < n; i++) out.push(color);
   }
   return out;
+}
+
+/** Whether this mode is a parley — its mana is decided by a reveal, not printed. */
+function isParleyMode(card: CardInstance, mode: number | undefined): boolean {
+  if (card.def.manaAbilities === undefined) return false;
+  return manaExtrasOf(card.def)?.[mode ?? 0]?.ability.rider?.parley !== undefined;
 }
 
 /** "G", "2 C", or "—" when a mode somehow produces nothing (never in practice). */
@@ -87,12 +105,14 @@ export function manaTapMenu(state: ManaTapBoard, actions: readonly GameAction[])
     if (action.kind !== 'tapForMana') continue;
     const card = permanentById(state, action.instanceId);
     if (!card) continue;
-    const colors = colorsOfMode(card, action.mode);
+    const colors = colorsOfMode(state, card, action.mode);
     const option: ManaTapOption = {
       instanceId: action.instanceId,
       mode: action.mode,
       colors,
-      label: labelForColors(colors),
+      // A parley's mana is whatever the reveal earns; the button says so
+      // rather than showing the "—" of a mode that makes nothing.
+      label: isParleyMode(card, action.mode) ? 'Parley' : labelForColors(colors),
     };
     const existing = menu.get(action.instanceId);
     if (existing) existing.push(option);
