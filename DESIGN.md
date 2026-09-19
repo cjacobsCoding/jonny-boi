@@ -10711,14 +10711,14 @@ derived mana, the Lab pickers, and this section.
 
 §3.158 built the gate ("can this deck be played?" — one funnel, four consumers) for exactly this
 moment, and named it: *the moment the pool is the whole of Scryfall, luck is the only thing holding
-it*. This section is that moment. The browsable pool goes from the 7,147 cards the engine plays to
+it*. This section is that moment. The browsable pool goes from the 7,168 cards the engine plays to
 the **32,338 the corpus knows** (the 32,341-card private corpus of `fetch-full-corpus.mjs`, which
 already excludes `set_type: funny`, digital-only cards and non-card layouts — his "stupid sets" line
 was drawn there in §3.71 — less three names the two tiers share once normalized).
 
 **Two tiers, because the shell has to work offline and 32,000 cards do not fit in it.** The POOL
 index stays bundled as before: it is what the engine plays, and a deck must open with no network.
-The CORPUS index (`packages/data-tools/data/corpus-index.json`, 25,191 cards) is everything else,
+The CORPUS index (`packages/data-tools/data/corpus-index.json`, 25,170 cards on the merged tree) is everything else,
 written by the same `--corpus` pipeline run that writes the pool index and subtracted from it **by
 the same front-face name key the pool resolved on**, so a card is in exactly one tier and a
 regeneration moves it rather than duplicating it. Its records are RAW Scryfall records cut to the
@@ -10730,7 +10730,7 @@ repo; the browser's cache key changes exactly when the data does). It is fetched
 expanded in 2,000-card macrotask chunks so the shell keeps painting, and it is deliberately **not
 precached** — the service worker caches it CacheFirst on first use (`vite.config.ts`), so the second
 visit is offline-capable and the first offline visit says so in the Cards view rather than pretending
-the pool is the world ("The full card list could not be loaded — showing the 7,147 cards the engine
+the pool is the world ("The full card list could not be loaded — showing the 7,168 cards the engine
 plays. It needs one visit online. Try again").
 
 **Image URLs are a function of the printing id.** `https://cards.scryfall.io/<size>/<face>/<a>/<b>/<id>.jpg`
@@ -10745,7 +10745,7 @@ record carries nothing; a synthesized record with a non-uuid id still degrades t
 (`'all'` — his default: everything, marked — or `'playable'`) answered by a caller-supplied
 predicate, so the filter module stays free of the engine pool; the predicate (`isPlayableCard`) is
 two map lookups against the memoized sim pool, because the browser asks it for 32,000 cards per
-keystroke. The toolbar gains **All cards / Playable** and reads "32,338 cards · 7,147 playable"; a
+keystroke. The toolbar gains **All cards / Playable** and reads "32,338 cards · 7,168 playable"; a
 tile the engine cannot play wears **Not playable yet** over dimmed art, in the Cards browser AND the
 deck builder's pool (where a card is added, which is where it matters most); the Lab's "add"
 picker lists playable cards only, because a swap the engine cannot simulate is not a test. The
@@ -10763,8 +10763,8 @@ sharing a pool name never shadows it), `lib/filter.test.ts` (the playable filter
 (derivable URLs dropped and still resolved; a non-uuid, URL-less record degrades),
 `components/unplayable-marking.test.ts` (static renders: the tile's badge, the grid's predicate,
 the toolbar's toggle and count, the detail view's sentence for a corpus card and its silence for a
-pool card). **In the browser**, on this branch: Cards showed *32,338 cards · 7,147 playable* with
-19 of the first 24 tiles badged; *Playable* → 7,147 and no badges; opening *1996 World Champion*
+pool card). **In the browser**, on this branch (before the §3.164 merge, so 7,147 playable then): Cards showed
+*32,338 cards · 7,147 playable* with 19 of the first 24 tiles badged; *Playable* → 7,147 and no badges; opening *1996 World Champion*
 read "Not playable yet. You can add it to a deck, but that deck cannot be played or tested until the
 engine learns: the "Summon" card type; …"; in Deck Builder, *Fledgling Mawcor* (morph) added to
 Thune's Life put ⚠ on its row ("Can't be simulated yet — needs a rules template the compiler does
