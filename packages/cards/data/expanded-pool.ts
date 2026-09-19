@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 6912 cards.
+ * 7010 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -1865,30 +1865,6 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
-  // When this enchantment enters, it deals X damage to any target.
-  // Creatures you control have trample.
-  {
-    id: 'd9039a58-2f17-4b8a-b714-3a2f0b46f057',
-    name: 'Ajani\'s Anguish',
-    types: ['enchantment'],
-    cost: { R: 1 },
-    xCost: 1,
-    triggers: [
-      {
-        condition: { on: 'etb' },
-        effects: [{ primitive: 'dealDamage', params: { amount: { chosenX: true } } }],
-        label: 'Enters: it deals x damage to any target',
-        targets: 'any',
-      },
-    ],
-    statics: [
-      {
-        affects: { anyOfTypes: ['creature'], controller: 'you' },
-        keywords: { trample: true },
-        label: 'creatures you control have trample',
-      },
-    ],
-  },
   // At the beginning of your upkeep, you may gain 1 life.
   {
     id: 'de4da30d-5c72-4323-b305-7277038b4a05',
@@ -2157,6 +2133,30 @@ const POOL_0: readonly CardDefinition[] = [
         cost: { mana: { W: 1 }, tap: true },
         effects: [{ primitive: 'tapTarget', params: { targets: 'creature' } }],
         label: '{w}, {t}: tap target creature',
+      },
+    ],
+  },
+  // Vigilance
+  // {2}{R}: Creatures you control get +1/+0 until end of turn.
+  {
+    id: 'fe23019a-e432-4a27-8acb-b17728a1e8b0',
+    name: 'Akroan Phalanx',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { vigilance: true },
+    subtypes: ['human', 'soldier'],
+    activated: [
+      {
+        cost: { mana: { generic: 2, R: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 0, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{2}{r}: creatures you control get +1/+0 until end of turn',
       },
     ],
   },
@@ -2860,6 +2860,31 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flash
+  // Flying
+  // {5}: Creatures you control get +1/+1 until end of turn.
+  {
+    id: 'cfa00c0e-163d-4f59-b8b9-3ee9143d27bb',
+    name: 'Ambush Paratrooper',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 1,
+    toughness: 2,
+    keywords: { flash: true, flying: true },
+    subtypes: ['human', 'soldier'],
+    activated: [
+      {
+        cost: { mana: { generic: 5 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{5}: creatures you control get +1/+1 until end of turn',
+      },
+    ],
+  },
   // First strike, haste
   {
     id: '92a1bb12-636f-426a-af13-f3be532c7845',
@@ -2911,6 +2936,28 @@ const POOL_0: readonly CardDefinition[] = [
           },
         ],
         label: '{2}{u}: target creature can\'t be blocked this turn',
+      },
+    ],
+  },
+  // When this creature enters, creatures you control get +1/+1 until end of turn.
+  {
+    id: '82a2e1d9-6763-4024-a18b-982d96395553',
+    name: 'Ampryn Tactician',
+    types: ['creature'],
+    cost: { generic: 2, W: 2 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['human', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Enters: creatures you control get +1/+1 until end of turn',
       },
     ],
   },
@@ -3460,6 +3507,30 @@ const POOL_0: readonly CardDefinition[] = [
         condition: { on: 'leaves' },
         effects: [{ primitive: 'returnExiledByThis', params: { to: 'hand' } }],
         label: 'Leaves: return the exiled cards to their owners\' hands',
+      },
+    ],
+  },
+  // Flying
+  // When this creature enters, creatures you control get +1/+1 and gain vigilance until end of turn.
+  {
+    id: 'd00ffeb5-195c-45ad-a791-ec67f463d552',
+    name: 'Angel of the Dawn',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { keywords: { vigilance: true }, power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Enters: creatures you control get +1/+1 and gain vigilance until end of turn',
       },
     ],
   },
@@ -7505,6 +7576,41 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying
+  // Whenever you cast an instant or sorcery spell, creatures you control get +1/+0 and gain trample until end of turn.
+  {
+    id: '0b45ab13-9bb6-48af-8b37-d97b25801ac8',
+    name: 'Balmor, Battlemage Captain',
+    types: ['creature'],
+    cost: { U: 1, R: 1 },
+    power: 1,
+    toughness: 3,
+    legendary: true,
+    keywords: { flying: true },
+    subtypes: ['bird', 'wizard'],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellType: 'instant' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { keywords: { trample: true }, power: 1, toughness: 0, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Cast instant: creatures you control get +1/+0 and gain trample until end of turn',
+      },
+      {
+        condition: { on: 'castSpell', who: 'you', spellType: 'sorcery' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { keywords: { trample: true }, power: 1, toughness: 0, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Cast sorcery: creatures you control get +1/+0 and gain trample until end of turn',
+      },
+    ],
+  },
   // Kicker {4} (You may pay an additional {4} as you cast this spell.)
   // If this creature was kicked, it enters with three +1/+1 counters on it.
   {
@@ -7699,6 +7805,19 @@ const POOL_0: readonly CardDefinition[] = [
     },
     effects: [{ primitive: 'drawCards', params: { count: 3 } }],
   },
+  // Creatures you control get +1/+0 until end of turn.
+  {
+    id: 'a7792df3-e2ab-4e60-abee-f24b72807107',
+    name: 'Banners Raised',
+    types: ['instant'],
+    cost: { R: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 1, toughness: 0, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // {G}, {T}: Target creature gains trample until end of turn.
   // {U}, {T}: Target creature gains flying until end of turn.
   {
@@ -7756,6 +7875,19 @@ const POOL_0: readonly CardDefinition[] = [
           },
         ],
         label: '{1}, {t}, sacrifice ~: search your library for a basic forest, plains, or island card, put it onto the battlefield tapped, then shuffle',
+      },
+    ],
+  },
+  // Creatures you control get +0/+4 until end of turn.
+  {
+    id: 'b593f544-2d82-4237-b9a9-88503b5036cc',
+    name: 'Bar the Door',
+    types: ['instant'],
+    cost: { generic: 2, W: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 0, toughness: 4, anyOfTypes: ['creature'] },
       },
     ],
   },
@@ -9103,6 +9235,9 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_1: readonly CardDefinition[] = [
   // Target creature gets -4/-0 until end of turn.
   // Draw a card.
   {
@@ -9200,9 +9335,6 @@ const POOL_0: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_1: readonly CardDefinition[] = [
   // When this creature enters, draw a card, then discard a card.
   {
     id: 'ca2215dd-6300-49cf-b9b2-3a840b786c31',
@@ -14422,6 +14554,19 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+  // Creatures you control get +2/+0 until end of turn.
+  {
+    id: 'd10a0f92-c42d-4257-8f64-89fe26687fba',
+    name: 'Burn Bright',
+    types: ['instant'],
+    cost: { generic: 2, R: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 2, toughness: 0, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // Enchant creature
   // Enchanted creature has "{T}: This creature deals damage equal to its power to any target."
   {
@@ -15334,6 +15479,28 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+  // Landfall — Whenever a land you control enters, creatures you control get +1/+1 until end of turn.
+  {
+    id: '26b3938e-ebd7-4668-be3a-422c02ff5b08',
+    name: 'Canyon Jerboa',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 1,
+    toughness: 2,
+    subtypes: ['mouse'],
+    triggers: [
+      {
+        condition: { on: 'permanentEnters', who: 'you', permanentFilter: { anyOfTypes: ['land'] } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'land (you) enters: creatures you control get +1/+1 until end of turn',
+      },
+    ],
+  },
   {
     id: '3469d73e-6de1-4b91-83e3-b1714ac29268',
     name: 'Canyon Minotaur',
@@ -16081,6 +16248,28 @@ const POOL_1: readonly CardDefinition[] = [
           },
         ],
         label: '{2}{w}{w}, {t}: create a 1/1 white human creature token',
+      },
+    ],
+  },
+  // This land enters tapped unless you control a Mountain.
+  // {T}: Add {R}.
+  // {1}{R}{R}, {T}: Creatures you control get +1/+0 until end of turn.
+  {
+    id: '337f2d97-b317-4c10-b151-7acccf38fca8',
+    name: 'Castle Embereth',
+    types: ['land'],
+    entersTappedUnless: { controlsSubtype: ['mountain'] },
+    produces: ['R'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, R: 2 }, tap: true },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 0, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{1}{r}{r}, {t}: creatures you control get +1/+0 until end of turn',
       },
     ],
   },
@@ -17173,25 +17362,6 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
-  // Haste
-  // Whenever you cast a noncreature spell, put a +1/+1 counter on this creature.
-  {
-    id: '3a64c5f4-9cfc-4d19-bd99-13d619b1aa9d',
-    name: 'Chandra\'s Emberling',
-    types: ['creature'],
-    cost: { generic: 2, R: 1 },
-    power: 2,
-    toughness: 2,
-    keywords: { haste: true },
-    subtypes: ['gremlin', 'elemental'],
-    triggers: [
-      {
-        condition: { on: 'castSpell', who: 'you', spellTypeNoneOf: ['creature'] },
-        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
-        label: 'Cast noncreature: put a +1/+1 counter on ~',
-      },
-    ],
-  },
   // {T}: This creature deals 1 damage to target player or planeswalker.
   {
     id: '91d3e366-4da5-42c8-bbd5-a0c178c0da28',
@@ -17317,6 +17487,19 @@ const POOL_1: readonly CardDefinition[] = [
     toughness: 4,
     keywords: { flying: true },
     subtypes: ['dragon'],
+  },
+  // Creatures you control get +1/+1 until end of turn.
+  {
+    id: '000eded9-854c-408a-aadf-c26209e27432',
+    name: 'Charge',
+    types: ['instant'],
+    cost: { W: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+      },
+    ],
   },
   // Target creature gains trample until end of turn.
   // Draw a card.
@@ -17460,6 +17643,28 @@ const POOL_1: readonly CardDefinition[] = [
       label: 'Equip {1}',
       modifies: { power: 0, toughness: 0, keywords: { firstStrike: true, trample: true, haste: true } },
     },
+  },
+  // {4}{W}: Creatures you control get +1/+1 until end of turn.
+  {
+    id: 'a51764fe-0d75-4cfa-a699-0d9e7ffb7843',
+    name: 'Charismatic Vanguard',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 3,
+    toughness: 2,
+    subtypes: ['dwarf', 'soldier'],
+    activated: [
+      {
+        cost: { mana: { generic: 4, W: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{4}{w}: creatures you control get +1/+1 until end of turn',
+      },
+    ],
   },
   // Lifelink
   {
@@ -17817,6 +18022,19 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+  // Creatures you control get +1/+0 until end of turn.
+  {
+    id: 'ee70f692-35c4-4ea8-baad-c950725cfc30',
+    name: 'Chorus of Woe',
+    types: ['sorcery'],
+    cost: { B: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 1, toughness: 0, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // Enchant creature
   // When this Aura enters, draw a card.
   // Enchanted creature gets +0/+2.
@@ -17943,6 +18161,9 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_2: readonly CardDefinition[] = [
   // {1}, {T}: Put a +1/+1 counter on this creature.
   {
     id: '787b6916-3fce-41dd-ab52-f17546fd04ed',
@@ -18135,9 +18356,6 @@ const POOL_1: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_2: readonly CardDefinition[] = [
   // Creatures you control have "{T}: Add {G}."
   {
     id: 'f378ee17-bf8b-4a83-b42e-86da10817dba',
@@ -18257,6 +18475,28 @@ const POOL_2: readonly CardDefinition[] = [
         condition: { on: 'dies' },
         effects: [{ primitive: 'surveil', params: { count: 2 } }],
         label: 'Dies: surveil 2',
+      },
+    ],
+  },
+  // When this creature enters, creatures you control get +1/+1 until end of turn.
+  {
+    id: 'aa981489-4301-43f6-b1d7-2aa42e00cf75',
+    name: 'Civic Stalwart',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['elephant', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Enters: creatures you control get +1/+1 until end of turn',
       },
     ],
   },
@@ -18518,6 +18758,21 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+  // Affinity for Cats (This spell costs {1} less to cast for each Cat you control.)
+  // Creatures you control get +2/+2 until end of turn.
+  {
+    id: '4396049c-b976-4b7f-8ecd-564e24ebd631',
+    name: 'Claws Out',
+    types: ['instant'],
+    cost: { generic: 3, W: 2 },
+    castCostReductionPerPermanent: { amount: 1, filter: { anyOfSubtypes: ['Cat'] } },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 2, toughness: 2, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // This creature enters tapped.
   // {2}{B}: Return this card from your graveyard to your hand.
   {
@@ -18767,6 +19022,28 @@ const POOL_2: readonly CardDefinition[] = [
         condition: { on: 'gainLife', who: 'you' },
         effects: [{ primitive: 'loseLife', params: { amount: 1, whichPlayer: 'opponent' } }],
         label: 'Gain life: each opponent loses 1 life',
+      },
+    ],
+  },
+  // {4}{W}: Creatures you control get +1/+1 until end of turn.
+  {
+    id: '8c755ae6-badc-4dc8-bfa6-fdebcb00bfba',
+    name: 'Cliffside Lookout',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['kor', 'scout', 'ally'],
+    activated: [
+      {
+        cost: { mana: { generic: 4, W: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{4}{w}: creatures you control get +1/+1 until end of turn',
       },
     ],
   },
@@ -20829,6 +21106,27 @@ const POOL_2: readonly CardDefinition[] = [
     cost: { generic: 2, U: 1 },
     effects: [{ primitive: 'counterUnlessPaid', params: { targets: 'spell', unlessPaid: { generic: 4 } } }],
   },
+  // Creatures you control get +2/+1 until end of turn.
+  // Cycling {2} ({2}, Discard this card: Draw a card.)
+  {
+    id: '129c404b-2c1e-4f0b-bb4e-7e8e627a69a8',
+    name: 'Coordinated Charge',
+    types: ['instant'],
+    cost: { generic: 4, W: 1 },
+    cycling: [
+      {
+        cost: { generic: 2 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {2}',
+      },
+    ],
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 2, toughness: 1, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // Equipped creature gets +2/+2 and can't block.
   // Equip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)
   {
@@ -21727,6 +22025,64 @@ const POOL_2: readonly CardDefinition[] = [
           count: 2,
           keywords: { trample: true },
         },
+      },
+    ],
+  },
+  // Haste
+  // When this creature enters, creatures you control gain trample and get +X/+0 until end of turn, where X is the number of artifacts you control.
+  {
+    id: '47793a51-08c6-4ad2-a7e5-a4484d83a5cd',
+    name: 'Craterclaw Colossus',
+    types: ['artifact', 'creature'],
+    cost: { generic: 4, R: 3 },
+    power: 5,
+    toughness: 5,
+    keywords: { haste: true },
+    subtypes: ['beast', 'construct'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: {
+              keywords: { trample: true },
+              power: { countOf: 'permanentsMatching', filter: { anyOfTypes: ['artifact'] }, scope: 'you' },
+              toughness: 0,
+              anyOfTypes: ['creature'],
+            },
+          },
+        ],
+        label: 'Enters: creatures you control gain trample and get +x/+0 until end of turn, where x is the number of artifacts you control',
+      },
+    ],
+  },
+  // Haste
+  // When this creature enters, creatures you control gain trample and get +X/+X until end of turn, where X is the number of creatures you control.
+  {
+    id: '276f5cee-a501-4658-bd4d-7a044bf1ccbc',
+    name: 'Craterhoof Behemoth',
+    types: ['creature'],
+    cost: { generic: 5, G: 3 },
+    power: 5,
+    toughness: 5,
+    keywords: { haste: true },
+    subtypes: ['beast'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: {
+              keywords: { trample: true },
+              power: { countOf: 'creaturesYouControl' },
+              toughness: { countOf: 'creaturesYouControl' },
+              anyOfTypes: ['creature'],
+            },
+          },
+        ],
+        label: 'Enters: creatures you control gain trample and get +x/+x until end of turn, where x is the number of creatures you control',
       },
     ],
   },
@@ -23924,6 +24280,28 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+  // Whenever this creature attacks, creatures you control get +1/+1 until end of turn.
+  {
+    id: '7a136f26-ac66-407f-b389-357222d2c4a2',
+    name: 'Dauntless Veteran',
+    types: ['creature'],
+    cost: { generic: 1, W: 2 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Attacks: creatures you control get +1/+1 until end of turn',
+      },
+    ],
+  },
   // {B}{B}: Target creature gains shadow until end of turn. (It can block or be blocked by only creatures with shadow.)
   {
     id: '7e84bb94-d654-4d69-89d9-0a398a940125',
@@ -24107,6 +24485,30 @@ const POOL_2: readonly CardDefinition[] = [
     keywords: { flash: true, reach: true },
     subtypes: ['elf', 'archer'],
   },
+  // Flying
+  // When this creature enters, creatures you control get +1/+1 and gain vigilance until end of turn.
+  {
+    id: 'f7113ddc-cb3c-46da-a6c7-2567bd0affa9',
+    name: 'Dawnfeather Eagle',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['bird'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { keywords: { vigilance: true }, power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Enters: creatures you control get +1/+1 and gain vigilance until end of turn',
+      },
+    ],
+  },
   // Flash
   // When this creature enters, prevent the next 3 damage that would be dealt to any target this turn.
   // Evoke {W} (You may cast this spell for its evoke cost. If you do, it's sacrificed when it enters.)
@@ -24266,6 +24668,30 @@ const POOL_2: readonly CardDefinition[] = [
           },
         ],
         label: '{g}, sacrifice ~: search your library for a basic land card, put it onto the battlefield tapped, then shuffle',
+      },
+    ],
+  },
+  // Flying
+  // {4}{W}: Creatures you control get +1/+1 until end of turn.
+  {
+    id: '807db84f-addb-4ef0-b9ba-32b3e1bced3d',
+    name: 'Dawnwing Marshal',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true },
+    subtypes: ['cat', 'soldier'],
+    activated: [
+      {
+        cost: { mana: { generic: 4, W: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{4}{w}: creatures you control get +1/+1 until end of turn',
       },
     ],
   },
@@ -25403,6 +25829,42 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+  // Choose one —
+  // • Creatures you control get +1/+1 until end of turn.
+  // • Destroy target creature with power 4 or greater.
+  {
+    id: '85e4e1b5-77d6-4af4-b22e-6f6b4d129f5d',
+    name: 'Defend the Campus',
+    types: ['instant'],
+    cost: { generic: 3, W: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Creatures you control get +1/+1 until end of turn',
+          effects: [
+            {
+              primitive: 'grantKeywordToYoursUntilEndOfTurn',
+              params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+            },
+          ],
+        },
+        {
+          id: 'mode2',
+          label: 'Destroy target creature with power 4 or greater',
+          effects: [
+            {
+              primitive: 'destroyTarget',
+              params: { targets: { base: 'creature', bound: { atLeast: { property: 'power', value: 4 } } } },
+            },
+          ],
+          targets: { base: 'creature', bound: { atLeast: { property: 'power', value: 4 } } },
+        },
+      ],
+    },
+  },
   // Flash
   // Protection from white
   {
@@ -26206,6 +26668,19 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+  // Creatures you control get +2/+0 until end of turn.
+  {
+    id: '304cc153-36ac-4527-a6e2-91d994bcc35c',
+    name: 'Desperate Charge',
+    types: ['sorcery'],
+    cost: { generic: 2, B: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 2, toughness: 0, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // Target creature gets +2/+2 and gains flying until end of turn. You gain 2 life.
   {
     id: '69ce134a-25ef-4f8d-a385-7c29fc5707dc',
@@ -26503,6 +26978,9 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_3: readonly CardDefinition[] = [
   // Protection from black
   // When this creature enters, exile target black permanent.
   {
@@ -26897,9 +27375,6 @@ const POOL_2: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_3: readonly CardDefinition[] = [
   // Direct Current deals 2 damage to any target.
   // Jump-start (You may cast this card from your graveyard by discarding a card in addition to paying its other costs. Then exile this card.)
   {
@@ -27857,6 +28332,30 @@ const POOL_3: readonly CardDefinition[] = [
     cost: { generic: 3, W: 2 },
     foretell: { generic: 1, W: 2 },
     effects: [{ primitive: 'destroyAll' }],
+  },
+  // When this creature enters, creatures you control get +1/+0 and gain haste until end of turn.
+  // Foretell {4}{R} (During your turn, you may pay {2} and exile this card from your hand face down. Cast it on a later turn for its foretell cost.)
+  {
+    id: 'a4e125e4-103f-4a68-b85f-1382646da71e',
+    name: 'Doomskar Titan',
+    types: ['creature'],
+    cost: { generic: 4, R: 2 },
+    power: 4,
+    toughness: 4,
+    subtypes: ['giant', 'berserker'],
+    foretell: { generic: 4, R: 1 },
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { keywords: { haste: true }, power: 1, toughness: 0, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Enters: creatures you control get +1/+0 and gain haste until end of turn',
+      },
+    ],
   },
   // Defender
   // {2}{U}, {T}: Target player mills X cards, where X is the number of creatures you control with defender.
@@ -29790,6 +30289,30 @@ const POOL_3: readonly CardDefinition[] = [
       },
     },
   },
+  // Double strike
+  // {5}: Creatures you control get +1/+1 until end of turn.
+  {
+    id: 'c7e8c830-77ae-437f-8e28-ce61c5fde6b6',
+    name: 'Dual-Sun Adepts',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { doubleStrike: true },
+    subtypes: ['human', 'soldier'],
+    activated: [
+      {
+        cost: { mana: { generic: 5 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{5}: creatures you control get +1/+1 until end of turn',
+      },
+    ],
+  },
   // Flash
   // When this creature enters, copy target instant or sorcery spell. You may choose new targets for the copy.
   {
@@ -30215,6 +30738,28 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // {3}{W}: Creatures you control get +1/+1 until end of turn.
+  {
+    id: '1f9a61a1-454e-4d5b-a6dd-1a79fe9dedf3',
+    name: 'Dwarven Provisioner',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['dwarf', 'citizen'],
+    activated: [
+      {
+        cost: { mana: { generic: 3, W: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{3}{w}: creatures you control get +1/+1 until end of turn',
+      },
+    ],
+  },
   // Create two 2/1 red Dwarf Berserker creature tokens.
   // Foretell {1}{R} (During your turn, you may pay {2} and exile this card from your hand face down. Cast it on a later turn for its foretell cost.)
   {
@@ -30379,6 +30924,48 @@ const POOL_3: readonly CardDefinition[] = [
     keywords: { flying: true, vigilance: true },
     subtypes: ['bird'],
   },
+  // Flying
+  // When this creature enters, creatures you control get +1/+0 and gain first strike until end of turn.
+  // Plainscycling {1} ({1}, Discard this card: Search your library for a Plains card, reveal it, put it into your hand, then shuffle.)
+  {
+    id: '068a5bf7-6faf-41d5-924d-cdf387c1a193',
+    name: 'Eagles of the North',
+    types: ['creature'],
+    cost: { generic: 5, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['bird', 'soldier'],
+    cycling: [
+      {
+        cost: { generic: 1 },
+        effects: [
+          {
+            primitive: 'searchLibrary',
+            params: {
+              who: 'controller',
+              count: 1,
+              destination: 'hand',
+              filter: { anyOfSubtypes: ['plains'] },
+            },
+          },
+        ],
+        label: 'Plainscycling {1}',
+      },
+    ],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { keywords: { firstStrike: true }, power: 1, toughness: 0, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Enters: creatures you control get +1/+0 and gain first strike until end of turn',
+      },
+    ],
+  },
   {
     id: '659eeb25-b79b-4229-9d84-e28f6a636958',
     name: 'Earth Elemental',
@@ -30408,6 +30995,28 @@ const POOL_3: readonly CardDefinition[] = [
       {
         primitive: 'dealDamage',
         params: { amount: { countOf: 'landsYouControl' }, targets: 'creatureOrPlaneswalker' },
+      },
+    ],
+  },
+  // When this creature enters, creatures you control get +1/+1 until end of turn.
+  {
+    id: 'abcde784-d0cd-4bac-b1bf-bd686ac2f73d',
+    name: 'Earth-Origin Yak',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 2,
+    toughness: 4,
+    subtypes: ['ox'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Enters: creatures you control get +1/+1 until end of turn',
       },
     ],
   },
@@ -32099,6 +32708,30 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // First strike
+  // {7}{W}, {T}, Sacrifice this creature: Creatures you control get +2/+2 until end of turn.
+  {
+    id: '6fe64569-c1b6-4bd4-a742-6ee46ea5181c',
+    name: 'Encampment Keeper',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { firstStrike: true },
+    subtypes: ['dog'],
+    activated: [
+      {
+        cost: { mana: { generic: 7, W: 1 }, tap: true, sacrificeSelf: true },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 2, toughness: 2, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{7}{w}, {t}, sacrifice ~: creatures you control get +2/+2 until end of turn',
+      },
+    ],
+  },
   // Whenever you cast an enchantment spell, draw a card.
   {
     id: '3f50538b-f866-4e75-8856-2ad8af635011',
@@ -32214,6 +32847,46 @@ const POOL_3: readonly CardDefinition[] = [
         label: '{5}{b}: each opponent loses 2 life',
       },
     ],
+  },
+  // Choose one —
+  // • Target creature gets +5/+5 and gains trample until end of turn.
+  // • Creatures you control get +2/+2 and gain vigilance until end of turn.
+  {
+    id: '675b5fc7-51b2-4425-b053-a5d19c1595e0',
+    name: 'Engineered Might',
+    types: ['sorcery'],
+    cost: { generic: 3, W: 1, G: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Target creature gets +5/+5 and gains trample until end of turn',
+          effects: [
+            {
+              primitive: 'pumpUntilEndOfTurn',
+              params: { power: 5, toughness: 5, targets: 'creature' },
+            },
+            {
+              primitive: 'grantKeywordUntilEndOfTurn',
+              params: { keywords: { trample: true }, targets: 'creature' },
+            },
+          ],
+          targets: 'creature',
+        },
+        {
+          id: 'mode2',
+          label: 'Creatures you control get +2/+2 and gain vigilance until end of turn',
+          effects: [
+            {
+              primitive: 'grantKeywordToYoursUntilEndOfTurn',
+              params: { keywords: { vigilance: true }, power: 2, toughness: 2, anyOfTypes: ['creature'] },
+            },
+          ],
+        },
+      ],
+    },
   },
   // Engulfing Eruption deals 5 damage to target creature.
   {
@@ -33212,6 +33885,19 @@ const POOL_3: readonly CardDefinition[] = [
           },
         ],
         label: 'Pay 1 life: prevent the next 1 damage that would be dealt to ~ this turn',
+      },
+    ],
+  },
+  // Creatures you control get +2/+1 until end of turn.
+  {
+    id: 'f47dd220-6193-4e31-a1df-591b6424ad27',
+    name: 'Ethereal Guidance',
+    types: ['sorcery'],
+    cost: { generic: 2, W: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 2, toughness: 1, anyOfTypes: ['creature'] },
       },
     ],
   },
@@ -34360,6 +35046,14 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+  // Reveal the top five cards of your library. An opponent separates those cards into two piles. Put one pile into your hand and the other into your graveyard.
+  {
+    id: '04588d2f-9e90-4f83-b85e-67e4bc222a62',
+    name: 'Fact or Fiction',
+    types: ['instant'],
+    cost: { generic: 3, U: 1 },
+    effects: [{ primitive: 'revealAndOpponentSplitsPiles', params: { count: 5, rest: 'graveyard' } }],
+  },
   // Exile target card from a graveyard.
   // Cycling {B} ({B}, Discard this card: Draw a card.)
   {
@@ -34761,6 +35455,41 @@ const POOL_3: readonly CardDefinition[] = [
         params: { targets: 'creatureCardInYourGraveyard', to: 'battlefield' },
       },
     ],
+  },
+  // Choose one —
+  // • Creatures you control get +1/+1 until end of turn.
+  // • Creatures you control gain hexproof until end of turn. (They can't be the targets of spells or abilities your opponents control.)
+  {
+    id: '5c2cfbdc-8d40-4abb-afca-6c6d8e36185b',
+    name: 'Family Reunion',
+    types: ['instant'],
+    cost: { generic: 1, W: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Creatures you control get +1/+1 until end of turn',
+          effects: [
+            {
+              primitive: 'grantKeywordToYoursUntilEndOfTurn',
+              params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+            },
+          ],
+        },
+        {
+          id: 'mode2',
+          label: 'Creatures you control gain hexproof until end of turn',
+          effects: [
+            {
+              primitive: 'grantKeywordToYoursUntilEndOfTurn',
+              params: { keywords: { hexproof: true }, anyOfTypes: ['creature'] },
+            },
+          ],
+        },
+      ],
+    },
   },
   // Famine deals 3 damage to each creature and each player.
   {
@@ -35439,6 +36168,9 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_4: readonly CardDefinition[] = [
   // Destroy target creature.
   {
     id: 'c96ac326-de44-470b-a592-a4c2a052c091',
@@ -35914,9 +36646,6 @@ const POOL_3: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_4: readonly CardDefinition[] = [
   // ({T}: Add {U} or {B}.)
   // This land enters tapped.
   // Cycling {2} ({2}, Discard this card: Draw a card.)
@@ -37169,6 +37898,28 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // When this creature enters, creatures you control get +1/+1 and gain haste until end of turn.
+  {
+    id: 'fe7db99b-903f-43d8-bc60-cab2d914a0cb',
+    name: 'Flame-Kin Zealot',
+    types: ['creature'],
+    cost: { generic: 1, W: 1, R: 2 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['elemental', 'berserker'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { keywords: { haste: true }, power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Enters: creatures you control get +1/+1 and gain haste until end of turn',
+      },
+    ],
+  },
   // Haste
   // This creature attacks each combat if able.
   {
@@ -38393,6 +39144,24 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Creatures you control get +2/+2 and gain vigilance and lifelink until end of turn.
+  {
+    id: '3c3e9950-b0b9-425c-8b14-f6450882bd57',
+    name: 'For the Emperor!',
+    types: ['sorcery'],
+    cost: { generic: 3, W: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: {
+          keywords: { vigilance: true, lifelink: true },
+          power: 2,
+          toughness: 2,
+          anyOfTypes: ['creature'],
+        },
+      },
+    ],
+  },
   // {G}, Sacrifice a Forest: This creature gets +2/+2 until end of turn.
   {
     id: '5d621fad-3a50-4910-a302-23ae9e77ebde',
@@ -38691,6 +39460,41 @@ const POOL_4: readonly CardDefinition[] = [
     types: ['land'],
     entersTappedUnlessRevealed: { anyOfSubtypes: ['forest', 'plains'] },
     producesOptions: [{ G: 1 }, { W: 1 }],
+  },
+  // Choose one —
+  // • Creatures you control get +2/+0 until end of turn.
+  // • Creatures you control get +0/+2 until end of turn.
+  {
+    id: 'b47af529-6ba1-4900-a6f6-7647c9632e11',
+    name: 'Fortify',
+    types: ['instant'],
+    cost: { generic: 2, W: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Creatures you control get +2/+0 until end of turn',
+          effects: [
+            {
+              primitive: 'grantKeywordToYoursUntilEndOfTurn',
+              params: { power: 2, toughness: 0, anyOfTypes: ['creature'] },
+            },
+          ],
+        },
+        {
+          id: 'mode2',
+          label: 'Creatures you control get +0/+2 until end of turn',
+          effects: [
+            {
+              primitive: 'grantKeywordToYoursUntilEndOfTurn',
+              params: { power: 0, toughness: 2, anyOfTypes: ['creature'] },
+            },
+          ],
+        },
+      ],
+    },
   },
   // Creatures you control get +0/+1.
   // When this enchantment enters, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")
@@ -41121,20 +41925,6 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
-  // Flying
-  // Noncreature spells you cast cost {1} less to cast.
-  {
-    id: '9c334530-0880-46b5-a358-9603eee3cecf',
-    name: 'Geist of Saint Thalia',
-    types: ['creature'],
-    cost: { generic: 1, U: 1 },
-    power: 1,
-    toughness: 2,
-    legendary: true,
-    keywords: { flying: true },
-    subtypes: ['spirit', 'cleric'],
-    castCostReduction: { amount: 1, filter: { noneOfTypes: ['creature'] } },
-  },
   // Defender
   // At the beginning of your upkeep, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
   {
@@ -41488,6 +42278,25 @@ const POOL_4: readonly CardDefinition[] = [
         condition: { on: 'etb' },
         effects: [{ primitive: 'gainLife', params: { amount: 2 } }],
         label: 'Enters: you gain 2 life',
+      },
+    ],
+  },
+  // {2}{W}: Creatures you control get +1/+1 until end of turn.
+  {
+    id: '814c4295-5d99-45da-87cc-29bb1b774e99',
+    name: 'Gerrard\'s Battle Cry',
+    types: ['enchantment'],
+    cost: { W: 1 },
+    activated: [
+      {
+        cost: { mana: { generic: 2, W: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{2}{w}: creatures you control get +1/+1 until end of turn',
       },
     ],
   },
@@ -43440,6 +44249,19 @@ const POOL_4: readonly CardDefinition[] = [
       },
     ],
   },
+  // Creatures you control get +1/+1 until end of turn.
+  {
+    id: 'f8672cfd-e34b-4587-9e24-015e03c7574d',
+    name: 'Glorious Charge',
+    types: ['instant'],
+    cost: { generic: 1, W: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // Choose one —
   // • Destroy target artifact.
   // • Glorious Decay deals 4 damage to target creature with flying.
@@ -43835,6 +44657,30 @@ const POOL_4: readonly CardDefinition[] = [
     power: 2,
     toughness: 1,
     subtypes: ['goblin'],
+  },
+  // Kicker {R} (You may pay an additional {R} as you cast this spell.)
+  // When this creature enters, if it was kicked, creatures you control get +1/+0 and gain haste until end of turn.
+  {
+    id: '4085a5bf-a71b-4c73-9b39-0dcc328fe11b',
+    name: 'Goblin Bushwhacker',
+    types: ['creature'],
+    cost: { R: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['goblin', 'warrior'],
+    kicker: { R: 1 },
+    triggers: [
+      {
+        condition: { on: 'etb', intervening: { kind: 'sourceKicked' } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { keywords: { haste: true }, power: 1, toughness: 0, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Enters: if it was kicked, creatures you control get +1/+0 and gain haste until end of turn',
+      },
+    ],
   },
   // {2}: This artifact deals 1 damage to any target. Sacrifice this artifact.
   {
@@ -44450,6 +45296,51 @@ const POOL_4: readonly CardDefinition[] = [
     keywords: { firstStrike: true, haste: true },
     subtypes: ['goblin', 'berserker'],
   },
+  // Choose one —
+  // • Creatures you control get +2/+0 until end of turn.
+  // • Create two 1/1 red Goblin creature tokens.
+  {
+    id: '527dd5d4-5f72-40bb-8a9d-1f5ac3f81e2e',
+    name: 'Goblin Surprise',
+    types: ['instant'],
+    cost: { generic: 2, R: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Creatures you control get +2/+0 until end of turn',
+          effects: [
+            {
+              primitive: 'grantKeywordToYoursUntilEndOfTurn',
+              params: { power: 2, toughness: 0, anyOfTypes: ['creature'] },
+            },
+          ],
+        },
+        {
+          id: 'mode2',
+          label: 'Create two 1/1 red goblin creature tokens',
+          effects: [
+            {
+              primitive: 'makeToken',
+              params: {
+                power: 1,
+                toughness: 1,
+                name: 'Goblin',
+                colors: ['R'],
+                subtypes: ['Goblin'],
+                count: 2,
+              },
+            },
+          ],
+        },
+      ],
+    },
+  },
+];
+
+const POOL_5: readonly CardDefinition[] = [
   // Menace (This creature can't be blocked except by two or more creatures.)
   {
     id: 'ca382425-2454-4300-b903-fdefd31582d3',
@@ -44612,6 +45503,50 @@ const POOL_4: readonly CardDefinition[] = [
       label: 'Enchant creature',
       modifies: { power: 2, toughness: 2, keywords: { haste: true } },
     },
+  },
+  // Choose one —
+  // • Create three 1/1 red Goblin creature tokens.
+  // • Creatures you control get +1/+1 and gain haste until end of turn.
+  // Entwine {2}{R} (Choose both if you pay the entwine cost.)
+  {
+    id: '2b4155d1-0a87-4d2c-a1a0-06b2553eaae4',
+    name: 'Goblin War Party',
+    types: ['sorcery'],
+    cost: { generic: 3, R: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Create three 1/1 red goblin creature tokens',
+          effects: [
+            {
+              primitive: 'makeToken',
+              params: {
+                power: 1,
+                toughness: 1,
+                name: 'Goblin',
+                colors: ['R'],
+                subtypes: ['Goblin'],
+                count: 3,
+              },
+            },
+          ],
+        },
+        {
+          id: 'mode2',
+          label: 'Creatures you control get +1/+1 and gain haste until end of turn',
+          effects: [
+            {
+              primitive: 'grantKeywordToYoursUntilEndOfTurn',
+              params: { keywords: { haste: true }, power: 1, toughness: 1, anyOfTypes: ['creature'] },
+            },
+          ],
+        },
+      ],
+    },
+    entwine: { generic: 2, R: 1 },
   },
   // Goblin War Strike deals damage to target player or planeswalker equal to the number of Goblins you control.
   {
@@ -44903,6 +45838,33 @@ const POOL_4: readonly CardDefinition[] = [
     entersTapped: true,
     producesOptions: [{ W: 1 }, { B: 1 }],
   },
+  // Whenever another creature you control enters, creatures you control get +1/+1 until end of turn.
+  {
+    id: '854ee15f-bf36-4b80-9717-6e6f02da790e',
+    name: 'Goldnight Commander',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'cleric', 'soldier'],
+    triggers: [
+      {
+        condition: {
+          on: 'permanentEnters',
+          who: 'you',
+          permanentFilter: { anyOfTypes: ['creature'] },
+          excludeSelf: true,
+        },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'another creature (you) enters: creatures you control get +1/+1 until end of turn',
+      },
+    ],
+  },
   // Equipped creature gets +1/+1.
   // Whenever equipped creature deals combat damage to a player, create a Treasure token. (It's an artifact with "{T}, Sacrifice this token: Add one mana of any color.")
   // Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)
@@ -45111,9 +46073,6 @@ const POOL_4: readonly CardDefinition[] = [
     keywords: { flying: true },
     subtypes: ['sphinx'],
   },
-];
-
-const POOL_5: readonly CardDefinition[] = [
   // Reach (This creature can block creatures with flying.)
   {
     id: 'cecc53b1-942e-4b44-bf93-dd2d8cc92d6d',
@@ -46655,6 +47614,25 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // {3}, {T}: Target player mills two cards. If two cards that share a color were milled this way, repeat this process.
+  {
+    id: '0f15505d-b32f-4b71-8b99-f27bc964c5a8',
+    name: 'Grindstone',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    activated: [
+      {
+        cost: { mana: { generic: 3 }, tap: true },
+        effects: [
+          {
+            primitive: 'millSharedColorRepeat',
+            params: { amount: 2, share: 'color', targets: 'player' },
+          },
+        ],
+        label: '{3}, {t}: target player mills two cards. if two cards that share a color were milled this way, repeat this process',
+      },
+    ],
+  },
   // Surge {1}{U} (You may cast this spell for its surge cost if you or a teammate has cast another spell this turn.)
   // Tap target creature. It doesn't untap during its controller's next untap step.
   // Draw a card.
@@ -46730,6 +47708,49 @@ const POOL_5: readonly CardDefinition[] = [
         label: 'Sacrifice ~: you gain life equal to ~\'s power',
       },
     ],
+  },
+  // Choose one —
+  // • Return target permanent to its owner's hand.
+  // • Target creature gets -4/-4 until end of turn.
+  // • Creatures you control get +2/+0 until end of turn.
+  {
+    id: '20332354-a294-4448-a66f-533e6b546df6',
+    name: 'Grixis Charm',
+    types: ['instant'],
+    cost: { U: 1, B: 1, R: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Return target permanent to its owner\'s hand',
+          effects: [{ primitive: 'returnToHand', params: { targets: 'permanent' } }],
+          targets: 'permanent',
+        },
+        {
+          id: 'mode2',
+          label: 'Target creature gets -4/-4 until end of turn',
+          effects: [
+            {
+              primitive: 'pumpUntilEndOfTurn',
+              params: { power: -4, toughness: -4, targets: 'creature' },
+            },
+          ],
+          targets: 'creature',
+        },
+        {
+          id: 'mode3',
+          label: 'Creatures you control get +2/+0 until end of turn',
+          effects: [
+            {
+              primitive: 'grantKeywordToYoursUntilEndOfTurn',
+              params: { power: 2, toughness: 0, anyOfTypes: ['creature'] },
+            },
+          ],
+        },
+      ],
+    },
   },
   // {T}: Add {C}.
   // {1}, {T}, Sacrifice this land: Search your library for a basic Island, Swamp, or Mountain card, put it onto the battlefield tapped, then shuffle.
@@ -48464,6 +49485,23 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // Buyback {2} (You may pay an additional {2} as you cast this spell. If you do, put this card into your hand as it resolves.)
+  // Creatures you control get +1/+0 until end of turn.
+  // Storm (When you cast this spell, copy it for each spell cast before it this turn.)
+  {
+    id: 'c344b885-68c6-43d2-b6c1-6c89b3c94983',
+    name: 'Haze of Rage',
+    types: ['sorcery'],
+    cost: { generic: 1, R: 1 },
+    buyback: { generic: 2 },
+    castTriggers: [{ keyword: 'storm', label: 'Storm', effects: [{ primitive: 'stormCopies' }] }],
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 1, toughness: 0, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // Return up to two target creature cards from your graveyard to your hand. Each opponent loses 2 life and you gain 2 life.
   {
     id: '239363df-4de8-4b64-80fc-a1f4b5c36027',
@@ -49891,6 +50929,30 @@ const POOL_5: readonly CardDefinition[] = [
     toughness: 4,
     keywords: { trample: true },
     subtypes: ['hippo', 'ox'],
+  },
+  // Create a 2/1 black Villain creature token with menace, then creatures you control get +1/+0 until end of turn. (A creature with menace can't be blocked except by two or more creatures.)
+  {
+    id: '50a6aa80-79a3-46f3-9cc1-5bf663b64976',
+    name: 'Hire a Crew',
+    types: ['instant'],
+    cost: { generic: 2, R: 1 },
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: {
+          power: 2,
+          toughness: 1,
+          name: 'Villain',
+          colors: ['B'],
+          subtypes: ['Villain'],
+          keywords: { menace: true },
+        },
+      },
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 1, toughness: 0, anyOfTypes: ['creature'] },
+      },
+    ],
   },
   // Flash (You may cast this spell any time you could cast an instant.)
   {
@@ -52015,6 +53077,52 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // When this creature enters, creatures you control get +1/+0 and gain haste until end of turn.
+  {
+    id: '4dbaa855-3f8e-42e6-8ec8-5ffbc5c8acf0',
+    name: 'Imodane\'s Recruiter',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'knight'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { keywords: { haste: true }, power: 1, toughness: 0, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Enters: creatures you control get +1/+0 and gain haste until end of turn',
+      },
+    ],
+    backFace: {
+      id: '4dbaa855-3f8e-42e6-8ec8-5ffbc5c8acf0#back',
+      name: 'Train Troops',
+      types: ['sorcery'],
+      cost: { generic: 4, W: 1 },
+      subtypes: ['adventure'],
+      effects: [
+        {
+          primitive: 'makeToken',
+          params: {
+            power: 2,
+            toughness: 2,
+            name: 'Knight',
+            colors: ['W'],
+            subtypes: ['Knight'],
+            count: 2,
+            keywords: { vigilance: true },
+          },
+        },
+      ],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
   // Whenever a creature you control enters, this enchantment deals 1 damage to each opponent.
   {
     id: 'd0b7cecf-b51b-4d30-b7e9-cd7976271e07',
@@ -52805,6 +53913,9 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_6: readonly CardDefinition[] = [
   // Flying
   // {3}{B}: This creature gets +2/+2 until end of turn.
   {
@@ -53055,6 +54166,19 @@ const POOL_5: readonly CardDefinition[] = [
       },
     ],
   },
+  // Creatures you control get +2/+1 until end of turn.
+  {
+    id: '9f17e624-219a-4e76-bfe0-f49c9ddd4a6d',
+    name: 'Inspired Charge',
+    types: ['instant'],
+    cost: { generic: 2, W: 2 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 2, toughness: 1, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // {1}, Sacrifice this creature: Destroy target artifact or enchantment.
   {
     id: '119d4579-26e6-4985-b232-40d11d60fd96',
@@ -53069,6 +54193,28 @@ const POOL_5: readonly CardDefinition[] = [
         cost: { mana: { generic: 1 }, sacrificeSelf: true },
         effects: [{ primitive: 'destroyTarget', params: { targets: 'artifactOrEnchantment' } }],
         label: '{1}, sacrifice ~: destroy target artifact or enchantment',
+      },
+    ],
+  },
+  // When this creature enters, creatures you control get +1/+1 until end of turn.
+  {
+    id: 'fb56d6ab-50bf-4407-9f30-595ef7ae9492',
+    name: 'Inspiring Captain',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['human', 'knight'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Enters: creatures you control get +1/+1 until end of turn',
       },
     ],
   },
@@ -53118,6 +54264,28 @@ const POOL_5: readonly CardDefinition[] = [
     types: ['sorcery'],
     cost: { generic: 3, W: 1 },
     effects: [{ primitive: 'addCounters', params: { amount: 1, each: true, scope: 'you', filter: {} } }],
+  },
+  // Whenever this creature attacks, creatures you control get +1/+1 until end of turn.
+  {
+    id: '3320865c-ef02-4f18-82b0-47a6d845de0f',
+    name: 'Inspiring Unicorn',
+    types: ['creature'],
+    cost: { generic: 2, W: 2 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['unicorn'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Attacks: creatures you control get +1/+1 until end of turn',
+      },
+    ],
   },
   // This land enters tapped unless you control two or fewer other lands.
   // {T}: Add {R} or {W}.
@@ -53702,9 +54870,6 @@ const POOL_5: readonly CardDefinition[] = [
     keywords: { doubleStrike: true },
     subtypes: ['human', 'soldier'],
   },
-];
-
-const POOL_6: readonly CardDefinition[] = [
   // Menace (This creature can't be blocked except by two or more creatures.)
   // When this creature enters, put a +1/+1 counter on target creature.
   {
@@ -55276,6 +56441,48 @@ const POOL_6: readonly CardDefinition[] = [
     cost: { generic: 3, G: 1 },
     subtypes: ['arcane'],
     effects: [{ primitive: 'gainLife', params: { amount: { countOf: 'landsYouControl' } } }],
+  },
+  // When this creature enters, creatures you control get +2/+2 and gain trample until end of turn.
+  // Encore {7}{G}{G} ({7}{G}{G}, Exile this card from your graveyard: For each opponent, create a token copy that attacks that opponent this turn if able. They gain haste. Sacrifice them at the beginning of the next end step. Activate only as a sorcery.)
+  {
+    id: 'a8eef44d-113c-428f-89e1-821418def041',
+    name: 'Jubilation',
+    types: ['creature'],
+    cost: { generic: 5, G: 1 },
+    power: 5,
+    toughness: 5,
+    subtypes: ['elemental', 'incarnation'],
+    graveyardAbilities: [
+      {
+        kind: 'encore',
+        cost: { mana: { generic: 7, G: 2 } },
+        exileSelf: true,
+        effects: [
+          {
+            primitive: 'graveyardTokenCopy',
+            params: {
+              perOpponent: true,
+              grantKeywords: { haste: true, mustAttack: true },
+              delayedRemoval: 'sacrifice',
+            },
+          },
+        ],
+        timing: 'sorcery',
+        label: 'Encore {7}{G}{G}',
+      },
+    ],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { keywords: { trample: true }, power: 2, toughness: 2, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Enters: creatures you control get +2/+2 and gain trample until end of turn',
+      },
+    ],
   },
   // Other creatures you control get +1/+0.
   // Whenever a nontoken creature you control dies, Judith deals 1 damage to any target.
@@ -57330,56 +58537,6 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
-  // When Kiora enters, create a 5/5 red Dragon creature token with flying.
-  // {8}: Create a 5/5 red Dragon creature token with flying.
-  {
-    id: '08657053-86f9-4c52-abf0-d9cdd443ae3b',
-    name: 'Kiora of Fire and Ashes',
-    types: ['creature'],
-    cost: { generic: 4, R: 2 },
-    power: 2,
-    toughness: 2,
-    legendary: true,
-    subtypes: ['merfolk', 'noble'],
-    triggers: [
-      {
-        condition: { on: 'etb' },
-        effects: [
-          {
-            primitive: 'makeToken',
-            params: {
-              power: 5,
-              toughness: 5,
-              name: 'Dragon',
-              colors: ['R'],
-              subtypes: ['Dragon'],
-              keywords: { flying: true },
-            },
-          },
-        ],
-        label: 'Enters: create a 5/5 red dragon creature token with flying',
-      },
-    ],
-    activated: [
-      {
-        cost: { mana: { generic: 8 } },
-        effects: [
-          {
-            primitive: 'makeToken',
-            params: {
-              power: 5,
-              toughness: 5,
-              name: 'Dragon',
-              colors: ['R'],
-              subtypes: ['Dragon'],
-              keywords: { flying: true },
-            },
-          },
-        ],
-        label: '{8}: create a 5/5 red dragon creature token with flying',
-      },
-    ],
-  },
   // Whenever a creature you control with power 4 or greater enters, draw a card.
   // −1: Untap target permanent.
   {
@@ -58366,47 +59523,6 @@ const POOL_6: readonly CardDefinition[] = [
         label: 'other creatures you control get +1/+1',
       },
     ],
-  },
-  // Choose one —
-  // • Konstrari Charm deals 6 damage to target creature with flying.
-  // • Put two +1/+1 counters on target creature. It gains trample until end of turn.
-  // • Add {C}{C}{C}.
-  {
-    id: '7d29dfa1-9582-47bc-8f42-62b611bdcc4e',
-    name: 'Konstrari Charm',
-    types: ['instant'],
-    cost: { R: 1, G: 1 },
-    modal: {
-      min: 1,
-      max: 1,
-      modes: [
-        {
-          id: 'mode1',
-          label: 'Konstrari Charm deals 6 damage to target creature with flying',
-          effects: [
-            {
-              primitive: 'dealDamage',
-              params: { amount: 6, targets: { base: 'creature', bound: { withKeyword: 'flying' } } },
-            },
-          ],
-          targets: { base: 'creature', bound: { withKeyword: 'flying' } },
-        },
-        {
-          id: 'mode2',
-          label: 'Put two +1/+1 counters on target creature. it gains trample until end of turn',
-          effects: [
-            { primitive: 'addCounters', params: { amount: 2, targets: 'creature' } },
-            { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords: { trample: true } } },
-          ],
-          targets: 'creature',
-        },
-        {
-          id: 'mode3',
-          label: 'Add {c}{c}{c}',
-          effects: [{ primitive: 'addMana', params: { mana: ['C', 'C', 'C'] } }],
-        },
-      ],
-    },
   },
   // Kicker {1}{W} (You may pay an additional {1}{W} as you cast this spell.)
   // Flying
@@ -59583,6 +60699,28 @@ const POOL_6: readonly CardDefinition[] = [
     subtypes: ['arcane'],
     effects: [{ primitive: 'dealDamage', params: { amount: 3, targets: 'playerOrPlaneswalker' } }],
   },
+  // {8}: Creatures you control get +3/+0 until end of turn.
+  {
+    id: '8e773b3f-37ef-4e37-8b1e-99b7b6314877',
+    name: 'Lavafume Invoker',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['goblin', 'shaman'],
+    activated: [
+      {
+        cost: { mana: { generic: 8 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 3, toughness: 0, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{8}: creatures you control get +3/+0 until end of turn',
+      },
+    ],
+  },
   // Equipped creature gets +1/+0 and has haste and ward {1}. (Whenever it becomes the target of a spell or ability an opponent controls, counter it unless that player pays {1}.)
   // Equip {1}
   {
@@ -60042,6 +61180,28 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+  // When this creature enters, creatures you control get +1/+1 until end of turn.
+  {
+    id: '8a57cdbd-3cd2-47c1-aec8-7f4fd7a7b804',
+    name: 'Leonin Armorguard',
+    types: ['creature'],
+    cost: { generic: 2, W: 1, G: 1 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['cat', 'soldier'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Enters: creatures you control get +1/+1 until end of turn',
+      },
+    ],
+  },
   // Whenever an artifact enters, you may gain 1 life.
   {
     id: 'e9b766e7-fe4a-47fb-949b-e046b5a38d91',
@@ -60159,6 +61319,25 @@ const POOL_6: readonly CardDefinition[] = [
         ],
         label: 'Enters: you may tap target creature',
         targets: 'creature',
+      },
+    ],
+  },
+  // {1}{W}: Creatures you control get +1/+1 until end of turn.
+  {
+    id: '395f719d-1f55-4f1a-a9fb-a178cd589f70',
+    name: 'Leonin Sun Standard',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    activated: [
+      {
+        cost: { mana: { generic: 1, W: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{1}{w}: creatures you control get +1/+1 until end of turn',
       },
     ],
   },
@@ -62068,6 +63247,9 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_7: readonly CardDefinition[] = [
   {
     id: '00c050c3-4f50-4bb6-8477-6737887ca10d',
     name: 'Loxodon Convert',
@@ -62631,31 +63813,6 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
-  // Flying
-  // Whenever you gain life, put a +1/+1 counter on each Angel you control.
-  {
-    id: '86a3866e-68a8-402c-baf0-1908e98e3995',
-    name: 'Lyra, Archangel of Dawn',
-    types: ['creature'],
-    cost: { generic: 2, W: 1 },
-    power: 3,
-    toughness: 3,
-    legendary: true,
-    keywords: { flying: true },
-    subtypes: ['angel', 'knight'],
-    triggers: [
-      {
-        condition: { on: 'gainLife', who: 'you' },
-        effects: [
-          {
-            primitive: 'addCounters',
-            params: { amount: 1, each: true, scope: 'you', filter: { anyOfSubtypes: ['Angel'] } },
-          },
-        ],
-        label: 'Gain life: put a +1/+1 counter on each angel you control',
-      },
-    ],
-  },
   // When this creature dies, create two 2/2 black Zombie creature tokens.
   {
     id: 'c166df8f-9508-427a-8ec7-bc8541b6ed88',
@@ -63014,9 +64171,6 @@ const POOL_6: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_7: readonly CardDefinition[] = [
   // As an additional cost to cast this spell, sacrifice a land.
   // Magma Rift deals 5 damage to target creature.
   {
@@ -63161,6 +64315,19 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // Creatures you control get +1/+0 and gain indestructible until end of turn. (Damage and effects that say "destroy" don't destroy them.)
+  {
+    id: '9c26415d-9e98-480b-9e30-b3aed00d5f3d',
+    name: 'Make a Stand',
+    types: ['instant'],
+    cost: { generic: 2, W: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { keywords: { indestructible: true }, power: 1, toughness: 0, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // Flying
   {
     id: 'a35d3113-6cb7-4b74-94a3-8160d9ac1b89',
@@ -63220,6 +64387,28 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // Creatures you control get +2/+2 until end of turn.
+  {
+    id: 'ada9a974-8f1f-4148-bd61-200fc14714b2',
+    name: 'Makindi Stampede',
+    types: ['sorcery'],
+    cost: { generic: 3, W: 2 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 2, toughness: 2, anyOfTypes: ['creature'] },
+      },
+    ],
+    backFace: {
+      id: 'ada9a974-8f1f-4148-bd61-200fc14714b2#back',
+      name: 'Makindi Mesas',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['W'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
   // Flying
   // {W}{W}{W}: Regenerate this creature.
   {
@@ -63272,6 +64461,28 @@ const POOL_7: readonly CardDefinition[] = [
         condition: { on: 'gainLife', who: 'you' },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
         label: 'Gain life: ~ gets +1/+1 until end of turn',
+      },
+    ],
+  },
+  // When this creature enters, creatures you control get +2/+1 until end of turn.
+  {
+    id: 'b92a6ba0-cea0-4084-92f1-2bd60ea25fb0',
+    name: 'Malamet War Scribe',
+    types: ['creature'],
+    cost: { generic: 3, W: 2 },
+    power: 4,
+    toughness: 3,
+    subtypes: ['cat', 'warrior'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 2, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Enters: creatures you control get +2/+1 until end of turn',
       },
     ],
   },
@@ -64211,6 +65422,29 @@ const POOL_7: readonly CardDefinition[] = [
     keywords: { landwalk: [{ kind: 'subtype', subtype: 'swamp' }] },
     subtypes: ['kor', 'scout'],
   },
+  // Creatures you control get +1/+1 and gain vigilance until end of turn.
+  // Cycling {2} ({2}, Discard this card: Draw a card.)
+  // Flashback {3}{W} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: '920d7f7e-8df3-4465-be07-83cb340cffc1',
+    name: 'Marshaling Cry',
+    types: ['sorcery'],
+    cost: { generic: 1, W: 2 },
+    cycling: [
+      {
+        cost: { generic: 2 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {2}',
+      },
+    ],
+    flashback: { generic: 3, W: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { keywords: { vigilance: true }, power: 1, toughness: 1, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // Target creature gets +3/+0 until end of turn.
   // Target creature gets +0/+3 until end of turn.
   {
@@ -64630,6 +65864,28 @@ const POOL_7: readonly CardDefinition[] = [
     effects: [
       { primitive: 'destroyTarget', params: { targets: 'land' } },
       { primitive: 'gainLife', params: { amount: 4 } },
+    ],
+  },
+  // Sacrifice a creature: Creatures you control get +1/+1 until end of turn.
+  {
+    id: 'cd1131c6-04da-4c4d-ab61-874ac5be7087',
+    name: 'Maw of the Obzedat',
+    types: ['creature'],
+    cost: { generic: 3, W: 1, B: 1 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['thrull'],
+    activated: [
+      {
+        cost: { sacrificeAnother: { anyOfTypes: ['creature'] } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Sacrifice a creature: creatures you control get +1/+1 until end of turn',
+      },
     ],
   },
   // Flying
@@ -66907,6 +68163,49 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+  // Choose one —
+  // • Create two 1/1 colorless Soldier artifact creature tokens.
+  // • Creatures you control get +2/+0 until end of turn.
+  {
+    id: 'eda82e38-c1d4-4019-8f79-f91602d941b0',
+    name: 'Mishra\'s Onslaught',
+    types: ['instant'],
+    cost: { generic: 3, R: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Create two 1/1 colorless soldier artifact creature tokens',
+          effects: [
+            {
+              primitive: 'makeToken',
+              params: {
+                power: 1,
+                toughness: 1,
+                name: 'Soldier',
+                colors: [],
+                subtypes: ['Soldier'],
+                types: ['artifact', 'creature'],
+                count: 2,
+              },
+            },
+          ],
+        },
+        {
+          id: 'mode2',
+          label: 'Creatures you control get +2/+0 until end of turn',
+          effects: [
+            {
+              primitive: 'grantKeywordToYoursUntilEndOfTurn',
+              params: { power: 2, toughness: 0, anyOfTypes: ['creature'] },
+            },
+          ],
+        },
+      ],
+    },
+  },
   // {T}: Add {C}{C}{C}. Spend this mana only to cast artifact spells.
   {
     id: 'aac0c8df-f01d-4178-8d66-ee603f814d24',
@@ -67922,6 +69221,35 @@ const POOL_7: readonly CardDefinition[] = [
         condition: { on: 'attacks' },
         effects: [{ primitive: 'gainLife', params: { amount: 1 } }],
         label: 'Attacks: you gain 1 life',
+      },
+    ],
+  },
+  // Flying
+  // When this creature enters, creatures you control gain flying and get +X/+X until end of turn, where X is the number of creatures you control.
+  {
+    id: 'ca90d382-7e13-4637-a624-2a1b82abe56c',
+    name: 'Moonshaker Cavalry',
+    types: ['creature'],
+    cost: { generic: 5, W: 3 },
+    power: 6,
+    toughness: 6,
+    keywords: { flying: true },
+    subtypes: ['spirit', 'knight'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: {
+              keywords: { flying: true },
+              power: { countOf: 'creaturesYouControl' },
+              toughness: { countOf: 'creaturesYouControl' },
+              anyOfTypes: ['creature'],
+            },
+          },
+        ],
+        label: 'Enters: creatures you control gain flying and get +x/+x until end of turn, where x is the number of creatures you control',
       },
     ],
   },
@@ -70891,6 +72219,9 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_8: readonly CardDefinition[] = [
   // Flash
   // Flying
   // When this creature enters, target opponent mills two cards. (They put the top two cards of their library into their graveyard.)
@@ -71900,6 +73231,44 @@ const POOL_7: readonly CardDefinition[] = [
     keywords: { vigilance: true, trample: true },
     subtypes: ['treefolk', 'warrior'],
   },
+  // {T}: Creatures you control get +1/+1 until end of turn.
+  {
+    id: '8a665794-513f-4f78-92c9-1844ec27c79c',
+    name: 'Oakhame Ranger',
+    types: ['creature'],
+    cost: { hybrid: [['G', 'W'], ['G', 'W'], ['G', 'W'], ['G', 'W']] },
+    power: 2,
+    toughness: 2,
+    subtypes: ['elf', 'knight', 'ranger'],
+    activated: [
+      {
+        cost: { tap: true },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{t}: creatures you control get +1/+1 until end of turn',
+      },
+    ],
+    backFace: {
+      id: '8a665794-513f-4f78-92c9-1844ec27c79c#back',
+      name: 'Bring Back',
+      types: ['sorcery'],
+      cost: { hybrid: [['G', 'W'], ['G', 'W'], ['G', 'W'], ['G', 'W']] },
+      subtypes: ['adventure'],
+      effects: [
+        {
+          primitive: 'makeToken',
+          params: { power: 1, toughness: 1, name: 'Human', colors: ['W'], subtypes: ['Human'], count: 2 },
+        },
+      ],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
   // {2}{G}, {T}, Sacrifice this creature: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
   {
     id: '3d10be36-8e57-4b08-bc3b-e69769e0908a',
@@ -71929,9 +73298,6 @@ const POOL_7: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_8: readonly CardDefinition[] = [
   // {T}: Prevent the next 1 damage that would be dealt to target creature this turn.
   {
     id: '4949330d-9f12-459a-8a64-bd304fc53954',
@@ -72919,6 +74285,20 @@ const POOL_8: readonly CardDefinition[] = [
         effects: [{ primitive: 'surveil' }],
         label: '{4}, {t}: surveil 1',
       },
+    ],
+  },
+  // Creatures you control get +2/+1 until end of turn. Investigate. (Create a Clue token. It's an artifact with "{2}, Sacrifice this token: Draw a card.")
+  {
+    id: '48b92629-4196-4943-91fd-8c8d5f3fcaef',
+    name: 'On the Job',
+    types: ['instant'],
+    cost: { generic: 2, W: 2 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 2, toughness: 1, anyOfTypes: ['creature'] },
+      },
+      { primitive: 'createPredefinedToken', params: { token: 'clue' } },
     ],
   },
   {
@@ -73942,6 +75322,19 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+  // Creatures you control get +2/+2 and gain trample until end of turn. (Each of those creatures can deal excess combat damage to the player or planeswalker it's attacking.)
+  {
+    id: '4089c088-b113-467c-9160-f6bac779ddd7',
+    name: 'Overcome',
+    types: ['sorcery'],
+    cost: { generic: 3, G: 2 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { keywords: { trample: true }, power: 2, toughness: 2, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // {1}, {T}: Add {G}{U}.
   {
     id: '6357d665-2b28-4747-ab43-b90176d78d42',
@@ -74032,6 +75425,19 @@ const POOL_8: readonly CardDefinition[] = [
       { primitive: 'gainLife', params: { amount: { chosenX: true } } },
     ],
   },
+  // Creatures you control get +3/+3 and gain trample until end of turn. (Each of those creatures can deal excess combat damage to the player or planeswalker it's attacking.)
+  {
+    id: '1d8e9cbb-8bf4-4a48-a58e-79deb3abdf7f',
+    name: 'Overrun',
+    types: ['sorcery'],
+    cost: { generic: 2, G: 3 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { keywords: { trample: true }, power: 3, toughness: 3, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // Flying
   // When this creature enters, you may destroy target creature.
   // Whenever a nontoken creature an opponent controls dies, create a tapped 2/2 black Zombie creature token.
@@ -74093,6 +75499,21 @@ const POOL_8: readonly CardDefinition[] = [
     toughness: 5,
     keywords: { protectionFrom: ['blue', 'black', 'red'] },
     subtypes: ['spirit', 'avatar'],
+  },
+  // Convoke (Your creatures can help cast this spell. Each creature you tap while casting this spell pays for {1} or one mana of that creature's color.)
+  // Creatures you control get +3/+3 until end of turn.
+  {
+    id: '19384be7-d746-4927-adb4-ad521e8a8dd5',
+    name: 'Overwhelm',
+    types: ['sorcery'],
+    cost: { generic: 5, G: 2 },
+    costAssist: 'convoke',
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 3, toughness: 3, anyOfTypes: ['creature'] },
+      },
+    ],
   },
   // Surge {U}{U} (You may cast this spell for its surge cost if you or a teammate has cast another spell this turn.)
   // This spell can't be countered.
@@ -74665,6 +76086,20 @@ const POOL_8: readonly CardDefinition[] = [
         power: 1,
         toughness: 1,
         label: 'creatures you control of the chosen type get +1/+1',
+      },
+    ],
+  },
+  // Creatures you control get +2/+0 until end of turn.
+  {
+    id: '046fd4b1-d3a4-4859-a0d4-0e8341e6c6c7',
+    name: 'Path of Anger\'s Flame',
+    types: ['instant'],
+    cost: { generic: 2, R: 1 },
+    subtypes: ['arcane'],
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 2, toughness: 0, anyOfTypes: ['creature'] },
       },
     ],
   },
@@ -76186,91 +77621,6 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
-  // When Pia enters, you may discard a card. If you do, search your library for an enchantment card, reveal it, put it into your hand, then shuffle.
-  {
-    id: 'ff0bc30f-9d20-458e-808f-bdc2825905a5',
-    name: 'Pia, Aether Ascetic',
-    types: ['creature'],
-    cost: { generic: 2, G: 1 },
-    power: 2,
-    toughness: 2,
-    legendary: true,
-    subtypes: ['human', 'druid'],
-    triggers: [
-      {
-        condition: { on: 'etb' },
-        effects: [
-          {
-            primitive: 'mayCostEffects',
-            params: {
-              cost: [{ primitive: 'discardCard', params: { who: 'controller' } }],
-              effects: [
-                {
-                  primitive: 'searchLibrary',
-                  params: {
-                    who: 'controller',
-                    count: 1,
-                    filter: { anyOfTypes: ['enchantment'] },
-                    destination: 'hand',
-                  },
-                },
-              ],
-              prompt: 'You may discard a card. If you do, search your library for an enchantment card, reveal it, put it into your hand, then shuffle',
-            },
-          },
-        ],
-        label: 'Enters: you may discard a card. if you do, search your library for an enchantment card, reveal it, put it into your hand, then shuffle',
-      },
-    ],
-  },
-  // When Pia enters, create a 1/1 colorless Thopter artifact creature token with flying.
-  // {5}{R}: Target creature gets +X/+0 until end of turn, where X is the number of artifacts you control.
-  {
-    id: 'dd3faaf4-45ca-4714-8dbe-37102ec131cf',
-    name: 'Pia, Determined Rebuilder',
-    types: ['creature'],
-    cost: { generic: 2, R: 1 },
-    power: 2,
-    toughness: 2,
-    legendary: true,
-    subtypes: ['human', 'artificer'],
-    triggers: [
-      {
-        condition: { on: 'etb' },
-        effects: [
-          {
-            primitive: 'makeToken',
-            params: {
-              power: 1,
-              toughness: 1,
-              name: 'Thopter',
-              colors: [],
-              subtypes: ['Thopter'],
-              types: ['artifact', 'creature'],
-              keywords: { flying: true },
-            },
-          },
-        ],
-        label: 'Enters: create a 1/1 colorless thopter artifact creature token with flying',
-      },
-    ],
-    activated: [
-      {
-        cost: { mana: { generic: 5, R: 1 } },
-        effects: [
-          {
-            primitive: 'pumpUntilEndOfTurn',
-            params: {
-              power: { countOf: 'permanentsMatching', filter: { anyOfTypes: ['artifact'] }, scope: 'you' },
-              toughness: 0,
-              targets: 'creature',
-            },
-          },
-        ],
-        label: '{5}{r}: target creature gets +x/+0 until end of turn, where x is the number of artifacts you control',
-      },
-    ],
-  },
   // When this creature enters, target opponent loses 3 life.
   {
     id: '1dd4c278-4215-4582-8725-bc4b0b664d13',
@@ -77010,6 +78360,21 @@ const POOL_8: readonly CardDefinition[] = [
         condition: { on: 'permanentEnters', who: 'you', permanentFilter: { anyOfTypes: ['land'] } },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
         label: 'land (you) enters: ~ gets +2/+2 until end of turn',
+      },
+    ],
+  },
+  // Affinity for artifacts (This spell costs {1} less to cast for each artifact you control.)
+  // Creatures you control get +2/+1 until end of turn.
+  {
+    id: '472a635a-a581-4c00-89d6-464f30887944',
+    name: 'Plated Onslaught',
+    types: ['instant'],
+    cost: { generic: 3, W: 2 },
+    castCostReductionPerPermanent: { amount: 1, filter: { anyOfTypes: ['artifact'] } },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 2, toughness: 1, anyOfTypes: ['creature'] },
       },
     ],
   },
@@ -77754,6 +79119,19 @@ const POOL_8: readonly CardDefinition[] = [
     cost: { U: 1 },
     effects: [{ primitive: 'scry', params: { count: 2 } }, { primitive: 'drawCards', params: { count: 1 } }],
   },
+  // Creatures you control get +10/+10 and gain vigilance until end of turn.
+  {
+    id: 'acb65189-60e4-42e0-9fb1-da6b716b91d7',
+    name: 'Preposterous Proportions',
+    types: ['sorcery'],
+    cost: { generic: 5, G: 2 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { keywords: { vigilance: true }, power: 10, toughness: 10, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // Flying
   // Whenever you cast an instant or sorcery spell, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
   {
@@ -78182,6 +79560,22 @@ const POOL_8: readonly CardDefinition[] = [
         affects: { anyOfTypes: ['creature'], controller: 'you' },
         keywords: { trample: true },
         label: 'creatures you control have trample',
+      },
+    ],
+  },
+  // Exile the top card of your library. If it's a permanent card, you may put it onto the battlefield. If you do, repeat this process.
+  {
+    id: '4278f7bd-afff-4a1d-a0bb-bf9ce3ad5a2e',
+    name: 'Primal Surge',
+    types: ['sorcery'],
+    cost: { generic: 8, G: 2 },
+    effects: [
+      {
+        primitive: 'exileTopMayPlay',
+        params: {
+          filter: { anyOfTypes: ['land', 'creature', 'artifact', 'enchantment', 'planeswalker', 'battle'] },
+          repeat: true,
+        },
       },
     ],
   },
@@ -79880,6 +81274,9 @@ const POOL_8: readonly CardDefinition[] = [
     effects: [{ primitive: 'chooseAsEnters', params: {} }],
     manaAbilities: [{ produces: [{ G: 1 }] }, { chosenColor: true, label: 'Add one mana of the chosen color' }],
   },
+];
+
+const POOL_9: readonly CardDefinition[] = [
   // {T}: Add one mana of any color that a land an opponent controls could produce.
   {
     id: 'd56bae65-1811-4428-93f4-60c36ceee715',
@@ -80777,6 +82174,21 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
+  // Creatures you control get +2/+0 until end of turn.
+  // Flashback {2}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: '9387f821-10ec-4698-9697-ad37084b4861',
+    name: 'Rally the Peasants',
+    types: ['instant'],
+    cost: { generic: 2, W: 1 },
+    flashback: { generic: 2, R: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 2, toughness: 0, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // As this enchantment enters, choose a creature type.
   // Creatures you control of the chosen type get +1/+1.
   {
@@ -80983,9 +82395,6 @@ const POOL_8: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_9: readonly CardDefinition[] = [
   // You may play lands from your graveyard.
   {
     id: '3f8a0a0e-81f7-40a2-b393-bdc1423549f6',
@@ -83312,6 +84721,54 @@ const POOL_9: readonly CardDefinition[] = [
     ],
   },
   // Landfall — Whenever a land you control enters, choose one —
+  // • Create a 1/1 white Kor Ally creature token.
+  // • Creatures you control get +1/+1 until end of turn.
+  {
+    id: '9f18221f-e900-48ef-9b8e-e8ee52b31939',
+    name: 'Retreat to Emeria',
+    types: ['enchantment'],
+    cost: { generic: 3, W: 1 },
+    triggers: [
+      {
+        condition: { on: 'permanentEnters', who: 'you', permanentFilter: { anyOfTypes: ['land'] } },
+        effects: [],
+        label: 'land (you) enters: choose one — • create a 1/1 white kor ally creature token. • creatures you control get +1/+1 until end of turn',
+        modal: {
+          min: 1,
+          max: 1,
+          modes: [
+            {
+              id: 'mode1',
+              label: 'Create a 1/1 white kor ally creature token',
+              effects: [
+                {
+                  primitive: 'makeToken',
+                  params: {
+                    power: 1,
+                    toughness: 1,
+                    name: 'Kor Ally',
+                    colors: ['W'],
+                    subtypes: ['Kor', 'Ally'],
+                  },
+                },
+              ],
+            },
+            {
+              id: 'mode2',
+              label: 'Creatures you control get +1/+1 until end of turn',
+              effects: [
+                {
+                  primitive: 'grantKeywordToYoursUntilEndOfTurn',
+                  params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ],
+  },
+  // Landfall — Whenever a land you control enters, choose one —
   // • Target creature gets +1/+0 and gains deathtouch until end of turn.
   // • Each opponent loses 1 life and you gain 1 life.
   {
@@ -84192,6 +85649,19 @@ const POOL_9: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { landwalk: [{ kind: 'subtype', subtype: 'plains' }] },
     subtypes: ['human', 'soldier'],
+  },
+  // Creatures you control get +2/+2 until end of turn.
+  {
+    id: 'f52cb325-4f16-4cf3-9999-feafe0fde8c2',
+    name: 'Righteous Charge',
+    types: ['sorcery'],
+    cost: { generic: 1, W: 2 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 2, toughness: 2, anyOfTypes: ['creature'] },
+      },
+    ],
   },
   // Choose three. You may choose the same mode more than once.
   // • Create a 2/2 white Knight creature token with vigilance.
@@ -85100,6 +86570,43 @@ const POOL_9: readonly CardDefinition[] = [
     },
     backFaceCastable: true,
     backFaceCastZones: ['graveyard'],
+  },
+  // Choose one —
+  // • Creatures you control get +1/+1 until end of turn.
+  // • Untap all creatures you control.
+  // Entwine {1}{W} (Choose both if you pay the entwine cost.)
+  {
+    id: 'dc697a4c-f219-46fd-90f2-63c638cd5ef7',
+    name: 'Roar of the Kha',
+    types: ['instant'],
+    cost: { generic: 1, W: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Creatures you control get +1/+1 until end of turn',
+          effects: [
+            {
+              primitive: 'grantKeywordToYoursUntilEndOfTurn',
+              params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+            },
+          ],
+        },
+        {
+          id: 'mode2',
+          label: 'Untap all creatures you control',
+          effects: [
+            {
+              primitive: 'tapPermanents',
+              params: { who: 'controller', untap: true, types: ['creature'] },
+            },
+          ],
+        },
+      ],
+    },
+    entwine: { generic: 1, W: 1 },
   },
   // Create a 6/6 green Wurm creature token.
   // Flashback {3}{G} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
@@ -87843,6 +89350,56 @@ const POOL_9: readonly CardDefinition[] = [
     cost: { generic: 2 },
     castCostReduction: { amount: 1, filter: { anyOfColors: ['U'] } },
   },
+  // +1: Creatures you control get +1/+1 and gain haste until end of turn.
+  // −2: Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn.
+  // −6: Create five 4/4 red Dragon creature tokens with flying.
+  {
+    id: '181e20e9-94a2-40b6-abc4-797f588866bf',
+    name: 'Sarkhan Vol',
+    types: ['planeswalker'],
+    cost: { generic: 2, R: 1, G: 1 },
+    loyalty: 4,
+    legendary: true,
+    subtypes: ['sarkhan'],
+    activated: [
+      {
+        cost: { loyalty: 1 },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { keywords: { haste: true }, power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        timing: 'sorcery',
+        label: '+1: creatures you control get +1/+1 and gain haste until end of turn',
+      },
+      {
+        cost: { loyalty: -2 },
+        effects: [{ primitive: 'gainControl', params: { targets: 'creature', untap: true, haste: true } }],
+        timing: 'sorcery',
+        label: '−2: gain control of target creature until end of turn. untap that creature. it gains haste until end of turn',
+      },
+      {
+        cost: { loyalty: -6 },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 4,
+              toughness: 4,
+              name: 'Dragon',
+              colors: ['R'],
+              subtypes: ['Dragon'],
+              count: 5,
+              keywords: { flying: true },
+            },
+          },
+        ],
+        timing: 'sorcery',
+        label: '−6: create five 4/4 red dragon creature tokens with flying',
+      },
+    ],
+  },
   // Sarkhan's Catharsis deals 5 damage to target player or planeswalker.
   {
     id: '2f4b6f26-c66b-4048-9503-af0a886ef14f',
@@ -88432,6 +89989,19 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // Creatures you control get +1/+0 until end of turn.
+  {
+    id: '6a9d4e11-ce2e-445a-9536-756a6687d6d7',
+    name: 'Scare Tactics',
+    types: ['instant'],
+    cost: { B: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 1, toughness: 0, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // Sacrifice a creature: Put a +1/+1 counter on this creature.
   {
     id: '8fb20f32-cdfa-43e3-8dbe-339bb03c0a00',
@@ -88707,6 +90277,9 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_10: readonly CardDefinition[] = [
   // {W}, {T}: Tap target permanent.
   {
     id: '888bc7ca-f9fa-4da4-b466-b9dc273d5319',
@@ -89059,6 +90632,38 @@ const POOL_9: readonly CardDefinition[] = [
         condition: { on: 'etb' },
         effects: [{ primitive: 'gainLife', params: { amount: 1 } }],
         label: 'Enters: you gain 1 life',
+      },
+    ],
+  },
+  // When this creature enters, creatures you control get +1/+0 until end of turn.
+  // Unearth {2}{R} ({2}{R}: Return this card from your graveyard to the battlefield. It gains haste. Exile it at the beginning of the next end step or if it would leave the battlefield. Unearth only as a sorcery.)
+  {
+    id: '565033d2-7cb9-4ee2-b952-45745b9a2ecc',
+    name: 'Scourge Devil',
+    types: ['creature'],
+    cost: { generic: 4, R: 1 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['devil'],
+    graveyardAbilities: [
+      {
+        kind: 'unearth',
+        cost: { mana: { generic: 2, R: 1 } },
+        effects: [{ primitive: 'unearthReturn' }],
+        timing: 'sorcery',
+        label: 'Unearth {2}{R}',
+      },
+    ],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 0, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Enters: creatures you control get +1/+0 until end of turn',
       },
     ],
   },
@@ -89481,6 +91086,30 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying
+  // {2}{R}: Creatures you control get +1/+0 until end of turn.
+  {
+    id: '4b9477ba-e198-4085-8733-fd392a5648e7',
+    name: 'Screeching Phoenix',
+    types: ['creature'],
+    cost: { generic: 4, R: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { flying: true },
+    subtypes: ['phoenix'],
+    activated: [
+      {
+        cost: { mana: { generic: 2, R: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 0, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{2}{r}: creatures you control get +1/+0 until end of turn',
+      },
+    ],
+  },
   // When this creature enters, mill two cards.
   {
     id: '0efc87bc-2ae9-423d-8f95-6dbd18b57745',
@@ -89518,28 +91147,6 @@ const POOL_9: readonly CardDefinition[] = [
           },
         ],
         label: 'all slivers have "{t}: target player mills a card."',
-      },
-    ],
-  },
-  // Flying
-  // Whenever this creature attacks, it deals 1 damage to each opponent and you gain 1 life.
-  {
-    id: '738667a1-c184-43ea-829f-49fbb69b6fc0',
-    name: 'Screeching Soulbreaker',
-    types: ['creature'],
-    cost: { generic: 2, B: 1 },
-    power: 1,
-    toughness: 4,
-    keywords: { flying: true },
-    subtypes: ['siren', 'bard'],
-    triggers: [
-      {
-        condition: { on: 'attacks' },
-        effects: [
-          { primitive: 'dealDamageToEach', params: { amount: 1, opponents: true } },
-          { primitive: 'gainLife', params: { amount: 1 } },
-        ],
-        label: 'Attacks: ~ deals 1 damage to each opponent and you gain 1 life',
       },
     ],
   },
@@ -89807,6 +91414,28 @@ const POOL_9: readonly CardDefinition[] = [
     keywords: { flying: true },
     subtypes: ['bird'],
   },
+  // {4}{W}: Creatures you control get +1/+1 until end of turn.
+  {
+    id: '6ae4634e-1487-4b66-8f70-bcb4b1fa6e77',
+    name: 'Sea Gate Banneret',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 1,
+    toughness: 2,
+    subtypes: ['kor', 'warrior'],
+    activated: [
+      {
+        cost: { mana: { generic: 4, W: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{4}{w}: creatures you control get +1/+1 until end of turn',
+      },
+    ],
+  },
   // This creature can't attack unless defending player controls an Island.
   {
     id: '6a1d7d4b-721e-4946-803d-b04ddbe7b718',
@@ -89929,9 +91558,6 @@ const POOL_9: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_10: readonly CardDefinition[] = [
   // Sacrifice this enchantment: Return target creature to its owner's hand.
   {
     id: '6dfc7060-e374-486f-8029-d3fdfe4b61e7',
@@ -90589,6 +92215,39 @@ const POOL_10: readonly CardDefinition[] = [
     entersTapped: true,
     producesOptions: [{ G: 1 }, { W: 1 }],
   },
+  // {3}{G}: Create a 1/1 green Saproling creature token.
+  // {3}{W}: Creatures you control get +1/+1 until end of turn.
+  {
+    id: '954b8e86-284a-4a6f-ac35-896afd414f8a',
+    name: 'Selesnya Guildmage',
+    types: ['creature'],
+    cost: { hybrid: [['G', 'W'], ['G', 'W']] },
+    power: 2,
+    toughness: 2,
+    subtypes: ['elf', 'wizard'],
+    activated: [
+      {
+        cost: { mana: { generic: 3, G: 1 } },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: { power: 1, toughness: 1, name: 'Saproling', colors: ['G'], subtypes: ['Saproling'] },
+          },
+        ],
+        label: '{3}{g}: create a 1/1 green saproling creature token',
+      },
+      {
+        cost: { mana: { generic: 3, W: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{3}{w}: creatures you control get +1/+1 until end of turn',
+      },
+    ],
+  },
   // This land enters tapped.
   // When this land enters, return a land you control to its owner's hand.
   // {T}: Add {G}{W}.
@@ -90645,6 +92304,28 @@ const POOL_10: readonly CardDefinition[] = [
     cost: { generic: 4, U: 2 },
     flashback: { generic: 3, U: 1 },
     effects: [{ primitive: 'createTokenCopy', params: { targets: 'creatureYouControl', count: 1 } }],
+  },
+  // {1}{W}, Sacrifice this creature: Creatures you control get +1/+1 until end of turn.
+  {
+    id: '3366f6c3-3899-4585-b6d2-24406703cf34',
+    name: 'Selfless Cathar',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['human', 'cleric'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, W: 1 }, sacrificeSelf: true },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{1}{w}, sacrifice ~: creatures you control get +1/+1 until end of turn',
+      },
+    ],
   },
   // Flying
   // Sacrifice this creature: Creatures you control gain indestructible until end of turn.
@@ -92197,6 +93878,29 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
+  // {T}: Add {C}.
+  // {T}, Pay 1 life: Add {W}.
+  // {2}{W}{W}, {T}, Sacrifice a Desert: Creatures you control get +1/+1 until end of turn. Activate only as a sorcery.
+  {
+    id: 'c9b0a526-73b0-4501-80a3-f16dbef9cdfd',
+    name: 'Shefet Dunes',
+    types: ['land'],
+    subtypes: ['desert'],
+    manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ W: 1 }], cost: { life: 1 } }],
+    activated: [
+      {
+        cost: { mana: { generic: 2, W: 2 }, tap: true, sacrificeAnother: { anyOfSubtypes: ['Desert'] } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        timing: 'sorcery',
+        label: '{2}{w}{w}, {t}, sacrifice a desert: creatures you control get +1/+1 until end of turn. activate only as a sorcery',
+      },
+    ],
+  },
   // {3}: Target blue creature gains shroud until end of turn. (It can't be the target of spells or abilities.)
   {
     id: 'c0953373-66e1-4af1-a4ec-cc990e20a1de',
@@ -92473,6 +94177,19 @@ const POOL_10: readonly CardDefinition[] = [
           },
         ],
         label: '{2}: prevent the next 1 damage that would be dealt to you this turn',
+      },
+    ],
+  },
+  // Creatures you control get +0/+2 until end of turn.
+  {
+    id: 'd4b70c30-dbc9-4d30-81d8-b0bde9b626df',
+    name: 'Shield Wall',
+    types: ['instant'],
+    cost: { generic: 1, W: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 0, toughness: 2, anyOfTypes: ['creature'] },
       },
     ],
   },
@@ -95164,6 +96881,35 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
+  // Whenever a land card is put into your graveyard from anywhere, you gain 1 life.
+  // {2}{G}: Mill a card. (Put the top card of your library into your graveyard.)
+  {
+    id: 'ce7753e0-2838-49c2-acd0-80b534f43bad',
+    name: 'Skola Grovedancer',
+    types: ['enchantment', 'creature'],
+    cost: { generic: 1, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['satyr', 'druid'],
+    triggers: [
+      {
+        condition: {
+          on: 'cardPutIntoGraveyardFromAnywhere',
+          who: 'you',
+          permanentFilter: { anyOfTypes: ['land'] },
+        },
+        effects: [{ primitive: 'gainLife', params: { amount: 1 } }],
+        label: 'card into your graveyard from anywhere: you gain 1 life',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2, G: 1 } },
+        effects: [{ primitive: 'mill', params: { amount: 1, self: true } }],
+        label: '{2}{g}: mill a card',
+      },
+    ],
+  },
   // {1}, {T}, Sacrifice a creature: This artifact deals 2 damage to any target.
   {
     id: '4bce5e36-99f3-415f-9064-ea83c96eb8ef',
@@ -97491,6 +99237,9 @@ const POOL_10: readonly CardDefinition[] = [
       { primitive: 'gainLife', params: { amount: 4 } },
     ],
   },
+];
+
+const POOL_11: readonly CardDefinition[] = [
   // When this creature enters, you may search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.
   // When this creature dies, you may draw a card.
   {
@@ -97541,6 +99290,19 @@ const POOL_10: readonly CardDefinition[] = [
           },
         ],
         label: 'Dies: you may draw a card',
+      },
+    ],
+  },
+  // Creatures you control get +0/+5 until end of turn.
+  {
+    id: '7810eec1-9bb4-480f-9074-712ad9eb8fba',
+    name: 'Solidarity',
+    types: ['instant'],
+    cost: { generic: 3, W: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 0, toughness: 5, anyOfTypes: ['creature'] },
       },
     ],
   },
@@ -98037,6 +99799,30 @@ const POOL_10: readonly CardDefinition[] = [
       },
     ],
   },
+  // Flying
+  // Whenever you cast a noncreature spell, creatures you control get +1/+1 until end of turn.
+  {
+    id: '7b891276-1645-4e96-b774-647b82bf0e60',
+    name: 'Soulblade Djinn',
+    types: ['creature'],
+    cost: { generic: 3, U: 2 },
+    power: 4,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['djinn'],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellTypeNoneOf: ['creature'] },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Cast noncreature: creatures you control get +1/+1 until end of turn',
+      },
+    ],
+  },
   // Defender, flying
   {
     id: '62e8128f-9858-4c48-ab43-1beca3db70e5',
@@ -98528,6 +100314,28 @@ const POOL_10: readonly CardDefinition[] = [
       modifies: { power: 2, toughness: 2, keywords: { flying: true } },
     },
   },
+  // {5}{G}: Creatures you control get +1/+1 and gain trample until end of turn.
+  {
+    id: '358fc99b-b2e5-4967-ba5a-ab2caee1751c',
+    name: 'Spectral Hunt-Caller',
+    types: ['creature'],
+    cost: { generic: 4, G: 1 },
+    power: 4,
+    toughness: 4,
+    subtypes: ['wolf', 'spirit'],
+    activated: [
+      {
+        cost: { mana: { generic: 5, G: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { keywords: { trample: true }, power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{5}{g}: creatures you control get +1/+1 and gain trample until end of turn',
+      },
+    ],
+  },
   // Protection from green
   // {B}: Regenerate this creature.
   {
@@ -98804,6 +100612,25 @@ const POOL_10: readonly CardDefinition[] = [
     },
     subtypes: ['sphinx'],
   },
+  // Flying
+  // When this creature enters, reveal the top five cards of your library. An opponent separates those cards into two piles. Put one pile into your hand and the other into your graveyard.
+  {
+    id: '5bd5cd33-20e2-4063-b422-2bde13021888',
+    name: 'Sphinx of Uthuun',
+    types: ['creature'],
+    cost: { generic: 5, U: 2 },
+    power: 5,
+    toughness: 6,
+    keywords: { flying: true },
+    subtypes: ['sphinx'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'revealAndOpponentSplitsPiles', params: { count: 5, rest: 'graveyard' } }],
+        label: 'Enters: reveal the top five cards of your library. an opponent separates those cards into two piles. put one pile into your hand and the other into your graveyard',
+      },
+    ],
+  },
   // You gain X life and draw X cards.
   {
     id: '71d83fca-e40e-4d0e-956d-d0d6da9cc472',
@@ -98945,9 +100772,6 @@ const POOL_10: readonly CardDefinition[] = [
     keywords: { trample: true },
     subtypes: ['beast'],
   },
-];
-
-const POOL_11: readonly CardDefinition[] = [
   // {1}{R}{R}: This creature deals damage equal to its power to any target.
   {
     id: '14c14e44-20ff-4128-b07d-4b751fc82d4e',
@@ -100350,6 +102174,30 @@ const POOL_11: readonly CardDefinition[] = [
       },
     ],
   },
+  // When this creature enters, creatures you control get +1/+1 and gain vigilance until end of turn.
+  // Plot {3}{W} (You may pay {3}{W} and exile this card from your hand. Cast it as a sorcery on a later turn without paying its mana cost. Plot only as a sorcery.)
+  {
+    id: '21301998-b3e6-4f3d-89f4-5e17aeb79a1e',
+    name: 'Stagecoach Security',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 4,
+    toughness: 5,
+    subtypes: ['human', 'soldier'],
+    plot: { generic: 3, W: 1 },
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { keywords: { vigilance: true }, power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Enters: creatures you control get +1/+1 and gain vigilance until end of turn',
+      },
+    ],
+  },
   // Target creature gets +3/+3 and gains trample until end of turn.
   {
     id: 'e34c4946-6c21-4ae1-9595-35933d38da52',
@@ -100922,6 +102770,19 @@ const POOL_11: readonly CardDefinition[] = [
         effects: [{ primitive: 'addCounters', params: { amount: 1, targets: 'creatureYouControl' } }],
         label: 'Dies: put a +1/+1 counter on target creature you control',
         targets: 'creatureYouControl',
+      },
+    ],
+  },
+  // Creatures you control get +0/+3 until end of turn.
+  {
+    id: 'c1fafcb8-f1ee-4e76-bcfb-6aea4d49efc5',
+    name: 'Steadfastness',
+    types: ['sorcery'],
+    cost: { generic: 1, W: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 0, toughness: 3, anyOfTypes: ['creature'] },
       },
     ],
   },
@@ -102672,6 +104533,28 @@ const POOL_11: readonly CardDefinition[] = [
       },
     ],
   },
+  // Whenever you cast a noncreature spell, creatures you control get +1/+1 until end of turn.
+  {
+    id: '0f5f5ead-b9e0-44c0-893f-0e3ae01933d3',
+    name: 'Strongarm Monk',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['human', 'monk'],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellTypeNoneOf: ['creature'] },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Cast noncreature: creatures you control get +1/+1 until end of turn',
+      },
+    ],
+  },
   // {T}, Sacrifice a creature: Destroy target nonblack creature.
   {
     id: '22f2bad4-565d-4302-a8aa-57e03f65cc84',
@@ -103538,6 +105421,46 @@ const POOL_11: readonly CardDefinition[] = [
     types: ['land'],
     manaAbilities: [{ produces: [{ G: 1, W: 1 }], cost: { mana: { generic: 1 } } }],
   },
+  // {1}{R}{W}: Creatures you control get +1/+0 until end of turn.
+  // {2}{R}{W}: Create a 1/1 red and white Soldier creature token with haste.
+  {
+    id: '62e5ee3d-3db2-45fc-adc0-9903231f16db',
+    name: 'Sunhome Guildmage',
+    types: ['creature'],
+    cost: { W: 1, R: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'wizard'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, R: 1, W: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 0, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{1}{r}{w}: creatures you control get +1/+0 until end of turn',
+      },
+      {
+        cost: { mana: { generic: 2, R: 1, W: 1 } },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Soldier',
+              colors: ['R', 'W'],
+              subtypes: ['Soldier'],
+              keywords: { haste: true },
+            },
+          },
+        ],
+        label: '{2}{r}{w}: create a 1/1 red and white soldier creature token with haste',
+      },
+    ],
+  },
   // {T}: Add {C}.
   // {2}{R}{W}, {T}: Target creature gains double strike until end of turn.
   {
@@ -103642,6 +105565,34 @@ const POOL_11: readonly CardDefinition[] = [
         condition: { on: 'etb' },
         effects: [{ primitive: 'explore' }],
         label: 'Enters: it explores',
+      },
+    ],
+  },
+  // {G}{G}, {T}: Creatures you control get +2/+2 until end of turn.
+  // {U}{U}, {T}: Return target creature to its owner's hand.
+  {
+    id: 'ebb7203d-529d-45d2-8e03-cd342c153f38',
+    name: 'Sunscape Master',
+    types: ['creature'],
+    cost: { generic: 2, W: 2 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'wizard'],
+    activated: [
+      {
+        cost: { mana: { G: 2 }, tap: true },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 2, toughness: 2, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{g}{g}, {t}: creatures you control get +2/+2 until end of turn',
+      },
+      {
+        cost: { mana: { U: 2 }, tap: true },
+        effects: [{ primitive: 'returnToHand', params: { targets: 'creature' } }],
+        label: '{u}{u}, {t}: return target creature to its owner\'s hand',
       },
     ],
   },
@@ -103930,43 +105881,6 @@ const POOL_11: readonly CardDefinition[] = [
         label: 'another nontoken artifact (you) enters: proliferate',
       },
     ],
-  },
-  // Choose one —
-  // • Destroy target creature with toughness 4 or greater. You gain 1 life.
-  // • You draw a card and gain 2 life.
-  {
-    id: 'd3acf176-ef02-4729-88c4-0f0dfbfdada4',
-    name: 'Surgical Precision',
-    types: ['sorcery'],
-    cost: { generic: 1, W: 1 },
-    modal: {
-      min: 1,
-      max: 1,
-      modes: [
-        {
-          id: 'mode1',
-          label: 'Destroy target creature with toughness 4 or greater. you gain 1 life',
-          effects: [
-            {
-              primitive: 'destroyTarget',
-              params: {
-                targets: { base: 'creature', bound: { atLeast: { property: 'toughness', value: 4 } } },
-              },
-            },
-            { primitive: 'gainLife', params: { amount: 1 } },
-          ],
-          targets: { base: 'creature', bound: { atLeast: { property: 'toughness', value: 4 } } },
-        },
-        {
-          id: 'mode2',
-          label: 'You draw a card and gain 2 life',
-          effects: [
-            { primitive: 'drawCards', params: { count: 1 } },
-            { primitive: 'gainLife', params: { amount: 2 } },
-          ],
-        },
-      ],
-    },
   },
   // {1}, Sacrifice this artifact: Draw a card.
   // {2}{U}, Sacrifice this artifact: Return target creature to its owner's hand. Draw a card. Activate only as a sorcery.
@@ -104362,6 +106276,34 @@ const POOL_11: readonly CardDefinition[] = [
     effects: [
       { primitive: 'dealDamage', params: { amount: { chosenX: true }, targets: 'creature' } },
       { primitive: 'gainLife', params: { amount: { chosenX: true } } },
+    ],
+  },
+  // {4}{B}, {T}: Creatures you control get +1/+0 and gain menace until end of turn. (They can't be blocked except by two or more creatures.)
+  // {1}{G}, {T}: You gain 2 life.
+  {
+    id: '7599adc7-72b2-4079-ac0a-1a821f9de925',
+    name: 'Swarm Guildmage',
+    types: ['creature'],
+    cost: { B: 1, G: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['elf', 'shaman'],
+    activated: [
+      {
+        cost: { mana: { generic: 4, B: 1 }, tap: true },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { keywords: { menace: true }, power: 1, toughness: 0, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{4}{b}, {t}: creatures you control get +1/+0 and gain menace until end of turn',
+      },
+      {
+        cost: { mana: { generic: 1, G: 1 }, tap: true },
+        effects: [{ primitive: 'gainLife', params: { amount: 2 } }],
+        label: '{1}{g}, {t}: you gain 2 life',
+      },
     ],
   },
   // Flying
@@ -105719,6 +107661,79 @@ const POOL_11: readonly CardDefinition[] = [
     keywords: { haste: true },
     subtypes: ['minotaur', 'berserker'],
   },
+  // +1: Tap target permanent. It doesn't untap during its controller's next untap step.
+  // −2: Draw a card for each tapped creature target player controls.
+  // −8: You get an emblem with "You have no maximum hand size" and "Whenever a card is put into your graveyard from anywhere, you may return it to your hand."
+  {
+    id: 'b9398926-13b9-47b8-b66b-1ab9d06bb704',
+    name: 'Tamiyo, the Moon Sage',
+    types: ['planeswalker'],
+    cost: { generic: 3, U: 2 },
+    loyalty: 4,
+    legendary: true,
+    subtypes: ['tamiyo'],
+    activated: [
+      {
+        cost: { loyalty: 1 },
+        effects: [
+          { primitive: 'tapTarget', params: { targets: 'permanent' } },
+          { primitive: 'freezeTarget', params: {} },
+        ],
+        timing: 'sorcery',
+        label: '+1: tap target permanent. it doesn\'t untap during its controller\'s next untap step',
+      },
+      {
+        cost: { loyalty: -2 },
+        effects: [
+          {
+            primitive: 'drawCards',
+            params: {
+              count: {
+                countOf: 'permanentsMatching',
+                filter: { anyOfTypes: ['creature'] },
+                scope: 'you',
+                subject: 'targetPlayer',
+                permanentState: 'tapped',
+              },
+              targets: 'player',
+            },
+          },
+        ],
+        timing: 'sorcery',
+        label: '−2: draw a card for each tapped creature target player controls',
+      },
+      {
+        cost: { loyalty: -8 },
+        effects: [
+          {
+            primitive: 'createEmblem',
+            params: {
+              name: 'Tamiyo, the Moon Sage emblem',
+              triggers: [
+                {
+                  condition: { on: 'cardPutIntoGraveyardFromAnywhere', who: 'you', carriesSubject: true },
+                  effects: [
+                    {
+                      primitive: 'mayEffects',
+                      params: {
+                        prompt: 'You may return it to your hand',
+                        valence: 'gain',
+                        effects: [{ primitive: 'returnTriggeringCardToHand' }],
+                      },
+                    },
+                  ],
+                  label: 'card into your graveyard from anywhere: you may return it to your hand',
+                },
+              ],
+              definitionFields: { noMaximumHandSize: true },
+            },
+          },
+        ],
+        timing: 'sorcery',
+        label: '−8: you get an emblem with "you have no maximum hand size" and "whenever a card is put into your graveyard from anywhere, you may return it to your hand."',
+      },
+    ],
+  },
   // Scry 4, then draw two cards.
   {
     id: 'ce338cf3-46dc-4c87-8df5-af27097c7dd4',
@@ -106249,6 +108264,9 @@ const POOL_11: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_12: readonly CardDefinition[] = [
   // Flying; trample; rampage 4 (Whenever this creature becomes blocked, it gets +4/+4 until end of turn for each creature blocking it beyond the first.)
   {
     id: '57e8971d-baeb-4e4f-8c4d-0e8109e4505e',
@@ -107653,9 +109671,6 @@ const POOL_11: readonly CardDefinition[] = [
       },
     ],
   },
-];
-
-const POOL_12: readonly CardDefinition[] = [
   // Search your library for a basic land card, put it onto the battlefield tapped, then shuffle. Investigate. (Create a Clue token. It's an artifact with "{2}, Sacrifice this token: Draw a card.")
   {
     id: 'f4a31d4a-34bc-46b4-b20f-a5460191b35d',
@@ -107876,6 +109891,40 @@ const POOL_12: readonly CardDefinition[] = [
         label: 'Cast noncreature: ~ gets +1/+1 until end of turn',
       },
     ],
+  },
+  // Choose one —
+  // • Creatures you control get +2/+1 until end of turn.
+  // • Destroy target artifact or enchantment. You gain 2 life.
+  {
+    id: '127367b6-9cfe-4516-9bfd-5b951468a25c',
+    name: 'Thorin\'s Last Stand',
+    types: ['instant'],
+    cost: { generic: 2, W: 2 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Creatures you control get +2/+1 until end of turn',
+          effects: [
+            {
+              primitive: 'grantKeywordToYoursUntilEndOfTurn',
+              params: { power: 2, toughness: 1, anyOfTypes: ['creature'] },
+            },
+          ],
+        },
+        {
+          id: 'mode2',
+          label: 'Destroy target artifact or enchantment. you gain 2 life',
+          effects: [
+            { primitive: 'destroyTarget', params: { targets: 'artifactOrEnchantment' } },
+            { primitive: 'gainLife', params: { amount: 2 } },
+          ],
+          targets: 'artifactOrEnchantment',
+        },
+      ],
+    },
   },
   // Destroy target creature with flying.
   // Cycling {1}{G} ({1}{G}, Discard this card: Draw a card.)
@@ -108695,6 +110744,37 @@ const POOL_12: readonly CardDefinition[] = [
       },
     ],
   },
+  // {B}{B}, {T}: Target player loses 2 life and you gain 2 life.
+  // {G}{G}, {T}: Creatures you control get +2/+2 until end of turn.
+  {
+    id: '22abdc2f-bdc8-46c4-8ce2-f06befedbc32',
+    name: 'Thunderscape Master',
+    types: ['creature'],
+    cost: { generic: 2, R: 2 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'wizard'],
+    activated: [
+      {
+        cost: { mana: { B: 2 }, tap: true },
+        effects: [
+          { primitive: 'loseLife', params: { amount: 2, targetPlayer: true, targets: 'player' } },
+          { primitive: 'gainLife', params: { amount: 2 } },
+        ],
+        label: '{b}{b}, {t}: target player loses 2 life and you gain 2 life',
+      },
+      {
+        cost: { mana: { G: 2 }, tap: true },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 2, toughness: 2, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{g}{g}, {t}: creatures you control get +2/+2 until end of turn',
+      },
+    ],
+  },
   // Haste
   // Myriad (Whenever this creature attacks, for each opponent other than defending player, you may create a token copy that's tapped and attacking that player or a planeswalker they control. Exile the tokens at end of combat.)
   {
@@ -109074,6 +111154,28 @@ const POOL_12: readonly CardDefinition[] = [
         condition: { on: 'etb' },
         effects: [{ primitive: 'returnFromGraveyard', params: { count: 1 } }],
         label: 'Enters: return target card from your graveyard to your hand',
+      },
+    ],
+  },
+  // {4}{W}: Creatures you control get +1/+1 until end of turn.
+  {
+    id: '1c672d38-a1a6-4912-a9a6-b11e7bf0cc67',
+    name: 'Timid Shieldbearer',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['kithkin', 'soldier'],
+    activated: [
+      {
+        cost: { mana: { generic: 4, W: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{4}{w}: creatures you control get +1/+1 until end of turn',
       },
     ],
   },
@@ -110091,6 +112193,19 @@ const POOL_12: readonly CardDefinition[] = [
         },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
         label: 'another artifact (you) enters: ~ gets +1/+0 until end of turn',
+      },
+    ],
+  },
+  // Creatures you control get +0/+5 and gain reach until end of turn.
+  {
+    id: 'adacc68a-0bc5-49ee-b5f8-d61024952ce9',
+    name: 'Tower Defense',
+    types: ['instant'],
+    cost: { generic: 1, G: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { keywords: { reach: true }, power: 0, toughness: 5, anyOfTypes: ['creature'] },
       },
     ],
   },
@@ -114153,6 +116268,25 @@ const POOL_12: readonly CardDefinition[] = [
     keywords: { haste: true, mustAttack: true },
     subtypes: ['human', 'berserker'],
   },
+  // Whenever a creature you control enters, creatures you control get +1/+1 until end of turn.
+  {
+    id: '7e7428ad-4bd4-401d-a45c-3900bb05a3f7',
+    name: 'Valor in Akros',
+    types: ['enchantment'],
+    cost: { generic: 3, W: 1 },
+    triggers: [
+      {
+        condition: { on: 'permanentEnters', who: 'you', permanentFilter: { anyOfTypes: ['creature'] } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'creature (you) enters: creatures you control get +1/+1 until end of turn',
+      },
+    ],
+  },
   // Choose one —
   // • Target creature gains indestructible until end of turn. (Damage and effects that say "destroy" don't destroy it.)
   // • Destroy target creature with toughness 4 or greater.
@@ -114939,6 +117073,9 @@ const POOL_12: readonly CardDefinition[] = [
       },
     ],
   },
+];
+
+const POOL_13: readonly CardDefinition[] = [
   // Reach (This creature can block creatures with flying.)
   // Soulshift 4 (When this creature dies, you may return target Spirit card with mana value 4 or less from your graveyard to your hand.)
   {
@@ -116260,6 +118397,21 @@ const POOL_12: readonly CardDefinition[] = [
       modifies: { power: 1, toughness: 1, keywords: {} },
     },
   },
+  // Cascade (When you cast this spell, exile cards from the top of your library until you exile a nonland card that costs less. You may cast it without paying its mana cost. Put the exiled cards on the bottom in a random order.)
+  // Creatures you control get +1/+0 until end of turn.
+  {
+    id: '1b58856a-f88e-4625-8636-62b5c717b956',
+    name: 'Violent Outburst',
+    types: ['instant'],
+    cost: { generic: 1, R: 1, G: 1 },
+    castTriggers: [{ keyword: 'cascade', label: 'Cascade', effects: [{ primitive: 'cascade' }] }],
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 1, toughness: 0, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // Destroy target nonblack creature. Create a 1/1 black Faerie Rogue creature token with flying.
   {
     id: 'bdfd0fa3-37d2-403e-99fe-8c9e57515e9d',
@@ -116506,6 +118658,19 @@ const POOL_12: readonly CardDefinition[] = [
       },
     ],
   },
+  // Creatures you control get +1/+1 until end of turn.
+  {
+    id: '72ad4c79-a85d-4fc6-95ab-5a6d6d667579',
+    name: 'Virtuous Charge',
+    types: ['sorcery'],
+    cost: { generic: 2, W: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // Flying (This creature can't be blocked except by creatures with flying or reach.)
   // When this creature enters, put a +1/+1 counter on target creature you control.
   {
@@ -116658,9 +118823,6 @@ const POOL_12: readonly CardDefinition[] = [
     cost: { generic: 1, U: 1 },
     effects: [{ primitive: 'drawCards', params: { count: 2, whichPlayer: 'each' } }],
   },
-];
-
-const POOL_13: readonly CardDefinition[] = [
   // Fabricate 2 (When this creature enters, put two +1/+1 counters on it or create two 1/1 colorless Servo artifact creature tokens.)
   {
     id: '918691b1-f927-4027-a444-adc418f3ab16',
@@ -116688,6 +118850,19 @@ const POOL_13: readonly CardDefinition[] = [
       {
         primitive: 'tapPermanents',
         params: { who: 'controller', untap: true, types: ['creature'] },
+      },
+    ],
+  },
+  // Creatures you control get +7/+7 until end of turn.
+  {
+    id: '0fbd7c20-d527-4d97-9630-896d5e7bf1de',
+    name: 'Vitalizing Wind',
+    types: ['instant'],
+    cost: { generic: 8, G: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 7, toughness: 7, anyOfTypes: ['creature'] },
       },
     ],
   },
@@ -118292,6 +120467,28 @@ const POOL_13: readonly CardDefinition[] = [
     cost: { generic: 4, W: 1 },
     effects: [{ primitive: 'exileTarget', params: { targets: 'creature' } }, { primitive: 'proliferate' }],
   },
+  // Whenever this creature attacks, creatures you control get +1/+0 until end of turn.
+  {
+    id: '3da81dbd-dc80-47ff-a33b-270d23a24e0a',
+    name: 'Wandering Musicians',
+    types: ['creature'],
+    cost: { generic: 3, hybrid: [['R', 'W']] },
+    power: 2,
+    toughness: 5,
+    subtypes: ['human', 'bard', 'ally'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 0, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: 'Attacks: creatures you control get +1/+0 until end of turn',
+      },
+    ],
+  },
   {
     id: '8f973d6b-4a34-4b0e-b092-ead05bf2e535',
     name: 'Wandering Ones',
@@ -118506,6 +120703,21 @@ const POOL_13: readonly CardDefinition[] = [
       ],
     },
   },
+  // Creatures you control get +2/+1 until end of turn.
+  // Foretell {2}{W} (During your turn, you may pay {2} and exile this card from your hand face down. Cast it on a later turn for its foretell cost.)
+  {
+    id: '3fc98aff-edc0-4f78-ae4f-e08735c9e512',
+    name: 'Warhorn Blast',
+    types: ['instant'],
+    cost: { generic: 4, W: 1 },
+    foretell: { generic: 2, W: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 2, toughness: 1, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
   // Creatures you control get +1/+1.
   // Whenever a creature you control enters, this enchantment deals 1 damage to each opponent.
   {
@@ -118631,6 +120843,28 @@ const POOL_13: readonly CardDefinition[] = [
       },
     ],
   },
+  // {3}{W}: Creatures you control get +1/+1 until end of turn.
+  {
+    id: '4bf20069-5a20-4f95-976b-6af2b69f3ad0',
+    name: 'Warren Elder',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['rabbit', 'cleric'],
+    activated: [
+      {
+        cost: { mana: { generic: 3, W: 1 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{3}{w}: creatures you control get +1/+1 until end of turn',
+      },
+    ],
+  },
   // Pay 1 life, Sacrifice another creature: Create a Treasure token. (It's an artifact with "{T}, Sacrifice this token: Add one mana of any color.")
   {
     id: 'b334e4c6-d316-4141-8889-f95afcc04701',
@@ -118658,6 +120892,32 @@ const POOL_13: readonly CardDefinition[] = [
     toughness: 1,
     keywords: { protectionFrom: ['subtype:Goblin'] },
     subtypes: ['elf', 'warrior'],
+  },
+  // Creatures you control get +1/+1 until end of turn.
+  {
+    id: '8668e4af-ae89-4fab-8015-8dc643c6cd36',
+    name: 'Warrior\'s Charge',
+    types: ['sorcery'],
+    cost: { generic: 2, W: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+      },
+    ],
+  },
+  // Creatures you control get +1/+1 until end of turn.
+  {
+    id: '09117d06-79e6-4f86-ba92-d1f8fe165147',
+    name: 'Warrior\'s Honor',
+    types: ['instant'],
+    cost: { generic: 2, W: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+      },
+    ],
   },
   // Trample (This creature can deal excess combat damage to the player it's attacking.)
   {
@@ -118928,6 +121188,28 @@ const POOL_13: readonly CardDefinition[] = [
         cost: { mana: { U: 1 } },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -1, toughness: 1 } }],
         label: '{u}: ~ gets -1/+1 until end of turn',
+      },
+    ],
+  },
+  // {5}: Creatures you control get +1/+1 until end of turn.
+  {
+    id: '0a0cdf97-1927-47c6-8ef1-29969e3567ee',
+    name: 'Water Tribe Captain',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['human', 'soldier', 'ally'],
+    activated: [
+      {
+        cost: { mana: { generic: 5 } },
+        effects: [
+          {
+            primitive: 'grantKeywordToYoursUntilEndOfTurn',
+            params: { power: 1, toughness: 1, anyOfTypes: ['creature'] },
+          },
+        ],
+        label: '{5}: creatures you control get +1/+1 until end of turn',
       },
     ],
   },
@@ -122207,16 +124489,6 @@ const POOL_13: readonly CardDefinition[] = [
     legendary: true,
     subtypes: ['frog', 'spirit'],
   },
-  {
-    id: 'f45ba926-6496-4bd4-96eb-663946d56bbf',
-    name: 'Yargle, Goliath of Otaria',
-    types: ['creature'],
-    cost: { generic: 4, U: 1 },
-    power: 3,
-    toughness: 9,
-    legendary: true,
-    subtypes: ['frog', 'spirit'],
-  },
   // {G}: This creature gets +1/-2 until end of turn.
   {
     id: '4f6ea327-524b-4790-abec-05c67d7f3bbc',
@@ -122677,54 +124949,6 @@ const POOL_13: readonly CardDefinition[] = [
         },
         effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
         label: 'another angel (you) enters: put a +1/+1 counter on ~',
-      },
-    ],
-  },
-  // Flash
-  // When Yuriko enters, choose one —
-  // • Target creature gets -X/-0 until end of turn, where X is the number of cards in your graveyard.
-  // • Surveil 2. (Look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)
-  {
-    id: '45e81487-8b8c-480b-922a-eaa9edc7201d',
-    name: 'Yuriko, Hope from the Shadows',
-    types: ['creature'],
-    cost: { U: 1 },
-    power: 1,
-    toughness: 1,
-    legendary: true,
-    keywords: { flash: true },
-    subtypes: ['human', 'ninja'],
-    triggers: [
-      {
-        condition: { on: 'etb' },
-        effects: [],
-        label: 'Enters: choose one — • target creature gets -x/-0 until end of turn, where x is the number of cards in your graveyard. • surveil 2',
-        modal: {
-          min: 1,
-          max: 1,
-          modes: [
-            {
-              id: 'mode1',
-              label: 'Target creature gets -x/-0 until end of turn, where x is the number of cards in your graveyard',
-              effects: [
-                {
-                  primitive: 'pumpUntilEndOfTurn',
-                  params: {
-                    power: { countOf: 'cardsInYourGraveyard', times: -1 },
-                    toughness: 0,
-                    targets: 'creature',
-                  },
-                },
-              ],
-              targets: 'creature',
-            },
-            {
-              id: 'mode2',
-              label: 'Surveil 2',
-              effects: [{ primitive: 'surveil', params: { count: 2 } }],
-            },
-          ],
-        },
       },
     ],
   },
@@ -123297,6 +125521,9 @@ const POOL_13: readonly CardDefinition[] = [
     keywords: { landwalk: [{ kind: 'subtype', subtype: 'plains' }] },
     subtypes: ['bird'],
   },
+];
+
+const POOL_14: readonly CardDefinition[] = [
   // Swampwalk (This creature can't be blocked as long as defending player controls a Swamp.)
   {
     id: '6d30d6f0-ca4c-4442-a47f-ecdf52088ecc',
@@ -123429,4 +125656,4 @@ const POOL_13: readonly CardDefinition[] = [
   },
 ];
 
-export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([...POOL_0, ...POOL_1, ...POOL_2, ...POOL_3, ...POOL_4, ...POOL_5, ...POOL_6, ...POOL_7, ...POOL_8, ...POOL_9, ...POOL_10, ...POOL_11, ...POOL_12, ...POOL_13]);
+export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([...POOL_0, ...POOL_1, ...POOL_2, ...POOL_3, ...POOL_4, ...POOL_5, ...POOL_6, ...POOL_7, ...POOL_8, ...POOL_9, ...POOL_10, ...POOL_11, ...POOL_12, ...POOL_13, ...POOL_14]);
