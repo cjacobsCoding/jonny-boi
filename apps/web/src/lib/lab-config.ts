@@ -10,6 +10,7 @@ import {
   DEFAULT_SUGGEST_CONFIG,
   DEFAULT_STATS_CONFIG,
   FIDELITY_CAVEAT,
+  LAND_COUNT_SWEEP_RADIUS,
 } from '@jonny-boi/sim';
 
 /**
@@ -51,6 +52,25 @@ export const SUGGEST_MAX_CANDIDATES = {
   default: DEFAULT_SUGGEST_CONFIG.maxCandidates,
   min: 1,
   max: 24,
+  step: 1,
+} as const;
+
+/**
+ * §3.175 — the manabase experiments: paired games per opponent a FINALIST
+ * variant reaches (the ladder is adaptive, like Suggestions, so the default is
+ * the same finalist depth), and how far the count/mix sweeps step each way.
+ */
+export const MANABASE_GAMES = {
+  default: DEFAULT_SUGGEST_CONFIG.defaultGamesPerCandidate,
+  min: 10,
+  max: 200,
+  step: 10,
+} as const;
+
+export const MANABASE_SWEEP_RADIUS = {
+  default: LAND_COUNT_SWEEP_RADIUS,
+  min: 1,
+  max: 3,
   step: 1,
 } as const;
 

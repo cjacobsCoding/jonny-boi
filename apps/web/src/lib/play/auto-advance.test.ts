@@ -95,6 +95,39 @@ describe('auto-advancing priority', () => {
     expect(s.hasMeaningfulChoice()).toBe(true);
   });
 
+  it('makes a FORCED block declaration for the defender with no possible blocker (report 20260825_211445)', () => {
+    // A: Goblin Guide attacks. B: no creatures. The live build sat on "No
+    // blocks" here with nothing to decide; the declaration is made for B and
+    // the walk carries on through combat.
+    let s = session((state) => {
+      place(state, card('Goblin Guide'), 'A');
+    }).autoAdvancePriority();
+    expect(s.state.step).toBe('precombatMain');
+    s = s.passPriority().session.autoAdvancePriority();
+    expect(s.state.step).toBe('declareAttackers');
+    const guide = s.state.battlefield.find((c) => c.def.name === 'Goblin Guide')!;
+    s = s.declareAttackers([guide.instanceId]).session;
+    // B is now the priority holder somewhere in combat; nothing B holds is a decision.
+    const walked = s.autoAdvancePriority();
+    expect(walked.state.combat?.blockersDeclared ?? true, 'the empty declaration was made').toBe(true);
+    expect(walked.state.step, 'combat is over — no stop on a forced declaration').not.toBe('declareBlockers');
+    expect(walked.state.players.B.life, 'Goblin Guide connected').toBeLessThan(20);
+  });
+
+  it('still STOPS at declare-blockers when a creature can block — declining to block is a decision', () => {
+    let s = session((state) => {
+      place(state, card('Goblin Guide'), 'A');
+      place(state, card('Grizzly Bears'), 'B');
+    }).autoAdvancePriority();
+    s = s.passPriority().session.autoAdvancePriority();
+    const guide = s.state.battlefield.find((c) => c.def.name === 'Goblin Guide')!;
+    s = s.declareAttackers([guide.instanceId]).session.autoAdvancePriority();
+    expect(s.state.step).toBe('declareBlockers');
+    expect(s.priorityPlayer).toBe('B');
+    expect(s.blockDeclarationIsForced()).toBe(false);
+    expect(s.hasMeaningfulChoice()).toBe(true);
+  });
+
   it('never makes more passes than its bound, so it cannot spin the UI', () => {
     // An empty-handed board has long stretches with nothing to do, so this walks
     // many windows. Capped at two passes, it must stop exactly where two manual

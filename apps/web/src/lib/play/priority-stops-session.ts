@@ -31,7 +31,14 @@ export function stopContextFor(session: GameSession): StopContext {
     activePlayer: state.activePlayer,
     holder,
     pendingChoice: session.pendingChoice !== null,
-    offersDeclaration: legal.some((a) => a.kind === 'declareAttackers' || a.kind === 'declareBlockers'),
+    // A forced block declaration (no creature can block — bug report
+    // 20260825_211445) is no decision; the auto-advance makes it, so the
+    // Arena-style rule must not stop the board for it either.
+    offersDeclaration: legal.some(
+      (a) =>
+        a.kind === 'declareAttackers' ||
+        (a.kind === 'declareBlockers' && !session.blockDeclarationIsForced()),
+    ),
     hasAnyPlay: session.hasMeaningfulChoice(),
     canRespond: session.canRespond(),
     stackTopController: top ? top.controller : null,

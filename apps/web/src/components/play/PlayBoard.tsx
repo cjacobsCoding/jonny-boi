@@ -327,7 +327,9 @@ export function PlayBoard({
   // A modal mana source the player tapped, awaiting the colour they want.
   const [pendingManaTap, setPendingManaTap] = useState<readonly ManaTapOption[] | null>(null);
   // The viewer's graveyard panel (the flashback affordance's entry point).
-  const [graveyardOpen, setGraveyardOpen] = useState(false);
+  // Which seat's graveyard is open, or none — either seat's, since a graveyard
+  // is public (bug report 20260907_190210); the viewer's also offers casts.
+  const [graveyardOpen, setGraveyardOpen] = useState<PlayerId | null>(null);
   /**
    * WHOSE exile is open, or null. A seat, not a boolean, because exile is the
    * one openable zone where the OPPONENT's copy is worth looking at: a jailed
@@ -1201,24 +1203,39 @@ export function PlayBoard({
     if (opt) onCastClick(opt);
   };
 
-  /** The panel's view of the viewer's graveyard, with the why-disabled treatment. */
-  const graveyardPanelCards = zonePanelView(
-    'graveyard',
-    {
-      cards: session.state.players[viewer].graveyard.map((inst) => ({
-        instanceId: inst.instanceId,
-        cardId: inst.def.id,
-        name: inst.def.name,
-        // The graveyard CAN answer the permanent question: no printed flashback
-        // cost means no cast from here, ever.
-        castableEver: inst.def.flashback !== undefined,
-      })),
-      // CR 404.2 — nothing in a graveyard is hidden from anybody.
-      hiddenCount: 0,
-    },
-    new Set(graveyardCasts.map((o) => o.instanceId)),
-    { yours: true, yourTurn: isViewersPriority, waitingOn: names[session.priorityPlayer], step },
-  );
+  /**
+   * The opened graveyard, for whichever seat's chip was clicked — the viewer's
+   * with its casts, the opponent's as a reading surface (bug report
+   * 20260907_190210). Read from the same public zone the exile panel reads its
+   * seat from; CR 404.2 — nothing in a graveyard is hidden from anybody, so
+   * `hiddenCount` is 0 for either seat.
+   */
+  const graveyardSeat = graveyardOpen === null ? null : graveyardOpen === view.self.id ? view.self : view.opponent;
+  const graveyardPanelCards =
+    graveyardSeat === null
+      ? null
+      : zonePanelView(
+          'graveyard',
+          {
+            cards: session.state.players[graveyardSeat.id].graveyard.map((inst) => ({
+              instanceId: inst.instanceId,
+              cardId: inst.def.id,
+              name: inst.def.name,
+              // The graveyard CAN answer the permanent question: no printed flashback
+              // cost means no cast from here, ever.
+              castableEver: inst.def.flashback !== undefined,
+            })),
+            hiddenCount: 0,
+          },
+          // Only the viewer's own graveyard offers casts.
+          graveyardSeat.id === viewer ? new Set(graveyardCasts.map((o) => o.instanceId)) : new Set(),
+          {
+            yours: graveyardSeat.id === viewer,
+            yourTurn: isViewersPriority,
+            waitingOn: names[session.priorityPlayer],
+            step,
+          },
+        );
 
   /**
    * The opened exile, for whichever seat's chip was clicked.
@@ -1789,7 +1806,7 @@ export function PlayBoard({
         opponentInteraction={opponentInteraction}
         jails={jails}
         onInspectCard={setZoomed}
-        onGraveyardClick={() => setGraveyardOpen((open) => !open)}
+        onGraveyardClick={(seat) => setGraveyardOpen((open) => (open === seat ? null : seat))}
         onExileClick={(seat) => setExileOpen((open) => (open === seat ? null : seat))}
         drag={drag}
         dropRef={dropRef}
@@ -1797,23 +1814,28 @@ export function PlayBoard({
         measureKey={session}
         damage={damageSource}
         rail={
-          <GameLog
-            events={session.events}
-            resolvers={{ name: session.nameOf, playerName: session.playerName }}
-          />
+          <>
+            {/* "What the computer just did" sits ABOVE the log, in the rail —
+                never over a tile (bug report 20260917_220347). */}
+            <OpponentActionFeed notes={opponentNotes} opponentName={names[otherOf(viewer)]} />
+            <GameLog
+              events={session.events}
+              resolvers={{ name: session.nameOf, playerName: session.playerName }}
+            />
+          </>
         }
         selfZonePanels={
           <>
             {/* The opened graveyard. Flashback casts live in `legalActions` but the
                 hand was the only clickable zone, so they were unreachable — this is
                 that affordance, routed through the same cast chokepoint. */}
-            {graveyardOpen && (
+            {graveyardSeat !== null && graveyardPanelCards !== null && (
               <ZonePanel
                 zone="graveyard"
-                ownerName={view.self.name}
+                ownerName={graveyardSeat.name}
                 view={graveyardPanelCards}
                 onActivate={onGraveyardCardClick}
-                onClose={() => setGraveyardOpen(false)}
+                onClose={() => setGraveyardOpen(null)}
               />
             )}
             {/* The opened EXILE — the last zone on this board that a player could
@@ -2432,7 +2454,6 @@ export function PlayBoard({
           the loser WAITS and is counted on screen rather than being painted
           over or dropped. */}
       <AnnouncementSurface queue={announcements} renderers={announcementRenderers} />
-      <OpponentActionFeed notes={opponentNotes} opponentName={names[otherOf(viewer)]} />
     </div>
   );
 }

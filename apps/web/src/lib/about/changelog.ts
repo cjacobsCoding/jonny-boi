@@ -78,6 +78,22 @@ export const MECHANICS_CHANGELOG: readonly ChangelogEntry[] = [
       'Step through a loop twice in Solo or pass-and-play — tap for life, untap, tap again — and the board stops you: here are the pieces, here is what one time round changes (+1 life, +1 Saproling), how many more times? Up to 1,000, every trigger and state-based action as if you had clicked. A loop that changes nothing (tap one artifact to untap the other) is left alone, and so is one that would run out of something. "Repeat forever" is drawn but waits for the next stage.',
   },
   {
+    section: '3.176',
+    date: '2026-09-19',
+    kind: 'fix',
+    title: 'The gathered feedback: 37 reports answered',
+    summary:
+      'Every human bug report from 2026-08-19 to 2026-09-18 triaged against the live build. Fixed now: the hand shows the printed card instead of a wall of tiny text, a card never shows its rules twice, the opponent’s graveyard opens, the game no longer stops for blockers you do not have, the computer’s plays are listed beside the log instead of over your creatures, and a bug-report capture keeps every row of a table.',
+  },
+  {
+    section: '3.175',
+    date: '2026-09-19',
+    kind: 'app',
+    title: 'The Lab tries other manabases — and measures reliability, not just wins',
+    summary:
+      'A new Manabase tab in the Lab: it builds land-only variants of your deck — a land or two more or fewer, the basics shifted between colours, a playset of each dual from the pool that fits your colours — plays each one against your deck on the same games, and shows the win rate beside how often it missed a land drop, got colour-screwed, or had its lands by turn four. Two axes, side by side, with the rule that picks a recommendation printed; Apply swaps the lands in.',
+  },
+  {
     section: '3.173',
     date: '2026-09-19',
     kind: 'mechanic',

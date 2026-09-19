@@ -18,13 +18,17 @@
  */
 import {
   applyAction,
+  attackingCreatureIds,
   backFaceCastZonesOf,
+  canBlock,
   canPay,
   castPermissionFor,
   DEFAULT_RULES,
   generateLegalActions,
   hasCardGrants,
   hasCastableBackFace,
+  indexContinuous,
+  isCreature,
   isFreeCastWindow,
   isLand,
   manaPaymentChoiceExists,
@@ -685,6 +689,10 @@ export class GameSession {
     if (this.comboWindow) return true;
     for (const action of this.legalActions()) {
       if (action.kind === 'passPriority' || action.kind === 'tapForMana') continue;
+      // Bug report 20260825_211445 — the engine offers the empty block
+      // declaration to EVERY defender; with no creature able to block it is
+      // not a decision, and `autoAdvancePriority` makes it for the player.
+      if (action.kind === 'declareBlockers' && this.blockDeclarationIsForced()) continue;
       return true; // playLand / castSpell / declareAttackers / declareBlockers
     }
     // Nothing in the raw menu but a pass or a mana tap — yet there may still be a
@@ -747,11 +755,46 @@ export class GameSession {
     let working: GameSession = this;
     for (let i = 0; i < maxPasses; i++) {
       if (working.gameOver || shouldStop(working)) break;
-      const result = working.passPriority();
+      // A FORCED block declaration is made, not passed over: passing does not
+      // declare, and the step cannot end until the defender has (bug report
+      // 20260825_211445 — the board sat on "No blocks" with no creature in play).
+      const result = working.blockDeclarationIsForced()
+        ? working.declareBlockers([])
+        : working.passPriority();
       if (result.rejected) break;
       working = result.session;
     }
     return working;
+  }
+
+  /**
+   * Is the block declaration the engine is offering the priority holder FORCED
+   * — the empty declaration its only legal form? True when it is offered and
+   * no untapped creature of the holder's can block any attacker still in
+   * combat, read through the same `canBlock` the declaration itself is judged
+   * by, so "nothing to decide" and "the engine would refuse it" cannot drift
+   * apart. False whenever a real block exists, even a bad one: choosing not to
+   * block is a decision, and the board must stop for it.
+   */
+  blockDeclarationIsForced(): boolean {
+    if (this.pendingChoice) return false;
+    if (!this.legalActions().some((a) => a.kind === 'declareBlockers')) return false;
+    const combat = this.state.combat;
+    if (!combat) return true;
+    const me = this.priorityPlayer;
+    const battlefield = this.state.battlefield;
+    const index = indexContinuous(this.state);
+    const attackers = attackingCreatureIds(combat)
+      .map((id) => battlefield.find((c) => c.instanceId === id))
+      .filter((c): c is CardInstance => c !== undefined);
+    if (attackers.length === 0) return true;
+    for (const blocker of battlefield) {
+      if (blocker.controller !== me || blocker.tapped || !isCreature(blocker.def)) continue;
+      for (const attacker of attackers) {
+        if (canBlock(attacker, blocker, index, battlefield)) return false;
+      }
+    }
+    return true;
   }
 
   /** The lands in the priority-holder's hand they may currently play (engine-gated). */

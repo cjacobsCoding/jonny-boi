@@ -2,30 +2,26 @@
  * "What the computer just did" (§3.133). Reported: "the computer plays instant
  * and sorcery spells and I have no idea what they played".
  *
- * Pinned over the board's top-right, above the tiles but inert to the pointer,
- * because the one thing it must never do is eat a click on a card underneath.
- * Newest note last, so a turn reads downward in the order it happened.
+ * IN THE LOG RAIL, above the game log (bug report 20260917_220347). It used to
+ * be pinned over the board's top-right — pointer-transparent, so it could not
+ * eat a click, but a burst of four notes sat squarely over the attacking Craw
+ * Wurm the player needed to see and aim at: "Look at all the crap in the way".
+ * The rail is the one region of this surface made of words, it is never over a
+ * tile, and a turn's notes now read downward into the log that keeps them.
+ * Newest note last, so a turn reads in the order it happened.
  */
 
 .opp-feed {
-  position: absolute;
-  /*
-   * Clears the board's status row, which is one line tall and carries the
-   * Concede button at the right — the feed is pointer-transparent so it could
-   * never BLOCK that button, but sitting on top of it hid the word. Named here
-   * rather than inlined so the two are obviously related if the row grows.
-   */
-  --opp-feed-status-clearance: 3.9rem;
-  top: var(--opp-feed-status-clearance);
-  /* Clears the log rail — see `--play-board-right-overlay-inset` in board-fit.css. */
-  right: var(--play-board-right-overlay-inset, var(--space-2, 8px));
-  z-index: 30;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 3px;
-  align-items: flex-end;
-  pointer-events: none;
-  max-width: min(52%, 380px);
+  align-items: stretch;
+  margin-bottom: var(--space-2, 8px);
+  /* A burst never squeezes the log out: the feed keeps at most its share and
+     the notes retire on their own timers (`OPPONENT_FEED_CONFIG.holdMs`). */
+  max-height: 40%;
+  overflow: hidden;
 }
 
 .opp-feed__note {
