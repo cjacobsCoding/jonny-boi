@@ -103,6 +103,7 @@ export function pureManaExchange(ability: ActivatedAbility): ManaExchange | unde
   const cost = ability.cost;
   if (cost.mana === undefined) return undefined;
   if (cost.tap || cost.sacrificeSelf || cost.sacrificeAnother) return undefined;
+  if (cost.discard !== undefined || cost.removeCounters !== undefined) return undefined;
   if (cost.life !== undefined || cost.loyalty !== undefined) return undefined;
   const produced: ManaColor[] = [];
   for (const effect of ability.effects) {
@@ -153,6 +154,7 @@ export function untapSelfExchange(ability: ActivatedAbility, def: CardDefinition
   const cost = ability.cost;
   if (cost.mana === undefined) return undefined;
   if (cost.tap || cost.sacrificeSelf || cost.sacrificeAnother) return undefined;
+  if (cost.discard !== undefined || cost.removeCounters !== undefined) return undefined;
   if (cost.life !== undefined || cost.loyalty !== undefined) return undefined;
   if (ability.effects.length !== 1 || ability.effects[0]?.primitive !== UNTAP_SELF) return undefined;
   const produced = def.produces;

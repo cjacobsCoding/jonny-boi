@@ -2824,6 +2824,36 @@ export const COST_NOUN_PHRASE = Object.keys(COST_NOUNS)
   .join('|');
 
 /**
+ * §3.172 — the CARD a "**Discard <noun>**" activation cost names, as printed
+ * with its article, mapped to the filter the engine reads over the hand
+ * (`ActivationCost.discard.filter`; `undefined` is any card). The card-type
+ * rows are the {@link COST_NOUNS} rows of the same type, so "a creature card"
+ * in a discard cost and "a creature" in a sacrifice cost cannot drift apart.
+ *
+ * Closed on purpose, like every cost table here: "a historic card" (Sanctum
+ * Spirit), "a legendary card with the same name as …" (Key to the Side-Door),
+ * "a Mountain card or a red card" (Chandra's Regulator) and "your hand" all
+ * report rather than discarding something looser than printed. Measured on the
+ * corpus (2026-09-19): 92 cards had one of these rows as their only blocker,
+ * 66 of them the plain "a card".
+ */
+export const DISCARD_COST_NOUNS: Readonly<Record<string, CardFilter | undefined>> = Object.freeze({
+  'a card': undefined,
+  'a creature card': COST_NOUNS.creature,
+  'a land card': COST_NOUNS.land,
+  'an artifact card': COST_NOUNS.artifact,
+  'an enchantment card': { anyOfTypes: ['enchantment'] },
+  'an instant card': { anyOfTypes: ['instant'] },
+  'a sorcery card': { anyOfTypes: ['sorcery'] },
+  'a nonland card': { noneOfTypes: ['land'] },
+});
+
+/** The discard nouns as an alternation, longest first so none is truncated. */
+export const DISCARD_COST_NOUN_PHRASE = Object.keys(DISCARD_COST_NOUNS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+
+/**
  * The printed bodies that read "**that much**" / "**that many**" — the SIZE of
  * the event that set the trigger off (Exquisite Blood, Vito, Sanguine Bond,
  * Mindcrank).

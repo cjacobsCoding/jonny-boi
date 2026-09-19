@@ -423,6 +423,8 @@ export function mechanicOfAction(
     case 'activateAbility': {
       const def = defOf(action.instanceId);
       if (def && isPlaneswalker(def)) return 'planeswalker-loyalty';
+      // §3.172 — the cost paid rides the ability the action names.
+      if (def?.activated?.[action.abilityIndex]?.cost.discard !== undefined) return 'discard-cost';
       return undefined;
     }
     case 'tapForMana': {

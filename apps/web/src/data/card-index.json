@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-09-19T15:16:39.722Z",
+  "generatedAt": "2026-09-19T17:16:58.639Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 7528,
+  "requested": 7631,
   "unresolved": [],
   "cards": [
     {
@@ -7645,6 +7645,49 @@
       "faces": []
     },
     {
+      "id": "5c5bdb8c-2a2e-47cf-a502-2d62f9ada3fa",
+      "name": "Amok",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "{1}, Discard a card at random: Put a +1/+1 counter on target creature.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "sth",
+      "collectorNumber": "76",
+      "rarity": "rare",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "fd169064-9c7b-40bd-8be0-a89fcb28ae2f",
       "name": "Amphin Cutthroat",
       "manaCost": {
@@ -15198,6 +15241,49 @@
       "faces": []
     },
     {
+      "id": "abe37c88-afd7-45ac-9f84-f4bd881a1462",
+      "name": "Artificer's Intuition",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "{U}, Discard an artifact card: Search your library for an artifact card with mana value 1 or less, reveal it, put it into your hand, then shuffle.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "5dn",
+      "collectorNumber": "23",
+      "rarity": "rare",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "034522ae-f531-44d9-b186-ada046ce0abc",
       "name": "Artillerize",
       "manaCost": {
@@ -18638,6 +18724,54 @@
       "faces": []
     },
     {
+      "id": "79c8f774-6d4f-4fd0-85c0-26ef713e6b89",
+      "name": "Aven Trooper",
+      "manaCost": {
+        "generic": 3,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Bird",
+          "Soldier"
+        ]
+      },
+      "rawTypeLine": "Creature — Bird Soldier",
+      "oracleText": "Flying\n{2}{W}, Discard a card: This creature gets +1/+2 until end of turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "tor",
+      "collectorNumber": "2",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "28911e7b-0435-4393-a651-dc6eb53c7d98",
       "name": "Aven Wind Mage",
       "manaCost": {
@@ -19096,6 +19230,52 @@
       "faces": []
     },
     {
+      "id": "c9b3b785-396e-4240-bfa3-58ab53497686",
+      "name": "Axiom Engraver",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Phyrexian",
+          "Wizard"
+        ]
+      },
+      "rawTypeLine": "Creature — Phyrexian Wizard",
+      "oracleText": "This creature enters with two oil counters on it.\n{T}, Remove an oil counter from this creature, Discard a card: Draw a card.",
+      "power": 1,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "one",
+      "collectorNumber": "120",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "2a2e669b-61b2-4729-b636-094796fb1d93",
       "name": "Aysen Abbey",
       "manaCost": {
@@ -19179,6 +19359,49 @@
       "set": "me2",
       "collectorNumber": "6",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "1b9296ca-39a8-4aad-be92-0a56c704e950",
+      "name": "Ayula's Influence",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 3,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "Discard a land card: Create a 2/2 green Bear creature token.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "mh1",
+      "collectorNumber": "156",
+      "rarity": "rare",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -20562,6 +20785,52 @@
       "set": "otc",
       "collectorNumber": "215",
       "rarity": "rare",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c34963e6-850e-4ce4-b04f-5e623ce5b73f",
+      "name": "Balloon Peddler",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Spellshaper",
+      "oracleText": "{U}, {T}, Discard a card: Target creature gains flying until end of turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "mmq",
+      "collectorNumber": "59",
+      "rarity": "common",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -33745,6 +34014,52 @@
       "faces": []
     },
     {
+      "id": "92662394-c31d-4348-9b9c-0fe619949ea3",
+      "name": "Bog Witch",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Spellshaper",
+      "oracleText": "{B}, {T}, Discard a card: Add {B}{B}{B}.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "arc",
+      "collectorNumber": "11",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "5d17210c-be39-4abc-9d4d-4f2eca9573bd",
       "name": "Bog Wraith",
       "manaCost": {
@@ -40741,6 +41056,54 @@
       "faces": []
     },
     {
+      "id": "52f191fb-eaf6-432f-a668-37ad48ffabaf",
+      "name": "Burning-Fist Minotaur",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Minotaur",
+          "Wizard"
+        ]
+      },
+      "rawTypeLine": "Creature — Minotaur Wizard",
+      "oracleText": "First strike\n{1}{R}, Discard a card: This creature gets +2/+0 until end of turn.",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "First strike"
+      ],
+      "set": "hou",
+      "collectorNumber": "85",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "ba327a5e-bd57-4e24-b4b4-062202df30e1",
       "name": "Burning-Tree Emissary",
       "manaCost": {
@@ -41540,6 +41903,54 @@
       "faces": []
     },
     {
+      "id": "b279a03f-85ab-43f2-b5ca-1bc10563e5ad",
+      "name": "Cabal Initiate",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Warlock"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Warlock",
+      "oracleText": "Discard a card: This creature gains lifelink until end of turn.\nThreshold — This creature gets +1/+2 as long as there are seven or more cards in your graveyard.",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Threshold"
+      ],
+      "set": "mh2",
+      "collectorNumber": "78",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "d345d702-b205-4391-985a-6201e707f0ba",
       "name": "Cabal Trainee",
       "manaCost": {
@@ -41818,6 +42229,52 @@
       "set": "dvd",
       "collectorNumber": "41",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "cec755ee-b4c0-47fd-9e61-9a3161766de6",
+      "name": "Cackling Witch",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Spellshaper",
+      "oracleText": "{X}{B}, {T}, Discard a card: Target creature gets +X/+0 until end of turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "mmq",
+      "collectorNumber": "119",
+      "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -42247,6 +42704,49 @@
         "normal": "call-of-the-herd-normal.jpg",
         "art_crop": "call-of-the-herd-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "3ec85cca-ac2c-4b1b-850b-6a762df72bd0",
+      "name": "Call the Bloodline",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "{1}, Discard a card: Create a 1/1 black Vampire Knight creature token with lifelink. Activate only once each turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "soi",
+      "collectorNumber": "103",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -43033,6 +43533,53 @@
       "set": "tla",
       "collectorNumber": "90",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "22f84143-5912-43ca-a274-f26ed0dbadd0",
+      "name": "Canyon Drake",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 2,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Drake"
+        ]
+      },
+      "rawTypeLine": "Creature — Drake",
+      "oracleText": "Flying\n{1}, Discard a card at random: This creature gets +2/+0 until end of turn.",
+      "power": 1,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "tmp",
+      "collectorNumber": "166",
+      "rarity": "rare",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -47221,6 +47768,54 @@
       "faces": []
     },
     {
+      "id": "a83903c1-40fe-47a5-8bcc-2f0877c58225",
+      "name": "Centaur Veteran",
+      "manaCost": {
+        "generic": 5,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Centaur"
+        ]
+      },
+      "rawTypeLine": "Creature — Centaur",
+      "oracleText": "Trample\n{G}, Discard a card: Regenerate this creature.",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Regenerate",
+        "Trample"
+      ],
+      "set": "tor",
+      "collectorNumber": "123",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "08598b2b-6fd2-4a1d-8d74-7ca6d93ad382",
       "name": "Centaur's Herald",
       "manaCost": {
@@ -48787,6 +49382,54 @@
       "set": "bbd",
       "collectorNumber": "192",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "9940d992-1ba1-40ec-9b93-17d773452c4b",
+      "name": "Charging Strifeknight",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit",
+          "Knight"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit Knight",
+      "oracleText": "Haste\n{T}, Discard a card: Draw a card.",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Haste"
+      ],
+      "set": "sos",
+      "collectorNumber": "110",
+      "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -56387,6 +57030,49 @@
       "faces": []
     },
     {
+      "id": "2d1f56e8-55cb-4b81-9946-9f0f813e3d4a",
+      "name": "Compulsion",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "{1}{U}, Discard a card: Draw a card.\n{1}{U}, Sacrifice this enchantment: Draw a card.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "tor",
+      "collectorNumber": "34",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "b75df1f0-0513-40e4-a449-454f75de6434",
       "name": "Concealed Courtyard",
       "manaCost": {
@@ -58835,6 +59521,45 @@
       "faces": []
     },
     {
+      "id": "4ac5a963-d3f3-4700-8c10-6c6974b20c24",
+      "name": "Coral Helm",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "{3}, Discard a card at random: Target creature gets +2/+2 until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "me4",
+      "collectorNumber": "194",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "4ed27607-21a8-4bc3-997e-6d2242313f6d",
       "name": "Coral Merfolk",
       "manaCost": {
@@ -61001,6 +61726,53 @@
       "set": "fdn",
       "collectorNumber": "620",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "e1f3a32a-bfd2-4c31-a349-3e62a84c20e1",
+      "name": "Crashing Centaur",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Centaur"
+        ]
+      },
+      "rawTypeLine": "Creature — Centaur",
+      "oracleText": "{G}, Discard a card: This creature gains trample until end of turn.\nThreshold — As long as there are seven or more cards in your graveyard, this creature gets +2/+2 and has shroud. (It can't be the target of spells or abilities.)",
+      "power": 3,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Threshold"
+      ],
+      "set": "ody",
+      "collectorNumber": "235",
+      "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -68833,6 +69605,52 @@
       "faces": []
     },
     {
+      "id": "2d193a35-8950-4a77-ace3-c4d4085727f4",
+      "name": "Dawnstrider",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Dryad",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Dryad Spellshaper",
+      "oracleText": "{G}, {T}, Discard a card: Prevent all combat damage that would be dealt this turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "mmq",
+      "collectorNumber": "237",
+      "rarity": "rare",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "549ca818-f7bf-47a8-9005-18ddabd3c360",
       "name": "Dawnstrike Paladin",
       "manaCost": {
@@ -71551,6 +72369,52 @@
       "keywords": [],
       "set": "xln",
       "collectorNumber": "186",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "acbed0f5-2ac0-48d8-b5ab-b4cd7176fde2",
+      "name": "Deepwood Drummer",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Spellshaper",
+      "oracleText": "{G}, {T}, Discard a card: Target creature gets +2/+2 until end of turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "mmq",
+      "collectorNumber": "239",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -75431,6 +76295,52 @@
       "set": "s99",
       "collectorNumber": "14",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "fdafbdbd-002d-4a4d-a9f9-f6d365b9cf0b",
+      "name": "Devout Witness",
+      "manaCost": {
+        "generic": 2,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Spellshaper",
+      "oracleText": "{1}{W}, {T}, Discard a card: Destroy target artifact or enchantment.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "vma",
+      "collectorNumber": "24",
+      "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -85847,6 +86757,52 @@
       "faces": []
     },
     {
+      "id": "a2bc3d85-5ba1-4f2e-a676-be989bdb04f7",
+      "name": "Dwarven Strike Force",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Dwarf",
+          "Berserker"
+        ]
+      },
+      "rawTypeLine": "Creature — Dwarf Berserker",
+      "oracleText": "Discard a card at random: This creature gains first strike and haste until end of turn.",
+      "power": 4,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "ody",
+      "collectorNumber": "188",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "4db9aa47-f42b-41e9-948c-8b012c3809fb",
       "name": "Dwarven Trader",
       "manaCost": {
@@ -86217,6 +87173,53 @@
       ],
       "set": "hoc",
       "collectorNumber": "164",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "5dad63b5-ced3-4150-ad84-1ca05a892840",
+      "name": "Earsplitting Rats",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Rat"
+        ]
+      },
+      "rawTypeLine": "Creature — Rat",
+      "oracleText": "When this creature enters, each player discards a card.\nDiscard a card: Regenerate this creature.",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Regenerate"
+      ],
+      "set": "jud",
+      "collectorNumber": "65",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -92719,6 +93722,53 @@
       "faces": []
     },
     {
+      "id": "dd3a0128-4499-498d-9721-b1fd70ea84b4",
+      "name": "Epiphany Storm",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nEnchanted creature has \"{R}, {T}, Discard a card: Draw a card.\"",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "bng",
+      "collectorNumber": "91",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "d1dd0e10-2ad7-467f-8d4b-c70b95bf2e9c",
       "name": "Erase",
       "manaCost": {
@@ -93075,6 +94125,54 @@
       "keywords": [],
       "set": "clu",
       "collectorNumber": "85",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "351ee4ba-882d-48c1-837d-e9eccc5bc50d",
+      "name": "Erstwhile Trooper",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Zombie",
+          "Soldier"
+        ]
+      },
+      "rawTypeLine": "Creature — Zombie Soldier",
+      "oracleText": "Discard a creature card: This creature gets +2/+2 and gains trample until end of turn. Activate only once each turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B",
+        "G"
+      ],
+      "colorIdentity": [
+        "B",
+        "G"
+      ],
+      "keywords": [],
+      "set": "grn",
+      "collectorNumber": "169",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -99349,6 +100447,52 @@
       "set": "cmd",
       "collectorNumber": "122",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "b8b906eb-3223-474c-9b74-eda2c280f9c5",
+      "name": "Fauna Shaman",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elf",
+          "Shaman"
+        ]
+      },
+      "rawTypeLine": "Creature — Elf Shaman",
+      "oracleText": "{G}, {T}, Discard a creature card: Search your library for a creature card, reveal it, put it into your hand, then shuffle.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "bro",
+      "collectorNumber": "179",
+      "rarity": "rare",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -106277,6 +107421,51 @@
       "faces": []
     },
     {
+      "id": "d11770ee-dcf0-4dd4-ab43-b98f1133cec7",
+      "name": "Fledgling Imp",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Imp"
+        ]
+      },
+      "rawTypeLine": "Creature — Imp",
+      "oracleText": "{B}, Discard a card: This creature gains flying until end of turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "ody",
+      "collectorNumber": "137",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "8cd46bfa-ca09-422f-9891-db9399fa2d3a",
       "name": "Fledgling Osprey",
       "manaCost": {
@@ -106687,6 +107876,52 @@
       "keywords": [],
       "set": "clu",
       "collectorNumber": "111",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "01095217-bc33-4d71-bf10-2ead9f8ebd25",
+      "name": "Fleshgrafter",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Warrior"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Warrior",
+      "oracleText": "Discard an artifact card: This creature gets +2/+2 until end of turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "5dn",
+      "collectorNumber": "51",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -107286,6 +108521,52 @@
       ],
       "set": "mh2",
       "collectorNumber": "159",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "9f10fa1c-2c7b-49ba-87b6-3b652b65704d",
+      "name": "Flowstone Channeler",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Spellshaper",
+      "oracleText": "{1}{R}, {T}, Discard a card: Target creature gets +1/-1 and gains haste until end of turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "tsp",
+      "collectorNumber": "155",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -108192,6 +109473,45 @@
       "faces": []
     },
     {
+      "id": "fd401525-b874-4af2-99a3-c2c83e22547e",
+      "name": "Fodder Tosser",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "{T}, Discard a card: This artifact deals 2 damage to target player or planeswalker.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "mh2",
+      "collectorNumber": "226",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "27e9db49-7af7-4bef-ad4c-bf5dfb92030d",
       "name": "Fog",
       "manaCost": {
@@ -108422,6 +109742,48 @@
       "set": "emn",
       "collectorNumber": "60",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "e63523d5-0f2c-436a-b411-662eb11fd150",
+      "name": "Fogwell's Gym",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": [],
+        "absent": true
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Land",
+      "oracleText": "{T}: Add {R}. This land deals 1 damage to you.\n{2}{R}, {T}, Discard a card: Draw a card.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "msc",
+      "collectorNumber": "754",
+      "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -111478,6 +112840,51 @@
       "set": "vis",
       "collectorNumber": "5",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "0dc939cc-826a-4208-ba5b-a11e1cd47aa2",
+      "name": "Frenetic Ogre",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Ogre"
+        ]
+      },
+      "rawTypeLine": "Creature — Ogre",
+      "oracleText": "{R}, Discard a card at random: This creature gets +3/+0 until end of turn.",
+      "power": 2,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "ody",
+      "collectorNumber": "195",
+      "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -118274,6 +119681,52 @@
       ],
       "set": "a25",
       "collectorNumber": "60",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "56ab366c-085b-4b13-b5ad-918965c34d22",
+      "name": "Ghost Tactician",
+      "manaCost": {
+        "generic": 4,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spirit",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Spirit Spellshaper",
+      "oracleText": "{W}, {T}, Discard a card: Creatures you control get +1/+0 until end of turn.",
+      "power": 2,
+      "toughness": 5,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "plc",
+      "collectorNumber": "6",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -125581,6 +127034,51 @@
       ],
       "set": "vma",
       "collectorNumber": "169",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "6d8f1f06-dde5-41f2-923c-67d1d4d13fab",
+      "name": "Goblin Picker",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Goblin"
+        ]
+      },
+      "rawTypeLine": "Creature — Goblin",
+      "oracleText": "{R}, {T}, Discard a card: Draw a card.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "dmu",
+      "collectorNumber": "128",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -139655,6 +141153,103 @@
       "faces": []
     },
     {
+      "id": "f7da32a3-8e33-4603-abd2-8db144062f6a",
+      "name": "Hell Mongrel",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Nightmare",
+          "Dog"
+        ]
+      },
+      "rawTypeLine": "Creature — Nightmare Dog",
+      "oracleText": "Discard a card: This creature gets +1/+1 until end of turn.\nMadness {2}{B} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
+      "power": 4,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Madness"
+      ],
+      "set": "mh2",
+      "collectorNumber": "88",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "7f41ac1c-2603-4234-8963-cd47bb894024",
+      "name": "Hell-Bent Raider",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 2,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Barbarian"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Barbarian",
+      "oracleText": "First strike, haste\nDiscard a card at random: This creature gains protection from white until end of turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "First strike",
+        "Haste"
+      ],
+      "set": "tor",
+      "collectorNumber": "101",
+      "rarity": "rare",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "6137c34e-cc4c-4342-a8e4-cfa9c767c67b",
       "name": "Hell's Kitchen",
       "manaCost": {
@@ -147178,6 +148773,49 @@
       ]
     },
     {
+      "id": "3467c940-dae4-4667-bec8-524dbce13283",
+      "name": "Hypochondria",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "{W}, Discard a card: Prevent the next 3 damage that would be dealt to any target this turn.\n{W}, Sacrifice this enchantment: Prevent the next 3 damage that would be dealt to any target this turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "tor",
+      "collectorNumber": "7",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "bb7f2638-d757-4df6-90b0-b616534dd3a0",
       "name": "Hyrax Tower Scout",
       "manaCost": {
@@ -147216,6 +148854,52 @@
       "keywords": [],
       "set": "thb",
       "collectorNumber": "173",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c5ba6543-ede7-45a5-8e8d-e17d3f545d3f",
+      "name": "Icatian Crier",
+      "manaCost": {
+        "generic": 2,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Spellshaper",
+      "oracleText": "{1}{W}, {T}, Discard a card: Create two 1/1 white Citizen creature tokens.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "uma",
+      "collectorNumber": "22",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -148522,6 +150206,53 @@
       "keywords": [],
       "set": "khm",
       "collectorNumber": "141",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "ee6e2d96-dd9e-45f6-b412-78562f2ada40",
+      "name": "Immobilizing Ink",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nEnchanted creature doesn't untap during its controller's untap step.\nEnchanted creature has \"{1}, Discard a card: Untap this creature.\"",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "ody",
+      "collectorNumber": "87",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -151228,6 +152959,53 @@
       "faces": []
     },
     {
+      "id": "efec73e0-2dfa-42f7-bb95-3c2553821055",
+      "name": "Inner Demons Gangsters",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Rogue",
+          "Villain"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Rogue Villain",
+      "oracleText": "Discard a card: This creature gets +1/+0 and gains menace until end of turn. Activate only as a sorcery. (It can't be blocked except by two or more creatures.)",
+      "power": 3,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "msc",
+      "collectorNumber": "797",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "2298faae-370e-4b87-bf32-d20c2282a928",
       "name": "Inner Sanctum",
       "manaCost": {
@@ -151639,6 +153417,53 @@
       "set": "ths",
       "collectorNumber": "92",
       "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "813104f6-e6e4-4709-8626-12fe4262a11f",
+      "name": "Insolent Neonate",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Vampire"
+        ]
+      },
+      "rawTypeLine": "Creature — Vampire",
+      "oracleText": "Menace (This creature can't be blocked except by two or more creatures.)\nDiscard a card, Sacrifice this creature: Draw a card.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Menace"
+      ],
+      "set": "soi",
+      "collectorNumber": "168",
+      "rarity": "common",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -153106,6 +154931,116 @@
           "toughness": null,
           "colors": [
             "B"
+          ],
+          "imageUris": {}
+        }
+      ]
+    },
+    {
+      "id": "407d6723-bf58-403e-b2ac-ba52c51d356f",
+      "name": "Invasion of Mercadia // Kyren Flamewright",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Battle"
+        ],
+        "subtypes": [
+          "Siege"
+        ]
+      },
+      "rawTypeLine": "Battle — Siege // Creature — Goblin Spellshaper",
+      "oracleText": "(As a Siege enters, choose an opponent to protect it. You and others can attack it. When it's defeated, exile it, then cast it transformed.)\nWhen this Siege enters, you may discard a card. If you do, draw two cards.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": 4,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Transform"
+      ],
+      "set": "mom",
+      "collectorNumber": "147",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "transform",
+      "isDoubleFaced": true,
+      "faces": [
+        {
+          "name": "Invasion of Mercadia",
+          "manaCost": {
+            "generic": 1,
+            "W": 0,
+            "U": 0,
+            "B": 0,
+            "R": 1,
+            "G": 0,
+            "C": 0,
+            "other": []
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Battle"
+            ],
+            "subtypes": [
+              "Siege"
+            ]
+          },
+          "rawTypeLine": "Battle — Siege",
+          "oracleText": "(As a Siege enters, choose an opponent to protect it. You and others can attack it. When it's defeated, exile it, then cast it transformed.)\nWhen this Siege enters, you may discard a card. If you do, draw two cards.",
+          "power": null,
+          "toughness": null,
+          "colors": [
+            "R"
+          ],
+          "imageUris": {}
+        },
+        {
+          "name": "Kyren Flamewright",
+          "manaCost": {
+            "generic": 0,
+            "W": 0,
+            "U": 0,
+            "B": 0,
+            "R": 0,
+            "G": 0,
+            "C": 0,
+            "other": [],
+            "absent": true
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Creature"
+            ],
+            "subtypes": [
+              "Goblin",
+              "Spellshaper"
+            ]
+          },
+          "rawTypeLine": "Creature — Goblin Spellshaper",
+          "oracleText": "{2}{R}, {T}, Discard a card: Create two 1/1 blue and red Elemental creature tokens. Creatures you control get +1/+0 and gain haste until end of turn.",
+          "power": 3,
+          "toughness": 3,
+          "colors": [
+            "R"
           ],
           "imageUris": {}
         }
@@ -168118,6 +170053,52 @@
       "faces": []
     },
     {
+      "id": "4389fbcd-182a-4cac-b14f-aa971948cf8e",
+      "name": "Kris Mage",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Spellshaper",
+      "oracleText": "{R}, {T}, Discard a card: This creature deals 1 damage to any target.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "mmq",
+      "collectorNumber": "195",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "6536320d-79c3-4406-96eb-b44a9f4a0686",
       "name": "Kronch Wrangler",
       "manaCost": {
@@ -168158,6 +170139,54 @@
       ],
       "set": "clu",
       "collectorNumber": "169",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "e188562f-8219-4fb0-ac2c-5618cfb00bca",
+      "name": "Krosan Archer",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Centaur",
+          "Archer"
+        ]
+      },
+      "rawTypeLine": "Creature — Centaur Archer",
+      "oracleText": "Reach (This creature can block creatures with flying.)\n{G}, Discard a card: This creature gets +0/+2 until end of turn.",
+      "power": 2,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Reach"
+      ],
+      "set": "ody",
+      "collectorNumber": "246",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -177267,6 +179296,57 @@
       "faces": []
     },
     {
+      "id": "cc138550-a797-4a57-91b3-626aac1b1edd",
+      "name": "Lotleth Troll",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Zombie",
+          "Troll"
+        ]
+      },
+      "rawTypeLine": "Creature — Zombie Troll",
+      "oracleText": "Trample\nDiscard a creature card: Put a +1/+1 counter on this creature.\n{B}: Regenerate this creature.",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B",
+        "G"
+      ],
+      "colorIdentity": [
+        "B",
+        "G"
+      ],
+      "keywords": [
+        "Regenerate",
+        "Trample"
+      ],
+      "set": "2x2",
+      "collectorNumber": "245",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "ddfc6396-5377-4ab3-9c10-8abcdeae2aa1",
       "name": "Lotus Guardian",
       "manaCost": {
@@ -179296,6 +181376,54 @@
       "faces": []
     },
     {
+      "id": "89a62145-8dad-4385-9c6d-8cf8bfdad681",
+      "name": "Mad Prophet",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Shaman"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Shaman",
+      "oracleText": "Haste\n{T}, Discard a card: Draw a card.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Haste"
+      ],
+      "set": "uma",
+      "collectorNumber": "137",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "ba77b1ff-e73d-4181-9564-d71df348b2fe",
       "name": "Madcap Skills",
       "manaCost": {
@@ -179568,6 +181696,52 @@
       "set": "ecc",
       "collectorNumber": "127",
       "rarity": "rare",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "672b4f9a-84e4-4a27-8d03-11a63a701fec",
+      "name": "Mage il-Vec",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Wizard"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Wizard",
+      "oracleText": "{T}, Discard a card at random: This creature deals 1 damage to any target.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "tpr",
+      "collectorNumber": "140",
+      "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -183514,6 +185688,54 @@
       "faces": []
     },
     {
+      "id": "fa3ed9d2-9053-4583-a226-0ab49bbdab6e",
+      "name": "Markov Dreadknight",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 2,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Vampire",
+          "Knight"
+        ]
+      },
+      "rawTypeLine": "Creature — Vampire Knight",
+      "oracleText": "Flying\n{2}{B}, Discard a card: Put two +1/+1 counters on this creature.",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "soi",
+      "collectorNumber": "122",
+      "rarity": "rare",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "29c3d3f7-5e28-4fec-8422-87856fcd1e8e",
       "name": "Markov Patrician",
       "manaCost": {
@@ -184301,6 +186523,55 @@
       ],
       "set": "clu",
       "collectorNumber": "115",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "2e918a9c-4d06-489e-9a7c-a56f7ded7c0e",
+      "name": "Masked Meower",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Spider",
+          "Cat",
+          "Hero"
+        ]
+      },
+      "rawTypeLine": "Creature — Spider Cat Hero",
+      "oracleText": "Haste\nDiscard a card, Sacrifice this creature: Draw a card.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Haste"
+      ],
+      "set": "msc",
+      "collectorNumber": "807",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -186357,6 +188628,49 @@
       "faces": []
     },
     {
+      "id": "5e9ffd83-b5c9-46b4-bc5a-172ca34ddc79",
+      "name": "Mental Discipline",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 2,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "{1}{U}, Discard a card: Draw a card.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "uds",
+      "collectorNumber": "37",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "1f343724-6ecd-494f-8bfc-93676af4e173",
       "name": "Mental Note",
       "manaCost": {
@@ -186541,6 +188855,110 @@
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
+    },
+    {
+      "id": "0b4399b6-e67f-40d8-8676-f5db7e04a6c9",
+      "name": "Merchant of the Vale // Haggle",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Peasant"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Peasant // Instant — Adventure",
+      "oracleText": "{2}{R}, Discard a card: Draw a card.",
+      "power": 2,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "eld",
+      "collectorNumber": "131",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "adventure",
+      "isDoubleFaced": true,
+      "faces": [
+        {
+          "name": "Merchant of the Vale",
+          "manaCost": {
+            "generic": 2,
+            "W": 0,
+            "U": 0,
+            "B": 0,
+            "R": 1,
+            "G": 0,
+            "C": 0,
+            "other": []
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Creature"
+            ],
+            "subtypes": [
+              "Human",
+              "Peasant"
+            ]
+          },
+          "rawTypeLine": "Creature — Human Peasant",
+          "oracleText": "{2}{R}, Discard a card: Draw a card.",
+          "power": 2,
+          "toughness": 3,
+          "colors": [],
+          "imageUris": {}
+        },
+        {
+          "name": "Haggle",
+          "manaCost": {
+            "generic": 0,
+            "W": 0,
+            "U": 0,
+            "B": 0,
+            "R": 1,
+            "G": 0,
+            "C": 0,
+            "other": []
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Instant"
+            ],
+            "subtypes": [
+              "Adventure"
+            ]
+          },
+          "rawTypeLine": "Instant — Adventure",
+          "oracleText": "You may discard a card. If you do, draw a card. (Then exile this card. You may cast the creature later from exile.)",
+          "power": null,
+          "toughness": null,
+          "colors": [],
+          "imageUris": {}
+        }
+      ]
     },
     {
       "id": "bb5385d2-ca5d-4fb9-934b-b7cc8b38ac89",
@@ -187560,6 +189978,51 @@
       "set": "jmp",
       "collectorNumber": "122",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "91129aeb-eed5-4b98-896f-fb3bab48b25d",
+      "name": "Mesmeric Trance",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 2,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "Cumulative upkeep {1} (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)\n{U}, Discard a card: Draw a card.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Cumulative upkeep"
+      ],
+      "set": "me2",
+      "collectorNumber": "55",
+      "rarity": "rare",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -189855,6 +192318,48 @@
       "set": "tsp",
       "collectorNumber": "118",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "ccce91e9-58f4-4358-a696-5c439ea19fc9",
+      "name": "Mindless Automaton",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Creature"
+        ],
+        "subtypes": [
+          "Construct"
+        ]
+      },
+      "rawTypeLine": "Artifact Creature — Construct",
+      "oracleText": "This creature enters with two +1/+1 counters on it.\n{1}, Discard a card: Put a +1/+1 counter on this creature.\nRemove two +1/+1 counters from this creature: Draw a card.",
+      "power": 0,
+      "toughness": 0,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "eoc",
+      "collectorNumber": "142",
+      "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -193479,6 +195984,49 @@
       "faces": []
     },
     {
+      "id": "d99fd073-c249-4cd2-9d71-be417c88c493",
+      "name": "Molten Vortex",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "{R}, Discard a land card: This enchantment deals 2 damage to any target.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "ori",
+      "collectorNumber": "156",
+      "rarity": "rare",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "ddfe33fb-71d5-4552-bcd3-f07e4e3847e1",
       "name": "Molting Harpy",
       "manaCost": {
@@ -195732,6 +198280,49 @@
       "keywords": [],
       "set": "fdn",
       "collectorNumber": "662",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c7b93caa-0f43-43ac-84e9-99f6bcbf9e81",
+      "name": "Mortiphobia",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 2,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "{1}{B}, Discard a card: Exile target card from a graveyard.\n{1}{B}, Sacrifice this enchantment: Exile target card from a graveyard.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "tor",
+      "collectorNumber": "72",
       "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
@@ -199771,6 +202362,49 @@
       "set": "dmr",
       "collectorNumber": "92",
       "rarity": "rare",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "eea658dd-7567-4b93-88a4-08b4ffb3dad7",
+      "name": "Narcissism",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "{G}, Discard a card: Target creature gets +2/+2 until end of turn.\n{G}, Sacrifice this enchantment: Target creature gets +2/+2 until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "tor",
+      "collectorNumber": "134",
+      "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -204857,6 +207491,53 @@
       "faces": []
     },
     {
+      "id": "b432cccb-4291-46f3-a171-919adf8b95eb",
+      "name": "Noose Constrictor",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Snake"
+        ]
+      },
+      "rawTypeLine": "Creature — Snake",
+      "oracleText": "Reach\nDiscard a card: This creature gets +1/+1 until end of turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Reach"
+      ],
+      "set": "inr",
+      "collectorNumber": "210",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "eeebc0ab-89fb-47d5-a20f-8f1fe5e3c149",
       "name": "Norn's Wellspring",
       "manaCost": {
@@ -205213,6 +207894,53 @@
       "set": "mkm",
       "collectorNumber": "28",
       "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "239e48d8-e2ba-4e25-88ef-301420c796b4",
+      "name": "Notorious Assassin",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Spellshaper",
+          "Assassin"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Spellshaper Assassin",
+      "oracleText": "{2}{B}, {T}, Discard a card: Destroy target nonblack creature. It can't be regenerated.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "mmq",
+      "collectorNumber": "150",
+      "rarity": "rare",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -206992,6 +209720,54 @@
       "faces": []
     },
     {
+      "id": "0cd5486b-c6f4-4cfc-9590-8ffc78b48b0a",
+      "name": "Oblivion Crown",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Flash (You may cast this spell any time you could cast an instant.)\nEnchant creature\nEnchanted creature has \"Discard a card: This creature gets +1/+1 until end of turn.\"",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Enchant",
+        "Flash"
+      ],
+      "set": "fut",
+      "collectorNumber": "73",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "bff31eba-8ab3-403e-8d82-37a18b279bec",
       "name": "Oblivion Ring",
       "manaCost": {
@@ -208188,6 +210964,52 @@
       "faces": []
     },
     {
+      "id": "e5e11a62-7885-4494-b128-938485dea8a5",
+      "name": "Ogre Shaman",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 2,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Ogre",
+          "Shaman"
+        ]
+      },
+      "rawTypeLine": "Creature — Ogre Shaman",
+      "oracleText": "{2}, Discard a card at random: This creature deals 2 damage to any target.",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "tpr",
+      "collectorNumber": "148",
+      "rarity": "rare",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "60b6b204-f3a2-4d58-94a7-1d132ccfc819",
       "name": "Ogre Taskmaster",
       "manaCost": {
@@ -208462,6 +211284,52 @@
       "keywords": [],
       "set": "shm",
       "collectorNumber": "232",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "571a9e92-6f34-4bf4-b7f4-15d12560efb6",
+      "name": "Olivia's Dragoon",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Vampire",
+          "Berserker"
+        ]
+      },
+      "rawTypeLine": "Creature — Vampire Berserker",
+      "oracleText": "Discard a card: This creature gains flying until end of turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "inr",
+      "collectorNumber": "127",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -210954,6 +213822,52 @@
       "faces": []
     },
     {
+      "id": "0f9bb73a-5b4e-4c9b-b0a6-8e531dc27394",
+      "name": "Oread of Mountain's Blaze",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment",
+          "Creature"
+        ],
+        "subtypes": [
+          "Nymph"
+        ]
+      },
+      "rawTypeLine": "Enchantment Creature — Nymph",
+      "oracleText": "{2}{R}, Discard a card: Draw a card.",
+      "power": 1,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "thb",
+      "collectorNumber": "146",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "0ea1dfb4-1983-41f7-956c-f2a1d1489b54",
       "name": "Oreskos Swiftclaw",
       "manaCost": {
@@ -212074,6 +214988,52 @@
       "set": "clu",
       "collectorNumber": "171",
       "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "8227e2fc-259d-4470-8522-d550746dbc4a",
+      "name": "Overeager Apprentice",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Minion"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Minion",
+      "oracleText": "Discard a card, Sacrifice this creature: Add {B}{B}{B}.",
+      "power": 1,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "dvd",
+      "collectorNumber": "35",
+      "rarity": "common",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -214279,6 +217239,97 @@
       "faces": []
     },
     {
+      "id": "f487a6a7-066a-49bb-ab76-d79fc4300c29",
+      "name": "Pardic Lancer",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Barbarian"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Barbarian",
+      "oracleText": "Discard a card at random: This creature gets +1/+0 and gains first strike until end of turn.",
+      "power": 3,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "tor",
+      "collectorNumber": "107",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "44ac622c-db04-41bf-817e-4698843e6346",
+      "name": "Pardic Swordsmith",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Dwarf"
+        ]
+      },
+      "rawTypeLine": "Creature — Dwarf",
+      "oracleText": "{R}, Discard a card at random: This creature gets +2/+0 until end of turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "ody",
+      "collectorNumber": "213",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "2fffe967-3a99-4f00-af46-f4e5567598df",
       "name": "Pardic Wanderer",
       "manaCost": {
@@ -214505,6 +217556,51 @@
         "normal": "patchwork-banner-normal.jpg",
         "art_crop": "patchwork-banner-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "3002ccef-5322-4f99-9fce-3b4303347240",
+      "name": "Patchwork Gnomes",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Creature"
+        ],
+        "subtypes": [
+          "Gnome"
+        ]
+      },
+      "rawTypeLine": "Artifact Creature — Gnome",
+      "oracleText": "Discard a card: Regenerate this creature. (The next time this creature would be destroyed this turn, instead tap it, remove it from combat, and heal all damage on it.)",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Heal",
+        "Regenerate"
+      ],
+      "set": "mh2",
+      "collectorNumber": "299",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -214798,6 +217894,51 @@
       "faces": []
     },
     {
+      "id": "e216a539-152b-4a83-98ef-1996182a5714",
+      "name": "Patrol Hound",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Dog"
+        ]
+      },
+      "rawTypeLine": "Creature — Dog",
+      "oracleText": "Discard a card: This creature gains first strike until end of turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "ody",
+      "collectorNumber": "38",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "3cfcf84c-a30c-4c4f-9f8c-ee807661e499",
       "name": "Pause for Reflection",
       "manaCost": {
@@ -214929,6 +218070,49 @@
       ],
       "set": "blb",
       "collectorNumber": "186",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "36e37aa2-d898-47f5-9679-5717bfa25688",
+      "name": "Peace of Mind",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "{W}, Discard a card: You gain 3 life.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "emn",
+      "collectorNumber": "36",
       "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
@@ -215245,6 +218429,49 @@
       "set": "9ed",
       "collectorNumber": "34",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "a2bce334-0ae6-4a7d-85db-99ee205ce546",
+      "name": "Pegasus Refuge",
+      "manaCost": {
+        "generic": 3,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "{2}, Discard a card: Create a 1/1 white Pegasus creature token with flying.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "tmp",
+      "collectorNumber": "35",
+      "rarity": "rare",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -220186,6 +223413,52 @@
       ],
       "set": "som",
       "collectorNumber": "75",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "7a1e3438-dbee-473a-8556-d4e28b939266",
+      "name": "Plague Witch",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elf",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Elf Spellshaper",
+      "oracleText": "{B}, {T}, Discard a card: Target creature gets -1/-1 until end of turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "ema",
+      "collectorNumber": "103",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -226508,6 +229781,53 @@
       "set": "chk",
       "collectorNumber": "137",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "d3297f28-a15d-43dd-a96e-09701d5f9aed",
+      "name": "Pulsating Illusion",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Illusion"
+        ]
+      },
+      "rawTypeLine": "Creature — Illusion",
+      "oracleText": "Flying\nDiscard a card: This creature gets +4/+4 until end of turn. Activate only once each turn.",
+      "power": 0,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "ody",
+      "collectorNumber": "96",
+      "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -233167,6 +236487,52 @@
       "set": "mma",
       "collectorNumber": "95",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "cc4d04bc-6263-43b0-9b01-894a532cd3ed",
+      "name": "Ravenous Bloodseeker",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Vampire",
+          "Berserker"
+        ]
+      },
+      "rawTypeLine": "Creature — Vampire Berserker",
+      "oracleText": "Discard a card: This creature gets +2/-2 until end of turn.",
+      "power": 1,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "soi",
+      "collectorNumber": "175",
+      "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -240352,6 +243718,52 @@
       "faces": []
     },
     {
+      "id": "a51ea7d3-a9d7-4b1d-bf3b-3fcfb6a49624",
+      "name": "Ridged Kusite",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Horror",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Horror Spellshaper",
+      "oracleText": "{1}{B}, {T}, Discard a card: Target creature gets +1/+0 and gains first strike until end of turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "tsr",
+      "collectorNumber": "134",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "43d9c248-2360-4fdc-9a0f-49d350c11e95",
       "name": "Ridgeline Rager",
       "manaCost": {
@@ -246615,6 +250027,52 @@
       ],
       "set": "thb",
       "collectorNumber": "35",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "254391a3-c12a-4944-9da5-ae166094480f",
+      "name": "Rummaging Goblin",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Goblin",
+          "Rogue"
+        ]
+      },
+      "rawTypeLine": "Creature — Goblin Rogue",
+      "oracleText": "{T}, Discard a card: Draw a card.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "cmr",
+      "collectorNumber": "198",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -258681,6 +262139,54 @@
       "faces": []
     },
     {
+      "id": "7e897f14-8775-4bc3-a3b2-b149f79ec702",
+      "name": "Seer of the Last Tomorrow",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Snake",
+          "Cleric"
+        ]
+      },
+      "rawTypeLine": "Creature — Snake Cleric",
+      "oracleText": "{U}, {T}, Discard a card: Target player mills three cards.",
+      "power": 1,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Mill"
+      ],
+      "set": "hou",
+      "collectorNumber": "44",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "09bcfd12-6b50-4fdf-9bda-6d52bba2f897",
       "name": "Seer's Lantern",
       "manaCost": {
@@ -258961,6 +262467,95 @@
       "set": "6ed",
       "collectorNumber": "97",
       "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "6b2eb4e6-4ce1-4f72-9b3d-b6a44b22bd2e",
+      "name": "Seismic Assault",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 3,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "Discard a land card: This enchantment deals 2 damage to any target.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "uma",
+      "collectorNumber": "146",
+      "rarity": "rare",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "9524432a-3186-4c7b-a780-28bdbe36053f",
+      "name": "Seismic Mage",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Spellshaper",
+      "oracleText": "{2}{R}, {T}, Discard a card: Destroy target land.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "mmq",
+      "collectorNumber": "211",
+      "rarity": "rare",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -259841,6 +263436,51 @@
       "set": "soc",
       "collectorNumber": "167",
       "rarity": "rare",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "f8805db2-5a26-43cf-9b74-f882c283e5e4",
+      "name": "Selhoff Entomber",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Zombie"
+        ]
+      },
+      "rawTypeLine": "Creature — Zombie",
+      "oracleText": "{T}, Discard a creature card: Draw a card.",
+      "power": 1,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "vow",
+      "collectorNumber": "76",
+      "rarity": "common",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -270193,6 +273833,52 @@
       "faces": []
     },
     {
+      "id": "9bc99b33-ce06-4a44-8b23-300b41b2b2fe",
+      "name": "Silverglade Pathfinder",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Dryad",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Dryad Spellshaper",
+      "oracleText": "{1}{G}, {T}, Discard a card: Search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "mmq",
+      "collectorNumber": "270",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "354efff0-aea5-4274-94d6-9fce02430255",
       "name": "Silverquill Campus",
       "manaCost": {
@@ -270418,6 +274104,52 @@
       "set": "ema",
       "collectorNumber": "186",
       "rarity": "rare",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "df2ed9f3-50b1-493b-9c14-0f8ddb4d8c57",
+      "name": "Simian Brawler",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Ape",
+          "Warrior"
+        ]
+      },
+      "rawTypeLine": "Creature — Ape Warrior",
+      "oracleText": "Discard a land card: This creature gets +1/+1 until end of turn.",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "csp",
+      "collectorNumber": "122",
+      "rarity": "common",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -272087,6 +275819,54 @@
       "faces": []
     },
     {
+      "id": "2d92fcf1-2ccd-47d2-9a24-f44b766a0b68",
+      "name": "Skirge Familiar",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Phyrexian",
+          "Imp"
+        ]
+      },
+      "rawTypeLine": "Creature — Phyrexian Imp",
+      "oracleText": "Flying\nDiscard a card: Add {B}.",
+      "power": 3,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "mh2",
+      "collectorNumber": "276",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "7bc508b3-8b38-4cf0-89a7-a2cb247ed083",
       "name": "Skirk Prospector",
       "manaCost": {
@@ -272636,6 +276416,45 @@
         "normal": "skullclamp-normal.jpg",
         "art_crop": "skullclamp-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "1d8567c5-d068-42bb-a593-3849e65e29c0",
+      "name": "Skullmead Cauldron",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "{T}: You gain 1 life.\n{T}, Discard a card: You gain 3 life.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "dis",
+      "collectorNumber": "167",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -274494,6 +278313,53 @@
       "set": "sth",
       "collectorNumber": "115",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "de545a92-a489-4695-8a03-c02a8e92f1b6",
+      "name": "Skyshroud Vampire",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 2,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Vampire"
+        ]
+      },
+      "rawTypeLine": "Creature — Vampire",
+      "oracleText": "Flying\nDiscard a creature card: This creature gets +2/+2 until end of turn.",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "tpr",
+      "collectorNumber": "118",
+      "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -280361,6 +284227,56 @@
           }
         }
       ]
+    },
+    {
+      "id": "2b327925-8a50-4fd7-9010-673f9a3e97ce",
+      "name": "Songbird, Sonic Screamer",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Villain"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Human Villain",
+      "oracleText": "Lifelink (Damage dealt by this creature also causes you to gain that much life.)\nDiscard a card: Songbird gains flying until end of turn. (She can't be blocked except by creatures with flying or reach.)",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Lifelink"
+      ],
+      "set": "msc",
+      "collectorNumber": "762",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
     },
     {
       "id": "eb93c9d2-88eb-403d-bb67-8e8b0462ac27",
@@ -287829,6 +291745,53 @@
       "faces": []
     },
     {
+      "id": "16705695-1ba8-4169-974f-d8c683ab2652",
+      "name": "Stalking Bloodsucker",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 2,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Vampire"
+        ]
+      },
+      "rawTypeLine": "Creature — Vampire",
+      "oracleText": "Flying\n{1}{B}, Discard a card: This creature gets +2/+2 until end of turn.",
+      "power": 4,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "ody",
+      "collectorNumber": "163",
+      "rarity": "rare",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "12bc5b4c-a809-43f0-8848-38812ce865c2",
       "name": "Stalking Drone",
       "manaCost": {
@@ -287962,6 +291925,52 @@
       "set": "ima",
       "collectorNumber": "32",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "35390394-013f-4996-9d1a-e4c53de941ba",
+      "name": "Stampede Driver",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Spellshaper",
+      "oracleText": "{1}{G}, {T}, Discard a card: Creatures you control get +1/+1 and gain trample until end of turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "a25",
+      "collectorNumber": "188",
+      "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -290331,6 +294340,52 @@
       "faces": []
     },
     {
+      "id": "4f0f87d4-5fed-415c-918a-c3546697a3da",
+      "name": "Stern Constable",
+      "manaCost": {
+        "generic": 0,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Soldier"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Soldier",
+      "oracleText": "{T}, Discard a card: Tap target creature.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "soi",
+      "collectorNumber": "39",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "7042fdc8-e2dd-4f9a-97b9-00d95c9eae74",
       "name": "Stern Proctor",
       "manaCost": {
@@ -292289,6 +296344,51 @@
       "set": "rna",
       "collectorNumber": "119",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "45f03556-cef5-438d-a1d8-66c297502622",
+      "name": "Stormbind",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "{2}, Discard a card at random: This enchantment deals 2 damage to any target.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G",
+        "R"
+      ],
+      "colorIdentity": [
+        "G",
+        "R"
+      ],
+      "keywords": [],
+      "set": "tsb",
+      "collectorNumber": "102",
+      "rarity": "special",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -294521,6 +298621,52 @@
       "set": "dom",
       "collectorNumber": "105",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "d3567b4e-6e31-40b0-83ea-4a2a58bd637c",
+      "name": "Stronghold Machinist",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Spellshaper",
+      "oracleText": "{U}{U}, {T}, Discard a card: Counter target noncreature spell.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "nem",
+      "collectorNumber": "46",
+      "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -298980,6 +303126,49 @@
       "set": "rtr",
       "collectorNumber": "107",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "4ef0d7f9-ddb9-4e83-a9bf-09bec22fc80d",
+      "name": "Survival of the Fittest",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "{G}, Discard a creature card: Search your library for a creature card, reveal that card, put it into your hand, then shuffle.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "tpr",
+      "collectorNumber": "199",
+      "rarity": "mythic",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -308126,6 +312315,51 @@
       "faces": []
     },
     {
+      "id": "ac7bb326-a07a-448c-a962-b9d3acc9d5b8",
+      "name": "Thalakos Drifters",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 2,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Thalakos"
+        ]
+      },
+      "rawTypeLine": "Creature — Thalakos",
+      "oracleText": "Discard a card: This creature gains shadow until end of turn. (It can block or be blocked by only creatures with shadow.)",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "tpr",
+      "collectorNumber": "70",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "50210dd8-83c6-4e64-a488-f8e7fd85d992",
       "name": "Thalakos Seer",
       "manaCost": {
@@ -309001,6 +313235,49 @@
       "set": "tle",
       "collectorNumber": "225",
       "rarity": "rare",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "039d62b0-3309-4424-a2ea-5a0d88d4bd72",
+      "name": "The Underworld Cookbook",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Book"
+        ]
+      },
+      "rawTypeLine": "Artifact — Book",
+      "oracleText": "{T}, Discard a card: Create a Food token. (It's an artifact with \"{2}, {T}, Sacrifice this token: You gain 3 life.\")\n{4}, {T}, Sacrifice this artifact: Return target creature card from your graveyard to your hand.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Food"
+      ],
+      "set": "mh2",
+      "collectorNumber": "240",
+      "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -311139,6 +315416,52 @@
       "keywords": [],
       "set": "isd",
       "collectorNumber": "37",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "15b7cd60-e3b9-4dd8-ad3c-a687f642147f",
+      "name": "Thraben Standard Bearer",
+      "manaCost": {
+        "generic": 0,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Soldier"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Soldier",
+      "oracleText": "{1}{W}, {T}, Discard a card: Create a 1/1 white Human Soldier creature token.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "emn",
+      "collectorNumber": "48",
       "rarity": "common",
       "imageUris": {},
       "localImages": {},
@@ -314024,6 +318347,52 @@
       "faces": []
     },
     {
+      "id": "1d23e47a-21d5-4d7e-8aa0-3b3064da5967",
+      "name": "Tireless Tribe",
+      "manaCost": {
+        "generic": 0,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Nomad"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Nomad",
+      "oracleText": "Discard a card: This creature gets +0/+4 until end of turn.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "ody",
+      "collectorNumber": "56",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "e522b695-859e-4fba-bf8c-c415fbce13e3",
       "name": "Tishana, Voice of Thunder",
       "manaCost": {
@@ -315056,6 +319425,55 @@
         "normal": "tomakul-honor-guard-normal.jpg",
         "art_crop": "tomakul-honor-guard-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "68132a28-b33b-48cb-acf8-42245312934e",
+      "name": "Tomb Robber",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Pirate"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Pirate",
+      "oracleText": "Menace\n{1}, Discard a card: This creature explores. (Reveal the top card of your library. Put that card into your hand if it's a land. Otherwise, put a +1/+1 counter on this creature, then put the card back or put it into your graveyard.)",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Explore",
+        "Menace"
+      ],
+      "set": "rix",
+      "collectorNumber": "87",
+      "rarity": "rare",
+      "imageUris": {},
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
@@ -316343,6 +320761,49 @@
       "faces": []
     },
     {
+      "id": "1754b92b-d6f9-4503-af01-dee03f72a048",
+      "name": "Tortured Existence",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "{B}, Discard a creature card: Return target creature card from your graveyard to your hand.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "sth",
+      "collectorNumber": "74",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "e82e61d1-488d-4627-a54c-d8496a967814",
       "name": "Toski, Bearer of Secrets",
       "manaCost": {
@@ -317359,6 +321820,45 @@
       "set": "m21",
       "collectorNumber": "211",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "03499a72-e865-46ff-bcb2-75e53e4b600e",
+      "name": "Trading Post",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "{1}, {T}, Discard a card: You gain 4 life.\n{1}, {T}, Pay 1 life: Create a 0/1 white Goat creature token.\n{1}, {T}, Sacrifice a creature: Return target artifact card from your graveyard to your hand.\n{1}, {T}, Sacrifice an artifact: Draw a card.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "msc",
+      "collectorNumber": "224",
+      "rarity": "rare",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -319455,6 +323955,52 @@
       "faces": []
     },
     {
+      "id": "278421ff-5324-44e5-b24f-dfbf9aa9b604",
+      "name": "Trespasser il-Vec",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Rogue"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Rogue",
+      "oracleText": "Discard a card: This creature gains shadow until end of turn. (It can block or be blocked by only creatures with shadow.)",
+      "power": 3,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "tsr",
+      "collectorNumber": "147",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "4bd8fe2c-2297-4e19-8a87-01eb99b8c6dc",
       "name": "Tresserhorn Sinks",
       "manaCost": {
@@ -321492,6 +326038,53 @@
       "set": "dsk",
       "collectorNumber": "76",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c8e246c8-3b3f-47c4-8a1b-b5f2d36f0ca4",
+      "name": "Tunneler Wurm",
+      "manaCost": {
+        "generic": 6,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 8,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Wurm"
+        ]
+      },
+      "rawTypeLine": "Creature — Wurm",
+      "oracleText": "Discard a card: Regenerate this creature.",
+      "power": 6,
+      "toughness": 6,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Regenerate"
+      ],
+      "set": "jud",
+      "collectorNumber": "135",
+      "rarity": "uncommon",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -324798,6 +329391,52 @@
       "set": "khm",
       "collectorNumber": "78",
       "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "e99bb258-7b05-4c70-8a67-d7a5709a60ff",
+      "name": "Undertaker",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Spellshaper",
+      "oracleText": "{B}, {T}, Discard a card: Return target creature card from your graveyard to your hand.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "tsb",
+      "collectorNumber": "53",
+      "rarity": "special",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -328445,6 +333084,52 @@
       "set": "emn",
       "collectorNumber": "110",
       "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "59339026-3ec6-4bd9-a1c4-c80951f8c68d",
+      "name": "Vampire Hounds",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Vampire",
+          "Dog"
+        ]
+      },
+      "rawTypeLine": "Creature — Vampire Dog",
+      "oracleText": "Discard a creature card: This creature gets +2/+2 until end of turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "tpr",
+      "collectorNumber": "122",
+      "rarity": "common",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -332471,6 +337156,52 @@
       "faces": []
     },
     {
+      "id": "3457e346-a5de-4624-b577-f59d4c186537",
+      "name": "Viashino Lashclaw",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Lizard",
+          "Warrior"
+        ]
+      },
+      "rawTypeLine": "Creature — Lizard Warrior",
+      "oracleText": "{T}, Discard a card: Creatures you control gain haste until end of turn.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "mh2",
+      "collectorNumber": "146",
+      "rarity": "common",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "26ba659c-7e0f-4d8b-b91c-3c0725102ba2",
       "name": "Viashino Outrider",
       "manaCost": {
@@ -332699,6 +337430,55 @@
       "set": "gtc",
       "collectorNumber": "110",
       "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "b9451a62-31a4-4aaf-beef-2bf149f25ae3",
+      "name": "Viashino Skeleton",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Lizard",
+          "Skeleton"
+        ]
+      },
+      "rawTypeLine": "Creature — Lizard Skeleton",
+      "oracleText": "{1}{B}, Discard a card: Regenerate this creature.",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "B",
+        "R"
+      ],
+      "keywords": [
+        "Regenerate"
+      ],
+      "set": "ala",
+      "collectorNumber": "118",
+      "rarity": "common",
       "imageUris": {},
       "localImages": {},
       "layout": "normal",
@@ -342510,6 +347290,52 @@
         "normal": "waterfall-aerialist-normal.jpg",
         "art_crop": "waterfall-aerialist-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "d4dab9a1-19e6-4d90-a79c-275b47d7073c",
+      "name": "Waterfront Bouncer",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Merfolk",
+          "Spellshaper"
+        ]
+      },
+      "rawTypeLine": "Creature — Merfolk Spellshaper",
+      "oracleText": "{U}, {T}, Discard a card: Return target creature to its owner's hand.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "vma",
+      "collectorNumber": "102",
+      "rarity": "uncommon",
+      "imageUris": {},
+      "localImages": {},
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []

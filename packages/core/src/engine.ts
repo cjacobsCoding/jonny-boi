@@ -5117,6 +5117,10 @@ function unpayableGraveyardAbilityReason(
       return 'you do not control enough permanents to pay that sacrifice cost';
     }
   }
+  // §3.172 — the discard cost is paid by the BATTLEFIELD activation path only;
+  // the compiler never puts one on a graveyard ability. Data that does is
+  // refused by name rather than activated for free.
+  if (cost.discard !== undefined) return 'a graveyard ability cannot charge a discard cost';
   return undefined;
 }
 
@@ -5350,6 +5354,31 @@ function applyActivateAbility(
     moveToZone(state, source, 'graveyard', emit, source.owner);
     resetInstanceForNewZone(source);
   }
+  if (cost.discard !== undefined) {
+    // §3.172 — paid here, before the stack (CR 602.2b), through the ONE discard
+    // funnel, so madness and "whenever you discard" see it as any discard.
+    const needed = cost.discard.count;
+    const candidates = discardCostCandidates(state, source, cost);
+    let chosen: InstanceId[];
+    if (cost.discard.random === true) {
+      // "At random": drawn from the state-carried RNG cursor, exactly as a
+      // shuffle is, so a replay from the seed discards the same card.
+      if (candidates.length < needed) return rejectWith(prevState, 'not enough cards in hand to discard');
+      const rng = createRng(state.rngState);
+      chosen = shuffle(candidates, rng).slice(0, needed).map((c) => c.instanceId);
+      state.rngState = rng.state;
+    } else {
+      const named = action.costInstanceIds ?? [];
+      const legal = new Set(candidates.map((c) => c.instanceId));
+      // Exactly as many as printed, all distinct, all legal — the same three
+      // checks the sacrifice cost makes, for the same reason.
+      if (named.length !== needed || new Set(named).size !== needed || named.some((id) => !legal.has(id))) {
+        return rejectWith(prevState, `${source.def.name}'s ability needs ${needed} legal card(s) to discard`);
+      }
+      chosen = [...named];
+    }
+    discardChosenCards(state, action.player, chosen, emit);
+  }
   if (cost.removeCounters !== undefined) {
     // Paid here, before the stack (CR 602.2b), and never refunded. The same
     // `counters` map and the same `counterAdded` event (negative amount) the
@@ -5462,6 +5491,30 @@ function sacrificeCostCandidates(
 }
 
 /**
+ * §3.172 — the cards in the controller's HAND that may pay a "Discard a <noun>"
+ * cost: the hand, filtered by the printed noun. The same three readers as
+ * `sacrificeCostCandidates` — the offer path (one action per card), the
+ * payability gate (are there enough), the apply path (was the named card one
+ * of these) — and the same reason they share one function.
+ *
+ * A "discard at random" cost has candidates too: the gate still needs a card
+ * to exist, and the apply path draws from exactly this list.
+ */
+function discardCostCandidates(
+  state: GameState,
+  source: CardInstance,
+  cost: ActivatedAbility['cost'],
+): readonly CardInstance[] {
+  const discard = cost.discard;
+  if (discard === undefined) return [];
+  const hand = state.players[source.controller].hand;
+  if (discard.filter === undefined) return hand;
+  const out: CardInstance[] = [];
+  for (const card of hand) if (matchesCardFilter(card, discard.filter)) out.push(card);
+  return out;
+}
+
+/**
  * The mana an activation actually owes: the printed base cost plus the generic
  * the chosen X buys (§3.149). ONE answer, read by the payability gate, by the
  * offer path's affordability search and by the payment itself, so "offered" and
@@ -5568,6 +5621,13 @@ function unpayableActivationReason(
     const needed = cost.sacrificeCount ?? 1;
     if (sacrificeCostCandidates(state, source, cost).length < needed) {
       return 'you do not control enough permanents to pay that sacrifice cost';
+    }
+  }
+  if (cost.discard !== undefined) {
+    // §3.172 — a discard you cannot make is a cost you cannot pay (CR 118.3):
+    // the hand must hold as many matching cards as the cost prints.
+    if (discardCostCandidates(state, source, cost).length < cost.discard.count) {
+      return 'you do not have enough cards in hand to pay that discard cost';
     }
   }
   if (cost.removeCounters !== undefined) {
@@ -6307,9 +6367,16 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
       // as its first legal pair, taken in battlefield order, which is a real
       // narrowing of the choice and is why the cost is still refused at compile
       // time for counts above one (see the compiler's cost table).
-      const payers = ability.cost.sacrificeAnother === undefined
-        ? [undefined]
-        : sacrificeCostCandidates(state, perm, ability.cost).map((c) => [c.instanceId] as const);
+      // §3.172 — a "Discard a <noun>" cost is enumerated the same way, one action
+      // per legal card in hand; "at random" names nothing (the engine draws it
+      // as the cost is paid) and rides the single unnamed action. The compiler
+      // never emits both a sacrifice and a discard on one ability, so the two
+      // enumerations never have to combine.
+      const payers = ability.cost.sacrificeAnother !== undefined
+        ? sacrificeCostCandidates(state, perm, ability.cost).map((c) => [c.instanceId] as const)
+        : ability.cost.discard !== undefined && ability.cost.discard.random !== true
+          ? discardCostCandidates(state, perm, ability.cost).map((c) => [c.instanceId] as const)
+          : [undefined];
       // §3.149 — an `{X}` in the activation cost is enumerated like a payer: one
       // action per value the FLOATING pool can fund (CR 602.2b, the cost is paid
       // as the ability is activated). Zero is always on offer, and is the whole

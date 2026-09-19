@@ -61,6 +61,8 @@ import {
   parsePayloadKeyword,
   COST_NOUNS,
   COST_NOUN_PHRASE,
+  DISCARD_COST_NOUNS,
+  DISCARD_COST_NOUN_PHRASE,
   parseRemoveCountersCost,
   resolveItsReferent,
   WHERE_X_IS_CLAUSE,
@@ -1161,6 +1163,14 @@ const SACRIFICE_SELF = /^sacrifice ~$/;
  * noun itself is looked up in the shared {@link COST_NOUNS} table.
  */
 const SACRIFICE_ANOTHER = new RegExp(`^sacrifice (a|an|another) (${COST_NOUN_PHRASE})$`);
+/**
+ * §3.172 — "Discard a card" / "Discard a creature card" / "Discard a card at
+ * random": ONE card leaves the hand as the cost is paid. The noun is a row in
+ * the shared {@link DISCARD_COST_NOUNS}; "at random" is the engine's own draw.
+ * "Discard two cards" and "Discard your hand" do not match and keep reporting
+ * (the offer path enumerates a single payer — see `ActivationCost.discard`).
+ */
+const DISCARD_ONE = new RegExp(`^discard (${DISCARD_COST_NOUN_PHRASE})( at random)?$`);
 /** A mana symbol run, e.g. `{1}{g}` or `{u}`. */
 const MANA_SYMBOLS = /^(?:\{[^}]+\})+$/;
 
@@ -1178,6 +1188,7 @@ function parseActivationCost(text: string, ctx: RuleContext): ActivationCost | n
     sacrificeExcludesSelf?: boolean;
     life?: number;
     removeCounters?: ActivationCost['removeCounters'];
+    discard?: ActivationCost['discard'];
   } = {};
 
   for (const partRaw of text.split(',')) {
@@ -1222,6 +1233,19 @@ function parseActivationCost(text: string, ctx: RuleContext): ActivationCost | n
       if (sacrificeOther[1] === 'another') cost.sacrificeExcludesSelf = true;
       continue;
     }
+    // §3.172 — "Discard a card" / "Discard a creature card" / "… at random".
+    const discardOne = DISCARD_ONE.exec(part);
+    if (discardOne) {
+      const noun = (discardOne[1] ?? '').trim();
+      if (!(noun in DISCARD_COST_NOUNS)) return null;
+      const filter = DISCARD_COST_NOUNS[noun];
+      cost.discard = {
+        count: 1,
+        ...(filter === undefined ? {} : { filter }),
+        ...(discardOne[2] === undefined ? {} : { random: true }),
+      };
+      continue;
+    }
     if (MANA_SYMBOLS.test(part)) {
       // §3.149 — `{X}` in an ACTIVATION cost ("{X}{R}{G}, {T}: …" — Kessig Wolf
       // Run). The X symbols are partitioned off before the rest is parsed, for
@@ -1243,6 +1267,10 @@ function parseActivationCost(text: string, ctx: RuleContext): ActivationCost | n
     return null; // an unrecognised cost component — report the whole line
   }
 
+  // §3.172 — a cost naming BOTH a sacrifice and a discard would need
+  // `costInstanceIds` to carry two kinds of payer; refused rather than
+  // enumerated wrong. No printed card of the measured family combines them.
+  if (cost.discard !== undefined && cost.sacrificeAnother !== undefined) return null;
   return Object.keys(cost).length > 0 ? (cost as ActivationCost) : null;
 }
 

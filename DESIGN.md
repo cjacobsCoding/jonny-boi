@@ -10978,6 +10978,70 @@ variants (*a creature card*, *a land card*, *at random*, *discard ~*); *"exile ~
 graveyard"* — 33, a generic graveyard ability; *"tap an untapped creature you control"* and its
 counts and nouns — ~40; *{Q}* — 8; Phyrexian activation costs — 5; snow — 6.
 
+### 3.172 "Discard a card:" — a card leaves the hand as an activation cost — ✅ done
+
+> "start adding all the rest of the missing mechanics"
+
+The cost vocabulary, ranked over the whole corpus for the first time (`probe-costs`: every blocked
+`COST: BODY` line whose BODY compiles alone, split by the cost part the parser refuses): **"discard a
+card" — 66 cards blocked by nothing else, 92 with its variants** (*a creature card*, *a land card*,
+*at random*); then *"exile ~ from your graveyard"* 33, the *"tap N untapped <noun> you control"*
+family ~40, hybrid mana 34 (taken in §3.171), {Q} 8. Patrol Hound (*"Discard a card: ~ gains first
+strike"*), Vampire Hounds (*"Discard a creature card: ~ gets +2/+2"*), Frenetic Ogre (*"{R}, Discard
+a card at random: ~ gets +3/+0"*), Tireless Tribe, Viashino Lashclaw, Junk Golem, the Odyssey
+madness outlets — all with a body the engine has played for years.
+
+**`ActivationCost.discard` — `sacrificeAnother` one zone over.** `{ count, filter?, random? }`: the
+printed noun is a row in the new shared `DISCARD_COST_NOUNS` (*a card*, *a creature card*, *a land
+card*, *an artifact card*, *an enchantment card*, *an instant card*, *a sorcery card*, *a nonland
+card*), whose type rows ARE the `COST_NOUNS` rows of the same type, so *"a creature card"* in a
+discard cost and *"a creature"* in a sacrifice cost cannot drift apart. The card is named by the
+ACTION (`costInstanceIds`), because the cost is paid as the ability is activated (CR 602.2b) and
+there is no resolution in which to ask; the engine's three readers share one candidate list
+(`discardCostCandidates`): the OFFER path enumerates one action per legal card in hand, the
+payability gate asks only whether enough exist (and says why not, by name), the APPLY path re-checks
+that exactly `count` distinct legal cards were named and pays through the ONE discard funnel
+(`discardChosenCards` → `moveToZone`) — so a madness card discarded to pay the cost exiles itself and
+opens its window, and *"whenever you discard a card"* sees it, exactly as when an effect made the
+discard. *"At random"* names nothing: the engine draws from the state-carried RNG cursor, as a
+shuffle does, so a replay from the seed discards the same card. Closed where the offer path cannot
+yet express the choice: *"discard two cards"*, *"discard your hand"*, *"a historic card"*, and a cost
+naming BOTH a sacrifice and a discard all keep reporting.
+
+**The pilot pitches its worst card — by construction, not by a rule.** The engine offers one
+activation per card in hand; priced by the body alone every offer ties and the first (hand[0]) wins,
+the Bear as readily as the eighth land. `activationCostValue` now takes the offered payer and debits
+THAT card at `cardValue` — the one ranking the cleanup discard, edicts and every other *"which card
+do I least want?"* question already use — so the offer that pitches the flooded land (2) outscores
+the one that pitches the Bear (18), and the pilot discards the land because that offer scored best.
+The funded path (deciding whether to tap for the ability, with no offer yet) debits the cheapest
+qualifying card; *"at random"* debits the mean. A pure mana exchange stops being pure when it
+discards or strips a counter (`mana-exchange.ts`).
+
+**Verification.** `core/activation-discard-cost.test.ts` (6; all red on the previous engine): one
+offer per card in hand naming its card and none with an empty hand; the named card is in the
+graveyard while the ability is still on the stack and the effect has not run; an action naming a
+card not in hand, two cards, or none is refused by name and nothing is paid; *"a creature card"*
+offers the creature and never the instant, and naming the instant is refused; the madness funnel
+(Basking Rootwalla discarded as the cost is exiled with the window open); *"at random"* names no
+card, takes one, the same seed takes the same one and eight seeds do not all agree.
+`cards/discard-cost.test.ts` (5; 4 red before): Patrol Hound, Vampire Hounds and Frenetic Ogre from
+their printed text, the four refusals, and Patrol Hound PLAYED — one offer per card in the
+eight-card hand, the Bear in the graveyard as the cost is paid with nothing asked, first strike
+after resolution. `ai/discard-cost-pilot.test.ts` (4): the named payer costs that card (land 2, Bear
+18), unnamed the cheapest — and the Bear when the pilot is still short of lands — random the mean;
+driven, a flooded pilot with *"Discard a card: Draw two cards"* names the Forest and keeps the Bear.
+`web/lib/play/discard-cost-proposal.test.ts` (3): through the real session and the proposal flow the
+Play board drives, Patrol Hound's option carries one payer per card in hand labelled by the card's
+name (the `costPayers` seam the sacrifice costs use — no surface learned a second one), two cards in
+hand ASK and the pick is what leaves the hand, one card is taken without a question. Soak witness
+`discard-cost` (the activation ACTION on an ability whose cost carries `discard`; also a boundary
+mechanic in the observation scan) — green on the first run, not inert. Pool at regeneration: **7,496 → 7,599** (+103, nothing
+left; index 7,631/7,631, `--check` clean) — 80 on the plain *"a card"*, 11 *"at random"*, 8 *"a creature
+card"*, 3 *"a land card"*, 1 *"an artifact card"*. Above the 92 the probe promised, for once: the probe
+counted cards whose ONLY refusal was the cost, and eleven more printed two discard abilities, or a
+discard beside a hybrid symbol §3.171 had just made payable.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

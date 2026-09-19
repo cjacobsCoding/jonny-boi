@@ -1782,6 +1782,36 @@ export interface ActivationCost {
   /** How many to sacrifice ("Sacrifice TWO artifacts" — Sai). Default 1. */
   readonly sacrificeCount?: number;
   /**
+   * §3.172 — "**Discard a card**: Patrol Hound gains first strike until end of
+   * turn", "**Discard a creature card**: Vampire Hounds gets +2/+2", "{R},
+   * **Discard a card at random**: Frenetic Ogre gets +3/+0" — a card leaves the
+   * controller's HAND as the cost is paid (CR 602.2b), so it is in the
+   * graveyard before the ability is on the stack and is never refunded.
+   *
+   * The same shape as {@link sacrificeAnother}, one zone over: `filter` is the
+   * printed noun ("a creature card") as the closed `CardFilter` every other
+   * cost reads, and the card is named by the ACTION (`costInstanceIds`) rather
+   * than chosen mid-resolution — there is no resolution in which to ask. The
+   * offer path enumerates one action per legal card in hand; the payability
+   * gate asks only whether enough exist; the apply path re-checks what was
+   * named. `random` is the printed "at random": no card is named, the engine
+   * draws it from the state-carried RNG, so a replay reproduces the discard.
+   *
+   * The card goes through the ONE discard funnel (`discardChosenCards` →
+   * `moveToZone`), so a madness card exiles itself and a "whenever you
+   * discard a card" trigger fires exactly as when an effect made the discard.
+   *
+   * Only a count of ONE is accepted at compile time, for the reason
+   * {@link sacrificeAnother} gives: the offer path enumerates a single payer.
+   * A cost naming BOTH a sacrifice and a discard is refused at compile time
+   * too — `costInstanceIds` would have to carry two kinds of payer.
+   */
+  readonly discard?: {
+    readonly count: number;
+    readonly filter?: CardFilter;
+    readonly random?: boolean;
+  };
+  /**
    * "**Remove a +1/+1 counter from this creature**: You gain 2 life" (Spike
    * Feeder), "Remove a charge counter from ~: …" (Umezawa's Jitte), "Remove
    * three spore counters from ~: …" (Thorn Thallid) — counters of ONE kind,
