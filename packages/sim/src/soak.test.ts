@@ -300,6 +300,13 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
       onPlay: 'A',
       what: "CR 707.10: the same copy-mirror loop with Reverberate + Narset's Reversal, seat A",
     },
+    {
+      // §3.162 — the shuffle the stubborn-pilot row now replays; clean under
+      // the shipped pilot, as every runaway row's game must be.
+      seed: 113390585,
+      onPlay: 'A',
+      what: "CR 707.10: the Reverberate + Narset's Reversal decks under the re-pinned shuffle, seat A",
+    },
     /*
      * THREE ROWS, THREE UNRELATED DEFECTS, ONE SHAPE (DESIGN §3.142): a rules
      * question answered somewhere other than by the rule.

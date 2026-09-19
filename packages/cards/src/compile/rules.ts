@@ -6048,6 +6048,47 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'search-each-library-exile-cast-free',
+    description:
+      '"For each player, search that player\'s library for a nonland card and exile it, then that player shuffles. You may cast those cards without paying their mana costs." (Jace, Architect of Thought\'s −8)',
+    /**
+     * ONE whole-line idiom — the second sentence is meaningless without the
+     * exile the first made, exactly as the −2's pile split is one line.
+     *
+     * §3.150 and §3.154 pinned this as the last of Jace's residues with three
+     * named engine gaps: no `'exile'` search destination, a search that had to
+     * be of your OWN library, and — the real one — a cast permission that could
+     * not cross seats, because the card exiled from the opponent's library sits
+     * in the opponent's exile and the offer loop walked only the asker's. All
+     * three are now rows in the machinery that existed: `searchLibrary` takes
+     * `who: 'each'` with the CONTROLLER as chooser and an `exile` destination,
+     * and `grantCast: 'free'` gives the chooser a `castBy` permission
+     * (`core/card-grants.ts`) on every card it exiled.
+     *
+     * The noun is read by the same parser every other search uses, with
+     * "nonland" added as the one negative it prints; a noun neither can express
+     * reports the line rather than searching for the wrong kind of card.
+     */
+    pattern:
+      /^for each player, search that player's library for an? ([a-z]+(?: or [a-z]+)?) card and exile it, then that player shuffles\. you may cast (?:those cards|that card) without paying (?:their|its) mana costs?$/,
+    build(match) {
+      const noun = (match[1] ?? '').trim();
+      const filter = noun === 'nonland' ? { noneOfTypes: ['land'] } : searchFilterFrom(noun);
+      if (filter === null) return null;
+      return effects({
+        primitive: 'searchLibrary',
+        params: {
+          who: 'each',
+          chooser: 'controller',
+          count: 1,
+          filter,
+          destination: 'exile',
+          grantCast: 'free',
+        },
+      });
+    },
+  },
+  {
     id: 'search-any-card',
     description:
       '"Search your library for a card, put that card into your hand/graveyard, then shuffle" (Diabolic Tutor, Grim Tutor, Vile Entomber)',

@@ -137,6 +137,7 @@ import {
   expireCardGrants,
   hasCardGrants,
   pruneCardGrantsFor,
+  type CardGrant,
 } from './card-grants.js';
 import { declineMadness } from './madness.js';
 // §3.111 — the graveyard-casting family: activated abilities of a card in a
@@ -2288,6 +2289,7 @@ function applyPlayLand(
   const permission = fromZone === 'exile' ? castPermissionFor(state, card) : undefined;
   if (fromZone === 'exile') {
     if (permission === undefined) return rejectWith(prevState, 'that card has no permission to be played from exile');
+    if (permission.by !== action.player) return rejectWith(prevState, 'that permission to play from exile belongs to another player');
     if ((action.face ?? 'front') !== permission.face) {
       return rejectWith(prevState, 'that face of this card may not be played from exile');
     }
@@ -3566,11 +3568,16 @@ function applyCastSpell(
   // so it is the owner's copy), and a card that has left that zone mid-response
   // — exiled, or already flashed back — is cleanly rejected here, exactly as a
   // hand card that was discarded in response would be.
+  // An EXILE cast may name a card in ANOTHER player's exile: a permission can
+  // belong to a seat other than the owner (`CastPermission.by` — Jace's −8),
+  // and the card stays in its owner's exile until it is cast. Whether THIS
+  // player may cast it is judged below, against the permission, never assumed
+  // from which zone it was found in.
   const card =
     fromZone === 'graveyard'
       ? instanceIn(player.graveyard, action.instanceId)
       : fromZone === 'exile'
-        ? instanceIn(player.exile, action.instanceId)
+        ? instanceInAnyExile(state, action.instanceId)
         : instanceIn(player.hand, action.instanceId);
   if (!card) {
     return rejectWith(
@@ -3605,6 +3612,9 @@ function applyCastSpell(
   if (fromZone === 'exile') {
     if (!madnessWindowOpen && permission === undefined) {
       return rejectWith(prevState, 'that card has no open madness window and no permission to be cast from exile');
+    }
+    if (permission !== undefined && permission.by !== action.player) {
+      return rejectWith(prevState, 'that permission to cast from exile belongs to another player');
     }
     if (madnessWindowOpen && !suspendCast && !pileWindowCast && madnessCost === undefined) {
       return rejectWith(prevState, 'that card has no madness cost');
@@ -3870,8 +3880,14 @@ function applyCastSpell(
   }
 
   // Move the card to the stack, out of whichever zone it was cast from.
+  // Exile is the owner's zone even when another seat is casting (see the
+  // lookup above); graveyard and hand casts are always the caster's own.
   removeFromZoneArray(
-    fromZone === 'graveyard' ? player.graveyard : fromZone === 'exile' ? player.exile : player.hand,
+    fromZone === 'graveyard'
+      ? player.graveyard
+      : fromZone === 'exile'
+        ? state.players[card.owner].exile
+        : player.hand,
     card.instanceId,
   );
   // The madness window is CONSUMED by the cast: the card has left exile, so
@@ -3912,6 +3928,12 @@ function applyCastSpell(
     : fromZone === 'graveyard'
       ? GRAVEYARD_CAST_EXIT[graveyardCastKind] // §3.111 — the same table `spellLeaveDestination` reads
       : 'graveyard';
+  // CR 112.2 / 608.3a — the spell is controlled by whoever cast it, and a
+  // permanent spell enters under its controller's control. The card's own
+  // `controller` used to be left as it was, which was invisible while owner and
+  // caster were always the same player; a cast under another seat's permission
+  // (`CastPermission.by`) resolved onto the battlefield under the OWNER.
+  card.controller = action.player;
   const stackObject: SpellStackObject = {
     kind: 'spell',
     instanceId: card.instanceId,
@@ -5496,6 +5518,30 @@ function unpayableActivationReason(
 }
 
 /** Remove an instance from a zone array in place (hand or graveyard, at cast). */
+/** The exiled card with this id, whichever player's exile holds it. */
+function instanceInAnyExile(state: GameState, id: InstanceId): CardInstance | undefined {
+  return instanceIn(state.players.A.exile, id) ?? instanceIn(state.players.B.exile, id);
+}
+
+/**
+ * Every exiled card that some grant names with a cast permission, in grant
+ * order. The permission itself (face, cost, WHO) is still `castPermissionFor`'s
+ * to judge — this only finds the cards, wherever they sit, so the offer loops
+ * need not walk a whole exile zone per priority decision.
+ */
+function exiledCardsUnderPermission(state: GameState): CardInstance[] {
+  const grants = state.cardGrants;
+  const out: CardInstance[] = [];
+  if (grants === undefined) return out;
+  for (let i = 0; i < grants.length; i++) {
+    const grant = grants[i] as CardGrant;
+    if (grant.castFace === undefined || grant.zone !== 'exile') continue;
+    const card = instanceInAnyExile(state, grant.targetInstanceId);
+    if (card !== undefined && !out.includes(card)) out.push(card);
+  }
+  return out;
+}
+
 function removeFromZoneArray(zone: CardInstance[], id: InstanceId): void {
   for (let i = 0; i < zone.length; i++) {
     if ((zone[i] as CardInstance).instanceId === id) {
@@ -5852,11 +5898,9 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     // card-grant consumer, so a game with nothing exiled under permission walks no
     // exile zone here either.
     if (hasCardGrants(state)) {
-      const exile = player.exile;
-      for (let e = 0; e < exile.length; e++) {
-        const card = exile[e] as CardInstance;
+      for (const card of exiledCardsUnderPermission(state)) {
         const permission = castPermissionFor(state, card);
-        if (permission === undefined) continue;
+        if (permission === undefined || permission.by !== me) continue;
         const playDef = playableFaceOf(card.def, permission.face);
         if (playDef === undefined || !isLand(playDef)) continue;
         actions.push({
@@ -6010,11 +6054,13 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // so a game in which nothing is ever exiled with permission walks no exile
   // zone at all. That matters: this runs once per priority decision.
   if (hasCardGrants(state)) {
-    const exile = player.exile;
-    for (let e = 0; e < exile.length; e++) {
-      const card = exile[e] as CardInstance;
+    // Walked by GRANT, not by the asking player's exile zone: a permission may
+    // belong to a seat other than the card's owner (`CastPermission.by`), so the
+    // card can sit in the OTHER player's exile. The grant list is short (see the
+    // module header's perf note); an exile zone is not.
+    for (const card of exiledCardsUnderPermission(state)) {
       const permission = castPermissionFor(state, card);
-      if (permission === undefined) continue;
+      if (permission === undefined || permission.by !== me) continue;
       const castDef = playableFaceOf(card.def, permission.face);
       if (castDef === undefined) continue;
       pushCastOffers(state, card, castDef, permission.face, me, player.manaPool, sorcerySpeedWindow, actions, {
